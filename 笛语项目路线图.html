@@ -110,7 +110,7 @@
 
     <div class="meta">
       <span class="pill"><span class="k">更新</span> <b>2026-07-22</b></span>
-      <span class="pill"><span class="k">当前位置</span> <b>阶段 3 · WSL 主仓迁移已确认、待执行</b></span>
+      <span class="pill"><span class="k">当前位置</span> <b>阶段 3 · WSL Git 主仓已建立、待切换工作区</b></span>
       <span class="pill"><span class="k">业务语义</span> <b>双应用合同与 25 类模型已关闭</b></span>
       <span class="pill"><span class="k">领域资产</span> <b>用户提供 62 文件 · 243 条候选 · 0 条生产激活</b></span>
     </div>
@@ -118,7 +118,7 @@
 
   <div class="nextbar">
     <div class="lab">⬇ 下一步永远看这里</div>
-    <div class="txt">工程工作区裁决已经确认。现在只做一个动作：<b>把当前项目无损复制到 <code>/home/faye/workspace/diyu-formal-init</code>，逐文件核验后切换为唯一 Git 主仓</b>；本轮尚未执行迁移，C 盘原目录不得删除或与新目录双向编辑。</div>
+    <div class="txt">207 个项目文件已经无损复制并核验，WSL 正式 Git 主仓已经建立。现在只做一个动作：<b>在 Codex 中打开 <code>/home/faye/workspace/diyu-formal-init</code></b>；后续只编辑该主仓，C 盘原目录仅作回退副本。</div>
   </div>
 
   <div class="legend">
@@ -186,7 +186,7 @@
         <div class="ph-head"><p class="ph-title"><span class="idx">阶段 3</span>最小生产物理架构与首批资产激活</p><span class="badge b-now">当前</span></div>
         <p class="ph-desc">把已经关闭的 25 类逻辑模型和用户提供的候选资产，落成第一条纵向闭环真正需要的最小物理实现。</p>
         <ul class="nodes">
-          <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">WSL 唯一主仓迁移<span class="ncode">EDR-001 · 已确认待执行</span></div><div class="ndesc">先复制、逐文件摘要核验、再切换；WSL 副本成为唯一可写 Git 主仓，C 盘原目录只作临时回退，不长期双向编辑</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">WSL 唯一主仓迁移<span class="ncode">EDR-001 · 已执行并核验</span></div><div class="ndesc">207 个文件逐项一致，WSL 已建立 main 分支正式 Git 主仓；当前只需把 Codex 工作区切换到 WSL，C 盘原目录仅作回退</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">第一条闭环与最小资产清单</div><div class="ndesc">迁移通过后，确定第一条可运行闭环；再从用户提供的 62 个文件、243 条候选中只选择该闭环会实际调用的知识、方法、角色模板和评测规则</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">权威底座、物理映射与选择性激活</div><div class="ndesc">SQL 保存稳定身份、关系、版本与状态；对象存储保存原件；全文/向量索引只作可重建派生层；复核通过的最小条目才 active</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">检索前强制作用域过滤</div><div class="ndesc">先过滤租户、组织、品牌、账号与私人范围，再做全文/向量召回；模型只接收已经过滤的上下文</div></div></li>
@@ -273,6 +273,7 @@
           <li>D-011：内容前情复用与正式知识升级分离</li>
           <li>用户提供的 62 个领域候选文件与 243 条机器候选</li>
           <li>“折线之间”全链路合成资料与渐进入驻模板</li>
+          <li>WSL 唯一 Git 主仓与首个迁移基线提交</li>
           <li>混合知识方向：SQL 权威 + 原件 + 全文/向量派生检索</li>
         </ul>
       </div>
@@ -290,12 +291,12 @@
   </div>
 
   <div class="onenote">
-    <b>一句话记住整条主线：</b>已经完成业务合同、25 类语义核、D-008/D-010/D-011 数据使用边界和合成品牌资料，并收到用户提供的首批领域候选资产 → 无损切换到 WSL 唯一 Git 主仓 → 确定第一条闭环并选出最小知识切片 → 落最小物理架构和选择性激活 → 先跑通内容，再跑通陈列 → 扩展首期能力 → 用授权真实品牌完成企业验收。<b>不重造领域库，不全量自动激活，也不把迁移冒充风险隔离或 CI/CD 已完成。</b>
+    <b>一句话记住整条主线：</b>已经完成业务合同、25 类语义核、D-008/D-010/D-011 数据使用边界和合成品牌资料，收到用户提供的首批领域候选资产，并建立 WSL 唯一 Git 主仓 → 在 Codex 中切换到该主仓 → 确定第一条闭环并选出最小知识切片 → 落最小物理架构和选择性激活 → 先跑通内容，再跑通陈列 → 扩展首期能力 → 用授权真实品牌完成企业验收。<b>不重造领域库，不全量自动激活，也不把迁移冒充风险隔离或 CI/CD 已完成。</b>
   </div>
 
   <footer>
     依据 <code>docs/项目记忆.md</code>、<code>docs/待决策清单.md</code>、正式 ADR、用户提供的 <code>首批领域数据库知识数据</code> 与 D-007 两份资料成果更新。<br>
-    当前已完成立项前业务与数据语义基线并关闭 D-008、D-010、D-011；WSL 唯一主仓迁移已经确认但尚未执行。迁移完成后才继续最小物理架构与首批资产切片；当前尚无正式 Git 主仓、CI/CD、生产数据库、隔离实现证明或软件闭环。路线图是后续工作顺序，不自动授权迁移执行、远程仓库写入、外部部署、真实账号写入或试点上线。
+    当前已完成立项前业务与数据语义基线并关闭 D-008、D-010、D-011；WSL 唯一 Git 主仓已经建立并完成迁移基线提交，当前 Codex 工作区仍需切换。尚无远程 CI/CD、生产数据库、隔离实现证明或软件闭环。路线图是后续工作顺序，不自动授权远程仓库写入、外部部署、真实账号写入或试点上线。
   </footer>
 
 </div>
