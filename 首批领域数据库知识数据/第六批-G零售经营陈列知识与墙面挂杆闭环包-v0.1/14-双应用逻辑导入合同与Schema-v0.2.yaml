@@ -1,0 +1,248 @@
+package:
+  name: 双应用全库机器导入候选
+  version: '0.2'
+  date: '2026-07-22'
+  status: review_candidate
+  physical_implementation_frozen: false
+  records:
+    assets: 243
+    fixtures: 123
+    sources: 62
+    new_display_assets: 73
+    new_display_fixtures: 25
+    new_display_sources: 5
+registered_applications:
+  content-production:
+    primary_contracts:
+    - P1_dressing_decision
+    - P2_product_truth
+    - P3_brand_life_narrative
+    - P4_local_response
+    - P5_visual_styling_story
+    primary_artifact: ContentItem
+  display-merchandising:
+    primary_contracts:
+    - DM01_wall_hanging_rail_execution
+    primary_artifact: DisplayArtifact
+    first_release_scope:
+      task_purpose: visual_merchandising
+      display_zone: salesfloor_wall
+      display_carrier: hanging_rail_group
+      artifact_subtype: store_display_execution_plan
+canonical_value_sets:
+  asset_type:
+  - domain_knowledge
+  - generation_method
+  - industry_role_template
+  - evaluation_rule
+  category:
+  - A
+  - B
+  - C
+  - D
+  - E
+  - F
+  - G
+  - H
+  knowledge_hardness:
+  - deterministic_fact
+  - conditional_rule
+  - creative_candidate
+  content_product_id:
+  - P1_dressing_decision
+  - P2_product_truth
+  - P3_brand_life_narrative
+  - P4_local_response
+  - P5_visual_styling_story
+  display_contract_id:
+  - DM01_wall_hanging_rail_execution
+  lifecycle_status:
+  - review_candidate
+  - active
+  - deprecated
+  rule_type:
+  - hard_gate
+  - quality_criterion
+  - offline_test
+  - maturity_indicator
+  execution_scope:
+  - online_lightweight
+  - offline_gold
+  - offline_regression
+  - offline_diagnostic_sample
+  failure_handling:
+  - block
+  - rewrite
+  - degrade
+  - warn
+  - record_only
+migration_from_v0_1:
+- change: add category G
+  meaning: retail display-merchandising domain knowledge and application methods
+  breaking: false
+- change: add supported_display_contracts as an alternative consumer field
+  meaning: G assets can declare display contract consumers without pretending to support P1-P5
+  breaking: false
+- change: allow evaluation_rule.applies_to to reference content product IDs or display contract IDs
+  breaking: false
+- change: normalize all combined records to schema_version diyu_global_asset_v0.2 / registry v0.2
+  semantic_change: false
+- change: do not rename existing generation_method asset_type
+  meaning: display methods use method_family=display_merchandising to avoid a breaking type migration
+  breaking: false
+record_contracts:
+  domain_knowledge:
+    categories:
+    - A
+    - B
+    - C
+    - G
+    required_common:
+    - asset_id
+    - knowledge_id
+    - title
+    - topic
+    - statement
+    - hardness
+    - semantic_distance
+    - allowed_expression
+    - anti_misuse
+    - basis_refs
+    - status
+    - schema_version
+    - source_batch
+    - import_disposition
+    consumer_requirement:
+      A_B_C: supported_products required
+      G: supported_display_contracts required
+    conditional_requirements:
+      deterministic_fact:
+      - scope
+      - definition_or_measurement_method
+      - basis_refs
+      conditional_rule:
+      - when
+      - likely_effect
+      - because
+      - tradeoffs
+      - not_when
+      creative_candidate:
+      - creative_direction
+      - variation_axes
+      - anti_cliche_or_anti_misuse
+  generation_method:
+    categories:
+    - D
+    - E
+    - G
+    required_common:
+    - asset_id
+    - method_id
+    - name
+    - method_family
+    - use_when
+    - avoid_when
+    - required_inputs
+    - transformation_steps
+    - success_signals
+    - failure_patterns
+    - basis_refs
+    - status
+    - schema_version
+    - source_batch
+    - import_disposition
+    consumer_requirement:
+      D_E: supported_products required
+      G: supported_display_contracts required
+    prohibited:
+    - hardness
+  industry_role_template:
+    categories:
+    - F
+    required:
+    - asset_id
+    - role_template_id
+    - role_family
+    - organization_level
+    - authority_basis
+    - service_object
+    - legitimate_expression_scope
+    - default_content_opportunities
+    - must_not_impersonate
+    - confirmation_required
+    - status
+    invariants:
+      confirmation_required: true
+  evaluation_rule:
+    categories:
+    - H
+    required:
+    - asset_id
+    - evaluation_rule_id
+    - name
+    - applies_to
+    - rule_type
+    - condition
+    - expected_result
+    - failure_pattern
+    - execution_scope
+    - failure_handling
+    - normative_status
+    - basis_refs
+    - status
+    applies_to_allowed: content_product_id or display_contract_id
+logical_display_contracts:
+  DM01_wall_hanging_rail_execution:
+    module: display-merchandising
+    artifact: DisplayArtifact/store_display_execution_plan
+    contract_file: 05-DisplayArtifact逻辑合同与版本事件-v0.1.yaml
+    input_file: 03-首次条件档案与日常输入合同-v0.1.md
+    data_template_file: 08-品牌门店陈列数据模板与折线之间演示增量-v0.1.yaml
+    physical_identity: deferred_to_D016
+cross_reference_rules:
+- asset_id must be globally unique
+- every basis_ref must resolve in source registry
+- every gold_fixture_ref must resolve in fixture registry
+- fixture related_asset_ids must resolve in asset registry
+- asset related_asset_ids must resolve in asset registry
+- G domain knowledge and G methods must declare supported_display_contracts
+- content-production assets must not silently default to display contracts
+- unknown optional fields may be preserved
+- unknown asset_type, category, hardness, rule_type, execution_scope or display contract must not silently default
+logical_import_order:
+- register source records
+- register application and contract identifiers
+- import assets into review_candidate scope
+- register fixtures and cross-links
+- run required-field and value-set validation
+- run source/fixture/asset reference integrity checks
+- expose human review queue
+- activate only after applicable professional review and gold/regression evidence
+activation_policy:
+  default: no_auto_activation
+  rules:
+  - all imported records remain review_candidate
+  - deterministic facts require scope and source review
+  - conditional rules require condition, tradeoff and exception review
+  - G knowledge requires retail visual merchandising professional review
+  - brand/store templates remain templates until a tenant confirms actual values
+  - DisplayArtifact recommendations never become verified execution facts by import
+  - evaluation hypotheses never become hard gates by import alone
+  - adoption, execution declaration or high performance never upgrades an asset automatically
+first_release_display_exclusions:
+- image inspection
+- display scoring
+- remediation task workflow
+- approval workflow
+- ERP/POS/WMS/PIM/PLM integration
+- inventory truth service
+- window/mannequin/midfloor/entrance contracts
+- automatic execution verification
+deferred:
+- database tables and indexes
+- object first-class identity
+- SQL versus JSON versus projection
+- DIFY workflow nodes
+- image support and sensitive-data cleanup under D-030
+- platform/media contracts under D-032
+- additional display purpose/zone/carrier combinations

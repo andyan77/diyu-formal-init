@@ -1,0 +1,174 @@
+package:
+  name: 品牌门店陈列数据模板与折线之间演示增量
+  version: '0.1'
+  date: '2026-07-22'
+  status: review_candidate
+  physical_implementation_frozen: false
+templates:
+  brand_display_policy:
+    brand_ref: null
+    policy_version: null
+    valid_from: null
+    valid_until: null
+    default_task_goal: visual_merchandising
+    visual_hierarchy:
+      primary_focus_policy: null
+      secondary_response_policy: null
+    color_texture_direction: null
+    density_preference: null
+    grouping_direction: null
+    prohibited_patterns: []
+    confirmation:
+      confirmed_by: null
+      confirmed_at: null
+  store_wall_rail_profile:
+    store_ref: null
+    display_zone_ref: null
+    display_carrier_ref: null
+    profile_version: null
+    structure:
+      upper_rail: null
+      lower_rail: null
+      fixed_front_facing_points: null
+    capacity_rules:
+      upper_side_hang: null
+      lower_hang: null
+      notes: null
+    primary_approach_direction: null
+    main_sight_band_cm: null
+    hard_constraints: []
+    last_confirmed_at: null
+  product_display_profile:
+    product_ref: null
+    product_version_ref: null
+    category: null
+    colors: []
+    patterns: []
+    visible_surfaces: []
+    silhouette_or_volume_notes: null
+    display_relevant_constraints: []
+    source: brand_product_knowledge
+  daily_inventory_input:
+    source: user_provided
+    scope: current_task
+    submitted_at: null
+    lines:
+    - product_ref: null
+      quantity: null
+    special_goal: null
+    temporary_constraints: []
+  natural_feedback:
+    source: user_provided
+    original_text: null
+    changed_conditions: []
+    explicitly_unchanged: []
+    affected_scope: null
+demo_increment:
+  brand:
+    brand_ref: demo_brand_fold_between
+    display_policy_ref: fold_between_display_policy_v1
+    policy_version: '1.0'
+    default_task_goal: visual_merchandising
+    visual_hierarchy:
+      primary_focus_policy: one_clear_primary_focus_with_weaker_response
+      secondary_response_policy: response_must_not_equal_primary_strength
+    color_texture_direction: low_saturation_palette; use value contrast, unique texture, position and whitespace rather than
+      fabricating bright products
+    density_preference: do_not_fill_to_capacity; preserve focus and product accessibility
+    grouping_direction: organize readable outfit zones rather than pure category blocks
+    prohibited_patterns:
+    - invent_bright_product_for_focus
+    - make_every_zone_primary
+    - treat_inventory_list_as_fill_command
+    confirmation:
+      basis: D-005 golden closure supplied by user
+      confirmed_at: '2026-07-22'
+  store_wall_rail_profile:
+    store_ref: fold_between_nancheng_store
+    display_zone_ref: nancheng_salesfloor_wall_01
+    display_carrier_ref: nancheng_wall_rail_group_01
+    profile_version: '1.0'
+    structure:
+      upper_rail: true
+      lower_rail: true
+      fixed_front_facing_points: 2
+    capacity_rules:
+      upper_side_hang_max: 6
+      lower_hang_max: 8
+      notes: fixed front-facing points occupy additional visual/physical space; capacity is a ceiling, not a fill target
+    primary_approach_direction: left
+    main_sight_band_cm:
+    - 120
+    - 160
+    hard_constraints:
+    - upper and lower outfit zones should remain vertically readable
+    - primary focus uses left entry-side fixed front-facing point unless conditions change
+    - products must remain easy to extract
+    - fixture condition changes must be reported before reuse
+    last_confirmed_at: '2026-07-22'
+  products:
+  - product_ref: ZX-C218
+    category: double-faced_short_coat
+    colors:
+    - charcoal_gray
+    - deep_green
+    patterns:
+    - solid
+    - fine_plaid
+    visible_surfaces:
+    - charcoal_solid_face
+    - deep_green_fine_plaid_face
+    notes: only confirmed display-relevant attributes are used
+  - product_ref: ZX-S104
+    category: shirt
+    colors:
+    - warm_white
+    patterns:
+    - solid
+  - product_ref: ZX-K126
+    category: thin_knit
+    colors:
+    - oat
+    patterns:
+    - solid
+  - product_ref: ZX-P211
+    category: straight_trousers
+    colors:
+    - charcoal_gray
+    patterns:
+    - solid
+  - product_ref: ZX-V113
+    category: short_vest
+    colors:
+    - charcoal_gray
+    patterns:
+    - solid
+  - product_ref: ZX-Q117
+    category: mid_length_skirt
+    colors:
+    - deep_olive
+    patterns:
+    - solid
+  gold_daily_inventory:
+    source: user_provided
+    scope: current_task
+    lines:
+    - product_ref: ZX-C218
+      quantity: 3
+    - product_ref: ZX-S104
+      quantity: 3
+    - product_ref: ZX-K126
+      quantity: 4
+    - product_ref: ZX-P211
+      quantity: 3
+    - product_ref: ZX-V113
+      quantity: 3
+    - product_ref: ZX-Q117
+      quantity: 4
+    total_quantity: 20
+    truth_boundary: not_erp_verified
+notes:
+- All templates are logical contracts, not database tables.
+- Demo data only contains facts supplied in the confirmed golden task.
+- Brand and store records are synthetic demonstration data and must not be copied as industry defaults.
+- Specific field names and persistence remain deferred to D-016.

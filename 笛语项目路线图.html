@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>笛语 · 项目主线路线图</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#ffffff; --ink:#1a2230; --muted:#63708a; --line:#e3e8f0;
+    --done:#16a34a; --now:#e08a00; --todo:#8a97ad; --parallel:#2563eb; --mile:#7c3aed;
+    --tip:#b45309; --tipbg:#fff8ec; --tipbd:#f0d9a8;
+    --shadow:0 1px 3px rgba(20,30,50,.06),0 8px 24px rgba(20,30,50,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:940px;margin:0 auto;padding:32px 20px 80px}
+  header.top{margin-bottom:8px}
+  .eyebrow{font-size:12px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;font-weight:600}
+  h1{font-size:27px;margin:6px 0 4px;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:14px;margin:0}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
+  .pill{background:var(--card);border:1px solid var(--line);border-radius:999px;
+    padding:6px 14px;font-size:13px;box-shadow:var(--shadow)}
+  .pill b{color:var(--ink)}
+  .pill .k{color:var(--muted)}
+
+  .nextbar{margin:16px 0 30px;background:linear-gradient(180deg,#fffdf7,#fff8ec);
+    border:1px solid var(--tipbd);border-left:5px solid var(--now);border-radius:14px;
+    padding:16px 18px;box-shadow:var(--shadow)}
+  .nextbar .lab{font-size:12px;font-weight:700;color:var(--now);letter-spacing:.06em}
+  .nextbar .txt{font-size:15px;margin-top:3px}
+  .nextbar .txt b{color:#8a5a00}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:0 0 28px;font-size:12.5px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .d-done{background:var(--done)} .d-now{background:var(--now)}
+  .d-todo{background:var(--todo)} .d-par{background:var(--parallel)} .d-mile{background:var(--mile)}
+
+  .timeline{position:relative;margin-left:8px;padding-left:30px;border-left:2px solid var(--line)}
+  .phase{position:relative;margin-bottom:26px}
+  .phase::before{content:"";position:absolute;left:-39px;top:4px;width:16px;height:16px;
+    border-radius:50%;background:var(--card);border:3px solid var(--todo)}
+  .phase.done::before{border-color:var(--done)}
+  .phase.now::before{border-color:var(--now);box-shadow:0 0 0 5px rgba(224,138,0,.15)}
+  .phase.par::before{border-color:var(--parallel)}
+  .phase.mile::before{border-color:var(--mile);background:var(--mile)}
+
+  .pcard{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:18px 20px;box-shadow:var(--shadow)}
+  .phase.now .pcard{border-color:#f3d9a8;box-shadow:0 2px 6px rgba(224,138,0,.10),0 10px 30px rgba(20,30,50,.06)}
+  .ph-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .ph-title{font-size:18px;font-weight:700;margin:0}
+  .ph-title .idx{color:var(--muted);font-weight:600;margin-right:8px;font-size:15px}
+  .badge{font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
+  .b-done{background:#e7f6ec;color:#127a37}
+  .b-now{background:#fdf0d8;color:#a86500}
+  .b-todo{background:#eef1f6;color:#5a6882}
+  .b-par{background:#e7effd;color:#1d4ed8}
+  .ph-desc{color:var(--muted);font-size:13.5px;margin:6px 0 12px}
+
+  .nodes{list-style:none;margin:0;padding:0}
+  .node{display:flex;gap:11px;padding:9px 0;border-top:1px dashed var(--line)}
+  .node:first-child{border-top:none}
+  .nstat{flex:0 0 auto;margin-top:3px}
+  .nbody{flex:1 1 auto;min-width:0}
+  .ntitle{font-size:14.5px;font-weight:600}
+  .ncode{font-size:11.5px;color:var(--muted);font-weight:600;margin-left:6px;
+    background:#f1f4f9;border-radius:5px;padding:1px 6px}
+  .ndesc{font-size:13px;color:#485469;margin-top:2px}
+
+  .tip{margin-top:8px;background:var(--tipbg);border:1px solid var(--tipbd);
+    border-left:3px solid var(--tip);border-radius:8px;padding:8px 11px;font-size:12.5px;color:#6b4a12}
+  .tip b{color:var(--tip)}
+  .tip .h{font-weight:700;font-size:11px;letter-spacing:.05em;color:var(--tip);display:block;margin-bottom:2px;text-transform:uppercase}
+
+  .mile-card{background:linear-gradient(180deg,#faf7ff,#f4eefe);border:1px solid #e4d7fb;
+    border-radius:14px;padding:12px 18px;font-weight:700;color:#5b21b6;font-size:14.5px;
+    display:flex;align-items:center;gap:10px}
+  .mile-card .flag{font-size:17px}
+
+  .tech{margin-top:44px;background:var(--card);border:1px solid var(--line);
+    border-radius:18px;padding:22px 22px 8px;box-shadow:var(--shadow)}
+  .tech h2{font-size:18px;margin:0 0 4px}
+  .tech .lead{color:var(--muted);font-size:13.5px;margin:0 0 16px}
+  .tgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:640px){.tgrid{grid-template-columns:1fr}}
+  .tcol{border:1px solid var(--line);border-radius:12px;padding:14px 15px;margin-bottom:14px}
+  .tcol h3{font-size:13.5px;margin:0 0 9px;display:flex;align-items:center;gap:7px}
+  .tcol ul{margin:0;padding-left:2px;list-style:none}
+  .tcol li{font-size:13px;padding:4px 0;color:#3f4c62;display:flex;gap:8px}
+  .tcol li::before{content:"▸";color:var(--muted);flex:0 0 auto}
+  .when{font-size:11px;color:var(--muted);background:#f1f4f9;border-radius:5px;padding:0 6px;margin-left:auto;white-space:nowrap;align-self:center}
+
+  .onenote{margin-top:22px;background:#0f1c2e;color:#dfe7f2;border-radius:14px;padding:18px 20px;font-size:14px}
+  .onenote b{color:#ffd98a}
+
+  footer{margin-top:34px;color:var(--muted);font-size:12px;line-height:1.7;border-top:1px solid var(--line);padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow">笛语 · 服装零售 SaaS Agent · 项目主线</div>
+    <h1>从"现在"到"系统交付"路线图</h1>
+    <p class="sub">从已确认的业务与数据基线，到最小生产闭环和真实试点 · 只保留当前有下游的工作</p>
+
+    <div class="meta">
+      <span class="pill"><span class="k">更新</span> <b>2026-07-22</b></span>
+      <span class="pill"><span class="k">当前位置</span> <b>阶段 3 · WSL 主仓迁移已确认、待执行</b></span>
+      <span class="pill"><span class="k">业务语义</span> <b>双应用合同与 25 类模型已关闭</b></span>
+      <span class="pill"><span class="k">领域资产</span> <b>用户提供 62 文件 · 243 条候选 · 0 条生产激活</b></span>
+    </div>
+  </header>
+
+  <div class="nextbar">
+    <div class="lab">⬇ 下一步永远看这里</div>
+    <div class="txt">工程工作区裁决已经确认。现在只做一个动作：<b>把当前项目无损复制到 <code>/home/faye/workspace/diyu-formal-init</code>，逐文件核验后切换为唯一 Git 主仓</b>；本轮尚未执行迁移，C 盘原目录不得删除或与新目录双向编辑。</div>
+  </div>
+
+  <div class="legend">
+    <span><i class="dot d-done"></i>已完成</span>
+    <span><i class="dot d-now"></i>进行中 / 当前</span>
+    <span><i class="dot d-todo"></i>待办</span>
+    <span><i class="dot d-par"></i>并行（建议现在就启动）</span>
+    <span><i class="dot d-mile"></i>里程碑</span>
+  </div>
+
+  <div class="timeline">
+
+    <!-- 阶段0 -->
+    <div class="phase done">
+      <div class="pcard">
+        <div class="ph-head">
+          <p class="ph-title"><span class="idx">阶段 0</span>业务与语义基线</p>
+          <span class="badge b-done">已完成</span>
+        </div>
+        <p class="ph-desc">先确定两个应用产出什么、怎样路由、事实与创意怎样分开，再冻结最小共同语义核。</p>
+        <ul class="nodes">
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">P1—P5 与共同路由<span class="ncode">D-004 / X-01 / X-02</span></div><div class="ndesc">五类内容产品、共享能力、黄金基线和往返无损收口均已关闭</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">媒体与文字成品边界<span class="ncode">D-032 / D-030 / D-021</span></div><div class="ndesc">抖音、小红书、微信视频号；视频/图文均交付可执行文字成品，不生成媒体文件</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">首期经营陈列<span class="ncode">D-005</span></div><div class="ndesc">卖场墙面 × 双层挂杆：人工清单 → 文字方案 → 自然反馈 → 局部修订</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">25 类最小语义核与多品牌/素材边界<span class="ncode">D-016—D-020</span></div><div class="ndesc">租户、组织、品牌三轴；内容与陈列分产物；私人/组织素材双入口；经营关系不是权限包</div></div></li>
+        </ul>
+        <div class="tip"><span class="h">收敛规则</span>这些合同和对象边界已经足以进入生产设计；后续实现不得以“再完善文档”为由重新打开同范围讨论。</div>
+      </div>
+    </div>
+
+    <div class="phase mile"><div class="mile-card"><span class="flag">🏁</span> 里程碑：双应用业务合同与最小语义模型完成</div></div>
+
+    <!-- 阶段1 -->
+    <div class="phase par">
+      <div class="pcard">
+        <div class="ph-head"><p class="ph-title"><span class="idx">阶段 1</span>领域候选资产接收与项目对齐</p><span class="badge b-par">已收到 · 待对齐激活</span></div>
+        <p class="ph-desc">这批资产由用户放入工作区。项目不重造平行领域库，而是核验、接收并按真实软件路径逐批激活。</p>
+        <ul class="nodes">
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">用户提供的首批领域知识数据<span class="ncode">62 个文件</span></div><div class="ndesc">合并候选包含 243 条逻辑资产、123 个验证夹具、62 条来源；现有报告显示结构校验 0 阻断</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">项目接收与专业激活<span class="ncode">当前 243 / 243 为 review_candidate</span></div><div class="ndesc">对齐最新 P1—P5、D-005、D-016 和 ADR；按第一条软件闭环选择最小资产切片复核，不全库自动 active</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">合成品牌与渐进入驻资料<span class="ncode">D-007</span></div><div class="ndesc">“折线之间”全链路资料包与新租户模板已完成，可直接支持原型、检索编排和黄金回归</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">生产能力仍未产生</div><div class="ndesc">尚无物理数据库、active 资产、全文/向量检索、API、DIFY 工作流或可运行评测器</div></div></li>
+        </ul>
+        <div class="tip"><span class="h">接收原则</span>文件存在不等于生产数据库建成；结构校验通过也不等于专业内容已获项目确认。只激活当前纵向闭环会实际调用的条目。</div>
+      </div>
+    </div>
+
+    <!-- 阶段2 -->
+    <div class="phase done">
+      <div class="pcard">
+        <div class="ph-head"><p class="ph-title"><span class="idx">阶段 2</span>生产数据与复用边界最后收口</p><span class="badge b-done">已完成</span></div>
+        <p class="ph-desc">物理隔离、跨范围学习、内容前情复用和正式知识升级边界均已关闭，不再扩张本体和合同。</p>
+        <ul class="nodes">
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">租户专属数据的首期物理隔离档位<span class="ncode">D-008 / ADR-024</span></div><div class="ndesc">已确认共享 SaaS 下按 Tenant 强逻辑隔离；品牌、区域和门店不分库，专属部署只由真实合同触发</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">跨品牌/跨租户匿名汇总学习<span class="ncode">D-010 / ADR-025</span></div><div class="ndesc">已确认第一版不跨品牌、跨租户复用内容、汇总业务规律、共享派生特征或训练模型</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">内容记忆与事实知识升级<span class="ncode">D-011 / ADR-026</span></div><div class="ndesc">用户明确延续即可复用前情；品牌战略、方法、规则和事实分别由责任来源确认，成品不能给自己作证</div></div></li>
+        </ul>
+        <div class="tip"><span class="h">D-008 / D-010 / D-011 已确认</span><b>共享 SaaS 强隔离，不共享租户内容学习成果；内容前情与正式知识分开</b>。这些边界已经足以进入最小物理实现。</div>
+      </div>
+    </div>
+
+    <!-- 阶段3 -->
+    <div class="phase now">
+      <div class="pcard">
+        <div class="ph-head"><p class="ph-title"><span class="idx">阶段 3</span>最小生产物理架构与首批资产激活</p><span class="badge b-now">当前</span></div>
+        <p class="ph-desc">把已经关闭的 25 类逻辑模型和用户提供的候选资产，落成第一条纵向闭环真正需要的最小物理实现。</p>
+        <ul class="nodes">
+          <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">WSL 唯一主仓迁移<span class="ncode">EDR-001 · 已确认待执行</span></div><div class="ndesc">先复制、逐文件摘要核验、再切换；WSL 副本成为唯一可写 Git 主仓，C 盘原目录只作临时回退，不长期双向编辑</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">第一条闭环与最小资产清单</div><div class="ndesc">迁移通过后，确定第一条可运行闭环；再从用户提供的 62 个文件、243 条候选中只选择该闭环会实际调用的知识、方法、角色模板和评测规则</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">权威底座、物理映射与选择性激活</div><div class="ndesc">SQL 保存稳定身份、关系、版本与状态；对象存储保存原件；全文/向量索引只作可重建派生层；复核通过的最小条目才 active</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">检索前强制作用域过滤</div><div class="ndesc">先过滤租户、组织、品牌、账号与私人范围，再做全文/向量召回；模型只接收已经过滤的上下文</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">最小技术选型</div><div class="ndesc">DIFY 可作为首期高概率编排候选但不锁死；模型/SDK 可替换；知识图谱与 GraphRAG 仍由评测缺口触发</div></div></li>
+        </ul>
+        <div class="tip"><span class="h">复杂度上限</span>首期采用模块化单体，不建微服务群、每品牌数据库、图数据库、全量自动激活、复杂权限引擎或未来模块空壳。</div>
+      </div>
+    </div>
+
+    <!-- 阶段4 -->
+    <div class="phase">
+      <div class="pcard">
+        <div class="ph-head"><p class="ph-title"><span class="idx">阶段 4</span>第一版软件纵向薄切</p><span class="badge b-todo">待实现</span></div>
+        <p class="ph-desc">用“折线之间”先形成可观察的软件结果；一条闭环稳定后再扩下一条，不同时横向铺满全部能力。</p>
+        <ul class="nodes">
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">内容生产第一条闭环<span class="ncode">建议先做 P1 弱种子</span></div><div class="ndesc">自然输入 → 账号/品牌/领域上下文 → 一份完整文字成品 → 用户自然修改 → 版本与必要留痕</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">陈列搭配第一条闭环<span class="ncode">D-005 / DM01</span></div><div class="ndesc">南城店人工商品清单 → 双层挂杆文字方案 → 自然反馈 → 只修订受影响部分</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">最小工作入口</div><div class="ndesc">顶层区分“内容生产（对外）/陈列搭配（对内）”；普通用户只看自然对话和成品，不看路由、提示词与后台轨迹</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">高风险定向终验</div><div class="ndesc">租户/品牌/组织/私人范围泄漏对抗；内容质量只做快速必要自检和黄金回归，不为每次生成跑全套对照</div></div></li>
+        </ul>
+        <div class="tip"><span class="h">完成线</span>只有用户能在软件里从输入走到可保存的成品或陈列新版，才叫纵向闭环完成；文档、夹具和绿色校验不能替代。</div>
+      </div>
+    </div>
+
+    <!-- 阶段5 -->
+    <div class="phase">
+      <div class="pcard">
+        <div class="ph-head"><p class="ph-title"><span class="idx">阶段 5</span>扩展为第一阶段完整产品</p><span class="badge b-todo">薄切通过后</span></div>
+        <p class="ph-desc">复用已经跑通的同一底座，逐项打开首期合同；不为每类内容复制一套 Agent 或工作流。</p>
+        <ul class="nodes">
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">P2—P5 与共享能力</div><div class="ndesc">在同一上下文编译、主张边界、版本和质量门上增加产品专属合同，不建五套生成系统</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">三平台文字媒体成品<span class="ncode">D-032</span></div><div class="ndesc">抖音、小红书、微信视频号；视频与图文按目标语境重编译，不机械改时长或复制文案</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">渐进入驻、账号与系列</div><div class="ndesc">消费现有新租户模板；支持轻量私人协作偏好、用户主导的连续系列和平台账号/内容角色分离</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">私人/组织素材与生命周期</div><div class="ndesc">只实现首期真实入口、范围过滤和必要事件；不预建公共投稿、BBS、多媒体编辑和复杂审批</div></div></li>
+        </ul>
+        <div class="tip"><span class="h">收敛规则</span>每新增一项能力都必须复用已跑通的底座并有当前验收消费者；不建设“产品 × 平台 × 时长 × 拍法”的流程矩阵。</div>
+      </div>
+    </div>
+
+    <!-- 阶段6 -->
+    <div class="phase par">
+      <div class="pcard">
+        <div class="ph-head"><p class="ph-title"><span class="idx">阶段 6</span>授权真实试点准备（并行）</p><span class="badge b-par">开发不等待 · 声明前必须</span></div>
+        <p class="ph-desc">真实租户不是系统构建启动门，但在声称生产就绪、企业验收或真实试点通过前必须进入。</p>
+        <ul class="nodes">
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">首个试点范围<span class="ncode">D-019</span></div><div class="ndesc">一个单品牌企业、一个区域代理、3—5 家独立加盟店；这不是一般租户准入条件</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">授权企业与最小真实资料</div><div class="ndesc">真实品牌战略、组织、账号角色、商品、门店挂杆和操作人员；ERP/POS 仍不是首期前提</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">部署配置档案</div><div class="ndesc">数据地域、外部模型边界、预估规模、恢复要求和退出窗口；按真实合同填写，不写成领域真理</div></div></li>
+        </ul>
+        <div class="tip"><span class="h">诚实边界</span>“折线之间”只能证明合同、合成数据和软件路径；不能替代真实企业资料取得、员工使用、门店执行和企业采用。</div>
+      </div>
+    </div>
+
+    <!-- 阶段7 -->
+    <div class="phase">
+      <div class="pcard">
+        <div class="ph-head"><p class="ph-title"><span class="idx">阶段 7</span>真实试点交付与第一阶段验收</p><span class="badge b-todo">待办</span></div>
+        <p class="ph-desc">让真实总部、区域和门店在生产环境完成内容与陈列任务，再判断第一阶段是否成立。</p>
+        <ul class="nodes">
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">真实内容生产路径</div><div class="ndesc">至少一个真实账号从自然输入到完整文字成品、修改、采用/发布记录和自愿反馈</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">真实墙面挂杆路径</div><div class="ndesc">门店人工清单、文字方案、现场执行、自然反馈和局部修订；不把合成黄金夹具冒充门店效果</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">首期验收与停止</div><div class="ndesc">用户结果、安全边界和必要回归成立即收口；流量、成交和全国推广不作为首期虚假完成条件</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">稳定发展阶段</div><div class="ndesc">机器自评、公共素材、多模态、更多陈列载体、ERP/连接器、交易或 BBS 均按真实需求另行立项</div></div></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase mile"><div class="mile-card"><span class="flag">🏁</span> 里程碑：第一阶段真实试点通过并完成企业验收</div></div>
+
+  </div><!-- /timeline -->
+
+  <!-- 当前完成度与技术缺口 -->
+  <div class="tech">
+    <h2>现在已经有什么，还缺什么？</h2>
+    <p class="lead">把“业务与候选数据准备好”和“生产系统已经建成”分开，避免用文档或记录数量冒充用户能力。</p>
+    <div class="tgrid">
+      <div class="tcol">
+        <h3><i class="dot d-done"></i>已完成或已有输入</h3>
+        <ul>
+          <li>P1—P5、D-032、D-005 和双应用合同</li>
+          <li>25 类最小语义核及多品牌/组织/素材边界</li>
+          <li>D-008：共享 SaaS 下的租户级强逻辑隔离档位</li>
+          <li>D-010：首期禁止跨品牌、跨租户内容学习与复用</li>
+          <li>D-011：内容前情复用与正式知识升级分离</li>
+          <li>用户提供的 62 个领域候选文件与 243 条机器候选</li>
+          <li>“折线之间”全链路合成资料与渐进入驻模板</li>
+          <li>混合知识方向：SQL 权威 + 原件 + 全文/向量派生检索</li>
+        </ul>
+      </div>
+      <div class="tcol">
+        <h3><i class="dot d-todo"></i>尚未完成</h3>
+        <ul>
+          <li>用户提供领域资产的项目接收、专业复核与 active 激活 <span class="when">阶段1/3</span></li>
+          <li>物理表、迁移、对象存储、全文/向量索引与作用域过滤 <span class="when">阶段3</span></li>
+          <li>API、DIFY/其他编排、模型 SDK、自然交互 UI <span class="when">阶段3/4</span></li>
+          <li>两条可运行软件纵向闭环 <span class="when">阶段4</span></li>
+          <li>授权真实企业与生产试点证据 <span class="when">阶段6/7</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="onenote">
+    <b>一句话记住整条主线：</b>已经完成业务合同、25 类语义核、D-008/D-010/D-011 数据使用边界和合成品牌资料，并收到用户提供的首批领域候选资产 → 无损切换到 WSL 唯一 Git 主仓 → 确定第一条闭环并选出最小知识切片 → 落最小物理架构和选择性激活 → 先跑通内容，再跑通陈列 → 扩展首期能力 → 用授权真实品牌完成企业验收。<b>不重造领域库，不全量自动激活，也不把迁移冒充风险隔离或 CI/CD 已完成。</b>
+  </div>
+
+  <footer>
+    依据 <code>docs/项目记忆.md</code>、<code>docs/待决策清单.md</code>、正式 ADR、用户提供的 <code>首批领域数据库知识数据</code> 与 D-007 两份资料成果更新。<br>
+    当前已完成立项前业务与数据语义基线并关闭 D-008、D-010、D-011；WSL 唯一主仓迁移已经确认但尚未执行。迁移完成后才继续最小物理架构与首批资产切片；当前尚无正式 Git 主仓、CI/CD、生产数据库、隔离实现证明或软件闭环。路线图是后续工作顺序，不自动授权迁移执行、远程仓库写入、外部部署、真实账号写入或试点上线。
+  </footer>
+
+</div>
+</body>
+</html>

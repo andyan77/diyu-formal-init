@@ -1,0 +1,284 @@
+contract_bundle:
+  name: 笛语系统全局知识与能力卡片合同
+  version: 0.1
+  status: alignment_draft
+  scope: system_global_baseline
+  physical_implementation_frozen: false
+  notes:
+    - 本文件定义逻辑区别，不要求映射为四张表、四个本体类或四个 Agent。
+    - 对象、表、JSON、投影和持久化身份由 D-016 决定。
+    - 平台媒体字段由 D-032 决定；经营陈列知识正文首版延后。
+
+value_sets:
+  asset_type:
+    - domain_knowledge
+    - generation_method
+    - industry_role_template
+    - evaluation_rule
+  knowledge_hardness:
+    - deterministic_fact
+    - conditional_rule
+    - creative_candidate
+  semantic_distance:
+    - commercial_core
+    - professional_adjacent
+    - audience_life
+    - public_culture
+  product_id:
+    - P1_dressing_decision
+    - P2_product_truth
+    - P3_brand_life_narrative
+    - P4_local_response
+    - P5_visual_styling_story
+  lifecycle_status:
+    - draft
+    - review
+    - active
+    - deprecated
+  rule_type:
+    - hard_gate
+    - quality_criterion
+    - maturity_indicator
+    - offline_test
+  execution_scope:
+    - online_lightweight
+    - offline_gold
+    - offline_regression
+    - offline_diagnostic_sample
+  failure_handling:
+    - block
+    - rewrite
+    - degrade
+    - warn
+    - record_only
+
+contracts:
+  domain_knowledge_card:
+    purpose: 保存跨品牌可复用的服装与生活场景领域断言。
+    applies_to_categories: [A, B, C]
+    required:
+      - knowledge_id
+      - title
+      - category
+      - topic
+      - statement
+      - hardness
+      - semantic_distance
+      - supported_products
+      - applicability
+      - allowed_expression
+      - anti_misuse
+      - status
+    optional:
+      - synonyms
+      - rationale
+      - likely_effect
+      - tradeoffs
+      - exceptions
+      - basis_refs
+      - review_policy
+      - gold_fixture_refs
+      - related_knowledge_ids
+    applicability:
+      optional_dimensions:
+        - user_goal
+        - garment_conditions
+        - body_or_activity_conditions
+        - scene_conditions
+        - climate_conditions
+        - combination_conditions
+      required_rule: 只填写实际会改变结论的维度，不为形式完整制造空条件。
+    hardness_contracts:
+      deterministic_fact:
+        required: [scope, definition_or_measurement_method, basis_refs]
+        allowed_expression: assertive_within_scope
+        prohibited:
+          - 越过已定义范围作普遍断言
+          - 冒充具体品牌商品事实
+          - 由模型擅自修改定义、单位或测量方法
+      conditional_rule:
+        required: [when, likely_effect, because, tradeoffs, not_when]
+        allowed_expression: conditional
+        prohibited:
+          - 必然化
+          - 只写收益不写代价
+          - 用单一身材或人群标签决定答案
+      creative_candidate:
+        required: [creative_direction, variation_axes, anti_cliche]
+        allowed_expression: optional_inspiration
+        prohibited:
+          - 冒充行业真理
+          - 覆盖品牌审美
+          - 把短期平台趋势写入稳定知识
+    validation_rules:
+      - 必须至少支持一个 P1—P5 产品任务。
+      - 不得包含品牌、SKU、门店、真人或动态经营属性。
+      - 单卡只标一个主要硬度；混合内容必须拆卡。
+      - 使用一次、采用或高表现不得自动改变硬度或升级为事实。
+    example:
+      knowledge_id: B-PROP-001
+      title: 短上装与视觉重心
+      category: B
+      topic: proportion
+      statement: 当上装长度、下装腰线和整体量感协调时，较短上装可能提高视觉重心并增强腿部比例感。
+      hardness: conditional_rule
+      semantic_distance: commercial_core
+      supported_products: [P1_dressing_decision, P5_visual_styling_story]
+      applicability:
+        user_goal: 提高视觉重心
+        garment_conditions: 上装长度与下装腰线可形成明确比例关系
+      when: 上装落点、下装腰线和整体量感协调
+      likely_effect: 视觉重心上移，腿部比例感增强
+      because: 减少上身纵向占比并改变上下身切割位置
+      tradeoffs: 可能暴露腰腹区域或削弱包裹感
+      not_when: 上装落点恰在最宽处、下装腰线过低或整体量感失衡
+      allowed_expression: conditional
+      anti_misuse: 不得写成“短款人人显高”
+      status: draft
+
+  generation_method_card:
+    purpose: 保存内容与制作编译方法，回答何时使用、怎样转换和如何失败。
+    applies_to_categories: [D, E]
+    required:
+      - method_id
+      - name
+      - category
+      - supported_products
+      - use_when
+      - avoid_when
+      - required_inputs
+      - transformation_steps
+      - success_signals
+      - failure_patterns
+      - status
+    optional:
+      - optional_inputs
+      - variation_axes
+      - production_constraints
+      - example_outline
+      - gold_fixture_refs
+      - related_method_ids
+    validation_rules:
+      - 方法卡不标 knowledge_hardness。
+      - 不保存可直接复制的整篇模板作为方法本体。
+      - 方法必须服务主要产品价值，不能以形式替代任务结果。
+      - 平台专属尺寸、时长和格式等待 D-032。
+    example:
+      method_id: D-REVERSAL-001
+      name: 认知反转
+      category: D
+      supported_products: [P1_dressing_decision, P2_product_truth, P3_brand_life_narrative]
+      use_when:
+        - 受众存在稳定旧判断
+        - 当前商品、事件或专业知识提供了真实反例
+      avoid_when:
+        - 没有真实变化
+        - 只能靠夸张标题制造冲突
+      required_inputs:
+        - 旧判断
+        - 可成立的新观察或证据
+      transformation_steps:
+        - 先呈现旧判断
+        - 给出具体变化
+        - 用专业解释或人格反应完成认知更新
+      success_signals:
+        - 受众能复述旧判断为何需要修正
+        - 反转不改变用户前提或商品事实
+      failure_patterns:
+        - 强行反转
+        - 末尾万能人生金句
+        - 只有标题反转，正文仍是资料朗读
+      status: draft
+
+  industry_role_template_card:
+    purpose: 为品牌入驻和账号冷启动提供服装行业角色原型，不替代企业确认的 ContentRole。
+    applies_to_category: F
+    required:
+      - role_template_id
+      - role_family
+      - organization_level
+      - authority_basis
+      - service_object
+      - legitimate_expression_scope
+      - default_content_opportunities
+      - must_not_impersonate
+      - confirmation_required
+      - status
+    optional:
+      - typical_questions
+      - first_person_boundary
+      - default_product_strengths
+      - unsuitable_topics
+      - onboarding_questions
+      - related_role_templates
+    validation_rules:
+      - 不包含真实人员姓名、履历和私人信息。
+      - 不等于系统权限角色或发布账号。
+      - 企业确认版本优先；模板升级不得静默覆盖。
+      - 知识默认可用不等于角色可以冒充其他层级身份。
+    example:
+      role_template_id: F-HQ-EXPERT-001
+      role_family: headquarters_product_expert
+      organization_level: headquarters
+      authority_basis:
+        - 品牌确认的商品、设计、面料或版型职责
+      service_object:
+        - 目标消费者
+        - 区域与终端内容团队
+      legitimate_expression_scope:
+        - 解释商品事实、结构和专业取舍
+        - 在有品牌确认理由时说明设计/开发选择
+      default_content_opportunities:
+        - P2 商品真相
+        - P1 专业选择方法
+      must_not_impersonate:
+        - 某家门店的第一人称顾客服务经历
+        - 未确认的品牌设计动机
+      confirmation_required: true
+      status: draft
+
+  evaluation_rule_card:
+    purpose: 保存 P1—P5 的规范性验收规则；不是描述性领域知识。
+    applies_to_category: H
+    required:
+      - evaluation_rule_id
+      - name
+      - applies_to
+      - rule_type
+      - condition
+      - expected_result
+      - failure_pattern
+      - execution_scope
+      - failure_handling
+      - status
+    optional:
+      - gold_fixture_refs
+      - counterfactual_variables
+      - threshold_ref
+      - version_dependency
+      - related_rule_ids
+      - rationale
+    validation_rules:
+      - 具体阈值、相似度算法和模型权重未校准前不得写死。
+      - 日常生产只执行快速必要自检；完整变形测试仅离线执行。
+      - 概率性评委不能单独承担权限、合规或发布责任硬阻断。
+      - 成熟度指标不得伪装成首期硬门。
+      - 普通质量问题优先后台改写，只有权限、隔离和明确硬禁项才阻断。
+    example:
+      evaluation_rule_id: H-BRAND-COUNTERFACTUAL-001
+      name: 品牌反事实敏感性
+      applies_to: [P1_dressing_decision, P2_product_truth, P3_brand_life_narrative, P4_local_response, P5_visual_styling_story]
+      rule_type: offline_test
+      condition: 替换品牌、账号、商品或地域中的一个变量，其余条件保持不变
+      expected_result: 成品的观点、判断、证据、结构、视觉秩序、服务动作或 CTA 至少一项发生实质变化
+      failure_pattern: 只替换品牌名、城市名、商品名或账号称谓，主体内容无需变化
+      execution_scope: offline_gold
+      failure_handling: record_only
+      threshold_ref: null
+      status: draft
+
+excluded_contracts:
+  dynamic_signal:
+    reason: 平台趋势、热点和搜索变化需要观察时间、有效期和平台作用域，单独治理。
+  display_merchandising_knowledge:
+    reason: 经营陈列属于独立应用模块，首版只保留边界，不创建知识正文或空对象。

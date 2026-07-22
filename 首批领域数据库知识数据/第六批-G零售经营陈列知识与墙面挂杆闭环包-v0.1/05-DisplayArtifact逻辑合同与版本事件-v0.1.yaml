@@ -1,0 +1,146 @@
+package:
+  name: 第六批-G零售经营陈列知识与墙面挂杆闭环包
+  version: '0.1'
+  date: '2026-07-22'
+  status: review_candidate
+  physical_implementation_frozen: false
+module_contract:
+  module_id: display-merchandising
+  contract_id: DM01_wall_hanging_rail_execution
+  contract_version: 1.0-candidate
+  task_dimensions:
+    task_purpose: visual_merchandising
+    display_zone: salesfloor_wall
+    display_carrier: hanging_rail_group
+  artifact_semantics:
+    upper_type: DisplayArtifact
+    subtype: store_display_execution_plan
+    actuality: proposed_internal_execution_advice
+    not_equivalent_to:
+    - ContentItem
+    - P5_visual_styling_story
+    - inspection_record
+    - remediation_task
+    - approval
+    - verified_execution_fact
+task_formation:
+  interaction: natural_dialogue
+  first_use:
+    required_semantics:
+    - store_and_rail_group_scope
+    - approximate_or_layered_capacity_rule
+    - upper_lower_front_side_structure
+    - primary_approach_direction
+    - fixed_hard_constraints
+    question_policy: ask_at_most_one_currently_decisive_question
+  daily_use:
+    required_semantics:
+    - current_user_provided_product_refs_and_quantities
+    optional_semantics:
+    - special_goal
+    - new_hard_constraint
+    - user_correction
+    default_goal: current_brand_display_standard
+input_contract:
+  identity_context:
+  - tenant_ref
+  - brand_ref
+  - represented_organization_ref
+  - workspace_ref
+  - store_ref
+  - actual_operator_ref
+  reused_context:
+  - brand_display_policy_ref
+  - store_wall_rail_profile_ref
+  - product_knowledge_refs
+  - applicable_global_A_B_G_assets
+  task_input:
+    inventory_lines:
+      source: user_provided
+      scope: current_task
+      fields:
+      - product_ref
+      - quantity
+    special_goal: optional
+    temporary_constraints: optional
+  truth_boundary:
+    no_erp_required: true
+    no_inventory_verification: true
+    no_source_ranking: true
+    no_inventory_writeback: true
+    preserve_user_numbers: true
+output_contract:
+  user_visible: one_complete_text_execution_plan
+  required_semantics:
+  - selection_and_unselected_backups
+  - product_grouping
+  - left_right_order
+  - upper_lower_correspondence
+  - primary_front_facing_focus_and_weaker_response
+  - side_hang_rhythm
+  - quantities_and_spacing
+  - substitution_ladder
+  - execution_steps
+  - advice_actuality_disclaimer
+  open_composition: true
+  prohibited_user_visible_runtime_data:
+  - prompt
+  - retrieval_trace
+  - model_reasoning
+  - quality_score
+  - rule_names
+  - retry_history
+feedback_revision_contract:
+  feedback_source: user_provided_natural_language
+  feedback_is_not:
+  - image_inspection
+  - system_verification
+  - quality_score
+  - remediation_order
+  revision_policy:
+    local_change: revise_affected_scope_and_inherit_unaffected_parts
+    structural_change: recompile_affected_structure_or_full_artifact
+    structural_change_examples:
+    - primary_focus_product_unavailable
+    - task_goal_changed
+    - primary_approach_direction_changed
+    - fixture_structure_or_fixed_points_changed
+    - multiple_zones_affected
+event_semantics:
+  principle: events_plus_minimal_derived_views_not_a_frozen_mutually_exclusive_state_machine
+  events:
+  - display_generation_run_recorded
+  - display_artifact_version_created
+  - user_feedback_received
+  - display_artifact_revised
+  - user_declared_execution_optional
+  minimum_audit:
+  - stable_run_id
+  - tenant_brand_workspace_store_refs
+  - actual_operator_ref
+  - contract_version
+  - brand_policy_version
+  - store_profile_version
+  - product_and_task_input_refs_or_hashes
+  - output_version_ref_and_hash
+  - checks_and_errors
+  - latency
+  - feedback_and_revision_events
+  hidden_reasoning_prohibited: true
+first_release_exclusions:
+- computer_vision_inspection
+- display_scoring
+- issue_severity
+- remediation_assignment
+- remediation_deadline
+- verification_pass
+- internal_approval_state_machine
+- erp_pos_wms_pim_plm_connectors
+- inventory_truth_service
+- automatic_execution_claim
+- window_mannequin_midfloor_other_unvalidated_contracts
+deferred_to_d016:
+- whether_DisplayArtifact_is_a_physical_first_class_object
+- table_json_projection_choice
+- field_names_and_code_enums
+- version_and_event_persistence_shape

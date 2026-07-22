@@ -1,0 +1,180 @@
+package:
+  name: 第五批-H评测与全库导入包
+  version: 0.1
+  date: 2026-07-21
+  status: review_candidate
+  physical_implementation_frozen: false
+  records:
+    assets: 170
+    fixtures: 98
+    sources: 57
+
+canonical_value_sets:
+  asset_type:
+    - domain_knowledge
+    - generation_method
+    - industry_role_template
+    - evaluation_rule
+  category: [A, B, C, D, E, F, H]
+  knowledge_hardness:
+    - deterministic_fact
+    - conditional_rule
+    - creative_candidate
+  product_id:
+    - P1_dressing_decision
+    - P2_product_truth
+    - P3_brand_life_narrative
+    - P4_local_response
+    - P5_visual_styling_story
+  lifecycle_status:
+    - review_candidate
+    - active
+    - deprecated
+  rule_type:
+    - hard_gate
+    - quality_criterion
+    - offline_test
+    - maturity_indicator
+  execution_scope:
+    - online_lightweight
+    - offline_gold
+    - offline_regression
+    - offline_diagnostic_sample
+  failure_handling:
+    - block
+    - rewrite
+    - degrade
+    - warn
+    - record_only
+
+normalization:
+  - from: asset_type=production_method
+    to: asset_type=generation_method
+    add:
+      method_family: production_media
+    affected_records: 28
+    semantic_change: false
+  - from: asset_type=generation_method AND category=D
+    add:
+      method_family: content_generation
+    affected_records: 16
+    semantic_change: false
+  - from: supported_products=[P1..P5]
+    to: supported_products=[stable_product_ids]
+    semantic_change: false
+  - from: PRJ-P5-CD-20260721
+    to: PRJ-P5-CLOSE-20260721
+    kind: source_alias
+    semantic_change: false
+  - add_to_all_assets:
+      asset_id: original logical id
+      schema_version: diyu_global_asset_v0.1
+      source_batch: source package
+      import_disposition: create_review_candidate
+
+record_contracts:
+  domain_knowledge:
+    categories: [A, B, C]
+    required:
+      - asset_id
+      - knowledge_id
+      - title
+      - topic
+      - statement
+      - hardness
+      - semantic_distance
+      - supported_products
+      - applicability
+      - allowed_expression
+      - anti_misuse
+      - basis_refs
+      - status
+    conditional_requirements:
+      deterministic_fact: [scope, definition_or_measurement_method, basis_refs]
+      conditional_rule: [when, likely_effect, because, tradeoffs, not_when]
+      creative_candidate: [creative_direction, variation_axes, anti_cliche_or_anti_misuse]
+  generation_method:
+    categories: [D, E]
+    required:
+      - asset_id
+      - method_id
+      - name
+      - method_family
+      - supported_products
+      - use_when
+      - avoid_when
+      - required_inputs
+      - transformation_steps
+      - success_signals
+      - failure_patterns
+      - status
+    prohibited: [hardness]
+  industry_role_template:
+    categories: [F]
+    required:
+      - asset_id
+      - role_template_id
+      - role_family
+      - organization_level
+      - authority_basis
+      - service_object
+      - legitimate_expression_scope
+      - default_content_opportunities
+      - must_not_impersonate
+      - confirmation_required
+      - status
+    invariants:
+      confirmation_required: true
+  evaluation_rule:
+    categories: [H]
+    required:
+      - asset_id
+      - evaluation_rule_id
+      - name
+      - applies_to
+      - rule_type
+      - condition
+      - expected_result
+      - failure_pattern
+      - execution_scope
+      - failure_handling
+      - normative_status
+      - basis_refs
+      - status
+
+cross_reference_rules:
+  - asset_id must be globally unique
+  - every basis_ref must resolve in source registry
+  - every gold_fixture_ref must resolve in fixture registry
+  - fixture related_asset_ids must resolve in asset registry
+  - unknown optional fields may be preserved
+  - unknown asset_type, category, hardness, rule_type or execution_scope must not silently default
+
+logical_import_order:
+  - register source records
+  - import assets into review_candidate scope
+  - register fixtures and cross-links
+  - run required-field and value-set validation
+  - run source/fixture/asset reference integrity checks
+  - expose human review queue
+  - activate only after domain review and applicable gold/regression evidence
+
+activation_policy:
+  default: no_auto_activation
+  rules:
+    - imported records remain review_candidate
+    - deterministic facts require scope and source review
+    - conditional rules require condition/tradeoff/exception review
+    - creative candidates must not override brand aesthetics
+    - role templates require enterprise confirmation before becoming ContentRole
+    - evaluation hypotheses and maturity indicators never become hard gates by import alone
+    - adoption, publication or high performance never upgrades an asset automatically
+
+deferred:
+  - database tables and indexes
+  - object first-class identity
+  - SQL versus JSON versus projection
+  - DIFY workflow nodes
+  - platform and media contracts under D-032
+  - media support matrix under D-030
+  - display-merchandising knowledge body

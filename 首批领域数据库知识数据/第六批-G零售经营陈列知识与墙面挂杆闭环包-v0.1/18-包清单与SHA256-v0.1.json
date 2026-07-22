@@ -1,0 +1,112 @@
+{
+  "package_name": "第六批-G零售经营陈列知识与墙面挂杆闭环包-v0.1",
+  "version": "0.1",
+  "date": "2026-07-22",
+  "manifest_self_included": false,
+  "files": [
+    {
+      "file": "00-上游裁决同步与第六批边界记录-v0.1.md",
+      "size_bytes": 3676,
+      "sha256": "53edd706ff67129deb33699e9da8de53898f3f5ef78d23ad63b020e4dfbc7107"
+    },
+    {
+      "file": "01-第六批G零售经营陈列知识与墙面挂杆闭环包-README-v0.1.md",
+      "size_bytes": 4843,
+      "sha256": "bf3a8f6ebabaf6a079da20fc61047768845dae7a38197847340f14375c1f74fa"
+    },
+    {
+      "file": "02-首期陈列搭配成果合同-v0.1.md",
+      "size_bytes": 4401,
+      "sha256": "d26d78055654e32549c54069febf0fcae9e5311d82f05ce67e883e66ff19597a"
+    },
+    {
+      "file": "03-首次条件档案与日常输入合同-v0.1.md",
+      "size_bytes": 3550,
+      "sha256": "be11a3301f0a021c7821da1b33111739264c2c913108218f9e59d38ade361c7b"
+    },
+    {
+      "file": "04-陈列任务与数据需求清单-v0.1.md",
+      "size_bytes": 3816,
+      "sha256": "63b5282c18cc6fb0304241cc44f3e8b5fbe5a40fcf75948162370d313fe015a6"
+    },
+    {
+      "file": "05-DisplayArtifact逻辑合同与版本事件-v0.1.yaml",
+      "size_bytes": 4224,
+      "sha256": "1cecd73df044d963cd9306e1acd2791e670e0fbbb5f17bd9e1db5bb0a5ed82a8"
+    },
+    {
+      "file": "06-G01-G08零售经营陈列知识卡-v0.1.md",
+      "size_bytes": 44404,
+      "sha256": "4084fb907232534807e630f52035c4b4bcce2881b7dec038888e6c6c4b772bfe"
+    },
+    {
+      "file": "07-墙面挂杆方案编译方法卡-v0.1.md",
+      "size_bytes": 20829,
+      "sha256": "0e87be129bb00a5c0bc025f6e66b0e1a635424f96269d26af16dfb93b0e0e8f9"
+    },
+    {
+      "file": "08-品牌门店陈列数据模板与折线之间演示增量-v0.1.yaml",
+      "size_bytes": 5079,
+      "sha256": "f85aa299f47e95b773f89083f2901d6e7bddbf4e3307b77367c61fdaad911979"
+    },
+    {
+      "file": "09-陈列专属H评测规则卡-v0.1.md",
+      "size_bytes": 18479,
+      "sha256": "8a7fd8e1f92027ef5c15a67bb2a56252f01e6a49c6908a6e96e69625764e0888"
+    },
+    {
+      "file": "10-墙面挂杆黄金闭环与变形夹具-v0.1.md",
+      "size_bytes": 8931,
+      "sha256": "9a1f2757b36745e101827554c98edf4335068d006535c85dde59e31a169d6a7b"
+    },
+    {
+      "file": "11-GH陈列机器导入候选-v0.1.jsonl",
+      "size_bytes": 96807,
+      "sha256": "273f592122acbe30231a9b237f31a0b227da358f11dc677a7c685743d69d0954"
+    },
+    {
+      "file": "12-双应用验证夹具注册表-v0.2.jsonl",
+      "size_bytes": 86745,
+      "sha256": "733cbece915acd42ef1a2f0280e7823f2fb6dd69a30f7afd39a41275cd7a4bf4"
+    },
+    {
+      "file": "13-双应用来源注册表-v0.2.jsonl",
+      "size_bytes": 32254,
+      "sha256": "0b437d91c8282a58e3cbad3479c6c3994c222cd2a5d66133b81f7f593c5a05eb"
+    },
+    {
+      "file": "14-双应用逻辑导入合同与Schema-v0.2.yaml",
+      "size_bytes": 7094,
+      "sha256": "7a9d8e4ff5c6bfde2f0040a0080153b862dd959dc40dbb1c5aaf9510c3b94fb0"
+    },
+    {
+      "file": "15-双应用全库机器导入候选-v0.2.jsonl",
+      "size_bytes": 356378,
+      "sha256": "f0aa764a4e78198eb141f39a7ac7af33c3fc5b9d364fa07a58f066f0741eec11"
+    },
+    {
+      "file": "16-双应用全库目录与导入追踪矩阵-v0.2.xlsx",
+      "size_bytes": 126072,
+      "sha256": "a50e4c6cb007fd439f51744998e8b10f79a35da08f1e8043ea78ecd54cea6143"
+    },
+    {
+      "file": "17-导入校验报告-v0.1.md",
+      "size_bytes": 4344,
+      "sha256": "4af06f26360238f051d4bc60662833f9319ea6aef69203d1fc67094467fa84dd"
+    },
+    {
+      "file": "overview-preview.png",
+      "size_bytes": 301406,
+      "sha256": "7bd012233c0709215367dd3dfa102e51bf04b04e85c0db9b76ea9e842bf7919b"
+    }
+  ],
+  "counts": {
+    "files_excluding_manifest": 19,
+    "new_assets": 73,
+    "combined_assets": 243,
+    "combined_fixtures": 123,
+    "combined_sources": 62,
+    "blocking_errors": 0,
+    "warnings": 4
+  }
+}
