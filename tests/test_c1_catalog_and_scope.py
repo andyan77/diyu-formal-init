@@ -38,7 +38,7 @@ def test_catalog_is_idempotent_and_keeps_p1_and_dm01_activations_separate(
 
 def test_run_records_only_applicable_active_asset_versions(app_database_url: str) -> None:
     with TestClient(create_app(Settings.model_validate({}))) as client:
-        client.get("/")
+        client.get("/ui/select/content")
         created = client.post("/api/v1/content", json={"weak_seed": _SEED})
         assert created.status_code == 200
         not_applicable = client.post(
@@ -87,10 +87,10 @@ def test_same_tenant_other_brand_account_and_user_cannot_access_content() -> Non
         demo_account_id=SIBLING_ACCOUNT_ID,
     )
     with TestClient(create_app(primary)) as owner:
-        owner.get("/")
+        owner.get("/ui/select/content")
         created = owner.post("/api/v1/content", json={"weak_seed": _SEED}).json()
     with TestClient(create_app(sibling)) as other:
-        other.get("/")
+        other.get("/ui/select/content")
         read = other.get(f"/api/v1/tasks/{created['task_id']}/versions/1")
         revise = other.post(
             f"/api/v1/tasks/{created['task_id']}/revisions", json={"instruction": "改写一下"}
@@ -133,7 +133,7 @@ def test_account_rejects_a_content_role_owned_by_another_same_tenant_brand(
         )
     try:
         with TestClient(create_app(Settings.model_validate({}))) as client:
-            client.get("/")
+            client.get("/ui/select/content")
             response = client.post("/api/v1/content", json={"weak_seed": _SEED})
         assert response.status_code == 422
     finally:

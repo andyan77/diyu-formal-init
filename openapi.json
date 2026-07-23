@@ -1,6 +1,24 @@
 {
   "components": {
     "schemas": {
+      "ApplicationHandoffResponse": {
+        "properties": {
+          "kind": {
+            "default": "handoff",
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ApplicationHandoffResponse",
+        "type": "object"
+      },
       "ContentVersionResponse": {
         "properties": {
           "body": {
@@ -265,7 +283,7 @@
   },
   "info": {
     "description": "可信 cookie 会话决定租户、品牌、发布账号和操作人；客户端不能切换这些作用域。",
-    "title": "笛语 M3-1 P1 API",
+    "title": "笛语双应用 API",
     "version": "0.1.0"
   },
   "openapi": "3.1.0",
@@ -373,6 +391,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/GreetingResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ApplicationHandoffResponse"
                     }
                   ],
                   "title": "Response Create Content Api V1 Content Post"
@@ -383,6 +404,9 @@
           },
           "401": {
             "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
           },
           "422": {
             "description": "业务失败；生成失败时不会产生半成品版本。"
@@ -425,6 +449,9 @@
           "401": {
             "description": "缺少或无效的可信会话。"
           },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
           "422": {
             "description": "业务失败；生成失败时不会产生半成品版本。"
           }
@@ -461,6 +488,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/DisplayQuestionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ApplicationHandoffResponse"
                     }
                   ],
                   "title": "Response Create Display Api V1 Display Post"
@@ -471,6 +501,9 @@
           },
           "401": {
             "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
           },
           "422": {
             "description": "业务失败；生成失败时不会产生半成品版本。"
@@ -531,6 +564,9 @@
           "401": {
             "description": "缺少或无效的可信会话。"
           },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
           "422": {
             "description": "业务失败；生成失败时不会产生半成品版本。"
           }
@@ -580,6 +616,9 @@
           },
           "401": {
             "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
           },
           "422": {
             "description": "业务失败；生成失败时不会产生半成品版本。"
@@ -632,6 +671,9 @@
           "401": {
             "description": "缺少或无效的可信会话。"
           },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
           "422": {
             "description": "业务失败；生成失败时不会产生半成品版本。"
           }
@@ -682,6 +724,9 @@
           "401": {
             "description": "缺少或无效的可信会话。"
           },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
           "422": {
             "description": "业务失败；生成失败时不会产生半成品版本。"
           }
@@ -692,6 +737,89 @@
           }
         ],
         "summary": "Get Version"
+      }
+    },
+    "/content": {
+      "get": {
+        "operationId": "content_workbench_content_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "task",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notice",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notice"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Content Workbench"
       }
     },
     "/display": {
@@ -759,17 +887,21 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
           "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
+            "description": "业务失败；生成失败时不会产生半成品版本。"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Display Workbench"
       }
     },
@@ -814,6 +946,9 @@
           },
           "401": {
             "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
           }
         },
         "security": [
@@ -833,6 +968,9 @@
           },
           "401": {
             "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
           }
         },
         "security": [
@@ -852,6 +990,9 @@
           },
           "401": {
             "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
           }
         },
         "security": [
@@ -871,6 +1012,9 @@
           },
           "401": {
             "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
           }
         },
         "security": [

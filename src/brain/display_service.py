@@ -59,6 +59,17 @@ class DisplayService:
     def fetch_version(self, scope: DisplayScope, task_id: UUID, version: int) -> dict[str, object]:
         return self._repository.fetch_version(scope, task_id, version)
 
+    def identity_summary(self, scope: DisplayScope) -> dict[str, str]:
+        context = self._repository.load_context(scope)
+        if context is None:
+            raise DomainError("当前演示会话没有可用门店身份")
+        return {
+            "brand": context.brand_name,
+            "operator": context.operator_name,
+            "organization": context.organization_name,
+            "store": context.store_name,
+        }
+
     def _generate(
         self,
         scope: DisplayScope,

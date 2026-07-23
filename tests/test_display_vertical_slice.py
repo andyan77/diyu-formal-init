@@ -34,7 +34,7 @@ _INVENTORY_PAIRS = (
 
 def test_display_v1_v2_preserves_history_and_records_dm01_assets(app_database_url: str) -> None:
     with TestClient(create_app(Settings.model_validate({}))) as client:
-        assert client.get("/display").status_code == 200
+        assert client.get("/ui/select/display").status_code == 200
         created = client.post("/api/v1/display", json={"inventory_text": _INVENTORY})
         assert created.status_code == 200
         v1 = created.json()

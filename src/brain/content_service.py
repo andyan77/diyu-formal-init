@@ -63,6 +63,16 @@ class ContentService:
     def save_version(self, scope: TrustedScope, version_id: UUID) -> dict[str, object]:
         return self._repository.save_version(scope, version_id)
 
+    def identity_summary(self, scope: TrustedScope) -> dict[str, str]:
+        context = self._repository.load_brand_context(scope)
+        return {
+            "brand": context.brand_name,
+            "operator": context.operator_name,
+            "organization": context.organization_name,
+            "account": context.account_name,
+            "content_role": context.content_role_name,
+        }
+
     def _generate_and_persist(
         self,
         scope: TrustedScope,

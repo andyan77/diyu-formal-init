@@ -59,3 +59,8 @@ class DisplayVersionResponse(BaseModel):
 class DisplayQuestionResponse(BaseModel):
     kind: str = "question"
     message: str
+
+
+class ApplicationHandoffResponse(BaseModel):
+    kind: str = "handoff"
+    message: str

@@ -17,7 +17,7 @@ _SEED = "下午开完一个挺正式的会，转身就拎着电脑去接孩子�
 
 def test_p1_v1_v2_history_save_and_explicit_reuse() -> None:
     with TestClient(create_app(Settings.model_validate({}))) as client:
-        assert client.get("/").status_code == 200
+        assert client.get("/ui/select/content").status_code == 200
         created = client.post("/api/v1/content", json={"weak_seed": _SEED})
         assert created.status_code == 200
         v1 = created.json()
@@ -53,7 +53,7 @@ def test_p1_v1_v2_history_save_and_explicit_reuse() -> None:
 
 def test_workbench_renders_complete_artifact_without_internal_trace() -> None:
     with TestClient(create_app(Settings.model_validate({}))) as client:
-        client.get("/")
+        client.get("/ui/select/content")
         generated = client.post("/ui/generate", data={"weak_seed": _SEED}, follow_redirects=False)
         assert generated.status_code == 303
         page = client.get(generated.headers["location"])
@@ -75,7 +75,7 @@ def test_natural_chat_does_not_create_task(app_database_url: str) -> None:
         cursor.execute("SELECT COUNT(*) FROM business_tasks")
         before = cursor.fetchone()
     with TestClient(create_app(Settings.model_validate({}))) as client:
-        client.get("/")
+        client.get("/ui/select/content")
         responses = [
             client.post("/api/v1/content", json={"weak_seed": message})
             for message in ("hello world", "你好呀", "今天有点累")
@@ -96,7 +96,7 @@ def test_api_uses_cookie_scope_and_rejects_client_scope_switching() -> None:
     with TestClient(app) as client:
         assert client.post("/api/v1/content", json={"weak_seed": "怎么穿"}).status_code == 401
         assert client.post("/ui/generate", data={"weak_seed": "怎么穿"}).status_code == 401
-        client.get("/")
+        client.get("/ui/select/content")
         switched = client.post(
             "/api/v1/content",
             json={"weak_seed": "怎么穿", "tenant_id": "not-accepted"},
@@ -114,16 +114,16 @@ def test_api_uses_cookie_scope_and_rejects_client_scope_switching() -> None:
 def test_workbench_requires_cookie_before_reading_a_version() -> None:
     app = create_app(Settings.model_validate({}))
     with TestClient(app) as owner:
-        owner.get("/")
+        owner.get("/ui/select/content")
         created = owner.post("/api/v1/content", json={"weak_seed": _SEED}).json()
     with TestClient(app) as stranger:
-        response = stranger.get(f"/?task={created['task_id']}&version=1")
+        response = stranger.get(f"/content?task={created['task_id']}&version=1")
     assert response.status_code == 401
 
 
 def test_second_seed_and_personal_identifier_are_not_replayed() -> None:
     with TestClient(create_app(Settings.model_validate({}))) as client:
-        client.get("/")
+        client.get("/ui/select/content")
         golden = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
         second_seed = "下雨天骑车去上班，到了办公室还要参加下午的分享。"
         second = client.post("/api/v1/content", json={"weak_seed": second_seed}).json()
