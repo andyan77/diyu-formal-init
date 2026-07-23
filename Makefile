@@ -16,4 +16,4 @@ golden:
 	scripts/golden.sh
 
 openapi:
-	source scripts/test.sh && .venv/bin/python -m src.gateway.api.export_openapi
+	bash -c 'source scripts/test.sh && .venv/bin/python -m src.gateway.api.export_openapi'
