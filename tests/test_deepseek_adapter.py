@@ -148,7 +148,7 @@ def test_deepseek_adapter_accepts_provider_fenced_json(
                 "choices": [
                     {
                         "message": {
-                            "content": "```json\n{\"body\":\"自然导读\\n选择\\n边界\\n下一步\\n完整台词/解说\\n台词\\n画面与动作\\n动作\\n字幕\\n字幕\\n声音与制作提示\\n一人手机\",\"choice\":\"选择\",\"boundary\":\"边界\",\"next_action\":\"下一步\",\"natural_guide\":\"自然导读\",\"spoken_lines\":\"台词\",\"visual_actions\":\"动作\",\"subtitles\":\"字幕\",\"sound_and_production\":\"一人手机\"}\n```"
+                            "content": '```json\n{"body":"自然导读\\n选择\\n边界\\n下一步\\n完整台词/解说\\n台词\\n画面与动作\\n动作\\n字幕\\n字幕\\n声音与制作提示\\n一人手机","choice":"选择","boundary":"边界","next_action":"下一步","natural_guide":"自然导读","spoken_lines":"台词","visual_actions":"动作","subtitles":"字幕","sound_and_production":"一人手机"}\n```'
                         }
                     }
                 ]

@@ -69,6 +69,91 @@
         "title": "CreateContentRequest",
         "type": "object"
       },
+      "CreateDisplayRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "inventory_text": {
+            "maxLength": 2000,
+            "minLength": 4,
+            "title": "Inventory Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "inventory_text"
+        ],
+        "title": "CreateDisplayRequest",
+        "type": "object"
+      },
+      "DisplayQuestionResponse": {
+        "properties": {
+          "kind": {
+            "default": "question",
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "DisplayQuestionResponse",
+        "type": "object"
+      },
+      "DisplayRevisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "feedback": {
+            "maxLength": 2000,
+            "minLength": 2,
+            "title": "Feedback",
+            "type": "string"
+          }
+        },
+        "required": [
+          "feedback"
+        ],
+        "title": "DisplayRevisionRequest",
+        "type": "object"
+      },
+      "DisplayVersionResponse": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "kind": {
+            "default": "display",
+            "title": "Kind",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "version_id": {
+            "format": "uuid",
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "version_id",
+          "version",
+          "body"
+        ],
+        "title": "DisplayVersionResponse",
+        "type": "object"
+      },
       "GreetingResponse": {
         "properties": {
           "kind": {
@@ -352,6 +437,154 @@
         "summary": "Save Version"
       }
     },
+    "/api/v1/display": {
+      "post": {
+        "operationId": "create_display_api_v1_display_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDisplayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DisplayVersionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DisplayQuestionResponse"
+                    }
+                  ],
+                  "title": "Response Create Display Api V1 Display Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Display"
+      }
+    },
+    "/api/v1/display-tasks/{task_id}/revisions": {
+      "post": {
+        "operationId": "revise_display_api_v1_display_tasks__task_id__revisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisplayRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisplayVersionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Revise Display"
+      }
+    },
+    "/api/v1/display-tasks/{task_id}/versions/{version}": {
+      "get": {
+        "operationId": "get_display_api_v1_display_tasks__task_id__versions__version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisplayVersionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Get Display"
+      }
+    },
     "/api/v1/tasks/{task_id}/revisions": {
       "post": {
         "operationId": "revise_content_api_v1_tasks__task_id__revisions_post",
@@ -451,6 +684,101 @@
           }
         ],
         "summary": "Get Version"
+      }
+    },
+    "/display": {
+      "get": {
+        "operationId": "display_workbench_display_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "task",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Display Workbench"
+      }
+    },
+    "/ui/display/generate": {
+      "post": {
+        "operationId": "ui_display_generate_ui_display_generate_post",
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Ui Display Generate"
+      }
+    },
+    "/ui/display/revise": {
+      "post": {
+        "operationId": "ui_display_revise_ui_display_revise_post",
+        "responses": {
+          "303": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Ui Display Revise"
       }
     },
     "/ui/generate": {

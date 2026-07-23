@@ -6,7 +6,7 @@ import hmac
 from fastapi import HTTPException, Request
 
 from src.gateway.api.settings import Settings
-from src.shared.types import TrustedScope
+from src.shared.types import DisplayScope, TrustedScope
 
 _COOKIE_NAME = "diyu_session"
 _SESSION_MARKER = b"m3-p1-server-session"
@@ -14,6 +14,7 @@ _SESSION_MARKER = b"m3-p1-server-session"
 
 class SessionAuthority:
     def __init__(self, settings: Settings) -> None:
+        self._settings = settings
         self._secret = settings.session_secret.get_secret_value().encode("utf-8")
         self._scope = TrustedScope(
             tenant_id=settings.demo_tenant_id,
@@ -25,6 +26,14 @@ class SessionAuthority:
     @property
     def scope(self) -> TrustedScope:
         return self._scope
+
+    def display_scope(self) -> DisplayScope:
+        return DisplayScope(
+            self._scope.tenant_id,
+            self._settings.demo_display_user_id,
+            self._scope.brand_id,
+            self._settings.demo_display_organization_id,
+        )
 
     def issue(self) -> str:
         return hmac.new(self._secret, _SESSION_MARKER, hashlib.sha256).hexdigest()

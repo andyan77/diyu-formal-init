@@ -127,7 +127,9 @@ class DeepSeekGenerator(ContentGenerator):
     @staticmethod
     def _body_with_contract(body: str, contract: P1SemanticContract) -> str:
         """Keep the user-visible artifact faithful to its small semantic contract."""
-        if all(value in body for value in (contract.choice, contract.boundary, contract.next_action)):
+        if all(
+            value in body for value in (contract.choice, contract.boundary, contract.next_action)
+        ):
             return body
         return (
             f"{body}\n\n本条选择：{contract.choice}\n"
@@ -144,11 +146,7 @@ class DeepSeekGenerator(ContentGenerator):
             ("字幕", production.subtitles),
             ("声音与制作提示", production.sound_and_production),
         )
-        missing = [
-            f"{heading}：{value}"
-            for heading, value in sections
-            if heading not in body
-        ]
+        missing = [f"{heading}：{value}" for heading, value in sections if heading not in body]
         return body if not missing else f"{body}\n\n" + "\n".join(missing)
 
     @staticmethod

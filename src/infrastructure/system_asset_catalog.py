@@ -19,6 +19,19 @@ _ACTIVE: dict[str, tuple[str, str]] = {
     "C-COMMUTE-001": ("p1_context", "同一弱种子明确出现两个以上连续生活或工作阶段时"),
     "D-DIRECT-001": ("p1_method", "当前 P1 任务需要先给出可执行选择结论时"),
     "D-CRAFT-001": ("p1_method", "当前 P1 成品需要去除重复并推进选择、边界或行动时"),
+    "G-TASK-003": ("display-merchandising / DM01", "DM01 墙面挂杆任务"),
+    "G-TASK-004": ("display-merchandising / DM01", "DM01 墙面挂杆任务"),
+    "G-FIXTURE-001": ("display-merchandising / DM01", "双层挂杆条件"),
+    "G-FIXTURE-002": ("display-merchandising / DM01", "固定正挂条件"),
+    "G-GROUP-001": ("display-merchandising / DM01", "上下搭配分组"),
+    "G-FOCUS-001": ("display-merchandising / DM01", "焦点与回应"),
+    "G-DENSITY-002": ("display-merchandising / DM01", "可抽取密度"),
+    "G-SUB-001": ("display-merchandising / DM01", "同款替代"),
+    "G-SUB-003": ("display-merchandising / DM01", "局部减密度"),
+    "G-REV-003": ("display-merchandising / DM01", "自然反馈局部修订"),
+    "GM-LAYOUT-001": ("display-merchandising / DM01", "搭配布局方法"),
+    "GM-EXEC-001": ("display-merchandising / DM01", "现场执行方法"),
+    "GM-REVISE-001": ("display-merchandising / DM01", "局部修订方法"),
 }
 
 
@@ -39,7 +52,7 @@ def import_system_asset_catalog(source: Path = _SOURCE) -> int:
                     (asset_id, asset_type, schema_version, source_batch, display_name, structured_body,
                      supported_products, applicability, status)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (asset_id) DO NOTHING
+                ON CONFLICT (asset_id) DO UPDATE SET status = EXCLUDED.status
                 """,
                 (
                     asset_id,
@@ -58,7 +71,7 @@ def import_system_asset_catalog(source: Path = _SOURCE) -> int:
                 """
                 INSERT INTO system_asset_activations (asset_id, consumer, applicability)
                 VALUES (%s, %s, %s)
-                ON CONFLICT (asset_id) DO NOTHING
+                ON CONFLICT (asset_id) DO UPDATE SET consumer = EXCLUDED.consumer, applicability = EXCLUDED.applicability
                 """,
                 (asset_id, consumer, applicability),
             )

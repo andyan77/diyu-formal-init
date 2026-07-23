@@ -40,3 +40,11 @@ def workbench_location(result: dict[str, object], notice: str | None = None) -> 
     if notice:
         query["notice"] = notice
     return "/?" + urlencode(query)
+
+
+def render_display_workbench(mode: str, result: dict[str, object] | None = None) -> str:
+    artifact = ""
+    if result:
+        artifact = f"<h2>墙面方案 V{escape(str(result['version']))}</h2><article>{escape(str(result['body']))}</article><form method='post' action='/ui/display/revise'><input type='hidden' name='task_id' value='{escape(str(result['task_id']))}'><textarea name='feedback' required></textarea><button>按自然反馈生成 V{int(str(result['version'])) + 1}</button></form>"
+    mode_text = "离线确定性测试模式" if mode == "stub" else "已连接 DeepSeek 真实生成模式"
+    return f"<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><title>陈列搭配（对内）</title><style>body{{max-width:780px;margin:36px auto;background:#F8F7F3;color:#171614;font:16px/1.7 system-ui}}textarea{{width:100%;min-height:100px}}article{{white-space:pre-wrap;background:#fff;padding:18px}}a{{color:#B7462E}}</style></head><body><img src='/assets/diyu-logo-horizontal.svg' alt='笛语' width='150'><h1>陈列搭配（对内）</h1><p>{mode_text}</p><form method='post' action='/ui/display/generate'><textarea name='inventory_text' required placeholder='今天这组墙可用：ZX-C218 3 件……'></textarea><button>生成墙面方案</button></form>{artifact}<p><a href='/'>返回内容生产</a></p></body></html>"

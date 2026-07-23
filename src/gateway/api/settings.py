@@ -16,6 +16,8 @@ class Settings:
     demo_user_id: UUID
     demo_brand_id: UUID
     demo_account_id: UUID
+    demo_display_organization_id: UUID
+    demo_display_user_id: UUID
     generator_mode: Literal["stub", "deepseek"]
     model_timeout_seconds: float
     model_max_retries: int
@@ -34,6 +36,8 @@ class Settings:
             "DIYU_DEMO_USER_ID": "demo_user_id",
             "DIYU_DEMO_BRAND_ID": "demo_brand_id",
             "DIYU_DEMO_ACCOUNT_ID": "demo_account_id",
+            "DIYU_DEMO_DISPLAY_ORGANIZATION_ID": "demo_display_organization_id",
+            "DIYU_DEMO_DISPLAY_USER_ID": "demo_display_user_id",
             "DIYU_GENERATOR_MODE": "generator_mode",
             "DIYU_MODEL_TIMEOUT_SECONDS": "model_timeout_seconds",
             "DIYU_MODEL_MAX_RETRIES": "model_max_retries",
@@ -74,6 +78,16 @@ class Settings:
             demo_user_id=UUID(str(read("DIYU_DEMO_USER_ID"))),
             demo_brand_id=UUID(str(read("DIYU_DEMO_BRAND_ID"))),
             demo_account_id=UUID(str(read("DIYU_DEMO_ACCOUNT_ID"))),
+            demo_display_organization_id=UUID(
+                str(
+                    read(
+                        "DIYU_DEMO_DISPLAY_ORGANIZATION_ID", "00000000-0000-0000-0000-000000000012"
+                    )
+                )
+            ),
+            demo_display_user_id=UUID(
+                str(read("DIYU_DEMO_DISPLAY_USER_ID", "00000000-0000-0000-0000-000000000013"))
+            ),
             generator_mode=cast(Literal["stub", "deepseek"], mode),
             model_timeout_seconds=timeout,
             model_max_retries=retries,

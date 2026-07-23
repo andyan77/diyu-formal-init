@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+import uuid
 from uuid import UUID
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 TENANT_ID = UUID("00000000-0000-0000-0000-000000000001")
 ORG_ID = UUID("00000000-0000-0000-0000-000000000010")
@@ -14,6 +16,10 @@ GRANT_ID = UUID("00000000-0000-0000-0000-000000000041")
 ROLE_ID = UUID("00000000-0000-0000-0000-000000000051")
 ACCOUNT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000061")
 AUDIENCE_ID = UUID("00000000-0000-0000-0000-000000000071")
+STORE_ORG_ID = UUID("00000000-0000-0000-0000-000000000012")
+STORE_USER_ID = UUID("00000000-0000-0000-0000-000000000013")
+STORE_ID = UUID("00000000-0000-0000-0000-000000000081")
+POLICY_ID = UUID("00000000-0000-0000-0000-000000000082")
 
 
 def seed_demo() -> None:
@@ -24,6 +30,14 @@ def seed_demo() -> None:
         cursor.execute(
             "INSERT INTO tenants (id, name) VALUES (%s, %s) ON CONFLICT (id) DO NOTHING",
             (TENANT_ID, "折线之间演示租户"),
+        )
+        cursor.execute(
+            "INSERT INTO organizations (id,tenant_id,name) VALUES (%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+            (STORE_ORG_ID, TENANT_ID, "折线之间·南城店"),
+        )
+        cursor.execute(
+            "INSERT INTO users (id,tenant_id,organization_id,display_name) VALUES (%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+            (STORE_USER_ID, TENANT_ID, STORE_ORG_ID, "南城店陈列执行甲"),
         )
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
         cursor.execute(
@@ -55,6 +69,42 @@ def seed_demo() -> None:
             "UPDATE brands SET strategy_version = %s WHERE tenant_id = %s AND id = %s",
             ("V1.0-first-phase-data-ready", TENANT_ID, BRAND_ID),
         )
+        cursor.execute(
+            "INSERT INTO display_policies (id,tenant_id,brand_id,version,body) VALUES (%s,%s,%s,'1.0',%s) ON CONFLICT (id) DO NOTHING",
+            (
+                POLICY_ID,
+                TENANT_ID,
+                BRAND_ID,
+                Jsonb({"focus": "left primary, right weaker response", "density": "do not fill"}),
+            ),
+        )
+        cursor.execute(
+            "INSERT INTO display_stores (id,tenant_id,brand_id,control_organization_id,execution_organization_id,name,profile_version,rail_profile) VALUES (%s,%s,%s,%s,%s,%s,'1.0',%s) ON CONFLICT (id) DO NOTHING",
+            (
+                STORE_ID,
+                TENANT_ID,
+                BRAND_ID,
+                ORG_ID,
+                STORE_ORG_ID,
+                "折线之间·南城店",
+                Jsonb({"upper_side_max": 6, "lower_max": 8, "approach": "left", "front_points": 2}),
+            ),
+        )
+        for sku, facts in {
+            "ZX-C218": {
+                "category": "double-faced short coat",
+                "colors": ["charcoal", "deep green plaid"],
+            },
+            "ZX-S104": {"category": "warm white shirt"},
+            "ZX-K126": {"category": "oat thin knit"},
+            "ZX-P211": {"category": "charcoal straight trousers"},
+            "ZX-V113": {"category": "charcoal short vest"},
+            "ZX-Q117": {"category": "deep olive skirt"},
+        }.items():
+            cursor.execute(
+                "INSERT INTO display_products (id,tenant_id,brand_id,sku,facts) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (tenant_id,brand_id,sku) DO NOTHING",
+                (uuid.uuid5(uuid.NAMESPACE_URL, sku), TENANT_ID, BRAND_ID, sku, Jsonb(facts)),
+            )
         cursor.execute(
             """
                 INSERT INTO content_accounts (id, tenant_id, brand_id, name, channel)

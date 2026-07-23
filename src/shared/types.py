@@ -76,3 +76,47 @@ class GeneratedArtifact:
     provider_usage: dict[str, int] | None
     semantic_contract: P1SemanticContract
     production: P1ProductionBundle
+
+
+@dataclass(frozen=True)
+class DisplayScope:
+    """Trusted internal merchandising scope; deliberately has no publishing account."""
+
+    tenant_id: UUID
+    user_id: UUID
+    brand_id: UUID
+    organization_id: UUID
+
+
+@dataclass(frozen=True)
+class DisplayContext:
+    brand_name: str
+    organization_name: str
+    operator_name: str
+    policy_version: str
+    policy: str
+    store_name: str
+    store_profile_version: str
+    rail_profile: str
+    products: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class DisplayGenerationInput:
+    run_id: UUID
+    task_id: UUID
+    inventory: tuple[tuple[str, int], ...]
+    context: DisplayContext
+    active_domain_assets: tuple[ActiveAsset, ...]
+    feedback: str | None = None
+    prior_plan: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class GeneratedDisplayArtifact:
+    body: str
+    plan: dict[str, object]
+    model: str
+    latency_ms: int
+    retry_count: int
+    provider_usage: dict[str, int] | None

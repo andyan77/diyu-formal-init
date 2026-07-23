@@ -13,7 +13,9 @@ from tests.conftest import SIBLING_ACCOUNT_ID, SIBLING_BRAND_ID, SIBLING_USER_ID
 _SEED = "下午开完一个挺正式的会，转身去接孩子。"
 
 
-def test_catalog_is_idempotent_and_only_four_assets_are_active(migrator_database_url: str) -> None:
+def test_catalog_is_idempotent_and_keeps_p1_and_dm01_activations_separate(
+    migrator_database_url: str,
+) -> None:
     with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
         cursor.execute(
             "SELECT COUNT(*), COUNT(*) FILTER (WHERE status = 'active') FROM system_domain_assets"
@@ -24,8 +26,14 @@ def test_catalog_is_idempotent_and_only_four_assets_are_active(migrator_database
     assert row is not None
     count, active = row
     assert count == 243
-    assert active == 4
-    assert activated == ["B-TPO-001", "C-COMMUTE-001", "D-CRAFT-001", "D-DIRECT-001"]
+    assert active == 17
+    assert len(activated) == 17
+    assert {item for item in activated if item.startswith(("B-", "C-", "D-"))} == {
+        "B-TPO-001",
+        "C-COMMUTE-001",
+        "D-CRAFT-001",
+        "D-DIRECT-001",
+    }
 
 
 def test_run_records_only_applicable_active_asset_versions(app_database_url: str) -> None:

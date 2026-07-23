@@ -36,3 +36,26 @@ class GreetingResponse(BaseModel):
 class SavedVersionResponse(BaseModel):
     version_id: UUID
     saved_at: datetime
+
+
+class CreateDisplayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    inventory_text: str = Field(min_length=4, max_length=2000)
+
+
+class DisplayRevisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    feedback: str = Field(min_length=2, max_length=2000)
+
+
+class DisplayVersionResponse(BaseModel):
+    kind: str = "display"
+    task_id: UUID
+    version_id: UUID
+    version: int
+    body: str
+
+
+class DisplayQuestionResponse(BaseModel):
+    kind: str = "question"
+    message: str
