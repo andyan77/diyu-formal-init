@@ -28,6 +28,17 @@ class WorkbenchRepository(ABC):
     def management_accounts(self, scope: TrustedScope) -> list[dict[str, object]]: ...
 
     @abstractmethod
+    def create_publishing_account(
+        self,
+        scope: TrustedScope,
+        name: str,
+        channel: str,
+        content_role_name: str,
+        voice_boundary: str,
+        operator_id: UUID,
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
     def create_operator(
         self,
         scope: TrustedScope,

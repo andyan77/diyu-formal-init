@@ -49,6 +49,20 @@ class WorkbenchService:
     def management_accounts(self, scope: TrustedScope) -> list[dict[str, object]]:
         return self._repository.management_accounts(scope)
 
+    def create_publishing_account(
+        self,
+        scope: TrustedScope,
+        name: str,
+        channel: str,
+        content_role_name: str,
+        voice_boundary: str,
+        operator_id: UUID,
+    ) -> dict[str, object]:
+        values = (name.strip(), channel.strip(), content_role_name.strip(), voice_boundary.strip())
+        if not all(values):
+            raise DomainError("发布账号、独立表达身份和成立边界都需要填写。")
+        return self._repository.create_publishing_account(scope, *values, operator_id)
+
     def create_operator(
         self,
         scope: TrustedScope,

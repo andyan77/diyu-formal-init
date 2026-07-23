@@ -254,6 +254,52 @@
         "title": "CreateOperatorRequest",
         "type": "object"
       },
+      "CreatePublishingAccountRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "enum": [
+              "抖音",
+              "小红书",
+              "微信视频号"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "content_role_name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Content Role Name",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "operator_id": {
+            "format": "uuid",
+            "title": "Operator Id",
+            "type": "string"
+          },
+          "voice_boundary": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Voice Boundary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "channel",
+          "content_role_name",
+          "voice_boundary",
+          "operator_id"
+        ],
+        "title": "CreatePublishingAccountRequest",
+        "type": "object"
+      },
       "CreateSeriesRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1891,6 +1937,48 @@
           }
         ],
         "summary": "Management Accounts"
+      },
+      "post": {
+        "operationId": "create_publishing_account_api_v1_tenant_management_publishing_accounts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePublishingAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Publishing Account Api V1 Tenant Management Publishing Accounts Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Publishing Account"
       }
     },
     "/api/v1/user/default-persona": {

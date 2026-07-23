@@ -84,6 +84,14 @@ interface PublishingAccount {
   voice_boundary: string;
 }
 
+interface CreatePublishingAccount {
+  name: string;
+  channel: "抖音" | "小红书" | "微信视频号";
+  content_role_name: string;
+  voice_boundary: string;
+  operator_id: string;
+}
+
 interface Operator {
   id: string;
   display_name: string;
@@ -320,11 +328,55 @@ function OperatorPanel(): JSX.Element {
   const client = useQueryClient();
   const operators = useQuery({ queryKey: ["operators"], queryFn: () => api<Operator[]>("/api/v1/tenant-management/operators") });
   const accounts = useQuery({ queryKey: ["publishing-accounts"], queryFn: () => api<PublishingAccount[]>("/api/v1/tenant-management/publishing-accounts") });
+  const [newAccountName, setNewAccountName] = useState("");
+  const [channel, setChannel] = useState<CreatePublishingAccount["channel"]>("抖音");
+  const [contentRoleName, setContentRoleName] = useState("");
+  const [voiceBoundary, setVoiceBoundary] = useState("");
+  const [operatorId, setOperatorId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [accountId, setAccountId] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const createAccount = useMutation({
+    mutationFn: () => api<PublishingAccount>("/api/v1/tenant-management/publishing-accounts", {
+      method: "POST",
+      body: JSON.stringify({
+        name: newAccountName,
+        channel,
+        content_role_name: contentRoleName,
+        voice_boundary: voiceBoundary,
+        operator_id: operatorId,
+      }),
+    }),
+    onSuccess: () => {
+      setNewAccountName("");
+      setChannel("抖音");
+      setContentRoleName("");
+      setVoiceBoundary("");
+      setOperatorId("");
+      client.invalidateQueries({ queryKey: ["publishing-accounts"] });
+      client.invalidateQueries({ queryKey: ["operators"] });
+      client.invalidateQueries({ queryKey: ["readiness"] });
+      setNotice("已建立企业发布账号和独立表达身份，并仅向所选自然人授予操作资格。未创建或共享密码。");
+    },
+    onError: error => setNotice(error.message),
+  });
   const create = useMutation({ mutationFn: () => api<Operator>("/api/v1/tenant-management/operators", { method: "POST", body: JSON.stringify({ display_name: displayName, account_id: accountId }) }), onSuccess: () => { setDisplayName(""); setAccountId(""); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("已创建最小自然人操作身份并授予指定企业发布账号。未创建或共享密码。"); }, onError: error => setNotice(error.message) });
-  return <><header className="page-heading"><p className="eyebrow">账号与操作人</p><h1>企业发布账号不是登录账号。</h1><p>多人可以运营同一企业发布账号；每一位内部、临时或外部代运营操作者都必须是单独登记的自然人身份。</p></header>{notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}<section className="account-grid">{accounts.data?.map(account => <article key={account.id} className="series-card"><p className="eyebrow">{account.channel}</p><h2>{account.name}</h2><p>企业表达身份：{account.content_role}</p><small>{account.voice_boundary}</small></article>)}</section><form className="series-create" onSubmit={event => { event.preventDefault(); if (displayName.trim() && accountId) create.mutate(); }}><p>登记一位实际操作者（不设置密码；生产开户与一次性激活在 M5-4）。</p><input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">授予哪个企业发布账号</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><button className="primary" disabled={create.isPending}>{create.isPending ? "正在登记……" : "登记并授权操作人"}</button></form><section className="readiness-list">{operators.data?.map(operator => <article className="readiness-card ready" key={operator.id}><div><p className="eyebrow">{operator.manages_tenant ? "具备租户管理资格" : "业务操作人"}</p><h2>{operator.display_name}</h2><p>{operator.organization} · {operator.publishing_accounts || "尚未授予发布账号"}</p><small>{operator.default_persona ? `本人默认表达人设：${operator.default_persona}` : "尚未设置本人默认表达人设"}</small></div></article>)}</section></>;
+  return <>
+    <header className="page-heading"><p className="eyebrow">账号与操作人</p><h1>企业发布账号不是登录账号。</h1><p>多人可以运营同一企业发布账号；每一位内部、临时或外部代运营操作者都必须是单独登记的自然人身份。</p></header>
+    {notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}
+    <section className="account-grid">{accounts.data?.map(account => <article key={account.id} className="series-card"><p className="eyebrow">{account.channel}</p><h2>{account.name}</h2><p>企业表达身份：{account.content_role}</p><small>{account.voice_boundary}</small></article>)}</section>
+    <form className="series-create" onSubmit={event => { event.preventDefault(); if (newAccountName.trim() && contentRoleName.trim() && voiceBoundary.trim() && operatorId) createAccount.mutate(); }}>
+      <p>新建企业发布账号，同时建立独立表达身份，并授权一位已经登记的自然人操作者。</p>
+      <input value={newAccountName} onChange={event => setNewAccountName(event.target.value)} placeholder="企业发布账号名称" maxLength={120} aria-label="企业发布账号名称" />
+      <select value={channel} onChange={event => setChannel(event.target.value as CreatePublishingAccount["channel"])} aria-label="发布平台"><option value="抖音">抖音</option><option value="小红书">小红书</option><option value="微信视频号">微信视频号</option></select>
+      <input value={contentRoleName} onChange={event => setContentRoleName(event.target.value)} placeholder="独立表达身份名称" maxLength={80} aria-label="独立表达身份名称" />
+      <textarea value={voiceBoundary} onChange={event => setVoiceBoundary(event.target.value)} placeholder="这份企业表达身份在什么边界内成立？" maxLength={500} aria-label="企业表达身份成立边界" />
+      <select value={operatorId} onChange={event => setOperatorId(event.target.value)} aria-label="已登记操作者"><option value="">选择已登记操作者</option>{operators.data?.map(operator => <option key={operator.id} value={operator.id}>{operator.display_name} · {operator.organization}</option>)}</select>
+      <button className="primary" disabled={createAccount.isPending}>{createAccount.isPending ? "正在创建……" : "创建账号并授权操作者"}</button>
+    </form>
+    <form className="series-create" onSubmit={event => { event.preventDefault(); if (displayName.trim() && accountId) create.mutate(); }}><p>登记一位实际操作者（不设置密码；生产开户与一次性激活在 M5-4）。</p><input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">授予哪个企业发布账号</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><button className="primary" disabled={create.isPending}>{create.isPending ? "正在登记……" : "登记并授权操作人"}</button></form>
+    <section className="readiness-list">{operators.data?.map(operator => <article className="readiness-card ready" key={operator.id}><div><p className="eyebrow">{operator.manages_tenant ? "具备租户管理资格" : "业务操作人"}</p><h2>{operator.display_name}</h2><p>{operator.organization} · {operator.publishing_accounts || "尚未授予发布账号"}</p><small>{operator.default_persona ? `本人默认表达人设：${operator.default_persona}` : "尚未设置本人默认表达人设"}</small></div></article>)}</section>
+  </>;
 }
 
 function ReadinessPanel(): JSX.Element {

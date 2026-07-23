@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -129,3 +130,13 @@ class CreateOperatorRequest(BaseModel):
     account_id: UUID
     default_persona_name: str = Field(default="", max_length=80)
     default_persona_boundary: str = Field(default="", max_length=500)
+
+
+class CreatePublishingAccountRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    channel: Literal["抖音", "小红书", "微信视频号"]
+    content_role_name: str = Field(min_length=1, max_length=80)
+    voice_boundary: str = Field(min_length=1, max_length=500)
+    operator_id: UUID

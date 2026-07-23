@@ -179,6 +179,68 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             for row in rows
         ]
 
+    def create_publishing_account(
+        self,
+        scope: TrustedScope,
+        name: str,
+        channel: str,
+        content_role_name: str,
+        voice_boundary: str,
+        operator_id: UUID,
+    ) -> dict[str, object]:
+        account_id = uuid4()
+        content_role_id = uuid4()
+        with self._content_tx(scope) as cursor:
+            cursor.execute(
+                "SELECT id FROM users WHERE tenant_id = %s AND id = %s AND enabled = true",
+                (scope.tenant_id, operator_id),
+            )
+            self._one(cursor, "只能向当前租户已登记且启用的自然人授权发布账号")
+            cursor.execute(
+                "SELECT 1 FROM content_accounts WHERE tenant_id = %s AND name = %s",
+                (scope.tenant_id, name),
+            )
+            if cursor.fetchone() is not None:
+                raise DomainError("当前租户已有同名企业发布账号。")
+            cursor.execute(
+                "SELECT 1 FROM content_roles WHERE tenant_id = %s AND brand_id = %s AND name = %s",
+                (scope.tenant_id, scope.brand_id, content_role_name),
+            )
+            if cursor.fetchone() is not None:
+                raise DomainError("当前品牌已有同名企业表达人设。")
+            cursor.execute(
+                "INSERT INTO content_accounts (id, tenant_id, brand_id, name, channel) VALUES (%s, %s, %s, %s, %s)",
+                (account_id, scope.tenant_id, scope.brand_id, name, channel),
+            )
+            cursor.execute(
+                "INSERT INTO content_roles (id, tenant_id, brand_id, name, voice_boundary) VALUES (%s, %s, %s, %s, %s)",
+                (
+                    content_role_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    content_role_name,
+                    voice_boundary,
+                ),
+            )
+            cursor.execute(
+                "INSERT INTO account_content_roles (id, tenant_id, account_id, content_role_id) VALUES (%s, %s, %s, %s)",
+                (uuid4(), scope.tenant_id, account_id, content_role_id),
+            )
+            cursor.execute(
+                "INSERT INTO auth_grants (id, tenant_id, user_id, account_id, role_name) VALUES (%s, %s, %s, %s, %s)",
+                (uuid4(), scope.tenant_id, operator_id, account_id, "发布账号操作资格"),
+            )
+            self._event(cursor, scope, "publishing_account.created", "content_account", account_id)
+        return {
+            "id": str(account_id),
+            "name": name,
+            "channel": channel,
+            "content_role": content_role_name,
+            "voice_boundary": voice_boundary,
+            "operator_id": str(operator_id),
+            "shared_password": False,
+        }
+
     def create_operator(
         self,
         scope: TrustedScope,
@@ -499,10 +561,10 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT id, title, premise FROM content_series
-                WHERE tenant_id = %s AND brand_id = %s AND created_by = %s
+                WHERE tenant_id = %s AND brand_id = %s AND created_by = %s AND account_id = %s
                 ORDER BY created_at DESC
                 """,
-                (scope.tenant_id, scope.brand_id, scope.user_id),
+                (scope.tenant_id, scope.brand_id, scope.user_id, scope.account_id),
             )
             series_rows = cursor.fetchall()
             result: list[dict[str, object]] = []
@@ -511,14 +573,16 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     """
                     SELECT item.task_id, item.position, cv.outline
                     FROM content_series_items item
+                    JOIN business_tasks task ON task.id = item.task_id
+                        AND task.tenant_id = item.tenant_id
                     JOIN content_items content_item ON content_item.task_id = item.task_id
                         AND content_item.tenant_id = item.tenant_id
                     JOIN content_versions cv ON cv.task_id = item.task_id AND cv.tenant_id = item.tenant_id
                         AND cv.version_number = content_item.current_version
-                    WHERE item.tenant_id = %s AND item.series_id = %s
+                    WHERE item.tenant_id = %s AND item.series_id = %s AND task.account_id = %s
                     ORDER BY item.position
                     """,
-                    (scope.tenant_id, series["id"]),
+                    (scope.tenant_id, series["id"], scope.account_id),
                 )
                 result.append(
                     {
@@ -542,10 +606,18 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._content_tx(scope) as cursor:
             cursor.execute(
                 """
-                INSERT INTO content_series (id, tenant_id, brand_id, created_by, title, premise)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO content_series (id, tenant_id, brand_id, account_id, created_by, title, premise)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                (series_id, scope.tenant_id, scope.brand_id, scope.user_id, title, premise),
+                (
+                    series_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.account_id,
+                    scope.user_id,
+                    title,
+                    premise,
+                ),
             )
             self._event(cursor, scope, "content_series.created", "content_series", series_id)
         return {"id": str(series_id), "title": title, "premise": premise, "items": []}
@@ -558,11 +630,11 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT id FROM business_tasks
-                WHERE tenant_id = %s AND id = %s AND brand_id = %s AND created_by = %s
+                WHERE tenant_id = %s AND id = %s AND brand_id = %s AND created_by = %s AND account_id = %s
                 """,
-                (scope.tenant_id, task_id, scope.brand_id, scope.user_id),
+                (scope.tenant_id, task_id, scope.brand_id, scope.user_id, scope.account_id),
             )
-            self._one(cursor, "只能把当前账号可见的内容纳入系列")
+            self._one(cursor, "只能把当前发布账号的内容纳入系列")
             if task_id in existing:
                 raise DomainError("这份内容已在当前系列中。")
             insert_at = len(existing) if position is None else position - 1
@@ -752,14 +824,20 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         cursor.execute(
             """
             SELECT series.id FROM content_series series
-            WHERE series.tenant_id = %s AND series.id = %s AND series.brand_id = %s AND series.created_by = %s
+            WHERE series.tenant_id = %s AND series.id = %s AND series.brand_id = %s
+              AND series.created_by = %s AND series.account_id = %s
             """,
-            (scope.tenant_id, series_id, scope.brand_id, scope.user_id),
+            (scope.tenant_id, series_id, scope.brand_id, scope.user_id, scope.account_id),
         )
         self._one(cursor, "找不到当前内容系列")
         cursor.execute(
-            "SELECT task_id FROM content_series_items WHERE tenant_id = %s AND series_id = %s ORDER BY position",
-            (scope.tenant_id, series_id),
+            """
+            SELECT item.task_id FROM content_series_items item
+            JOIN business_tasks task ON task.id = item.task_id AND task.tenant_id = item.tenant_id
+            WHERE item.tenant_id = %s AND item.series_id = %s AND task.account_id = %s
+            ORDER BY item.position
+            """,
+            (scope.tenant_id, series_id, scope.account_id),
         )
         return [UUID(str(row["task_id"])) for row in cursor.fetchall()]
 

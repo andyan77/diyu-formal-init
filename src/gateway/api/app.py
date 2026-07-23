@@ -35,6 +35,7 @@ from src.gateway.api.contracts import (
     CreateContentRequest,
     CreateDisplayRequest,
     CreateOperatorRequest,
+    CreatePublishingAccountRequest,
     CreateSeriesRequest,
     DefaultPersonaRequest,
     DisplayQuestionResponse,
@@ -217,6 +218,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scope: TrustedScope = Depends(management_scope_from_request),
     ) -> list[dict[str, object]]:
         return workbench_service.management_accounts(scope)
+
+    @app.post(
+        "/api/v1/tenant-management/publishing-accounts",
+        status_code=status.HTTP_201_CREATED,
+        responses=business_failures,
+    )
+    def create_publishing_account(
+        payload: CreatePublishingAccountRequest,
+        scope: TrustedScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.create_publishing_account(
+            scope,
+            payload.name,
+            payload.channel,
+            payload.content_role_name,
+            payload.voice_boundary,
+            payload.operator_id,
+        )
 
     @app.post(
         "/api/v1/tenant-management/operators",

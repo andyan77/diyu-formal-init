@@ -79,7 +79,7 @@ def test_dual_qualified_person_stays_one_identity_and_external_operator_never_sh
         external_operator = next(
             item for item in operators if item["display_name"] == "外部代运营乙"
         )
-        assert external_operator["publishing_accounts"] == "折线之间品牌母账号·抖音"
+        assert "折线之间品牌母账号·抖音" in external_operator["publishing_accounts"]
         account = manager.get("/api/v1/tenant-management/publishing-accounts").json()[0]
         created = manager.post(
             "/api/v1/tenant-management/operators",
@@ -87,6 +87,58 @@ def test_dual_qualified_person_stays_one_identity_and_external_operator_never_sh
         )
         assert created.status_code == 201
         assert created.json()["shared_password"] is False
+
+
+def test_manager_creates_distinct_account_role_and_grants_registered_operator_only() -> None:
+    app = create_app(Settings.model_validate({}))
+    with TestClient(app) as manager:
+        manager.get("/ui/select/admin")
+        external_operator = next(
+            item
+            for item in manager.get("/api/v1/tenant-management/operators").json()
+            if item["display_name"] == "外部代运营乙"
+        )
+        account_name = f"外部代运营专题账号-{uuid4()}"
+        role_name = f"专题表达身份-{uuid4()}"
+        created = manager.post(
+            "/api/v1/tenant-management/publishing-accounts",
+            json={
+                "name": account_name,
+                "channel": "小红书",
+                "content_role_name": role_name,
+                "voice_boundary": "只在该专题账号已确认的商品事实和内容范围内表达。",
+                "operator_id": external_operator["id"],
+            },
+        )
+        assert created.status_code == 201
+        assert created.json() == {
+            "id": created.json()["id"],
+            "name": account_name,
+            "channel": "小红书",
+            "content_role": role_name,
+            "voice_boundary": "只在该专题账号已确认的商品事实和内容范围内表达。",
+            "operator_id": external_operator["id"],
+            "shared_password": False,
+        }
+        accounts = manager.get("/api/v1/tenant-management/publishing-accounts").json()
+        assert any(account["id"] == created.json()["id"] for account in accounts)
+        operators = manager.get("/api/v1/tenant-management/operators").json()
+        assigned = next(item for item in operators if item["id"] == external_operator["id"])
+        assert account_name in assigned["publishing_accounts"]
+
+    with TestClient(app) as content_user:
+        content_user.get("/ui/select/content")
+        denied = content_user.post(
+            "/api/v1/tenant-management/publishing-accounts",
+            json={
+                "name": f"越权账号-{uuid4()}",
+                "channel": "抖音",
+                "content_role_name": "越权表达身份",
+                "voice_boundary": "不应执行。",
+                "operator_id": external_operator["id"],
+            },
+        )
+        assert denied.status_code == 403
 
 
 def test_each_user_can_only_update_one_default_persona_record() -> None:
@@ -113,7 +165,7 @@ def test_series_is_explicitly_created_inserted_reordered_and_reset() -> None:
         client.get("/ui/select/content")
         first = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
         second = client.post(
-            "/api/v1/content", json={"weak_seed": _SEED + " 换成小红书视频。"}
+            "/api/v1/content", json={"weak_seed": _SEED + " 再补一句选择提示。"}
         ).json()
         created = client.post(
             "/api/v1/content/series",
@@ -147,6 +199,38 @@ def test_series_is_explicitly_created_inserted_reordered_and_reset() -> None:
         reset = client.post(f"/api/v1/content/series/{series_id}/reset", json={})
         assert reset.status_code == 200
         assert reset.json()["items"] == []
+
+
+def test_series_rejects_task_from_another_publishing_account() -> None:
+    with TestClient(create_app(Settings.model_validate({}))) as client:
+        client.get("/ui/select/content")
+        douyin_task = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
+        xiaohongshu_task = client.post(
+            "/api/v1/content",
+            json={"weak_seed": _SEED, "target": "xiaohongshu_graphic"},
+        ).json()
+        created = client.post(
+            "/api/v1/content/series",
+            json={"title": f"账号边界系列 {uuid4()}", "premise": "只服务当前发布账号。"},
+        )
+        assert created.status_code == 201
+        series_id = created.json()["id"]
+        assert (
+            client.post(
+                f"/api/v1/content/series/{series_id}/items",
+                json={"task_id": douyin_task["task_id"]},
+            ).status_code
+            == 200
+        )
+        rejected = client.post(
+            f"/api/v1/content/series/{series_id}/items",
+            json={"task_id": xiaohongshu_task["task_id"]},
+        )
+        assert rejected.status_code == 422
+        assert "当前发布账号" in rejected.json()["detail"]
+        listed = client.get("/api/v1/content/series").json()
+        series = next(item for item in listed if item["id"] == series_id)
+        assert [item["task_id"] for item in series["items"]] == [douyin_task["task_id"]]
 
 
 def _material_payload(
