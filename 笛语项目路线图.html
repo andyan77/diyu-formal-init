@@ -184,7 +184,7 @@
         <p class="ph-desc">直接交付可观察的用户结果；数据、知识、模型适配和交互只作为当前闭环的内部支撑，不再拥有脱离用户结果的“完成”状态。</p>
         <ul class="nodes">
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">P1 弱种子可用闭环<span class="ncode">M3-1 · CLOSED</span></div><div class="ndesc">自然弱种子 → 服务端可信租户/品牌/组织/账号/角色上下文 → 完整 P1 文字成品 → 自然修改 → 新版本 → 用户主动保存；同步交付登录/作用域、生成、修订、保存、版本和错误返回的 API 契约</div></div></li>
-          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">P1 扩展攻击面与最小远程 CI<span class="ncode">M3-2 · READY</span></div><div class="ndesc">在 M3-1 最小正确性上扩大相似诱饵、历史池、缓存和故障攻击面，并把黄金套件与隔离检查接入最小 Linux CI，作为 M3—M5 的持续回归闸门</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">P1 扩展攻击面与最小远程 CI<span class="ncode">M3-2 · ACTIVE</span></div><div class="ndesc">在 M3-1 最小正确性上扩大相似诱饵、历史池、缓存和故障攻击面，并把黄金套件与隔离检查接入最小 Linux CI，作为 M3—M5 的持续回归闸门</div></div></li>
         </ul>
         <div class="tip"><span class="h">M3-1 已确认架构</span>应用核心掌握身份、作用域、编排、任务、版本和事件，经极薄适配器直连 DeepSeek-V4-Flash；DIFY 已取消。权威关系存储已关闭为当前项目独立 PostgreSQL、共享 schema、应用显式作用域与强制 RLS。243 条候选已登记，当前 P1 只按条件激活 4 条；全量登记不等于全量生产激活。</div>
         <div class="tip"><span class="h">持续质量闸门</span>M0-2 只冻结初始黄金基线；M3—M5 每次新增 P2—P5、调整 API、上下文、知识激活、模型或核心提示策略，都必须重跑受影响黄金套件。M3-2 将确定性部分接入 CI；真实语义质量只在实质变化时运行黄金任务并人工审阅。</div>
@@ -309,7 +309,7 @@
 
   <footer>
     依据 <code>docs/项目记忆.md</code>、<code>docs/待决策清单.md</code>、正式 ADR、用户提供的 <code>首批领域数据库知识数据</code> 与 D-007 两份资料成果更新。<br>
-    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料、WSL 唯一 Git 主仓迁移及 M3-1 P1 本地软件纵向闭环；M3-2 处于 READY，尚未建立可写 Git 远程和远程 CI。M3-1 的 RLS 与真实 DeepSeek 证据只证明本地合成演示范围，不证明共享 ECS 生产隔离、真实品牌试点或企业采用。执行所需 DeepSeek 与 ECS 配置按用户指定的历史基础设施仓库安全读取；密钥和旧仓业务数据不得写入路线图、代码、日志或项目记忆。外部部署和真实账号写入仍由其所属里程碑及既定授权边界控制。
+    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料、WSL 唯一 Git 主仓迁移及 M3-1 P1 本地软件纵向闭环；公开远程仓库 andyan77/diyu-formal-init 已创建并完成首次推送，M3-2 处于 ACTIVE，远程 CI 尚待执行侧落盘并取得首次绿色运行。M3-1 的 RLS 与真实 DeepSeek 证据只证明本地合成演示范围，不证明共享 ECS 生产隔离、真实品牌试点或企业采用。执行所需 DeepSeek 与 ECS 配置按用户指定的历史基础设施仓库安全读取；密钥和旧仓业务数据不得写入路线图、代码、日志或项目记忆。外部部署和真实账号写入仍由其所属里程碑及既定授权边界控制。
   </footer>
 
 </div>
