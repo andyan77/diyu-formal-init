@@ -26,7 +26,7 @@ class DeepSeekDisplayGenerator(DisplayGenerator):
 
     def generate(self, request: DisplayGenerationInput) -> GeneratedDisplayArtifact:
         started, retries = time.monotonic(), 0
-        prompt = f"为南城店墙面双层挂杆写完整内部执行建议。库存={dict(request.inventory)}；反馈={request.feedback or '首次'}。只用清单内 SKU，输出 JSON: body 与 plan(mounted,unmounted,zones)。必须有 A/B/C、主焦点、回应、侧挂、替代、执行步骤和内部执行建议；不声称批准、核验或已完成。"
+        prompt = self._prompt(request)
         payload = {
             "model": self._model,
             "messages": [{"role": "user", "content": prompt}],
@@ -42,23 +42,7 @@ class DeepSeekDisplayGenerator(DisplayGenerator):
                         json=payload,
                     )
                     if response.status_code < 400:
-                        data = json.loads(
-                            DeepSeekGenerator._json_content(
-                                str(response.json()["choices"][0]["message"]["content"])
-                            )
-                        )
-                        plan = data["plan"]
-                        if not isinstance(plan, dict):
-                            raise GenerationFailed("模型返回格式不完整")
-                        usage = response.json().get("usage")
-                        return GeneratedDisplayArtifact(
-                            str(data["body"]),
-                            plan,
-                            self._model,
-                            int((time.monotonic() - started) * 1000),
-                            retries,
-                            usage if isinstance(usage, dict) else None,
-                        )
+                        return self._result(response.json(), started, retries)
                     if (
                         response.status_code != 429 and not 500 <= response.status_code < 600
                     ) or retries >= self._retries:
@@ -67,4 +51,58 @@ class DeepSeekDisplayGenerator(DisplayGenerator):
                     if retries >= self._retries:
                         raise GenerationFailed("模型网络请求失败") from exc
                 retries += 1
-                time.sleep(min(4.0, 0.5 * (2 ** (retries - 1))))
+                time.sleep(
+                    DeepSeekGenerator._retry_delay(response.headers.get("Retry-After"), retries - 1)
+                )
+
+    @staticmethod
+    def _prompt(request: DisplayGenerationInput) -> str:
+        assets = "\n".join(
+            f"- {asset.asset_id}@{asset.schema_version}: {asset.body}"
+            for asset in request.active_domain_assets
+        )
+        products = "\n".join(f"- {sku}: {facts}" for sku, facts in request.context.products)
+        feedback = request.feedback or "（首次生成；没有现场反馈。）"
+        prior = (
+            json.dumps(request.prior_plan, ensure_ascii=False)
+            if request.prior_plan
+            else "（首次生成；没有上一版结构。）"
+        )
+        return f"""你只为 DM01 墙面双层挂杆合同生成一份完整的中文内部执行建议。
+当前实际操作组织：{request.context.organization_name}；当前操作人：{request.context.operator_name}。
+品牌：{request.context.brand_name}。陈列标准版本 {request.context.policy_version}：{request.context.policy}
+门店：{request.context.store_name}。挂杆档案版本 {request.context.store_profile_version}：{request.context.rail_profile}
+当前商品事实：
+{products}
+当前人工库存（仅本任务，不是 ERP）：{dict(request.inventory)}
+本次适用陈列资产：
+{assets or "（无）"}
+自然反馈：{feedback}
+修订时上一版本必要结构：{prior}
+
+首次生成只使用库存、品牌标准、挂杆档案、商品事实和本次资产。修订时只改反馈影响范围，并明确继承未变化的区域、下杆、主次焦点与动线。不得使用或提及发布账号、ContentRole、平台、CTA、提示词、资产 ID、运行记录、其他租户/品牌/组织资料。
+
+严格只返回 JSON 对象：body 为完整、可直接执行的中文正文；plan 为对象，且必须包含 mounted、unmounted、zones。mounted 与 unmounted 使用 SKU→整数；所有库存 SKU 必须逐项对账，禁止清单外 SKU 或超量。zones 必须含 A、B、C。正文必须包含主焦点、回应、侧挂、替代、执行步骤和“内部执行建议”，并明确不表示总部批准、系统核验或门店已经完成。"""
+
+    def _result(
+        self, payload: dict[str, object], started: float, retries: int
+    ) -> GeneratedDisplayArtifact:
+        try:
+            choices = payload["choices"]
+            choice = choices[0]  # type: ignore[index]
+            content = choice["message"]["content"]
+            data = json.loads(DeepSeekGenerator._json_content(str(content)))
+            body, plan = str(data["body"]).strip(), data["plan"]
+            if not body or not isinstance(plan, dict):
+                raise TypeError("display result")
+        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+            raise GenerationFailed("模型返回格式不完整") from exc
+        usage = payload.get("usage")
+        return GeneratedDisplayArtifact(
+            body,
+            plan,
+            self._model,
+            int((time.monotonic() - started) * 1000),
+            retries,
+            usage if isinstance(usage, dict) else None,
+        )
