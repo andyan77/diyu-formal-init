@@ -200,14 +200,18 @@ def test_history_baits_never_enter_current_generation_input(
     )
     captured_continuation = generator.requests[-2]
     captured_explicit = generator.requests[-1]
+    continuation_prior = captured_continuation.prior_saved_body
+    explicit_prior = captured_explicit.prior_saved_body
 
     assert continued["kind"] == "content"
     assert explicit["kind"] == "content"
-    assert captured_continuation.prior_saved_body == current["body"]
-    assert captured_explicit.prior_saved_body == current["body"]
-    assert captured_continuation.prior_saved_body != same_brand_other["body"]
-    assert _CROSS_TENANT_BODY not in captured_continuation.prior_saved_body
-    assert _SIBLING_BODY not in captured_continuation.prior_saved_body
+    assert continuation_prior is not None
+    assert explicit_prior is not None
+    assert continuation_prior == current["body"]
+    assert explicit_prior == current["body"]
+    assert continuation_prior != same_brand_other["body"]
+    assert _CROSS_TENANT_BODY not in continuation_prior
+    assert _SIBLING_BODY not in continuation_prior
     assert captured_continuation.brand.brand_name == "折线之间"
     assert captured_continuation.brand.account_name == "折线之间品牌母账号·抖音"
     assert captured_continuation.brand.content_role_name == "总部零售/服务专家"
