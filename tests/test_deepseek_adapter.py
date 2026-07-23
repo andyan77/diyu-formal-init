@@ -11,14 +11,11 @@ from src.shared.errors import GenerationFailed
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
-    DisplayContext,
-    DisplayGenerationInput,
     GenerationInput,
     P1ProductionBundle,
     P1SemanticContract,
 )
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
-from src.tool.llm_gateway.display_deepseek import DeepSeekDisplayGenerator
 
 
 class FakeResponse:
@@ -189,61 +186,3 @@ def test_deepseek_adapter_adds_missing_production_parts_to_visible_body() -> Non
     assert "画面与动作：画面动作" in body
     assert "字幕：字幕文案" in body
     assert "声音与制作提示：声音提示" in body
-
-
-def test_display_adapter_compiles_only_the_dm01_context_into_supplier_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    FakeClient.responses = [
-        FakeResponse(
-            200,
-            {
-                "choices": [
-                    {
-                        "message": {
-                            "content": '{"body":"错误正文：库存17件","plan":{"mounted":{},"unmounted":{},"layout":{"order":["A","B","C"],"zones":{}}}}'
-                        }
-                    }
-                ]
-            },
-        )
-    ]
-    FakeClient.requests = []
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    request = DisplayGenerationInput(
-        UUID("00000000-0000-0000-0000-000000000201"),
-        UUID("00000000-0000-0000-0000-000000000202"),
-        (("ZX-C218", 3),),
-        DisplayContext(
-            "折线之间",
-            "南城店",
-            "陈列执行甲",
-            "policy-v1",
-            "左强右弱",
-            "南城店",
-            "rail-v1",
-            "双层挂杆、左侧来客",
-            (("ZX-C218", "双面短外套；炭灰与深绿细格"),),
-        ),
-        (ActiveAsset("G-FOCUS-001", "g-v1", "method", "焦点", "左侧主焦点"),),
-        "右侧袖子压住马甲，其他区域不变。",
-        {"zones": {"A": "keep"}},
-    )
-    artifact = DeepSeekDisplayGenerator(
-        "https://compat.example/v1", "not-a-real-key", "verified-deepseek-model", 10, 0
-    ).generate(request)
-    assert artifact.body == "model body is ignored"
-    sent = str(FakeClient.requests[0]["json"])
-    for expected in (
-        "policy-v1",
-        "左强右弱",
-        "rail-v1",
-        "ZX-C218",
-        "g-v1",
-        "南城店",
-        "其他区域不变",
-        "keep",
-    ):
-        assert expected in sent
-    for forbidden in ("折线之间品牌母账号", "抖音", "总部零售/服务专家", "立即购买", "外租户"):
-        assert forbidden not in sent

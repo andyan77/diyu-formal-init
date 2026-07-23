@@ -514,7 +514,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DisplayVersionResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/DisplayVersionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DisplayQuestionResponse"
+                    }
+                  ],
+                  "title": "Response Revise Display Api V1 Display Tasks  Task Id  Revisions Post"
                 }
               }
             },
@@ -721,6 +729,22 @@
                 }
               ],
               "title": "Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "notice",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Notice"
             }
           }
         ],

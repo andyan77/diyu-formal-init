@@ -35,9 +35,13 @@ def compile_display_body(context: DisplayContext, plan: dict[str, object], revis
         sections.append("本次 ZX-C218 只剩一件：保留左侧主焦点，取消同款右侧回应。")
     sections.extend(
         [
-            "正挂、侧挂与间距：主焦点与较弱回应均使用上杆正挂；侧挂按各区保留约一个衣架宽的停顿，优先保证单手可抽取。",
-            "替代：已上墙商品临时不能使用时，优先用本次未上墙同款；若同款只剩一件，保留左侧主焦点并取消右侧同款回应。衣袖或厚度挤压时，先减少受影响位置侧挂。",
-            "执行步骤：1. 按上墙与未上墙数量分开商品。2. 先完成 A 区主正挂，再完成 C 区较弱回应。3. 依次按 A、B、C 的上杆和下杆摆放。4. 统一衣架方向并确认每件可抽取。",
+            f"正挂、侧挂与间距：{layout['spacing']}。",
+            f"替代：{layout['substitution']}。",
+            "执行步骤："
+            + " ".join(
+                f"{index}. {step}"
+                for index, step in enumerate(cast(list[str], layout["execution_steps"]), start=1)
+            ),
             "这是一份内部执行建议，不表示总部批准、系统核验或门店已经完成。",
         ]
     )

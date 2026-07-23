@@ -102,6 +102,7 @@ class PostgresDisplayRepository(DisplayRepository):
         scope: DisplayScope,
         inventory_text: str,
         inventory: tuple[tuple[str, int], ...],
+        context: DisplayContext,
         model: str,
         assets: tuple[ActiveAsset, ...],
     ) -> tuple[UUID, UUID]:
@@ -125,7 +126,7 @@ class PostgresDisplayRepository(DisplayRepository):
                     Jsonb(dict(inventory)),
                 ),
             )
-            self._run(cursor, scope, run_id, task_id, model, assets)
+            self._run(cursor, scope, run_id, task_id, model, assets, context, inventory)
         return task_id, run_id
 
     def create_revision_run(
@@ -133,6 +134,7 @@ class PostgresDisplayRepository(DisplayRepository):
         scope: DisplayScope,
         task_id: UUID,
         feedback: str,
+        context: DisplayContext,
         model: str,
         assets: tuple[ActiveAsset, ...],
     ) -> tuple[UUID, dict[str, object], tuple[tuple[str, int], ...]]:
@@ -152,14 +154,15 @@ class PostgresDisplayRepository(DisplayRepository):
                 "UPDATE display_tasks SET feedback=%s WHERE tenant_id=%s AND id=%s",
                 (feedback, scope.tenant_id, task_id),
             )
-            self._run(cursor, scope, run_id, task_id, model, assets)
-        raw = task["inventory"]
-        if not isinstance(raw, dict):
-            raise DomainError("陈列库存数据无效")
+            raw = task["inventory"]
+            if not isinstance(raw, dict):
+                raise DomainError("陈列库存数据无效")
+            inventory = tuple((str(k), int(v)) for k, v in raw.items())
+            self._run(cursor, scope, run_id, task_id, model, assets, context, inventory)
         return (
             run_id,
             dict(prior["plan"]) if isinstance(prior["plan"], dict) else {},
-            tuple((str(k), int(v)) for k, v in raw.items()),
+            inventory,
         )
 
     def complete_run(
@@ -283,9 +286,19 @@ class PostgresDisplayRepository(DisplayRepository):
         task_id: UUID,
         model: str,
         assets: tuple[ActiveAsset, ...],
+        context: DisplayContext,
+        inventory: tuple[tuple[str, int], ...],
     ) -> None:
         receipts = [{"asset_id": a.asset_id, "schema_version": a.schema_version} for a in assets]
+        input_receipt = {
+            "executor": model,
+            "brand_standard_version": context.policy_version,
+            "store_profile_version": context.store_profile_version,
+            "operator_organization": context.organization_name,
+            "products": [{"sku": sku, "facts": facts} for sku, facts in context.products],
+            "inventory": dict(inventory),
+        }
         cursor.execute(
-            "INSERT INTO display_generation_runs (id,tenant_id,task_id,model,status,used_assets) VALUES (%s,%s,%s,%s,'running',%s)",
-            (run_id, scope.tenant_id, task_id, model, Jsonb(receipts)),
+            "INSERT INTO display_generation_runs (id,tenant_id,task_id,model,status,used_assets,input_receipt) VALUES (%s,%s,%s,%s,'running',%s,%s)",
+            (run_id, scope.tenant_id, task_id, model, Jsonb(receipts), Jsonb(input_receipt)),
         )

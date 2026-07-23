@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
@@ -71,7 +71,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post(
         "/api/v1/display-tasks/{task_id}/revisions",
         status_code=status.HTTP_201_CREATED,
-        response_model=DisplayVersionResponse,
+        response_model=DisplayVersionResponse | DisplayQuestionResponse,
         responses=business_failures,
     )
     def revise_display(
@@ -101,12 +101,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/display", response_class=HTMLResponse)
     def display_workbench(
-        request: Request, task: UUID | None = None, version: int | None = None
+        request: Request,
+        task: UUID | None = None,
+        version: int | None = None,
+        notice: str | None = None,
     ) -> HTMLResponse:
         result = None
         if task is not None and version is not None:
+            authority.require(request)
             result = display_service.fetch_version(authority.display_scope(), task, version)
-        response = HTMLResponse(render_display_workbench(current_settings.generator_mode, result))
+        response = HTMLResponse(render_display_workbench(result, notice))
         set_session_cookie(response, authority)
         return response
 
@@ -122,7 +126,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             authority.display_scope(), fields.get("inventory_text", [""])[0]
         )
         if result["kind"] == "question":
-            return RedirectResponse("/display", status_code=303)
+            return RedirectResponse(
+                "/display?" + urlencode({"notice": str(result["message"])}), status_code=303
+            )
         return RedirectResponse(
             f"/display?task={result['task_id']}&version={result['version']}", status_code=303
         )
@@ -140,6 +146,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             UUID(fields.get("task_id", [""])[0]),
             fields.get("feedback", [""])[0],
         )
+        if result["kind"] == "question":
+            return RedirectResponse(
+                "/display?" + urlencode({"notice": str(result["message"])}), status_code=303
+            )
         return RedirectResponse(
             f"/display?task={result['task_id']}&version={result['version']}", status_code=303
         )

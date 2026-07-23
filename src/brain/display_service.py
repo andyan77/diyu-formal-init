@@ -3,8 +3,12 @@ from __future__ import annotations
 import re
 from uuid import UUID
 
-from src.brain.display_contract import assert_display_complete
+from src.brain.display_contract import assert_display_complete, assert_display_revision
 from src.brain.display_text import compile_display_body
+from src.brain.dm01_display_compiler import (
+    is_c_upper_vest_obstruction_feedback,
+    required_inventory_gap,
+)
 from src.ports.display_generator import DisplayGenerator
 from src.ports.display_repository import DisplayRepository
 from src.shared.errors import DomainError, GenerationFailed
@@ -26,9 +30,12 @@ class DisplayService:
                 "kind": "question",
                 "message": "这家门店还缺少上下挂杆、固定正挂点和来客方向这项条件；请先补充它。",
             }
+        gap = required_inventory_gap(inventory)
+        if gap is not None:
+            return {"kind": "question", "message": gap}
         assets = self._repository.load_assets(revision=False)
         task_id, run_id = self._repository.create_run(
-            scope, inventory_text, inventory, self._generator.model_name, assets
+            scope, inventory_text, inventory, context, self._generator.model_name, assets
         )
         return self._generate(scope, task_id, run_id, inventory, context, assets, None, None)
 
@@ -38,9 +45,14 @@ class DisplayService:
         context = self._repository.load_context(scope)
         if context is None:
             raise DomainError("当前门店缺少可复用的挂杆条件")
+        if not is_c_upper_vest_obstruction_feedback(feedback):
+            return {
+                "kind": "question",
+                "message": "我还不能判断受影响位置；请说明是否是 C 区上杆马甲被遮挡、挤压或难以抽取。",
+            }
         assets = self._repository.load_assets(revision=True)
         run_id, prior, inventory = self._repository.create_revision_run(
-            scope, task_id, feedback, self._generator.model_name, assets
+            scope, task_id, feedback, context, self._generator.model_name, assets
         )
         return self._generate(scope, task_id, run_id, inventory, context, assets, feedback, prior)
 
@@ -63,6 +75,8 @@ class DisplayService:
                 DisplayGenerationInput(run_id, task_id, inventory, context, assets, feedback, prior)
             )
             assert_display_complete(artifact, inventory, revision=feedback is not None)
+            if feedback is not None and prior is not None:
+                assert_display_revision(prior, artifact.plan)
             body = compile_display_body(context, artifact.plan, revision=feedback is not None)
         except GenerationFailed as exc:
             self._repository.fail_run(scope, task_id, run_id, str(exc))

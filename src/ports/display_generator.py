@@ -9,8 +9,8 @@ class DisplayGenerator(ABC):
     @property
     @abstractmethod
     def model_name(self) -> str:
-        """Return the single configured generator model identifier."""
+        """Return the deterministic DM01 executor identifier."""
 
     @abstractmethod
     def generate(self, request: DisplayGenerationInput) -> GeneratedDisplayArtifact:
-        """Generate one DM01 plan or raise GenerationFailed."""
+        """Compile one DM01 plan or raise GenerationFailed."""

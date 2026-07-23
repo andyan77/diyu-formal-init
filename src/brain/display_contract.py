@@ -39,6 +39,56 @@ def assert_display_complete(
         _assert_gold_layout(layout, mounted, unmounted, revision)
 
 
+def assert_display_revision(prior_plan: dict[str, object], current_plan: dict[str, object]) -> None:
+    """The only frozen revision is one C-upper ZX-V113 side-hang reduction."""
+    prior_mounted = prior_plan.get("mounted")
+    current_mounted = current_plan.get("mounted")
+    prior_unmounted = prior_plan.get("unmounted")
+    current_unmounted = current_plan.get("unmounted")
+    prior_layout = prior_plan.get("layout")
+    current_layout = current_plan.get("layout")
+    if (
+        not isinstance(prior_mounted, dict)
+        or not isinstance(current_mounted, dict)
+        or not isinstance(prior_unmounted, dict)
+        or not isinstance(current_unmounted, dict)
+        or not isinstance(prior_layout, dict)
+        or not isinstance(current_layout, dict)
+    ):
+        raise GenerationFailed("修订方案缺少可继承的结构")
+    prior_mounted_values = cast(dict[str, int], prior_mounted)
+    current_mounted_values = cast(dict[str, int], current_mounted)
+    prior_unmounted_values = cast(dict[str, int], prior_unmounted)
+    current_unmounted_values = cast(dict[str, int], current_unmounted)
+    prior_layout_values = cast(dict[str, object], prior_layout)
+    current_layout_values = cast(dict[str, object], current_layout)
+    if set(prior_mounted_values) != set(current_mounted_values) or set(prior_unmounted_values) != set(
+        current_unmounted_values
+    ):
+        raise GenerationFailed("修订方案不能切换本次商品范围")
+    for sku in prior_mounted_values:
+        mounted_delta = current_mounted_values[sku] - prior_mounted_values[sku]
+        unmounted_delta = current_unmounted_values[sku] - prior_unmounted_values[sku]
+        expected = (-1, 1) if sku == "ZX-V113" else (0, 0)
+        if (mounted_delta, unmounted_delta) != expected:
+            raise GenerationFailed("冻结修订只能减少 C 区上杆一件 ZX-V113")
+    prior_zones = prior_layout_values.get("zones")
+    current_zones = current_layout_values.get("zones")
+    if not isinstance(prior_zones, dict) or not isinstance(current_zones, dict):
+        raise GenerationFailed("修订方案缺少搭配区")
+    if any(prior_zones[zone] != current_zones[zone] for zone in ("A", "B")):
+        raise GenerationFailed("冻结修订不能改变 A/B 区")
+    prior_c, current_c = prior_zones.get("C"), current_zones.get("C")
+    if not isinstance(prior_c, dict) or not isinstance(current_c, dict):
+        raise GenerationFailed("修订方案缺少 C 区")
+    if prior_c.get("role") != current_c.get("role") or prior_c.get("lower") != current_c.get("lower"):
+        raise GenerationFailed("冻结修订不能改变 C 区下杆或角色")
+    if _rail_quantities(prior_c.get("upper")) != {"ZX-C218": 1, "ZX-V113": 2} or _rail_quantities(
+        current_c.get("upper")
+    ) != {"ZX-C218": 1, "ZX-V113": 1}:
+        raise GenerationFailed("冻结修订必须只减少 C 区上杆一件 ZX-V113")
+
+
 def _assert_quantities(
     mounted: dict[object, object], unmounted: dict[object, object], available: dict[str, int]
 ) -> None:
@@ -123,6 +173,8 @@ def _assert_gold_layout(
 
 
 def _rail_quantities(value: object) -> dict[str, int]:
+    if not isinstance(value, list):
+        raise GenerationFailed("陈列挂杆槽位无效")
     slots = cast(list[dict[str, object]], value)
     return {str(slot["sku"]): cast(int, slot["quantity"]) for slot in slots}
 

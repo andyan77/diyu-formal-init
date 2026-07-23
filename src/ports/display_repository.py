@@ -21,6 +21,7 @@ class DisplayRepository(ABC):
         scope: DisplayScope,
         inventory_text: str,
         inventory: tuple[tuple[str, int], ...],
+        context: DisplayContext,
         model: str,
         assets: tuple[ActiveAsset, ...],
     ) -> tuple[UUID, UUID]:
@@ -32,6 +33,7 @@ class DisplayRepository(ABC):
         scope: DisplayScope,
         task_id: UUID,
         feedback: str,
+        context: DisplayContext,
         model: str,
         assets: tuple[ActiveAsset, ...],
     ) -> tuple[UUID, dict[str, object], tuple[tuple[str, int], ...]]:
