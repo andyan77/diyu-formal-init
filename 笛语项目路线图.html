@@ -214,11 +214,12 @@
           <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">P2—P5 与价值路由<span class="ncode">M5-1</span></div><div class="ndesc">接入 P2—P5 领域知识与生成方法，复用同一内容编译底座，实现 X-01 价值路由、邻门反证与无生产意图时继续自然聊天</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">三平台与视频/图文文字成品<span class="ncode">M5-2</span></div><div class="ndesc">接入媒体与平台方法，按抖音、小红书、微信视频号及视频/图文语境重编译，支持自然时长和同主题不同制作方式改写</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">渐进入驻、账号系列与素材生命周期<span class="ncode">M5-3</span></div><div class="ndesc">接入角色模板的入驻用途和品牌专属资料入口；品牌战略草案确认、最小账号/角色启动、轻量私人偏好、用户主导系列、对象存储及私人/组织素材首期入口；私人媒体保持原件和原作用域，执行 D-020 已知/声明可识别真人未成年人原件禁入及当前有效平台红线</div></div></li>
-          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">共享 ECS SaaS 上线<span class="ncode">M5-4</span></div><div class="ndesc">上线前完成已登记资产无孤儿去向核对；将一套模块化单体部署到 ECS；PostgreSQL RLS 兜住租户根，数据库/检索/缓存/素材/日志及模型上下文承接同一可信作用域；完成 HTTPS、认证、迁移、密钥、模型调用观测、备份恢复和安全回退</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">共享 ECS SaaS 上线<span class="ncode">M5-4</span></div><div class="ndesc">上线前完成已登记资产无孤儿去向核对；将一套模块化单体部署到 ECS，并以 https://diyuai.cc 作为正式产品入口；PostgreSQL RLS 兜住租户根，数据库/检索/缓存/素材/日志及模型上下文承接同一可信作用域；完成 HTTPS、认证、迁移、密钥、模型调用观测、备份恢复和安全回退</div></div></li>
         </ul>
         <div class="tip"><span class="h">收敛规则</span>每新增一项能力都必须复用已跑通的底座并有当前验收消费者；不建设“产品 × 平台 × 时长 × 拍法”的流程矩阵。</div>
         <div class="tip"><span class="h">素材边界</span>D-030 文字非识别表达从 M3 首次生成即生效。M5-3 只新增素材持久化边界：私人图片/视频保持原件并限原作用域参考，不编辑、清洗或匿名化；不建设自动年龄识别、媒体审批或 PII 清洗流水线。</div>
         <div class="tip"><span class="h">共享上线闸门</span>M5-4 以“折线之间”即可关闭，不等待真实品牌。围绕 DeepSeek-V4-Flash 建立全局/每租户简单并发与速率限制、有界退避、用量/延迟/错误记录；测试不设成本预算闸门。按最多 5 租户、合计 200 个已启用账号做相称验证，不把它误作 200 并发，也不建设消息队列或完整计费平台。</div>
+        <div class="tip"><span class="h">域名边界</span>2026-07-22 已只读核验：diyuai.cc 的 DNS 与证书已具备，旧业务路由已移除并等待当前项目在 M5-4 接入。dify.diyuai.cc 仍属于历史 DIFY 入口，不是新系统产品入口；新项目不得继承其工作流、数据集、账号或运行状态。</div>
       </div>
     </div>
 
