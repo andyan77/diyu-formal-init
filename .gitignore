@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+.venv/
+var/postgres/
+var/tmp/
 
 # Python
 __pycache__/
