@@ -690,6 +690,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Brand Expression Api V1 Admin Brand Expression Get",
                   "type": "object"
                 }
@@ -733,6 +734,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Confirm Brand Expression Api V1 Admin Brand Expression Confirm Post",
                   "type": "object"
                 }
@@ -766,6 +768,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Readiness Api V1 Admin Readiness Get",
                   "type": "object"
                 }
@@ -916,6 +919,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Series Api V1 Content Series Get",
@@ -959,6 +963,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Series Api V1 Content Series Post",
                   "type": "object"
                 }
@@ -1014,6 +1019,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Add Series Item Api V1 Content Series  Series Id  Items Post",
                   "type": "object"
                 }
@@ -1067,6 +1073,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Reorder Series Api V1 Content Series  Series Id  Items Put",
                   "type": "object"
                 }
@@ -1112,6 +1119,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Reset Series Api V1 Content Series  Series Id  Reset Post",
                   "type": "object"
                 }
@@ -1146,6 +1154,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Content Tasks Api V1 Content Tasks Get",
@@ -1194,6 +1203,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Content Versions Api V1 Content Tasks  Task Id  Versions Get",
@@ -1398,6 +1408,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Display Tasks Api V1 Display Tasks Get",
@@ -1446,6 +1457,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Display Versions Api V1 Display Tasks  Task Id  Versions Get",
@@ -1482,6 +1494,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Materials Api V1 Materials Get",
@@ -1586,6 +1599,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Material Api V1 Materials  Asset Scope  Post",
                   "type": "object"
                 }
@@ -1619,6 +1633,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Session Context Api V1 Session Context Get",
                   "type": "object"
                 }
@@ -1771,6 +1786,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Management Operators Api V1 Tenant Management Operators Get",
@@ -1814,6 +1830,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Operator Api V1 Tenant Management Operators Post",
                   "type": "object"
                 }
@@ -1848,6 +1865,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Management Accounts Api V1 Tenant Management Publishing Accounts Get",
@@ -1893,6 +1911,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Default Persona Api V1 User Default Persona Post",
                   "type": "object"
                 }
