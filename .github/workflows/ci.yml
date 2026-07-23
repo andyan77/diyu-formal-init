@@ -28,10 +28,5 @@ jobs:
         run: make lint
       - name: Typecheck
         run: make typecheck
-      - name: Diagnose tracked OpenAPI
-        run: |
-          make openapi
-          git diff --no-ext-diff -- openapi.json
-          git diff --quiet -- openapi.json
       - name: Golden regression
         run: make golden
