@@ -65,6 +65,10 @@ class ContentRepository(ABC):
         """Record explicit user save; no implicit knowledge promotion occurs."""
 
     @abstractmethod
+    def latest_visible_version(self, scope: TrustedScope) -> UUID | None:
+        """Find the current user's newest visible version for an explicit continuation."""
+
+    @abstractmethod
     def load_active_assets(self, scope: TrustedScope, weak_seed: str) -> tuple[ActiveAsset, ...]:
         """Compile only currently applicable system assets for the P1 task."""
 

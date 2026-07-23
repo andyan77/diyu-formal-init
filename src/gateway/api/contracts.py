@@ -10,7 +10,7 @@ class CreateContentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     weak_seed: str = Field(min_length=1, max_length=1000)
-    reuse_saved_version_id: UUID | None = None
+    reuse_version_id: UUID | None = None
 
 
 class RevisionRequest(BaseModel):

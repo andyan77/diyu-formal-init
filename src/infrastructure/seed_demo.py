@@ -52,6 +52,10 @@ def seed_demo() -> None:
             ),
         )
         cursor.execute(
+            "UPDATE brands SET strategy_version = %s WHERE tenant_id = %s AND id = %s",
+            ("V1.0-first-phase-data-ready", TENANT_ID, BRAND_ID),
+        )
+        cursor.execute(
             """
                 INSERT INTO content_accounts (id, tenant_id, brand_id, name, channel)
                 VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING

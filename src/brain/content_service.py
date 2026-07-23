@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from src.brain.natural_entry import greeting_reply, is_greeting, sanitize_seed
+from src.brain.natural_entry import (
+    is_p1_weak_seed,
+    natural_reply,
+    requests_continuation,
+    sanitize_seed,
+)
 from src.brain.p1_contract import assert_p1_complete
 from src.ports.content_generator import ContentGenerator
 from src.ports.content_repository import ContentRepository
@@ -16,15 +21,19 @@ class ContentService:
         self._generator = generator
 
     def create_from_weak_seed(
-        self, scope: TrustedScope, weak_seed: str, reuse_saved_version_id: UUID | None = None
+        self, scope: TrustedScope, weak_seed: str, reuse_version_id: UUID | None = None
     ) -> dict[str, object]:
-        if is_greeting(weak_seed):
-            return {"kind": "greeting", "message": greeting_reply()}
+        if reuse_version_id is None and not is_p1_weak_seed(weak_seed):
+            return {"kind": "greeting", "message": natural_reply()}
+        if reuse_version_id is None and requests_continuation(weak_seed):
+            reuse_version_id = self._repository.latest_visible_version(scope)
+            if reuse_version_id is None:
+                return {"kind": "greeting", "message": "还没有当前账号可继续的上一条内容。"}
         sanitized_seed = sanitize_seed(weak_seed)
         context = self._repository.load_brand_context(scope)
         assets = self._repository.load_active_assets(scope, sanitized_seed)
         task_id, run_id, prior_body = self._repository.create_task_and_running_run(
-            scope, sanitized_seed, reuse_saved_version_id, self._generator.model_name, assets
+            scope, sanitized_seed, reuse_version_id, self._generator.model_name, assets
         )
         return self._generate_and_persist(
             scope, task_id, run_id, sanitized_seed, None, prior_body, context, assets

@@ -24,6 +24,10 @@ class BrandContext:
     content_role_name: str
     content_role_boundary: str
     audience_description: str
+    strategy_version: str
+    platform: str
+    media_format: str
+    production_conditions: str
 
 
 @dataclass(frozen=True)
@@ -40,6 +44,15 @@ class P1SemanticContract:
     choice: str
     boundary: str
     next_action: str
+
+
+@dataclass(frozen=True)
+class P1ProductionBundle:
+    natural_guide: str
+    spoken_lines: str
+    visual_actions: str
+    subtitles: str
+    sound_and_production: str
 
 
 @dataclass(frozen=True)
@@ -62,3 +75,4 @@ class GeneratedArtifact:
     retry_count: int
     provider_usage: dict[str, int] | None
     semantic_contract: P1SemanticContract
+    production: P1ProductionBundle

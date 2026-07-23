@@ -37,6 +37,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         401: {"description": "缺少或无效的可信会话。"},
         422: {"description": "业务失败；生成失败时不会产生半成品版本。"},
     }
+    ui_responses: dict[int | str, dict[str, Any]] = {
+        303: {"description": "可信会话中的表单操作完成后重定向回工作台。"},
+        401: {"description": "缺少或无效的可信会话。"},
+    }
 
     def scope_from_request(
         request: Request, _: str | None = Security(session_cookie)
@@ -55,9 +59,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def create_content(
         payload: CreateContentRequest, scope: TrustedScope = Depends(scope_from_request)
     ) -> dict[str, object]:
-        return service.create_from_weak_seed(
-            scope, payload.weak_seed, payload.reuse_saved_version_id
-        )
+        return service.create_from_weak_seed(scope, payload.weak_seed, payload.reuse_version_id)
 
     @app.post(
         "/api/v1/tasks/{task_id}/revisions",
@@ -100,14 +102,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         result = None
         if task is not None and version is not None:
             try:
-                result = service.fetch_version(authority.scope, task, version)
+                result = service.fetch_version(authority.require(request), task, version)
             except DomainError as exc:
                 raise HTTPException(status_code=404, detail="找不到当前会话可见的版本") from exc
         response = HTMLResponse(render_workbench(current_settings.generator_mode, result, notice))
         set_session_cookie(response, authority)
         return response
 
-    @app.post("/ui/generate")
+    @app.post(
+        "/ui/generate",
+        status_code=status.HTTP_303_SEE_OTHER,
+        response_class=RedirectResponse,
+        dependencies=[Security(session_cookie)],
+        responses=ui_responses,
+    )
     async def ui_generate(request: Request) -> RedirectResponse:
         fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
         weak_seed = fields.get("weak_seed", [""])[0]
@@ -121,7 +129,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         return RedirectResponse(workbench_location(result), status_code=status.HTTP_303_SEE_OTHER)
 
-    @app.post("/ui/revise")
+    @app.post(
+        "/ui/revise",
+        status_code=status.HTTP_303_SEE_OTHER,
+        response_class=RedirectResponse,
+        dependencies=[Security(session_cookie)],
+        responses=ui_responses,
+    )
     async def ui_revise(request: Request) -> RedirectResponse:
         fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
         try:
@@ -132,11 +146,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return RedirectResponse("/?notice=" + str(exc), status_code=status.HTTP_303_SEE_OTHER)
         return RedirectResponse(workbench_location(result), status_code=status.HTTP_303_SEE_OTHER)
 
-    @app.post("/ui/reuse")
+    @app.post(
+        "/ui/reuse",
+        status_code=status.HTTP_303_SEE_OTHER,
+        response_class=RedirectResponse,
+        dependencies=[Security(session_cookie)],
+        responses=ui_responses,
+    )
     async def ui_reuse(request: Request) -> RedirectResponse:
         fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
         try:
-            version_id = UUID(fields.get("reuse_saved_version_id", [""])[0])
+            version_id = UUID(fields.get("reuse_version_id", [""])[0])
             weak_seed = fields.get("weak_seed", [""])[0]
             result = service.create_from_weak_seed(
                 authority.require(request), weak_seed, version_id
@@ -149,7 +169,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         return RedirectResponse(workbench_location(result), status_code=status.HTTP_303_SEE_OTHER)
 
-    @app.post("/ui/save")
+    @app.post(
+        "/ui/save",
+        status_code=status.HTTP_303_SEE_OTHER,
+        response_class=RedirectResponse,
+        dependencies=[Security(session_cookie)],
+        responses=ui_responses,
+    )
     async def ui_save(request: Request) -> RedirectResponse:
         fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
         try:

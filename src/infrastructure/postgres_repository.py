@@ -39,7 +39,8 @@ class PostgresContentRepository(ContentRepository):
                 """
                 SELECT b.name AS brand_name, b.positioning, b.decision_order, b.tone, a.name AS account_name,
                        u.display_name AS operator_name, o.name AS organization_name,
-                       cr.name AS content_role_name, cr.voice_boundary, ba.description AS audience_description
+                       cr.name AS content_role_name, cr.voice_boundary, ba.description AS audience_description,
+                       b.strategy_version, a.channel
                 FROM brands b
                 JOIN content_accounts a ON a.brand_id = b.id AND a.tenant_id = b.tenant_id
                 JOIN auth_grants g ON g.account_id = a.id AND g.tenant_id = a.tenant_id
@@ -47,6 +48,7 @@ class PostgresContentRepository(ContentRepository):
                 JOIN organizations o ON o.id = u.organization_id AND o.tenant_id = u.tenant_id
                 JOIN account_content_roles acr ON acr.account_id = a.id AND acr.tenant_id = a.tenant_id
                 JOIN content_roles cr ON cr.id = acr.content_role_id AND cr.tenant_id = acr.tenant_id
+                    AND cr.brand_id = b.id
                 JOIN brand_audiences ba ON ba.brand_id = b.id AND ba.tenant_id = b.tenant_id
                 WHERE b.tenant_id = %s AND b.id = %s AND a.id = %s AND g.user_id = %s
                   AND a.enabled AND g.enabled AND u.enabled
@@ -65,6 +67,10 @@ class PostgresContentRepository(ContentRepository):
             content_role_name=str(row["content_role_name"]),
             content_role_boundary=str(row["voice_boundary"]),
             audience_description=str(row["audience_description"]),
+            strategy_version=str(row["strategy_version"]),
+            platform=str(row["channel"]),
+            media_format="视频",
+            production_conditions="未说明时按一人一部手机可完成的拍摄、录音和剪辑条件编写。",
         )
 
     def create_task_and_running_run(
@@ -81,22 +87,20 @@ class PostgresContentRepository(ContentRepository):
             if parent_version_id is not None:
                 cursor.execute(
                     """
-                    SELECT cv.body FROM saved_content_versions s
-                    JOIN content_versions cv ON cv.id = s.version_id AND cv.tenant_id = s.tenant_id
+                    SELECT cv.body FROM content_versions cv
                     JOIN business_tasks t ON t.id = cv.task_id AND t.tenant_id = cv.tenant_id
-                    WHERE s.tenant_id = %s AND s.version_id = %s AND s.user_id = %s
+                    WHERE cv.tenant_id = %s AND cv.id = %s
                       AND t.brand_id = %s AND t.account_id = %s AND t.created_by = %s
                     """,
                     (
                         scope.tenant_id,
                         parent_version_id,
-                        scope.user_id,
                         scope.brand_id,
                         scope.account_id,
                         scope.user_id,
                     ),
                 )
-                row = self._one(cursor, "只能明确复用当前用户已保存的同租户内容")
+                row = self._one(cursor, "只能明确复用当前用户当前作用域中的内容")
                 prior_body = str(row["body"])
             cursor.execute(
                 """
@@ -386,6 +390,20 @@ class PostgresContentRepository(ContentRepository):
             self._event(cursor, scope, "content.saved", "content_version", version_id, {})
         return {"version_id": str(version_id), "saved_at": saved_at}
 
+    def latest_visible_version(self, scope: TrustedScope) -> UUID | None:
+        with self._tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT cv.id FROM content_versions cv
+                JOIN business_tasks t ON t.id = cv.task_id AND t.tenant_id = cv.tenant_id
+                WHERE cv.tenant_id = %s AND t.brand_id = %s AND t.account_id = %s AND t.created_by = %s
+                ORDER BY cv.created_at DESC LIMIT 1
+                """,
+                (scope.tenant_id, scope.brand_id, scope.account_id, scope.user_id),
+            )
+            row = cursor.fetchone()
+        return UUID(str(row["id"])) if row is not None else None
+
     def task_seed(self, scope: TrustedScope, task_id: UUID) -> str:
         with self._tx(scope) as cursor:
             cursor.execute(
@@ -473,5 +491,7 @@ class PostgresContentRepository(ContentRepository):
         if asset_id == "B-TPO-001":
             return any(word in weak_seed for word in ("会", "正式", "工作", "见", "场合"))
         if asset_id == "C-COMMUTE-001":
-            return any(word in weak_seed for word in ("之后", "后", "再", "转身", "接孩子", "接人", "换场"))
+            return any(
+                word in weak_seed for word in ("之后", "后", "再", "转身", "接孩子", "接人", "换场")
+            )
         return asset_id in {"D-DIRECT-001", "D-CRAFT-001"}

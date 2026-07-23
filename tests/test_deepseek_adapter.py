@@ -60,6 +60,10 @@ def generation_input() -> GenerationInput:
             "总部零售/服务专家",
             "不冒充具体门店店长或顾客。",
             "在多场景之间切换的城市女性。",
+            "V1.0-first-phase-data-ready",
+            "抖音",
+            "视频",
+            "一人一部手机完成。",
         ),
         active_domain_assets=(
             ActiveAsset("B-TPO-001", "v0.1", "boundary", "场合", "先看场合。"),
@@ -81,7 +85,7 @@ def test_deepseek_adapter_retries_429_with_retry_after(
                 "choices": [
                     {
                         "message": {
-                            "content": '{"body":"一份完整成品","choice":"保住分寸","boundary":"活动受限时调整","next_action":"走动确认"}'
+                            "content": '{"body":"自然导读\\n保住分寸\\n完整台词/解说\\n活动受限时调整\\n画面与动作\\n走动确认\\n字幕\\n走动确认\\n声音与制作提示\\n一人手机","choice":"保住分寸","boundary":"活动受限时调整","next_action":"走动确认","natural_guide":"保住分寸","spoken_lines":"活动受限时调整","visual_actions":"走动确认","subtitles":"走动确认","sound_and_production":"一人手机"}'
                         }
                     }
                 ],
@@ -106,6 +110,8 @@ def test_deepseek_adapter_retries_429_with_retry_after(
     request_payload = str(FakeClient.requests[1]["json"])
     assert "总部零售/服务专家" in request_payload
     assert "在多场景之间切换的城市女性" in request_payload
+    assert "V1.0-first-phase-data-ready" in request_payload
+    assert "抖音／视频" in request_payload
     assert "B-TPO-001@v0.1" in request_payload
     assert "D-CRAFT-001@v0.1" in request_payload
 

@@ -38,18 +38,17 @@ def test_p1_v1_v2_history_save_and_explicit_reuse() -> None:
         assert original.status_code == 200
         assert original.json()["body"] == v1["body"]
 
-        saved = client.post(f"/api/v1/content-versions/{v2['version_id']}/save")
-        assert saved.status_code == 200
-
         reused = client.post(
             "/api/v1/content",
             json={
-                "weak_seed": "沿用刚才的判断，写成另一篇独立提醒。",
-                "reuse_saved_version_id": v2["version_id"],
+                "weak_seed": "接着上一条的判断，写成另一篇独立提醒。",
             },
         )
         assert reused.status_code == 200
         assert reused.json()["task_id"] != v1["task_id"]
+
+        saved = client.post(f"/api/v1/content-versions/{v2['version_id']}/save")
+        assert saved.status_code == 200
 
 
 def test_workbench_renders_complete_artifact_without_internal_trace() -> None:
@@ -60,44 +59,66 @@ def test_workbench_renders_complete_artifact_without_internal_trace() -> None:
         page = client.get(generated.headers["location"])
         assert "内容概要" in page.text
         assert "完整文字成品" in page.text
+        assert "自然导读" in page.text
+        assert "完整台词/解说" in page.text
+        assert "画面与动作" in page.text
+        assert "字幕" in page.text
+        assert "声音与制作提示" in page.text
         assert "离线确定性测试模式" in page.text
         assert "生成运行" not in page.text
         assert "提示词" not in page.text
 
 
-def test_hello_returns_friendly_reply_without_creating_task(app_database_url: str) -> None:
+def test_natural_chat_does_not_create_task(app_database_url: str) -> None:
     with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
         cursor.execute("SELECT COUNT(*) FROM business_tasks")
         before = cursor.fetchone()
     with TestClient(create_app(Settings.model_validate({}))) as client:
         client.get("/")
-        response = client.post("/api/v1/content", json={"weak_seed": "hello"})
+        responses = [
+            client.post("/api/v1/content", json={"weak_seed": message})
+            for message in ("hello world", "你好呀", "今天有点累")
+        ]
     with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
         cursor.execute("SELECT COUNT(*) FROM business_tasks")
         after = cursor.fetchone()
     assert before is not None and after is not None
-    assert response.status_code == 200
-    assert response.json()["kind"] == "greeting"
-    assert "你好" in response.json()["message"]
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.json()["kind"] == "greeting" for response in responses)
+    assert all("你好" in response.json()["message"] for response in responses)
     assert before[0] == after[0]
 
 
 def test_api_uses_cookie_scope_and_rejects_client_scope_switching() -> None:
     app = create_app(Settings.model_validate({}))
     with TestClient(app) as client:
-        assert client.post("/api/v1/content", json={"weak_seed": "一条弱种子"}).status_code == 401
+        assert client.post("/api/v1/content", json={"weak_seed": "怎么穿"}).status_code == 401
+        assert client.post("/ui/generate", data={"weak_seed": "怎么穿"}).status_code == 401
         client.get("/")
         switched = client.post(
             "/api/v1/content",
-            json={"weak_seed": "一条弱种子", "tenant_id": "not-accepted"},
+            json={"weak_seed": "怎么穿", "tenant_id": "not-accepted"},
         )
     contract = app.openapi()
     assert switched.status_code == 422
     assert "APIKeyCookie" in contract["components"]["securitySchemes"]
     assert contract["paths"]["/api/v1/content"]["post"]["responses"]["401"]
     assert contract["paths"]["/api/v1/content"]["post"]["responses"]["422"]
+    ui_generate = contract["paths"]["/ui/generate"]["post"]
+    assert ui_generate["responses"]["303"]
+    assert ui_generate["security"]
+
+
+def test_workbench_requires_cookie_before_reading_a_version() -> None:
+    app = create_app(Settings.model_validate({}))
+    with TestClient(app) as owner:
+        owner.get("/")
+        created = owner.post("/api/v1/content", json={"weak_seed": _SEED}).json()
+    with TestClient(app) as stranger:
+        response = stranger.get(f"/?task={created['task_id']}&version=1")
+    assert response.status_code == 401
 
 
 def test_second_seed_and_personal_identifier_are_not_replayed() -> None:
@@ -131,7 +152,7 @@ def test_failed_generation_records_run_but_no_partial_version(
     scope = TrustedScope(TENANT_ID, USER_ID, BRAND_ID, ACCOUNT_ID)
     service = ContentService(PostgresContentRepository(app_database_url), FailingGenerator())  # type: ignore[arg-type]
     with pytest.raises(GenerationFailed):
-        service.create_from_weak_seed(scope, "一个足够长的失败原子性测试弱种子。")
+        service.create_from_weak_seed(scope, "下雨天骑车去上班，怎么穿才不狼狈？")
 
     with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))

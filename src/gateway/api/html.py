@@ -21,7 +21,7 @@ def render_workbench(mode: str, result: dict[str, object] | None, notice: str | 
             <button type=\"submit\">生成 V{int(str(result["version"])) + 1}</button>
           </form>
           <form method=\"post\" action=\"/ui/save\"><input type=\"hidden\" name=\"version_id\" value=\"{version_id}\"><input type=\"hidden\" name=\"task_id\" value=\"{task_id}\"><input type=\"hidden\" name=\"version\" value=\"{version}\"><button type=\"submit\">主动保存 V{version}</button></form>
-          <form method=\"post\" action=\"/ui/reuse\"><input type=\"hidden\" name=\"reuse_saved_version_id\" value=\"{version_id}\"><label>以已保存 V{version} 为前情新建任务<textarea name=\"weak_seed\" required maxlength=\"1000\" placeholder=\"说明这次要怎样继续；未保存时系统会拒绝复用。\"></textarea></label><button type=\"submit\">明确复用并新建</button></form>
+          <form method=\"post\" action=\"/ui/reuse\"><input type=\"hidden\" name=\"reuse_version_id\" value=\"{version_id}\"><label>以当前 V{version} 为前情新建任务<textarea name=\"weak_seed\" required maxlength=\"1000\" placeholder=\"说明这次要怎样继续；这是一次明确复用授权。\"></textarea></label><button type=\"submit\">明确复用并新建</button></form>
         </section>"""
     banner = (
         "离线确定性测试模式：此页结果不是实际模型调用。"

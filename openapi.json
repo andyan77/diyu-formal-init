@@ -44,7 +44,7 @@
       "CreateContentRequest": {
         "additionalProperties": false,
         "properties": {
-          "reuse_saved_version_id": {
+          "reuse_version_id": {
             "anyOf": [
               {
                 "format": "uuid",
@@ -54,7 +54,7 @@
                 "type": "null"
               }
             ],
-            "title": "Reuse Saved Version Id"
+            "title": "Reuse Version Id"
           },
           "weak_seed": {
             "maxLength": 1000,
@@ -457,15 +457,18 @@
       "post": {
         "operationId": "ui_generate_ui_generate_post",
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
+          "303": {
+            "description": "可信会话中的表单操作完成后重定向回工作台。"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Ui Generate"
       }
     },
@@ -473,15 +476,18 @@
       "post": {
         "operationId": "ui_reuse_ui_reuse_post",
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
+          "303": {
+            "description": "可信会话中的表单操作完成后重定向回工作台。"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Ui Reuse"
       }
     },
@@ -489,15 +495,18 @@
       "post": {
         "operationId": "ui_revise_ui_revise_post",
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
+          "303": {
+            "description": "可信会话中的表单操作完成后重定向回工作台。"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Ui Revise"
       }
     },
@@ -505,15 +514,18 @@
       "post": {
         "operationId": "ui_save_ui_save_post",
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
+          "303": {
+            "description": "可信会话中的表单操作完成后重定向回工作台。"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Ui Save"
       }
     }

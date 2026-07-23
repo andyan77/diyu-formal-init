@@ -9,7 +9,12 @@ import httpx
 
 from src.ports.content_generator import ContentGenerator
 from src.shared.errors import GenerationFailed
-from src.shared.types import GeneratedArtifact, GenerationInput, P1SemanticContract
+from src.shared.types import (
+    GeneratedArtifact,
+    GenerationInput,
+    P1ProductionBundle,
+    P1SemanticContract,
+)
 
 
 class DeepSeekGenerator(ContentGenerator):
@@ -46,6 +51,7 @@ class DeepSeekGenerator(ContentGenerator):
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.4,
+            "response_format": {"type": "json_object"},
         }
         retries = 0
         with httpx.Client(timeout=httpx.Timeout(self._timeout_seconds)) as client:
@@ -79,6 +85,13 @@ class DeepSeekGenerator(ContentGenerator):
                 boundary=str(structured["boundary"]).strip(),
                 next_action=str(structured["next_action"]).strip(),
             )
+            production = P1ProductionBundle(
+                natural_guide=str(structured["natural_guide"]).strip(),
+                spoken_lines=str(structured["spoken_lines"]).strip(),
+                visual_actions=str(structured["visual_actions"]).strip(),
+                subtitles=str(structured["subtitles"]).strip(),
+                sound_and_production=str(structured["sound_and_production"]).strip(),
+            )
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise GenerationFailed("模型返回格式不完整") from exc
         usage_value = payload.get("usage")
@@ -95,6 +108,7 @@ class DeepSeekGenerator(ContentGenerator):
             retry_count=retries,
             provider_usage=usage,
             semantic_contract=contract,
+            production=production,
         )
 
     @staticmethod
@@ -133,9 +147,12 @@ class DeepSeekGenerator(ContentGenerator):
 当前操作人：{request.brand.operator_name}；代表组织：{request.brand.organization_name}
 内容角色：{request.brand.content_role_name}（{request.brand.content_role_boundary}）
 目标受众：{request.brand.audience_description}
+品牌战略版本：{request.brand.strategy_version}
+发布平台与媒体：{request.brand.platform}／{request.brand.media_format}
+当前制作条件：{request.brand.production_conditions}
 自然弱种子：{request.weak_seed}
 本次修改：{revision}
 仅在明确授权时可参考的已保存正文：{prior}
 已确认、当前品牌范围内的领域资产：{assets}
 
-只返回 JSON 对象，字段为 body、choice、boundary、next_action。body 是完整中文成品；后三项是对应的简短语义位置，不能是提示词或隐藏推理。必须先形成穿衣选择，再说明依据、改变选择的条件和一个低成本验证动作。不要复述顾客姓名、电话、账号或订单号；使用自然非识别性称谓。不要补造职业、天气、体型、预算、衣橱、交通或商品事实；不要承诺身体效果；不要硬卖货、说教或暴露后台过程。"""
+只返回 JSON 对象，字段为 body、choice、boundary、next_action、natural_guide、spoken_lines、visual_actions、subtitles、sound_and_production。body 必须完整呈现五个制作部分：自然导读、完整台词/解说、画面与动作、字幕、声音与制作提示；并逐字包含 choice、boundary、next_action 三个值。其他字段是对应可执行部分，不能是提示词或隐藏推理。必须先形成穿衣选择，再说明依据、改变选择的条件和一个低成本验证动作。不要复述顾客姓名、电话、账号或订单号；使用自然非识别性称谓。不要补造职业、天气、体型、预算、衣橱、交通或商品事实；不要承诺身体效果；不要硬卖货、说教或暴露后台过程。"""
