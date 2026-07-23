@@ -113,12 +113,13 @@
       <span class="pill"><span class="k">当前位置</span> <b>阶段 3 · M3-1 P1 弱种子内容生产纵向闭环 · ACTIVE</b></span>
       <span class="pill"><span class="k">业务语义</span> <b>双应用合同与 25 类模型已关闭</b></span>
       <span class="pill"><span class="k">领域资产</span> <b>用户提供 62 文件 · 243 条候选 · 0 条生产激活</b></span>
+      <span class="pill"><span class="k">首期容量</span> <b>预计 2—3、最多 5 租户 · 合计 ≤ 200 已启用账号</b></span>
     </div>
   </header>
 
   <div class="nextbar">
     <div class="lab">⬇ 下一步永远看这里</div>
-    <div class="txt">当前只执行 <b>M3-1</b>：让“折线之间”的合法内容账号从一句自然弱种子获得一份可直接使用、可自然修改并可主动保存的完整 P1 文字成品，同时形成 UI—应用的显式 API/交互契约。生成由应用核心经极薄适配器直连一个模型 API；只实现当前路径需要的数据、知识、模型和交互，不先建设完整数据库、全量资产激活、向量库、GraphRAG、图数据库、工作流平台或空 CI。</div>
+    <div class="txt">当前只执行 <b>M3-1</b>：让“折线之间”的合法内容账号从一句自然弱种子获得一份可直接使用、可自然修改并可主动保存的完整 P1 文字成品，同时形成 UI—应用的显式 API/交互契约。生成由应用核心经极薄适配器直连 DeepSeek-V4-Flash；权威关系存储采用 PostgreSQL，应用作用域过滤与数据库 RLS 双保险。只实现当前路径需要的数据、知识、模型和交互，不先建设完整数据库、全量资产激活、向量库、GraphRAG、图数据库、工作流平台或空 CI。</div>
   </div>
 
   <div class="legend">
@@ -169,7 +170,7 @@
         <div class="ph-head"><p class="ph-title"><span class="idx">阶段 2</span>生产数据使用边界</p><span class="badge b-done">CLOSED</span></div>
         <p class="ph-desc">物理隔离、跨范围学习、内容前情复用和正式知识升级边界均已关闭，不再扩张本体和合同。</p>
         <ul class="nodes">
-          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">租户、品牌、组织和素材使用边界<span class="ncode">M2-1</span></div><div class="ndesc">关闭一套共享 SaaS 中由服务端可信身份解析 tenant_id 的强逻辑隔离；检索前继续按品牌适用范围、组织权限、知识和私人/组织素材作用域收窄，经营关系不产生权限</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">租户、品牌、组织和素材使用边界<span class="ncode">M2-1</span></div><div class="ndesc">关闭一套共享 SaaS 中由服务端可信身份解析 tenant_id 的强逻辑隔离；共享 PostgreSQL 由应用显式过滤与租户根 RLS 双保险，检索前继续按品牌、组织、知识和私人/组织素材作用域收窄</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">内容前情、正式知识与学习边界<span class="ncode">M2-2</span></div><div class="ndesc">日常内容默认不跨任务；明确延续才复用；正式知识由责任来源确认；首期禁止跨品牌、跨租户内容学习</div></div></li>
         </ul>
         <div class="tip"><span class="h">关闭线</span>共享基础设施不自动产生跨租户、跨品牌、跨组织或私人范围的数据使用权；生成、采用、发布、高表现和机器评分均不能给事实或正式知识作自证。</div>
@@ -185,7 +186,7 @@
           <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">P1 弱种子可用闭环<span class="ncode">M3-1 · ACTIVE</span></div><div class="ndesc">自然弱种子 → 服务端可信租户/品牌/组织/账号/角色上下文 → 完整 P1 文字成品 → 自然修改 → 新版本 → 用户主动保存；同步交付登录/作用域、生成、修订、保存、版本和错误返回的 API 契约</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">P1 扩展攻击面与最小远程 CI<span class="ncode">M3-2 · READY</span></div><div class="ndesc">在 M3-1 最小正确性上扩大相似诱饵、历史池、缓存和故障攻击面，并把黄金套件与隔离检查接入最小 Linux CI，作为 M3—M5 的持续回归闸门</div></div></li>
         </ul>
-        <div class="tip"><span class="h">M3-1 已确认架构</span>应用核心掌握身份、作用域、编排、任务、版本和事件，经极薄适配器直连一个模型 API；DIFY 已从首期候选和运行链路取消。当前承重技术裁决只剩最小权威关系存储；模型供应商与既有凭据在首次真实调用时安全核验。</div>
+        <div class="tip"><span class="h">M3-1 已确认架构</span>应用核心掌握身份、作用域、编排、任务、版本和事件，经极薄适配器直连 DeepSeek-V4-Flash；DIFY 已取消。权威关系存储已关闭为当前项目独立 PostgreSQL、共享 schema、应用显式作用域与强制 RLS；当前只剩最小领域资产激活清单需要业务确认。</div>
         <div class="tip"><span class="h">持续质量闸门</span>M0-2 只冻结初始黄金基线；M3—M5 每次新增 P2—P5、调整 API、上下文、知识激活、模型或核心提示策略，都必须重跑受影响黄金套件。M3-2 将确定性部分接入 CI；真实语义质量只在实质变化时运行黄金任务并人工审阅。</div>
         <div class="tip"><span class="h">复杂度上限</span>不建设完整 25 表、对象存储、全量资产激活、向量库、GraphRAG、图数据库、多模型路由、工作流平台或空 CI。简单检索过不了当前验收时，才增加更复杂检索。</div>
       </div>
@@ -213,11 +214,11 @@
           <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">P2—P5 与价值路由<span class="ncode">M5-1</span></div><div class="ndesc">复用同一内容编译底座，实现 X-01 价值路由、邻门反证与无生产意图时继续自然聊天</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">三平台与视频/图文文字成品<span class="ncode">M5-2</span></div><div class="ndesc">按抖音、小红书、微信视频号及视频/图文语境重编译，支持自然时长和同主题不同制作方式改写</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">渐进入驻、账号系列与素材生命周期<span class="ncode">M5-3</span></div><div class="ndesc">品牌战略草案确认、最小账号/角色启动、轻量私人偏好、用户主导系列、对象存储及私人/组织素材首期入口；私人媒体保持原件和原作用域，执行 D-020 已知/声明可识别真人未成年人原件禁入及当前有效平台红线</div></div></li>
-          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">共享 ECS SaaS 上线<span class="ncode">M5-4</span></div><div class="ndesc">将一套租户中立的模块化单体部署到 ECS；可信 tenant_id、组织权限和知识作用域覆盖数据库、检索、缓存、素材、日志及模型上下文，并完成 HTTPS、认证、迁移、密钥、日志、最小监控、备份恢复和安全回退</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">共享 ECS SaaS 上线<span class="ncode">M5-4</span></div><div class="ndesc">将一套模块化单体部署到 ECS；PostgreSQL RLS 兜住租户根，数据库/检索/缓存/素材/日志及模型上下文承接同一可信作用域；完成 HTTPS、认证、迁移、密钥、模型调用观测、备份恢复和安全回退</div></div></li>
         </ul>
         <div class="tip"><span class="h">收敛规则</span>每新增一项能力都必须复用已跑通的底座并有当前验收消费者；不建设“产品 × 平台 × 时长 × 拍法”的流程矩阵。</div>
         <div class="tip"><span class="h">素材边界</span>D-030 文字非识别表达从 M3 首次生成即生效。M5-3 只新增素材持久化边界：私人图片/视频保持原件并限原作用域参考，不编辑、清洗或匿名化；不建设自动年龄识别、媒体审批或 PII 清洗流水线。</div>
-        <div class="tip"><span class="h">共享上线闸门</span>M5-4 以“折线之间”即可关闭，不等待真实品牌；必须具备按租户和任务/会话归集模型用量与成本、每租户配额和限流，并完成与当前预估规模相称的性能、容量、备份恢复和回退验证。它不证明真实品牌适配或企业采用。</div>
+        <div class="tip"><span class="h">共享上线闸门</span>M5-4 以“折线之间”即可关闭，不等待真实品牌。围绕 DeepSeek-V4-Flash 建立全局/每租户简单并发与速率限制、有界退避、用量/延迟/错误记录；测试不设成本预算闸门。按最多 5 租户、合计 200 个已启用账号做相称验证，不把它误作 200 并发，也不建设消息队列或完整计费平台。</div>
       </div>
     </div>
 
@@ -227,12 +228,12 @@
         <div class="ph-head"><p class="ph-title"><span class="idx">阶段 6</span>真实租户入驻与试点启用</p><span class="badge b-par">WAITING_EXTERNAL</span></div>
         <p class="ph-desc">共享平台已经在 M5-4 独立上线；本阶段只在既有平台中创建、配置和验收真实租户，不重新部署第二套系统。</p>
         <ul class="nodes">
-          <li class="node"><span class="nstat"><i class="dot d-par"></i></span><div class="nbody"><div class="ntitle">授权真实单品牌租户与最低资料<span class="ncode">M6-1</span></div><div class="ndesc">在既有平台创建一个真实单品牌企业租户、一个代理和 3—5 家独立门店，导入获授权的品牌战略、组织、账号角色、商品和门店挂杆最低资料</div></div></li>
-          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">试点租户配置与非功能验收<span class="ncode">M6-2</span></div><div class="ndesc">确定该租户的数据地域、模型边界、初始权限、配额和限流；按真实合同规模验收性能、容量、SLA、按租户和任务/会话的成本归集、备份恢复、定向压力/灾备及租户级回退</div></div></li>
-          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">品牌入驻质量验收<span class="ncode">M6-3</span></div><div class="ndesc">用真实任务验收品牌调性符合度、品牌专属知识缺口和跨作用域串味；承重缺口补齐或明确降级后才能进入 M7</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-par"></i></span><div class="nbody"><div class="ntitle">授权真实租户与最低资料<span class="ncode">M6-1</span></div><div class="ndesc">先在既有平台创建一个真实单品牌租户作为最低验收锚点；后续租户复用同一路径渐进入驻。阶段预计 2—3、最多 5 个租户，但客户资料不到位不阻塞平台施工</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">小规模运行与非功能验收<span class="ncode">M6-2</span></div><div class="ndesc">按真实合同确定数据地域、权限和恢复目标；按实测峰值加适度突发验收 DeepSeek 限流、容量、备份恢复和租户级回退，不虚构企业级 SLA 或 200 并发</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">逐租户品牌质量验收<span class="ncode">M6-3</span></div><div class="ndesc">每个租户用真实任务验收品牌调性、专属知识缺口和范围串味；从第二个真实租户起增加跨租户诱饵反证，承重缺口补齐或明确降级后启用</div></div></li>
         </ul>
         <div class="tip"><span class="h">非阻塞外部条件</span>真实租户不阻塞 M3—M5；“折线之间”不能替代真实企业资料、员工使用、门店执行和企业采用，但公共平台上线也不等待真实品牌。</div>
-        <div class="tip"><span class="h">首期单品牌边界</span>第一阶段只实际运行“折线之间 → 一个真实品牌”。D-017 的多品牌关系仍是已声明、未获真实多品牌运行验证；第 2 个及后续真实品牌入驻时必须增量重跑 M6-3 串味检查，届时才可声称真实多品牌验证。</div>
+        <div class="tip"><span class="h">首期品牌边界</span>一个真实单品牌租户是最低试点验收锚点，平台容量支持预计 2—3、最多 5 个租户。多个单品牌租户只验证跨租户隔离，不证明“同一租户多品牌”；只有真实多品牌租户出现并通过相应反证后才能作该声明。</div>
       </div>
     </div>
 
@@ -260,9 +261,9 @@
     <div class="tgrid">
       <div class="tcol"><h3>L1 · 交互 UI</h3><ul><li>M0 定义自然交互与成品语义</li><li>M3 跑通 P1 页面</li><li>M4 打开双应用入口</li><li>M5 完成平台、入驻与素材入口</li></ul></div>
       <div class="tcol"><h3>L2 · 应用核心</h3><ul><li>服务端可信身份和作用域</li><li>P1—P5 与陈列价值路由</li><li>成品版本、系列、保存和事件</li><li>不拆成三套 Agent 或 DIFY 工作流</li></ul></div>
-      <div class="tcol"><h3>L3 · 上下文编译 / RAG</h3><ul><li>M2 冻结先过滤再检索</li><li>M3 从 SQL 精确查询起步</li><li>全文或向量只由黄金召回缺口触发</li><li>不把检索投影当权威真源</li></ul></div>
-      <div class="tcol"><h3>L4 · KE 与权威数据</h3><ul><li>M1 接收 62 文件和 243 条候选</li><li>M3 起随真实消费者最小激活</li><li>SQL 保存权威对象、范围、版本和事件</li><li>候选与合成夹具不冒充生产知识</li></ul></div>
-      <div class="tcol"><h3>L5 · 模型适配</h3><ul><li>应用核心直连一个模型 API</li><li>适配器只接收已裁减上下文</li><li>DIFY 首期取消</li><li>真实模型语义质量按变化触发黄金审阅</li></ul></div>
+      <div class="tcol"><h3>L3 · 上下文编译 / RAG</h3><ul><li>M2 冻结先过滤再检索</li><li>M3 从 SQL 精确查询起步</li><li>未来向量必须先限合法范围再 Top-K</li><li>不把检索投影当权威真源</li></ul></div>
+      <div class="tcol"><h3>L4 · KE 与权威数据</h3><ul><li>M1 接收 62 文件和 243 条候选</li><li>M3 起随真实消费者最小激活</li><li>PostgreSQL 保存权威对象并以 RLS 守租户根</li><li>候选与合成夹具不冒充生产知识</li></ul></div>
+      <div class="tcol"><h3>L5 · 模型适配</h3><ul><li>应用核心直连 DeepSeek-V4-Flash</li><li>适配器只接收已裁减上下文</li><li>DIFY 与多模型路由首期取消</li><li>真实模型可按需测试并人工黄金审阅</li></ul></div>
       <div class="tcol"><h3>L6 · ECS 共享运行</h3><ul><li>M3-2 建最小远程 CI</li><li>M5-4 让共享平台独立上线</li><li>M6 在既有平台入驻真实租户</li><li>平台部署和品牌入驻不互相阻塞</li></ul></div>
     </div>
   </div>
@@ -277,7 +278,7 @@
         <ul>
           <li>P1—P5、D-032、D-005 和双应用合同</li>
           <li>25 类最小语义核及多品牌/组织/素材边界</li>
-          <li>D-008：共享 SaaS 下的租户级强逻辑隔离档位</li>
+          <li>D-008：共享 PostgreSQL 中应用过滤 + 强制 RLS 的租户级隔离</li>
           <li>D-010：首期禁止跨品牌、跨租户内容学习与复用</li>
           <li>D-011：内容前情复用与正式知识升级分离</li>
           <li>用户提供的 62 个领域候选文件与 243 条机器候选</li>
@@ -293,8 +294,8 @@
           <li>P1 扩展攻击面、连续性对抗与最小远程 CI <span class="when">M3-2</span></li>
           <li>首期墙面双层挂杆软件闭环与双应用入口 <span class="when">阶段4</span></li>
           <li>P2—P5、三平台、渐进入驻和合规素材首期入口 <span class="when">M5-1—M5-3</span></li>
-          <li>一套 ECS 共享 SaaS、成本/用量、配额限流与平台非功能闸门 <span class="when">M5-4</span></li>
-          <li>真实单品牌租户入驻、非功能与品牌质量验收 <span class="when">阶段6</span></li>
+          <li>一套 ECS 共享 SaaS、DeepSeek 调用观测/限流与小规模非功能闸门 <span class="when">M5-4</span></li>
+          <li>真实租户渐进入驻、非功能与逐租户品牌质量验收 <span class="when">阶段6</span></li>
           <li>真实内容与陈列试点及企业验收 <span class="when">阶段7</span></li>
         </ul>
       </div>
@@ -302,12 +303,12 @@
   </div>
 
   <div class="onenote">
-    <b>一句话记住整条主线：</b>已关闭业务合同、语义核和数据使用边界，并准备好领域候选与完整合成品牌 → 交付 P1 弱种子闭环和持续黄金闸门 → 跑通经营陈列 → 扩展 P2—P5、平台、入驻与合规素材 → 在 M5-4 将一套共享应用独立部署到 ECS → 在既有平台中入驻并验收一个真实品牌 → 完成真实试点和企业验收。<b>公共平台上线不等待真实品牌，真实品牌入驻也不重新部署系统。</b>
+    <b>一句话记住整条主线：</b>已关闭业务合同、语义核和数据使用边界，并准备好领域候选与完整合成品牌 → 交付 PostgreSQL RLS 双保险下的 P1 弱种子闭环和持续黄金闸门 → 跑通经营陈列 → 扩展 P2—P5、平台、入驻与合规素材 → 在 M5-4 将一套共享应用独立部署到 ECS → 以一个真实租户为最低锚点、渐进支持预计 2—3 个且最多 5 个租户 → 完成真实试点和企业验收。<b>公共平台上线不等待真实品牌，真实品牌入驻也不重新部署系统。</b>
   </div>
 
   <footer>
     依据 <code>docs/项目记忆.md</code>、<code>docs/待决策清单.md</code>、正式 ADR、用户提供的 <code>首批领域数据库知识数据</code> 与 D-007 两份资料成果更新。<br>
-    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料和 WSL 唯一 Git 主仓迁移；M3-1 处于 ACTIVE，但尚未交付软件闭环。当前没有远程 CI/CD、经隔离验收的共享 ECS/生产数据库、真实模型闭环、隔离实现证明或真实试点。执行所需模型与 ECS 配置按用户指定的历史基础设施仓库安全读取；密钥和旧仓业务数据不得写入路线图、代码、日志或项目记忆。外部部署、真实账号写入和费用仍由其所属里程碑及既定授权边界控制。
+    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料和 WSL 唯一 Git 主仓迁移；M3-1 处于 ACTIVE，但尚未交付软件闭环。当前没有远程 CI/CD、经隔离验收的共享 ECS/生产数据库、真实 DeepSeek 闭环、RLS 隔离实现证明或真实试点。执行所需 DeepSeek 与 ECS 配置按用户指定的历史基础设施仓库安全读取；密钥和旧仓业务数据不得写入路线图、代码、日志或项目记忆。构建测试按需调用模型且不设成本预算闸门；外部部署和真实账号写入仍由其所属里程碑及既定授权边界控制。
   </footer>
 
 </div>
