@@ -18,6 +18,9 @@ class Settings:
     demo_account_id: UUID
     demo_display_organization_id: UUID
     demo_display_user_id: UUID
+    demo_store_content_user_id: UUID
+    demo_store_content_account_id: UUID
+    store_active_product_refs: tuple[str, ...]
     generator_mode: Literal["stub", "deepseek"]
     model_timeout_seconds: float
     model_max_retries: int
@@ -38,6 +41,9 @@ class Settings:
             "DIYU_DEMO_ACCOUNT_ID": "demo_account_id",
             "DIYU_DEMO_DISPLAY_ORGANIZATION_ID": "demo_display_organization_id",
             "DIYU_DEMO_DISPLAY_USER_ID": "demo_display_user_id",
+            "DIYU_DEMO_STORE_CONTENT_USER_ID": "demo_store_content_user_id",
+            "DIYU_DEMO_STORE_CONTENT_ACCOUNT_ID": "demo_store_content_account_id",
+            "DIYU_STORE_ACTIVE_PRODUCT_REFS": "store_active_product_refs",
             "DIYU_GENERATOR_MODE": "generator_mode",
             "DIYU_MODEL_TIMEOUT_SECONDS": "model_timeout_seconds",
             "DIYU_MODEL_MAX_RETRIES": "model_max_retries",
@@ -87,6 +93,17 @@ class Settings:
             ),
             demo_display_user_id=UUID(
                 str(read("DIYU_DEMO_DISPLAY_USER_ID", "00000000-0000-0000-0000-000000000013"))
+            ),
+            demo_store_content_user_id=UUID(
+                str(read("DIYU_DEMO_STORE_CONTENT_USER_ID", "00000000-0000-0000-0000-000000000014"))
+            ),
+            demo_store_content_account_id=UUID(
+                str(read("DIYU_DEMO_STORE_CONTENT_ACCOUNT_ID", "00000000-0000-0000-0000-000000000032"))
+            ),
+            store_active_product_refs=tuple(
+                ref.strip().upper()
+                for ref in (read("DIYU_STORE_ACTIVE_PRODUCT_REFS", "ZX-C218") or "").split(",")
+                if ref.strip()
             ),
             generator_mode=cast(Literal["stub", "deepseek"], mode),
             model_timeout_seconds=timeout,

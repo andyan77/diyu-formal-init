@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import cast
 from uuid import UUID, uuid4
 
 import psycopg
@@ -10,12 +12,23 @@ from psycopg.types.json import Jsonb
 
 from src.ports.content_repository import ContentRepository
 from src.shared.errors import DomainError
-from src.shared.types import ActiveAsset, BrandContext, TrustedScope
+from src.shared.types import (
+    ActiveAsset,
+    BrandContext,
+    ContentProduct,
+    FactRepairReceipt,
+    ProductFact,
+    TrustedScope,
+)
 
 
 class PostgresContentRepository(ContentRepository):
-    def __init__(self, database_url: str) -> None:
+    def __init__(
+        self, database_url: str, store_content_account_id: UUID | None = None, active_product_refs: tuple[str, ...] = ()
+    ) -> None:
         self._database_url = database_url
+        self._store_content_account_id = store_content_account_id
+        self._active_product_refs = active_product_refs
 
     @contextmanager
     def _tx(self, scope: TrustedScope) -> Iterator[psycopg.Cursor[dict[str, object]]]:
@@ -77,9 +90,12 @@ class PostgresContentRepository(ContentRepository):
         self,
         scope: TrustedScope,
         weak_seed: str,
+        primary_product: ContentProduct,
         parent_version_id: UUID | None,
         model: str,
         used_assets: tuple[ActiveAsset, ...],
+        context: BrandContext,
+        products: tuple[ProductFact, ...],
     ) -> tuple[UUID, UUID, str | None]:
         task_id, run_id = uuid4(), uuid4()
         with self._tx(scope) as cursor:
@@ -105,8 +121,8 @@ class PostgresContentRepository(ContentRepository):
             cursor.execute(
                 """
                 INSERT INTO business_tasks
-                    (id, tenant_id, brand_id, account_id, created_by, weak_seed, parent_version_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    (id, tenant_id, brand_id, account_id, created_by, weak_seed, primary_content_product, product_refs, parent_version_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     task_id,
@@ -115,15 +131,24 @@ class PostgresContentRepository(ContentRepository):
                     scope.account_id,
                     scope.user_id,
                     weak_seed,
+                    primary_product,
+                    Jsonb([product.sku for product in products]),
                     parent_version_id,
                 ),
             )
             cursor.execute(
                 """
-                INSERT INTO generation_runs (id, tenant_id, task_id, model, status, used_assets)
-                VALUES (%s, %s, %s, %s, 'running', %s)
+                INSERT INTO generation_runs (id, tenant_id, task_id, model, status, used_assets, input_receipt)
+                VALUES (%s, %s, %s, %s, 'running', %s, %s)
                 """,
-                (run_id, scope.tenant_id, task_id, model, Jsonb(self._asset_receipts(used_assets))),
+                (
+                    run_id,
+                    scope.tenant_id,
+                    task_id,
+                    model,
+                    Jsonb(self._asset_receipts(used_assets)),
+                    Jsonb(self._input_receipt(primary_product, context, products)),
+                ),
             )
             self._event(
                 cursor,
@@ -146,6 +171,8 @@ class PostgresContentRepository(ContentRepository):
         latency_ms: int,
         retry_count: int,
         provider_usage: dict[str, int] | None,
+        product_contract: dict[str, str],
+        fact_repair_receipts: tuple[FactRepairReceipt, ...],
     ) -> dict[str, object]:
         version_id = uuid4()
         with self._tx(scope) as cursor:
@@ -211,8 +238,8 @@ class PostgresContentRepository(ContentRepository):
             cursor.execute(
                 """
                 INSERT INTO content_versions
-                    (id, tenant_id, item_id, task_id, run_id, version_number, outline, body, created_by)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (id, tenant_id, item_id, task_id, run_id, version_number, outline, body, product_contract, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     version_id,
@@ -223,6 +250,7 @@ class PostgresContentRepository(ContentRepository):
                     next_version,
                     outline,
                     body,
+                    Jsonb(product_contract),
                     scope.user_id,
                 ),
             )
@@ -234,6 +262,20 @@ class PostgresContentRepository(ContentRepository):
                 version_id,
                 {"task_id": str(task_id), "version": next_version, "run_id": str(run_id)},
             )
+            if fact_repair_receipts:
+                self._event(
+                    cursor,
+                    scope,
+                    "generation.fact_boundary_repaired",
+                    "generation_run",
+                    run_id,
+                    {
+                        "fields": [
+                            {"field": receipt.field, "fragments": list(receipt.fragments)}
+                            for receipt in fact_repair_receipts
+                        ]
+                    },
+                )
         return {
             "task_id": str(task_id),
             "version_id": str(version_id),
@@ -281,12 +323,14 @@ class PostgresContentRepository(ContentRepository):
         instruction: str,
         model: str,
         used_assets: tuple[ActiveAsset, ...],
-    ) -> tuple[UUID, UUID, str]:
+        context: BrandContext,
+        products: tuple[ProductFact, ...],
+    ) -> tuple[UUID, UUID, str, ContentProduct]:
         run_id = uuid4()
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT weak_seed FROM business_tasks
+                SELECT weak_seed, primary_content_product FROM business_tasks
                 WHERE tenant_id = %s AND id = %s AND brand_id = %s AND account_id = %s AND created_by = %s
                 FOR UPDATE
                 """,
@@ -305,10 +349,17 @@ class PostgresContentRepository(ContentRepository):
             )
             cursor.execute(
                 """
-                INSERT INTO generation_runs (id, tenant_id, task_id, model, status, used_assets)
-                VALUES (%s, %s, %s, %s, 'running', %s)
+                INSERT INTO generation_runs (id, tenant_id, task_id, model, status, used_assets, input_receipt)
+                VALUES (%s, %s, %s, %s, 'running', %s, %s)
                 """,
-                (run_id, scope.tenant_id, task_id, model, Jsonb(self._asset_receipts(used_assets))),
+                (
+                    run_id,
+                    scope.tenant_id,
+                    task_id,
+                    model,
+                    Jsonb(self._asset_receipts(used_assets)),
+                    Jsonb(self._input_receipt(self._product(task["primary_content_product"]), context, products)),
+                ),
             )
             self._event(
                 cursor,
@@ -318,7 +369,7 @@ class PostgresContentRepository(ContentRepository):
                 task_id,
                 {"run_id": str(run_id)},
             )
-        return run_id, parent_version_id, str(task["weak_seed"])
+        return run_id, parent_version_id, str(task["weak_seed"]), self._product(task["primary_content_product"])
 
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:
         with self._tx(scope) as cursor:
@@ -404,33 +455,77 @@ class PostgresContentRepository(ContentRepository):
             row = cursor.fetchone()
         return UUID(str(row["id"])) if row is not None else None
 
-    def task_seed(self, scope: TrustedScope, task_id: UUID) -> str:
+    def task_details(self, scope: TrustedScope, task_id: UUID) -> tuple[str, ContentProduct]:
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT weak_seed FROM business_tasks
+                SELECT weak_seed, primary_content_product FROM business_tasks
                 WHERE tenant_id = %s AND id = %s AND brand_id = %s AND account_id = %s AND created_by = %s
                 """,
                 (scope.tenant_id, task_id, scope.brand_id, scope.account_id, scope.user_id),
             )
             row = self._one(cursor, "找不到当前作用域中的内容任务")
-        return str(row["weak_seed"])
+        return str(row["weak_seed"]), self._product(row["primary_content_product"])
 
-    def load_active_assets(self, scope: TrustedScope, weak_seed: str) -> tuple[ActiveAsset, ...]:
+    def load_active_assets(
+        self,
+        scope: TrustedScope,
+        primary_product: ContentProduct,
+        weak_seed: str,
+        products: tuple[ProductFact, ...],
+    ) -> tuple[ActiveAsset, ...]:
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT a.asset_id, a.schema_version, a.asset_type, a.display_name, a.structured_body
+                SELECT a.asset_id, a.schema_version, a.asset_type, a.display_name, a.structured_body, active.consumer
                 FROM system_domain_assets a
                 JOIN system_asset_activations active ON active.asset_id = a.asset_id
-                WHERE a.status = 'active' ORDER BY a.asset_id
+                WHERE a.status = 'active' AND active.consumer = %s ORDER BY a.asset_id
                 """
+                ,
+                (self._consumer(primary_product),),
             )
             rows = cursor.fetchall()
         return tuple(
-            self._active_asset(row)
+            self._active_asset(row, primary_product, products)
             for row in rows
-            if self._applies(str(row["asset_id"]), weak_seed)
+            if self._applies(str(row["asset_id"]), primary_product, weak_seed)
+        )
+
+    def load_product_facts(self, scope: TrustedScope, weak_seed: str) -> tuple[ProductFact, ...]:
+        skus = tuple(sorted(set(re.findall(r"\b[A-Z]{2}-[A-Z]\d{3}\b", weak_seed.upper()))))
+        if not skus and scope.account_id == self._store_content_account_id:
+            skus = self._active_product_refs
+        return self._product_facts_for_refs(scope, skus)
+
+    def load_task_product_facts(self, scope: TrustedScope, task_id: UUID) -> tuple[ProductFact, ...]:
+        with self._tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT product_refs FROM business_tasks
+                WHERE tenant_id = %s AND id = %s AND brand_id = %s AND account_id = %s AND created_by = %s
+                """,
+                (scope.tenant_id, task_id, scope.brand_id, scope.account_id, scope.user_id),
+            )
+            row = self._one(cursor, "找不到当前作用域中的内容任务")
+        stored_refs = row["product_refs"]
+        if not isinstance(stored_refs, list) or not all(isinstance(ref, str) for ref in stored_refs):
+            raise DomainError("内容任务商品引用无效")
+        return self._product_facts_for_refs(scope, tuple(stored_refs))
+
+    def _product_facts_for_refs(self, scope: TrustedScope, refs: tuple[str, ...]) -> tuple[ProductFact, ...]:
+        if not refs:
+            return ()
+        with self._tx(scope) as cursor:
+            cursor.execute(
+                "SELECT sku, facts FROM brand_products WHERE tenant_id=%s AND brand_id=%s AND sku = ANY(%s)",
+                (scope.tenant_id, scope.brand_id, list(refs)),
+            )
+            rows = cursor.fetchall()
+        return tuple(
+            ProductFact(str(row["sku"]), dict(row["facts"]))
+            for row in rows
+            if isinstance(row["facts"], dict)
         )
 
     @staticmethod
@@ -471,27 +566,121 @@ class PostgresContentRepository(ContentRepository):
         ]
 
     @staticmethod
-    def _active_asset(row: dict[str, object]) -> ActiveAsset:
+    def _input_receipt(
+        product: ContentProduct, context: BrandContext, products: tuple[ProductFact, ...]
+    ) -> dict[str, object]:
+        return {
+            "primary_content_product": product,
+            "brand_strategy_version": context.strategy_version,
+            "publishing_account": context.account_name,
+            "content_role": context.content_role_name,
+            "product_refs": [item.sku for item in products],
+        }
+
+    @classmethod
+    def _active_asset(
+        cls,
+        row: dict[str, object],
+        primary_product: ContentProduct,
+        products: tuple[ProductFact, ...],
+    ) -> ActiveAsset:
         body = row["structured_body"]
         if not isinstance(body, dict):
             raise DomainError("系统领域资产数据无效")
-        summary = (
+        asset_id = str(row["asset_id"])
+        summary: object = (
+            cls._p2_asset_projection(asset_id, body, products)
+            if primary_product == "product_truth"
+            else (
             body.get("statement") or body.get("name") or body.get("title") or row["display_name"]
+            )
         )
         return ActiveAsset(
-            asset_id=str(row["asset_id"]),
+            asset_id=asset_id,
             schema_version=str(row["schema_version"]),
             asset_type=str(row["asset_type"]),
             display_name=str(row["display_name"]),
             body=str(summary),
         )
 
+    @classmethod
+    def _p2_asset_projection(
+        cls, asset_id: str, body: dict[str, object], products: tuple[ProductFact, ...]
+    ) -> str:
+        """Compile only the parts of a P2 asset supported by this product input."""
+        parts: list[str] = []
+        if cls._p2_statement_applies(asset_id, body, products):
+            statement = cls._asset_text(body.get("statement"))
+            if statement:
+                parts.append(f"适用理解：{statement}")
+        for key, label in (
+            ("not_when", "不适用边界"),
+            ("anti_misuse", "防误用边界"),
+            ("avoid_when", "避免条件"),
+        ):
+            value = cls._asset_text(body.get(key))
+            if value:
+                parts.append(f"{label}：{value}")
+        return "；".join(parts) or "当前资料不足以启用该资产的正向主张。"
+
     @staticmethod
-    def _applies(asset_id: str, weak_seed: str) -> bool:
-        if asset_id == "B-TPO-001":
+    def _p2_statement_applies(
+        asset_id: str, body: dict[str, object], products: tuple[ProductFact, ...]
+    ) -> bool:
+        if not isinstance(body.get("statement"), str):
+            return False
+        if asset_id == "A-MAT-005":
+            return any(
+                isinstance(product.facts.get("thickness_mm"), (int, float))
+                and isinstance(product.facts.get("structure_test"), (str, bool))
+                for product in products
+            )
+        if asset_id == "A-TRANSLATE-001":
+            return any(
+                any(
+                    key in product.facts
+                    for key in ("material", "material_composition", "fabric_structure", "craft", "process")
+                )
+                for product in products
+            )
+        return False
+
+    @staticmethod
+    def _asset_text(value: object) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            return "；".join(value)
+        return ""
+
+    @staticmethod
+    def _applies(asset_id: str, product: ContentProduct, weak_seed: str) -> bool:
+        if product == "dressing_decision" and asset_id == "B-TPO-001":
             return any(word in weak_seed for word in ("会", "正式", "工作", "见", "场合"))
-        if asset_id == "C-COMMUTE-001":
+        if product == "dressing_decision" and asset_id == "C-COMMUTE-001":
             return any(
                 word in weak_seed for word in ("之后", "后", "再", "转身", "接孩子", "接人", "换场")
             )
-        return asset_id in {"D-DIRECT-001", "D-CRAFT-001"}
+        return True
+
+    @staticmethod
+    def _consumer(product: ContentProduct) -> str:
+        return {
+            "dressing_decision": "content-production / P1",
+            "product_truth": "content-production / P2",
+            "brand_life_narrative": "content-production / P3",
+            "local_response": "content-production / P4",
+            "visual_styling_story": "content-production / P5",
+        }[product]
+
+    @staticmethod
+    def _product(value: object) -> ContentProduct:
+        if value in {
+            "dressing_decision",
+            "product_truth",
+            "brand_life_narrative",
+            "local_response",
+            "visual_styling_story",
+        }:
+            return cast(ContentProduct, value)
+        raise DomainError("内容任务的主要产品数据无效")

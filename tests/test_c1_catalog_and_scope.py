@@ -26,9 +26,9 @@ def test_catalog_is_idempotent_and_keeps_p1_and_dm01_activations_separate(
     assert row is not None
     count, active = row
     assert count == 243
-    assert active == 17
-    assert len(activated) == 17
-    assert {item for item in activated if item.startswith(("B-", "C-", "D-"))} == {
+    assert active == 30
+    assert len(activated) == 30
+    assert {item for item in activated if item in {"B-TPO-001", "C-COMMUTE-001", "D-DIRECT-001", "D-CRAFT-001"}} == {
         "B-TPO-001",
         "C-COMMUTE-001",
         "D-CRAFT-001",

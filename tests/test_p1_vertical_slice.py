@@ -142,6 +142,9 @@ class FailingGenerator:
     def model_name(self) -> str:
         return "deterministic-failure"
 
+    def route(self, request: object) -> str:
+        return "dressing_decision"
+
     def generate(self, request: GenerationInput) -> object:
         raise GenerationFailed("测试性失败")
 

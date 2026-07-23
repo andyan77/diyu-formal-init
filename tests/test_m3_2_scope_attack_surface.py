@@ -10,7 +10,13 @@ from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.seed_demo import ACCOUNT_ID, BRAND_ID, ROLE_ID, TENANT_ID, USER_ID
 from src.ports.content_generator import ContentGenerator
 from src.shared.errors import DomainError
-from src.shared.types import GeneratedArtifact, GenerationInput, TrustedScope
+from src.shared.types import (
+    ContentProduct,
+    GeneratedArtifact,
+    GenerationInput,
+    RoutingInput,
+    TrustedScope,
+)
 from src.tool.llm_gateway.stub import DeterministicP1Generator
 from tests.conftest import BAIT_BRAND_ID, BAIT_TENANT_ID, SIBLING_BRAND_ID, SIBLING_USER_ID
 
@@ -41,6 +47,9 @@ class CapturingGenerator(ContentGenerator):
     @property
     def model_name(self) -> str:
         return self._delegate.model_name
+
+    def route(self, request: RoutingInput) -> ContentProduct | None:
+        return self._delegate.route(request)
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
         self.requests.append(request)

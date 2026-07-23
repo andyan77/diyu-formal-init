@@ -10,8 +10,9 @@ from src.gateway.api.settings import Settings
 from src.shared.types import DisplayScope, TrustedScope
 
 _COOKIE_NAME = "diyu_session"
-ApplicationId = Literal["content-production", "display-merchandising"]
+ApplicationId = Literal["content-production", "content-production-store", "display-merchandising"]
 _CONTENT_APPLICATION: ApplicationId = "content-production"
+_STORE_CONTENT_APPLICATION: ApplicationId = "content-production-store"
 _DISPLAY_APPLICATION: ApplicationId = "display-merchandising"
 
 
@@ -41,20 +42,32 @@ class SessionAuthority:
     def issue(self, application: ApplicationId) -> str:
         return hmac.new(self._secret, application.encode("utf-8"), hashlib.sha256).hexdigest()
 
-    def _require_application(self, request: Request, application: ApplicationId) -> None:
+    def _require_application(self, request: Request, application: ApplicationId | tuple[ApplicationId, ...]) -> ApplicationId:
         presented = request.cookies.get(_COOKIE_NAME, "")
         if not presented:
             raise HTTPException(status_code=401, detail="请先从应用首页进入折线之间合成演示")
-        if not hmac.compare_digest(presented, self.issue(application)):
-            if any(
-                hmac.compare_digest(presented, self.issue(candidate))
-                for candidate in (_CONTENT_APPLICATION, _DISPLAY_APPLICATION)
-            ):
-                raise HTTPException(status_code=403, detail="当前演示会话属于另一应用，请先切换入口")
-            raise HTTPException(status_code=401, detail="缺少或无效的可信演示会话")
+        expected = (application,) if isinstance(application, str) else application
+        for candidate in expected:
+            if hmac.compare_digest(presented, self.issue(candidate)):
+                return candidate
+        if any(
+            hmac.compare_digest(presented, self.issue(candidate))
+            for candidate in (_CONTENT_APPLICATION, _STORE_CONTENT_APPLICATION, _DISPLAY_APPLICATION)
+        ):
+            raise HTTPException(status_code=403, detail="当前演示会话属于另一应用，请先切换入口")
+        raise HTTPException(status_code=401, detail="缺少或无效的可信演示会话")
 
     def require_content(self, request: Request) -> TrustedScope:
-        self._require_application(request, _CONTENT_APPLICATION)
+        application = self._require_application(
+            request, (_CONTENT_APPLICATION, _STORE_CONTENT_APPLICATION)
+        )
+        if application == _STORE_CONTENT_APPLICATION:
+            return TrustedScope(
+                self._scope.tenant_id,
+                self._settings.demo_store_content_user_id,
+                self._scope.brand_id,
+                self._settings.demo_store_content_account_id,
+            )
         return self._scope
 
     def require_display(self, request: Request) -> DisplayScope:

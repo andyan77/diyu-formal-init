@@ -34,7 +34,7 @@ def render_workbench(
         </section>"""
     banner = "离线确定性测试模式：此页结果不是实际模型调用。" if mode == "stub" else "已连接 DeepSeek 真实生成模式。"
     identity_text = _identity(("品牌", identity["brand"]), ("实际操作人", identity["operator"]), ("代表组织", identity["organization"]), ("发布账号", identity["account"]), ("内容角色", identity["content_role"]))
-    content = f"<a href='/'>返回应用首页</a><h1>内容生产（对外）</h1>{identity_text}<p class='mode'>{banner}</p>{_notice(notice)}<form method='post' action='/ui/generate'><label>把今天遇到的穿衣情境说出来<textarea name='weak_seed' required maxlength='1000'></textarea></label><button>生成完整 P1 成品</button></form>{artifact}"
+    content = f"<a href='/'>返回应用首页</a><h1>内容生产（对外）</h1>{identity_text}<p class='mode'>{banner}</p><p class='switch'>合成演示身份：<a href='/ui/select/content'>总部内容账号</a> · <a href='/ui/select/content-store'>南城店内容账号</a></p>{_notice(notice)}<form method='post' action='/ui/generate'><label>把想完成的内容、商品、观察或穿衣情境自然说出来<textarea name='weak_seed' required maxlength='1000'></textarea></label><button>生成完整内容成品</button></form>{artifact}"
     return _page("笛语 · 内容生产", content)
 
 

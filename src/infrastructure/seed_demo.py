@@ -18,6 +18,11 @@ ACCOUNT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000061")
 AUDIENCE_ID = UUID("00000000-0000-0000-0000-000000000071")
 STORE_ORG_ID = UUID("00000000-0000-0000-0000-000000000012")
 STORE_USER_ID = UUID("00000000-0000-0000-0000-000000000013")
+STORE_CONTENT_USER_ID = UUID("00000000-0000-0000-0000-000000000014")
+STORE_CONTENT_ACCOUNT_ID = UUID("00000000-0000-0000-0000-000000000032")
+STORE_CONTENT_GRANT_ID = UUID("00000000-0000-0000-0000-000000000042")
+STORE_CONTENT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000053")
+STORE_CONTENT_ACCOUNT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000063")
 STORE_ID = UUID("00000000-0000-0000-0000-000000000081")
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000082")
 
@@ -31,6 +36,7 @@ def seed_demo() -> None:
             "INSERT INTO tenants (id, name) VALUES (%s, %s) ON CONFLICT (id) DO NOTHING",
             (TENANT_ID, "折线之间演示租户"),
         )
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
         cursor.execute(
             "INSERT INTO organizations (id,tenant_id,name) VALUES (%s,%s,%s) ON CONFLICT (id) DO NOTHING",
             (STORE_ORG_ID, TENANT_ID, "折线之间·南城店"),
@@ -39,7 +45,10 @@ def seed_demo() -> None:
             "INSERT INTO users (id,tenant_id,organization_id,display_name) VALUES (%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
             (STORE_USER_ID, TENANT_ID, STORE_ORG_ID, "南城店陈列执行甲"),
         )
-        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+        cursor.execute(
+            "INSERT INTO users (id,tenant_id,organization_id,display_name) VALUES (%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+            (STORE_CONTENT_USER_ID, TENANT_ID, STORE_ORG_ID, "南城店内容运营甲"),
+        )
         cursor.execute(
             "INSERT INTO organizations (id, tenant_id, name) VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
             (ORG_ID, TENANT_ID, "折线之间总部"),
@@ -93,7 +102,12 @@ def seed_demo() -> None:
         for sku, facts in {
             "ZX-C218": {
                 "category": "double-faced short coat",
-                "colors": ["charcoal", "deep green plaid"],
+                "colors": ["炭灰纯色", "深绿细格纹"],
+                "both_sides_complete": True,
+                "pockets_functional_both_sides": True,
+                "sample_weight_m_grams": 960,
+                "comparison_single_layer_short_coat_m_grams": 650,
+                "weight_boundary": "only the current sample weight difference is known; do not attribute all difference to the double-faced structure",
             },
             "ZX-S104": {"category": "warm white shirt"},
             "ZX-K126": {"category": "oat thin knit"},
@@ -102,7 +116,7 @@ def seed_demo() -> None:
             "ZX-Q117": {"category": "deep olive skirt"},
         }.items():
             cursor.execute(
-                "INSERT INTO display_products (id,tenant_id,brand_id,sku,facts) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (tenant_id,brand_id,sku) DO NOTHING",
+                "INSERT INTO brand_products (id,tenant_id,brand_id,sku,facts) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (tenant_id,brand_id,sku) DO UPDATE SET facts=EXCLUDED.facts",
                 (uuid.uuid5(uuid.NAMESPACE_URL, sku), TENANT_ID, BRAND_ID, sku, Jsonb(facts)),
             )
         cursor.execute(
@@ -138,6 +152,22 @@ def seed_demo() -> None:
                 VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING
                 """,
             (ACCOUNT_ROLE_ID, TENANT_ID, ACCOUNT_ID, ROLE_ID),
+        )
+        cursor.execute(
+            "INSERT INTO content_accounts (id,tenant_id,brand_id,name,channel) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+            (STORE_CONTENT_ACCOUNT_ID, TENANT_ID, BRAND_ID, "折线之间·南城店账号·抖音", "抖音"),
+        )
+        cursor.execute(
+            "INSERT INTO auth_grants (id,tenant_id,user_id,account_id,role_name) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+            (STORE_CONTENT_GRANT_ID, TENANT_ID, STORE_CONTENT_USER_ID, STORE_CONTENT_ACCOUNT_ID, "南城店内容运营权限"),
+        )
+        cursor.execute(
+            "INSERT INTO content_roles (id,tenant_id,brand_id,name,voice_boundary) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+            (STORE_CONTENT_ROLE_ID, TENANT_ID, BRAND_ID, "南城店店长/门店经营者", "只从南城店经营者的合法位置表达，不冒充总部、全国政策或真实顾客。"),
+        )
+        cursor.execute(
+            "INSERT INTO account_content_roles (id,tenant_id,account_id,content_role_id) VALUES (%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+            (STORE_CONTENT_ACCOUNT_ROLE_ID, TENANT_ID, STORE_CONTENT_ACCOUNT_ID, STORE_CONTENT_ROLE_ID),
         )
         cursor.execute(
             """

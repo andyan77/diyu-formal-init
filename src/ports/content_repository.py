@@ -3,7 +3,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from src.shared.types import ActiveAsset, BrandContext, TrustedScope
+from src.shared.types import (
+    ActiveAsset,
+    BrandContext,
+    ContentProduct,
+    FactRepairReceipt,
+    ProductFact,
+    TrustedScope,
+)
 
 
 class ContentRepository(ABC):
@@ -16,9 +23,12 @@ class ContentRepository(ABC):
         self,
         scope: TrustedScope,
         weak_seed: str,
+        primary_product: ContentProduct,
         parent_version_id: UUID | None,
         model: str,
         used_assets: tuple[ActiveAsset, ...],
+        context: BrandContext,
+        products: tuple[ProductFact, ...],
     ) -> tuple[UUID, UUID, str | None]:
         """Create a task and auditable running generation run."""
 
@@ -34,6 +44,8 @@ class ContentRepository(ABC):
         latency_ms: int,
         retry_count: int,
         provider_usage: dict[str, int] | None,
+        product_contract: dict[str, str],
+        fact_repair_receipts: tuple[FactRepairReceipt, ...],
     ) -> dict[str, object]:
         """Atomically persist a new immutable content version and complete its run."""
 
@@ -49,7 +61,9 @@ class ContentRepository(ABC):
         instruction: str,
         model: str,
         used_assets: tuple[ActiveAsset, ...],
-    ) -> tuple[UUID, UUID, str]:
+        context: BrandContext,
+        products: tuple[ProductFact, ...],
+    ) -> tuple[UUID, UUID, str, ContentProduct]:
         """Create the next auditable run for a revision request."""
 
     @abstractmethod
@@ -69,9 +83,23 @@ class ContentRepository(ABC):
         """Find the current user's newest visible version for an explicit continuation."""
 
     @abstractmethod
-    def load_active_assets(self, scope: TrustedScope, weak_seed: str) -> tuple[ActiveAsset, ...]:
-        """Compile only currently applicable system assets for the P1 task."""
+    def load_active_assets(
+        self,
+        scope: TrustedScope,
+        primary_product: ContentProduct,
+        weak_seed: str,
+        products: tuple[ProductFact, ...],
+    ) -> tuple[ActiveAsset, ...]:
+        """Compile only assets applicable to the one routed content product."""
 
     @abstractmethod
-    def task_seed(self, scope: TrustedScope, task_id: UUID) -> str:
-        """Load the current user's original task seed without widening scope."""
+    def load_product_facts(self, scope: TrustedScope, weak_seed: str) -> tuple[ProductFact, ...]:
+        """Read only current-brand product facts expressly named in the user task."""
+
+    @abstractmethod
+    def load_task_product_facts(self, scope: TrustedScope, task_id: UUID) -> tuple[ProductFact, ...]:
+        """Read the product references resolved and persisted when this scoped task was created."""
+
+    @abstractmethod
+    def task_details(self, scope: TrustedScope, task_id: UUID) -> tuple[str, ContentProduct]:
+        """Load the current user's original seed and stable primary product."""

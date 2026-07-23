@@ -11,6 +11,7 @@ from fastapi.security import APIKeyCookie
 from src.composition.bootstrap import build_content_service, build_display_service
 from src.gateway.api.contracts import (
     ApplicationHandoffResponse,
+    ContentQuestionResponse,
     ContentVersionResponse,
     CreateContentRequest,
     CreateDisplayRequest,
@@ -73,6 +74,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def select_content() -> RedirectResponse:
         response = RedirectResponse("/content", status_code=status.HTTP_303_SEE_OTHER)
         set_session_cookie(response, authority, "content-production")
+        return response
+
+    @app.get("/ui/select/content-store", include_in_schema=False)
+    def select_store_content() -> RedirectResponse:
+        response = RedirectResponse("/content", status_code=status.HTTP_303_SEE_OTHER)
+        set_session_cookie(response, authority, "content-production-store")
         return response
 
     @app.get("/ui/select/display", include_in_schema=False)
@@ -189,7 +196,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post(
         "/api/v1/content",
-        response_model=ContentVersionResponse | GreetingResponse | ApplicationHandoffResponse,
+        response_model=ContentVersionResponse | GreetingResponse | ContentQuestionResponse | ApplicationHandoffResponse,
         responses=business_failures,
     )
     def create_content(
@@ -287,7 +294,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             result = service.create_from_weak_seed(scope, weak_seed)
         except DomainError as exc:
             return RedirectResponse("/content?notice=" + str(exc), status_code=status.HTTP_303_SEE_OTHER)
-        if result["kind"] == "greeting":
+        if result["kind"] in {"greeting", "question"}:
             return RedirectResponse(
                 "/content?notice=" + str(result["message"]), status_code=status.HTTP_303_SEE_OTHER
             )
@@ -327,7 +334,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         except (DomainError, ValueError) as exc:
             return RedirectResponse("/content?notice=" + str(exc), status_code=status.HTTP_303_SEE_OTHER)
-        if result["kind"] == "greeting":
+        if result["kind"] in {"greeting", "question"}:
             return RedirectResponse(
                 "/content?notice=" + str(result["message"]), status_code=status.HTTP_303_SEE_OTHER
             )

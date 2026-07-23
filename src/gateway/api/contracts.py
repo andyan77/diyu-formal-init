@@ -33,6 +33,11 @@ class GreetingResponse(BaseModel):
     message: str
 
 
+class ContentQuestionResponse(BaseModel):
+    kind: str = "question"
+    message: str
+
+
 class SavedVersionResponse(BaseModel):
     version_id: UUID
     saved_at: datetime

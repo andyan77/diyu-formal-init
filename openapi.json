@@ -19,6 +19,24 @@
         "title": "ApplicationHandoffResponse",
         "type": "object"
       },
+      "ContentQuestionResponse": {
+        "properties": {
+          "kind": {
+            "default": "question",
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ContentQuestionResponse",
+        "type": "object"
+      },
       "ContentVersionResponse": {
         "properties": {
           "body": {
@@ -391,6 +409,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/GreetingResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ContentQuestionResponse"
                     },
                     {
                       "$ref": "#/components/schemas/ApplicationHandoffResponse"

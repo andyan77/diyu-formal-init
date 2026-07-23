@@ -1,7 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal, TypeAlias
 from uuid import UUID
+
+ContentProduct: TypeAlias = Literal[
+    "dressing_decision",
+    "product_truth",
+    "brand_life_narrative",
+    "local_response",
+    "visual_styling_story",
+]
 
 
 @dataclass(frozen=True)
@@ -47,6 +56,43 @@ class P1SemanticContract:
 
 
 @dataclass(frozen=True)
+class P2SemanticContract:
+    product_insight: str
+    tradeoff_or_limit: str
+    validity_condition: str
+
+
+@dataclass(frozen=True)
+class P3SemanticContract:
+    persona_observation: str
+    audience_return: str
+    brand_account_link: str
+
+
+@dataclass(frozen=True)
+class P4SemanticContract:
+    local_reality_or_signal: str
+    legitimate_account_response: str
+    public_relationship_return: str
+
+
+@dataclass(frozen=True)
+class P5SemanticContract:
+    real_product_anchor: str
+    visible_styling_proposition: str
+    visual_dependency: str
+
+
+ContentSemanticContract: TypeAlias = (
+    P1SemanticContract
+    | P2SemanticContract
+    | P3SemanticContract
+    | P4SemanticContract
+    | P5SemanticContract
+)
+
+
+@dataclass(frozen=True)
 class P1ProductionBundle:
     natural_guide: str
     spoken_lines: str
@@ -55,15 +101,42 @@ class P1ProductionBundle:
     sound_and_production: str
 
 
+ContentProductionBundle = P1ProductionBundle
+
+
+@dataclass(frozen=True)
+class ProductFact:
+    sku: str
+    facts: dict[str, object]
+
+
+@dataclass(frozen=True)
+class RoutingInput:
+    weak_seed: str
+    brand: BrandContext
+    products: tuple[ProductFact, ...]
+    prior_saved_body: str | None = None
+
+
 @dataclass(frozen=True)
 class GenerationInput:
     run_id: UUID
     task_id: UUID
     weak_seed: str
+    primary_product: ContentProduct
     revision_instruction: str | None
     brand: BrandContext
     active_domain_assets: tuple[ActiveAsset, ...] = ()
+    products: tuple[ProductFact, ...] = ()
     prior_saved_body: str | None = None
+
+
+@dataclass(frozen=True)
+class FactRepairReceipt:
+    """Auditable fact-boundary repair evidence, never model reasoning."""
+
+    field: str
+    fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -74,8 +147,10 @@ class GeneratedArtifact:
     latency_ms: int
     retry_count: int
     provider_usage: dict[str, int] | None
-    semantic_contract: P1SemanticContract
+    primary_product: ContentProduct
+    semantic_contract: ContentSemanticContract
     production: P1ProductionBundle
+    fact_repair_receipts: tuple[FactRepairReceipt, ...] = ()
 
 
 @dataclass(frozen=True)

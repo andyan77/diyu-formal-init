@@ -57,7 +57,7 @@ class PostgresDisplayRepository(DisplayRepository):
             if row is None:
                 return None
             cursor.execute(
-                "SELECT sku, facts FROM display_products WHERE tenant_id=%s AND brand_id=%s ORDER BY sku",
+                "SELECT sku, facts FROM brand_products WHERE tenant_id=%s AND brand_id=%s ORDER BY sku",
                 (scope.tenant_id, scope.brand_id),
             )
             products = tuple((str(item["sku"]), str(item["facts"])) for item in cursor.fetchall())

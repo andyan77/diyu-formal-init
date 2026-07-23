@@ -29,7 +29,14 @@ def build_content_service(settings: Settings) -> ContentService:
             timeout_seconds=settings.model_timeout_seconds,
             max_retries=settings.model_max_retries,
         )
-    return ContentService(PostgresContentRepository(settings.app_database_url), generator)
+    return ContentService(
+        PostgresContentRepository(
+            settings.app_database_url,
+            settings.demo_store_content_account_id,
+            settings.store_active_product_refs,
+        ),
+        generator,
+    )
 
 
 def build_display_service(settings: Settings) -> DisplayService:
