@@ -61,7 +61,7 @@ class DisplayService:
             artifact = self._generator.generate(
                 DisplayGenerationInput(run_id, task_id, inventory, context, assets, feedback, prior)
             )
-            assert_display_complete(artifact, inventory)
+            assert_display_complete(artifact, inventory, revision=feedback is not None)
         except GenerationFailed as exc:
             self._repository.fail_run(scope, task_id, run_id, str(exc))
             raise

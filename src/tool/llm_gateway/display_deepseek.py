@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 
 import httpx
@@ -80,7 +81,7 @@ class DeepSeekDisplayGenerator(DisplayGenerator):
 自然反馈：{feedback}
 修订时上一版本必要结构：{prior}
 
-首次生成只使用库存、品牌标准、挂杆档案、商品事实和本次资产。修订时只改反馈影响范围，并明确继承未变化的区域、下杆、主次焦点与动线。不得使用或提及发布账号、ContentRole、平台、CTA、提示词、资产 ID、运行记录、其他租户/品牌/组织资料。
+首次生成只使用库存、品牌标准、挂杆档案、商品事实和本次资产。冻结首次任务的 mounted 必须严格为 ZX-C218:2、ZX-S104:2、ZX-K126:2、ZX-P211:3、ZX-V113:2、ZX-Q117:4（共15件）；zones 必须严格为 A={{ZX-C218:1,ZX-P211:2}}、B={{ZX-S104:2,ZX-K126:2,ZX-Q117:2}}、C={{ZX-C218:1,ZX-V113:2,ZX-P211:1,ZX-Q117:2}}。A 为左侧深绿细格 C218 主正挂，C 为右侧炭灰面 C218 弱回应，不能换成其他商品正挂。修订时只改反馈影响范围：C 的 ZX-V113 从2改为1、共14件，其他商品和 A/B 区、全部下杆、主次焦点、左右动线继承不变。不得补造未给出的商品属性、库房、设施或行动事实，也不得使用或提及发布账号、ContentRole、平台、CTA、提示词、资产 ID、运行记录、其他租户/品牌/组织资料。
 
 严格只返回 JSON 对象：body 为完整、可直接执行的中文正文；plan 为对象，且必须包含 mounted、unmounted、zones。mounted 与 unmounted 使用 SKU→整数；所有库存 SKU 必须逐项对账，禁止清单外 SKU 或超量。zones 必须含 A、B、C。正文必须包含主焦点、回应、侧挂、替代、执行步骤和“内部执行建议”，并明确不表示总部批准、系统核验或门店已经完成。"""
 
@@ -92,7 +93,8 @@ class DeepSeekDisplayGenerator(DisplayGenerator):
             choice = choices[0]  # type: ignore[index]
             content = choice["message"]["content"]
             data = json.loads(DeepSeekGenerator._json_content(str(content)))
-            body, plan = str(data["body"]).strip(), data["plan"]
+            body = re.sub(r"\b(?:G|GM)-[A-Z]+-\d{3}\b", "", str(data["body"])).strip()
+            plan = data["plan"]
             if not body or not isinstance(plan, dict):
                 raise TypeError("display result")
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
