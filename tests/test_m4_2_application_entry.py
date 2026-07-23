@@ -32,8 +32,8 @@ def test_two_application_entries_bind_identity_and_reject_cross_application_call
     with TestClient(app) as client:
         home = client.get("/")
         assert home.status_code == 200
-        assert "内容生产（对外）" in home.text
-        assert "陈列搭配（对内）" in home.text
+        assert "租户用户入口" in home.text
+        assert "租户管理入口" in home.text
         assert "总部内容运营甲" not in home.text
         assert client.post("/api/v1/content", json={"weak_seed": _SEED}).status_code == 401
 
@@ -42,7 +42,9 @@ def test_two_application_entries_bind_identity_and_reject_cross_application_call
         for value in ("总部内容运营甲", "折线之间总部", "品牌母账号·抖音", "总部零售/服务专家"):
             assert value in content.text
         content_v1 = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
-        assert client.post("/api/v1/display", json={"inventory_text": _INVENTORY}).status_code == 403
+        assert (
+            client.post("/api/v1/display", json={"inventory_text": _INVENTORY}).status_code == 403
+        )
 
         client.get("/ui/select/display")
         display = client.get("/display")

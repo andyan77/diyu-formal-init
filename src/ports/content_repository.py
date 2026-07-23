@@ -117,7 +117,9 @@ class ContentRepository(ABC):
         """Read only current-brand product facts expressly named in the user task."""
 
     @abstractmethod
-    def load_task_product_facts(self, scope: TrustedScope, task_id: UUID) -> tuple[ProductFact, ...]:
+    def load_task_product_facts(
+        self, scope: TrustedScope, task_id: UUID
+    ) -> tuple[ProductFact, ...]:
         """Read the product references resolved and persisted when this scoped task was created."""
 
     @abstractmethod

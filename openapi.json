@@ -1,6 +1,33 @@
 {
   "components": {
     "schemas": {
+      "AddSeriesItemRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "position": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id"
+        ],
+        "title": "AddSeriesItemRequest",
+        "type": "object"
+      },
       "ApplicationHandoffResponse": {
         "properties": {
           "kind": {
@@ -17,6 +44,22 @@
           "message"
         ],
         "title": "ApplicationHandoffResponse",
+        "type": "object"
+      },
+      "BrandExpressionConfirmRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "draft": {
+            "maxLength": 4000,
+            "minLength": 8,
+            "title": "Draft",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft"
+        ],
+        "title": "BrandExpressionConfirmRequest",
         "type": "object"
       },
       "ContentQuestionResponse": {
@@ -73,6 +116,23 @@
               }
             ],
             "title": "Target"
+          },
+          "target_key": {
+            "anyOf": [
+              {
+                "enum": [
+                  "douyin_video",
+                  "xiaohongshu_video",
+                  "xiaohongshu_graphic",
+                  "wechat_channels_video"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Key"
           },
           "task_id": {
             "format": "uuid",
@@ -158,6 +218,85 @@
           "inventory_text"
         ],
         "title": "CreateDisplayRequest",
+        "type": "object"
+      },
+      "CreateOperatorRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "default_persona_boundary": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Default Persona Boundary",
+            "type": "string"
+          },
+          "default_persona_name": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Default Persona Name",
+            "type": "string"
+          },
+          "display_name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "account_id"
+        ],
+        "title": "CreateOperatorRequest",
+        "type": "object"
+      },
+      "CreateSeriesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "premise": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Premise",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "CreateSeriesRequest",
+        "type": "object"
+      },
+      "DefaultPersonaRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "boundary": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Boundary",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "boundary"
+        ],
+        "title": "DefaultPersonaRequest",
         "type": "object"
       },
       "DisplayQuestionResponse": {
@@ -258,6 +397,66 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MaterialUploadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content_base64": {
+            "maxLength": 70000000,
+            "minLength": 1,
+            "title": "Content Base64",
+            "type": "string"
+          },
+          "content_type": {
+            "maxLength": 100,
+            "minLength": 3,
+            "title": "Content Type",
+            "type": "string"
+          },
+          "declares_identifiable_minor": {
+            "default": false,
+            "title": "Declares Identifiable Minor",
+            "type": "boolean"
+          },
+          "filename": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "filename",
+          "content_type",
+          "content_base64"
+        ],
+        "title": "MaterialUploadRequest",
+        "type": "object"
+      },
+      "ReorderSeriesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "task_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Task Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "task_ids"
+        ],
+        "title": "ReorderSeriesRequest",
         "type": "object"
       },
       "RevisionRequest": {
@@ -458,6 +657,140 @@
         "summary": "Workbench"
       }
     },
+    "/admin": {
+      "get": {
+        "operationId": "legacy_admin_admin_get",
+        "responses": {
+          "307": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Legacy Admin"
+      }
+    },
+    "/api/v1/admin/brand-expression": {
+      "get": {
+        "operationId": "brand_expression_api_v1_admin_brand_expression_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Brand Expression Api V1 Admin Brand Expression Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Brand Expression"
+      }
+    },
+    "/api/v1/admin/brand-expression/confirm": {
+      "post": {
+        "operationId": "confirm_brand_expression_api_v1_admin_brand_expression_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandExpressionConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Confirm Brand Expression Api V1 Admin Brand Expression Confirm Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Confirm Brand Expression"
+      }
+    },
+    "/api/v1/admin/readiness": {
+      "get": {
+        "operationId": "readiness_api_v1_admin_readiness_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Readiness Api V1 Admin Readiness Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Readiness"
+      }
+    },
     "/api/v1/content": {
       "post": {
         "operationId": "create_content_api_v1_content_post",
@@ -572,6 +905,320 @@
           }
         ],
         "summary": "Save Version"
+      }
+    },
+    "/api/v1/content/series": {
+      "get": {
+        "operationId": "list_series_api_v1_content_series_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response List Series Api V1 Content Series Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "List Series"
+      },
+      "post": {
+        "operationId": "create_series_api_v1_content_series_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSeriesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Series Api V1 Content Series Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Series"
+      }
+    },
+    "/api/v1/content/series/{series_id}/items": {
+      "post": {
+        "operationId": "add_series_item_api_v1_content_series__series_id__items_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddSeriesItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Add Series Item Api V1 Content Series  Series Id  Items Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Add Series Item"
+      },
+      "put": {
+        "operationId": "reorder_series_api_v1_content_series__series_id__items_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderSeriesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Reorder Series Api V1 Content Series  Series Id  Items Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Reorder Series"
+      }
+    },
+    "/api/v1/content/series/{series_id}/reset": {
+      "post": {
+        "operationId": "reset_series_api_v1_content_series__series_id__reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Series Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Reset Series Api V1 Content Series  Series Id  Reset Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Reset Series"
+      }
+    },
+    "/api/v1/content/tasks": {
+      "get": {
+        "operationId": "list_content_tasks_api_v1_content_tasks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response List Content Tasks Api V1 Content Tasks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "List Content Tasks"
+      }
+    },
+    "/api/v1/content/tasks/{task_id}/versions": {
+      "get": {
+        "operationId": "list_content_versions_api_v1_content_tasks__task_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response List Content Versions Api V1 Content Tasks  Task Id  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "List Content Versions"
       }
     },
     "/api/v1/display": {
@@ -742,6 +1389,256 @@
         "summary": "Get Display"
       }
     },
+    "/api/v1/display/tasks": {
+      "get": {
+        "operationId": "list_display_tasks_api_v1_display_tasks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response List Display Tasks Api V1 Display Tasks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "List Display Tasks"
+      }
+    },
+    "/api/v1/display/tasks/{task_id}/versions": {
+      "get": {
+        "operationId": "list_display_versions_api_v1_display_tasks__task_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response List Display Versions Api V1 Display Tasks  Task Id  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "List Display Versions"
+      }
+    },
+    "/api/v1/materials": {
+      "get": {
+        "operationId": "list_materials_api_v1_materials_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response List Materials Api V1 Materials Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "List Materials"
+      }
+    },
+    "/api/v1/materials/{asset_id}": {
+      "delete": {
+        "operationId": "delete_material_api_v1_materials__asset_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Delete Material Api V1 Materials  Asset Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Delete Material"
+      }
+    },
+    "/api/v1/materials/{asset_scope}": {
+      "post": {
+        "operationId": "create_material_api_v1_materials__asset_scope__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_scope",
+            "required": true,
+            "schema": {
+              "title": "Asset Scope",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Material Api V1 Materials  Asset Scope  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Material"
+      }
+    },
+    "/api/v1/session/context": {
+      "get": {
+        "operationId": "session_context_api_v1_session_context_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Session Context Api V1 Session Context Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Session Context"
+      }
+    },
     "/api/v1/tasks/{task_id}/revisions": {
       "post": {
         "operationId": "revise_content_api_v1_tasks__task_id__revisions_post",
@@ -863,6 +1760,162 @@
           }
         ],
         "summary": "Get Version"
+      }
+    },
+    "/api/v1/tenant-management/operators": {
+      "get": {
+        "operationId": "management_operators_api_v1_tenant_management_operators_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response Management Operators Api V1 Tenant Management Operators Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Operators"
+      },
+      "post": {
+        "operationId": "create_operator_api_v1_tenant_management_operators_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOperatorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Create Operator Api V1 Tenant Management Operators Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Operator"
+      }
+    },
+    "/api/v1/tenant-management/publishing-accounts": {
+      "get": {
+        "operationId": "management_accounts_api_v1_tenant_management_publishing_accounts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response Management Accounts Api V1 Tenant Management Publishing Accounts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Accounts"
+      }
+    },
+    "/api/v1/user/default-persona": {
+      "post": {
+        "operationId": "update_default_persona_api_v1_user_default_persona_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DefaultPersonaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Update Default Persona Api V1 User Default Persona Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Update Default Persona"
       }
     },
     "/content": {
@@ -1047,6 +2100,38 @@
         "summary": "Display Workbench"
       }
     },
+    "/tenant-admin": {
+      "get": {
+        "operationId": "tenant_management_portal_tenant_admin_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Tenant Management Portal"
+      }
+    },
     "/ui/display/generate": {
       "post": {
         "operationId": "ui_display_generate_ui_display_generate_post",
@@ -1165,6 +2250,38 @@
           }
         ],
         "summary": "Ui Save"
+      }
+    },
+    "/user": {
+      "get": {
+        "operationId": "tenant_user_portal_user_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Tenant User Portal"
       }
     }
   }

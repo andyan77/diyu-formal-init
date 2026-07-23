@@ -13,7 +13,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TABLE generation_runs ADD COLUMN input_receipt jsonb NOT NULL DEFAULT '{}'::jsonb")
+    op.execute(
+        "ALTER TABLE generation_runs ADD COLUMN input_receipt jsonb NOT NULL DEFAULT '{}'::jsonb"
+    )
 
 
 def downgrade() -> None:

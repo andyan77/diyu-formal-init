@@ -10,6 +10,9 @@
 *.js text eol=lf
 *.css text eol=lf
 
+# Migrated design-source Markdown intentionally uses hard line breaks.
+docs/前端UI架构/*.md whitespace=-trailing-space
+
 *.docx binary
 *.pdf binary
 *.png binary

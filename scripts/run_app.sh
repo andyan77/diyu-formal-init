@@ -13,6 +13,11 @@ export DIYU_DEMO_DISPLAY_ORGANIZATION_ID="00000000-0000-0000-0000-000000000012"
 export DIYU_DEMO_DISPLAY_USER_ID="00000000-0000-0000-0000-000000000013"
 export DIYU_GENERATOR_MODE="${DIYU_GENERATOR_MODE:-stub}"
 
+if [[ ! -x "$project_root/frontend/node_modules/.bin/vite" ]]; then
+  npm --prefix "$project_root/frontend" install
+fi
+npm --prefix "$project_root/frontend" run build
+
 "$project_root/.venv/bin/python" -m alembic upgrade head
 "$project_root/.venv/bin/python" -m src.infrastructure.seed_demo
 "$project_root/.venv/bin/python" -m src.infrastructure.system_asset_catalog

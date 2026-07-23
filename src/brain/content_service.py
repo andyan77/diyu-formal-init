@@ -50,13 +50,19 @@ class ContentService:
         target = natural_target or target
         direction = direction_for(target)
         production_conditions = self._production_conditions(sanitized_seed, direction.media_format)
-        context = self._repository.load_brand_context(scope, direction.media_format, production_conditions)
+        context = self._repository.load_brand_context(
+            scope, direction.media_format, production_conditions
+        )
         self._assert_target_context(context, direction.platform)
         primary_product: ContentProduct | None
         is_recompile = False
         if reuse_version_id is not None:
             source = self._repository.load_recompile_source(scope, reuse_version_id)
-            if continuation and source.source_target == target and not self._requests_independent_result(sanitized_seed):
+            if (
+                continuation
+                and source.source_target == target
+                and not self._requests_independent_result(sanitized_seed)
+            ):
                 return self.revise(scope, source.task_id, sanitized_seed, target)
             products = source.products
             prior_body = source.body
@@ -113,13 +119,21 @@ class ContentService:
         )
 
     def revise(
-        self, scope: TrustedScope, task_id: UUID, instruction: str, target: ContentTarget = "douyin_video"
+        self,
+        scope: TrustedScope,
+        task_id: UUID,
+        instruction: str,
+        target: ContentTarget = "douyin_video",
     ) -> dict[str, object]:
         direction = direction_for(target)
-        weak_seed, primary_product, media_format, prior_conditions = self._repository.task_details(scope, task_id)
+        weak_seed, primary_product, media_format, prior_conditions = self._repository.task_details(
+            scope, task_id
+        )
         if media_format != direction.media_format:
             raise GenerationFailed("改换图文或平台请从当前版本选择目标并新建改编版本")
-        production_conditions = self._production_conditions(instruction, media_format, prior_conditions)
+        production_conditions = self._production_conditions(
+            instruction, media_format, prior_conditions
+        )
         context = self._repository.load_brand_context(scope, media_format, production_conditions)
         self._assert_target_context(context, direction.platform)
         products = self._repository.load_task_product_facts(scope, task_id)
@@ -248,12 +262,15 @@ class ContentService:
         if not isinstance(version_value, int):
             raise GenerationFailed("内容版本数据无效")
         visible = self._repository.fetch_version(scope, task_id, version_value)
-        return completed | {"kind": "content", "target": visible["target"], "adapted_from": visible["adapted_from"]}
+        return completed | {
+            "kind": "content",
+            "target": visible["target"],
+            "target_key": visible["target_key"],
+            "adapted_from": visible["adapted_from"],
+        }
 
     @staticmethod
-    def _production_conditions(
-        text: str, media_format: str, previous: str | None = None
-    ) -> str:
+    def _production_conditions(text: str, media_format: str, previous: str | None = None) -> str:
         if "8 秒" in text or "8秒" in text:
             return "目标自然时长为 8 秒；无法同时保留原有全部认知时，只做明确标识的窄主题版，不称与原版等义。"
         if "四张" in text or "4 张" in text or "4张" in text:

@@ -28,7 +28,9 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         "visual_styling_story": P5SemanticContract,
     }
     expected = expected_types[artifact.primary_product]
-    if not isinstance(contract, expected) or any(not str(value).strip() for value in vars(contract).values()):
+    if not isinstance(contract, expected) or any(
+        not str(value).strip() for value in vars(contract).values()
+    ):
         raise GenerationFailed("内容成品缺少当前主要产品的必要部分")
     if isinstance(artifact.production, VideoProductionBundle):
         required = vars(artifact.production).values()
@@ -65,7 +67,11 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         raise GenerationFailed("内容成品没有忠实呈现当前主要产品的必要部分")
     if re.search(r"1[3-9]\d{9}|[\w.+-]+@[\w.-]+|订单号?\s*[:：]?\s*[A-Za-z0-9-]+", artifact.body):
         raise GenerationFailed("内容成品包含个人标识")
-    if re.search(r"\bP[1-5]\b|dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story", artifact.body, re.IGNORECASE):
+    if re.search(
+        r"\bP[1-5]\b|dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story",
+        artifact.body,
+        re.IGNORECASE,
+    ):
         raise GenerationFailed("内容成品泄露内部产品标识")
 
 

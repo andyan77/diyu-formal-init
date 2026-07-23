@@ -11,13 +11,46 @@ from src.gateway.api.settings import Settings
 from src.shared.types import ContentTarget, DisplayScope, TrustedScope
 
 _COOKIE_NAME = "diyu_session"
-ApplicationId = Literal["content-production", "content-production-store", "display-merchandising"]
-_CONTENT_APPLICATION: ApplicationId = "content-production"
-_STORE_CONTENT_APPLICATION: ApplicationId = "content-production-store"
-_DISPLAY_APPLICATION: ApplicationId = "display-merchandising"
+ApplicationId = Literal[
+    "tenant-user",
+    "tenant-admin",
+    "dual-tenant-user",
+    "dual-tenant-admin",
+    "content-production",
+    "content-production-store",
+    "display-merchandising",
+    "dual-content-production",
+    "external-content-production",
+]
+_APPLICATIONS: tuple[ApplicationId, ...] = (
+    "tenant-user",
+    "tenant-admin",
+    "dual-tenant-user",
+    "dual-tenant-admin",
+    "content-production",
+    "content-production-store",
+    "display-merchandising",
+    "dual-content-production",
+    "external-content-production",
+)
+_CONTENT_APPLICATIONS: tuple[ApplicationId, ...] = (
+    "content-production",
+    "content-production-store",
+    "dual-content-production",
+    "external-content-production",
+)
+_USER_PORTAL_APPLICATIONS: tuple[ApplicationId, ...] = (
+    "tenant-user",
+    "dual-tenant-user",
+    *_CONTENT_APPLICATIONS,
+    "display-merchandising",
+)
+_MANAGEMENT_APPLICATIONS: tuple[ApplicationId, ...] = ("tenant-admin", "dual-tenant-admin")
 
 
 class SessionAuthority:
+    """Synthetic M5-3 sessions only; production authentication stays in M5-4."""
+
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._secret = settings.session_secret.get_secret_value().encode("utf-8")
@@ -32,6 +65,14 @@ class SessionAuthority:
     def scope(self) -> TrustedScope:
         return self._scope
 
+    def _scope_for_user(self, user_id: UUID, account_id: UUID | None = None) -> TrustedScope:
+        return TrustedScope(
+            self._scope.tenant_id,
+            user_id,
+            self._scope.brand_id,
+            account_id or self._scope.account_id,
+        )
+
     def _display_scope(self) -> DisplayScope:
         return DisplayScope(
             self._scope.tenant_id,
@@ -43,59 +84,71 @@ class SessionAuthority:
     def issue(self, application: ApplicationId) -> str:
         return hmac.new(self._secret, application.encode("utf-8"), hashlib.sha256).hexdigest()
 
-    def _require_application(self, request: Request, application: ApplicationId | tuple[ApplicationId, ...]) -> ApplicationId:
+    def application(self, request: Request) -> ApplicationId:
         presented = request.cookies.get(_COOKIE_NAME, "")
         if not presented:
-            raise HTTPException(status_code=401, detail="请先从应用首页进入折线之间合成演示")
-        expected = (application,) if isinstance(application, str) else application
-        for candidate in expected:
+            raise HTTPException(status_code=401, detail="请先从合成入口进入当前工作空间")
+        for candidate in _APPLICATIONS:
             if hmac.compare_digest(presented, self.issue(candidate)):
                 return candidate
-        if any(
-            hmac.compare_digest(presented, self.issue(candidate))
-            for candidate in (_CONTENT_APPLICATION, _STORE_CONTENT_APPLICATION, _DISPLAY_APPLICATION)
-        ):
-            raise HTTPException(status_code=403, detail="当前演示会话属于另一应用，请先切换入口")
-        raise HTTPException(status_code=401, detail="缺少或无效的可信演示会话")
+        raise HTTPException(status_code=401, detail="缺少或无效的可信合成会话")
 
-    def require_content(self, request: Request) -> TrustedScope:
-        application = self._require_application(
-            request, (_CONTENT_APPLICATION, _STORE_CONTENT_APPLICATION)
-        )
-        if application == _STORE_CONTENT_APPLICATION:
-            return TrustedScope(
-                self._scope.tenant_id,
+    def _require_application(
+        self, request: Request, applications: tuple[ApplicationId, ...]
+    ) -> ApplicationId:
+        application = self.application(request)
+        if application not in applications:
+            raise HTTPException(status_code=403, detail="当前合成会话没有此入口资格")
+        return application
+
+    def _content_scope(self, application: ApplicationId) -> TrustedScope:
+        if application == "content-production-store":
+            return self._scope_for_user(
                 self._settings.demo_store_content_user_id,
-                self._scope.brand_id,
                 self._settings.demo_store_content_account_id,
             )
+        if application == "dual-content-production":
+            return self._scope_for_user(self._settings.demo_dual_qualified_user_id)
+        if application == "external-content-production":
+            return self._scope_for_user(self._settings.demo_external_operator_user_id)
         return self._scope
 
+    def require_content(self, request: Request) -> TrustedScope:
+        return self._content_scope(self._require_application(request, _CONTENT_APPLICATIONS))
+
     def require_content_target(self, request: Request, target: ContentTarget) -> TrustedScope:
-        """Map a natural target to a server-trusted account; no account ID is accepted from a client."""
-        application = self._require_application(
-            request, (_CONTENT_APPLICATION, _STORE_CONTENT_APPLICATION)
-        )
-        if application == _STORE_CONTENT_APPLICATION:
+        """Map a natural target to the server-trusted account; clients never send account IDs."""
+        application = self._require_application(request, _CONTENT_APPLICATIONS)
+        scope = self._content_scope(application)
+        if application == "content-production-store":
             if target != "douyin_video":
                 raise HTTPException(status_code=403, detail="南城店内容身份不能切换到总部平台账号")
-            return TrustedScope(
-                self._scope.tenant_id,
-                self._settings.demo_store_content_user_id,
-                self._scope.brand_id,
-                self._settings.demo_store_content_account_id,
-            )
+            return scope
         accounts: dict[ContentTarget, UUID] = {
-            "douyin_video": self._scope.account_id,
+            "douyin_video": scope.account_id,
             "xiaohongshu_video": self._settings.demo_headquarters_xiaohongshu_account_id,
             "xiaohongshu_graphic": self._settings.demo_headquarters_xiaohongshu_account_id,
             "wechat_channels_video": self._settings.demo_headquarters_wechat_channels_account_id,
         }
-        return TrustedScope(self._scope.tenant_id, self._scope.user_id, self._scope.brand_id, accounts[target])
+        return TrustedScope(scope.tenant_id, scope.user_id, scope.brand_id, accounts[target])
 
     def require_display(self, request: Request) -> DisplayScope:
-        self._require_application(request, _DISPLAY_APPLICATION)
+        self._require_application(request, ("display-merchandising",))
         return self._display_scope()
+
+    def require_user_portal(self, request: Request) -> TrustedScope:
+        application = self._require_application(request, _USER_PORTAL_APPLICATIONS)
+        if application in _CONTENT_APPLICATIONS:
+            return self._content_scope(application)
+        if application == "dual-tenant-user":
+            return self._scope_for_user(self._settings.demo_dual_qualified_user_id)
+        return self._scope
+
+    def require_management(self, request: Request) -> TrustedScope:
+        application = self._require_application(request, _MANAGEMENT_APPLICATIONS)
+        if application == "dual-tenant-admin":
+            return self._scope_for_user(self._settings.demo_dual_qualified_user_id)
+        return self._scope_for_user(self._settings.demo_tenant_admin_user_id)
 
 
 def set_session_cookie(

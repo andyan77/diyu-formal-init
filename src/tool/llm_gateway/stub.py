@@ -28,25 +28,51 @@ class DeterministicContentGenerator(ContentGenerator):
         text = request.weak_seed.casefold()
         if _ordinary_chat(text):
             return None
-        if any(value in text for value in ("想先看", "不用解释", "不用先解释", "留点空", "门店回应", "店里这几天")):
+        if any(
+            value in text
+            for value in ("想先看", "不用解释", "不用先解释", "留点空", "门店回应", "店里这几天")
+        ):
             return "local_response"
         if any(value in text for value in ("店长", "自我怀疑", "三位客人", "我会注意")):
             return "brand_life_narrative"
-        if any(value in text for value in ("单独拍", "单独用", "画面", "视觉重音", "走动里换", "重音")):
+        if any(
+            value in text for value in ("单独拍", "单独用", "画面", "视觉重音", "走动里换", "重音")
+        ):
             return "visual_styling_story"
         if any(value in text for value in ("一件顶两件", "解释双面", "不要替两面站队", "商品")):
             return "product_truth"
-        if any(value in text for value in ("哪面", "怎么穿", "怎么选", "先穿", "口袋", "上镜", "会议", "开完", "接孩子", "下雨", "骑车", "接着上一条", "复用当前")):
+        if any(
+            value in text
+            for value in (
+                "哪面",
+                "怎么穿",
+                "怎么选",
+                "先穿",
+                "口袋",
+                "上镜",
+                "会议",
+                "开完",
+                "接孩子",
+                "下雨",
+                "骑车",
+                "接着上一条",
+                "复用当前",
+            )
+        ):
             return "dressing_decision"
         return "brand_life_narrative" if "内容" in text or "写一条" in text else None
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
         contract, guide, spoken, visuals, subtitles, sound = self._parts(request)
         production = self._production(request, contract, guide, spoken, visuals, subtitles, sound)
-        revision = "\n\n这次只按你的自然修改更新了同一任务的表达。" if request.revision_instruction else ""
+        revision = (
+            "\n\n这次只按你的自然修改更新了同一任务的表达。" if request.revision_instruction else ""
+        )
         prior = "\n\n已承接当前合法作用域内明确授权的前情。" if request.prior_saved_body else ""
         core = "\n\n内容核心：" + " ".join(str(value) for value in vars(contract).values())
-        body = _visible_body(_outline(request.primary_product), production) + core + prior + revision
+        body = (
+            _visible_body(_outline(request.primary_product), production) + core + prior + revision
+        )
         return GeneratedArtifact(
             outline=_outline(request.primary_product),
             body=body,
@@ -169,7 +195,9 @@ class DeterministicContentGenerator(ContentGenerator):
         if any(word in request.weak_seed for word in ("雨", "骑车", "湿")):
             choice = "把移动中的安全、耐受和到达后的可整理性放在造型完整度之前。"
             boundary = "若当天并不需要长时间移动，或已有可靠的防护与替换条件，这个排序可以改变。"
-            action = "出门前做一次抬腿、转身和收纳物品的动作试验，再决定是否减少容易受潮或牵扯的部分。"
+            action = (
+                "出门前做一次抬腿、转身和收纳物品的动作试验，再决定是否减少容易受潮或牵扯的部分。"
+            )
         else:
             choice = "保住已经为正式场合完成的分寸，再检查它是否允许自然移动和切换。"
             boundary = "若后一段确实需要大量活动，或一处衣物让人持续分心，就应优先调整那一处。"
@@ -185,9 +213,9 @@ class DeterministicContentGenerator(ContentGenerator):
 
 
 def _ordinary_chat(text: str) -> bool:
-    return any(value in text for value in ("hello", "你好", "有点困", "挺安静", "谢谢")) and not any(
-        value in text for value in ("写", "内容", "双面", "外套", "穿", "商品", "拍")
-    )
+    return any(
+        value in text for value in ("hello", "你好", "有点困", "挺安静", "谢谢")
+    ) and not any(value in text for value in ("写", "内容", "双面", "外套", "穿", "商品", "拍"))
 
 
 def _outline(product: ContentProduct) -> str:
@@ -209,9 +237,7 @@ def _colors(facts: dict[str, object]) -> tuple[str, ...]:
     return tuple(str(value) for value in raw) if isinstance(raw, list) else ()
 
 
-def _visible_body(
-    title: str, production: VideoProductionBundle | GraphicProductionBundle
-) -> str:
+def _visible_body(title: str, production: VideoProductionBundle | GraphicProductionBundle) -> str:
     if isinstance(production, VideoProductionBundle):
         sections: tuple[tuple[str, str], ...] = (
             ("自然导读", production.natural_guide),
@@ -233,8 +259,11 @@ def _visible_body(
             ("拍摄/排版提示", production.layout_and_production),
             ("发布配文与互动", production.release_caption_and_interaction),
         )
-    return "标题：" + title + "\n\n" + "\n\n".join(
-        f"{heading}：{value}" for heading, value in sections
+    return (
+        "标题："
+        + title
+        + "\n\n"
+        + "\n\n".join(f"{heading}：{value}" for heading, value in sections)
     )
 
 

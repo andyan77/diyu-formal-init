@@ -86,7 +86,8 @@ class FactBoundary:
     def from_request(cls, request: GenerationInput) -> FactBoundary:
         return cls(
             product_facts="；".join(
-                DeepSeekGenerator._natural_product(product.sku, product.facts) for product in request.products
+                DeepSeekGenerator._natural_product(product.sku, product.facts)
+                for product in request.products
             )
             or "（无当前商品事实）",
             explicit_premise="\n".join(
@@ -154,9 +155,9 @@ class DeepSeekGenerator(ContentGenerator):
             700,
         )
         try:
-            value = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"]))).get(
-                "primary_value"
-            )
+            value = json.loads(
+                self._json_content(str(payload["choices"][0]["message"]["content"]))
+            ).get("primary_value")
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise GenerationFailed("模型路由返回格式不完整") from exc
         mapping: dict[str, ContentProduct | None] = {
@@ -206,9 +207,7 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("模型返回格式不完整")
         boundary = FactBoundary.from_request(request)
         known_choice = _known_choice_premise(request, boundary.explicit_premise)
-        violations = self._boundary_violations(
-            boundary, title, contract, production, known_choice
-        )
+        violations = self._boundary_violations(boundary, title, contract, production, known_choice)
         fact_repair_receipts: tuple[FactRepairReceipt, ...] = ()
         if violations:
             payload, repair_retries = self._request(
@@ -225,9 +224,7 @@ class DeepSeekGenerator(ContentGenerator):
                 title, contract, production, body = self._compiled_artifact(request, structured)
             except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
                 raise GenerationFailed("模型边界修复返回格式不完整") from exc
-            if self._boundary_violations(
-                boundary, title, contract, production, known_choice
-            ):
+            if self._boundary_violations(boundary, title, contract, production, known_choice):
                 raise GenerationFailed("内容事实边界无法在一次修复内满足")
             fact_repair_receipts = self._repair_receipts(violations)
         usage_value = payload.get("usage")
@@ -253,7 +250,10 @@ class DeepSeekGenerator(ContentGenerator):
         retries = 0
         request_payload = {
             "model": self._model,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
             # A modest amount of variation is needed when a later version must
             # genuinely recompile the same facts for another medium or platform.
             "temperature": 0.35,
@@ -298,8 +298,12 @@ class DeepSeekGenerator(ContentGenerator):
                 spoken_lines=DeepSeekGenerator._visible_text(structured["spoken_lines"]),
                 visual_actions=DeepSeekGenerator._visible_text(structured["visual_actions"]),
                 subtitles=DeepSeekGenerator._visible_text(structured["subtitles"]),
-                sound_and_production=DeepSeekGenerator._visible_text(structured["sound_and_production"]),
-                cover_or_first_frame=DeepSeekGenerator._visible_text(structured["cover_or_first_frame"]),
+                sound_and_production=DeepSeekGenerator._visible_text(
+                    structured["sound_and_production"]
+                ),
+                cover_or_first_frame=DeepSeekGenerator._visible_text(
+                    structured["cover_or_first_frame"]
+                ),
                 viewing_flow=DeepSeekGenerator._visible_text(structured["viewing_flow"]),
                 natural_duration=DeepSeekGenerator._visible_text(structured["natural_duration"]),
                 release_caption_and_interaction=DeepSeekGenerator._visible_text(
@@ -312,12 +316,19 @@ class DeepSeekGenerator(ContentGenerator):
                 hero_image=DeepSeekGenerator._visible_text(structured["hero_image"]),
                 image_sequence=DeepSeekGenerator._visible_text(structured["image_sequence"]),
                 full_body=DeepSeekGenerator._visible_text(structured["full_body"]),
-                layout_and_production=DeepSeekGenerator._visible_text(structured["layout_and_production"]),
+                layout_and_production=DeepSeekGenerator._visible_text(
+                    structured["layout_and_production"]
+                ),
                 release_caption_and_interaction=DeepSeekGenerator._visible_text(
                     structured["release_caption_and_interaction"]
                 ),
             )
-        return title, contract, production, DeepSeekGenerator._visible_body(title, production, contract)
+        return (
+            title,
+            contract,
+            production,
+            DeepSeekGenerator._visible_body(title, production, contract),
+        )
 
     @staticmethod
     def _boundary_violations(
@@ -327,7 +338,9 @@ class DeepSeekGenerator(ContentGenerator):
         production: ContentProductionBundle,
         known_choice: KnownChoicePremise | None = None,
     ) -> tuple[FactViolation, ...]:
-        visible = (("title", title),) + tuple(vars(contract).items()) + tuple(vars(production).items())
+        visible = (
+            (("title", title),) + tuple(vars(contract).items()) + tuple(vars(production).items())
+        )
         violations: list[FactViolation] = []
         product_claim = re.compile(
             r"(?:保暖|舒适|品质|版型|显瘦|显高|耐穿|材质|面料|设计意图|挺括|支撑|体积|"
@@ -364,7 +377,9 @@ class DeepSeekGenerator(ContentGenerator):
                 if not sentence.strip():
                     continue
                 conditional = re.search(r"(?:如果|拍摄安排|演绎|假设)", sentence)
-                product_reference = re.search(r"(?:商品|外套|衣服|炭灰|格纹|重量|双面|样衣|口袋)", sentence)
+                product_reference = re.search(
+                    r"(?:商品|外套|衣服|炭灰|格纹|重量|双面|样衣|口袋)", sentence
+                )
                 acknowledged_unknown = bool(
                     re.search(
                         r"(?:现有资料不能证明|不能(?:从.{0,16})?(?:确认|下结论|推断|证明)|"
@@ -378,20 +393,21 @@ class DeepSeekGenerator(ContentGenerator):
                     violations.append(FactViolation(field, sentence.strip()))
                 if invalid_weight_explanation.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
-                if unsupported_weight_comparison.search(sentence) and "不以极致轻量" not in sentence:
+                if (
+                    unsupported_weight_comparison.search(sentence)
+                    and "不以极致轻量" not in sentence
+                ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if unsupported_weight_cause.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
                 if internal_copy_direction.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    (product_reference or product_contract)
-                    and unprovided_technical_detail.search(sentence)
+                if (product_reference or product_contract) and unprovided_technical_detail.search(
+                    sentence
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    isinstance(contract, P5SemanticContract)
-                    and unprovided_styling_detail.search(sentence)
+                if isinstance(contract, P5SemanticContract) and unprovided_styling_detail.search(
+                    sentence
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if (
@@ -408,7 +424,10 @@ class DeepSeekGenerator(ContentGenerator):
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if (
-                    re.search(r"(?:很多|许多|不少|多位|几位|每位|所有|常客).{0,8}(?:顾客|客人|到店者)", sentence)
+                    re.search(
+                        r"(?:很多|许多|不少|多位|几位|每位|所有|常客).{0,8}(?:顾客|客人|到店者)",
+                        sentence,
+                    )
                     and sentence not in boundary.explicit_premise
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
@@ -569,8 +588,14 @@ class DeepSeekGenerator(ContentGenerator):
             r"8\s*秒", production.natural_duration
         ):
             transform_sections = (("变换边界", "这是 8 秒窄主题版，不等同于原完整版本。"),)
-        return "标题：" + title + "\n\n" + "\n\n".join(
-            f"{heading}：{value}" for heading, value in contract_sections + transform_sections + sections
+        return (
+            "标题："
+            + title
+            + "\n\n"
+            + "\n\n".join(
+                f"{heading}：{value}"
+                for heading, value in contract_sections + transform_sections + sections
+            )
         )
 
     @staticmethod
@@ -580,7 +605,9 @@ class DeepSeekGenerator(ContentGenerator):
                 return min(8.0, max(0.0, float(retry_after)))
             except ValueError:
                 try:
-                    return min(8.0, max(0.0, parsedate_to_datetime(retry_after).timestamp() - time.time()))
+                    return min(
+                        8.0, max(0.0, parsedate_to_datetime(retry_after).timestamp() - time.time())
+                    )
                 except (TypeError, ValueError):
                     pass
         return float(min(4.0, 0.5 * (2**retries)))
@@ -600,9 +627,13 @@ class DeepSeekGenerator(ContentGenerator):
     @staticmethod
     def _generation_prompt(request: GenerationInput) -> str:
         assets = "\n".join(asset.body for asset in request.active_domain_assets) or "（无）"
-        products = "\n".join(
-            DeepSeekGenerator._natural_product(item.sku, item.facts) for item in request.products
-        ) or "（无）"
+        products = (
+            "\n".join(
+                DeepSeekGenerator._natural_product(item.sku, item.facts)
+                for item in request.products
+            )
+            or "（无）"
+        )
         fields = ", ".join(_CONTRACT_FIELDS[request.primary_product])
         prior = request.prior_saved_body or "（未授权复用旧正文）"
         revision = request.revision_instruction or "（首次生成）"
@@ -636,7 +667,7 @@ class DeepSeekGenerator(ContentGenerator):
 品牌：{request.brand.brand_name}；品牌战略版本：{request.brand.strategy_version}；定位：{request.brand.positioning}；语气：{request.brand.tone}。
 实际操作人：{request.brand.operator_name}；代表组织：{request.brand.organization_name}；内容角色：{request.brand.content_role_name}；角色边界：{request.brand.content_role_boundary}；受众：{request.brand.audience_description}；平台/形式：{request.brand.platform}／{request.brand.media_format}；制作条件：{request.brand.production_conditions}。
 目标平台方向：{request.platform_direction.direction}
-当前变形边界：{shortening_boundary or four_image_boundary or '（无额外变形）'}
+当前变形边界：{shortening_boundary or four_image_boundary or "（无额外变形）"}
 当前商品事实（只可使用这里明确给出的内容）：{products}
 本次适用资产：{assets}
 已授权前情：{prior}
@@ -713,10 +744,15 @@ class DeepSeekGenerator(ContentGenerator):
 
     @staticmethod
     def _weight_boundary(value: object) -> str:
-        if value == "only the current sample weight difference is known; do not attribute all difference to the double-faced structure":
+        if (
+            value
+            == "only the current sample weight difference is known; do not attribute all difference to the double-faced structure"
+        ):
             return "当前只知道这两份样衣存在重量差异，不能把全部差异归因于双面结构。"
         if isinstance(value, str) and value.strip():
-            return "当前重量边界已登记；只能以两份样衣的已记录重量为准，不能从重量推断其他未测试性质。"
+            return (
+                "当前重量边界已登记；只能以两份样衣的已记录重量为准，不能从重量推断其他未测试性质。"
+            )
         return "当前只可确认已记录的样衣重量，不能从重量推断其他性质。"
 
     @staticmethod

@@ -28,7 +28,10 @@ from src.shared.types import (
 
 class PostgresContentRepository(ContentRepository):
     def __init__(
-        self, database_url: str, store_content_account_id: UUID | None = None, active_product_refs: tuple[str, ...] = ()
+        self,
+        database_url: str,
+        store_content_account_id: UUID | None = None,
+        active_product_refs: tuple[str, ...] = (),
     ) -> None:
         self._database_url = database_url
         self._store_content_account_id = store_content_account_id
@@ -404,7 +407,12 @@ class PostgresContentRepository(ContentRepository):
                 task_id,
                 {"run_id": str(run_id)},
             )
-        return run_id, parent_version_id, str(task["weak_seed"]), self._product(task["primary_content_product"])
+        return (
+            run_id,
+            parent_version_id,
+            str(task["weak_seed"]),
+            self._product(task["primary_content_product"]),
+        )
 
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:
         with self._tx(scope) as cursor:
@@ -457,6 +465,7 @@ class PostgresContentRepository(ContentRepository):
             "model": str(row["model"]),
             "created_at": row["created_at"],
             "target": self._target_label(channel, media_format),
+            "target_key": self._target_from_channel_media(channel, media_format),
             "adapted_from": adapted_from,
         }
 
@@ -597,8 +606,7 @@ class PostgresContentRepository(ContentRepository):
                 FROM system_domain_assets a
                 JOIN system_asset_activations active ON active.asset_id = a.asset_id
                 WHERE a.status = 'active' AND active.consumer = ANY(%s) ORDER BY a.asset_id
-                """
-                ,
+                """,
                 ([self._consumer(primary_product), "content-production / M5-2-media"],),
             )
             rows = cursor.fetchall()
@@ -617,7 +625,9 @@ class PostgresContentRepository(ContentRepository):
             skus = self._active_product_refs
         return self._product_facts_for_refs(scope, skus)
 
-    def load_task_product_facts(self, scope: TrustedScope, task_id: UUID) -> tuple[ProductFact, ...]:
+    def load_task_product_facts(
+        self, scope: TrustedScope, task_id: UUID
+    ) -> tuple[ProductFact, ...]:
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
@@ -628,11 +638,15 @@ class PostgresContentRepository(ContentRepository):
             )
             row = self._one(cursor, "找不到当前作用域中的内容任务")
         stored_refs = row["product_refs"]
-        if not isinstance(stored_refs, list) or not all(isinstance(ref, str) for ref in stored_refs):
+        if not isinstance(stored_refs, list) or not all(
+            isinstance(ref, str) for ref in stored_refs
+        ):
             raise DomainError("内容任务商品引用无效")
         return self._product_facts_for_refs(scope, tuple(stored_refs))
 
-    def _product_facts_for_refs(self, scope: TrustedScope, refs: tuple[str, ...]) -> tuple[ProductFact, ...]:
+    def _product_facts_for_refs(
+        self, scope: TrustedScope, refs: tuple[str, ...]
+    ) -> tuple[ProductFact, ...]:
         if not refs:
             return ()
         with self._tx(scope) as cursor:
@@ -725,7 +739,12 @@ class PostgresContentRepository(ContentRepository):
         elif primary_product == "product_truth":
             summary = cls._p2_asset_projection(asset_id, body, products)
         else:
-            summary = body.get("statement") or body.get("name") or body.get("title") or row["display_name"]
+            summary = (
+                body.get("statement")
+                or body.get("name")
+                or body.get("title")
+                or row["display_name"]
+            )
         return ActiveAsset(
             asset_id=asset_id,
             schema_version=str(row["schema_version"]),
@@ -758,13 +777,21 @@ class PostgresContentRepository(ContentRepository):
     def _media_asset_projection(cls, asset_id: str, body: dict[str, object]) -> str:
         """Project only execution guidance, never legacy persistence advice or asset identifiers."""
         parts: list[str] = [cls._asset_text(body.get("name"))]
-        for key in ("transformation_steps", "production_constraints", "avoid_when", "failure_patterns"):
+        for key in (
+            "transformation_steps",
+            "production_constraints",
+            "avoid_when",
+            "failure_patterns",
+        ):
             value = cls._asset_text(body.get(key))
             if value:
                 parts.append(value)
         if asset_id == "E-ADAPT-001":
             parts = [part for part in parts if "同一任务版本链" not in part and "持久" not in part]
-        return "；".join(part for part in parts if part) or "按当前媒体合同重组表达，不复用不适用制作建议。"
+        return (
+            "；".join(part for part in parts if part)
+            or "按当前媒体合同重组表达，不复用不适用制作建议。"
+        )
 
     @staticmethod
     def _p2_statement_applies(
@@ -782,7 +809,13 @@ class PostgresContentRepository(ContentRepository):
             return any(
                 any(
                     key in product.facts
-                    for key in ("material", "material_composition", "fabric_structure", "craft", "process")
+                    for key in (
+                        "material",
+                        "material_composition",
+                        "fabric_structure",
+                        "craft",
+                        "process",
+                    )
                 )
                 for product in products
             )

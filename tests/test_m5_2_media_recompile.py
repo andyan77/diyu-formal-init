@@ -68,7 +68,9 @@ def test_four_targets_are_complete_and_server_mapped(app_database_url: str) -> N
             created = client.post("/api/v1/content", json={"weak_seed": _P2D, "target": target})
             assert created.status_code == 200
             payload = created.json()
-            task_account, product, refs, media_format = _task_row(app_database_url, payload["task_id"])
+            task_account, product, refs, media_format = _task_row(
+                app_database_url, payload["task_id"]
+            )
             assert task_account == account_id
             assert product == "product_truth"
             assert refs == ["ZX-C218"]
@@ -77,20 +79,31 @@ def test_four_targets_are_complete_and_server_mapped(app_database_url: str) -> N
             assert "B-TPO-001" not in payload["body"]
         rejected = client.post(
             "/api/v1/content",
-            json={"weak_seed": _P2D, "target": "xiaohongshu_graphic", "account_id": "client-controlled"},
+            json={
+                "weak_seed": _P2D,
+                "target": "xiaohongshu_graphic",
+                "account_id": "client-controlled",
+            },
         )
         assert rejected.status_code == 422
     with TestClient(app) as store:
         store.get("/ui/select/content-store")
-        assert store.post(
-            "/api/v1/content", json={"weak_seed": _P2D, "target": "xiaohongshu_graphic"}
-        ).status_code == 403
+        assert (
+            store.post(
+                "/api/v1/content", json={"weak_seed": _P2D, "target": "xiaohongshu_graphic"}
+            ).status_code
+            == 403
+        )
 
 
-def test_recompile_isolated_and_same_target_revisions_stay_on_one_item(app_database_url: str) -> None:
+def test_recompile_isolated_and_same_target_revisions_stay_on_one_item(
+    app_database_url: str,
+) -> None:
     with TestClient(create_app(Settings.model_validate({}))) as client:
         client.get("/ui/select/content")
-        source = client.post("/api/v1/content", json={"weak_seed": _P2D, "target": "douyin_video"}).json()
+        source = client.post(
+            "/api/v1/content", json={"weak_seed": _P2D, "target": "douyin_video"}
+        ).json()
         adapted = client.post(
             "/api/v1/content",
             json={
@@ -120,9 +133,12 @@ def test_recompile_isolated_and_same_target_revisions_stay_on_one_item(app_datab
         graphic_v2 = revised.json()
         assert graphic_v2["version"] == 2
         assert "只补拍四张" in graphic_v2["body"]
-        assert client.get(
-            f"/api/v1/tasks/{source['task_id']}/versions/1?target=douyin_video"
-        ).json()["body"] == source["body"]
+        assert (
+            client.get(f"/api/v1/tasks/{source['task_id']}/versions/1?target=douyin_video").json()[
+                "body"
+            ]
+            == source["body"]
+        )
 
 
 def test_transform_boundaries_receipts_and_silent_store_video(app_database_url: str) -> None:
@@ -137,9 +153,12 @@ def test_transform_boundaries_receipts_and_silent_store_video(app_database_url: 
         )
         assert short.status_code == 201
         assert "8 秒窄主题版" in short.json()["body"]
-        assert headquarters.get(
-            f"/api/v1/tasks/{source['task_id']}/versions/1?target=douyin_video"
-        ).json()["body"] == source["body"]
+        assert (
+            headquarters.get(
+                f"/api/v1/tasks/{source['task_id']}/versions/1?target=douyin_video"
+            ).json()["body"]
+            == source["body"]
+        )
         receipt = _receipt(app_database_url, source["task_id"])
         assert receipt["target"] == "douyin_video"
         assert receipt["target_platform"] == "抖音"

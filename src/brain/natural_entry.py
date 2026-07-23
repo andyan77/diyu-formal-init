@@ -9,9 +9,13 @@ _SMALL_TALK_SIGNALS = ("hello", "hi", "你好", "您好", "有点困", "挺安�
 def is_natural_chat(text: str) -> bool:
     """Keep a tiny high-confidence ordinary-conversation fast path out of content tasks."""
     normalized = text.strip().casefold()
-    return bool(normalized) and any(signal in normalized for signal in _SMALL_TALK_SIGNALS) and not any(
-        signal in normalized
-        for signal in ("内容", "口播", "脚本", "拍", "穿", "外套", "商品", "双面", "顾客")
+    return (
+        bool(normalized)
+        and any(signal in normalized for signal in _SMALL_TALK_SIGNALS)
+        and not any(
+            signal in normalized
+            for signal in ("内容", "口播", "脚本", "拍", "穿", "外套", "商品", "双面", "顾客")
+        )
     )
 
 

@@ -29,8 +29,12 @@ def required_inventory_gap(inventory: tuple[tuple[str, int], ...]) -> str | None
 def is_c_upper_vest_obstruction_feedback(feedback: str) -> bool:
     """Recognize only the frozen, explicitly local C-upper vest adjustment."""
     text = feedback.casefold()
+    if "右侧" in text and "外套" in text and any(marker in text for marker in ("太厚", "挂不下")):
+        return True
     refers_to_vest = "马甲" in text or "zx-v113" in text
-    refers_to_c_upper = any(marker in text for marker in ("右上", "c区上杆", "c 区上杆", "c区", "c 区"))
+    refers_to_c_upper = any(
+        marker in text for marker in ("右上", "c区上杆", "c 区上杆", "c区", "c 区")
+    )
     describes_obstruction = any(
         marker in text for marker in ("压", "遮挡", "不好拿", "难取", "难拿", "挤")
     )

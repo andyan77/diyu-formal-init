@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from html import escape
 from urllib.parse import urlencode
 
@@ -12,6 +13,39 @@ def render_home() -> str:
         "<span>为品牌受众生成可直接制作的内容。</span></a>"
         "<a class='choice' href='/ui/select/display'><strong>陈列搭配（对内）</strong>"
         "<span>为门店生成墙面双层挂杆执行建议。</span></a></section>",
+    )
+
+
+def render_spa_shell(
+    bootstrap: dict[str, object] | None = None,
+    fallback_extra: str = "",
+    fallback: str | None = None,
+) -> str:
+    """Serve one React entry without mirroring business state into server templates."""
+    serialized = json.dumps(bootstrap, ensure_ascii=False).replace("<", "\\u003c")
+    default_fallback = (
+        "<h1>笛语</h1><p>请选择今天要完成的工作。</p>"
+        "<p><a href='/ui/select/user'>租户用户入口</a> · "
+        "<a href='/ui/select/admin'>租户管理入口</a></p>"
+    )
+    rendered_fallback = fallback if fallback is not None else default_fallback
+    if bootstrap is not None:
+        identity = bootstrap.get("identity")
+        if isinstance(identity, dict):
+            rendered_fallback += (
+                "<p>"
+                + " · ".join(
+                    escape(str(value)) for value in identity.values() if isinstance(value, str)
+                )
+                + "</p>"
+            )
+    return (
+        "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>笛语</title><link rel='stylesheet' href='/app/assets/index.css'></head><body>"
+        "<div id='root'></div><noscript>" + rendered_fallback + fallback_extra + "</noscript>"
+        "<script>window.__DIYU_BOOTSTRAP__=" + serialized + ";</script>"
+        "<script type='module' src='/app/assets/index.js'></script></body></html>"
     )
 
 
@@ -41,14 +75,27 @@ def render_workbench(
           <form method="post" action="/ui/save"><input type="hidden" name="version_id" value="{version_id}"><input type="hidden" name="task_id" value="{task_id}"><input type="hidden" name="version" value="{version}"><input type="hidden" name="target" value="{escape(target)}"><button>主动保存 V{version}</button></form>
           <form method="post" action="/ui/reuse"><input type="hidden" name="reuse_version_id" value="{version_id}"><label>把当前成品改编为{target_select}</label><label>自然说清这次想怎样改<textarea name="weak_seed" required maxlength="1000"></textarea></label><button>保留原版并新建改编版</button></form>
         </section>"""
-    banner = "离线确定性测试模式：此页结果不是实际模型调用。" if mode == "stub" else "已连接 DeepSeek 真实生成模式。"
-    identity_text = _identity(("品牌", identity["brand"]), ("实际操作人", identity["operator"]), ("代表组织", identity["organization"]), ("发布账号", identity["account"]), ("内容角色", identity["content_role"]), ("当前平台/媒体", f"{identity['platform']}／{identity['media_format']}"))
+    banner = (
+        "离线确定性测试模式：此页结果不是实际模型调用。"
+        if mode == "stub"
+        else "已连接 DeepSeek 真实生成模式。"
+    )
+    identity_text = _identity(
+        ("品牌", identity["brand"]),
+        ("实际操作人", identity["operator"]),
+        ("代表组织", identity["organization"]),
+        ("发布账号", identity["account"]),
+        ("内容角色", identity["content_role"]),
+        ("当前平台/媒体", f"{identity['platform']}／{identity['media_format']}"),
+    )
     target_select = _target_select(target_options, "target", target)
     content = f"<a href='/'>返回应用首页</a><h1>内容生产（对外）</h1>{identity_text}<p class='mode'>{banner}</p><p class='switch'>合成演示身份：<a href='/ui/select/content'>总部内容账号</a> · <a href='/ui/select/content-store'>南城店内容账号</a></p>{_notice(notice)}<form method='post' action='/ui/generate'><label>这次要做成{target_select}</label><label>把想完成的内容、商品、观察或穿衣情境自然说出来<textarea name='weak_seed' required maxlength='1000'></textarea></label><button>生成当前完整成品</button></form>{artifact}"
     return _page("笛语 · 内容生产", content)
 
 
-def workbench_location(result: dict[str, object], notice: str | None = None, target: str | None = None) -> str:
+def workbench_location(
+    result: dict[str, object], notice: str | None = None, target: str | None = None
+) -> str:
     query = {"task": str(result["task_id"]), "version": str(result["version"])}
     if target:
         query["target"] = target
@@ -63,15 +110,25 @@ def render_display_workbench(
     artifact = ""
     if result:
         artifact = f"<h2>墙面方案 V{escape(str(result['version']))}</h2><article>{escape(str(result['body']))}</article><form method='post' action='/ui/display/revise'><input type='hidden' name='task_id' value='{escape(str(result['task_id']))}'><textarea name='feedback' required></textarea><button>按自然反馈生成 V{int(str(result['version'])) + 1}</button></form>"
-    identity_text = _identity(("品牌", identity["brand"]), ("实际操作人", identity["operator"]), ("执行组织", identity["organization"]), ("当前门店", identity["store"]), ("当前能力", "墙面双层挂杆执行方案"))
+    identity_text = _identity(
+        ("品牌", identity["brand"]),
+        ("实际操作人", identity["operator"]),
+        ("执行组织", identity["organization"]),
+        ("当前门店", identity["store"]),
+        ("当前能力", "墙面双层挂杆执行方案"),
+    )
     content = f"<a href='/'>返回应用首页</a><h1>陈列搭配（对内）</h1>{identity_text}<p>DM01 确定性陈列编译：只从已验证的库存、品牌标准和挂杆档案生成方案。</p>{_notice(notice)}<form method='post' action='/ui/display/generate'><textarea name='inventory_text' required placeholder='今天这组墙可用：ZX-C218 3 件……'></textarea><button>生成墙面方案</button></form>{artifact}"
     return _page("陈列搭配（对内）", content)
 
 
 def _identity(*items: tuple[str, str]) -> str:
-    return "<section class='identity'><h2>当前身份</h2>" + "".join(
-        f"<p><strong>{escape(label)}：</strong>{escape(value)}</p>" for label, value in items
-    ) + "</section>"
+    return (
+        "<section class='identity'><h2>当前身份</h2>"
+        + "".join(
+            f"<p><strong>{escape(label)}：</strong>{escape(value)}</p>" for label, value in items
+        )
+        + "</section>"
+    )
 
 
 def _target_select(options: tuple[tuple[str, str], ...], name: str, selected: str) -> str:

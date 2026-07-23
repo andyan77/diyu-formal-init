@@ -5,6 +5,7 @@
 .venv/
 var/postgres/
 var/tmp/
+var/materials-test/
 
 # Python
 __pycache__/

@@ -62,9 +62,9 @@ def assert_display_revision(prior_plan: dict[str, object], current_plan: dict[st
     current_unmounted_values = cast(dict[str, int], current_unmounted)
     prior_layout_values = cast(dict[str, object], prior_layout)
     current_layout_values = cast(dict[str, object], current_layout)
-    if set(prior_mounted_values) != set(current_mounted_values) or set(prior_unmounted_values) != set(
-        current_unmounted_values
-    ):
+    if set(prior_mounted_values) != set(current_mounted_values) or set(
+        prior_unmounted_values
+    ) != set(current_unmounted_values):
         raise GenerationFailed("修订方案不能切换本次商品范围")
     for sku in prior_mounted_values:
         mounted_delta = current_mounted_values[sku] - prior_mounted_values[sku]
@@ -81,7 +81,9 @@ def assert_display_revision(prior_plan: dict[str, object], current_plan: dict[st
     prior_c, current_c = prior_zones.get("C"), current_zones.get("C")
     if not isinstance(prior_c, dict) or not isinstance(current_c, dict):
         raise GenerationFailed("修订方案缺少 C 区")
-    if prior_c.get("role") != current_c.get("role") or prior_c.get("lower") != current_c.get("lower"):
+    if prior_c.get("role") != current_c.get("role") or prior_c.get("lower") != current_c.get(
+        "lower"
+    ):
         raise GenerationFailed("冻结修订不能改变 C 区下杆或角色")
     if _rail_quantities(prior_c.get("upper")) != {"ZX-C218": 1, "ZX-V113": 2} or _rail_quantities(
         current_c.get("upper")

@@ -19,18 +19,31 @@ AUDIENCE_ID = UUID("00000000-0000-0000-0000-000000000071")
 STORE_ORG_ID = UUID("00000000-0000-0000-0000-000000000012")
 STORE_USER_ID = UUID("00000000-0000-0000-0000-000000000013")
 STORE_CONTENT_USER_ID = UUID("00000000-0000-0000-0000-000000000014")
+TENANT_ADMIN_USER_ID = UUID("00000000-0000-0000-0000-000000000015")
+DUAL_QUALIFIED_USER_ID = UUID("00000000-0000-0000-0000-000000000016")
+EXTERNAL_OPERATOR_USER_ID = UUID("00000000-0000-0000-0000-000000000017")
+EXTERNAL_OPERATOR_ORG_ID = UUID("00000000-0000-0000-0000-000000000018")
 STORE_CONTENT_ACCOUNT_ID = UUID("00000000-0000-0000-0000-000000000032")
 HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID = UUID("00000000-0000-0000-0000-000000000033")
 HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID = UUID("00000000-0000-0000-0000-000000000034")
 STORE_CONTENT_GRANT_ID = UUID("00000000-0000-0000-0000-000000000042")
 HEADQUARTERS_XIAOHONGSHU_GRANT_ID = UUID("00000000-0000-0000-0000-000000000043")
 HEADQUARTERS_WECHAT_CHANNELS_GRANT_ID = UUID("00000000-0000-0000-0000-000000000044")
+DUAL_QUALIFIED_GRANT_ID = UUID("00000000-0000-0000-0000-000000000151")
+EXTERNAL_OPERATOR_GRANT_ID = UUID("00000000-0000-0000-0000-000000000152")
 STORE_CONTENT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000053")
 STORE_CONTENT_ACCOUNT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000063")
 HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000064")
 HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000065")
 STORE_ID = UUID("00000000-0000-0000-0000-000000000081")
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000082")
+BRAND_EXPRESSION_BASELINE_ID = UUID("00000000-0000-0000-0000-000000000091")
+MATERIAL_MAINTAINER_ID = UUID("00000000-0000-0000-0000-000000000092")
+TENANT_ADMIN_GRANT_ID = UUID("00000000-0000-0000-0000-000000000093")
+DUAL_TENANT_ADMIN_GRANT_ID = UUID("00000000-0000-0000-0000-000000000094")
+USER_DEFAULT_PERSONA_ID = UUID("00000000-0000-0000-0000-000000000095")
+DUAL_DEFAULT_PERSONA_ID = UUID("00000000-0000-0000-0000-000000000096")
+EXTERNAL_DEFAULT_PERSONA_ID = UUID("00000000-0000-0000-0000-000000000097")
 
 
 def seed_demo() -> None:
@@ -60,12 +73,25 @@ def seed_demo() -> None:
             (ORG_ID, TENANT_ID, "折线之间总部"),
         )
         cursor.execute(
+            "INSERT INTO organizations (id, tenant_id, name) VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
+            (EXTERNAL_OPERATOR_ORG_ID, TENANT_ID, "折线之间外部代运营服务方"),
+        )
+        cursor.execute(
             """
                 INSERT INTO users (id, tenant_id, organization_id, display_name)
                 VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING
                 """,
             (USER_ID, TENANT_ID, ORG_ID, "总部内容运营甲"),
         )
+        for user_id, organization_id, display_name in (
+            (TENANT_ADMIN_USER_ID, ORG_ID, "总部租户管理员甲"),
+            (DUAL_QUALIFIED_USER_ID, ORG_ID, "总部内容与租户管理兼任甲"),
+            (EXTERNAL_OPERATOR_USER_ID, EXTERNAL_OPERATOR_ORG_ID, "外部代运营乙"),
+        ):
+            cursor.execute(
+                "INSERT INTO users (id, tenant_id, organization_id, display_name) VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
+                (user_id, TENANT_ID, organization_id, display_name),
+            )
         cursor.execute(
             """
                 INSERT INTO brands (id, tenant_id, name, positioning, decision_order, tone)
@@ -83,6 +109,19 @@ def seed_demo() -> None:
         cursor.execute(
             "UPDATE brands SET strategy_version = %s WHERE tenant_id = %s AND id = %s",
             ("V1.0-first-phase-data-ready", TENANT_ID, BRAND_ID),
+        )
+        cursor.execute(
+            """
+            INSERT INTO brand_expression_baselines (id, tenant_id, brand_id, version, draft, status)
+            VALUES (%s, %s, %s, 1, %s, 'draft') ON CONFLICT (tenant_id, brand_id) DO NOTHING
+            """,
+            (
+                BRAND_EXPRESSION_BASELINE_ID,
+                TENANT_ID,
+                BRAND_ID,
+                "我们先把真实穿衣处境和商品取舍讲清楚：成熟、平等、具体，有生活温度，"
+                "不利用身体、年龄或身份焦虑，也不把没有证据的故事说成事实。",
+            ),
         )
         cursor.execute(
             "INSERT INTO display_policies (id,tenant_id,brand_id,version,body) VALUES (%s,%s,%s,'1.0',%s) ON CONFLICT (id) DO NOTHING",
@@ -139,6 +178,14 @@ def seed_demo() -> None:
                 """,
             (GRANT_ID, TENANT_ID, USER_ID, ACCOUNT_ID, "总部零售/服务专家"),
         )
+        for grant_id, user_id, role_name in (
+            (DUAL_QUALIFIED_GRANT_ID, DUAL_QUALIFIED_USER_ID, "总部内容运营权限"),
+            (EXTERNAL_OPERATOR_GRANT_ID, EXTERNAL_OPERATOR_USER_ID, "受托代运营权限"),
+        ):
+            cursor.execute(
+                "INSERT INTO auth_grants (id, tenant_id, user_id, account_id, role_name) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
+                (grant_id, TENANT_ID, user_id, ACCOUNT_ID, role_name),
+            )
         cursor.execute(
             """
                 INSERT INTO content_roles (id, tenant_id, brand_id, name, voice_boundary)
@@ -193,15 +240,32 @@ def seed_demo() -> None:
         )
         cursor.execute(
             "INSERT INTO auth_grants (id,tenant_id,user_id,account_id,role_name) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
-            (STORE_CONTENT_GRANT_ID, TENANT_ID, STORE_CONTENT_USER_ID, STORE_CONTENT_ACCOUNT_ID, "南城店内容运营权限"),
+            (
+                STORE_CONTENT_GRANT_ID,
+                TENANT_ID,
+                STORE_CONTENT_USER_ID,
+                STORE_CONTENT_ACCOUNT_ID,
+                "南城店内容运营权限",
+            ),
         )
         cursor.execute(
             "INSERT INTO content_roles (id,tenant_id,brand_id,name,voice_boundary) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
-            (STORE_CONTENT_ROLE_ID, TENANT_ID, BRAND_ID, "南城店店长/门店经营者", "只从南城店经营者的合法位置表达，不冒充总部、全国政策或真实顾客。"),
+            (
+                STORE_CONTENT_ROLE_ID,
+                TENANT_ID,
+                BRAND_ID,
+                "南城店店长/门店经营者",
+                "只从南城店经营者的合法位置表达，不冒充总部、全国政策或真实顾客。",
+            ),
         )
         cursor.execute(
             "INSERT INTO account_content_roles (id,tenant_id,account_id,content_role_id) VALUES (%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
-            (STORE_CONTENT_ACCOUNT_ROLE_ID, TENANT_ID, STORE_CONTENT_ACCOUNT_ID, STORE_CONTENT_ROLE_ID),
+            (
+                STORE_CONTENT_ACCOUNT_ROLE_ID,
+                TENANT_ID,
+                STORE_CONTENT_ACCOUNT_ID,
+                STORE_CONTENT_ROLE_ID,
+            ),
         )
         cursor.execute(
             """
@@ -215,6 +279,45 @@ def seed_demo() -> None:
                 "约 30—45 岁、常在工作、家庭与个人生活之间切换的城市女性；任务时不假定个人事实。",
             ),
         )
+        cursor.execute(
+            """
+            INSERT INTO organization_material_maintainers (id, tenant_id, organization_id, user_id)
+            VALUES (%s, %s, %s, %s) ON CONFLICT (tenant_id, organization_id, user_id) DO NOTHING
+            """,
+            (MATERIAL_MAINTAINER_ID, TENANT_ID, ORG_ID, USER_ID),
+        )
+        for grant_id, user_id in (
+            (TENANT_ADMIN_GRANT_ID, TENANT_ADMIN_USER_ID),
+            (DUAL_TENANT_ADMIN_GRANT_ID, DUAL_QUALIFIED_USER_ID),
+        ):
+            cursor.execute(
+                "INSERT INTO tenant_management_grants (id, tenant_id, user_id) VALUES (%s, %s, %s) ON CONFLICT (tenant_id, user_id) DO NOTHING",
+                (grant_id, TENANT_ID, user_id),
+            )
+        for persona_id, user_id, name, boundary in (
+            (
+                USER_DEFAULT_PERSONA_ID,
+                USER_ID,
+                "总部内容运营的默认表达",
+                "只说明本人可承担的内容协作位置，不替代企业发布账号的表达身份。",
+            ),
+            (
+                DUAL_DEFAULT_PERSONA_ID,
+                DUAL_QUALIFIED_USER_ID,
+                "兼任者的默认表达",
+                "同一自然人可兼任两个入口，但每次只在当前入口按其资格行动。",
+            ),
+            (
+                EXTERNAL_DEFAULT_PERSONA_ID,
+                EXTERNAL_OPERATOR_USER_ID,
+                "外部代运营的默认表达",
+                "仅在受托发布账号授权范围内协作，不代表租户管理身份。",
+            ),
+        ):
+            cursor.execute(
+                "INSERT INTO user_default_personas (id, tenant_id, user_id, name, boundary) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (tenant_id, user_id) DO NOTHING",
+                (persona_id, TENANT_ID, user_id, name, boundary),
+            )
 
 
 if __name__ == "__main__":

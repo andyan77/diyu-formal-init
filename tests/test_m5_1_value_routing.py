@@ -57,7 +57,9 @@ def _store_scope() -> TrustedScope:
 def _product(task: dict[str, object], app_database_url: str) -> str:
     with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
-        cursor.execute("SELECT primary_content_product FROM business_tasks WHERE id=%s", (task["task_id"],))
+        cursor.execute(
+            "SELECT primary_content_product FROM business_tasks WHERE id=%s", (task["task_id"],)
+        )
         row = cursor.fetchone()
     assert row is not None
     return str(row[0])
@@ -66,7 +68,8 @@ def _product(task: dict[str, object], app_database_url: str) -> str:
 def test_x01_routes_assets_versions_and_shared_product_truth(app_database_url: str) -> None:
     generator = CapturingContentGenerator()
     service = ContentService(
-        PostgresContentRepository(app_database_url, _store_scope().account_id, ("ZX-C218",)), generator
+        PostgresContentRepository(app_database_url, _store_scope().account_id, ("ZX-C218",)),
+        generator,
     )
     scope = _store_scope()
 
@@ -94,21 +97,33 @@ def test_x01_routes_assets_versions_and_shared_product_truth(app_database_url: s
     assert p1_v2["version"] == 2
     assert _product(p1_v2, app_database_url) == "dressing_decision"
 
-    received = {item.primary_product: {asset.asset_id for asset in item.active_domain_assets} for item in generator.inputs}
+    received = {
+        item.primary_product: {asset.asset_id for asset in item.active_domain_assets}
+        for item in generator.inputs
+    }
     assert {"A-TRANSLATE-001", "A-MAT-005", "D-EXPLAIN-001"}.issubset(received["product_truth"])
-    assert {"D-PERSONA-001", "D-PERSONA-002", "D-CRAFT-002"}.issubset(received["brand_life_narrative"])
+    assert {"D-PERSONA-001", "D-PERSONA-002", "D-CRAFT-002"}.issubset(
+        received["brand_life_narrative"]
+    )
     assert {"C-LOCAL-001", "C-LOCAL-002", "D-RESPONSE-002"}.issubset(received["local_response"])
-    assert {"B-VIS-001", "B-VIS-003", "B-VIS-005", "B-VIS-006"}.issubset(received["visual_styling_story"])
+    assert {"B-VIS-001", "B-VIS-003", "B-VIS-005", "B-VIS-006"}.issubset(
+        received["visual_styling_story"]
+    )
     p2_input = next(item for item in generator.inputs if item.primary_product == "product_truth")
     p2_assets = {asset.asset_id: asset.body for asset in p2_input.active_domain_assets}
     assert "厚度增加可能改变支撑和体积" not in p2_assets["A-MAT-005"]
     assert "不得把“厚=挺”“轻=软”“双面=更硬”直接写入商品认知" in p2_assets["A-MAT-005"]
-    assert "已知结构、材质或工艺可用于解释可能的穿着、使用或视觉影响" not in p2_assets[
-        "A-TRANSLATE-001"
-    ]
+    assert (
+        "已知结构、材质或工艺可用于解释可能的穿着、使用或视觉影响"
+        not in p2_assets["A-TRANSLATE-001"]
+    )
     assert "不得编造设计故事、研发目的、性能验证" in p2_assets["A-TRANSLATE-001"]
     assert "条件—效果—原因—代价—不适用的专业解释" not in p2_assets["D-EXPLAIN-001"]
-    product_inputs = [item for item in generator.inputs if item.primary_product in {"product_truth", "visual_styling_story"}]
+    product_inputs = [
+        item
+        for item in generator.inputs
+        if item.primary_product in {"product_truth", "visual_styling_story"}
+    ]
     assert all(item.products and item.products[0].sku == "ZX-C218" for item in product_inputs)
     assert "960 克" in str(p2["body"])
     assert "炭灰纯色" in str(p5["body"])
@@ -142,10 +157,16 @@ def test_store_identity_ui_and_account_boundary(app_database_url: str) -> None:
     with TestClient(app) as headquarters:
         headquarters.get("/ui/select/content")
         assert headquarters.get(f"/api/v1/tasks/{created['task_id']}/versions/1").status_code == 422
-        assert headquarters.post(
-            f"/api/v1/tasks/{created['task_id']}/revisions", json={"instruction": "改一下"}
-        ).status_code == 422
-        assert headquarters.post(f"/api/v1/content-versions/{created['version_id']}/save").status_code == 422
+        assert (
+            headquarters.post(
+                f"/api/v1/tasks/{created['task_id']}/revisions", json={"instruction": "改一下"}
+            ).status_code
+            == 422
+        )
+        assert (
+            headquarters.post(f"/api/v1/content-versions/{created['version_id']}/save").status_code
+            == 422
+        )
 
 
 def test_sibling_brand_product_never_enters_store_content_input(
@@ -165,7 +186,8 @@ def test_sibling_brand_product_never_enters_store_content_input(
         )
     generator = CapturingContentGenerator()
     service = ContentService(
-        PostgresContentRepository(app_database_url, _store_scope().account_id, ("ZX-C218",)), generator
+        PostgresContentRepository(app_database_url, _store_scope().account_id, ("ZX-C218",)),
+        generator,
     )
     created = service.create_from_weak_seed(_store_scope(), R1_C)
     assert created["kind"] == "content"

@@ -28,7 +28,11 @@ def test_catalog_is_idempotent_and_keeps_p1_and_dm01_activations_separate(
     assert count == 243
     assert active == 41
     assert len(activated) == 41
-    assert {item for item in activated if item in {"B-TPO-001", "C-COMMUTE-001", "D-DIRECT-001", "D-CRAFT-001"}} == {
+    assert {
+        item
+        for item in activated
+        if item in {"B-TPO-001", "C-COMMUTE-001", "D-DIRECT-001", "D-CRAFT-001"}
+    } == {
         "B-TPO-001",
         "C-COMMUTE-001",
         "D-CRAFT-001",
@@ -77,7 +81,11 @@ def test_run_records_only_applicable_active_asset_versions(app_database_url: str
         "E-VISUAL-003",
     }
     assert not_applicable_row is not None
-    assert {asset["asset_id"] for asset in not_applicable_row[0] if not asset["asset_id"].startswith("E-")} == {
+    assert {
+        asset["asset_id"]
+        for asset in not_applicable_row[0]
+        if not asset["asset_id"].startswith("E-")
+    } == {
         "D-DIRECT-001",
         "D-CRAFT-001",
     }

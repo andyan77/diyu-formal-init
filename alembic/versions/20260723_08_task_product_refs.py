@@ -9,7 +9,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TABLE business_tasks ADD COLUMN product_refs jsonb NOT NULL DEFAULT '[]'::jsonb")
+    op.execute(
+        "ALTER TABLE business_tasks ADD COLUMN product_refs jsonb NOT NULL DEFAULT '[]'::jsonb"
+    )
 
 
 def downgrade() -> None:

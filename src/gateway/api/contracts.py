@@ -32,6 +32,7 @@ class ContentVersionResponse(BaseModel):
     outline: str
     body: str
     target: str | None = None
+    target_key: ContentTarget | None = None
     adapted_from: str | None = None
 
 
@@ -76,3 +77,55 @@ class DisplayQuestionResponse(BaseModel):
 class ApplicationHandoffResponse(BaseModel):
     kind: str = "handoff"
     message: str
+
+
+class BrandExpressionConfirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    draft: str = Field(min_length=8, max_length=4000)
+
+
+class CreateSeriesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=100)
+    premise: str = Field(default="", max_length=500)
+
+
+class AddSeriesItemRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: UUID
+    position: int | None = Field(default=None, ge=1)
+
+
+class ReorderSeriesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_ids: list[UUID]
+
+
+class MaterialUploadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=120)
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(min_length=3, max_length=100)
+    content_base64: str = Field(min_length=1, max_length=70_000_000)
+    declares_identifiable_minor: bool = False
+
+
+class DefaultPersonaRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=80)
+    boundary: str = Field(min_length=1, max_length=500)
+
+
+class CreateOperatorRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=80)
+    account_id: UUID
+    default_persona_name: str = Field(default="", max_length=80)
+    default_persona_boundary: str = Field(default="", max_length=500)

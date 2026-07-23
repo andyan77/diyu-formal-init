@@ -22,6 +22,9 @@ class Settings:
     demo_display_user_id: UUID
     demo_store_content_user_id: UUID
     demo_store_content_account_id: UUID
+    demo_tenant_admin_user_id: UUID
+    demo_dual_qualified_user_id: UUID
+    demo_external_operator_user_id: UUID
     store_active_product_refs: tuple[str, ...]
     generator_mode: Literal["stub", "deepseek"]
     model_timeout_seconds: float
@@ -29,6 +32,7 @@ class Settings:
     deepseek_api_base_url: str | None
     deepseek_api_key: SecretStr | None
     deepseek_model: str | None
+    material_storage_root: str
 
     @classmethod
     def model_validate(cls, values: dict[str, object]) -> Settings:
@@ -47,6 +51,9 @@ class Settings:
             "DIYU_DEMO_DISPLAY_USER_ID": "demo_display_user_id",
             "DIYU_DEMO_STORE_CONTENT_USER_ID": "demo_store_content_user_id",
             "DIYU_DEMO_STORE_CONTENT_ACCOUNT_ID": "demo_store_content_account_id",
+            "DIYU_DEMO_TENANT_ADMIN_USER_ID": "demo_tenant_admin_user_id",
+            "DIYU_DEMO_DUAL_QUALIFIED_USER_ID": "demo_dual_qualified_user_id",
+            "DIYU_DEMO_EXTERNAL_OPERATOR_USER_ID": "demo_external_operator_user_id",
             "DIYU_STORE_ACTIVE_PRODUCT_REFS": "store_active_product_refs",
             "DIYU_GENERATOR_MODE": "generator_mode",
             "DIYU_MODEL_TIMEOUT_SECONDS": "model_timeout_seconds",
@@ -54,6 +61,7 @@ class Settings:
             "DEEPSEEK_API_BASE_URL": "deepseek_api_base_url",
             "DEEPSEEK_API_KEY": "deepseek_api_key",
             "DEEPSEEK_MODEL": "deepseek_model",
+            "DIYU_MATERIAL_STORAGE_ROOT": "material_storage_root",
         }
 
         def read(name: str, default: str | None = None) -> str | None:
@@ -89,10 +97,20 @@ class Settings:
             demo_brand_id=UUID(str(read("DIYU_DEMO_BRAND_ID"))),
             demo_account_id=UUID(str(read("DIYU_DEMO_ACCOUNT_ID"))),
             demo_headquarters_xiaohongshu_account_id=UUID(
-                str(read("DIYU_DEMO_HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID", "00000000-0000-0000-0000-000000000033"))
+                str(
+                    read(
+                        "DIYU_DEMO_HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID",
+                        "00000000-0000-0000-0000-000000000033",
+                    )
+                )
             ),
             demo_headquarters_wechat_channels_account_id=UUID(
-                str(read("DIYU_DEMO_HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID", "00000000-0000-0000-0000-000000000034"))
+                str(
+                    read(
+                        "DIYU_DEMO_HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID",
+                        "00000000-0000-0000-0000-000000000034",
+                    )
+                )
             ),
             demo_display_organization_id=UUID(
                 str(
@@ -108,7 +126,27 @@ class Settings:
                 str(read("DIYU_DEMO_STORE_CONTENT_USER_ID", "00000000-0000-0000-0000-000000000014"))
             ),
             demo_store_content_account_id=UUID(
-                str(read("DIYU_DEMO_STORE_CONTENT_ACCOUNT_ID", "00000000-0000-0000-0000-000000000032"))
+                str(
+                    read(
+                        "DIYU_DEMO_STORE_CONTENT_ACCOUNT_ID", "00000000-0000-0000-0000-000000000032"
+                    )
+                )
+            ),
+            demo_tenant_admin_user_id=UUID(
+                str(read("DIYU_DEMO_TENANT_ADMIN_USER_ID", "00000000-0000-0000-0000-000000000015"))
+            ),
+            demo_dual_qualified_user_id=UUID(
+                str(
+                    read("DIYU_DEMO_DUAL_QUALIFIED_USER_ID", "00000000-0000-0000-0000-000000000016")
+                )
+            ),
+            demo_external_operator_user_id=UUID(
+                str(
+                    read(
+                        "DIYU_DEMO_EXTERNAL_OPERATOR_USER_ID",
+                        "00000000-0000-0000-0000-000000000017",
+                    )
+                )
             ),
             store_active_product_refs=tuple(
                 ref.strip().upper()
@@ -121,6 +159,7 @@ class Settings:
             deepseek_api_base_url=read("DEEPSEEK_API_BASE_URL"),
             deepseek_api_key=SecretStr(api_key) if api_key else None,
             deepseek_model=read("DEEPSEEK_MODEL"),
+            material_storage_root=str(read("DIYU_MATERIAL_STORAGE_ROOT", "var/materials-test")),
         )
         if configured.generator_mode == "deepseek" and not all(
             (

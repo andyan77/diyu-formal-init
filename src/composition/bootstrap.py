@@ -3,9 +3,12 @@ from __future__ import annotations
 from src.brain.content_service import ContentService
 from src.brain.display_service import DisplayService
 from src.brain.dm01_display_compiler import DM01DisplayCompiler
+from src.brain.workbench_service import WorkbenchService
 from src.gateway.api.settings import Settings
 from src.infrastructure.display_repository import PostgresDisplayRepository
+from src.infrastructure.local_object_store import LocalObjectStore
 from src.infrastructure.postgres_repository import PostgresContentRepository
+from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.ports.content_generator import ContentGenerator
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
 from src.tool.llm_gateway.stub import DeterministicP1Generator
@@ -41,4 +44,14 @@ def build_content_service(settings: Settings) -> ContentService:
 
 def build_display_service(settings: Settings) -> DisplayService:
     """DM01 is always compiled from trusted display facts, never from an LLM."""
-    return DisplayService(PostgresDisplayRepository(settings.app_database_url), DM01DisplayCompiler())
+    return DisplayService(
+        PostgresDisplayRepository(settings.app_database_url), DM01DisplayCompiler()
+    )
+
+
+def build_workbench_service(settings: Settings) -> WorkbenchService:
+    """One minimal workbench metadata service; media bytes stay behind an object-store port."""
+    return WorkbenchService(
+        PostgresWorkbenchRepository(settings.app_database_url),
+        LocalObjectStore(settings.material_storage_root),
+    )
