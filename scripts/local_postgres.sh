@@ -5,7 +5,21 @@ project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 data_dir="$project_root/var/postgres/data"
 socket_dir="$project_root/var/postgres/socket"
 port="${DIYU_LOCAL_PG_PORT:-55432}"
-pg_bin="/usr/lib/postgresql/14/bin"
+if [[ -n "${DIYU_PG_BIN:-}" ]]; then
+  pg_bin="$DIYU_PG_BIN"
+elif command -v pg_config >/dev/null 2>&1; then
+  pg_bin="$(pg_config --bindir)"
+elif command -v initdb >/dev/null 2>&1; then
+  pg_bin="$(dirname "$(command -v initdb)")"
+else
+  echo "未找到 PostgreSQL 服务端工具；请设置 DIYU_PG_BIN 或安装 pg_config/initdb。" >&2
+  exit 1
+fi
+
+if [[ ! -x "$pg_bin/initdb" || ! -x "$pg_bin/pg_ctl" || ! -x "$pg_bin/pg_isready" ]]; then
+  echo "DIYU_PG_BIN 不包含 initdb、pg_ctl 和 pg_isready。" >&2
+  exit 1
+fi
 
 mkdir -p "$socket_dir" "$data_dir"
 if [[ ! -f "$data_dir/PG_VERSION" ]]; then
