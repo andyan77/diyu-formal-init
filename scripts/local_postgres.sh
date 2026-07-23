@@ -29,10 +29,10 @@ fi
 if ! "$pg_bin/pg_isready" -h "$socket_dir" -p "$port" >/dev/null 2>&1; then
   "$pg_bin/pg_ctl" -D "$data_dir" -l "$project_root/var/postgres/postgres.log" -o "-k '$socket_dir' -p $port" start
 fi
-if ! psql -h "$socket_dir" -p "$port" -U diyu_migrator -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname = 'diyu_app'" | rg -q 1; then
+if ! psql -h "$socket_dir" -p "$port" -U diyu_migrator -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname = 'diyu_app'" | grep -qx 1; then
   psql -h "$socket_dir" -p "$port" -U diyu_migrator -d postgres -v ON_ERROR_STOP=1 -c "CREATE ROLE diyu_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS"
 fi
-if ! psql -h "$socket_dir" -p "$port" -U diyu_migrator -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'diyu_m3'" | rg -q 1; then
+if ! psql -h "$socket_dir" -p "$port" -U diyu_migrator -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'diyu_m3'" | grep -qx 1; then
   psql -h "$socket_dir" -p "$port" -U diyu_migrator -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE diyu_m3 OWNER diyu_migrator"
 fi
 export DIYU_MIGRATOR_DATABASE_URL="postgresql://diyu_migrator@/diyu_m3?host=$socket_dir&port=$port"
