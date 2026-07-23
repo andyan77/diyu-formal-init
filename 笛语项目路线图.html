@@ -183,7 +183,7 @@
         <div class="ph-head"><p class="ph-title"><span class="idx">阶段 3</span>首条内容软件纵向闭环</p><span class="badge b-now">当前 · ACTIVE</span></div>
         <p class="ph-desc">直接交付可观察的用户结果；数据、知识、模型适配和交互只作为当前闭环的内部支撑，不再拥有脱离用户结果的“完成”状态。</p>
         <ul class="nodes">
-          <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">P1 弱种子可用闭环<span class="ncode">M3-1 · ACTIVE</span></div><div class="ndesc">自然弱种子 → 服务端可信租户/品牌/组织/账号/角色上下文 → 完整 P1 文字成品 → 自然修改 → 新版本 → 用户主动保存；同步交付登录/作用域、生成、修订、保存、版本和错误返回的 API 契约</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">P1 弱种子可用闭环<span class="ncode">M3-1 · CLOSED</span></div><div class="ndesc">自然弱种子 → 服务端可信租户/品牌/组织/账号/角色上下文 → 完整 P1 文字成品 → 自然修改 → 新版本 → 用户主动保存；同步交付登录/作用域、生成、修订、保存、版本和错误返回的 API 契约</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-todo"></i></span><div class="nbody"><div class="ntitle">P1 扩展攻击面与最小远程 CI<span class="ncode">M3-2 · READY</span></div><div class="ndesc">在 M3-1 最小正确性上扩大相似诱饵、历史池、缓存和故障攻击面，并把黄金套件与隔离检查接入最小 Linux CI，作为 M3—M5 的持续回归闸门</div></div></li>
         </ul>
         <div class="tip"><span class="h">M3-1 已确认架构</span>应用核心掌握身份、作用域、编排、任务、版本和事件，经极薄适配器直连 DeepSeek-V4-Flash；DIFY 已取消。权威关系存储已关闭为当前项目独立 PostgreSQL、共享 schema、应用显式作用域与强制 RLS。243 条候选已登记，当前 P1 只按条件激活 4 条；全量登记不等于全量生产激活。</div>
@@ -285,13 +285,13 @@
           <li>用户提供的 62 个领域候选文件与 243 条机器候选</li>
           <li>“折线之间”全链路合成资料与渐进入驻模板</li>
           <li>WSL 唯一 Git 主仓、里程碑协作协议与迁移基线</li>
+          <li>M3-1：P1 弱种子生成、自然修改、版本保留、主动保存与真实 DeepSeek 本地纵向闭环</li>
           <li>混合知识方向：SQL 权威；全文/向量等派生检索由实际质量缺口触发</li>
         </ul>
       </div>
       <div class="tcol">
         <h3><i class="dot d-todo"></i>尚未完成</h3>
         <ul>
-          <li>P1 弱种子自然输入、完整成品、修改与保存闭环 <span class="when">M3-1</span></li>
           <li>P1 扩展攻击面、连续性对抗与最小远程 CI <span class="when">M3-2</span></li>
           <li>首期墙面双层挂杆软件闭环与双应用入口 <span class="when">阶段4</span></li>
           <li>P2—P5、三平台、渐进入驻和合规素材首期入口 <span class="when">M5-1—M5-3</span></li>
@@ -309,7 +309,7 @@
 
   <footer>
     依据 <code>docs/项目记忆.md</code>、<code>docs/待决策清单.md</code>、正式 ADR、用户提供的 <code>首批领域数据库知识数据</code> 与 D-007 两份资料成果更新。<br>
-    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料和 WSL 唯一 Git 主仓迁移；M3-1 处于 ACTIVE，但尚未交付软件闭环。当前没有远程 CI/CD、经隔离验收的共享 ECS/生产数据库、真实 DeepSeek 闭环、RLS 隔离实现证明或真实试点。执行所需 DeepSeek 与 ECS 配置按用户指定的历史基础设施仓库安全读取；密钥和旧仓业务数据不得写入路线图、代码、日志或项目记忆。构建测试按需调用模型且不设成本预算闸门；外部部署和真实账号写入仍由其所属里程碑及既定授权边界控制。
+    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料、WSL 唯一 Git 主仓迁移及 M3-1 P1 本地软件纵向闭环；M3-2 处于 READY，尚未建立可写 Git 远程和远程 CI。M3-1 的 RLS 与真实 DeepSeek 证据只证明本地合成演示范围，不证明共享 ECS 生产隔离、真实品牌试点或企业采用。执行所需 DeepSeek 与 ECS 配置按用户指定的历史基础设施仓库安全读取；密钥和旧仓业务数据不得写入路线图、代码、日志或项目记忆。外部部署和真实账号写入仍由其所属里程碑及既定授权边界控制。
   </footer>
 
 </div>
