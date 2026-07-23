@@ -21,6 +21,7 @@ def test_display_v1_v2_preserves_history_and_records_dm01_assets(app_database_ur
         v1 = created.json()
         assert v1["version"] == 1
         assert "15 件上墙" in v1["body"]
+        assert "20 件" in v1["body"]
         revised = client.post(
             f"/api/v1/display-tasks/{v1['task_id']}/revisions", json={"feedback": _FEEDBACK}
         )
@@ -28,6 +29,8 @@ def test_display_v1_v2_preserves_history_and_records_dm01_assets(app_database_ur
         v2 = revised.json()
         assert v2["version"] == 2
         assert "14 件上墙" in v2["body"]
+        assert "6 件不上墙" in v2["body"]
+        assert "ZX-V113 ×1（侧挂）" in v2["body"]
         assert (
             client.get(f"/api/v1/display-tasks/{v1['task_id']}/versions/1").json()["body"]
             == v1["body"]

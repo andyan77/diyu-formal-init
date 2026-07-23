@@ -201,7 +201,7 @@ def test_display_adapter_compiles_only_the_dm01_context_into_supplier_request(
                 "choices": [
                     {
                         "message": {
-                            "content": '{"body":"主焦点 回应 侧挂 替代 执行步骤 内部执行建议","plan":{"mounted":{},"unmounted":{},"zones":{"A":{},"B":{},"C":{}}}}'
+                            "content": '{"body":"错误正文：库存17件","plan":{"mounted":{},"unmounted":{},"layout":{"order":["A","B","C"],"zones":{}}}}'
                         }
                     }
                 ]
@@ -229,9 +229,10 @@ def test_display_adapter_compiles_only_the_dm01_context_into_supplier_request(
         "右侧袖子压住马甲，其他区域不变。",
         {"zones": {"A": "keep"}},
     )
-    DeepSeekDisplayGenerator(
+    artifact = DeepSeekDisplayGenerator(
         "https://compat.example/v1", "not-a-real-key", "verified-deepseek-model", 10, 0
     ).generate(request)
+    assert artifact.body == "model body is ignored"
     sent = str(FakeClient.requests[0]["json"])
     for expected in (
         "policy-v1",

@@ -4,6 +4,7 @@ import re
 from uuid import UUID
 
 from src.brain.display_contract import assert_display_complete
+from src.brain.display_text import compile_display_body
 from src.ports.display_generator import DisplayGenerator
 from src.ports.display_repository import DisplayRepository
 from src.shared.errors import DomainError, GenerationFailed
@@ -62,6 +63,7 @@ class DisplayService:
                 DisplayGenerationInput(run_id, task_id, inventory, context, assets, feedback, prior)
             )
             assert_display_complete(artifact, inventory, revision=feedback is not None)
+            body = compile_display_body(context, artifact.plan, revision=feedback is not None)
         except GenerationFailed as exc:
             self._repository.fail_run(scope, task_id, run_id, str(exc))
             raise
@@ -72,7 +74,7 @@ class DisplayService:
             scope,
             task_id,
             run_id,
-            {"body": artifact.body, "plan": artifact.plan},
+            {"body": body, "plan": artifact.plan},
             artifact.model,
             artifact.latency_ms,
             artifact.retry_count,

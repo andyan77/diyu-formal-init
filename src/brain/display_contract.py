@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections import Counter
+from typing import cast
+
 from src.shared.errors import GenerationFailed
 from src.shared.types import GeneratedDisplayArtifact
 
@@ -12,11 +15,6 @@ _GOLD_INVENTORY = {
     "ZX-Q117": 4,
 }
 _GOLD_V1 = {"ZX-C218": 2, "ZX-S104": 2, "ZX-K126": 2, "ZX-P211": 3, "ZX-V113": 2, "ZX-Q117": 4}
-_GOLD_ZONES = {
-    "A": {"ZX-C218": 1, "ZX-P211": 2},
-    "B": {"ZX-S104": 2, "ZX-K126": 2, "ZX-Q117": 2},
-    "C": {"ZX-C218": 1, "ZX-V113": 2, "ZX-P211": 1, "ZX-Q117": 2},
-}
 
 
 def assert_display_complete(
@@ -24,34 +22,114 @@ def assert_display_complete(
     inventory: tuple[tuple[str, int], ...],
     revision: bool = False,
 ) -> None:
-    mounted = artifact.plan.get("mounted")
-    unmounted = artifact.plan.get("unmounted")
-    zones = artifact.plan.get("zones")
+    plan = artifact.plan
+    mounted, unmounted, layout = plan.get("mounted"), plan.get("unmounted"), plan.get("layout")
     if (
         not isinstance(mounted, dict)
         or not isinstance(unmounted, dict)
-        or not isinstance(zones, dict)
+        or not isinstance(layout, dict)
     ):
         raise GenerationFailed("陈列方案结构不完整")
     available = dict(inventory)
-    for sku, amount in available.items():
-        if not isinstance(mounted.get(sku, 0), int) or not isinstance(unmounted.get(sku, 0), int):
-            raise GenerationFailed("陈列方案数量必须是整数")
-        if int(mounted.get(sku, 0)) + int(unmounted.get(sku, 0)) != amount:
-            raise GenerationFailed("陈列方案数量无法与本次清单对账")
-    if any(sku not in available for sku in mounted) or not {"A", "B", "C"}.issubset(zones):
-        raise GenerationFailed("陈列方案包含无效商品或缺少搭配区")
-    required = ("主焦点", "回应", "侧挂", "替代", "执行步骤", "内部执行建议")
-    if not artifact.body.strip() or any(part not in artifact.body for part in required):
-        raise GenerationFailed("陈列方案缺少必要执行说明")
-    if "G-" in artifact.body or "GM-" in artifact.body:
-        raise GenerationFailed("陈列成品不能展示内部资产编号")
+    _assert_quantities(mounted, unmounted, available)
+    placed = _placed_quantities(layout, available)
+    if dict(placed) != mounted:
+        raise GenerationFailed("上墙数量必须由上下挂杆槽位唯一聚合")
     if available == _GOLD_INVENTORY:
-        expected = {**_GOLD_V1, "ZX-V113": 1} if revision else _GOLD_V1
-        if mounted != expected:
-            raise GenerationFailed("冻结黄金任务必须满足约定的上墙数量与商品分配")
-        expected_zones = (
-            {**_GOLD_ZONES, "C": {**_GOLD_ZONES["C"], "ZX-V113": 1}} if revision else _GOLD_ZONES
-        )
-        if zones != expected_zones:
+        _assert_gold_layout(layout, mounted, unmounted, revision)
+
+
+def _assert_quantities(
+    mounted: dict[object, object], unmounted: dict[object, object], available: dict[str, int]
+) -> None:
+    if set(mounted) != set(available) or set(unmounted) != set(available):
+        raise GenerationFailed("陈列方案包含不在本次清单中的商品")
+    for sku, amount in available.items():
+        if not isinstance(mounted[sku], int) or not isinstance(unmounted[sku], int):
+            raise GenerationFailed("陈列方案数量必须是整数")
+        mounted_count = cast(int, mounted[sku])
+        unmounted_count = cast(int, unmounted[sku])
+        if mounted_count < 0 or unmounted_count < 0 or mounted_count + unmounted_count != amount:
+            raise GenerationFailed("陈列方案数量无法与本次清单对账")
+
+
+def _placed_quantities(layout: dict[object, object], available: dict[str, int]) -> Counter[str]:
+    order, zones = layout.get("order"), layout.get("zones")
+    if order != ["A", "B", "C"] or not isinstance(zones, dict) or set(zones) != {"A", "B", "C"}:
+        raise GenerationFailed("陈列方案必须明确 A/B/C 左右顺序")
+    placed: Counter[str] = Counter()
+    for zone_id in ("A", "B", "C"):
+        zone = zones[zone_id]
+        if not isinstance(zone, dict) or zone.get("role") not in {
+            "primary_focus",
+            "neutral",
+            "secondary_response",
+        }:
+            raise GenerationFailed("陈列方案缺少焦点角色")
+        for rail in ("upper", "lower"):
+            slots = zone.get(rail)
+            if not isinstance(slots, list) or not slots:
+                raise GenerationFailed("陈列方案必须明确每区上下挂杆")
+            for slot in slots:
+                if not isinstance(slot, dict):
+                    raise GenerationFailed("陈列槽位无效")
+                sku, quantity, mount = slot.get("sku"), slot.get("quantity"), slot.get("mount")
+                if (
+                    not isinstance(sku, str)
+                    or sku not in available
+                    or not isinstance(quantity, int)
+                    or quantity < 1
+                ):
+                    raise GenerationFailed("陈列槽位商品或数量无效")
+                if mount not in {"front_facing", "side_hang"}:
+                    raise GenerationFailed("陈列槽位缺少正挂或侧挂表达")
+                placed[sku] += quantity
+    return placed
+
+
+def _assert_gold_layout(
+    layout: dict[object, object],
+    mounted: dict[object, object],
+    unmounted: dict[object, object],
+    revision: bool,
+) -> None:
+    expected_mounted = {**_GOLD_V1, "ZX-V113": 1} if revision else _GOLD_V1
+    if mounted != expected_mounted or sum(cast(dict[str, int], unmounted).values()) != (
+        6 if revision else 5
+    ):
+        raise GenerationFailed("冻结黄金任务必须满足约定的 15→14 数量")
+    zones = cast(dict[str, dict[str, object]], layout["zones"])
+    expected = {
+        "A": ("primary_focus", {"ZX-C218": 1}, {"ZX-P211": 2}),
+        "B": ("neutral", {"ZX-S104": 2, "ZX-K126": 2}, {"ZX-Q117": 2}),
+        "C": (
+            "secondary_response",
+            {"ZX-C218": 1, "ZX-V113": 1 if revision else 2},
+            {"ZX-P211": 1, "ZX-Q117": 2},
+        ),
+    }
+    for zone_id, (role, upper, lower) in expected.items():
+        zone = zones[zone_id]
+        if (
+            zone["role"] != role
+            or _rail_quantities(zone["upper"]) != upper
+            or _rail_quantities(zone["lower"]) != lower
+        ):
             raise GenerationFailed("冻结黄金任务必须保持约定的上下左右搭配区")
+    if _front_skus(zones["A"]["upper"]) != {"ZX-C218"} or _front_skus(zones["C"]["upper"]) != {
+        "ZX-C218"
+    }:
+        raise GenerationFailed("冻结黄金任务必须保留主正挂与弱回应正挂")
+
+
+def _rail_quantities(value: object) -> dict[str, int]:
+    slots = cast(list[dict[str, object]], value)
+    return {str(slot["sku"]): cast(int, slot["quantity"]) for slot in slots}
+
+
+def _front_skus(value: object) -> set[str]:
+    return {
+        str(slot["sku"])
+        for slot in cast(list[dict[str, object]], value)
+        if slot["mount"] == "front_facing"
+    }
