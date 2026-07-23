@@ -13,4 +13,4 @@ scripts/run_app.sh
 
 随后打开 `http://127.0.0.1:8000`。本地完整回归入口为 `make golden`；它创建/使用工作区内 PostgreSQL、合成演示数据和模型替身，并固定项目内 Linux 临时目录，不受 Windows `TEMP`/`TMP` 继承影响。
 
-真实 DeepSeek 模式必须由服务器环境提供 `DIYU_GENERATOR_MODE=deepseek`、`DEEPSEEK_API_BASE_URL`、`DEEPSEEK_API_KEY` 和已核验的 `DEEPSEEK_MODEL`。受保护配置只能在服务器环境安全引用，绝不提交；本仓不会内置密钥。当前本地环境到已确认端点的 HTTPS 连接尚未成功，真实生成不能由替身替代。
+真实 DeepSeek 模式必须由服务器环境提供 `DIYU_GENERATOR_MODE=deepseek`、`DEEPSEEK_API_BASE_URL`、`DEEPSEEK_API_KEY` 和已核验的 `DEEPSEEK_MODEL`。受保护配置只能在服务器环境安全引用，绝不提交；本仓不会内置密钥。本轮已用临时、本机回环且仅限该 HTTPS 端点的 SSH 出站隧道完成真实同页验收；该隧道不是部署方式，也不改变 ECS、Nginx 或 DNS。

@@ -30,8 +30,17 @@ def assert_p1_complete(artifact: GeneratedArtifact) -> None:
         raise GenerationFailed("P1 成品缺少可执行的媒体制作部分")
     if not all(
         value in artifact.body
-        for value in (contract.choice, contract.boundary, contract.next_action)
+        for value in (
+            contract.choice,
+            contract.boundary,
+            contract.next_action,
+            "自然导读",
+            "完整台词/解说",
+            "画面与动作",
+            "字幕",
+            "声音与制作提示",
+        )
     ):
-        raise GenerationFailed("P1 成品正文没有忠实呈现选择、边界和下一步")
+        raise GenerationFailed("P1 成品正文没有忠实呈现其必要部分")
     if re.search(r"1[3-9]\d{9}|[\w.+-]+@[\w.-]+|订单号?\s*[:：]?\s*[A-Za-z0-9-]+", artifact.body):
         raise GenerationFailed("P1 成品包含个人标识")

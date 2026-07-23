@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -50,7 +51,8 @@ class DeepSeekGenerator(ContentGenerator):
                 },
                 {"role": "user", "content": prompt},
             ],
-            "temperature": 0.4,
+            "temperature": 0.2,
+            "max_tokens": 3072,
             "response_format": {"type": "json_object"},
         }
         retries = 0
@@ -77,7 +79,7 @@ class DeepSeekGenerator(ContentGenerator):
 
     def _result(self, payload: dict[str, Any], started: float, retries: int) -> GeneratedArtifact:
         try:
-            content = str(payload["choices"][0]["message"]["content"]).strip()
+            content = self._json_content(str(payload["choices"][0]["message"]["content"]))
             structured = json.loads(content)
             body = str(structured["body"]).strip()
             contract = P1SemanticContract(
@@ -85,6 +87,7 @@ class DeepSeekGenerator(ContentGenerator):
                 boundary=str(structured["boundary"]).strip(),
                 next_action=str(structured["next_action"]).strip(),
             )
+            body = self._body_with_contract(body, contract)
             production = P1ProductionBundle(
                 natural_guide=str(structured["natural_guide"]).strip(),
                 spoken_lines=str(structured["spoken_lines"]).strip(),
@@ -92,6 +95,7 @@ class DeepSeekGenerator(ContentGenerator):
                 subtitles=str(structured["subtitles"]).strip(),
                 sound_and_production=str(structured["sound_and_production"]).strip(),
             )
+            body = self._body_with_production(body, production)
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise GenerationFailed("模型返回格式不完整") from exc
         usage_value = payload.get("usage")
@@ -110,6 +114,42 @@ class DeepSeekGenerator(ContentGenerator):
             semantic_contract=contract,
             production=production,
         )
+
+    @staticmethod
+    def _json_content(content: str) -> str:
+        """Accept a provider's fenced JSON while rejecting any non-JSON response."""
+        stripped = content.strip()
+        if stripped.startswith("```") and stripped.endswith("```"):
+            stripped = re.sub(r"^```(?:json)?\s*", "", stripped, count=1, flags=re.IGNORECASE)
+            stripped = re.sub(r"\s*```$", "", stripped, count=1)
+        return stripped
+
+    @staticmethod
+    def _body_with_contract(body: str, contract: P1SemanticContract) -> str:
+        """Keep the user-visible artifact faithful to its small semantic contract."""
+        if all(value in body for value in (contract.choice, contract.boundary, contract.next_action)):
+            return body
+        return (
+            f"{body}\n\n本条选择：{contract.choice}\n"
+            f"适用边界：{contract.boundary}\n"
+            f"下一步：{contract.next_action}"
+        )
+
+    @staticmethod
+    def _body_with_production(body: str, production: P1ProductionBundle) -> str:
+        sections = (
+            ("自然导读", production.natural_guide),
+            ("完整台词/解说", production.spoken_lines),
+            ("画面与动作", production.visual_actions),
+            ("字幕", production.subtitles),
+            ("声音与制作提示", production.sound_and_production),
+        )
+        missing = [
+            f"{heading}：{value}"
+            for heading, value in sections
+            if heading not in body
+        ]
+        return body if not missing else f"{body}\n\n" + "\n".join(missing)
 
     @staticmethod
     def _retry_delay(retry_after: str | None, retries: int) -> float:
@@ -155,4 +195,4 @@ class DeepSeekGenerator(ContentGenerator):
 仅在明确授权时可参考的已保存正文：{prior}
 已确认、当前品牌范围内的领域资产：{assets}
 
-只返回 JSON 对象，字段为 body、choice、boundary、next_action、natural_guide、spoken_lines、visual_actions、subtitles、sound_and_production。body 必须完整呈现五个制作部分：自然导读、完整台词/解说、画面与动作、字幕、声音与制作提示；并逐字包含 choice、boundary、next_action 三个值。其他字段是对应可执行部分，不能是提示词或隐藏推理。必须先形成穿衣选择，再说明依据、改变选择的条件和一个低成本验证动作。不要复述顾客姓名、电话、账号或订单号；使用自然非识别性称谓。不要补造职业、天气、体型、预算、衣橱、交通或商品事实；不要承诺身体效果；不要硬卖货、说教或暴露后台过程。"""
+只返回一个可由 JSON 解析器直接解析的对象，不能使用 Markdown 代码块、前后说明或省略号。键名只能是 body、choice、boundary、next_action、natural_guide、spoken_lines、visual_actions、subtitles、sound_and_production，九个键都必须出现且值为非空字符串。body 必须完整呈现五个制作部分：自然导读、完整台词/解说、画面与动作、字幕、声音与制作提示；并逐字包含 choice、boundary、next_action 三个值。其他字段是对应可执行部分，不能是提示词或隐藏推理。必须先形成穿衣选择，再说明依据、改变选择的条件和一个低成本验证动作。不要复述顾客姓名、电话、账号或订单号；使用自然非识别性称谓。只能给出条件性的穿搭建议，例如“可以优先考虑”“如果已有这类单品”；绝不虚构品牌测试、门店经验、商品款号、面料、口袋、剪裁、功能或既有产品设计，也不要写“我们测试过”“特意设计”“自带”。不得把输入的相对时间改写为具体钟点，不得新增未给定的职业、场地、人物或拍摄素材。不要补造职业、天气、体型、预算、衣橱、交通或商品事实；不要承诺身体效果；不要硬卖货、说教或暴露后台过程。"""
