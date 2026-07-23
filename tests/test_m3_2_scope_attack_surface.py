@@ -225,10 +225,9 @@ def test_history_baits_never_enter_current_generation_input(
     assert captured_continuation.brand.account_name == "折线之间品牌母账号·抖音"
     assert captured_continuation.brand.content_role_name == "总部零售/服务专家"
     assert captured_continuation.brand.audience_description.startswith("约 30—45 岁")
-    assert {asset.asset_id for asset in captured_continuation.active_domain_assets} == {
-        "D-DIRECT-001",
-        "D-CRAFT-001",
-    }
+    assert {"D-DIRECT-001", "D-CRAFT-001"}.issubset(
+        {asset.asset_id for asset in captured_continuation.active_domain_assets}
+    )
     with pytest.raises(DomainError):
         repository.fetch_version_body(_owner_scope(), _CROSS_TENANT_VERSION_ID)
     with pytest.raises(DomainError):

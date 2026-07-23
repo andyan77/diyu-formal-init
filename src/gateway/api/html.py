@@ -16,30 +16,42 @@ def render_home() -> str:
 
 
 def render_workbench(
-    mode: str, identity: dict[str, str], result: dict[str, object] | None, notice: str | None = None
+    mode: str,
+    identity: dict[str, str],
+    result: dict[str, object] | None,
+    notice: str | None = None,
+    target: str = "douyin_video",
+    target_options: tuple[tuple[str, str], ...] = (),
 ) -> str:
     artifact = ""
     if result:
         task_id = escape(str(result["task_id"]))
         version_id = escape(str(result["version_id"]))
         version = escape(str(result["version"]))
+        adapted = str(result.get("adapted_from") or "")
+        adapted_text = f"<p class='version'>{escape(adapted)}</p>" if adapted else ""
+        target_select = _target_select(target_options, "target", target)
         artifact = f"""
         <section class="artifact"><p class="version">版本 V{version}</p>
+          {adapted_text}
           <h2>内容概要</h2><p>{escape(str(result["outline"]))}</p>
           <h2>完整文字成品</h2><article>{escape(str(result["body"]))}</article>
-          <form method="post" action="/ui/revise"><input type="hidden" name="task_id" value="{task_id}">
+          <form method="post" action="/ui/revise"><input type="hidden" name="task_id" value="{task_id}"><input type="hidden" name="target" value="{escape(target)}"><input type="hidden" name="source_target" value="{escape(target)}">
             <label>自然语言修改 <textarea name="instruction" required maxlength="1000"></textarea></label><button>生成 V{int(str(result["version"])) + 1}</button></form>
-          <form method="post" action="/ui/save"><input type="hidden" name="version_id" value="{version_id}"><input type="hidden" name="task_id" value="{task_id}"><input type="hidden" name="version" value="{version}"><button>主动保存 V{version}</button></form>
-          <form method="post" action="/ui/reuse"><input type="hidden" name="reuse_version_id" value="{version_id}"><label>以当前 V{version} 为前情新建任务<textarea name="weak_seed" required maxlength="1000"></textarea></label><button>明确复用并新建</button></form>
+          <form method="post" action="/ui/save"><input type="hidden" name="version_id" value="{version_id}"><input type="hidden" name="task_id" value="{task_id}"><input type="hidden" name="version" value="{version}"><input type="hidden" name="target" value="{escape(target)}"><button>主动保存 V{version}</button></form>
+          <form method="post" action="/ui/reuse"><input type="hidden" name="reuse_version_id" value="{version_id}"><label>把当前成品改编为{target_select}</label><label>自然说清这次想怎样改<textarea name="weak_seed" required maxlength="1000"></textarea></label><button>保留原版并新建改编版</button></form>
         </section>"""
     banner = "离线确定性测试模式：此页结果不是实际模型调用。" if mode == "stub" else "已连接 DeepSeek 真实生成模式。"
-    identity_text = _identity(("品牌", identity["brand"]), ("实际操作人", identity["operator"]), ("代表组织", identity["organization"]), ("发布账号", identity["account"]), ("内容角色", identity["content_role"]))
-    content = f"<a href='/'>返回应用首页</a><h1>内容生产（对外）</h1>{identity_text}<p class='mode'>{banner}</p><p class='switch'>合成演示身份：<a href='/ui/select/content'>总部内容账号</a> · <a href='/ui/select/content-store'>南城店内容账号</a></p>{_notice(notice)}<form method='post' action='/ui/generate'><label>把想完成的内容、商品、观察或穿衣情境自然说出来<textarea name='weak_seed' required maxlength='1000'></textarea></label><button>生成完整内容成品</button></form>{artifact}"
+    identity_text = _identity(("品牌", identity["brand"]), ("实际操作人", identity["operator"]), ("代表组织", identity["organization"]), ("发布账号", identity["account"]), ("内容角色", identity["content_role"]), ("当前平台/媒体", f"{identity['platform']}／{identity['media_format']}"))
+    target_select = _target_select(target_options, "target", target)
+    content = f"<a href='/'>返回应用首页</a><h1>内容生产（对外）</h1>{identity_text}<p class='mode'>{banner}</p><p class='switch'>合成演示身份：<a href='/ui/select/content'>总部内容账号</a> · <a href='/ui/select/content-store'>南城店内容账号</a></p>{_notice(notice)}<form method='post' action='/ui/generate'><label>这次要做成{target_select}</label><label>把想完成的内容、商品、观察或穿衣情境自然说出来<textarea name='weak_seed' required maxlength='1000'></textarea></label><button>生成当前完整成品</button></form>{artifact}"
     return _page("笛语 · 内容生产", content)
 
 
-def workbench_location(result: dict[str, object], notice: str | None = None) -> str:
+def workbench_location(result: dict[str, object], notice: str | None = None, target: str | None = None) -> str:
     query = {"task": str(result["task_id"]), "version": str(result["version"])}
+    if target:
+        query["target"] = target
     if notice:
         query["notice"] = notice
     return "/content?" + urlencode(query)
@@ -60,6 +72,14 @@ def _identity(*items: tuple[str, str]) -> str:
     return "<section class='identity'><h2>当前身份</h2>" + "".join(
         f"<p><strong>{escape(label)}：</strong>{escape(value)}</p>" for label, value in items
     ) + "</section>"
+
+
+def _target_select(options: tuple[tuple[str, str], ...], name: str, selected: str) -> str:
+    rendered = "".join(
+        f"<option value='{escape(value)}'{' selected' if value == selected else ''}>{escape(label)}</option>"
+        for value, label in options
+    )
+    return f"<select name='{escape(name)}'>{rendered}</select>"
 
 
 def _notice(value: str | None) -> str:

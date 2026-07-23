@@ -1,0 +1,25 @@
+{
+  "version": "M5-2-platform-directions-v1",
+  "targets": {
+    "douyin_video": {
+      "platform": "抖音",
+      "media_format": "video",
+      "direction": "让信息流里的观看理由和动态回报尽早可感知；不要把这写成固定三秒钩子、喊叫、反转或统一秒数。"
+    },
+    "xiaohongshu_video": {
+      "platform": "小红书",
+      "media_format": "video",
+      "direction": "标题、封面、视频与发布正文共同组成独立理解的内容单元；不要强制教程化、种草体或知识卡。"
+    },
+    "xiaohongshu_graphic": {
+      "platform": "小红书",
+      "media_format": "graphic",
+      "direction": "标题、首图、图序与完整正文共同形成可执行阅读链；不得把视频截图、台词卡或切碎长文当作图文。"
+    },
+    "wechat_channels_video": {
+      "platform": "微信视频号",
+      "media_format": "video",
+      "direction": "在微信内被独立看到或转发时仍须语境完整、人物可信；不要因此强制更长、更严肃、正能量或特定年龄层。"
+    }
+  }
+}

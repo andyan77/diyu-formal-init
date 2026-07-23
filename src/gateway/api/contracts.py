@@ -5,18 +5,23 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.shared.types import ContentTarget
+
 
 class CreateContentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     weak_seed: str = Field(min_length=1, max_length=1000)
     reuse_version_id: UUID | None = None
+    target: ContentTarget | None = None
 
 
 class RevisionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     instruction: str = Field(min_length=2, max_length=1000)
+    target: ContentTarget | None = None
+    source_target: ContentTarget | None = None
 
 
 class ContentVersionResponse(BaseModel):
@@ -26,6 +31,8 @@ class ContentVersionResponse(BaseModel):
     version: int
     outline: str
     body: str
+    target: str | None = None
+    adapted_from: str | None = None
 
 
 class GreetingResponse(BaseModel):

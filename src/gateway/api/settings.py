@@ -16,6 +16,8 @@ class Settings:
     demo_user_id: UUID
     demo_brand_id: UUID
     demo_account_id: UUID
+    demo_headquarters_xiaohongshu_account_id: UUID
+    demo_headquarters_wechat_channels_account_id: UUID
     demo_display_organization_id: UUID
     demo_display_user_id: UUID
     demo_store_content_user_id: UUID
@@ -39,6 +41,8 @@ class Settings:
             "DIYU_DEMO_USER_ID": "demo_user_id",
             "DIYU_DEMO_BRAND_ID": "demo_brand_id",
             "DIYU_DEMO_ACCOUNT_ID": "demo_account_id",
+            "DIYU_DEMO_HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID": "demo_headquarters_xiaohongshu_account_id",
+            "DIYU_DEMO_HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID": "demo_headquarters_wechat_channels_account_id",
             "DIYU_DEMO_DISPLAY_ORGANIZATION_ID": "demo_display_organization_id",
             "DIYU_DEMO_DISPLAY_USER_ID": "demo_display_user_id",
             "DIYU_DEMO_STORE_CONTENT_USER_ID": "demo_store_content_user_id",
@@ -84,6 +88,12 @@ class Settings:
             demo_user_id=UUID(str(read("DIYU_DEMO_USER_ID"))),
             demo_brand_id=UUID(str(read("DIYU_DEMO_BRAND_ID"))),
             demo_account_id=UUID(str(read("DIYU_DEMO_ACCOUNT_ID"))),
+            demo_headquarters_xiaohongshu_account_id=UUID(
+                str(read("DIYU_DEMO_HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID", "00000000-0000-0000-0000-000000000033"))
+            ),
+            demo_headquarters_wechat_channels_account_id=UUID(
+                str(read("DIYU_DEMO_HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID", "00000000-0000-0000-0000-000000000034"))
+            ),
             demo_display_organization_id=UUID(
                 str(
                     read(

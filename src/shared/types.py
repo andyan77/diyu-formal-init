@@ -12,6 +12,14 @@ ContentProduct: TypeAlias = Literal[
     "visual_styling_story",
 ]
 
+MediaFormat: TypeAlias = Literal["video", "graphic"]
+ContentTarget: TypeAlias = Literal[
+    "douyin_video",
+    "xiaohongshu_video",
+    "xiaohongshu_graphic",
+    "wechat_channels_video",
+]
+
 
 @dataclass(frozen=True)
 class TrustedScope:
@@ -37,6 +45,14 @@ class BrandContext:
     platform: str
     media_format: str
     production_conditions: str
+
+
+@dataclass(frozen=True)
+class PlatformDirection:
+    version: str
+    platform: str
+    media_format: MediaFormat
+    direction: str
 
 
 @dataclass(frozen=True)
@@ -101,13 +117,46 @@ class P1ProductionBundle:
     sound_and_production: str
 
 
-ContentProductionBundle = P1ProductionBundle
+@dataclass(frozen=True)
+class VideoProductionBundle(P1ProductionBundle):
+    """The complete, visible viewing chain for the current video target."""
+
+    cover_or_first_frame: str
+    viewing_flow: str
+    natural_duration: str
+    release_caption_and_interaction: str
+
+
+@dataclass(frozen=True)
+class GraphicProductionBundle:
+    """The complete, visible reading chain for the current graphic target."""
+
+    natural_guide: str
+    hero_image: str
+    image_sequence: str
+    full_body: str
+    layout_and_production: str
+    release_caption_and_interaction: str
+
+
+ContentProductionBundle: TypeAlias = VideoProductionBundle | GraphicProductionBundle
 
 
 @dataclass(frozen=True)
 class ProductFact:
     sku: str
     facts: dict[str, object]
+
+
+@dataclass(frozen=True)
+class RecompileSource:
+    task_id: UUID
+    weak_seed: str
+    primary_product: ContentProduct
+    products: tuple[ProductFact, ...]
+    body: str
+    source_description: str
+    source_target: ContentTarget
 
 
 @dataclass(frozen=True)
@@ -126,9 +175,13 @@ class GenerationInput:
     primary_product: ContentProduct
     revision_instruction: str | None
     brand: BrandContext
+    target: ContentTarget
+    media_format: MediaFormat
+    platform_direction: PlatformDirection
     active_domain_assets: tuple[ActiveAsset, ...] = ()
     products: tuple[ProductFact, ...] = ()
     prior_saved_body: str | None = None
+    source_version_description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -149,7 +202,7 @@ class GeneratedArtifact:
     provider_usage: dict[str, int] | None
     primary_product: ContentProduct
     semantic_contract: ContentSemanticContract
-    production: P1ProductionBundle
+    production: ContentProductionBundle
     fact_repair_receipts: tuple[FactRepairReceipt, ...] = ()
 
 

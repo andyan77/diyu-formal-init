@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs, urlencode
 from uuid import UUID
 
@@ -8,6 +8,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Security, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import APIKeyCookie
 
+from src.brain.platform_directions import target_from_text
 from src.composition.bootstrap import build_content_service, build_display_service
 from src.gateway.api.contracts import (
     ApplicationHandoffResponse,
@@ -35,7 +36,24 @@ from src.shared.application_handoff import (
     requests_display_merchandising,
 )
 from src.shared.errors import DomainError
-from src.shared.types import DisplayScope, TrustedScope
+from src.shared.types import ContentTarget, DisplayScope, TrustedScope
+
+_HEADQUARTERS_TARGETS: tuple[tuple[ContentTarget, str], ...] = (
+    ("douyin_video", "抖音视频"),
+    ("xiaohongshu_video", "小红书视频"),
+    ("xiaohongshu_graphic", "小红书图文"),
+    ("wechat_channels_video", "微信视频号视频"),
+)
+_STORE_TARGETS: tuple[tuple[ContentTarget, str], ...] = (("douyin_video", "抖音视频"),)
+
+
+def _target(value: str | None, text: str = "") -> ContentTarget:
+    natural = target_from_text(text)
+    if natural is not None:
+        return natural
+    if value in {"douyin_video", "xiaohongshu_video", "xiaohongshu_graphic", "wechat_channels_video"}:
+        return cast(ContentTarget, value)
+    return "douyin_video"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -200,11 +218,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         responses=business_failures,
     )
     def create_content(
-        payload: CreateContentRequest, scope: TrustedScope = Depends(scope_from_request)
+        payload: CreateContentRequest,
+        request: Request,
+        _: TrustedScope = Depends(scope_from_request),
     ) -> dict[str, object]:
         if payload.reuse_version_id is None and requests_display_merchandising(payload.weak_seed):
             return {"kind": "handoff", "message": "这是给门店内部执行的陈列任务，请切换到陈列搭配。"}
-        return service.create_from_weak_seed(scope, payload.weak_seed, payload.reuse_version_id)
+        target = _target(payload.target, payload.weak_seed)
+        return service.create_from_weak_seed(
+            authority.require_content_target(request, target),
+            payload.weak_seed,
+            payload.reuse_version_id,
+            target,
+        )
 
     @app.post(
         "/api/v1/tasks/{task_id}/revisions",
@@ -213,9 +239,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         responses=business_failures,
     )
     def revise_content(
-        task_id: UUID, payload: RevisionRequest, scope: TrustedScope = Depends(scope_from_request)
+        task_id: UUID,
+        payload: RevisionRequest,
+        request: Request,
+        _: TrustedScope = Depends(scope_from_request),
     ) -> dict[str, object]:
-        return service.revise(scope, task_id, payload.instruction)
+        target = _target(payload.target, payload.instruction)
+        source_target = payload.source_target or payload.target or "douyin_video"
+        source_scope = authority.require_content_target(request, source_target)
+        if target != source_target:
+            return service.recompile_task(
+                source_scope,
+                authority.require_content_target(request, target),
+                task_id,
+                payload.instruction,
+                target,
+            )
+        return service.revise(source_scope, task_id, payload.instruction, target)
 
     @app.get(
         "/api/v1/tasks/{task_id}/versions/{version}",
@@ -223,9 +263,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         responses=business_failures,
     )
     def get_version(
-        task_id: UUID, version: int, scope: TrustedScope = Depends(scope_from_request)
+        task_id: UUID,
+        version: int,
+        request: Request,
+        target: ContentTarget = "douyin_video",
+        _: TrustedScope = Depends(scope_from_request),
     ) -> dict[str, object]:
-        return service.fetch_version(scope, task_id, version)
+        return service.fetch_version(authority.require_content_target(request, target), task_id, version)
 
     @app.post(
         "/api/v1/content-versions/{version_id}/save",
@@ -233,9 +277,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         responses=business_failures,
     )
     def save_version(
-        version_id: UUID, scope: TrustedScope = Depends(scope_from_request)
+        version_id: UUID,
+        request: Request,
+        target: ContentTarget = "douyin_video",
+        _: TrustedScope = Depends(scope_from_request),
     ) -> dict[str, object]:
-        return service.save_version(scope, version_id)
+        return service.save_version(authority.require_content_target(request, target), version_id)
 
     @app.get("/", response_class=HTMLResponse)
     def workbench(
@@ -262,8 +309,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         task: UUID | None = None,
         version: int | None = None,
         notice: str | None = None,
+        target: ContentTarget = "douyin_video",
     ) -> HTMLResponse:
-        scope = authority.require_content(request)
+        scope = authority.require_content_target(request, target)
         result = None
         if task is not None and version is not None:
             try:
@@ -271,7 +319,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             except DomainError as exc:
                 raise HTTPException(status_code=404, detail="找不到当前会话可见的版本") from exc
         return HTMLResponse(
-            render_workbench(current_settings.generator_mode, service.identity_summary(scope), result, notice)
+            render_workbench(
+                current_settings.generator_mode,
+                service.identity_summary(scope, target),
+                result,
+                notice,
+                target,
+                _STORE_TARGETS if scope.account_id == current_settings.demo_store_content_account_id else _HEADQUARTERS_TARGETS,
+            )
         )
 
     @app.post(
@@ -284,21 +339,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def ui_generate(request: Request) -> RedirectResponse:
         fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
         weak_seed = fields.get("weak_seed", [""])[0]
+        target = _target(fields.get("target", [None])[0], weak_seed)
         try:
-            scope = authority.require_content(request)
+            scope = authority.require_content_target(request, target)
             if requests_display_merchandising(weak_seed):
                 return RedirectResponse(
                     "/content?" + urlencode({"notice": "这是给门店内部执行的陈列任务，请切换到陈列搭配。"}),
                     status_code=status.HTTP_303_SEE_OTHER,
                 )
-            result = service.create_from_weak_seed(scope, weak_seed)
+            result = service.create_from_weak_seed(scope, weak_seed, target=target)
         except DomainError as exc:
             return RedirectResponse("/content?notice=" + str(exc), status_code=status.HTTP_303_SEE_OTHER)
         if result["kind"] in {"greeting", "question"}:
             return RedirectResponse(
                 "/content?notice=" + str(result["message"]), status_code=status.HTTP_303_SEE_OTHER
             )
-        return RedirectResponse(workbench_location(result), status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(workbench_location(result, target=target), status_code=status.HTTP_303_SEE_OTHER)
 
     @app.post(
         "/ui/revise",
@@ -312,10 +368,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             task_id = UUID(fields.get("task_id", [""])[0])
             instruction = fields.get("instruction", [""])[0]
-            result = service.revise(authority.require_content(request), task_id, instruction)
+            target = _target(fields.get("target", [None])[0], instruction)
+            source_target = _target(fields.get("source_target", [None])[0])
+            source_scope = authority.require_content_target(request, source_target)
+            if target != source_target:
+                result = service.recompile_task(
+                    source_scope,
+                    authority.require_content_target(request, target),
+                    task_id,
+                    instruction,
+                    target,
+                )
+            else:
+                result = service.revise(source_scope, task_id, instruction, target)
         except (DomainError, ValueError) as exc:
             return RedirectResponse("/content?notice=" + str(exc), status_code=status.HTTP_303_SEE_OTHER)
-        return RedirectResponse(workbench_location(result), status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(workbench_location(result, target=target), status_code=status.HTTP_303_SEE_OTHER)
 
     @app.post(
         "/ui/reuse",
@@ -329,8 +397,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             version_id = UUID(fields.get("reuse_version_id", [""])[0])
             weak_seed = fields.get("weak_seed", [""])[0]
+            target = _target(fields.get("target", [None])[0], weak_seed)
             result = service.create_from_weak_seed(
-                authority.require_content(request), weak_seed, version_id
+                authority.require_content_target(request, target), weak_seed, version_id, target
             )
         except (DomainError, ValueError) as exc:
             return RedirectResponse("/content?notice=" + str(exc), status_code=status.HTTP_303_SEE_OTHER)
@@ -338,7 +407,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return RedirectResponse(
                 "/content?notice=" + str(result["message"]), status_code=status.HTTP_303_SEE_OTHER
             )
-        return RedirectResponse(workbench_location(result), status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(workbench_location(result, target=target), status_code=status.HTTP_303_SEE_OTHER)
 
     @app.post(
         "/ui/save",
@@ -353,13 +422,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             version_id = UUID(fields.get("version_id", [""])[0])
             task_id = UUID(fields.get("task_id", [""])[0])
             version = int(fields.get("version", [""])[0])
-            saved = service.save_version(authority.require_content(request), version_id)
+            target = _target(fields.get("target", [None])[0])
+            saved = service.save_version(authority.require_content_target(request, target), version_id)
         except (DomainError, ValueError) as exc:
             return RedirectResponse("/content?notice=" + str(exc), status_code=status.HTTP_303_SEE_OTHER)
         return RedirectResponse(
             workbench_location(
                 {"task_id": task_id, "version": version},
                 f"已主动保存版本 {saved['version_id']}",
+                target,
             ),
             status_code=status.HTTP_303_SEE_OTHER,
         )

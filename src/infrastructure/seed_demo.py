@@ -20,9 +20,15 @@ STORE_ORG_ID = UUID("00000000-0000-0000-0000-000000000012")
 STORE_USER_ID = UUID("00000000-0000-0000-0000-000000000013")
 STORE_CONTENT_USER_ID = UUID("00000000-0000-0000-0000-000000000014")
 STORE_CONTENT_ACCOUNT_ID = UUID("00000000-0000-0000-0000-000000000032")
+HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID = UUID("00000000-0000-0000-0000-000000000033")
+HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID = UUID("00000000-0000-0000-0000-000000000034")
 STORE_CONTENT_GRANT_ID = UUID("00000000-0000-0000-0000-000000000042")
+HEADQUARTERS_XIAOHONGSHU_GRANT_ID = UUID("00000000-0000-0000-0000-000000000043")
+HEADQUARTERS_WECHAT_CHANNELS_GRANT_ID = UUID("00000000-0000-0000-0000-000000000044")
 STORE_CONTENT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000053")
 STORE_CONTENT_ACCOUNT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000063")
+HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000064")
+HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ROLE_ID = UUID("00000000-0000-0000-0000-000000000065")
 STORE_ID = UUID("00000000-0000-0000-0000-000000000081")
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000082")
 
@@ -153,6 +159,34 @@ def seed_demo() -> None:
                 """,
             (ACCOUNT_ROLE_ID, TENANT_ID, ACCOUNT_ID, ROLE_ID),
         )
+        for account_id, name, channel, grant_id, account_role_id in (
+            (
+                HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
+                "折线之间品牌母账号·小红书",
+                "小红书",
+                HEADQUARTERS_XIAOHONGSHU_GRANT_ID,
+                HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ROLE_ID,
+            ),
+            (
+                HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID,
+                "折线之间品牌母账号·微信视频号",
+                "微信视频号",
+                HEADQUARTERS_WECHAT_CHANNELS_GRANT_ID,
+                HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ROLE_ID,
+            ),
+        ):
+            cursor.execute(
+                "INSERT INTO content_accounts (id, tenant_id, brand_id, name, channel) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
+                (account_id, TENANT_ID, BRAND_ID, name, channel),
+            )
+            cursor.execute(
+                "INSERT INTO auth_grants (id, tenant_id, user_id, account_id, role_name) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
+                (grant_id, TENANT_ID, USER_ID, account_id, "总部零售/服务专家"),
+            )
+            cursor.execute(
+                "INSERT INTO account_content_roles (id, tenant_id, account_id, content_role_id) VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
+                (account_role_id, TENANT_ID, account_id, ROLE_ID),
+            )
         cursor.execute(
             "INSERT INTO content_accounts (id,tenant_id,brand_id,name,channel) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
             (STORE_CONTENT_ACCOUNT_ID, TENANT_ID, BRAND_ID, "折线之间·南城店账号·抖音", "抖音"),

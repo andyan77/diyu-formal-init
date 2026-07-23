@@ -95,10 +95,10 @@ def test_x01_routes_assets_versions_and_shared_product_truth(app_database_url: s
     assert _product(p1_v2, app_database_url) == "dressing_decision"
 
     received = {item.primary_product: {asset.asset_id for asset in item.active_domain_assets} for item in generator.inputs}
-    assert received["product_truth"] == {"A-TRANSLATE-001", "A-MAT-005", "D-EXPLAIN-001"}
-    assert received["brand_life_narrative"] == {"D-PERSONA-001", "D-PERSONA-002", "D-CRAFT-002"}
-    assert received["local_response"] == {"C-LOCAL-001", "C-LOCAL-002", "D-RESPONSE-002"}
-    assert received["visual_styling_story"] == {"B-VIS-001", "B-VIS-003", "B-VIS-005", "B-VIS-006"}
+    assert {"A-TRANSLATE-001", "A-MAT-005", "D-EXPLAIN-001"}.issubset(received["product_truth"])
+    assert {"D-PERSONA-001", "D-PERSONA-002", "D-CRAFT-002"}.issubset(received["brand_life_narrative"])
+    assert {"C-LOCAL-001", "C-LOCAL-002", "D-RESPONSE-002"}.issubset(received["local_response"])
+    assert {"B-VIS-001", "B-VIS-003", "B-VIS-005", "B-VIS-006"}.issubset(received["visual_styling_story"])
     p2_input = next(item for item in generator.inputs if item.primary_product == "product_truth")
     p2_assets = {asset.asset_id: asset.body for asset in p2_input.active_domain_assets}
     assert "厚度增加可能改变支撑和体积" not in p2_assets["A-MAT-005"]

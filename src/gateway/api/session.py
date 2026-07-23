@@ -3,11 +3,12 @@ from __future__ import annotations
 import hashlib
 import hmac
 from typing import Literal
+from uuid import UUID
 
 from fastapi import HTTPException, Request
 
 from src.gateway.api.settings import Settings
-from src.shared.types import DisplayScope, TrustedScope
+from src.shared.types import ContentTarget, DisplayScope, TrustedScope
 
 _COOKIE_NAME = "diyu_session"
 ApplicationId = Literal["content-production", "content-production-store", "display-merchandising"]
@@ -69,6 +70,28 @@ class SessionAuthority:
                 self._settings.demo_store_content_account_id,
             )
         return self._scope
+
+    def require_content_target(self, request: Request, target: ContentTarget) -> TrustedScope:
+        """Map a natural target to a server-trusted account; no account ID is accepted from a client."""
+        application = self._require_application(
+            request, (_CONTENT_APPLICATION, _STORE_CONTENT_APPLICATION)
+        )
+        if application == _STORE_CONTENT_APPLICATION:
+            if target != "douyin_video":
+                raise HTTPException(status_code=403, detail="南城店内容身份不能切换到总部平台账号")
+            return TrustedScope(
+                self._scope.tenant_id,
+                self._settings.demo_store_content_user_id,
+                self._scope.brand_id,
+                self._settings.demo_store_content_account_id,
+            )
+        accounts: dict[ContentTarget, UUID] = {
+            "douyin_video": self._scope.account_id,
+            "xiaohongshu_video": self._settings.demo_headquarters_xiaohongshu_account_id,
+            "xiaohongshu_graphic": self._settings.demo_headquarters_xiaohongshu_account_id,
+            "wechat_channels_video": self._settings.demo_headquarters_wechat_channels_account_id,
+        }
+        return TrustedScope(self._scope.tenant_id, self._scope.user_id, self._scope.brand_id, accounts[target])
 
     def require_display(self, request: Request) -> DisplayScope:
         self._require_application(request, _DISPLAY_APPLICATION)

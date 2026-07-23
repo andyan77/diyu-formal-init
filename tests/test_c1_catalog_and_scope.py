@@ -26,8 +26,8 @@ def test_catalog_is_idempotent_and_keeps_p1_and_dm01_activations_separate(
     assert row is not None
     count, active = row
     assert count == 243
-    assert active == 30
-    assert len(activated) == 30
+    assert active == 41
+    assert len(activated) == 41
     assert {item for item in activated if item in {"B-TPO-001", "C-COMMUTE-001", "D-DIRECT-001", "D-CRAFT-001"}} == {
         "B-TPO-001",
         "C-COMMUTE-001",
@@ -64,18 +64,24 @@ def test_run_records_only_applicable_active_asset_versions(app_database_url: str
         )
         not_applicable_row = cursor.fetchone()
     assert row is not None
-    assert {asset["asset_id"] for asset in row[0]} == {
-        "B-TPO-001",
-        "C-COMMUTE-001",
+    assert {"B-TPO-001", "C-COMMUTE-001", "D-DIRECT-001", "D-CRAFT-001"}.issubset(
+        {asset["asset_id"] for asset in row[0]}
+    )
+    assert {asset["asset_id"] for asset in row[0] if asset["asset_id"].startswith("E-")} == {
+        "E-FORM-001",
+        "E-RESOURCE-002",
+        "E-RESOURCE-003",
+        "E-SOUND-001",
+        "E-TIME-001",
+        "E-VISUAL-001",
+        "E-VISUAL-003",
+    }
+    assert not_applicable_row is not None
+    assert {asset["asset_id"] for asset in not_applicable_row[0] if not asset["asset_id"].startswith("E-")} == {
         "D-DIRECT-001",
         "D-CRAFT-001",
     }
     assert {asset["schema_version"] for asset in row[0]} == {"diyu_global_asset_v0.2"}
-    assert not_applicable_row is not None
-    assert {asset["asset_id"] for asset in not_applicable_row[0]} == {
-        "D-DIRECT-001",
-        "D-CRAFT-001",
-    }
 
 
 def test_same_tenant_other_brand_account_and_user_cannot_access_content() -> None:

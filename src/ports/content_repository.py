@@ -7,15 +7,21 @@ from src.shared.types import (
     ActiveAsset,
     BrandContext,
     ContentProduct,
+    ContentTarget,
     FactRepairReceipt,
+    MediaFormat,
+    PlatformDirection,
     ProductFact,
+    RecompileSource,
     TrustedScope,
 )
 
 
 class ContentRepository(ABC):
     @abstractmethod
-    def load_brand_context(self, scope: TrustedScope) -> BrandContext:
+    def load_brand_context(
+        self, scope: TrustedScope, media_format: MediaFormat, production_conditions: str
+    ) -> BrandContext:
         """Load the authorized brand/account context in the trusted scope."""
 
     @abstractmethod
@@ -29,6 +35,11 @@ class ContentRepository(ABC):
         used_assets: tuple[ActiveAsset, ...],
         context: BrandContext,
         products: tuple[ProductFact, ...],
+        target: ContentTarget,
+        media_format: MediaFormat,
+        platform_direction: PlatformDirection,
+        source_description: str | None,
+        production_conditions: str,
     ) -> tuple[UUID, UUID, str | None]:
         """Create a task and auditable running generation run."""
 
@@ -63,6 +74,9 @@ class ContentRepository(ABC):
         used_assets: tuple[ActiveAsset, ...],
         context: BrandContext,
         products: tuple[ProductFact, ...],
+        target: ContentTarget,
+        platform_direction: PlatformDirection,
+        production_conditions: str,
     ) -> tuple[UUID, UUID, str, ContentProduct]:
         """Create the next auditable run for a revision request."""
 
@@ -83,12 +97,18 @@ class ContentRepository(ABC):
         """Find the current user's newest visible version for an explicit continuation."""
 
     @abstractmethod
+    def latest_task_version(self, scope: TrustedScope, task_id: UUID) -> UUID:
+        """Return the latest version of one already-authorized task for an explicit recompile."""
+
+    @abstractmethod
     def load_active_assets(
         self,
         scope: TrustedScope,
         primary_product: ContentProduct,
         weak_seed: str,
         products: tuple[ProductFact, ...],
+        target: ContentTarget,
+        is_recompile: bool,
     ) -> tuple[ActiveAsset, ...]:
         """Compile only assets applicable to the one routed content product."""
 
@@ -101,5 +121,11 @@ class ContentRepository(ABC):
         """Read the product references resolved and persisted when this scoped task was created."""
 
     @abstractmethod
-    def task_details(self, scope: TrustedScope, task_id: UUID) -> tuple[str, ContentProduct]:
+    def task_details(
+        self, scope: TrustedScope, task_id: UUID
+    ) -> tuple[str, ContentProduct, MediaFormat, str]:
         """Load the current user's original seed and stable primary product."""
+
+    @abstractmethod
+    def load_recompile_source(self, scope: TrustedScope, version_id: UUID) -> RecompileSource:
+        """Read an explicit same-user source version without exposing a source account identifier."""

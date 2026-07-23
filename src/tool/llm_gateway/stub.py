@@ -6,13 +6,14 @@ from src.shared.types import (
     ContentSemanticContract,
     GeneratedArtifact,
     GenerationInput,
-    P1ProductionBundle,
+    GraphicProductionBundle,
     P1SemanticContract,
     P2SemanticContract,
     P3SemanticContract,
     P4SemanticContract,
     P5SemanticContract,
     RoutingInput,
+    VideoProductionBundle,
 )
 
 
@@ -41,14 +42,11 @@ class DeterministicContentGenerator(ContentGenerator):
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
         contract, guide, spoken, visuals, subtitles, sound = self._parts(request)
-        production = P1ProductionBundle(guide, spoken, visuals, subtitles, sound)
+        production = self._production(request, contract, guide, spoken, visuals, subtitles, sound)
         revision = "\n\n这次只按你的自然修改更新了同一任务的表达。" if request.revision_instruction else ""
         prior = "\n\n已承接当前合法作用域内明确授权的前情。" if request.prior_saved_body else ""
         core = "\n\n内容核心：" + " ".join(str(value) for value in vars(contract).values())
-        body = (
-            f"标题：{_outline(request.primary_product)}\n\n自然导读：{guide}\n\n完整台词/解说：{spoken}\n\n"
-            f"画面与动作：{visuals}\n\n字幕：{subtitles}\n\n声音与制作提示：{sound}{core}{prior}{revision}"
-        )
+        body = _visible_body(_outline(request.primary_product), production) + core + prior + revision
         return GeneratedArtifact(
             outline=_outline(request.primary_product),
             body=body,
@@ -59,6 +57,51 @@ class DeterministicContentGenerator(ContentGenerator):
             primary_product=request.primary_product,
             semantic_contract=contract,
             production=production,
+        )
+
+    @staticmethod
+    def _production(
+        request: GenerationInput,
+        contract: ContentSemanticContract,
+        guide: str,
+        spoken: str,
+        visuals: str,
+        subtitles: str,
+        sound: str,
+    ) -> VideoProductionBundle | GraphicProductionBundle:
+        if request.media_format == "graphic":
+            four_images = "四张" in request.brand.production_conditions
+            return GraphicProductionBundle(
+                natural_guide=guide,
+                hero_image="首图拍摄安排：用当前商品和本篇最关键的可见关系作出标题承诺，不使用视频截图。",
+                image_sequence=(
+                    "只补拍四张：第 1 张给出首图承诺；第 2 张让关键商品或关系完整可见；"
+                    "第 3 张补足必要比较或动作；第 4 张完成本篇判断。每张只承担这一项职责。"
+                    if four_images
+                    else "第 1 张给出首图承诺；第 2 张让关键商品或关系完整可见；"
+                    "第 3 张补足必要比较或动作；最后一张完成本篇判断。每张只承担这一项职责。"
+                ),
+                full_body="\n".join(str(value) for value in vars(contract).values()),
+                layout_and_production="按当前一人一手机条件补拍或选图；不把视频帧、台词卡或长文切片当作图片序列。",
+                release_caption_and_interaction="正文已经完成当前判断；不需要额外互动时自然结束。",
+            )
+        silent = request.primary_product == "visual_styling_story" and any(
+            phrase in request.weak_seed for phrase in ("无口播", "无对白", "无解说", "不讲")
+        )
+        return VideoProductionBundle(
+            natural_guide=guide,
+            spoken_lines="无口播、无对白、无解说；由画面和同期声承担内容。" if silent else spoken,
+            visual_actions=visuals,
+            subtitles=subtitles,
+            sound_and_production=sound,
+            cover_or_first_frame="封面/首帧拍摄安排：第一眼就让当前商品关系或判断进入画面。",
+            viewing_flow="从当前入口开始，依次完成事实、动作或判断，并在主价值成立处自然收束。",
+            natural_duration=(
+                "8 秒窄主题版：只保留仍能独立成立的一项命题，不称与原完整版本等义。"
+                if "8 秒" in request.brand.production_conditions
+                else "以把当前主要价值与必要边界说清为准，不套固定秒数。"
+            ),
+            release_caption_and_interaction="发布配文复述当前完整结论；不适用互动时自然结束。",
         )
 
     @staticmethod
@@ -164,6 +207,35 @@ def _product_facts(request: GenerationInput, sku: str) -> dict[str, object]:
 def _colors(facts: dict[str, object]) -> tuple[str, ...]:
     raw = facts.get("colors")
     return tuple(str(value) for value in raw) if isinstance(raw, list) else ()
+
+
+def _visible_body(
+    title: str, production: VideoProductionBundle | GraphicProductionBundle
+) -> str:
+    if isinstance(production, VideoProductionBundle):
+        sections: tuple[tuple[str, str], ...] = (
+            ("自然导读", production.natural_guide),
+            ("封面/首帧", production.cover_or_first_frame),
+            ("完整观看链", production.viewing_flow),
+            ("完整台词/解说", production.spoken_lines),
+            ("画面与动作", production.visual_actions),
+            ("字幕", production.subtitles),
+            ("声音与制作提示", production.sound_and_production),
+            ("自然时长", production.natural_duration),
+            ("发布配文与互动", production.release_caption_and_interaction),
+        )
+    else:
+        sections = (
+            ("自然导读", production.natural_guide),
+            ("首图方案", production.hero_image),
+            ("图序与每张职责", production.image_sequence),
+            ("完整发布正文", production.full_body),
+            ("拍摄/排版提示", production.layout_and_production),
+            ("发布配文与互动", production.release_caption_and_interaction),
+        )
+    return "标题：" + title + "\n\n" + "\n\n".join(
+        f"{heading}：{value}" for heading, value in sections
+    )
 
 
 DeterministicP1Generator = DeterministicContentGenerator

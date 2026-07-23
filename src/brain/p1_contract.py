@@ -5,16 +5,18 @@ import re
 from src.shared.errors import GenerationFailed
 from src.shared.types import (
     GeneratedArtifact,
+    GraphicProductionBundle,
     P1SemanticContract,
     P2SemanticContract,
     P3SemanticContract,
     P4SemanticContract,
     P5SemanticContract,
+    VideoProductionBundle,
 )
 
 
 def assert_content_complete(artifact: GeneratedArtifact) -> None:
-    """Validate one product contract plus the executable video text pack."""
+    """Validate one product contract plus its executable current-media pack."""
     if not artifact.body.strip():
         raise GenerationFailed("内容成品为空")
     contract = artifact.semantic_contract
@@ -28,21 +30,36 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
     expected = expected_types[artifact.primary_product]
     if not isinstance(contract, expected) or any(not str(value).strip() for value in vars(contract).values()):
         raise GenerationFailed("内容成品缺少当前主要产品的必要部分")
-    if any(
-        not section.strip()
-        for section in (
-            artifact.production.natural_guide,
-            artifact.production.spoken_lines,
-            artifact.production.visual_actions,
-            artifact.production.subtitles,
-            artifact.production.sound_and_production,
+    if isinstance(artifact.production, VideoProductionBundle):
+        required = vars(artifact.production).values()
+        headings: tuple[str, ...] = (
+            "标题",
+            "自然导读",
+            "封面/首帧",
+            "完整观看链",
+            "完整台词/解说",
+            "画面与动作",
+            "字幕",
+            "声音与制作提示",
+            "自然时长",
+            "发布配文与互动",
         )
-    ):
+    elif isinstance(artifact.production, GraphicProductionBundle):
+        required = vars(artifact.production).values()
+        headings = (
+            "标题",
+            "自然导读",
+            "首图方案",
+            "图序与每张职责",
+            "完整发布正文",
+            "拍摄/排版提示",
+            "发布配文与互动",
+        )
+    else:  # pragma: no cover - typing and constructors keep this unreachable.
+        raise GenerationFailed("内容成品媒体格式无效")
+    if any(not section.strip() for section in required):
         raise GenerationFailed("内容成品缺少可执行的媒体制作部分")
-    if not all(
-        heading in artifact.body
-        for heading in ("标题", "自然导读", "完整台词/解说", "画面与动作", "字幕", "声音与制作提示")
-    ):
+    if not all(heading in artifact.body for heading in headings):
         raise GenerationFailed("内容成品正文没有完整可见文字包")
     if not all(value in artifact.body for value in vars(contract).values()):
         raise GenerationFailed("内容成品没有忠实呈现当前主要产品的必要部分")
