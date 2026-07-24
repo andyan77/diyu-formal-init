@@ -238,7 +238,7 @@ class DeepSeekGenerator(ContentGenerator):
                 and re.search(r"(?:重量|克|差异)", violation.fragment)
                 and re.search(
                     r"(?:归因|原因|造成|导致|带来|增加|来自|贡献|影响|"
-                    r"多.{0,6}重量)",
+                    r"多.{0,6}重量|代价|负担|值得.{0,8}重量|换来)",
                     violation.fragment,
                 )
                 for violation in violations
@@ -581,7 +581,12 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:结构|其他).{0,16}(?:因素|原因).{0,16}(?:导致|造成|解释).{0,16}(?:差异|重量)|"
             r"(?:双面结构|双面).{0,16}(?:是|为).{0,12}(?:原因之一|部分原因|一部分原因)|"
             r"(?:双面结构|双面).{0,16}(?:带来|导致|造成|增加).{0,16}(?:重量|克|差异)|"
-            r"(?:双面结构|双面).{0,16}(?:更重|重量更大|重量增加|多.{0,6}重量)"
+            r"(?:双面结构|双面).{0,64}(?:更重|重量(?:更大|增加|上.{0,8}代价|"
+            r"是.{0,8}代价|负担)|多.{0,6}重量|值得.{0,8}重量|换来.{0,8}重量)"
+        )
+        positive_weight_link = re.compile(
+            r"(?:双面结构|双面).{0,64}(?:更重|重量(?:更大|增加|上.{0,8}代价|"
+            r"是.{0,8}代价|负担)|多.{0,6}重量|值得.{0,8}重量|换来.{0,8}重量)"
         )
         internal_copy_direction = re.compile(r"(?:需向受众说明|不应仅因.{0,16}说服)")
         personal_identifier = re.compile(r"1[3-9]\d{9}|[\w.+-]+@[\w.-]+|订单号?\s*[:：]?\s*[A-Za-z0-9-]+")
@@ -665,7 +670,9 @@ class DeepSeekGenerator(ContentGenerator):
                     violations.append(FactViolation(field, sentence.strip()))
                 if unsupported_weight_comparison.search(sentence) and "不以极致轻量" not in sentence:
                     violations.append(FactViolation(field, sentence.strip()))
-                if unsupported_weight_cause.search(sentence) and not acknowledged_unknown:
+                if positive_weight_link.search(sentence) or (
+                    unsupported_weight_cause.search(sentence) and not acknowledged_unknown
+                ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if DeepSeekGenerator._weakens_no_weight_attribution(sentence):
                     violations.append(FactViolation(field, sentence.strip()))

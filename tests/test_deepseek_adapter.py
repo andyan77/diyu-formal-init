@@ -1010,6 +1010,29 @@ def test_deepseek_adapter_rejects_more_sides_as_more_weight() -> None:
     assert {violation.field for violation in violations} == {"release_caption_and_interaction"}
 
 
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "双面设计提供两种完整外观，但重量增加。",
+        "双面不等于一件顶两件，它只是给了两种穿法，但重量上是有代价的。",
+        "你觉得双面设计值得这个重量吗？",
+    ],
+)
+def test_deepseek_adapter_rejects_evaluative_double_sided_weight_links(
+    claim: str,
+) -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：两份样衣重量不同，不能归因。", ""),
+        "标题",
+        P2SemanticContract("理解", "边界", "条件"),
+        VideoProductionBundle(
+            "导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", claim
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {"release_caption_and_interaction"}
+
+
 def test_deepseek_adapter_accepts_an_explicit_no_partial_attribution_boundary() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
