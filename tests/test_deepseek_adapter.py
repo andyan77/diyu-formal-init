@@ -20,7 +20,7 @@ from src.shared.types import (
     ProductFact,
     VideoProductionBundle,
 )
-from src.tool.llm_gateway.deepseek import DeepSeekGenerator, FactBoundary, KnownChoicePremise
+from src.tool.llm_gateway.deepseek import DeepSeekGenerator, FactBoundary
 
 
 class FakeResponse:
@@ -169,7 +169,7 @@ def test_deepseek_adapter_retries_429_with_retry_after(
     assert "用户种子中的人物、事件和对白可作为本次前提" in request_payload
 
 
-def test_deepseek_adapter_puts_p5_inner_layer_boundary_in_system_instruction(
+def test_deepseek_adapter_does_not_turn_a_visual_plan_into_a_word_blacklist(
     monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
 ) -> None:
     request = GenerationInput(
@@ -205,7 +205,7 @@ def test_deepseek_adapter_puts_p5_inner_layer_boundary_in_system_instruction(
 
     generator.generate(request)
 
-    assert "绝不补充内搭颜色、款式或任何衣物部位" in str(FakeClient.requests[0]["json"])
+    assert "绝不补充内搭颜色、款式或任何衣物部位" not in str(FakeClient.requests[0]["json"])
 
 
 def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_named(
@@ -216,8 +216,8 @@ def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_nam
     prompt = DeepSeekGenerator._generation_prompt(request)
 
     assert "当前没有已点名商品或可用商品事实" in prompt
-    assert "不能补写任何物品或身体的属性、功能、效果、适配或具体细节" in prompt
-    assert "不得新增任何物品、身体或场景细节" in prompt
+    assert "不得把某件未提供的商品属性、功能、效果或现实经历" in prompt
+    assert "自然的选择、情绪、节奏和未来拍摄构思" in prompt
 
     FakeClient.responses = [FakeResponse(200, {"choices": [{"message": {"content": _video_payload()}}]})]
     FakeClient.requests = []
@@ -227,10 +227,10 @@ def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_nam
     generator.generate(request)
 
     system = str(FakeClient.requests[0]["json"])
-    assert "任何字段不得补写衣物、身体、场景或动作细节" in system
+    assert "不得把某件商品的具体属性、功能或现实经历写成已经确认" in system
 
 
-def test_deepseek_adapter_repairs_clothing_claims_when_no_product_fact_exists() -> None:
+def test_deepseek_adapter_allows_non_factual_clothing_choice_when_no_product_fact_exists() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("（无当前商品事实）", "不要把任何一件衣服说成万能。"),
         "标题",
@@ -240,9 +240,40 @@ def test_deepseek_adapter_repairs_clothing_claims_when_no_product_fact_exists() 
         ),
     )
 
-    assert [(item.field, item.fragment) for item in violations] == [
-        ("choice", "选一件有结构感的单品")
-    ]
+    assert violations == ()
+
+
+def test_deepseek_adapter_rejects_concrete_product_facts_that_conflict_with_current_input(
+    generation_input: GenerationInput,
+) -> None:
+    boundary = FactBoundary.from_request(
+        GenerationInput(
+            **{
+                **generation_input.__dict__,
+                "products": (
+                    ProductFact(
+                        "ZX-C218",
+                        {
+                            "colors": ["炭灰纯色", "深绿细格纹"],
+                            "sample_weight_m_grams": 960,
+                            "comparison_single_layer_short_coat_m_grams": 650,
+                        },
+                    ),
+                ),
+            }
+        )
+    )
+
+    violations = DeepSeekGenerator._boundary_violations(
+        boundary,
+        "ZX-C999",
+        P2SemanticContract("这件 ZX-C218 是黑色，当前样衣重800克。", "边界", "条件"),
+        VideoProductionBundle(
+            "导读", "台词", "拍摄安排：翻面", "字幕", "声音", "首帧", "观看链", "时长", "发布"
+        ),
+    )
+
+    assert {item.field for item in violations} == {"title", "product_insight"}
 
 
 def test_deepseek_adapter_does_not_retry_nonrecoverable_status(
@@ -458,7 +489,7 @@ def test_deepseek_adapter_accepts_a_p2_anti_misuse_boundary_without_accepting_th
     assert violations == ()
 
 
-def test_deepseek_adapter_rejects_an_unprovided_garment_component_in_p5() -> None:
+def test_deepseek_adapter_allows_a_future_visual_plan_without_turning_it_into_product_fact() -> None:
     boundary = FactBoundary("商品 ZX-C218：两面均为完整外观。", "")
     violations = DeepSeekGenerator._boundary_violations(
         boundary,
@@ -477,7 +508,7 @@ def test_deepseek_adapter_rejects_an_unprovided_garment_component_in_p5() -> Non
         ),
     )
 
-    assert violations[0].field == "visual_actions"
+    assert violations == ()
 
 
 def test_deepseek_adapter_rejects_an_unprovided_inner_layer_detail_in_p5() -> None:
@@ -589,7 +620,7 @@ def test_deepseek_adapter_rejects_unprovided_technical_test_details() -> None:
     assert violations[0].field == "tradeoff_or_limit"
 
 
-def test_deepseek_adapter_requires_a_user_given_known_choice_relation_in_p2() -> None:
+def test_deepseek_adapter_does_not_require_a_user_premise_to_use_fixed_words_or_one_sentence() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：两面均为完整外观。", "品牌已知差异仍坚持要求两面完整。"),
         "标题",
@@ -597,8 +628,6 @@ def test_deepseek_adapter_requires_a_user_given_known_choice_relation_in_p2() ->
         VideoProductionBundle(
             "导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"
         ),
-        KnownChoicePremise(310, "不以极致轻量为目标"),
     )
 
-    assert violations[0].field == "natural_guide"
-    assert "遗漏的用户前提" in violations[0].fragment
+    assert violations == ()

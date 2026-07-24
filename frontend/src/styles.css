@@ -20,6 +20,8 @@ a { color:inherit; }
 @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; transition:none !important; } }
 
 .user-portal .entry-copy { margin-top:64px; }
+.artifact-disclosure { display:inline-block; margin:12px 0 0; border-radius:99px; padding:4px 8px; background:var(--red-pale); color:var(--red); font-size:12px; font-weight:700; }
+.artifact-reminder { max-width:520px; margin:8px 0 0; color:var(--ink-soft); font-size:13px; line-height:1.6; }
 .persona-card { display:grid; gap:10px; max-width:680px; margin-top:36px; padding:24px; border:1px solid var(--line); border-radius:14px; background:var(--white); }
 .persona-card p { margin:0; color:var(--ink-soft); line-height:1.65; }
 .persona-card input,.persona-card textarea { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--white); }

@@ -52,6 +52,8 @@ def test_two_application_entries_bind_identity_and_reject_cross_application_call
             assert value in display.text
         display_v1 = client.post("/api/v1/display", json={"inventory_text": _INVENTORY}).json()
         assert display_v1["version"] == 1
+        assert "ai_generated" not in display_v1
+        assert "aigc_label" not in display_v1
         assert client.post("/api/v1/content", json={"weak_seed": _SEED}).status_code == 403
 
         client.get("/ui/select/content")

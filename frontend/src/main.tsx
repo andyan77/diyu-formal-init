@@ -20,6 +20,9 @@ interface ContentVersion {
   version: number;
   outline: string;
   body: string;
+  ai_generated: boolean;
+  aigc_label?: string | null;
+  aigc_release_reminder?: string | null;
   target?: Target;
   target_key?: Target;
   adapted_from?: string | null;
@@ -286,6 +289,11 @@ function ContentComposer({ targets, busy, onSubmit }: { targets: Array<{ value: 
   return <form className="composer" onSubmit={submit}><label>这次要做成<select value={target} onChange={event => setTarget(event.target.value as Target)}>{targets.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><textarea value={seed} onChange={event => setSeed(event.target.value)} maxLength={1000} placeholder="例如：我想把一件衣服的取舍说清楚，别只讲卖点。" aria-label="内容需求" /><div className="composer-foot"><span>不需要填写表单；必要时只追问一个会改变成品的问题。</span><button className="primary" disabled={busy}>{busy ? "正在整理成品……" : "生成当前成品"}</button></div></form>;
 }
 
+function disclosureForTransfer(artifact: ContentVersion): string {
+  if (!artifact.ai_generated || !artifact.aigc_label || !artifact.aigc_release_reminder) return artifact.body;
+  return `${artifact.aigc_label}\n发布提醒：${artifact.aigc_release_reminder}\n\n${artifact.body}`;
+}
+
 function ArtifactPane({ artifact, onArtifact, onNotice, context, mobileView, onShowConversation }: { artifact: ContentVersion | null; onArtifact: (value: ContentVersion) => void; onNotice: (value: string) => void; context: Context; mobileView: "conversation" | "artifact"; onShowConversation: () => void }): JSX.Element {
   const client = useQueryClient();
   const [instruction, setInstruction] = useState("");
@@ -295,11 +303,11 @@ function ArtifactPane({ artifact, onArtifact, onNotice, context, mobileView, onS
     onSuccess: value => { onArtifact(value); setInstruction(""); client.invalidateQueries({ queryKey: ["content-recent"] }); client.invalidateQueries({ queryKey: ["content-versions", value.task_id] }); },
     onError: error => onNotice(error.message)
   });
-  const copy = async (): Promise<void> => { if (!artifact) return; await navigator.clipboard.writeText(artifact.body).catch(() => undefined); onNotice("已复制当前成品全文。"); };
-  const exportText = (): void => { if (!artifact) return; const blob = new Blob([artifact.body], { type: "text/plain;charset=utf-8" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `笛语内容-V${artifact.version}.txt`; anchor.click(); URL.revokeObjectURL(url); };
+  const copy = async (): Promise<void> => { if (!artifact) return; await navigator.clipboard.writeText(disclosureForTransfer(artifact)).catch(() => undefined); onNotice("已复制当前成品全文。"); };
+  const exportText = (): void => { if (!artifact) return; const blob = new Blob([disclosureForTransfer(artifact)], { type: "text/plain;charset=utf-8" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `笛语内容-V${artifact.version}.txt`; anchor.click(); URL.revokeObjectURL(url); };
   return <aside className={`artifact-pane ${mobileView === "conversation" ? "mobile-hidden" : ""}`} aria-live="polite">
     {!artifact ? <EmptyArtifact title="成品会出现在这里" detail="生成后可以完整阅读、继续修改、复制或导出。旧版本始终保留。" /> : <>
-      <div className="artifact-header"><div><p className="eyebrow">当前成品 · V{artifact.version}</p><h2>{artifact.outline}</h2>{artifact.adapted_from && <p className="muted">{artifact.adapted_from}</p>}</div><div className="artifact-actions"><button onClick={copy}>复制</button><button onClick={exportText}>导出</button></div></div>
+      <div className="artifact-header"><div><p className="eyebrow">当前成品 · V{artifact.version}</p><h2>{artifact.outline}</h2>{artifact.ai_generated && artifact.aigc_label && artifact.aigc_release_reminder && <><p className="artifact-disclosure">{artifact.aigc_label}</p><p className="artifact-reminder">{artifact.aigc_release_reminder}</p></>}{artifact.adapted_from && <p className="muted">{artifact.adapted_from}</p>}</div><div className="artifact-actions"><button onClick={copy}>复制</button><button onClick={exportText}>导出</button></div></div>
       <ArtifactText value={artifact.body} />
       <VersionRail versions={versions.data ?? []} currentVersion={artifact.version} onSelect={value => onArtifact({ ...value, kind: "content" })} />
       <form className="revision-form" onSubmit={event => { event.preventDefault(); if (instruction.trim()) revise.mutate(); }}><label>继续改，只说这次要变什么<textarea value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="例如：把结尾改短一点，其他不动。" maxLength={1000} /></label><button className="primary" disabled={revise.isPending}>{revise.isPending ? "正在生成新版本……" : `生成 V${artifact.version + 1}`}</button></form>

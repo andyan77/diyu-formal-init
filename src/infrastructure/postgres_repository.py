@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from src.ports.content_repository import ContentRepository
+from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.errors import DomainError
 from src.shared.types import (
     ActiveAsset,
@@ -456,6 +457,7 @@ class PostgresContentRepository(ContentRepository):
         channel = row["channel"]
         if not isinstance(media_format, str) or not isinstance(channel, str):
             raise DomainError("内容版本目标数据无效")
+        disclosure, release_reminder = aigc_disclosure(row["model"])
         return {
             "version_id": str(row["id"]),
             "task_id": str(row["task_id"]),
@@ -463,6 +465,9 @@ class PostgresContentRepository(ContentRepository):
             "outline": str(row["outline"]),
             "body": str(row["body"]),
             "model": str(row["model"]),
+            "ai_generated": is_ai_generated_content(row["model"]),
+            "aigc_label": disclosure,
+            "aigc_release_reminder": release_reminder,
             "created_at": row["created_at"],
             "target": self._target_label(channel, media_format),
             "target_key": self._target_from_channel_media(channel, media_format),

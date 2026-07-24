@@ -40,3 +40,5 @@ scripts/run_app.sh
 每次推送到 `main`、面向 `main` 的 PR 和手动触发都会在单个 Linux CI 作业中运行前端 lint/typecheck/build 以及 `make lint`、`make typecheck`、`make golden`；CI 不读取模型、ECS、生产数据库或密钥。
 
 真实 DeepSeek 模式服务同一内容编译器的价值判断与 P1—P5 成品生成，必须由服务器环境提供 `DIYU_GENERATOR_MODE=deepseek`、`DEEPSEEK_API_BASE_URL`、`DEEPSEEK_API_KEY` 和已核验的 `DEEPSEEK_MODEL`。受保护配置只能在服务器环境安全引用，绝不提交；本仓不会内置密钥。DM01 不因模型可用性阻塞，也不通过 SSH 隧道调用模型。
+
+模型生成的 P1—P5 文字成品在阅读区会清楚显示“AI 辅助生成”；复制全文和文本导出保留同一标识与发布前使用当前平台 AI 内容声明功能的提醒。确定性 DM01 陈列方案不显示该标识。

@@ -32,6 +32,9 @@ class ContentVersionResponse(BaseModel):
     version: int
     outline: str
     body: str
+    ai_generated: bool
+    aigc_label: str | None = None
+    aigc_release_reminder: str | None = None
     target: str | None = None
     target_key: ContentTarget | None = None
     adapted_from: str | None = None

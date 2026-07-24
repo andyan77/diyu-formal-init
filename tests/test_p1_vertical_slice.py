@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
@@ -11,8 +13,15 @@ from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.seed_demo import ACCOUNT_ID, BRAND_ID, TENANT_ID, USER_ID
 from src.shared.errors import GenerationFailed
 from src.shared.types import GenerationInput, TrustedScope
+from src.tool.llm_gateway.stub import DeterministicP1Generator
 
 _SEED = "下午开完一个挺正式的会，转身就拎着电脑去接孩子，站在校门口才发现自己还穿着会议那一身。"
+
+
+class AiNamedTestGenerator(DeterministicP1Generator):
+    @property
+    def model_name(self) -> str:
+        return "deepseek-v4-flash"
 
 
 def test_p1_v1_v2_history_save_and_explicit_reuse() -> None:
@@ -49,6 +58,32 @@ def test_p1_v1_v2_history_save_and_explicit_reuse() -> None:
 
         saved = client.post(f"/api/v1/content-versions/{v2['version_id']}/save")
         assert saved.status_code == 200
+
+
+def test_content_disclosure_uses_persisted_server_source_and_rejects_client_override(
+    app_database_url: str,
+) -> None:
+    scope = TrustedScope(TENANT_ID, USER_ID, BRAND_ID, ACCOUNT_ID)
+    service = ContentService(PostgresContentRepository(app_database_url), AiNamedTestGenerator())
+    generated = service.create_from_weak_seed(scope, _SEED)
+    assert generated["ai_generated"] is True
+    assert generated["aigc_label"] == "AI 辅助生成"
+    assert generated["aigc_release_reminder"] == "发布到当前平台前，请使用平台提供的 AI 内容声明功能；以发布页当前规则为准。"
+    task_id = generated["task_id"]
+    assert isinstance(task_id, str)
+    assert service.fetch_version(scope, UUID(task_id), 1)["ai_generated"] is True
+
+    with TestClient(create_app(Settings.model_validate({}))) as client:
+        client.get("/ui/select/content")
+        deterministic = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
+        assert deterministic["ai_generated"] is False
+        assert deterministic["aigc_label"] is None
+        assert deterministic["aigc_release_reminder"] is None
+        forged = client.post(
+            "/api/v1/content",
+            json={"weak_seed": _SEED, "ai_generated": True},
+        )
+    assert forged.status_code == 422
 
 
 def test_workbench_renders_complete_artifact_without_internal_trace() -> None:

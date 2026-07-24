@@ -9,6 +9,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from src.ports.workbench_repository import WorkbenchRepository
+from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.errors import DomainError
 from src.shared.types import DisplayScope, TrustedScope
 
@@ -384,7 +385,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._content_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT cv.id AS version_id, cv.version_number, cv.outline, cv.body, cv.created_at,
+                SELECT cv.id AS version_id, cv.version_number, cv.outline, cv.body, cv.created_at, gr.model,
                        CASE
                          WHEN a.channel = '抖音' AND t.media_format = 'video' THEN 'douyin_video'
                          WHEN a.channel = '小红书' AND t.media_format = 'video' THEN 'xiaohongshu_video'
@@ -393,6 +394,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                          ELSE 'douyin_video'
                        END AS target_key
                 FROM content_versions cv
+                JOIN generation_runs gr ON gr.id = cv.run_id AND gr.tenant_id = cv.tenant_id
                 JOIN business_tasks t ON t.id = cv.task_id AND t.tenant_id = cv.tenant_id
                 JOIN content_accounts a ON a.id = t.account_id AND a.tenant_id = t.tenant_id
                 WHERE cv.tenant_id = %s AND cv.task_id = %s AND t.brand_id = %s
@@ -410,6 +412,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "outline": str(row["outline"]),
                 "body": str(row["body"]),
                 "target_key": str(row["target_key"]),
+                "ai_generated": is_ai_generated_content(row["model"]),
+                "aigc_label": aigc_disclosure(row["model"])[0],
+                "aigc_release_reminder": aigc_disclosure(row["model"])[1],
                 "created_at": self._time(row["created_at"]),
             }
             for row in rows

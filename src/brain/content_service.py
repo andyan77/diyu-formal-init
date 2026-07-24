@@ -264,6 +264,9 @@ class ContentService:
         visible = self._repository.fetch_version(scope, task_id, version_value)
         return completed | {
             "kind": "content",
+            "ai_generated": visible["ai_generated"],
+            "aigc_label": visible["aigc_label"],
+            "aigc_release_reminder": visible["aigc_release_reminder"],
             "target": visible["target"],
             "target_key": visible["target_key"],
             "adapted_from": visible["adapted_from"],

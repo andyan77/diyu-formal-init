@@ -2,6 +2,8 @@
 
 > 将本文件正文完整转交给唯一 WSL 执行端。执行端可以是 Codex 或 Claude Code，但同一时间只能有一个写入者。
 
+> 当前实施增量以 [M5-4 AIGC 标识与内容竞争路线补充执行包](M5-4-AIGC标识与内容竞争路线补充执行包.md) 为准：原先 P1/P2 的模型失败保留为历史证据，现按已裁决的事实边界实现纠偏复验；补充模型文字成品的最小 AIGC 标识闭环，不更换供应商、不重开六卡或 M6。
+
 - 状态：`READY`
 - 唯一主仓：`/home/faye/workspace/diyu-formal-init`
 - 远程：公开仓库 `andyan77/diyu-formal-init` 的 `main`
