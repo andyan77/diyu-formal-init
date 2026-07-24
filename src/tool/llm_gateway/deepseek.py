@@ -619,7 +619,7 @@ class DeepSeekGenerator(ContentGenerator):
         invented_real_world_event = re.compile(
             r"(?:一位|同事|顾客|店长|孩子|观众|她|他).{0,24}"
             r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|拍了拍|转身离开|等(?:待)?).{0,32}"
-            r"|(?:我们|我).{0,16}(?:见过|遇到过|试过|观察到|经常被问|站在镜子前|试了又试)"
+            r"|(?:我们|我).{0,16}(?:见过|遇到过|试过|观察到|经常被问|收到过|站在镜子前|试了又试)"
             r"|(?:我|我们).{0,20}(?:最近|曾经|一直|太久|以前|当了|给孩子|家里|"
             r"观察过|买了|留下了|犹豫了|包括我自己|上周|昨天|刚才).{0,32}"
             r"|(?:每次|平时|往常).{0,24}(?:都会|会先|总会|常常)"
@@ -630,6 +630,9 @@ class DeepSeekGenerator(ContentGenerator):
             r"玻璃门|挂着的衣物|门铃)"
         )
         unprovided_capture_resource = re.compile(capture_resource_pattern)
+        unprovided_creator_identity = re.compile(
+            r"创作者[（(][^）)]{0,20}(?:女性|男性|\d{1,2}\s*岁)"
+        )
         text_only_topic = re.compile(
             r"(?:手写(?:标题|关键词)?|字幕|文字|标题|封面文字).{0,48}"
             + capture_resource_pattern
@@ -741,6 +744,13 @@ class DeepSeekGenerator(ContentGenerator):
                     and unprovided_capture_resource.search(sentence)
                     and not text_only_topic.search(sentence)
                     and not has_provided_capture_resource
+                ):
+                    violations.append(FactViolation(field, sentence.strip()))
+                if (
+                    boundary.product_facts == "（无当前商品事实）"
+                    and field in _COMPARISON_VISUAL_FIELDS
+                    and unprovided_creator_identity.search(sentence)
+                    and sentence not in boundary.explicit_premise
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if (

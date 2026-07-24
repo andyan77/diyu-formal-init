@@ -397,6 +397,30 @@ def test_p3_does_not_turn_a_role_question_into_an_implied_recurring_life_history
     ) in violations
 
 
+def test_p3_does_not_claim_the_brand_received_questions_or_invent_creator_demographics() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "当了妈妈以后，只为自己喜欢而买衣服算自私吗？"),
+        "自私吗",
+        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
+        VideoProductionBundle(
+            "导读",
+            "我们只讨论这个问题，不替任何人编经历。",
+            "一人正对手机口播。",
+            "字幕",
+            "声音",
+            "创作者（女性，30岁左右）坐在沙发上看向镜头。",
+            "观看链",
+            "18秒",
+            "我们收到过很多类似提问，今天试着回答。",
+        ),
+    )
+
+    assert {item.field for item in violations} == {
+        "cover_or_first_frame",
+        "release_caption_and_interaction",
+    }
+
+
 def test_p1_and_p3_require_spoken_copy_but_p5_may_be_visual_only() -> None:
     production = VideoProductionBundle(
         "导读",
