@@ -476,6 +476,11 @@ def test_deepseek_adapter_compiles_visible_body_only_from_controlled_fields() ->
     assert "声音与制作提示：声音提示" in body
 
 
+def test_deepseek_adapter_rejects_punctuation_only_visible_text() -> None:
+    with pytest.raises(TypeError):
+        DeepSeekGenerator._visible_text("'")
+
+
 def test_deepseek_adapter_prunes_only_finally_rejected_sentences() -> None:
     projected = DeepSeekGenerator._prune_rejected_sentences(
         {
@@ -505,6 +510,19 @@ def test_deepseek_adapter_fails_when_final_rejection_would_empty_a_field() -> No
                 FactViolation(
                     "tradeoff_or_limit",
                     "不能简单归因于双面结构。",
+                ),
+            ),
+        )
+
+
+def test_deepseek_adapter_does_not_prune_a_rejected_production_field() -> None:
+    with pytest.raises(GenerationFailed):
+        DeepSeekGenerator._prune_rejected_sentences(
+            {"cover_or_first_frame": "展示未提供的商品部位。"},
+            (
+                FactViolation(
+                    "cover_or_first_frame",
+                    "展示未提供的商品部位。",
                 ),
             ),
         )
@@ -990,6 +1008,7 @@ def test_deepseek_adapter_accepts_an_explicit_no_partial_attribution_boundary() 
         "不知道双面结构具体贡献了多少重量差异。",
         "不能确认这份重量是不是全因为双面。",
         "不能简单把这份重量差异归因于双面结构。",
+        "你猜双面结构贡献了多少？",
     ],
 )
 def test_deepseek_adapter_rejects_causal_degree_language_that_implies_partial_weight(
@@ -1026,6 +1045,21 @@ def test_deepseek_adapter_rejects_an_unverified_claim_that_we_weighed_the_produc
     assert {violation.field for violation in violations} == {
         "release_caption_and_interaction"
     }
+
+
+def test_deepseek_adapter_rejects_unprovided_candidate_causes_even_when_negated() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：当前样衣960克；对照样衣650克。", ""),
+        "标题",
+        P2SemanticContract(
+            "两份样衣重量不同。",
+            "现有资料无法把重量差异归因于面料、里料或工艺。",
+            "当前两份样衣记录",
+        ),
+        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
+    )
+
+    assert {violation.field for violation in violations} == {"tradeoff_or_limit"}
 
 
 def test_deepseek_adapter_rejects_an_unverified_first_person_measurement() -> None:

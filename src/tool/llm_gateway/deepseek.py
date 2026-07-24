@@ -538,7 +538,7 @@ class DeepSeekGenerator(ContentGenerator):
         # A boundary may say that no structure test is available.  It must not
         # grow into a fabricated inventory of technical variables such as a
         # lining or a process test.
-        unprovided_technical_detail = re.compile(r"(?:里料|工艺)")
+        unprovided_technical_detail = re.compile(r"(?:面料|里料|工艺)")
         no_product_clothing_term = (
             r"(?:连衣裙|连体裤|阔腿裤|半身裙|裙装|衬衫|衬衣|西装|针织衫|T恤|外套|裤装|裤子|上衣|"
             r"单品|衣服|丝巾|腰带|配饰)"
@@ -637,7 +637,10 @@ class DeepSeekGenerator(ContentGenerator):
                 if (
                     (product_reference or product_contract)
                     and unprovided_technical_detail.search(sentence)
-                    and not acknowledged_unknown
+                    and (
+                        not acknowledged_unknown
+                        or re.search(r"(?:重量|克|差异|归因|原因)", sentence)
+                    )
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if isinstance(contract, P5SemanticContract) and unprovided_styling_detail.search(
@@ -666,6 +669,12 @@ class DeepSeekGenerator(ContentGenerator):
     @staticmethod
     def _weakens_no_weight_attribution(sentence: str) -> bool:
         """Reject causal degree language that quietly presupposes a partial attribution."""
+        if re.search(
+            r"双面结构.{0,16}(?:占|贡献|造成|导致).{0,8}"
+            r"(?:多少|多大|比例|程度)",
+            sentence,
+        ):
+            return True
         if not re.search(r"(?:重量|克|差异)", sentence) or "双面" not in sentence:
             return False
         causal = re.search(
@@ -795,7 +804,12 @@ class DeepSeekGenerator(ContentGenerator):
     ) -> dict[str, object]:
         """Finish the one repair atomically by dropping only finally rejected sentences."""
         rejected_by_field: dict[str, list[str]] = {}
+        prunable_fields = {
+            field for fields in _CONTRACT_FIELDS.values() for field in fields
+        }
         for violation in violations:
+            if violation.field not in prunable_fields:
+                raise GenerationFailed("内容事实边界无法在一次修复内满足")
             rejected_by_field.setdefault(violation.field, []).append(
                 violation.fragment.strip()
             )
@@ -857,12 +871,15 @@ class DeepSeekGenerator(ContentGenerator):
         """Remove only reserved routing labels before a model response reaches a user artifact."""
         if not isinstance(value, str) or not value.strip():
             raise TypeError("visible content must be a non-empty string")
-        return re.sub(
+        visible = re.sub(
             r"\b(?:P[1-5]|dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story)\b\s*[:：-]?\s*",
             "",
             str(value),
             flags=re.IGNORECASE,
         ).strip()
+        if not re.search(r"[\w\u4e00-\u9fff]", visible):
+            raise TypeError("visible content must contain readable text")
+        return visible
 
     @staticmethod
     def _visible_body(
