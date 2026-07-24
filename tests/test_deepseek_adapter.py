@@ -1006,6 +1006,29 @@ def test_deepseek_adapter_rejects_a_claim_that_double_facing_increased_weight() 
     assert {violation.field for violation in violations} == {"product_insight"}
 
 
+def test_deepseek_adapter_rejects_more_sides_as_more_weight() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：两份样衣重量不同，不能归因。", ""),
+        "标题",
+        P2SemanticContract("理解", "边界", "条件"),
+        VideoProductionBundle(
+            "导读",
+            "台词",
+            "动作",
+            "字幕",
+            "声音",
+            "首帧",
+            "观看链",
+            "时长",
+            "双面外套，多一个面，也多一份重量。",
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {
+        "release_caption_and_interaction"
+    }
+
+
 def test_deepseek_adapter_accepts_an_explicit_no_partial_attribution_boundary() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
@@ -1035,6 +1058,8 @@ def test_deepseek_adapter_accepts_an_explicit_no_partial_attribution_boundary() 
         "你猜双面结构贡献了多少？",
         "不能简单理解为双面结构直接导致重量增加。",
         "没法说这重量差就是双面结构带来的。",
+        "无法判断双面设计对重量的具体影响。",
+        "不能确认重量差异全因双面。",
     ],
 )
 def test_deepseek_adapter_rejects_causal_degree_language_that_implies_partial_weight(

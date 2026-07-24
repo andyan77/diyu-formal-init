@@ -243,6 +243,20 @@ class DeepSeekGenerator(ContentGenerator):
                     "这些已命中字段不得再次出现“双面结构”四个字。"
                 )
             if any(
+                "双面" in violation.fragment
+                and re.search(r"(?:重量|克|差异)", violation.fragment)
+                and re.search(
+                    r"(?:归因|原因|造成|导致|带来|增加|来自|贡献|影响|"
+                    r"多.{0,6}重量)",
+                    violation.fragment,
+                )
+                for violation in violations
+            ):
+                repair_system += (
+                    "待修字段不得把双面设计与重量的增减、原因或影响写成因果关系；"
+                    "只可保留两份记录存在差异以及现有资料无法归因。"
+                )
+            if any(
                 self._generalizes_sample_comparison(violation.fragment)
                 for violation in violations
             ):
@@ -547,7 +561,7 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:结构|其他).{0,16}(?:因素|原因).{0,16}(?:导致|造成|解释).{0,16}(?:差异|重量)|"
             r"(?:双面结构|双面).{0,16}(?:是|为).{0,12}(?:原因之一|部分原因|一部分原因)|"
             r"(?:双面结构|双面).{0,16}(?:带来|导致|造成|增加).{0,16}(?:重量|克|差异)|"
-            r"(?:双面结构|双面).{0,16}(?:更重|重量更大|重量增加)"
+            r"(?:双面结构|双面).{0,16}(?:更重|重量更大|重量增加|多.{0,6}重量)"
         )
         internal_copy_direction = re.compile(r"(?:需向受众说明|不应仅因.{0,16}说服)")
         personal_identifier = re.compile(
@@ -691,10 +705,6 @@ class DeepSeekGenerator(ContentGenerator):
             return True
         if not re.search(r"(?:重量|克|差异)", sentence) or "双面" not in sentence:
             return False
-        causal = re.search(
-            r"(?:归因|原因|造成|导致|带来|增加|来自|贡献|因为)",
-            sentence,
-        )
         weak_uncertainty = re.search(
             r"(?:是否|是不是|能否|唯一|主要|多少|多大|比例|程度|主次|"
             r"不一定|无法排除|不能全|不能都)",
@@ -708,12 +718,10 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:归因|确认|证明)",
             sentence,
         )
-        weak_relation = weak_uncertainty is not None or (
-            causal is not None and weak_extent is not None
-        )
+        weak_relation = weak_uncertainty is not None or weak_extent is not None
         weakened_negative = re.search(
             r"(?:无法|没法|不能|不可|不应|不要).{0,32}"
-            r"(?:归因|原因|造成|导致|带来|增加|来自|贡献)",
+            r"(?:归因|原因|造成|导致|带来|增加|来自|贡献|影响)",
             sentence,
         )
         direct_no_attribution = re.search(
