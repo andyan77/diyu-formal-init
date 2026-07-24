@@ -369,7 +369,8 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:像.{0,16}单层.{0,8}(?:轻|重)|(?:更轻|更重|轻于|重于).{0,16}单层)"
         )
         unsupported_weight_cause = re.compile(
-            r"(?:结构|其他).{0,16}(?:因素|原因).{0,16}(?:导致|造成|解释).{0,16}(?:差异|重量)"
+            r"(?:结构|其他).{0,16}(?:因素|原因).{0,16}(?:导致|造成|解释).{0,16}(?:差异|重量)|"
+            r"(?:双面结构|双面).{0,16}(?:是|为).{0,12}(?:原因之一|部分原因|一部分原因)"
         )
         internal_copy_direction = re.compile(r"(?:需向受众说明|不应仅因.{0,16}说服)")
         personal_identifier = re.compile(
