@@ -398,6 +398,17 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:一位|同事|顾客|店长|孩子|观众|她|他).{0,24}"
             r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|拍了拍|转身离开|等(?:待)?).{0,32}"
         )
+        unprovided_comparison_visual = re.compile(r"单层.{0,4}外套")
+        comparison_visual_fields = {
+            "natural_guide",
+            "cover_or_first_frame",
+            "viewing_flow",
+            "visual_actions",
+            "hero_image",
+            "image_sequence",
+            "full_body",
+            "layout_and_production",
+        }
         for field, text in visible:
             for sentence in re.split(r"(?<=[。！？!?])", text):
                 if not sentence.strip():
@@ -416,6 +427,8 @@ class DeepSeekGenerator(ContentGenerator):
                 )
                 product_contract = isinstance(contract, (P2SemanticContract, P5SemanticContract))
                 if unverified_capture.search(sentence) and not acknowledged_unknown:
+                    violations.append(FactViolation(field, sentence.strip()))
+                if field in comparison_visual_fields and unprovided_comparison_visual.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
                 if invalid_weight_explanation.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))

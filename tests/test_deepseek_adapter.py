@@ -627,6 +627,27 @@ def test_deepseek_adapter_rejects_a_hand_raising_an_unprovided_comparison_sample
     assert {violation.field for violation in violations} == {"visual_actions"}
 
 
+def test_deepseek_adapter_rejects_an_unprovided_comparison_sample_in_visual_planning() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：当前样衣约960克；对照数据约650克。", ""),
+        "标题",
+        P2SemanticContract("理解", "边界", "条件"),
+        VideoProductionBundle(
+            "导读",
+            "台词",
+            "旁边放一件同季同长度单层短外套。",
+            "字幕可写单层短外套 M 码约650克。",
+            "声音",
+            "首帧",
+            "观看链",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {"visual_actions"}
+
+
 def test_deepseek_adapter_rejects_an_invented_explanation_for_weight_difference() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
