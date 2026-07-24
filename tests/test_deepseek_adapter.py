@@ -349,6 +349,84 @@ def test_brand_relationship_view_does_not_become_an_unconfirmed_store_promise() 
     ) in violations
 
 
+def test_p3_does_not_turn_a_question_into_the_brand_operators_life_history() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "当了妈妈以后，只为自己喜欢而买衣服算自私吗？"),
+        "自私吗",
+        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
+        VideoProductionBundle(
+            "导读",
+            "我最近一直在想这个问题，后来发现我太久没问过自己喜欢什么。",
+            "一人正对手机口播。",
+            "字幕",
+            "声音",
+            "首帧",
+            "观看链",
+            "20秒",
+            "发布",
+        ),
+    )
+
+    assert FactViolation(
+        "spoken_lines",
+        "我最近一直在想这个问题，后来发现我太久没问过自己喜欢什么。",
+    ) in violations
+
+
+def test_p1_and_p3_require_spoken_copy_but_p5_may_be_visual_only() -> None:
+    production = VideoProductionBundle(
+        "导读",
+        "无口播、无对白、无解说",
+        "一人动作。",
+        "无字幕",
+        "声音",
+        "首帧",
+        "观看链",
+        "15秒",
+        "发布",
+    )
+
+    p3 = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "品牌关系观点"),
+        "标题",
+        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
+        production,
+    )
+    p5 = DeepSeekGenerator._boundary_violations(
+        FactBoundary("当前商品事实", "视觉造型"),
+        "标题",
+        P5SemanticContract("商品", "命题", "视觉"),
+        production,
+    )
+
+    assert FactViolation("spoken_lines", "无口播、无对白、无解说") in p3
+    assert FactViolation("spoken_lines", "无口播、无对白、无解说") not in p5
+
+
+def test_a_claimed_family_photo_is_not_excused_by_later_handwritten_text() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "一家三口准备拍合照，怎样穿？"),
+        "合照",
+        P1SemanticContract("选择", "边界", "下一步"),
+        VideoProductionBundle(
+            "导读",
+            "这是一段足以直接说出的完整口播文字，并且能够自然完成入口、展开和最后收束。"
+            "先说明选择，再讲改变条件，最后给出一个当场可以尝试的动作。",
+            "一人正对手机口播。",
+            "字幕",
+            "声音",
+            "手机屏幕显示一张三人合照，旁边手写文字“先舒服”。",
+            "观看链",
+            "20秒",
+            "发布",
+        ),
+    )
+
+    assert {
+        item.field for item in violations
+    } == {"cover_or_first_frame"}
+
+
 def test_eighteen_seconds_is_not_mislabeled_as_an_eight_second_transform() -> None:
     body = DeepSeekGenerator._visible_body(
         "标题",

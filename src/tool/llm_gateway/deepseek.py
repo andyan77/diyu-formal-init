@@ -629,18 +629,16 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:一位|同事|顾客|店长|孩子|观众|她|他).{0,24}"
             r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|拍了拍|转身离开|等(?:待)?).{0,32}"
             r"|(?:我们|我).{0,16}(?:见过|遇到过|试过|观察到|经常被问|站在镜子前|试了又试)"
-        )
-        no_product_specific_object = re.compile(
-            r"(?:米色|蓝色|白色|黑色|灰色|棕色|深色|同色系|"
-            r"针织|卫衣|T恤|牛仔|棉麻|连衣裙|童装|衬衫|裙子|外套|配饰|绿植)"
+            r"|我(?:最近|曾经|一直|太久|以前|当了|给孩子|家里).{0,32}"
         )
         capture_resource_pattern = (
             r"(?:孩子|妈妈|爸爸|丈夫|一家三口|全家(?:人|合影)?|顾客|店员|"
-            r"店内|店门|门店|衣柜|衣架|收银台|购物车|家庭合照|合照|手机相册)"
+            r"店内|店门|门店|衣柜|衣架|收银台|购物车|家庭合照|合照|手机相册|"
+            r"玻璃门|挂着的衣物|门铃)"
         )
         unprovided_capture_resource = re.compile(capture_resource_pattern)
         text_only_topic = re.compile(
-            r"(?:手写|字幕|文字|标题).{0,20}" + capture_resource_pattern
+            r"^\s*(?:手写|字幕|文字|标题|封面文字).{0,20}" + capture_resource_pattern
         )
         unconfirmed_service_practice = re.compile(
             r"(?:我们|这个账号|笛语服饰).{0,24}"
@@ -680,6 +678,10 @@ class DeepSeekGenerator(ContentGenerator):
                     violations.append(
                         FactViolation("spoken_lines", production.spoken_lines)
                     )
+        elif isinstance(production, VideoProductionBundle) and isinstance(
+            contract, (P1SemanticContract, P3SemanticContract)
+        ):
+            violations.append(FactViolation("spoken_lines", production.spoken_lines))
         for field, text in visible:
             for sentence in re.split(r"(?<=[。！？!?])", text):
                 if not sentence.strip():
@@ -736,12 +738,6 @@ class DeepSeekGenerator(ContentGenerator):
                     boundary.product_facts == "（无当前商品事实）"
                     and no_product_specific_assertion.search(sentence)
                     and not conditional
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    boundary.product_facts == "（无当前商品事实）"
-                    and no_product_specific_object.search(sentence)
-                    and sentence not in boundary.explicit_premise
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if (
