@@ -204,6 +204,25 @@ class DeepSeekGenerator(ContentGenerator):
         fact_repair_receipts: tuple[FactRepairReceipt, ...] = ()
         if violations:
             repair_system = "你是笛语内容编写器。只交付修复后的 JSON，不展示规则、推理或后台信息。"
+            if any(
+                violation.field
+                in {
+                    "natural_guide",
+                    "cover_or_first_frame",
+                    "viewing_flow",
+                    "visual_actions",
+                    "hero_image",
+                    "image_sequence",
+                    "full_body",
+                    "layout_and_production",
+                }
+                and "单层" in violation.fragment
+                for violation in violations
+            ):
+                repair_system += (
+                    "当前只有对照重量数据，没有对照样衣拍摄事实。待修视觉字段绝不能出现单层外套、"
+                    "对照样衣、第二件商品、两件并排、称量或实物对比；重量只能作为当前商品旁的文字或口播数据。"
+                )
             if not request.products:
                 repair_system += (
                     "当前没有已点名商品或商品事实。待修字段不得把某件商品的具体属性、功能或效果"

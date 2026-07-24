@@ -658,6 +658,25 @@ def test_deepseek_adapter_repairs_comparison_visuals_without_showing_a_second_sa
     assert "不得提及、展示、悬挂、拿起或并排任何单层外套、对照样衣或第二件商品" in prompt
 
 
+def test_deepseek_adapter_uses_a_system_repair_guard_for_comparison_visuals(
+    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
+) -> None:
+    unsafe = _video_payload(visual_actions="旁边放一件单层短外套。")
+    repaired = '{"visual_actions":"画面只展示当前商品，重量作为文字数据出现。"}'
+    FakeClient.responses = [
+        FakeResponse(200, {"choices": [{"message": {"content": unsafe}}]}),
+        FakeResponse(200, {"choices": [{"message": {"content": repaired}}]}),
+    ]
+    FakeClient.requests = []
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+
+    DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model").generate(
+        generation_input
+    )
+
+    assert "当前只有对照重量数据，没有对照样衣拍摄事实" in str(FakeClient.requests[1]["json"])
+
+
 def test_deepseek_adapter_rejects_an_invented_explanation_for_weight_difference() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
