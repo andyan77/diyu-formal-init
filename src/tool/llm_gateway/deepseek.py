@@ -622,6 +622,7 @@ class DeepSeekGenerator(ContentGenerator):
             r"|(?:我们|我).{0,16}(?:见过|遇到过|试过|观察到|经常被问|站在镜子前|试了又试)"
             r"|(?:我|我们).{0,20}(?:最近|曾经|一直|太久|以前|当了|给孩子|家里|"
             r"观察过|买了|留下了|犹豫了|包括我自己|上周|昨天|刚才).{0,32}"
+            r"|(?:每次|平时|往常).{0,24}(?:都会|会先|总会|常常)"
         )
         capture_resource_pattern = (
             r"(?:孩子|妈妈|爸爸|丈夫|一家三口|全家(?:人|合影)?|顾客|店员|"
@@ -630,7 +631,8 @@ class DeepSeekGenerator(ContentGenerator):
         )
         unprovided_capture_resource = re.compile(capture_resource_pattern)
         text_only_topic = re.compile(
-            r"^\s*(?:手写|字幕|文字|标题|封面文字).{0,20}" + capture_resource_pattern
+            r"(?:手写(?:标题|关键词)?|字幕|文字|标题|封面文字).{0,48}"
+            + capture_resource_pattern
         )
         unconfirmed_service_practice = re.compile(
             r"(?:我们|这个账号|笛语服饰).{0,24}"

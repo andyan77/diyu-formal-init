@@ -373,6 +373,30 @@ def test_p3_does_not_turn_a_question_into_the_brand_operators_life_history() -> 
     ) in violations
 
 
+def test_p3_does_not_turn_a_role_question_into_an_implied_recurring_life_history() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "当了妈妈以后，只为自己喜欢而买衣服算自私吗？"),
+        "自私吗",
+        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
+        VideoProductionBundle(
+            "导读",
+            "每次站在衣柜前，都会先想方不方便抱孩子，再想自己喜欢什么。",
+            "一人正对手机口播。",
+            "字幕",
+            "声音",
+            "首帧",
+            "观看链",
+            "20秒",
+            "发布",
+        ),
+    )
+
+    assert FactViolation(
+        "spoken_lines",
+        "每次站在衣柜前，都会先想方不方便抱孩子，再想自己喜欢什么。",
+    ) in violations
+
+
 def test_p1_and_p3_require_spoken_copy_but_p5_may_be_visual_only() -> None:
     production = VideoProductionBundle(
         "导读",
@@ -759,6 +783,27 @@ def test_deepseek_adapter_compiles_safe_media_when_no_product_visual_stays_unsaf
     assert projected["cover_or_first_frame"] == (
         "当前创作者正对手机，首帧手写标题：“家庭成员要不要穿成同款？”"
     )
+
+
+def test_handwritten_family_topic_remains_a_text_resource_after_safe_fallback() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "一家三口准备拍合照，怎样穿？"),
+        "合照怎么穿",
+        P1SemanticContract("先舒服", "不舒服就不统一", "先试一次"),
+        VideoProductionBundle(
+            "导读",
+            "这是一段足以直接说出的完整口播文字，并且能够自然完成入口、展开和最后收束。",
+            "一人正对手机口播。",
+            "字幕",
+            "声音",
+            "当前创作者正对手机，首帧手写标题：“一家三口准备拍合照，怎样穿？”",
+            "观看链",
+            "18秒",
+            "发布",
+        ),
+    )
+
+    assert violations == ()
 
 
 def test_deepseek_adapter_prunes_one_rejected_spoken_sentence_when_copy_remains(
