@@ -265,9 +265,9 @@ class DeepSeekGenerator(ContentGenerator):
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
-            # A modest amount of variation is needed when a later version must
-            # genuinely recompile the same facts for another medium or platform.
-            "temperature": 0.35,
+            # Fact-bound JSON must not drift through stochastic rewording. A
+            # revision still changes when its explicit instruction changes.
+            "temperature": 0.0,
             "max_tokens": max_tokens,
             # The current provider enables reasoning by default.  This adapter
             # needs a complete JSON object in the visible content channel, not
