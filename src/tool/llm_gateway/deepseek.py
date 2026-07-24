@@ -272,6 +272,24 @@ class DeepSeekGenerator(ContentGenerator):
                     "待修字段只能保留两面可用这个已知事实。"
                 )
             if any(
+                re.search(
+                    r"(?:展示|拉出|露出|翻出).{0,8}(?:内衬|里布)",
+                    violation.fragment,
+                )
+                for violation in violations
+            ):
+                repair_system += (
+                    "当前只提供两面完整外观和两面口袋可用；待修字段不得新增、展示或拉出"
+                    "未提供的内部结构或部件。"
+                )
+            if any(violation.field == "natural_duration" for violation in violations):
+                spoken = DeepSeekGenerator._visible_text(structured["spoken_lines"])
+                spoken_count = len(re.findall(r"[\w\u4e00-\u9fff]", spoken))
+                repair_system += (
+                    f"完整口播约有 {spoken_count} 个可读字符；待修自然时长必须足以自然说完"
+                    "全部口播并完成画面，不能通过删口播或报不可能的短时长规避。"
+                )
+            if any(
                 violation.field
                 in {
                     "viewing_flow",
@@ -279,7 +297,10 @@ class DeepSeekGenerator(ContentGenerator):
                     "subtitles",
                     "sound_and_production",
                 }
-                and re.search(r"无口播.{0,8}无对白.{0,8}无解说", violation.fragment)
+                and re.search(
+                    r"(?:无口播时|无口播.{0,8}无对白.{0,8}无解说)",
+                    violation.fragment,
+                )
                 for violation in violations
             ):
                 repair_system += (
@@ -539,6 +560,9 @@ class DeepSeekGenerator(ContentGenerator):
         # grow into a fabricated inventory of technical variables such as a
         # lining or a process test.
         unprovided_technical_detail = re.compile(r"(?:面料|里料|工艺)")
+        unprovided_structure_action = re.compile(
+            r"(?:展示|拉出|露出|翻出).{0,8}(?:内衬|里布)"
+        )
         no_product_clothing_term = (
             r"(?:连衣裙|连体裤|阔腿裤|半身裙|裙装|衬衫|衬衣|西装|针织衫|T恤|外套|裤装|裤子|上衣|"
             r"单品|衣服|丝巾|腰带|配饰)"
@@ -571,8 +595,22 @@ class DeepSeekGenerator(ContentGenerator):
                 "sound_and_production",
             ):
                 value = str(getattr(production, field))
-                if re.search(r"无口播.{0,8}无对白.{0,8}无解说", value):
+                if re.search(
+                    r"(?:无口播时|无口播.{0,8}无对白.{0,8}无解说)",
+                    value,
+                ):
                     violations.append(FactViolation(field, value))
+            duration_match = re.search(r"(\d{1,3})\s*秒", production.natural_duration)
+            if duration_match:
+                spoken_count = len(
+                    re.findall(r"[\w\u4e00-\u9fff]", production.spoken_lines)
+                )
+                declared_seconds = int(duration_match.group(1))
+                minimum_seconds = (spoken_count + 5) // 6
+                if declared_seconds < minimum_seconds:
+                    violations.append(
+                        FactViolation("natural_duration", production.natural_duration)
+                    )
         for field, text in visible:
             for sentence in re.split(r"(?<=[。！？!?])", text):
                 if not sentence.strip():
@@ -648,6 +686,8 @@ class DeepSeekGenerator(ContentGenerator):
                     and unprovided_technical_detail.search(sentence)
                     and re.search(r"(?:重量|克|差异|归因|原因|测试)", sentence)
                 ):
+                    violations.append(FactViolation(field, sentence.strip()))
+                if unprovided_structure_action.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
                 if isinstance(contract, P5SemanticContract) and unprovided_styling_detail.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))

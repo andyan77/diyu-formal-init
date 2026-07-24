@@ -1121,6 +1121,30 @@ def test_deepseek_adapter_allows_ordinary_visual_garment_language() -> None:
     assert violations == ()
 
 
+def test_deepseek_adapter_rejects_showing_an_unprovided_internal_component() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：两面均为完整外观，两面口袋均可使用。", ""),
+        "标题",
+        P2SemanticContract("两面完整。", "现有资料无法归因。", "当前商品记录"),
+        VideoProductionBundle(
+            "导读",
+            "台词",
+            "手伸入口袋，拉出一点内衬。",
+            "字幕",
+            "口袋拉出内衬时的布料声。",
+            "首帧",
+            "观看链",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {
+        "visual_actions",
+        "sound_and_production",
+    }
+
+
 def test_deepseek_adapter_rejects_an_unverified_first_person_measurement() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
@@ -1182,6 +1206,51 @@ def test_deepseek_adapter_rejects_no_voice_subtitle_when_spoken_copy_exists() ->
     )
 
     assert {violation.field for violation in violations} == {"subtitles"}
+
+
+def test_deepseek_adapter_rejects_no_voice_branch_when_spoken_copy_exists() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
+        "标题",
+        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
+        VideoProductionBundle(
+            "导读",
+            "这是一段完整口播。",
+            "画面展示当前商品。",
+            "字幕",
+            "无口播时保留环境声。",
+            "首帧",
+            "观看链",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {
+        "sound_and_production"
+    }
+
+
+def test_deepseek_adapter_rejects_duration_too_short_for_complete_spoken_copy() -> None:
+    spoken = "这是完整口播，需要以自然语速说完。" * 12
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
+        "标题",
+        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
+        VideoProductionBundle(
+            "导读",
+            spoken,
+            "画面展示当前商品。",
+            "字幕",
+            "环境声和清晰口播。",
+            "首帧",
+            "观看链",
+            "12秒",
+            "发布",
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {"natural_duration"}
 
 
 def test_deepseek_adapter_accepts_a_consistent_no_voice_video() -> None:
