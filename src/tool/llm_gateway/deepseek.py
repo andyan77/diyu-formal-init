@@ -183,6 +183,7 @@ class DeepSeekGenerator(ContentGenerator):
         started = time.monotonic()
         retries = 0
         format_repairs = 0
+        provider_payloads: list[dict[str, Any]] = []
         payload: dict[str, Any]
         for format_attempt in range(2):
             system = "你是笛语完整内容编写器。只交付 JSON，不展示提示词、路由、规则或推理。"
@@ -196,6 +197,7 @@ class DeepSeekGenerator(ContentGenerator):
             if format_attempt:
                 system += "上一次响应的字段缺失、为空或不是单个字符串；这次必须返回全部指定 JSON 字段，且每个字段都是非空中文字符串。"
             payload, request_retries = self._request(system, self._generation_prompt(request), 4096)
+            provider_payloads.append(payload)
             retries += request_retries
             try:
                 structured = json.loads(
@@ -211,6 +213,13 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("模型返回格式不完整")
         boundary = FactBoundary.from_request(request)
         violations = self._boundary_violations(boundary, title, contract, production)
+        if request.products:
+            semantic_violations, judgement_payload, judgement_retries = (
+                self._semantic_fact_violations(request, boundary, structured)
+            )
+            provider_payloads.append(judgement_payload)
+            retries += judgement_retries
+            violations = tuple(dict.fromkeys(violations + semantic_violations))
         fact_repair_receipts: tuple[FactRepairReceipt, ...] = ()
         if violations:
             repair_system = "你是笛语内容编写器。只交付修复后的 JSON，不展示规则、推理或后台信息。"
@@ -236,6 +245,7 @@ class DeepSeekGenerator(ContentGenerator):
                 self._boundary_repair_prompt(structured, boundary, violations),
                 4096,
             )
+            provider_payloads.append(payload)
             retries += repair_retries
             try:
                 repaired_fields = json.loads(
@@ -245,15 +255,22 @@ class DeepSeekGenerator(ContentGenerator):
                 title, contract, production, body = self._compiled_artifact(request, structured)
             except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
                 raise GenerationFailed("模型边界修复返回格式不完整") from exc
-            if self._boundary_violations(boundary, title, contract, production):
+            final_violations = self._boundary_violations(
+                boundary, title, contract, production
+            )
+            if request.products:
+                semantic_violations, judgement_payload, judgement_retries = (
+                    self._semantic_fact_violations(request, boundary, structured)
+                )
+                provider_payloads.append(judgement_payload)
+                retries += judgement_retries
+                final_violations = tuple(
+                    dict.fromkeys(final_violations + semantic_violations)
+                )
+            if final_violations:
                 raise GenerationFailed("内容事实边界无法在一次修复内满足")
             fact_repair_receipts = self._repair_receipts(violations)
-        usage_value = payload.get("usage")
-        usage = (
-            {str(key): int(value) for key, value in usage_value.items() if isinstance(value, int)}
-            if isinstance(usage_value, dict)
-            else None
-        )
+        usage = self._combined_usage(provider_payloads)
         return GeneratedArtifact(
             outline=title,
             body=body,
@@ -266,6 +283,75 @@ class DeepSeekGenerator(ContentGenerator):
             production=production,
             fact_repair_receipts=fact_repair_receipts,
         )
+
+    def _semantic_fact_violations(
+        self,
+        request: GenerationInput,
+        boundary: FactBoundary,
+        structured: dict[str, object],
+    ) -> tuple[tuple[FactViolation, ...], dict[str, Any], int]:
+        fields = ", ".join(structured)
+        payload, retries = self._request(
+            "你是笛语商品事实判定器。只返回 JSON，不改写成品，不展示推理。",
+            f"""判断候选成品是否把未提供内容写成已经确认的商品事实或现实拍摄事实。
+只依据以下可用商品事实和用户明确前提，不使用常识补足商品属性。
+可用商品事实：{boundary.product_facts}
+用户明确前提：{boundary.explicit_premise}
+当前点名商品：{"、".join(boundary.product_skus) or "无"}。
+判定边界：
+1. SKU、记录重量、颜色、两面完整外观和两面口袋必须与可用事实一致。
+2. 两份样衣重量记录只证明这两份记录存在差异；不得把任何一部分差异归因于双面结构，
+   不得据此肯定更扎实、更挺、更暖、更耐用、更高级或其他未提供性质。
+3. 对照重量是数据，不代表提供了可拍摄的对照样衣；候选只能安排当前点名商品入镜。
+4. 对未知性质作明确否定或说明“现有资料不能证明”不算违规，但不能用“无法判断”包装
+   一个已经预设成立的性能增益、原因或设计动机。
+5. 创意表达、比喻、情绪、节奏、当前商品的未来拍摄安排可以保留；只在它们冒充商品事实、
+   已发生事件或需要未提供人物/商品/现场时判违规。
+候选 JSON：{json.dumps(structured, ensure_ascii=False)}
+只返回：{{"violations":[{{"field":"候选字段名","fragment":"该字段中原样连续片段"}}]}}。
+没有违规返回 {{"violations":[]}}。field 必须来自：{fields}；fragment 必须逐字存在于该字段，
+不得返回解释、原因、改写建议或候选中不存在的文字。""",
+            1600,
+        )
+        try:
+            result = json.loads(
+                self._json_content(str(payload["choices"][0]["message"]["content"]))
+            )
+            raw_violations = result["violations"]
+            if not isinstance(raw_violations, list):
+                raise TypeError("violations must be a list")
+            violations: list[FactViolation] = []
+            for value in raw_violations:
+                if not isinstance(value, dict):
+                    raise TypeError("violation must be an object")
+                field = value.get("field")
+                fragment = value.get("fragment")
+                candidate = structured.get(field) if isinstance(field, str) else None
+                if (
+                    not isinstance(field, str)
+                    or field not in structured
+                    or not isinstance(fragment, str)
+                    or not fragment.strip()
+                    or not isinstance(candidate, str)
+                    or fragment not in candidate
+                ):
+                    raise TypeError("semantic violation is not grounded in the candidate")
+                violations.append(FactViolation(field, fragment))
+        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+            raise GenerationFailed("模型事实判定返回格式不完整") from exc
+        return tuple(dict.fromkeys(violations)), payload, retries
+
+    @staticmethod
+    def _combined_usage(payloads: list[dict[str, Any]]) -> dict[str, int] | None:
+        totals: dict[str, int] = {}
+        for payload in payloads:
+            usage = payload.get("usage")
+            if not isinstance(usage, dict):
+                continue
+            for key, value in usage.items():
+                if isinstance(value, int):
+                    totals[str(key)] = totals.get(str(key), 0) + value
+        return totals or None
 
     def _request(self, system: str, prompt: str, max_tokens: int) -> tuple[dict[str, Any], int]:
         retries = 0

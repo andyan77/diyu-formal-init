@@ -735,6 +735,89 @@ def test_deepseek_adapter_treats_comparison_weight_as_data_not_a_shootable_sampl
     assert "画面只能使用当前点名商品" in prompt
 
 
+def test_deepseek_adapter_semantically_repairs_an_unprovided_product_property(
+    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
+) -> None:
+    request = GenerationInput(
+        **{
+            **generation_input.__dict__,
+            "primary_product": "product_truth",
+            "products": (
+                ProductFact(
+                    "ZX-C218",
+                    {
+                        "sample_weight_m_grams": 960,
+                        "comparison_single_layer_short_coat_m_grams": 650,
+                    },
+                ),
+            ),
+        }
+    )
+    initial = json.loads(_video_payload())
+    initial.update(
+        {
+            "product_insight": "当前只可确认两份样衣重量。",
+            "tradeoff_or_limit": "不能归因。",
+            "validity_condition": "限当前记录。",
+            "spoken_lines": "它是一件更扎实的外套。",
+        }
+    )
+    repaired = {"spoken_lines": "当前只可确认两份样衣重量存在差异，原因不能归因。"}
+    FakeClient.responses = [
+        FakeResponse(
+            200,
+            {
+                "choices": [{"message": {"content": json.dumps(initial, ensure_ascii=False)}}],
+                "usage": {"total_tokens": 10},
+            },
+        ),
+        FakeResponse(
+            200,
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"violations":[{"field":"spoken_lines",'
+                            '"fragment":"它是一件更扎实的外套。"}]}'
+                        }
+                    }
+                ],
+                "usage": {"total_tokens": 2},
+            },
+        ),
+        FakeResponse(
+            200,
+            {
+                "choices": [
+                    {"message": {"content": json.dumps(repaired, ensure_ascii=False)}}
+                ],
+                "usage": {"total_tokens": 3},
+            },
+        ),
+        FakeResponse(
+            200,
+            {
+                "choices": [{"message": {"content": '{"violations":[]}'}}],
+                "usage": {"total_tokens": 2},
+            },
+        ),
+    ]
+    FakeClient.requests = []
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+
+    artifact = DeepSeekGenerator(
+        "https://compat.example/v1", "not-a-real-key", "verified-deepseek-model"
+    ).generate(request)
+
+    assert "更扎实" not in artifact.body
+    assert artifact.provider_usage == {"total_tokens": 17}
+    assert {receipt.field for receipt in artifact.fact_repair_receipts} == {
+        "spoken_lines"
+    }
+    assert len(FakeClient.requests) == 4
+    assert "不得据此肯定更扎实" in str(FakeClient.requests[1]["json"])
+
+
 def test_deepseek_adapter_uses_a_system_repair_guard_for_comparison_visuals(
     monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
 ) -> None:
