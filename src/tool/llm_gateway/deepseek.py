@@ -302,8 +302,8 @@ class DeepSeekGenerator(ContentGenerator):
 1. SKU、记录重量、颜色、两面完整外观和两面口袋必须与可用事实一致。
 2. 两份样衣重量记录只证明这两份记录存在差异；不得把任何一部分差异归因于双面结构，
    不得据此肯定更扎实、更挺、更暖、更耐用、更高级或其他未提供性质。
-   “不能确认是否完全由双面造成”“不能确认双面造成多少”“不是唯一原因”仍预设了部分归因，
-   必须判违规；只有明确说明不能确认双面造成任何一部分差异才合格。
+   涉及重量原因时，不得讨论双面结构所占程度、比例、主次或可能性；这类表达仍预设了部分归因。
+   只能说明两份记录存在差异、没有结构测试、现有资料无法归因。
 3. 对照重量是数据，不代表提供了可拍摄的对照样衣；候选只能安排当前点名商品入镜。
 4. 对未知性质作明确否定或说明“现有资料不能证明”不算违规，但不能用“无法判断”包装
    一个已经预设成立的性能增益、原因或设计动机。
@@ -538,6 +538,8 @@ class DeepSeekGenerator(ContentGenerator):
                     violations.append(FactViolation(field, sentence.strip()))
                 if unsupported_weight_cause.search(sentence) and not acknowledged_unknown:
                     violations.append(FactViolation(field, sentence.strip()))
+                if DeepSeekGenerator._weakens_no_weight_attribution(sentence):
+                    violations.append(FactViolation(field, sentence.strip()))
                 if internal_copy_direction.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
                 if personal_identifier.search(sentence):
@@ -597,6 +599,26 @@ class DeepSeekGenerator(ContentGenerator):
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
         return tuple(dict.fromkeys(violations))
+
+    @staticmethod
+    def _weakens_no_weight_attribution(sentence: str) -> bool:
+        """Reject causal degree language that quietly presupposes a partial attribution."""
+        if not re.search(r"(?:重量|克|差异)", sentence) or "双面" not in sentence:
+            return False
+        causal = re.search(r"(?:归因|原因|造成|导致|带来|增加)", sentence)
+        weak_quantifier = re.search(
+            r"(?:是否|是不是|能否|完全|全部|全都|全|唯一|主要|多少|多大|"
+            r"比例|程度|主次|部分|不一定|无法排除|不能全|不能都)",
+            sentence,
+        )
+        safe_no_part = re.search(
+            r"(?:不能|无法|没有.{0,8}(?:依据|证据)).{0,24}"
+            r"(?:任何一部分|任一部分).{0,16}(?:差异|重量)|"
+            r"(?:任何一部分|任一部分).{0,16}(?:差异|重量).{0,24}(?:不能|无法).{0,12}"
+            r"(?:归因|确认|证明)",
+            sentence,
+        )
+        return causal is not None and weak_quantifier is not None and safe_no_part is None
 
     @staticmethod
     def _depicts_unavailable_comparison(
@@ -847,7 +869,7 @@ class DeepSeekGenerator(ContentGenerator):
             "不要写资产、版本、路由、提示或后台字段。"
             if not request.products
             else """写作边界：只把“用户种子”和“当前商品事实”当作已经发生或可以肯定的事实；未知资料不得补足为具体商品性能、材质、工艺、部位设计动机或现实事件。条件性专业解释要说明依据什么、能说明什么、不能推出什么；不得把颜色、重量或双面外观推演为性能或官方设计动机。品牌、账号、组织和内容角色只约束发声身份、语气和权威边界，绝不成为已经发生的顾客、店长、门店、服务或交易事件。
-商品解释时，新增理解只能组合当前商品事实和当前适用资产已经支持的内容。若没有结构测试，不能声称双面结构造成、带来或增加了任何一部分重量差异，也不得列举面料、里料、工艺等未验证候选原因；只能陈述两份已记录重量及当前不能归因。“不能确认是否完全由双面造成”“不能确认双面造成多少”“不是唯一原因”仍暗示了部分归因，也不得使用。用户种子明确给出的品牌开发选择要与相伴限制自然讲清，但不要求固定词、数字或字段逐字重复。创意、比喻、幽默、情绪、节奏和未来拍摄安排可以充分表达，只要不把它们伪装成已经发生的商品事实或现实经历。没有明确确认拍摄当天重新称量时，绝不写实测、电子秤、称重画面、称重声音或当前不存在的对照样衣。不要在可见文字中加入资产、版本、路由、提示或后台字段。"""
+商品解释时，新增理解只能组合当前商品事实和当前适用资产已经支持的内容。若没有结构测试，不能声称双面结构造成、带来或增加了任何一部分重量差异，也不得列举面料、里料、工艺等未验证候选原因；只能陈述两份已记录重量及当前不能归因。涉及重量原因时，不讨论双面结构所占程度、比例、主次或可能性；这些表达仍暗示了部分归因。用户种子明确给出的品牌开发选择要与相伴限制自然讲清，但不要求固定词、数字或字段逐字重复。创意、比喻、幽默、情绪、节奏和未来拍摄安排可以充分表达，只要不把它们伪装成已经发生的商品事实或现实经历。没有明确确认拍摄当天重新称量时，绝不写实测、电子秤、称重画面、称重声音或当前不存在的对照样衣。不要在可见文字中加入资产、版本、路由、提示或后台字段。"""
         )
         shortening_boundary = (
             "若条件要求 8 秒，不能声称保留源版全部认知；明确标为 8 秒窄主题版，只保留仍能独立成立的一项命题。"
@@ -923,7 +945,7 @@ class DeepSeekGenerator(ContentGenerator):
 请只依据可用商品事实和用户明确前提，重新写出下列字段：{", ".join(fields)}。
 可用商品事实：{boundary.product_facts}
 用户明确前提：{boundary.explicit_premise}
-不得新增商品性能、材质、工艺、未提供部位、设计动机、现实人物/事件或重新称量；不得把当前两份样衣资料改写成实拍对比。{comparison_visual_repair}若当前资料不能归因，只能陈述两份已记录重量、没有结构测试、不能确认双面结构造成任何一部分差异；不得声称双面造成、带来或增加了重量，也不得改写为“不能确认是否完全由双面造成”“不能确认双面造成多少”或“不是唯一原因”，这些说法仍暗示了部分归因；不得列举面料、里料、工艺等未验证候选原因或未提供性能。条件性、未来拍摄安排和自然表达可以保留。
+不得新增商品性能、材质、工艺、未提供部位、设计动机、现实人物/事件或重新称量；不得把当前两份样衣资料改写成实拍对比。{comparison_visual_repair}若当前资料不能归因，只能陈述两份已记录重量、没有结构测试、现有资料无法归因；不得声称双面造成、带来或增加了重量。涉及重量原因时，不讨论双面结构所占程度、比例、主次或可能性，这些说法仍暗示了部分归因；不得列举面料、里料、工艺等未验证候选原因或未提供性能。条件性、未来拍摄安排和自然表达可以保留。
 严格只返回一个 JSON 对象，键必须恰好为：{", ".join(fields)}。每个值必须是对应字段修复后的非空中文字符串。"""
 
     @staticmethod

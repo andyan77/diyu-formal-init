@@ -910,6 +910,29 @@ def test_deepseek_adapter_accepts_an_explicit_no_partial_attribution_boundary() 
     assert violations == ()
 
 
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "不能确认这310克差异是否完全由双面结构造成。",
+        "不能确认双面结构是重量差异的唯一或主要原因。",
+        "不能确认双面结构造成了多少重量差异。",
+        "双面结构不一定带来全部重量差异。",
+        "不能把重量差异全归因于双面结构。",
+    ],
+)
+def test_deepseek_adapter_rejects_causal_degree_language_that_implies_partial_weight(
+    claim: str,
+) -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
+        "标题",
+        P2SemanticContract("两份样衣重量不同。", claim, "当前两份样衣记录"),
+        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
+    )
+
+    assert {violation.field for violation in violations} == {"tradeoff_or_limit"}
+
+
 def test_deepseek_adapter_rejects_internal_copy_direction() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：两面均为完整外观。", ""),
