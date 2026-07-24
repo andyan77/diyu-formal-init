@@ -154,6 +154,8 @@ def test_deepseek_adapter_retries_429_with_retry_after(
     request_json = FakeClient.requests[1]["json"]
     assert isinstance(request_json, dict)
     assert request_json["max_tokens"] == 4096
+    assert request_json["thinking"] == {"type": "disabled"}
+    assert request_json["response_format"] == {"type": "json_object"}
     request_payload = str(request_json)
     assert "总部零售/服务专家" in request_payload
     assert "在多场景之间切换的城市女性" in request_payload

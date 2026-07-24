@@ -258,6 +258,10 @@ class DeepSeekGenerator(ContentGenerator):
             # genuinely recompile the same facts for another medium or platform.
             "temperature": 0.35,
             "max_tokens": max_tokens,
+            # The current provider enables reasoning by default.  This adapter
+            # needs a complete JSON object in the visible content channel, not
+            # an open-ended reasoning pass that can exhaust the response budget.
+            "thinking": {"type": "disabled"},
             "response_format": {"type": "json_object"},
         }
         with httpx.Client(timeout=httpx.Timeout(self._timeout_seconds)) as client:
