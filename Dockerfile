@@ -11,6 +11,7 @@ FROM ghcr.io/astral-sh/uv:python3.10-bookworm-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
+    UV_CACHE_DIR=/tmp/uv-cache \
     UV_LINK_MODE=copy \
     PATH="/app/.venv/bin:$PATH"
 
