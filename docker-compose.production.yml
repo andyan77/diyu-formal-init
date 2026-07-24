@@ -1,6 +1,9 @@
 services:
   app:
     image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
+    build:
+      context: .
+      dockerfile: Dockerfile
     env_file:
       - /etc/diyu/app.env
     network_mode: host
