@@ -250,6 +250,11 @@ class ContentService:
         except Exception as exc:  # Provider implementation details never reach the user.
             self._repository.fail_run(scope, task_id, run_id, "模型调用失败，请稍后重试")
             raise GenerationFailed("模型调用失败，请稍后重试") from exc
+        except BaseException:
+            # Cancellation and process-level interruption must not leave a durable
+            # generation run looking active after the request slot is released.
+            self._repository.fail_run(scope, task_id, run_id, "模型调用已取消")
+            raise
         completed = self._repository.complete_run_with_version(
             scope,
             task_id,
