@@ -940,6 +940,7 @@ def test_deepseek_adapter_accepts_an_explicit_no_partial_attribution_boundary() 
         "不能把重量差异全归因于双面结构。",
         "不知道双面结构具体贡献了多少重量差异。",
         "不能确认这份重量是不是全因为双面。",
+        "不能简单把这份重量差异归因于双面结构。",
     ],
 )
 def test_deepseek_adapter_rejects_causal_degree_language_that_implies_partial_weight(
@@ -976,6 +977,70 @@ def test_deepseek_adapter_rejects_an_unverified_claim_that_we_weighed_the_produc
     assert {violation.field for violation in violations} == {
         "release_caption_and_interaction"
     }
+
+
+def test_deepseek_adapter_rejects_an_unverified_first_person_measurement() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
+        "标题",
+        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
+        VideoProductionBundle(
+            "导读",
+            "我们M码样衣称出来是960克。",
+            "动作",
+            "字幕",
+            "声音",
+            "首帧",
+            "观看链",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {"spoken_lines"}
+
+
+def test_deepseek_adapter_rejects_no_voice_direction_when_spoken_copy_exists() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
+        "标题",
+        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
+        VideoProductionBundle(
+            "导读",
+            "这是一段完整口播。",
+            "无口播、无对白、无解说。画面展示当前商品。",
+            "字幕",
+            "声音",
+            "首帧",
+            "观看链",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {"visual_actions"}
+
+
+def test_deepseek_adapter_accepts_a_consistent_no_voice_video() -> None:
+    no_voice = "无口播、无对白、无解说"
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
+        "标题",
+        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
+        VideoProductionBundle(
+            "导读",
+            no_voice,
+            no_voice,
+            "字幕",
+            "声音",
+            "首帧",
+            "观看链",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert violations == ()
 
 
 @pytest.mark.parametrize(

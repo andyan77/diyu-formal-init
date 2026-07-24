@@ -249,6 +249,15 @@ class DeepSeekGenerator(ContentGenerator):
                     "当前对照仅是一份同季同长度 M 码样衣记录；待修字段不得把它泛化为普通、"
                     "一般、通常或普遍的单层外套类别结论。"
                 )
+            if any(
+                violation.field in {"viewing_flow", "visual_actions", "sound_and_production"}
+                and re.search(r"无口播.{0,8}无对白.{0,8}无解说", violation.fragment)
+                for violation in violations
+            ):
+                repair_system += (
+                    "完整成品已经提供口播文本；待修制作字段不得再标记无口播、无对白或无解说，"
+                    "应与已有口播合同保持一致。"
+                )
             if not request.products:
                 repair_system += (
                     "当前没有已点名商品或商品事实。待修字段不得把某件商品的具体属性、功能或效果"
@@ -483,7 +492,8 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:黑色|白色|灰色|棕色|高领|衬衫|针织衫|T恤).{0,8}(?:内搭|高领|衬衫|针织衫|T恤)"
         )
         unverified_capture = re.compile(
-            r"(?:实测|称(?:重(?:台|画面|提示音|读数)|了(?:一下|一遍|重量))|电子秤|"
+            r"(?:实测|称(?:重(?:台|画面|提示音|读数)|了(?:一下|一遍|重量))|"
+            r"(?:我们|我方|店里|团队).{0,12}称(?:出来|出|得|过|了|重|量)|电子秤|"
             r"(?:一(?:只|双)手|手部?|镜头).{0,16}(?:拿起|展示|放入).{0,16}(?:单层.{0,4}外套|对照)|"
             r"(?:单层外套|对照样衣|对比图像).{0,16}(?:拿起|展示|放入|对比))"
         )
@@ -523,6 +533,14 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:一位|同事|顾客|店长|孩子|观众|她|他).{0,24}"
             r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|拍了拍|转身离开|等(?:待)?).{0,32}"
         )
+        if isinstance(production, VideoProductionBundle) and not re.search(
+            r"^\s*无口播.{0,8}无对白.{0,8}无解说\s*$",
+            production.spoken_lines,
+        ):
+            for field in ("viewing_flow", "visual_actions", "sound_and_production"):
+                value = str(getattr(production, field))
+                if re.search(r"无口播.{0,8}无对白.{0,8}无解说", value):
+                    violations.append(FactViolation(field, value))
         for field, text in visible:
             for sentence in re.split(r"(?<=[。！？!?])", text):
                 if not sentence.strip():
@@ -644,7 +662,20 @@ class DeepSeekGenerator(ContentGenerator):
         weak_relation = weak_uncertainty is not None or (
             causal is not None and weak_extent is not None
         )
-        return weak_relation and safe_no_part is None
+        weakened_negative = re.search(
+            r"(?:无法|不能|不可).{0,10}"
+            r"(?:归因|原因|造成|导致|带来|增加|来自|贡献)",
+            sentence,
+        )
+        direct_no_attribution = re.search(
+            r"(?:无法|不能|不可)(?:(?:据此|直接)|(?:将|把).{0,16})?归因|"
+            r"(?:无法|不能|不可)(?:确认|确定|证明).{0,16}(?:原因|归因)",
+            sentence,
+        )
+        return safe_no_part is None and (
+            weak_relation
+            or (weakened_negative is not None and direct_no_attribution is None)
+        )
 
     @staticmethod
     def _generalizes_sample_comparison(sentence: str) -> bool:
