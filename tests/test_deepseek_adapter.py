@@ -1164,6 +1164,27 @@ def test_deepseek_adapter_rejects_no_voice_direction_when_spoken_copy_exists() -
     assert {violation.field for violation in violations} == {"visual_actions"}
 
 
+def test_deepseek_adapter_rejects_no_voice_subtitle_when_spoken_copy_exists() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
+        "标题",
+        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
+        VideoProductionBundle(
+            "导读",
+            "这是一段完整口播。",
+            "画面展示当前商品。",
+            "无口播、无对白、无解说",
+            "声音",
+            "首帧",
+            "观看链",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {"subtitles"}
+
+
 def test_deepseek_adapter_accepts_a_consistent_no_voice_video() -> None:
     no_voice = "无口播、无对白、无解说"
     violations = DeepSeekGenerator._boundary_violations(

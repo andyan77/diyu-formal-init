@@ -273,7 +273,13 @@ class DeepSeekGenerator(ContentGenerator):
                     "待修字段只能保留两面可用这个已知事实。"
                 )
             if any(
-                violation.field in {"viewing_flow", "visual_actions", "sound_and_production"}
+                violation.field
+                in {
+                    "viewing_flow",
+                    "visual_actions",
+                    "subtitles",
+                    "sound_and_production",
+                }
                 and re.search(r"无口播.{0,8}无对白.{0,8}无解说", violation.fragment)
                 for violation in violations
             ):
@@ -559,7 +565,12 @@ class DeepSeekGenerator(ContentGenerator):
             r"^\s*无口播.{0,8}无对白.{0,8}无解说\s*$",
             production.spoken_lines,
         ):
-            for field in ("viewing_flow", "visual_actions", "sound_and_production"):
+            for field in (
+                "viewing_flow",
+                "visual_actions",
+                "subtitles",
+                "sound_and_production",
+            ):
                 value = str(getattr(production, field))
                 if re.search(r"无口播.{0,8}无对白.{0,8}无解说", value):
                     violations.append(FactViolation(field, value))
