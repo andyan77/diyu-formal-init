@@ -362,6 +362,11 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
   const [formalGrantsMaterialMaintenance, setFormalGrantsMaterialMaintenance] = useState(false);
   const [activationLink, setActivationLink] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!operatorId && operators.data?.length === 1) {
+      setOperatorId(operators.data[0].id);
+    }
+  }, [operatorId, operators.data]);
   const createAccount = useMutation({
     mutationFn: () => api<PublishingAccount>("/api/v1/tenant-management/publishing-accounts", {
       method: "POST",
@@ -392,7 +397,14 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
     <header className="page-heading"><p className="eyebrow">账号与操作人</p><h1>企业发布账号不是登录账号。</h1><p>多人可以运营同一企业发布账号；每一位内部、临时或外部代运营操作者都必须是单独登记的自然人身份。</p></header>
     {notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}
     <section className="account-grid">{accounts.data?.map(account => <article key={account.id} className="series-card"><p className="eyebrow">{account.channel}</p><h2>{account.name}</h2><p>企业表达身份：{account.content_role}</p><small>{account.voice_boundary}</small></article>)}</section>
-    <form className="series-create" onSubmit={event => { event.preventDefault(); if (newAccountName.trim() && contentRoleName.trim() && voiceBoundary.trim() && operatorId) createAccount.mutate(); }}>
+    <form className="series-create" onSubmit={event => {
+      event.preventDefault();
+      if (!newAccountName.trim() || !contentRoleName.trim() || !voiceBoundary.trim() || !operatorId) {
+        setNotice("请完整填写发布账号、平台和表达身份，并选择一位已登记操作者。");
+        return;
+      }
+      createAccount.mutate();
+    }}>
       <p>新建企业发布账号，同时建立独立表达身份，并授权一位已经登记的自然人操作者。</p>
       <input value={newAccountName} onChange={event => setNewAccountName(event.target.value)} placeholder="企业发布账号名称" maxLength={120} aria-label="企业发布账号名称" />
       <select value={channel} onChange={event => setChannel(event.target.value as CreatePublishingAccount["channel"])} aria-label="发布平台"><option value="抖音">抖音</option><option value="小红书">小红书</option><option value="微信视频号">微信视频号</option></select>
