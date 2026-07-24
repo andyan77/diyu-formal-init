@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from typing import Literal
+from typing import Literal, cast
 from uuid import UUID
 
 from fastapi import HTTPException, Request
 
 from src.gateway.api.settings import Settings
+from src.infrastructure.production_auth import (
+    LoginRateLimiter,
+    ModelRequestLimiter,
+    OpsSession,
+    ProductionAuthRepository,
+    TenantSession,
+)
 from src.shared.types import ContentTarget, DisplayScope, TrustedScope
 
 _COOKIE_NAME = "diyu_session"
@@ -65,6 +72,10 @@ class SessionAuthority:
     def scope(self) -> TrustedScope:
         return self._scope
 
+    @property
+    def secure_cookie(self) -> bool:
+        return False
+
     def _scope_for_user(self, user_id: UUID, account_id: UUID | None = None) -> TrustedScope:
         return TrustedScope(
             self._scope.tenant_id,
@@ -93,9 +104,7 @@ class SessionAuthority:
                 return candidate
         raise HTTPException(status_code=401, detail="缺少或无效的可信合成会话")
 
-    def _require_application(
-        self, request: Request, applications: tuple[ApplicationId, ...]
-    ) -> ApplicationId:
+    def _require_application(self, request: Request, applications: tuple[ApplicationId, ...]) -> ApplicationId:
         application = self.application(request)
         if application not in applications:
             raise HTTPException(status_code=403, detail="当前合成会话没有此入口资格")
@@ -151,14 +160,100 @@ class SessionAuthority:
         return self._scope_for_user(self._settings.demo_tenant_admin_user_id)
 
 
-def set_session_cookie(
-    response: object, authority: SessionAuthority, application: ApplicationId
-) -> None:
+def set_session_cookie(response: object, authority: SessionAuthority, application: ApplicationId) -> None:
     response.set_cookie(  # type: ignore[attr-defined]
         _COOKIE_NAME,
         authority.issue(application),
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=authority.secure_cookie,
+        max_age=60 * 60 * 8,
+    )
+
+
+class ProductionSessionAuthority:
+    """Formal production sessions; synthetic selector cookies are deliberately unsupported."""
+
+    def __init__(self, settings: Settings) -> None:
+        self.repository = ProductionAuthRepository(settings.app_database_url)
+        self.login_limiter = LoginRateLimiter(settings.login_rate_limit_per_minute)
+        self.model_limiter = ModelRequestLimiter(
+            settings.model_global_concurrency,
+            settings.model_tenant_concurrency,
+            settings.model_tenant_rate_per_minute,
+        )
+
+    @property
+    def secure_cookie(self) -> bool:
+        return True
+
+    @staticmethod
+    def _tenant_identity(request: Request) -> TenantSession:
+        authority = cast(ProductionSessionAuthority, request.app.state.session_authority)
+        token = request.cookies.get(_COOKIE_NAME, "")
+        session = authority.repository.load_tenant_session(token) if token else None
+        if session is None:
+            raise HTTPException(status_code=401, detail="请先通过当前正式入口登录")
+        return session
+
+    def application(self, request: Request) -> ApplicationId:
+        return cast(ApplicationId, self._tenant_identity(request).audience)
+
+    def require_content(self, request: Request) -> TrustedScope:
+        identity = self._tenant_identity(request)
+        if identity.audience != "tenant-user":
+            raise HTTPException(status_code=403, detail="当前正式会话没有租户用户入口资格")
+        return self.repository.content_scope(identity)
+
+    def require_content_target(self, request: Request, target: ContentTarget) -> TrustedScope:
+        identity = self._tenant_identity(request)
+        if identity.audience != "tenant-user":
+            raise HTTPException(status_code=403, detail="当前正式会话没有租户用户入口资格")
+        return self.repository.content_scope(identity, target)
+
+    def require_display(self, request: Request) -> DisplayScope:
+        identity = self._tenant_identity(request)
+        if identity.audience != "tenant-user":
+            raise HTTPException(status_code=403, detail="当前正式会话没有租户用户入口资格")
+        return self.repository.display_scope(identity)
+
+    def require_user_portal(self, request: Request) -> TrustedScope:
+        identity = self._tenant_identity(request)
+        if identity.audience != "tenant-user":
+            raise HTTPException(status_code=403, detail="当前正式会话没有租户用户入口资格")
+        return self.repository.content_scope(identity)
+
+    def require_management(self, request: Request) -> TrustedScope:
+        identity = self._tenant_identity(request)
+        if identity.audience != "tenant-admin":
+            raise HTTPException(status_code=403, detail="当前正式会话没有租户管理入口资格")
+        return self.repository.manager_scope(identity)
+
+    def require_ops(self, request: Request) -> OpsSession:
+        token = request.cookies.get("diyu_ops_session", "")
+        session = self.repository.load_operator_session(token) if token else None
+        if session is None:
+            raise HTTPException(status_code=401, detail="请先通过平台运维入口完成密码和 MFA 登录")
+        return session
+
+
+def set_production_tenant_cookie(response: object, token: str) -> None:
+    response.set_cookie(  # type: ignore[attr-defined]
+        _COOKIE_NAME,
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=True,
+        max_age=60 * 60 * 8,
+    )
+
+
+def set_production_ops_cookie(response: object, token: str) -> None:
+    response.set_cookie(  # type: ignore[attr-defined]
+        "diyu_ops_session",
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=True,
         max_age=60 * 60 * 8,
     )

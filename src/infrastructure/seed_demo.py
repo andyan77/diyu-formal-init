@@ -55,6 +55,10 @@ def seed_demo() -> None:
             "INSERT INTO tenants (id, name) VALUES (%s, %s) ON CONFLICT (id) DO NOTHING",
             (TENANT_ID, "折线之间演示租户"),
         )
+        cursor.execute(
+            "INSERT INTO ops_tenant_registry (tenant_id) VALUES (%s) ON CONFLICT (tenant_id) DO NOTHING",
+            (TENANT_ID,),
+        )
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
         cursor.execute(
             "INSERT INTO organizations (id,tenant_id,name) VALUES (%s,%s,%s) ON CONFLICT (id) DO NOTHING",

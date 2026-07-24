@@ -155,7 +155,9 @@ def upgrade() -> None:
             "WITH CHECK (tenant_id = current_setting('app.tenant_id')::uuid)"
         )
         op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO diyu_app")
-    op.execute("GRANT CONNECT ON DATABASE diyu_m3 TO diyu_app")
+    op.execute(
+        "DO $$ BEGIN EXECUTE format('GRANT CONNECT ON DATABASE %I TO diyu_app', current_database()); END $$"
+    )
     op.execute("REVOKE ALL ON tenants FROM PUBLIC")
 
 

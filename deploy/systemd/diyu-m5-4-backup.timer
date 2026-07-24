@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the 笛语 M5-4 backup once each day
+
+[Timer]
+OnCalendar=*-*-* 03:17:00 UTC
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

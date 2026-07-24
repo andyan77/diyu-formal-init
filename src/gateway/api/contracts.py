@@ -140,3 +140,41 @@ class CreatePublishingAccountRequest(BaseModel):
     content_role_name: str = Field(min_length=1, max_length=80)
     voice_boundary: str = Field(min_length=1, max_length=500)
     operator_id: UUID
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=3, max_length=80)
+    password: str = Field(min_length=12, max_length=512)
+
+
+class OpsLoginRequest(LoginRequest):
+    totp_code: str = Field(pattern=r"^[0-9]{6}$")
+
+
+class SetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    password: str = Field(min_length=12, max_length=512)
+
+
+class ChangePasswordRequest(SetPasswordRequest):
+    current_password: str = Field(min_length=12, max_length=512)
+
+
+class CreateTenantUserRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=80)
+    username: str = Field(min_length=3, max_length=80)
+    account_id: UUID | None = None
+    grants_tenant_management: bool = False
+
+
+class CreateTenantRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_name: str = Field(min_length=2, max_length=120)
+    administrator_name: str = Field(min_length=1, max_length=80)
+    administrator_username: str = Field(min_length=3, max_length=80)

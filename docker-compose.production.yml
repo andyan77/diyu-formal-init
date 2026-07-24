@@ -1,0 +1,65 @@
+services:
+  app:
+    image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
+    env_file:
+      - /etc/diyu/app.env
+    network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=64m
+    restart: unless-stopped
+    init: true
+    user: "65532:65532"
+    command:
+      - uv
+      - run
+      - --no-sync
+      - uvicorn
+      - src.gateway.api.app:create_app
+      - --factory
+      - --host
+      - 127.0.0.1
+      - --port
+      - "18000"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - 127.0.0.1
+
+  migrate:
+    image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
+    env_file:
+      - /etc/diyu/migrator.env
+    network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=64m
+    profiles: ["maintenance"]
+    command: ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
+
+  seed:
+    image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
+    env_file:
+      - /etc/diyu/migrator.env
+    network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=64m
+    profiles: ["maintenance"]
+    command:
+      - sh
+      - -ec
+      - uv run --no-sync python -m src.infrastructure.seed_demo && uv run --no-sync python -m src.infrastructure.system_asset_catalog
+
+  bootstrap:
+    image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
+    env_file:
+      - /etc/diyu/app.env
+      - /etc/diyu/bootstrap.env
+    network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=64m
+    volumes:
+      - /etc/diyu:/run/diyu-ops
+    profiles: ["maintenance"]
+    command: ["uv", "run", "--no-sync", "python", "-m", "src.infrastructure.production_bootstrap"]

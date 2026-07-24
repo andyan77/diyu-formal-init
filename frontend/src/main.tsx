@@ -10,6 +10,7 @@ interface Context {
   generator_mode: "stub" | "deepseek";
   identity: Record<string, string>;
   targets?: Array<{ value: Target; label: string }>;
+  formal_runtime?: boolean;
 }
 
 interface ContentVersion {
@@ -171,7 +172,7 @@ function App(): JSX.Element {
   });
   if (isEntry || bootstrap === null) return <Entry />;
   if (!context) return <Loading label="正在确认当前工作身份……" />;
-  if (location.pathname.startsWith("/tenant-admin")) return <TenantManagementShell context={context}><AdminWorkspace /></TenantManagementShell>;
+  if (location.pathname.startsWith("/tenant-admin")) return <TenantManagementShell context={context}><AdminWorkspace context={context} /></TenantManagementShell>;
   if (location.pathname.startsWith("/user")) return <UserPortal context={context} />;
   if (location.pathname.startsWith("/display")) return <WorkbenchShell context={context}><DisplayWorkbench context={context} /></WorkbenchShell>;
   return <WorkbenchShell context={context}><ContentWorkbench context={context} /></WorkbenchShell>;
@@ -194,13 +195,15 @@ function UserPortal({ context }: { context: Context }): JSX.Element {
   const [boundary, setBoundary] = useState(identity.persona_boundary ?? "");
   const [notice, setNotice] = useState<string | null>(null);
   const persona = useMutation({ mutationFn: () => api<{ version: number }>("/api/v1/user/default-persona", { method: "POST", body: JSON.stringify({ name, boundary }) }), onSuccess: value => setNotice(`本人默认表达人设已更新为 V${value.version}。`), onError: error => setNotice(error.message) });
+  const contentEntry = context.formal_runtime ? "/content" : "/ui/select/content";
+  const displayEntry = context.formal_runtime ? "/display" : "/ui/select/display";
   return <main className="entry-page user-portal">
     <header className="entry-brand"><img src="/assets/diyu-logo-horizontal.svg" alt="笛语" /></header>
     <section className="entry-copy"><p className="eyebrow">租户用户工作台</p><h1>{identity.operator}，今天要完成什么？</h1><p>这里不显示租户管理页面或导航；业务工作只使用当前自然人已获授权的身份。</p></section>
     {notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}
     <section className="entry-choices" aria-label="选择业务应用">
-      <a href="/ui/select/content" className="entry-choice"><span>对外</span><strong>内容生产</strong><small>把判断整理成可直接制作与发布的成品。</small></a>
-      <a href="/ui/select/display" className="entry-choice"><span>对内</span><strong>陈列搭配</strong><small>把本次库存整理成墙面双层挂杆执行方案。</small></a>
+      <a href={contentEntry} className="entry-choice"><span>对外</span><strong>内容生产</strong><small>把判断整理成可直接制作与发布的成品。</small></a>
+      <a href={displayEntry} className="entry-choice"><span>对内</span><strong>陈列搭配</strong><small>把本次库存整理成墙面双层挂杆执行方案。</small></a>
     </section>
     <form className="persona-card" onSubmit={event => { event.preventDefault(); persona.mutate(); }}><p className="eyebrow">本人默认表达人设</p><p>每个自然人只有这一份可维护的人设；它不等于企业发布账号的表达身份。</p><input value={name} onChange={event => setName(event.target.value)} maxLength={80} aria-label="本人默认表达人设名称" /><textarea value={boundary} onChange={event => setBoundary(event.target.value)} maxLength={500} aria-label="本人默认表达人设边界" /><button className="primary" disabled={persona.isPending}>{persona.isPending ? "正在保存……" : "更新我的默认人设"}</button></form>
   </main>;
@@ -216,12 +219,14 @@ function WorkbenchShell({ context, children }: { context: Context; children: Rea
   const contentActive = location.pathname.startsWith("/content");
   const displayActive = location.pathname.startsWith("/display");
   const identity = context.identity;
+  const contentEntry = context.formal_runtime ? "/content" : "/ui/select/content";
+  const displayEntry = context.formal_runtime ? "/display" : "/ui/select/display";
   return <div className="app-frame">
     <header className="topbar">
       <Link className="wordmark" to="/user"><img src="/assets/diyu-logo-horizontal.svg" alt="笛语" /></Link>
       <nav className="app-switcher" aria-label="工作域">
-        <a className={contentActive ? "active" : ""} href="/ui/select/content">内容生产</a>
-        <a className={displayActive ? "active" : ""} href="/ui/select/display">陈列搭配</a>
+        <a className={contentActive ? "active" : ""} href={contentEntry}>内容生产</a>
+        <a className={displayActive ? "active" : ""} href={displayEntry}>陈列搭配</a>
       </nav>
       <details className="identity-bar"><summary><span>{identity.operator}</span><span className="identity-org">· {identity.organization}</span></summary><dl>
         <div><dt>实际操作人</dt><dd>{identity.operator}</dd></div>
@@ -319,12 +324,12 @@ function DisplayWorkbench({ context }: { context: Context }): JSX.Element {
   </section>;
 }
 
-function AdminWorkspace(): JSX.Element {
+function AdminWorkspace({ context }: { context: Context }): JSX.Element {
   const [section, setSection] = useState<"readiness" | "operators">("readiness");
-  return <section className="admin-workspace"><aside className="sidebar"><p className="sidebar-label">租户管理</p><nav><button className={section === "readiness" ? "active" : ""} onClick={() => setSection("readiness")}>入驻与就绪</button><button className={section === "operators" ? "active" : ""} onClick={() => setSection("operators")}>账号与操作人</button></nav></aside><main className="admin-main">{section === "readiness" && <ReadinessPanel />}{section === "operators" && <OperatorPanel />}</main></section>;
+  return <section className="admin-workspace"><aside className="sidebar"><p className="sidebar-label">租户管理</p><nav><button className={section === "readiness" ? "active" : ""} onClick={() => setSection("readiness")}>入驻与就绪</button><button className={section === "operators" ? "active" : ""} onClick={() => setSection("operators")}>账号与操作人</button></nav></aside><main className="admin-main">{section === "readiness" && <ReadinessPanel />}{section === "operators" && <OperatorPanel formalRuntime={context.formal_runtime === true} />}</main></section>;
 }
 
-function OperatorPanel(): JSX.Element {
+function OperatorPanel({ formalRuntime }: { formalRuntime: boolean }): JSX.Element {
   const client = useQueryClient();
   const operators = useQuery({ queryKey: ["operators"], queryFn: () => api<Operator[]>("/api/v1/tenant-management/operators") });
   const accounts = useQuery({ queryKey: ["publishing-accounts"], queryFn: () => api<PublishingAccount[]>("/api/v1/tenant-management/publishing-accounts") });
@@ -335,6 +340,10 @@ function OperatorPanel(): JSX.Element {
   const [operatorId, setOperatorId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [accountId, setAccountId] = useState("");
+  const [formalName, setFormalName] = useState("");
+  const [formalUsername, setFormalUsername] = useState("");
+  const [formalAccountId, setFormalAccountId] = useState("");
+  const [activationLink, setActivationLink] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const createAccount = useMutation({
     mutationFn: () => api<PublishingAccount>("/api/v1/tenant-management/publishing-accounts", {
@@ -361,6 +370,7 @@ function OperatorPanel(): JSX.Element {
     onError: error => setNotice(error.message),
   });
   const create = useMutation({ mutationFn: () => api<Operator>("/api/v1/tenant-management/operators", { method: "POST", body: JSON.stringify({ display_name: displayName, account_id: accountId }) }), onSuccess: () => { setDisplayName(""); setAccountId(""); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("已创建最小自然人操作身份并授予指定企业发布账号。未创建或共享密码。"); }, onError: error => setNotice(error.message) });
+  const createFormalUser = useMutation({ mutationFn: () => api<{ activation_link: string }>("/api/v1/tenant-management/users", { method: "POST", body: JSON.stringify({ display_name: formalName, username: formalUsername, account_id: formalAccountId || null }) }), onSuccess: value => { setFormalName(""); setFormalUsername(""); setFormalAccountId(""); setActivationLink(value.activation_link); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("已建立独立自然人登录身份；请安全复制一次性激活链接交付本人。"); }, onError: error => setNotice(error.message) });
   return <>
     <header className="page-heading"><p className="eyebrow">账号与操作人</p><h1>企业发布账号不是登录账号。</h1><p>多人可以运营同一企业发布账号；每一位内部、临时或外部代运营操作者都必须是单独登记的自然人身份。</p></header>
     {notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}
@@ -374,7 +384,7 @@ function OperatorPanel(): JSX.Element {
       <select value={operatorId} onChange={event => setOperatorId(event.target.value)} aria-label="已登记操作者"><option value="">选择已登记操作者</option>{operators.data?.map(operator => <option key={operator.id} value={operator.id}>{operator.display_name} · {operator.organization}</option>)}</select>
       <button className="primary" disabled={createAccount.isPending}>{createAccount.isPending ? "正在创建……" : "创建账号并授权操作者"}</button>
     </form>
-    <form className="series-create" onSubmit={event => { event.preventDefault(); if (displayName.trim() && accountId) create.mutate(); }}><p>登记一位实际操作者（不设置密码；生产开户与一次性激活在 M5-4）。</p><input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">授予哪个企业发布账号</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><button className="primary" disabled={create.isPending}>{create.isPending ? "正在登记……" : "登记并授权操作人"}</button></form>
+    {formalRuntime ? <form className="series-create" onSubmit={event => { event.preventDefault(); if (formalName.trim() && formalUsername.trim()) createFormalUser.mutate(); }}><p>创建独立自然人登录身份。发布账号不是密码；每位内部或外部操作者都必须各自激活并登录。</p><input value={formalName} onChange={event => setFormalName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><input value={formalUsername} onChange={event => setFormalUsername(event.target.value)} placeholder="全平台唯一登录用户名" minLength={3} maxLength={80} /><select value={formalAccountId} onChange={event => setFormalAccountId(event.target.value)}><option value="">暂不授予发布账号（可稍后配置）</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><button className="primary" disabled={createFormalUser.isPending}>{createFormalUser.isPending ? "正在创建……" : "创建并生成激活链接"}</button>{activationLink && <p className="notice">一次性激活链接：<code>{activationLink}</code></p>}</form> : <form className="series-create" onSubmit={event => { event.preventDefault(); if (displayName.trim() && accountId) create.mutate(); }}><p>登记一位实际操作者（不设置密码；生产开户与一次性激活在 M5-4）。</p><input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">授予哪个企业发布账号</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><button className="primary" disabled={create.isPending}>{create.isPending ? "正在登记……" : "登记并授权操作人"}</button></form>}
     <section className="readiness-list">{operators.data?.map(operator => <article className="readiness-card ready" key={operator.id}><div><p className="eyebrow">{operator.manages_tenant ? "具备租户管理资格" : "业务操作人"}</p><h2>{operator.display_name}</h2><p>{operator.organization} · {operator.publishing_accounts || "尚未授予发布账号"}</p><small>{operator.default_persona ? `本人默认表达人设：${operator.default_persona}` : "尚未设置本人默认表达人设"}</small></div></article>)}</section>
   </>;
 }
