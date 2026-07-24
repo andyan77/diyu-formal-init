@@ -359,7 +359,7 @@ class DeepSeekGenerator(ContentGenerator):
         )
         unverified_capture = re.compile(
             r"(?:实测|称(?:重(?:台|画面|提示音|读数)|了一下)|电子秤|"
-            r"(?:手部?|镜头).{0,16}(?:拿起|展示|放入).{0,16}(?:单层外套|对照)|"
+            r"(?:一(?:只|双)手|手部?|镜头).{0,16}(?:拿起|展示|放入).{0,16}(?:单层.{0,4}外套|对照)|"
             r"(?:单层外套|对照样衣|对比图像).{0,16}(?:拿起|展示|放入|对比))"
         )
         invalid_weight_explanation = re.compile(
