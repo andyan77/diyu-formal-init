@@ -22,7 +22,7 @@ test -f /etc/diyu/migrator.env
 grep -q '^DEEPSEEK_API_KEY=.' /etc/diyu/app.env
 
 if [[ ! -d "$repository/.git" ]]; then
-  git clone --no-checkout "$repository_url" "$repository"
+  git clone --quiet "$repository_url" "$repository"
 fi
 if [[ -n "$(git -C "$repository" status --porcelain)" ]]; then
   echo "Refusing to overwrite local deployment repository changes." >&2
