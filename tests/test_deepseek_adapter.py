@@ -207,6 +207,17 @@ def test_deepseek_adapter_puts_p5_inner_layer_boundary_in_system_instruction(
     assert "绝不补充内搭颜色、款式或任何衣物部位" in str(FakeClient.requests[0]["json"])
 
 
+def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_named(
+    generation_input: GenerationInput,
+) -> None:
+    request = GenerationInput(**{**generation_input.__dict__, "products": ()})
+
+    prompt = DeepSeekGenerator._generation_prompt(request)
+
+    assert "当前没有已点名商品或可用商品事实" in prompt
+    assert "不得给任何衣物补写功能、版型、质感、性能、场合适配或穿着效果" in prompt
+
+
 def test_deepseek_adapter_does_not_retry_nonrecoverable_status(
     monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
 ) -> None:
