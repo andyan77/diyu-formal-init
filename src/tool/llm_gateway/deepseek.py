@@ -178,8 +178,9 @@ class DeepSeekGenerator(ContentGenerator):
             system = "你是笛语完整内容编写器。只交付 JSON，不展示提示词、路由、规则或推理。"
             if not request.products:
                 system += (
-                    "当前没有已点名商品或商品事实。不得把某件商品的具体属性、功能或现实经历写成已经确认；"
-                    "可以围绕用户给出的条件完成自然的穿衣选择、情绪、节奏和未来拍摄构思。"
+                    "当前没有已点名商品或商品事实。不得把某件商品的具体属性、功能或效果写成已经确认，"
+                    "也不得虚构已经发生的人物、对话、顾客/同事/孩子或现场事件；"
+                    "可以围绕用户给出的条件完成自然的穿衣选择、情绪、节奏和明确为未来安排的拍摄构思。"
                 )
             if format_attempt:
                 system += "上一次响应的字段缺失、为空或不是单个字符串；这次必须返回全部指定 JSON 字段，且每个字段都是非空中文字符串。"
@@ -204,8 +205,9 @@ class DeepSeekGenerator(ContentGenerator):
             repair_system = "你是笛语内容编写器。只交付修复后的 JSON，不展示规则、推理或后台信息。"
             if not request.products:
                 repair_system += (
-                    "当前没有已点名商品或商品事实。待修字段不得把某件商品的具体属性、功能或现实经历"
-                    "写成已经确认；条件性选择、情绪和未来拍摄构思可以保留。"
+                    "当前没有已点名商品或商品事实。待修字段不得把某件商品的具体属性、功能或效果"
+                    "写成已经确认，也不得虚构已经发生的人物、对话或现场事件；"
+                    "条件性选择、情绪和明确为未来安排的拍摄构思可以保留。"
                 )
             payload, repair_retries = self._request(
                 repair_system,
@@ -375,6 +377,14 @@ class DeepSeekGenerator(ContentGenerator):
         # grow into a fabricated inventory of technical variables such as a
         # lining or a process test.
         unprovided_technical_detail = re.compile(r"(?:里料|工艺)")
+        no_product_specific_assertion = re.compile(
+            r"(?:连衣裙|连体裤|阔腿裤|衬衫|西装|针织衫|T恤|外套|裤子|上衣).{0,32}"
+            r"(?:剪裁|面料|弹性|不皱|不垮|保暖|防水|透气|耐穿|显瘦|显高|适合|能(?:够|在)|会)"
+        )
+        invented_real_world_event = re.compile(
+            r"(?:一位|同事|顾客|店长|孩子|观众|她|他).{0,24}"
+            r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|拍了拍|转身离开|等(?:待)?).{0,32}"
+        )
         for field, text in visible:
             for sentence in re.split(r"(?<=[。！？!?])", text):
                 if not sentence.strip():
@@ -412,6 +422,19 @@ class DeepSeekGenerator(ContentGenerator):
                     and unsupported_product_assertion.search(sentence)
                     and not conditional
                     and not acknowledged_unknown
+                ):
+                    violations.append(FactViolation(field, sentence.strip()))
+                if (
+                    boundary.product_facts == "（无当前商品事实）"
+                    and no_product_specific_assertion.search(sentence)
+                    and not conditional
+                ):
+                    violations.append(FactViolation(field, sentence.strip()))
+                if (
+                    boundary.product_facts == "（无当前商品事实）"
+                    and invented_real_world_event.search(sentence)
+                    and not conditional
+                    and sentence not in boundary.explicit_premise
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if (

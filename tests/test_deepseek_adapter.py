@@ -227,7 +227,8 @@ def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_nam
     generator.generate(request)
 
     system = str(FakeClient.requests[0]["json"])
-    assert "不得把某件商品的具体属性、功能或现实经历写成已经确认" in system
+    assert "不得把某件商品的具体属性、功能或效果写成已经确认" in system
+    assert "不得虚构已经发生的人物、对话、顾客/同事/孩子或现场事件" in system
 
 
 def test_deepseek_adapter_allows_non_factual_clothing_choice_when_no_product_fact_exists() -> None:
@@ -241,6 +242,35 @@ def test_deepseek_adapter_allows_non_factual_clothing_choice_when_no_product_fac
     )
 
     assert violations == ()
+
+
+def test_deepseek_adapter_rejects_invented_product_details_and_events_without_product_facts() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "下午开完正式会议，再去接孩子。"),
+        "会议后的切换",
+        P1SemanticContract(
+            "穿深色连衣裙或连体裤，剪裁利落、面料有弹性。",
+            "同事问我：这身蹲下不皱，站起来不垮吗？",
+            "下午开完正式会议，再去接孩子。",
+        ),
+        VideoProductionBundle(
+            "导读",
+            "一位女性站在写字楼门口，准备去接孩子。",
+            "动作",
+            "字幕",
+            "声音",
+            "首帧",
+            "观看链",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert {item.field for item in violations} == {
+        "choice",
+        "boundary",
+        "spoken_lines",
+    }
 
 
 def test_deepseek_adapter_rejects_concrete_product_facts_that_conflict_with_current_input(
