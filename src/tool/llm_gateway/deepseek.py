@@ -293,6 +293,11 @@ class DeepSeekGenerator(ContentGenerator):
                     f"完整口播约有 {spoken_count} 个可读字符；待修自然时长必须足以自然说完"
                     "全部口播并完成画面，不能通过删口播或报不可能的短时长规避。"
                 )
+            if any(violation.field == "spoken_lines" for violation in violations):
+                repair_system += (
+                    "待修台词必须是一段可以直接说出的完整口播，不能只重复标题或问题；"
+                    "要自然完成入口、展开与收束，同时保持当前账号身份和事实边界。"
+                )
             if any(
                 violation.field
                 in {
@@ -629,10 +634,11 @@ class DeepSeekGenerator(ContentGenerator):
             r"针织|卫衣|T恤|牛仔|棉麻|连衣裙|童装|衬衫|裙子|外套|配饰|绿植)"
         )
         unprovided_capture_resource = re.compile(
-            r"(?:孩子|妈妈|爸爸|丈夫|一家三口|全家(?:人|合影)?|顾客|店员).{0,24}"
-            r"(?:出镜|入镜|背影|只露|展示|穿上|走向|跑开|转圈|合影|画面)"
-            r"|(?:店内|店门|门店|衣柜|衣架|收银台|购物车|家庭合照|手机相册).{0,24}"
-            r"(?:拍摄|镜头|画面|展示|显示|翻出|扫过|推近|滑动|拿出)"
+            r"(?:孩子|妈妈|爸爸|丈夫|一家三口|全家(?:人|合影)?|顾客|店员|"
+            r"店内|店门|门店|衣柜|衣架|收银台|购物车|家庭合照|手机相册)"
+        )
+        unsubstantiated_group_generalization = re.compile(
+            r"(?:很多|许多|不少|大多数|常见的).{0,8}(?:妈妈|爸爸|孩子|家庭|顾客|客人)"
         )
         has_provided_capture_resource = bool(
             re.search(r"(?:可以|可|会|让).{0,8}(?:出镜|拍摄)|现成素材|已经上传|我上传|就在门店拍", boundary.explicit_premise)
@@ -663,6 +669,10 @@ class DeepSeekGenerator(ContentGenerator):
                 if declared_seconds < minimum_seconds:
                     violations.append(
                         FactViolation("natural_duration", production.natural_duration)
+                    )
+                if declared_seconds >= 20 and spoken_count < 40:
+                    violations.append(
+                        FactViolation("spoken_lines", production.spoken_lines)
                     )
         for field, text in visible:
             for sentence in re.split(r"(?<=[。！？!?])", text):
@@ -732,6 +742,12 @@ class DeepSeekGenerator(ContentGenerator):
                     boundary.product_facts == "（无当前商品事实）"
                     and invented_real_world_event.search(sentence)
                     and not conditional
+                    and sentence not in boundary.explicit_premise
+                ):
+                    violations.append(FactViolation(field, sentence.strip()))
+                if (
+                    boundary.product_facts == "（无当前商品事实）"
+                    and unsubstantiated_group_generalization.search(sentence)
                     and sentence not in boundary.explicit_premise
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
@@ -1041,7 +1057,9 @@ class DeepSeekGenerator(ContentGenerator):
                 ("画面成立条件", contract.visual_dependency),
             )
         transform_sections: tuple[tuple[str, str], ...] = ()
-        if isinstance(production, VideoProductionBundle) and re.search(r"8\s*秒", production.natural_duration):
+        if isinstance(production, VideoProductionBundle) and re.search(
+            r"(?<!\d)8\s*秒", production.natural_duration
+        ):
             transform_sections = (("变换边界", "这是 8 秒窄主题版，不等同于原完整版本。"),)
         return (
             "标题："
@@ -1070,7 +1088,7 @@ class DeepSeekGenerator(ContentGenerator):
 按主要受众最终获得的价值判断；只有纯问候或情绪交流返回普通交流。凡是要求把具体商品观察、选择疑问、账号观察、近场回应或画面设想做成可发布内容的输入，必须选择一个内容价值，不能回落为普通交流。独立、可单独采用的新成果重新判断。
 帮助选择强调条件、改变条件和下一步；解释商品强调已知事实、限制与不能下的结论；建立人格强调账号怎样观察、判断和待人；经营关系强调近场信号、合法回应和可迁移许可；视觉造型强调必须由画面承重的穿着可能。
 解释商品必须以当前已点名且有已确认事实的商品为对象；当前没有已点名商品时不得选择解释商品。品牌、账号或家庭生活观点主要让受众认识账号怎样观察、判断和待人时，选择建立人格。
-当输入的主回报是让没到店、未参与原事件的人带走一句可迁移的门店关系许可（例如可以先看、不必解释、按自己的节奏靠近），即使同时提到店长性格、商品或镜头，也选经营关系。只有主回报是让受众认识账号/店长怎样观察、判断和待人，才选建立人格。明确要求“同一个人、同一动作、两面在画面中换重音”，且不要选择建议或商品说明时，选视觉造型；明确要求解释“双面不等于一件顶两件”、说明已知与未知时，选解释商品。
+经营关系必须有用户明确给出的真实评论、门店观察或近场事件；只有一个假设、一般问题或品牌关系观点而没有真实近场信号时，选择建立人格，不能把问题补成门店事实。当输入的主回报是让没到店、未参与原事件的人带走一句可迁移的门店关系许可，且已经有真实近场信号时，即使同时提到店长性格、商品或镜头，也选经营关系。只有主回报是让受众认识账号/店长怎样观察、判断和待人，才选建立人格。明确要求“同一个人、同一动作、两面在画面中换重音”，且不要选择建议或商品说明时，选视觉造型；明确要求解释“双面不等于一件顶两件”、说明已知与未知时，选解释商品。
 品牌：{request.brand.brand_name}；账号：{request.brand.account_name}；角色：{request.brand.content_role_name}；受众：{request.brand.audience_description}。
 当前已点名商品：{products}。
 用户输入：{request.weak_seed}"""

@@ -278,6 +278,47 @@ def test_p4_contract_does_not_embed_a_demo_store_name(
     assert "南城店账号" not in prompt
 
 
+def test_video_contract_rejects_a_question_only_script_for_a_long_declared_duration() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "为什么品牌内容不都写成卖货？"),
+        "不只卖货",
+        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
+        VideoProductionBundle(
+            "导读",
+            "为什么品牌内容不都写成卖货？",
+            "一人正对手机口播。",
+            "字幕",
+            "声音",
+            "首帧",
+            "观看链",
+            "45秒",
+            "发布",
+        ),
+    )
+
+    assert FactViolation("spoken_lines", "为什么品牌内容不都写成卖货？") in violations
+
+
+def test_eighteen_seconds_is_not_mislabeled_as_an_eight_second_transform() -> None:
+    body = DeepSeekGenerator._visible_body(
+        "标题",
+        VideoProductionBundle(
+            "导读",
+            "这是一段足以直接说出的完整口播文字，并且能够自然完成入口、展开和最后收束。",
+            "一人正对手机口播。",
+            "字幕",
+            "声音",
+            "首帧",
+            "观看链",
+            "18秒",
+            "发布",
+        ),
+        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
+    )
+
+    assert "8 秒窄主题版" not in body
+
+
 def test_deepseek_adapter_allows_non_factual_clothing_choice_when_no_product_fact_exists() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("（无当前商品事实）", "不要把任何一件衣服说成万能。"),
