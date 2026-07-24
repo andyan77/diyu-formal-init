@@ -529,7 +529,7 @@ def test_deepseek_adapter_projects_zx_c218_facts_without_erasing_known_pockets()
     assert "两面口袋均可正常使用" in product
     assert "960克" in product
     assert "650克" in product
-    assert "不能确认双面结构造成了其中任何一部分差异" in product
+    assert "没有结构测试，现有资料无法归因" in product
     assert "口袋情况未提供" not in product
 
 
@@ -836,6 +836,26 @@ def test_deepseek_adapter_uses_a_system_repair_guard_for_comparison_visuals(
     assert "当前只有对照重量数据，没有对照样衣拍摄事实" in str(FakeClient.requests[1]["json"])
 
 
+def test_deepseek_adapter_uses_a_system_repair_guard_for_weak_causal_negation(
+    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
+) -> None:
+    unsafe = _video_payload(spoken_lines="不能确认这310克是否完全由双面结构造成。")
+    repaired = '{"spoken_lines":"现有资料只有两份重量记录，没有结构测试，无法归因。"}'
+    FakeClient.responses = [
+        FakeResponse(200, {"choices": [{"message": {"content": unsafe}}]}),
+        FakeResponse(200, {"choices": [{"message": {"content": repaired}}]}),
+    ]
+    FakeClient.requests = []
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+
+    artifact = DeepSeekGenerator(
+        "https://compat.example/v1", "not-a-real-key", "verified-deepseek-model"
+    ).generate(generation_input)
+
+    assert "无法归因" in artifact.body
+    assert "不得把双面结构与重量差异组成因果句" in str(FakeClient.requests[1]["json"])
+
+
 def test_deepseek_adapter_rejects_an_invented_explanation_for_weight_difference() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
@@ -931,6 +951,29 @@ def test_deepseek_adapter_rejects_causal_degree_language_that_implies_partial_we
     )
 
     assert {violation.field for violation in violations} == {"tradeoff_or_limit"}
+
+
+def test_deepseek_adapter_rejects_an_unverified_claim_that_we_weighed_the_product() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
+        "标题",
+        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
+        VideoProductionBundle(
+            "导读",
+            "台词",
+            "动作",
+            "字幕",
+            "声音",
+            "首帧",
+            "观看链",
+            "时长",
+            "我们称了重量，结果很意外。",
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {
+        "release_caption_and_interaction"
+    }
 
 
 def test_deepseek_adapter_rejects_internal_copy_direction() -> None:

@@ -233,6 +233,14 @@ class DeepSeekGenerator(ContentGenerator):
                     "当前只有对照重量数据，没有对照样衣拍摄事实。待修视觉字段绝不能出现单层外套、"
                     "对照样衣、第二件商品、两件并排、称量或实物对比；重量只能作为当前商品旁的文字或口播数据。"
                 )
+            if any(
+                self._weakens_no_weight_attribution(violation.fragment)
+                for violation in violations
+            ):
+                repair_system += (
+                    "待修字段不得把双面结构与重量差异组成因果句，即使使用否定、疑问或不确定语气；"
+                    "不要讨论原因的程度、比例、主次或可能性，只说明现有资料无法归因。"
+                )
             if not request.products:
                 repair_system += (
                     "当前没有已点名商品或商品事实。待修字段不得把某件商品的具体属性、功能或效果"
@@ -466,7 +474,7 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:黑色|白色|灰色|棕色|高领|衬衫|针织衫|T恤).{0,8}(?:内搭|高领|衬衫|针织衫|T恤)"
         )
         unverified_capture = re.compile(
-            r"(?:实测|称(?:重(?:台|画面|提示音|读数)|了一下)|电子秤|"
+            r"(?:实测|称(?:重(?:台|画面|提示音|读数)|了(?:一下|一遍|重量))|电子秤|"
             r"(?:一(?:只|双)手|手部?|镜头).{0,16}(?:拿起|展示|放入).{0,16}(?:单层.{0,4}外套|对照)|"
             r"(?:单层外套|对照样衣|对比图像).{0,16}(?:拿起|展示|放入|对比))"
         )
@@ -991,7 +999,7 @@ class DeepSeekGenerator(ContentGenerator):
         ):
             return (
                 "当前只知道这两份样衣存在重量差异；没有结构测试，"
-                "不能确认双面结构造成了其中任何一部分差异。"
+                "现有资料无法归因。"
             )
         if isinstance(value, str) and value.strip():
             return (
