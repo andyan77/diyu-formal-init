@@ -454,8 +454,10 @@ class DeepSeekGenerator(ContentGenerator):
                     and not acknowledged_unknown
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
-                if (product_reference or product_contract) and unprovided_technical_detail.search(
-                    sentence
+                if (
+                    (product_reference or product_contract)
+                    and unprovided_technical_detail.search(sentence)
+                    and not acknowledged_unknown
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if isinstance(contract, P5SemanticContract) and unprovided_styling_detail.search(
@@ -749,22 +751,19 @@ class DeepSeekGenerator(ContentGenerator):
         violations: tuple[FactViolation, ...],
     ) -> str:
         fields = tuple(dict.fromkeys(violation.field for violation in violations))
-        flagged = "\n".join(f"- {item.field}：{item.fragment}" for item in violations)
-        local_draft = {field: draft[field] for field in fields}
+        del draft
         if boundary.product_facts == "（无当前商品事实）":
             return f"""只修复下列字段；不得返回任何未列字段，服务端会保留其余合格字段。
 当前没有可用商品事实。每个待修字段只能使用用户明确前提、抽象选择条件、改变条件和低成本验证动作。不得保留或新增任何具体衣物、颜色、配饰、材质、性能、部位或示例，也不得把原来的具体例子换成另一件具体例子。未来拍摄构思可以保留，但只能是抽象安排，不能描写未提供的服装、人物或现场。
 用户明确前提：{boundary.explicit_premise}
 服务器已记录每个待修字段中的违规片段；为避免复写错误事实，不向你回显这些原文。请依据用户明确前提，为下列字段重新写出自然、完整的替换值：{", ".join(fields)}。
 严格只返回一个 JSON 对象，键必须恰好为：{", ".join(fields)}。每个值必须是对应字段修复后的非空中文字符串。"""
-        return f"""仅局部修复被标记的字段；未列出的字段已经合格，服务端会原样保留，不能也不需要返回它们。
-待修字段原文：{json.dumps(local_draft, ensure_ascii=False)}
-具体违规片段：
-{flagged}
+        return f"""只修复下列字段；不得返回任何未列字段，服务端会保留其余合格字段。
+服务器已记录每个待修字段中的违规片段；为避免复写错误事实，不向你回显这些原文。请只依据可用商品事实和用户明确前提，重新写出下列字段：{", ".join(fields)}。
 可用商品事实：{boundary.product_facts}
 用户明确前提：{boundary.explicit_premise}
-只处理确定性问题：把未提供的商品性能、材质、工艺、部位设计动机或普遍穿着结果改成不作肯定主张的表达；删除由品牌、账号、角色或受众画像凭空形成的现实人物、门店、顾客、行为、对白、原因或结果；删除手机号、邮件地址、订单号和任何个人标识；删除“实测”、电子秤、称重画面/声音、当前不存在的对照样衣或把两件样衣放到镜头中的表述；删除用未测试原因解释重量差异的说法；删除面向创作者的内部写作指令，改成可直接对受众使用的自然语言。重量对照只能作为已提供的屏显或口播数据，不能冒充已经拍到或重新称量；若不能归因，只能明确当前没有结构测试、不能定量判断。每个已标记片段都必须从修复后的 JSON 消失，不得换词重复同一未经证实的主张。条件性、假设性、拍摄演绎、比喻、幽默、情绪、节奏和基于颜色纹理动作的视觉重音都可保留。不要整篇改写。
-严格只返回一个 JSON 对象，且键必须恰好为：{", ".join(fields)}。每个值必须是对应字段修复后的非空中文字符串；不得返回任何未列字段，不返回 body。"""
+不得新增商品性能、材质、工艺、未提供部位、设计动机、现实人物/事件或重新称量；不得把当前两份样衣资料改写成实拍对比。若当前资料不能归因，只能说明没有结构测试、不能定量判断。条件性、未来拍摄安排和自然表达可以保留。
+严格只返回一个 JSON 对象，键必须恰好为：{", ".join(fields)}。每个值必须是对应字段修复后的非空中文字符串。"""
 
     @staticmethod
     def _natural_product(sku: str, facts: dict[str, object]) -> str:
