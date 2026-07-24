@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import CancelledError, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Condition, Event
@@ -411,7 +411,7 @@ def test_formal_content_api_enforces_global_tenant_user_rate_limits_and_releases
 
     # Starlette may replace a BaseException raised by a sync worker with its
     # stopped-portal RuntimeError while closing that one test client.
-    with pytest.raises((RequestCancelled, RuntimeError)):
+    with pytest.raises((RequestCancelled, RuntimeError, CancelledError)):
         _post_content(app, tokens[(1, 1)], "取消-调用被取消")
     after_cancel = _content_counts(migrator_database_url, tenant_ids)
     assert after_cancel[2] == after_failure[2] + 1

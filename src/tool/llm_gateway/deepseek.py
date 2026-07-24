@@ -604,6 +604,10 @@ class DeepSeekGenerator(ContentGenerator):
             r"是.{0,8}代价|负担)|多.{0,6}重量|值得.{0,8}重量|换来.{0,8}重量)"
         )
         internal_copy_direction = re.compile(r"(?:需向受众说明|不应仅因.{0,16}说服)")
+        internal_identifier = re.compile(
+            r"(?:brand-expression-v\d+|schema[_ -]?version|asset[_ -]?id|DIYU-[A-Z0-9-]+)",
+            re.IGNORECASE,
+        )
         personal_identifier = re.compile(r"1[3-9]\d{9}|[\w.+-]+@[\w.-]+|订单号?\s*[:：]?\s*[A-Za-z0-9-]+")
         # A boundary may say that no structure test is available.  It must not
         # grow into a fabricated inventory of technical variables such as a
@@ -617,9 +621,10 @@ class DeepSeekGenerator(ContentGenerator):
             r"连衣裙|童装|衬衫|裙子|外套|裤子|上衣|配饰)"
         )
         invented_real_world_event = re.compile(
-            r"(?:一位|同事|顾客|店长|孩子|观众|她|他).{0,24}"
-            r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|拍了拍|转身离开|等(?:待)?).{0,32}"
-            r"|(?:我们|我).{0,16}(?:见过|遇到过|试过|观察到|经常被问|收到过|站在镜子前|试了又试)"
+            r"(?:一位|同事|顾客|店长|妈妈|爸爸|孩子|观众|她|他).{0,24}"
+            r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|整理|挑|抓|换|拍了拍|转身离开|等(?:待)?).{0,32}"
+            r"|(?:我们|我).{0,16}(?:见过|遇到过|试过|观察到|每天看到|常常看到|看到过|"
+            r"经常被问|收到过|站在镜子前|试了又试)"
             r"|(?:我|我们).{0,20}(?:最近|曾经|一直|太久|以前|当了|给孩子|家里|"
             r"观察过|买了|留下了|犹豫了|包括我自己|上周|昨天|刚才).{0,32}"
             r"|(?:每次|平时|往常).{0,24}(?:都会|会先|总会|常常)"
@@ -721,6 +726,8 @@ class DeepSeekGenerator(ContentGenerator):
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if internal_copy_direction.search(sentence):
+                    violations.append(FactViolation(field, sentence.strip()))
+                if internal_identifier.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
                 if personal_identifier.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))

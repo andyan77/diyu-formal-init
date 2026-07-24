@@ -421,6 +421,35 @@ def test_p3_does_not_claim_the_brand_received_questions_or_invent_creator_demogr
     }
 
 
+def test_p3_rejects_invented_family_scenes_and_internal_strategy_ids() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "为什么品牌内容不都写成卖货？"),
+        "不只卖货",
+        P3SemanticContract(
+            "妈妈整理衣领，孩子挑了一件外套，爸爸抓起旧卫衣。",
+            "先观察再理解。",
+            "当前品牌表达版本是 brand-expression-v1。",
+        ),
+        VideoProductionBundle(
+            "导读",
+            "我们每天看到家庭里的这些选择，所以不急着卖货。",
+            "一人正对手机口播。",
+            "字幕",
+            "声音",
+            "手写标题“不只卖货”",
+            "观看链",
+            "18秒",
+            "发布",
+        ),
+    )
+
+    assert {item.field for item in violations} == {
+        "persona_observation",
+        "brand_account_link",
+        "spoken_lines",
+    }
+
+
 def test_p1_and_p3_require_spoken_copy_but_p5_may_be_visual_only() -> None:
     production = VideoProductionBundle(
         "导读",
