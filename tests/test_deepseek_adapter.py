@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any
 from uuid import UUID
@@ -15,17 +16,23 @@ from src.shared.types import (
     BrandContext,
     GenerationInput,
     P1SemanticContract,
-    P2SemanticContract,
-    P3SemanticContract,
     P5SemanticContract,
     ProductFact,
     VideoProductionBundle,
 )
-from src.tool.llm_gateway.deepseek import DeepSeekGenerator, FactBoundary, FactViolation
+from src.tool.llm_gateway.deepseek import (
+    BoundaryContext,
+    DeepSeekGenerator,
+)
 
 
 class FakeResponse:
-    def __init__(self, status_code: int, payload: dict[str, Any], headers: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        payload: dict[str, Any],
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.status_code = status_code
         self._payload = payload
         self.headers = headers or {}
@@ -57,1707 +64,518 @@ def generation_input() -> GenerationInput:
     return GenerationInput(
         run_id=UUID("00000000-0000-0000-0000-000000000101"),
         task_id=UUID("00000000-0000-0000-0000-000000000102"),
-        weak_seed="先开完正式会议，再去接孩子。",
+        weak_seed="一家人一定要穿成同款，才算有家庭感吗？",
         primary_product="dressing_decision",
         revision_instruction=None,
         brand=BrandContext(
-            "折线之间",
-            "从容判断",
-            "先场合再活动",
-            "平等具体",
-            "折线之间品牌母账号·抖音",
-            "总部内容运营甲",
-            "折线之间总部",
-            "总部零售/服务专家",
-            "不冒充具体门店店长或顾客。",
-            "在多场景之间切换的城市女性。",
-            "V1.0-first-phase-data-ready",
+            "笛语服饰",
+            "家庭成员各自成立，也可以自然呼应",
+            "先尊重差异，再讨论呼应",
+            "真实、克制、有依据",
+            "笛语服饰品牌官方账号",
+            "当前运营者",
+            "笛语服饰",
+            "品牌官方 / 品牌定义者",
+            "表达品牌判断，不冒充自然人、门店岗位或顾客。",
+            "重视真实感受与家庭差异的人。",
+            "brand-expression-v1",
             "抖音",
             "视频",
-            "一人一部手机完成。",
+            "一名创作者、一部手机、普通室内环境。",
         ),
         target="douyin_video",
         media_format="video",
         platform_direction=direction_for("douyin_video"),
         active_domain_assets=(
-            ActiveAsset("B-TPO-001", "v0.1", "boundary", "场合", "先看场合。"),
-            ActiveAsset("C-COMMUTE-001", "v0.1", "boundary", "通勤", "兼顾转场。"),
-            ActiveAsset("D-DIRECT-001", "v0.1", "method", "直接", "明确选择。"),
-            ActiveAsset("D-CRAFT-001", "v0.1", "method", "细节", "保留分寸。"),
+            ActiveAsset(
+                "B-001",
+                "v1",
+                "brand",
+                "品牌基线",
+                "内容先建立理解和关系，不把生活强行变成卖货。",
+            ),
         ),
     )
 
 
+def _with(
+    request: GenerationInput,
+    **changes: object,
+) -> GenerationInput:
+    return GenerationInput(**{**request.__dict__, **changes})
+
+
 def _video_payload(**overrides: object) -> str:
     payload: dict[str, object] = {
-        "title": "选择",
-        "choice": "选择",
-        "boundary": "边界",
-        "next_action": "下一步",
-        "natural_guide": "自然导读",
-        "cover_or_first_frame": "首帧",
-        "viewing_flow": "完整观看链",
-        "spoken_lines": "台词",
-        "visual_actions": "拍摄安排：动作",
-        "subtitles": "字幕",
-        "sound_and_production": "一人手机",
-        "natural_duration": "自然时长",
-        "release_caption_and_interaction": "发布配文",
+        "title": "不必穿成同款",
+        "choice": "先保留每个人舒服的选择",
+        "boundary": "如果需要正式合照，再找一个自然呼应点",
+        "next_action": "先看每个人愿不愿意这样穿",
+        "natural_guide": "从同款是否等于家庭感进入",
+        "cover_or_first_frame": "手写标题：不必穿成同款",
+        "viewing_flow": "固定机位完成口播",
+        "spoken_lines": (
+            "一家人的家庭感，不一定来自穿成同款。我们更愿意先尊重每个人舒服的选择，再找一个自然的呼应点。"
+        ),
+        "visual_actions": "当前创作者正对手机自然口播。",
+        "subtitles": "家庭感不一定来自同款，先尊重每个人舒服的选择。",
+        "sound_and_production": "手机直接收录当前创作者的人声。",
+        "natural_duration": "12 秒",
+        "release_caption_and_interaction": "你更在意整齐，还是每个人都自在？",
     }
     payload.update(overrides)
     return json.dumps(payload, ensure_ascii=False)
 
 
-def test_deepseek_adapter_retries_429_with_retry_after(
-    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
-) -> None:
-    FakeClient.responses = [
-        FakeResponse(429, {}, {"Retry-After": "0"}),
-        FakeResponse(
-            200,
-            {
-                "choices": [
-                    {
-                        "message": {
-                            "content": _video_payload(
-                                title="从容选择",
-                                choice="保住分寸",
-                                boundary="活动受限时调整",
-                                next_action="走动确认",
-                                natural_guide="保住分寸",
-                                spoken_lines="活动受限时调整",
-                                visual_actions="走动确认",
-                                subtitles="走动确认",
-                            )
-                        }
-                    }
-                ],
-                "usage": {"total_tokens": 12},
-            },
-        ),
-    ]
-    FakeClient.requests = []
-    pauses: list[float] = []
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    monkeypatch.setattr(time, "sleep", pauses.append)
-    generator = DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model")
+def _completion(content: str, tokens: int = 0) -> FakeResponse:
+    payload: dict[str, Any] = {
+        "choices": [{"message": {"content": content}}],
+    }
+    if tokens:
+        payload["usage"] = {"total_tokens": tokens}
+    return FakeResponse(200, payload)
 
-    artifact = generator.generate(generation_input)
+
+def _judgement(
+    *violations: tuple[str, str, str],
+) -> str:
+    return json.dumps(
+        {
+            "violations": [
+                {
+                    "field": field,
+                    "fragment": fragment,
+                    "reason_code": reason,
+                }
+                for field, fragment, reason in violations
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+
+def _install_fake(
+    monkeypatch: pytest.MonkeyPatch,
+    responses: list[FakeResponse],
+) -> None:
+    FakeClient.responses = responses
+    FakeClient.requests = []
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+
+
+def test_generation_compiles_one_ephemeral_boundary_context(
+    generation_input: GenerationInput,
+) -> None:
+    context = BoundaryContext.from_request(generation_input)
+    prompt = DeepSeekGenerator._generation_prompt(generation_input, context)
+
+    assert "可信表达身份" in prompt
+    assert generation_input.brand.account_name in prompt
+    assert generation_input.brand.content_role_name in prompt
+    assert generation_input.brand.content_role_boundary in prompt
+    assert "已确认事实" in prompt
+    assert generation_input.brand.positioning in prompt
+    assert "用户本次前提" in prompt
+    assert generation_input.weak_seed in prompt
+    assert "品牌观点与条件性判断" in prompt
+    assert "当前可用制作资源" in prompt
+    assert "话题中出现对象不表示" in prompt
+    assert "当前创作者也不能扮演该对象" in prompt
+    assert "场地可用也不自动证明场地内的任何实物可用" in prompt
+    assert "第一人称只能表达当前品牌观点或当前拍摄动作" in prompt
+    assert "不能写成门店已经执行的服务或普遍政策" in prompt
+    assert "没有明确提供的人物、商品、衣物、图片" in prompt
+    assert "B-001" not in prompt
+    assert "schema_version" not in prompt
+
+
+def test_semantic_judge_scans_every_field_under_closed_world_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    _install_fake(monkeypatch, [_completion(_judgement())])
+
+    DeepSeekGenerator(
+        "https://compat.example/v1",
+        "not-a-real-key",
+        "verified-deepseek-model",
+    )._semantic_boundary_violations(
+        BoundaryContext.from_request(generation_input),
+        json.loads(_video_payload()),
+    )
+
+    request_json = FakeClient.requests[0]["json"]
+    assert isinstance(request_json, dict)
+    prompt = str(request_json["messages"])
+    assert "边界未明确提供的事实或资源一律视为不存在" in prompt
+    assert "对每个候选字段分别核对" in prompt
+    assert "用户只是在话题中提到某类人，不构成账号具备该身份" in prompt
+    assert "让该对象出镜、行动、发声" in prompt
+
+
+def test_adapter_retries_provider_429_without_adding_a_boundary_retry_layer(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    _install_fake(
+        monkeypatch,
+        [
+            FakeResponse(429, {}, {"Retry-After": "0"}),
+            _completion(_video_payload(), tokens=10),
+            _completion(_judgement(), tokens=2),
+        ],
+    )
+    pauses: list[float] = []
+    monkeypatch.setattr(time, "sleep", pauses.append)
+
+    artifact = DeepSeekGenerator(
+        "https://compat.example/v1",
+        "not-a-real-key",
+        "verified-deepseek-model",
+    ).generate(generation_input)
 
     assert artifact.model == "verified-deepseek-model"
     assert artifact.retry_count == 1
     assert artifact.provider_usage == {"total_tokens": 12}
     assert pauses == [0.0]
+    assert len(FakeClient.requests) == 3
     request_json = FakeClient.requests[1]["json"]
     assert isinstance(request_json, dict)
-    assert request_json["max_tokens"] == 4096
     assert request_json["temperature"] == 0.0
     assert request_json["thinking"] == {"type": "disabled"}
     assert request_json["response_format"] == {"type": "json_object"}
-    request_payload = str(request_json)
-    assert "总部零售/服务专家" in request_payload
-    assert "在多场景之间切换的城市女性" in request_payload
-    assert "V1.0-first-phase-data-ready" in request_payload
-    assert "抖音／视频" in request_payload
-    assert "先看场合。" in request_payload
-    assert "保留分寸。" in request_payload
-    assert "B-TPO-001" not in request_payload
-    assert "v0.1" not in request_payload
-    assert "用户明确讲述为真实经历的人物、事件和对白可作为本次前提" in request_payload
-    assert "不得擅自变成妈妈、爸爸、孩子、创始人、研发、店长、店员或顾客" in request_payload
-    assert "画面只能使用当前一名创作者和普通室内条件" in request_payload
 
 
-def test_deepseek_adapter_does_not_turn_a_visual_plan_into_a_word_blacklist(
-    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
+@pytest.mark.parametrize(
+    ("field", "unsafe", "reason", "repaired"),
+    [
+        (
+            "spoken_lines",
+            "作为孩子的妈妈，我每天都这样选择。",
+            "untrusted_role",
+            "品牌更愿意先听见每个人的感受，再表达自己的判断。",
+        ),
+        (
+            "brand_account_link",
+            "我们所有门店都已经要求店员不主动打扰顾客。",
+            "invented_actuality",
+            "品牌主张给每个人留出安静判断的空间。",
+        ),
+        (
+            "visual_actions",
+            "让一家三口穿着三套商品在门店里走动。",
+            "unsupported_resource",
+            "当前创作者正对手机，用手写关键词辅助口播。",
+        ),
+    ],
+)
+def test_semantic_boundary_repairs_properties_not_frozen_copy(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+    field: str,
+    unsafe: str,
+    reason: str,
+    repaired: str,
 ) -> None:
-    request = GenerationInput(
-        **{
-            **generation_input.__dict__,
-            "primary_product": "visual_styling_story",
-            "weak_seed": "同一身内搭，只改变外套朝外表面。",
-        }
-    )
-    FakeClient.responses = [
-        FakeResponse(
-            200,
-            {
-                "choices": [
-                    {
-                        "message": {
-                            "content": _video_payload(
-                                real_product_anchor="真实锚点",
-                                visible_styling_proposition="可见命题",
-                                visual_dependency="成立条件",
-                            )
-                        }
-                    }
-                ]
-            },
+    initial = json.loads(_video_payload())
+    if field == "brand_account_link":
+        initial["brand_account_link"] = unsafe
+        initial["persona_observation"] = "品牌先理解真实感受"
+        initial["audience_return"] = "受众保留自己的判断"
+        request = _with(
+            generation_input,
+            primary_product="brand_life_narrative",
         )
-    ]
-    FakeClient.requests = []
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    generator = DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model")
+    else:
+        initial[field] = unsafe
+        request = generation_input
+    _install_fake(
+        monkeypatch,
+        [
+            _completion(json.dumps(initial, ensure_ascii=False)),
+            _completion(_judgement((field, unsafe, reason))),
+            _completion(json.dumps({field: repaired}, ensure_ascii=False)),
+            _completion(_judgement()),
+        ],
+    )
 
-    generator.generate(request)
+    artifact = DeepSeekGenerator(
+        "https://compat.example/v1",
+        "not-a-real-key",
+        "verified-deepseek-model",
+    ).generate(request)
 
-    assert "绝不补充内搭颜色、款式或任何衣物部位" not in str(FakeClient.requests[0]["json"])
+    assert unsafe not in artifact.body
+    assert repaired in artifact.body
+    assert {receipt.field for receipt in artifact.fact_repair_receipts} == {field}
+    repair_json = FakeClient.requests[2]["json"]
+    assert isinstance(repair_json, dict)
+    repair_text = str(repair_json["messages"])
+    assert reason in repair_text
+    assert "只修复下列字段" in repair_text
+    assert "固定安全文案" in repair_text
+    assert len(FakeClient.requests) == 4
 
 
-def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_named(
+def test_repair_fails_closed_when_the_same_boundary_still_fails(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,
 ) -> None:
-    request = GenerationInput(**{**generation_input.__dict__, "products": ()})
-
-    prompt = DeepSeekGenerator._generation_prompt(request)
-
-    assert "当前没有已点名商品或可用商品事实" in prompt
-    assert "不得把某件未提供的商品属性、功能、效果或现实经历" in prompt
-    assert "一般方法或假设可以使用颜色、品类与搭配例子" in prompt
-    assert "只是讨论对象，不是可用人物、素材或现场" in prompt
-    assert "自然的选择、情绪、节奏和未来拍摄构思" in prompt
-
-    FakeClient.responses = [FakeResponse(200, {"choices": [{"message": {"content": _video_payload()}}]})]
-    FakeClient.requests = []
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    generator = DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model")
-
-    generator.generate(request)
-
-    system = str(FakeClient.requests[0]["json"])
-    assert "不得把某件商品的具体属性、功能或效果写成已经确认" in system
-    assert "不得虚构已经发生的人物、对话、顾客/同事/孩子或现场事件" in system
-    assert "默认只使用当前内容角色、一名创作者、一部手机和普通室内条件" in system
-
-
-def test_deepseek_adapter_rejects_turning_a_family_question_into_people_or_props() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "孩子坚持自己选衣服，大人的审美要不要让一步？"),
-        "让一步",
-        P3SemanticContract(
-            "我们观察到一位妈妈总会替孩子重新搭配。",
-            "尊重差异。",
-            "品牌官方账号。",
-        ),
-        VideoProductionBundle(
-            "导读",
-            "完整台词",
-            "孩子背影从衣柜里拿出蓝色卫衣，再跑向门口。",
-            "字幕",
-            "声音",
-            "首帧",
-            "镜头展示孩子穿上衣服转圈。",
-            "时长",
-            "发布",
-        ),
+    unsafe = "我是这家门店的店长。"
+    _install_fake(
+        monkeypatch,
+        [
+            _completion(_video_payload(spoken_lines=unsafe)),
+            _completion(_judgement(("spoken_lines", unsafe, "untrusted_role"))),
+            _completion(json.dumps({"spoken_lines": unsafe}, ensure_ascii=False)),
+            _completion(_judgement(("spoken_lines", unsafe, "untrusted_role"))),
+        ],
     )
 
-    assert {item.field for item in violations} == {
-        "persona_observation",
-        "visual_actions",
-        "viewing_flow",
-    }
+    with pytest.raises(GenerationFailed, match="一次字段修复"):
+        DeepSeekGenerator(
+            "https://compat.example/v1",
+            "not-a-real-key",
+            "verified-deepseek-model",
+        ).generate(generation_input)
+
+    assert len(FakeClient.requests) == 4
 
 
-def test_p4_contract_does_not_embed_a_demo_store_name(
+def test_semantic_judgement_requires_exact_field_fragment_and_reason_code(
+    monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,
 ) -> None:
-    request = GenerationInput(
+    context = BoundaryContext.from_request(generation_input)
+    candidate = json.loads(_video_payload())
+    _install_fake(
+        monkeypatch,
+        [
+            _completion(
+                json.dumps(
+                    {
+                        "violations": [
+                            {
+                                "field": "spoken_lines",
+                                "fragment": "候选中不存在",
+                                "reason_code": "other",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        ],
+    )
+
+    with pytest.raises(GenerationFailed, match="边界判定返回格式"):
+        DeepSeekGenerator(
+            "https://compat.example/v1",
+            "not-a-real-key",
+            "verified-deepseek-model",
+        )._semantic_boundary_violations(context, candidate)
+
+
+def test_deterministic_checks_keep_identifiers_and_product_values_exact(
+    generation_input: GenerationInput,
+) -> None:
+    product = ProductFact(
+        "ZX-C218",
+        {
+            "category": "double-faced short coat",
+            "colors": ["炭灰面", "深绿面"],
+            "sample_weight_m_grams": 960,
+        },
+    )
+    context = BoundaryContext.from_request(_with(generation_input, products=(product,)))
+
+    accepted = DeepSeekGenerator._deterministic_boundary_violations(
+        context,
+        {
+            "title": "炭灰面",
+            "spoken_lines": "当前商品 ZX-C218 的样衣记录为960克。",
+        },
+    )
+    rejected = DeepSeekGenerator._deterministic_boundary_violations(
+        context,
+        {
+            "title": "asset_id=hidden",
+            "spoken_lines": ("当前商品 ZX-B999 的样衣记录为999克，颜色是红色；联系 test@example.com。"),
+        },
+    )
+
+    assert accepted == ()
+    assert {issue.fragment for issue in rejected} >= {
+        "asset_id",
+        "ZX-B999",
+        "999克",
+        "红色",
+        "test@example.com",
+    }
+    assert {issue.reason_code for issue in rejected} == {"factual_conflict"}
+
+
+def test_subtitles_are_an_ordered_compression_of_final_spoken_copy(
+    generation_input: GenerationInput,
+) -> None:
+    spoken = "我们认为，先尊重每个人的舒服，再找自然的呼应。"
+    legal = json.loads(
+        _video_payload(
+            spoken_lines=spoken,
+            subtitles="尊重每个人舒服，再找自然呼应",
+        )
+    )
+    invented = json.loads(
+        _video_payload(
+            spoken_lines=spoken,
+            subtitles="全国门店已经执行这项服务",
+        )
+    )
+
+    legal_projection = DeepSeekGenerator._project_video_contract(
+        generation_input,
+        legal,
+    )
+    invented_projection = DeepSeekGenerator._project_video_contract(
+        generation_input,
+        invented,
+    )
+
+    assert legal_projection["subtitles"] == "尊重每个人舒服，再找自然呼应"
+    assert invented_projection["subtitles"] == spoken
+
+
+def test_natural_duration_uses_at_most_four_readable_characters_per_second(
+    generation_input: GenerationInput,
+) -> None:
+    spoken = "家庭感不必来自同款。先听见每个人的舒服，再找自然的呼应。"
+    structured = json.loads(
+        _video_payload(
+            spoken_lines=spoken,
+            natural_duration="8 秒",
+        )
+    )
+
+    projected = DeepSeekGenerator._project_video_contract(
+        generation_input,
+        structured,
+    )
+    seconds = int(str(projected["natural_duration"]).split()[1])
+    readable = len(re.findall(r"[\u4e00-\u9fff]|[A-Za-z0-9]+", spoken))
+
+    assert seconds >= (readable + 3) // 4
+    assert seconds == DeepSeekGenerator._natural_spoken_seconds(spoken)
+
+
+def test_fixed_duration_repairs_the_copy_instead_of_only_the_label(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    fixed_brand = BrandContext(
         **{
-            **generation_input.__dict__,
-            "primary_product": "local_response",
-            "weak_seed": "品牌官方账号回应一个门店关系问题。",
+            **generation_input.brand.__dict__,
+            "production_conditions": "一人一部手机，固定 8 秒。",
         }
     )
-
-    prompt = DeepSeekGenerator._generation_prompt(request)
-
-    assert "当前发布账号能合法作出的回应" in prompt
-    assert "南城店账号" not in prompt
-
-
-def test_video_contract_rejects_a_question_only_script_for_a_long_declared_duration() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "为什么品牌内容不都写成卖货？"),
-        "不只卖货",
-        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
-        VideoProductionBundle(
-            "导读",
-            "为什么品牌内容不都写成卖货？",
-            "一人正对手机口播。",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "45秒",
-            "发布",
-        ),
+    request = _with(generation_input, brand=fixed_brand)
+    long_spoken = "这是必须真实缩短的完整口播。" * 8
+    short_spoken = "先尊重差异，再找呼应。"
+    _install_fake(
+        monkeypatch,
+        [
+            _completion(_video_payload(spoken_lines=long_spoken)),
+            _completion(_judgement()),
+            _completion(json.dumps({"spoken_lines": short_spoken}, ensure_ascii=False)),
+            _completion(_judgement()),
+        ],
     )
 
-    assert FactViolation("spoken_lines", "为什么品牌内容不都写成卖货？") in violations
-
-
-def test_a_handwritten_topic_does_not_claim_the_topic_person_is_available_to_film() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "孩子坚持自己选衣服，大人的审美要不要让一步？"),
-        "让一步",
-        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
-        VideoProductionBundle(
-            "导读",
-            "孩子坚持自己选衣服，大人的审美要不要让一步？今天聊聊这个纠结，也说说我们为什么尊重差异。"
-            "先听听孩子在意什么，再决定是否需要调整，可能比立刻否定更有用。",
-            "一人正对手机口播。",
-            "字幕",
-            "声音",
-            "手写标题“孩子坚持自己穿搭，大人该让步吗？”",
-            "观看链",
-            "20秒",
-            "发布",
-        ),
-    )
-
-    assert violations == ()
-
-
-def test_brand_relationship_view_does_not_become_an_unconfirmed_store_promise() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "走进门店只想自己看看，这种沉默是不是也应该被尊重？"),
-        "沉默",
-        P3SemanticContract(
-            "品牌关系观点",
-            "受众获得",
-            "这个账号只在你需要时出现，不会打扰。",
-        ),
-        VideoProductionBundle(
-            "导读",
-            "走进门店只想自己看看，这种沉默也应该被尊重。我们愿意先理解这种心情，再表达品牌判断。",
-            "一人正对手机口播。",
-            "字幕",
-            "普通室内环境声。",
-            "手写标题“沉默是否应该被尊重？”",
-            "观看链",
-            "20秒",
-            "发布",
-        ),
-    )
-
-    assert FactViolation(
-        "brand_account_link",
-        "这个账号只在你需要时出现，不会打扰。",
-    ) in violations
-
-
-def test_p3_does_not_turn_a_question_into_the_brand_operators_life_history() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "当了妈妈以后，只为自己喜欢而买衣服算自私吗？"),
-        "自私吗",
-        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
-        VideoProductionBundle(
-            "导读",
-            "我最近一直在想这个问题，后来发现我太久没问过自己喜欢什么。",
-            "一人正对手机口播。",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "20秒",
-            "发布",
-        ),
-    )
-
-    assert FactViolation(
-        "spoken_lines",
-        "我最近一直在想这个问题，后来发现我太久没问过自己喜欢什么。",
-    ) in violations
-
-
-def test_p3_does_not_turn_a_role_question_into_an_implied_recurring_life_history() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "当了妈妈以后，只为自己喜欢而买衣服算自私吗？"),
-        "自私吗",
-        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
-        VideoProductionBundle(
-            "导读",
-            "每次站在衣柜前，都会先想方不方便抱孩子，再想自己喜欢什么。",
-            "一人正对手机口播。",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "20秒",
-            "发布",
-        ),
-    )
-
-    assert FactViolation(
-        "spoken_lines",
-        "每次站在衣柜前，都会先想方不方便抱孩子，再想自己喜欢什么。",
-    ) in violations
-
-
-def test_p3_does_not_claim_the_brand_received_questions_or_invent_creator_demographics() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "当了妈妈以后，只为自己喜欢而买衣服算自私吗？"),
-        "自私吗",
-        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
-        VideoProductionBundle(
-            "导读",
-            "我们只讨论这个问题，不替任何人编经历。",
-            "一人正对手机口播。",
-            "字幕",
-            "声音",
-            "创作者（女性，30岁左右）坐在沙发上看向镜头。",
-            "观看链",
-            "18秒",
-            "我们收到过很多类似提问，今天试着回答。",
-        ),
-    )
-
-    assert {item.field for item in violations} == {
-        "cover_or_first_frame",
-        "release_caption_and_interaction",
-    }
-
-
-def test_p3_rejects_invented_family_scenes_and_internal_strategy_ids() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "为什么品牌内容不都写成卖货？"),
-        "不只卖货",
-        P3SemanticContract(
-            "妈妈整理衣领，孩子挑了一件外套，爸爸抓起旧卫衣。",
-            "先观察再理解。",
-            "当前品牌表达版本是 brand-expression-v1。",
-        ),
-        VideoProductionBundle(
-            "导读",
-            "我们每天看到家庭里的这些选择，所以不急着卖货。",
-            "一人正对手机口播。",
-            "字幕",
-            "声音",
-            "手写标题“不只卖货”",
-            "观看链",
-            "18秒",
-            "发布",
-        ),
-    )
-
-    assert {item.field for item in violations} == {
-        "persona_observation",
-        "brand_account_link",
-        "spoken_lines",
-    }
-
-
-def test_p1_and_p3_require_spoken_copy_but_p5_may_be_visual_only() -> None:
-    production = VideoProductionBundle(
-        "导读",
-        "无口播、无对白、无解说",
-        "一人动作。",
-        "无字幕",
-        "声音",
-        "首帧",
-        "观看链",
-        "15秒",
-        "发布",
-    )
-
-    p3 = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "品牌关系观点"),
-        "标题",
-        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
-        production,
-    )
-    p5 = DeepSeekGenerator._boundary_violations(
-        FactBoundary("当前商品事实", "视觉造型"),
-        "标题",
-        P5SemanticContract("商品", "命题", "视觉"),
-        production,
-    )
-
-    assert FactViolation("spoken_lines", "无口播、无对白、无解说") in p3
-    assert FactViolation("spoken_lines", "无口播、无对白、无解说") not in p5
-
-
-def test_a_claimed_family_photo_is_not_excused_by_later_handwritten_text() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "一家三口准备拍合照，怎样穿？"),
-        "合照",
-        P1SemanticContract("选择", "边界", "下一步"),
-        VideoProductionBundle(
-            "导读",
-            "这是一段足以直接说出的完整口播文字，并且能够自然完成入口、展开和最后收束。"
-            "先说明选择，再讲改变条件，最后给出一个当场可以尝试的动作。",
-            "一人正对手机口播。",
-            "字幕",
-            "声音",
-            "手机屏幕显示一张三人合照，旁边手写文字“先舒服”。",
-            "观看链",
-            "20秒",
-            "发布",
-        ),
-    )
-
-    assert {
-        item.field for item in violations
-    } == {"cover_or_first_frame"}
-
-
-def test_eighteen_seconds_is_not_mislabeled_as_an_eight_second_transform() -> None:
-    body = DeepSeekGenerator._visible_body(
-        "标题",
-        VideoProductionBundle(
-            "导读",
-            "这是一段足以直接说出的完整口播文字，并且能够自然完成入口、展开和最后收束。",
-            "一人正对手机口播。",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "18秒",
-            "发布",
-        ),
-        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
-    )
-
-    assert "8 秒窄主题版" not in body
-
-
-def test_deepseek_adapter_allows_non_factual_clothing_choice_when_no_product_fact_exists() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "不要把任何一件衣服说成万能。"),
-        "标题",
-        P1SemanticContract("选一件有结构感的单品", "条件改变时调整", "出门前走两步"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert violations == ()
-
-
-def test_deepseek_adapter_rejects_invented_product_details_and_events_without_product_facts() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "下午开完正式会议，再去接孩子。"),
-        "会议后的切换",
-        P1SemanticContract(
-            "穿深色连衣裙或连体裤，剪裁利落、面料抗皱。",
-            "同事问我：这身蹲下不皱，站起来不垮吗？",
-            "下午开完正式会议，再去接孩子。",
-        ),
-        VideoProductionBundle(
-            "导读",
-            "一位女性站在写字楼门口，准备去接孩子。",
-            "动作",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert {item.field for item in violations} == {"boundary", "spoken_lines"}
-
-
-def test_deepseek_adapter_rejects_product_detail_before_a_generic_garment_name() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "下午开完正式会议，再去接孩子。"),
-        "标题",
-        P1SemanticContract(
-            "优先选一件剪裁利落、面料抗皱的连衣裙，搭配可拆卸丝巾。",
-            "如果临时去户外，再换成高弹力、易活动的裤装。",
-            "出门前走两步。",
-        ),
-        VideoProductionBundle(
-            "导读",
-            "台词",
-            "动作",
-            "字幕",
-            "声音",
-            "深蓝色连衣裙作为首帧。",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert {item.field for item in violations} == {"cover_or_first_frame"}
-
-
-def test_deepseek_adapter_rejects_concrete_product_facts_that_conflict_with_current_input(
-    generation_input: GenerationInput,
-) -> None:
-    boundary = FactBoundary.from_request(
-        GenerationInput(
-            **{
-                **generation_input.__dict__,
-                "products": (
-                    ProductFact(
-                        "ZX-C218",
-                        {
-                            "colors": ["炭灰纯色", "深绿细格纹"],
-                            "sample_weight_m_grams": 960,
-                            "comparison_single_layer_short_coat_m_grams": 650,
-                        },
-                    ),
-                ),
-            }
-        )
-    )
-
-    violations = DeepSeekGenerator._boundary_violations(
-        boundary,
-        "ZX-C999",
-        P2SemanticContract("这件 ZX-C218 是黑色，当前样衣重800克。", "边界", "条件"),
-        VideoProductionBundle("导读", "台词", "拍摄安排：翻面", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert {item.field for item in violations} == {"title", "product_insight"}
-
-
-def test_deepseek_adapter_does_not_retry_nonrecoverable_status(
-    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
-) -> None:
-    FakeClient.responses = [FakeResponse(400, {})]
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    generator = DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model")
-
-    with pytest.raises(GenerationFailed):
-        generator.generate(generation_input)
-
-
-def test_deepseek_adapter_accepts_provider_fenced_json(
-    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
-) -> None:
-    FakeClient.responses = [
-        FakeResponse(
-            200,
-            {"choices": [{"message": {"content": "```json\n" + _video_payload() + "\n```"}}]},
-        )
-    ]
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    generator = DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model")
-
-    artifact = generator.generate(generation_input)
-
-    assert isinstance(artifact.semantic_contract, P1SemanticContract)
-    assert artifact.semantic_contract.choice == "选择"
-
-
-def test_deepseek_adapter_repairs_one_incomplete_structured_response(
-    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
-) -> None:
-    complete = _video_payload()
-    FakeClient.responses = [
-        FakeResponse(200, {"choices": [{"message": {"content": '{"outline":"缺字段"}'}}]}),
-        FakeResponse(200, {"choices": [{"message": {"content": complete}}]}),
-    ]
-    FakeClient.requests = []
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    generator = DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model")
-
-    artifact = generator.generate(generation_input)
-
-    assert artifact.retry_count == 1
-    assert len(FakeClient.requests) == 2
-    assert "字段缺失、为空或不是单个字符串" in str(FakeClient.requests[1]["json"])
-
-
-def test_deepseek_adapter_repairs_non_string_visible_fields(
-    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
-) -> None:
-    complete = _video_payload()
-    FakeClient.responses = [
-        FakeResponse(
-            200,
-            {"choices": [{"message": {"content": _video_payload(spoken_lines=["台词"])}}]},
-        ),
-        FakeResponse(200, {"choices": [{"message": {"content": complete}}]}),
-    ]
-    FakeClient.requests = []
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    generator = DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model")
-
-    artifact = generator.generate(generation_input)
+    artifact = DeepSeekGenerator(
+        "https://compat.example/v1",
+        "not-a-real-key",
+        "verified-deepseek-model",
+    ).generate(request)
 
     assert isinstance(artifact.production, VideoProductionBundle)
-    assert artifact.production.spoken_lines == "台词"
-    assert artifact.retry_count == 1
-    assert len(FakeClient.requests) == 2
-    assert "不是单个字符串" in str(FakeClient.requests[1]["json"])
-
-
-def test_deepseek_adapter_repairs_a_specific_unsupported_product_claim(
-    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
-) -> None:
-    unsafe = _video_payload(
-        spoken_lines="这件外套很保暖。",
-        visual_actions="拍摄安排：展示翻面",
-        subtitles="这件外套很保暖。",
-    )
-    repaired = '{"spoken_lines":"现有资料不能证明保暖表现。","subtitles":"现有资料不能证明保暖表现。"}'
-    FakeClient.responses = [
-        FakeResponse(200, {"choices": [{"message": {"content": unsafe}}]}),
-        FakeResponse(200, {"choices": [{"message": {"content": repaired}}]}),
-    ]
-    FakeClient.requests = []
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-    generator = DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model")
-
-    artifact = generator.generate(generation_input)
-
-    assert "很保暖" not in artifact.body
-    assert "现有资料不能证明保暖表现" in artifact.body
-    assert {receipt.field for receipt in artifact.fact_repair_receipts} == {
-        "spoken_lines",
-        "subtitles",
-    }
-    assert len(FakeClient.requests) == 2
-    repair_request = str(FakeClient.requests[1]["json"])
-    assert "spoken_lines" in repair_request
-    assert "subtitles" in repair_request
-    assert '"title"' not in repair_request
-    assert "一般方法或假设可以使用颜色、品类与搭配例子" in repair_request
-    assert "这件外套很保暖" not in repair_request
-
-
-def test_deepseek_adapter_compiles_visible_body_only_from_controlled_fields() -> None:
-    body = DeepSeekGenerator._visible_body(
-        "自然标题",
-        VideoProductionBundle(
-            "开场说明",
-            "完整台词",
-            "画面动作",
-            "字幕文案",
-            "声音提示",
-            "首帧",
-            "观看链",
-            "自然时长",
-            "发布配文",
-        ),
-    )
-
-    assert body.startswith("标题：自然标题")
-    assert "完整台词/解说：完整台词" in body
-    assert "画面与动作：画面动作" in body
-    assert "字幕：字幕文案" in body
-    assert "声音与制作提示：声音提示" in body
-
-
-def test_deepseek_adapter_normalizes_video_sound_branch_and_minimum_duration() -> None:
-    structured = json.loads(_video_payload())
-    structured["spoken_lines"] = "这是完整口播，需要以自然语速说完。" * 12
-    structured["sound_and_production"] = "保留环境声。无口播时保持安静。"
-    structured["natural_duration"] = "约12秒"
-
-    projected = DeepSeekGenerator._normalize_video_contract(structured)
-
-    assert projected["sound_and_production"] == "保留环境声。"
-    assert projected["natural_duration"] != "约12秒"
-
-
-def test_deepseek_adapter_rejects_punctuation_only_visible_text() -> None:
-    with pytest.raises(TypeError):
-        DeepSeekGenerator._visible_text("'")
-
-
-def test_deepseek_adapter_prunes_only_finally_rejected_sentences(
-    generation_input: GenerationInput,
-) -> None:
-    projected = DeepSeekGenerator._prune_rejected_sentences(
-        generation_input,
-        {"tradeoff_or_limit": ("现有资料只有两份样衣重量记录。不能简单认为双面结构直接导致重量增加。")},
-        (
-            FactViolation(
-                "tradeoff_or_limit",
-                "不能简单认为双面结构直接导致重量增加。",
-            ),
-        ),
-    )
-
-    assert projected == {"tradeoff_or_limit": "现有资料只有两份样衣重量记录。"}
-
-
-def test_deepseek_adapter_fails_when_final_rejection_would_empty_a_field(
-    generation_input: GenerationInput,
-) -> None:
-    with pytest.raises(GenerationFailed):
-        DeepSeekGenerator._prune_rejected_sentences(
-            generation_input,
-            {"tradeoff_or_limit": "不能简单归因于双面结构。"},
-            (
-                FactViolation(
-                    "tradeoff_or_limit",
-                    "不能简单归因于双面结构。",
-                ),
-            ),
-        )
-
-
-def test_deepseek_adapter_does_not_prune_a_rejected_product_production_field(
-    generation_input: GenerationInput,
-) -> None:
-    product_request = GenerationInput(
-        **{
-            **generation_input.__dict__,
-            "products": (ProductFact("SKU-1", {"category": "coat"}),),
-        }
-    )
-    with pytest.raises(GenerationFailed):
-        DeepSeekGenerator._prune_rejected_sentences(
-            product_request,
-            {"cover_or_first_frame": "展示未提供的商品部位。"},
-            (
-                FactViolation(
-                    "cover_or_first_frame",
-                    "展示未提供的商品部位。",
-                ),
-            ),
-        )
-
-
-def test_deepseek_adapter_compiles_safe_media_when_no_product_visual_stays_unsafe(
-    generation_input: GenerationInput,
-) -> None:
-    request = GenerationInput(
-        **{
-            **generation_input.__dict__,
-            "primary_product": "brand_life_narrative",
-            "weak_seed": "家庭成员要不要穿成同款？",
-        }
-    )
-    projected = DeepSeekGenerator._prune_rejected_sentences(
-        request,
-        {"cover_or_first_frame": "孩子站在门店里展示衣服。"},
-        (FactViolation("cover_or_first_frame", "孩子站在门店里展示衣服。"),),
-    )
-
-    assert projected["cover_or_first_frame"] == (
-        "当前创作者正对手机，首帧手写标题：“家庭成员要不要穿成同款？”"
-    )
-
-
-def test_handwritten_family_topic_remains_a_text_resource_after_safe_fallback() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("（无当前商品事实）", "一家三口准备拍合照，怎样穿？"),
-        "合照怎么穿",
-        P1SemanticContract("先舒服", "不舒服就不统一", "先试一次"),
-        VideoProductionBundle(
-            "导读",
-            "这是一段足以直接说出的完整口播文字，并且能够自然完成入口、展开和最后收束。",
-            "一人正对手机口播。",
-            "字幕",
-            "声音",
-            "当前创作者正对手机，首帧手写标题：“一家三口准备拍合照，怎样穿？”",
-            "观看链",
-            "18秒",
-            "发布",
-        ),
-    )
-
-    assert violations == ()
-
-
-def test_deepseek_adapter_prunes_one_rejected_spoken_sentence_when_copy_remains(
-    generation_input: GenerationInput,
-) -> None:
-    projected = DeepSeekGenerator._prune_rejected_sentences(
-        generation_input,
-        {
-            "spoken_lines": (
-                "当前M码样衣约960克，对照同季同长度单层短外套M码样衣约650克。"
-                "两面外观完整，两面口袋均可正常使用。"
-                "不能确认重量差异是不是双面结构造成的。"
-                "当前只有这两份样衣记录，没有结构测试，现有资料无法归因。"
-            )
-        },
-        (
-            FactViolation(
-                "spoken_lines",
-                "不能确认重量差异是不是双面结构造成的。",
-            ),
-        ),
-    )
-
-    spoken = str(projected["spoken_lines"])
-    assert "是不是双面结构造成" not in spoken
-    assert "当前M码样衣约960克" in spoken
-    assert "现有资料无法归因" in spoken
-
-
-def test_deepseek_adapter_prunes_one_rejected_subtitle_segment(
-    generation_input: GenerationInput,
-) -> None:
-    projected = DeepSeekGenerator._prune_rejected_sentences(
-        generation_input,
-        {"subtitles": ("M码960克 | 同季同长度单层样衣M码650克 | 不能确认差异全因双面 | 现有资料无法归因")},
-        (
-            FactViolation(
-                "subtitles",
-                "不能确认差异全因双面",
-            ),
-        ),
-    )
-
-    subtitles = str(projected["subtitles"])
-    assert "全因双面" not in subtitles
-    assert "M码960克" in subtitles
-    assert "现有资料无法归因" in subtitles
-
-
-def test_deepseek_adapter_exposes_p5_contract_as_readable_sections() -> None:
-    body = DeepSeekGenerator._visible_body(
-        "视觉标题",
-        VideoProductionBundle("导读", "无口播", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-        P5SemanticContract("真实锚点", "可见命题", "成立条件"),
-    )
-
-    assert "真实商品锚点：真实锚点" in body
-    assert "可见造型命题：可见命题" in body
-    assert "画面成立条件：成立条件" in body
-
-
-def test_deepseek_adapter_marks_a_short_video_as_a_narrow_transform() -> None:
-    body = DeepSeekGenerator._visible_body(
-        "短版",
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "8秒", "发布"),
-    )
-
-    assert "变换边界：这是 8 秒窄主题版，不等同于原完整版本。" in body
-
-
-def test_deepseek_adapter_removes_reserved_product_labels_from_visible_text() -> None:
-    visible = DeepSeekGenerator._visible_text("P2：product_truth 解释商品")
-
-    assert visible == "解释商品"
-
-
-def test_deepseek_adapter_projects_zx_c218_facts_without_erasing_known_pockets() -> None:
-    product = DeepSeekGenerator._natural_product(
-        "ZX-C218",
-        ProductFact(
-            "ZX-C218",
-            {
-                "colors": ["炭灰纯色", "深绿细格纹"],
-                "category": "double-faced short coat",
-                "both_sides_complete": True,
-                "pockets_functional_both_sides": True,
-                "sample_weight_m_grams": 960,
-                "comparison_single_layer_short_coat_m_grams": 650,
-                "weight_boundary": "only the current sample weight difference is known; do not attribute all difference to the double-faced structure",
-            },
-        ).facts,
-    )
-
-    assert "两面均为完整外观" in product
-    assert "双面短外套" in product
-    assert "两面口袋均可正常使用" in product
-    assert "960克" in product
-    assert "650克" in product
-    assert "没有结构测试，现有资料无法归因" in product
-    assert "口袋情况未提供" not in product
-
-
-def test_deepseek_adapter_accepts_a_p2_anti_misuse_boundary_without_accepting_the_claim() -> None:
-    boundary = DeepSeekGenerator._natural_product(
-        "ZX-C218", {"sample_weight_m_grams": 960, "comparison_single_layer_short_coat_m_grams": 650}
-    )
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary(boundary, ""),
-        "标题",
-        P2SemanticContract("新增理解", "不能从重量差异推断厚度、手感或品质。", "当前样衣数据"),
-        VideoProductionBundle("导读", "台词", "拍摄安排：称重", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert violations == ()
-
-
-def test_deepseek_adapter_allows_a_future_visual_plan_without_turning_it_into_product_fact() -> None:
-    boundary = FactBoundary("商品 ZX-C218：两面均为完整外观。", "")
-    violations = DeepSeekGenerator._boundary_violations(
-        boundary,
-        "标题",
-        P5SemanticContract("ZX-C218 双面短外套", "视觉重音来自翻面", "翻面动作不可移除"),
-        VideoProductionBundle(
-            "导读",
-            "台词",
-            "拍摄安排：翻开左襟露出格纹。",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert violations == ()
-
-
-def test_deepseek_adapter_rejects_an_unprovided_inner_layer_detail_in_p5() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两面均为完整外观。", "同一身内搭。"),
-        "标题",
-        P5SemanticContract("锚点", "命题", "条件"),
-        VideoProductionBundle("导读", "无口播", "动作", "字幕", "声音", "人物穿黑色高领内搭", "观看链", "时长", "发布"),
-    )
-
-    assert violations[0].field == "cover_or_first_frame"
-
-
-def test_deepseek_adapter_rejects_unverified_weighing_or_comparison_capture() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克；对照数据约650克。", ""),
-        "标题",
-        P2SemanticContract("理解", "边界", "条件"),
-        VideoProductionBundle(
-            "我们实测了重量。",
-            "台词",
-            "拍摄安排：把当前样衣和对照单层外套分别放到称重台。",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {"natural_guide", "visual_actions"}
-
-
-def test_deepseek_adapter_rejects_a_hand_raising_an_unprovided_comparison_sample() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克；对照数据约650克。", ""),
-        "标题",
-        P2SemanticContract("理解", "边界", "条件"),
-        VideoProductionBundle(
-            "导读",
-            "台词",
-            "另一只手拿起一件单层短外套，只作视觉对比。",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {"visual_actions"}
-
-
-def test_deepseek_adapter_rejects_an_unprovided_comparison_sample_in_visual_planning() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克；对照数据约650克。", ""),
-        "标题",
-        P2SemanticContract("理解", "边界", "条件"),
-        VideoProductionBundle(
-            "导读",
-            "台词",
-            "旁边放一件同季同长度单层短外套。",
-            "字幕可写单层短外套 M 码约650克。",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {"visual_actions"}
-
-
-def test_deepseek_adapter_rejects_two_physical_products_when_only_one_is_available() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary(
-            "商品 ZX-C218：当前样衣约960克；对照数据约650克。",
-            "",
-            product_skus=("ZX-C218",),
-        ),
-        "标题",
-        P2SemanticContract("理解", "边界", "条件"),
-        VideoProductionBundle(
-            "展示两件外套的差别。",
-            "台词",
-            "拍摄安排：只拍当前商品。",
-            "字幕",
-            "声音",
-            "一只手分别拿起两件外套。",
-            "两件商品并排后再讲重量。",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {
-        "natural_guide",
-        "cover_or_first_frame",
-        "viewing_flow",
-    }
-
-
-def test_deepseek_adapter_allows_a_visual_boundary_that_refuses_a_comparison_sample() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克；对照数据约650克。", ""),
-        "标题",
-        P2SemanticContract("理解", "边界", "条件"),
-        VideoProductionBundle(
-            "导读",
-            "台词",
-            "不展示、提及或对比任何单层短外套。",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert violations == ()
-
-
-def test_deepseek_adapter_repairs_comparison_visuals_without_showing_a_second_sample() -> None:
-    prompt = DeepSeekGenerator._boundary_repair_prompt(
-        {"visual_actions": "旁边放单层短外套。"},
-        FactBoundary("商品 ZX-C218：当前样衣约960克；对照数据约650克。", ""),
-        (FactViolation("visual_actions", "旁边放单层短外套。"),),
-    )
-
-    assert "不得提及、展示、悬挂、拿起或并排任何单层外套、对照样衣或第二件商品" in prompt
-    assert "旁边放单层短外套" not in prompt
-    assert "不得讨论或点名任何候选原因" in prompt
-
-
-def test_deepseek_adapter_allows_comparison_weight_as_a_text_card() -> None:
-    boundary = FactBoundary(
-        "商品 ZX-C218：当前样衣约960克；对照数据约650克。",
-        "",
-        product_skus=("ZX-C218",),
-    )
-
-    assert not DeepSeekGenerator._depicts_unavailable_comparison(
-        boundary,
-        "viewing_flow",
-        "外套挂在衣架上，画面出现文字卡片“同季同长度单层样衣 M 码 650 克”。",
-    )
-
-
-def test_deepseek_adapter_treats_comparison_weight_as_data_not_a_shootable_sample(
-    generation_input: GenerationInput,
-) -> None:
-    request = GenerationInput(
-        **{
-            **generation_input.__dict__,
-            "primary_product": "product_truth",
-            "products": (
-                ProductFact(
-                    "ZX-C218",
-                    {
-                        "sample_weight_m_grams": 960,
-                        "comparison_single_layer_short_coat_m_grams": 650,
-                    },
-                ),
-            ),
-        }
-    )
-
-    prompt = DeepSeekGenerator._generation_prompt(request)
-
-    assert "当前只提供了对照重量记录，没有提供可拍摄的对照样衣" in prompt
-    assert "画面只能使用当前点名商品" in prompt
-
-
-def test_deepseek_adapter_semantically_repairs_an_unprovided_product_property(
-    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
-) -> None:
-    request = GenerationInput(
-        **{
-            **generation_input.__dict__,
-            "primary_product": "product_truth",
-            "products": (
-                ProductFact(
-                    "ZX-C218",
-                    {
-                        "sample_weight_m_grams": 960,
-                        "comparison_single_layer_short_coat_m_grams": 650,
-                    },
-                ),
-            ),
-        }
-    )
-    initial = json.loads(_video_payload())
-    initial.update(
-        {
-            "product_insight": "当前只可确认两份样衣重量。",
-            "tradeoff_or_limit": "不能归因。",
-            "validity_condition": "限当前记录。",
-            "spoken_lines": "它是一件更扎实的外套。",
-        }
-    )
-    repaired = {"spoken_lines": "当前只可确认两份样衣重量存在差异，原因不能归因。"}
-    FakeClient.responses = [
-        FakeResponse(
-            200,
-            {
-                "choices": [{"message": {"content": json.dumps(initial, ensure_ascii=False)}}],
-                "usage": {"total_tokens": 10},
-            },
-        ),
-        FakeResponse(
-            200,
-            {
-                "choices": [
-                    {
-                        "message": {
-                            "content": '{"violations":[{"field":"spoken_lines","fragment":"它是一件更扎实的外套。"}]}'
-                        }
-                    }
-                ],
-                "usage": {"total_tokens": 2},
-            },
-        ),
-        FakeResponse(
-            200,
-            {
-                "choices": [{"message": {"content": json.dumps(repaired, ensure_ascii=False)}}],
-                "usage": {"total_tokens": 3},
-            },
-        ),
-        FakeResponse(
-            200,
-            {
-                "choices": [{"message": {"content": '{"violations":[]}'}}],
-                "usage": {"total_tokens": 2},
-            },
-        ),
-    ]
-    FakeClient.requests = []
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-
-    artifact = DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model").generate(
-        request
-    )
-
-    assert "更扎实" not in artifact.body
-    assert artifact.provider_usage == {"total_tokens": 17}
+    assert artifact.production.spoken_lines == short_spoken
+    assert artifact.production.natural_duration == "8 秒"
+    assert artifact.production.subtitles == short_spoken
     assert {receipt.field for receipt in artifact.fact_repair_receipts} == {"spoken_lines"}
-    assert len(FakeClient.requests) == 4
-    assert "不得据此肯定更扎实" in str(FakeClient.requests[1]["json"])
 
 
-def test_deepseek_adapter_uses_a_system_repair_guard_for_comparison_visuals(
-    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
+def test_legal_viewpoint_title_and_available_resource_are_not_hard_blocked(
+    generation_input: GenerationInput,
 ) -> None:
-    unsafe = _video_payload(visual_actions="旁边放一件单层短外套。")
-    repaired = '{"visual_actions":"画面只展示当前商品，重量作为文字数据出现。"}'
-    FakeClient.responses = [
-        FakeResponse(200, {"choices": [{"message": {"content": unsafe}}]}),
-        FakeResponse(200, {"choices": [{"message": {"content": repaired}}]}),
-    ]
-    FakeClient.requests = []
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-
-    DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model").generate(
-        generation_input
-    )
-
-    assert "当前只有对照重量数据，没有对照样衣拍摄事实" in str(FakeClient.requests[1]["json"])
-
-
-def test_deepseek_adapter_uses_a_system_repair_guard_for_weak_causal_negation(
-    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
-) -> None:
-    unsafe = _video_payload(spoken_lines="不能确认这310克是否完全由双面结构造成。")
-    repaired = '{"spoken_lines":"现有资料只有两份重量记录，没有结构测试，无法归因。"}'
-    FakeClient.responses = [
-        FakeResponse(200, {"choices": [{"message": {"content": unsafe}}]}),
-        FakeResponse(200, {"choices": [{"message": {"content": repaired}}]}),
-    ]
-    FakeClient.requests = []
-    monkeypatch.setattr(httpx, "Client", FakeClient)
-
-    artifact = DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model").generate(
-        generation_input
-    )
-
-    assert "无法归因" in artifact.body
-    assert "不得讨论或点名任何重量原因" in str(FakeClient.requests[1]["json"])
-
-
-def test_deepseek_adapter_rejects_an_invented_explanation_for_weight_difference() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
-        "标题",
-        P2SemanticContract("理解", "因为单层那件本身有650克，所以能解释310克差异。", "条件"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert violations[0].field == "tradeoff_or_limit"
-
-
-def test_deepseek_adapter_rejects_a_speculative_weight_cause() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
-        "标题",
-        P2SemanticContract("理解", "未被测试的结构因素可能导致差异。", "当前样衣数据"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert violations[0].field == "tradeoff_or_limit"
-
-
-def test_deepseek_adapter_rejects_a_partial_weight_attribution_without_structure_test() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
-        "标题",
-        P2SemanticContract("理解", "双面结构是重量差异的一部分原因。", "条件"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert {violation.field for violation in violations} == {"tradeoff_or_limit"}
-
-
-def test_deepseek_adapter_rejects_a_claim_that_double_facing_created_the_weight_difference() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
-        "标题",
-        P2SemanticContract("双面结构确实带来了约310克重量差异。", "边界", "条件"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert {violation.field for violation in violations} == {"product_insight"}
-
-
-def test_deepseek_adapter_rejects_a_claim_that_double_facing_increased_weight() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
-        "标题",
-        P2SemanticContract("双面结构确实增加了重量。", "边界", "条件"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert {violation.field for violation in violations} == {"product_insight"}
-
-
-def test_deepseek_adapter_rejects_more_sides_as_more_weight() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两份样衣重量不同，不能归因。", ""),
-        "标题",
-        P2SemanticContract("理解", "边界", "条件"),
-        VideoProductionBundle(
-            "导读",
-            "台词",
-            "动作",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "双面外套，多一个面，也多一份重量。",
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {"release_caption_and_interaction"}
-
-
-@pytest.mark.parametrize(
-    "claim",
-    [
-        "双面设计提供两种完整外观，但重量增加。",
-        "双面不等于一件顶两件，它只是给了两种穿法，但重量上是有代价的。",
-        "你觉得双面设计值得这个重量吗？",
-    ],
-)
-def test_deepseek_adapter_rejects_evaluative_double_sided_weight_links(
-    claim: str,
-) -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两份样衣重量不同，不能归因。", ""),
-        "标题",
-        P2SemanticContract("理解", "边界", "条件"),
-        VideoProductionBundle(
-            "导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", claim
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {"release_caption_and_interaction"}
-
-
-def test_deepseek_adapter_accepts_an_explicit_no_partial_attribution_boundary() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
-        "标题",
-        P2SemanticContract(
-            "两份样衣重量不同。",
-            "没有结构测试，不能确认双面结构造成了其中任何一部分差异。",
-            "当前两份样衣记录",
-        ),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert violations == ()
-
-
-@pytest.mark.parametrize(
-    "claim",
-    [
-        "不能确认这310克差异是否完全由双面结构造成。",
-        "不能确认双面结构是重量差异的唯一或主要原因。",
-        "不能确认双面结构造成了多少重量差异。",
-        "双面结构不一定带来全部重量差异。",
-        "不能把重量差异全归因于双面结构。",
-        "不知道双面结构具体贡献了多少重量差异。",
-        "不能确认这份重量是不是全因为双面。",
-        "不能简单把这份重量差异归因于双面结构。",
-        "你猜双面结构贡献了多少？",
-        "不能简单理解为双面结构直接导致重量增加。",
-        "没法说这重量差就是双面结构带来的。",
-        "无法判断双面设计对重量的具体影响。",
-        "不能确认重量差异全因双面。",
-    ],
-)
-def test_deepseek_adapter_rejects_causal_degree_language_that_implies_partial_weight(
-    claim: str,
-) -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
-        "标题",
-        P2SemanticContract("两份样衣重量不同。", claim, "当前两份样衣记录"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert {violation.field for violation in violations} == {"tradeoff_or_limit"}
-
-
-def test_deepseek_adapter_rejects_an_unverified_claim_that_we_weighed_the_product() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
-        "标题",
-        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
-        VideoProductionBundle(
-            "导读",
-            "台词",
-            "动作",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "我们称了重量，结果很意外。",
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {"release_caption_and_interaction"}
-
-
-def test_deepseek_adapter_rejects_unprovided_candidate_causes_even_when_negated() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣960克；对照样衣650克。", ""),
-        "标题",
-        P2SemanticContract(
-            "两份样衣重量不同。",
-            "现有资料无法把重量差异归因于面料、里料或工艺。",
-            "当前两份样衣记录",
-        ),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert {violation.field for violation in violations} == {"tradeoff_or_limit"}
-
-
-@pytest.mark.parametrize(
-    "claim",
-    [
-        "双面设计提供了双倍口袋使用。",
-        "这件外套的口袋数量翻倍。",
-    ],
-)
-def test_deepseek_adapter_rejects_turning_two_sided_pocket_use_into_double_quantity(
-    claim: str,
-) -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两面口袋均可正常使用。", ""),
-        "标题",
-        P2SemanticContract("两面口袋均可使用。", "现有资料无法归因。", "当前商品记录"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", claim),
-    )
-
-    assert {violation.field for violation in violations} == {"release_caption_and_interaction"}
-
-
-def test_deepseek_adapter_allows_ordinary_visual_garment_language() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两面均为完整外观。", ""),
-        "标题",
-        P2SemanticContract("两面完整。", "现有资料无法归因。", "当前商品记录"),
-        VideoProductionBundle(
-            "导读",
-            "台词",
-            "手拎衣领翻面，镜头推近至面料纹理。",
-            "字幕",
-            "声音",
-            "衣领与面料纹理的画面",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert violations == ()
-
-
-def test_deepseek_adapter_rejects_showing_an_unprovided_internal_component() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两面均为完整外观，两面口袋均可使用。", ""),
-        "标题",
-        P2SemanticContract("两面完整。", "现有资料无法归因。", "当前商品记录"),
-        VideoProductionBundle(
-            "导读",
-            "台词",
-            "手伸入口袋，拉出一点内衬。",
-            "字幕",
-            "口袋拉出内衬时的布料声。",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {
-        "visual_actions",
-        "sound_and_production",
+    context = BoundaryContext.from_request(generation_input)
+    candidate: dict[str, object] = {
+        "title": "沉默也值得被尊重",
+        "brand_account_link": "笛语服饰主张给每个人留出自己的判断空间。",
+        "visual_actions": "当前创作者在普通室内正对自己的手机口播。",
+        "spoken_lines": "我们认为，理解不必立刻变成推销。",
     }
 
+    assert (
+        DeepSeekGenerator._deterministic_boundary_violations(
+            context,
+            candidate,
+        )
+        == ()
+    )
 
-def test_deepseek_adapter_rejects_an_unverified_first_person_measurement() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
+
+def test_visible_body_keeps_contract_and_media_fields_readable() -> None:
+    body = DeepSeekGenerator._visible_body(
         "标题",
-        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
         VideoProductionBundle(
             "导读",
-            "我们M码样衣称出来是960克。",
+            "完整口播",
             "动作",
-            "字幕",
+            "同源字幕",
             "声音",
             "首帧",
             "观看链",
-            "时长",
+            "约 12 秒",
             "发布",
         ),
+        P1SemanticContract("选择", "边界", "下一步"),
     )
 
-    assert {violation.field for violation in violations} == {"spoken_lines"}
+    assert "标题：标题" in body
+    assert "当前选择：选择" in body
+    assert "完整台词/解说：完整口播" in body
+    assert "字幕：同源字幕" in body
 
 
-def test_deepseek_adapter_rejects_no_voice_direction_when_spoken_copy_exists() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
+def test_visual_only_product_story_can_remain_no_voice() -> None:
+    body = DeepSeekGenerator._visible_body(
         "标题",
-        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
         VideoProductionBundle(
             "导读",
-            "这是一段完整口播。",
-            "无口播、无对白、无解说。画面展示当前商品。",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {"visual_actions"}
-
-
-def test_deepseek_adapter_rejects_no_voice_subtitle_when_spoken_copy_exists() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
-        "标题",
-        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
-        VideoProductionBundle(
-            "导读",
-            "这是一段完整口播。",
-            "画面展示当前商品。",
             "无口播、无对白、无解说",
-            "声音",
+            "当前商品在画面中翻面",
+            "画面字幕",
+            "环境声",
             "首帧",
             "观看链",
-            "时长",
+            "约 8 秒",
             "发布",
         ),
+        P5SemanticContract("真实商品", "视觉命题", "画面成立条件"),
     )
 
-    assert {violation.field for violation in violations} == {"subtitles"}
+    assert "无口播、无对白、无解说" in body
 
 
-def test_deepseek_adapter_rejects_no_voice_branch_when_spoken_copy_exists() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
-        "标题",
-        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
-        VideoProductionBundle(
-            "导读",
-            "这是一段完整口播。",
-            "画面展示当前商品。",
-            "字幕",
-            "无口播时保留环境声。",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {
-        "sound_and_production"
-    }
-
-
-def test_deepseek_adapter_rejects_duration_too_short_for_complete_spoken_copy() -> None:
-    spoken = "这是完整口播，需要以自然语速说完。" * 12
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
-        "标题",
-        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
-        VideoProductionBundle(
-            "导读",
-            spoken,
-            "画面展示当前商品。",
-            "字幕",
-            "环境声和清晰口播。",
-            "首帧",
-            "观看链",
-            "12秒",
-            "发布",
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {"natural_duration"}
-
-
-def test_deepseek_adapter_accepts_a_consistent_no_voice_video() -> None:
-    no_voice = "无口播、无对白、无解说"
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
-        "标题",
-        P2SemanticContract("两份样衣重量不同。", "现有资料无法归因。", "当前样衣记录"),
-        VideoProductionBundle(
-            "导读",
-            no_voice,
-            no_voice,
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert violations == ()
-
-
-@pytest.mark.parametrize(
-    "claim",
-    [
-        "这件双面外套确实比普通单层外套重。",
-        "双面外套通常比单层外套更重。",
-        "一般单层外套都比双面款轻。",
-    ],
-)
-def test_deepseek_adapter_rejects_a_two_sample_weight_as_a_category_claim(
-    claim: str,
+def test_nonrecoverable_provider_status_fails_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣960克；对照样衣650克。", ""),
-        "标题",
-        P2SemanticContract(claim, "现有资料无法归因。", "当前两份样衣记录"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
+    _install_fake(monkeypatch, [FakeResponse(401, {})])
 
-    assert {violation.field for violation in violations} == {"product_insight"}
+    with pytest.raises(GenerationFailed, match="拒绝当前请求"):
+        DeepSeekGenerator(
+            "https://compat.example/v1",
+            "not-a-real-key",
+            "verified-deepseek-model",
+        )._request("system", "prompt", 100)
 
-
-def test_deepseek_adapter_rejects_treating_a_known_weight_difference_as_unknown() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary(
-            "商品 ZX-C218：当前样衣960克；对照样衣650克。",
-            "",
-            known_weight_grams=(960, 650, 310),
-        ),
-        "标题",
-        P2SemanticContract("两份样衣相差310克。", "原因未知。", "当前两份样衣记录"),
-        VideoProductionBundle(
-            "导读",
-            "它确实更重，但重多少、为什么重，现有资料没法确定。",
-            "动作",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert {violation.field for violation in violations} == {"spoken_lines"}
-
-
-def test_deepseek_adapter_rejects_internal_copy_direction() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两面均为完整外观。", ""),
-        "标题",
-        P2SemanticContract("理解", "边界", "当前样衣数据"),
-        VideoProductionBundle(
-            "需向受众说明两面完整。",
-            "台词",
-            "动作",
-            "字幕",
-            "声音",
-            "首帧",
-            "观看链",
-            "时长",
-            "发布",
-        ),
-    )
-
-    assert violations[0].field == "natural_guide"
-
-
-def test_deepseek_adapter_repairs_personal_identifiers_field_by_field() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两面均为完整外观。", ""),
-        "标题",
-        P1SemanticContract("今天先看炭灰面", "不需要联系 test@example.com", "下次再翻面"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert [(item.field, item.fragment) for item in violations] == [("boundary", "不需要联系 test@example.com")]
-
-
-def test_deepseek_adapter_rejects_unprovided_technical_test_details() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：当前样衣约960克；没有结构测试。", ""),
-        "标题",
-        P2SemanticContract("理解", "现有资料没有测试里料或工艺。", "当前样衣数据"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert violations[0].field == "tradeoff_or_limit"
-
-
-def test_deepseek_adapter_does_not_require_a_user_premise_to_use_fixed_words_or_one_sentence() -> None:
-    violations = DeepSeekGenerator._boundary_violations(
-        FactBoundary("商品 ZX-C218：两面均为完整外观。", "品牌已知差异仍坚持要求两面完整。"),
-        "标题",
-        P2SemanticContract("理解", "边界", "当前样衣数据"),
-        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
-    )
-
-    assert violations == ()
+    assert len(FakeClient.requests) == 1

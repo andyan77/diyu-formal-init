@@ -5,7 +5,7 @@ import re
 import time
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import httpx
 
@@ -73,61 +73,94 @@ _DELIVERABLE_REQUIREMENTS: dict[ContentProduct, str] = {
         "不要给选择建议或商品资料说明，也不要把颜色/纹理推成性能、剪裁、人格或生活方式。"
     ),
 }
-_COMPARISON_VISUAL_FIELDS = {
-    "natural_guide",
-    "cover_or_first_frame",
-    "viewing_flow",
-    "visual_actions",
-    "sound_and_production",
-    "hero_image",
-    "image_sequence",
-    "full_body",
-    "layout_and_production",
-}
 
 
 @dataclass(frozen=True)
-class FactBoundary:
-    """One-run-only guard for concrete product claims and invented real-world events."""
+class BoundaryContext:
+    """Ephemeral, user-invisible boundary for one generation call."""
 
-    product_facts: str
-    explicit_premise: str
+    trusted_identity: str
+    confirmed_facts: str
+    user_premise: str
+    brand_viewpoint: str
+    production_resources: str
     product_skus: tuple[str, ...] = ()
-    known_weight_grams: tuple[int, ...] = ()
+    known_numbers: tuple[int, ...] = ()
     known_colors: tuple[str, ...] = ()
+    internal_identifiers: tuple[str, ...] = ()
 
     @classmethod
-    def from_request(cls, request: GenerationInput) -> FactBoundary:
-        weights: list[int] = []
+    def from_request(cls, request: GenerationInput) -> BoundaryContext:
+        numbers: list[int] = []
         colors: list[str] = []
         for product in request.products:
-            for key in ("sample_weight_m_grams", "comparison_single_layer_short_coat_m_grams"):
-                value = product.facts.get(key)
+            for value in product.facts.values():
                 if isinstance(value, int):
-                    weights.append(value)
-            current = product.facts.get("sample_weight_m_grams")
-            comparison = product.facts.get("comparison_single_layer_short_coat_m_grams")
-            if isinstance(current, int) and isinstance(comparison, int):
-                weights.append(abs(current - comparison))
+                    numbers.append(value)
             raw_colors = product.facts.get("colors")
             if isinstance(raw_colors, list):
                 colors.extend(value for value in raw_colors if isinstance(value, str))
-        return cls(
-            product_facts="；".join(
-                DeepSeekGenerator._natural_product(product.sku, product.facts) for product in request.products
+        recorded_numbers = tuple(dict.fromkeys(numbers))
+        numbers.extend(
+            abs(left - right) for index, left in enumerate(recorded_numbers) for right in recorded_numbers[index + 1 :]
+        )
+        facts = "\n".join(
+            (
+                f"当前品牌有效基线：定位“{request.brand.positioning}”；"
+                f"判断顺序“{request.brand.decision_order}”；语气“{request.brand.tone}”。",
+                "当前商品事实："
+                + (
+                    "；".join(
+                        DeepSeekGenerator._natural_product(product.sku, product.facts) for product in request.products
+                    )
+                    or "无已确认商品"
+                ),
+                "本次适用可信资料："
+                + ("；".join(asset.body for asset in request.active_domain_assets) or "无额外可信资料"),
             )
-            or "（无当前商品事实）",
-            explicit_premise="\n".join(part for part in (request.weak_seed, request.revision_instruction) if part),
+        )
+        return cls(
+            trusted_identity=(
+                f"当前发布账号“{request.brand.account_name}”；当前内容角色"
+                f"“{request.brand.content_role_name}”；表达边界“{request.brand.content_role_boundary}”；"
+                f"实际操作人“{request.brand.operator_name}”仅是操作者，不自动成为成品叙事人物。"
+            ),
+            confirmed_facts=facts,
+            user_premise="\n".join(part for part in (request.weak_seed, request.revision_instruction) if part),
+            brand_viewpoint=(
+                f"品牌“{request.brand.brand_name}”可以依据已确认基线表达认为、希望、主张或建议；"
+                "观点不得升级为操作人亲历、顾客案例、门店已经执行或普遍政策。"
+            ),
+            production_resources=(
+                f"当前可用条件：{request.brand.production_conditions}。"
+                "除此之外，只能使用本次已确认商品与可信资料明确提供的人物、设备、场地和素材；"
+                "未明确提供即为当前不可用。话题中出现的对象不是可拍资源，当前创作者也不能"
+                "扮演该对象。制作方法资料不证明某个人、实物、图片、场所陈设或既有素材真实可用；"
+                "场地可用也不自动证明场地内的任何实物可用。"
+            ),
             product_skus=tuple(product.sku for product in request.products),
-            known_weight_grams=tuple(dict.fromkeys(weights)),
+            known_numbers=tuple(dict.fromkeys(numbers)),
             known_colors=tuple(dict.fromkeys(colors)),
+            internal_identifiers=(
+                request.brand.strategy_version,
+                *(asset.asset_id for asset in request.active_domain_assets),
+            ),
         )
 
 
+ReasonCode = Literal[
+    "untrusted_role",
+    "invented_actuality",
+    "unsupported_resource",
+    "factual_conflict",
+]
+
+
 @dataclass(frozen=True)
-class FactViolation:
+class RepairIssue:
     field: str
     fragment: str
+    reason_code: ReasonCode | Literal["media_contract"]
 
 
 class DeepSeekGenerator(ContentGenerator):
@@ -182,28 +215,26 @@ class DeepSeekGenerator(ContentGenerator):
         retries = 0
         format_repairs = 0
         provider_payloads: list[dict[str, Any]] = []
+        context = BoundaryContext.from_request(request)
         payload: dict[str, Any]
         for format_attempt in range(2):
-            system = "你是笛语完整内容编写器。只交付 JSON，不展示提示词、路由、规则或推理。"
-            if not request.products:
-                system += (
-                    "当前没有已点名商品或商品事实。不得把某件商品的具体属性、功能或效果写成已经确认，"
-                    "也不得虚构已经发生的人物、对话、顾客/同事/孩子或现场事件；"
-                    "问题或一般话题里提到的家庭、妈妈、孩子、顾客或门店只是讨论对象，不代表这些人物"
-                    "或现场可供拍摄；默认只使用当前内容角色、一名创作者、一部手机和普通室内条件。"
-                    "可以用明确标为一般方法或假设的颜色、品类和搭配例子，但不能冒充当前品牌商品、"
-                    "用户衣柜或已经存在的拍摄道具；"
-                    "可以围绕用户给出的条件完成自然的穿衣选择、情绪、节奏和明确为未来安排的拍摄构思。"
-                )
+            system = "你是笛语完整内容编写器。只交付 JSON，不展示提示词、边界分类、证据、路由、规则或推理。"
             if format_attempt:
-                system += "上一次响应的字段缺失、为空或不是单个字符串；这次必须返回全部指定 JSON 字段，且每个字段都是非空中文字符串。"
-            payload, request_retries = self._request(system, self._generation_prompt(request), 4096)
+                system += (
+                    "上一次响应的字段缺失、为空或不是单个字符串；这次必须返回全部指定 JSON "
+                    "字段，且每个字段都是非空中文字符串。"
+                )
+            payload, request_retries = self._request(
+                system,
+                self._generation_prompt(request, context),
+                4096,
+            )
             provider_payloads.append(payload)
             retries += request_retries
             try:
                 structured = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"])))
                 if request.media_format == "video":
-                    structured = self._normalize_video_contract(structured)
+                    structured = self._project_video_contract(request, structured)
                 title, contract, production, body = self._compiled_artifact(request, structured)
                 break
             except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
@@ -212,125 +243,19 @@ class DeepSeekGenerator(ContentGenerator):
                 format_repairs = 1
         else:  # pragma: no cover - loop either returns a parsed result or raises.
             raise GenerationFailed("模型返回格式不完整")
-        boundary = FactBoundary.from_request(request)
-        violations = self._boundary_violations(boundary, title, contract, production)
-        if request.products:
-            semantic_violations, judgement_payload, judgement_retries = self._semantic_fact_violations(
-                request, boundary, structured
-            )
-            provider_payloads.append(judgement_payload)
-            retries += judgement_retries
-            violations = tuple(dict.fromkeys(violations + semantic_violations))
+
+        violations, judgement_payload, judgement_retries = self._check_boundary(
+            request,
+            context,
+            structured,
+        )
+        provider_payloads.append(judgement_payload)
+        retries += judgement_retries
         fact_repair_receipts: tuple[FactRepairReceipt, ...] = ()
         if violations:
-            repair_system = "你是笛语内容编写器。只交付修复后的 JSON，不展示规则、推理或后台信息。"
-            if any(
-                self._depicts_unavailable_comparison(boundary, violation.field, violation.fragment)
-                for violation in violations
-            ):
-                repair_system += (
-                    "当前只有对照重量数据，没有对照样衣拍摄事实。待修视觉字段绝不能出现单层外套、"
-                    "对照样衣、第二件商品、两件并排、称量或实物对比；重量只能作为当前商品旁的文字或口播数据。"
-                )
-            if any(self._weakens_no_weight_attribution(violation.fragment) for violation in violations):
-                repair_system += (
-                    "待修字段只保留两份重量记录、没有结构测试和现有资料无法归因；"
-                    "不得讨论或点名任何重量原因，也不得讨论原因的程度、比例、主次或可能性。"
-                )
-            if any(
-                "双面" in violation.fragment
-                and re.search(r"(?:重量|克|差异)", violation.fragment)
-                and re.search(
-                    r"(?:归因|原因|造成|导致|带来|增加|来自|贡献|影响|"
-                    r"多.{0,6}重量|代价|负担|值得.{0,8}重量|换来)",
-                    violation.fragment,
-                )
-                for violation in violations
-            ):
-                repair_system += (
-                    "待修字段只可保留两份记录存在差异以及现有资料无法归因；"
-                    "不得讨论或点名任何重量原因、影响或增减关系。"
-                )
-            if any(self._generalizes_sample_comparison(violation.fragment) for violation in violations):
-                repair_system += (
-                    "当前对照仅是一份同季同长度 M 码样衣记录；待修字段不得把它泛化为普通、"
-                    "一般、通常或普遍的单层外套类别结论。"
-                )
-            if any(self._denies_known_weight_difference(boundary, violation.fragment) for violation in violations):
-                repair_system += (
-                    "960 克与 650 克两份记录可以直接确认相差 310 克；待修字段不得说重量差额、"
-                    "重多少或差多少未知，只能说差异原因未知。"
-                )
-            if any(re.search(r"(?:实测|称重|称了|称出|电子秤)", violation.fragment) for violation in violations):
-                repair_system += (
-                    "已知重量是既有样衣记录；待修字段不得写成我们称了、称出来、现场称重或"
-                    "电子秤画面，只能把记录作为口播或文字数据。"
-                )
-            if any(
-                re.search(
-                    r"(?:双倍|两倍|翻倍).{0,8}口袋|口袋.{0,8}(?:双倍|两倍|翻倍)",
-                    violation.fragment,
-                )
-                for violation in violations
-            ):
-                repair_system += (
-                    "两面口袋均可使用只说明两面可用，不代表口袋数量双倍、两倍或翻倍；"
-                    "待修字段只能保留两面可用这个已知事实。"
-                )
-            if any(
-                re.search(
-                    r"(?:展示|拉出|露出|翻出).{0,8}(?:内衬|里布)",
-                    violation.fragment,
-                )
-                for violation in violations
-            ):
-                repair_system += (
-                    "当前只提供两面完整外观和两面口袋可用；待修字段不得新增、展示或拉出"
-                    "未提供的内部结构或部件。"
-                )
-            if any(violation.field == "natural_duration" for violation in violations):
-                spoken = DeepSeekGenerator._visible_text(structured["spoken_lines"])
-                spoken_count = len(re.findall(r"[\w\u4e00-\u9fff]", spoken))
-                repair_system += (
-                    f"完整口播约有 {spoken_count} 个可读字符；待修自然时长必须足以自然说完"
-                    "全部口播并完成画面，不能通过删口播或报不可能的短时长规避。"
-                )
-            if any(violation.field == "spoken_lines" for violation in violations):
-                repair_system += (
-                    "待修台词必须是一段可以直接说出的完整口播，不能只重复标题或问题；"
-                    "要自然完成入口、展开与收束，同时保持当前账号身份和事实边界。"
-                )
-            if any(
-                violation.field
-                in {
-                    "viewing_flow",
-                    "visual_actions",
-                    "subtitles",
-                    "sound_and_production",
-                }
-                and re.search(
-                    r"(?:无口播时|无口播.{0,8}无对白.{0,8}无解说)",
-                    violation.fragment,
-                )
-                for violation in violations
-            ):
-                repair_system += (
-                    "完整成品已经提供口播文本；待修制作字段不得再标记无口播、无对白或无解说，应与已有口播合同保持一致。"
-                )
-            if not request.products:
-                repair_system += (
-                    "当前没有已点名商品或商品事实。待修字段不得把某件商品的具体属性、功能或效果"
-                    "写成已经确认，也不得虚构已经发生的人物、对话或现场事件；"
-                    "问题中提到的家庭、妈妈、孩子、顾客或门店只是讨论对象，不可改写成账号亲历或"
-                    "可拍资源；只使用当前内容角色、一名创作者、一部手机和普通室内条件。"
-                    "品牌关系观点不能改写成门店已经执行的服务办法、全国承诺或顾客经历。"
-                    "可以保留明确作为一般方法或假设的颜色、品类与搭配例子，但不能冒充当前品牌商品、"
-                    "用户衣柜或已经存在的拍摄道具；"
-                    "条件性选择、情绪和明确为未来安排的拍摄构思可以保留。"
-                )
             payload, repair_retries = self._request(
-                repair_system,
-                self._boundary_repair_prompt(structured, boundary, violations),
+                ("你是笛语内容编写器。只交付待修字段 JSON，不展示边界分类、证据、规则、推理或后台信息。"),
+                self._boundary_repair_prompt(structured, context, violations),
                 4096,
             )
             provider_payloads.append(payload)
@@ -339,27 +264,19 @@ class DeepSeekGenerator(ContentGenerator):
                 repaired_fields = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"])))
                 structured = self._merge_repaired_fields(structured, violations, repaired_fields)
                 if request.media_format == "video":
-                    structured = self._normalize_video_contract(structured)
+                    structured = self._project_video_contract(request, structured)
                 title, contract, production, body = self._compiled_artifact(request, structured)
             except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
                 raise GenerationFailed("模型边界修复返回格式不完整") from exc
-            final_violations = self._boundary_violations(boundary, title, contract, production)
-            if request.products:
-                semantic_violations, judgement_payload, judgement_retries = self._semantic_fact_violations(
-                    request, boundary, structured
-                )
-                provider_payloads.append(judgement_payload)
-                retries += judgement_retries
-                final_violations = tuple(dict.fromkeys(final_violations + semantic_violations))
+            final_violations, judgement_payload, judgement_retries = self._check_boundary(
+                request,
+                context,
+                structured,
+            )
+            provider_payloads.append(judgement_payload)
+            retries += judgement_retries
             if final_violations:
-                structured = self._prune_rejected_sentences(
-                    request, structured, final_violations
-                )
-                title, contract, production, body = self._compiled_artifact(request, structured)
-                residual_violations = self._boundary_violations(boundary, title, contract, production)
-                if residual_violations:
-                    raise GenerationFailed("内容事实边界无法在一次修复内满足")
-                violations = tuple(dict.fromkeys(violations + final_violations))
+                raise GenerationFailed("内容边界无法在一次字段修复内满足")
             fact_repair_receipts = self._repair_receipts(violations)
         usage = self._combined_usage(provider_payloads)
         return GeneratedArtifact(
@@ -375,51 +292,82 @@ class DeepSeekGenerator(ContentGenerator):
             fact_repair_receipts=fact_repair_receipts,
         )
 
-    def _semantic_fact_violations(
+    def _check_boundary(
         self,
         request: GenerationInput,
-        boundary: FactBoundary,
+        context: BoundaryContext,
         structured: dict[str, object],
-    ) -> tuple[tuple[FactViolation, ...], dict[str, Any], int]:
+    ) -> tuple[tuple[RepairIssue, ...], dict[str, Any], int]:
+        deterministic = self._deterministic_boundary_violations(context, structured)
+        media = self._media_violations(request, structured)
+        semantic, payload, retries = self._semantic_boundary_violations(context, structured)
+        return tuple(dict.fromkeys(deterministic + media + semantic)), payload, retries
+
+    def _semantic_boundary_violations(
+        self,
+        context: BoundaryContext,
+        structured: dict[str, object],
+    ) -> tuple[tuple[RepairIssue, ...], dict[str, Any], int]:
         fields = ", ".join(structured)
         payload, retries = self._request(
-            "你是笛语商品事实判定器。只返回 JSON，不改写成品，不展示推理。",
-            f"""判断候选成品是否把未提供内容写成已经确认的商品事实或现实拍摄事实。
-只依据以下可用商品事实和用户明确前提，不使用常识补足商品属性。
-可用商品事实：{boundary.product_facts}
-用户明确前提：{boundary.explicit_premise}
-当前点名商品：{"、".join(boundary.product_skus) or "无"}。
-判定边界：
-1. SKU、记录重量、颜色、两面完整外观和两面口袋必须与可用事实一致。
-2. 两份样衣重量记录只证明这两份记录存在差异；不得把任何一部分差异归因于双面结构，
-   不得据此肯定更扎实、更挺、更暖、更耐用、更高级或其他未提供性质。
-   涉及重量原因时，不得讨论双面结构所占程度、比例、主次或可能性；这类表达仍预设了部分归因。
-   只能说明两份记录存在差异、没有结构测试、现有资料无法归因。
-3. 对照重量是数据，不代表提供了可拍摄的对照样衣；候选只能安排当前点名商品入镜。
-   两份样衣记录也不得泛化为普通、一般、通常或普遍的单层/双面外套品类结论。
-   用文字、字幕或卡片呈现 650 克对照数据，以及拿取、翻面当前点名商品，均属合法画面；
-   只有把单层对照写成第二件实物入镜才违规。
-4. 对未知性质作明确否定或说明“现有资料不能证明”不算违规，但不能用“无法判断”包装
-   一个已经预设成立的性能增益、原因或设计动机。
-5. 创意表达、比喻、情绪、节奏、当前商品的未来拍摄安排可以保留；只在它们冒充商品事实、
-   已发生事件或需要未提供人物/商品/现场时判违规。
+            (
+                "你是笛语内容边界判定器。逐字段做完边界核对，只返回最终 JSON；"
+                "不改写成品，不展示核对过程或推理。"
+            ),
+            f"""只依据本次临时边界判断候选成品。边界未明确提供的事实或资源一律视为不存在，
+不能用常识、常见拍法或话题里出现的对象补足。
+
+可信表达身份：
+{context.trusted_identity}
+
+已确认事实：
+{context.confirmed_facts}
+
+用户本次前提：
+{context.user_premise}
+
+品牌观点与条件性判断：
+{context.brand_viewpoint}
+
+当前可用制作资源：
+{context.production_resources}
+
+对每个候选字段分别核对以下四个问题；一个字段只要有一项成立，就至少返回该字段的一条违规，
+同一字段不必穷举：
+- untrusted_role：账号或当前创作者是否用第一人称、表演或叙事位置冒充了边界外的自然人或岗位。
+  用户只是在话题中提到某类人，不构成账号具备该身份。
+- invented_actuality：是否把观点、假设、话题对象或未知情况写成操作人亲历、真实案例、已经发生的
+  动作/场景、门店已执行做法或普遍政策。品牌“认为、希望、主张、建议”不属于已发生事实。
+  如果确认事实只有品牌观点、没有组织或场所的实际执行状态，任何用品牌口吻肯定描述当前服务、
+  员工做法、现场安排或对外承诺的句子，都属于 invented_actuality，即使该做法符合品牌观点。
+- unsupported_resource：画面、动作、声音或制作步骤是否实际需要边界未提供的人物、商品、图片、
+  场地、设备、道具或既有素材。话题对象可以被口播抽象讨论，但不能因此成为演员、实物或现场。
+- factual_conflict：是否与已确认品牌、商品、资料或明确作用域冲突。
+
+不要误杀依据品牌基线表达的观点、条件性建议、普通视觉标题、当前创作者对手机口播、现有场地中的
+中性动作，或从用户明确前提忠实改写的内容。关键区别是“谈论某个对象”不需要该资源，
+“让该对象出镜、行动、发声或把事件拍成已经发生”需要当前依据。
+
 候选 JSON：{json.dumps(structured, ensure_ascii=False)}
-只返回：{{"violations":[{{"field":"候选字段名","fragment":"该字段中原样连续片段"}}]}}。
-没有违规返回 {{"violations":[]}}。field 必须来自：{fields}；fragment 必须逐字存在于该字段，
-不得返回解释、原因、改写建议或候选中不存在的文字。""",
-            1600,
+只返回：
+{{"violations":[{{"field":"候选字段名","fragment":"该字段中原样连续片段",
+"reason_code":"四类之一"}}]}}。
+没有违规返回 {{"violations":[]}}。field 必须来自：{fields}；fragment 必须逐字存在于该字段且
+是足以定位违规的最小连续片段。不得返回解释、理由、置信度、改写建议或候选中不存在的文字。""",
+            2400,
         )
         try:
             result = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"])))
             raw_violations = result["violations"]
             if not isinstance(raw_violations, list):
                 raise TypeError("violations must be a list")
-            violations: list[FactViolation] = []
+            violations: list[RepairIssue] = []
             for value in raw_violations:
                 if not isinstance(value, dict):
                     raise TypeError("violation must be an object")
                 field = value.get("field")
                 fragment = value.get("fragment")
+                reason_code = value.get("reason_code")
                 candidate = structured.get(field) if isinstance(field, str) else None
                 if (
                     not isinstance(field, str)
@@ -428,18 +376,24 @@ class DeepSeekGenerator(ContentGenerator):
                     or not fragment.strip()
                     or not isinstance(candidate, str)
                     or fragment not in candidate
+                    or reason_code
+                    not in {
+                        "untrusted_role",
+                        "invented_actuality",
+                        "unsupported_resource",
+                        "factual_conflict",
+                    }
                 ):
                     raise TypeError("semantic violation is not grounded in the candidate")
-                if (
-                    field in _COMPARISON_VISUAL_FIELDS
-                    and "单层" in fragment
-                    and re.search(r"(?:卡片|文字|字幕|数据)", fragment)
-                    and not self._depicts_unavailable_comparison(boundary, field, fragment)
-                ):
-                    continue
-                violations.append(FactViolation(field, fragment))
+                violations.append(
+                    RepairIssue(
+                        field,
+                        fragment,
+                        cast(ReasonCode, reason_code),
+                    )
+                )
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
-            raise GenerationFailed("模型事实判定返回格式不完整") from exc
+            raise GenerationFailed("模型边界判定返回格式不完整") from exc
         return tuple(dict.fromkeys(violations)), payload, retries
 
     @staticmethod
@@ -498,28 +452,23 @@ class DeepSeekGenerator(ContentGenerator):
                 time.sleep(delay)
 
     @staticmethod
-    def _normalize_video_contract(structured: dict[str, object]) -> dict[str, object]:
-        """Apply deterministic media consistency without rewriting creative content."""
+    def _project_video_contract(
+        request: GenerationInput,
+        structured: dict[str, object],
+    ) -> dict[str, object]:
+        """Derive subtitles and truthful duration from the final spoken copy."""
         projected = dict(structured)
         spoken = DeepSeekGenerator._visible_text(projected["spoken_lines"])
-        if re.search(r"^\s*无口播.{0,8}无对白.{0,8}无解说\s*$", spoken):
+        if DeepSeekGenerator._is_no_voice(spoken):
             return projected
-        sound = DeepSeekGenerator._visible_text(projected["sound_and_production"])
-        sound_sentences = [
-            sentence.strip()
-            for sentence in re.split(r"(?<=[。！？!?])", sound)
-            if sentence.strip()
-            and not re.search(r"无口播时", sentence)
-        ]
-        if sound_sentences:
-            projected["sound_and_production"] = "".join(sound_sentences)
-        duration = DeepSeekGenerator._visible_text(projected["natural_duration"])
-        duration_match = re.search(r"(\d{1,3})\s*秒", duration)
-        if duration_match:
-            spoken_count = len(re.findall(r"[\w\u4e00-\u9fff]", spoken))
-            minimum_seconds = (spoken_count + 5) // 6
-            if int(duration_match.group(1)) < minimum_seconds:
-                projected["natural_duration"] = f"约 {minimum_seconds} 秒"
+        subtitle = DeepSeekGenerator._visible_text(projected["subtitles"])
+        projected["subtitles"] = subtitle if DeepSeekGenerator._subtitle_is_grounded(spoken, subtitle) else spoken
+        fixed_seconds = DeepSeekGenerator._fixed_duration_seconds(request.brand.production_conditions)
+        projected["natural_duration"] = (
+            f"{fixed_seconds} 秒"
+            if fixed_seconds is not None
+            else f"约 {DeepSeekGenerator._natural_spoken_seconds(spoken)} 秒"
+        )
         return projected
 
     @staticmethod
@@ -562,515 +511,127 @@ class DeepSeekGenerator(ContentGenerator):
         )
 
     @staticmethod
-    def _boundary_violations(
-        boundary: FactBoundary,
-        title: str,
-        contract: ContentSemanticContract,
-        production: ContentProductionBundle,
-    ) -> tuple[FactViolation, ...]:
-        visible = (("title", title),) + tuple(vars(contract).items()) + tuple(vars(production).items())
-        violations: list[FactViolation] = []
-        unsupported_product_assertion = re.compile(
-            r"(?:这(?:件|款)?|该(?:件|款)?|当前(?:这件|这款)?|商品|ZX-[A-Z]\d+).{0,28}"
-            r"(?:保暖|防水|透气|耐穿|显瘦|显高|挺括|支撑|版型|剪裁|"
-            r"设计意图|设计动机|为了.{0,12}(?:设计|制作)|"
-            r"(?:采用|使用|材质(?:是|为)|面料(?:是|为)|由.{0,10}制成).{0,12}"
-            r"(?:羊毛|羊绒|棉|聚酯))"
-        )
-        unprovided_styling_detail = re.compile(
-            r"(?:黑色|白色|灰色|棕色|高领|衬衫|针织衫|T恤).{0,8}(?:内搭|高领|衬衫|针织衫|T恤)"
-        )
-        unverified_capture = re.compile(
-            r"(?:实测|称(?:重(?:台|画面|提示音|读数)|了(?:一下|一遍|重量))|"
-            r"(?:我们|我方|店里|团队).{0,12}称(?:出来|出|得|过|了|重|量)|电子秤|"
-            r"(?:一(?:只|双)手|手部?|镜头).{0,16}(?:拿起|展示|放入).{0,16}(?:单层.{0,4}外套|对照)|"
-            r"(?:单层外套|对照样衣|对比图像).{0,16}(?:拿起|展示|放入|对比))"
-        )
-        invalid_weight_explanation = re.compile(
-            r"(?:因为.{0,24}(?:单层|650克)|(?:单层|650克).{0,24}(?:所以|解释了|证明了).{0,24}(?:310克|差异))"
-        )
-        unsupported_weight_comparison = re.compile(
-            r"(?:像.{0,16}单层.{0,8}(?:轻|重)|(?:更轻|更重|轻于|重于).{0,16}单层)"
-        )
-        unsupported_weight_cause = re.compile(
-            r"(?:结构|其他).{0,16}(?:因素|原因).{0,16}(?:导致|造成|解释).{0,16}(?:差异|重量)|"
-            r"(?:双面结构|双面).{0,16}(?:是|为).{0,12}(?:原因之一|部分原因|一部分原因)|"
-            r"(?:双面结构|双面).{0,16}(?:带来|导致|造成|增加).{0,16}(?:重量|克|差异)|"
-            r"(?:双面结构|双面).{0,64}(?:更重|重量(?:更大|增加|上.{0,8}代价|"
-            r"是.{0,8}代价|负担)|多.{0,6}重量|值得.{0,8}重量|换来.{0,8}重量)"
-        )
-        positive_weight_link = re.compile(
-            r"(?:双面结构|双面).{0,64}(?:更重|重量(?:更大|增加|上.{0,8}代价|"
-            r"是.{0,8}代价|负担)|多.{0,6}重量|值得.{0,8}重量|换来.{0,8}重量)"
-        )
-        internal_copy_direction = re.compile(r"(?:需向受众说明|不应仅因.{0,16}说服)")
+    def _deterministic_boundary_violations(
+        context: BoundaryContext,
+        structured: dict[str, object],
+    ) -> tuple[RepairIssue, ...]:
+        """Keep exact identifiers and concrete product values on trusted rails."""
+        violations: list[RepairIssue] = []
         internal_identifier = re.compile(
-            r"(?:brand-expression-v\d+|schema[_ -]?version|asset[_ -]?id|DIYU-[A-Z0-9-]+)",
+            r"(?:schema[_ -]?version|asset[_ -]?id|DIYU-[A-Z0-9-]+)",
             re.IGNORECASE,
         )
         personal_identifier = re.compile(r"1[3-9]\d{9}|[\w.+-]+@[\w.-]+|订单号?\s*[:：]?\s*[A-Za-z0-9-]+")
-        # A boundary may say that no structure test is available.  It must not
-        # grow into a fabricated inventory of technical variables such as a
-        # lining or a process test.
-        unprovided_technical_detail = re.compile(r"(?:面料|里料|工艺)")
-        unprovided_structure_action = re.compile(
-            r"(?:展示|拉出|露出|翻出).{0,8}(?:内衬|里布)"
-        )
-        unprovided_visual_garment = re.compile(
-            r"(?:米色|蓝色|白色|黑色|灰色|棕色|深色|同色系|针织|卫衣|T恤|牛仔|棉麻|"
-            r"连衣裙|童装|衬衫|裙子|外套|裤子|上衣|配饰)"
-        )
-        invented_real_world_event = re.compile(
-            r"(?:一位|同事|顾客|店长|妈妈|爸爸|孩子|观众|她|他).{0,24}"
-            r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|整理|挑|抓|换|拍了拍|转身离开|等(?:待)?).{0,32}"
-            r"|(?:我们|我).{0,16}(?:见过|遇到过|试过|观察到|每天看到|常常看到|看到过|"
-            r"经常被问|收到过|站在镜子前|试了又试)"
-            r"|(?:我|我们).{0,20}(?:最近|曾经|一直|太久|以前|当了|给孩子|家里|"
-            r"观察过|买了|留下了|犹豫了|包括我自己|上周|昨天|刚才).{0,32}"
-            r"|(?:每次|平时|往常).{0,24}(?:都会|会先|总会|常常)"
-        )
-        capture_resource_pattern = (
-            r"(?:孩子|妈妈|爸爸|丈夫|一家三口|全家(?:人|合影)?|顾客|店员|"
-            r"店内|店门|门店|衣柜|衣架|收银台|购物车|家庭合照|合照|手机相册|"
-            r"玻璃门|挂着的衣物|门铃)"
-        )
-        unprovided_capture_resource = re.compile(capture_resource_pattern)
-        unprovided_creator_identity = re.compile(
-            r"创作者[（(][^）)]{0,20}(?:女性|男性|\d{1,2}\s*岁)"
-        )
-        text_only_topic = re.compile(
-            r"(?:手写(?:标题|关键词)?|字幕|文字|标题|封面文字).{0,48}"
-            + capture_resource_pattern
-        )
-        unconfirmed_service_practice = re.compile(
-            r"(?:我们|这个账号|笛语服饰).{0,24}"
-            r"(?:只在.{0,8}需要时出现|不会打扰|不打扰|始终欢迎|随时来|让顾客|给顾客空间)"
-        )
-        has_provided_capture_resource = bool(
-            re.search(r"(?:可以|可|会|让).{0,8}(?:出镜|拍摄)|现成素材|已经上传|我上传|就在门店拍", boundary.explicit_premise)
-        )
-        if isinstance(production, VideoProductionBundle) and not re.search(
-            r"^\s*无口播.{0,8}无对白.{0,8}无解说\s*$",
-            production.spoken_lines,
-        ):
-            for field in (
-                "viewing_flow",
-                "visual_actions",
-                "subtitles",
-                "sound_and_production",
-            ):
-                value = str(getattr(production, field))
-                if re.search(
-                    r"(?:无口播时|无口播.{0,8}无对白.{0,8}无解说)",
-                    value,
-                ):
-                    violations.append(FactViolation(field, value))
-            duration_match = re.search(r"(\d{1,3})\s*秒", production.natural_duration)
-            if duration_match:
-                spoken_count = len(
-                    re.findall(r"[\w\u4e00-\u9fff]", production.spoken_lines)
-                )
-                declared_seconds = int(duration_match.group(1))
-                minimum_seconds = (spoken_count + 5) // 6
-                if declared_seconds < minimum_seconds:
+        sku_pattern = re.compile(r"\b[A-Z]{2,}(?:-[A-Z0-9]+)+\b")
+        measured_value = re.compile(r"(?<!\d)(\d{1,6})\s*(?:克|元|%|厘米|cm)\b", re.IGNORECASE)
+        colour = re.compile(r"(黑色|白色|蓝色|红色|黄色|紫色|棕色|灰色|绿色|炭灰|深绿)")
+        for field, value in structured.items():
+            text = DeepSeekGenerator._visible_text(value)
+            for identifier in context.internal_identifiers:
+                if identifier and identifier in text:
+                    violations.append(RepairIssue(field, identifier, "factual_conflict"))
+            for pattern in (internal_identifier, personal_identifier):
+                for match in pattern.finditer(text):
                     violations.append(
-                        FactViolation("natural_duration", production.natural_duration)
+                        RepairIssue(
+                            field,
+                            match.group(0),
+                            "factual_conflict",
+                        )
                     )
-                if declared_seconds >= 20 and spoken_count < 50:
+            for sku in sku_pattern.findall(text):
+                if sku not in context.product_skus:
+                    violations.append(RepairIssue(field, sku, "factual_conflict"))
+            if not context.product_skus:
+                continue
+            product_specific = bool(
+                any(sku in text for sku in context.product_skus)
+                or re.search(r"(?:当前商品|这件商品|该商品|当前样衣)", text)
+            )
+            if not product_specific:
+                continue
+            for match in measured_value.finditer(text):
+                if int(match.group(1)) not in context.known_numbers:
                     violations.append(
-                        FactViolation("spoken_lines", production.spoken_lines)
+                        RepairIssue(
+                            field,
+                            match.group(0),
+                            "factual_conflict",
+                        )
                     )
-        elif isinstance(production, VideoProductionBundle) and isinstance(
-            contract, (P1SemanticContract, P3SemanticContract)
-        ):
-            violations.append(FactViolation("spoken_lines", production.spoken_lines))
-        for field, text in visible:
-            for sentence in re.split(r"(?<=[。！？!?])", text):
-                if not sentence.strip():
-                    continue
-                conditional = re.search(r"(?:如果|若|拍摄安排|演绎|假设|可以|可在|打算|建议)", sentence)
-                product_reference = re.search(
-                    r"(?:商品|这(?:件|款)?|该(?:件|款)?|ZX-[A-Z]\d+|重量|双面|样衣|口袋)", sentence
-                )
-                acknowledged_unknown = bool(
-                    re.search(
-                        r"(?:现有资料不能证明|不能(?:从.{0,16})?(?:确认|下结论|推断|证明)|"
-                        r"无法(?:直接|据此|从.{0,16})?(?:确认|断言|推断|证明)|"
-                        r"不宜(?:从.{0,16})?(?:确认|下结论|推断|证明)|不(?:等于|代表|意味着|反映|推演|延伸))",
-                        sentence,
-                    )
-                )
-                product_contract = isinstance(contract, (P2SemanticContract, P5SemanticContract))
-                if unverified_capture.search(sentence) and not acknowledged_unknown:
-                    violations.append(FactViolation(field, sentence.strip()))
-                if DeepSeekGenerator._depicts_unavailable_comparison(boundary, field, sentence):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if invalid_weight_explanation.search(sentence):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if unsupported_weight_comparison.search(sentence) and "不以极致轻量" not in sentence:
-                    violations.append(FactViolation(field, sentence.strip()))
-                if positive_weight_link.search(sentence) or (
-                    unsupported_weight_cause.search(sentence) and not acknowledged_unknown
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if DeepSeekGenerator._weakens_no_weight_attribution(sentence):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if DeepSeekGenerator._generalizes_sample_comparison(sentence):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if DeepSeekGenerator._denies_known_weight_difference(boundary, sentence):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if re.search(
-                    r"(?:双倍|两倍|翻倍).{0,8}口袋|"
-                    r"口袋.{0,8}(?:双倍|两倍|翻倍)",
-                    sentence,
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if internal_copy_direction.search(sentence):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if internal_identifier.search(sentence):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if personal_identifier.search(sentence):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    boundary.product_facts == "（无当前商品事实）"
-                    and unsupported_product_assertion.search(sentence)
-                    and not conditional
-                    and not acknowledged_unknown
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    boundary.product_facts == "（无当前商品事实）"
-                    and invented_real_world_event.search(sentence)
-                    and not conditional
-                    and sentence not in boundary.explicit_premise
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    boundary.product_facts == "（无当前商品事实）"
-                    and field in _COMPARISON_VISUAL_FIELDS
-                    and unprovided_capture_resource.search(sentence)
-                    and not text_only_topic.search(sentence)
-                    and not has_provided_capture_resource
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    boundary.product_facts == "（无当前商品事实）"
-                    and field in _COMPARISON_VISUAL_FIELDS
-                    and unprovided_creator_identity.search(sentence)
-                    and sentence not in boundary.explicit_premise
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    boundary.product_facts == "（无当前商品事实）"
-                    and field in _COMPARISON_VISUAL_FIELDS
-                    and unprovided_visual_garment.search(sentence)
-                    and not text_only_topic.search(sentence)
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    boundary.product_facts == "（无当前商品事实）"
-                    and unconfirmed_service_practice.search(sentence)
-                    and sentence not in boundary.explicit_premise
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    boundary.product_facts != "（无当前商品事实）"
-                    and unsupported_product_assertion.search(sentence)
-                    and not conditional
-                    and not acknowledged_unknown
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    (product_reference or product_contract)
-                    and unprovided_technical_detail.search(sentence)
-                    and re.search(r"(?:重量|克|差异|归因|原因|测试)", sentence)
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if unprovided_structure_action.search(sentence):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if isinstance(contract, P5SemanticContract) and unprovided_styling_detail.search(sentence):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if DeepSeekGenerator._conflicts_with_product_facts(boundary, sentence):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    re.search(
-                        r"(?:很多|许多|不少|多位|几位|每位|所有|常客).{0,8}(?:顾客|客人|到店者)",
-                        sentence,
-                    )
-                    and sentence not in boundary.explicit_premise
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
+            if context.known_colors:
+                for match in colour.finditer(text):
+                    if not any(match.group(1) in known for known in context.known_colors):
+                        violations.append(
+                            RepairIssue(
+                                field,
+                                match.group(0),
+                                "factual_conflict",
+                            )
+                        )
         return tuple(dict.fromkeys(violations))
 
     @staticmethod
-    def _weakens_no_weight_attribution(sentence: str) -> bool:
-        """Reject causal degree language that quietly presupposes a partial attribution."""
-        if re.search(
-            r"双面结构.{0,16}(?:占|贡献|造成|导致).{0,8}"
-            r"(?:多少|多大|比例|程度)",
-            sentence,
-        ):
-            return True
-        if not re.search(r"(?:重量|克|差异)", sentence) or "双面" not in sentence:
-            return False
-        weak_uncertainty = re.search(
-            r"(?:是否|是不是|能否|唯一|主要|多少|多大|比例|程度|主次|"
-            r"不一定|无法排除|不能全|不能都)",
-            sentence,
-        )
-        weak_extent = re.search(r"(?:完全|全部|全都|全|部分)", sentence)
-        safe_no_part = re.search(
-            r"(?:不能|无法|没有.{0,8}(?:依据|证据)).{0,24}"
-            r"(?:任何一部分|任一部分).{0,16}(?:差异|重量)|"
-            r"(?:任何一部分|任一部分).{0,16}(?:差异|重量).{0,24}(?:不能|无法).{0,12}"
-            r"(?:归因|确认|证明)",
-            sentence,
-        )
-        weak_relation = weak_uncertainty is not None or weak_extent is not None
-        weakened_negative = re.search(
-            r"(?:无法|没法|不能|不可|不应|不要).{0,32}"
-            r"(?:归因|原因|造成|导致|带来|增加|来自|贡献|影响)",
-            sentence,
-        )
-        direct_no_attribution = re.search(
-            r"(?:无法|不能|不可)(?:(?:据此|直接)|(?:将|把).{0,16})?归因|"
-            r"(?:无法|不能|不可)(?:确认|确定|证明).{0,16}(?:原因|归因)",
-            sentence,
-        )
-        return safe_no_part is None and (
-            weak_relation or (weakened_negative is not None and direct_no_attribution is None)
-        )
+    def _media_violations(
+        request: GenerationInput,
+        structured: dict[str, object],
+    ) -> tuple[RepairIssue, ...]:
+        if request.media_format != "video":
+            return ()
+        spoken = DeepSeekGenerator._visible_text(structured["spoken_lines"])
+        if DeepSeekGenerator._is_no_voice(spoken):
+            return ()
+        fixed_seconds = DeepSeekGenerator._fixed_duration_seconds(request.brand.production_conditions)
+        if fixed_seconds is not None and DeepSeekGenerator._natural_spoken_seconds(spoken) > fixed_seconds:
+            return (RepairIssue("spoken_lines", spoken, "media_contract"),)
+        return ()
 
     @staticmethod
-    def _generalizes_sample_comparison(sentence: str) -> bool:
-        """Keep a recorded two-sample comparison from becoming a category-level claim."""
-        return bool(
-            re.search(r"(?:单层|双面)", sentence)
-            and re.search(
-                r"(?:重量|克|差异|更重|更轻|重于|轻于|比.{0,12}(?:重|轻))",
-                sentence,
-            )
-            and re.search(r"(?:普通|一般|通常|普遍|往往|都比|均比)", sentence)
-        )
+    def _natural_spoken_seconds(spoken: str) -> int:
+        readable = len(re.findall(r"[\u4e00-\u9fff]|[A-Za-z0-9]+", spoken))
+        pauses = len(re.findall(r"[。！？!?；;\n]", spoken))
+        return max(1, (readable + 3) // 4 + (pauses + 1) // 2)
 
     @staticmethod
-    def _denies_known_weight_difference(boundary: FactBoundary, sentence: str) -> bool:
-        """Reject treating an arithmetically known sample-weight difference as unknown."""
-        if len(boundary.known_weight_grams) < 3:
-            return False
-        unknown = r"(?:无法|没法|不能|未知|不清楚|不确定)"
-        amount = r"(?:重多少|差多少|重量差额|差额|差值|差了多少)"
-        return bool(
-            re.search(amount + r".{0,20}" + unknown, sentence) or re.search(unknown + r".{0,20}" + amount, sentence)
-        )
+    def _fixed_duration_seconds(production_conditions: str) -> int | None:
+        match = re.search(r"(?<!\d)(\d{1,3})\s*秒", production_conditions)
+        return int(match.group(1)) if match else None
 
     @staticmethod
-    def _depicts_unavailable_comparison(boundary: FactBoundary, field: str, sentence: str) -> bool:
-        """Reject a second physical product when the request only supplied comparison data."""
-        if field not in _COMPARISON_VISUAL_FIELDS or len(boundary.product_skus) > 1:
-            return False
-        if re.search(
-            r"不(?:展示|提及|悬挂|拿起|并排|对比).{0,32}(?:单层|对照|第二件|两件)",
-            sentence,
-        ):
-            return False
-        if re.search(r"(?:卡片|文字|字幕|数据)", sentence) and not re.search(
-            r"单层.{0,12}(?:实物|平铺|悬挂|拿起|穿上|入镜)",
-            sentence,
-        ):
-            return False
-        physical_comparison = re.search(
-            r"(?:展示|悬挂|拿起|平铺|并排|旁边放|按压|对比).{0,32}单层.{0,4}外套|"
-            r"单层.{0,4}外套.{0,32}(?:展示|悬挂|拿起|平铺|并排|按压|对比)|"
-            r"(?:两|2)\s*(?:件|款)\s*(?:外套|衣服|商品)|第二(?:件|款)(?:外套|衣服|商品)",
-            sentence,
-        )
-        return physical_comparison is not None
+    def _is_no_voice(spoken: str) -> bool:
+        normalized = re.sub(r"[\s、，,。；;]+", "", spoken)
+        return normalized in {"无口播无对白无解说", "无口播"}
 
     @staticmethod
-    def _conflicts_with_product_facts(boundary: FactBoundary, sentence: str) -> bool:
-        """Reject only concrete SKU, recorded-weight, or product-colour contradictions."""
-        skus = tuple(re.findall(r"\bZX-[A-Z]\d+\b", sentence))
-        if boundary.product_skus and skus and any(sku not in boundary.product_skus for sku in skus):
-            return True
-        weighs_product = bool(re.search(r"(?:商品|样衣|重量|外套|ZX-[A-Z]\d+)", sentence))
-        grams = tuple(int(value) for value in re.findall(r"(\d{2,4})\s*克", sentence))
-        if (
-            boundary.known_weight_grams
-            and weighs_product
-            and grams
-            and any(value not in boundary.known_weight_grams for value in grams)
-        ):
-            return True
-        product_specific = bool(re.search(r"(?:商品|这(?:件|款)?|该(?:件|款)?|ZX-[A-Z]\d+)", sentence))
-        color_terms = tuple(re.findall(r"(?:黑色|白色|蓝色|红色|黄色|紫色|棕色|深绿|炭灰)", sentence))
-        return (
-            product_specific
-            and bool(boundary.known_colors)
-            and bool(color_terms)
-            and any(not any(color in known for known in boundary.known_colors) for color in color_terms)
-        )
+    def _subtitle_is_grounded(spoken: str, subtitle: str) -> bool:
+        """Allow an ordered compression, never a second vocabulary of facts."""
+        spoken_tokens = re.findall(r"[\u4e00-\u9fff]|[A-Za-z0-9]+", spoken)
+        subtitle_tokens = re.findall(r"[\u4e00-\u9fff]|[A-Za-z0-9]+", subtitle)
+        if not subtitle_tokens:
+            return False
+        cursor = iter(spoken_tokens)
+        return all(any(token == candidate for candidate in cursor) for token in subtitle_tokens)
 
     @staticmethod
     def _merge_repaired_fields(
-        draft: dict[str, object], violations: tuple[FactViolation, ...], repaired_fields: object
+        draft: dict[str, object],
+        violations: tuple[RepairIssue, ...],
+        repaired_fields: object,
     ) -> dict[str, object]:
         if not isinstance(repaired_fields, dict):
-            raise TypeError("fact repair must be an object")
+            raise TypeError("boundary repair must be an object")
         requested = tuple(dict.fromkeys(violation.field for violation in violations))
         if set(repaired_fields) != set(requested):
-            raise TypeError("fact repair fields do not match the requested fields")
+            raise TypeError("boundary repair fields do not match the requested fields")
         merged = dict(draft)
         for field in requested:
             merged[field] = DeepSeekGenerator._visible_text(repaired_fields[field])
         return merged
 
     @staticmethod
-    def _prune_rejected_sentences(
-        request: GenerationInput,
-        draft: dict[str, object],
-        violations: tuple[FactViolation, ...],
-    ) -> dict[str, object]:
-        """Finish one repair with safe media fallback only for no-product content."""
-        rejected_by_field: dict[str, list[str]] = {}
-        prunable_fields = {field for fields in _CONTRACT_FIELDS.values() for field in fields} | {
-            "spoken_lines",
-            "subtitles",
-            "release_caption_and_interaction",
-        }
-        no_product_media_fallback_fields = {
-            "natural_guide",
-            "cover_or_first_frame",
-            "viewing_flow",
-            "visual_actions",
-            "sound_and_production",
-        }
-        for violation in violations:
-            if (
-                violation.field not in prunable_fields
-                and not (
-                    not request.products
-                    and violation.field in no_product_media_fallback_fields
-                )
-            ):
-                raise GenerationFailed("内容事实边界无法在一次修复内满足")
-            rejected_by_field.setdefault(violation.field, []).append(violation.fragment.strip())
-        projected = dict(draft)
-        contract_fields = {
-            field for fields in _CONTRACT_FIELDS.values() for field in fields
-        }
-        for field in no_product_media_fallback_fields & rejected_by_field.keys():
-            projected[field] = DeepSeekGenerator._safe_no_product_media_field(
-                request, projected, field
-            )
-            rejected_by_field.pop(field)
-        for field, rejected in rejected_by_field.items():
-            value = DeepSeekGenerator._visible_text(projected[field])
-            separator = r"(?<=[。！？!?])|[|｜；;\n]+" if field == "subtitles" else r"(?<=[。！？!?])"
-            sentences = [sentence.strip() for sentence in re.split(separator, value) if sentence.strip()]
-            kept = [
-                sentence
-                for sentence in sentences
-                if not any(fragment in sentence or sentence in fragment for fragment in rejected)
-            ]
-            if not kept:
-                if not request.products and field in {
-                    "spoken_lines",
-                    "subtitles",
-                    "release_caption_and_interaction",
-                } | contract_fields:
-                    projected[field] = DeepSeekGenerator._safe_no_product_media_field(
-                        request, projected, field
-                    )
-                    continue
-                raise GenerationFailed("内容事实边界无法在一次修复内满足")
-            retained = (" | " if field == "subtitles" else "").join(kept)
-            readable_count = len(re.findall(r"[\w\u4e00-\u9fff]", retained))
-            minimum = 30 if field == "spoken_lines" else 10
-            if field in contract_fields:
-                minimum = 4
-            if readable_count < minimum and not request.products and field in {
-                "spoken_lines",
-                "subtitles",
-                "release_caption_and_interaction",
-            } | contract_fields:
-                projected[field] = DeepSeekGenerator._safe_no_product_media_field(
-                    request, projected, field
-                )
-                continue
-            if readable_count < minimum:
-                raise GenerationFailed("内容事实边界无法在一次修复内满足")
-            projected[field] = retained
-        return projected
-
-    @staticmethod
-    def _safe_no_product_media_field(
-        request: GenerationInput,
-        draft: dict[str, object],
-        field: str,
-    ) -> str:
-        """Compile a usable one-person field without inventing people, products or places."""
-        seed = request.weak_seed.strip()
-        if field == "natural_guide":
-            return "由当前创作者正对手机，从这个问题进入，展开判断后自然收束到品牌立场。"
-        if field == "cover_or_first_frame":
-            return f"当前创作者正对手机，首帧手写标题：“{seed}”"
-        if field == "viewing_flow":
-            return "固定机位：先提出问题，再说清判断与边界，最后留一句给受众继续思考。"
-        if field == "visual_actions":
-            return "当前创作者正对手机口播，用自然停顿、简单手势和手写关键词辅助表达。"
-        if field == "sound_and_production":
-            return "一人一部手机，普通室内环境收音；人声清楚，不依赖额外人物、商品、场地或素材。"
-        if field == "subtitles":
-            return f"{seed}｜尊重差异，也保留自己的判断"
-        if field == "release_caption_and_interaction":
-            return f"{seed} 你最在意的条件是什么？"
-        if field == "choice":
-            return "先保留每个人舒服、愿意使用的选择，再找一个可以自然呼应的共同点。"
-        if field == "boundary":
-            return "如果这个共同点让任何人明显不自在，就放弃统一，保留各自选择。"
-        if field == "next_action":
-            return "先用现有条件做一次低成本对照，再决定哪一种更自然。"
-        if field == "persona_observation":
-            return "这个问题值得从真实感受出发讨论，不需要替任何人物编造经历。"
-        if field == "audience_return":
-            return "你可以保留自己的节奏和判断，不必被一种标准答案催促。"
-        if field == "brand_account_link":
-            return (
-                f"{request.brand.brand_name}当前表达尊重差异、真实克制；"
-                "这是一项品牌立场，不代表门店已经执行某项服务。"
-            )
-        if field == "local_reality_or_signal":
-            return "只使用用户本次明确给出的近场信号，不补写顾客原因或门店事实。"
-        if field == "legitimate_account_response":
-            return "当前账号只表达在其身份边界内能够成立的回应。"
-        if field == "public_relationship_return":
-            return "让未参与原事件的人也能带走一份可迁移的理解与选择空间。"
-        if field == "spoken_lines":
-            if request.primary_product == "dressing_decision":
-                return (
-                    f"关于“{seed}”，这次可以先这样选："
-                    f"{DeepSeekGenerator._visible_text(draft['choice'])}。"
-                    f"但如果{DeepSeekGenerator._visible_text(draft['boundary'])}，选择就要跟着变。"
-                    f"现在可以先做一个小验证：{DeepSeekGenerator._visible_text(draft['next_action'])}。"
-                )
-            if request.primary_product == "brand_life_narrative":
-                return (
-                    f"关于“{seed}”，我们不替任何人编一段经历。"
-                    f"我们想说的是：{DeepSeekGenerator._visible_text(draft['persona_observation'])}。"
-                    f"对你来说，{DeepSeekGenerator._visible_text(draft['audience_return'])}。"
-                    f"这也说明了{DeepSeekGenerator._visible_text(draft['brand_account_link'])}。"
-                )
-            if request.primary_product == "local_response":
-                return (
-                    f"关于“{seed}”，我们只回应当前已经给出的信号。"
-                    f"{DeepSeekGenerator._visible_text(draft['legitimate_account_response'])}。"
-                    f"{DeepSeekGenerator._visible_text(draft['public_relationship_return'])}。"
-                )
-        raise GenerationFailed("内容事实边界无法在一次修复内满足")
-
-    @staticmethod
-    def _repair_receipts(violations: tuple[FactViolation, ...]) -> tuple[FactRepairReceipt, ...]:
+    def _repair_receipts(
+        violations: tuple[RepairIssue, ...],
+    ) -> tuple[FactRepairReceipt, ...]:
         by_field: dict[str, list[str]] = {}
         for violation in violations:
             by_field.setdefault(violation.field, []).append(violation.fragment)
@@ -1181,9 +742,7 @@ class DeepSeekGenerator(ContentGenerator):
                 ("画面成立条件", contract.visual_dependency),
             )
         transform_sections: tuple[tuple[str, str], ...] = ()
-        if isinstance(production, VideoProductionBundle) and re.search(
-            r"(?<!\d)8\s*秒", production.natural_duration
-        ):
+        if isinstance(production, VideoProductionBundle) and re.search(r"(?<!\d)8\s*秒", production.natural_duration):
             transform_sections = (("变换边界", "这是 8 秒窄主题版，不等同于原完整版本。"),)
         return (
             "标题："
@@ -1218,60 +777,36 @@ class DeepSeekGenerator(ContentGenerator):
 用户输入：{request.weak_seed}"""
 
     @staticmethod
-    def _generation_prompt(request: GenerationInput) -> str:
-        assets = "\n".join(asset.body for asset in request.active_domain_assets) or "（无）"
-        products = (
-            "\n".join(DeepSeekGenerator._natural_product(item.sku, item.facts) for item in request.products) or "（无）"
-        )
+    def _generation_prompt(
+        request: GenerationInput,
+        context: BoundaryContext | None = None,
+    ) -> str:
+        boundary = context or BoundaryContext.from_request(request)
         fields = ", ".join(_CONTRACT_FIELDS[request.primary_product])
         prior = request.prior_saved_body or "（未授权复用旧正文）"
         revision = request.revision_instruction or "（首次生成）"
         source = request.source_version_description or "（不是跨目标重编译）"
-        has_comparison_data = any(
-            isinstance(item.facts.get("comparison_single_layer_short_coat_m_grams"), int) for item in request.products
-        )
-        production_fact_boundary = (
-            "当前只提供了对照重量记录，没有提供可拍摄的对照样衣。画面只能使用当前点名商品；"
-            "不得安排第二件商品、两件并排、对照样衣、重新称量或实物比较。"
-            if has_comparison_data
-            else "画面只能使用当前明确提供的商品、人物和现场条件。"
-        )
-        no_product_guard = (
-            "当前没有已点名商品或可用商品事实。不得把某件未提供的商品属性、功能、效果或现实经历"
-            "写成已经确认；一般方法或假设可以使用颜色、品类与搭配例子，但不得冒充当前品牌商品、"
-            "用户衣柜或已存在的拍摄道具；"
-            "问题或一般话题里出现的家庭、妈妈、孩子、顾客或门店只是讨论对象，不是可用人物、素材或现场；"
-            "可以围绕用户给出的条件完成自然的选择、情绪、节奏和未来拍摄构思。"
-            if not request.products
-            else ""
-        )
-        writing_boundary = (
-            "写作边界：当前没有商品事实。可以自然讨论穿衣选择、情绪、幽默、节奏和未来拍摄构思，"
-            "但不得把某件具体衣物的属性、功能、效果或现实经历当作已经发生的事实；"
-            "一般方法或假设可以用颜色、品类与搭配例子，不能冒充当前品牌商品或用户已有物品。"
-            "不要写资产、版本、路由、提示或后台字段。"
-            if not request.products
-            else """写作边界：只把“用户种子”和“当前商品事实”当作已经发生或可以肯定的事实；未知资料不得补足为具体商品性能、材质、工艺、部位设计动机或现实事件。条件性专业解释要说明依据什么、能说明什么、不能推出什么；不得把颜色、重量或双面外观推演为性能或官方设计动机。品牌、账号、组织和内容角色只约束发声身份、语气和权威边界，绝不成为已经发生的顾客、店长、门店、服务或交易事件。
-商品解释时，新增理解只能组合当前商品事实和当前适用资产已经支持的内容。若没有结构测试，不能声称双面结构造成、带来或增加了任何一部分重量差异，也不得列举面料、里料、工艺等未验证候选原因；只能陈述两份已记录重量及当前不能归因。涉及重量原因时，不讨论双面结构所占程度、比例、主次或可能性；这些表达仍暗示了部分归因。对照只是一份同季同长度 M 码样衣记录，不得泛化成普通、一般、通常或普遍的单层/双面外套品类结论。用户种子明确给出的品牌开发选择要与相伴限制自然讲清，但不要求固定词、数字或字段逐字重复。创意、比喻、幽默、情绪、节奏和未来拍摄安排可以充分表达，只要不把它们伪装成已经发生的商品事实或现实经历。没有明确确认拍摄当天重新称量时，绝不写实测、电子秤、称重画面、称重声音或当前不存在的对照样衣。不要在可见文字中加入资产、版本、路由、提示或后台字段。"""
-        )
-        shortening_boundary = (
-            "若条件要求 8 秒，不能声称保留源版全部认知；明确标为 8 秒窄主题版，只保留仍能独立成立的一项命题。"
-            if "8 秒" in request.brand.production_conditions
-            else ""
-        )
-        four_image_boundary = (
-            "若当前只能补拍四张，图序必须恰为四张；完整正文继续承担图片无法独立说明的归因边界。"
-            if "四张" in request.brand.production_conditions
-            else ""
+        fixed_seconds = DeepSeekGenerator._fixed_duration_seconds(request.brand.production_conditions)
+        transform_boundary = (
+            f"用户明确要求 {fixed_seconds} 秒；完整口播必须真实适配，不要只改时长标签。"
+            if fixed_seconds is not None
+            else "用户未要求固定时长；保留完整口播，由服务端根据最终口播形成自然时长。"
         )
         if request.media_format == "video":
-            media_contract = """交付一条可直接拍摄、表演、录音和剪辑的完整观看链。语言承重时给完整可说文本；视觉承重时给足以直接执行的画面、动作、顺序、节奏和声音。无口播版本要明确写“无口播、无对白、无解说”，并让画面和声音承担价值。不要固定时长、故事、反转、CTA、字幕或配乐。"""
+            media_contract = (
+                "交付可直接拍摄、表演、录音和剪辑的完整观看链。口播必须完整自然；"
+                "字幕将由服务端从最终口播同源形成。声音和动作只能使用当前画面与可用资源，"
+                "不能另造人物、商品、场地、道具、既有图片或事件。没有明确提供实物时，"
+                "用当前创作者面对手机口播、手势或屏幕文字承担画面，不安排话题对象出镜。"
+            )
             media_fields = (
                 "natural_guide, cover_or_first_frame, viewing_flow, spoken_lines, visual_actions, subtitles, "
                 "sound_and_production, natural_duration, release_caption_and_interaction"
             )
         else:
-            media_contract = """交付一条可直接拍摄、选图、排版和发布的完整阅读链。首图、每张图的唯一职责、图中文字、完整正文与必要制作提示必须闭合；不得把视频截图、台词卡或切碎长文当作图文。图片承重时不能让正文代替画面。不要固定图片数或强塞 CTA。"""
+            media_contract = (
+                "交付可直接拍摄、选图、排版和发布的完整阅读链。首图、图序、完整正文与制作提示闭合，只使用当前可用资源。"
+            )
             media_fields = (
                 "natural_guide, hero_image, image_sequence, full_body, layout_and_production, "
                 "release_caption_and_interaction"
@@ -1280,55 +815,74 @@ class DeepSeekGenerator(ContentGenerator):
 本次受众价值：{_PRODUCT_VALUE[request.primary_product]}；必须只兑现这一价值，不说明路由。
 本次交付门：{_DELIVERABLE_REQUIREMENTS[request.primary_product]}
 当前媒体合同：{media_contract}
-品牌：{request.brand.brand_name}；品牌战略版本：{request.brand.strategy_version}；定位：{request.brand.positioning}；语气：{request.brand.tone}。
-实际操作人：{request.brand.operator_name}；代表组织：{request.brand.organization_name}；内容角色：{request.brand.content_role_name}；角色边界：{request.brand.content_role_boundary}；受众：{request.brand.audience_description}；平台/形式：{request.brand.platform}／{request.brand.media_format}；制作条件：{request.brand.production_conditions}。
+受众：{request.brand.audience_description}；平台/形式：{request.brand.platform}／{request.brand.media_format}。
 目标平台方向：{request.platform_direction.direction}
-当前变形边界：{shortening_boundary or four_image_boundary or "（无额外变形）"}
-当前商品事实（只可使用这里明确给出的内容）：{products}
-当前可拍对象边界：{production_fact_boundary}
-无商品事实边界：{no_product_guard or "（当前有已点名商品，仍只可使用上述事实）"}
-本次适用资产：{assets}
+当前变形边界：{transform_boundary}
+
+可信表达身份：
+{boundary.trusted_identity}
+
+已确认事实：
+{boundary.confirmed_facts}
+
+用户本次前提：
+{boundary.user_premise}
+
+品牌观点与条件性判断：
+{boundary.brand_viewpoint}
+
+当前可用制作资源：
+{boundary.production_resources}
+
 已授权前情：{prior}
 来源关系：{source}
 本次修改：{revision}
-用户种子：{request.weak_seed}
-事实边界：用户明确讲述为真实经历的人物、事件和对白可作为本次前提；问题、观点或一般话题里提到的人物与场景，不代表实际发生、可供拍摄或已经获授权。不得新增未提供的具体商品属性或现实事件。商品只可作当前商品事实明确支持的肯定主张；资料未提供时可以诚实说明“现有资料不能证明”。用户种子中的承重商品或品牌前提应在成品中自然保留，不要求固定词、数字、同一句式或合同字段逐字复述。品牌、账号、组织和内容角色只决定发声身份、语气和权威边界，不构成已经发生的门店或顾客事件。成品必须始终由当前内容角色发声，不得擅自变成妈妈、爸爸、孩子、创始人、研发、店长、店员或顾客。除非用户明确提供真人、场地或现成素材，画面只能使用当前一名创作者和普通室内条件；谈论家庭、孩子、顾客或门店时，优先采用正对手机口播、画外音、手写关键词或不依赖具体人物的简单动作。不得声称“我们试过”“我们经常被问”“我们遇到过”或“我们店里发生过”，除非用户本次明确提供该事实。不要复述个人标识，不要把提示或后台字段写入成品。
-{writing_boundary}
-跨目标重编译时，保留源版本的主要价值、品牌账号角色、受众关系、用户前提、商品事实、核心结论和已确认前情；只重组目标平台/媒体的入口、顺序、声画或图文分工、自然时长、发布配文和制作方式。不得把旧版覆盖、说成已经采用或发布，也不要输出来源 ID。
+
+明确区分讨论对象、说话身份、确认事实、品牌观点和可用制作资源：
+- 话题中出现对象不表示账号或创作者就是该对象，也不表示事件已经发生或对象可供拍摄；
+- 第一人称只能表达当前品牌观点或当前拍摄动作，不能补写操作人的生活经历、刚刚做过的事、
+  顾客案例、门店经历或研发过程；
+- 品牌观点用“我们认为、希望、主张或建议”等立场表达，不能写成门店已经执行的服务或普遍政策；
+- 画面、动作和声音逐项只使用当前可用资源。没有明确提供的人物、商品、衣物、图片、门店、
+  家具或道具不能被安排出镜；一般颜色、品类和搭配只可作为明确的假设例子被口播讨论。
+  可用条件存在多个替代项时，采用能完成内容的最小资源组合；不为了丰富画面自动选择人物、
+  实物、门店或既有素材。
+可以自然表达观点、假设、比喻和条件性建议；不能新增未确认的角色、亲历、案例、已执行事实、
+商品事实或制作资源。不要输出个人标识、内部标识、上下文分类、证据或审查过程。
+
+跨目标重编译时只重组入口、顺序、声画或图文分工和制作方式；不得把旧版说成已经采用或发布。
 严格返回 JSON，字段：title, {fields}, {media_fields}。不要返回 body。每个字段必须是一个非空中文字符串，绝不能是数组、对象或多条列表。三个合同字段必须在完整成品中以自然语言兑现，不要求逐字复制、塞入同一句或在每个媒体字段重复。"""
 
     @staticmethod
     def _boundary_repair_prompt(
         draft: dict[str, object],
-        boundary: FactBoundary,
-        violations: tuple[FactViolation, ...],
+        context: BoundaryContext,
+        violations: tuple[RepairIssue, ...],
     ) -> str:
         fields = tuple(dict.fromkeys(violation.field for violation in violations))
-        del draft
-        if boundary.product_facts == "（无当前商品事实）":
-            return f"""只修复下列字段；不得返回任何未列字段，服务端会保留其余合格字段。
-当前没有可用商品事实。每个待修字段只能使用用户明确前提、选择条件、改变条件和低成本验证动作。一般方法或假设可以使用颜色、品类与搭配例子，但不得把它们写成当前品牌商品、用户衣柜或已经存在的拍摄道具。未来拍摄构思可以保留，但不能描写未提供的服装、人物或现场。
-问题中提到的家庭、妈妈、孩子、顾客或门店只是讨论对象，不可改写成账号亲历或可拍资源。画面只使用当前内容角色、一名创作者、一部手机和普通室内条件；可用正对手机口播、画外音、手写关键词或不依赖具体人物的简单动作。
-品牌关系观点不能改写成门店已经执行的服务办法、全国承诺或顾客经历，只能表达当前品牌立场和判断。
-用户明确前提：{boundary.explicit_premise}
-请依据用户明确前提，为下列字段重新写出自然、完整的替换值：{", ".join(fields)}。
-严格只返回一个 JSON 对象，键必须恰好为：{", ".join(fields)}。每个值必须是对应字段修复后的非空中文字符串。"""
-        current_products = "、".join(boundary.product_skus) or "当前已点名商品"
-        comparison_visual_repair = (
-            "待修视觉字段不得提及、展示、悬挂、拿起或并排任何单层外套、对照样衣或第二件商品；"
-            f"已知重量只能作为{current_products}画面旁的文字或口播数据出现，"
-            "不能伪造为实物对比、称量或重新拍摄。"
-            if any(
-                DeepSeekGenerator._depicts_unavailable_comparison(boundary, violation.field, violation.fragment)
-                for violation in violations
-            )
-            else ""
+        issue_text = "\n".join(
+            f"- {violation.field} | {violation.reason_code} | {violation.fragment}" for violation in violations
         )
+        candidate = {field: DeepSeekGenerator._visible_text(draft[field]) for field in fields}
         return f"""只修复下列字段；不得返回任何未列字段，服务端会保留其余合格字段。
-请只依据可用商品事实和用户明确前提，重新写出下列字段：{", ".join(fields)}。
-可用商品事实：{boundary.product_facts}
-用户明确前提：{boundary.explicit_premise}
-不得新增商品性能、材质、工艺、未提供部位、设计动机、现实人物/事件或重新称量；不得把当前两份样衣资料改写成实拍对比。{comparison_visual_repair}重量原因完全未知：只陈述两份已记录重量、没有结构测试和现有资料无法归因；不得讨论或点名任何候选原因，也不得讨论原因的程度、比例、主次、可能性、影响或增减关系。对照只是一份同季同长度 M 码样衣记录，不得泛化成普通、一般、通常或普遍的单层/双面外套品类结论；不得列举未验证候选因素或未提供性能。条件性、未来拍摄安排和自然表达可以保留。
+不要删除整篇的主要价值，也不要用固定安全文案代替成品。只让字段重新满足本次边界。
+
+可信表达身份：{context.trusted_identity}
+已确认事实：{context.confirmed_facts}
+用户本次前提：{context.user_premise}
+品牌观点与条件性判断：{context.brand_viewpoint}
+当前可用制作资源：{context.production_resources}
+
+待修字段原文：{json.dumps(candidate, ensure_ascii=False)}
+定位到的问题：
+{issue_text}
+
+若问题是 media_contract，必须真实缩短口播以适配用户指定时长；不能只改时长标签。
+身份或现实主张越界时，保留原话题价值，改成当前品牌明确标示的观点、建议或条件性判断，
+不能继续让账号扮演话题人物，也不能保留没有依据的亲历、案例或已执行事实。
+制作资源越界时，保留原内容职责，改用当前明确提供的创作者、手机和场地内的中性动作；
+话题人物、商品、图片和道具只可被抽象谈论，不能被安排出镜或当成已经持有的素材。
+不要输出分类、证据、审查过程或解释。
 严格只返回一个 JSON 对象，键必须恰好为：{", ".join(fields)}。每个值必须是对应字段修复后的非空中文字符串。"""
 
     @staticmethod
