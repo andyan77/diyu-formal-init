@@ -259,6 +259,14 @@ class DeepSeekGenerator(ContentGenerator):
                     "重多少或差多少未知，只能说差异原因未知。"
                 )
             if any(
+                re.search(r"(?:实测|称重|称了|称出|电子秤)", violation.fragment)
+                for violation in violations
+            ):
+                repair_system += (
+                    "已知重量是既有样衣记录；待修字段不得写成我们称了、称出来、现场称重或"
+                    "电子秤画面，只能把记录作为口播或文字数据。"
+                )
+            if any(
                 violation.field in {"viewing_flow", "visual_actions", "sound_and_production"}
                 and re.search(r"无口播.{0,8}无对白.{0,8}无解说", violation.fragment)
                 for violation in violations
@@ -504,11 +512,10 @@ class DeepSeekGenerator(ContentGenerator):
         violations: list[FactViolation] = []
         unsupported_product_assertion = re.compile(
             r"(?:这(?:件|款)?|该(?:件|款)?|当前(?:这件|这款)?|商品|ZX-[A-Z]\d+).{0,28}"
-            r"(?:保暖|防水|透气|耐穿|显瘦|显高|性能|品质|材质|面料|羊毛|羊绒|棉|聚酯|"
-            r"挺括|支撑|版型|剪裁|设计意图|设计动机|为了.{0,12}(?:设计|制作))"
-        )
-        unprovided_component = re.compile(
-            r"(?:左襟|右襟|衣襟|拉链|纽扣|帽|袖口|领口|衣领)"
+            r"(?:保暖|防水|透气|耐穿|显瘦|显高|挺括|支撑|版型|剪裁|"
+            r"设计意图|设计动机|为了.{0,12}(?:设计|制作)|"
+            r"(?:采用|使用|材质(?:是|为)|面料(?:是|为)|由.{0,10}制成).{0,12}"
+            r"(?:羊毛|羊绒|棉|聚酯))"
         )
         unprovided_styling_detail = re.compile(
             r"(?:黑色|白色|灰色|棕色|高领|衬衫|针织衫|T恤).{0,8}(?:内搭|高领|衬衫|针织衫|T恤)"
@@ -637,21 +644,11 @@ class DeepSeekGenerator(ContentGenerator):
                 if (
                     (product_reference or product_contract)
                     and unprovided_technical_detail.search(sentence)
-                    and (
-                        not acknowledged_unknown
-                        or re.search(r"(?:重量|克|差异|归因|原因)", sentence)
-                    )
+                    and re.search(r"(?:重量|克|差异|归因|原因|测试)", sentence)
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if isinstance(contract, P5SemanticContract) and unprovided_styling_detail.search(
                     sentence
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    (product_reference or product_contract)
-                    and unprovided_component.search(sentence)
-                    and not acknowledged_unknown
-                    and not conditional
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if DeepSeekGenerator._conflicts_with_product_facts(boundary, sentence):

@@ -1062,6 +1062,27 @@ def test_deepseek_adapter_rejects_unprovided_candidate_causes_even_when_negated(
     assert {violation.field for violation in violations} == {"tradeoff_or_limit"}
 
 
+def test_deepseek_adapter_allows_ordinary_visual_garment_language() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：两面均为完整外观。", ""),
+        "标题",
+        P2SemanticContract("两面完整。", "现有资料无法归因。", "当前商品记录"),
+        VideoProductionBundle(
+            "导读",
+            "台词",
+            "手拎衣领翻面，镜头推近至面料纹理。",
+            "字幕",
+            "声音",
+            "衣领与面料纹理的画面",
+            "观看链",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert violations == ()
+
+
 def test_deepseek_adapter_rejects_an_unverified_first_person_measurement() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：当前样衣约960克。", ""),
