@@ -240,6 +240,7 @@ class DeepSeekGenerator(ContentGenerator):
                 repair_system += (
                     "待修字段不得把双面结构与重量差异组成因果句，即使使用否定、疑问或不确定语气；"
                     "不要讨论原因的程度、比例、主次或可能性，只说明现有资料无法归因。"
+                    "这些已命中字段不得再次出现“双面结构”四个字。"
                 )
             if any(
                 self._generalizes_sample_comparison(violation.fragment)
@@ -698,6 +699,11 @@ class DeepSeekGenerator(ContentGenerator):
             return False
         if re.search(
             r"不(?:展示|提及|悬挂|拿起|并排|对比).{0,32}(?:单层|对照|第二件|两件)",
+            sentence,
+        ):
+            return False
+        if re.search(r"(?:卡片|文字|字幕|数据)", sentence) and not re.search(
+            r"单层.{0,12}(?:实物|平铺|悬挂|拿起|穿上|入镜)",
             sentence,
         ):
             return False

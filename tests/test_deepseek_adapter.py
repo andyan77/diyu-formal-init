@@ -709,6 +709,20 @@ def test_deepseek_adapter_repairs_comparison_visuals_without_showing_a_second_sa
     assert "不得声称双面造成、带来或增加了重量" in prompt
 
 
+def test_deepseek_adapter_allows_comparison_weight_as_a_text_card() -> None:
+    boundary = FactBoundary(
+        "商品 ZX-C218：当前样衣约960克；对照数据约650克。",
+        "",
+        product_skus=("ZX-C218",),
+    )
+
+    assert not DeepSeekGenerator._depicts_unavailable_comparison(
+        boundary,
+        "viewing_flow",
+        "外套挂在衣架上，画面出现文字卡片“同季同长度单层样衣 M 码 650 克”。",
+    )
+
+
 def test_deepseek_adapter_treats_comparison_weight_as_data_not_a_shootable_sample(
     generation_input: GenerationInput,
 ) -> None:
@@ -854,6 +868,7 @@ def test_deepseek_adapter_uses_a_system_repair_guard_for_weak_causal_negation(
 
     assert "无法归因" in artifact.body
     assert "不得把双面结构与重量差异组成因果句" in str(FakeClient.requests[1]["json"])
+    assert "不得再次出现“双面结构”四个字" in str(FakeClient.requests[1]["json"])
 
 
 def test_deepseek_adapter_rejects_an_invented_explanation_for_weight_difference() -> None:
