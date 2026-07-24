@@ -774,11 +774,31 @@ class DeepSeekGenerator(ContentGenerator):
 用户明确前提：{boundary.explicit_premise}
 服务器已记录每个待修字段中的违规片段；为避免复写错误事实，不向你回显这些原文。请依据用户明确前提，为下列字段重新写出自然、完整的替换值：{", ".join(fields)}。
 严格只返回一个 JSON 对象，键必须恰好为：{", ".join(fields)}。每个值必须是对应字段修复后的非空中文字符串。"""
+        comparison_visual_repair = (
+            "待修视觉字段不得提及、展示、悬挂、拿起或并排任何单层外套、对照样衣或第二件商品；"
+            "已知重量只能作为 ZX-C218 画面旁的文字或口播数据出现，不能伪造为实物对比、称量或重新拍摄。"
+            if any(
+                violation.field
+                in {
+                    "natural_guide",
+                    "cover_or_first_frame",
+                    "viewing_flow",
+                    "visual_actions",
+                    "hero_image",
+                    "image_sequence",
+                    "full_body",
+                    "layout_and_production",
+                }
+                and "单层" in violation.fragment
+                for violation in violations
+            )
+            else ""
+        )
         return f"""只修复下列字段；不得返回任何未列字段，服务端会保留其余合格字段。
 服务器已记录每个待修字段中的违规片段；为避免复写错误事实，不向你回显这些原文。请只依据可用商品事实和用户明确前提，重新写出下列字段：{", ".join(fields)}。
 可用商品事实：{boundary.product_facts}
 用户明确前提：{boundary.explicit_premise}
-不得新增商品性能、材质、工艺、未提供部位、设计动机、现实人物/事件或重新称量；不得把当前两份样衣资料改写成实拍对比。若当前资料不能归因，只能说明没有结构测试、不能定量判断。条件性、未来拍摄安排和自然表达可以保留。
+不得新增商品性能、材质、工艺、未提供部位、设计动机、现实人物/事件或重新称量；不得把当前两份样衣资料改写成实拍对比。{comparison_visual_repair}若当前资料不能归因，只能说明没有结构测试、不能定量判断。条件性、未来拍摄安排和自然表达可以保留。
 严格只返回一个 JSON 对象，键必须恰好为：{", ".join(fields)}。每个值必须是对应字段修复后的非空中文字符串。"""
 
     @staticmethod

@@ -20,7 +20,7 @@ from src.shared.types import (
     ProductFact,
     VideoProductionBundle,
 )
-from src.tool.llm_gateway.deepseek import DeepSeekGenerator, FactBoundary
+from src.tool.llm_gateway.deepseek import DeepSeekGenerator, FactBoundary, FactViolation
 
 
 class FakeResponse:
@@ -646,6 +646,16 @@ def test_deepseek_adapter_rejects_an_unprovided_comparison_sample_in_visual_plan
     )
 
     assert {violation.field for violation in violations} == {"visual_actions"}
+
+
+def test_deepseek_adapter_repairs_comparison_visuals_without_showing_a_second_sample() -> None:
+    prompt = DeepSeekGenerator._boundary_repair_prompt(
+        {"visual_actions": "旁边放单层短外套。"},
+        FactBoundary("商品 ZX-C218：当前样衣约960克；对照数据约650克。", ""),
+        (FactViolation("visual_actions", "旁边放单层短外套。"),),
+    )
+
+    assert "不得提及、展示、悬挂、拿起或并排任何单层外套、对照样衣或第二件商品" in prompt
 
 
 def test_deepseek_adapter_rejects_an_invented_explanation_for_weight_difference() -> None:
