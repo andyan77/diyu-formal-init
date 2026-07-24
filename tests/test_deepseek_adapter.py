@@ -450,6 +450,7 @@ def test_deepseek_adapter_repairs_a_specific_unsupported_product_claim(
     assert "spoken_lines" in repair_request
     assert "subtitles" in repair_request
     assert '"title"' not in repair_request
+    assert "每个待修字段只能保留用户前提、抽象选择条件、改变条件和低成本验证动作" in repair_request
 
 
 def test_deepseek_adapter_compiles_visible_body_only_from_controlled_fields() -> None:

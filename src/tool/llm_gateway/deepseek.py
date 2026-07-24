@@ -752,9 +752,10 @@ class DeepSeekGenerator(ContentGenerator):
         flagged = "\n".join(f"- {item.field}：{item.fragment}" for item in violations)
         local_draft = {field: draft[field] for field in fields}
         no_product_repair = (
-            "本次没有可用商品事实。只删除被写成既成事实的具体商品属性、功能、效果或现实经历，"
-            "也不要把抽象选择改写成任何具体裙、裤、颜色、配饰、材质或性能；"
-            "条件性选择、比喻、幽默、情绪、节奏和未来拍摄构思可以保留。"
+            "本次没有可用商品事实。每个待修字段只能保留用户前提、抽象选择条件、改变条件"
+            "和低成本验证动作；不得提及任何具体衣物、颜色、配饰、材质、性能、部位或示例，"
+            "也不得把原来的具体例子替换成另一件具体例子。条件性选择、比喻、幽默、情绪、"
+            "节奏和未来拍摄构思可以保留。"
             if boundary.product_facts == "（无当前商品事实）"
             else ""
         )
