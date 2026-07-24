@@ -528,6 +528,30 @@ def test_deepseek_adapter_does_not_prune_a_rejected_production_field() -> None:
         )
 
 
+def test_deepseek_adapter_prunes_one_rejected_spoken_sentence_when_copy_remains() -> None:
+    projected = DeepSeekGenerator._prune_rejected_sentences(
+        {
+            "spoken_lines": (
+                "当前M码样衣约960克，对照同季同长度单层短外套M码样衣约650克。"
+                "两面外观完整，两面口袋均可正常使用。"
+                "不能确认重量差异是不是双面结构造成的。"
+                "当前只有这两份样衣记录，没有结构测试，现有资料无法归因。"
+            )
+        },
+        (
+            FactViolation(
+                "spoken_lines",
+                "不能确认重量差异是不是双面结构造成的。",
+            ),
+        ),
+    )
+
+    spoken = str(projected["spoken_lines"])
+    assert "是不是双面结构造成" not in spoken
+    assert "当前M码样衣约960克" in spoken
+    assert "现有资料无法归因" in spoken
+
+
 def test_deepseek_adapter_exposes_p5_contract_as_readable_sections() -> None:
     body = DeepSeekGenerator._visible_body(
         "视觉标题",

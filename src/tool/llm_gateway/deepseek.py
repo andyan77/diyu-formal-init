@@ -803,7 +803,7 @@ class DeepSeekGenerator(ContentGenerator):
         rejected_by_field: dict[str, list[str]] = {}
         prunable_fields = {
             field for fields in _CONTRACT_FIELDS.values() for field in fields
-        }
+        } | {"spoken_lines", "release_caption_and_interaction"}
         for violation in violations:
             if violation.field not in prunable_fields:
                 raise GenerationFailed("内容事实边界无法在一次修复内满足")
@@ -828,7 +828,18 @@ class DeepSeekGenerator(ContentGenerator):
             ]
             if not kept:
                 raise GenerationFailed("内容事实边界无法在一次修复内满足")
-            projected[field] = "".join(kept)
+            retained = "".join(kept)
+            readable_count = len(re.findall(r"[\w\u4e00-\u9fff]", retained))
+            minimum = 30 if field == "spoken_lines" else 10
+            if field in {
+                contract_field
+                for fields in _CONTRACT_FIELDS.values()
+                for contract_field in fields
+            }:
+                minimum = 4
+            if readable_count < minimum:
+                raise GenerationFailed("内容事实边界无法在一次修复内满足")
+            projected[field] = retained
         return projected
 
     @staticmethod
