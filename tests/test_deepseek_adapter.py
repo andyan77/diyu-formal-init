@@ -249,7 +249,7 @@ def test_deepseek_adapter_rejects_invented_product_details_and_events_without_pr
         FactBoundary("（无当前商品事实）", "下午开完正式会议，再去接孩子。"),
         "会议后的切换",
         P1SemanticContract(
-            "穿深色连衣裙或连体裤，剪裁利落、面料有弹性。",
+            "穿深色连衣裙或连体裤，剪裁利落、面料抗皱。",
             "同事问我：这身蹲下不皱，站起来不垮吗？",
             "下午开完正式会议，再去接孩子。",
         ),
@@ -270,6 +270,34 @@ def test_deepseek_adapter_rejects_invented_product_details_and_events_without_pr
         "choice",
         "boundary",
         "spoken_lines",
+    }
+
+
+def test_deepseek_adapter_rejects_product_detail_before_a_generic_garment_name() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "下午开完正式会议，再去接孩子。"),
+        "标题",
+        P1SemanticContract(
+            "优先选一件剪裁利落、面料抗皱的连衣裙，搭配可拆卸丝巾。",
+            "如果临时去户外，再换成高弹力、易活动的裤装。",
+            "出门前走两步。",
+        ),
+        VideoProductionBundle(
+            "导读",
+            "台词",
+            "动作",
+            "字幕",
+            "声音",
+            "深蓝色连衣裙作为首帧。",
+            "观看链",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert {item.field for item in violations} == {
+        "choice",
+        "cover_or_first_frame",
     }
 
 
