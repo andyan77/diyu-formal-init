@@ -16,6 +16,7 @@ from src.shared.types import (
     GenerationInput,
     P1SemanticContract,
     P2SemanticContract,
+    P3SemanticContract,
     P5SemanticContract,
     ProductFact,
     VideoProductionBundle,
@@ -229,6 +230,52 @@ def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_nam
     assert "不得把某件商品的具体属性、功能或效果写成已经确认" in system
     assert "不得虚构已经发生的人物、对话、顾客/同事/孩子或现场事件" in system
     assert "默认只使用当前内容角色、一名创作者、一部手机和普通室内条件" in system
+
+
+def test_deepseek_adapter_rejects_turning_a_family_question_into_people_or_props() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "孩子坚持自己选衣服，大人的审美要不要让一步？"),
+        "让一步",
+        P3SemanticContract(
+            "我们观察到一位妈妈总会替孩子重新搭配。",
+            "尊重差异。",
+            "品牌官方账号。",
+        ),
+        VideoProductionBundle(
+            "导读",
+            "完整台词",
+            "孩子背影从衣柜里拿出蓝色卫衣，再跑向门口。",
+            "字幕",
+            "声音",
+            "首帧",
+            "镜头展示孩子穿上衣服转圈。",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert {item.field for item in violations} == {
+        "persona_observation",
+        "visual_actions",
+        "viewing_flow",
+    }
+
+
+def test_p4_contract_does_not_embed_a_demo_store_name(
+    generation_input: GenerationInput,
+) -> None:
+    request = GenerationInput(
+        **{
+            **generation_input.__dict__,
+            "primary_product": "local_response",
+            "weak_seed": "品牌官方账号回应一个门店关系问题。",
+        }
+    )
+
+    prompt = DeepSeekGenerator._generation_prompt(request)
+
+    assert "当前发布账号能合法作出的回应" in prompt
+    assert "南城店账号" not in prompt
 
 
 def test_deepseek_adapter_allows_non_factual_clothing_choice_when_no_product_fact_exists() -> None:

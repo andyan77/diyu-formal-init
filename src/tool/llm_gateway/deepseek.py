@@ -65,7 +65,7 @@ _DELIVERABLE_REQUIREMENTS: dict[ContentProduct, str] = {
         "不要把可迁移的门店关系许可写成主回报，也不要把商品改写为造型主张。"
     ),
     "local_response": (
-        "必须由已给出的近场信号、南城店账号能合法作出的回应、未到店者也可带走的关系许可共同承重。"
+        "必须由已给出的近场信号、当前发布账号能合法作出的回应、未到店者也可带走的关系许可共同承重。"
         "不要把店长性格、商品或画面写成主回报，也不把门店做法扩大成全国政策或交易承诺。"
     ),
     "visual_styling_story": (
@@ -314,6 +314,8 @@ class DeepSeekGenerator(ContentGenerator):
                 repair_system += (
                     "当前没有已点名商品或商品事实。待修字段不得把某件商品的具体属性、功能或效果"
                     "写成已经确认，也不得虚构已经发生的人物、对话或现场事件；"
+                    "问题中提到的家庭、妈妈、孩子、顾客或门店只是讨论对象，不可改写成账号亲历或"
+                    "可拍资源；只使用当前内容角色、一名创作者、一部手机和普通室内条件。"
                     "不要自行把抽象选择指定为裙、裤、颜色、配饰、材质或性能；"
                     "条件性选择、情绪和明确为未来安排的拍摄构思可以保留。"
                 )
@@ -619,6 +621,21 @@ class DeepSeekGenerator(ContentGenerator):
         invented_real_world_event = re.compile(
             r"(?:一位|同事|顾客|店长|孩子|观众|她|他).{0,24}"
             r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|拍了拍|转身离开|等(?:待)?).{0,32}"
+            r"|(?:我们|我).{0,16}(?:见过|遇到过|试过|观察到|经常被问|站在镜子前|试了又试)"
+            r"|(?:妈妈|爸爸|丈夫|孩子).{0,16}(?:喊|坚持|拿起|穿上|跑开|转圈)"
+        )
+        no_product_specific_object = re.compile(
+            r"(?:米色|蓝色|白色|黑色|灰色|棕色|深色|同色系|"
+            r"针织|卫衣|T恤|牛仔|棉麻|连衣裙|童装|衬衫|裙子|外套|配饰|绿植)"
+        )
+        unprovided_capture_resource = re.compile(
+            r"(?:孩子|妈妈|爸爸|丈夫|一家三口|全家(?:人|合影)?|顾客|店员).{0,24}"
+            r"(?:出镜|入镜|背影|只露|展示|穿上|走向|跑开|转圈|合影|画面)"
+            r"|(?:店内|店门|门店|衣柜|衣架|收银台|购物车|家庭合照|手机相册).{0,24}"
+            r"(?:拍摄|镜头|画面|展示|显示|翻出|扫过|推近|滑动|拿出)"
+        )
+        has_provided_capture_resource = bool(
+            re.search(r"(?:可以|可|会|让).{0,8}(?:出镜|拍摄)|现成素材|已经上传|我上传|就在门店拍", boundary.explicit_premise)
         )
         if isinstance(production, VideoProductionBundle) and not re.search(
             r"^\s*无口播.{0,8}无对白.{0,8}无解说\s*$",
@@ -707,9 +724,22 @@ class DeepSeekGenerator(ContentGenerator):
                     violations.append(FactViolation(field, sentence.strip()))
                 if (
                     boundary.product_facts == "（无当前商品事实）"
+                    and no_product_specific_object.search(sentence)
+                    and sentence not in boundary.explicit_premise
+                ):
+                    violations.append(FactViolation(field, sentence.strip()))
+                if (
+                    boundary.product_facts == "（无当前商品事实）"
                     and invented_real_world_event.search(sentence)
                     and not conditional
                     and sentence not in boundary.explicit_premise
+                ):
+                    violations.append(FactViolation(field, sentence.strip()))
+                if (
+                    boundary.product_facts == "（无当前商品事实）"
+                    and field in _COMPARISON_VISUAL_FIELDS
+                    and unprovided_capture_resource.search(sentence)
+                    and not has_provided_capture_resource
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if (
@@ -1135,6 +1165,7 @@ class DeepSeekGenerator(ContentGenerator):
         if boundary.product_facts == "（无当前商品事实）":
             return f"""只修复下列字段；不得返回任何未列字段，服务端会保留其余合格字段。
 当前没有可用商品事实。每个待修字段只能使用用户明确前提、抽象选择条件、改变条件和低成本验证动作。不得保留或新增任何具体衣物、颜色、配饰、材质、性能、部位或示例，也不得把原来的具体例子换成另一件具体例子。未来拍摄构思可以保留，但只能是抽象安排，不能描写未提供的服装、人物或现场。
+问题中提到的家庭、妈妈、孩子、顾客或门店只是讨论对象，不可改写成账号亲历或可拍资源。画面只使用当前内容角色、一名创作者、一部手机和普通室内条件；可用正对手机口播、画外音、手写关键词或不依赖具体人物的简单动作。
 用户明确前提：{boundary.explicit_premise}
 请依据用户明确前提，为下列字段重新写出自然、完整的替换值：{", ".join(fields)}。
 严格只返回一个 JSON 对象，键必须恰好为：{", ".join(fields)}。每个值必须是对应字段修复后的非空中文字符串。"""
