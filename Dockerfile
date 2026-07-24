@@ -24,7 +24,6 @@ COPY assets/ ./assets/
 COPY 首批领域数据库知识数据/ ./首批领域数据库知识数据/
 COPY frontend/ ./frontend/
 COPY --from=frontend /build/frontend/dist ./frontend/dist
-RUN uv sync --locked --no-dev
 
 EXPOSE 18000
 CMD ["uv", "run", "--no-sync", "uvicorn", "src.gateway.api.app:create_app", "--factory", "--host", "127.0.0.1", "--port", "18000", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1"]
