@@ -18,16 +18,25 @@ def upgrade() -> None:
     )
     op.execute(
         """
-        UPDATE content_series series
-        SET account_id = scoped.account_id
-        FROM (
-            SELECT item.series_id, min(task.account_id::text)::uuid AS account_id
-            FROM content_series_items item
-            JOIN business_tasks task ON task.id = item.task_id AND task.tenant_id = item.tenant_id
-            GROUP BY item.series_id
-            HAVING count(DISTINCT task.account_id) = 1
-        ) scoped
-        WHERE series.id = scoped.series_id
+        DO $$
+        DECLARE current_tenant uuid;
+        BEGIN
+            FOR current_tenant IN SELECT id FROM tenants LOOP
+                PERFORM set_config('app.tenant_id', current_tenant::text, true);
+                UPDATE content_series series
+                SET account_id = scoped.account_id
+                FROM (
+                    SELECT item.series_id, min(task.account_id::text)::uuid AS account_id
+                    FROM content_series_items item
+                    JOIN business_tasks task ON task.id = item.task_id AND task.tenant_id = item.tenant_id
+                    WHERE item.tenant_id = current_tenant
+                    GROUP BY item.series_id
+                    HAVING count(DISTINCT task.account_id) = 1
+                ) scoped
+                WHERE series.id = scoped.series_id AND series.tenant_id = current_tenant;
+            END LOOP;
+        END;
+        $$
         """
     )
     op.execute(
