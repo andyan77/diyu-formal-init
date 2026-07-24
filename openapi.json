@@ -93,6 +93,32 @@
             ],
             "title": "Adapted From"
           },
+          "ai_generated": {
+            "title": "Ai Generated",
+            "type": "boolean"
+          },
+          "aigc_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aigc Label"
+          },
+          "aigc_release_reminder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aigc Release Reminder"
+          },
           "body": {
             "title": "Body",
             "type": "string"
@@ -154,7 +180,8 @@
           "version_id",
           "version",
           "outline",
-          "body"
+          "body",
+          "ai_generated"
         ],
         "title": "ContentVersionResponse",
         "type": "object"
