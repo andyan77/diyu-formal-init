@@ -217,6 +217,7 @@ def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_nam
 
     assert "当前没有已点名商品或可用商品事实" in prompt
     assert "不得把某件未提供的商品属性、功能、效果或现实经历" in prompt
+    assert "不要自行把抽象选择指定为裙、裤、颜色、配饰、材质或性能" in prompt
     assert "自然的选择、情绪、节奏和未来拍摄构思" in prompt
 
     FakeClient.responses = [FakeResponse(200, {"choices": [{"message": {"content": _video_payload()}}]})]
