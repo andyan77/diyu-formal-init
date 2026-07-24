@@ -976,6 +976,27 @@ def test_deepseek_adapter_rejects_an_unverified_claim_that_we_weighed_the_produc
     }
 
 
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "这件双面外套确实比普通单层外套重。",
+        "双面外套通常比单层外套更重。",
+        "一般单层外套都比双面款轻。",
+    ],
+)
+def test_deepseek_adapter_rejects_a_two_sample_weight_as_a_category_claim(
+    claim: str,
+) -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：当前样衣960克；对照样衣650克。", ""),
+        "标题",
+        P2SemanticContract(claim, "现有资料无法归因。", "当前两份样衣记录"),
+        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
+    )
+
+    assert {violation.field for violation in violations} == {"product_insight"}
+
+
 def test_deepseek_adapter_rejects_internal_copy_direction() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：两面均为完整外观。", ""),
