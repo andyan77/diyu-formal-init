@@ -82,6 +82,11 @@ class ContentService:
             source_description = None
         if primary_product is None:
             return {"kind": "greeting", "message": natural_reply()}
+        if primary_product == "product_truth" and not products:
+            return {
+                "kind": "question",
+                "message": "这条商品解释要以哪件当前品牌已确认商品为依据？",
+            }
         if primary_product == "visual_styling_story" and not products:
             return {"kind": "question", "message": "这条视觉内容要以哪件当前品牌商品为锚？"}
         assets = self._repository.load_active_assets(

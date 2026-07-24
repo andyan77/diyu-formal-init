@@ -19,8 +19,14 @@ from src.infrastructure.production_auth import (
 )
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.errors import DomainError
-from src.shared.types import TrustedScope
+from src.shared.types import ContentProduct, RoutingInput, TrustedScope
 from src.tool.llm_gateway.stub import DeterministicP1Generator
+
+
+class ForcedProductTruthGenerator(DeterministicP1Generator):
+    def route(self, request: RoutingInput) -> ContentProduct | None:
+        del request
+        return "product_truth"
 
 
 def _settings(database_url: str) -> Settings:
@@ -291,6 +297,19 @@ def test_real_brand_non_product_p3_has_no_demo_tenant_context(
     )
     scope = repository.content_scope(TenantSession(tenant_id, user_id, "tenant-user"))
     assert str(scope.account_id) == account["id"]
+
+    guarded_service = ContentService(
+        PostgresContentRepository(app_database_url),
+        ForcedProductTruthGenerator(),
+    )
+    guarded = guarded_service.create_from_weak_seed(
+        scope,
+        "请解释这件没有确认资料的商品。",
+    )
+    assert guarded == {
+        "kind": "question",
+        "message": "这条商品解释要以哪件当前品牌已确认商品为依据？",
+    }
 
     service = ContentService(
         PostgresContentRepository(app_database_url),
