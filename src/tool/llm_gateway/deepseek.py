@@ -417,7 +417,10 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:一位|同事|顾客|店长|孩子|观众|她|他).{0,24}"
             r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|拍了拍|转身离开|等(?:待)?).{0,32}"
         )
-        unprovided_comparison_visual = re.compile(r"单层.{0,4}外套")
+        unprovided_comparison_visual = re.compile(
+            r"(?:展示|悬挂|拿起|并排|旁边放|按压).{0,32}单层.{0,4}外套|"
+            r"单层.{0,4}外套.{0,32}(?:展示|悬挂|拿起|并排|按压)"
+        )
         comparison_visual_fields = {
             "natural_guide",
             "cover_or_first_frame",
@@ -447,7 +450,11 @@ class DeepSeekGenerator(ContentGenerator):
                 product_contract = isinstance(contract, (P2SemanticContract, P5SemanticContract))
                 if unverified_capture.search(sentence) and not acknowledged_unknown:
                     violations.append(FactViolation(field, sentence.strip()))
-                if field in comparison_visual_fields and unprovided_comparison_visual.search(sentence):
+                if (
+                    field in comparison_visual_fields
+                    and unprovided_comparison_visual.search(sentence)
+                    and not re.search(r"不(?:展示|提及|悬挂|拿起|并排|对比).{0,32}单层", sentence)
+                ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if invalid_weight_explanation.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
