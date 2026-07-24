@@ -664,6 +664,17 @@ def test_deepseek_adapter_rejects_a_partial_weight_attribution_without_structure
     assert {violation.field for violation in violations} == {"tradeoff_or_limit"}
 
 
+def test_deepseek_adapter_rejects_a_claim_that_double_facing_created_the_weight_difference() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：两份样衣相差约310克，不能归因。", ""),
+        "标题",
+        P2SemanticContract("双面结构确实带来了约310克重量差异。", "边界", "条件"),
+        VideoProductionBundle("导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"),
+    )
+
+    assert {violation.field for violation in violations} == {"product_insight"}
+
+
 def test_deepseek_adapter_rejects_internal_copy_direction() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：两面均为完整外观。", ""),
