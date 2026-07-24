@@ -162,7 +162,9 @@ def test_deepseek_adapter_retries_429_with_retry_after(
     assert "保留分寸。" in request_payload
     assert "B-TPO-001" not in request_payload
     assert "v0.1" not in request_payload
-    assert "用户种子中的人物、事件和对白可作为本次前提" in request_payload
+    assert "用户明确讲述为真实经历的人物、事件和对白可作为本次前提" in request_payload
+    assert "不得擅自变成妈妈、爸爸、孩子、创始人、研发、店长、店员或顾客" in request_payload
+    assert "画面只能使用当前一名创作者和普通室内条件" in request_payload
 
 
 def test_deepseek_adapter_does_not_turn_a_visual_plan_into_a_word_blacklist(
@@ -213,6 +215,7 @@ def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_nam
     assert "当前没有已点名商品或可用商品事实" in prompt
     assert "不得把某件未提供的商品属性、功能、效果或现实经历" in prompt
     assert "不要自行把抽象选择指定为裙、裤、颜色、配饰、材质或性能" in prompt
+    assert "只是讨论对象，不是可用人物、素材或现场" in prompt
     assert "自然的选择、情绪、节奏和未来拍摄构思" in prompt
 
     FakeClient.responses = [FakeResponse(200, {"choices": [{"message": {"content": _video_payload()}}]})]
@@ -225,6 +228,7 @@ def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_nam
     system = str(FakeClient.requests[0]["json"])
     assert "不得把某件商品的具体属性、功能或效果写成已经确认" in system
     assert "不得虚构已经发生的人物、对话、顾客/同事/孩子或现场事件" in system
+    assert "默认只使用当前内容角色、一名创作者、一部手机和普通室内条件" in system
 
 
 def test_deepseek_adapter_allows_non_factual_clothing_choice_when_no_product_fact_exists() -> None:

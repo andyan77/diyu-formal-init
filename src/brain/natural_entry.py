@@ -4,6 +4,23 @@ import re
 
 _CONTINUATION_SIGNALS = ("接着上一条", "延续之前", "继续上一条", "沿用上一条")
 _SMALL_TALK_SIGNALS = ("hello", "hi", "你好", "您好", "有点困", "挺安静", "聊聊", "谢谢")
+_CONTENT_INTENT_SIGNALS = (
+    "内容",
+    "口播",
+    "脚本",
+    "拍",
+    "穿",
+    "外套",
+    "商品",
+    "双面",
+    "顾客",
+    "品牌",
+    "账号",
+    "门店",
+    "家庭",
+    "孩子",
+    "妈妈",
+)
 
 
 def is_natural_chat(text: str) -> bool:
@@ -12,10 +29,7 @@ def is_natural_chat(text: str) -> bool:
     return (
         bool(normalized)
         and any(signal in normalized for signal in _SMALL_TALK_SIGNALS)
-        and not any(
-            signal in normalized
-            for signal in ("内容", "口播", "脚本", "拍", "穿", "外套", "商品", "双面", "顾客")
-        )
+        and not any(signal in normalized for signal in _CONTENT_INTENT_SIGNALS)
     )
 
 

@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.brain.content_service import ContentService
+from src.brain.natural_entry import is_natural_chat
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
 from src.infrastructure.postgres_repository import PostgresContentRepository
@@ -27,6 +28,12 @@ class ForcedProductTruthGenerator(DeterministicP1Generator):
     def route(self, request: RoutingInput) -> ContentProduct | None:
         del request
         return "product_truth"
+
+
+class ForcedBrandLifeGenerator(DeterministicP1Generator):
+    def route(self, request: RoutingInput) -> ContentProduct | None:
+        del request
+        return "brand_life_narrative"
 
 
 def _settings(database_url: str) -> Settings:
@@ -325,6 +332,49 @@ def test_real_brand_non_product_p3_has_no_demo_tenant_context(
     assert "一家人，可以自然呼应" in body
     for forbidden in ("折线之间", "南城店", "ZX-C218", "炭灰", "深绿细格纹"):
         assert forbidden not in body
+    assert not is_natural_chat(
+        "品牌官方账号能不能聊聊：走进门店只想自己看看，这种沉默是不是也应该被尊重？"
+    )
+    relationship_service = ContentService(
+        PostgresContentRepository(app_database_url),
+        ForcedBrandLifeGenerator(),
+    )
+    relationship_result = relationship_service.create_from_weak_seed(
+        scope,
+        "品牌官方账号能不能聊聊：走进门店只想自己看看，这种沉默是不是也应该被尊重？",
+    )
+    assert relationship_result["kind"] == "content"
+
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                (SELECT count(*) FROM business_tasks WHERE tenant_id = %s),
+                (SELECT count(*) FROM generation_runs WHERE tenant_id = %s),
+                (SELECT count(*) FROM content_versions WHERE tenant_id = %s)
+            """,
+            (tenant_id, tenant_id, tenant_id),
+        )
+        before_product_gate = cursor.fetchone()
+    product_gate = service.create_from_weak_seed(
+        scope,
+        "请讲一件当前品牌现在最值得买的外套，并说明面料、价格和适合谁。",
+    )
+    assert product_gate == {
+        "kind": "question",
+        "message": "要讲当前品牌的具体商品，请先指定一件已经确认资料的商品。",
+    }
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                (SELECT count(*) FROM business_tasks WHERE tenant_id = %s),
+                (SELECT count(*) FROM generation_runs WHERE tenant_id = %s),
+                (SELECT count(*) FROM content_versions WHERE tenant_id = %s)
+            """,
+            (tenant_id, tenant_id, tenant_id),
+        )
+        assert cursor.fetchone() == before_product_gate
     task_id = UUID(str(result["task_id"]))
     with pytest.raises(DomainError):
         service.fetch_version(
@@ -358,4 +408,4 @@ def test_real_brand_non_product_p3_has_no_demo_tenant_context(
             """,
             (tenant_id, tenant_id, tenant_id, UUID(created["brand_id"])),
         )
-        assert cursor.fetchone() == (0, 0, 1)
+        assert cursor.fetchone() == (0, 0, 2)

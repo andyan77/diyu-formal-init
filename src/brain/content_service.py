@@ -77,6 +77,13 @@ class ContentService:
                 source_description = source.source_description if is_recompile else None
         else:
             products = self._repository.load_product_facts(scope, sanitized_seed)
+            if not products and self._requires_confirmed_product(
+                sanitized_seed, context.brand_name
+            ):
+                return {
+                    "kind": "question",
+                    "message": "要讲当前品牌的具体商品，请先指定一件已经确认资料的商品。",
+                }
             primary_product = self._generator.route(RoutingInput(sanitized_seed, context, products))
             prior_body = None
             source_description = None
@@ -122,6 +129,34 @@ class ContentService:
             direction,
             source_description,
         )
+
+    @staticmethod
+    def _requires_confirmed_product(seed: str, brand_name: str) -> bool:
+        """Fail closed only for an explicit current-brand factual product request."""
+        product_subject = any(
+            marker in seed
+            for marker in ("商品", "外套", "上衣", "裤子", "裙子", "连衣裙", "鞋", "这件", "这款")
+        )
+        current_brand = any(
+            marker in seed
+            for marker in (brand_name, "当前品牌", "你们品牌", "我们品牌")
+        )
+        factual_request = any(
+            marker in seed
+            for marker in (
+                "面料",
+                "成分",
+                "价格",
+                "库存",
+                "工艺",
+                "功能",
+                "最值得买",
+                "哪件",
+                "推荐一件",
+                "讲一件",
+            )
+        )
+        return product_subject and current_brand and factual_request
 
     def revise(
         self,
