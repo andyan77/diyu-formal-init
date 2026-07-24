@@ -38,10 +38,10 @@ export DOCKER_BUILDKIT=1
 
 "$repository/deploy/backup.sh" predeploy
 docker compose -f "$repository/$compose_file" build app
-docker compose -f "$repository/$compose_file" run --rm migrate
-docker compose -f "$repository/$compose_file" run --rm seed
+docker compose -f "$repository/$compose_file" run --rm migrate </dev/null
+docker compose -f "$repository/$compose_file" run --rm seed </dev/null
 if [[ ! -e /etc/diyu/bootstrap-output ]]; then
-  docker compose -f "$repository/$compose_file" run --rm bootstrap
+  docker compose -f "$repository/$compose_file" run --rm bootstrap </dev/null
 fi
 docker compose -f "$repository/$compose_file" up -d --no-build app
 
