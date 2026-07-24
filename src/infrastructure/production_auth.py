@@ -341,7 +341,7 @@ class ProductionAuthRepository:
                 (self._digest(token),),
             )
 
-    def complete_activation(self, raw_token: str, password: str) -> None:
+    def complete_activation(self, raw_token: str, password: str) -> str:
         token_digest = self._digest(raw_token)
         with self._tx() as cursor:
             cursor.execute(
@@ -367,6 +367,22 @@ class ProductionAuthRepository:
                 (token["tenant_id"], token["user_id"]),
             )
             self._tenant_audit(cursor, tenant_id, user_id, "password.activated_or_reset", user_id)
+            cursor.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM tenant_management_grants management_grant
+                    WHERE management_grant.tenant_id = %s
+                      AND management_grant.user_id = %s
+                      AND management_grant.enabled = true
+                ) AS is_manager
+                """,
+                (tenant_id, user_id),
+            )
+            is_manager = bool(
+                self._one(cursor, "无法确认激活后的入口资格")["is_manager"]
+            )
+        return "tenant-admin" if is_manager else "tenant-user"
 
     def change_password(self, identity: TenantSession, current_password: str, new_password: str) -> bool:
         with self._tx() as cursor:

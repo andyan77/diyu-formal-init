@@ -152,6 +152,7 @@ def test_real_tenant_onboarding_is_atomic_account_independent_and_idempotent(
             follow_redirects=False,
         )
         assert activated.status_code == 303
+        assert activated.headers["location"] == "/tenant-admin/login"
         with pytest.raises(DomainError, match="租户名称或管理员用户名"):
             repository.provision_tenant(
                 operator,

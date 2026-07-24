@@ -55,6 +55,7 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
             follow_redirects=False,
         )
         assert activated.status_code == 303
+        assert activated.headers["location"] == "/tenant-admin/login"
         signed_in = client.post(
             "/tenant-admin/login",
             content="username=formal-admin&password=a-long-enough-password",
@@ -101,14 +102,13 @@ def test_production_created_user_uses_one_time_link_and_cannot_escalate(
         assert cursor.fetchone() == (ORG_ID,)
     app = create_app(_settings(app_database_url))
     with TestClient(app, base_url="https://diyuai.cc") as client:
-        assert (
-            client.post(
-                f"/activate/{created['activation_token']}",
-                content="password=another-long-password",
-                follow_redirects=False,
-            ).status_code
-            == 303
+        activated = client.post(
+            f"/activate/{created['activation_token']}",
+            content="password=another-long-password",
+            follow_redirects=False,
         )
+        assert activated.status_code == 303
+        assert activated.headers["location"] == "/login"
         assert (
             client.post(
                 "/login",

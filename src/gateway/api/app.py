@@ -342,8 +342,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             password = fields.get("password", [""])[0]
             if len(password) < 12:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="密码至少需要 12 个字符")
-            production_authority.repository.complete_activation(activation_token, password)
-            return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+            audience = production_authority.repository.complete_activation(
+                activation_token, password
+            )
+            destination = (
+                "/tenant-admin/login" if audience == "tenant-admin" else "/login"
+            )
+            return RedirectResponse(destination, status_code=status.HTTP_303_SEE_OTHER)
 
         @app.post("/api/v1/auth/password", responses=business_failures)
         def change_password(payload: ChangePasswordRequest, request: Request) -> dict[str, bool]:
@@ -1018,9 +1023,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 context = workbench_service.user_portal_context(production_authority.repository.content_scope(identity))
             except DomainError:
+                try:
+                    production_authority.repository.manager_scope(identity)
+                except DomainError:
+                    manager_guidance = "请由租户管理员为本人建立最小工作资格。"
+                else:
+                    manager_guidance = (
+                        "你具备租户管理资格；请使用同一用户名和密码从"
+                        "<a href='/tenant-admin/login'>租户管理员入口</a>登录，"
+                        "先确认品牌草案并建立首个发布账号。"
+                    )
                 return HTMLResponse(
-                    "<main><h1>租户用户工作台</h1><p>当前自然人尚未获授内容或陈列工作资格。"
-                    "请由租户管理员为本人建立最小工作资格。</p></main>"
+                    "<main><h1>租户用户工作台</h1><p>当前自然人尚未获授内容或陈列工作资格。</p><p>"
+                    + manager_guidance
+                    + "</p></main>"
                 )
             context["formal_runtime"] = True
         else:
