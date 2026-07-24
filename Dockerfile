@@ -3,7 +3,7 @@ FROM node:20-bookworm-slim AS frontend
 
 WORKDIR /build/frontend
 COPY frontend/ ./
-RUN npm ci --ignore-scripts
+RUN ls -la && test -f package-lock.json && npm ci --ignore-scripts
 RUN npm run build
 
 FROM ghcr.io/astral-sh/uv:python3.10-bookworm-slim AS runtime
