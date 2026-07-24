@@ -350,15 +350,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         @app.post("/api/v1/tenant-management/users", status_code=status.HTTP_201_CREATED, responses=business_failures)
         def create_tenant_user(payload: CreateTenantUserRequest, request: Request) -> dict[str, str]:
             identity = formal_manager_identity(request)
-            created = production_authority.repository.create_tenant_user(
-                identity,
-                payload.display_name,
-                payload.username,
-                payload.organization_id,
-                payload.account_id,
-                payload.grants_tenant_management,
-                payload.grants_material_maintenance,
-            )
+            try:
+                created = production_authority.repository.create_tenant_user(
+                    identity,
+                    payload.display_name,
+                    payload.username,
+                    payload.organization_id,
+                    payload.account_id,
+                    payload.grants_tenant_management,
+                    payload.grants_material_maintenance,
+                )
+            except psycopg.errors.UniqueViolation as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="当前租户已有同名自然人，或登录用户名已被使用",
+                ) from exc
             return {
                 "user_id": created["user_id"],
                 "username": created["username"],

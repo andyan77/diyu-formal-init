@@ -64,6 +64,17 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
         assert signed_in.headers["location"] == "/tenant-admin"
         assert client.get("/tenant-admin").status_code == 200
         assert client.get("/user").status_code == 403
+        display_name = f"重复自然人-{uuid4().hex[:8]}"
+        first = client.post(
+            "/api/v1/tenant-management/users",
+            json={"display_name": display_name, "username": f"first-{uuid4().hex[:10]}"},
+        )
+        assert first.status_code == 201
+        duplicate = client.post(
+            "/api/v1/tenant-management/users",
+            json={"display_name": display_name, "username": f"second-{uuid4().hex[:10]}"},
+        )
+        assert duplicate.status_code == 422
 
 
 def test_production_created_user_uses_one_time_link_and_cannot_escalate(
