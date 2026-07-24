@@ -25,7 +25,7 @@ set +a
 docker exec "$postgres_container" sh -lc \
   'pg_dump -U "$POSTGRES_USER" -d diyu_m5_4 --format=custom --no-owner --no-acl' >"$snapshot/database.dump"
 
-if ! docker run --rm -i --network host -v "$snapshot/objects:/backup" "$minio_image" sh -ec '
+if ! docker run --rm -i --network host -v "$snapshot/objects:/backup" --entrypoint /bin/sh "$minio_image" -ec '
   IFS= read -r endpoint
   IFS= read -r access_key
   IFS= read -r secret_key

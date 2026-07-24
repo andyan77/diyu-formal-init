@@ -85,7 +85,7 @@ set -a
 source /etc/diyu/app.env
 set +a
 restore_key="recovery-verify/${suffix}-$(basename "$test_object")"
-if ! docker run --rm -i --network host -v "$test_object:/restore-object:ro" "$minio_image" sh -ec '
+if ! docker run --rm -i --network host -v "$test_object:/restore-object:ro" --entrypoint /bin/sh "$minio_image" -ec '
   IFS= read -r endpoint
   IFS= read -r access_key
   IFS= read -r secret_key
