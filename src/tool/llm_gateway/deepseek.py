@@ -302,7 +302,20 @@ class DeepSeekGenerator(ContentGenerator):
                     dict.fromkeys(final_violations + semantic_violations)
                 )
             if final_violations:
-                raise GenerationFailed("内容事实边界无法在一次修复内满足")
+                structured = self._prune_rejected_sentences(
+                    structured, final_violations
+                )
+                title, contract, production, body = self._compiled_artifact(
+                    request, structured
+                )
+                residual_violations = self._boundary_violations(
+                    boundary, title, contract, production
+                )
+                if residual_violations:
+                    raise GenerationFailed("内容事实边界无法在一次修复内满足")
+                violations = tuple(
+                    dict.fromkeys(violations + final_violations)
+                )
             fact_repair_receipts = self._repair_receipts(violations)
         usage = self._combined_usage(provider_payloads)
         return GeneratedArtifact(
@@ -775,6 +788,37 @@ class DeepSeekGenerator(ContentGenerator):
         for field in requested:
             merged[field] = DeepSeekGenerator._visible_text(repaired_fields[field])
         return merged
+
+    @staticmethod
+    def _prune_rejected_sentences(
+        draft: dict[str, object], violations: tuple[FactViolation, ...]
+    ) -> dict[str, object]:
+        """Finish the one repair atomically by dropping only finally rejected sentences."""
+        rejected_by_field: dict[str, list[str]] = {}
+        for violation in violations:
+            rejected_by_field.setdefault(violation.field, []).append(
+                violation.fragment.strip()
+            )
+        projected = dict(draft)
+        for field, rejected in rejected_by_field.items():
+            value = DeepSeekGenerator._visible_text(projected[field])
+            sentences = [
+                sentence.strip()
+                for sentence in re.split(r"(?<=[。！？!?])", value)
+                if sentence.strip()
+            ]
+            kept = [
+                sentence
+                for sentence in sentences
+                if not any(
+                    fragment in sentence or sentence in fragment
+                    for fragment in rejected
+                )
+            ]
+            if not kept:
+                raise GenerationFailed("内容事实边界无法在一次修复内满足")
+            projected[field] = "".join(kept)
+        return projected
 
     @staticmethod
     def _repair_receipts(violations: tuple[FactViolation, ...]) -> tuple[FactRepairReceipt, ...]:

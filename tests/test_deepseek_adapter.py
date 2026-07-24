@@ -476,6 +476,40 @@ def test_deepseek_adapter_compiles_visible_body_only_from_controlled_fields() ->
     assert "声音与制作提示：声音提示" in body
 
 
+def test_deepseek_adapter_prunes_only_finally_rejected_sentences() -> None:
+    projected = DeepSeekGenerator._prune_rejected_sentences(
+        {
+            "tradeoff_or_limit": (
+                "现有资料只有两份样衣重量记录。"
+                "不能简单认为双面结构直接导致重量增加。"
+            )
+        },
+        (
+            FactViolation(
+                "tradeoff_or_limit",
+                "不能简单认为双面结构直接导致重量增加。",
+            ),
+        ),
+    )
+
+    assert projected == {
+        "tradeoff_or_limit": "现有资料只有两份样衣重量记录。"
+    }
+
+
+def test_deepseek_adapter_fails_when_final_rejection_would_empty_a_field() -> None:
+    with pytest.raises(GenerationFailed):
+        DeepSeekGenerator._prune_rejected_sentences(
+            {"tradeoff_or_limit": "不能简单归因于双面结构。"},
+            (
+                FactViolation(
+                    "tradeoff_or_limit",
+                    "不能简单归因于双面结构。",
+                ),
+            ),
+        )
+
+
 def test_deepseek_adapter_exposes_p5_contract_as_readable_sections() -> None:
     body = DeepSeekGenerator._visible_body(
         "视觉标题",
