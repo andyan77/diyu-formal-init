@@ -215,7 +215,8 @@ def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_nam
     prompt = DeepSeekGenerator._generation_prompt(request)
 
     assert "当前没有已点名商品或可用商品事实" in prompt
-    assert "不得给任何衣物补写功能、版型、质感、性能、场合适配或穿着效果" in prompt
+    assert "不能补写任何物品或身体的属性、功能、效果、适配或具体细节" in prompt
+    assert "不得新增任何物品、身体或场景细节" in prompt
 
 
 def test_deepseek_adapter_repairs_clothing_claims_when_no_product_fact_exists() -> None:
