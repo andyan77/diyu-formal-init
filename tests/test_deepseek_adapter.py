@@ -306,7 +306,8 @@ def test_a_handwritten_topic_does_not_claim_the_topic_person_is_available_to_fil
         P3SemanticContract("品牌观察", "受众获得", "账号关系"),
         VideoProductionBundle(
             "导读",
-            "孩子坚持自己选衣服，大人的审美要不要让一步？今天聊聊这个纠结，也说说我们为什么尊重差异。",
+            "孩子坚持自己选衣服，大人的审美要不要让一步？今天聊聊这个纠结，也说说我们为什么尊重差异。"
+            "先听听孩子在意什么，再决定是否需要调整，可能比立刻否定更有用。",
             "一人正对手机口播。",
             "字幕",
             "声音",
@@ -318,6 +319,34 @@ def test_a_handwritten_topic_does_not_claim_the_topic_person_is_available_to_fil
     )
 
     assert violations == ()
+
+
+def test_brand_relationship_view_does_not_become_an_unconfirmed_store_promise() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "走进门店只想自己看看，这种沉默是不是也应该被尊重？"),
+        "沉默",
+        P3SemanticContract(
+            "品牌关系观点",
+            "受众获得",
+            "这个账号只在你需要时出现，不会打扰。",
+        ),
+        VideoProductionBundle(
+            "导读",
+            "走进门店只想自己看看，这种沉默也应该被尊重。我们愿意先理解这种心情，再表达品牌判断。",
+            "一人正对手机口播。",
+            "字幕",
+            "普通室内环境声。",
+            "手写标题“沉默是否应该被尊重？”",
+            "观看链",
+            "20秒",
+            "发布",
+        ),
+    )
+
+    assert FactViolation(
+        "brand_account_link",
+        "这个账号只在你需要时出现，不会打扰。",
+    ) in violations
 
 
 def test_eighteen_seconds_is_not_mislabeled_as_an_eight_second_transform() -> None:
