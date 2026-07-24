@@ -168,8 +168,10 @@ class CreateTenantUserRequest(BaseModel):
 
     display_name: str = Field(min_length=1, max_length=80)
     username: str = Field(min_length=3, max_length=80)
+    organization_id: UUID | None = None
     account_id: UUID | None = None
     grants_tenant_management: bool = False
+    grants_material_maintenance: bool = False
 
 
 class CreateTenantRequest(BaseModel):

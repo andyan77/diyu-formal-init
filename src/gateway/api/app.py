@@ -354,14 +354,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 identity,
                 payload.display_name,
                 payload.username,
+                payload.organization_id,
                 payload.account_id,
                 payload.grants_tenant_management,
+                payload.grants_material_maintenance,
             )
             return {
                 "user_id": created["user_id"],
                 "username": created["username"],
                 "activation_link": f"/activate/{created['activation_token']}",
             }
+
+        @app.get("/api/v1/tenant-management/organizations", responses=business_failures)
+        def tenant_organizations(request: Request) -> list[dict[str, str]]:
+            return production_authority.repository.tenant_organizations(formal_manager_identity(request))
 
         @app.post("/api/v1/tenant-management/users/{user_id}/reset", responses=business_failures)
         def reset_tenant_user(user_id: UUID, request: Request) -> dict[str, str]:

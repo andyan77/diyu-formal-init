@@ -382,8 +382,10 @@ class ProductionAuthRepository:
         manager: TenantSession,
         display_name: str,
         username: str,
+        organization_id: UUID | None,
         account_id: UUID | None,
         grants_tenant_management: bool,
+        grants_material_maintenance: bool,
     ) -> dict[str, str]:
         user_id = uuid4()
         activation_id = uuid4()
@@ -393,10 +395,16 @@ class ProductionAuthRepository:
                 "SELECT organization_id FROM users WHERE tenant_id = %s AND id = %s AND enabled = true",
                 (manager.tenant_id, manager.user_id),
             )
-            organization_id = self._one(cursor, "找不到当前租户管理员")["organization_id"]
+            manager_organization_id = self._one(cursor, "找不到当前租户管理员")["organization_id"]
+            selected_organization_id = organization_id or UUID(str(manager_organization_id))
+            cursor.execute(
+                "SELECT id FROM organizations WHERE tenant_id = %s AND id = %s",
+                (manager.tenant_id, selected_organization_id),
+            )
+            self._one(cursor, "只能授予当前租户的组织资格")
             cursor.execute(
                 "INSERT INTO users (id, tenant_id, organization_id, display_name) VALUES (%s, %s, %s, %s)",
-                (user_id, manager.tenant_id, organization_id, display_name),
+                (user_id, manager.tenant_id, selected_organization_id, display_name),
             )
             cursor.execute(
                 "INSERT INTO user_credentials (user_id, tenant_id, username) VALUES (%s, %s, %s)",
@@ -430,6 +438,12 @@ class ProductionAuthRepository:
                 cursor.execute(
                     "INSERT INTO tenant_management_grants (id, tenant_id, user_id) VALUES (%s, %s, %s)",
                     (uuid4(), manager.tenant_id, user_id),
+                )
+            if grants_material_maintenance:
+                cursor.execute(
+                    "INSERT INTO organization_material_maintainers (id, tenant_id, organization_id, user_id) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (uuid4(), manager.tenant_id, selected_organization_id, user_id),
                 )
             self._tenant_audit(cursor, manager.tenant_id, manager.user_id, "tenant_user.created", user_id)
         return {
@@ -496,6 +510,15 @@ class ProductionAuthRepository:
             )
             self._one(cursor, "找不到当前租户可撤销的发布账号资格")
             self._tenant_audit(cursor, manager.tenant_id, manager.user_id, "publishing_account_grant.revoked", user_id)
+
+    def tenant_organizations(self, manager: TenantSession) -> list[dict[str, str]]:
+        """Return only the manager's tenant organizations for qualification assignment."""
+        with self._tenant_tx(manager.tenant_id) as cursor:
+            cursor.execute(
+                "SELECT id, name FROM organizations WHERE tenant_id = %s ORDER BY name",
+                (manager.tenant_id,),
+            )
+            return [{"id": str(row["id"]), "name": str(row["name"])} for row in cursor.fetchall()]
 
     def bootstrap_existing_tenant_admin(self, tenant_id: UUID, user_id: UUID, username: str) -> str:
         """Create the first one-time activation material without creating a synthetic password."""

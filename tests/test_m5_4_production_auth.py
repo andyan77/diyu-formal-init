@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
 from src.infrastructure.production_auth import ProductionAuthRepository, TenantSession
-from src.infrastructure.seed_demo import ACCOUNT_ID, TENANT_ADMIN_USER_ID, TENANT_ID
+from src.infrastructure.seed_demo import ACCOUNT_ID, ORG_ID, TENANT_ADMIN_USER_ID, TENANT_ID
 
 
 def _settings(database_url: str) -> Settings:
@@ -77,9 +77,17 @@ def test_production_created_user_uses_one_time_link_and_cannot_escalate(
         manager,
         f"正式内容操作人-{uuid4().hex[:8]}",
         username,
+        ORG_ID,
         ACCOUNT_ID,
         grants_tenant_management=False,
+        grants_material_maintenance=True,
     )
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT organization_id FROM organization_material_maintainers WHERE tenant_id = %s AND user_id = %s",
+            (TENANT_ID, UUID(created["user_id"])),
+        )
+        assert cursor.fetchone() == (ORG_ID,)
     app = create_app(_settings(app_database_url))
     with TestClient(app, base_url="https://diyuai.cc") as client:
         assert (
