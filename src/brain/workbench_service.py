@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from src.ports.material_object_store import MaterialObjectStore
 from src.ports.workbench_repository import WorkbenchRepository
 from src.shared.errors import DomainError
-from src.shared.types import DisplayScope, TrustedScope
+from src.shared.types import DisplayScope, TenantManagementScope, TrustedScope
 
 _MAX_MEDIA_BYTES = 50 * 1024 * 1024
 
@@ -31,27 +31,27 @@ class WorkbenchService:
             "identity": self._repository.user_portal_identity(scope),
         }
 
-    def tenant_management_context(self, scope: TrustedScope) -> dict[str, object]:
+    def tenant_management_context(self, scope: TenantManagementScope) -> dict[str, object]:
         return {
             "application": "tenant_management",
-            "identity": self._repository.user_portal_identity(scope),
+            "identity": self._repository.management_identity(scope),
         }
 
     def is_content_operator(self, scope: TrustedScope) -> bool:
         return self._repository.is_content_operator(scope)
 
-    def is_tenant_manager(self, scope: TrustedScope) -> bool:
+    def is_tenant_manager(self, scope: TenantManagementScope) -> bool:
         return self._repository.is_tenant_manager(scope)
 
-    def management_operators(self, scope: TrustedScope) -> list[dict[str, object]]:
+    def management_operators(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         return self._repository.management_operators(scope)
 
-    def management_accounts(self, scope: TrustedScope) -> list[dict[str, object]]:
+    def management_accounts(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         return self._repository.management_accounts(scope)
 
     def create_publishing_account(
         self,
-        scope: TrustedScope,
+        scope: TenantManagementScope,
         name: str,
         channel: str,
         content_role_name: str,
@@ -65,7 +65,7 @@ class WorkbenchService:
 
     def create_operator(
         self,
-        scope: TrustedScope,
+        scope: TenantManagementScope,
         display_name: str,
         account_id: UUID,
         default_persona_name: str = "",
@@ -83,9 +83,7 @@ class WorkbenchService:
             default_persona_boundary.strip(),
         )
 
-    def update_default_persona(
-        self, scope: TrustedScope, name: str, boundary: str
-    ) -> dict[str, object]:
+    def update_default_persona(self, scope: TrustedScope, name: str, boundary: str) -> dict[str, object]:
         if not name.strip() or not boundary.strip():
             raise DomainError("本人默认表达人设需要名称和成立边界。")
         return self._repository.update_default_persona(scope, name.strip(), boundary.strip())
@@ -109,13 +107,13 @@ class WorkbenchService:
     def display_versions(self, scope: DisplayScope, task_id: UUID) -> list[dict[str, object]]:
         return self._repository.display_versions(scope, task_id)
 
-    def readiness(self, scope: TrustedScope) -> dict[str, object]:
+    def readiness(self, scope: TenantManagementScope) -> dict[str, object]:
         return {"items": self._repository.readiness(scope)}
 
-    def brand_expression(self, scope: TrustedScope) -> dict[str, object]:
+    def brand_expression(self, scope: TenantManagementScope) -> dict[str, object]:
         return self._repository.brand_expression(scope)
 
-    def confirm_brand_expression(self, scope: TrustedScope, draft: str) -> dict[str, object]:
+    def confirm_brand_expression(self, scope: TenantManagementScope, draft: str) -> dict[str, object]:
         if len(draft.strip()) < 8:
             raise DomainError("请先留下足以判断表达方向的一句话。")
         return self._repository.confirm_brand_expression(scope, draft.strip())
@@ -133,9 +131,7 @@ class WorkbenchService:
     ) -> dict[str, object]:
         return self._repository.add_series_item(scope, series_id, task_id, position)
 
-    def reorder_series(
-        self, scope: TrustedScope, series_id: UUID, task_ids: tuple[UUID, ...]
-    ) -> dict[str, object]:
+    def reorder_series(self, scope: TrustedScope, series_id: UUID, task_ids: tuple[UUID, ...]) -> dict[str, object]:
         return self._repository.reorder_series(scope, series_id, task_ids)
 
     def reset_series(self, scope: TrustedScope, series_id: UUID) -> dict[str, object]:

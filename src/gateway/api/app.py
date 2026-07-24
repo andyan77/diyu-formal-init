@@ -74,7 +74,12 @@ from src.shared.application_handoff import (
     requests_display_merchandising,
 )
 from src.shared.errors import DomainError
-from src.shared.types import ContentTarget, DisplayScope, TrustedScope
+from src.shared.types import (
+    ContentTarget,
+    DisplayScope,
+    TenantManagementScope,
+    TrustedScope,
+)
 
 _HEADQUARTERS_TARGETS: tuple[tuple[ContentTarget, str], ...] = (
     ("douyin_video", "抖音视频"),
@@ -146,7 +151,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def user_scope_from_request(request: Request, _: str | None = Security(session_cookie)) -> TrustedScope:
         return authority.require_user_portal(request)
 
-    def management_scope_from_request(request: Request, _: str | None = Security(session_cookie)) -> TrustedScope:
+    def management_scope_from_request(
+        request: Request, _: str | None = Security(session_cookie)
+    ) -> TenantManagementScope:
         scope = authority.require_management(request)
         if not workbench_service.is_tenant_manager(scope):
             raise HTTPException(
@@ -538,32 +545,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/admin/readiness", responses=business_failures)
     def readiness(
-        scope: TrustedScope = Depends(management_scope_from_request),
+        scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> dict[str, object]:
         return workbench_service.readiness(scope)
 
     @app.get("/api/v1/admin/brand-expression", responses=business_failures)
     def brand_expression(
-        scope: TrustedScope = Depends(management_scope_from_request),
+        scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> dict[str, object]:
         return workbench_service.brand_expression(scope)
 
     @app.post("/api/v1/admin/brand-expression/confirm", responses=business_failures)
     def confirm_brand_expression(
         payload: BrandExpressionConfirmRequest,
-        scope: TrustedScope = Depends(management_scope_from_request),
+        scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> dict[str, object]:
         return workbench_service.confirm_brand_expression(scope, payload.draft)
 
     @app.get("/api/v1/tenant-management/operators", responses=business_failures)
     def management_operators(
-        scope: TrustedScope = Depends(management_scope_from_request),
+        scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> list[dict[str, object]]:
         return workbench_service.management_operators(scope)
 
     @app.get("/api/v1/tenant-management/publishing-accounts", responses=business_failures)
     def management_accounts(
-        scope: TrustedScope = Depends(management_scope_from_request),
+        scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> list[dict[str, object]]:
         return workbench_service.management_accounts(scope)
 
@@ -574,7 +581,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     def create_publishing_account(
         payload: CreatePublishingAccountRequest,
-        scope: TrustedScope = Depends(management_scope_from_request),
+        scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> dict[str, object]:
         return workbench_service.create_publishing_account(
             scope,
@@ -592,7 +599,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     def create_operator(
         payload: CreateOperatorRequest,
-        scope: TrustedScope = Depends(management_scope_from_request),
+        scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> dict[str, object]:
         if current_settings.is_production:
             raise HTTPException(

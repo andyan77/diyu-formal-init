@@ -11,7 +11,7 @@ from psycopg.rows import dict_row
 from src.ports.workbench_repository import WorkbenchRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.errors import DomainError
-from src.shared.types import DisplayScope, TrustedScope
+from src.shared.types import DisplayScope, TenantManagementScope, TrustedScope
 
 
 class PostgresWorkbenchRepository(WorkbenchRepository):
@@ -20,6 +20,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
 
     @contextmanager
     def _content_tx(self, scope: TrustedScope) -> Iterator[psycopg.Cursor[dict[str, object]]]:
+        with (
+            psycopg.connect(self._database_url, row_factory=dict_row) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(scope.tenant_id),))
+            yield cursor
+
+    @contextmanager
+    def _management_tx(self, scope: TenantManagementScope) -> Iterator[psycopg.Cursor[dict[str, object]]]:
         with (
             psycopg.connect(self._database_url, row_factory=dict_row) as connection,
             connection.cursor() as cursor,
@@ -84,6 +93,28 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             row = self._one(cursor, "找不到当前可信自然人身份")
         return {key: str(value) for key, value in row.items()}
 
+    def management_identity(self, scope: TenantManagementScope) -> dict[str, str]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT brand.name AS brand, user_record.display_name AS operator,
+                       organization.name AS organization
+                FROM users user_record
+                JOIN organizations organization
+                  ON organization.id = user_record.organization_id
+                 AND organization.tenant_id = user_record.tenant_id
+                JOIN brands brand
+                  ON brand.id = %s
+                 AND brand.tenant_id = user_record.tenant_id
+                WHERE user_record.tenant_id = %s
+                  AND user_record.id = %s
+                  AND user_record.enabled = true
+                """,
+                (scope.brand_id, scope.tenant_id, scope.user_id),
+            )
+            row = self._one(cursor, "找不到当前可信租户管理身份")
+        return {key: str(value) for key, value in row.items()}
+
     def is_content_operator(self, scope: TrustedScope) -> bool:
         with self._content_tx(scope) as cursor:
             cursor.execute(
@@ -100,8 +131,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             )
             return bool(self._one(cursor, "无法读取内容工作资格")["allowed"])
 
-    def is_tenant_manager(self, scope: TrustedScope) -> bool:
-        with self._content_tx(scope) as cursor:
+    def is_tenant_manager(self, scope: TenantManagementScope) -> bool:
+        with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
                 SELECT EXISTS (
@@ -115,8 +146,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             )
             return bool(self._one(cursor, "无法读取租户管理资格")["allowed"])
 
-    def management_operators(self, scope: TrustedScope) -> list[dict[str, object]]:
-        with self._content_tx(scope) as cursor:
+    def management_operators(self, scope: TenantManagementScope) -> list[dict[str, object]]:
+        with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
                 SELECT u.id, u.display_name, o.name AS organization,
@@ -153,8 +184,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             for row in rows
         ]
 
-    def management_accounts(self, scope: TrustedScope) -> list[dict[str, object]]:
-        with self._content_tx(scope) as cursor:
+    def management_accounts(self, scope: TenantManagementScope) -> list[dict[str, object]]:
+        with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
                 SELECT a.id, a.name, a.channel, r.name AS content_role, r.voice_boundary
@@ -182,7 +213,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
 
     def create_publishing_account(
         self,
-        scope: TrustedScope,
+        scope: TenantManagementScope,
         name: str,
         channel: str,
         content_role_name: str,
@@ -191,18 +222,66 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
     ) -> dict[str, object]:
         account_id = uuid4()
         content_role_id = uuid4()
-        with self._content_tx(scope) as cursor:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT 1
+                FROM brand_expression_baselines
+                WHERE tenant_id = %s AND brand_id = %s AND status = 'confirmed'
+                """,
+                (scope.tenant_id, scope.brand_id),
+            )
+            self._one(cursor, "请先由品牌方确认当前品牌表达草案，再创建正式发布账号")
             cursor.execute(
                 "SELECT id FROM users WHERE tenant_id = %s AND id = %s AND enabled = true",
                 (scope.tenant_id, operator_id),
             )
             self._one(cursor, "只能向当前租户已登记且启用的自然人授权发布账号")
             cursor.execute(
-                "SELECT 1 FROM content_accounts WHERE tenant_id = %s AND name = %s",
-                (scope.tenant_id, name),
+                """
+                SELECT account.id, account.channel, role.name AS content_role,
+                       role.voice_boundary,
+                       EXISTS (
+                           SELECT 1
+                           FROM auth_grants grant_record
+                           WHERE grant_record.tenant_id = account.tenant_id
+                             AND grant_record.account_id = account.id
+                             AND grant_record.user_id = %s
+                             AND grant_record.enabled = true
+                       ) AS has_operator
+                FROM content_accounts account
+                JOIN account_content_roles account_role
+                  ON account_role.tenant_id = account.tenant_id
+                 AND account_role.account_id = account.id
+                JOIN content_roles role
+                  ON role.tenant_id = account_role.tenant_id
+                 AND role.id = account_role.content_role_id
+                 AND role.brand_id = account.brand_id
+                WHERE account.tenant_id = %s
+                  AND account.brand_id = %s
+                  AND account.name = %s
+                  AND account.enabled = true
+                """,
+                (operator_id, scope.tenant_id, scope.brand_id, name),
             )
-            if cursor.fetchone() is not None:
-                raise DomainError("当前租户已有同名企业发布账号。")
+            existing = cursor.fetchone()
+            if existing is not None:
+                if (
+                    str(existing["channel"]) != channel
+                    or str(existing["content_role"]) != content_role_name
+                    or str(existing["voice_boundary"]) != voice_boundary
+                    or not bool(existing["has_operator"])
+                ):
+                    raise DomainError("当前品牌已有同名发布账号，但平台、表达身份或操作者不同。")
+                return {
+                    "id": str(existing["id"]),
+                    "name": name,
+                    "channel": channel,
+                    "content_role": content_role_name,
+                    "voice_boundary": voice_boundary,
+                    "operator_id": str(operator_id),
+                    "shared_password": False,
+                }
             cursor.execute(
                 "SELECT 1 FROM content_roles WHERE tenant_id = %s AND brand_id = %s AND name = %s",
                 (scope.tenant_id, scope.brand_id, content_role_name),
@@ -244,7 +323,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
 
     def create_operator(
         self,
-        scope: TrustedScope,
+        scope: TenantManagementScope,
         display_name: str,
         account_id: UUID,
         default_persona_name: str,
@@ -252,7 +331,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
     ) -> dict[str, object]:
         operator_id = uuid4()
         grant_id = uuid4()
-        with self._content_tx(scope) as cursor:
+        with self._management_tx(scope) as cursor:
             cursor.execute(
                 "SELECT id FROM content_accounts WHERE tenant_id = %s AND brand_id = %s AND id = %s AND enabled = true",
                 (scope.tenant_id, scope.brand_id, account_id),
@@ -262,9 +341,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "SELECT organization_id FROM users WHERE tenant_id = %s AND id = %s AND enabled = true",
                 (scope.tenant_id, scope.user_id),
             )
-            organization_id = UUID(
-                str(self._one(cursor, "找不到当前租户管理员")["organization_id"])
-            )
+            organization_id = UUID(str(self._one(cursor, "找不到当前租户管理员")["organization_id"]))
             cursor.execute(
                 "SELECT EXISTS (SELECT 1 FROM users WHERE tenant_id = %s AND display_name = %s) AS exists",
                 (scope.tenant_id, display_name),
@@ -298,9 +375,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "shared_password": False,
         }
 
-    def update_default_persona(
-        self, scope: TrustedScope, name: str, boundary: str
-    ) -> dict[str, object]:
+    def update_default_persona(self, scope: TrustedScope, name: str, boundary: str) -> dict[str, object]:
         with self._content_tx(scope) as cursor:
             cursor.execute(
                 """
@@ -472,22 +547,58 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             for row in rows
         ]
 
-    def readiness(self, scope: TrustedScope) -> list[dict[str, str]]:
+    def readiness(self, scope: TenantManagementScope) -> list[dict[str, str]]:
         expression = self.brand_expression(scope)
-        with self._content_tx(scope) as cursor:
+        with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT EXISTS (
-                    SELECT 1 FROM account_content_roles acr
-                    JOIN content_roles r ON r.id = acr.content_role_id AND r.tenant_id = acr.tenant_id
-                    WHERE acr.tenant_id = %s AND acr.account_id = %s AND r.brand_id = %s
-                ) AS has_role
+                SELECT
+                    EXISTS (
+                        SELECT 1
+                        FROM content_accounts account
+                        JOIN account_content_roles account_role
+                          ON account_role.tenant_id = account.tenant_id
+                         AND account_role.account_id = account.id
+                        JOIN content_roles role
+                          ON role.tenant_id = account_role.tenant_id
+                         AND role.id = account_role.content_role_id
+                         AND role.brand_id = account.brand_id
+                        JOIN auth_grants grant_record
+                          ON grant_record.tenant_id = account.tenant_id
+                         AND grant_record.account_id = account.id
+                         AND grant_record.user_id = %s
+                         AND grant_record.enabled = true
+                        WHERE account.tenant_id = %s
+                          AND account.brand_id = %s
+                          AND account.enabled = true
+                    ) AS has_account_role,
+                    EXISTS (
+                        SELECT 1
+                        FROM brand_products product
+                        WHERE product.tenant_id = %s
+                          AND product.brand_id = %s
+                    ) AS has_confirmed_products,
+                    EXISTS (
+                        SELECT 1
+                        FROM display_stores store
+                        WHERE store.tenant_id = %s
+                          AND store.brand_id = %s
+                    ) AS has_dm01_profile
                 """,
-                (scope.tenant_id, scope.account_id, scope.brand_id),
+                (
+                    scope.user_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                ),
             )
-            role_row = self._one(cursor, "无法读取账号表达身份")
-        has_role = bool(role_row["has_role"])
-        maintainer = self.is_material_maintainer(scope)
+            state = self._one(cursor, "无法读取当前入驻条件")
+        has_account_role = bool(state["has_account_role"])
+        has_confirmed_products = bool(state["has_confirmed_products"])
+        has_dm01_profile = bool(state["has_dm01_profile"])
         return [
             {
                 "id": "brand_expression",
@@ -500,26 +611,35 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             },
             {
                 "id": "account_role",
-                "title": "发布账号与表达身份",
-                "detail": "当前账号已关联独立表达身份。"
-                if has_role
-                else "还没有可代表当前品牌的表达身份。",
-                "unlock": "用真实组织位置完成对外内容。",
-                "state": "ready" if has_role else "needs_action",
+                "title": "发布账号、表达身份与操作者",
+                "detail": "当前品牌已有一个发布账号、独立表达身份和获授权自然人。"
+                if has_account_role
+                else "还需要确认一个实际使用的发布账号、独立表达身份，并授权当前自然人。",
+                "unlock": "以服务端可信的品牌、账号和自然人身份生产内容。",
+                "state": "ready" if has_account_role else "needs_action",
             },
             {
-                "id": "organization_materials",
-                "title": "组织素材维护人",
-                "detail": "当前操作人可以从组织入口直接录入组织素材。"
-                if maintainer
-                else "当前操作人没有组织素材维护权。",
-                "unlock": "让本组织素材在明确范围内供后续任务主动选择。",
-                "state": "ready" if maintainer else "needs_action",
+                "id": "product_facts",
+                "title": "已确认商品资料",
+                "detail": "已有可供商品承重内容使用的已确认资料。"
+                if has_confirmed_products
+                else "具体商品和价格仍未确认；P3/P4 可以使用，商品承重的 P1/P2/P5 暂不启用。",
+                "unlock": "启用需要具体商品硬事实的内容能力。",
+                "state": "ready" if has_confirmed_products else "needs_action",
+            },
+            {
+                "id": "dm01_profile",
+                "title": "真实双层挂杆条件",
+                "detail": "已有当前品牌可执行的真实门店挂杆档案。"
+                if has_dm01_profile
+                else "真实门店双层挂杆条件尚未确认；只限制 DM01，不影响内容生产。",
+                "unlock": "在真实门店范围内启用 DM01 执行方案。",
+                "state": "ready" if has_dm01_profile else "needs_action",
             },
         ]
 
-    def brand_expression(self, scope: TrustedScope) -> dict[str, object]:
-        with self._content_tx(scope) as cursor:
+    def brand_expression(self, scope: TenantManagementScope) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
                 SELECT version, status, draft FROM brand_expression_baselines
@@ -534,20 +654,58 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "draft": str(row["draft"]),
         }
 
-    def confirm_brand_expression(self, scope: TrustedScope, draft: str) -> dict[str, object]:
-        with self._content_tx(scope) as cursor:
+    def confirm_brand_expression(self, scope: TenantManagementScope, draft: str) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT version, status, draft
+                FROM brand_expression_baselines
+                WHERE tenant_id = %s AND brand_id = %s
+                """,
+                (scope.tenant_id, scope.brand_id),
+            )
+            current = self._one(cursor, "当前品牌尚无表达草案")
+            if str(current["status"]) == "confirmed" and str(current["draft"]) == draft:
+                return {
+                    "version": self._integer(current["version"]),
+                    "status": "confirmed",
+                    "draft": draft,
+                }
+            version = self._integer(current["version"])
+            if str(current["status"]) == "confirmed":
+                version += 1
             cursor.execute(
                 """
                 UPDATE brand_expression_baselines
-                SET draft = %s,
-                    version = CASE WHEN status = 'confirmed' AND draft <> %s THEN version + 1 ELSE version END,
-                    status = 'confirmed', confirmed_by = %s, confirmed_at = now(), updated_at = now()
+                SET draft = %s, version = %s, status = 'confirmed',
+                    confirmed_by = %s, confirmed_at = now(), updated_at = now()
                 WHERE tenant_id = %s AND brand_id = %s
                 RETURNING version, status, draft
                 """,
-                (draft, draft, scope.user_id, scope.tenant_id, scope.brand_id),
+                (
+                    draft,
+                    version,
+                    scope.user_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                ),
             )
-            row = self._one(cursor, "当前品牌尚无表达草案")
+            row = self._one(cursor, "当前品牌表达草案没有确认成功")
+            cursor.execute(
+                """
+                UPDATE brands
+                SET positioning = %s,
+                    tone = '以当前已确认品牌表达版本为准。',
+                    strategy_version = %s
+                WHERE tenant_id = %s AND id = %s
+                """,
+                (
+                    draft,
+                    f"brand-expression-v{version}",
+                    scope.tenant_id,
+                    scope.brand_id,
+                ),
+            )
             self._event(
                 cursor,
                 scope,
@@ -650,9 +808,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             self._event(cursor, scope, "content_series.item_added", "content_series", series_id)
         return self._series_value(scope, series_id)
 
-    def reorder_series(
-        self, scope: TrustedScope, series_id: UUID, task_ids: tuple[UUID, ...]
-    ) -> dict[str, object]:
+    def reorder_series(self, scope: TrustedScope, series_id: UUID, task_ids: tuple[UUID, ...]) -> dict[str, object]:
         with self._content_tx(scope) as cursor:
             existing = self._series_task_ids(cursor, scope, series_id)
             if len(task_ids) != len(existing) or set(task_ids) != set(existing):
@@ -741,9 +897,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     "SELECT organization_id FROM users WHERE tenant_id = %s AND id = %s",
                     (scope.tenant_id, scope.user_id),
                 )
-                owner_organization_id = UUID(
-                    str(self._one(cursor, "找不到当前组织")["organization_id"])
-                )
+                owner_organization_id = UUID(str(self._one(cursor, "找不到当前组织")["organization_id"]))
             cursor.execute(
                 """
                 INSERT INTO material_assets
@@ -873,7 +1027,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
     def _event(
         self,
         cursor: psycopg.Cursor[dict[str, object]],
-        scope: TrustedScope,
+        scope: TenantManagementScope | TrustedScope,
         event_type: str,
         entity_type: str,
         entity_id: UUID,

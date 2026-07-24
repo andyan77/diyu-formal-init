@@ -19,12 +19,29 @@ import psycopg
 from psycopg.rows import dict_row
 
 from src.shared.errors import DomainError
-from src.shared.types import DisplayScope, TrustedScope
+from src.shared.types import DisplayScope, TenantManagementScope, TrustedScope
 
 _TOKEN_TTL = timedelta(hours=8)
 _ACTIVATION_TTL = timedelta(hours=24)
 _SCRYPT_N = 2**15
 _SCRYPT_MAX_MEMORY = 64 * 1024 * 1024
+_DIYU_FASHION_TENANT_NAME = "笛语服饰"
+_DIYU_FASHION_BRAND_DRAFT = """品牌名称：笛语服饰
+
+我们想服务家庭生活中的真实穿衣、商品取舍、生活叙事与造型灵感。
+我们尊重家庭成员各自成立、自然呼应，不要求整齐同款。
+我们的表达希望真实、克制、有依据，也尊重每个人的差异。
+
+稳定边界：不编造商品、价格、库存、研发、人物经历、顾客或门店事实；不利用儿童、身体、年龄或家庭焦虑施压。"""
+_GENERIC_BRAND_DRAFT_TEMPLATE = """品牌名称：{tenant_name}
+
+这是一份待品牌方确认的表达草案。请用自然语言补充品牌希望服务的人、准备长期表达的方向和真实成立的边界。
+
+稳定边界：不编造商品、价格、库存、研发、人物经历、顾客或门店事实；不使用尚未确认的资料作为品牌事实。"""
+_DRAFT_POSITIONING = "待品牌方确认；确认后以当前品牌表达版本为准。"
+_DRAFT_DECISION_ORDER = "先使用已确认事实；未确认商品与门店资料不进入正式上下文。"
+_DRAFT_TONE = "待品牌方以自然语言确认。"
+_DRAFT_AUDIENCE = "不预设具体年龄、身份或消费动机；以当前任务和已确认品牌表达为准。"
 
 
 @dataclass(frozen=True)
@@ -605,32 +622,71 @@ class ProductionAuthRepository:
     def provision_tenant(
         self, operator: OpsSession, tenant_name: str, administrator_name: str, username: str
     ) -> dict[str, str]:
-        tenant_id, organization_id, user_id, credential_id, activation_id = (uuid4() for _ in range(5))
+        tenant_name = tenant_name.strip()
+        administrator_name = administrator_name.strip()
+        username = username.strip()
+        if not 2 <= len(tenant_name) <= 120 or not 1 <= len(administrator_name) <= 80 or not 3 <= len(username) <= 80:
+            raise DomainError("租户名称、首位管理员工作名或用户名不符合开户要求")
+        (
+            tenant_id,
+            organization_id,
+            user_id,
+            credential_id,
+            activation_id,
+            brand_id,
+            baseline_id,
+            audience_id,
+        ) = (uuid4() for _ in range(8))
         raw_token, digest = self._token()
+        brand_draft = (
+            _DIYU_FASHION_BRAND_DRAFT
+            if tenant_name.startswith(_DIYU_FASHION_TENANT_NAME)
+            else _GENERIC_BRAND_DRAFT_TEMPLATE.format(tenant_name=tenant_name)
+        )
         with self._tx() as cursor:
-            cursor.execute(
-                "SELECT * FROM ops_provision_tenant(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                (
-                    tenant_id,
-                    tenant_name,
-                    organization_id,
-                    user_id,
-                    administrator_name,
-                    username,
-                    credential_id,
-                    activation_id,
-                    digest,
-                    datetime.now(timezone.utc) + _ACTIVATION_TTL,
-                ),
-            )
+            try:
+                cursor.execute(
+                    "SELECT * FROM ops_provision_tenant("
+                    "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
+                    "%s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        tenant_id,
+                        tenant_name,
+                        organization_id,
+                        user_id,
+                        administrator_name,
+                        username,
+                        credential_id,
+                        activation_id,
+                        digest,
+                        datetime.now(timezone.utc) + _ACTIVATION_TTL,
+                        brand_id,
+                        baseline_id,
+                        audience_id,
+                        brand_draft,
+                        _DRAFT_POSITIONING,
+                        _DRAFT_DECISION_ORDER,
+                        _DRAFT_TONE,
+                        _DRAFT_AUDIENCE,
+                    ),
+                )
+                provisioned = self._one(cursor, "租户开户没有返回完整结果")
+            except psycopg.errors.UniqueViolation as exc:
+                raise DomainError("租户名称或管理员用户名已被其他身份使用") from exc
             cursor.execute(
                 "INSERT INTO ops_audit_events (id, operator_id, event_type, tenant_id) VALUES (%s, %s, %s, %s)",
-                (uuid4(), operator.operator_id, "tenant.provisioned", tenant_id),
+                (
+                    uuid4(),
+                    operator.operator_id,
+                    "tenant.provisioned",
+                    UUID(str(provisioned["tenant_id"])),
+                ),
             )
         return {
-            "tenant_id": str(tenant_id),
-            "administrator_id": str(user_id),
-            "username": username,
+            "tenant_id": str(provisioned["tenant_id"]),
+            "administrator_id": str(provisioned["user_id"]),
+            "brand_id": str(provisioned["brand_id"]),
+            "username": str(provisioned["username"]),
             "activation_token": raw_token,
         }
 
@@ -722,14 +778,27 @@ class ProductionAuthRepository:
             UUID(str(row["organization_id"])),
         )
 
-    def manager_scope(self, identity: TenantSession) -> TrustedScope:
+    def manager_scope(self, identity: TenantSession) -> TenantManagementScope:
         with self._tenant_tx(identity.tenant_id) as cursor:
             cursor.execute(
-                "SELECT brand_id, id AS account_id FROM content_accounts "
-                "WHERE tenant_id = %s AND enabled = true ORDER BY name LIMIT 1",
-                (identity.tenant_id,),
+                """
+                SELECT brand.id AS brand_id
+                FROM users user_record
+                JOIN tenant_management_grants management_grant
+                  ON management_grant.tenant_id = user_record.tenant_id
+                 AND management_grant.user_id = user_record.id
+                 AND management_grant.enabled = true
+                JOIN brands brand ON brand.tenant_id = user_record.tenant_id
+                WHERE user_record.tenant_id = %s AND user_record.id = %s
+                  AND user_record.enabled = true
+                ORDER BY brand.name
+                LIMIT 1
+                """,
+                (identity.tenant_id, identity.user_id),
             )
-            row = self._one(cursor, "当前租户还没有可管理的发布账号")
-        return TrustedScope(
-            identity.tenant_id, identity.user_id, UUID(str(row["brand_id"])), UUID(str(row["account_id"]))
+            row = self._one(cursor, "当前租户尚无可管理的品牌身份")
+        return TenantManagementScope(
+            identity.tenant_id,
+            identity.user_id,
+            UUID(str(row["brand_id"])),
         )

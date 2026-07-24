@@ -28,16 +28,11 @@ class DeterministicContentGenerator(ContentGenerator):
         text = request.weak_seed.casefold()
         if _ordinary_chat(text):
             return None
-        if any(
-            value in text
-            for value in ("想先看", "不用解释", "不用先解释", "留点空", "门店回应", "店里这几天")
-        ):
+        if any(value in text for value in ("想先看", "不用解释", "不用先解释", "留点空", "门店回应", "店里这几天")):
             return "local_response"
         if any(value in text for value in ("店长", "自我怀疑", "三位客人", "我会注意")):
             return "brand_life_narrative"
-        if any(
-            value in text for value in ("单独拍", "单独用", "画面", "视觉重音", "走动里换", "重音")
-        ):
+        if any(value in text for value in ("单独拍", "单独用", "画面", "视觉重音", "走动里换", "重音")):
             return "visual_styling_story"
         if any(value in text for value in ("一件顶两件", "解释双面", "不要替两面站队", "商品")):
             return "product_truth"
@@ -65,14 +60,10 @@ class DeterministicContentGenerator(ContentGenerator):
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
         contract, guide, spoken, visuals, subtitles, sound = self._parts(request)
         production = self._production(request, contract, guide, spoken, visuals, subtitles, sound)
-        revision = (
-            "\n\n这次只按你的自然修改更新了同一任务的表达。" if request.revision_instruction else ""
-        )
+        revision = "\n\n这次只按你的自然修改更新了同一任务的表达。" if request.revision_instruction else ""
         prior = "\n\n已承接当前合法作用域内明确授权的前情。" if request.prior_saved_body else ""
         core = "\n\n内容核心：" + " ".join(str(value) for value in vars(contract).values())
-        body = (
-            _visible_body(_outline(request.primary_product), production) + core + prior + revision
-        )
+        body = _visible_body(_outline(request.primary_product), production) + core + prior + revision
         return GeneratedArtifact(
             outline=_outline(request.primary_product),
             body=body,
@@ -154,6 +145,24 @@ class DeterministicContentGenerator(ContentGenerator):
                 "一人一手机，保留翻面摩擦和脚步声；不补拍价格牌、库存或未经提供的材质细节。",
             )
         if product == "brand_life_narrative":
+            if request.brand.brand_name != "折线之间":
+                return (
+                    P3SemanticContract(
+                        f"{request.brand.account_name}从当前已确认的品牌表达出发，"
+                        "选择尊重每个人自己的生活节奏，不替具体家庭编造经历。",
+                        "受众得到的是一种可带回日常的许可：一家人可以彼此呼应，也可以各自成立。",
+                        f"这由“{request.brand.content_role_name}”在已确认品牌边界内表达，"
+                        "不冒充创始人、研发、门店、顾客或具体家庭。",
+                    ),
+                    "从已经确认的品牌关系观出发，讲清一家人不必穿成同一个答案。",
+                    "一家人站在一起，不一定要穿成一套。有人喜欢安静一点，有人愿意多一点颜色；"
+                    "彼此看得见，也各自舒服，就已经是一种自然的呼应。我们只说当前确认过的品牌立场，"
+                    "不替任何一个真实家庭补写经历。",
+                    "一人一手机，用不同衣架或空白色卡表示几种独立选择；不出现具体商品、价格、库存、"
+                    "顾客或门店画面，也不把概念冒充已实拍。",
+                    "一家人，可以自然呼应。\n也可以，各自成立。",
+                    "使用普通室内环境与轻微生活声；不制造儿童、身体、年龄或家庭焦虑。",
+                )
             return (
                 P3SemanticContract(
                     "南城店店长会把“我先看看”当成需要被尊重的停顿，而不是必须立刻解决的犹豫。",
@@ -195,9 +204,7 @@ class DeterministicContentGenerator(ContentGenerator):
         if any(word in request.weak_seed for word in ("雨", "骑车", "湿")):
             choice = "把移动中的安全、耐受和到达后的可整理性放在造型完整度之前。"
             boundary = "若当天并不需要长时间移动，或已有可靠的防护与替换条件，这个排序可以改变。"
-            action = (
-                "出门前做一次抬腿、转身和收纳物品的动作试验，再决定是否减少容易受潮或牵扯的部分。"
-            )
+            action = "出门前做一次抬腿、转身和收纳物品的动作试验，再决定是否减少容易受潮或牵扯的部分。"
         else:
             choice = "保住已经为正式场合完成的分寸，再检查它是否允许自然移动和切换。"
             boundary = "若后一段确实需要大量活动，或一处衣物让人持续分心，就应优先调整那一处。"
@@ -213,9 +220,9 @@ class DeterministicContentGenerator(ContentGenerator):
 
 
 def _ordinary_chat(text: str) -> bool:
-    return any(
-        value in text for value in ("hello", "你好", "有点困", "挺安静", "谢谢")
-    ) and not any(value in text for value in ("写", "内容", "双面", "外套", "穿", "商品", "拍"))
+    return any(value in text for value in ("hello", "你好", "有点困", "挺安静", "谢谢")) and not any(
+        value in text for value in ("写", "内容", "双面", "外套", "穿", "商品", "拍")
+    )
 
 
 def _outline(product: ContentProduct) -> str:
@@ -259,12 +266,7 @@ def _visible_body(title: str, production: VideoProductionBundle | GraphicProduct
             ("拍摄/排版提示", production.layout_and_production),
             ("发布配文与互动", production.release_caption_and_interaction),
         )
-    return (
-        "标题："
-        + title
-        + "\n\n"
-        + "\n\n".join(f"{heading}：{value}" for heading, value in sections)
-    )
+    return "标题：" + title + "\n\n" + "\n\n".join(f"{heading}：{value}" for heading, value in sections)
 
 
 DeterministicP1Generator = DeterministicContentGenerator

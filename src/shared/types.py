@@ -30,6 +30,15 @@ class TrustedScope:
 
 
 @dataclass(frozen=True)
+class TenantManagementScope:
+    """Trusted tenant/brand administration scope with no publishing identity."""
+
+    tenant_id: UUID
+    user_id: UUID
+    brand_id: UUID
+
+
+@dataclass(frozen=True)
 class BrandContext:
     brand_name: str
     positioning: str
@@ -100,11 +109,7 @@ class P5SemanticContract:
 
 
 ContentSemanticContract: TypeAlias = (
-    P1SemanticContract
-    | P2SemanticContract
-    | P3SemanticContract
-    | P4SemanticContract
-    | P5SemanticContract
+    P1SemanticContract | P2SemanticContract | P3SemanticContract | P4SemanticContract | P5SemanticContract
 )
 
 

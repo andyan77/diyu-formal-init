@@ -339,18 +339,19 @@ function DisplayWorkbench({ context }: { context: Context }): JSX.Element {
 
 function AdminWorkspace({ context }: { context: Context }): JSX.Element {
   const [section, setSection] = useState<"readiness" | "operators">("readiness");
-  return <section className="admin-workspace"><aside className="sidebar"><p className="sidebar-label">租户管理</p><nav><button className={section === "readiness" ? "active" : ""} onClick={() => setSection("readiness")}>入驻与就绪</button><button className={section === "operators" ? "active" : ""} onClick={() => setSection("operators")}>账号与操作人</button></nav></aside><main className="admin-main">{section === "readiness" && <ReadinessPanel />}{section === "operators" && <OperatorPanel formalRuntime={context.formal_runtime === true} />}</main></section>;
+  return <section className="admin-workspace"><aside className="sidebar"><p className="sidebar-label">租户管理</p><nav><button className={section === "readiness" ? "active" : ""} onClick={() => setSection("readiness")}>入驻与就绪</button><button className={section === "operators" ? "active" : ""} onClick={() => setSection("operators")}>账号与操作人</button></nav></aside><main className="admin-main">{section === "readiness" && <ReadinessPanel />}{section === "operators" && <OperatorPanel formalRuntime={context.formal_runtime === true} brandName={context.identity.brand} />}</main></section>;
 }
 
-function OperatorPanel({ formalRuntime }: { formalRuntime: boolean }): JSX.Element {
+function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; brandName: string }): JSX.Element {
   const client = useQueryClient();
   const operators = useQuery({ queryKey: ["operators"], queryFn: () => api<Operator[]>("/api/v1/tenant-management/operators") });
   const accounts = useQuery({ queryKey: ["publishing-accounts"], queryFn: () => api<PublishingAccount[]>("/api/v1/tenant-management/publishing-accounts") });
   const organizations = useQuery({ queryKey: ["tenant-organizations"], queryFn: () => api<TenantOrganization[]>("/api/v1/tenant-management/organizations"), enabled: formalRuntime });
-  const [newAccountName, setNewAccountName] = useState("");
+  const isDiyuFashion = brandName === "笛语服饰";
+  const [newAccountName, setNewAccountName] = useState(isDiyuFashion ? "笛语服饰品牌官方账号" : "");
   const [channel, setChannel] = useState<CreatePublishingAccount["channel"]>("抖音");
-  const [contentRoleName, setContentRoleName] = useState("");
-  const [voiceBoundary, setVoiceBoundary] = useState("");
+  const [contentRoleName, setContentRoleName] = useState(isDiyuFashion ? "品牌官方 / 品牌定义者" : "");
+  const [voiceBoundary, setVoiceBoundary] = useState(isDiyuFashion ? "代表品牌讲已确认的品牌立场、生活关系和内容方向；不冒充创始人、研发、门店或顾客，不讲未确认商品和经营事实。" : "");
   const [operatorId, setOperatorId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [accountId, setAccountId] = useState("");
@@ -410,8 +411,10 @@ function ReadinessPanel(): JSX.Element {
   const readiness = useQuery({ queryKey: ["readiness"], queryFn: () => api<Readiness>("/api/v1/admin/readiness") });
   const expression = useQuery({ queryKey: ["brand-expression"], queryFn: () => api<BrandExpression>("/api/v1/admin/brand-expression") });
   const [draft, setDraft] = useState("");
-  const confirm = useMutation({ mutationFn: () => api<BrandExpression>("/api/v1/admin/brand-expression/confirm", { method: "POST", body: JSON.stringify({ draft: draft || expression.data?.draft || "" }) }), onSuccess: () => { client.invalidateQueries({ queryKey: ["readiness"] }); client.invalidateQueries({ queryKey: ["brand-expression"] }); } });
-  return <><header className="page-heading"><p className="eyebrow">企业管理</p><h1>入驻与就绪</h1><p>只列出现在真的会影响哪项能力的事项，不使用统一完成度。</p></header><section className="readiness-list">{readiness.isLoading ? <Loading label="正在读取当前就绪条件……" /> : readiness.data?.items.map(item => <article className={`readiness-card ${item.state}`} key={item.id}><div><p className="eyebrow">{item.state === "ready" ? "已具备" : "需要处理"}</p><h2>{item.title}</h2><p>{item.detail}</p><small>完成后：{item.unlock}</small></div>{item.id === "brand_expression" && item.state === "needs_action" && <button className="primary" onClick={() => document.getElementById("brand-expression")?.scrollIntoView({ behavior: "smooth" })}>确认草案</button>}</article>)}</section><section id="brand-expression" className="expression-card"><div><p className="eyebrow">品牌表达草案</p><h2>先判断“像不像我们”。</h2><p>这份草案可修改；未确认前不会被当成正式表达基线。</p></div><textarea defaultValue={expression.data?.draft ?? ""} onChange={event => setDraft(event.target.value)} aria-label="品牌表达草案" /><div className="expression-foot"><span>{expression.data?.status === "confirmed" ? `已确认 V${expression.data.version}` : "等待确认"}</span><button className="primary" onClick={() => confirm.mutate()} disabled={confirm.isPending}>{confirm.isPending ? "正在确认……" : "确认这版表达"}</button></div></section></>;
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => { if (expression.data && draft === "") setDraft(expression.data.draft); }, [expression.data?.draft]);
+  const confirm = useMutation({ mutationFn: () => api<BrandExpression>("/api/v1/admin/brand-expression/confirm", { method: "POST", body: JSON.stringify({ draft }) }), onSuccess: value => { client.invalidateQueries({ queryKey: ["readiness"] }); client.invalidateQueries({ queryKey: ["brand-expression"] }); setNotice(`品牌表达 V${value.version} 已由当前品牌方确认。`); }, onError: error => setNotice(error.message) });
+  return <><header className="page-heading"><p className="eyebrow">企业管理</p><h1>入驻与就绪</h1><p>只列出现在真的会影响哪项能力的事项，不使用统一完成度。</p></header>{notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}<section className="readiness-list">{readiness.isLoading ? <Loading label="正在读取当前就绪条件……" /> : readiness.data?.items.map(item => <article className={`readiness-card ${item.state}`} key={item.id}><div><p className="eyebrow">{item.state === "ready" ? "已具备" : "需要处理"}</p><h2>{item.title}</h2><p>{item.detail}</p><small>完成后：{item.unlock}</small></div>{item.id === "brand_expression" && item.state === "needs_action" && <button className="primary" onClick={() => document.getElementById("brand-expression")?.scrollIntoView({ behavior: "smooth" })}>确认草案</button>}</article>)}</section><section id="brand-expression" className="expression-card"><div><p className="eyebrow">品牌表达草案</p><h2>先判断“像不像我们”。</h2><p>这份草案可修改；未确认前不会被当成正式表达基线。</p></div><textarea value={draft} onChange={event => setDraft(event.target.value)} aria-label="品牌表达草案" /><div className="expression-foot"><span>{expression.data?.status === "confirmed" ? `已确认 V${expression.data.version}` : "等待确认"}</span><button className="primary" onClick={() => confirm.mutate()} disabled={confirm.isPending || draft.trim().length < 8}>{confirm.isPending ? "正在确认……" : "确认这版表达"}</button></div></section></>;
 }
 
 function SeriesPanel(): JSX.Element {

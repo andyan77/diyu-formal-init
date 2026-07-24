@@ -40,7 +40,8 @@ def test_workbench_context_and_onboarding_are_server_scoped() -> None:
         assert {item["id"] for item in readiness["items"]} == {
             "brand_expression",
             "account_role",
-            "organization_materials",
+            "product_facts",
+            "dm01_profile",
         }
         baseline = manager.get("/api/v1/admin/brand-expression").json()
         confirmed = manager.post(
@@ -51,9 +52,7 @@ def test_workbench_context_and_onboarding_are_server_scoped() -> None:
         assert confirmed.json()["status"] == "confirmed"
 
 
-def test_dual_qualified_person_stays_one_identity_and_external_operator_never_shares_an_account_login() -> (
-    None
-):
+def test_dual_qualified_person_stays_one_identity_and_external_operator_never_shares_an_account_login() -> None:
     app = create_app(Settings.model_validate({}))
     with TestClient(app) as dual:
         dual.get("/ui/select/dual-user")
@@ -76,9 +75,7 @@ def test_dual_qualified_person_stays_one_identity_and_external_operator_never_sh
     with TestClient(app) as manager:
         manager.get("/ui/select/admin")
         operators = manager.get("/api/v1/tenant-management/operators").json()
-        external_operator = next(
-            item for item in operators if item["display_name"] == "外部代运营乙"
-        )
+        external_operator = next(item for item in operators if item["display_name"] == "外部代运营乙")
         assert "折线之间品牌母账号·抖音" in external_operator["publishing_accounts"]
         account = manager.get("/api/v1/tenant-management/publishing-accounts").json()[0]
         created = manager.post(
@@ -164,9 +161,7 @@ def test_series_is_explicitly_created_inserted_reordered_and_reset() -> None:
     with TestClient(create_app(Settings.model_validate({}))) as client:
         client.get("/ui/select/content")
         first = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
-        second = client.post(
-            "/api/v1/content", json={"weak_seed": _SEED + " 再补一句选择提示。"}
-        ).json()
+        second = client.post("/api/v1/content", json={"weak_seed": _SEED + " 再补一句选择提示。"}).json()
         created = client.post(
             "/api/v1/content/series",
             json={
@@ -177,9 +172,7 @@ def test_series_is_explicitly_created_inserted_reordered_and_reset() -> None:
         assert created.status_code == 201
         series_id = created.json()["id"]
         assert (
-            client.post(
-                f"/api/v1/content/series/{series_id}/items", json={"task_id": first["task_id"]}
-            ).status_code
+            client.post(f"/api/v1/content/series/{series_id}/items", json={"task_id": first["task_id"]}).status_code
             == 200
         )
         inserted = client.post(
@@ -265,9 +258,7 @@ def test_materials_keep_private_and_organization_entries_separate_and_reject_kno
         assert organization.status_code == 201
         listed = headquarters.get("/api/v1/materials").json()
         assert {item["scope"] for item in listed} >= {"personal", "organization"}
-        assert headquarters.delete(f"/api/v1/materials/{personal.json()['id']}").json() == {
-            "deleted": True
-        }
+        assert headquarters.delete(f"/api/v1/materials/{personal.json()['id']}").json() == {"deleted": True}
         text = headquarters.post(
             "/api/v1/materials/personal",
             json=_material_payload("搭配文字备注", "notes.txt", "text/plain", b"reference note"),

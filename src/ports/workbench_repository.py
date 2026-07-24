@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from src.shared.types import DisplayScope, TrustedScope
+from src.shared.types import DisplayScope, TenantManagementScope, TrustedScope
 
 
 class WorkbenchRepository(ABC):
@@ -16,21 +16,24 @@ class WorkbenchRepository(ABC):
     def user_portal_identity(self, scope: TrustedScope) -> dict[str, str]: ...
 
     @abstractmethod
+    def management_identity(self, scope: TenantManagementScope) -> dict[str, str]: ...
+
+    @abstractmethod
     def is_content_operator(self, scope: TrustedScope) -> bool: ...
 
     @abstractmethod
-    def is_tenant_manager(self, scope: TrustedScope) -> bool: ...
+    def is_tenant_manager(self, scope: TenantManagementScope) -> bool: ...
 
     @abstractmethod
-    def management_operators(self, scope: TrustedScope) -> list[dict[str, object]]: ...
+    def management_operators(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
 
     @abstractmethod
-    def management_accounts(self, scope: TrustedScope) -> list[dict[str, object]]: ...
+    def management_accounts(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
 
     @abstractmethod
     def create_publishing_account(
         self,
-        scope: TrustedScope,
+        scope: TenantManagementScope,
         name: str,
         channel: str,
         content_role_name: str,
@@ -41,7 +44,7 @@ class WorkbenchRepository(ABC):
     @abstractmethod
     def create_operator(
         self,
-        scope: TrustedScope,
+        scope: TenantManagementScope,
         display_name: str,
         account_id: UUID,
         default_persona_name: str,
@@ -49,9 +52,7 @@ class WorkbenchRepository(ABC):
     ) -> dict[str, object]: ...
 
     @abstractmethod
-    def update_default_persona(
-        self, scope: TrustedScope, name: str, boundary: str
-    ) -> dict[str, object]: ...
+    def update_default_persona(self, scope: TrustedScope, name: str, boundary: str) -> dict[str, object]: ...
 
     @abstractmethod
     def display_identity(self, scope: DisplayScope) -> dict[str, str]: ...
@@ -69,13 +70,13 @@ class WorkbenchRepository(ABC):
     def display_versions(self, scope: DisplayScope, task_id: UUID) -> list[dict[str, object]]: ...
 
     @abstractmethod
-    def readiness(self, scope: TrustedScope) -> list[dict[str, str]]: ...
+    def readiness(self, scope: TenantManagementScope) -> list[dict[str, str]]: ...
 
     @abstractmethod
-    def brand_expression(self, scope: TrustedScope) -> dict[str, object]: ...
+    def brand_expression(self, scope: TenantManagementScope) -> dict[str, object]: ...
 
     @abstractmethod
-    def confirm_brand_expression(self, scope: TrustedScope, draft: str) -> dict[str, object]: ...
+    def confirm_brand_expression(self, scope: TenantManagementScope, draft: str) -> dict[str, object]: ...
 
     @abstractmethod
     def list_series(self, scope: TrustedScope) -> list[dict[str, object]]: ...
@@ -89,9 +90,7 @@ class WorkbenchRepository(ABC):
     ) -> dict[str, object]: ...
 
     @abstractmethod
-    def reorder_series(
-        self, scope: TrustedScope, series_id: UUID, task_ids: tuple[UUID, ...]
-    ) -> dict[str, object]: ...
+    def reorder_series(self, scope: TrustedScope, series_id: UUID, task_ids: tuple[UUID, ...]) -> dict[str, object]: ...
 
     @abstractmethod
     def reset_series(self, scope: TrustedScope, series_id: UUID) -> dict[str, object]: ...

@@ -15,7 +15,12 @@ from src.infrastructure.production_auth import (
     ProductionAuthRepository,
     TenantSession,
 )
-from src.shared.types import ContentTarget, DisplayScope, TrustedScope
+from src.shared.types import (
+    ContentTarget,
+    DisplayScope,
+    TenantManagementScope,
+    TrustedScope,
+)
 
 _COOKIE_NAME = "diyu_session"
 ApplicationId = Literal[
@@ -153,11 +158,14 @@ class SessionAuthority:
             return self._scope_for_user(self._settings.demo_dual_qualified_user_id)
         return self._scope
 
-    def require_management(self, request: Request) -> TrustedScope:
+    def require_management(self, request: Request) -> TenantManagementScope:
         application = self._require_application(request, _MANAGEMENT_APPLICATIONS)
-        if application == "dual-tenant-admin":
-            return self._scope_for_user(self._settings.demo_dual_qualified_user_id)
-        return self._scope_for_user(self._settings.demo_tenant_admin_user_id)
+        user_id = (
+            self._settings.demo_dual_qualified_user_id
+            if application == "dual-tenant-admin"
+            else self._settings.demo_tenant_admin_user_id
+        )
+        return TenantManagementScope(self._scope.tenant_id, user_id, self._scope.brand_id)
 
 
 def set_session_cookie(response: object, authority: SessionAuthority, application: ApplicationId) -> None:
@@ -223,7 +231,7 @@ class ProductionSessionAuthority:
             raise HTTPException(status_code=403, detail="当前正式会话没有租户用户入口资格")
         return self.repository.content_scope(identity)
 
-    def require_management(self, request: Request) -> TrustedScope:
+    def require_management(self, request: Request) -> TenantManagementScope:
         identity = self._tenant_identity(request)
         if identity.audience != "tenant-admin":
             raise HTTPException(status_code=403, detail="当前正式会话没有租户管理入口资格")
