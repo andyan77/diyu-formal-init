@@ -34,7 +34,12 @@ def bootstrap_production() -> None:
     ops_password = _required("DIYU_INITIAL_OPS_PASSWORD")
     demo_admin_username = _required("DIYU_INITIAL_DEMO_ADMIN_USERNAME")
     public_url = os.environ.get("DIYU_PUBLIC_URL", "https://diyuai.cc").rstrip("/")
-    _, totp_uri = repository.bootstrap_operator(ops_username, ops_password)
+    try:
+        _, totp_uri = repository.bootstrap_operator(ops_username, ops_password)
+    except DomainError as exc:
+        if str(exc) == "平台运维首位身份已经初始化":
+            return
+        raise
     activation_token = repository.bootstrap_existing_tenant_admin(
         TENANT_ID, TENANT_ADMIN_USER_ID, demo_admin_username
     )
