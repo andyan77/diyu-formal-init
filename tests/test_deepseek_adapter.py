@@ -218,6 +218,21 @@ def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_nam
     assert "不得给任何衣物补写功能、版型、质感、性能、场合适配或穿着效果" in prompt
 
 
+def test_deepseek_adapter_repairs_clothing_claims_when_no_product_fact_exists() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "不要把任何一件衣服说成万能。"),
+        "标题",
+        P1SemanticContract("选一件有结构感的单品", "条件改变时调整", "出门前走两步"),
+        VideoProductionBundle(
+            "导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"
+        ),
+    )
+
+    assert [(item.field, item.fragment) for item in violations] == [
+        ("choice", "选一件有结构感的单品")
+    ]
+
+
 def test_deepseek_adapter_does_not_retry_nonrecoverable_status(
     monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput
 ) -> None:

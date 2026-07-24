@@ -379,6 +379,9 @@ class DeepSeekGenerator(ContentGenerator):
         # grow into a fabricated inventory of technical variables such as a
         # lining or a process test.
         unprovided_technical_detail = re.compile(r"(?:里料|工艺)")
+        no_product_clothing_claim = re.compile(
+            r"(?:衣服|外套|单品|上衣|裤子|面料|衣架|穿上|肩部|腰部|腹部|起皱|变形|折叠)"
+        )
         for field, text in visible:
             for sentence in re.split(r"(?<=[。！？!?])", text):
                 if not sentence.strip():
@@ -410,6 +413,12 @@ class DeepSeekGenerator(ContentGenerator):
                 if internal_copy_direction.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
                 if personal_identifier.search(sentence):
+                    violations.append(FactViolation(field, sentence.strip()))
+                if (
+                    boundary.product_facts == "（无当前商品事实）"
+                    and no_product_clothing_claim.search(sentence)
+                    and "不要把任何一件衣服说成万能" not in sentence
+                ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if (product_reference or product_contract) and unprovided_technical_detail.search(
                     sentence
