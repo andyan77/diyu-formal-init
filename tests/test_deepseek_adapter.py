@@ -215,7 +215,7 @@ def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_nam
 
     assert "当前没有已点名商品或可用商品事实" in prompt
     assert "不得把某件未提供的商品属性、功能、效果或现实经历" in prompt
-    assert "不要自行把抽象选择指定为裙、裤、颜色、配饰、材质或性能" in prompt
+    assert "一般方法或假设可以使用颜色、品类与搭配例子" in prompt
     assert "只是讨论对象，不是可用人物、素材或现场" in prompt
     assert "自然的选择、情绪、节奏和未来拍摄构思" in prompt
 
@@ -480,11 +480,7 @@ def test_deepseek_adapter_rejects_invented_product_details_and_events_without_pr
         ),
     )
 
-    assert {item.field for item in violations} == {
-        "choice",
-        "boundary",
-        "spoken_lines",
-    }
+    assert {item.field for item in violations} == {"boundary", "spoken_lines"}
 
 
 def test_deepseek_adapter_rejects_product_detail_before_a_generic_garment_name() -> None:
@@ -509,10 +505,7 @@ def test_deepseek_adapter_rejects_product_detail_before_a_generic_garment_name()
         ),
     )
 
-    assert {item.field for item in violations} == {
-        "choice",
-        "cover_or_first_frame",
-    }
+    assert {item.field for item in violations} == {"cover_or_first_frame"}
 
 
 def test_deepseek_adapter_rejects_concrete_product_facts_that_conflict_with_current_input(
@@ -648,7 +641,7 @@ def test_deepseek_adapter_repairs_a_specific_unsupported_product_claim(
     assert "spoken_lines" in repair_request
     assert "subtitles" in repair_request
     assert '"title"' not in repair_request
-    assert "不得保留或新增任何具体衣物、颜色、配饰、材质、性能、部位或示例" in repair_request
+    assert "一般方法或假设可以使用颜色、品类与搭配例子" in repair_request
     assert "这件外套很保暖" not in repair_request
 
 

@@ -191,7 +191,8 @@ class DeepSeekGenerator(ContentGenerator):
                     "也不得虚构已经发生的人物、对话、顾客/同事/孩子或现场事件；"
                     "问题或一般话题里提到的家庭、妈妈、孩子、顾客或门店只是讨论对象，不代表这些人物"
                     "或现场可供拍摄；默认只使用当前内容角色、一名创作者、一部手机和普通室内条件。"
-                    "不要自行把抽象选择指定为裙、裤、颜色、配饰、材质或性能；"
+                    "可以用明确标为一般方法或假设的颜色、品类和搭配例子，但不能冒充当前品牌商品、"
+                    "用户衣柜或已经存在的拍摄道具；"
                     "可以围绕用户给出的条件完成自然的穿衣选择、情绪、节奏和明确为未来安排的拍摄构思。"
                 )
             if format_attempt:
@@ -323,7 +324,8 @@ class DeepSeekGenerator(ContentGenerator):
                     "问题中提到的家庭、妈妈、孩子、顾客或门店只是讨论对象，不可改写成账号亲历或"
                     "可拍资源；只使用当前内容角色、一名创作者、一部手机和普通室内条件。"
                     "品牌关系观点不能改写成门店已经执行的服务办法、全国承诺或顾客经历。"
-                    "不要自行把抽象选择指定为裙、裤、颜色、配饰、材质或性能；"
+                    "可以保留明确作为一般方法或假设的颜色、品类与搭配例子，但不能冒充当前品牌商品、"
+                    "用户衣柜或已经存在的拍摄道具；"
                     "条件性选择、情绪和明确为未来安排的拍摄构思可以保留。"
                 )
             payload, repair_retries = self._request(
@@ -610,28 +612,16 @@ class DeepSeekGenerator(ContentGenerator):
         unprovided_structure_action = re.compile(
             r"(?:展示|拉出|露出|翻出).{0,8}(?:内衬|里布)"
         )
-        no_product_clothing_term = (
-            r"(?:连衣裙|连体裤|阔腿裤|半身裙|裙装|衬衫|衬衣|西装|针织衫|T恤|外套|裤装|裤子|上衣|"
-            r"单品|衣服|丝巾|腰带|配饰)"
-        )
-        no_product_detail = (
-            r"(?:剪裁|面料|抗皱|高弹(?:力)?|易活动|可叠穿|可拆卸|"
-            r"深(?:蓝|色)|保暖|防水|透气|耐穿|显瘦|显高|不皱|不垮)"
-        )
-        no_product_specific_assertion = re.compile(
-            no_product_clothing_term
-            + r".{0,32}"
-            + no_product_detail
-            + r"|"
-            + no_product_detail
-            + r".{0,32}"
-            + no_product_clothing_term
+        unprovided_visual_garment = re.compile(
+            r"(?:米色|蓝色|白色|黑色|灰色|棕色|深色|同色系|针织|卫衣|T恤|牛仔|棉麻|"
+            r"连衣裙|童装|衬衫|裙子|外套|裤子|上衣|配饰)"
         )
         invented_real_world_event = re.compile(
             r"(?:一位|同事|顾客|店长|孩子|观众|她|他).{0,24}"
             r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|拍了拍|转身离开|等(?:待)?).{0,32}"
             r"|(?:我们|我).{0,16}(?:见过|遇到过|试过|观察到|经常被问|站在镜子前|试了又试)"
-            r"|我(?:最近|曾经|一直|太久|以前|当了|给孩子|家里).{0,32}"
+            r"|(?:我|我们).{0,20}(?:最近|曾经|一直|太久|以前|当了|给孩子|家里|"
+            r"观察过|买了|留下了|犹豫了|包括我自己|上周|昨天|刚才).{0,32}"
         )
         capture_resource_pattern = (
             r"(?:孩子|妈妈|爸爸|丈夫|一家三口|全家(?:人|合影)?|顾客|店员|"
@@ -738,12 +728,6 @@ class DeepSeekGenerator(ContentGenerator):
                     violations.append(FactViolation(field, sentence.strip()))
                 if (
                     boundary.product_facts == "（无当前商品事实）"
-                    and no_product_specific_assertion.search(sentence)
-                    and not conditional
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    boundary.product_facts == "（无当前商品事实）"
                     and invented_real_world_event.search(sentence)
                     and not conditional
                     and sentence not in boundary.explicit_premise
@@ -755,6 +739,13 @@ class DeepSeekGenerator(ContentGenerator):
                     and unprovided_capture_resource.search(sentence)
                     and not text_only_topic.search(sentence)
                     and not has_provided_capture_resource
+                ):
+                    violations.append(FactViolation(field, sentence.strip()))
+                if (
+                    boundary.product_facts == "（无当前商品事实）"
+                    and field in _COMPARISON_VISUAL_FIELDS
+                    and unprovided_visual_garment.search(sentence)
+                    and not text_only_topic.search(sentence)
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
                 if (
@@ -946,6 +937,9 @@ class DeepSeekGenerator(ContentGenerator):
                 raise GenerationFailed("内容事实边界无法在一次修复内满足")
             rejected_by_field.setdefault(violation.field, []).append(violation.fragment.strip())
         projected = dict(draft)
+        contract_fields = {
+            field for fields in _CONTRACT_FIELDS.values() for field in fields
+        }
         for field in no_product_media_fallback_fields & rejected_by_field.keys():
             projected[field] = DeepSeekGenerator._safe_no_product_media_field(
                 request, projected, field
@@ -965,7 +959,7 @@ class DeepSeekGenerator(ContentGenerator):
                     "spoken_lines",
                     "subtitles",
                     "release_caption_and_interaction",
-                }:
+                } | contract_fields:
                     projected[field] = DeepSeekGenerator._safe_no_product_media_field(
                         request, projected, field
                     )
@@ -974,13 +968,13 @@ class DeepSeekGenerator(ContentGenerator):
             retained = (" | " if field == "subtitles" else "").join(kept)
             readable_count = len(re.findall(r"[\w\u4e00-\u9fff]", retained))
             minimum = 30 if field == "spoken_lines" else 10
-            if field in {contract_field for fields in _CONTRACT_FIELDS.values() for contract_field in fields}:
+            if field in contract_fields:
                 minimum = 4
             if readable_count < minimum and not request.products and field in {
                 "spoken_lines",
                 "subtitles",
                 "release_caption_and_interaction",
-            }:
+            } | contract_fields:
                 projected[field] = DeepSeekGenerator._safe_no_product_media_field(
                     request, projected, field
                 )
@@ -1012,6 +1006,27 @@ class DeepSeekGenerator(ContentGenerator):
             return f"{seed}｜尊重差异，也保留自己的判断"
         if field == "release_caption_and_interaction":
             return f"{seed} 你最在意的条件是什么？"
+        if field == "choice":
+            return "先保留每个人舒服、愿意使用的选择，再找一个可以自然呼应的共同点。"
+        if field == "boundary":
+            return "如果这个共同点让任何人明显不自在，就放弃统一，保留各自选择。"
+        if field == "next_action":
+            return "先用现有条件做一次低成本对照，再决定哪一种更自然。"
+        if field == "persona_observation":
+            return "这个问题值得从真实感受出发讨论，不需要替任何人物编造经历。"
+        if field == "audience_return":
+            return "你可以保留自己的节奏和判断，不必被一种标准答案催促。"
+        if field == "brand_account_link":
+            return (
+                f"{request.brand.brand_name}当前表达尊重差异、真实克制；"
+                "这是一项品牌立场，不代表门店已经执行某项服务。"
+            )
+        if field == "local_reality_or_signal":
+            return "只使用用户本次明确给出的近场信号，不补写顾客原因或门店事实。"
+        if field == "legitimate_account_response":
+            return "当前账号只表达在其身份边界内能够成立的回应。"
+        if field == "public_relationship_return":
+            return "让未参与原事件的人也能带走一份可迁移的理解与选择空间。"
         if field == "spoken_lines":
             if request.primary_product == "dressing_decision":
                 return (
@@ -1204,7 +1219,8 @@ class DeepSeekGenerator(ContentGenerator):
         )
         no_product_guard = (
             "当前没有已点名商品或可用商品事实。不得把某件未提供的商品属性、功能、效果或现实经历"
-            "写成已经确认，也不要自行把抽象选择指定为裙、裤、颜色、配饰、材质或性能；"
+            "写成已经确认；一般方法或假设可以使用颜色、品类与搭配例子，但不得冒充当前品牌商品、"
+            "用户衣柜或已存在的拍摄道具；"
             "问题或一般话题里出现的家庭、妈妈、孩子、顾客或门店只是讨论对象，不是可用人物、素材或现场；"
             "可以围绕用户给出的条件完成自然的选择、情绪、节奏和未来拍摄构思。"
             if not request.products
@@ -1213,7 +1229,7 @@ class DeepSeekGenerator(ContentGenerator):
         writing_boundary = (
             "写作边界：当前没有商品事实。可以自然讨论穿衣选择、情绪、幽默、节奏和未来拍摄构思，"
             "但不得把某件具体衣物的属性、功能、效果或现实经历当作已经发生的事实；"
-            "选择必须保持抽象，不能自行指定裙、裤、颜色、配饰、材质或性能。"
+            "一般方法或假设可以用颜色、品类与搭配例子，不能冒充当前品牌商品或用户已有物品。"
             "不要写资产、版本、路由、提示或后台字段。"
             if not request.products
             else """写作边界：只把“用户种子”和“当前商品事实”当作已经发生或可以肯定的事实；未知资料不得补足为具体商品性能、材质、工艺、部位设计动机或现实事件。条件性专业解释要说明依据什么、能说明什么、不能推出什么；不得把颜色、重量或双面外观推演为性能或官方设计动机。品牌、账号、组织和内容角色只约束发声身份、语气和权威边界，绝不成为已经发生的顾客、店长、门店、服务或交易事件。
@@ -1272,7 +1288,7 @@ class DeepSeekGenerator(ContentGenerator):
         del draft
         if boundary.product_facts == "（无当前商品事实）":
             return f"""只修复下列字段；不得返回任何未列字段，服务端会保留其余合格字段。
-当前没有可用商品事实。每个待修字段只能使用用户明确前提、抽象选择条件、改变条件和低成本验证动作。不得保留或新增任何具体衣物、颜色、配饰、材质、性能、部位或示例，也不得把原来的具体例子换成另一件具体例子。未来拍摄构思可以保留，但只能是抽象安排，不能描写未提供的服装、人物或现场。
+当前没有可用商品事实。每个待修字段只能使用用户明确前提、选择条件、改变条件和低成本验证动作。一般方法或假设可以使用颜色、品类与搭配例子，但不得把它们写成当前品牌商品、用户衣柜或已经存在的拍摄道具。未来拍摄构思可以保留，但不能描写未提供的服装、人物或现场。
 问题中提到的家庭、妈妈、孩子、顾客或门店只是讨论对象，不可改写成账号亲历或可拍资源。画面只使用当前内容角色、一名创作者、一部手机和普通室内条件；可用正对手机口播、画外音、手写关键词或不依赖具体人物的简单动作。
 品牌关系观点不能改写成门店已经执行的服务办法、全国承诺或顾客经历，只能表达当前品牌立场和判断。
 用户明确前提：{boundary.explicit_premise}
