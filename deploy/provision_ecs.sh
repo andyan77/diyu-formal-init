@@ -31,12 +31,24 @@ s3_access_key="diyu-m54-$(openssl rand -hex 8)"
 s3_secret_key="$(openssl rand -base64 36 | tr -d '\n')"
 ops_password="$(openssl rand -base64 30 | tr -d '\n')"
 
-docker exec -i "$postgres_container" sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' <<SQL >/dev/null
+existing_roles="$(docker exec "$postgres_container" sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT string_agg(rolname, chr(44) ORDER BY rolname) FROM pg_roles WHERE rolname IN (chr(100)||chr(105)||chr(121)||chr(117)||chr(95)||chr(97)||chr(112)||chr(112), chr(100)||chr(105)||chr(121)||chr(117)||chr(95)||chr(109)||chr(105)||chr(103)||chr(114)||chr(97)||chr(116)||chr(111)||chr(114))"')"
+if [[ "$existing_roles" == "diyu_app,diyu_migrator" ]]; then
+  database_is_empty="$(docker exec "$postgres_container" sh -lc 'psql -U "$POSTGRES_USER" -d diyu_m5_4 -Atc "SELECT to_regclass(chr(112)||chr(117)||chr(98)||chr(108)||chr(105)||chr(99)||chr(46)||chr(97)||chr(108)||chr(101)||chr(109)||chr(98)||chr(105)||chr(99)||chr(95)||chr(118)||chr(101)||chr(114)||chr(115)||chr(105)||chr(111)||chr(110)) IS NULL"')"
+  if [[ "$database_is_empty" != "t" ]]; then
+    echo "Existing current-project database is not an empty failed provision; refusing recovery." >&2
+    exit 1
+  fi
+  docker exec -i "$postgres_container" sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' <<SQL >/dev/null
+ALTER ROLE diyu_migrator PASSWORD '${migrator_database_password}';
+ALTER ROLE diyu_app PASSWORD '${app_database_password}';
+SQL
+elif [[ -n "$existing_roles" ]]; then
+  echo "A partial non-isolated role set already exists; refusing to reuse it." >&2
+  exit 1
+else
+  docker exec -i "$postgres_container" sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' <<SQL >/dev/null
 DO \$\$
 BEGIN
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ('diyu_app', 'diyu_migrator')) THEN
-        RAISE EXCEPTION 'diyu application roles already exist; refusing to reuse a non-isolated role';
-    END IF;
     CREATE ROLE diyu_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS PASSWORD '${migrator_database_password}';
     CREATE ROLE diyu_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOINHERIT PASSWORD '${app_database_password}';
 END
@@ -45,12 +57,13 @@ SELECT format('CREATE DATABASE %I OWNER %I', '${database_name}', 'diyu_migrator'
 WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${database_name}')\gexec
 GRANT CONNECT ON DATABASE ${database_name} TO diyu_app;
 SQL
+fi
 
 docker exec -i "$minio_container" sh -ec '
   IFS= read -r access_key
   IFS= read -r secret_key
-  if [ -n "${MINIO_ROOT_USER_FILE:-}" ]; then MINIO_ROOT_USER=$(cat "$MINIO_ROOT_USER_FILE"); fi
-  if [ -n "${MINIO_ROOT_PASSWORD_FILE:-}" ]; then MINIO_ROOT_PASSWORD=$(cat "$MINIO_ROOT_PASSWORD_FILE"); fi
+  if [ -n "${MINIO_ROOT_USER_FILE:-}" ] && [ -r "$MINIO_ROOT_USER_FILE" ]; then MINIO_ROOT_USER=$(cat "$MINIO_ROOT_USER_FILE"); fi
+  if [ -n "${MINIO_ROOT_PASSWORD_FILE:-}" ] && [ -r "$MINIO_ROOT_PASSWORD_FILE" ]; then MINIO_ROOT_PASSWORD=$(cat "$MINIO_ROOT_PASSWORD_FILE"); fi
   mc alias set current-project http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
   mc mb --ignore-existing "current-project/diyu-m5-4-materials" >/dev/null
   cat >/tmp/diyu-m5-4-materials-policy.json <<"JSON"
