@@ -624,12 +624,16 @@ class DeepSeekGenerator(ContentGenerator):
         """Reject causal degree language that quietly presupposes a partial attribution."""
         if not re.search(r"(?:重量|克|差异)", sentence) or "双面" not in sentence:
             return False
-        causal = re.search(r"(?:归因|原因|造成|导致|带来|增加)", sentence)
-        weak_quantifier = re.search(
-            r"(?:是否|是不是|能否|完全|全部|全都|全|唯一|主要|多少|多大|"
-            r"比例|程度|主次|部分|不一定|无法排除|不能全|不能都)",
+        causal = re.search(
+            r"(?:归因|原因|造成|导致|带来|增加|来自|贡献|因为)",
             sentence,
         )
+        weak_uncertainty = re.search(
+            r"(?:是否|是不是|能否|唯一|主要|多少|多大|比例|程度|主次|"
+            r"不一定|无法排除|不能全|不能都)",
+            sentence,
+        )
+        weak_extent = re.search(r"(?:完全|全部|全都|全|部分)", sentence)
         safe_no_part = re.search(
             r"(?:不能|无法|没有.{0,8}(?:依据|证据)).{0,24}"
             r"(?:任何一部分|任一部分).{0,16}(?:差异|重量)|"
@@ -637,7 +641,10 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:归因|确认|证明)",
             sentence,
         )
-        return causal is not None and weak_quantifier is not None and safe_no_part is None
+        weak_relation = weak_uncertainty is not None or (
+            causal is not None and weak_extent is not None
+        )
+        return weak_relation and safe_no_part is None
 
     @staticmethod
     def _generalizes_sample_comparison(sentence: str) -> bool:

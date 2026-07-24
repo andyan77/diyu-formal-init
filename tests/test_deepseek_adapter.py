@@ -938,6 +938,8 @@ def test_deepseek_adapter_accepts_an_explicit_no_partial_attribution_boundary() 
         "不能确认双面结构造成了多少重量差异。",
         "双面结构不一定带来全部重量差异。",
         "不能把重量差异全归因于双面结构。",
+        "不知道双面结构具体贡献了多少重量差异。",
+        "不能确认这份重量是不是全因为双面。",
     ],
 )
 def test_deepseek_adapter_rejects_causal_degree_language_that_implies_partial_weight(
