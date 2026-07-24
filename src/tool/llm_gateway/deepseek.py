@@ -251,6 +251,14 @@ class DeepSeekGenerator(ContentGenerator):
                     "一般、通常或普遍的单层外套类别结论。"
                 )
             if any(
+                self._denies_known_weight_difference(boundary, violation.fragment)
+                for violation in violations
+            ):
+                repair_system += (
+                    "960 克与 650 克两份记录可以直接确认相差 310 克；待修字段不得说重量差额、"
+                    "重多少或差多少未知，只能说差异原因未知。"
+                )
+            if any(
                 violation.field in {"viewing_flow", "visual_actions", "sound_and_production"}
                 and re.search(r"无口播.{0,8}无对白.{0,8}无解说", violation.fragment)
                 for violation in violations
@@ -578,6 +586,10 @@ class DeepSeekGenerator(ContentGenerator):
                     violations.append(FactViolation(field, sentence.strip()))
                 if DeepSeekGenerator._generalizes_sample_comparison(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
+                if DeepSeekGenerator._denies_known_weight_difference(
+                    boundary, sentence
+                ):
+                    violations.append(FactViolation(field, sentence.strip()))
                 if internal_copy_direction.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
                 if personal_identifier.search(sentence):
@@ -688,6 +700,18 @@ class DeepSeekGenerator(ContentGenerator):
                 sentence,
             )
             and re.search(r"(?:普通|一般|通常|普遍|往往|都比|均比)", sentence)
+        )
+
+    @staticmethod
+    def _denies_known_weight_difference(boundary: FactBoundary, sentence: str) -> bool:
+        """Reject treating an arithmetically known sample-weight difference as unknown."""
+        if len(boundary.known_weight_grams) < 3:
+            return False
+        unknown = r"(?:无法|没法|不能|未知|不清楚|不确定)"
+        amount = r"(?:重多少|差多少|重量差额|差额|差值|差了多少)"
+        return bool(
+            re.search(amount + r".{0,20}" + unknown, sentence)
+            or re.search(unknown + r".{0,20}" + amount, sentence)
         )
 
     @staticmethod

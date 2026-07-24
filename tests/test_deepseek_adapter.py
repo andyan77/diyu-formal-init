@@ -1079,6 +1079,31 @@ def test_deepseek_adapter_rejects_a_two_sample_weight_as_a_category_claim(
     assert {violation.field for violation in violations} == {"product_insight"}
 
 
+def test_deepseek_adapter_rejects_treating_a_known_weight_difference_as_unknown() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary(
+            "商品 ZX-C218：当前样衣960克；对照样衣650克。",
+            "",
+            known_weight_grams=(960, 650, 310),
+        ),
+        "标题",
+        P2SemanticContract("两份样衣相差310克。", "原因未知。", "当前两份样衣记录"),
+        VideoProductionBundle(
+            "导读",
+            "它确实更重，但重多少、为什么重，现有资料没法确定。",
+            "动作",
+            "字幕",
+            "声音",
+            "首帧",
+            "观看链",
+            "时长",
+            "发布",
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {"spoken_lines"}
+
+
 def test_deepseek_adapter_rejects_internal_copy_direction() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：两面均为完整外观。", ""),
