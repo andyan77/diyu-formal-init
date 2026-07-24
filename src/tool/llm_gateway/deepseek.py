@@ -368,6 +368,9 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:结构|其他).{0,16}(?:因素|原因).{0,16}(?:导致|造成|解释).{0,16}(?:差异|重量)"
         )
         internal_copy_direction = re.compile(r"(?:需向受众说明|不应仅因.{0,16}说服)")
+        personal_identifier = re.compile(
+            r"1[3-9]\d{9}|[\w.+-]+@[\w.-]+|订单号?\s*[:：]?\s*[A-Za-z0-9-]+"
+        )
         # A boundary may say that no structure test is available.  It must not
         # grow into a fabricated inventory of technical variables such as a
         # lining or a process test.
@@ -401,6 +404,8 @@ class DeepSeekGenerator(ContentGenerator):
                 if unsupported_weight_cause.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
                 if internal_copy_direction.search(sentence):
+                    violations.append(FactViolation(field, sentence.strip()))
+                if personal_identifier.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
                 if (product_reference or product_contract) and unprovided_technical_detail.search(
                     sentence
@@ -704,7 +709,7 @@ class DeepSeekGenerator(ContentGenerator):
 {flagged}
 可用商品事实：{boundary.product_facts}
 用户明确前提：{boundary.explicit_premise}
-只处理六种问题：把未提供的商品材质、保暖、舒适、品质、版型效果、适用场景、设计动机或普遍穿着结果改成不作肯定主张的表达；删除未提供的衣物部位、内搭颜色或内搭款式，只保留用户已给出的“同一身内搭”及当前商品事实支持的翻面、走动、停留和口袋动作；删除由品牌、账号、角色或受众画像凭空形成的现实人物、门店、顾客、行为、对白、原因或结果；删除“实测”、电子秤、称重画面/声音、当前不存在的对照样衣或把两件样衣放到镜头中的表述；删除用对照样衣的重量、颜色或其他未测试原因解释“为什么有这份差异”的说法；补回标记为“遗漏的用户前提”的当前用户明确关系，必须保留其已知、仍作选择和限制三者的连结，不得补造原因；删除面向创作者的内部写作指令，改成可直接对受众使用的自然语言。{silent_visual_repair} 重量对照只能作为已提供的屏显或口播数据，不能冒充已经拍到或重新称量；若不能归因，只能明确当前没有结构测试、不能定量判断。每个已标记片段都必须从修复后的 JSON 消失，遗漏前提则必须在该字段中完整出现；不得换词重复同一未经证实的主张。条件性、假设性、拍摄演绎、比喻、幽默、情绪、节奏和基于颜色纹理动作的视觉重音都可保留。不要整篇改写。
+只处理七种问题：把未提供的商品材质、保暖、舒适、品质、版型效果、适用场景、设计动机或普遍穿着结果改成不作肯定主张的表达；删除未提供的衣物部位、内搭颜色或内搭款式，只保留用户已给出的“同一身内搭”及当前商品事实支持的翻面、走动、停留和口袋动作；删除由品牌、账号、角色或受众画像凭空形成的现实人物、门店、顾客、行为、对白、原因或结果；删除手机号、邮件地址、订单号和任何个人标识；删除“实测”、电子秤、称重画面/声音、当前不存在的对照样衣或把两件样衣放到镜头中的表述；删除用对照样衣的重量、颜色或其他未测试原因解释“为什么有这份差异”的说法；补回标记为“遗漏的用户前提”的当前用户明确关系，必须保留其已知、仍作选择和限制三者的连结，不得补造原因；删除面向创作者的内部写作指令，改成可直接对受众使用的自然语言。{silent_visual_repair} 重量对照只能作为已提供的屏显或口播数据，不能冒充已经拍到或重新称量；若不能归因，只能明确当前没有结构测试、不能定量判断。每个已标记片段都必须从修复后的 JSON 消失，遗漏前提则必须在该字段中完整出现；不得换词重复同一未经证实的主张。条件性、假设性、拍摄演绎、比喻、幽默、情绪、节奏和基于颜色纹理动作的视觉重音都可保留。不要整篇改写。
 严格只返回一个 JSON 对象，且键必须恰好为：{", ".join(fields)}。每个值必须是对应字段修复后的非空中文字符串；不得返回任何未列字段，不返回 body。"""
 
     @staticmethod

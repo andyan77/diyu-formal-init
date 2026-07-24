@@ -521,6 +521,21 @@ def test_deepseek_adapter_rejects_internal_copy_direction() -> None:
     assert violations[0].field == "natural_guide"
 
 
+def test_deepseek_adapter_repairs_personal_identifiers_field_by_field() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：两面均为完整外观。", ""),
+        "标题",
+        P1SemanticContract("今天先看炭灰面", "不需要联系 test@example.com", "下次再翻面"),
+        VideoProductionBundle(
+            "导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", "发布"
+        ),
+    )
+
+    assert [(item.field, item.fragment) for item in violations] == [
+        ("boundary", "不需要联系 test@example.com")
+    ]
+
+
 def test_deepseek_adapter_rejects_unprovided_technical_test_details() -> None:
     violations = DeepSeekGenerator._boundary_violations(
         FactBoundary("商品 ZX-C218：当前样衣约960克；没有结构测试。", ""),
