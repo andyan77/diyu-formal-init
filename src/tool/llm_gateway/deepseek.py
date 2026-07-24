@@ -350,7 +350,9 @@ class DeepSeekGenerator(ContentGenerator):
                 retries += judgement_retries
                 final_violations = tuple(dict.fromkeys(final_violations + semantic_violations))
             if final_violations:
-                structured = self._prune_rejected_sentences(structured, final_violations)
+                structured = self._prune_rejected_sentences(
+                    request, structured, final_violations
+                )
                 title, contract, production, body = self._compiled_artifact(request, structured)
                 residual_violations = self._boundary_violations(boundary, title, contract, production)
                 if residual_violations:
@@ -914,19 +916,41 @@ class DeepSeekGenerator(ContentGenerator):
         return merged
 
     @staticmethod
-    def _prune_rejected_sentences(draft: dict[str, object], violations: tuple[FactViolation, ...]) -> dict[str, object]:
-        """Finish the one repair atomically by dropping only finally rejected sentences."""
+    def _prune_rejected_sentences(
+        request: GenerationInput,
+        draft: dict[str, object],
+        violations: tuple[FactViolation, ...],
+    ) -> dict[str, object]:
+        """Finish one repair with safe media fallback only for no-product content."""
         rejected_by_field: dict[str, list[str]] = {}
         prunable_fields = {field for fields in _CONTRACT_FIELDS.values() for field in fields} | {
             "spoken_lines",
             "subtitles",
             "release_caption_and_interaction",
         }
+        no_product_media_fallback_fields = {
+            "natural_guide",
+            "cover_or_first_frame",
+            "viewing_flow",
+            "visual_actions",
+            "sound_and_production",
+        }
         for violation in violations:
-            if violation.field not in prunable_fields:
+            if (
+                violation.field not in prunable_fields
+                and not (
+                    not request.products
+                    and violation.field in no_product_media_fallback_fields
+                )
+            ):
                 raise GenerationFailed("内容事实边界无法在一次修复内满足")
             rejected_by_field.setdefault(violation.field, []).append(violation.fragment.strip())
         projected = dict(draft)
+        for field in no_product_media_fallback_fields & rejected_by_field.keys():
+            projected[field] = DeepSeekGenerator._safe_no_product_media_field(
+                request, projected, field
+            )
+            rejected_by_field.pop(field)
         for field, rejected in rejected_by_field.items():
             value = DeepSeekGenerator._visible_text(projected[field])
             separator = r"(?<=[。！？!?])|[|｜；;\n]+" if field == "subtitles" else r"(?<=[。！？!?])"
@@ -937,16 +961,79 @@ class DeepSeekGenerator(ContentGenerator):
                 if not any(fragment in sentence or sentence in fragment for fragment in rejected)
             ]
             if not kept:
+                if not request.products and field in {
+                    "spoken_lines",
+                    "subtitles",
+                    "release_caption_and_interaction",
+                }:
+                    projected[field] = DeepSeekGenerator._safe_no_product_media_field(
+                        request, projected, field
+                    )
+                    continue
                 raise GenerationFailed("内容事实边界无法在一次修复内满足")
             retained = (" | " if field == "subtitles" else "").join(kept)
             readable_count = len(re.findall(r"[\w\u4e00-\u9fff]", retained))
             minimum = 30 if field == "spoken_lines" else 10
             if field in {contract_field for fields in _CONTRACT_FIELDS.values() for contract_field in fields}:
                 minimum = 4
+            if readable_count < minimum and not request.products and field in {
+                "spoken_lines",
+                "subtitles",
+                "release_caption_and_interaction",
+            }:
+                projected[field] = DeepSeekGenerator._safe_no_product_media_field(
+                    request, projected, field
+                )
+                continue
             if readable_count < minimum:
                 raise GenerationFailed("内容事实边界无法在一次修复内满足")
             projected[field] = retained
         return projected
+
+    @staticmethod
+    def _safe_no_product_media_field(
+        request: GenerationInput,
+        draft: dict[str, object],
+        field: str,
+    ) -> str:
+        """Compile a usable one-person field without inventing people, products or places."""
+        seed = request.weak_seed.strip()
+        if field == "natural_guide":
+            return "由当前创作者正对手机，从这个问题进入，展开判断后自然收束到品牌立场。"
+        if field == "cover_or_first_frame":
+            return f"当前创作者正对手机，首帧手写标题：“{seed}”"
+        if field == "viewing_flow":
+            return "固定机位：先提出问题，再说清判断与边界，最后留一句给受众继续思考。"
+        if field == "visual_actions":
+            return "当前创作者正对手机口播，用自然停顿、简单手势和手写关键词辅助表达。"
+        if field == "sound_and_production":
+            return "一人一部手机，普通室内环境收音；人声清楚，不依赖额外人物、商品、场地或素材。"
+        if field == "subtitles":
+            return f"{seed}｜尊重差异，也保留自己的判断"
+        if field == "release_caption_and_interaction":
+            return f"{seed} 你最在意的条件是什么？"
+        if field == "spoken_lines":
+            if request.primary_product == "dressing_decision":
+                return (
+                    f"关于“{seed}”，这次可以先这样选："
+                    f"{DeepSeekGenerator._visible_text(draft['choice'])}。"
+                    f"但如果{DeepSeekGenerator._visible_text(draft['boundary'])}，选择就要跟着变。"
+                    f"现在可以先做一个小验证：{DeepSeekGenerator._visible_text(draft['next_action'])}。"
+                )
+            if request.primary_product == "brand_life_narrative":
+                return (
+                    f"关于“{seed}”，我们不替任何人编一段经历。"
+                    f"我们想说的是：{DeepSeekGenerator._visible_text(draft['persona_observation'])}。"
+                    f"对你来说，{DeepSeekGenerator._visible_text(draft['audience_return'])}。"
+                    f"这也说明了{DeepSeekGenerator._visible_text(draft['brand_account_link'])}。"
+                )
+            if request.primary_product == "local_response":
+                return (
+                    f"关于“{seed}”，我们只回应当前已经给出的信号。"
+                    f"{DeepSeekGenerator._visible_text(draft['legitimate_account_response'])}。"
+                    f"{DeepSeekGenerator._visible_text(draft['public_relationship_return'])}。"
+                )
+        raise GenerationFailed("内容事实边界无法在一次修复内满足")
 
     @staticmethod
     def _repair_receipts(violations: tuple[FactViolation, ...]) -> tuple[FactRepairReceipt, ...]:

@@ -692,8 +692,11 @@ def test_deepseek_adapter_rejects_punctuation_only_visible_text() -> None:
         DeepSeekGenerator._visible_text("'")
 
 
-def test_deepseek_adapter_prunes_only_finally_rejected_sentences() -> None:
+def test_deepseek_adapter_prunes_only_finally_rejected_sentences(
+    generation_input: GenerationInput,
+) -> None:
     projected = DeepSeekGenerator._prune_rejected_sentences(
+        generation_input,
         {"tradeoff_or_limit": ("现有资料只有两份样衣重量记录。不能简单认为双面结构直接导致重量增加。")},
         (
             FactViolation(
@@ -706,9 +709,12 @@ def test_deepseek_adapter_prunes_only_finally_rejected_sentences() -> None:
     assert projected == {"tradeoff_or_limit": "现有资料只有两份样衣重量记录。"}
 
 
-def test_deepseek_adapter_fails_when_final_rejection_would_empty_a_field() -> None:
+def test_deepseek_adapter_fails_when_final_rejection_would_empty_a_field(
+    generation_input: GenerationInput,
+) -> None:
     with pytest.raises(GenerationFailed):
         DeepSeekGenerator._prune_rejected_sentences(
+            generation_input,
             {"tradeoff_or_limit": "不能简单归因于双面结构。"},
             (
                 FactViolation(
@@ -719,9 +725,18 @@ def test_deepseek_adapter_fails_when_final_rejection_would_empty_a_field() -> No
         )
 
 
-def test_deepseek_adapter_does_not_prune_a_rejected_production_field() -> None:
+def test_deepseek_adapter_does_not_prune_a_rejected_product_production_field(
+    generation_input: GenerationInput,
+) -> None:
+    product_request = GenerationInput(
+        **{
+            **generation_input.__dict__,
+            "products": (ProductFact("SKU-1", {"category": "coat"}),),
+        }
+    )
     with pytest.raises(GenerationFailed):
         DeepSeekGenerator._prune_rejected_sentences(
+            product_request,
             {"cover_or_first_frame": "展示未提供的商品部位。"},
             (
                 FactViolation(
@@ -732,8 +747,32 @@ def test_deepseek_adapter_does_not_prune_a_rejected_production_field() -> None:
         )
 
 
-def test_deepseek_adapter_prunes_one_rejected_spoken_sentence_when_copy_remains() -> None:
+def test_deepseek_adapter_compiles_safe_media_when_no_product_visual_stays_unsafe(
+    generation_input: GenerationInput,
+) -> None:
+    request = GenerationInput(
+        **{
+            **generation_input.__dict__,
+            "primary_product": "brand_life_narrative",
+            "weak_seed": "家庭成员要不要穿成同款？",
+        }
+    )
     projected = DeepSeekGenerator._prune_rejected_sentences(
+        request,
+        {"cover_or_first_frame": "孩子站在门店里展示衣服。"},
+        (FactViolation("cover_or_first_frame", "孩子站在门店里展示衣服。"),),
+    )
+
+    assert projected["cover_or_first_frame"] == (
+        "当前创作者正对手机，首帧手写标题：“家庭成员要不要穿成同款？”"
+    )
+
+
+def test_deepseek_adapter_prunes_one_rejected_spoken_sentence_when_copy_remains(
+    generation_input: GenerationInput,
+) -> None:
+    projected = DeepSeekGenerator._prune_rejected_sentences(
+        generation_input,
         {
             "spoken_lines": (
                 "当前M码样衣约960克，对照同季同长度单层短外套M码样衣约650克。"
@@ -756,8 +795,11 @@ def test_deepseek_adapter_prunes_one_rejected_spoken_sentence_when_copy_remains(
     assert "现有资料无法归因" in spoken
 
 
-def test_deepseek_adapter_prunes_one_rejected_subtitle_segment() -> None:
+def test_deepseek_adapter_prunes_one_rejected_subtitle_segment(
+    generation_input: GenerationInput,
+) -> None:
     projected = DeepSeekGenerator._prune_rejected_sentences(
+        generation_input,
         {"subtitles": ("M码960克 | 同季同长度单层样衣M码650克 | 不能确认差异全因双面 | 现有资料无法归因")},
         (
             FactViolation(
