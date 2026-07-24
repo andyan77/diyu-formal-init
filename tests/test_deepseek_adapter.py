@@ -446,11 +446,11 @@ def test_deepseek_adapter_repairs_a_specific_unsupported_product_claim(
     }
     assert len(FakeClient.requests) == 2
     repair_request = str(FakeClient.requests[1]["json"])
-    assert "具体违规片段" in repair_request
+    assert "违规片段" in repair_request
     assert "spoken_lines" in repair_request
     assert "subtitles" in repair_request
     assert '"title"' not in repair_request
-    assert "每个待修字段只能保留用户前提、抽象选择条件、改变条件和低成本验证动作" in repair_request
+    assert "不得保留或新增任何具体衣物、颜色、配饰、材质、性能、部位或示例" in repair_request
 
 
 def test_deepseek_adapter_compiles_visible_body_only_from_controlled_fields() -> None:
