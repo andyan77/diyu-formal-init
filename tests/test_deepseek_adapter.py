@@ -299,6 +299,27 @@ def test_video_contract_rejects_a_question_only_script_for_a_long_declared_durat
     assert FactViolation("spoken_lines", "为什么品牌内容不都写成卖货？") in violations
 
 
+def test_a_handwritten_topic_does_not_claim_the_topic_person_is_available_to_film() -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("（无当前商品事实）", "孩子坚持自己选衣服，大人的审美要不要让一步？"),
+        "让一步",
+        P3SemanticContract("品牌观察", "受众获得", "账号关系"),
+        VideoProductionBundle(
+            "导读",
+            "孩子坚持自己选衣服，大人的审美要不要让一步？今天聊聊这个纠结，也说说我们为什么尊重差异。",
+            "一人正对手机口播。",
+            "字幕",
+            "声音",
+            "手写标题“孩子坚持自己穿搭，大人该让步吗？”",
+            "观看链",
+            "20秒",
+            "发布",
+        ),
+    )
+
+    assert violations == ()
+
+
 def test_eighteen_seconds_is_not_mislabeled_as_an_eight_second_transform() -> None:
     body = DeepSeekGenerator._visible_body(
         "标题",

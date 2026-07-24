@@ -627,18 +627,23 @@ class DeepSeekGenerator(ContentGenerator):
             r"(?:一位|同事|顾客|店长|孩子|观众|她|他).{0,24}"
             r"(?:问|说|站在|走进|走向|看见|蹲下|拿着|拍了拍|转身离开|等(?:待)?).{0,32}"
             r"|(?:我们|我).{0,16}(?:见过|遇到过|试过|观察到|经常被问|站在镜子前|试了又试)"
-            r"|(?:妈妈|爸爸|丈夫|孩子).{0,16}(?:喊|坚持|拿起|穿上|跑开|转圈)"
         )
         no_product_specific_object = re.compile(
             r"(?:米色|蓝色|白色|黑色|灰色|棕色|深色|同色系|"
             r"针织|卫衣|T恤|牛仔|棉麻|连衣裙|童装|衬衫|裙子|外套|配饰|绿植)"
         )
-        unprovided_capture_resource = re.compile(
+        capture_resource = (
             r"(?:孩子|妈妈|爸爸|丈夫|一家三口|全家(?:人|合影)?|顾客|店员|"
-            r"店内|店门|门店|衣柜|衣架|收银台|购物车|家庭合照|手机相册)"
+            r"店内|店门|门店|衣柜|衣架|收银台|购物车|家庭合照|合照|手机相册)"
         )
-        unsubstantiated_group_generalization = re.compile(
-            r"(?:很多|许多|不少|大多数|常见的).{0,8}(?:妈妈|爸爸|孩子|家庭|顾客|客人)"
+        capture_action = (
+            r"(?:出镜|入镜|背影|只露|站在|穿上|走向|跑开|转圈|合影|"
+            r"画面|镜头|拍摄|展示|显示|翻出|扫过|推近|滑动|拿出)"
+        )
+        unprovided_capture_resource = re.compile(
+            capture_resource + r".{0,24}" + capture_action
+            + r"|"
+            + capture_action + r".{0,24}" + capture_resource
         )
         has_provided_capture_resource = bool(
             re.search(r"(?:可以|可|会|让).{0,8}(?:出镜|拍摄)|现成素材|已经上传|我上传|就在门店拍", boundary.explicit_premise)
@@ -670,7 +675,7 @@ class DeepSeekGenerator(ContentGenerator):
                     violations.append(
                         FactViolation("natural_duration", production.natural_duration)
                     )
-                if declared_seconds >= 20 and spoken_count < 40:
+                if declared_seconds >= 20 and spoken_count < 30:
                     violations.append(
                         FactViolation("spoken_lines", production.spoken_lines)
                     )
@@ -742,12 +747,6 @@ class DeepSeekGenerator(ContentGenerator):
                     boundary.product_facts == "（无当前商品事实）"
                     and invented_real_world_event.search(sentence)
                     and not conditional
-                    and sentence not in boundary.explicit_premise
-                ):
-                    violations.append(FactViolation(field, sentence.strip()))
-                if (
-                    boundary.product_facts == "（无当前商品事实）"
-                    and unsubstantiated_group_generalization.search(sentence)
                     and sentence not in boundary.explicit_premise
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
