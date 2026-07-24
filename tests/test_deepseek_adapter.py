@@ -455,6 +455,18 @@ def test_deepseek_adapter_compiles_visible_body_only_from_controlled_fields() ->
     assert "声音与制作提示：声音提示" in body
 
 
+def test_deepseek_adapter_normalizes_video_sound_branch_and_minimum_duration() -> None:
+    structured = json.loads(_video_payload())
+    structured["spoken_lines"] = "这是完整口播，需要以自然语速说完。" * 12
+    structured["sound_and_production"] = "保留环境声。无口播时保持安静。"
+    structured["natural_duration"] = "约12秒"
+
+    projected = DeepSeekGenerator._normalize_video_contract(structured)
+
+    assert projected["sound_and_production"] == "保留环境声。"
+    assert projected["natural_duration"] != "约12秒"
+
+
 def test_deepseek_adapter_rejects_punctuation_only_visible_text() -> None:
     with pytest.raises(TypeError):
         DeepSeekGenerator._visible_text("'")

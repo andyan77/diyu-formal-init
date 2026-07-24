@@ -198,6 +198,8 @@ class DeepSeekGenerator(ContentGenerator):
             retries += request_retries
             try:
                 structured = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"])))
+                if request.media_format == "video":
+                    structured = self._normalize_video_contract(structured)
                 title, contract, production, body = self._compiled_artifact(request, structured)
                 break
             except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
@@ -323,6 +325,8 @@ class DeepSeekGenerator(ContentGenerator):
             try:
                 repaired_fields = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"])))
                 structured = self._merge_repaired_fields(structured, violations, repaired_fields)
+                if request.media_format == "video":
+                    structured = self._normalize_video_contract(structured)
                 title, contract, production, body = self._compiled_artifact(request, structured)
             except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
                 raise GenerationFailed("模型边界修复返回格式不完整") from exc
@@ -477,6 +481,31 @@ class DeepSeekGenerator(ContentGenerator):
                     delay = min(4.0, 0.5 * (2**retries))
                 retries += 1
                 time.sleep(delay)
+
+    @staticmethod
+    def _normalize_video_contract(structured: dict[str, object]) -> dict[str, object]:
+        """Apply deterministic media consistency without rewriting creative content."""
+        projected = dict(structured)
+        spoken = DeepSeekGenerator._visible_text(projected["spoken_lines"])
+        if re.search(r"^\s*无口播.{0,8}无对白.{0,8}无解说\s*$", spoken):
+            return projected
+        sound = DeepSeekGenerator._visible_text(projected["sound_and_production"])
+        sound_sentences = [
+            sentence.strip()
+            for sentence in re.split(r"(?<=[。！？!?])", sound)
+            if sentence.strip()
+            and not re.search(r"无口播时", sentence)
+        ]
+        if sound_sentences:
+            projected["sound_and_production"] = "".join(sound_sentences)
+        duration = DeepSeekGenerator._visible_text(projected["natural_duration"])
+        duration_match = re.search(r"(\d{1,3})\s*秒", duration)
+        if duration_match:
+            spoken_count = len(re.findall(r"[\w\u4e00-\u9fff]", spoken))
+            minimum_seconds = (spoken_count + 5) // 6
+            if int(duration_match.group(1)) < minimum_seconds:
+                projected["natural_duration"] = f"约 {minimum_seconds} 秒"
+        return projected
 
     @staticmethod
     def _compiled_artifact(
