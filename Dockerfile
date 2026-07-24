@@ -21,6 +21,7 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY src/ ./src/
+COPY tests/ ./tests/
 COPY assets/ ./assets/
 COPY 首批领域数据库知识数据/ ./首批领域数据库知识数据/
 COPY frontend/ ./frontend/
