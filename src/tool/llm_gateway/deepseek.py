@@ -228,9 +228,8 @@ class DeepSeekGenerator(ContentGenerator):
                 )
             if any(self._weakens_no_weight_attribution(violation.fragment) for violation in violations):
                 repair_system += (
-                    "待修字段不得把双面结构与重量差异组成因果句，即使使用否定、疑问或不确定语气；"
-                    "不要讨论原因的程度、比例、主次或可能性，只说明现有资料无法归因。"
-                    "这些已命中字段不得再次出现“双面结构”四个字。"
+                    "待修字段只保留两份重量记录、没有结构测试和现有资料无法归因；"
+                    "不得讨论或点名任何重量原因，也不得讨论原因的程度、比例、主次或可能性。"
                 )
             if any(
                 "双面" in violation.fragment
@@ -243,8 +242,8 @@ class DeepSeekGenerator(ContentGenerator):
                 for violation in violations
             ):
                 repair_system += (
-                    "待修字段不得把双面设计与重量的增减、原因或影响写成因果关系；"
-                    "只可保留两份记录存在差异以及现有资料无法归因。"
+                    "待修字段只可保留两份记录存在差异以及现有资料无法归因；"
+                    "不得讨论或点名任何重量原因、影响或增减关系。"
                 )
             if any(self._generalizes_sample_comparison(violation.fragment) for violation in violations):
                 repair_system += (
@@ -1074,7 +1073,7 @@ class DeepSeekGenerator(ContentGenerator):
 请只依据可用商品事实和用户明确前提，重新写出下列字段：{", ".join(fields)}。
 可用商品事实：{boundary.product_facts}
 用户明确前提：{boundary.explicit_premise}
-不得新增商品性能、材质、工艺、未提供部位、设计动机、现实人物/事件或重新称量；不得把当前两份样衣资料改写成实拍对比。{comparison_visual_repair}若当前资料不能归因，只能陈述两份已记录重量、没有结构测试、现有资料无法归因；不得声称双面造成、带来或增加了重量。涉及重量原因时，不讨论双面结构所占程度、比例、主次或可能性，这些说法仍暗示了部分归因；对照只是一份同季同长度 M 码样衣记录，不得泛化成普通、一般、通常或普遍的单层/双面外套品类结论；不得列举面料、里料、工艺等未验证候选原因或未提供性能。条件性、未来拍摄安排和自然表达可以保留。
+不得新增商品性能、材质、工艺、未提供部位、设计动机、现实人物/事件或重新称量；不得把当前两份样衣资料改写成实拍对比。{comparison_visual_repair}重量原因完全未知：只陈述两份已记录重量、没有结构测试和现有资料无法归因；不得讨论或点名任何候选原因，也不得讨论原因的程度、比例、主次、可能性、影响或增减关系。对照只是一份同季同长度 M 码样衣记录，不得泛化成普通、一般、通常或普遍的单层/双面外套品类结论；不得列举未验证候选因素或未提供性能。条件性、未来拍摄安排和自然表达可以保留。
 严格只返回一个 JSON 对象，键必须恰好为：{", ".join(fields)}。每个值必须是对应字段修复后的非空中文字符串。"""
 
     @staticmethod

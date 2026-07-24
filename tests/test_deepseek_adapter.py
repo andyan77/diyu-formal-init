@@ -763,7 +763,7 @@ def test_deepseek_adapter_repairs_comparison_visuals_without_showing_a_second_sa
 
     assert "不得提及、展示、悬挂、拿起或并排任何单层外套、对照样衣或第二件商品" in prompt
     assert "旁边放单层短外套" not in prompt
-    assert "不得声称双面造成、带来或增加了重量" in prompt
+    assert "不得讨论或点名任何候选原因" in prompt
 
 
 def test_deepseek_adapter_allows_comparison_weight_as_a_text_card() -> None:
@@ -919,8 +919,7 @@ def test_deepseek_adapter_uses_a_system_repair_guard_for_weak_causal_negation(
     )
 
     assert "无法归因" in artifact.body
-    assert "不得把双面结构与重量差异组成因果句" in str(FakeClient.requests[1]["json"])
-    assert "不得再次出现“双面结构”四个字" in str(FakeClient.requests[1]["json"])
+    assert "不得讨论或点名任何重量原因" in str(FakeClient.requests[1]["json"])
 
 
 def test_deepseek_adapter_rejects_an_invented_explanation_for_weight_difference() -> None:
