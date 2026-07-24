@@ -1,16 +1,27 @@
 from __future__ import annotations
 
+import json
+from copy import deepcopy
 from dataclasses import replace
+from pathlib import Path
 
 import psycopg
+import pytest
 from fastapi.testclient import TestClient
 
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
 from src.infrastructure.seed_demo import ACCOUNT_ID, ACCOUNT_ROLE_ID, ROLE_ID, TENANT_ID
+from src.infrastructure.system_asset_catalog import import_system_asset_catalog
 from tests.conftest import SIBLING_ACCOUNT_ID, SIBLING_BRAND_ID, SIBLING_USER_ID
 
 _SEED = "下午开完一个挺正式的会，转身去接孩子。"
+_GOVERNANCE = (
+    Path(__file__).resolve().parents[1]
+    / "首批领域数据库知识数据"
+    / "第五批：评测与导入包"
+    / "12-系统资产运行治理-v1.json"
+)
 
 
 def test_catalog_is_idempotent_and_keeps_p1_and_dm01_activations_separate(
@@ -38,6 +49,74 @@ def test_catalog_is_idempotent_and_keeps_p1_and_dm01_activations_separate(
         "D-CRAFT-001",
         "D-DIRECT-001",
     }
+
+
+def test_catalog_reconciles_activation_set_and_rolls_back_invalid_governance(
+    migrator_database_url: str,
+    tmp_path: Path,
+) -> None:
+    governance = json.loads(_GOVERNANCE.read_text(encoding="utf-8"))
+    changed = deepcopy(governance)
+    changed["assets"] = [asset for asset in changed["assets"] if asset["asset_id"] != "B-TPO-001"]
+    changed_path = tmp_path / "without-b-tpo.json"
+    changed_path.write_text(json.dumps(changed, ensure_ascii=False), encoding="utf-8")
+    try:
+        import_system_asset_catalog(changed_path)
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT asset_id FROM system_asset_activations WHERE asset_id = 'B-TPO-001'")
+            assert cursor.fetchone() is None
+            cursor.execute("SELECT status FROM system_domain_assets WHERE asset_id = 'B-TPO-001'")
+            assert cursor.fetchone() == ("review_candidate",)
+
+        invalid = deepcopy(changed)
+        invalid["assets"][0]["superseded_by"] = "UNKNOWN-ASSET"
+        invalid_path = tmp_path / "invalid-governance.json"
+        invalid_path.write_text(json.dumps(invalid, ensure_ascii=False), encoding="utf-8")
+        with pytest.raises(RuntimeError):
+            import_system_asset_catalog(invalid_path)
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT asset_id FROM system_asset_activations WHERE asset_id = 'B-TPO-001'")
+            assert cursor.fetchone() is None
+    finally:
+        import_system_asset_catalog()
+
+
+def test_runtime_excludes_expired_and_superseded_active_assets(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    cases = (
+        (
+            "UPDATE system_domain_assets SET valid_until = %s WHERE asset_id = 'B-TPO-001'",
+            "2000-01-01",
+            "UPDATE system_domain_assets SET valid_until = NULL WHERE asset_id = 'B-TPO-001'",
+        ),
+        (
+            "UPDATE system_domain_assets SET superseded_by = %s WHERE asset_id = 'B-TPO-001'",
+            "D-DIRECT-001",
+            "UPDATE system_domain_assets SET superseded_by = NULL WHERE asset_id = 'B-TPO-001'",
+        ),
+    )
+    for apply, value, restore in cases:
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+            cursor.execute(apply, (value,))
+        try:
+            with TestClient(create_app(Settings.model_validate({}))) as client:
+                client.get("/ui/select/content")
+                created = client.post("/api/v1/content", json={"weak_seed": _SEED})
+                assert created.status_code == 200
+            with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+                cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+                cursor.execute(
+                    "SELECT used_assets FROM generation_runs WHERE task_id = %s ORDER BY started_at DESC LIMIT 1",
+                    (created.json()["task_id"],),
+                )
+                row = cursor.fetchone()
+            assert row is not None
+            assert "B-TPO-001" not in {asset["asset_id"] for asset in row[0]}
+        finally:
+            with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+                cursor.execute(restore)
 
 
 def test_run_records_only_applicable_active_asset_versions(app_database_url: str) -> None:

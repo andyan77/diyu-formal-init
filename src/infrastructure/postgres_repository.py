@@ -605,7 +605,9 @@ class PostgresContentRepository(ContentRepository):
                 SELECT a.asset_id, a.schema_version, a.asset_type, a.display_name, a.structured_body, active.consumer
                 FROM system_domain_assets a
                 JOIN system_asset_activations active ON active.asset_id = a.asset_id
-                WHERE a.status = 'active' AND active.consumer = ANY(%s) ORDER BY a.asset_id
+                WHERE a.status = 'active' AND a.superseded_by IS NULL
+                  AND (a.valid_until IS NULL OR a.valid_until >= CURRENT_DATE)
+                  AND active.consumer = ANY(%s) ORDER BY a.asset_id
                 """,
                 ([self._consumer(primary_product), "content-production / M5-2-media"],),
             )

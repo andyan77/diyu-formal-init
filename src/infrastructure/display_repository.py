@@ -81,7 +81,9 @@ class PostgresDisplayRepository(DisplayRepository):
             cursor.execute(
                 """SELECT a.asset_id, a.schema_version, a.asset_type, a.display_name, a.structured_body
                    FROM system_domain_assets a JOIN system_asset_activations x ON x.asset_id=a.asset_id
-                   WHERE a.status='active' AND x.consumer='display-merchandising / DM01' ORDER BY a.asset_id"""
+                   WHERE a.status='active' AND a.superseded_by IS NULL
+                     AND (a.valid_until IS NULL OR a.valid_until >= CURRENT_DATE)
+                     AND x.consumer='display-merchandising / DM01' ORDER BY a.asset_id"""
             )
             rows = cursor.fetchall()
         excluded = {"G-REV-003", "GM-REVISE-001"} if not revision else set()

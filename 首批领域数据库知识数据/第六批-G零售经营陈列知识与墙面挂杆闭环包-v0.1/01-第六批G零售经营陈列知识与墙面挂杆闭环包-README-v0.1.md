@@ -39,6 +39,8 @@ status: review_candidate
 
 结构校验通过不等于专业内容已经自动激活。
 
+运行治理生命周期统一为 `review_candidate / active / deprecated`；只有有直接消费者且未过期、未被取代的 `active` 资产可进入 DM01 上下文，`deprecated` 仅保留历史引用。
+
 ## 3. 文件清单
 
 | 文件 | 用途 |
