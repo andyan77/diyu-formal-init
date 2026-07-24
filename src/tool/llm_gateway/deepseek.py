@@ -267,6 +267,17 @@ class DeepSeekGenerator(ContentGenerator):
                     "电子秤画面，只能把记录作为口播或文字数据。"
                 )
             if any(
+                re.search(
+                    r"(?:双倍|两倍|翻倍).{0,8}口袋|口袋.{0,8}(?:双倍|两倍|翻倍)",
+                    violation.fragment,
+                )
+                for violation in violations
+            ):
+                repair_system += (
+                    "两面口袋均可使用只说明两面可用，不代表口袋数量双倍、两倍或翻倍；"
+                    "待修字段只能保留两面可用这个已知事实。"
+                )
+            if any(
                 violation.field in {"viewing_flow", "visual_actions", "sound_and_production"}
                 and re.search(r"无口播.{0,8}无对白.{0,8}无解说", violation.fragment)
                 for violation in violations
@@ -610,6 +621,12 @@ class DeepSeekGenerator(ContentGenerator):
                     boundary, sentence
                 ):
                     violations.append(FactViolation(field, sentence.strip()))
+                if re.search(
+                    r"(?:双倍|两倍|翻倍).{0,8}口袋|"
+                    r"口袋.{0,8}(?:双倍|两倍|翻倍)",
+                    sentence,
+                ):
+                    violations.append(FactViolation(field, sentence.strip()))
                 if internal_copy_direction.search(sentence):
                     violations.append(FactViolation(field, sentence.strip()))
                 if personal_identifier.search(sentence):
@@ -695,7 +712,7 @@ class DeepSeekGenerator(ContentGenerator):
             causal is not None and weak_extent is not None
         )
         weakened_negative = re.search(
-            r"(?:无法|不能|不可).{0,10}"
+            r"(?:无法|没法|不能|不可|不应|不要).{0,32}"
             r"(?:归因|原因|造成|导致|带来|增加|来自|贡献)",
             sentence,
         )

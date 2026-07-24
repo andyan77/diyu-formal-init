@@ -1033,6 +1033,8 @@ def test_deepseek_adapter_accepts_an_explicit_no_partial_attribution_boundary() 
         "不能确认这份重量是不是全因为双面。",
         "不能简单把这份重量差异归因于双面结构。",
         "你猜双面结构贡献了多少？",
+        "不能简单理解为双面结构直接导致重量增加。",
+        "没法说这重量差就是双面结构带来的。",
     ],
 )
 def test_deepseek_adapter_rejects_causal_degree_language_that_implies_partial_weight(
@@ -1084,6 +1086,30 @@ def test_deepseek_adapter_rejects_unprovided_candidate_causes_even_when_negated(
     )
 
     assert {violation.field for violation in violations} == {"tradeoff_or_limit"}
+
+
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "双面设计提供了双倍口袋使用。",
+        "这件外套的口袋数量翻倍。",
+    ],
+)
+def test_deepseek_adapter_rejects_turning_two_sided_pocket_use_into_double_quantity(
+    claim: str,
+) -> None:
+    violations = DeepSeekGenerator._boundary_violations(
+        FactBoundary("商品 ZX-C218：两面口袋均可正常使用。", ""),
+        "标题",
+        P2SemanticContract("两面口袋均可使用。", "现有资料无法归因。", "当前商品记录"),
+        VideoProductionBundle(
+            "导读", "台词", "动作", "字幕", "声音", "首帧", "观看链", "时长", claim
+        ),
+    )
+
+    assert {violation.field for violation in violations} == {
+        "release_caption_and_interaction"
+    }
 
 
 def test_deepseek_adapter_allows_ordinary_visual_garment_language() -> None:
