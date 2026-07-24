@@ -208,7 +208,7 @@ def test_deepseek_adapter_puts_p5_inner_layer_boundary_in_system_instruction(
 
 
 def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_named(
-    generation_input: GenerationInput,
+    monkeypatch: pytest.MonkeyPatch, generation_input: GenerationInput,
 ) -> None:
     request = GenerationInput(**{**generation_input.__dict__, "products": ()})
 
@@ -217,6 +217,16 @@ def test_deepseek_adapter_forbids_invented_product_claims_when_no_product_is_nam
     assert "当前没有已点名商品或可用商品事实" in prompt
     assert "不能补写任何物品或身体的属性、功能、效果、适配或具体细节" in prompt
     assert "不得新增任何物品、身体或场景细节" in prompt
+
+    FakeClient.responses = [FakeResponse(200, {"choices": [{"message": {"content": _video_payload()}}]})]
+    FakeClient.requests = []
+    monkeypatch.setattr(httpx, "Client", FakeClient)
+    generator = DeepSeekGenerator("https://compat.example/v1", "not-a-real-key", "verified-deepseek-model")
+
+    generator.generate(request)
+
+    system = str(FakeClient.requests[0]["json"])
+    assert "任何字段不得补写衣物、身体、场景或动作细节" in system
 
 
 def test_deepseek_adapter_repairs_clothing_claims_when_no_product_fact_exists() -> None:
