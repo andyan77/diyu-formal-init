@@ -51,6 +51,38 @@ def test_catalog_is_idempotent_and_keeps_p1_and_dm01_activations_separate(
     }
 
 
+def test_generation_save_and_reuse_do_not_change_system_knowledge_catalog(app_database_url: str) -> None:
+    with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT a.asset_id, a.status, a.valid_until, a.superseded_by, x.consumer, x.applicability
+            FROM system_domain_assets a LEFT JOIN system_asset_activations x ON x.asset_id = a.asset_id
+            ORDER BY a.asset_id
+            """
+        )
+        before = cursor.fetchall()
+
+    with TestClient(create_app(Settings.model_validate({}))) as client:
+        assert client.get("/ui/select/content").status_code == 200
+        created = client.post("/api/v1/content", json={"weak_seed": _SEED})
+        assert created.status_code == 200
+        saved = client.post(f"/api/v1/content-versions/{created.json()['version_id']}/save")
+        assert saved.status_code == 200
+        reused = client.post("/api/v1/content", json={"weak_seed": "接着上一条的判断，写成另一篇独立提醒。"})
+        assert reused.status_code == 200
+
+    with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT a.asset_id, a.status, a.valid_until, a.superseded_by, x.consumer, x.applicability
+            FROM system_domain_assets a LEFT JOIN system_asset_activations x ON x.asset_id = a.asset_id
+            ORDER BY a.asset_id
+            """
+        )
+        after = cursor.fetchall()
+    assert after == before
+
+
 def test_catalog_reconciles_activation_set_and_rolls_back_invalid_governance(
     migrator_database_url: str,
     tmp_path: Path,

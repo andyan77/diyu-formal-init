@@ -48,7 +48,7 @@
     {"asset_id": "GM-REVISE-001", "consumer": "display-merchandising / DM01", "applicability": "局部修订方法", "lifecycle": "active"}
   ],
   "fixture_bindings": [
-    {"fixture_id": "H-V17", "boundary": "候选登记与当前激活分离；当前导入与激活引用完整性由目录导入反证承接。", "test_node": "tests/test_c1_catalog_and_scope.py::test_catalog_is_idempotent_and_keeps_p1_and_dm01_activations_separate"},
+    {"fixture_id": "H-V17", "boundary": "生成、保存或复用内容不得改变系统知识候选/激活状态；平台高表现事件尚未接入，H-V17 当前只获得上述部分自动化覆盖。", "test_node": "tests/test_c1_catalog_and_scope.py::test_generation_save_and_reuse_do_not_change_system_knowledge_catalog"},
     {"fixture_id": "H-V01", "boundary": "租户、品牌、发布账号和自然人作用域不得串用。", "test_node": "tests/test_c1_catalog_and_scope.py::test_same_tenant_other_brand_account_and_user_cannot_access_content"},
     {"fixture_id": "DM-GOLD-001", "boundary": "DM01 保持二十件输入、十五件上墙以及自然反馈后十四件的库存对账。", "test_node": "tests/test_display_vertical_slice.py::test_display_v1_v2_preserves_history_and_records_dm01_assets"},
     {"fixture_id": "H-V09", "boundary": "用户可见成品不得泄露资产 ID、schema 版本或内部运行标识。", "test_node": "tests/test_p1_vertical_slice.py::test_workbench_renders_complete_artifact_without_internal_trace"}
