@@ -90,6 +90,47 @@ class PostgresDisplayRepository(DisplayRepository):
             products,
         )
 
+    def load_task_context(self, scope: DisplayScope, task_id: UUID) -> DisplayContext | None:
+        """Reproduce the context this task was compiled from, not whatever the store holds today."""
+        actor_organization_id = scope.actor_organization_id or scope.organization_id
+        with self._tx(scope) as cursor:
+            cursor.execute(
+                """SELECT t.context_snapshot, u.display_name operator_name
+                   FROM display_tasks t
+                   JOIN display_stores s ON s.id=t.store_id AND s.tenant_id=t.tenant_id
+                   JOIN users u ON u.id=%s AND u.tenant_id=t.tenant_id
+                   WHERE t.tenant_id=%s AND t.id=%s AND t.brand_id=%s AND t.organization_id=%s
+                     AND (t.created_by=%s OR s.execution_organization_id=%s)
+                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)""",
+                (
+                    scope.user_id,
+                    scope.tenant_id,
+                    task_id,
+                    scope.brand_id,
+                    scope.organization_id,
+                    scope.user_id,
+                    actor_organization_id,
+                    actor_organization_id,
+                    actor_organization_id,
+                ),
+            )
+            row = cursor.fetchone()
+        if row is None or row["context_snapshot"] is None:
+            return None
+        frozen = self._object(row["context_snapshot"], "本次任务上下文快照")
+        products = self._frozen_products(frozen)
+        return DisplayContext(
+            str(frozen["brand_name"]),
+            str(frozen["organization_name"]),
+            str(row["operator_name"]),
+            str(frozen["task_expression_version"]),
+            self._object(frozen["task_expression"], "本次任务表达"),
+            str(frozen["store_name"]),
+            str(frozen["store_profile_version"]),
+            self._object(frozen["rail_profile"], "门店挂杆结构"),
+            products,
+        )
+
     def load_assets(self, revision: bool) -> tuple[ActiveAsset, ...]:
         with (
             psycopg.connect(self._database_url, row_factory=dict_row) as connection,
@@ -142,7 +183,7 @@ class PostgresDisplayRepository(DisplayRepository):
             )
             store_id = UUID(str(self._one(cursor, "当前组织没有可用陈列门店")["id"]))
             cursor.execute(
-                "INSERT INTO display_tasks (id, tenant_id, brand_id, organization_id, created_by, store_id, inventory_text, inventory) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                "INSERT INTO display_tasks (id, tenant_id, brand_id, organization_id, created_by, store_id, inventory_text, inventory, context_snapshot) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 (
                     task_id,
                     scope.tenant_id,
@@ -152,6 +193,7 @@ class PostgresDisplayRepository(DisplayRepository):
                     store_id,
                     inventory_text,
                     Jsonb(dict(inventory)),
+                    Jsonb(_frozen_context(context)),
                 ),
             )
             self._run(cursor, scope, run_id, task_id, model, assets, context, inventory)
@@ -400,6 +442,21 @@ class PostgresDisplayRepository(DisplayRepository):
         return cast(dict[str, object], value)
 
     @classmethod
+    def _frozen_products(cls, frozen: dict[str, object]) -> tuple[tuple[str, dict[str, object]], ...]:
+        """Read the products this task froze; the SKU is kept beside the facts, never inside them."""
+        items = frozen.get("products")
+        if not isinstance(items, list):
+            raise DomainError("本次任务上下文快照商品无效")
+        result: list[tuple[str, dict[str, object]]] = []
+        for raw in items:
+            item = cls._object(raw, "本次任务上下文快照商品")
+            sku = item.get("sku")
+            if not isinstance(sku, str) or not sku.strip():
+                raise DomainError("本次任务上下文快照商品缺少编号")
+            result.append((sku, cls._object(item.get("facts"), "本次任务上下文快照商品事实")))
+        return tuple(result)
+
+    @classmethod
     def _task_products(
         cls,
         task_input: dict[str, object],
@@ -418,3 +475,18 @@ class PostgresDisplayRepository(DisplayRepository):
                 raise DomainError("本次任务商品缺少编号")
             result.append((sku, item))
         return tuple(result)
+
+
+def _frozen_context(context: DisplayContext) -> dict[str, object]:
+    """Everything a later revision must reproduce; the live operator is recorded per run instead."""
+    return {
+        "frozen_for": "display_task",
+        "brand_name": context.brand_name,
+        "organization_name": context.organization_name,
+        "store_name": context.store_name,
+        "task_expression_version": context.task_expression_version,
+        "task_expression": context.task_expression,
+        "store_profile_version": context.store_profile_version,
+        "rail_profile": context.rail_profile,
+        "products": [{"sku": sku, "facts": facts} for sku, facts in context.products],
+    }

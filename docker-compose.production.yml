@@ -67,14 +67,13 @@ services:
     profiles: ["maintenance"]
     command: ["uv", "run", "--no-sync", "python", "-m", "src.infrastructure.production_bootstrap"]
 
-  dm01-task-input:
+  dm01-store-seed:
     image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
     env_file:
-      - /etc/diyu/app.env
       - /etc/diyu/migrator.env
     network_mode: host
     read_only: true
     tmpfs:
       - /tmp:mode=1777,size=64m
     profiles: ["maintenance"]
-    command: ["uv", "run", "--no-sync", "python", "-m", "src.composition.activate_dm01_task_input"]
+    command: ["uv", "run", "--no-sync", "python", "-m", "src.composition.seed_dm01_store"]

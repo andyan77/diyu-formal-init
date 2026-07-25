@@ -298,7 +298,7 @@ def _add_slot(
     mount: str,
 ) -> None:
     if sku not in products or sku not in inventory or amount < 1 or mounted[sku] + amount > inventory[sku]:
-        raise GenerationFailed("陈列分配超出本次已确认商品或数量")
+        raise GenerationFailed("陈列分配超出本次清单商品或数量")
     facts = products[sku]
     slots = cast(list[dict[str, object]], zones[position][rail])
     slots.append(

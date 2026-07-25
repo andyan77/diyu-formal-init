@@ -1,10 +1,15 @@
-"""Separate the reusable wall structure from this task's own input.
+"""Separate the reusable wall structure from this task's own input (expand only).
 
-The store profile keeps only reusable structure. This task's theme, focus
-suggestion and product snapshot move to display_stores.current_task_input, and
-the previously stored on-site confirmation block is removed: the system issues a
-reference plan and never records a business confirmation, approval or proxy
-submitter.
+This task's theme, focus suggestion and product snapshot are copied into
+display_stores.current_task_input, which is the only place the application reads
+them from now on. The application never reads the old rail_profile.confirmation
+block again, so no confirmer, confirmation date or proxy submitter can reach a
+user-visible plan.
+
+The old keys are deliberately left in place as invisible, never-written fallback
+data, so a rollback inside the rollback window still finds the structure it was
+built against. Dropping them is a separate contract step taken only after that
+window closes; this revision performs no irrecoverable delete.
 
 Revision ID: 20260725_18
 Revises: 20260724_17
@@ -36,10 +41,6 @@ def upgrade() -> None:
                    'products', s.rail_profile #> '{inventory_snapshot,items}')
          WHERE s.rail_profile ? 'inventory_snapshot'
         """
-    )
-    op.execute(
-        "UPDATE display_stores SET rail_profile = rail_profile - 'inventory_snapshot' - 'confirmation' "
-        "WHERE rail_profile ? 'inventory_snapshot' OR rail_profile ? 'confirmation'"
     )
 
 

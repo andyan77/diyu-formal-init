@@ -9,27 +9,30 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from src.shared.errors import DomainError
-from src.shared.types import DisplayScope
 
 
 @dataclass(frozen=True)
-class DM01TaskActivation:
-    scope: DisplayScope
-    inventory_text: str
+class DM01StoreSeed:
+    store_id: UUID
+    store_name: str
+    structure_version: str
+    task_input_version: str
+    product_count: int
 
 
-class DM01TaskInputProvisioner:
-    """Persist one reusable wall structure plus the task snapshot supplied for this run.
+class DM01StoreSeedWriter:
+    """Idempotently configure one wall structure and the default seed for its next task.
 
-    The wall structure is reusable; theme, focus suggestion and product snapshot belong to the
-    current task only. Nothing here records a confirmation, an approval or a proxy submitter, and no
-    long-term brand product fact or brand display policy is created.
+    This is configuration only. It never selects a natural person, never builds a DisplayScope and
+    never creates a task, run or version: a real plan is always started by an authenticated display
+    user through the ordinary API. Nothing here records a confirmation, an approval or a proxy
+    submitter, and no long-term brand product fact or brand display policy is created.
     """
 
     def __init__(self, database_url: str) -> None:
         self._database_url = database_url
 
-    def activate(self, record: dict[str, object]) -> DM01TaskActivation:
+    def seed(self, record: dict[str, object]) -> DM01StoreSeed:
         tenant_name = _text(record, "tenant_name")
         brand_name = _text(record, "brand_name")
         control_name = _text(record, "control_organization_name")
@@ -61,24 +64,13 @@ class DM01TaskInputProvisioner:
                     raise DomainError("找不到该真实品牌")
                 brand_id = UUID(str(brand["id"]))
                 cursor.execute(
-                    """
-                    SELECT u.id, u.display_name, u.organization_id
-                    FROM users u
-                    JOIN tenant_management_grants g
-                      ON g.tenant_id=u.tenant_id AND g.user_id=u.id AND g.enabled=true
-                    JOIN organizations o
-                      ON o.tenant_id=u.tenant_id AND o.id=u.organization_id
-                    WHERE u.tenant_id=%s AND u.enabled=true AND o.name=%s
-                    ORDER BY u.display_name
-                    LIMIT 1
-                    """,
+                    "SELECT id FROM organizations WHERE tenant_id=%s AND name=%s",
                     (tenant_id, control_name),
                 )
-                operator = cursor.fetchone()
-                if operator is None:
-                    raise DomainError("找不到当前租户中可用的登录操作者")
-                operator_id = UUID(str(operator["id"]))
-                control_organization_id = UUID(str(operator["organization_id"]))
+                control_organization = cursor.fetchone()
+                if control_organization is None:
+                    raise DomainError("找不到该租户的管理组织")
+                control_organization_id = UUID(str(control_organization["id"]))
                 cursor.execute(
                     """
                     INSERT INTO organizations (id,tenant_id,name)
@@ -97,12 +89,14 @@ class DM01TaskInputProvisioner:
                     raise DomainError("无法建立门店执行组织")
                 execution_organization_id = UUID(str(organization["id"]))
 
+                task_input_version = _text(task_input, "version")
                 stored_task_input = {
-                    "version": _text(task_input, "version"),
+                    "version": task_input_version,
                     "source": "user_task_snapshot",
                     "record_id": record_id,
                     "expression": _object(task_input, "expression"),
                     "products": products,
+                    "default_inventory_text": _inventory_text(products),
                 }
                 store_id = uuid5(NAMESPACE_URL, f"diyu:{tenant_id}:display-store:{record_id}")
                 cursor.execute(
@@ -131,21 +125,17 @@ class DM01TaskInputProvisioner:
                         Jsonb(stored_task_input),
                     ),
                 )
-                if cursor.fetchone() is None:
+                stored = cursor.fetchone()
+                if stored is None:
                     raise DomainError("无法建立门店挂杆结构")
+                seeded_store_id = UUID(str(stored["id"]))
 
-        inventory_text = (
-            "本次任务可用：" + "、".join(f"{_text(item, 'sku')} {_quantity(item)} 件" for item in products) + "。"
-        )
-        return DM01TaskActivation(
-            DisplayScope(
-                tenant_id,
-                operator_id,
-                brand_id,
-                execution_organization_id,
-                control_organization_id,
-            ),
-            inventory_text,
+        return DM01StoreSeed(
+            seeded_store_id,
+            store_name,
+            structure_version,
+            task_input_version,
+            len(products),
         )
 
 
@@ -175,3 +165,8 @@ def _quantity(item: dict[str, object]) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 1:
         raise DomainError("任务输入商品数量无效")
     return value
+
+
+def _inventory_text(products: list[dict[str, object]]) -> str:
+    """A prefilled default for the next task; the display user still submits it themselves."""
+    return "本次任务可用：" + "、".join(f"{_text(item, 'sku')} {_quantity(item)} 件" for item in products) + "。"

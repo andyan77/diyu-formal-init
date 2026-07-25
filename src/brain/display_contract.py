@@ -33,7 +33,7 @@ def assert_display_complete(
         if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity < 1:
             raise GenerationFailed("陈列方案容量必须是正整数")
         if rail_totals[rail] > capacity:
-            raise GenerationFailed("陈列方案超过已确认的舒适容量")
+            raise GenerationFailed("陈列方案超过当前舒适容量")
     _assert_focus(layout)
 
 
@@ -186,7 +186,7 @@ def _assert_focus(layout: dict[object, object]) -> None:
         raise GenerationFailed("主焦点角色与固定位置不一致")
     primary_front = _front_skus(zones[primary_position]["upper"])
     if not set(cast(list[str], primary_skus)) <= primary_front:
-        raise GenerationFailed("业务指定主焦点没有进入固定上杆正挂")
+        raise GenerationFailed("主焦点没有进入固定上杆正挂")
     secondary_front = _front_skus(zones[secondary_position]["upper"])
     if secondary_present and not set(cast(list[str], secondary_skus)) <= secondary_front:
         raise GenerationFailed("较弱回应没有进入固定上杆正挂")

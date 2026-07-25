@@ -16,10 +16,7 @@ def compile_display_body(context: DisplayContext, plan: dict[str, object], revis
     position_names = " → ".join(_POSITION_TEXT[item] for item in cast(list[str], layout["reading_order"]))
     change = f"{layout['revision_note']}\n\n" if revision else ""
     sections = [
-        (
-            f"适用范围：{context.brand_name}｜{context.store_name}｜{context.organization_name}；"
-            f"本次操作人 {context.operator_name}。"
-        ),
+        f"适用范围：{context.brand_name}｜{context.store_name}｜{context.organization_name}。",
         f"主题：{layout['theme']}。密度：{layout['density']}；只做一个主焦点和最多一个较弱回应。",
         (
             f"本次任务库存共 {total_mounted + total_unmounted} 件；建议 {total_mounted} 件上墙，"

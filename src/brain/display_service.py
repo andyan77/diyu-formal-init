@@ -54,7 +54,7 @@ class DisplayService:
     def revise(self, scope: DisplayScope, task_id: UUID, feedback: str) -> dict[str, object]:
         if not feedback.strip():
             raise DomainError("请说明这次现场变化")
-        context = self._repository.load_context(scope)
+        context = self._repository.load_task_context(scope, task_id) or self._repository.load_context(scope)
         if context is None:
             raise DomainError("当前门店缺少可复用的挂杆条件")
         revision_target = parse_revision_target(feedback, context)

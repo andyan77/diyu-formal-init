@@ -9,7 +9,11 @@ from src.shared.types import ActiveAsset, DisplayContext, DisplayScope
 class DisplayRepository(ABC):
     @abstractmethod
     def load_context(self, scope: DisplayScope) -> DisplayContext | None:
-        """Load the one authorized store profile, policy and product facts."""
+        """Load the wall structure and the default seed a new task starts from."""
+
+    @abstractmethod
+    def load_task_context(self, scope: DisplayScope, task_id: UUID) -> DisplayContext | None:
+        """Load the frozen context an existing task was compiled from, or None if it predates it."""
 
     @abstractmethod
     def load_assets(self, revision: bool) -> tuple[ActiveAsset, ...]:
