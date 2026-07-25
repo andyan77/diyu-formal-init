@@ -423,6 +423,48 @@ def test_verdict_failure_triggers_one_unit_repair_then_full_rereview(
     assert "固定安全文案" in repair_prompt
 
 
+def test_shared_invariant_forbids_unsourced_history_claims_in_every_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    """通用正反例（提示词层）：无来源的“曾经/反复/长期发生过”主张在写作、判定、修复三处
+    都被共享不变量禁止；观点只承载当前立场、希望、主张和建议。"""
+    unsourced_history = _claim(
+        "c8",
+        "spoken",
+        "这个问题我们被问过很多次，也内部讨论过很多次。",
+    )
+    stance_only = _claim("c9", "spoken", "我们现在的主张是：先建立理解，再谈生意。")
+    claims = [*cast("list[dict[str, object]]", _video_core()["claims"])[:7], unsourced_history, stance_only]
+    core = _video_core(claims=claims)
+    repaired = dict(unsourced_history)
+    repaired["text"] = "如果一个品牌总被问同一个问题，答案也许就该拍成一条视频。"
+    repaired["actuality"] = "hypothetical"
+    _install_fake(
+        monkeypatch,
+        [
+            _core_response(core),
+            _verdicts(core, {"c8": ("actuality_ok",)}),
+            _repairs(repaired),
+            _verdicts(core),
+        ],
+    )
+
+    artifact = _generator().generate(generation_input)
+
+    assert "被问过很多次" not in artifact.body
+    writer_prompt = str(FakeClient.requests[0]["json"]["messages"])  # type: ignore[index]
+    judge_prompt = str(FakeClient.requests[1]["json"]["messages"])  # type: ignore[index]
+    repair_prompt = str(FakeClient.requests[2]["json"]["messages"])  # type: ignore[index]
+    for prompt in (writer_prompt, judge_prompt):
+        assert "曾经、反复或长期发生过" in prompt
+        assert "执行或改变" in prompt
+    assert "共享不变量" in writer_prompt
+    assert "品牌观点只能承载当前立场、希望、主张和建议" in judge_prompt
+    assert "删除经历外壳" in writer_prompt and "删除经历外壳" in repair_prompt
+    assert "改写为" in repair_prompt and "不得为其编造来源" in repair_prompt
+
+
 def test_repair_fails_closed_when_the_same_unit_still_fails(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,

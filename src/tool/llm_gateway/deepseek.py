@@ -1345,6 +1345,11 @@ brand_viewpoint ↔ source:brand_baseline / source:role_boundary / source:organi
 confirmed_fact ↔ source:organization / source:product:…；
 user_premise ↔ source:user_request / source:user_actuality / source:prior_version；
 conditional_guidance ↔ source:method:… / source:brand_baseline / source:role_boundary。
+共享不变量：凡声称现实品牌、账号、组织或人物曾经、反复或长期发生过询问、讨论、观察、经历、
+服务、执行或改变，必须使用 user_premise 且引用 source:user_actuality，或 confirmed_fact 且引用
+已确认来源；没有这类来源时，保留观点本身，删除经历外壳，或改写为问题、假设或条件表达。
+brand_viewpoint 与 conditional_guidance 只承载当前立场、希望、主张和建议。该不变量同样约束
+sound_text、production_note 中引述的口播词句。
 text、action_text、sound_text、production_note 中不得出现单元编号（如 c1、s2）或任何 id 标记；
 不得使用未登记的品牌 logo、贴纸、已有照片或成品图形素材；现场手写字卡与屏幕文字可用。
 spoken_order 把全部 slot=spoken 的 claim_id 按口播顺序排列，各出现一次。
@@ -1404,7 +1409,10 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
   “这里是品牌官方账号”）不属于冒充。
 - actuality_ok：为 false 当该单元把观点、假设、话题对象或未知情况写成操作人亲历、真实案例、已经发生的
   动作/场景、门店已执行做法或普遍政策；或把品牌“认为、希望、主张、建议”写成已经发生或正在执行；
-  或出现“我们见过、我们观察到、有位顾客、很多家庭”等边界二、四未提供的经历与观察。
+  或出现“我们见过、我们观察到、有位顾客、很多家庭”等边界二、四未提供的经历与观察；
+  或在没有边界二（用户明确前提）或边界四（已确认事实）来源支撑时，声称现实品牌、账号、组织或人物
+  曾经、反复或长期发生过询问、讨论、观察、经历、服务、执行或改变——无论该表述出现在 text、
+  sound_text、production_note 还是其中引述的口播词句里。品牌观点只能承载当前立场、希望、主张和建议。
 - resource_ok：为 false 当该单元的画面、动作、声音或制作步骤实际需要边界六未登记的人物、商品、衣物、
   图片、合照、场地、家具、道具或既有素材；叠加品牌 logo、贴纸、成品图形或已有照片同样属于使用
   未登记素材。话题对象可以被口播抽象讨论，但不能出镜、行动、发声或被当作现有素材。
@@ -1483,6 +1491,9 @@ confirmed_fact ↔ organization/product；user_premise ↔ user_request/user_act
 conditional_guidance ↔ method/brand_baseline/role_boundary）；修复后的 scene step 需要给出正确的
 actor_refs、resource_refs 和 claim_refs。可见文字中不得出现单元编号或 id 标记；若问题片段是
 c1、s2 这类编号，必须把编号替换为对应台词原文或删去，不得在任何字段保留编号。
+若问题单元是没有用户明确前提或已确认事实来源、却声称现实品牌/账号/组织/人物曾经、反复或长期
+发生过询问、讨论、观察、经历、服务、执行或改变的表述：保留观点本身，删除经历外壳，或改写为
+问题、假设或条件表达；不得为其编造来源。
 不要输出分类、证据、审查过程或解释。
 严格只返回一个 JSON 对象：{{"repairs":[…]}}。repairs 中每个元素是完整替换单元：claim 用
 {{"claim_id":"…","text":"…","basis":"…","actuality":"…","source_refs":["…"]}}；scene step 用
