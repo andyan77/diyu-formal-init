@@ -218,8 +218,22 @@ def seed_demo() -> None:
             },
         }.items():
             cursor.execute(
-                "INSERT INTO brand_products (id,tenant_id,brand_id,sku,facts) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (tenant_id,brand_id,sku) DO UPDATE SET facts=EXCLUDED.facts",
-                (uuid.uuid5(uuid.NAMESPACE_URL, sku), TENANT_ID, BRAND_ID, sku, Jsonb(facts)),
+                """
+                INSERT INTO brand_products
+                    (id, tenant_id, brand_id, sku, display_name, facts)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (tenant_id, brand_id, sku) DO UPDATE
+                SET display_name = EXCLUDED.display_name,
+                    facts = EXCLUDED.facts
+                """,
+                (
+                    uuid.uuid5(uuid.NAMESPACE_URL, sku),
+                    TENANT_ID,
+                    BRAND_ID,
+                    sku,
+                    str(facts["name"]),
+                    Jsonb(facts),
+                ),
             )
         cursor.execute(
             """
