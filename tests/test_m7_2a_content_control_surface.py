@@ -20,15 +20,19 @@ from src.brain.content_expression import (
     load_inventory,
     reconcile_sources,
 )
+from src.composition.bootstrap import build_content_control_service
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
 from src.infrastructure.seed_demo import (
     ACCOUNT_ID,
+    ORG_ID,
     STORE_CONTENT_ACCOUNT_ID,
     STORE_CONTENT_USER_ID,
     TENANT_ID,
     USER_ID,
 )
+from src.shared.types import GeneratedArtifact, GenerationInput
+from src.tool.llm_gateway.stub import DeterministicContentGenerator
 
 _FRONTEND = Path(__file__).resolve().parents[1] / "frontend" / "src" / "main.tsx"
 _CATALOG_DIR = Path(__file__).resolve().parents[1] / "config" / "content_expression"
@@ -726,10 +730,24 @@ def test_frontend_keeps_natural_input_first_and_two_mobile_surfaces() -> None:
     # A revision may answer with a question; the artifact pane must not treat that as a version.
     assert 'if (!("task_id" in value)) { onNotice(value.message); return; }' in source
     # A saved default really steers the request, so the collapsed summary must reveal it.
-    assert "你保存的默认" in source
+    assert "沿用你保存的默认" in source
     # Saving axis defaults must not overwrite the note written in the personal entry.
     assert 'collaboration_note: preference.data?.collaboration_note ?? ""' in source
     assert "applied_direction" in source
+    # The behaviour below is not asserted from this source string; it is driven for real in
+    # frontend/test/interaction.test.tsx, which mounts the workbench and clicks through it.
+    interaction = _FRONTEND.parent.parent / "test" / "interaction.test.tsx"
+    assert interaction.exists()
+    checks = interaction.read_text(encoding="utf-8")
+    for behaviour in (
+        "创作方向面板默认收起",
+        "关掉后应显示本次不使用",
+        "缺人工说明的图片不可勾选",
+        "临时会话期间不再读取私人偏好",
+        "点「用这条开始」之前不得创建任务",
+        "身份抽屉应当能进入现有账号画像编辑卡",
+    ):
+        assert behaviour in checks
 
 
 def test_no_backend_only_field_reaches_the_visible_artifact(app_database_url: str) -> None:
@@ -754,34 +772,571 @@ def test_no_backend_only_field_reaches_the_visible_artifact(app_database_url: st
     assert "collaboration_note" not in json.dumps(snapshot, ensure_ascii=False)
 
 
-def test_account_creation_records_a_control_organization_and_a_separate_maintenance_grant() -> None:
+def test_account_creation_only_records_an_explicitly_declared_control_organization() -> None:
     app = create_app(Settings.model_validate({}))
     with TestClient(app) as manager:
         manager.get("/ui/select/admin")
+        organizations = manager.get("/api/v1/tenant-management/control-organizations").json()
+        own = next(item for item in organizations if item["id"] == str(ORG_ID))
+        name = f"控制组织回归账号-{uuid4().hex[:8]}"
         created = manager.post(
             "/api/v1/tenant-management/publishing-accounts",
             json={
-                "name": f"控制组织回归账号-{uuid4().hex[:8]}",
+                "name": name,
                 "channel": "抖音",
                 "content_role_name": f"控制组织回归表达身份-{uuid4().hex[:8]}",
-                "voice_boundary": "只用于验证新建账号会记录控制组织。",
+                "voice_boundary": "只用于验证新建账号只接受明确指定的控制组织。",
                 "operator_id": str(USER_ID),
+                "control_organization_id": own["id"],
             },
         )
         assert created.status_code == 201
         account_id = created.json()["id"]
-        # A brand new account must be maintainable, i.e. its control organization is not NULL.
         profile = manager.get(
             f"/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile"
         ).json()
+        assert profile["control_organization_source"] == "declared"
         assert profile["can_maintain"] is True
-        assert profile["control_organization"]
+        assert profile["can_declare"] is False
         saved = manager.post(
             f"/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile/versions",
             json=_SEGMENTS,
         )
         assert saved.status_code == 201
         assert saved.json()["version"] == 1
+
+
+def test_same_name_account_idempotency_compares_the_control_organization() -> None:
+    app = create_app(Settings.model_validate({}))
+    with TestClient(app) as manager:
+        manager.get("/ui/select/admin")
+        organizations = manager.get("/api/v1/tenant-management/control-organizations").json()
+        own = next(item for item in organizations if item["id"] == str(ORG_ID))
+        other = next(item for item in organizations if item["id"] != own["id"])
+        name = f"幂等控制组织账号-{uuid4().hex[:8]}"
+        payload = {
+            "name": name,
+            "channel": "抖音",
+            "content_role_name": f"幂等控制组织表达身份-{uuid4().hex[:8]}",
+            "voice_boundary": "只用于验证同名幂等比较包含控制组织。",
+            "operator_id": str(USER_ID),
+            "control_organization_id": own["id"],
+        }
+        first = manager.post("/api/v1/tenant-management/publishing-accounts", json=payload)
+        assert first.status_code == 201
+        same = manager.post("/api/v1/tenant-management/publishing-accounts", json=payload)
+        assert same.status_code == 201
+        assert same.json()["id"] == first.json()["id"]
+        # Control organization decides who may maintain the profile, so a repeat that names a
+        # different one is refused instead of quietly returning the existing account.
+        moved = manager.post(
+            "/api/v1/tenant-management/publishing-accounts",
+            json={**payload, "control_organization_id": other["id"]},
+        )
+        assert moved.status_code == 422
+        assert "控制组织" in moved.json()["detail"]
+        undeclared = manager.post(
+            "/api/v1/tenant-management/publishing-accounts",
+            json={key: value for key, value in payload.items() if key != "control_organization_id"},
+        )
+        assert undeclared.status_code == 422
+
+
+# ---- 1. control organization attribution and atomic authorisation ------------------------
+
+
+def _account_control_source(app_database_url: str, account_id: str) -> tuple[str, str | None]:
+    row = _rows(
+        app_database_url,
+        "SELECT control_organization_source, control_organization_id FROM content_accounts "
+        "WHERE id = %s",
+        (account_id,),
+    )[0]
+    control = row["control_organization_id"]
+    return str(row["control_organization_source"]), (str(control) if control else None)
+
+
+def _set_control_organization(
+    app_database_url: str, account_id: str, organization_id: str | None, source: str
+) -> None:
+    with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+        cursor.execute(
+            "UPDATE content_accounts SET control_organization_id = %s, "
+            "control_organization_source = %s WHERE tenant_id = %s AND id = %s",
+            (organization_id, source, str(TENANT_ID), account_id),
+        )
+
+
+def test_an_inferred_control_organization_grants_nothing_until_it_is_declared(
+    app_database_url: str,
+) -> None:
+    app = create_app(Settings.model_validate({}))
+    with TestClient(app) as manager:
+        manager.get("/ui/select/admin")
+        organizations = manager.get("/api/v1/tenant-management/control-organizations").json()
+        own = next(item for item in organizations if item["id"] == str(ORG_ID))
+        created = manager.post(
+            "/api/v1/tenant-management/publishing-accounts",
+            json={
+                "name": f"未声明控制组织账号-{uuid4().hex[:8]}",
+                "channel": "抖音",
+                "content_role_name": f"未声明控制组织表达身份-{uuid4().hex[:8]}",
+                "voice_boundary": "只用于验证推断值不授予任何维护资格。",
+                "operator_id": str(USER_ID),
+            },
+        )
+        assert created.status_code == 201
+        account_id = created.json()["id"]
+        assert _account_control_source(app_database_url, account_id) == ("unset", None)
+
+        url = f"/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile"
+        undeclared = manager.get(url).json()
+        assert undeclared["can_maintain"] is False
+        assert undeclared["can_declare"] is True
+        assert manager.post(f"{url}/versions", json=_SEGMENTS).status_code == 422
+
+        # Exactly the state the migration leaves behind: a value inferred from a creation event.
+        _set_control_organization(app_database_url, account_id, own["id"], "inferred")
+        inferred = manager.get(url).json()
+        assert inferred["control_organization"] == own["name"]
+        assert inferred["control_organization_source"] == "inferred"
+        assert inferred["can_maintain"] is False
+        refused = manager.post(f"{url}/versions", json=_SEGMENTS)
+        assert refused.status_code == 422
+        assert "控制组织" in refused.json()["detail"]
+
+        declared = manager.post(
+            f"/api/v1/tenant-management/publishing-accounts/{account_id}/control-organization",
+            json={"organization_id": own["id"]},
+        )
+        assert declared.status_code == 200
+        assert declared.json()["control_organization_source"] == "declared"
+        assert manager.get(url).json()["can_maintain"] is True
+        assert manager.post(f"{url}/versions", json=_SEGMENTS).status_code == 201
+
+        # Declared once, and it leaves its own trace; there is no new approval flow.
+        again = manager.post(
+            f"/api/v1/tenant-management/publishing-accounts/{account_id}/control-organization",
+            json={"organization_id": own["id"]},
+        )
+        assert again.status_code == 422
+    events = _rows(
+        app_database_url,
+        "SELECT count(*) AS total FROM activity_events "
+        "WHERE event_type = 'publishing_account.control_organization_declared' AND entity_id = %s",
+        (account_id,),
+    )
+    assert int(events[0]["total"]) == 1
+
+
+def test_a_write_recheck_refuses_after_the_maintenance_grant_is_revoked(
+    app_database_url: str,
+) -> None:
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as owner:
+        assert owner.get("/api/v1/content/account-expression-profile").json()["can_maintain"] is True
+        with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+            cursor.execute(
+                "UPDATE auth_grants SET can_maintain_expression_profile = false "
+                "WHERE tenant_id = %s AND user_id = %s AND account_id = %s",
+                (str(TENANT_ID), str(USER_ID), str(ACCOUNT_ID)),
+            )
+        try:
+            # The earlier read said yes; the write decides for itself, inside its own transaction.
+            refused = owner.post(
+                "/api/v1/content/account-expression-profile/versions", json=_SEGMENTS
+            )
+            assert refused.status_code == 422
+        finally:
+            with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+                cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+                cursor.execute(
+                    "UPDATE auth_grants SET can_maintain_expression_profile = true "
+                    "WHERE tenant_id = %s AND user_id = %s AND account_id = %s",
+                    (str(TENANT_ID), str(USER_ID), str(ACCOUNT_ID)),
+                )
+
+
+def test_a_current_profile_pointer_cannot_name_another_accounts_profile(
+    app_database_url: str,
+) -> None:
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as owner:
+        owner.post("/api/v1/content/account-expression-profile/versions", json=_SEGMENTS)
+    foreign = _rows(
+        app_database_url,
+        "SELECT id FROM account_expression_profile_versions WHERE account_id = %s LIMIT 1",
+        (str(ACCOUNT_ID),),
+    )[0]["id"]
+    with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            cursor.execute(
+                "UPDATE content_accounts SET current_expression_profile_id = %s "
+                "WHERE tenant_id = %s AND id = %s",
+                (str(foreign), str(TENANT_ID), str(STORE_CONTENT_ACCOUNT_ID)),
+            )
+
+
+# ---- 2. the frozen content role really is replayed ----------------------------------------
+
+
+def test_a_revision_keeps_the_frozen_content_role_after_the_account_is_renamed(
+    app_database_url: str,
+) -> None:
+    _clear_preference(app_database_url, USER_ID)
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as client:
+        created = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
+        snapshot = _snapshot(app_database_url, created["task_id"])
+        frozen_role = str(snapshot["content_role"])
+        assert frozen_role
+        assert snapshot["content_role_boundary"]
+        assert _receipt(app_database_url, created["task_id"])["content_role"] == frozen_role
+
+        renamed = f"{frozen_role}（改名后）"
+        with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+            cursor.execute(
+                "UPDATE content_roles SET name = %s, voice_boundary = %s "
+                "WHERE tenant_id = %s AND name = %s",
+                (renamed, "改名后的表达边界，只用于这次反证。", str(TENANT_ID), frozen_role),
+            )
+        try:
+            revised = client.post(
+                f"/api/v1/tasks/{created['task_id']}/revisions",
+                json={"instruction": "把结尾改短一点，其他不动。"},
+            ).json()
+            assert revised["version"] == 2
+            # A rename changes what the next new task says; it must not rewrite this one.
+            assert (
+                _latest_receipt(app_database_url, created["task_id"])["content_role"] == frozen_role
+            )
+            fresh = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
+            assert _receipt(app_database_url, fresh["task_id"])["content_role"] == renamed
+        finally:
+            with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+                cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+                cursor.execute(
+                    "UPDATE content_roles SET name = %s WHERE tenant_id = %s AND name = %s",
+                    (frozen_role, str(TENANT_ID), renamed),
+                )
+
+
+# ---- 3. private preference: soft note, bypass session and three axis states ---------------
+
+
+def test_the_collaboration_note_reaches_generation_and_no_tenant_record(
+    app_database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _clear_preference(app_database_url, USER_ID)
+    note = "我平时更喜欢先说结论，再给一个具体例子。"
+    seen: list[str] = []
+    original = DeterministicContentGenerator.generate
+
+    def capture(self: DeterministicContentGenerator, request: GenerationInput) -> GeneratedArtifact:
+        seen.append(request.collaboration_note)
+        return original(self, request)
+
+    monkeypatch.setattr(DeterministicContentGenerator, "generate", capture)
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as client:
+        client.put(
+            "/api/v1/user/creation-preferences",
+            json={"enabled": True, "collaboration_note": note},
+        )
+        created = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
+    assert seen[-1] == note
+    snapshot = _snapshot(app_database_url, created["task_id"])
+    receipt = _receipt(app_database_url, created["task_id"])
+    # It steered the work, and it stayed out of every tenant-visible record.
+    assert note not in json.dumps(snapshot, ensure_ascii=False)
+    assert note not in json.dumps(receipt, ensure_ascii=False)
+    assert note not in str(created["body"])
+    assert snapshot["private_preference_mode"] == "applied"
+    _clear_preference(app_database_url, USER_ID)
+
+
+def test_a_temporary_preference_free_session_neither_reads_nor_writes_the_preference(
+    app_database_url: str,
+) -> None:
+    _clear_preference(app_database_url, USER_ID)
+    app = create_app(Settings.model_validate({}))
+    bypass = {"X-Diyu-Preference-Session": "bypass"}
+    with _content_client(app) as client:
+        saved = client.put(
+            "/api/v1/user/creation-preferences",
+            json={
+                "enabled": True,
+                "direction_defaults": {"style": _STYLE_HUMOUR},
+                "collaboration_note": "平时更喜欢自然口语。",
+                "body_related_opt_in": True,
+            },
+        ).json()
+
+        catalog = client.get("/api/v1/content/expression-catalog", headers=bypass).json()
+        assert catalog["preference_session"] == "bypassed"
+        assert catalog["body_related_enabled"] is False
+        assert catalog["saved_defaults"] == {}
+        assert _BODY_RELATED not in json.dumps(catalog, ensure_ascii=False)
+
+        opportunities = client.post("/api/v1/content/opportunities", headers=bypass).json()
+        assert all(item["id"].endswith("preference") is False for item in opportunities["items"])
+        assert "你自己保存的私人创作偏好" not in json.dumps(opportunities, ensure_ascii=False)
+
+        created = client.post("/api/v1/content", json={"weak_seed": _SEED}, headers=bypass).json()
+        assert created["applied_direction"] == []
+        assert (
+            _snapshot(app_database_url, created["task_id"])["private_preference_mode"]
+            == "temporarily_bypassed"
+        )
+
+        for call in (
+            client.get("/api/v1/user/creation-preferences", headers=bypass),
+            client.put(
+                "/api/v1/user/creation-preferences",
+                json={"enabled": False},
+                headers=bypass,
+            ),
+            client.delete("/api/v1/user/creation-preferences", headers=bypass),
+        ):
+            assert call.status_code == 422
+            assert "临时无偏好会话" in call.json()["detail"]
+
+        after = client.get("/api/v1/user/creation-preferences").json()
+        assert after["version"] == saved["version"]
+        assert after["enabled"] is True
+        assert after["direction_defaults"] == {"style": _STYLE_HUMOUR}
+    _clear_preference(app_database_url, USER_ID)
+
+
+def test_each_axis_separates_a_saved_default_an_explicit_choice_and_switching_it_off(
+    app_database_url: str,
+) -> None:
+    _clear_preference(app_database_url, USER_ID)
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as client:
+        client.put(
+            "/api/v1/user/creation-preferences",
+            json={"enabled": True, "direction_defaults": {"style": _STYLE_HUMOUR}},
+        )
+        carried = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
+        origins = {
+            item["axis"]: item["origin"]
+            for item in _snapshot(app_database_url, carried["task_id"])["original_direction"][
+                "selections"
+            ]
+        }
+        assert origins["style"] == "default"
+        assert "克制的冷幽默" in carried["applied_direction"]
+
+        chosen = client.post(
+            "/api/v1/content",
+            json={
+                "weak_seed": _SEED,
+                "creative_direction": {"selections": {"style": "CAT-STYLE-PERSONA-01"}},
+            },
+        ).json()
+        chosen_snapshot = _snapshot(app_database_url, chosen["task_id"])
+        assert [item["origin"] for item in chosen_snapshot["original_direction"]["selections"]] == [
+            "explicit"
+        ]
+        assert chosen["applied_direction"] == ["干货攻略"]
+
+        switched_off = client.post(
+            "/api/v1/content",
+            json={"weak_seed": _SEED, "creative_direction": {"cleared_axes": ["style"]}},
+        ).json()
+        off_snapshot = _snapshot(app_database_url, switched_off["task_id"])
+        assert off_snapshot["original_direction"]["cleared_axes"] == ["style"]
+        assert switched_off["applied_direction"] == []
+
+        # Switching an axis off for one task never edits the saved default itself.
+        kept = client.get("/api/v1/user/creation-preferences").json()
+        assert kept["direction_defaults"] == {"style": _STYLE_HUMOUR}
+
+        # Saving with nothing selected keeps what is already saved; forgetting is its own act.
+        client.put(
+            "/api/v1/user/creation-preferences",
+            json={"enabled": True, "direction_defaults": {}},
+        )
+        assert (
+            client.get("/api/v1/user/creation-preferences").json()["direction_defaults"]
+            == {"style": _STYLE_HUMOUR}
+        )
+        client.put(
+            "/api/v1/user/creation-preferences",
+            json={"enabled": True, "direction_defaults": {}, "clear_direction_defaults": True},
+        )
+        assert client.get("/api/v1/user/creation-preferences").json()["direction_defaults"] == {}
+    _clear_preference(app_database_url, USER_ID)
+
+
+# ---- 4. user closure: unreadable originals and the operations gap entry -------------------
+
+
+def test_an_original_without_a_note_cannot_be_selected_until_one_is_written(
+    app_database_url: str,
+) -> None:
+    _clear_preference(app_database_url, USER_ID)
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as client:
+        created = client.post(
+            "/api/v1/materials/personal",
+            json={
+                "title": f"待补说明的原件-{uuid4().hex[:6]}",
+                "filename": "sample.png",
+                "content_type": "image/png",
+                "content_base64": base64.b64encode(b"not-parsed-bytes").decode("ascii"),
+            },
+        ).json()
+        asset_id = created["id"]
+        refused = client.post(
+            "/api/v1/content", json={"weak_seed": _SEED, "material_ids": [asset_id]}
+        )
+        assert refused.status_code == 422
+        assert "说明" in refused.json()["detail"]
+
+        written = client.patch(
+            f"/api/v1/materials/{asset_id}/reference-note",
+            json={"reference_note": "这张图里是这次要讲的那条裤子的口袋位置。"},
+        ).json()
+        assert written["reference_note"].startswith("这张图里")
+        # The note changes what a task would read, so the reference version moves with it.
+        assert written["reference_version"] == created["reference_version"] + 1
+
+        accepted = client.post(
+            "/api/v1/content", json={"weak_seed": _SEED, "material_ids": [asset_id]}
+        )
+        assert accepted.status_code == 200
+        client.delete(f"/api/v1/materials/{asset_id}")
+
+    with _content_client(app, "/ui/select/content-store") as store:
+        assert (
+            store.patch(
+                f"/api/v1/materials/{asset_id}/reference-note",
+                json={"reference_note": "别人的素材不该被我改说明。"},
+            ).status_code
+            == 422
+        )
+
+
+def test_operations_can_classify_and_answer_a_gap_candidate_and_change_nothing_else(
+    app_database_url: str,
+) -> None:
+    control = build_content_control_service(Settings.model_validate({}))
+    app = create_app(Settings.model_validate({}))
+    catalog_bytes = (_CATALOG_DIR / "catalog-v1.json").read_bytes()
+    with _content_client(app) as client:
+        submitted = client.post(
+            "/api/v1/content/unmet-capability-requests",
+            json={"request_text": f"我想按门店当天客流自动排内容，现在做不到。{uuid4().hex[:6]}"},
+        ).json()
+        before = _counts(app_database_url)
+
+        listed = control.ops_unmet_requests()
+        mine = next(
+            item
+            for item in listed
+            if item["stable_request_id"] == submitted["stable_request_id"]
+        )
+        assert mine["tenant_id"] == str(TENANT_ID)
+        assert mine["status"] == "received"
+
+        answered = control.ops_classify_unmet_request(
+            submitted["stable_request_id"],
+            "generation_method",
+            "answered",
+            "这条属于生成方法缺口，已登记，不进入当前里程碑。",
+        )
+        assert answered["status"] == "answered"
+
+        back = client.get("/api/v1/content/unmet-capability-requests").json()
+        seen = next(
+            item
+            for item in back
+            if item["stable_request_id"] == submitted["stable_request_id"]
+        )
+        assert seen["gap_type"] == "generation_method"
+        assert seen["status"] == "answered"
+        assert seen["response_text"].startswith("这条属于生成方法缺口")
+
+        # A candidate is a candidate: it changes no task, no run, no version and no catalog.
+        assert _counts(app_database_url) == before
+        assert (_CATALOG_DIR / "catalog-v1.json").read_bytes() == catalog_bytes
+        catalog_after = client.get("/api/v1/content/expression-catalog").json()
+        assert catalog_after["catalog_version"] == load_catalog().catalog_version
+
+
+# ---- 5. natural language that names a declared label -------------------------------------
+
+
+def test_free_text_naming_a_declared_label_reuses_the_visible_translation(
+    app_database_url: str,
+) -> None:
+    _clear_preference(app_database_url, USER_ID)
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as client:
+        spoken = client.post(
+            "/api/v1/content", json={"weak_seed": f"{_SEED}想幽默一点。"}
+        ).json()
+        assert "幽默玩梗" in spoken["translation_notice"]
+        assert "克制的冷幽默" in spoken["translation_notice"]
+        assert "你说的是" in spoken["translation_notice"]
+        assert "克制的冷幽默" in spoken["applied_direction"]
+        origins = {
+            item["axis"]: item["origin"]
+            for item in _snapshot(app_database_url, spoken["task_id"])["original_direction"][
+                "selections"
+            ]
+        }
+        assert origins["style"] == "natural_text"
+
+        # An explicit choice always wins over the same axis read out of the sentence.
+        explicit = client.post(
+            "/api/v1/content",
+            json={
+                "weak_seed": f"{_SEED}想幽默一点。",
+                "creative_direction": {"selections": {"style": "CAT-STYLE-PERSONA-01"}},
+            },
+        ).json()
+        assert explicit["applied_direction"] == ["干货攻略"]
+
+
+def test_free_text_that_cannot_be_mapped_is_kept_exactly_as_written(
+    app_database_url: str,
+) -> None:
+    _clear_preference(app_database_url, USER_ID)
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as client:
+        written = client.post(
+            "/api/v1/content", json={"weak_seed": f"{_SEED}希望读起来像清晨的散步。"}
+        ).json()
+        assert written["translation_notice"] is None
+        assert written["applied_direction"] == []
+        assert (
+            _snapshot(app_database_url, written["task_id"])["original_direction"]["selections"]
+            == []
+        )
+
+
+def test_a_body_related_word_in_free_text_only_gets_one_plain_suggestion(
+    app_database_url: str,
+) -> None:
+    _clear_preference(app_database_url, USER_ID)
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as client:
+        spoken = client.post(
+            "/api/v1/content", json={"weak_seed": f"{_SEED}最好还能显瘦。"}
+        )
+        assert spoken.status_code == 200
+        body = spoken.json()
+        assert "显高显瘦" in body["translation_notice"]
+        assert "按你原话保留" in body["translation_notice"]
+        # Nothing was applied and nothing was substituted; the person still decides.
+        assert body["applied_direction"] == []
 
 
 @pytest.mark.parametrize("axis", list(AXIS_ORDER))

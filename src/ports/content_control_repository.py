@@ -32,7 +32,11 @@ class ContentControlRepository(ABC):
 
     @abstractmethod
     def can_maintain_account_expression(self, scope: TrustedScope) -> bool:
-        """Account use never implies profile maintenance; the control organization decides."""
+        """Account use never implies profile maintenance; a declared control organization does.
+
+        This read only tells the interface what to show.  The write path re-checks the same
+        condition inside its own transaction, so a grant revoked in between cannot be used.
+        """
 
     @abstractmethod
     def can_manage_account_expression(
@@ -41,20 +45,39 @@ class ContentControlRepository(ABC):
         """A tenant administrator only maintains accounts their own organization controls."""
 
     @abstractmethod
-    def save_account_expression(
+    def save_account_expression_as_operator(
+        self, scope: TrustedScope, segments: tuple[str, str, str, str, str]
+    ) -> dict[str, object]:
+        """Check operator maintenance and append the next version in one transaction."""
+
+    @abstractmethod
+    def save_account_expression_as_manager(
         self,
-        tenant_id: UUID,
+        scope: TenantManagementScope,
         account_id: UUID,
-        created_by: UUID,
         segments: tuple[str, str, str, str, str],
     ) -> dict[str, object]:
-        """Append one immutable version and move the account's current pointer to it."""
+        """Check administrator maintenance and append the next version in one transaction."""
+
+    @abstractmethod
+    def declare_control_organization(
+        self, scope: TenantManagementScope, account_id: UUID, organization_id: UUID
+    ) -> dict[str, object]:
+        """Record, once, which organization controls this account.
+
+        An inferred value left by a migration is evidence of nothing; only this explicit
+        declaration, or the one made when the account is created, makes maintenance possible.
+        """
 
     @abstractmethod
     def management_accounts_with_expression(
         self, scope: TenantManagementScope
     ) -> list[dict[str, object]]:
         """List this brand's accounts with control organization and current profile version."""
+
+    @abstractmethod
+    def management_organizations(self, scope: TenantManagementScope) -> list[dict[str, object]]:
+        """List the tenant's own organizations so a control organization can be declared."""
 
     @abstractmethod
     def creation_preference(self, scope: TrustedScope) -> dict[str, object] | None:
@@ -106,3 +129,19 @@ class ContentControlRepository(ABC):
     @abstractmethod
     def list_unmet_requests(self, scope: TrustedScope) -> list[dict[str, object]]:
         """Return only the acting person's own submitted candidates."""
+
+    @abstractmethod
+    def ops_unmet_requests(self) -> list[dict[str, object]]:
+        """Read every tenant's gap candidates through the controlled operations boundary."""
+
+    @abstractmethod
+    def ops_classify_unmet_request(
+        self, stable_request_id: str, gap_type: str, status: str, response_text: str
+    ) -> str | None:
+        """Classify and answer one gap candidate; returns the tenant it belonged to."""
+
+    @abstractmethod
+    def set_material_reference_note(
+        self, scope: TrustedScope, asset_id: UUID, reference_note: str
+    ) -> dict[str, object]:
+        """Write the human-readable note an image or video original needs to be selectable."""

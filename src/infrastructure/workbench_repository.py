@@ -239,18 +239,11 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 (scope.tenant_id, operator_id),
             )
             self._one(cursor, "只能向当前租户已登记且启用的自然人授权发布账号")
-            # Which organization controls this account is an explicit decision by the creating
-            # administrator, defaulting to their own organization.  It is never guessed later
-            # from an account name, a role name or an operator's name.
-            if control_organization_id is None:
-                cursor.execute(
-                    "SELECT organization_id FROM users WHERE tenant_id = %s AND id = %s",
-                    (scope.tenant_id, scope.user_id),
-                )
-                control_organization_id = UUID(
-                    str(self._one(cursor, "找不到当前租户管理员")["organization_id"])
-                )
-            else:
+            # Which organization controls this account is an explicit decision, made here or
+            # later by a tenant authority.  Nothing is defaulted, inferred from the creating
+            # administrator, or guessed from an account name, a role name or an operator's name;
+            # an account created without one simply has no maintainable profile until declared.
+            if control_organization_id is not None:
                 cursor.execute(
                     "SELECT id FROM organizations WHERE tenant_id = %s AND id = %s",
                     (scope.tenant_id, control_organization_id),
@@ -259,7 +252,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT account.id, account.channel, role.name AS content_role,
-                       role.voice_boundary,
+                       role.voice_boundary, account.control_organization_id,
                        EXISTS (
                            SELECT 1
                            FROM auth_grants grant_record
@@ -285,13 +278,20 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             )
             existing = cursor.fetchone()
             if existing is not None:
+                existing_control = existing["control_organization_id"]
                 if (
                     str(existing["channel"]) != channel
                     or str(existing["content_role"]) != content_role_name
                     or str(existing["voice_boundary"]) != voice_boundary
                     or not bool(existing["has_operator"])
+                    # Control organization decides who may maintain the profile, so a repeat that
+                    # names a different one is a different account, not the same one again.
+                    or (str(existing_control) if existing_control is not None else None)
+                    != (str(control_organization_id) if control_organization_id else None)
                 ):
-                    raise DomainError("当前品牌已有同名发布账号，但平台、表达身份或操作者不同。")
+                    raise DomainError(
+                        "当前品牌已有同名发布账号，但平台、表达身份、操作者或控制组织不同。"
+                    )
                 return {
                     "id": str(existing["id"]),
                     "name": name,
@@ -308,8 +308,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             if cursor.fetchone() is not None:
                 raise DomainError("当前品牌已有同名企业表达人设。")
             cursor.execute(
-                "INSERT INTO content_accounts (id, tenant_id, brand_id, name, channel, control_organization_id) "
-                "VALUES (%s, %s, %s, %s, %s, %s)",
+                "INSERT INTO content_accounts (id, tenant_id, brand_id, name, channel, "
+                "control_organization_id, control_organization_source) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                 (
                     account_id,
                     scope.tenant_id,
@@ -317,6 +318,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     name,
                     channel,
                     control_organization_id,
+                    "declared" if control_organization_id is not None else "unset",
                 ),
             )
             cursor.execute(

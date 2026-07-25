@@ -1,4 +1,4 @@
-.PHONY: format lint typecheck test golden openapi frontend-lint frontend-typecheck frontend-build
+.PHONY: format lint typecheck test golden openapi frontend-lint frontend-typecheck frontend-build frontend-test
 
 format:
 	.venv/bin/python -m ruff format src tests alembic
@@ -26,3 +26,6 @@ frontend-typecheck:
 
 frontend-build:
 	npm --prefix frontend run build
+
+frontend-test:
+	npm --prefix frontend run test

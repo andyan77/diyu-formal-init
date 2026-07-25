@@ -29,8 +29,8 @@ jobs:
         run: uv sync --all-groups --no-install-project --locked
       - name: Install frontend dependencies
         run: npm --prefix frontend install
-      - name: Frontend lint and build
-        run: make frontend-lint frontend-typecheck frontend-build
+      - name: Frontend lint, build and interaction check
+        run: make frontend-lint frontend-typecheck frontend-build frontend-test
       - name: Lint
         run: make lint
       - name: Typecheck

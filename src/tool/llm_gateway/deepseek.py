@@ -211,6 +211,13 @@ class BoundaryContext:
                 )
             if creative.custom_text:
                 direction_lines.append(f"用户本次自然补充的方向要求：{creative.custom_text}")
+        if request.collaboration_note:
+            # The acting person's own soft collaboration preference: it shapes how we work with
+            # them, never what counts as a fact, and it is not written into any tenant record.
+            direction_lines.append(
+                "当前自然人本人的私人协作偏好说明（只影响协作方式与表达取舍，"
+                f"不作为事实来源，也不代表品牌立场）：{request.collaboration_note}"
+            )
         for material in request.reference_materials:
             if material.media_type == "text" and material.text_body:
                 direction_lines.append(

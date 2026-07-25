@@ -122,6 +122,8 @@ class PostgresContentControlRepository(ContentControlRepository):
     ) -> dict[str, object] | None:
         with self._tenant_tx(tenant_id) as cursor:
             cursor.execute(
+                # Tenant, account and profile must all line up; a pointer that names another
+                # account's profile resolves to nothing here and cannot be stored at all.
                 """
                 SELECT profile.id, profile.version, role.name AS content_role,
                        profile.identity_position, profile.authority_boundary,
@@ -131,6 +133,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                 JOIN account_expression_profile_versions profile
                   ON profile.id = account.current_expression_profile_id
                  AND profile.tenant_id = account.tenant_id
+                 AND profile.account_id = account.id
                 JOIN content_roles role
                   ON role.id = profile.content_role_id AND role.tenant_id = profile.tenant_id
                 WHERE account.tenant_id = %s AND account.id = %s
@@ -160,27 +163,51 @@ class PostgresContentControlRepository(ContentControlRepository):
             row = cursor.fetchone()
         return self._profile_value(row) if row is not None else None
 
+    # One predicate, used both to decide what the interface may show and, inside the writing
+    # transaction, to decide whether the version may be appended at all.  A control organization
+    # that a migration merely inferred is not evidence and never satisfies it.
+    _OPERATOR_MAINTENANCE = """
+        SELECT EXISTS (
+            SELECT 1
+            FROM auth_grants grant_record
+            JOIN users person
+              ON person.id = grant_record.user_id AND person.tenant_id = grant_record.tenant_id
+            JOIN content_accounts account
+              ON account.id = grant_record.account_id
+             AND account.tenant_id = grant_record.tenant_id
+            WHERE grant_record.tenant_id = %s AND grant_record.user_id = %s
+              AND grant_record.account_id = %s AND grant_record.enabled = true
+              AND grant_record.can_maintain_expression_profile = true
+              AND person.enabled = true AND account.enabled = true
+              AND account.brand_id = %s
+              AND account.control_organization_id IS NOT NULL
+              AND account.control_organization_source = 'declared'
+              AND account.control_organization_id = person.organization_id
+        ) AS allowed
+    """
+    _MANAGER_MAINTENANCE = """
+        SELECT EXISTS (
+            SELECT 1
+            FROM content_accounts account
+            JOIN users manager
+              ON manager.tenant_id = account.tenant_id AND manager.id = %s
+             AND manager.enabled = true
+            JOIN tenant_management_grants management_grant
+              ON management_grant.tenant_id = manager.tenant_id
+             AND management_grant.user_id = manager.id
+             AND management_grant.enabled = true
+            WHERE account.tenant_id = %s AND account.id = %s AND account.brand_id = %s
+              AND account.enabled = true
+              AND account.control_organization_id IS NOT NULL
+              AND account.control_organization_source = 'declared'
+              AND account.control_organization_id = manager.organization_id
+        ) AS allowed
+    """
+
     def can_maintain_account_expression(self, scope: TrustedScope) -> bool:
         with self._tenant_tx(scope.tenant_id) as cursor:
             cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM auth_grants grant_record
-                    JOIN users person
-                      ON person.id = grant_record.user_id AND person.tenant_id = grant_record.tenant_id
-                    JOIN content_accounts account
-                      ON account.id = grant_record.account_id
-                     AND account.tenant_id = grant_record.tenant_id
-                    WHERE grant_record.tenant_id = %s AND grant_record.user_id = %s
-                      AND grant_record.account_id = %s AND grant_record.enabled = true
-                      AND grant_record.can_maintain_expression_profile = true
-                      AND person.enabled = true AND account.enabled = true
-                      AND account.brand_id = %s
-                      AND account.control_organization_id IS NOT NULL
-                      AND account.control_organization_id = person.organization_id
-                ) AS allowed
-                """,
+                self._OPERATOR_MAINTENANCE,
                 (scope.tenant_id, scope.user_id, scope.account_id, scope.brand_id),
             )
             return bool(self._one(cursor, "无法读取账号画像维护资格")["allowed"])
@@ -190,33 +217,107 @@ class PostgresContentControlRepository(ContentControlRepository):
     ) -> bool:
         with self._tenant_tx(scope.tenant_id) as cursor:
             cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM content_accounts account
-                    JOIN users manager
-                      ON manager.tenant_id = account.tenant_id AND manager.id = %s
-                     AND manager.enabled = true
-                    JOIN tenant_management_grants management_grant
-                      ON management_grant.tenant_id = manager.tenant_id
-                     AND management_grant.user_id = manager.id
-                     AND management_grant.enabled = true
-                    WHERE account.tenant_id = %s AND account.id = %s AND account.brand_id = %s
-                      AND account.enabled = true
-                      AND account.control_organization_id IS NOT NULL
-                      AND account.control_organization_id = manager.organization_id
-                ) AS allowed
-                """,
+                self._MANAGER_MAINTENANCE,
                 (scope.user_id, scope.tenant_id, account_id, scope.brand_id),
             )
             return bool(self._one(cursor, "无法读取账号画像管理资格")["allowed"])
 
-    def save_account_expression(
+    def save_account_expression_as_operator(
+        self, scope: TrustedScope, segments: tuple[str, str, str, str, str]
+    ) -> dict[str, object]:
+        return self._append_version(
+            scope.tenant_id,
+            scope.account_id,
+            scope.user_id,
+            segments,
+            self._OPERATOR_MAINTENANCE,
+            (scope.tenant_id, scope.user_id, scope.account_id, scope.brand_id),
+            "你现在只能查看这个账号的表达画像。维护资格由已声明的账号控制组织决定。",
+        )
+
+    def save_account_expression_as_manager(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        segments: tuple[str, str, str, str, str],
+    ) -> dict[str, object]:
+        return self._append_version(
+            scope.tenant_id,
+            account_id,
+            scope.user_id,
+            segments,
+            self._MANAGER_MAINTENANCE,
+            (scope.user_id, scope.tenant_id, account_id, scope.brand_id),
+            "这个发布账号不属于你所在组织控制，或者控制组织还没有被明确声明。",
+        )
+
+    def declare_control_organization(
+        self, scope: TenantManagementScope, account_id: UUID, organization_id: UUID
+    ) -> dict[str, object]:
+        with self._tenant_tx(scope.tenant_id) as cursor:
+            cursor.execute(
+                """
+                SELECT 1 FROM tenant_management_grants management_grant
+                JOIN users manager ON manager.id = management_grant.user_id
+                 AND manager.tenant_id = management_grant.tenant_id AND manager.enabled = true
+                WHERE management_grant.tenant_id = %s AND management_grant.user_id = %s
+                  AND management_grant.enabled = true
+                """,
+                (scope.tenant_id, scope.user_id),
+            )
+            self._one(cursor, "只有当前租户的有权主体可以声明账号控制组织")
+            cursor.execute(
+                "SELECT id FROM organizations WHERE tenant_id = %s AND id = %s",
+                (scope.tenant_id, organization_id),
+            )
+            self._one(cursor, "只能声明当前租户已有的组织")
+            cursor.execute(
+                "SELECT control_organization_source FROM content_accounts "
+                "WHERE tenant_id = %s AND id = %s AND brand_id = %s AND enabled = true FOR UPDATE",
+                (scope.tenant_id, account_id, scope.brand_id),
+            )
+            account = self._one(cursor, "找不到当前范围内的发布账号")
+            if str(account["control_organization_source"]) == "declared":
+                raise DomainError("这个账号的控制组织已经声明过，不在这里重复更改。")
+            cursor.execute(
+                "UPDATE content_accounts SET control_organization_id = %s, "
+                "control_organization_source = 'declared' "
+                "WHERE tenant_id = %s AND id = %s",
+                (organization_id, scope.tenant_id, account_id),
+            )
+            cursor.execute(
+                "INSERT INTO activity_events "
+                "(id, tenant_id, actor_id, event_type, entity_type, entity_id, metadata) "
+                "VALUES (%s, %s, %s, 'publishing_account.control_organization_declared', "
+                "'content_account', %s, %s)",
+                (
+                    uuid4(),
+                    scope.tenant_id,
+                    scope.user_id,
+                    account_id,
+                    Jsonb({"organization_id": str(organization_id)}),
+                ),
+            )
+            cursor.execute(
+                "SELECT name FROM organizations WHERE tenant_id = %s AND id = %s",
+                (scope.tenant_id, organization_id),
+            )
+            organization = self._one(cursor, "找不到已声明的控制组织")
+        return {
+            "account_id": str(account_id),
+            "control_organization": str(organization["name"]),
+            "control_organization_source": "declared",
+        }
+
+    def _append_version(
         self,
         tenant_id: UUID,
         account_id: UUID,
         created_by: UUID,
         segments: tuple[str, str, str, str, str],
+        permission_sql: str,
+        permission_params: tuple[object, ...],
+        refusal: str,
     ) -> dict[str, object]:
         profile_id = uuid4()
         with self._tenant_tx(tenant_id) as cursor:
@@ -225,6 +326,9 @@ class PostgresContentControlRepository(ContentControlRepository):
                 (tenant_id, account_id),
             )
             self._one(cursor, "找不到可维护的发布账号")
+            cursor.execute(permission_sql, permission_params)
+            if not bool(self._one(cursor, "无法读取账号画像维护资格")["allowed"]):
+                raise DomainError(refusal)
             cursor.execute(
                 """
                 SELECT role.id, role.name FROM account_content_roles account_role
@@ -297,9 +401,12 @@ class PostgresContentControlRepository(ContentControlRepository):
                 SELECT account.id, account.name, account.channel,
                        role.name AS content_role,
                        control_organization.name AS control_organization,
+                       account.control_organization_source,
                        profile.version AS profile_version,
                        (account.control_organization_id IS NOT NULL
-                        AND account.control_organization_id = manager.organization_id) AS can_maintain
+                        AND account.control_organization_source = 'declared'
+                        AND account.control_organization_id = manager.organization_id) AS can_maintain,
+                       (account.control_organization_source <> 'declared') AS can_declare
                 FROM content_accounts account
                 JOIN users manager ON manager.tenant_id = account.tenant_id AND manager.id = %s
                     AND manager.enabled = true
@@ -313,6 +420,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                 LEFT JOIN account_expression_profile_versions profile
                   ON profile.id = account.current_expression_profile_id
                  AND profile.tenant_id = account.tenant_id
+                 AND profile.account_id = account.id
                 WHERE account.tenant_id = %s AND account.brand_id = %s AND account.enabled = true
                 ORDER BY account.name
                 """,
@@ -328,11 +436,22 @@ class PostgresContentControlRepository(ContentControlRepository):
                 "control_organization": (
                     str(row["control_organization"]) if row["control_organization"] else ""
                 ),
+                "control_organization_source": str(row["control_organization_source"]),
                 "profile_version": row["profile_version"],
                 "can_maintain": bool(row["can_maintain"]),
+                "can_declare": bool(row["can_declare"]),
             }
             for row in rows
         ]
+
+    def management_organizations(self, scope: TenantManagementScope) -> list[dict[str, object]]:
+        with self._tenant_tx(scope.tenant_id) as cursor:
+            cursor.execute(
+                "SELECT id, name FROM organizations WHERE tenant_id = %s ORDER BY name",
+                (scope.tenant_id,),
+            )
+            rows = cursor.fetchall()
+        return [{"id": str(row["id"]), "name": str(row["name"])} for row in rows]
 
     def creation_preference(self, scope: TrustedScope) -> dict[str, object] | None:
         with self._owner_tx(scope) as cursor:
@@ -592,3 +711,83 @@ class PostgresContentControlRepository(ContentControlRepository):
             }
             for row in rows
         ]
+
+    def ops_unmet_requests(self) -> list[dict[str, object]]:
+        """Read across tenants only through the controlled function, exactly like the runtime
+        summary does; there is no direct cross-tenant table access anywhere in the application."""
+        with (
+            psycopg.connect(self._database_url, row_factory=dict_row) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute("SELECT * FROM ops_unmet_capability_requests()")
+            rows = cursor.fetchall()
+        return [
+            {
+                "tenant_id": str(row["tenant_id"]),
+                "stable_request_id": str(row["stable_request_id"]),
+                "request_text": str(row["request_text"]),
+                "catalog_version": str(row["catalog_version"]),
+                "gap_type": str(row["gap_type"]),
+                "status": str(row["status"]),
+                "response_text": str(row["response_text"]),
+                "created_at": self._time(row["created_at"]),
+                "responded_at": (
+                    self._time(row["responded_at"]) if row["responded_at"] is not None else None
+                ),
+            }
+            for row in rows
+        ]
+
+    def ops_classify_unmet_request(
+        self, stable_request_id: str, gap_type: str, status: str, response_text: str
+    ) -> str | None:
+        with (
+            psycopg.connect(self._database_url, row_factory=dict_row) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute(
+                "SELECT ops_classify_unmet_capability_request(%s, %s, %s, %s) AS tenant_id",
+                (stable_request_id, gap_type, status, response_text),
+            )
+            row = self._one(cursor, "未满足需求候选没有更新成功")
+        return str(row["tenant_id"]) if row["tenant_id"] is not None else None
+
+    def set_material_reference_note(
+        self, scope: TrustedScope, asset_id: UUID, reference_note: str
+    ) -> dict[str, object]:
+        with self._tenant_tx(scope.tenant_id) as cursor:
+            cursor.execute(
+                """
+                UPDATE material_assets asset
+                   SET reference_note = %s, reference_version = asset.reference_version + 1
+                 WHERE asset.tenant_id = %s AND asset.id = %s AND asset.brand_id = %s
+                   AND asset.status = 'active'
+                   AND (
+                     (asset.scope = 'personal' AND asset.owner_user_id = %s)
+                     OR (asset.scope = 'organization' AND EXISTS (
+                        SELECT 1 FROM organization_material_maintainers maintainer
+                        WHERE maintainer.tenant_id = asset.tenant_id
+                          AND maintainer.user_id = %s
+                          AND maintainer.organization_id = asset.owner_organization_id
+                     ))
+                   )
+                RETURNING asset.id, asset.title, asset.media_type, asset.reference_note,
+                          asset.reference_version
+                """,
+                (
+                    reference_note,
+                    scope.tenant_id,
+                    asset_id,
+                    scope.brand_id,
+                    scope.user_id,
+                    scope.user_id,
+                ),
+            )
+            row = self._one(cursor, "找不到你可以补写说明的素材。")
+        return {
+            "id": str(row["id"]),
+            "title": str(row["title"]),
+            "media_type": str(row["media_type"]),
+            "reference_note": str(row["reference_note"]),
+            "reference_version": self._integer(row["reference_version"]),
+        }

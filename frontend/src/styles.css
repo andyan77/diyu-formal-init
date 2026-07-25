@@ -72,10 +72,18 @@ a { color:inherit; }
 .admin-expression { margin-top:14px; }
 .admin-expression > summary { cursor:pointer; color:var(--ink-soft); font-size:13px; }
 .admin-expression .profile-card { margin-top:12px; padding:16px; }
-.plan-row { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,2fr) auto; gap:8px; }
+.plan-row { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,2fr) auto auto; gap:8px; }
 .plan-row button { border:1px solid var(--line); border-radius:8px; padding:7px 10px; background:var(--white); color:var(--ink-soft); }
 .plan-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .direction-default { align-self:center; color:var(--stone); font-size:12px; }
+.reference-note-form { display:flex; flex-wrap:wrap; gap:6px; width:100%; margin-top:6px; }
+.reference-note-form input { flex:1 1 200px; min-width:0; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--white); font-size:13px; }
+.reference-note-form button,.reference-picker li > button.ghost { border:1px solid var(--line); border-radius:8px; padding:5px 10px; background:var(--white); color:var(--ink-soft); font-size:12px; }
+.reference-picker li > button.ghost { margin-top:6px; }
+.reference-picker input:disabled + strong { color:var(--stone); }
+.control-organization { margin:12px 0 0; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--paper-deep); }
+.control-organization select { min-width:0; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--white); font-size:13px; }
+.identity-bar dd button.ghost { margin-left:8px; border:1px solid var(--line); border-radius:8px; padding:3px 8px; background:var(--white); color:var(--ink-soft); font-size:12px; }
 .applied-direction { margin:0; padding-top:20px; color:var(--stone); font-size:12px; }
 .sidebar nav a[aria-current],.sidebar nav button[aria-current] { color:var(--ink); background:var(--white); font-weight:700; box-shadow:inset 3px 0 0 var(--red); }
 .version-rail button[aria-current] { font-weight:700; }

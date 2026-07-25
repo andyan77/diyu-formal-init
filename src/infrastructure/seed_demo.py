@@ -352,7 +352,9 @@ def seed_demo() -> None:
                 (grant_id, TENANT_ID, user_id),
             )
         # Which organization controls each publishing account, and who may maintain its
-        # expression profile.  Account use never implies profile maintenance.
+        # expression profile.  Account use never implies profile maintenance.  The demo seed
+        # states these outright, which is what `declared` means; a value a migration inferred
+        # from a creation event never gets that status.
         for account_id, control_organization_id in (
             (ACCOUNT_ID, ORG_ID),
             (HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID, ORG_ID),
@@ -360,7 +362,8 @@ def seed_demo() -> None:
             (STORE_CONTENT_ACCOUNT_ID, STORE_ORG_ID),
         ):
             cursor.execute(
-                "UPDATE content_accounts SET control_organization_id = %s "
+                "UPDATE content_accounts SET control_organization_id = %s, "
+                "control_organization_source = 'declared' "
                 "WHERE tenant_id = %s AND id = %s",
                 (control_organization_id, TENANT_ID, account_id),
             )

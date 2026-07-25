@@ -27,6 +27,7 @@ from fastapi.security import APIKeyCookie
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
+from src.brain.content_expression import GAP_TYPES
 from src.brain.platform_directions import target_from_text
 from src.composition.bootstrap import (
     build_content_control_service,
@@ -43,6 +44,7 @@ from src.gateway.api.contracts import (
     ContentPlanRequest,
     ContentQuestionResponse,
     ContentVersionResponse,
+    ControlOrganizationRequest,
     CreateContentRequest,
     CreateDisplayRequest,
     CreateOperatorRequest,
@@ -57,11 +59,13 @@ from src.gateway.api.contracts import (
     DisplayRevisionRequest,
     DisplayVersionResponse,
     GreetingResponse,
+    MaterialReferenceNoteRequest,
     MaterialUploadRequest,
     ReorderSeriesRequest,
     RevisionRequest,
     SavedVersionResponse,
     UnmetCapabilityRequest,
+    UnmetCapabilityResponseRequest,
 )
 from src.gateway.api.html import render_spa_shell, workbench_location
 from src.gateway.api.session import (
@@ -451,10 +455,57 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             return summary
 
+        @app.get("/api/v1/ops/unmet-capability-requests")
+        def ops_unmet_capability_requests(request: Request) -> list[dict[str, object]]:
+            """The gap candidates users submitted, read through the controlled function only."""
+            production_authority.require_ops(request)
+            return control_service.ops_unmet_requests()
+
+        @app.post("/api/v1/ops/unmet-capability-requests/{stable_request_id}")
+        def classify_unmet_capability_request(
+            stable_request_id: str,
+            payload: UnmetCapabilityResponseRequest,
+            request: Request,
+        ) -> dict[str, object]:
+            """Classify one candidate and write one plain answer back to the person who asked.
+
+            This is the whole consumption entry: no queue, no approval state machine, and no
+            change to the catalog, brand knowledge, an account profile or anybody's preference.
+            """
+            production_authority.require_ops(request)
+            return control_service.ops_classify_unmet_request(
+                stable_request_id, payload.gap_type, payload.status, payload.response_text
+            )
+
         @app.get("/ops", include_in_schema=False)
         def ops_dashboard(request: Request) -> HTMLResponse:
             operator = production_authority.require_ops(request)
             summary = production_authority.repository.runtime_summary(operator)
+            pending = [
+                item
+                for item in control_service.ops_unmet_requests()
+                if str(item["status"]) != "answered"
+            ]
+            gap_options = "".join(
+                f"<option value='{escape(value)}'>{escape(value)}</option>" for value in GAP_TYPES
+            )
+            candidates = "".join(
+                "<li><p>" + escape(str(item["request_text"])) + "</p>"
+                "<small>" + escape(str(item["stable_request_id"])) + " · "
+                + escape(str(item["gap_type"])) + " · " + escape(str(item["status"]))
+                + "</small>"
+                "<form method='post' action='/ops/unmet-capability-requests'>"
+                "<input type='hidden' name='stable_request_id' value='"
+                + escape(str(item["stable_request_id"]))
+                + "'><label>缺口分类 <select name='gap_type'>"
+                + gap_options
+                + "</select></label><label>状态 <select name='status'>"
+                "<option value='classified'>已分类</option>"
+                "<option value='answered'>已回告</option></select></label>"
+                "<label>回告 <input name='response_text' maxlength='1000'></label>"
+                "<button type='submit'>保存分类与回告</button></form></li>"
+                for item in pending
+            )
             return HTMLResponse(
                 "<main><h1>笛语平台运维</h1><p>只提供租户开户、停用与运行聚合；不提供租户正文或素材读取。</p>"
                 "<dl><dt>已登记租户</dt><dd>"
@@ -469,7 +520,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "<form method='post' action='/ops/tenants'><label>租户名称 <input name='tenant_name' required></label>"
                 "<label>首位管理员 <input name='administrator_name' required></label>"
                 "<label>管理员用户名 <input name='administrator_username' required></label>"
-                "<button type='submit'>创建租户壳</button></form></main>"
+                "<button type='submit'>创建租户壳</button></form>"
+                "<h2>未满足需求候选</h2><p>只做人工分类与一句回告；不改目录、知识、账号画像或任何人的偏好。</p>"
+                + ("<ul>" + candidates + "</ul>" if candidates else "<p>当前没有待处理的候选。</p>")
+                + "</main>"
+            )
+
+        @app.post("/ops/unmet-capability-requests", include_in_schema=False)
+        async def classify_unmet_capability_request_from_form(request: Request) -> HTMLResponse:
+            production_authority.require_ops(request)
+            fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+            answered = control_service.ops_classify_unmet_request(
+                fields.get("stable_request_id", [""])[0],
+                fields.get("gap_type", [""])[0],
+                fields.get("status", [""])[0],
+                fields.get("response_text", [""])[0],
+            )
+            return HTMLResponse(
+                "<main><h1>已记录分类与回告</h1><p>"
+                + escape(str(answered["stable_request_id"]))
+                + " · "
+                + escape(str(answered["status"]))
+                + "</p><p><a href='/ops'>返回</a></p></main>"
             )
 
         @app.post("/ops/tenants", include_in_schema=False)
@@ -929,21 +1001,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return RedirectResponse("/display?" + urlencode({"notice": str(result["message"])}), status_code=303)
         return RedirectResponse(f"/display?task={result['task_id']}&version={result['version']}", status_code=303)
 
-    def _controls(payload: CreateContentRequest) -> RequestedControls:
+    def _controls(payload: CreateContentRequest, bypassed: bool) -> RequestedControls:
         """Client control input stays untrusted data; it can never carry a scope."""
         direction = payload.creative_direction
         return RequestedControls(
             catalog_version=direction.catalog_version if direction else None,
             selections=tuple(direction.selections.items()) if direction else (),
+            cleared_axes=tuple(direction.cleared_axes) if direction else (),
             custom_text=direction.custom_text if direction else "",
             body_related_opt_in=bool(direction and direction.body_related_opt_in),
-            use_personal_preferences=payload.use_personal_preferences,
+            use_personal_preferences=payload.use_personal_preferences and not bypassed,
             material_ids=tuple(payload.material_ids),
         )
 
+    def preference_session_bypassed(request: Request) -> bool:
+        """A temporary preference-free session declares itself on every request it makes.
+
+        While it is on, the catalog, the opportunities, generation and revision neither read nor
+        write the acting person's private preference, and the preference entry itself is closed
+        rather than quietly reachable.
+        """
+        return request.headers.get("x-diyu-preference-session", "").strip().lower() == "bypass"
+
+    def _refuse_in_bypass(bypassed: bool) -> None:
+        if bypassed:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="你正在临时无偏好会话中，这里不读取也不写入你的私人偏好。退出后可以继续查看和修改。",
+            )
+
     @app.get("/api/v1/content/expression-catalog", responses=business_failures)
-    def expression_catalog(scope: TrustedScope = Depends(scope_from_request)) -> dict[str, object]:
-        return control_service.catalog_view(scope)
+    def expression_catalog(
+        scope: TrustedScope = Depends(scope_from_request),
+        bypassed: bool = Depends(preference_session_bypassed),
+    ) -> dict[str, object]:
+        return control_service.catalog_view(scope, read_preference=not bypassed)
 
     @app.get("/api/v1/content/account-expression-profile", responses=business_failures)
     def account_expression_profile(
@@ -986,37 +1078,80 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             scope, account_id, payload.model_dump()
         )
 
+    @app.get("/api/v1/tenant-management/control-organizations", responses=business_failures)
+    def control_organizations(
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return control_service.management_organizations(scope)
+
+    @app.post(
+        "/api/v1/tenant-management/publishing-accounts/{account_id}/control-organization",
+        responses=business_failures,
+    )
+    def declare_control_organization(
+        account_id: UUID,
+        payload: ControlOrganizationRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        """Declare, once, which organization controls this account.
+
+        A value a migration inferred from a creation event is not evidence and grants nothing;
+        this is the explicit decision that makes profile maintenance possible.
+        """
+        return control_service.declare_control_organization(
+            scope, account_id, payload.organization_id
+        )
+
     @app.get("/api/v1/user/creation-preferences", responses=business_failures)
     def read_creation_preferences(
         scope: TrustedScope = Depends(user_scope_from_request),
+        bypassed: bool = Depends(preference_session_bypassed),
     ) -> dict[str, object]:
+        _refuse_in_bypass(bypassed)
         return control_service.creation_preference(scope)
 
     @app.put("/api/v1/user/creation-preferences", responses=business_failures)
     def save_creation_preferences(
         payload: CreationPreferenceRequest,
         scope: TrustedScope = Depends(user_scope_from_request),
+        bypassed: bool = Depends(preference_session_bypassed),
     ) -> dict[str, object]:
+        _refuse_in_bypass(bypassed)
         return control_service.save_creation_preference(
             scope,
             payload.enabled,
             payload.direction_defaults,
             payload.collaboration_note,
             payload.body_related_opt_in,
+            payload.clear_direction_defaults,
         )
 
     @app.delete("/api/v1/user/creation-preferences", responses=business_failures)
     def delete_creation_preferences(
         scope: TrustedScope = Depends(user_scope_from_request),
+        bypassed: bool = Depends(preference_session_bypassed),
     ) -> dict[str, object]:
+        _refuse_in_bypass(bypassed)
         return control_service.delete_creation_preference(scope)
+
+    @app.patch("/api/v1/materials/{asset_id}/reference-note", responses=business_failures)
+    def set_material_reference_note(
+        asset_id: UUID,
+        payload: MaterialReferenceNoteRequest,
+        scope: TrustedScope = Depends(scope_from_request),
+    ) -> dict[str, object]:
+        """One sentence about an original nobody read; without it the original stays unusable."""
+        return control_service.set_material_reference_note(
+            scope, asset_id, payload.reference_note
+        )
 
     @app.post("/api/v1/content/opportunities", responses=business_failures)
     def content_opportunities(
         scope: TrustedScope = Depends(scope_from_request),
+        bypassed: bool = Depends(preference_session_bypassed),
     ) -> dict[str, object]:
         """Read-only: browsing or refreshing opportunities never creates a business task."""
-        return control_service.opportunities(scope)
+        return control_service.opportunities(scope, read_preference=not bypassed)
 
     @app.get("/api/v1/content/plan", responses=business_failures)
     def read_content_plan(scope: TrustedScope = Depends(scope_from_request)) -> dict[str, object]:
@@ -1066,6 +1201,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             custom_text=payload.custom_text,
             body_related_opt_in=payload.body_related_opt_in,
             translation_notice=None,
+            cleared_axes=tuple(payload.cleared_axes),
         )
 
     @app.post(
@@ -1077,6 +1213,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: CreateContentRequest,
         request: Request,
         _: TrustedScope = Depends(scope_from_request),
+        bypassed: bool = Depends(preference_session_bypassed),
     ) -> dict[str, object]:
         if payload.reuse_version_id is None and requests_display_merchandising(payload.weak_seed):
             return {
@@ -1090,7 +1227,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 payload.weak_seed,
                 payload.reuse_version_id,
                 target,
-                _controls(payload),
+                _controls(payload, bypassed),
             )
 
     @app.post(

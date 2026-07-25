@@ -47,6 +47,8 @@ interface CatalogAxis {
 interface ExpressionCatalog {
   catalog_version: string;
   body_related_enabled: boolean;
+  preference_session: "normal" | "bypassed";
+  saved_defaults: Record<string, string>;
   axes: CatalogAxis[];
 }
 
@@ -66,7 +68,9 @@ interface AccountExpression {
   account: string;
   content_role: string;
   control_organization?: string;
+  control_organization_source?: "unset" | "inferred" | "declared";
   can_maintain: boolean;
+  can_declare?: boolean;
   current: ExpressionSegments | null;
   draft?: ExpressionSegments | null;
   segment_labels: Record<string, string>;
@@ -244,10 +248,22 @@ function useQueryClient(): { invalidateQueries: (value: { queryKey: QueryKey }) 
 function useLocation(): { pathname: string } { return { pathname: window.location.pathname }; }
 function Link({ to, className, children }: { to: string; className?: string; children: ReactNode }): JSX.Element { return <a href={to} className={className}>{children}</a>; }
 
+// A temporary preference-free session declares itself on every request it makes, so the catalog,
+// the opportunities, generation and revision all stop reading or writing the private preference.
+let preferenceSession: "normal" | "bypass" = "normal";
+
+function setPreferenceSession(value: "normal" | "bypass"): void {
+  preferenceSession = value;
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(preferenceSession === "bypass" ? { "X-Diyu-Preference-Session": "bypass" } : {}),
+      ...init?.headers
+    },
     ...init
   });
   if (!response.ok) {
@@ -345,7 +361,7 @@ function WorkbenchShell({ context, children }: { context: Context; children: Rea
         <div><dt>代表组织</dt><dd>{identity.organization}</dd></div>
         <div><dt>{context.application === "content" ? "发布账号" : "当前门店"}</dt><dd>{context.application === "content" ? identity.account : identity.store}</dd></div>
         {context.application === "content" && <div><dt>表达身份</dt><dd>{identity.content_role}</dd></div>}
-        {context.application === "content" && <div><dt>账号画像</dt><dd>{profile ? `当前 V${profile.version} · ${profile.identity_position.slice(0, 60)}${profile.identity_position.length > 60 ? "……" : ""}` : "还没有保存过版本；可在「账号画像」里先看草案。"}</dd></div>}
+        {context.application === "content" && <div><dt>账号画像</dt><dd>{profile ? `当前 V${profile.version} · ${profile.identity_position.slice(0, 60)}${profile.identity_position.length > 60 ? "……" : ""}` : "还没有保存过版本；可在「账号画像」里先看草案。"}<button type="button" className="ghost" onClick={() => window.dispatchEvent(new CustomEvent("diyu-open-surface", { detail: "profile" }))}>去看这张画像</button></dd></div>}
       </dl></details>
     </header>
     <div className="application-body">{children}</div>
@@ -362,14 +378,21 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
   const [seed, setSeed] = useState("");
   const [target, setTarget] = useState<Target>(context.targets?.[0]?.value ?? "douyin_video");
   const [selections, setSelections] = useState<Record<string, string>>({});
+  const [clearedAxes, setClearedAxes] = useState<string[]>([]);
   const [customText, setCustomText] = useState("");
-  const [usePreferences, setUsePreferences] = useState(true);
+  const [noPreferenceSession, setNoPreferenceSession] = useState(false);
   const [materialIds, setMaterialIds] = useState<string[]>([]);
   const recent = useQuery({ queryKey: ["content-recent"], queryFn: () => api<RecentItem[]>("/api/v1/content/tasks") });
   const catalog = useQuery({ queryKey: ["expression-catalog"], queryFn: () => api<ExpressionCatalog>("/api/v1/content/expression-catalog") });
   const materials = useQuery({ queryKey: ["materials"], queryFn: () => api<Material[]>("/api/v1/materials") });
   const opportunities = useQuery({ queryKey: ["opportunities"], queryFn: () => api<OpportunityList>("/api/v1/content/opportunities", { method: "POST" }) });
-  const preference = useQuery({ queryKey: ["creation-preference"], queryFn: () => api<CreationPreference>("/api/v1/user/creation-preferences") });
+  // In a preference-free session the private preference is not read at all, here included.
+  const preference = useQuery({ queryKey: ["creation-preference"], queryFn: () => api<CreationPreference>("/api/v1/user/creation-preferences"), enabled: !noPreferenceSession });
+  useEffect(() => {
+    const open = (event: Event): void => { if (event instanceof CustomEvent && typeof event.detail === "string") setSurface(event.detail as typeof surface); };
+    window.addEventListener("diyu-open-surface", open);
+    return () => window.removeEventListener("diyu-open-surface", open);
+  }, []);
   const create = useMutation({
     mutationFn: () => api<ContentVersion | { kind: string; message: string }>("/api/v1/content", {
       method: "POST",
@@ -379,10 +402,11 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
         creative_direction: {
           catalog_version: catalog.data?.catalog_version ?? null,
           selections,
+          cleared_axes: clearedAxes,
           custom_text: customText.trim(),
           body_related_opt_in: catalog.data?.body_related_enabled ?? false
         },
-        use_personal_preferences: usePreferences,
+        use_personal_preferences: !noPreferenceSession,
         material_ids: materialIds
       })
     }),
@@ -392,28 +416,44 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
     },
     onError: error => setNotice(error.message)
   });
+  const appliedDefaults = catalog.data?.saved_defaults ?? {};
   const saveDefaults = useMutation({
     // Only the axis defaults change here; the note you wrote in your own entry is left alone.
-    mutationFn: () => api<CreationPreference>("/api/v1/user/creation-preferences", {
-      method: "PUT",
-      body: JSON.stringify({ enabled: true, direction_defaults: selections, collaboration_note: preference.data?.collaboration_note ?? "", body_related_opt_in: preference.data?.body_related_opt_in ?? false })
-    }),
-    onSuccess: value => { client.invalidateQueries({ queryKey: ["creation-preference"] }); setNotice(`以后会优先按这个方向帮你（第 ${value.version} 版偏好），你写过的偏好说明没有变。随时可以关闭或删除。`); },
+    // What gets saved is what is actually steering this task — a saved default you did not touch
+    // stays saved, and an axis you switched off for this task is the one that is dropped.
+    mutationFn: () => {
+      const effective: Record<string, string> = {};
+      Object.entries(appliedDefaults).forEach(([axis, value]) => { if (!clearedAxes.includes(axis)) effective[axis] = value; });
+      Object.entries(selections).forEach(([axis, value]) => { effective[axis] = value; });
+      return api<CreationPreference>("/api/v1/user/creation-preferences", {
+        method: "PUT",
+        body: JSON.stringify({ enabled: true, direction_defaults: effective, clear_direction_defaults: Object.keys(effective).length === 0, collaboration_note: preference.data?.collaboration_note ?? "", body_related_opt_in: preference.data?.body_related_opt_in ?? false })
+      });
+    },
+    onSuccess: value => { client.invalidateQueries({ queryKey: ["creation-preference"] }); client.invalidateQueries({ queryKey: ["expression-catalog"] }); setNotice(`以后会优先按这个方向帮你（第 ${value.version} 版偏好），你写过的偏好说明没有变。随时可以关闭或删除。`); },
     onError: error => setNotice(error.message)
   });
-  const appliedDefaults = usePreferences && preference.data?.enabled ? preference.data.direction_defaults : {};
   const open = async (item: RecentItem): Promise<void> => {
     try { setArtifact(await api<ContentVersion>(`/api/v1/tasks/${item.task_id}/versions/${item.version}?target=${item.target ?? "douyin_video"}`)); setMobileView("artifact"); }
     catch (error) { setNotice(error instanceof Error ? error.message : "无法读取这份成品。"); }
   };
   const surfaces: Array<[typeof surface, string]> = [["compose", "开始一条内容"], ["series", "连续系列"], ["materials", "我的素材"], ["profile", "账号画像"], ["plan", "内容计划"]];
   const sidebar = <aside className="sidebar"><p className="sidebar-label">内容生产</p><nav aria-label="内容生产工作面">{surfaces.map(([key, label]) => <button key={key} type="button" aria-current={surface === key ? "page" : undefined} className={surface === key ? "active" : ""} onClick={() => setSurface(key)}>{label}</button>)}</nav><p className="sidebar-label">最近成品</p><RecentList items={recent.data ?? []} loading={recent.isLoading} onOpen={open} /></aside>;
+  const startFromPlan = (item: PlanItem): void => {
+    // Only the title, the note and the direction come back to the natural input area.  Nothing
+    // is created until the person presses 生成当前成品 themself.
+    setSeed([item.title, item.note].filter(value => value.trim()).join("\n"));
+    setSelections(item.selections ?? {});
+    setClearedAxes([]);
+    setSurface("compose");
+    setNotice("已经把这条计划带回输入区，你可以改完再生成。现在还没有创建任何任务。");
+  };
   if (surface !== "compose") {
     return <section className="workbench content-workbench">{sidebar}<main className="admin-main">
       {surface === "series" && <SeriesPanel />}
       {surface === "materials" && <MaterialsPanel />}
       {surface === "profile" && <AccountProfilePanel />}
-      {surface === "plan" && <PlanPanel />}
+      {surface === "plan" && <PlanPanel onStart={startFromPlan} />}
     </main></section>;
   }
   return <section className="workbench content-workbench">
@@ -434,15 +474,18 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
         <DirectionPanel
           catalog={catalog.data}
           selections={selections}
+          clearedAxes={clearedAxes}
           savedDefaults={appliedDefaults}
-          onSelect={(axis, value) => setSelections(current => { const next = { ...current }; if (value) next[axis] = value; else delete next[axis]; return next; })}
+          onSelect={(axis, value) => { setSelections(current => { const next = { ...current }; if (value) next[axis] = value; else delete next[axis]; return next; }); setClearedAxes(current => current.filter(item => item !== axis)); }}
+          onClear={axis => { setSelections(current => { const next = { ...current }; delete next[axis]; return next; }); setClearedAxes(current => current.includes(axis) ? current.filter(item => item !== axis) : [...current, axis]); }}
           customText={customText}
           onCustomText={setCustomText}
-          usePreferences={usePreferences}
-          onUsePreferences={setUsePreferences}
+          noPreferenceSession={noPreferenceSession}
+          onNoPreferenceSession={value => { setNoPreferenceSession(value); setPreferenceSession(value ? "bypass" : "normal"); client.invalidateQueries({ queryKey: ["expression-catalog"] }); client.invalidateQueries({ queryKey: ["opportunities"] }); }}
           materials={materials.data ?? []}
           materialIds={materialIds}
           onMaterialIds={setMaterialIds}
+          onNotice={setNotice}
           onSaveDefaults={() => saveDefaults.mutate()}
           savingDefaults={saveDefaults.isPending}
         />
@@ -450,7 +493,7 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
       <OpportunityBoard
         data={opportunities.data}
         loading={opportunities.isLoading}
-        onPick={item => { setSeed(item.seed_text); setSelections(item.selections); setMaterialIds(item.material_ids); setNotice(null); }}
+        onPick={item => { setSeed(item.seed_text); setSelections(item.selections); setClearedAxes([]); setMaterialIds(item.material_ids); setNotice(null); }}
         onRefresh={() => client.invalidateQueries({ queryKey: ["opportunities"] })}
       />
       <UnmetRequestForm selections={selections} customText={customText} onNotice={setNotice} />
@@ -465,48 +508,77 @@ function ContentComposer({ targets, busy, seed, onSeed, target, onTarget, onSubm
   return <form className="composer" onSubmit={submit}><label>这次要做成<select value={target} onChange={event => onTarget(event.target.value as Target)}>{targets.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><textarea value={seed} onChange={event => onSeed(event.target.value)} maxLength={1000} placeholder="例如：我想把一件衣服的取舍说清楚，别只讲卖点。" aria-label="内容需求" />{children}<div className="composer-foot"><span>不需要填写表单；必要时只追问一个会改变成品的问题。</span><button className="primary" disabled={busy}>{busy ? "正在整理成品……" : "生成当前成品"}</button></div></form>;
 }
 
-function DirectionPanel({ catalog, selections, savedDefaults, onSelect, customText, onCustomText, usePreferences, onUsePreferences, materials, materialIds, onMaterialIds, onSaveDefaults, savingDefaults }: { catalog: ExpressionCatalog | undefined; selections: Record<string, string>; savedDefaults: Record<string, string>; onSelect: (axis: string, value: string) => void; customText: string; onCustomText: (value: string) => void; usePreferences: boolean; onUsePreferences: (value: boolean) => void; materials: Material[]; materialIds: string[]; onMaterialIds: (value: string[]) => void; onSaveDefaults: () => void; savingDefaults: boolean }): JSX.Element {
-  // A saved default really does steer this request, so the collapsed line must show it too.
-  const effective = (axis: CatalogAxis): { option: CatalogOption | undefined; fromDefault: boolean } => {
-    const own = axis.options.find(item => item.stable_id === selections[axis.key]);
-    if (own) return { option: own, fromDefault: false };
-    return { option: axis.options.find(item => item.stable_id === savedDefaults[axis.key]), fromDefault: true };
+type AxisState = "explicit" | "default" | "cleared" | "unset";
+
+function DirectionPanel({ catalog, selections, clearedAxes, savedDefaults, onSelect, onClear, customText, onCustomText, noPreferenceSession, onNoPreferenceSession, materials, materialIds, onMaterialIds, onNotice, onSaveDefaults, savingDefaults }: { catalog: ExpressionCatalog | undefined; selections: Record<string, string>; clearedAxes: string[]; savedDefaults: Record<string, string>; onSelect: (axis: string, value: string) => void; onClear: (axis: string) => void; customText: string; onCustomText: (value: string) => void; noPreferenceSession: boolean; onNoPreferenceSession: (value: boolean) => void; materials: Material[]; materialIds: string[]; onMaterialIds: (value: string[]) => void; onNotice: (value: string) => void; onSaveDefaults: () => void; savingDefaults: boolean }): JSX.Element {
+  // Three states per axis, kept apart on purpose: chosen for this task, carried over from a
+  // saved default, or switched off this time.  Carrying a default over is never shown as 不指定.
+  const stateOf = (axis: CatalogAxis): AxisState => {
+    if (selections[axis.key]) return "explicit";
+    if (clearedAxes.includes(axis.key)) return "cleared";
+    return savedDefaults[axis.key] ? "default" : "unset";
   };
+  const optionOf = (axis: CatalogAxis, state: AxisState): CatalogOption | undefined =>
+    axis.options.find(item => item.stable_id === (state === "explicit" ? selections[axis.key] : savedDefaults[axis.key]));
   const chosen = (catalog?.axes ?? []).flatMap(axis => {
-    const { option, fromDefault } = effective(axis);
-    return option ? [fromDefault ? `${option.label}（你保存的默认）` : option.label] : [];
+    const state = stateOf(axis);
+    if (state === "cleared") return [`${axis.label}：本次不使用`];
+    const option = optionOf(axis, state);
+    if (!option || state === "unset") return [];
+    return [state === "default" ? `${option.label}（沿用你保存的默认）` : option.label];
   });
   const summary = chosen.join("、") || "不指定也可以，直接自然说就行";
   return <details className="direction-panel">
     <summary><span className="direction-title">创作方向（可选）</span><span className="direction-summary">{summary}</span></summary>
     <div className="direction-body">
-      {(catalog?.axes ?? []).map(axis => <div className="direction-row" key={axis.key}>
-        <span className="direction-axis">{axis.label}<small>{axis.question}</small></span>
-        <div className="direction-options" role="group" aria-label={`${axis.label}：${axis.question}`}>
-          <button type="button" aria-pressed={!selections[axis.key]} className={selections[axis.key] ? "" : "active"} onClick={() => onSelect(axis.key, "")}>不指定</button>
-          {axis.options.map(option => <button key={option.stable_id} type="button" aria-pressed={selections[axis.key] === option.stable_id} className={selections[axis.key] === option.stable_id ? "active" : ""} onClick={() => onSelect(axis.key, selections[axis.key] === option.stable_id ? "" : option.stable_id)}>{option.label}</button>)}
-          {!selections[axis.key] && savedDefaults[axis.key] && <span className="direction-default">这一轴会用你保存的默认</span>}
-        </div>
-      </div>)}
+      {(catalog?.axes ?? []).map(axis => {
+        const state = stateOf(axis);
+        const savedOption = axis.options.find(item => item.stable_id === savedDefaults[axis.key]);
+        return <div className="direction-row" key={axis.key}>
+          <span className="direction-axis">{axis.label}<small>{axis.question}</small></span>
+          <div className="direction-options" role="group" aria-label={`${axis.label}：${axis.question}`}>
+            {savedOption
+              ? <button type="button" aria-pressed={state === "cleared"} className={state === "cleared" ? "active" : ""} onClick={() => onClear(axis.key)}>{state === "cleared" ? `恢复默认：${savedOption.label}` : `本次不用默认：${savedOption.label}`}</button>
+              : <button type="button" aria-pressed={state === "unset"} className={state === "unset" ? "active" : ""} onClick={() => onSelect(axis.key, "")}>不指定</button>}
+            {axis.options.map(option => <button key={option.stable_id} type="button" aria-pressed={selections[axis.key] === option.stable_id} className={selections[axis.key] === option.stable_id ? "active" : ""} onClick={() => onSelect(axis.key, selections[axis.key] === option.stable_id ? "" : option.stable_id)}>{option.label}</button>)}
+            {state === "default" && savedOption && <span className="direction-default">这一轴沿用你保存的默认：{savedOption.label}</span>}
+            {state === "cleared" && <span className="direction-default">这一轴本次不使用</span>}
+          </div>
+        </div>;
+      })}
       <label className="direction-custom">还想补一句就写在这里<textarea value={customText} onChange={event => onCustomText(event.target.value)} maxLength={500} /></label>
-      <ReferencePicker materials={materials} materialIds={materialIds} onMaterialIds={onMaterialIds} />
+      <ReferencePicker materials={materials} materialIds={materialIds} onMaterialIds={onMaterialIds} onNotice={onNotice} />
       <div className="direction-foot">
-        <label className="minor-check"><input type="checkbox" checked={!usePreferences} onChange={event => onUsePreferences(!event.target.checked)} />这次不读取我的私人偏好</label>
-        <button type="button" onClick={onSaveDefaults} disabled={savingDefaults}>{savingDefaults ? "正在保存……" : "以后优先这样帮我"}</button>
+        <label className="minor-check"><input type="checkbox" checked={noPreferenceSession} onChange={event => onNoPreferenceSession(event.target.checked)} />临时不读取也不写入我的私人偏好</label>
+        {!noPreferenceSession && <button type="button" onClick={onSaveDefaults} disabled={savingDefaults}>{savingDefaults ? "正在保存……" : "以后优先这样帮我"}</button>}
       </div>
-      <p className="muted">这里选的默认只用于这一次。只有你点上面那个按钮，才会存成以后的默认；生成本身从不改你的偏好。体型相关的方向默认不显示，要用可以在「我的」入口自己打开。</p>
+      <p className="muted">{noPreferenceSession ? "现在是临时无偏好会话：目录、可以这样开始、生成和修改都不读也不写你的私人偏好，「我的」入口在这期间也不打开。取消勾选就恢复。" : "这里选的只用于这一次。只有你点上面那个按钮，才会存成以后的默认；生成本身从不改你的偏好。体型相关的方向默认不显示，要用可以在「我的」入口自己打开。"}</p>
     </div>
   </details>;
 }
 
-function ReferencePicker({ materials, materialIds, onMaterialIds }: { materials: Material[]; materialIds: string[]; onMaterialIds: (value: string[]) => void }): JSX.Element {
+function ReferencePicker({ materials, materialIds, onMaterialIds, onNotice }: { materials: Material[]; materialIds: string[]; onMaterialIds: (value: string[]) => void; onNotice: (value: string) => void }): JSX.Element {
+  const client = useQueryClient();
+  const [writing, setWriting] = useState<string | null>(null);
+  const [note, setNote] = useState("");
   const toggle = (id: string): void => onMaterialIds(materialIds.includes(id) ? materialIds.filter(item => item !== id) : [...materialIds, id]);
+  const save = useMutation({
+    mutationFn: (value: { id: string; note: string }) => api<Material>(`/api/v1/materials/${value.id}/reference-note`, { method: "PATCH", body: JSON.stringify({ reference_note: value.note }) }),
+    onSuccess: () => { setWriting(null); setNote(""); client.invalidateQueries({ queryKey: ["materials"] }); onNotice("已经记下你写的原件说明，现在可以把它选进这次参考了。"); },
+    onError: error => onNotice(error.message)
+  });
+  const usable = (item: Material): boolean => item.media_type === "text" || Boolean(item.reference_note);
   return <fieldset className="reference-picker">
     <legend>这次参考（可选）</legend>
     <p className="muted">只使用你在这里勾选的文字素材，或你自己给图片、视频原件写下的说明；系统不会去看原件画面。</p>
     {materials.length === 0
       ? <p className="empty-inline">还没有可以参考的素材。可以先去「我的素材」保存一份。</p>
-      : <ul>{materials.map(item => <li key={item.id}><label><input type="checkbox" checked={materialIds.includes(item.id)} onChange={() => toggle(item.id)} /><strong>{item.title}</strong><span>{item.media_type === "text" ? "文字素材" : item.reference_note ? "已写原件说明" : "还没写原件说明"}</span></label></li>)}</ul>}
+      : <ul>{materials.map(item => <li key={item.id}>
+        <label><input type="checkbox" checked={materialIds.includes(item.id)} disabled={!usable(item)} onChange={() => toggle(item.id)} /><strong>{item.title}</strong><span>{item.media_type === "text" ? "文字素材" : item.reference_note ? "已写原件说明" : "还没写说明，先补一句才能选"}</span></label>
+        {!usable(item) && (writing === item.id
+          ? <span className="reference-note-form"><input value={note} maxLength={500} aria-label={`给《${item.title}》补一句说明`} placeholder="这份原件里有什么可以参考？" onChange={event => setNote(event.target.value)} /><button type="button" disabled={save.isPending || note.trim().length < 2} onClick={() => save.mutate({ id: item.id, note: note.trim() })}>保存这句说明</button></span>
+          : <button type="button" className="ghost" onClick={() => { setWriting(item.id); setNote(""); }}>先补一句说明</button>)}
+      </li>)}</ul>}
   </fieldset>;
 }
 
@@ -590,7 +662,7 @@ function AccountProfilePanel(): JSX.Element {
   </>;
 }
 
-function PlanPanel(): JSX.Element {
+function PlanPanel({ onStart }: { onStart: (item: PlanItem) => void }): JSX.Element {
   const client = useQueryClient();
   const [notice, setNotice] = useState<string | null>(null);
   const plan = useQuery({ queryKey: ["content-plan"], queryFn: () => api<ContentPlan>("/api/v1/content/plan") });
@@ -602,12 +674,13 @@ function PlanPanel(): JSX.Element {
     onError: error => setNotice(error.message)
   });
   return <>
-    <header className="page-heading"><p className="eyebrow">内容计划</p><h1>先记下来，什么时候做由你决定。</h1><p>这里不排期、不提醒、不打分；点「生成当前成品」才会真正开工。</p></header>
+    <header className="page-heading"><p className="eyebrow">内容计划</p><h1>先记下来，什么时候做由你决定。</h1><p>这里不排期、不提醒、不打分；「用这条开始」只是把它带回输入区，点「生成当前成品」才会真正开工。</p></header>
     {notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}
     <section className="series-create">
       {current.map((item, index) => <div key={`${item.title}-${index}`} className="plan-row">
         <input value={item.title} maxLength={120} aria-label={`第 ${index + 1} 条计划标题`} onChange={event => setItems(current.map((entry, position) => position === index ? { ...entry, title: event.target.value } : entry))} />
         <input value={item.note} maxLength={500} aria-label={`第 ${index + 1} 条计划备注`} placeholder="备注（可选）" onChange={event => setItems(current.map((entry, position) => position === index ? { ...entry, note: event.target.value } : entry))} />
+        <button type="button" disabled={!item.title.trim()} onClick={() => onStart(item)}>用这条开始</button>
         <button type="button" onClick={() => setItems(current.filter((_, position) => position !== index))}>删除</button>
       </div>)}
       {current.length === 0 && <p className="empty-inline">还没有计划项。</p>}
@@ -665,6 +738,7 @@ function AdminAccountExpression({ accountId }: { accountId: string }): JSX.Eleme
   return <details className="admin-expression">
     <summary>{profile.data.current ? `表达画像 · 当前 V${profile.data.current.version}` : "表达画像 · 还没有保存过版本"}</summary>
     {notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}
+    <ControlOrganizationCard accountId={accountId} data={profile.data} onNotice={setNotice} />
     <ExpressionProfileCard
       key={profile.data.current?.profile_id ?? `draft-${accountId}`}
       heading="本组织控制的发布账号"
@@ -674,6 +748,28 @@ function AdminAccountExpression({ accountId }: { accountId: string }): JSX.Eleme
       onSave={values => save.mutate(values)}
     />
   </details>;
+}
+
+function ControlOrganizationCard({ accountId, data, onNotice }: { accountId: string; data: AccountExpression; onNotice: (value: string) => void }): JSX.Element {
+  const client = useQueryClient();
+  const [organizationId, setOrganizationId] = useState("");
+  const organizations = useQuery({ queryKey: ["control-organizations"], queryFn: () => api<TenantOrganization[]>("/api/v1/tenant-management/control-organizations"), enabled: data.can_declare === true });
+  const declare = useMutation({
+    mutationFn: () => api<{ control_organization: string }>(`/api/v1/tenant-management/publishing-accounts/${accountId}/control-organization`, { method: "POST", body: JSON.stringify({ organization_id: organizationId }) }),
+    onSuccess: value => { client.invalidateQueries({ queryKey: ["management-expression", accountId] }); onNotice(`已声明由「${value.control_organization}」控制这个账号。只有这一步成立，画像才有人可以维护。`); },
+    onError: error => onNotice(error.message)
+  });
+  const source = data.control_organization_source ?? "unset";
+  return <div className="control-organization">
+    <p className="muted">
+      控制组织：{data.control_organization || "还没有声明"}
+      {source === "inferred" ? "（迁移时按创建事件推断，不作为依据；需要有权主体明确声明）" : source === "declared" ? "（已明确声明）" : ""}
+    </p>
+    {data.can_declare && <div className="plan-actions">
+      <select value={organizationId} onChange={event => setOrganizationId(event.target.value)} aria-label="声明控制组织"><option value="">选择控制这个账号的组织</option>{organizations.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+      <button type="button" disabled={!organizationId || declare.isPending} onClick={() => declare.mutate()}>{declare.isPending ? "正在声明……" : "声明控制组织"}</button>
+    </div>}
+  </div>;
 }
 
 function disclosureForTransfer(artifact: ContentVersion): string {
@@ -739,12 +835,14 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
   const operators = useQuery({ queryKey: ["operators"], queryFn: () => api<Operator[]>("/api/v1/tenant-management/operators") });
   const accounts = useQuery({ queryKey: ["publishing-accounts"], queryFn: () => api<PublishingAccount[]>("/api/v1/tenant-management/publishing-accounts") });
   const organizations = useQuery({ queryKey: ["tenant-organizations"], queryFn: () => api<TenantOrganization[]>("/api/v1/tenant-management/organizations"), enabled: formalRuntime });
+  const controlOrganizations = useQuery({ queryKey: ["control-organizations"], queryFn: () => api<TenantOrganization[]>("/api/v1/tenant-management/control-organizations") });
   const isDiyuFashion = brandName === "笛语服饰";
   const [newAccountName, setNewAccountName] = useState(isDiyuFashion ? "笛语服饰品牌官方账号" : "");
   const [channel, setChannel] = useState<CreatePublishingAccount["channel"]>("抖音");
   const [contentRoleName, setContentRoleName] = useState(isDiyuFashion ? "品牌官方 / 品牌定义者" : "");
   const [voiceBoundary, setVoiceBoundary] = useState(isDiyuFashion ? "代表品牌讲已确认的品牌立场、生活关系和内容方向；不冒充创始人、研发、门店或顾客，不讲未确认商品和经营事实。" : "");
   const [operatorId, setOperatorId] = useState("");
+  const [controlOrganizationId, setControlOrganizationId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [accountId, setAccountId] = useState("");
   const [formalName, setFormalName] = useState("");
@@ -768,6 +866,7 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
         content_role_name: contentRoleName,
         voice_boundary: voiceBoundary,
         operator_id: operatorId,
+        control_organization_id: controlOrganizationId || null,
       }),
     }),
     onSuccess: () => {
@@ -776,6 +875,7 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
       setContentRoleName("");
       setVoiceBoundary("");
       setOperatorId("");
+      setControlOrganizationId("");
       client.invalidateQueries({ queryKey: ["publishing-accounts"] });
       client.invalidateQueries({ queryKey: ["operators"] });
       client.invalidateQueries({ queryKey: ["readiness"] });
@@ -803,6 +903,8 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
       <input value={contentRoleName} onChange={event => setContentRoleName(event.target.value)} placeholder="独立表达身份名称" maxLength={80} aria-label="独立表达身份名称" />
       <textarea value={voiceBoundary} onChange={event => setVoiceBoundary(event.target.value)} placeholder="这份企业表达身份在什么边界内成立？" maxLength={500} aria-label="企业表达身份成立边界" />
       <select value={operatorId} onChange={event => setOperatorId(event.target.value)} aria-label="已登记操作者"><option value="">选择已登记操作者</option>{operators.data?.map(operator => <option key={operator.id} value={operator.id}>{operator.display_name} · {operator.organization}</option>)}</select>
+      <select value={controlOrganizationId} onChange={event => setControlOrganizationId(event.target.value)} aria-label="控制这个账号的组织"><option value="">暂不声明控制组织（画像先无人可维护）</option>{controlOrganizations.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+      <p className="muted">控制组织决定谁可以维护这个账号的表达画像。不选就先空着，之后由有权主体明确声明；系统不会按账号名、身份名或操作者姓名替你推断。</p>
       <button className="primary" disabled={createAccount.isPending}>{createAccount.isPending ? "正在创建……" : "创建账号并授权操作者"}</button>
     </form>
     {formalRuntime ? <form className="series-create" onSubmit={event => { event.preventDefault(); if (formalName.trim() && formalUsername.trim()) createFormalUser.mutate(); }}><p>创建独立自然人登录身份。发布账号不是密码；每位内部或外部操作者都必须各自激活并登录。</p><input value={formalName} onChange={event => setFormalName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><input value={formalUsername} onChange={event => setFormalUsername(event.target.value)} placeholder="全平台唯一登录用户名" minLength={3} maxLength={80} /><select value={formalOrganizationId} onChange={event => setFormalOrganizationId(event.target.value)} aria-label="所属组织"><option value="">使用当前管理员所属组织</option>{organizations.data?.map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select><select value={formalAccountId} onChange={event => setFormalAccountId(event.target.value)}><option value="">暂不授予发布账号（可稍后配置）</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><label className="minor-check"><input type="checkbox" checked={formalGrantsMaterialMaintenance} onChange={event => setFormalGrantsMaterialMaintenance(event.target.checked)} />允许维护该组织素材</label><button className="primary" disabled={createFormalUser.isPending}>{createFormalUser.isPending ? "正在创建……" : "创建并生成激活链接"}</button>{activationLink && <p className="notice">一次性激活链接：<code>{activationLink}</code></p>}</form> : <form className="series-create" onSubmit={event => { event.preventDefault(); if (displayName.trim() && accountId) create.mutate(); }}><p>登记一位实际操作者（不设置密码；生产开户与一次性激活在 M5-4）。</p><input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">授予哪个企业发布账号</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><button className="primary" disabled={create.isPending}>{create.isPending ? "正在登记……" : "登记并授权操作人"}</button></form>}

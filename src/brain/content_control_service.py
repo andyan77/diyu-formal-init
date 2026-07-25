@@ -6,8 +6,10 @@ from uuid import UUID
 
 from src.brain.content_expression import (
     AXIS_ORDER,
+    GAP_TYPES,
     ExpressionCatalog,
     load_catalog,
+    natural_text_hits,
     resolve_direction,
 )
 from src.ports.content_control_repository import ContentControlRepository
@@ -40,6 +42,7 @@ _DEFAULT_PRODUCTION_CONDITIONS = (
 )
 _MAX_MATERIAL_TEXT = 4000
 _MAX_SELECTED_MATERIALS = 5
+_UNMET_STATUSES = frozenset({"received", "classified", "answered"})
 
 PreferenceMode = str
 PREFERENCE_APPLIED = "applied"
@@ -72,13 +75,19 @@ class ContentControlService:
 
     # ---- A. versioned five-axis catalog -------------------------------------------------
 
-    def catalog_view(self, scope: TrustedScope) -> dict[str, object]:
-        preference = self._repository.creation_preference(scope)
+    def catalog_view(self, scope: TrustedScope, read_preference: bool = True) -> dict[str, object]:
+        """In a temporary preference-free session the catalog is not allowed to read it either."""
+        preference = self._repository.creation_preference(scope) if read_preference else None
         body_opt_in = bool(preference and preference["body_related_opt_in"])
+        defaults = (
+            preference["direction_defaults"] if preference and preference["enabled"] else {}
+        )
         visible = self._catalog.visible(body_opt_in)
         return {
             "catalog_version": self._catalog.catalog_version,
             "body_related_enabled": body_opt_in,
+            "preference_session": "bypassed" if not read_preference else "normal",
+            "saved_defaults": defaults if isinstance(defaults, dict) else {},
             "axes": [
                 {
                     "key": axis.key,
@@ -116,14 +125,21 @@ class ContentControlService:
     def save_account_expression(
         self, scope: TrustedScope, segments: Mapping[str, str]
     ) -> dict[str, object]:
-        if not self._repository.can_maintain_account_expression(scope):
-            raise DomainError("你现在只能查看这个账号的表达画像。维护资格由账号控制组织决定。")
-        return self._repository.save_account_expression(
-            scope.tenant_id, scope.account_id, scope.user_id, self._checked_segments(segments)
+        # The maintenance check happens inside the writing transaction, not before it.
+        return self._repository.save_account_expression_as_operator(
+            scope, self._checked_segments(segments)
         )
 
     def management_accounts(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         return self._repository.management_accounts_with_expression(scope)
+
+    def management_organizations(self, scope: TenantManagementScope) -> list[dict[str, object]]:
+        return self._repository.management_organizations(scope)
+
+    def declare_control_organization(
+        self, scope: TenantManagementScope, account_id: UUID, organization_id: UUID
+    ) -> dict[str, object]:
+        return self._repository.declare_control_organization(scope, account_id, organization_id)
 
     def management_account_expression(
         self, scope: TenantManagementScope, account_id: UUID
@@ -139,7 +155,9 @@ class ContentControlService:
             "account": account["name"],
             "content_role": account["content_role"],
             "control_organization": account["control_organization"],
+            "control_organization_source": account["control_organization_source"],
             "can_maintain": account["can_maintain"],
+            "can_declare": account["can_declare"],
             "current": current,
             "segment_labels": dict(_SEGMENT_LABELS),
         }
@@ -147,10 +165,8 @@ class ContentControlService:
     def save_management_account_expression(
         self, scope: TenantManagementScope, account_id: UUID, segments: Mapping[str, str]
     ) -> dict[str, object]:
-        if not self._repository.can_manage_account_expression(scope, account_id):
-            raise DomainError("这个发布账号不属于你所在组织控制，不能在这里维护它的表达画像。")
-        return self._repository.save_account_expression(
-            scope.tenant_id, account_id, scope.user_id, self._checked_segments(segments)
+        return self._repository.save_account_expression_as_manager(
+            scope, account_id, self._checked_segments(segments)
         )
 
     @staticmethod
@@ -240,6 +256,7 @@ class ContentControlService:
         direction_defaults: Mapping[str, str],
         collaboration_note: str,
         body_related_opt_in: bool,
+        clear_direction_defaults: bool = False,
     ) -> dict[str, object]:
         checked: dict[str, str] = {}
         for axis, stable_id in direction_defaults.items():
@@ -253,6 +270,12 @@ class ContentControlService:
             checked[axis] = stable_id
         if len(collaboration_note.strip()) > 500:
             raise DomainError("协作说明请控制在 500 字以内。")
+        if not checked and not clear_direction_defaults:
+            # Choosing nothing this time is not the same as asking to forget saved defaults.
+            existing = self._repository.creation_preference(scope)
+            existing_defaults = existing["direction_defaults"] if existing else {}
+            if isinstance(existing_defaults, dict):
+                checked = {str(key): str(value) for key, value in existing_defaults.items()}
         return {
             "exists": True,
             **self._repository.save_creation_preference(
@@ -278,8 +301,14 @@ class ContentControlService:
         use_personal_preferences: bool,
         boundary_text: str,
         requested_catalog_version: str | None,
-    ) -> tuple[CreativeDirection | None, PreferenceMode, int | None]:
-        """This panel is for this task.  Saving a default is a separate, explicit action."""
+        cleared_axes: tuple[str, ...] = (),
+        natural_text: str = "",
+    ) -> tuple[CreativeDirection | None, PreferenceMode, int | None, str]:
+        """This panel is for this task.  Saving a default is a separate, explicit action.
+
+        Returns the resolved direction, which preference mode applied, which preference version
+        it was, and the person's own soft collaboration note when they are using preferences.
+        """
         if (
             requested_catalog_version
             and requested_catalog_version != self._catalog.catalog_version
@@ -297,28 +326,38 @@ class ContentControlService:
                 preference = None
             else:
                 mode = PREFERENCE_APPLIED
-        merged: dict[str, str] = {}
+        defaults: dict[str, str] = {}
         opt_in = body_related_opt_in
         preference_version: int | None = None
+        collaboration_note = ""
         if preference is not None:
-            defaults = preference["direction_defaults"]
-            if isinstance(defaults, dict):
-                merged.update({str(key): str(value) for key, value in defaults.items()})
+            saved = preference["direction_defaults"]
+            if isinstance(saved, dict):
+                defaults.update({str(key): str(value) for key, value in saved.items()})
             opt_in = opt_in or bool(preference["body_related_opt_in"])
             version = preference["version"]
             preference_version = version if isinstance(version, int) else None
-        merged.update({key: value for key, value in selections.items() if value})
-        if not merged and not custom_text.strip():
-            return None, mode, preference_version
+            collaboration_note = str(preference["collaboration_note"])
+        explicit = {key: value for key, value in selections.items() if value}
+        effective_defaults = {
+            axis: value for axis, value in defaults.items() if axis not in cleared_axes
+        }
+        steered = bool(explicit or effective_defaults or cleared_axes or custom_text.strip())
+        # Nothing steered by the panel; the person's own words may still map onto a label.
+        if not steered and not natural_text_hits(self._catalog, natural_text):
+            return None, mode, preference_version, collaboration_note
         direction = resolve_direction(
             self._catalog,
-            merged,
+            explicit,
             custom_text,
             opt_in,
             boundary_text,
             requested_catalog_version,
+            saved_defaults=defaults,
+            cleared_axes=cleared_axes,
+            natural_text=natural_text,
         )
-        return direction, mode, preference_version
+        return direction, mode, preference_version, collaboration_note
 
     # ---- F. this-task legal references ---------------------------------------------------
 
@@ -354,11 +393,11 @@ class ContentControlService:
 
     # ---- G. cold-start opportunities and the light plan ----------------------------------
 
-    def opportunities(self, scope: TrustedScope) -> dict[str, object]:
+    def opportunities(self, scope: TrustedScope, read_preference: bool = True) -> dict[str, object]:
         source = self._repository.expression_source(scope)
         current = self._repository.current_account_expression(scope.tenant_id, scope.account_id)
         profile = current or self._draft_segments(source)
-        preference = self._repository.creation_preference(scope)
+        preference = self._repository.creation_preference(scope) if read_preference else None
         notes = self._repository.available_material_notes(scope)
         products = tuple(sku for sku in str(source["confirmed_product_skus"]).split(",") if sku)
         items: list[dict[str, object]] = [
@@ -487,3 +526,46 @@ class ContentControlService:
 
     def list_unmet_requests(self, scope: TrustedScope) -> list[dict[str, object]]:
         return self._repository.list_unmet_requests(scope)
+
+    def ops_unmet_requests(self) -> list[dict[str, object]]:
+        return self._repository.ops_unmet_requests()
+
+    def ops_classify_unmet_request(
+        self, stable_request_id: str, gap_type: str, status: str, response_text: str
+    ) -> dict[str, object]:
+        """Classify one candidate and write back one plain answer; nothing else changes.
+
+        A candidate never edits the catalog, brand knowledge, an account profile or somebody's
+        preference — this only fills in the fields the candidate already carries.
+        """
+        if gap_type not in GAP_TYPES:
+            raise DomainError("缺口类型不在已登记的分类里。")
+        if status not in _UNMET_STATUSES:
+            raise DomainError("需求候选状态不在已登记的取值里。")
+        if status == "answered" and not response_text.strip():
+            raise DomainError("回告状态需要写一句给提交人的回复。")
+        if len(response_text.strip()) > 1000:
+            raise DomainError("回告请控制在 1000 字以内。")
+        tenant_id = self._repository.ops_classify_unmet_request(
+            stable_request_id, gap_type, status, response_text.strip()
+        )
+        if tenant_id is None:
+            raise DomainError("找不到这条需求候选。")
+        return {
+            "stable_request_id": stable_request_id,
+            "tenant_id": tenant_id,
+            "gap_type": gap_type,
+            "status": status,
+            "response_text": response_text.strip(),
+        }
+
+    # ---- F. keeping an unreadable original selectable ------------------------------------
+
+    def set_material_reference_note(
+        self, scope: TrustedScope, asset_id: UUID, reference_note: str
+    ) -> dict[str, object]:
+        """The one readable description of an image or video; the system still reads no bytes."""
+        note = reference_note.strip()
+        if not 2 <= len(note) <= 500:
+            raise DomainError("请用一两句话写清楚这份原件里有什么可以参考。")
+        return self._repository.set_material_reference_note(scope, asset_id, note)

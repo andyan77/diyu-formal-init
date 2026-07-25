@@ -174,7 +174,11 @@ class RoutingInput:
 
 @dataclass(frozen=True)
 class DirectionSelection:
-    """One axis choice: what the user picked, and what the brand boundary let it become."""
+    """One axis choice: what the user picked, and what the brand boundary let it become.
+
+    `origin` keeps the three per-axis states apart: an explicit choice for this task, a saved
+    default carried over, or the person's own words matching a declared label or alias.
+    """
 
     axis: str
     stable_id: str
@@ -182,6 +186,7 @@ class DirectionSelection:
     applied_label: str
     translated: bool
     preserved_aspect: str
+    origin: str = "explicit"
 
 
 @dataclass(frozen=True)
@@ -191,6 +196,8 @@ class CreativeDirection:
     custom_text: str
     body_related_opt_in: bool
     translation_notice: str | None
+    # Axes the person switched off for this task; a saved default must not creep back in.
+    cleared_axes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -225,6 +232,8 @@ class RequestedControls:
 
     catalog_version: str | None = None
     selections: tuple[tuple[str, str], ...] = ()
+    # Axes explicitly switched off for this task; distinct from "the person said nothing".
+    cleared_axes: tuple[str, ...] = ()
     custom_text: str = ""
     body_related_opt_in: bool = False
     use_personal_preferences: bool = True
@@ -245,6 +254,12 @@ class ContentControlContext:
     materials: tuple[ReferenceMaterial, ...]
     preference_mode: str
     preference_version: int | None
+    # The expression identity this run really spoke from, frozen with the task.
+    content_role: str = ""
+    content_role_boundary: str = ""
+    # The acting person's own soft collaboration input.  It reaches the generator and stays out
+    # of the tenant-visible task snapshot and the ordinary run receipt.
+    collaboration_note: str = ""
 
 
 @dataclass(frozen=True)
@@ -265,6 +280,7 @@ class GenerationInput:
     creative_direction: CreativeDirection | None = None
     account_expression: AccountExpression | None = None
     reference_materials: tuple[ReferenceMaterial, ...] = ()
+    collaboration_note: str = ""
 
 
 @dataclass(frozen=True)

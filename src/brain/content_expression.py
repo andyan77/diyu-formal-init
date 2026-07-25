@@ -56,6 +56,9 @@ class CatalogEntry:
     body_related: bool
     restrained_variant: str
     preserved_aspect: str
+    # A short, declared list of other exact spellings of this same label.  It is not fuzzy style
+    # detection and not a keyword blacklist; anything not declared here stays free text.
+    aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -120,6 +123,11 @@ def _load_catalog_document(path: Path) -> ExpressionCatalog:
             raise _fail("精简目录只能包含已验证或可组合的能力")
         if axis not in AXIS_ORDER:
             raise _fail("内容表达目录存在未知表达轴")
+        raw_aliases = item.get("aliases", [])
+        if not isinstance(raw_aliases, list) or any(
+            not isinstance(alias, str) or not alias.strip() for alias in raw_aliases
+        ):
+            raise _fail("内容表达目录存在无效的别名声明")
         seen.add(stable_id)
         entries.append(
             CatalogEntry(
@@ -131,6 +139,7 @@ def _load_catalog_document(path: Path) -> ExpressionCatalog:
                 body_related=bool(item.get("body_related", False)),
                 restrained_variant=str(item.get("restrained_variant", "")),
                 preserved_aspect=str(item.get("preserved_aspect", "")),
+                aliases=tuple(str(alias) for alias in raw_aliases),
             )
         )
     return ExpressionCatalog(
@@ -206,6 +215,30 @@ def boundary_is_restrained(catalog: ExpressionCatalog, boundary_text: str) -> bo
     return any(marker in boundary_text for marker in catalog.restraint_markers)
 
 
+def natural_text_hits(catalog: ExpressionCatalog, text: str) -> dict[str, CatalogEntry]:
+    """Map the person's own words onto a catalog entry, only on an exact declared spelling.
+
+    This exists so free text that would otherwise be clamped invisibly reuses the same visible
+    restraint mechanism a clicked option gets.  Only entries that carry a restrained variant or
+    are body related take part, the longest declared spelling wins, and everything else is left
+    exactly as written — there is no fuzzy style detection, keyword blacklist or second model.
+    """
+    if not text:
+        return {}
+    matched: dict[str, tuple[int, CatalogEntry]] = {}
+    for entry in catalog.entries:
+        if not (entry.restrained_variant or entry.body_related):
+            continue
+        hits = [word for word in (entry.label, *entry.aliases) if word and word in text]
+        if not hits:
+            continue
+        length = max(len(word) for word in hits)
+        current = matched.get(entry.axis)
+        if current is None or length > current[0]:
+            matched[entry.axis] = (length, entry)
+    return {axis: entry for axis, (_, entry) in matched.items()}
+
+
 def resolve_direction(
     catalog: ExpressionCatalog,
     selections: Mapping[str, str],
@@ -213,24 +246,59 @@ def resolve_direction(
     body_related_opt_in: bool,
     boundary_text: str,
     requested_catalog_version: str | None = None,
+    saved_defaults: Mapping[str, str] | None = None,
+    cleared_axes: tuple[str, ...] = (),
+    natural_text: str = "",
 ) -> CreativeDirection:
-    """Keep the user's own choice and, on a soft brand conflict, say how it was translated."""
+    """Keep the user's own choice and, on a soft brand conflict, say how it was translated.
+
+    Each axis is in exactly one of three states: an explicit choice for this task, a saved
+    default carried over, or switched off for this task.  A cleared axis never falls back to a
+    saved default, and saying nothing never reads as switching a default off.
+    """
     if requested_catalog_version and requested_catalog_version != catalog.catalog_version:
         raise _fail("创作方向目录已更新，请刷新后重新选择。")
-    unknown_axes = [axis for axis in selections if axis not in AXIS_ORDER]
+    defaults = dict(saved_defaults or {})
+    unknown_axes = [
+        axis for axis in (*selections, *defaults, *cleared_axes) if axis not in AXIS_ORDER
+    ]
     if unknown_axes:
         raise _fail("创作方向只使用固定的五个方面。")
     restrained = boundary_is_restrained(catalog, boundary_text)
+    from_text = natural_text_hits(catalog, natural_text)
     resolved: list[DirectionSelection] = []
     notices: list[str] = []
+    suggestions: list[str] = []
     for axis in AXIS_ORDER:
+        if axis in cleared_axes:
+            continue
+        origin = "explicit"
         stable_id = selections.get(axis)
         if not stable_id:
-            continue
+            stable_id = defaults.get(axis)
+            origin = "default"
+        if not stable_id:
+            entry = from_text.get(axis)
+            if entry is None:
+                continue
+            if entry.body_related and not body_related_opt_in:
+                # A hard conflict: never silently apply it, never silently replace the wording.
+                suggestions.append(
+                    f"你提到的「{entry.label}」属于体型相关表达，需要你自己先打开才会使用；"
+                    "这次按你原话保留，没有替换。"
+                )
+                continue
+            stable_id = entry.stable_id
+            origin = "natural_text"
         entry = catalog.entry(stable_id)
         if entry is None or entry.axis != axis:
+            if origin == "default":
+                # A saved default that no longer exists is dropped, never guessed or substituted.
+                continue
             raise _fail("这个创作方向当前不可选，请刷新后重新选择。")
         if entry.body_related and not body_related_opt_in:
+            if origin == "default":
+                continue
             raise _fail("体型相关的方向需要你先自己打开才能使用。")
         translated = bool(restrained and entry.restrained_variant)
         applied_label = entry.restrained_variant if translated else entry.label
@@ -242,20 +310,26 @@ def resolve_direction(
                 applied_label=applied_label,
                 translated=translated,
                 preserved_aspect=entry.preserved_aspect if translated else "",
+                origin=origin,
             )
         )
         if translated:
+            source = "你说的是" if origin == "natural_text" else "你选的是"
             notices.append(
-                f"你选的是{entry.label}；这版保留{entry.preserved_aspect}，"
+                f"{source}{entry.label}；这版保留{entry.preserved_aspect}，"
                 f"但按当前账号的表达边界收成了{applied_label}。"
             )
-    notice = ("".join(notices) + "你还可以继续改。") if notices else None
+    body = "".join(notices)
+    if body:
+        body += "你还可以继续改。"
+    body += "".join(suggestions)
     return CreativeDirection(
         catalog_version=catalog.catalog_version,
         selections=tuple(resolved),
         custom_text=custom_text.strip(),
         body_related_opt_in=body_related_opt_in,
-        translation_notice=notice,
+        translation_notice=body or None,
+        cleared_axes=tuple(axis for axis in AXIS_ORDER if axis in cleared_axes),
     )
 
 
@@ -272,9 +346,10 @@ SNAPSHOT_SCHEMA = "content-context-snapshot-v1"
 def snapshot_document(control: ContentControlContext, content_role: str) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
-    Task conditions only: the axis choices that actually shaped this content, the applied result
-    and the versions used.  Private preference state — its body, its defaults object and whether
-    the person turned body-related options on — stays in the owner-scoped table, because this
+    Task conditions only: the expression identity and boundary this run actually spoke from, the
+    axis choices that shaped the content, the applied result and the versions used.  Private
+    preference state — its body, its collaboration note, its defaults object and whether the
+    person turned body-related options on — stays in the owner-scoped table, because this
     snapshot lives in a tenant-scoped row.
     """
     direction = control.direction
@@ -284,13 +359,19 @@ def snapshot_document(control: ContentControlContext, content_role: str) -> dict
         "original_direction": {
             "selections": (
                 [
-                    {"axis": item.axis, "stable_id": item.stable_id, "label": item.label}
+                    {
+                        "axis": item.axis,
+                        "stable_id": item.stable_id,
+                        "label": item.label,
+                        "origin": item.origin,
+                    }
                     for item in direction.selections
                 ]
                 if direction
                 else []
             ),
             "custom_text": direction.custom_text if direction else "",
+            "cleared_axes": list(direction.cleared_axes) if direction else [],
         },
         "applied_direction": (
             [
@@ -308,6 +389,7 @@ def snapshot_document(control: ContentControlContext, content_role: str) -> dict
         ),
         "translation_notice": direction.translation_notice if direction else None,
         "content_role": content_role,
+        "content_role_boundary": control.content_role_boundary,
         "legacy_content_role": False,
         "account_expression_profile_id": (
             str(control.account_expression.profile_id)
@@ -331,16 +413,23 @@ def direction_from_snapshot(snapshot: Mapping[str, object]) -> CreativeDirection
     applied = snapshot.get("applied_direction")
     original = snapshot.get("original_direction")
     original_labels: dict[str, str] = {}
+    original_origins: dict[str, str] = {}
     custom_text = ""
     body_opt_in = False
+    cleared: tuple[str, ...] = ()
     if isinstance(original, dict):
         custom_text = str(original.get("custom_text", ""))
         body_opt_in = bool(original.get("body_related_opt_in", False))
+        raw_cleared = original.get("cleared_axes")
+        if isinstance(raw_cleared, list):
+            cleared = tuple(str(axis) for axis in raw_cleared if isinstance(axis, str))
         raw_selections = original.get("selections")
         if isinstance(raw_selections, list):
             for item in raw_selections:
                 if isinstance(item, dict):
-                    original_labels[str(item.get("stable_id", ""))] = str(item.get("label", ""))
+                    key = str(item.get("stable_id", ""))
+                    original_labels[key] = str(item.get("label", ""))
+                    original_origins[key] = str(item.get("origin", "explicit"))
     selections: list[DirectionSelection] = []
     if isinstance(applied, list):
         for item in applied:
@@ -355,6 +444,7 @@ def direction_from_snapshot(snapshot: Mapping[str, object]) -> CreativeDirection
                     applied_label=str(item.get("applied_label", "")),
                     translated=bool(item.get("translated", False)),
                     preserved_aspect=str(item.get("preserved_aspect", "")),
+                    origin=original_origins.get(stable_id, "explicit"),
                 )
             )
     if not selections and not custom_text:
@@ -367,4 +457,5 @@ def direction_from_snapshot(snapshot: Mapping[str, object]) -> CreativeDirection
         custom_text=custom_text,
         body_related_opt_in=body_opt_in,
         translation_notice=str(notice) if isinstance(notice, str) else None,
+        cleared_axes=cleared,
     )

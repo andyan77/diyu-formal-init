@@ -1,0 +1,147 @@
+{
+  "/api/v1/session/context": {
+    "application": "content",
+    "generator_mode": "stub",
+    "formal_runtime": true,
+    "identity": {
+      "operator": "总部内容运营甲",
+      "organization": "折线之间总部",
+      "account": "总部抖音账号",
+      "content_role": "品牌官方",
+      "brand": "折线之间"
+    },
+    "targets": [
+      {
+        "value": "douyin_video",
+        "label": "抖音短视频"
+      }
+    ]
+  },
+  "/api/v1/content/tasks": [],
+  "/api/v1/materials": [
+    {
+      "id": "asset-text",
+      "title": "已写好的一段文字",
+      "media_type": "text",
+      "scope": "personal",
+      "created_at": "2026-07-27T00:00:00Z",
+      "status": "active",
+      "reference_note": ""
+    },
+    {
+      "id": "asset-image",
+      "title": "没写说明的图片原件",
+      "media_type": "image",
+      "scope": "personal",
+      "created_at": "2026-07-27T00:00:00Z",
+      "status": "active",
+      "reference_note": ""
+    }
+  ],
+  "/api/v1/content/expression-catalog": {
+    "catalog_version": "content-expression-catalog-v1",
+    "body_related_enabled": false,
+    "preference_session": "normal",
+    "saved_defaults": {
+      "style": "STYLE-A"
+    },
+    "axes": [
+      {
+        "key": "style",
+        "label": "风格",
+        "question": "希望是什么感觉",
+        "options": [
+          {
+            "stable_id": "STYLE-A",
+            "label": "干货攻略",
+            "capability_state": "composable",
+            "body_related": false
+          },
+          {
+            "stable_id": "STYLE-B",
+            "label": "真实记录",
+            "capability_state": "composable",
+            "body_related": false
+          }
+        ]
+      }
+    ]
+  },
+  "/api/v1/content/opportunities": {
+    "catalog_version": "content-expression-catalog-v1",
+    "profile_is_draft": false,
+    "items": [],
+    "boundary": "这些只是可修改的建议。"
+  },
+  "/api/v1/user/creation-preferences": {
+    "exists": true,
+    "enabled": true,
+    "version": 3,
+    "direction_defaults": {
+      "style": "STYLE-A"
+    },
+    "collaboration_note": "我平时更喜欢先说结论。",
+    "body_related_opt_in": false
+  },
+  "/api/v1/content/unmet-capability-requests": [],
+  "/api/v1/content/plan": {
+    "document": {
+      "items": [
+        {
+          "title": "先讲清楚我们从什么位置说话",
+          "note": "只用已经确认的品牌立场。",
+          "selections": {
+            "style": "STYLE-B"
+          }
+        }
+      ]
+    },
+    "updated_at": null
+  },
+  "/api/v1/content/account-expression-profile": {
+    "account": "总部抖音账号",
+    "content_role": "品牌官方",
+    "control_organization": "折线之间总部",
+    "control_organization_source": "declared",
+    "can_maintain": true,
+    "can_declare": false,
+    "current": {
+      "profile_id": "p1",
+      "version": 2,
+      "content_role": "品牌官方",
+      "identity_position": "代表品牌说话。",
+      "authority_boundary": "只讲已确认的事实。",
+      "audience_relationship": "平等、不施压。",
+      "content_territories": "穿衣处境。",
+      "default_production_conditions": "一人一手机。"
+    },
+    "draft": null,
+    "segment_labels": {
+      "identity_position": "表达身份",
+      "authority_boundary": "真实资格与权威边界",
+      "audience_relationship": "主要受众关系",
+      "content_territories": "可持续经营的内容领地",
+      "default_production_conditions": "可长期依赖的制作条件"
+    }
+  },
+  "/api/v1/materials/asset-image/reference-note": {
+    "id": "asset-image",
+    "title": "没写说明的图片原件",
+    "media_type": "image",
+    "scope": "personal",
+    "created_at": "2026-07-27T00:00:00Z",
+    "status": "active",
+    "reference_note": "这张图里是那条裤子的口袋。"
+  },
+  "/api/v1/content": {
+    "kind": "content",
+    "task_id": "t1",
+    "version_id": "v1",
+    "version": 1,
+    "outline": "标题",
+    "body": "正文",
+    "ai_generated": true,
+    "applied_direction": []
+  },
+  "/api/v1/content/tasks/t1/versions": []
+}

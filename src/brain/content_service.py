@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from uuid import UUID
 
 from src.brain.content_control_service import (
@@ -124,7 +125,7 @@ class ContentService:
         assets = self._repository.load_active_assets(
             scope, primary_product, sanitized_seed, products, target, is_recompile
         )
-        control = self._control_context(scope, context, controls)
+        control = self._control_context(scope, context, controls, sanitized_seed)
         task_id, run_id, prior_body = self._repository.create_task_and_running_run(
             scope,
             sanitized_seed,
@@ -164,15 +165,30 @@ class ContentService:
         scope: TrustedScope,
         context: BrandContext,
         controls: RequestedControls | None,
+        natural_text: str = "",
     ) -> ContentControlContext:
         """Resolve this request's own control choices against server-trusted brand boundaries."""
         if self._control is None:
-            return ContentControlContext(None, None, None, (), PREFERENCE_ABSENT, None)
+            return ContentControlContext(
+                catalog_version=None,
+                direction=None,
+                account_expression=None,
+                materials=(),
+                preference_mode=PREFERENCE_ABSENT,
+                preference_version=None,
+                content_role=context.content_role_name,
+                content_role_boundary=context.content_role_boundary,
+            )
         requested = controls or RequestedControls()
         boundary_text = " ".join(
             (context.tone, context.content_role_boundary, context.positioning, context.decision_order)
         )
-        creative, preference_mode, preference_version = self._control.resolve_request_direction(
+        (
+            creative,
+            preference_mode,
+            preference_version,
+            collaboration_note,
+        ) = self._control.resolve_request_direction(
             scope,
             dict(requested.selections),
             requested.custom_text,
@@ -180,6 +196,8 @@ class ContentService:
             requested.use_personal_preferences,
             boundary_text,
             requested.catalog_version,
+            cleared_axes=requested.cleared_axes,
+            natural_text=natural_text,
         )
         return ContentControlContext(
             catalog_version=self._control.catalog.catalog_version,
@@ -188,6 +206,9 @@ class ContentService:
             materials=self._control.reference_materials(scope, requested.material_ids),
             preference_mode=preference_mode,
             preference_version=preference_version,
+            content_role=context.content_role_name,
+            content_role_boundary=context.content_role_boundary,
+            collaboration_note=collaboration_note,
         )
 
     def _replayed_control(
@@ -221,6 +242,8 @@ class ContentService:
                 raise DomainError(_MISSING_FROZEN_MATERIAL)
         catalog_version = snapshot.get("catalog_version")
         preference_version = snapshot.get("private_preference_version")
+        frozen_role = snapshot.get("content_role")
+        frozen_boundary = snapshot.get("content_role_boundary")
         return ContentControlContext(
             catalog_version=str(catalog_version) if isinstance(catalog_version, str) else None,
             direction=direction_from_snapshot(snapshot),
@@ -230,6 +253,28 @@ class ContentService:
             preference_version=(
                 preference_version if isinstance(preference_version, int) else None
             ),
+            content_role=str(frozen_role) if isinstance(frozen_role, str) else "",
+            content_role_boundary=(
+                str(frozen_boundary) if isinstance(frozen_boundary, str) else ""
+            ),
+            # A revision replays conditions; it never reads today's private preference.
+            collaboration_note="",
+        )
+
+    @staticmethod
+    def _replayed_context(context: BrandContext, control: ContentControlContext) -> BrandContext:
+        """Speak from the identity this task froze, not from whatever the account carries today.
+
+        Renaming the account's expression identity, or rewriting its boundary, changes what the
+        next new task says.  It must not silently rewrite the identity an existing task and all
+        of its later versions were produced under.
+        """
+        if not control.content_role:
+            return context
+        return replace(
+            context,
+            content_role_name=control.content_role,
+            content_role_boundary=control.content_role_boundary or context.content_role_boundary,
         )
 
     @staticmethod
@@ -286,6 +331,7 @@ class ContentService:
             scope, primary_product, instruction, products, target, False
         )
         control = self._replayed_control(scope, snapshot)
+        context = self._replayed_context(context, control)
         run_id, parent_version_id, weak_seed, primary_product = self._repository.revise_task(
             scope,
             task_id,
@@ -388,6 +434,7 @@ class ContentService:
                     creative_direction=control.direction if control else None,
                     account_expression=control.account_expression if control else None,
                     reference_materials=control.materials if control else (),
+                    collaboration_note=control.collaboration_note if control else "",
                 )
             )
             assert_content_complete(artifact)

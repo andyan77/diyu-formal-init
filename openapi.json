@@ -293,6 +293,22 @@
         "title": "ContentVersionResponse",
         "type": "object"
       },
+      "ControlOrganizationRequest": {
+        "additionalProperties": false,
+        "description": "Which organization controls a publishing account, declared once by a tenant authority.",
+        "properties": {
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "organization_id"
+        ],
+        "title": "ControlOrganizationRequest",
+        "type": "object"
+      },
       "CreateContentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -500,6 +516,11 @@
             "title": "Body Related Opt In",
             "type": "boolean"
           },
+          "clear_direction_defaults": {
+            "default": false,
+            "title": "Clear Direction Defaults",
+            "type": "boolean"
+          },
           "collaboration_note": {
             "default": "",
             "maxLength": 500,
@@ -542,6 +563,14 @@
               }
             ],
             "title": "Catalog Version"
+          },
+          "cleared_axes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Cleared Axes",
+            "type": "array"
           },
           "custom_text": {
             "default": "",
@@ -681,6 +710,22 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "MaterialReferenceNoteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reference_note": {
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Reference Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference_note"
+        ],
+        "title": "MaterialReferenceNoteRequest",
         "type": "object"
       },
       "MaterialUploadRequest": {
@@ -2188,6 +2233,63 @@
         "summary": "Delete Material"
       }
     },
+    "/api/v1/materials/{asset_id}/reference-note": {
+      "patch": {
+        "description": "One sentence about an original nobody read; without it the original stays unusable.",
+        "operationId": "set_material_reference_note_api_v1_materials__asset_id__reference_note_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialReferenceNoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Material Reference Note Api V1 Materials  Asset Id  Reference Note Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Set Material Reference Note"
+      }
+    },
     "/api/v1/materials/{asset_scope}": {
       "post": {
         "operationId": "create_material_api_v1_materials__asset_scope__post",
@@ -2403,6 +2505,43 @@
         "summary": "Get Version"
       }
     },
+    "/api/v1/tenant-management/control-organizations": {
+      "get": {
+        "operationId": "control_organizations_api_v1_tenant_management_control_organizations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Control Organizations Api V1 Tenant Management Control Organizations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Control Organizations"
+      }
+    },
     "/api/v1/tenant-management/operators": {
       "get": {
         "operationId": "management_operators_api_v1_tenant_management_operators_get",
@@ -2559,6 +2698,63 @@
           }
         ],
         "summary": "Create Publishing Account"
+      }
+    },
+    "/api/v1/tenant-management/publishing-accounts/{account_id}/control-organization": {
+      "post": {
+        "description": "Declare, once, which organization controls this account.\n\nA value a migration inferred from a creation event is not evidence and grants nothing;\nthis is the explicit decision that makes profile maintenance possible.",
+        "operationId": "declare_control_organization_api_v1_tenant_management_publishing_accounts__account_id__control_organization_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlOrganizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Declare Control Organization Api V1 Tenant Management Publishing Accounts  Account Id  Control Organization Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Declare Control Organization"
       }
     },
     "/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile": {

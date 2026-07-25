@@ -16,6 +16,9 @@ class CreativeDirectionRequest(BaseModel):
 
     catalog_version: str | None = Field(default=None, max_length=80)
     selections: dict[str, str] = Field(default_factory=dict)
+    # Axes explicitly switched off for this task.  Saying nothing keeps a saved default; only
+    # this list turns one off, and it never edits the saved default itself.
+    cleared_axes: list[str] = Field(default_factory=list, max_length=5)
     custom_text: str = Field(default="", max_length=500)
     body_related_opt_in: bool = False
 
@@ -73,8 +76,42 @@ class CreationPreferenceRequest(BaseModel):
 
     enabled: bool = True
     direction_defaults: dict[str, str] = Field(default_factory=dict)
+    # Sending no defaults keeps the ones already saved; forgetting them is its own explicit act.
+    clear_direction_defaults: bool = False
     collaboration_note: str = Field(default="", max_length=500)
     body_related_opt_in: bool = False
+
+
+class ControlOrganizationRequest(BaseModel):
+    """Which organization controls a publishing account, declared once by a tenant authority."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    organization_id: UUID
+
+
+class MaterialReferenceNoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reference_note: str = Field(min_length=2, max_length=500)
+
+
+class UnmetCapabilityResponseRequest(BaseModel):
+    """笛语运维's minimum classification and reply; it changes nothing else."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gap_type: Literal[
+        "unclassified",
+        "knowledge",
+        "generation_method",
+        "media_tool",
+        "product_scope",
+        "policy_conflict",
+        "source_gap",
+    ]
+    status: Literal["received", "classified", "answered"]
+    response_text: str = Field(default="", max_length=1000)
 
 
 class ContentPlanItem(BaseModel):
