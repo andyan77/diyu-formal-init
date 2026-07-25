@@ -94,6 +94,17 @@ _SPOKEN_SLOT = "spoken"
 _COVER_PURPOSE = "cover"
 _SCENE_PURPOSE = "scene"
 
+# A sound_text that is nothing but a claim-id shorthand ("创作者口播：c8、c9内容").
+# The writer means "this step speaks those claims" — a semantics claim_refs
+# already carries — so the server resolves it deterministically to the claims'
+# own text. Any id mixed into real prose still fails closed downstream.
+_SOUND_CLAIM_REFERENCE = re.compile(
+    r"^(?:创作者)?(?:口播|说|台词|旁白|念)?\s*[:：]?\s*"
+    r"(c\d{1,3}(?:\s*[、,，和/]\s*c\d{1,3})*)"
+    r"\s*(?:的)?(?:内容|台词|原文|部分)?\s*[。.!！]?$"
+)
+_CLAIM_ID_TOKEN = re.compile(r"c\d{1,3}")
+
 ReasonCode = Literal[
     "untrusted_role",
     "invented_actuality",
@@ -591,14 +602,40 @@ class DeepSeekGenerator(ContentGenerator):
             raise ValueError("exactly one cover step is required")
         if not any(step.purpose == _SCENE_PURPOSE for step in steps):
             raise ValueError("at least one scene step is required")
-        core = ContentCore(
-            speaker_ref=context.speaker_id,
-            claims=tuple(claims),
-            spoken_order=tuple(order),
-            scene_steps=tuple(steps),
+        core = self._resolve_sound_references(
+            ContentCore(
+                speaker_ref=context.speaker_id,
+                claims=tuple(claims),
+                spoken_order=tuple(order),
+                scene_steps=tuple(steps),
+            )
         )
         self._assert_media_presence(request, core)
         return core
+
+    @staticmethod
+    def _resolve_sound_references(core: ContentCore) -> ContentCore:
+        claim_text = {claim.claim_id: claim.text for claim in core.claims}
+        steps: list[SceneStep] = []
+        changed = False
+        for step in core.scene_steps:
+            match = _SOUND_CLAIM_REFERENCE.match(step.sound_text.strip()) if step.sound_text else None
+            if match:
+                refs = _CLAIM_ID_TOKEN.findall(match.group(1))
+                if refs and all(ref in step.claim_refs and ref in claim_text for ref in refs):
+                    spoken = "".join(claim_text[ref] for ref in refs)
+                    steps.append(replace(step, sound_text=f"创作者口播：{spoken}"))
+                    changed = True
+                    continue
+            steps.append(step)
+        if not changed:
+            return core
+        return ContentCore(
+            speaker_ref=core.speaker_ref,
+            claims=core.claims,
+            spoken_order=core.spoken_order,
+            scene_steps=tuple(steps),
+        )
 
     @staticmethod
     def _assert_media_presence(request: GenerationInput, core: ContentCore) -> None:
@@ -850,11 +887,13 @@ class DeepSeekGenerator(ContentGenerator):
                 raise TypeError("repair units do not match the requested units")
         if set(replacements_claims) | set(replacements_steps) != requested:
             raise TypeError("repair units do not match the requested units")
-        repaired = ContentCore(
-            speaker_ref=core.speaker_ref,
-            claims=tuple(replacements_claims.get(claim.claim_id, claim) for claim in core.claims),
-            spoken_order=core.spoken_order,
-            scene_steps=tuple(replacements_steps.get(step.step_id, step) for step in core.scene_steps),
+        repaired = self._resolve_sound_references(
+            ContentCore(
+                speaker_ref=core.speaker_ref,
+                claims=tuple(replacements_claims.get(claim.claim_id, claim) for claim in core.claims),
+                spoken_order=core.spoken_order,
+                scene_steps=tuple(replacements_steps.get(step.step_id, step) for step in core.scene_steps),
+            )
         )
         self._assert_media_presence(request, repaired)
         return repaired
@@ -1311,7 +1350,8 @@ text、action_text、sound_text、production_note 中不得出现单元编号（
 spoken_order 把全部 slot=spoken 的 claim_id 按口播顺序排列，各出现一次。
 scene_steps 规则：purpose=cover 恰好 1 条（封面/首帧或首图），purpose=scene 至少 1 条（画面步骤/图序）；
 actor_refs/resource_refs 只能引用登记表中的 id，需要谁列谁，不需要则留空数组；action_text 为该步可直接
-拍摄的画面与动作；sound_text 为该步听到的声音（人声、环境底噪或可选背景音乐），没有额外声音留空字符串；
+拍摄的画面与动作；sound_text 为该步听到的声音（人声、环境底噪或可选背景音乐），必须写出实际语句或
+声音描述，禁止用编号指代台词（错误示例：口播：c8、c9内容），没有额外声音留空字符串；
 production_note 为制作提示，可留空；claim_refs 非空，指向该步服务的 claim。
 每个字段都必须是字符串或字符串数组，不要嵌套其他对象。"""
 
@@ -1441,7 +1481,8 @@ factual_conflict = 与已确认品牌、商品、资料或作用域冲突，或�
 source_refs（至少一个来源与 basis 匹配：brand_viewpoint ↔ brand_baseline/role_boundary/organization；
 confirmed_fact ↔ organization/product；user_premise ↔ user_request/user_actuality/prior_version；
 conditional_guidance ↔ method/brand_baseline/role_boundary）；修复后的 scene step 需要给出正确的
-actor_refs、resource_refs 和 claim_refs。可见文字中不得出现单元编号或 id 标记。
+actor_refs、resource_refs 和 claim_refs。可见文字中不得出现单元编号或 id 标记；若问题片段是
+c1、s2 这类编号，必须把编号替换为对应台词原文或删去，不得在任何字段保留编号。
 不要输出分类、证据、审查过程或解释。
 严格只返回一个 JSON 对象：{{"repairs":[…]}}。repairs 中每个元素是完整替换单元：claim 用
 {{"claim_id":"…","text":"…","basis":"…","actuality":"…","source_refs":["…"]}}；scene step 用

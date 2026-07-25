@@ -655,6 +655,103 @@ def test_deterministic_check_catches_unit_id_leak_in_visible_text(
     assert "c8" in {issue.fragment for issue in issues}
 
 
+def test_pure_claim_reference_sound_text_resolves_to_spoken_lines(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    steps = [
+        _step("s1", "cover", "手写标题卡：不必穿成同款。", ("c1",), resource_refs=("resource:onsite_text",)),
+        _step(
+            "s2",
+            "scene",
+            "当前创作者正对手机自然口播。",
+            ("c8", "c9"),
+            actor_refs=("actor:creator",),
+            resource_refs=("resource:phone",),
+            sound_text="创作者口播：c8、c9内容",
+        ),
+    ]
+    core = _video_core(steps=steps)
+    _install_fake(monkeypatch, [_core_response(core), _verdicts(core)])
+
+    artifact = _generator().generate(generation_input)
+
+    spoken = "一家人的家庭感，不一定来自穿成同款。我们更愿意先尊重每个人舒服的选择，再找一个自然的呼应点。"
+    assert isinstance(artifact.production, VideoProductionBundle)
+    assert artifact.production.sound_and_production == f"创作者口播：{spoken}"
+    assert "c8" not in artifact.body and "c9" not in artifact.body
+    assert artifact.fact_repair_receipts == ()
+    assert len(FakeClient.requests) == 2
+
+
+def test_sound_reference_outside_step_claim_refs_still_fails_closed(
+    generation_input: GenerationInput,
+) -> None:
+    context = BoundaryContext.from_request(generation_input)
+    steps = [
+        _step("s1", "cover", "手写标题卡。", ("c1",), resource_refs=("resource:onsite_text",)),
+        _step(
+            "s2",
+            "scene",
+            "当前创作者正对手机自然口播。",
+            ("c8",),
+            actor_refs=("actor:creator",),
+            resource_refs=("resource:phone",),
+            sound_text="创作者口播：c8、c9内容",
+        ),
+    ]
+    core = _generator()._parse_core(generation_input, context, _video_core(steps=steps))
+
+    issues = DeepSeekGenerator._deterministic_unit_issues(context, core)
+
+    assert ("s2", "factual_conflict") in {(issue.unit_id, issue.reason_code) for issue in issues}
+
+
+def test_repaired_step_with_claim_reference_shorthand_is_also_resolved(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    bad_steps = [
+        _step("s1", "cover", "手写标题卡：不必穿成同款。", ("c1",), resource_refs=("resource:onsite_text",)),
+        _step(
+            "s2",
+            "scene",
+            "当前创作者正对手机自然口播。",
+            ("c8", "c9"),
+            actor_refs=("actor:creator",),
+            resource_refs=("resource:phone",),
+            sound_text="创作者口播（对应c8）。",
+        ),
+    ]
+    core = _video_core(steps=bad_steps)
+    repaired_step = _step(
+        "s2",
+        "scene",
+        "当前创作者正对手机自然口播。",
+        ("c8", "c9"),
+        actor_refs=("actor:creator",),
+        resource_refs=("resource:phone",),
+        sound_text="口播：c8、c9 的内容",
+    )
+    _install_fake(
+        monkeypatch,
+        [
+            _core_response(core),
+            _verdicts(core),
+            _repairs(repaired_step),
+            _verdicts(core),
+        ],
+    )
+
+    artifact = _generator().generate(generation_input)
+
+    spoken = "一家人的家庭感，不一定来自穿成同款。我们更愿意先尊重每个人舒服的选择，再找一个自然的呼应点。"
+    assert isinstance(artifact.production, VideoProductionBundle)
+    assert artifact.production.sound_and_production == f"创作者口播：{spoken}"
+    assert "c8" not in artifact.body
+    assert len(FakeClient.requests) == 4
+
+
 def test_scene_steps_only_reference_registered_actors_and_resources(
     generation_input: GenerationInput,
 ) -> None:
