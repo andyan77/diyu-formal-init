@@ -9,7 +9,7 @@ from src.brain.content_expression import (
     GAP_TYPES,
     ExpressionCatalog,
     load_catalog,
-    natural_text_hits,
+    read_natural_text,
     resolve_direction,
 )
 from src.ports.content_control_repository import ContentControlRepository
@@ -306,6 +306,9 @@ class ContentControlService:
     ) -> tuple[CreativeDirection | None, PreferenceMode, int | None, str]:
         """This panel is for this task.  Saving a default is a separate, explicit action.
 
+        A saved default is the weakest input of the three: what the person clicked now wins, then
+        what this task's own words asked for, and only then the default.
+
         Returns the resolved direction, which preference mode applied, which preference version
         it was, and the person's own soft collaboration note when they are using preferences.
         """
@@ -344,7 +347,7 @@ class ContentControlService:
         }
         steered = bool(explicit or effective_defaults or cleared_axes or custom_text.strip())
         # Nothing steered by the panel; the person's own words may still map onto a label.
-        if not steered and not natural_text_hits(self._catalog, natural_text):
+        if not steered and not read_natural_text(self._catalog, natural_text).wanted:
             return None, mode, preference_version, collaboration_note
         direction = resolve_direction(
             self._catalog,

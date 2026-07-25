@@ -18,6 +18,7 @@ from src.brain.content_expression import (
     DECLARED_SOURCE_TARGETS,
     load_catalog,
     load_inventory,
+    read_natural_text,
     reconcile_sources,
 )
 from src.composition.bootstrap import build_content_control_service
@@ -32,12 +33,14 @@ from src.infrastructure.seed_demo import (
     USER_ID,
 )
 from src.shared.types import GeneratedArtifact, GenerationInput
+from src.tool.llm_gateway.deepseek import DeepSeekGenerator
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 
 _FRONTEND = Path(__file__).resolve().parents[1] / "frontend" / "src" / "main.tsx"
 _CATALOG_DIR = Path(__file__).resolve().parents[1] / "config" / "content_expression"
 _SEED = "开完一个正式会议后还要接孩子，这一身怎么穿才不用中途反复整理？"
 _STYLE_HUMOUR = "CAT-STYLE-PERSONA-06"
+_STYLE_PRACTICAL = "CAT-STYLE-PERSONA-01"
 _TOPIC_COMMUTE = "CAT-TOPIC-OCCASION-01"
 _MECHANISM_STEPS = "CAT-GENRE-TUTORIAL-01"
 _BODY_RELATED = "CAT-TOPIC-BODY-01"
@@ -1059,6 +1062,109 @@ def test_the_collaboration_note_reaches_generation_and_no_tenant_record(
     _clear_preference(app_database_url, USER_ID)
 
 
+def test_the_collaboration_note_never_becomes_material_the_product_talks_about(
+    app_database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _clear_preference(app_database_url, USER_ID)
+    note = "我平时更喜欢先说结论，再给一个具体例子。"
+    captured: list[GenerationInput] = []
+    original = DeterministicContentGenerator.generate
+
+    def capture(self: DeterministicContentGenerator, request: GenerationInput) -> GeneratedArtifact:
+        captured.append(request)
+        return original(self, request)
+
+    monkeypatch.setattr(DeterministicContentGenerator, "generate", capture)
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as client:
+        client.put(
+            "/api/v1/user/creation-preferences",
+            json={"enabled": True, "collaboration_note": note},
+        )
+        created = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
+        revised = client.post(
+            f"/api/v1/tasks/{created['task_id']}/revisions",
+            json={"instruction": "第二句更短一点，其他不动。"},
+        ).json()
+    for produced in (created, revised):
+        for field in ("outline", "body"):
+            assert note not in str(produced[field])
+            assert "先说结论" not in str(produced[field])
+
+    # The same adapter boundary the real model is given: the note steers the writing there, and
+    # it is handed over as a working instruction, never as material the product may talk about.
+    prompt = DeepSeekGenerator._generation_prompt(captured[0])
+    assert note in prompt
+    assert "成品中不得引用、复述、解释或提及这段说明本身" in prompt
+    assert "私人协作偏好说明只调整协作方式与表达取舍，成品中不得出现它的原文、转述或对它的解释" in prompt
+    # A revision replays frozen conditions, so the note is not even offered to the model.
+    assert note not in DeepSeekGenerator._generation_prompt(captured[-1])
+    _clear_preference(app_database_url, USER_ID)
+
+
+def test_a_cross_goal_adaptation_never_re_reads_todays_private_preference(
+    app_database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _clear_preference(app_database_url, USER_ID)
+    note = "我平时更喜欢先说结论。"
+    seen: list[str] = []
+    original = DeterministicContentGenerator.generate
+
+    def capture(self: DeterministicContentGenerator, request: GenerationInput) -> GeneratedArtifact:
+        seen.append(request.collaboration_note)
+        return original(self, request)
+
+    monkeypatch.setattr(DeterministicContentGenerator, "generate", capture)
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as client:
+        client.put(
+            "/api/v1/user/creation-preferences",
+            json={
+                "enabled": True,
+                "direction_defaults": {"style": _STYLE_HUMOUR},
+                "collaboration_note": note,
+            },
+        )
+        source = client.post(
+            "/api/v1/content", json={"weak_seed": _SEED, "target": "douyin_video"}
+        ).json()
+        assert source["applied_direction"] == ["克制的冷幽默"]
+        assert seen[-1] == note
+
+        adapted = client.post(
+            f"/api/v1/tasks/{source['task_id']}/revisions",
+            json={
+                "instruction": "改成小红书图文，保留事实与判断。",
+                "target": "xiaohongshu_graphic",
+                "source_target": "douyin_video",
+            },
+        )
+        assert adapted.status_code == 201
+        result = adapted.json()
+        assert result["task_id"] != source["task_id"]
+        # Adapting a task to another goal is still that task's revision: today's saved default
+        # and today's collaboration note stay out of it.
+        assert result["applied_direction"] == []
+        assert seen[-1] == ""
+        assert (
+            _snapshot(app_database_url, result["task_id"])["private_preference_mode"]
+            == "temporarily_bypassed"
+        )
+
+        # A same-goal revision keeps replaying the snapshot, in an ordinary session and in a
+        # temporary preference-free one; the revision endpoint reads that session header too.
+        for headers in ({}, {"X-Diyu-Preference-Session": "bypass"}):
+            revised = client.post(
+                f"/api/v1/tasks/{source['task_id']}/revisions",
+                json={"instruction": "第二句更短一点，其他不动。", "target": "douyin_video"},
+                headers=headers,
+            )
+            assert revised.status_code == 201
+            assert revised.json()["applied_direction"] == ["克制的冷幽默"]
+            assert seen[-1] == ""
+    _clear_preference(app_database_url, USER_ID)
+
+
 def test_a_temporary_preference_free_session_neither_reads_nor_writes_the_preference(
     app_database_url: str,
 ) -> None:
@@ -1303,6 +1409,92 @@ def test_free_text_naming_a_declared_label_reuses_the_visible_translation(
             },
         ).json()
         assert explicit["applied_direction"] == ["干货攻略"]
+
+
+def test_a_saved_default_never_outranks_what_this_task_asks_for(
+    app_database_url: str,
+) -> None:
+    _clear_preference(app_database_url, USER_ID)
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as client:
+        client.put(
+            "/api/v1/user/creation-preferences",
+            json={"enabled": True, "direction_defaults": {"style": _STYLE_PRACTICAL}},
+        )
+        spoken = client.post(
+            "/api/v1/content", json={"weak_seed": f"{_SEED}这次不要干货，想幽默一点。"}
+        ).json()
+        # A saved default is a standing convenience, so what this task asks for outranks it.
+        assert spoken["applied_direction"] == ["克制的冷幽默"]
+        assert "干货" not in str(spoken["translation_notice"])
+        origins = {
+            item["axis"]: item["origin"]
+            for item in _snapshot(app_database_url, spoken["task_id"])["original_direction"][
+                "selections"
+            ]
+        }
+        assert origins == {"style": "natural_text"}
+
+        # Refusing the default is itself a requirement for this task: it drops for this run and
+        # nothing is put in its place.
+        dropped = client.post(
+            "/api/v1/content", json={"weak_seed": f"{_SEED}这次不要干货。"}
+        ).json()
+        assert dropped["applied_direction"] == []
+        assert dropped["translation_notice"] is None
+
+        # The saved default itself is untouched; only an explicit save may change it.
+        kept = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
+        assert kept["applied_direction"] == ["干货攻略"]
+        assert client.get("/api/v1/user/creation-preferences").json()["direction_defaults"] == {
+            "style": _STYLE_PRACTICAL
+        }
+    _clear_preference(app_database_url, USER_ID)
+
+
+def test_refusing_a_declared_label_is_never_read_as_choosing_it(
+    app_database_url: str,
+) -> None:
+    catalog = load_catalog()
+    for phrase in (
+        "这次不要幽默玩梗",
+        "不想要幽默玩梗",
+        "别用幽默玩梗",
+        "不用幽默玩梗",
+        "取消幽默玩梗",
+    ):
+        reading = read_natural_text(catalog, phrase)
+        assert reading.wanted == {}, phrase
+        assert _STYLE_HUMOUR in reading.refused, phrase
+    # The refusal words are read as words, not as a style detector: an ordinary sentence that
+    # happens to contain one still chooses normally.
+    wanted = read_natural_text(catalog, "不用中途整理，想幽默一点").wanted
+    assert wanted["style"].stable_id == _STYLE_HUMOUR
+
+    _clear_preference(app_database_url, USER_ID)
+    app = create_app(Settings.model_validate({}))
+    with _content_client(app) as client:
+        plain = client.post(
+            "/api/v1/content", json={"weak_seed": f"{_SEED}这次不要幽默玩梗。"}
+        ).json()
+        assert plain["applied_direction"] == []
+        assert plain["translation_notice"] is None
+
+        client.put(
+            "/api/v1/user/creation-preferences",
+            json={"enabled": True, "direction_defaults": {"style": _STYLE_HUMOUR}},
+        )
+        refused = client.post(
+            "/api/v1/content", json={"weak_seed": f"{_SEED}这次不要幽默玩梗。"}
+        ).json()
+        # Neither the label the person declined nor its restrained translation may appear.
+        assert refused["applied_direction"] == []
+        assert refused["translation_notice"] is None
+        frozen = _snapshot(app_database_url, refused["task_id"])
+        assert frozen["applied_direction"] == []
+        assert frozen["original_direction"]["selections"] == []
+        assert "幽默" not in json.dumps(frozen["applied_direction"], ensure_ascii=False)
+    _clear_preference(app_database_url, USER_ID)
 
 
 def test_free_text_that_cannot_be_mapped_is_kept_exactly_as_written(

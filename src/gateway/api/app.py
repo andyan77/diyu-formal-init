@@ -102,6 +102,9 @@ _HEADQUARTERS_TARGETS: tuple[tuple[ContentTarget, str], ...] = (
 )
 _STORE_TARGETS: tuple[tuple[ContentTarget, str], ...] = (("douyin_video", "抖音视频"),)
 _RUNTIME_LOGGER = logging.getLogger("diyu.runtime")
+# No revision path may re-read today's private preference: a same-goal revision replays the
+# conditions the task froze, and a cross-goal adaptation recompiles those same conditions.
+_REVISION_MAY_READ_PREFERENCE = False
 
 
 def _safe_log_path(path: str) -> str:
@@ -1241,10 +1244,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: RevisionRequest,
         request: Request,
         _: TrustedScope = Depends(scope_from_request),
+        bypassed: bool = Depends(preference_session_bypassed),
     ) -> dict[str, object]:
+        """Both revision paths replay what this task froze; neither reads today's preference."""
         target = _target(payload.target, payload.instruction)
         source_target = payload.source_target or payload.target or "douyin_video"
         source_scope = authority.require_content_target(request, source_target)
+        # A same-goal revision reads the frozen snapshot and nothing else.  A cross-goal
+        # adaptation recompiles from that same task, so it is handed an explicitly
+        # preference-free control input.  Declaring the temporary preference-free session here
+        # keeps that session honest end to end: it can only narrow this further, never widen it.
+        reads_preference = _REVISION_MAY_READ_PREFERENCE and not bypassed
         with model_slot(request):
             if target != source_target:
                 return service.recompile_task(
@@ -1253,6 +1263,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     task_id,
                     payload.instruction,
                     target,
+                    RequestedControls(use_personal_preferences=reads_preference),
                 )
             return service.revise(source_scope, task_id, payload.instruction, target)
 

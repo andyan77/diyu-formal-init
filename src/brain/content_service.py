@@ -375,9 +375,22 @@ class ContentService:
         task_id: UUID,
         instruction: str,
         target: ContentTarget,
+        controls: RequestedControls | None = None,
     ) -> dict[str, object]:
+        """Adapt an existing task to another goal by recompiling its own latest version.
+
+        This is still that task's revision, not a fresh request, so it must not quietly pull in
+        today's private preference: the default here is already preference-free, and a caller may
+        only narrow it further.
+        """
         source_version_id = self._repository.latest_task_version(source_scope, task_id)
-        return self.create_from_weak_seed(target_scope, instruction, source_version_id, target)
+        return self.create_from_weak_seed(
+            target_scope,
+            instruction,
+            source_version_id,
+            target,
+            controls or RequestedControls(use_personal_preferences=False),
+        )
 
     def identity_summary(
         self, scope: TrustedScope, target: ContentTarget = "douyin_video"

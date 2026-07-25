@@ -241,7 +241,8 @@ class CreatePublishingAccountRequest(BaseModel):
     content_role_name: str = Field(min_length=1, max_length=80)
     voice_boundary: str = Field(min_length=1, max_length=500)
     operator_id: UUID
-    # Which organization controls this account; defaults to the creating administrator's own.
+    # Which organization controls this account.  There is no default: leaving it empty means
+    # nobody may maintain this account's expression profile until it is explicitly declared.
     control_organization_id: UUID | None = None
 
 

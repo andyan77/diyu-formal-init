@@ -30,6 +30,12 @@ GAP_TYPES = frozenset(
         "source_gap",
     }
 )
+# The few spellings that turn a mention into a refusal.  They are checked as exact words, only
+# in the short run of characters immediately before a declared label and only inside the same
+# sentence; this is not fuzzy style detection and not a keyword blacklist.
+REFUSAL_MARKERS: tuple[str, ...] = ("不要", "不想", "别", "不用", "取消")
+_REFUSAL_WINDOW = 4
+_SENTENCE_BREAKS = "，。！？；：\n,.!?;:"
 # Declared research targets from ADR-027 §决策 2.  They are reconciliation goals, not evidence
 # that the positions exist; missing positions become CAT-SOURCE-GAP-* records.
 DECLARED_SOURCE_TARGETS: tuple[tuple[str, str, int], ...] = (
@@ -215,28 +221,81 @@ def boundary_is_restrained(catalog: ExpressionCatalog, boundary_text: str) -> bo
     return any(marker in boundary_text for marker in catalog.restraint_markers)
 
 
-def natural_text_hits(catalog: ExpressionCatalog, text: str) -> dict[str, CatalogEntry]:
-    """Map the person's own words onto a catalog entry, only on an exact declared spelling.
+def _declared_spellings(entry: CatalogEntry) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(word for word in (entry.label, *entry.aliases) if word))
 
-    This exists so free text that would otherwise be clamped invisibly reuses the same visible
-    restraint mechanism a clicked option gets.  Only entries that carry a restrained variant or
-    are body related take part, the longest declared spelling wins, and everything else is left
-    exactly as written — there is no fuzzy style detection, keyword blacklist or second model.
+
+def _mention_positions(text: str, word: str) -> list[int]:
+    positions: list[int] = []
+    start = text.find(word)
+    while start >= 0:
+        positions.append(start)
+        start = text.find(word, start + 1)
+    return positions
+
+
+def _is_refused_at(text: str, start: int) -> bool:
+    """True when one of the declared refusal words sits right in front of this mention."""
+    window = text[max(0, start - _REFUSAL_WINDOW) : start]
+    for separator in _SENTENCE_BREAKS:
+        window = window.rsplit(separator, 1)[-1]
+    return any(marker in window for marker in REFUSAL_MARKERS)
+
+
+@dataclass(frozen=True)
+class NaturalTextReading:
+    """What this task's own words asked for, and what they asked not to use."""
+
+    wanted: Mapping[str, CatalogEntry]
+    refused: frozenset[str]
+
+
+def read_natural_text(catalog: ExpressionCatalog, text: str) -> NaturalTextReading:
+    """Read the person's own words against the declared spellings, and nothing else.
+
+    A mention only counts when the person wrote a spelling this catalog declares.  A mention
+    that one of the declared refusal words directly precedes in the same sentence is a refusal,
+    never a choice.  Only entries that carry a restrained variant or are body related can be
+    *applied* from free text, because applying one has to reuse the same visible restraint a
+    clicked option gets; any declared entry can be *refused*, because a refusal only ever removes
+    something and can never introduce an option.  The longest declared spelling wins per axis and
+    everything else is left exactly as written — there is no fuzzy style detection, keyword
+    blacklist, second model or review agent anywhere in this path.
     """
     if not text:
-        return {}
-    matched: dict[str, tuple[int, CatalogEntry]] = {}
+        return NaturalTextReading({}, frozenset())
+    wanted: dict[str, tuple[int, CatalogEntry]] = {}
+    refused: set[str] = set()
     for entry in catalog.entries:
-        if not (entry.restrained_variant or entry.body_related):
-            continue
-        hits = [word for word in (entry.label, *entry.aliases) if word and word in text]
-        if not hits:
-            continue
-        length = max(len(word) for word in hits)
-        current = matched.get(entry.axis)
-        if current is None or length > current[0]:
-            matched[entry.axis] = (length, entry)
-    return {axis: entry for axis, (_, entry) in matched.items()}
+        chosen = 0
+        declined = 0
+        length = 0
+        # Longest spelling first, and a shorter one nested inside it is the same mention, not a
+        # second one — otherwise 「不想要幽默玩梗」 would read as refusing 幽默玩梗 and choosing 玩梗.
+        counted: list[tuple[int, int]] = []
+        for word in sorted(_declared_spellings(entry), key=len, reverse=True):
+            for start in _mention_positions(text, word):
+                end = start + len(word)
+                if any(start >= left and end <= right for left, right in counted):
+                    continue
+                counted.append((start, end))
+                if _is_refused_at(text, start):
+                    declined += 1
+                else:
+                    chosen += 1
+                    length = max(length, len(word))
+        if chosen:
+            if not (entry.restrained_variant or entry.body_related):
+                continue
+            current = wanted.get(entry.axis)
+            if current is None or length > current[0]:
+                wanted[entry.axis] = (length, entry)
+        elif declined:
+            refused.add(entry.stable_id)
+    return NaturalTextReading(
+        wanted={axis: entry for axis, (_, entry) in wanted.items()},
+        refused=frozenset(refused),
+    )
 
 
 def resolve_direction(
@@ -252,8 +311,10 @@ def resolve_direction(
 ) -> CreativeDirection:
     """Keep the user's own choice and, on a soft brand conflict, say how it was translated.
 
-    Each axis is in exactly one of three states: an explicit choice for this task, a saved
-    default carried over, or switched off for this task.  A cleared axis never falls back to a
+    Per axis the order is: what the person clicked for this task, then what this task's own words
+    asked for, then a saved default.  A default is a standing convenience, so it never overrides
+    what the person just said — including a refusal of that very default, which suppresses it for
+    this task without editing the saved default itself.  A cleared axis never falls back to a
     saved default, and saying nothing never reads as switching a default off.
     """
     if requested_catalog_version and requested_catalog_version != catalog.catalog_version:
@@ -265,7 +326,7 @@ def resolve_direction(
     if unknown_axes:
         raise _fail("创作方向只使用固定的五个方面。")
     restrained = boundary_is_restrained(catalog, boundary_text)
-    from_text = natural_text_hits(catalog, natural_text)
+    spoken = read_natural_text(catalog, natural_text)
     resolved: list[DirectionSelection] = []
     notices: list[str] = []
     suggestions: list[str] = []
@@ -275,21 +336,24 @@ def resolve_direction(
         origin = "explicit"
         stable_id = selections.get(axis)
         if not stable_id:
-            stable_id = defaults.get(axis)
-            origin = "default"
-        if not stable_id:
-            entry = from_text.get(axis)
-            if entry is None:
-                continue
-            if entry.body_related and not body_related_opt_in:
+            asked = spoken.wanted.get(axis)
+            if asked is not None and asked.body_related and not body_related_opt_in:
                 # A hard conflict: never silently apply it, never silently replace the wording.
                 suggestions.append(
-                    f"你提到的「{entry.label}」属于体型相关表达，需要你自己先打开才会使用；"
+                    f"你提到的「{asked.label}」属于体型相关表达，需要你自己先打开才会使用；"
                     "这次按你原话保留，没有替换。"
                 )
-                continue
-            stable_id = entry.stable_id
-            origin = "natural_text"
+                asked = None
+            if asked is not None:
+                stable_id = asked.stable_id
+                origin = "natural_text"
+        if not stable_id:
+            saved = defaults.get(axis)
+            if saved and saved not in spoken.refused:
+                stable_id = saved
+                origin = "default"
+        if not stable_id:
+            continue
         entry = catalog.entry(stable_id)
         if entry is None or entry.axis != axis:
             if origin == "default":

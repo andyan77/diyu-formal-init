@@ -45,7 +45,7 @@
       "axis": "style",
       "label": "干货攻略",
       "source_label": "干货攻略",
-      "aliases": [],
+      "aliases": ["干货攻略", "干货"],
       "capability_state": "composable",
       "body_related": false,
       "restrained_variant": "",

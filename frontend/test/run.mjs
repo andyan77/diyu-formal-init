@@ -13,6 +13,8 @@ const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></
   url: "http://localhost/content",
   pretendToBeVisual: true
 });
+// defineProperty rather than assignment: Node 20 has no global navigator, while Node 22 defines
+// one as a getter-only accessor, and plain assignment to that throws in a module.
 for (const name of [
   "window",
   "document",
@@ -26,9 +28,12 @@ for (const name of [
   "HTMLTextAreaElement",
   "getComputedStyle"
 ]) {
-  globalThis[name] = dom.window[name] ?? dom.window;
+  Object.defineProperty(globalThis, name, {
+    value: dom.window[name] ?? dom.window,
+    configurable: true,
+    writable: true
+  });
 }
-globalThis.document = dom.window.document;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const requests = [];

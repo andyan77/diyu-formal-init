@@ -214,9 +214,11 @@ class BoundaryContext:
         if request.collaboration_note:
             # The acting person's own soft collaboration preference: it shapes how we work with
             # them, never what counts as a fact, and it is not written into any tenant record.
+            # It steers the writing; it is never material the writing is allowed to talk about.
             direction_lines.append(
                 "当前自然人本人的私人协作偏好说明（只影响协作方式与表达取舍，"
-                f"不作为事实来源，也不代表品牌立场）：{request.collaboration_note}"
+                "不作为事实来源，也不代表品牌立场；成品中不得引用、复述、解释或提及这段说明本身，"
+                f"只体现它带来的表达取舍）：{request.collaboration_note}"
             )
         for material in request.reference_materials:
             if material.media_type == "text" and material.text_body:
@@ -1376,6 +1378,7 @@ class DeepSeekGenerator(ContentGenerator):
   “我们的导购会/不会……”这类现实描述；
 - 不得声称品牌的商品线、商品能力或“我们做某类衣服”；边界四没有已确认商品时，只能谈观点与方法；
 - 一般颜色、品类和搭配只可作为明确的假设例子被口播讨论，不能被当作现有实物安排出镜；
+- 私人协作偏好说明只调整协作方式与表达取舍，成品中不得出现它的原文、转述或对它的解释；
 - 可用条件存在多个替代项时，采用能完成内容的最小资源组合。
 
 跨目标重编译时只重组入口、顺序、声画或图文分工和制作方式；不得把旧版说成已经采用或发布。
