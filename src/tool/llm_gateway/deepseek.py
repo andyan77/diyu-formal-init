@@ -112,49 +112,6 @@ ReasonCode = Literal[
     "factual_conflict",
     "media_contract",
 ]
-StatementKind = Literal[
-    "stance",
-    "hypothetical_or_guidance",
-    "confirmed_state",
-    "reported_event",
-    "operational_practice",
-    "unknown",
-]
-ResourceCapability = Literal[
-    "creator_appearance",
-    "phone_capture",
-    "phone_audio",
-    "onsite_text",
-    "neutral_background",
-    "confirmed_product",
-    "registered_photo",
-    "registered_video",
-    "additional_person",
-    "concrete_prop",
-    "unknown",
-]
-
-_STATEMENT_KINDS: tuple[StatementKind, ...] = (
-    "stance",
-    "hypothetical_or_guidance",
-    "confirmed_state",
-    "reported_event",
-    "operational_practice",
-    "unknown",
-)
-_CAPABILITY_CATALOG: tuple[tuple[ResourceCapability, str], ...] = (
-    ("creator_appearance", "当前创作者本人在画面中出现或表演"),
-    ("phone_capture", "使用当前手机现场拍摄；不包含手机中已有的照片或视频"),
-    ("phone_audio", "使用当前手机现场收音"),
-    ("onsite_text", "现场输入、书写或拍摄新写下的文字"),
-    ("neutral_background", "使用不依赖具体地点陈设的中性背景"),
-    ("confirmed_product", "展示本次已经登记的对应商品"),
-    ("registered_photo", "展示本次已经登记的既有照片"),
-    ("registered_video", "展示本次已经登记的既有视频"),
-    ("additional_person", "除当前创作者外的明确人物出镜、表演或发声"),
-    ("concrete_prop", "使用当前能力表另行明确登记的具体道具"),
-    ("unknown", "无法归入受控词表或无法稳定判断的资源需求"),
-)
 
 
 @dataclass(frozen=True)
@@ -177,11 +134,8 @@ class BoundaryContext:
     speaker_id: str
     actors: tuple[tuple[str, str], ...]
     resources: tuple[tuple[str, str], ...]
-    capabilities: tuple[ResourceCapability, ...]
     viewpoint_sources: tuple[tuple[str, str], ...]
     confirmed_sources: tuple[tuple[str, str], ...]
-    reported_event_sources: tuple[tuple[str, str], ...]
-    operational_practice_sources: tuple[tuple[str, str], ...]
     premise_sources: tuple[tuple[str, str], ...]
     guidance_sources: tuple[tuple[str, str], ...]
     user_actuality_source: str | None
@@ -205,16 +159,10 @@ class BoundaryContext:
             for identifier, _ in (
                 *self.viewpoint_sources,
                 *self.confirmed_sources,
-                *self.reported_event_sources,
-                *self.operational_practice_sources,
                 *self.premise_sources,
                 *self.guidance_sources,
             )
         )
-
-    @property
-    def capability_ids(self) -> frozenset[ResourceCapability]:
-        return frozenset(self.capabilities)
 
     def allowed_sources_for_basis(self, basis: str) -> frozenset[str]:
         """The sources that can carry a basis.
@@ -229,14 +177,7 @@ class BoundaryContext:
             # organization's registered existence.
             return frozenset((_ORGANIZATION_SOURCE_ID, *(identifier for identifier, _ in self.viewpoint_sources)))
         if basis == "confirmed_fact":
-            return frozenset(
-                identifier
-                for identifier, _ in (
-                    *self.confirmed_sources,
-                    *self.reported_event_sources,
-                    *self.operational_practice_sources,
-                )
-            )
+            return frozenset(identifier for identifier, _ in self.confirmed_sources)
         if basis == "user_premise":
             return frozenset(identifier for identifier, _ in self.premise_sources)
         # Conditional guidance may lean on method notes or the brand baseline.
@@ -317,14 +258,6 @@ class BoundaryContext:
             (_ONSITE_TEXT_RESOURCE_ID, "创作者现场手写字卡或手机屏幕文字"),
             *((f"resource:product:{product.sku}", f"已确认商品样衣 {product.sku}") for product in request.products),
         )
-        capabilities: tuple[ResourceCapability, ...] = (
-            "creator_appearance",
-            "phone_capture",
-            "phone_audio",
-            "onsite_text",
-            "neutral_background",
-            *(("confirmed_product",) if request.products else ()),
-        )
 
         return cls(
             task_topic_or_request=topic,
@@ -350,11 +283,8 @@ class BoundaryContext:
             speaker_id=_SPEAKER_ID,
             actors=((_CREATOR_ACTOR_ID, "当前创作者（实际操作人，仅以拍摄者/口播者身份出现，不扮演话题人物）"),),
             resources=resources,
-            capabilities=capabilities,
             viewpoint_sources=viewpoint_sources,
             confirmed_sources=confirmed_sources,
-            reported_event_sources=(),
-            operational_practice_sources=(),
             premise_sources=tuple(premise_sources),
             guidance_sources=guidance_sources,
             user_actuality_source=user_actuality_source,
@@ -421,18 +351,6 @@ class UnitIssue:
     unit_id: str
     reason_code: ReasonCode
     fragment: str
-
-
-@dataclass(frozen=True)
-class UnitObservation:
-    """Independent semantic observations for one complete visible unit."""
-
-    unit_id: str
-    observed_fields: tuple[str, ...]
-    identity_ok: bool
-    fact_ok: bool
-    statement_kinds: tuple[StatementKind, ...]
-    required_capabilities: tuple[ResourceCapability, ...]
 
 
 class DeepSeekGenerator(ContentGenerator):
@@ -596,17 +514,6 @@ class DeepSeekGenerator(ContentGenerator):
         if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
             raise TypeError("references must be a list of non-empty strings")
         return tuple(dict.fromkeys(item.strip() for item in value))
-
-    @staticmethod
-    def _strict_string_list(value: object, *, allow_empty: bool) -> tuple[str, ...]:
-        if not isinstance(value, list) or any(
-            not isinstance(item, str) or not item.strip() for item in value
-        ):
-            raise TypeError("observation values must be a list of strings")
-        items = tuple(item.strip() for item in value)
-        if (not allow_empty and not items) or len(set(items)) != len(items):
-            raise TypeError("observation values must be complete and unique")
-        return items
 
     def _parse_core(
         self,
@@ -873,171 +780,50 @@ class DeepSeekGenerator(ContentGenerator):
             thinking_disabled=False,
             timeout_seconds=self._judge_timeout_seconds,
         )
-        observations = self._parse_observations(payload, core)
+        verdicts = self._parse_verdicts(payload, core.unit_ids)
         issues: list[UnitIssue] = []
+        reason_by_flag: tuple[tuple[str, ReasonCode], ...] = (
+            ("identity_ok", "untrusted_role"),
+            ("actuality_ok", "invented_actuality"),
+            ("resource_ok", "unsupported_resource"),
+            ("fact_ok", "factual_conflict"),
+        )
         step_by_id = {step.step_id: step for step in core.scene_steps}
         for unit_id in core.unit_ids:
-            observation = observations[unit_id]
-            fragment = self._visible_unit_text(core, unit_id)
-            if not observation.identity_ok:
-                issues.append(UnitIssue(unit_id, "untrusted_role", fragment))
-            if not observation.fact_ok:
-                issues.append(UnitIssue(unit_id, "factual_conflict", fragment))
-            if any(capability not in context.capability_ids for capability in observation.required_capabilities):
-                issues.append(UnitIssue(unit_id, "unsupported_resource", fragment))
-            supporting_claims = (
-                (core.claim(unit_id),)
-                if unit_id not in step_by_id
-                else tuple(core.claim(claim_id) for claim_id in step_by_id[unit_id].claim_refs)
-            )
-            if any(
-                not self._statement_kind_supported(context, supporting_claims, statement_kind)
-                for statement_kind in observation.statement_kinds
-            ):
-                issues.append(UnitIssue(unit_id, "invented_actuality", fragment))
+            verdict = verdicts[unit_id]
+            fragment = core.claim(unit_id).text if unit_id not in step_by_id else step_by_id[unit_id].action_text
+            for flag, reason in reason_by_flag:
+                if not verdict[flag]:
+                    issues.append(UnitIssue(unit_id, reason, fragment))
         return tuple(issues), payload, retries
 
     @staticmethod
-    def _visible_unit_text(core: ContentCore, unit_id: str) -> str:
-        step = next((candidate for candidate in core.scene_steps if candidate.step_id == unit_id), None)
-        if step is None:
-            return core.claim(unit_id).text
-        return " ".join(
-            text for text in (step.action_text, step.sound_text, step.production_note) if text
-        )
-
-    @staticmethod
-    def _statement_kind_supported(
-        context: BoundaryContext,
-        claims: tuple[ContentClaim, ...],
-        statement_kind: StatementKind,
-    ) -> bool:
-        """Compute legality from trusted registries after independent observation."""
-
-        def carries(claim: ContentClaim, basis: str) -> bool:
-            return claim.basis == basis and any(
-                source in context.allowed_sources_for_basis(basis) for source in claim.source_refs
-            )
-
-        if statement_kind == "unknown":
-            return False
-        if statement_kind == "stance":
-            return any(carries(claim, "brand_viewpoint") for claim in claims)
-        if statement_kind == "hypothetical_or_guidance":
-            return any(
-                carries(claim, claim.basis)
-                and (
-                    claim.basis in ("user_premise", "conditional_guidance")
-                    or claim.actuality == "hypothetical"
-                )
-                for claim in claims
-            ) or any(carries(claim, "brand_viewpoint") for claim in claims)
-        if statement_kind == "confirmed_state":
-            return any(
-                carries(claim, "confirmed_fact") and claim.actuality == "non_event" for claim in claims
-            )
-        if statement_kind == "reported_event":
-            user_actuality_support = any(
-                claim.actuality == "user_presented_actual"
-                and context.user_actuality_source is not None
-                and context.user_actuality_source in claim.source_refs
-                for claim in claims
-            )
-            confirmed_event_sources = frozenset(
-                identifier for identifier, _ in context.reported_event_sources
-            )
-            confirmed_source_support = bool(confirmed_event_sources) and any(
-                carries(claim, "confirmed_fact")
-                and any(source in confirmed_event_sources for source in claim.source_refs)
-                for claim in claims
-            )
-            return user_actuality_support or confirmed_source_support
-        if statement_kind == "operational_practice":
-            practice_sources = frozenset(
-                identifier for identifier, _ in context.operational_practice_sources
-            )
-            return bool(practice_sources) and any(
-                carries(claim, "confirmed_fact")
-                and any(source in practice_sources for source in claim.source_refs)
-                for claim in claims
-            )
-        return False
-
-    @staticmethod
-    def _parse_observations(
-        payload: dict[str, Any],
-        core: ContentCore,
-    ) -> dict[str, UnitObservation]:
-        """Require one strict observation over every visible field of every unit."""
+    def _parse_verdicts(payload: dict[str, Any], expected_ids: tuple[str, ...]) -> dict[str, dict[str, bool]]:
+        """Every unit gets a complete verdict; a sparse or drifting id set fails closed."""
         try:
             result = json.loads(DeepSeekGenerator._json_content(str(payload["choices"][0]["message"]["content"])))
-            if set(result) != {"observations"}:
-                raise TypeError("observation envelope drifted")
-            raw_observations = result["observations"]
-            if not isinstance(raw_observations, list):
-                raise TypeError("observations must be a list")
-            expected_fields = {
-                **{claim.claim_id: ("text",) for claim in core.claims},
-                **{
-                    step.step_id: ("action_text", "sound_text", "production_note")
-                    for step in core.scene_steps
-                },
-            }
-            observations: dict[str, UnitObservation] = {}
-            for entry in raw_observations:
+            raw_verdicts = result["verdicts"]
+            if not isinstance(raw_verdicts, list):
+                raise TypeError("verdicts must be a list")
+            verdicts: dict[str, dict[str, bool]] = {}
+            for entry in raw_verdicts:
                 if not isinstance(entry, dict):
-                    raise TypeError("observation must be an object")
-                if set(entry) != {
-                    "id",
-                    "observed_fields",
-                    "identity_ok",
-                    "fact_ok",
-                    "statement_kinds",
-                    "required_capabilities",
-                }:
-                    raise TypeError("observation fields drifted")
+                    raise TypeError("verdict must be an object")
                 unit_id = entry.get("id")
-                if not isinstance(unit_id, str) or unit_id not in expected_fields or unit_id in observations:
-                    raise TypeError("observation id set does not match the units under review")
-                observed_fields = DeepSeekGenerator._strict_string_list(
-                    entry.get("observed_fields"),
-                    allow_empty=False,
-                )
-                if observed_fields != expected_fields[unit_id]:
-                    raise TypeError("visible field coverage is incomplete")
-                identity_ok = entry.get("identity_ok")
-                fact_ok = entry.get("fact_ok")
-                if not isinstance(identity_ok, bool) or not isinstance(fact_ok, bool):
-                    raise TypeError("observation flags must be booleans")
-                raw_kinds = DeepSeekGenerator._strict_string_list(
-                    entry.get("statement_kinds"),
-                    allow_empty=False,
-                )
-                normalized_kinds = tuple(
-                    kind if kind in _STATEMENT_KINDS else "unknown" for kind in raw_kinds
-                )
-                raw_capabilities = DeepSeekGenerator._strict_string_list(
-                    entry.get("required_capabilities"),
-                    allow_empty=True,
-                )
-                capability_catalog = dict(_CAPABILITY_CATALOG)
-                normalized_capabilities = tuple(
-                    capability if capability in capability_catalog else "unknown"
-                    for capability in raw_capabilities
-                )
-                observations[unit_id] = UnitObservation(
-                    unit_id=unit_id,
-                    observed_fields=observed_fields,
-                    identity_ok=identity_ok,
-                    fact_ok=fact_ok,
-                    statement_kinds=normalized_kinds,
-                    required_capabilities=normalized_capabilities,
-                )
-            if set(observations) != set(expected_fields):
-                raise TypeError("observation id set does not match the units under review")
+                if not isinstance(unit_id, str) or unit_id not in expected_ids or unit_id in verdicts:
+                    raise TypeError("verdict id set does not match the units under review")
+                flags: dict[str, bool] = {}
+                for flag in ("identity_ok", "actuality_ok", "resource_ok", "fact_ok"):
+                    value = entry.get(flag)
+                    if not isinstance(value, bool):
+                        raise TypeError("verdict flags must be complete booleans")
+                    flags[flag] = value
+                verdicts[unit_id] = flags
+            if set(verdicts) != set(expected_ids):
+                raise TypeError("verdict id set does not match the units under review")
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise GenerationFailed("模型边界判定返回格式不完整") from exc
-        return observations
+        return verdicts
 
     # ------------------------------------------------------------------
     # One unit-level repair, then a fresh complete review
@@ -1440,18 +1226,12 @@ class DeepSeekGenerator(ContentGenerator):
                 + "；".join(f"{identifier} = {description}" for identifier, description in context.actors),
                 "可用资源："
                 + "；".join(f"{identifier} = {description}" for identifier, description in context.resources),
-                "当前允许的实际制作能力："
-                + "；".join(
-                    f"{capability} = {dict(_CAPABILITY_CATALOG)[capability]}" for capability in context.capabilities
-                ),
                 "可引用来源："
                 + "；".join(
                     f"{identifier} = {description}"
                     for identifier, description in (
                         *context.viewpoint_sources,
                         *context.confirmed_sources,
-                        *context.reported_event_sources,
-                        *context.operational_practice_sources,
                         *context.premise_sources,
                         *context.guidance_sources,
                     )
@@ -1492,14 +1272,6 @@ class DeepSeekGenerator(ContentGenerator):
             f"用户明确要求 {fixed_seconds} 秒；spoken 单元的完整口播必须真实适配，不要只改时长标签。"
             if fixed_seconds is not None
             else "用户未要求固定时长；保留完整口播，由服务端根据最终口播形成自然时长。"
-        )
-        operational_boundary = (
-            "本次有明确登记的经营做法来源；只有实际引用相应来源的 confirmed_fact 才可陈述该做法。"
-            if boundary.operational_practice_sources
-            else (
-                "本次没有任何已确认经营做法、服务政策或组织承诺来源；只能表达品牌立场、"
-                "受众可采用的条件性建议或待执行的创作安排，不能把这些写成现实服务行为或承诺。"
-            )
         )
         if request.media_format == "video":
             media_contract = (
@@ -1548,9 +1320,9 @@ class DeepSeekGenerator(ContentGenerator):
 - 话题中出现对象不表示账号或创作者就是该对象，也不表示事件已经发生或对象可供拍摄；
 - 第一人称只能表达当前品牌观点或当前拍摄动作，不能补写操作人的生活经历、刚刚做过的事、
   顾客案例、门店经历或研发过程；
-- 品牌观点只表达当前立场、判断或价值选择；持续经营做法、服务政策和组织承诺属于现实事实，
-  不能从品牌观点推导；
-- {operational_boundary}
+- 品牌观点用“我们认为、希望、主张或建议”等立场表达，不能写成门店已经执行的服务或普遍政策；
+  谈门店或服务只能表达希望与主张（如“我们希望店里……”），不得写成“你来店里会看到……”、
+  “我们的导购会/不会……”这类现实描述；
 - 不得声称品牌的商品线、商品能力或“我们做某类衣服”；边界四没有已确认商品时，只能谈观点与方法；
 - 一般颜色、品类和搭配只可作为明确的假设例子被口播讨论，不能被当作现有实物安排出镜；
 - 可用条件存在多个替代项时，采用能完成内容的最小资源组合。
@@ -1570,7 +1342,7 @@ non_event（观点、性质或状态，不主张发生过）、hypothetical（�
 （仅限第二类中用户明确提供的真实情况）。
 source_refs 非空，只能引用可引用来源列表中的 id，且至少一个来源要与 basis 匹配：
 brand_viewpoint ↔ source:brand_baseline / source:role_boundary / source:organization；
-confirmed_fact ↔ source:organization / source:product:… / 本次明确登记的事件或经营做法来源；
+confirmed_fact ↔ source:organization / source:product:…；
 user_premise ↔ source:user_request / source:user_actuality / source:prior_version；
 conditional_guidance ↔ source:method:… / source:brand_baseline / source:role_boundary。
 共享不变量：凡声称现实品牌、账号、组织或人物曾经、反复或长期发生过询问、讨论、观察、经历、
@@ -1580,8 +1352,6 @@ brand_viewpoint 与 conditional_guidance 只承载当前立场、希望、主张
 sound_text、production_note 中引述的口播词句。
 text、action_text、sound_text、production_note 中不得出现单元编号（如 c1、s2）或任何 id 标记；
 不得使用未登记的品牌 logo、贴纸、已有照片或成品图形素材；现场手写字卡与屏幕文字可用。
-资源登记只证明列出的能力：手机可以现场拍摄和收音，但不证明手机中已有任何照片或视频；
-“示意、模糊、非真实、假装展示”不把未登记素材变成可用资源。
 spoken_order 把全部 slot=spoken 的 claim_id 按口播顺序排列，各出现一次。
 scene_steps 规则：purpose=cover 恰好 1 条（封面/首帧或首图），purpose=scene 至少 1 条（画面步骤/图序）；
 actor_refs/resource_refs 只能引用登记表中的 id，需要谁列谁，不需要则留空数组；action_text 为该步可直接
@@ -1594,19 +1364,29 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
     def _judgement_prompt(context: BoundaryContext, core: ContentCore) -> str:
         serialized = json.dumps(
             {
+                "speaker_ref": core.speaker_ref,
                 "claims": [
                     {
                         "id": claim.claim_id,
+                        "slot": claim.slot,
                         "text": claim.text,
+                        "basis": claim.basis,
+                        "actuality": claim.actuality,
+                        "source_refs": list(claim.source_refs),
                     }
                     for claim in core.claims
                 ],
+                "spoken_order": list(core.spoken_order),
                 "scene_steps": [
                     {
                         "id": step.step_id,
+                        "purpose": step.purpose,
+                        "actor_refs": list(step.actor_refs),
+                        "resource_refs": list(step.resource_refs),
                         "action_text": step.action_text,
                         "sound_text": step.sound_text,
                         "production_note": step.production_note,
+                        "claim_refs": list(step.claim_refs),
                     }
                     for step in core.scene_steps
                 ],
@@ -1614,54 +1394,39 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
             ensure_ascii=False,
         )
         unit_ids = ", ".join(core.unit_ids)
-        capability_catalog = "\n".join(
-            f"- {identifier}：{description}" for identifier, description in _CAPABILITY_CATALOG
-        )
-        allowed_capabilities = "、".join(context.capabilities)
-        return f"""只依据以下可信临时边界，对候选的每个用户可见单元独立提取语义观察。
-边界未明确提供的事实或资源一律视为不存在，不能用常识、常见拍法或话题里的对象补足。
-候选中没有 writer 自报的依据、现实性、来源、人物或资源引用；不得猜测或补造这些后台声明。
+        return f"""只依据以下六类临时边界，对候选底稿的每个单元独立完成完整判定。
+边界未明确提供的事实或资源一律视为不存在，不能用常识、常见拍法或话题里出现的对象补足。
 
 {DeepSeekGenerator._boundary_sections(context)}
 
-候选用户可见字段：
+候选底稿 ContentCore：
 {serialized}
 
-对下面每个 id 各返回一条完整观察：
-- observed_fields：claim 必须为 ["text"]；scene step 必须为
-  ["action_text","sound_text","production_note"]。空字符串字段也必须列入，证明三类可见字段都已检查。
+对下面列出的每一个 id 各返回一条完整判定，四项都必须给出 true/false：
 - identity_ok：为 false 当该单元让账号或当前创作者以第一人称、表演或叙事位置冒充边界外的自然人或岗位
-  或自然人经历。只谈论某类人不构成冒充，当前创作者以拍摄者、口播者或账号运营身份出现也不构成冒充。
+  （妈妈、家长、孩子的照护者、店长、店员、顾客、研发人员等）。用户只是在话题中提到某类人，
+  不构成账号具备该身份。当前创作者以拍摄者、口播者或账号运营身份自称（如“我是品牌账号运营”、
+  “这里是品牌官方账号”）不属于冒充。
+- actuality_ok：为 false 当该单元把观点、假设、话题对象或未知情况写成操作人亲历、真实案例、已经发生的
+  动作/场景、门店已执行做法或普遍政策；或把品牌“认为、希望、主张、建议”写成已经发生或正在执行；
+  或出现“我们见过、我们观察到、有位顾客、很多家庭”等边界二、四未提供的经历与观察；
+  或在没有边界二（用户明确前提）或边界四（已确认事实）来源支撑时，声称现实品牌、账号、组织或人物
+  曾经、反复或长期发生过询问、讨论、观察、经历、服务、执行或改变——无论该表述出现在 text、
+  sound_text、production_note 还是其中引述的口播词句里。品牌观点只能承载当前立场、希望、主张和建议。
+- resource_ok：为 false 当该单元的画面、动作、声音或制作步骤实际需要边界六未登记的人物、商品、衣物、
+  图片、合照、场地、家具、道具或既有素材；叠加品牌 logo、贴纸、成品图形或已有照片同样属于使用
+  未登记素材。话题对象可以被口播抽象讨论，但不能出镜、行动、发声或被当作现有素材。
 - fact_ok：为 false 当该单元与边界三、四中的品牌、商品、资料或明确作用域冲突，或提出了边界外的具体
-  商品事实、价格或参数。
-- statement_kinds：列出该单元实际表达的全部陈述性质，只能使用以下受控值：
-  stance = 当前品牌立场、判断或价值选择；
-  hypothetical_or_guidance = 假设、问题、建议、条件性方法或待执行的制作安排；
-  confirmed_state = 对当前现实状态的陈述；
-  reported_event = 对已经发生事件的陈述；
-  operational_practice = 对持续经营做法、服务政策、门店行为或组织承诺的陈述；
-  unknown = 无法稳定归类。一个单元同时包含多种性质时全部列出，不得用较弱性质覆盖较强性质。
-- required_capabilities：从该单元的画面、动作、声音和制作提示中提取实际需要的全部能力。
-  受控能力词表如下：
-{capability_catalog}
-
-本次实际允许的能力只有：{allowed_capabilities}。
-能力判定采用闭世界：一部手机只提供现场拍摄和现场收音，不证明手机中已有任何照片或视频；
-创作者存在不证明其他人物存在；普通场地只提供中性背景，不证明其中有商品、家具或道具。
-“示意、模糊、非真实、假装展示”等修饰不改变实际所需能力。口播抽象讨论某个人物、商品或事件，
-不等于让它出镜、行动、发声或成为被展示的素材，因此不产生对应制作能力。
-
-只观察当前单元的完整可见字段，不要因为其他单元存在问题而改变本单元；不要判断 writer 的后台声明，
-也不要替服务端决定来源或能力是否合法。scene_steps 是候选的待执行制作方案：纯粹说明拍摄、收音、
-书写、构图或表演的计划动作属于 hypothetical_or_guidance；只有它同时声称外部现实状态、已发生事件
-或持续经营做法时，才追加相应更强性质。无法稳定判断时必须返回 unknown。
+  商品事实、价格、参数；边界四没有相应已确认商品时，声称品牌的商品线、商品能力或“我们做某类
+  衣服”同样为 false。
+不要误杀：依据品牌基线表达的观点与条件性建议、明确标注的假设与比喻、普通视觉标题、当前创作者对手机
+口播、现有场地中的中性动作，以及对“本次话题/请求”的忠实抽象讨论，这些应当四项均为 true。
+关键区别是“谈论某个对象”不需要该资源；“让该对象出镜、行动、发声或把事件写成已经发生”需要当前依据。
+对每个单元只依据其自身文本与上述边界独立判定；不要因为其他单元存在问题而改变对本单元的判定。
 
 待判定 id：{unit_ids}
-只返回：
-{{"observations":[{{"id":"…","observed_fields":["text"],"identity_ok":true,"fact_ok":true,
-"statement_kinds":["stance"],"required_capabilities":[]}}]}}。
-observations 必须恰好覆盖上面每个 id，一次且仅一次；字段必须完整且不得增加其他字段；
-不得返回解释、理由、置信度或其他内容。"""
+只返回：{{"verdicts":[{{"id":"…","identity_ok":true,"actuality_ok":true,"resource_ok":true,"fact_ok":true}}]}}。
+verdicts 必须恰好覆盖上面列出的每个 id，一次且仅一次；不得返回解释、理由、置信度或其他字段。"""
 
     @staticmethod
     def _unit_repair_prompt(
@@ -1722,18 +1487,13 @@ factual_conflict = 与已确认品牌、商品、资料或作用域冲突，或�
 制作资源越界时改用登记表中的创作者、手机、现场手写字卡和场地内中性动作；话题人物、商品、图片和
 道具只可被抽象谈论，不能出镜或当作已持有素材。修复后的 claim 需要给出正确的 basis、actuality 和
 source_refs（至少一个来源与 basis 匹配：brand_viewpoint ↔ brand_baseline/role_boundary/organization；
-confirmed_fact ↔ organization/product/本次明确登记的事件或经营做法来源；
-user_premise ↔ user_request/user_actuality/prior_version；
+confirmed_fact ↔ organization/product；user_premise ↔ user_request/user_actuality/prior_version；
 conditional_guidance ↔ method/brand_baseline/role_boundary）；修复后的 scene step 需要给出正确的
 actor_refs、resource_refs 和 claim_refs。可见文字中不得出现单元编号或 id 标记；若问题片段是
 c1、s2 这类编号，必须把编号替换为对应台词原文或删去，不得在任何字段保留编号。
 若问题单元是没有用户明确前提或已确认事实来源、却声称现实品牌/账号/组织/人物曾经、反复或长期
 发生过询问、讨论、观察、经历、服务、执行或改变的表述：保留观点本身，删除经历外壳，或改写为
 问题、假设或条件表达；不得为其编造来源。
-修复以用户可见语义为准：只改 basis、actuality、source_refs、actor_refs 或 resource_refs，
-而让原文字、动作、声音或制作提示继续表达同一现实做法、事件或资源需求，不算修复。当前没有明确
-登记的经营做法来源时，现实服务行为、政策或组织承诺必须从可见内容中消失，只保留立场或条件性方法；
-待执行的拍摄、收音、书写、构图与表演动作应写成制作安排，不能写成已发生的外部现实。
 不要输出分类、证据、审查过程或解释。
 严格只返回一个 JSON 对象：{{"repairs":[…]}}。repairs 中每个元素是完整替换单元：claim 用
 {{"claim_id":"…","text":"…","basis":"…","actuality":"…","source_refs":["…"]}}；scene step 用

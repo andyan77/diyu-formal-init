@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import replace
 from typing import Any, cast
 from uuid import UUID
 
@@ -212,76 +211,15 @@ def _unit_ids(core: dict[str, object]) -> list[str]:
 def _verdicts(
     core: dict[str, object],
     failures: dict[str, tuple[str, ...]] | None = None,
-    statement_kinds: dict[str, tuple[str, ...]] | None = None,
-    required_capabilities: dict[str, tuple[str, ...]] | None = None,
-    observed_fields: dict[str, tuple[str, ...]] | None = None,
 ) -> FakeResponse:
     failures = failures or {}
-    statement_kinds = statement_kinds or {}
-    required_capabilities = required_capabilities or {}
-    observed_fields = observed_fields or {}
-    claims = core["claims"]
-    steps = core["scene_steps"]
-    assert isinstance(claims, list) and isinstance(steps, list)
-    claim_by_id = {str(entry["claim_id"]): entry for entry in claims}
-    step_by_id = {str(entry["step_id"]): entry for entry in steps}
-    observations = []
+    verdicts = []
     for unit_id in _unit_ids(core):
-        failure_flags = failures.get(unit_id, ())
-        default_kinds: tuple[str, ...]
-        default_fields: tuple[str, ...]
-        default_capabilities: tuple[str, ...]
-        if unit_id in claim_by_id:
-            entry = claim_by_id[unit_id]
-            basis = str(entry["basis"])
-            actuality = str(entry["actuality"])
-            if actuality == "user_presented_actual":
-                default_kinds = ("reported_event",)
-            elif actuality == "hypothetical" or basis in ("user_premise", "conditional_guidance"):
-                default_kinds = ("hypothetical_or_guidance",)
-            elif basis == "confirmed_fact":
-                default_kinds = ("confirmed_state",)
-            else:
-                default_kinds = ("stance",)
-            default_fields = ("text",)
-            default_capabilities = ()
-        else:
-            entry = step_by_id[unit_id]
-            default_kinds = ("hypothetical_or_guidance",)
-            default_fields = ("action_text", "sound_text", "production_note")
-            capability_items: list[str] = []
-            actor_refs = entry.get("actor_refs", [])
-            resource_refs = entry.get("resource_refs", [])
-            if "actor:creator" in actor_refs:
-                capability_items.append("creator_appearance")
-            if "resource:phone" in resource_refs:
-                capability_items.append("phone_capture")
-                if entry.get("sound_text"):
-                    capability_items.append("phone_audio")
-            if "resource:onsite_text" in resource_refs:
-                capability_items.append("onsite_text")
-            if "resource:venue" in resource_refs:
-                capability_items.append("neutral_background")
-            if any(str(reference).startswith("resource:product:") for reference in resource_refs):
-                capability_items.append("confirmed_product")
-            default_capabilities = tuple(dict.fromkeys(capability_items))
-        kinds = statement_kinds.get(unit_id, default_kinds)
-        observed_capabilities = required_capabilities.get(unit_id, default_capabilities)
-        if "actuality_ok" in failure_flags:
-            kinds = ("unknown",)
-        if "resource_ok" in failure_flags:
-            observed_capabilities = (*observed_capabilities, "unknown")
-        observations.append(
-            {
-                "id": unit_id,
-                "observed_fields": list(observed_fields.get(unit_id, default_fields)),
-                "identity_ok": "identity_ok" not in failure_flags,
-                "fact_ok": "fact_ok" not in failure_flags,
-                "statement_kinds": list(kinds),
-                "required_capabilities": list(observed_capabilities),
-            }
-        )
-    return _completion(json.dumps({"observations": observations}, ensure_ascii=False))
+        entry: dict[str, object] = {"id": unit_id}
+        for flag in ("identity_ok", "actuality_ok", "resource_ok", "fact_ok"):
+            entry[flag] = flag not in failures.get(unit_id, ())
+        verdicts.append(entry)
+    return _completion(json.dumps({"verdicts": verdicts}, ensure_ascii=False))
 
 
 def _repairs(*units: dict[str, object]) -> FakeResponse:
@@ -326,9 +264,6 @@ def test_generation_prompt_separates_six_input_semantics(
     assert "actor:creator" in prompt
     assert "resource:phone" in prompt
     assert "source:user_request" in prompt
-    assert "phone_capture" in prompt and "phone_audio" in prompt
-    assert "手机可以现场拍摄和收音，但不证明手机中已有任何照片或视频" in prompt
-    assert "本次没有任何已确认经营做法、服务政策或组织承诺来源" in prompt
     assert "标题、观点、比喻、幽默、节奏、完整口播和互动由你自然创作" in prompt
     assert "B-001" not in prompt
     assert "schema_version" not in prompt
@@ -391,295 +326,10 @@ def test_judgement_uses_bounded_config_independent_of_writer(
     assert judge_json["response_format"] == {"type": "json_object"}
     assert judge_json["max_tokens"] == 8192
     judge_prompt = str(judge_json["messages"])
-    assert "每个用户可见单元独立提取语义观察" in judge_prompt
-    assert "identity_ok" in judge_prompt and "fact_ok" in judge_prompt
-    assert "statement_kinds" in judge_prompt and "required_capabilities" in judge_prompt
-    assert "observed_fields" in judge_prompt
-    assert "恰好覆盖上面每个 id" in judge_prompt
-    for writer_only_field in ("basis", "actuality", "source_refs", "actor_refs", "resource_refs"):
-        assert f'"{writer_only_field}"' not in judge_prompt
-
-
-def test_registered_phone_does_not_imply_an_existing_photo(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    unsafe_action = "手机屏幕展示一张已有的、模糊示意的家庭合照。"
-    steps = [
-        _step(
-            "s1",
-            "cover",
-            "手机屏幕输入标题。",
-            ("c1",),
-            resource_refs=("resource:phone", "resource:onsite_text"),
-        ),
-        _step(
-            "s2",
-            "scene",
-            unsafe_action,
-            ("c8", "c9"),
-            resource_refs=("resource:phone",),
-            production_note="对照片做模糊处理。",
-        ),
-    ]
-    core = _video_core(steps=steps)
-    repaired_action = "当前创作者面对手机，自然口播家庭成员可以各自成立。"
-    _install_fake(
-        monkeypatch,
-        [
-            _core_response(core),
-            _verdicts(core, required_capabilities={"s2": ("registered_photo",)}),
-            _repairs(
-                {
-                    "step_id": "s2",
-                    "action_text": repaired_action,
-                    "sound_text": "手机现场收录当前创作者的人声。",
-                    "production_note": "",
-                    "actor_refs": ["actor:creator"],
-                    "resource_refs": ["resource:phone"],
-                    "claim_refs": ["c8", "c9"],
-                }
-            ),
-            _verdicts(
-                core,
-                required_capabilities={
-                    "s2": ("creator_appearance", "phone_capture", "phone_audio"),
-                },
-            ),
-        ],
-    )
-
-    artifact = _generator().generate(generation_input)
-
-    assert isinstance(artifact.production, VideoProductionBundle)
-    assert artifact.production.visual_actions == repaired_action
-    assert unsafe_action not in artifact.body
-    assert "unsupported_resource" in str(FakeClient.requests[2]["json"])
-
-
-def test_creator_phone_and_onsite_text_are_allowed_capabilities(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    core_dict = _video_core()
-    context = BoundaryContext.from_request(generation_input)
-    core = _generator()._parse_core(generation_input, context, core_dict)
-    _install_fake(
-        monkeypatch,
-        [
-            _verdicts(
-                core_dict,
-                required_capabilities={
-                    "s1": ("onsite_text",),
-                    "s2": ("creator_appearance", "phone_capture", "phone_audio"),
-                },
-            )
-        ],
-    )
-
-    issues, _, _ = _generator()._judgement_issues(context, core)
-
-    assert issues == ()
-
-
-def test_talking_about_people_needs_no_actor_but_showing_them_does(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    steps = [
-        _step("s1", "cover", "手机现场输入标题。", ("c1",), resource_refs=("resource:onsite_text",)),
-        _step(
-            "s2",
-            "scene",
-            "一家三口在镜头前摆拍。",
-            ("c8", "c9"),
-            resource_refs=("resource:phone",),
-            sound_text="手机现场收音。",
-        ),
-    ]
-    core_dict = _video_core(steps=steps)
-    context = BoundaryContext.from_request(generation_input)
-    core = _generator()._parse_core(generation_input, context, core_dict)
-    _install_fake(
-        monkeypatch,
-        [
-            _verdicts(
-                core_dict,
-                required_capabilities={
-                    "c8": (),
-                    "c9": (),
-                    "s2": ("phone_capture", "phone_audio", "additional_person"),
-                },
-            )
-        ],
-    )
-
-    issues, _, _ = _generator()._judgement_issues(context, core)
-
-    assert ("s2", "unsupported_resource") in {
-        (issue.unit_id, issue.reason_code) for issue in issues
-    }
-    assert not any(issue.unit_id in {"c8", "c9"} for issue in issues)
-
-
-def test_operational_practice_requires_an_explicit_practice_source(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    claims = [
-        *cast("list[dict[str, object]]", _video_core()["claims"])[:7],
-        _claim("c8", "spoken", "我们认为安静判断也值得被尊重。"),
-        _claim("c9", "spoken", "我们的导购不会打扰，进店后我们会这样服务。"),
-    ]
-    core_dict = _video_core(claims=claims)
-    context = BoundaryContext.from_request(generation_input)
-    core = _generator()._parse_core(generation_input, context, core_dict)
-    _install_fake(
-        monkeypatch,
-        [
-            _verdicts(
-                core_dict,
-                statement_kinds={
-                    "c8": ("stance",),
-                    "c9": ("operational_practice",),
-                },
-            )
-        ],
-    )
-
-    issues, _, _ = _generator()._judgement_issues(context, core)
-
-    assert ("c9", "invented_actuality") in {
-        (issue.unit_id, issue.reason_code) for issue in issues
-    }
-    assert not any(issue.unit_id == "c8" for issue in issues)
-
-
-def test_confirmed_practice_source_allows_the_same_operational_language(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    practice_source = "source:practice:quiet_service"
-    context = replace(
-        BoundaryContext.from_request(generation_input),
-        operational_practice_sources=((practice_source, "已确认门店安静服务做法"),),
-    )
-    claims = [
-        *cast("list[dict[str, object]]", _video_core()["claims"])[:7],
-        _claim("c8", "spoken", "我们认为安静判断也值得被尊重。"),
-        _claim(
-            "c9",
-            "spoken",
-            "我们的导购不会主动打扰，进店后会按这项服务做法执行。",
-            "confirmed_fact",
-            "non_event",
-            (practice_source,),
-        ),
-    ]
-    core_dict = _video_core(claims=claims)
-    core = _generator()._parse_core(generation_input, context, core_dict)
-    _install_fake(
-        monkeypatch,
-        [
-            _verdicts(
-                core_dict,
-                statement_kinds={
-                    "c8": ("stance",),
-                    "c9": ("operational_practice",),
-                },
-            )
-        ],
-    )
-
-    issues, _, _ = _generator()._judgement_issues(context, core)
-
-    assert issues == ()
-
-
-def test_reported_event_accepts_only_an_actuality_or_confirmed_event_source(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    event_source = "source:event:confirmed_visit"
-    context = replace(
-        BoundaryContext.from_request(generation_input),
-        reported_event_sources=((event_source, "用户确认的本次到店事件"),),
-    )
-    claims = [
-        *cast("list[dict[str, object]]", _video_core()["claims"])[:7],
-        _claim(
-            "c8",
-            "spoken",
-            "本次确认记录显示，一位顾客到店后先安静浏览。",
-            "confirmed_fact",
-            "non_event",
-            (event_source,),
-        ),
-        _claim("c9", "spoken", "我们认为安静判断也值得被尊重。"),
-    ]
-    core_dict = _video_core(claims=claims)
-    core = _generator()._parse_core(generation_input, context, core_dict)
-    _install_fake(
-        monkeypatch,
-        [
-            _verdicts(
-                core_dict,
-                statement_kinds={"c8": ("reported_event",), "c9": ("stance",)},
-            )
-        ],
-    )
-
-    issues, _, _ = _generator()._judgement_issues(context, core)
-
-    assert issues == ()
-
-
-def test_observation_must_cover_every_visible_field(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    core = _video_core()
-    _install_fake(
-        monkeypatch,
-        [
-            _core_response(core),
-            _verdicts(
-                core,
-                observed_fields={"s2": ("action_text", "sound_text")},
-            ),
-        ],
-    )
-
-    with pytest.raises(GenerationFailed, match="边界判定返回格式不完整"):
-        _generator().generate(generation_input)
-
-
-def test_unknown_observation_enums_fail_closed_as_repairable_issues(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    core_dict = _video_core()
-    context = BoundaryContext.from_request(generation_input)
-    core = _generator()._parse_core(generation_input, context, core_dict)
-    _install_fake(
-        monkeypatch,
-        [
-            _verdicts(
-                core_dict,
-                statement_kinds={"c8": ("unrecognized_statement_kind",)},
-                required_capabilities={"s2": ("unrecognized_capability",)},
-            )
-        ],
-    )
-
-    issues, _, _ = _generator()._judgement_issues(context, core)
-
-    assert {
-        (issue.unit_id, issue.reason_code) for issue in issues
-    } >= {
-        ("c8", "invented_actuality"),
-        ("s2", "unsupported_resource"),
-    }
+    assert "对下面列出的每一个 id 各返回一条完整判定" in judge_prompt
+    assert "identity_ok" in judge_prompt and "actuality_ok" in judge_prompt
+    assert "resource_ok" in judge_prompt and "fact_ok" in judge_prompt
+    assert "恰好覆盖上面列出的每个 id" in judge_prompt
 
 
 @pytest.mark.parametrize(
@@ -698,7 +348,7 @@ def test_incomplete_or_drifting_verdict_sets_fail_closed(
 ) -> None:
     core = _video_core()
     complete = json.loads(_verdicts(core).json()["choices"][0]["message"]["content"])
-    broken = json.dumps({"observations": mutate(complete["observations"])}, ensure_ascii=False)
+    broken = json.dumps({"verdicts": mutate(complete["verdicts"])}, ensure_ascii=False)
     _install_fake(monkeypatch, [_core_response(core), _completion(broken)])
 
     with pytest.raises(GenerationFailed, match="边界判定返回格式不完整"):
@@ -771,8 +421,6 @@ def test_verdict_failure_triggers_one_unit_repair_then_full_rereview(
     assert "unsupported_resource" in repair_prompt
     assert "只修复下列单元" in repair_prompt
     assert "固定安全文案" in repair_prompt
-    assert "只改 basis、actuality、source_refs、actor_refs 或 resource_refs" in repair_prompt
-    assert "修复以用户可见语义为准" in repair_prompt
 
 
 def test_shared_invariant_forbids_unsourced_history_claims_in_every_prompt(
@@ -808,12 +456,12 @@ def test_shared_invariant_forbids_unsourced_history_claims_in_every_prompt(
     writer_prompt = str(FakeClient.requests[0]["json"]["messages"])  # type: ignore[index]
     judge_prompt = str(FakeClient.requests[1]["json"]["messages"])  # type: ignore[index]
     repair_prompt = str(FakeClient.requests[2]["json"]["messages"])  # type: ignore[index]
-    assert "曾经、反复或长期发生过" in writer_prompt
-    assert "执行或改变" in writer_prompt
-    assert "不构成品牌或任何人已经发生过的询问、讨论、观察或经历" in writer_prompt
+    for prompt in (writer_prompt, judge_prompt):
+        assert "曾经、反复或长期发生过" in prompt
+        assert "执行或改变" in prompt
+        assert "不构成品牌或任何人已经发生过的询问、讨论、观察或经历" in prompt
     assert "共享不变量" in writer_prompt
-    assert "operational_practice" in judge_prompt
-    assert "对持续经营做法、服务政策、门店行为或组织承诺的陈述" in judge_prompt
+    assert "品牌观点只能承载当前立场、希望、主张和建议" in judge_prompt
     assert "删除经历外壳" in writer_prompt and "删除经历外壳" in repair_prompt
     assert "改写为" in repair_prompt and "不得为其编造来源" in repair_prompt
 
