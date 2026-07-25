@@ -91,7 +91,11 @@ class PostgresDisplayRepository(DisplayRepository):
         )
 
     def load_task_context(self, scope: DisplayScope, task_id: UUID) -> DisplayContext | None:
-        """Reproduce the context this task was compiled from, not whatever the store holds today."""
+        """Reproduce the context this task was compiled from, not whatever the store holds today.
+
+        Out of scope fails closed; None means the task is visible but froze no context, and such a
+        task can no longer be revised — the current store seed must never stand in for it.
+        """
         actor_organization_id = scope.actor_organization_id or scope.organization_id
         with self._tx(scope) as cursor:
             cursor.execute(
@@ -114,8 +118,8 @@ class PostgresDisplayRepository(DisplayRepository):
                     actor_organization_id,
                 ),
             )
-            row = cursor.fetchone()
-        if row is None or row["context_snapshot"] is None:
+            row = self._one(cursor, "找不到当前作用域中的陈列任务")
+        if row["context_snapshot"] is None:
             return None
         frozen = self._object(row["context_snapshot"], "本次任务上下文快照")
         products = self._frozen_products(frozen)

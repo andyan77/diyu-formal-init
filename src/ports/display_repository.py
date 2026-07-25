@@ -13,7 +13,11 @@ class DisplayRepository(ABC):
 
     @abstractmethod
     def load_task_context(self, scope: DisplayScope, task_id: UUID) -> DisplayContext | None:
-        """Load the frozen context an existing task was compiled from, or None if it predates it."""
+        """Load the frozen context this task was compiled from.
+
+        Returns None only when the task is visible in scope but kept no snapshot; a task outside
+        the caller's scope fails closed instead, so a missing snapshot never doubles as a leak.
+        """
 
     @abstractmethod
     def load_assets(self, revision: bool) -> tuple[ActiveAsset, ...]:

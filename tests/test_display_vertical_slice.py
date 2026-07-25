@@ -438,7 +438,8 @@ def test_task_snapshot_runs_end_to_end_and_a_new_inventory_is_never_blocked(
     assert service.create(foreign_tenant, inventory_text)["kind"] == "question"
     assert repository.load_context(replace(scope, brand_id=BRAND_ID)) is None
     assert repository.load_context(replace(scope, organization_id=STORE_ORG_ID)) is None
-    assert repository.load_task_context(replace(scope, brand_id=BRAND_ID), UUID(str(v1["task_id"]))) is None
+    with pytest.raises(DomainError):
+        repository.load_task_context(replace(scope, brand_id=BRAND_ID), UUID(str(v1["task_id"])))
     with pytest.raises(DomainError):
         service.fetch_version(foreign_tenant, UUID(str(v1["task_id"])), 1)
 
@@ -489,6 +490,81 @@ def test_a_revision_replays_its_own_task_snapshot_not_the_current_store_seed(
 
     fresh = service.create(scope, "今天这组墙可用：DIYU-CSPU-007 3 件、DIYU-CSPU-006 4 件、DIYU-CGRP-001 2 件。")
     assert "换季后的全新默认主题" in str(fresh["body"])
+
+
+def test_a_task_without_a_frozen_snapshot_can_no_longer_be_revised(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    """A task that kept no conditions must fail closed, never borrow whatever the store holds now."""
+    suffix = uuid4().hex[:10]
+    fixture, scope, inventory_text = _seeded_display_scope(migrator_database_url, suffix)
+    service = DisplayService(PostgresDisplayRepository(app_database_url), DM01DisplayCompiler())
+    legacy = service.create(scope, inventory_text)
+    legacy_body = str(legacy["body"])
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (fixture["tenant_id"],))
+        cursor.execute(
+            "UPDATE display_tasks SET context_snapshot=NULL WHERE tenant_id=%s AND id=%s",
+            (fixture["tenant_id"], legacy["task_id"]),
+        )
+        assert cursor.rowcount == 1
+
+    seeded_input = cast(dict[str, object], _keqiao_record()["task_input"])
+    _seed_store_update(
+        migrator_database_url,
+        fixture,
+        suffix,
+        {
+            "task_input": {
+                "version": "KQ-WALL-01-task-换季",
+                "expression": {
+                    **cast(dict[str, object], seeded_input["expression"]),
+                    "theme": "换季后的全新默认主题",
+                },
+                "products": seeded_input["products"],
+            }
+        },
+    )
+    before = _display_counts(app_database_url, fixture["tenant_id"])
+    refused = service.revise(
+        scope,
+        UUID(str(legacy["task_id"])),
+        "【测试夹具·非真实门店反馈】中间上杆 DIYU-CSPU-002 太挤，请减少一件；其他内容不变。",
+    )
+    assert refused == {
+        "kind": "question",
+        "message": "这份历史方案没有保留完整的任务条件，请按当前库存新建一份方案。",
+    }
+    for banned in _BANNED_VISIBLE_WORDS:
+        assert banned not in str(refused["message"])
+    assert _display_counts(app_database_url, fixture["tenant_id"]) == before
+    assert service.fetch_version(scope, UUID(str(legacy["task_id"])), 1)["body"] == legacy_body
+    with pytest.raises(DomainError):
+        service.fetch_version(scope, UUID(str(legacy["task_id"])), 2)
+
+    fresh = service.create(scope, inventory_text)
+    revised = service.revise(
+        scope,
+        UUID(str(fresh["task_id"])),
+        "【测试夹具·非真实门店反馈】中间上杆 DIYU-CSPU-002 太挤，请减少一件；其他内容不变。",
+    )
+    assert revised["version"] == 2
+    assert "换季后的全新默认主题" in str(revised["body"])
+
+
+def _display_counts(app_database_url: str, tenant_id: str) -> tuple[int, ...]:
+    with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
+        cursor.execute(
+            "SELECT (SELECT count(*) FROM display_tasks WHERE tenant_id=%s), "
+            "(SELECT count(*) FROM display_generation_runs WHERE tenant_id=%s), "
+            "(SELECT count(*) FROM display_artifact_versions WHERE tenant_id=%s)",
+            (tenant_id,) * 3,
+        )
+        counts = cursor.fetchone()
+    assert counts is not None
+    return tuple(int(value) for value in counts)
 
 
 def _seed_store_update(
