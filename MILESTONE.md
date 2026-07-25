@@ -1,9 +1,8 @@
 # 当前里程碑
 
 - 里程碑：`M7-2A` 内容表达目录、账号表达画像与用户控制面
-- 状态：`ACTIVE`（由 `REVIEW` 恢复，执行单一有界修复：画像权限与归属、任务冻结的
-  ContentRole、私人偏好三态与临时无偏好会话、用户闭环入口、自然语言透明转译。修复收口后重新
-  置为 `REVIEW`；未启动 M7-2B）
+- 状态：`REVIEW`（曾于 2026-07-27 由 `REVIEW` 恢复为 `ACTIVE` 执行一次单一有界修复，
+  修复已收口并重新进入 `REVIEW`；未启动 M7-2B）
 - 起点：M7-1 已 `CLOSED`；施工基线 `07fd4b8a54c1ad96fc237b97f18cff0cdb101847`。
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者
 - 当前任务包：`docs/M7-2A-内容表达目录账号画像与用户控制面执行包.md`
@@ -11,11 +10,14 @@
   私人创作偏好、可选创作方向面板与透明品牌转译、本次合法素材选择、冷启动内容机会与轻量
   计划、未满足需求候选）。未启动 M7-2B，未做真实连续系列、真实商品 P1/P2/P5、三平台重
   编译验证、平台流量或内容市场结果。
-- Git 基线：唯一实现提交 `c0f28732fe85e35ff28e35911d09144fb97b94a5`；唯一远程 CI run
-  `30159843299` 绿色。历史提交全部保留，未 reset、rebase、squash 或改写 M6-3/M7-1 历史。
-- 当前生产：运行镜像 `diyu-saas:c0f28732fe85e35ff28e35911d09144fb97b94a5`，数据库 schema
-  `20260726_20`（由 `20260725_19` expand-only 升级）；本机与公网 readiness 均 `200`，
-  公网首页 `303`。指定上一回退目标仍为 `1241cbd04aee8d3e28637d13323ae17d657c7082`。
+- Git 基线：首轮实现提交 `c0f28732fe85e35ff28e35911d09144fb97b94a5`（CI run `30159843299`），
+  单一有界修复轮实现提交 `6710072b7d3a610c263977cb3ecaf8fd385e349a`（CI run `30162932954`）。
+  两轮各只触发一次 CI，均绿。历史提交全部保留，未 reset、rebase、squash 或改写 M6-3/M7-1 历史。
+- 当前生产：运行镜像 `diyu-saas:6710072b7d3a610c263977cb3ecaf8fd385e349a`，数据库 schema
+  `20260727_21`（由 `20260726_20` expand-only 升级）；本机与公网 readiness 均 `200`，
+  公网首页 `303`。指定上一回退目标为 `c0f28732fe85e35ff28e35911d09144fb97b94a5`
+  （上一在产版本；`20260727_21` 只新增一列带默认值、两条约束与两个受控函数，该版本代码不读
+  这些对象，因此无需 downgrade 即可回退）。
 - 迁移 `20260726_20`（expand-only，生产 migrator 既非 superuser 也无 `BYPASSRLS`）：新增
   `account_expression_profile_versions`、`user_creation_preferences`、`content_plans`、
   `unmet_capability_requests` 四表（全部 `ENABLE + FORCE` 行级安全，私人偏好额外要求可信
@@ -26,7 +28,23 @@
   `publishing_account.created` 事件且操作者组织唯一）成立时回填，其余保持 `NULL`；历史任务由
   既有 `generation_runs.input_receipt` 无损回填 legacy 快照。生产实测：`271/271` 条历史任务
   全部有快照、`0` 条为空、`0` 条冒充画像版本；真实品牌账号回填为
-  `笛语服饰品牌官方账号 → 笛语服饰管理组织`。
+  `笛语服饰品牌官方账号 → 笛语服饰管理组织`。**该回填已在 `20260727_21` 中降级为 `inferred`
+  并因此不再授予任何维护资格**（见下）。
+- 迁移 `20260727_21`（expand-only，单一有界修复轮）：新增
+  `content_accounts.control_organization_source`（`unset / inferred / declared`，逐租户
+  `set_config` 把既有非空控制组织标为 `inferred`）；新增
+  `account_expression_profile_versions UNIQUE (tenant_id, account_id, id)` 与
+  `content_accounts (tenant_id, id, current_expression_profile_id)` 复合外键，使"当前画像指针
+  指向别的账号的画像"在数据库层存不进去；新增 `ops_unmet_capability_requests()` 与
+  `ops_classify_unmet_capability_request()` 两个 `SECURITY DEFINER` 受控函数（与既有
+  `ops_runtime_summary` 同一跨租户边界，`REVOKE ALL FROM PUBLIC` 后只授 `diyu_app`）。
+- 归属纪律（本轮硬化）：**由创建事件推断出的控制组织不是证据，不授予画像维护资格。**
+  只有新建账号时明确指定，或该租户有权主体经
+  `POST /api/v1/tenant-management/publishing-accounts/{id}/control-organization` 一次声明，
+  才成立；声明留痕复用既有 `activity_events`（`publishing_account.control_organization_declared`），
+  不新增审批流。新建账号不再默认取创建者所属组织。生产核对：真实
+  `笛语服饰品牌官方账号` 现为 `inferred`，因此**当前没有任何真实主体可以维护它的画像**，
+  等待该租户有权主体明确声明；演示租户四个账号由 seed 明确声明为 `declared`。
 - 目录来源诚实对账（真源 `config/content_expression/capability-inventory-v1.jsonl`）：
   风格 `20/20`、题材 `55/55`、**体裁 `41/44`**，合计有定义 `116`、声明目标 `119`、缺 `3`。
   缺口登记为 `CAT-SOURCE-GAP-GENRE-001/002/003`（`gap_type=source_gap`，去向 F10），不进入
@@ -44,17 +62,34 @@
   `401`，**schema 保持 `20260726_20`，未执行 downgrade、未重跑旧迁移**；用该回退版本自身代码
   路径读出生产已有内容（`version=1`、`1459` 字符），最终版本读同一条内容结果一致并额外带出
   透明转译。随后切回 `c0f2873…`，内容 `271/271/185`、陈列 `1/1/1` 计数不变。
-- 验证证据：本地 Ruff、mypy、OpenAPI/Golden、后端 `119 passed`、前端 lint/typecheck/build
-  全绿；生产六个新端点匿名访问全部 `401`，四张新表 RLS 均 `true/true`，系统激活资产恒 `41`，
-  M7-1 陈列侧 `1/1/1` 且无空快照。
+- 验证证据（首轮）：本地 Ruff、mypy、OpenAPI/Golden、后端 `119 passed`、前端
+  lint/typecheck/build 全绿；生产六个新端点匿名访问全部 `401`，四张新表 RLS 均 `true/true`，
+  系统激活资产恒 `41`，M7-1 陈列侧 `1/1/1` 且无空快照。
+- 单一有界修复轮（2026-07-27，详见执行包 §十）一次关闭五组缺口：画像权限与归属（推断不授权、
+  一次声明、同事务判权与写入、当前画像三重匹配 + 数据库约束、同名幂等含控制组织）；任务冻结
+  （快照冻结 ContentRole 名称与表达边界，V2 重放冻结角色而非当前角色）；私人偏好
+  （`collaboration_note` 入模型不入租户记录、真正的临时无偏好会话请求头、每轴三态且空选择不
+  清空已保存默认）；用户闭环（计划「用这条开始」、缺说明原件不可勾选并就地补写、身份抽屉进入
+  既有画像卡、笛语运维最小分类与回告入口）；自然语言透明转译（六条声明别名精确命中时复用
+  `restrained_variant`，无法映射的原样保留，硬冲突只给一句自然建议）。
+- 验证证据（修复轮）：`git diff --check`、`make lint`、`make typecheck`、`make golden`、
+  `make test`（`132 passed`）、前端 `lint / typecheck / build / test` 全绿，OpenAPI 由实际
+  路由重新生成；新增 **最小前端交互验证**（`frontend/test/interaction.test.tsx`，jsdom 中真实
+  挂载工作台并逐步点击 8 项行为），只增加 `esbuild` / `jsdom` / `@types/node` 三个开发依赖，
+  不建设测试平台。生产复核：schema `20260727_21`、readiness `200/200`、首页 `303`、新端点匿名
+  `401`、四张表 RLS 仍 `true/true`、内容 `271/271/185`、陈列 `1/1/1`、空快照 `0/271`、
+  系统激活资产 `41`；部署前由 `deploy.sh` 执行既有有界备份。
 - **未证明项（硬约束，不得被后续文档改写）**：
   1. **有界 DeepSeek 真实内容冒烟未执行**。它需要一个正式登录会话：真实品牌管理员口令属
      founder 本人、按协作基线不由执行侧代持；而为合成演示租户临时开通一次性登录的动作被
      执行环境权限闸拦下。执行侧**未绕过**该拦截，也未创建任何生产登录身份——`ops-run` 目录
      为空、`m7-2a*` 用户名凭据数 `0`、有效激活令牌 `0`。因此真实模型路径在生产上未验证。
-  2. 真实笛语服饰账号的五段画像**仍未由有权主体保存**；执行侧未代用户激活，本轮未向该租户
-     写入任何内容。这是 M7-2B 的启动前条件，不构成 M7-2A 软件能力阻断。
+  2. 真实笛语服饰账号的五段画像**仍未由有权主体保存**；执行侧未代用户激活，两轮均未向该租户
+     写入任何内容。这是 M7-2B 的启动前条件，不构成 M7-2A 软件能力阻断。修复轮之后它还多了
+     一个前置：该账号的控制组织必须先由租户有权主体**明确声明**（当前是 `inferred`）。
   3. 内容质量、真实发布、平台流量、企业采用与销售结果均未证明。
+  4. 修复轮**未调用真实 DeepSeek**、未创建临时生产验收身份、未重跑 M6-3 Q1—Q8；真实模型调用
+     正式转入 M7-2B 首个真实账号任务。
 - 唯一下一动作：主控独立终审 M7-2A。不启动 M7-2B。
 
 ## M7-1 关闭结论（2026-07-25，历史完整保留）

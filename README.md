@@ -39,7 +39,7 @@ scripts/run_app.sh
 
 随后打开 `http://127.0.0.1:8000`。本地完整回归入口为 `make golden`；它创建/使用工作区内 PostgreSQL、合成演示数据和模型替身，并固定项目内 Linux 临时目录，不受 Windows `TEMP`/`TMP` 继承影响。
 
-每次推送到 `main`、面向 `main` 的 PR 和手动触发都会在单个 Linux CI 作业中运行前端 lint/typecheck/build 以及 `make lint`、`make typecheck`、`make golden`；CI 不读取模型、ECS、生产数据库或密钥。
+每次推送到 `main`、面向 `main` 的 PR 和手动触发都会在单个 Linux CI 作业中运行前端 lint/typecheck/build/test 以及 `make lint`、`make typecheck`、`make golden`；CI 不读取模型、ECS、生产数据库或密钥。前端交互验证入口为 `make frontend-test`：它在 jsdom 中真实挂载工作台并逐步点击，不依赖浏览器、外部服务或测试平台。
 
 真实 DeepSeek 模式服务同一内容编译器的价值判断与 P1—P5 成品生成，必须由服务器环境提供 `DIYU_GENERATOR_MODE=deepseek`、`DEEPSEEK_API_BASE_URL`、`DEEPSEEK_API_KEY` 和已核验的 `DEEPSEEK_MODEL`。受保护配置只能在服务器环境安全引用，绝不提交；本仓不会内置密钥。DM01 不因模型可用性阻塞，也不通过 SSH 隧道调用模型。
 
