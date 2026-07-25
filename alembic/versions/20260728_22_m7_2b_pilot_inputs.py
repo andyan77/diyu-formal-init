@@ -32,9 +32,27 @@ def upgrade() -> None:
     # Existing rows remain readable as legacy inputs.  Only rows written through the new
     # management entrance can be presented as responsibility-sourced real product facts.
     op.execute("ALTER TABLE brand_products ADD COLUMN display_name text NOT NULL DEFAULT ''")
+    # Production migrations run as a narrow role and the table has FORCE RLS.  Backfill one
+    # tenant at a time after setting the trusted tenant context; never assume table ownership can
+    # bypass the policy.
     op.execute(
-        "UPDATE brand_products SET display_name = "
-        "COALESCE(NULLIF(facts ->> 'name', ''), NULLIF(facts ->> 'product_name', ''), sku)"
+        """
+        DO $$
+        DECLARE
+            tenant_record record;
+        BEGIN
+            FOR tenant_record IN SELECT id FROM public.tenants LOOP
+                PERFORM set_config('app.tenant_id', tenant_record.id::text, true);
+                UPDATE public.brand_products
+                   SET display_name = COALESCE(
+                       NULLIF(facts ->> 'name', ''),
+                       NULLIF(facts ->> 'product_name', ''),
+                       sku
+                   )
+                 WHERE tenant_id = tenant_record.id;
+            END LOOP;
+        END $$
+        """
     )
     op.execute(
         "ALTER TABLE brand_products ADD COLUMN source_kind text NOT NULL DEFAULT 'legacy_seed'"
