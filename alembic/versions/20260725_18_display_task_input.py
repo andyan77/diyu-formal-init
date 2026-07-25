@@ -26,20 +26,33 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("ALTER TABLE display_stores ADD COLUMN current_task_input jsonb")
+    # display_stores and display_policies force row-level security, and the production migrator is
+    # neither superuser nor BYPASSRLS, so the backfill sets each tenant's scope in turn instead of
+    # relying on an unscoped cross-tenant UPDATE.
     op.execute(
         """
-        UPDATE display_stores s
-           SET current_task_input = jsonb_build_object(
-                   'version', COALESCE(s.rail_profile #>> '{inventory_snapshot,record_version}', s.profile_version),
-                   'source', 'user_task_snapshot',
-                   'expression', COALESCE(
-                       (SELECT p.body
-                          FROM display_policies p
-                         WHERE p.tenant_id = s.tenant_id AND p.brand_id = s.brand_id
-                           AND p.version = s.profile_version),
-                       '{}'::jsonb),
-                   'products', s.rail_profile #> '{inventory_snapshot,items}')
-         WHERE s.rail_profile ? 'inventory_snapshot'
+        DO $$
+        DECLARE
+            tenant_record record;
+        BEGIN
+            FOR tenant_record IN SELECT id FROM tenants LOOP
+                PERFORM set_config('app.tenant_id', tenant_record.id::text, true);
+                UPDATE display_stores s
+                   SET current_task_input = jsonb_build_object(
+                           'version', COALESCE(
+                               s.rail_profile #>> '{inventory_snapshot,record_version}', s.profile_version),
+                           'source', 'user_task_snapshot',
+                           'expression', COALESCE(
+                               (SELECT p.body
+                                  FROM display_policies p
+                                 WHERE p.tenant_id = s.tenant_id AND p.brand_id = s.brand_id
+                                   AND p.version = s.profile_version),
+                               '{}'::jsonb),
+                           'products', s.rail_profile #> '{inventory_snapshot,items}')
+                 WHERE s.tenant_id = tenant_record.id
+                   AND s.rail_profile ? 'inventory_snapshot';
+            END LOOP;
+        END $$
         """
     )
 
