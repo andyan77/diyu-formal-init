@@ -224,12 +224,13 @@ class DisplayScope:
 
 @dataclass(frozen=True)
 class DisplayContext:
+    """Everything one reference plan may read: reusable wall structure plus this task's own input."""
+
     brand_name: str
     organization_name: str
     operator_name: str
-    submitter_name: str
-    policy_version: str
-    policy: dict[str, object]
+    task_expression_version: str
+    task_expression: dict[str, object]
     store_name: str
     store_profile_version: str
     rail_profile: dict[str, object]
@@ -246,6 +247,7 @@ class DisplayGenerationInput:
     feedback: str | None = None
     prior_plan: dict[str, object] | None = None
     revision_target: tuple[str, str, str] | None = None
+    hard_requirements: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

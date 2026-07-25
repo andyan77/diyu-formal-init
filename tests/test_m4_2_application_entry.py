@@ -48,7 +48,7 @@ def test_two_application_entries_bind_identity_and_reject_cross_application_call
 
         client.get("/ui/select/display")
         display = client.get("/display")
-        for value in ("南城店陈列执行甲", "折线之间·南城店", "墙面双层挂杆执行方案"):
+        for value in ("南城店陈列执行甲", "折线之间·南城店", "墙面双层挂杆参考执行方案"):
             assert value in display.text
         display_v1 = client.post("/api/v1/display", json={"inventory_text": _INVENTORY}).json()
         assert display_v1["version"] == 1

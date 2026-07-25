@@ -5,7 +5,7 @@ from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import psycopg
 import pytest
@@ -14,13 +14,23 @@ from fastapi.testclient import TestClient
 from src.brain.display_contract import assert_display_complete
 from src.brain.display_service import DisplayService
 from src.brain.display_text import compile_display_body
-from src.brain.dm01_display_compiler import DM01DisplayCompiler, required_inventory_gap
+from src.brain.dm01_display_compiler import (
+    DM01DisplayCompiler,
+    parse_hard_requirements,
+    required_inventory_gap,
+)
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
 from src.infrastructure.display_repository import PostgresDisplayRepository
+from src.infrastructure.dm01_task_input import DM01TaskInputProvisioner
 from src.infrastructure.seed_demo import BRAND_ID, STORE_ORG_ID, STORE_USER_ID, TENANT_ID
-from src.shared.errors import GenerationFailed
-from src.shared.types import DisplayContext, DisplayGenerationInput, DisplayScope
+from src.shared.errors import DomainError, GenerationFailed
+from src.shared.types import (
+    DisplayContext,
+    DisplayGenerationInput,
+    DisplayScope,
+    GeneratedDisplayArtifact,
+)
 
 _INVENTORY = "今天这组墙可用：ZX-C218 3 件、ZX-S104 3 件、ZX-K126 4 件、ZX-P211 3 件、ZX-V113 3 件、ZX-Q117 4 件。"
 _FEEDBACK = "中间上杆 ZX-V113 太挤，请减少一件；其他内容不变。"
@@ -73,7 +83,7 @@ def test_display_v1_v2_preserves_history_and_records_dm01_assets(app_database_ur
     assert row is not None
     assert len(row[0]) == 11
     assert all(item["asset_id"].startswith(("G-", "GM-")) for item in row[0])
-    assert row[1]["brand_standard_version"] == "1.0"
+    assert row[1]["task_expression_version"] == "1.0"
     assert row[1]["store_profile_version"] == "1.0"
     assert row[1]["inventory"]["ZX-C218"] == 3
     assert row[1]["executor"] == "dm01-rule-compiler-v1"
@@ -92,7 +102,7 @@ def test_visible_body_comes_only_from_verified_layout_and_rejects_bad_c_rail(
     result = service.create(scope, _INVENTORY)
     assert result["kind"] == "display"
     assert "错误正文" not in str(result["body"])
-    assert "20 件；选择 15 件上墙，5 件不上墙" in str(result["body"])
+    assert "20 件；建议 15 件上墙，5 件不上墙" in str(result["body"])
 
     context = PostgresDisplayRepository(app_database_url).load_context(scope)
     assert context is not None
@@ -105,47 +115,44 @@ def test_visible_body_comes_only_from_verified_layout_and_rejects_bad_c_rail(
         assert_display_complete(replace(artifact, plan=invalid_plan), _INVENTORY_PAIRS)
 
 
-def test_real_keqiao_v1_uses_confirmed_snapshot_without_zx_or_long_term_product_facts() -> None:
-    raw = json.loads(Path("config/confirmed_inputs/diyu_clothing_keqiao_dm01_v1.json").read_text(encoding="utf-8"))
+def _keqiao_record() -> dict[str, object]:
+    raw = json.loads(Path("config/task_inputs/diyu_clothing_keqiao_dm01_v1.json").read_text(encoding="utf-8"))
     assert isinstance(raw, dict)
-    record = cast(dict[str, object], raw)
-    policy = cast(dict[str, object], record["policy"])
-    rail_profile = {
-        **cast(dict[str, object], record["rail_profile"]),
-        "confirmation": {
-            "confirmed_by": "阿丹",
-            "confirmed_at": "2026-07-25",
-            "system_submitted_by": "笛语服饰管理员",
-        },
-        "inventory_snapshot": {
-            "record_id": record["record_id"],
-            "record_version": record["record_version"],
-            "enforce_exact": True,
-            "items": record["inventory"],
-        },
-    }
-    items = cast(list[dict[str, object]], record["inventory"])
+    return cast(dict[str, object], raw)
+
+
+def _keqiao_context(record: dict[str, object]) -> tuple[DisplayContext, tuple[tuple[str, int], ...]]:
+    task_input = cast(dict[str, object], record["task_input"])
+    items = cast(list[dict[str, object]], task_input["products"])
     products = tuple((cast(str, item["sku"]), item) for item in items)
-    inventory = tuple((cast(str, item["sku"]), cast(int, item["confirmed_quantity"])) for item in items)
+    inventory = tuple((cast(str, item["sku"]), cast(int, item["quantity"])) for item in items)
     context = DisplayContext(
         "笛语服饰",
         "浙江分公司",
-        "阿丹",
         "笛语服饰管理员",
-        cast(str, record["record_version"]),
-        policy,
+        cast(str, task_input["version"]),
+        cast(dict[str, object], task_input["expression"]),
         "笛语柯桥店",
-        cast(str, record["record_version"]),
-        rail_profile,
+        cast(str, record["structure_version"]),
+        cast(dict[str, object], record["rail_profile"]),
         products,
     )
+    return context, inventory
+
+
+def test_keqiao_task_snapshot_compiles_a_conserving_reference_plan_without_zx_or_confirmation() -> None:
+    context, inventory = _keqiao_context(_keqiao_record())
     compiler = DM01DisplayCompiler()
     artifact = compiler.generate(DisplayGenerationInput(uuid4(), uuid4(), inventory, context, ()))
     assert_display_complete(artifact, inventory)
     body = compile_display_body(context, artifact.plan, revision=False)
 
-    assert sum(cast(dict[str, int], artifact.plan["mounted"]).values()) == 18
-    assert sum(cast(dict[str, int], artifact.plan["unmounted"]).values()) == 12
+    mounted = cast(dict[str, int], artifact.plan["mounted"])
+    unmounted = cast(dict[str, int], artifact.plan["unmounted"])
+    assert sum(mounted.values()) == 18
+    assert sum(unmounted.values()) == 12
+    assert all(mounted[sku] + unmounted[sku] == amount for sku, amount in inventory)
+    assert "笛语柯桥店墙面挂杆参考执行方案" in body
     assert "上杆右侧约三分之一" in body
     assert "右侧（主焦点）" in body
     assert "女童浅绿机能叠穿马甲（DIYU-CSPU-007）" in body
@@ -153,8 +160,206 @@ def test_real_keqiao_v1_uses_confirmed_snapshot_without_zx_or_long_term_product_
     assert "左侧（较弱回应）" in body
     assert "男童深蓝轻学院长款衬衫（DIYU-CSPU-005）" in body
     assert "左侧、右侧；用于避开长款上下重叠" in body
+    assert "侧挂保持正常可抽取间距，主正挂两侧各留约一个衣架宽的视觉边界。" in body
     assert "执行步骤" in body
     assert "ZX-" not in body
+    for banned in ("确认人", "确认日期", "代录", "业务指定", "授权", "审批", "阿丹"):
+        assert banned not in body
+    assert "这是系统根据本次任务输入给出的参考建议" in body
+    assert "也不表示现场已经执行" in body
 
-    changed = tuple((sku, amount - 1 if sku == "DIYU-CSPU-007" else amount) for sku, amount in inventory)
-    assert "已确认 3 件" in str(required_inventory_gap(changed, context))
+
+def test_reference_plan_never_asks_for_confirmation_and_accepts_a_changed_inventory() -> None:
+    context, inventory = _keqiao_context(_keqiao_record())
+    compiler = DM01DisplayCompiler()
+
+    changed = tuple(
+        (sku, amount - 1 if sku == "DIYU-CSPU-007" else amount)
+        for sku, amount in inventory
+        if sku != "DIYU-CSPU-008"
+    ) + (("DIYU-CSPU-999", 2),)
+    assert required_inventory_gap(changed, context) is None
+    changed_artifact = compiler.generate(DisplayGenerationInput(uuid4(), uuid4(), changed, context, ()))
+    assert_display_complete(changed_artifact, changed)
+    changed_body = compile_display_body(context, changed_artifact.plan, revision=False)
+    assert "DIYU-CSPU-999" in changed_body
+    assert "本次没有陈列资料的商品" in changed_body
+    assert cast(dict[str, int], changed_artifact.plan["mounted"])["DIYU-CSPU-999"] == 0
+
+    without_focus = tuple((sku, amount) for sku, amount in inventory if sku not in {"DIYU-CSPU-006", "DIYU-CSPU-007"})
+    assert required_inventory_gap(without_focus, context) is None
+    narrowed = compiler.generate(DisplayGenerationInput(uuid4(), uuid4(), without_focus, context, ()))
+    assert_display_complete(narrowed, without_focus)
+    focus = cast(dict[str, object], cast(dict[str, object], narrowed.plan["layout"])["focus_contract"])
+    assert focus["focus_source"] == "system_narrowed"
+    assert "系统已在当前商品里重新选择主焦点" in compile_display_body(context, narrowed.plan, revision=False)
+
+    no_suggestion = replace(context, task_expression={"schema": "dm01-wall-double-rail-v1", "theme": "无建议主题"})
+    assert required_inventory_gap(inventory, no_suggestion) is None
+    system_chosen = compiler.generate(DisplayGenerationInput(uuid4(), uuid4(), inventory, no_suggestion, ()))
+    assert_display_complete(system_chosen, inventory)
+    chosen_focus = cast(dict[str, object], cast(dict[str, object], system_chosen.plan["layout"])["focus_contract"])
+    assert chosen_focus["focus_source"] == "system_narrowed"
+    assert chosen_focus["secondary_present"] is False
+
+    hard = parse_hard_requirements("今天这组墙可用：DIYU-CSPU-002 4 件；DIYU-CSPU-006 必须留在主焦点。")
+    assert hard == frozenset({"DIYU-CSPU-006"})
+    question = required_inventory_gap(without_focus, context, hard)
+    assert question is not None
+    assert "DIYU-CSPU-006" in question
+    for banned in ("确认人", "授权", "审批", "代录"):
+        assert banned not in question
+    assert required_inventory_gap(inventory, context, hard) is None
+
+
+def _seed_local_scope_fixture(migrator_database_url: str, suffix: str) -> dict[str, str]:
+    """A local-only tenant shell so this task snapshot can run end to end; not the production tenant."""
+    tenant_name = f"柯桥参考方案本地夹具-{suffix}"
+    control_name = f"{tenant_name}管理组织"
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("INSERT INTO tenants (id, name) VALUES (gen_random_uuid(), %s) RETURNING id", (tenant_name,))
+        row = cursor.fetchone()
+        assert row is not None
+        tenant_id = str(row[0])
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
+        cursor.execute(
+            "INSERT INTO organizations (id, tenant_id, name) VALUES (gen_random_uuid(), %s, %s) RETURNING id",
+            (tenant_id, control_name),
+        )
+        organization = cursor.fetchone()
+        assert organization is not None
+        cursor.execute(
+            "INSERT INTO users (id, tenant_id, organization_id, display_name) "
+            "VALUES (gen_random_uuid(), %s, %s, %s) RETURNING id",
+            (tenant_id, str(organization[0]), "本地夹具管理员"),
+        )
+        user = cursor.fetchone()
+        assert user is not None
+        cursor.execute(
+            "INSERT INTO tenant_management_grants (id, tenant_id, user_id) VALUES (gen_random_uuid(), %s, %s)",
+            (tenant_id, str(user[0])),
+        )
+        cursor.execute(
+            "INSERT INTO brands (id, tenant_id, name, positioning, decision_order, tone) "
+            "VALUES (gen_random_uuid(), %s, %s, '本地夹具', '本地夹具', '本地夹具')",
+            (tenant_id, tenant_name),
+        )
+    return {"tenant_id": tenant_id, "tenant_name": tenant_name, "control_name": control_name}
+
+
+def test_task_snapshot_runs_end_to_end_and_a_new_inventory_is_never_blocked(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    suffix = uuid4().hex[:10]
+    fixture = _seed_local_scope_fixture(migrator_database_url, suffix)
+    record = {
+        **_keqiao_record(),
+        "record_id": f"DIYU-STORE-KQ-WALL-01-{suffix}",
+        "tenant_name": fixture["tenant_name"],
+        "brand_name": fixture["tenant_name"],
+        "control_organization_name": fixture["control_name"],
+        "execution_organization_name": f"浙江分公司-{suffix}",
+    }
+    activation = DM01TaskInputProvisioner(migrator_database_url).activate(record)
+    repository = PostgresDisplayRepository(app_database_url)
+    service = DisplayService(repository, DM01DisplayCompiler())
+
+    v1 = service.create(activation.scope, activation.inventory_text)
+    assert v1["kind"] == "display"
+    assert v1["version"] == 1
+    body = str(v1["body"])
+    assert "笛语柯桥店墙面挂杆参考执行方案" in body
+    assert "本次任务库存共 30 件；建议 18 件上墙，12 件不上墙。" in body
+    for banned in ("确认人", "确认日期", "代录", "业务指定", "授权", "审批", "阿丹"):
+        assert banned not in body
+
+    with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (fixture["tenant_id"],))
+        cursor.execute(
+            "SELECT rail_profile, current_task_input FROM display_stores WHERE tenant_id=%s",
+            (fixture["tenant_id"],),
+        )
+        store = cursor.fetchone()
+        cursor.execute("SELECT count(*) FROM display_policies WHERE tenant_id=%s", (fixture["tenant_id"],))
+        policies = cursor.fetchone()
+        cursor.execute("SELECT count(*) FROM brand_products WHERE tenant_id=%s", (fixture["tenant_id"],))
+        long_term_products = cursor.fetchone()
+        cursor.execute(
+            "SELECT input_receipt FROM display_generation_runs WHERE tenant_id=%s AND task_id=%s",
+            (fixture["tenant_id"], v1["task_id"]),
+        )
+        receipt = cursor.fetchone()
+    assert store is not None and policies is not None and long_term_products is not None
+    assert "inventory_snapshot" not in store[0] and "confirmation" not in store[0]
+    assert store[1]["source"] == "user_task_snapshot"
+    assert policies[0] == 0
+    assert long_term_products[0] == 0
+    assert receipt is not None
+    assert receipt[0]["operator"] == "本地夹具管理员"
+    assert "field_executor" not in receipt[0] and "submitted_by" not in receipt[0]
+
+    changed_inventory = (
+        "今天这组墙可用：DIYU-CSPU-007 2 件、DIYU-CSPU-006 4 件、DIYU-CSPU-005 3 件、"
+        "DIYU-CSPU-011 3 件、DIYU-CSPU-002 4 件、DIYU-CGRP-001 2 件。"
+    )
+    v1_again = service.create(activation.scope, changed_inventory)
+    assert v1_again["kind"] == "display"
+    assert v1_again["version"] == 1
+    assert v1_again["task_id"] != v1["task_id"]
+    assert "本次任务库存共 18 件" in str(v1_again["body"])
+
+    v2 = service.revise(
+        activation.scope,
+        UUID(str(v1["task_id"])),
+        "【测试夹具·非真实门店反馈】中间上杆 DIYU-CSPU-002 太挤，请减少一件；其他内容不变。",
+    )
+    assert v2["version"] == 2
+    assert "仅将中间上杆" in str(v2["body"])
+    assert service.fetch_version(activation.scope, UUID(str(v1["task_id"])), 1)["body"] == body
+    assert service.fetch_version(activation.scope, UUID(str(v1_again["task_id"])), 1)["version"] == 1
+    with pytest.raises(DomainError):
+        service.fetch_version(activation.scope, UUID(str(v1_again["task_id"])), 2)
+
+    foreign_tenant = replace(activation.scope, tenant_id=TENANT_ID)
+    assert service.create(foreign_tenant, activation.inventory_text)["kind"] == "question"
+    assert repository.load_context(replace(activation.scope, brand_id=BRAND_ID)) is None
+    assert repository.load_context(replace(activation.scope, organization_id=STORE_ORG_ID)) is None
+    with pytest.raises(DomainError):
+        service.fetch_version(foreign_tenant, UUID(str(v1["task_id"])), 1)
+
+
+def test_a_failed_generation_leaves_no_half_version(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    class FailingCompiler(DM01DisplayCompiler):
+        def generate(self, request: DisplayGenerationInput) -> GeneratedDisplayArtifact:
+            del request
+            raise GenerationFailed("本次不生成任何半成品")
+
+    suffix = uuid4().hex[:10]
+    fixture = _seed_local_scope_fixture(migrator_database_url, suffix)
+    record = {
+        **_keqiao_record(),
+        "record_id": f"DIYU-STORE-KQ-WALL-01-{suffix}",
+        "tenant_name": fixture["tenant_name"],
+        "brand_name": fixture["tenant_name"],
+        "control_organization_name": fixture["control_name"],
+        "execution_organization_name": f"浙江分公司-{suffix}",
+    }
+    activation = DM01TaskInputProvisioner(migrator_database_url).activate(record)
+    service = DisplayService(PostgresDisplayRepository(app_database_url), FailingCompiler())
+    with pytest.raises(GenerationFailed):
+        service.create(activation.scope, activation.inventory_text)
+    with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (fixture["tenant_id"],))
+        cursor.execute("SELECT count(*) FROM display_artifact_versions WHERE tenant_id=%s", (fixture["tenant_id"],))
+        versions = cursor.fetchone()
+        cursor.execute(
+            "SELECT status FROM display_generation_runs WHERE tenant_id=%s",
+            (fixture["tenant_id"],),
+        )
+        runs = cursor.fetchall()
+    assert versions is not None and versions[0] == 0
+    assert [row[0] for row in runs] == ["failed"]

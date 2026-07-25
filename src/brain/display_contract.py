@@ -23,7 +23,7 @@ def assert_display_complete(
     available = dict(inventory)
     _assert_quantities(mounted, unmounted, available)
     placed, rail_totals = _placed_quantities(layout, available)
-    if dict(placed) != mounted:
+    if dict(placed) != {sku: amount for sku, amount in mounted.items() if cast(int, amount) > 0}:
         raise GenerationFailed("上墙数量必须由上下挂杆槽位唯一聚合")
     capacities = layout.get("capacities")
     if not isinstance(capacities, dict):

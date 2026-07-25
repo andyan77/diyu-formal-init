@@ -38,14 +38,14 @@ class PostgresDisplayRepository(DisplayRepository):
         actor_organization_id = scope.actor_organization_id or scope.organization_id
         with self._tx(scope) as cursor:
             cursor.execute(
-                """SELECT b.name brand_name, u.display_name submitter_name, o.name organization_name,
+                """SELECT b.name brand_name, u.display_name operator_name, o.name organization_name,
                           p.version policy_version, p.body policy, s.name store_name,
-                          s.profile_version, s.rail_profile
+                          s.profile_version, s.rail_profile, s.current_task_input
                    FROM brands b JOIN users u ON u.id=%s AND u.tenant_id=b.tenant_id
                    JOIN organizations o ON o.id=%s AND o.tenant_id=u.tenant_id
                    JOIN display_stores s ON s.brand_id=b.id AND s.tenant_id=b.tenant_id
                       AND s.execution_organization_id=o.id
-                   JOIN display_policies p ON p.brand_id=b.id AND p.tenant_id=b.tenant_id
+                   LEFT JOIN display_policies p ON p.brand_id=b.id AND p.tenant_id=b.tenant_id
                       AND p.version=s.profile_version
                    WHERE b.tenant_id=%s AND b.id=%s AND u.organization_id=%s
                      AND (s.execution_organization_id=%s OR s.control_organization_id=%s)""",
@@ -62,9 +62,9 @@ class PostgresDisplayRepository(DisplayRepository):
             row = cursor.fetchone()
             if row is None:
                 return None
-            policy = self._object(row["policy"], "陈列标准")
-            rail_profile = self._object(row["rail_profile"], "门店挂杆档案")
-            products = self._profile_products(rail_profile)
+            rail_profile = self._object(row["rail_profile"], "门店挂杆结构")
+            task_input = self._optional_object(row["current_task_input"], "本次任务输入")
+            products = self._task_products(task_input)
             if not products:
                 cursor.execute(
                     "SELECT sku, facts FROM brand_products WHERE tenant_id=%s AND brand_id=%s ORDER BY sku",
@@ -73,21 +73,17 @@ class PostgresDisplayRepository(DisplayRepository):
                 products = tuple(
                     (str(item["sku"]), self._object(item["facts"], "商品事实")) for item in cursor.fetchall()
                 )
-        confirmation = rail_profile.get("confirmation")
-        operator_name = (
-            str(confirmation["confirmed_by"])
-            if isinstance(confirmation, dict)
-            and isinstance(confirmation.get("confirmed_by"), str)
-            and str(confirmation["confirmed_by"]).strip()
-            else str(row["submitter_name"])
-        )
+        expression = self._optional_object(task_input.get("expression"), "本次任务表达")
+        expression_version = task_input.get("version")
+        if not expression:
+            expression = self._optional_object(row["policy"], "品牌陈列标准")
+            expression_version = row["policy_version"]
         return DisplayContext(
             str(row["brand_name"]),
             str(row["organization_name"]),
-            operator_name,
-            str(row["submitter_name"]),
-            str(row["policy_version"]),
-            policy,
+            str(row["operator_name"]),
+            str(expression_version) if isinstance(expression_version, str) else "",
+            expression,
             str(row["store_name"]),
             str(row["profile_version"]),
             rail_profile,
@@ -377,11 +373,10 @@ class PostgresDisplayRepository(DisplayRepository):
         receipts = [{"asset_id": a.asset_id, "schema_version": a.schema_version} for a in assets]
         input_receipt = {
             "executor": model,
-            "brand_standard_version": context.policy_version,
+            "task_expression_version": context.task_expression_version,
             "store_profile_version": context.store_profile_version,
             "operator_organization": context.organization_name,
-            "field_executor": context.operator_name,
-            "submitted_by": context.submitter_name,
+            "operator": context.operator_name,
             "products": [{"sku": sku, "facts": facts} for sku, facts in context.products],
             "inventory": dict(inventory),
         }
@@ -396,22 +391,30 @@ class PostgresDisplayRepository(DisplayRepository):
             raise DomainError(f"{label}数据无效")
         return cast(dict[str, object], value)
 
+    @staticmethod
+    def _optional_object(value: object, label: str) -> dict[str, object]:
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            raise DomainError(f"{label}数据无效")
+        return cast(dict[str, object], value)
+
     @classmethod
-    def _profile_products(
+    def _task_products(
         cls,
-        rail_profile: dict[str, object],
+        task_input: dict[str, object],
     ) -> tuple[tuple[str, dict[str, object]], ...]:
-        snapshot = rail_profile.get("inventory_snapshot")
-        if not isinstance(snapshot, dict):
+        """Read the light display attributes this task submitted; they are not brand product facts."""
+        items = task_input.get("products")
+        if items is None:
             return ()
-        items = snapshot.get("items")
         if not isinstance(items, list):
-            raise DomainError("门店一次性商品快照无效")
+            raise DomainError("本次任务商品资料无效")
         result: list[tuple[str, dict[str, object]]] = []
         for raw in items:
-            item = cls._object(raw, "门店一次性商品")
+            item = cls._object(raw, "本次任务商品")
             sku = item.get("sku")
             if not isinstance(sku, str) or not sku.strip():
-                raise DomainError("门店一次性商品缺少编号")
+                raise DomainError("本次任务商品缺少编号")
             result.append((sku, item))
         return tuple(result)

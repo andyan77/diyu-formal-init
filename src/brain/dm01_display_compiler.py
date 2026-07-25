@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import Counter
 from copy import deepcopy
 from typing import cast
@@ -10,42 +11,48 @@ from src.shared.types import DisplayContext, DisplayGenerationInput, GeneratedDi
 
 _POSITIONS = ("left", "center", "right")
 _REDUCTION_MARKERS = ("减少", "少挂", "拿掉", "撤下", "太挤", "挂不下", "遮挡", "难取", "不好拿")
+_HARD_MARKERS = ("必须", "务必", "固定", "不可改变", "不能改", "不得更换")
+_SKU_TOKEN = re.compile(r"[A-Z0-9]+(?:-[A-Z0-9]+)+")
+_SENTENCE = re.compile(r"[。；;.\n]")
+_RAIL_TEXT = {"upper": "上杆", "lower": "下杆"}
+
+
+def parse_hard_requirements(text: str) -> frozenset[str]:
+    """Only this task's own wording can make a product mandatory; nothing else grants that status."""
+    marked: set[str] = set()
+    for sentence in _SENTENCE.split(text.upper()):
+        if any(marker in sentence for marker in _HARD_MARKERS):
+            marked.update(_SKU_TOKEN.findall(sentence))
+    return frozenset(marked)
 
 
 def required_inventory_gap(
     inventory: tuple[tuple[str, int], ...],
     context: DisplayContext,
+    hard_requirements: frozenset[str] = frozenset(),
 ) -> str | None:
-    """Return one actionable gap against the trusted store-scoped product facts."""
-    available = dict(inventory)
-    products = dict(context.products)
-    unsupported = sorted(set(available) - set(products))
-    if unsupported:
-        return f"本次清单包含当前门店档案未登记的 {unsupported[0]}；请先确认这件商品。"
-    policy = _object(context.policy, "品牌陈列标准")
-    primary_skus = _string_tuple(policy.get("primary_focus_skus"), "主焦点商品")
-    secondary_skus = _string_tuple(policy.get("secondary_response_skus"), "较弱回应商品")
-    required = Counter(primary_skus)
-    if bool(policy.get("secondary_required", False)):
-        required.update(secondary_skus)
-    for sku, minimum in required.items():
-        if available.get(sku, 0) < minimum:
-            return f"本次缺少业务指定的 {sku} 至少 {minimum} 件；请确认可用数量后再生成。"
+    """Ask once, and only when this task cannot stand at all.
 
-    snapshot = context.rail_profile.get("inventory_snapshot")
-    if isinstance(snapshot, dict) and bool(snapshot.get("enforce_exact", False)):
-        confirmed = {
-            sku: _positive_int(facts.get("confirmed_quantity"), f"{sku} 确认数量") for sku, facts in context.products
-        }
-        if set(available) != set(confirmed):
-            missing = sorted(set(confirmed) - set(available))
-            extra = sorted(set(available) - set(confirmed))
-            changed = missing[0] if missing else extra[0]
-            return f"本次一次性库存没有完整覆盖已确认清单，首先需要核对 {changed}。"
-        for sku, amount in confirmed.items():
-            if available[sku] != amount:
-                return f"{sku} 已确认 {amount} 件，本次填写为 {available[sku]} 件；请先确认差异。"
-    return None
+    Everything substitutable is handled by narrowing the plan instead of asking. No question ever
+    requests a confirmer, an approval or an authorisation.
+    """
+    available = {sku: amount for sku, amount in inventory if amount > 0}
+    products = dict(context.products)
+    missing_hard = sorted(sku for sku in hard_requirements if available.get(sku, 0) < 1 or sku not in products)
+    families = {str(products[sku].get("display_family", "")) for sku in available if sku in products}
+    missing_rails = [rail for rail in ("upper", "lower") if rail not in families]
+    if not missing_hard and not missing_rails:
+        return None
+    parts = []
+    if missing_hard:
+        parts.append("本次输入里没有可用的 " + "、".join(missing_hard) + "，而你写明它必须留在方案里")
+    if missing_rails:
+        parts.append("本次没有可以放到" + "、".join(_RAIL_TEXT[rail] for rail in missing_rails) + "的商品资料")
+    return (
+        "还差一点就能生成参考方案："
+        + "；".join(parts)
+        + "。请在一段话里补上这些商品和数量，或直接说明由系统在现有商品里选择。"
+    )
 
 
 def parse_revision_target(
@@ -93,17 +100,18 @@ class DM01DisplayCompiler(DisplayGenerator):
         return self._compile_v1(request)
 
     def _compile_v1(self, request: DisplayGenerationInput) -> GeneratedDisplayArtifact:
-        gap = required_inventory_gap(request.inventory, request.context)
+        gap = required_inventory_gap(request.inventory, request.context, request.hard_requirements)
         if gap is not None:
             raise GenerationFailed(gap)
-        inventory = dict(request.inventory)
+        inventory = {sku: amount for sku, amount in request.inventory if amount > 0}
         products = dict(request.context.products)
-        policy = _object(request.context.policy, "品牌陈列标准")
-        profile = _object(request.context.rail_profile, "门店挂杆档案")
-        if policy.get("schema") != "dm01-wall-double-rail-v1":
-            raise GenerationFailed("品牌陈列标准不属于当前 DM01 双层挂杆合同")
+        expression = _object(request.context.task_expression, "本次任务表达")
+        profile = _object(request.context.rail_profile, "门店挂杆结构")
+        schema = expression.get("schema")
+        if schema is not None and schema != "dm01-wall-double-rail-v1":
+            raise GenerationFailed("本次任务表达不属于当前 DM01 双层挂杆合同")
         if profile.get("schema") != "dm01-wall-double-rail-v1":
-            raise GenerationFailed("门店挂杆档案不属于当前 DM01 双层挂杆合同")
+            raise GenerationFailed("门店挂杆结构不属于当前 DM01 双层挂杆合同")
 
         upper_capacity = _positive_int(profile.get("upper_comfort_capacity"), "上杆舒适容量")
         lower_capacity = _positive_int(profile.get("lower_comfort_capacity"), "下杆舒适容量")
@@ -115,16 +123,23 @@ class DM01DisplayCompiler(DisplayGenerator):
         physical_order = list(_POSITIONS)
         reading_order = list(reversed(_POSITIONS)) if approach == "right" else physical_order
         zones = _empty_zones(primary_position, secondary_position)
-        mounted = {sku: 0 for sku in inventory}
+        mounted = {sku: 0 for sku, _ in request.inventory}
 
-        primary_skus = _string_tuple(policy.get("primary_focus_skus"), "主焦点商品")
-        secondary_skus = _string_tuple(policy.get("secondary_response_skus"), "较弱回应商品")
+        suggested_primary = _suggested_skus(expression.get("primary_focus_skus"), "主焦点建议")
+        secondary_skus = _suggested_skus(expression.get("secondary_response_skus"), "较弱回应建议")
+        primary_skus = _usable_primary(suggested_primary, inventory, products)
+        focus_source = "task_input" if primary_skus else "system_narrowed"
+        if not primary_skus:
+            fallback = _first_upper_sku(request.context.products, inventory)
+            if fallback is None:
+                raise GenerationFailed("本次没有可以放到上杆的商品资料")
+            primary_skus = (fallback,)
         for index, sku in enumerate(primary_skus):
             mount = "front_facing" if index == 0 else "front_facing_layered"
             _add_slot(zones, primary_position, "upper", sku, products, mounted, inventory, 1, mount)
-        secondary_present = True
+        secondary_present = bool(secondary_skus)
         for sku in secondary_skus:
-            if mounted.get(sku, 0) >= inventory.get(sku, 0):
+            if sku not in products or mounted.get(sku, 0) >= inventory.get(sku, 0):
                 secondary_present = False
                 break
             _add_slot(
@@ -141,7 +156,7 @@ class DM01DisplayCompiler(DisplayGenerator):
 
         upper_count = sum(mounted.values())
         for sku, facts in request.context.products:
-            if facts.get("display_family") != "upper":
+            if facts.get("display_family") != "upper" or sku not in inventory:
                 continue
             target = (
                 primary_position if sku in primary_skus else secondary_position if sku in secondary_skus else "center"
@@ -170,7 +185,7 @@ class DM01DisplayCompiler(DisplayGenerator):
         lower_count = 0
         lower_index = 0
         for sku, facts in request.context.products:
-            if facts.get("display_family") != "lower":
+            if facts.get("display_family") != "lower" or sku not in inventory:
                 continue
             amount = min(inventory[sku] - mounted[sku], lower_capacity - lower_count)
             if amount < 1:
@@ -180,7 +195,8 @@ class DM01DisplayCompiler(DisplayGenerator):
             lower_count += amount
             lower_index += 1
 
-        unmounted = {sku: amount - mounted[sku] for sku, amount in inventory.items()}
+        unmounted = {sku: amount - mounted.get(sku, 0) for sku, amount in dict(request.inventory).items()}
+        undescribed = sorted(sku for sku in unmounted if sku not in products)
         constraints = _string_tuple(profile.get("constraints"), "现场硬限制")
         layout: dict[str, object] = {
             "schema": "dm01-wall-double-rail-v1",
@@ -195,13 +211,18 @@ class DM01DisplayCompiler(DisplayGenerator):
                 "primary_skus": list(primary_skus),
                 "secondary_skus": list(secondary_skus),
                 "secondary_present": secondary_present,
+                "focus_source": focus_source,
             },
-            "theme": _nonempty_text(policy.get("theme"), "本次主题"),
-            "density": _nonempty_text(policy.get("density"), "陈列密度"),
-            "spacing": "侧挂之间保留约一个衣架宽，正挂两侧各留出清楚边界，保证单手抽取和复位。",
-            "substitution": "缺少业务指定焦点商品时停止并确认；其他商品不足时保留主次焦点，缩减对应中性组，不跨用未登记商品。",
+            "theme": _text_or(expression.get("theme"), "本次没有说明主题，按现有商品关系组织"),
+            "density": _text_or(expression.get("density"), "中低密度"),
+            "spacing": "侧挂保持正常可抽取间距，主正挂两侧各留约一个衣架宽的视觉边界。",
+            "substitution": (
+                "本次建议的焦点商品不可用时，系统改用当前可用商品重新形成主焦点；"
+                "其他商品不足时保留主次关系，缩减对应中性组，不使用没有陈列资料的商品。"
+            ),
             "constraints": list(constraints),
             "blocked_lower_positions": sorted(blocked_lower),
+            "undescribed_skus": undescribed,
             "execution_steps": [
                 "按上墙与不上墙数量逐项对账",
                 f"先完成{_position_text(primary_position)}主焦点，再完成{_position_text(secondary_position)}较弱回应",
@@ -297,6 +318,36 @@ def _object(value: object, label: str) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
+def _suggested_skus(value: object, label: str) -> tuple[str, ...]:
+    """A focus list is a suggestion; an absent or empty list simply leaves the choice to the system."""
+    if value is None:
+        return ()
+    return _string_tuple(value, label, allow_empty=True)
+
+
+def _usable_primary(
+    suggested: tuple[str, ...],
+    inventory: dict[str, int],
+    products: dict[str, dict[str, object]],
+) -> tuple[str, ...]:
+    if not suggested:
+        return ()
+    counts = Counter(suggested)
+    if any(sku not in products or inventory.get(sku, 0) < amount for sku, amount in counts.items()):
+        return ()
+    return suggested
+
+
+def _first_upper_sku(
+    products: tuple[tuple[str, dict[str, object]], ...],
+    inventory: dict[str, int],
+) -> str | None:
+    for sku, facts in products:
+        if facts.get("display_family") == "upper" and inventory.get(sku, 0) > 0:
+            return sku
+    return None
+
+
 def _string_tuple(value: object, label: str, *, allow_empty: bool = False) -> tuple[str, ...]:
     if not isinstance(value, (list, tuple)) or any(not isinstance(item, str) or not item.strip() for item in value):
         raise GenerationFailed(f"{label}结构无效")
@@ -316,6 +367,11 @@ def _nonempty_text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise GenerationFailed(f"{label}不能为空")
     return value.strip()
+
+
+def _text_or(value: object, default: str) -> str:
+    """A missing non-critical field narrows the plan's wording instead of blocking this task."""
+    return value.strip() if isinstance(value, str) and value.strip() else default
 
 
 def _position(value: object, label: str) -> str:

@@ -14,19 +14,15 @@ def compile_display_body(context: DisplayContext, plan: dict[str, object], revis
     zones = cast(dict[str, dict[str, object]], layout["zones"])
     total_mounted, total_unmounted = sum(mounted.values()), sum(unmounted.values())
     position_names = " → ".join(_POSITION_TEXT[item] for item in cast(list[str], layout["reading_order"]))
-    confirmation = context.rail_profile.get("confirmation")
-    confirmed_at = ""
-    if isinstance(confirmation, dict) and isinstance(confirmation.get("confirmed_at"), str):
-        confirmed_at = f"，现场确认日期 {confirmation['confirmed_at']}"
     change = f"{layout['revision_note']}\n\n" if revision else ""
     sections = [
         (
             f"适用范围：{context.brand_name}｜{context.store_name}｜{context.organization_name}；"
-            f"现场执行人 {context.operator_name}，系统代录人 {context.submitter_name}{confirmed_at}。"
+            f"本次操作人 {context.operator_name}。"
         ),
         f"主题：{layout['theme']}。密度：{layout['density']}；只做一个主焦点和最多一个较弱回应。",
         (
-            f"本次人工库存共 {total_mounted + total_unmounted} 件；选择 {total_mounted} 件上墙，"
+            f"本次任务库存共 {total_mounted + total_unmounted} 件；建议 {total_mounted} 件上墙，"
             f"{total_unmounted} 件不上墙。上杆、下杆分别不超过 "
             f"{cast(dict[str, int], layout['capacities'])['upper']} / "
             f"{cast(dict[str, int], layout['capacities'])['lower']} 件舒适容量。"
@@ -56,6 +52,8 @@ def compile_display_body(context: DisplayContext, plan: dict[str, object], revis
             )
             + "；用于避开长款上下重叠、立柱影响或保留补货操作空间。"
         )
+    if str(cast(dict[str, object], layout["focus_contract"]).get("focus_source")) == "system_narrowed":
+        sections.append("本次输入建议的焦点商品这次不可用，系统已在当前商品里重新选择主焦点。")
     sections.extend(
         [
             f"正挂、侧挂与间距：{layout['spacing']}",
@@ -64,16 +62,26 @@ def compile_display_body(context: DisplayContext, plan: dict[str, object], revis
             + "、".join(
                 f"{_product_label(context, sku)}（{sku}）×{amount}" for sku, amount in unmounted.items() if amount > 0
             )
-            + "。这些仍属于本次人工库存，不表示缺货或不可销售。",
+            + "。这些仍属于本次任务库存，不表示缺货或不可销售。",
+        ]
+    )
+    undescribed = [sku for sku in cast(list[str], layout.get("undescribed_skus", [])) if unmounted.get(sku, 0) > 0]
+    if undescribed:
+        sections.append(
+            "本次没有陈列资料的商品：" + "、".join(undescribed) + "；它们只计入库存对账，没有进入上墙分配。"
+        )
+    sections.extend(
+        [
             "现场硬限制：" + "；".join(cast(list[str], layout["constraints"])) + "。",
             "执行步骤："
             + " ".join(
                 f"{index}. {step}" for index, step in enumerate(cast(list[str], layout["execution_steps"]), start=1)
             ),
-            "这是一份内部执行建议，不表示总部批准、系统核验库存或门店已经执行。",
+            "这是系统根据本次任务输入给出的参考建议，门店自行决定是否采用；"
+            "系统不代表总部批准，不核验库存，也不表示现场已经执行。",
         ]
     )
-    return "内部执行建议\n\n" + change + "\n\n".join(sections)
+    return f"{context.store_name}墙面挂杆参考执行方案\n\n" + change + "\n\n".join(sections)
 
 
 def _rail_text(value: object) -> str:
@@ -92,6 +100,6 @@ def _rail_text(value: object) -> str:
 
 
 def _product_label(context: DisplayContext, sku: str) -> str:
-    facts = dict(context.products)[sku]
+    facts = dict(context.products).get(sku, {})
     name = facts.get("name")
     return str(name) if isinstance(name, str) and name else sku

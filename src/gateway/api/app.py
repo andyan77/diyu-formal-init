@@ -874,8 +874,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return HTMLResponse(
             render_spa_shell(
                 workbench_service.display_context(scope, current_settings.generator_mode),
-                "<p>当前能力：墙面双层挂杆执行方案</p>",
-                "<h1>陈列搭配</h1><p>当前工作只处理门店内部执行方案。</p>",
+                "<p>当前能力：墙面双层挂杆参考执行方案</p>",
+                "<h1>陈列搭配</h1><p>当前工作只给出门店内部参考建议，不要求确认或授权。</p>",
             )
         )
 

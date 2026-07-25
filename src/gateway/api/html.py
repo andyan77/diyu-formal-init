@@ -12,7 +12,7 @@ def render_home() -> str:
         "<section class='choices'><a class='choice' href='/ui/select/content'><strong>内容生产（对外）</strong>"
         "<span>为品牌受众生成可直接制作的内容。</span></a>"
         "<a class='choice' href='/ui/select/display'><strong>陈列搭配（对内）</strong>"
-        "<span>为门店生成墙面双层挂杆执行建议。</span></a></section>",
+        "<span>为门店生成墙面双层挂杆参考执行建议。</span></a></section>",
     )
 
 
@@ -109,15 +109,15 @@ def render_display_workbench(
 ) -> str:
     artifact = ""
     if result:
-        artifact = f"<h2>墙面方案 V{escape(str(result['version']))}</h2><article>{escape(str(result['body']))}</article><form method='post' action='/ui/display/revise'><input type='hidden' name='task_id' value='{escape(str(result['task_id']))}'><textarea name='feedback' required></textarea><button>按自然反馈生成 V{int(str(result['version'])) + 1}</button></form>"
+        artifact = f"<h2>墙面挂杆参考执行方案 V{escape(str(result['version']))}</h2><article>{escape(str(result['body']))}</article><form method='post' action='/ui/display/revise'><input type='hidden' name='task_id' value='{escape(str(result['task_id']))}'><textarea name='feedback' required></textarea><button>按自然反馈生成 V{int(str(result['version'])) + 1}</button></form>"
     identity_text = _identity(
         ("品牌", identity["brand"]),
-        ("实际操作人", identity["operator"]),
+        ("当前操作人", identity["operator"]),
         ("执行组织", identity["organization"]),
         ("当前门店", identity["store"]),
-        ("当前能力", "墙面双层挂杆执行方案"),
+        ("当前能力", "墙面双层挂杆参考执行方案"),
     )
-    content = f"<a href='/'>返回应用首页</a><h1>陈列搭配（对内）</h1>{identity_text}<p>DM01 确定性陈列编译：只从已验证的库存、品牌标准和挂杆档案生成方案。</p>{_notice(notice)}<form method='post' action='/ui/display/generate'><textarea name='inventory_text' required placeholder='今天这组墙可用：商品编号 3 件……'></textarea><button>生成墙面方案</button></form>{artifact}"
+    content = f"<a href='/'>返回应用首页</a><h1>陈列搭配（对内）</h1>{identity_text}<p>DM01 确定性陈列编译：根据本次库存、门店挂杆结构和本次表达生成参考建议，不要求确认或授权。</p>{_notice(notice)}<form method='post' action='/ui/display/generate'><textarea name='inventory_text' required placeholder='今天这组墙可用：商品编号 3 件……'></textarea><button>生成墙面方案</button></form>{artifact}"
     return _page("陈列搭配（对内）", content)
 
 

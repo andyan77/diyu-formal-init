@@ -6,6 +6,7 @@ from uuid import UUID
 from src.brain.display_contract import assert_display_complete, assert_display_revision
 from src.brain.display_text import compile_display_body
 from src.brain.dm01_display_compiler import (
+    parse_hard_requirements,
     parse_revision_target,
     required_inventory_gap,
 )
@@ -30,14 +31,25 @@ class DisplayService:
                 "message": "这家门店还缺少上下挂杆、固定正挂点和来客方向这项条件；请先补充它。",
             }
         inventory = self._inventory(inventory_text, context)
-        gap = required_inventory_gap(inventory, context)
+        hard_requirements = parse_hard_requirements(inventory_text)
+        gap = required_inventory_gap(inventory, context, hard_requirements)
         if gap is not None:
             return {"kind": "question", "message": gap}
         assets = self._repository.load_assets(revision=False)
         task_id, run_id = self._repository.create_run(
             scope, inventory_text, inventory, context, self._generator.model_name, assets
         )
-        return self._generate(scope, task_id, run_id, inventory, context, assets, None, None)
+        return self._generate(
+            scope,
+            task_id,
+            run_id,
+            inventory,
+            context,
+            assets,
+            None,
+            None,
+            hard_requirements=hard_requirements,
+        )
 
     def revise(self, scope: DisplayScope, task_id: UUID, feedback: str) -> dict[str, object]:
         if not feedback.strip():
@@ -77,7 +89,6 @@ class DisplayService:
         return {
             "brand": context.brand_name,
             "operator": context.operator_name,
-            "submitter": context.submitter_name,
             "organization": context.organization_name,
             "store": context.store_name,
         }
@@ -93,6 +104,7 @@ class DisplayService:
         feedback: str | None,
         prior: dict[str, object] | None,
         revision_target: tuple[str, str, str] | None = None,
+        hard_requirements: frozenset[str] = frozenset(),
     ) -> dict[str, object]:
         try:
             artifact = self._generator.generate(
@@ -105,6 +117,7 @@ class DisplayService:
                     feedback,
                     prior,
                     revision_target,
+                    hard_requirements,
                 )
             )
             assert_display_complete(artifact, inventory, revision=feedback is not None)

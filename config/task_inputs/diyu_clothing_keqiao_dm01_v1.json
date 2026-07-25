@@ -1,0 +1,170 @@
+{
+  "record_id": "DIYU-STORE-KQ-WALL-01",
+  "input_status": "user_task_snapshot",
+  "input_note": "用户提供的本次任务快照，用于生成参考方案；其中现场条件和库存仍未证明为真实现场事实。",
+  "tenant_name": "笛语服饰",
+  "brand_name": "笛语服饰",
+  "control_organization_name": "笛语服饰管理组织",
+  "execution_organization_name": "浙江分公司",
+  "store_name": "笛语柯桥店",
+  "structure_version": "KQ-WALL-01-structure-v1",
+  "rail_profile": {
+    "schema": "dm01-wall-double-rail-v1",
+    "upper_comfort_capacity": 16,
+    "lower_comfort_capacity": 14,
+    "primary_position": "right",
+    "secondary_position": "left",
+    "golden_sight": "上杆右侧约三分之一，是从右侧进入时的第一视觉落点",
+    "approach": "right",
+    "lower_reserved_positions": [
+      "left"
+    ],
+    "avoid_long_upper_lower_overlap": true,
+    "constraints": [
+      "正挂位和杆高不可调整",
+      "左侧立柱不宜安排长厚商品侧挂",
+      "长款商品不得与下杆商品重叠",
+      "不增加落地架、墙面打孔或突出装饰",
+      "不得遮挡价格、消防、监控和通道",
+      "左下保留补货操作空间"
+    ]
+  },
+  "task_input": {
+    "version": "KQ-WALL-01-task-2026-07-25",
+    "expression": {
+      "schema": "dm01-wall-double-rail-v1",
+      "theme": "夏末初秋·自然机能与城市松弛",
+      "density": "中低密度",
+      "primary_focus_skus": [
+        "DIYU-CSPU-006",
+        "DIYU-CSPU-007"
+      ],
+      "secondary_response_skus": [
+        "DIYU-CSPU-005"
+      ]
+    },
+    "products": [
+      {
+        "sku": "DIYU-CSPU-007",
+        "name": "女童浅绿机能叠穿马甲",
+        "category": "马甲",
+        "color_shape": "浅绿、宽松、轻机能",
+        "weight": "轻薄",
+        "display_family": "upper",
+        "is_long": false,
+        "accent": false,
+        "quantity": 3
+      },
+      {
+        "sku": "DIYU-CSPU-006",
+        "name": "女童自然度假白色连衣裙",
+        "category": "连衣裙",
+        "color_shape": "白色、宽松A形、自然轮廓",
+        "weight": "轻薄",
+        "display_family": "upper",
+        "is_long": true,
+        "accent": false,
+        "quantity": 4
+      },
+      {
+        "sku": "DIYU-CSPU-005",
+        "name": "男童深蓝轻学院长款衬衫",
+        "category": "长袖衬衫",
+        "color_shape": "深蓝、长身、宽松直筒",
+        "weight": "中薄",
+        "display_family": "upper",
+        "is_long": true,
+        "accent": false,
+        "quantity": 3
+      },
+      {
+        "sku": "DIYU-CSPU-008",
+        "name": "女童灰色松弛针织开衫",
+        "category": "针织开衫",
+        "color_shape": "灰色、落肩、松弛轮廓",
+        "weight": "中等",
+        "display_family": "upper",
+        "is_long": false,
+        "accent": false,
+        "quantity": 3
+      },
+      {
+        "sku": "DIYU-CSPU-011",
+        "name": "男童海岸休闲牛仔外套",
+        "category": "牛仔外套",
+        "color_shape": "牛仔蓝、宽松、短至常规长度",
+        "weight": "中等",
+        "display_family": "upper",
+        "is_long": false,
+        "accent": false,
+        "quantity": 3
+      },
+      {
+        "sku": "DIYU-CSPU-002",
+        "name": "男童灰色自然工装宽松短袖",
+        "category": "短袖上衣",
+        "color_shape": "中灰、宽松、低调工装",
+        "weight": "轻薄",
+        "display_family": "upper",
+        "is_long": false,
+        "accent": false,
+        "quantity": 4
+      },
+      {
+        "sku": "DIYU-CSPU-003",
+        "name": "男童藏蓝街头工装宽松短袖",
+        "category": "短袖上衣",
+        "color_shape": "藏蓝、宽松、长身倾向",
+        "weight": "轻薄",
+        "display_family": "upper",
+        "is_long": false,
+        "accent": false,
+        "quantity": 3
+      },
+      {
+        "sku": "DIYU-CSPU-001",
+        "name": "男童亮黄城市工装宽松短袖",
+        "category": "短袖上衣",
+        "color_shape": "亮黄、宽松",
+        "weight": "轻薄",
+        "display_family": "upper",
+        "is_long": false,
+        "accent": true,
+        "quantity": 2
+      },
+      {
+        "sku": "DIYU-CGRP-001",
+        "name": "男童工装长裤组",
+        "category": "裤装原始描述",
+        "color_shape": "卡其/灰、直筒或宽松",
+        "weight": "中等",
+        "display_family": "lower",
+        "is_long": false,
+        "accent": false,
+        "quantity": 2
+      },
+      {
+        "sku": "DIYU-CGRP-002",
+        "name": "儿童宽松牛仔裤组",
+        "category": "裤装原始描述",
+        "color_shape": "牛仔蓝、宽松直筒",
+        "weight": "中等",
+        "display_family": "lower",
+        "is_long": false,
+        "accent": false,
+        "quantity": 2
+      },
+      {
+        "sku": "DIYU-CGRP-003",
+        "name": "儿童棕色松弛长裤组",
+        "category": "裤装原始描述",
+        "color_shape": "棕色、宽松、自然轮廓",
+        "weight": "中等",
+        "display_family": "lower",
+        "is_long": false,
+        "accent": false,
+        "quantity": 1
+      }
+    ]
+  }
+}
