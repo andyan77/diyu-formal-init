@@ -704,6 +704,7 @@ def test_deterministic_check_catches_unit_id_leak_in_visible_text(
         "创作者口播：c8、c9内容",
         "口播内容：c8、c9",
         "口播：c8、c9 的内容",
+        "（口播c8、c9内容）",
     ],
 )
 def test_pure_claim_reference_sound_text_resolves_to_spoken_lines(

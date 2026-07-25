@@ -99,9 +99,9 @@ _SCENE_PURPOSE = "scene"
 # already carries — so the server resolves it deterministically to the claims'
 # own text. Any id mixed into real prose still fails closed downstream.
 _SOUND_CLAIM_REFERENCE = re.compile(
-    r"^(?:创作者)?(?:口播|说|台词|旁白|念)?(?:内容|台词)?\s*[:：]?\s*"
+    r"^[（(]?\s*(?:创作者)?(?:口播|说|台词|旁白|念)?(?:内容|台词)?\s*[:：]?\s*"
     r"(c\d{1,3}(?:\s*[、,，和/]\s*c\d{1,3})*)"
-    r"\s*(?:的)?(?:内容|台词|原文|部分)?\s*[。.!！]?$"
+    r"\s*(?:的)?(?:内容|台词|原文|部分)?\s*[。.!！]?\s*[）)]?$"
 )
 _CLAIM_ID_TOKEN = re.compile(r"c\d{1,3}")
 
