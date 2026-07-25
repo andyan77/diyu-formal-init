@@ -459,6 +459,7 @@ def test_shared_invariant_forbids_unsourced_history_claims_in_every_prompt(
     for prompt in (writer_prompt, judge_prompt):
         assert "曾经、反复或长期发生过" in prompt
         assert "执行或改变" in prompt
+        assert "不构成品牌或任何人已经发生过的询问、讨论、观察或经历" in prompt
     assert "共享不变量" in writer_prompt
     assert "品牌观点只能承载当前立场、希望、主张和建议" in judge_prompt
     assert "删除经历外壳" in writer_prompt and "删除经历外壳" in repair_prompt
