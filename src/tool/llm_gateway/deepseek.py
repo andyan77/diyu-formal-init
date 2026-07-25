@@ -199,7 +199,34 @@ class BoundaryContext:
             abs(left - right) for index, left in enumerate(recorded_numbers) for right in recorded_numbers[index + 1 :]
         )
 
-        topic = "\n".join(part for part in (request.weak_seed, request.revision_instruction) if part)
+        direction_lines: list[str] = []
+        creative = request.creative_direction
+        if creative is not None:
+            if creative.selections:
+                direction_lines.append(
+                    "用户本次选择的创作方向（已按当前品牌边界转译，只影响表达方式，不改变事实边界）："
+                    + "、".join(
+                        f"{item.axis}={item.applied_label}" for item in creative.selections
+                    )
+                )
+            if creative.custom_text:
+                direction_lines.append(f"用户本次自然补充的方向要求：{creative.custom_text}")
+        for material in request.reference_materials:
+            if material.media_type == "text" and material.text_body:
+                direction_lines.append(
+                    f"用户本次明确选入的文字参考《{material.title}》（只作前提引用，"
+                    f"不证明现实事件已发生）：{material.text_body}"
+                )
+            elif material.reference_note:
+                direction_lines.append(
+                    f"用户本次明确选入的原件《{material.title}》的人工说明（系统未读取原件本身，"
+                    f"不得据此描述画面细节）：{material.reference_note}"
+                )
+        topic = "\n".join(
+            part
+            for part in (request.weak_seed, request.revision_instruction, *direction_lines)
+            if part
+        )
         # The request contract has no separate channel for user-presented
         # actuality.  Only a local_response request qualifies: its routing
         # contract already requires the user to hand over a real near-field
@@ -245,6 +272,10 @@ class BoundaryContext:
             premise_sources.append((_USER_ACTUALITY_SOURCE_ID, "用户本次明确提供的真实情况"))
         if request.prior_saved_body:
             premise_sources.append((_PRIOR_VERSION_SOURCE_ID, "已授权复用的旧版本正文"))
+        premise_sources.extend(
+            (f"source:material:{material.asset_id}", f"用户本次明确选入的参考《{material.title}》")
+            for material in request.reference_materials
+        )
         guidance_sources: tuple[tuple[str, str], ...] = tuple(
             (f"source:method:{index}", asset.display_name)
             for index, asset in enumerate(request.active_domain_assets, start=1)
@@ -274,7 +305,20 @@ class BoundaryContext:
             allowed_speaker_and_resources=(
                 f"当前发布账号“{request.brand.account_name}”；内容角色“{request.brand.content_role_name}”；"
                 f"表达边界“{request.brand.content_role_boundary}”。"
-                f"实际操作人“{request.brand.operator_name}”仅是操作者与拍摄者，不自动成为成品叙事人物。"
+                + (
+                    ""
+                    if request.account_expression is None
+                    else (
+                        f"该账号当前表达画像 V{request.account_expression.version}："
+                        f"表达身份“{request.account_expression.identity_position}”；"
+                        f"资格与权威边界“{request.account_expression.authority_boundary}”；"
+                        f"受众关系“{request.account_expression.audience_relationship}”；"
+                        f"内容领地“{request.account_expression.content_territories}”；"
+                        f"默认制作条件“{request.account_expression.default_production_conditions}”。"
+                        "画像只说明表达位置与资格边界，不证明本次人物、设备、场地或素材已经存在。"
+                    )
+                )
+                + f"实际操作人“{request.brand.operator_name}”仅是操作者与拍摄者，不自动成为成品叙事人物。"
                 f"当前可用条件：{request.brand.production_conditions}。"
                 "这是能力选择，不证明场地内存在家庭成员、顾客、商品、合照、家具或已执行服务；"
                 "未在登记表中列出的人物、设备、场地和素材一律视为当前不可用。"

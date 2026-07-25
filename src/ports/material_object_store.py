@@ -12,5 +12,9 @@ class MaterialObjectStore(ABC):
         """Persist an original reference file and return its opaque object key."""
 
     @abstractmethod
+    def get(self, object_key: str) -> bytes:
+        """Read back one already-authorized object; callers must check scope first."""
+
+    @abstractmethod
     def delete(self, object_key: str) -> None:
         """Remove one previously authorized object; missing objects are harmless."""

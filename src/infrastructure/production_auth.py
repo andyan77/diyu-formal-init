@@ -419,6 +419,7 @@ class ProductionAuthRepository:
         account_id: UUID | None,
         grants_tenant_management: bool,
         grants_material_maintenance: bool,
+        grants_expression_profile_maintenance: bool = False,
     ) -> dict[str, str]:
         user_id = uuid4()
         activation_id = uuid4()
@@ -463,9 +464,17 @@ class ProductionAuthRepository:
                 )
                 self._one(cursor, "只能授予当前租户已启用的企业发布账号")
                 cursor.execute(
-                    "INSERT INTO auth_grants (id, tenant_id, user_id, account_id, role_name) "
-                    "VALUES (%s, %s, %s, %s, %s)",
-                    (uuid4(), manager.tenant_id, user_id, account_id, "发布账号操作资格"),
+                    "INSERT INTO auth_grants "
+                    "(id, tenant_id, user_id, account_id, role_name, can_maintain_expression_profile) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (
+                        uuid4(),
+                        manager.tenant_id,
+                        user_id,
+                        account_id,
+                        "发布账号操作资格",
+                        grants_expression_profile_maintenance,
+                    ),
                 )
             if grants_tenant_management:
                 cursor.execute(

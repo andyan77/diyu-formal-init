@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from src.brain.content_control_service import (
+    PREFERENCE_ABSENT,
+    ContentControlService,
+)
+from src.brain.content_expression import direction_from_snapshot, snapshot_document
 from src.brain.natural_entry import (
     is_natural_chat,
     natural_reply,
@@ -16,20 +21,39 @@ from src.shared.errors import DomainError, GenerationFailed
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
+    ContentControlContext,
     ContentProduct,
     ContentTarget,
     GenerationInput,
     PlatformDirection,
     ProductFact,
+    ReferenceMaterial,
+    RequestedControls,
     RoutingInput,
     TrustedScope,
 )
 
+_NO_FROZEN_CONTEXT = (
+    "这条历史内容没有保留完整的创作条件，请按当前输入新建一条。"
+)
+_MISSING_FROZEN_MATERIAL = (
+    "这条内容当时用到的参考素材已经不可用，请按当前输入新建一条。"
+)
+_MISSING_FROZEN_PROFILE = (
+    "这条内容当时用到的账号表达画像已经读不到了，请按当前输入新建一条。"
+)
+
 
 class ContentService:
-    def __init__(self, repository: ContentRepository, generator: ContentGenerator) -> None:
+    def __init__(
+        self,
+        repository: ContentRepository,
+        generator: ContentGenerator,
+        control_service: ContentControlService | None = None,
+    ) -> None:
         self._repository = repository
         self._generator = generator
+        self._control = control_service
 
     def create_from_weak_seed(
         self,
@@ -37,6 +61,7 @@ class ContentService:
         weak_seed: str,
         reuse_version_id: UUID | None = None,
         target: ContentTarget = "douyin_video",
+        controls: RequestedControls | None = None,
     ) -> dict[str, object]:
         if reuse_version_id is None and is_natural_chat(weak_seed):
             return {"kind": "greeting", "message": natural_reply()}
@@ -99,6 +124,7 @@ class ContentService:
         assets = self._repository.load_active_assets(
             scope, primary_product, sanitized_seed, products, target, is_recompile
         )
+        control = self._control_context(scope, context, controls)
         task_id, run_id, prior_body = self._repository.create_task_and_running_run(
             scope,
             sanitized_seed,
@@ -113,6 +139,8 @@ class ContentService:
             direction,
             source_description,
             production_conditions,
+            control,
+            snapshot_document(control, context.content_role_name),
         )
         return self._generate_and_persist(
             scope,
@@ -128,6 +156,80 @@ class ContentService:
             target,
             direction,
             source_description,
+            control,
+        )
+
+    def _control_context(
+        self,
+        scope: TrustedScope,
+        context: BrandContext,
+        controls: RequestedControls | None,
+    ) -> ContentControlContext:
+        """Resolve this request's own control choices against server-trusted brand boundaries."""
+        if self._control is None:
+            return ContentControlContext(None, None, None, (), PREFERENCE_ABSENT, None)
+        requested = controls or RequestedControls()
+        boundary_text = " ".join(
+            (context.tone, context.content_role_boundary, context.positioning, context.decision_order)
+        )
+        creative, preference_mode, preference_version = self._control.resolve_request_direction(
+            scope,
+            dict(requested.selections),
+            requested.custom_text,
+            requested.body_related_opt_in,
+            requested.use_personal_preferences,
+            boundary_text,
+            requested.catalog_version,
+        )
+        return ContentControlContext(
+            catalog_version=self._control.catalog.catalog_version,
+            direction=creative,
+            account_expression=self._control.expression_for_generation(scope),
+            materials=self._control.reference_materials(scope, requested.material_ids),
+            preference_mode=preference_mode,
+            preference_version=preference_version,
+        )
+
+    def _replayed_control(
+        self, scope: TrustedScope, snapshot: dict[str, object]
+    ) -> ContentControlContext:
+        """A revision reads its own frozen conditions; today's settings never stand in."""
+        profile_id = snapshot.get("account_expression_profile_id")
+        expression = None
+        if self._control is not None and isinstance(profile_id, str) and profile_id:
+            expression = self._control.expression_for_generation(scope, UUID(profile_id))
+            if expression is None:
+                raise DomainError(_MISSING_FROZEN_PROFILE)
+        material_refs = snapshot.get("material_refs")
+        frozen_versions: dict[UUID, int] = {}
+        if isinstance(material_refs, list):
+            frozen_versions = {
+                UUID(str(item["asset_id"])): int(str(item.get("reference_version", 1)))
+                for item in material_refs
+                if isinstance(item, dict) and item.get("asset_id")
+            }
+        materials: tuple[ReferenceMaterial, ...] = ()
+        if self._control is not None and frozen_versions:
+            try:
+                materials = self._control.reference_materials(scope, tuple(frozen_versions))
+            except DomainError as exc:
+                raise DomainError(_MISSING_FROZEN_MATERIAL) from exc
+            # A reference that moved on is not the reference this task froze.
+            if any(
+                frozen_versions[item.asset_id] != item.reference_version for item in materials
+            ):
+                raise DomainError(_MISSING_FROZEN_MATERIAL)
+        catalog_version = snapshot.get("catalog_version")
+        preference_version = snapshot.get("private_preference_version")
+        return ContentControlContext(
+            catalog_version=str(catalog_version) if isinstance(catalog_version, str) else None,
+            direction=direction_from_snapshot(snapshot),
+            account_expression=expression,
+            materials=materials,
+            preference_mode=str(snapshot.get("private_preference_mode") or PREFERENCE_ABSENT),
+            preference_version=(
+                preference_version if isinstance(preference_version, int) else None
+            ),
         )
 
     @staticmethod
@@ -166,6 +268,9 @@ class ContentService:
         target: ContentTarget = "douyin_video",
     ) -> dict[str, object]:
         direction = direction_for(target)
+        snapshot = self._repository.load_content_context_snapshot(scope, task_id)
+        if snapshot is None:
+            return {"kind": "question", "message": _NO_FROZEN_CONTEXT}
         weak_seed, primary_product, media_format, prior_conditions = self._repository.task_details(
             scope, task_id
         )
@@ -180,6 +285,7 @@ class ContentService:
         assets = self._repository.load_active_assets(
             scope, primary_product, instruction, products, target, False
         )
+        control = self._replayed_control(scope, snapshot)
         run_id, parent_version_id, weak_seed, primary_product = self._repository.revise_task(
             scope,
             task_id,
@@ -191,6 +297,7 @@ class ContentService:
             target,
             direction,
             production_conditions,
+            control,
         )
         return self._generate_and_persist(
             scope,
@@ -206,6 +313,7 @@ class ContentService:
             target,
             direction,
             None,
+            control,
         )
 
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:
@@ -259,6 +367,7 @@ class ContentService:
         target: ContentTarget,
         direction: PlatformDirection,
         source_version_description: str | None,
+        control: ContentControlContext | None = None,
     ) -> dict[str, object]:
         try:
             artifact = self._generator.generate(
@@ -276,6 +385,9 @@ class ContentService:
                     products=products,
                     prior_saved_body=prior_saved_body,
                     source_version_description=source_version_description,
+                    creative_direction=control.direction if control else None,
+                    account_expression=control.account_expression if control else None,
+                    reference_materials=control.materials if control else (),
                 )
             )
             assert_content_complete(artifact)
@@ -307,6 +419,7 @@ class ContentService:
         if not isinstance(version_value, int):
             raise GenerationFailed("内容版本数据无效")
         visible = self._repository.fetch_version(scope, task_id, version_value)
+        creative = control.direction if control else None
         return completed | {
             "kind": "content",
             "ai_generated": visible["ai_generated"],
@@ -315,6 +428,11 @@ class ContentService:
             "target": visible["target"],
             "target_key": visible["target_key"],
             "adapted_from": visible["adapted_from"],
+            # Shown before the artifact, never inside it, and never a review report.
+            "translation_notice": creative.translation_notice if creative else None,
+            "applied_direction": (
+                [item.applied_label for item in creative.selections] if creative else []
+            ),
         }
 
     @staticmethod

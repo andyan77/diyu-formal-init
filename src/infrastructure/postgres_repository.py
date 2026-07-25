@@ -12,10 +12,12 @@ from psycopg.types.json import Jsonb
 
 from src.ports.content_repository import ContentRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
+from src.shared.content_snapshot import visible_direction
 from src.shared.errors import DomainError
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
+    ContentControlContext,
     ContentProduct,
     ContentTarget,
     FactRepairReceipt,
@@ -111,6 +113,8 @@ class PostgresContentRepository(ContentRepository):
         platform_direction: PlatformDirection,
         source_description: str | None,
         production_conditions: str,
+        control: ContentControlContext | None = None,
+        snapshot: dict[str, object] | None = None,
     ) -> tuple[UUID, UUID, str | None]:
         task_id, run_id = uuid4(), uuid4()
         with self._tx(scope) as cursor:
@@ -135,8 +139,8 @@ class PostgresContentRepository(ContentRepository):
             cursor.execute(
                 """
                 INSERT INTO business_tasks
-                    (id, tenant_id, brand_id, account_id, created_by, weak_seed, primary_content_product, product_refs, parent_version_id, media_format, production_conditions)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (id, tenant_id, brand_id, account_id, created_by, weak_seed, primary_content_product, product_refs, parent_version_id, media_format, production_conditions, content_context_snapshot)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     task_id,
@@ -150,6 +154,7 @@ class PostgresContentRepository(ContentRepository):
                     parent_version_id,
                     media_format,
                     production_conditions,
+                    Jsonb(snapshot) if snapshot is not None else None,
                 ),
             )
             cursor.execute(
@@ -172,6 +177,7 @@ class PostgresContentRepository(ContentRepository):
                             platform_direction,
                             parent_version_id,
                             source_description,
+                            control,
                         )
                     ),
                 ),
@@ -354,6 +360,7 @@ class PostgresContentRepository(ContentRepository):
         target: ContentTarget,
         platform_direction: PlatformDirection,
         production_conditions: str,
+        control: ContentControlContext | None = None,
     ) -> tuple[UUID, UUID, str, ContentProduct]:
         run_id = uuid4()
         with self._tx(scope) as cursor:
@@ -396,6 +403,7 @@ class PostgresContentRepository(ContentRepository):
                             platform_direction,
                             parent_version_id,
                             None,
+                            control,
                         )
                     ),
                 ),
@@ -420,7 +428,8 @@ class PostgresContentRepository(ContentRepository):
             cursor.execute(
                 """
                 SELECT cv.id, cv.task_id, cv.version_number, cv.outline, cv.body, cv.created_at, gr.model,
-                       t.media_format, a.channel, parent_cv.version_number AS parent_version_number,
+                       t.media_format, t.content_context_snapshot, a.channel,
+                       parent_cv.version_number AS parent_version_number,
                        parent_a.channel AS parent_channel, parent_t.media_format AS parent_media_format
                 FROM content_versions cv
                 JOIN generation_runs gr ON gr.id = cv.run_id AND gr.tenant_id = cv.tenant_id
@@ -458,6 +467,9 @@ class PostgresContentRepository(ContentRepository):
         if not isinstance(media_format, str) or not isinstance(channel, str):
             raise DomainError("内容版本目标数据无效")
         disclosure, release_reminder = aigc_disclosure(row["model"])
+        # A version keeps the transparent translation it was produced with, so reopening it never
+        # makes a translated direction look like the user's untouched choice.
+        translation_notice, applied_direction = visible_direction(row["content_context_snapshot"])
         return {
             "version_id": str(row["id"]),
             "task_id": str(row["task_id"]),
@@ -472,6 +484,8 @@ class PostgresContentRepository(ContentRepository):
             "target": self._target_label(channel, media_format),
             "target_key": self._target_from_channel_media(channel, media_format),
             "adapted_from": adapted_from,
+            "translation_notice": translation_notice,
+            "applied_direction": applied_direction,
         }
 
     def fetch_version_body(self, scope: TrustedScope, version_id: UUID) -> str:
@@ -714,8 +728,9 @@ class PostgresContentRepository(ContentRepository):
         platform_direction: PlatformDirection,
         source_version_id: UUID | None,
         source_description: str | None,
+        control: ContentControlContext | None = None,
     ) -> dict[str, object]:
-        return {
+        receipt: dict[str, object] = {
             "primary_content_product": product,
             "brand_strategy_version": context.strategy_version,
             "publishing_account": context.account_name,
@@ -729,6 +744,50 @@ class PostgresContentRepository(ContentRepository):
             "source_version_id": str(source_version_id) if source_version_id else None,
             "source_description": source_description,
         }
+        if control is None:
+            return receipt
+        # Which versions this run really used; never hidden reasoning or a user-visible trace.
+        direction = control.direction
+        receipt.update(
+            {
+                "catalog_version": control.catalog_version,
+                "creative_direction": [
+                    {
+                        "axis": item.axis,
+                        "stable_id": item.stable_id,
+                        "applied_label": item.applied_label,
+                        "translated": item.translated,
+                    }
+                    for item in (direction.selections if direction else ())
+                ],
+                "account_expression_profile_version": (
+                    control.account_expression.version if control.account_expression else None
+                ),
+                "private_preference_mode": control.preference_mode,
+                "private_preference_version": control.preference_version,
+                "material_refs": [
+                    {"asset_id": str(item.asset_id), "reference_version": item.reference_version}
+                    for item in control.materials
+                ],
+            }
+        )
+        return receipt
+
+    def load_content_context_snapshot(
+        self, scope: TrustedScope, task_id: UUID
+    ) -> dict[str, object] | None:
+        with self._tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT content_context_snapshot FROM business_tasks
+                WHERE tenant_id = %s AND id = %s AND brand_id = %s AND account_id = %s
+                  AND created_by = %s
+                """,
+                (scope.tenant_id, task_id, scope.brand_id, scope.account_id, scope.user_id),
+            )
+            row = self._one(cursor, "找不到当前作用域中的内容任务")
+        snapshot = row["content_context_snapshot"]
+        return snapshot if isinstance(snapshot, dict) else None
 
     @classmethod
     def _active_asset(

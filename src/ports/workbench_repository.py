@@ -39,6 +39,7 @@ class WorkbenchRepository(ABC):
         content_role_name: str,
         voice_boundary: str,
         operator_id: UUID,
+        control_organization_id: UUID | None = None,
     ) -> dict[str, object]: ...
 
     @abstractmethod
@@ -113,6 +114,7 @@ class WorkbenchRepository(ABC):
         byte_size: int,
         original_filename: str,
         checksum_sha256: str,
+        reference_note: str = "",
     ) -> dict[str, object]: ...
 
     @abstractmethod

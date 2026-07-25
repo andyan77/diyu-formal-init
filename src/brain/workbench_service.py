@@ -57,11 +57,14 @@ class WorkbenchService:
         content_role_name: str,
         voice_boundary: str,
         operator_id: UUID,
+        control_organization_id: UUID | None = None,
     ) -> dict[str, object]:
         values = (name.strip(), channel.strip(), content_role_name.strip(), voice_boundary.strip())
         if not all(values):
             raise DomainError("发布账号、独立表达身份和成立边界都需要填写。")
-        return self._repository.create_publishing_account(scope, *values, operator_id)
+        return self._repository.create_publishing_account(
+            scope, *values, operator_id, control_organization_id
+        )
 
     def create_operator(
         self,
@@ -149,6 +152,7 @@ class WorkbenchService:
         content_type: str,
         payload: bytes,
         declares_identifiable_minor: bool,
+        reference_note: str = "",
     ) -> dict[str, object]:
         if declares_identifiable_minor:
             raise DomainError("第一版不能保存认得出真人未成年人的照片、视频或声音。")
@@ -160,6 +164,8 @@ class WorkbenchService:
             raise DomainError("素材名称需要在 1 到 120 个字符之间。")
         if len(payload) == 0 or len(payload) > _MAX_MEDIA_BYTES:
             raise DomainError("素材文件为空或超过首期 50MB 上限。")
+        if len(reference_note.strip()) > 500:
+            raise DomainError("原件说明请控制在 500 字以内。")
         media_type = self._media_type(content_type)
         suffix = Path(filename).suffix
         asset_id = uuid4()
@@ -175,6 +181,7 @@ class WorkbenchService:
                 len(payload),
                 filename,
                 hashlib.sha256(payload).hexdigest(),
+                reference_note.strip(),
             )
         except (OSError, ValueError) as exc:
             if "object_key" in locals():

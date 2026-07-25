@@ -63,7 +63,13 @@ class DeterministicContentGenerator(ContentGenerator):
         revision = "\n\n这次只按你的自然修改更新了同一任务的表达。" if request.revision_instruction else ""
         prior = "\n\n已承接当前合法作用域内明确授权的前情。" if request.prior_saved_body else ""
         core = "\n\n内容核心：" + " ".join(str(value) for value in vars(contract).values())
-        body = _visible_body(_outline(request.primary_product), production) + core + prior + revision
+        body = (
+            _visible_body(_outline(request.primary_product), production)
+            + core
+            + prior
+            + revision
+            + _control_sections(request)
+        )
         return GeneratedArtifact(
             outline=_outline(request.primary_product),
             body=body,
@@ -217,6 +223,27 @@ class DeterministicContentGenerator(ContentGenerator):
             "先保住分寸。\n走几步，再决定要不要改。",
             "一人一部手机，环境声和脚步声即可；不补造商品事实或顾客身份。",
         )
+
+
+def _control_sections(request: GenerationInput) -> str:
+    """Make the user's own control choices observable in the offline artifact."""
+    parts: list[str] = []
+    direction = request.creative_direction
+    if direction is not None:
+        if direction.selections:
+            parts.append(
+                "\n\n本次创作方向：" + "、".join(item.applied_label for item in direction.selections)
+            )
+        if direction.custom_text:
+            parts.append("\n\n本次自然补充：" + direction.custom_text)
+    if request.account_expression is not None:
+        # The account's own words may appear; its internal version number is a receipt field.
+        parts.append("\n\n当前账号表达位置：" + request.account_expression.identity_position)
+    if request.reference_materials:
+        parts.append(
+            "\n\n本次参考：" + "、".join(item.title for item in request.reference_materials)
+        )
+    return "".join(parts)
 
 
 def _ordinary_chat(text: str) -> bool:

@@ -36,6 +36,9 @@ class LocalObjectStore(MaterialObjectStore):
         os.replace(temporary, target)
         return key
 
+    def get(self, object_key: str) -> bytes:
+        return self._path_for(object_key).read_bytes()
+
     def delete(self, object_key: str) -> None:
         target = self._path_for(object_key)
         target.unlink(missing_ok=True)

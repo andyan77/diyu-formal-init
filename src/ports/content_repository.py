@@ -6,6 +6,7 @@ from uuid import UUID
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
+    ContentControlContext,
     ContentProduct,
     ContentTarget,
     FactRepairReceipt,
@@ -40,8 +41,10 @@ class ContentRepository(ABC):
         platform_direction: PlatformDirection,
         source_description: str | None,
         production_conditions: str,
+        control: ContentControlContext | None = None,
+        snapshot: dict[str, object] | None = None,
     ) -> tuple[UUID, UUID, str | None]:
-        """Create a task and auditable running generation run."""
+        """Create a task, freeze its content context and open an auditable running run."""
 
     @abstractmethod
     def complete_run_with_version(
@@ -77,8 +80,20 @@ class ContentRepository(ABC):
         target: ContentTarget,
         platform_direction: PlatformDirection,
         production_conditions: str,
+        control: ContentControlContext | None = None,
     ) -> tuple[UUID, UUID, str, ContentProduct]:
         """Create the next auditable run for a revision request."""
+
+    @abstractmethod
+    def load_content_context_snapshot(
+        self, scope: TrustedScope, task_id: UUID
+    ) -> dict[str, object] | None:
+        """Return the conditions this task froze.
+
+        Out of scope fails closed; None means the task is visible but kept no snapshot, and such
+        a task can no longer be revised — today's catalog, profile or preference must never
+        stand in for it.
+        """
 
     @abstractmethod
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:

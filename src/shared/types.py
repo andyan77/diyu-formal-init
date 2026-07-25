@@ -173,6 +173,81 @@ class RoutingInput:
 
 
 @dataclass(frozen=True)
+class DirectionSelection:
+    """One axis choice: what the user picked, and what the brand boundary let it become."""
+
+    axis: str
+    stable_id: str
+    label: str
+    applied_label: str
+    translated: bool
+    preserved_aspect: str
+
+
+@dataclass(frozen=True)
+class CreativeDirection:
+    catalog_version: str
+    selections: tuple[DirectionSelection, ...]
+    custom_text: str
+    body_related_opt_in: bool
+    translation_notice: str | None
+
+
+@dataclass(frozen=True)
+class AccountExpression:
+    """The publishing account's five plain-language segments actually used this time."""
+
+    profile_id: UUID | None
+    version: int | None
+    identity_position: str
+    authority_boundary: str
+    audience_relationship: str
+    content_territories: str
+    default_production_conditions: str
+    is_draft: bool
+
+
+@dataclass(frozen=True)
+class ReferenceMaterial:
+    """A reference the user explicitly selected for this task only."""
+
+    asset_id: UUID
+    title: str
+    media_type: str
+    reference_version: int
+    text_body: str = ""
+    reference_note: str = ""
+
+
+@dataclass(frozen=True)
+class RequestedControls:
+    """Raw, untrusted client control input for one request; scopes are never sent by clients."""
+
+    catalog_version: str | None = None
+    selections: tuple[tuple[str, str], ...] = ()
+    custom_text: str = ""
+    body_related_opt_in: bool = False
+    use_personal_preferences: bool = True
+    material_ids: tuple[UUID, ...] = ()
+
+
+@dataclass(frozen=True)
+class ContentControlContext:
+    """What this task actually froze about how the user steered it.
+
+    A later change to the catalog, the account profile, a private preference or a material must
+    never rewrite an existing task, so a revision replays this and nothing else.
+    """
+
+    catalog_version: str | None
+    direction: CreativeDirection | None
+    account_expression: AccountExpression | None
+    materials: tuple[ReferenceMaterial, ...]
+    preference_mode: str
+    preference_version: int | None
+
+
+@dataclass(frozen=True)
 class GenerationInput:
     run_id: UUID
     task_id: UUID
@@ -187,6 +262,9 @@ class GenerationInput:
     products: tuple[ProductFact, ...] = ()
     prior_saved_body: str | None = None
     source_version_description: str | None = None
+    creative_direction: CreativeDirection | None = None
+    account_expression: AccountExpression | None = None
+    reference_materials: tuple[ReferenceMaterial, ...] = ()
 
 
 @dataclass(frozen=True)

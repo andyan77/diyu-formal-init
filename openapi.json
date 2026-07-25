@@ -1,6 +1,51 @@
 {
   "components": {
     "schemas": {
+      "AccountExpressionVersionRequest": {
+        "additionalProperties": false,
+        "description": "Five plain-language segments; saving forms the next immutable version.",
+        "properties": {
+          "audience_relationship": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Audience Relationship",
+            "type": "string"
+          },
+          "authority_boundary": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Authority Boundary",
+            "type": "string"
+          },
+          "content_territories": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Content Territories",
+            "type": "string"
+          },
+          "default_production_conditions": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Default Production Conditions",
+            "type": "string"
+          },
+          "identity_position": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Identity Position",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity_position",
+          "authority_boundary",
+          "audience_relationship",
+          "content_territories",
+          "default_production_conditions"
+        ],
+        "title": "AccountExpressionVersionRequest",
+        "type": "object"
+      },
       "AddSeriesItemRequest": {
         "additionalProperties": false,
         "properties": {
@@ -62,6 +107,50 @@
         "title": "BrandExpressionConfirmRequest",
         "type": "object"
       },
+      "ContentPlanItem": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Note",
+            "type": "string"
+          },
+          "selections": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Selections",
+            "type": "object"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "ContentPlanItem",
+        "type": "object"
+      },
+      "ContentPlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContentPlanItem"
+            },
+            "maxItems": 20,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "ContentPlanRequest",
+        "type": "object"
+      },
       "ContentQuestionResponse": {
         "properties": {
           "kind": {
@@ -119,6 +208,13 @@
             ],
             "title": "Aigc Release Reminder"
           },
+          "applied_direction": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Applied Direction",
+            "type": "array"
+          },
           "body": {
             "title": "Body",
             "type": "string"
@@ -165,6 +261,17 @@
             "title": "Task Id",
             "type": "string"
           },
+          "translation_notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translation Notice"
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -189,6 +296,25 @@
       "CreateContentRequest": {
         "additionalProperties": false,
         "properties": {
+          "creative_direction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreativeDirectionRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "material_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Material Ids",
+            "type": "array"
+          },
           "reuse_version_id": {
             "anyOf": [
               {
@@ -217,6 +343,11 @@
               }
             ],
             "title": "Target"
+          },
+          "use_personal_preferences": {
+            "default": true,
+            "title": "Use Personal Preferences",
+            "type": "boolean"
           },
           "weak_seed": {
             "maxLength": 1000,
@@ -299,6 +430,18 @@
             "title": "Content Role Name",
             "type": "string"
           },
+          "control_organization_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Organization Id"
+          },
           "name": {
             "maxLength": 120,
             "minLength": 1,
@@ -347,6 +490,74 @@
           "title"
         ],
         "title": "CreateSeriesRequest",
+        "type": "object"
+      },
+      "CreationPreferenceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "body_related_opt_in": {
+            "default": false,
+            "title": "Body Related Opt In",
+            "type": "boolean"
+          },
+          "collaboration_note": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Collaboration Note",
+            "type": "string"
+          },
+          "direction_defaults": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Direction Defaults",
+            "type": "object"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "title": "CreationPreferenceRequest",
+        "type": "object"
+      },
+      "CreativeDirectionRequest": {
+        "additionalProperties": false,
+        "description": "The optional five-axis panel for this request only; saving a default is a separate call.",
+        "properties": {
+          "body_related_opt_in": {
+            "default": false,
+            "title": "Body Related Opt In",
+            "type": "boolean"
+          },
+          "catalog_version": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Version"
+          },
+          "custom_text": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Custom Text",
+            "type": "string"
+          },
+          "selections": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Selections",
+            "type": "object"
+          }
+        },
+        "title": "CreativeDirectionRequest",
         "type": "object"
       },
       "DefaultPersonaRequest": {
@@ -498,6 +709,12 @@
             "title": "Filename",
             "type": "string"
           },
+          "reference_note": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Reference Note",
+            "type": "string"
+          },
           "title": {
             "maxLength": 120,
             "minLength": 1,
@@ -600,6 +817,32 @@
           "saved_at"
         ],
         "title": "SavedVersionResponse",
+        "type": "object"
+      },
+      "UnmetCapabilityRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "creative_direction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreativeDirectionRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "request_text": {
+            "maxLength": 1000,
+            "minLength": 4,
+            "title": "Request Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_text"
+        ],
+        "title": "UnmetCapabilityRequest",
         "type": "object"
       },
       "ValidationError": {
@@ -983,6 +1226,229 @@
         "summary": "Save Version"
       }
     },
+    "/api/v1/content/account-expression-profile": {
+      "get": {
+        "operationId": "account_expression_profile_api_v1_content_account_expression_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Account Expression Profile Api V1 Content Account Expression Profile Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Account Expression Profile"
+      }
+    },
+    "/api/v1/content/account-expression-profile/versions": {
+      "post": {
+        "operationId": "save_account_expression_profile_api_v1_content_account_expression_profile_versions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountExpressionVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Account Expression Profile Api V1 Content Account Expression Profile Versions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Save Account Expression Profile"
+      }
+    },
+    "/api/v1/content/expression-catalog": {
+      "get": {
+        "operationId": "expression_catalog_api_v1_content_expression_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Expression Catalog Api V1 Content Expression Catalog Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Expression Catalog"
+      }
+    },
+    "/api/v1/content/opportunities": {
+      "post": {
+        "description": "Read-only: browsing or refreshing opportunities never creates a business task.",
+        "operationId": "content_opportunities_api_v1_content_opportunities_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Content Opportunities Api V1 Content Opportunities Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Content Opportunities"
+      }
+    },
+    "/api/v1/content/plan": {
+      "get": {
+        "operationId": "read_content_plan_api_v1_content_plan_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Read Content Plan Api V1 Content Plan Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Read Content Plan"
+      },
+      "put": {
+        "operationId": "save_content_plan_api_v1_content_plan_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Content Plan Api V1 Content Plan Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Save Content Plan"
+      }
+    },
     "/api/v1/content/series": {
       "get": {
         "operationId": "list_series_api_v1_content_series_get",
@@ -1302,6 +1768,85 @@
           }
         ],
         "summary": "List Content Versions"
+      }
+    },
+    "/api/v1/content/unmet-capability-requests": {
+      "get": {
+        "operationId": "list_unmet_capability_requests_api_v1_content_unmet_capability_requests_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Unmet Capability Requests Api V1 Content Unmet Capability Requests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "List Unmet Capability Requests"
+      },
+      "post": {
+        "operationId": "submit_unmet_capability_request_api_v1_content_unmet_capability_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnmetCapabilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Submit Unmet Capability Request Api V1 Content Unmet Capability Requests Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Submit Unmet Capability Request"
       }
     },
     "/api/v1/display": {
@@ -1757,7 +2302,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ContentVersionResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ContentVersionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ContentQuestionResponse"
+                    }
+                  ],
+                  "title": "Response Revise Content Api V1 Tasks  Task Id  Revisions Post"
                 }
               }
             },
@@ -2006,6 +2559,216 @@
           }
         ],
         "summary": "Create Publishing Account"
+      }
+    },
+    "/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile": {
+      "get": {
+        "operationId": "management_account_expression_profile_api_v1_tenant_management_publishing_accounts__account_id__expression_profile_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Management Account Expression Profile Api V1 Tenant Management Publishing Accounts  Account Id  Expression Profile Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Account Expression Profile"
+      }
+    },
+    "/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile/versions": {
+      "post": {
+        "operationId": "save_management_account_expression_profile_api_v1_tenant_management_publishing_accounts__account_id__expression_profile_versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountExpressionVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Management Account Expression Profile Api V1 Tenant Management Publishing Accounts  Account Id  Expression Profile Versions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Save Management Account Expression Profile"
+      }
+    },
+    "/api/v1/user/creation-preferences": {
+      "delete": {
+        "operationId": "delete_creation_preferences_api_v1_user_creation_preferences_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Creation Preferences Api V1 User Creation Preferences Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Delete Creation Preferences"
+      },
+      "get": {
+        "operationId": "read_creation_preferences_api_v1_user_creation_preferences_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Read Creation Preferences Api V1 User Creation Preferences Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Read Creation Preferences"
+      },
+      "put": {
+        "operationId": "save_creation_preferences_api_v1_user_creation_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreationPreferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Creation Preferences Api V1 User Creation Preferences Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Save Creation Preferences"
       }
     },
     "/api/v1/user/default-persona": {

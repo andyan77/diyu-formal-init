@@ -351,6 +351,32 @@ def seed_demo() -> None:
                 "INSERT INTO tenant_management_grants (id, tenant_id, user_id) VALUES (%s, %s, %s) ON CONFLICT (tenant_id, user_id) DO NOTHING",
                 (grant_id, TENANT_ID, user_id),
             )
+        # Which organization controls each publishing account, and who may maintain its
+        # expression profile.  Account use never implies profile maintenance.
+        for account_id, control_organization_id in (
+            (ACCOUNT_ID, ORG_ID),
+            (HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID, ORG_ID),
+            (HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID, ORG_ID),
+            (STORE_CONTENT_ACCOUNT_ID, STORE_ORG_ID),
+        ):
+            cursor.execute(
+                "UPDATE content_accounts SET control_organization_id = %s "
+                "WHERE tenant_id = %s AND id = %s",
+                (control_organization_id, TENANT_ID, account_id),
+            )
+        for grant_id, can_maintain in (
+            (GRANT_ID, True),
+            (HEADQUARTERS_XIAOHONGSHU_GRANT_ID, True),
+            (HEADQUARTERS_WECHAT_CHANNELS_GRANT_ID, True),
+            (STORE_CONTENT_GRANT_ID, False),
+            (DUAL_QUALIFIED_GRANT_ID, False),
+            (EXTERNAL_OPERATOR_GRANT_ID, True),
+        ):
+            cursor.execute(
+                "UPDATE auth_grants SET can_maintain_expression_profile = %s "
+                "WHERE tenant_id = %s AND id = %s",
+                (can_maintain, TENANT_ID, grant_id),
+            )
         for persona_id, user_id, name, boundary in (
             (
                 USER_DEFAULT_PERSONA_ID,

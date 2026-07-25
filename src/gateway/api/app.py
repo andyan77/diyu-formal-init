@@ -29,15 +29,18 @@ from starlette.responses import Response
 
 from src.brain.platform_directions import target_from_text
 from src.composition.bootstrap import (
+    build_content_control_service,
     build_content_service,
     build_display_service,
     build_workbench_service,
 )
 from src.gateway.api.contracts import (
+    AccountExpressionVersionRequest,
     AddSeriesItemRequest,
     ApplicationHandoffResponse,
     BrandExpressionConfirmRequest,
     ChangePasswordRequest,
+    ContentPlanRequest,
     ContentQuestionResponse,
     ContentVersionResponse,
     CreateContentRequest,
@@ -47,6 +50,8 @@ from src.gateway.api.contracts import (
     CreateSeriesRequest,
     CreateTenantRequest,
     CreateTenantUserRequest,
+    CreationPreferenceRequest,
+    CreativeDirectionRequest,
     DefaultPersonaRequest,
     DisplayQuestionResponse,
     DisplayRevisionRequest,
@@ -56,6 +61,7 @@ from src.gateway.api.contracts import (
     ReorderSeriesRequest,
     RevisionRequest,
     SavedVersionResponse,
+    UnmetCapabilityRequest,
 )
 from src.gateway.api.html import render_spa_shell, workbench_location
 from src.gateway.api.session import (
@@ -76,7 +82,10 @@ from src.shared.application_handoff import (
 from src.shared.errors import DomainError
 from src.shared.types import (
     ContentTarget,
+    CreativeDirection,
+    DirectionSelection,
     DisplayScope,
+    RequestedControls,
     TenantManagementScope,
     TrustedScope,
 )
@@ -120,6 +129,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     service = build_content_service(current_settings)
     display_service = build_display_service(current_settings)
     workbench_service = build_workbench_service(current_settings)
+    control_service = build_content_control_service(current_settings)
     app = FastAPI(
         title="笛语双应用 API",
         version="0.1.0",
@@ -371,6 +381,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     payload.account_id,
                     payload.grants_tenant_management,
                     payload.grants_material_maintenance,
+                    payload.grants_expression_profile_maintenance,
                 )
             except psycopg.errors.UniqueViolation as exc:
                 raise HTTPException(
@@ -595,6 +606,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.content_role_name,
             payload.voice_boundary,
             payload.operator_id,
+            payload.control_organization_id,
         )
 
     @app.post(
@@ -684,6 +696,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             upload.content_type,
             payload,
             upload.declares_identifiable_minor,
+            upload.reference_note,
         )
 
     @app.delete("/api/v1/materials/{asset_id}", responses=business_failures)
@@ -916,6 +929,145 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return RedirectResponse("/display?" + urlencode({"notice": str(result["message"])}), status_code=303)
         return RedirectResponse(f"/display?task={result['task_id']}&version={result['version']}", status_code=303)
 
+    def _controls(payload: CreateContentRequest) -> RequestedControls:
+        """Client control input stays untrusted data; it can never carry a scope."""
+        direction = payload.creative_direction
+        return RequestedControls(
+            catalog_version=direction.catalog_version if direction else None,
+            selections=tuple(direction.selections.items()) if direction else (),
+            custom_text=direction.custom_text if direction else "",
+            body_related_opt_in=bool(direction and direction.body_related_opt_in),
+            use_personal_preferences=payload.use_personal_preferences,
+            material_ids=tuple(payload.material_ids),
+        )
+
+    @app.get("/api/v1/content/expression-catalog", responses=business_failures)
+    def expression_catalog(scope: TrustedScope = Depends(scope_from_request)) -> dict[str, object]:
+        return control_service.catalog_view(scope)
+
+    @app.get("/api/v1/content/account-expression-profile", responses=business_failures)
+    def account_expression_profile(
+        scope: TrustedScope = Depends(scope_from_request),
+    ) -> dict[str, object]:
+        return control_service.account_expression(scope)
+
+    @app.post(
+        "/api/v1/content/account-expression-profile/versions",
+        status_code=status.HTTP_201_CREATED,
+        responses=business_failures,
+    )
+    def save_account_expression_profile(
+        payload: AccountExpressionVersionRequest,
+        scope: TrustedScope = Depends(scope_from_request),
+    ) -> dict[str, object]:
+        return control_service.save_account_expression(scope, payload.model_dump())
+
+    @app.get(
+        "/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile",
+        responses=business_failures,
+    )
+    def management_account_expression_profile(
+        account_id: UUID,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return control_service.management_account_expression(scope, account_id)
+
+    @app.post(
+        "/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile/versions",
+        status_code=status.HTTP_201_CREATED,
+        responses=business_failures,
+    )
+    def save_management_account_expression_profile(
+        account_id: UUID,
+        payload: AccountExpressionVersionRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return control_service.save_management_account_expression(
+            scope, account_id, payload.model_dump()
+        )
+
+    @app.get("/api/v1/user/creation-preferences", responses=business_failures)
+    def read_creation_preferences(
+        scope: TrustedScope = Depends(user_scope_from_request),
+    ) -> dict[str, object]:
+        return control_service.creation_preference(scope)
+
+    @app.put("/api/v1/user/creation-preferences", responses=business_failures)
+    def save_creation_preferences(
+        payload: CreationPreferenceRequest,
+        scope: TrustedScope = Depends(user_scope_from_request),
+    ) -> dict[str, object]:
+        return control_service.save_creation_preference(
+            scope,
+            payload.enabled,
+            payload.direction_defaults,
+            payload.collaboration_note,
+            payload.body_related_opt_in,
+        )
+
+    @app.delete("/api/v1/user/creation-preferences", responses=business_failures)
+    def delete_creation_preferences(
+        scope: TrustedScope = Depends(user_scope_from_request),
+    ) -> dict[str, object]:
+        return control_service.delete_creation_preference(scope)
+
+    @app.post("/api/v1/content/opportunities", responses=business_failures)
+    def content_opportunities(
+        scope: TrustedScope = Depends(scope_from_request),
+    ) -> dict[str, object]:
+        """Read-only: browsing or refreshing opportunities never creates a business task."""
+        return control_service.opportunities(scope)
+
+    @app.get("/api/v1/content/plan", responses=business_failures)
+    def read_content_plan(scope: TrustedScope = Depends(scope_from_request)) -> dict[str, object]:
+        return control_service.plan(scope)
+
+    @app.put("/api/v1/content/plan", responses=business_failures)
+    def save_content_plan(
+        payload: ContentPlanRequest, scope: TrustedScope = Depends(scope_from_request)
+    ) -> dict[str, object]:
+        return control_service.save_plan(
+            scope, {"items": [item.model_dump() for item in payload.items]}
+        )
+
+    @app.post(
+        "/api/v1/content/unmet-capability-requests",
+        status_code=status.HTTP_201_CREATED,
+        responses=business_failures,
+    )
+    def submit_unmet_capability_request(
+        payload: UnmetCapabilityRequest,
+        scope: TrustedScope = Depends(scope_from_request),
+    ) -> dict[str, object]:
+        direction = _requested_direction(payload.creative_direction)
+        return control_service.create_unmet_request(scope, payload.request_text, direction)
+
+    @app.get("/api/v1/content/unmet-capability-requests", responses=business_failures)
+    def list_unmet_capability_requests(
+        scope: TrustedScope = Depends(scope_from_request),
+    ) -> list[dict[str, object]]:
+        return control_service.list_unmet_requests(scope)
+
+    def _requested_direction(payload: CreativeDirectionRequest | None) -> CreativeDirection | None:
+        """Only record what the user actually saw; unknown ids are dropped, never guessed."""
+        if payload is None:
+            return None
+        catalog = control_service.catalog
+        selections = tuple(
+            DirectionSelection(axis, entry.stable_id, entry.label, entry.label, False, "")
+            for axis, stable_id in payload.selections.items()
+            if (entry := catalog.entry(stable_id)) is not None
+            and entry.axis == axis
+            and (payload.body_related_opt_in or not entry.body_related)
+        )
+        return CreativeDirection(
+            catalog_version=catalog.catalog_version,
+            selections=selections,
+            custom_text=payload.custom_text,
+            body_related_opt_in=payload.body_related_opt_in,
+            translation_notice=None,
+        )
+
     @app.post(
         "/api/v1/content",
         response_model=ContentVersionResponse | GreetingResponse | ContentQuestionResponse | ApplicationHandoffResponse,
@@ -938,12 +1090,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 payload.weak_seed,
                 payload.reuse_version_id,
                 target,
+                _controls(payload),
             )
 
     @app.post(
         "/api/v1/tasks/{task_id}/revisions",
         status_code=status.HTTP_201_CREATED,
-        response_model=ContentVersionResponse,
+        response_model=ContentVersionResponse | ContentQuestionResponse,
         responses=business_failures,
     )
     def revise_content(

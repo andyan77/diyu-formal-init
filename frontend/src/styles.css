@@ -29,3 +29,65 @@ a { color:inherit; }
 .management-title { margin:0; color:var(--ink-soft); font-size:14px; font-weight:700; }
 .account-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:20px; }
 @media (max-width:680px) { .account-grid { grid-template-columns:1fr; } }
+
+.direction-panel { margin:0 0 16px; border-top:1px solid var(--line); }
+.direction-panel > summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; padding:12px 0; cursor:pointer; color:var(--ink-soft); font-size:14px; }
+.direction-panel > summary::marker { color:var(--stone); }
+.direction-title { font-weight:700; }
+.direction-summary { min-width:0; color:var(--stone); font-size:13px; overflow-wrap:anywhere; }
+.direction-body { display:grid; gap:14px; padding:4px 0 14px; }
+.direction-row { display:grid; grid-template-columns:112px minmax(0,1fr); gap:10px; align-items:start; }
+.direction-axis { display:grid; color:var(--ink-soft); font-size:13px; font-weight:700; }
+.direction-axis small { color:var(--stone); font-size:12px; font-weight:400; }
+.direction-options { display:flex; flex-wrap:wrap; gap:6px; min-width:0; }
+.direction-options button { border:1px solid var(--line); border-radius:99px; padding:5px 10px; background:var(--white); color:var(--ink-soft); font-size:13px; }
+.direction-options button.active { border-color:var(--red); background:var(--red-pale); color:var(--red); font-weight:700; }
+.direction-options button.active::before { content:"✓ "; }
+.direction-custom { display:grid; gap:6px; color:var(--ink-soft); font-size:13px; }
+.direction-custom textarea { min-height:64px; margin:0; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--white); resize:vertical; }
+.direction-foot { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; color:var(--ink-soft); font-size:13px; }
+.direction-foot button,.starter-prompts button.ghost,.plan-actions button { border:1px solid var(--line); border-radius:8px; padding:7px 10px; background:var(--white); color:var(--ink-soft); }
+.reference-picker { min-width:0; margin:0; padding:12px 14px; border:1px solid var(--line); border-radius:10px; }
+.reference-picker legend { padding:0 6px; color:var(--ink-soft); font-size:13px; font-weight:700; }
+.reference-picker ul { display:grid; gap:6px; margin:8px 0 0; padding:0; list-style:none; }
+.reference-picker label { display:flex; flex-wrap:wrap; align-items:baseline; gap:8px; font-size:13px; }
+.reference-picker span { color:var(--stone); font-size:12px; }
+.starter-prompts button { display:grid; gap:3px; }
+.starter-prompts button strong { font-size:14px; }
+.starter-prompts button span { color:var(--stone); font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
+.starter-prompts button.ghost { display:inline-block; width:auto; margin-top:10px; border-bottom:1px solid var(--line); }
+.translation-notice { max-width:560px; margin:10px 0 12px; padding:10px 12px; border-left:3px solid var(--red); border-radius:0 8px 8px 0; background:var(--paper-deep); color:var(--ink); font-size:14px; line-height:1.7; }
+.unmet-panel { margin-top:32px; border-top:1px solid var(--line); }
+.unmet-panel > summary { padding:12px 0; cursor:pointer; color:var(--ink-soft); font-size:14px; }
+.unmet-panel form { display:grid; gap:10px; justify-items:start; }
+.unmet-panel textarea { width:100%; min-height:72px; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--white); resize:vertical; }
+.unmet-panel label { display:grid; gap:6px; width:100%; color:var(--ink-soft); font-size:13px; }
+.unmet-list { display:grid; gap:8px; margin:16px 0 0; padding:0; list-style:none; }
+.unmet-list li { display:grid; gap:3px; padding:10px 0; border-top:1px solid var(--paper-deep); }
+.unmet-list span { color:var(--stone); font-size:12px; }
+.profile-card { display:grid; gap:14px; max-width:760px; }
+.profile-field { display:grid; gap:6px; color:var(--ink-soft); font-size:13px; }
+.profile-field textarea { min-height:76px; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--white); resize:vertical; }
+.profile-field textarea:disabled { background:var(--paper-deep); color:var(--ink-soft); }
+.admin-expression { margin-top:14px; }
+.admin-expression > summary { cursor:pointer; color:var(--ink-soft); font-size:13px; }
+.admin-expression .profile-card { margin-top:12px; padding:16px; }
+.plan-row { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,2fr) auto; gap:8px; }
+.plan-row button { border:1px solid var(--line); border-radius:8px; padding:7px 10px; background:var(--white); color:var(--ink-soft); }
+.plan-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.direction-default { align-self:center; color:var(--stone); font-size:12px; }
+.applied-direction { margin:0; padding-top:20px; color:var(--stone); font-size:12px; }
+.sidebar nav a[aria-current],.sidebar nav button[aria-current] { color:var(--ink); background:var(--white); font-weight:700; box-shadow:inset 3px 0 0 var(--red); }
+.version-rail button[aria-current] { font-weight:700; }
+@media (max-width:680px) {
+  .direction-row { grid-template-columns:1fr; }
+  .plan-row { grid-template-columns:1fr; }
+  .direction-foot { align-items:flex-start; flex-direction:column; }
+  .reference-picker { padding:10px; }
+  /* Keep the secondary work surfaces reachable on a phone without adding a third tab. */
+  .workbench .sidebar,.admin-workspace .sidebar { display:block; padding:8px 12px; border-right:0; border-bottom:1px solid var(--line); }
+  .sidebar .sidebar-label,.sidebar .recent-list,.sidebar .muted { display:none; }
+  .sidebar nav { display:flex; gap:6px; margin:0; overflow-x:auto; }
+  .sidebar nav a,.sidebar nav button { flex:0 0 auto; padding:7px 10px; font-size:13px; white-space:nowrap; }
+  .conversation-pane,.artifact-pane { min-height:calc(100vh - 168px); }
+}

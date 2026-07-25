@@ -1,0 +1,294 @@
+{
+  "catalog_version": "content-expression-catalog-v1",
+  "inventory_file": "capability-inventory-v1.jsonl",
+  "axes": [
+    {
+      "key": "topic",
+      "label": "题材",
+      "question": "这次讲什么"
+    },
+    {
+      "key": "mechanism",
+      "label": "讲法",
+      "question": "怎样展开"
+    },
+    {
+      "key": "style",
+      "label": "风格",
+      "question": "希望是什么感觉"
+    },
+    {
+      "key": "form",
+      "label": "形式",
+      "question": "怎样呈现"
+    },
+    {
+      "key": "continuity",
+      "label": "连续",
+      "question": "独立单篇就不用选；要接着已有系列再选"
+    }
+  ],
+  "brand_restraint_markers": [
+    "克制",
+    "不夸张",
+    "不制造",
+    "不利用",
+    "不说教",
+    "不硬卖",
+    "不煽动",
+    "轻微",
+    "不施压"
+  ],
+  "entries": [
+    {
+      "stable_id": "CAT-STYLE-PERSONA-01",
+      "axis": "style",
+      "label": "干货攻略",
+      "source_label": "干货攻略",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-STYLE-PERSONA-02",
+      "axis": "style",
+      "label": "闺蜜聊天",
+      "source_label": "闺蜜聊天",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-STYLE-PERSONA-04",
+      "axis": "style",
+      "label": "真实记录",
+      "source_label": "真实记录",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-STYLE-PERSONA-05",
+      "axis": "style",
+      "label": "情感共鸣",
+      "source_label": "情感共鸣",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "不施压的共情陪伴",
+      "preserved_aspect": "共情"
+    },
+    {
+      "stable_id": "CAT-STYLE-PERSONA-06",
+      "axis": "style",
+      "label": "幽默玩梗",
+      "source_label": "幽默玩梗",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "克制的冷幽默",
+      "preserved_aspect": "幽默"
+    },
+    {
+      "stable_id": "CAT-TOPIC-TEACH-01",
+      "axis": "topic",
+      "label": "搭配公式",
+      "source_label": "搭配公式",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-TOPIC-TEACH-02",
+      "axis": "topic",
+      "label": "一衣多穿",
+      "source_label": "一衣多穿",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-TOPIC-TEACH-05",
+      "axis": "topic",
+      "label": "显高显瘦",
+      "source_label": "显高显瘦",
+      "capability_state": "composable",
+      "body_related": true,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-TOPIC-TEACH-06",
+      "axis": "topic",
+      "label": "避坑纠错",
+      "source_label": "避坑纠错",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-TOPIC-BODY-01",
+      "axis": "topic",
+      "label": "小个子",
+      "source_label": "小个子",
+      "capability_state": "composable",
+      "body_related": true,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-TOPIC-BODY-02",
+      "axis": "topic",
+      "label": "微胖梨形",
+      "source_label": "微胖梨形",
+      "capability_state": "composable",
+      "body_related": true,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-TOPIC-BODY-03",
+      "axis": "topic",
+      "label": "苹果型",
+      "source_label": "苹果型",
+      "capability_state": "composable",
+      "body_related": true,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-TOPIC-OCCASION-01",
+      "axis": "topic",
+      "label": "通勤上班",
+      "source_label": "通勤上班",
+      "capability_state": "verified",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-TOPIC-NEWITEM-03",
+      "axis": "continuity",
+      "label": "连续系列",
+      "source_label": "系列企划",
+      "capability_state": "verified",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-TOPIC-FABRIC-01",
+      "axis": "topic",
+      "label": "面料对比",
+      "source_label": "面料对比",
+      "capability_state": "verified",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-TOPIC-PEOPLE-01",
+      "axis": "topic",
+      "label": "品牌故事",
+      "source_label": "品牌故事",
+      "capability_state": "verified",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-GENRE-NOTE-02",
+      "axis": "form",
+      "label": "多图合集",
+      "source_label": "多图合集",
+      "capability_state": "verified",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-GENRE-SPEAK-01",
+      "axis": "form",
+      "label": "真人口播",
+      "source_label": "真人口播",
+      "capability_state": "verified",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-GENRE-SHOW-01",
+      "axis": "form",
+      "label": "上身试穿",
+      "source_label": "上身试穿",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-GENRE-SHOW-04",
+      "axis": "form",
+      "label": "细节特写",
+      "source_label": "细节特写",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-GENRE-TUTORIAL-01",
+      "axis": "mechanism",
+      "label": "步骤教程",
+      "source_label": "步骤教程",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-GENRE-TUTORIAL-02",
+      "axis": "mechanism",
+      "label": "公式图解",
+      "source_label": "公式图解",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-GENRE-TUTORIAL-03",
+      "axis": "mechanism",
+      "label": "避坑指南",
+      "source_label": "避坑指南",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-GENRE-TUTORIAL-05",
+      "axis": "mechanism",
+      "label": "清单盘点",
+      "source_label": "清单盘点",
+      "capability_state": "composable",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    },
+    {
+      "stable_id": "CAT-GENRE-DRAMA-04",
+      "axis": "mechanism",
+      "label": "故事品牌",
+      "source_label": "故事品牌",
+      "capability_state": "verified",
+      "body_related": false,
+      "restrained_variant": "",
+      "preserved_aspect": ""
+    }
+  ]
+}

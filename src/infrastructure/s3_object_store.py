@@ -53,6 +53,11 @@ class S3ObjectStore(MaterialObjectStore):
         self._request("PUT", object_key, payload)
         return object_key
 
+    def get(self, object_key: str) -> bytes:
+        if not object_key.startswith("materials/") or ".." in object_key:
+            raise ValueError("素材对象标识无效")
+        return self._request("GET", object_key).content
+
     def delete(self, object_key: str) -> None:
         if not object_key.startswith("materials/") or ".." in object_key:
             raise ValueError("素材对象标识无效")
@@ -65,7 +70,7 @@ class S3ObjectStore(MaterialObjectStore):
             return False
         return True
 
-    def _request(self, method: str, object_key: str, body: bytes = b"") -> None:
+    def _request(self, method: str, object_key: str, body: bytes = b"") -> httpx.Response:
         now = datetime.now(timezone.utc)
         date_stamp = now.strftime("%Y%m%d")
         amz_date = now.strftime("%Y%m%dT%H%M%SZ")
@@ -104,6 +109,7 @@ class S3ObjectStore(MaterialObjectStore):
             timeout=15.0,
         )
         response.raise_for_status()
+        return response
 
     def _signing_key(self, date_stamp: str) -> bytes:
         key = ("AWS4" + self._secret_access_key).encode("utf-8")

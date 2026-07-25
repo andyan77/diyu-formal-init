@@ -10,6 +10,7 @@ from psycopg.rows import dict_row
 
 from src.ports.workbench_repository import WorkbenchRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
+from src.shared.content_snapshot import visible_direction
 from src.shared.errors import DomainError
 from src.shared.types import DisplayScope, TenantManagementScope, TrustedScope
 
@@ -219,6 +220,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         content_role_name: str,
         voice_boundary: str,
         operator_id: UUID,
+        control_organization_id: UUID | None = None,
     ) -> dict[str, object]:
         account_id = uuid4()
         content_role_id = uuid4()
@@ -237,6 +239,23 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 (scope.tenant_id, operator_id),
             )
             self._one(cursor, "只能向当前租户已登记且启用的自然人授权发布账号")
+            # Which organization controls this account is an explicit decision by the creating
+            # administrator, defaulting to their own organization.  It is never guessed later
+            # from an account name, a role name or an operator's name.
+            if control_organization_id is None:
+                cursor.execute(
+                    "SELECT organization_id FROM users WHERE tenant_id = %s AND id = %s",
+                    (scope.tenant_id, scope.user_id),
+                )
+                control_organization_id = UUID(
+                    str(self._one(cursor, "找不到当前租户管理员")["organization_id"])
+                )
+            else:
+                cursor.execute(
+                    "SELECT id FROM organizations WHERE tenant_id = %s AND id = %s",
+                    (scope.tenant_id, control_organization_id),
+                )
+                self._one(cursor, "只能指定当前租户已有的组织作为账号控制组织")
             cursor.execute(
                 """
                 SELECT account.id, account.channel, role.name AS content_role,
@@ -289,8 +308,16 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             if cursor.fetchone() is not None:
                 raise DomainError("当前品牌已有同名企业表达人设。")
             cursor.execute(
-                "INSERT INTO content_accounts (id, tenant_id, brand_id, name, channel) VALUES (%s, %s, %s, %s, %s)",
-                (account_id, scope.tenant_id, scope.brand_id, name, channel),
+                "INSERT INTO content_accounts (id, tenant_id, brand_id, name, channel, control_organization_id) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (
+                    account_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    name,
+                    channel,
+                    control_organization_id,
+                ),
             )
             cursor.execute(
                 "INSERT INTO content_roles (id, tenant_id, brand_id, name, voice_boundary) VALUES (%s, %s, %s, %s, %s)",
@@ -461,6 +488,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT cv.id AS version_id, cv.version_number, cv.outline, cv.body, cv.created_at, gr.model,
+                       t.content_context_snapshot,
                        CASE
                          WHEN a.channel = '抖音' AND t.media_format = 'video' THEN 'douyin_video'
                          WHEN a.channel = '小红书' AND t.media_format = 'video' THEN 'xiaohongshu_video'
@@ -491,6 +519,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "aigc_label": aigc_disclosure(row["model"])[0],
                 "aigc_release_reminder": aigc_disclosure(row["model"])[1],
                 "created_at": self._time(row["created_at"]),
+                "translation_notice": visible_direction(row["content_context_snapshot"])[0],
+                "applied_direction": visible_direction(row["content_context_snapshot"])[1],
             }
             for row in rows
         ]
@@ -832,7 +862,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT m.id, m.title, m.media_type, m.scope, m.created_at, m.status,
-                       m.original_filename, m.byte_size, m.checksum_sha256, m.reference_version
+                       m.original_filename, m.byte_size, m.checksum_sha256, m.reference_version,
+                       m.reference_note
                 FROM material_assets m
                 WHERE m.tenant_id = %s AND m.brand_id = %s AND m.status = 'active'
                   AND (
@@ -858,6 +889,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "byte_size": self._integer(row["byte_size"]),
                 "checksum_sha256": str(row["checksum_sha256"]),
                 "reference_version": self._integer(row["reference_version"]),
+                "reference_note": str(row["reference_note"]),
             }
             for row in rows
         ]
@@ -888,6 +920,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         byte_size: int,
         original_filename: str,
         checksum_sha256: str,
+        reference_note: str = "",
     ) -> dict[str, object]:
         with self._content_tx(scope) as cursor:
             owner_user_id: UUID | None = scope.user_id if asset_scope == "personal" else None
@@ -901,9 +934,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 INSERT INTO material_assets
-                    (id, tenant_id, brand_id, scope, owner_user_id, owner_organization_id, title, media_type, object_key, byte_size, original_filename, checksum_sha256)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, title, media_type, scope, created_at, status, original_filename, byte_size, checksum_sha256, reference_version
+                    (id, tenant_id, brand_id, scope, owner_user_id, owner_organization_id, title, media_type, object_key, byte_size, original_filename, checksum_sha256, reference_note)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, title, media_type, scope, created_at, status, original_filename, byte_size, checksum_sha256, reference_version, reference_note
                 """,
                 (
                     asset_id,
@@ -918,6 +951,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     byte_size,
                     original_filename,
                     checksum_sha256,
+                    reference_note,
                 ),
             )
             row = self._one(cursor, "素材元数据没有保存成功")
@@ -933,6 +967,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "byte_size": self._integer(row["byte_size"]),
             "checksum_sha256": str(row["checksum_sha256"]),
             "reference_version": self._integer(row["reference_version"]),
+            "reference_note": str(row["reference_note"]),
         }
 
     def request_material_deletion(self, scope: TrustedScope, asset_id: UUID) -> str:
