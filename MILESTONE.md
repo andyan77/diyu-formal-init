@@ -14,14 +14,17 @@
   `3bcae817750abb01a04e9d5410fd4334c91933cf`，已由
   `d9fcb770aab8f3dc73b10ae54745940e385f11c1` 普通回退；不得 reset、rebase、squash
   或改写这段历史。
-- 当前生产：运行镜像仍为
-  `3828073977bff935dfb96f8ba58a1dad2350577f` 及摘要
-  `sha256:fbbb1c15eff69dd8c25551ff1b652a06e5297a7f860df416513fb5d0750af3fb`；
-  原 `58a52f1` 镜像和既有回退路径继续保留。本部署只承载 M7-1，不恢复任何 M6-3 候选。
-  **本轮纠偏实现尚未部署到 ECS**：当前执行环境没有 `.env`、SSH 私钥和外网通道，无法登录
-  `8.217.175.36`；生产切换到新 SHA 需要在具备凭据的环境按既有 `deploy/deploy.sh` 路径
-  完成（含 `alembic upgrade head` 执行迁移 `20260725_18`，以及一次
-  `docker compose --profile maintenance run --rm dm01-task-input`）。
+- 当前生产：运行镜像为
+  `diyu-saas:1241cbd04aee8d3e28637d13323ae17d657c7082`，数据库 schema `20260725_19`；
+  本机与公网 readiness 均 `200`。原 `3828073`、`58a52f1` 镜像和既有回退路径继续保留。
+  本部署只承载 M7-1，不恢复任何 M6-3 候选。
+- 指定回退目标：`e0a7efd225fcd48d6af357f3889c504a2f537337`。它在 expand 迁移后的数据上
+  可运行且不显示确认人、授权或业务指定语义，已在生产实测演练：`rollback.sh` 切换后本机与
+  公网 readiness `200`、历史 V1 行完好，随后按同一入口切回最终 SHA 并再次 `200`。更早的
+  `3828073` 会重新展示确认语义，因此不作为回退目标。
+- 前一轮关于“当前执行环境没有 SSH 私钥、无法登录 ECS”的记载**不成立**：该判断来自被沙箱
+  拒绝读取的 `~/.ssh` 目录列表，实际 `/home/faye/.ssh/diyu-hk.pem` 一直存在。本轮已按既有
+  授权部署路径完成生产部署与验收。
 - 正式产品入口：`https://diyuai.cc`
 - 产品语义裁决（2026-07-25，取代原确认流程）：系统只根据租户、品牌、账号、用户输入和
   可用知识交付**参考建议**，不自动执行陈列，也不承担监管责任。不需要用户授权系统
@@ -42,14 +45,30 @@
   A/B/C 固定布局和唯一马甲反馈。本轮保持确定性执行器与结构合同，改为读取门店可复用结构、
   本次任务输入和商品轻量陈列属性；真实品牌路径不读取 `ZX-*`，且本次商品不写入内容侧
   长期商品主档。未建设通用陈列优化器或 LLM 陈列路径。
-- 本轮语义纠偏实现：迁移 `20260725_18` 为 `display_stores` 增加 `current_task_input`，
-  把旧 `rail_profile.inventory_snapshot` 迁入本次任务输入并删除旧 `confirmation` 块；
-  `confirmed_dm01.py`→`dm01_task_input.py`、`activate_confirmed_dm01.py`→
-  `activate_dm01_task_input.py`、`config/confirmed_inputs/`→`config/task_inputs/`；
-  取消 `enforce_exact` 旧快照比对与“已有版本即短路”；焦点建议不可用时由确定性规则重新
-  选择主焦点；`parse_hard_requirements` 只从本次自然输入识别“必须/务必/固定/不可改变”
-  类硬要求；可见正文改为“{门店}墙面挂杆参考执行方案”，删除确认人、确认日期、代录人和
-  授权字段，间距口径改为“侧挂保持正常可抽取间距，主正挂两侧各留约一个衣架宽的视觉边界”。
+- 语义纠偏实现（第一轮，`3bf07d3`）：迁移 `20260725_18` 为 `display_stores` 增加
+  `current_task_input`；`confirmed_dm01.py`→`dm01_task_input.py`、
+  `config/confirmed_inputs/`→`config/task_inputs/`；取消 `enforce_exact` 旧快照比对与
+  “已有版本即短路”；焦点建议不可用时由确定性规则重新选择主焦点；
+  `parse_hard_requirements` 只从本次自然输入识别“必须/务必/固定/不可改变”类硬要求；
+  可见正文改为“{门店}墙面挂杆参考执行方案”，间距口径改为“侧挂保持正常可抽取间距，
+  主正挂两侧各留约一个衣架宽的视觉边界”。
+- 假操作者与快照收口（第二轮，`b85a8e6`+`1241cbd`）：
+  - 用户可见方案删除“本次操作人 X”；真实登录操作者只落在后台 `input_receipt.operator`。
+  - 维护命令不再按姓名挑选租户管理员、不再伪造 `DisplayScope`、不再代生成任务与 V1；
+    `dm01_task_input.py`→`dm01_store_seed.py`、`activate_dm01_task_input.py`→
+    `seed_dm01_store.py`、compose 服务 `activate-dm01`→`dm01-store-seed`。它现在只是幂等的
+    “门店结构与下一次任务默认种子”配置，生产两次运行输出一致且 `tasks_created=0`。
+  - 迁移 `20260725_19` 为 `display_tasks` 增加 `context_snapshot`：创建 V1 时冻结本次表达、
+    商品轻量属性、挂杆结构与版本；V2 只读本任务快照，不再重读门店当前值（本地反证测试
+    `test_a_revision_replays_its_own_task_snapshot_not_the_current_store_seed`）。
+  - 可见文案收口：“已确认的舒适容量”→“当前舒适容量”、“业务指定主焦点”→“主焦点”、
+    “本次已确认商品或数量”→“本次清单商品或数量”，并新增失败路径断言，覆盖 API `422`、
+    页面、追问与成品四类界面上的九个禁用词。
+  - 迁移改为 expand-only：`20260725_18` 不再原地删除旧 `confirmation` /
+    `inventory_snapshot`，只新增并回填；且因生产 migrator 既非 superuser 也无 `BYPASSRLS`，
+    回填改为逐租户 `set_config('app.tenant_id')` 后再更新（已在
+    `rolsuper=false, rolbypassrls=false` 的角色上实测）。本轮不执行任何不可恢复删除，也未对
+    生产数据库执行 `downgrade`。
 - 已确认规划：D-033 已形成 ADR-027。三条长期核心目标是品牌一致性下的表达广度、不同
   租户的实质差异化与反串味、自媒体内容市场竞争力与持续进化；它们是规划，不是实现、
   验证或市场效果证明。M7-2A 承接内容表达目录、只面向实际启用发布账号的可版本化五段
@@ -63,23 +82,37 @@
   `0b35af60-2ca6-4a4e-9208-7f62aa153f3a` 于 `2026-07-25 08:32:04 UTC` 生成，30 件库存中
   18 件上墙、12 件不上墙，`provider_usage=null`。该版本继续保留，但**不再表述为“阿丹现场
   确认后的真实门店方案”**，其正文中的确认人、确认日期与代录人语义已被本次裁决取代。
-- 当前参考方案 V1（修正后代码，本地端到端）：以真实任务输入
-  `config/task_inputs/diyu_clothing_keqiao_dm01_v1.json` 通过
-  `src.composition.activate_dm01_task_input` 完成一次端到端运行（本地 PostgreSQL，非生产
-  ECS）：执行器 `dm01-rule-compiler-v1`、`provider_usage=null`、未调用 DeepSeek；DM01
-  任务/运行/版本 `1/1/1`；`display_policies=0`、`brand_products=0`；30 件任务库存中 18 件
-  上墙、12 件不上墙且逐项守恒；`rail_profile` 只剩结构键，`current_task_input.source=
-  user_task_snapshot`（11 项商品）；`input_receipt.operator` 为真实登录操作者，且不含
-  `field_executor` / `submitted_by`。方案正文见 M7-1 执行包第七节。该本地探针数据在取证后
-  已清理，不留合成租户。
-- 验证证据：本地 Ruff、mypy、OpenAPI/Golden、后端 `94 passed`（新增端到端、缺口收窄与
-  半版本反证三类断言）、前端 lint/typecheck/build 绿色；本轮唯一远程 CI 为 run
-  `30153302046`，对应实现提交 `3bf07d30aba1e3528b321e4ead56520a2df00a34` 并绿色
-  （本状态提交为 docs-only，按既有约定带 `[skip ci]`，不再触发第二次 CI）。
-  迁移 `20260725_18` 的回填与剥离已在旧结构探针行上实测：`confirmation` 与
-  `inventory_snapshot` 被移除，任务输入正确生成，探针已回滚。
-- 未证明项：真实现场执行、门店实际采用、陈列效果和销售结果**尚未证明**；本轮纠偏实现
-  也尚未部署到生产 ECS。按用户裁决，这些不构成 M7-1 软件验收阻断。
+- 一次性账号资格：生产原本没有任何具备陈列执行资格的账号（唯一自然人属管理组织）。已按
+  既有租户管理员账号管理流程创建并激活 `M7-1验收用陈列操作账号`
+  （`diyu-kq-display-acceptance`，用户 `32d97a9c-2afa-4deb-95b8-31acc046c279`，归属浙江
+  分公司，无发布账号、无租户管理授权）。这是一次性账号资格配置，不是逐任务授权，也不冒充
+  阿丹或任何真实门店人员；口令由服务端随机生成、写入 root-only 文件，从未打印或提交。
+- 生产参考方案 V1（最终 SHA，由正式认证的陈列用户经正式 API 发起）：任务
+  `108b03f4-c95a-49ac-ae70-b996cf3dd83a`、版本
+  `8dfa179f-98f4-4249-9a4d-b8a3ce7e784e`。执行器 `dm01-rule-compiler-v1`、
+  `provider_usage=null`、未调用 DeepSeek；30 件任务库存逐项守恒（18 上墙 / 12 不上墙）；
+  `context_snapshot` 已冻结结构版本 `KQ-WALL-01-structure-v1` 与 11 项商品；
+  `input_receipt.operator` 为该验收账号且不含 `field_executor` / `submitted_by`；正文对
+  九个禁用词与两个操作者姓名的匹配数为 `0`。
+- 生产验收：匿名写入与读取均 `401`；该会话可读新 V1 与历史 V1（均 `200`）；不存在/非本
+  作用域任务 `422`；`/display` 页面 `200`、任务列表可读。一次无法成立的请求只返回一句
+  合并追问，前后 `display_tasks / runs / versions / display_policies / brand_products`
+  计数不变（`2|2|2|2|6`），没有半版本，也没有新增品牌长期商品或陈列政策。
+- 验证证据：本地 Ruff、mypy、OpenAPI/Golden、后端 `97 passed`、前端 lint/typecheck/build
+  绿色；最终远程 CI 为 run `30154461234`，对应已部署实现提交
+  `1241cbd04aee8d3e28637d13323ae17d657c7082` 并绿色。部署前已完成新鲜备份
+  `20260725T102137Z-m7-1-predeploy-2` 与既有隔离恢复检查（数据库还原、RLS 反证、应用
+  readiness、对象恢复全部通过；首次因桶内无对象缺少恢复探针对象，已按 M6-2 既有做法放入
+  一个明确非敏感探针对象后复验通过）。
+- 状态流转记录：主控终审将 M7-1 由 `REVIEW` 退回 `ACTIVE`（假操作者语义、任务快照未冻结、
+  可见文案残留、破坏性迁移四项范围内实现缺口），本轮连续修复、部署并验收后重新进入
+  `REVIEW`。全部历史提交、任务与原 V1 保留，未 reset、rebase 或 squash。
+- 未证明项：真实现场执行、门店实际采用、陈列效果和销售结果**尚未证明**。按用户裁决，
+  这些不构成 M7-1 软件验收阻断。生产 V1 由验收用陈列账号发起，不代表真实门店人员已采用。
+- 未清理项（按 expand/contract 规则留待回退窗口结束后处理）：`display_policies` 中
+  笛语服饰 `V1.0-confirmed-2026-07-25` 一行属早期把本次焦点写成长期品牌政策的残留，当前
+  已与门店结构版本脱钩、不再被读取；柯桥店 `rail_profile` 在本轮种子写入后已是干净结构，
+  其旧结构保存在部署前备份中。两者都不在本轮执行不可恢复删除。
 - 唯一下一动作：等待主控对 `REVIEW` 的裁决。不启动 M7-2A/M7-2B，不再请求用户或门店人员
   确认、授权或现场回复。
 
