@@ -73,7 +73,9 @@
   `field_executor` / `submitted_by`。方案正文见 M7-1 执行包第七节。该本地探针数据在取证后
   已清理，不留合成租户。
 - 验证证据：本地 Ruff、mypy、OpenAPI/Golden、后端 `94 passed`（新增端到端、缺口收窄与
-  半版本反证三类断言）、前端 lint/typecheck/build 绿色；唯一远程 CI 见下方“本轮 CI”。
+  半版本反证三类断言）、前端 lint/typecheck/build 绿色；本轮唯一远程 CI 为 run
+  `30153302046`，对应实现提交 `3bf07d30aba1e3528b321e4ead56520a2df00a34` 并绿色
+  （本状态提交为 docs-only，按既有约定带 `[skip ci]`，不再触发第二次 CI）。
   迁移 `20260725_18` 的回填与剥离已在旧结构探针行上实测：`confirmation` 与
   `inventory_snapshot` 被移除，任务输入正确生成，探针已回滚。
 - 未证明项：真实现场执行、门店实际采用、陈列效果和销售结果**尚未证明**；本轮纠偏实现
