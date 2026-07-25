@@ -7,7 +7,13 @@ from functools import lru_cache
 from pathlib import Path
 
 from src.shared.errors import DomainError
-from src.shared.types import ContentControlContext, CreativeDirection, DirectionSelection
+from src.shared.types import (
+    ContentControlContext,
+    CreativeDirection,
+    DirectionSelection,
+    ProductFact,
+    SeriesContext,
+)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _CATALOG_DIR = _PROJECT_ROOT / "config" / "content_expression"
@@ -407,7 +413,12 @@ def direction_summary(direction: CreativeDirection | None) -> str:
 SNAPSHOT_SCHEMA = "content-context-snapshot-v1"
 
 
-def snapshot_document(control: ContentControlContext, content_role: str) -> dict[str, object]:
+def snapshot_document(
+    control: ContentControlContext,
+    content_role: str,
+    products: tuple[ProductFact, ...] = (),
+    series_context: SeriesContext | None = None,
+) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
     Task conditions only: the expression identity and boundary this run actually spoke from, the
@@ -463,12 +474,68 @@ def snapshot_document(control: ContentControlContext, content_role: str) -> dict
         "account_expression_profile_version": (
             control.account_expression.version if control.account_expression else None
         ),
+        "account_expression": (
+            {
+                "profile_id": (
+                    str(control.account_expression.profile_id)
+                    if control.account_expression.profile_id
+                    else None
+                ),
+                "version": control.account_expression.version,
+                "identity_position": control.account_expression.identity_position,
+                "authority_boundary": control.account_expression.authority_boundary,
+                "audience_relationship": control.account_expression.audience_relationship,
+                "content_territories": control.account_expression.content_territories,
+                "default_production_conditions": (
+                    control.account_expression.default_production_conditions
+                ),
+            }
+            if control.account_expression is not None
+            else None
+        ),
         "private_preference_mode": control.preference_mode,
         "private_preference_version": control.preference_version,
         "material_refs": [
             {"asset_id": str(item.asset_id), "reference_version": item.reference_version}
             for item in control.materials
         ],
+        "product_facts": [
+            {
+                "sku": item.sku,
+                "display_name": item.display_name,
+                "facts": item.facts,
+                "source_kind": item.source_kind,
+                "source_note": item.source_note,
+                "fact_version": item.fact_version,
+                "applicability": item.applicability,
+            }
+            for item in products
+        ],
+        "series_context": (
+            {
+                "series_id": str(series_context.series_id),
+                "revision": series_context.revision,
+                "title": series_context.title,
+                "premise": series_context.premise,
+                "target_position": series_context.target_position,
+                "user_asserted_published_continuity": (
+                    series_context.user_asserted_published_continuity
+                ),
+                "prior_entries": [
+                    {
+                        "task_id": str(item.task_id),
+                        "version_id": str(item.version_id),
+                        "version": item.version,
+                        "position": item.position,
+                        "outline": item.outline,
+                        "body": item.body,
+                    }
+                    for item in series_context.prior_entries
+                ],
+            }
+            if series_context is not None
+            else None
+        ),
     }
 
 

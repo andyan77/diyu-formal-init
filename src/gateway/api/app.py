@@ -48,6 +48,8 @@ from src.gateway.api.contracts import (
     CreateContentRequest,
     CreateDisplayRequest,
     CreateOperatorRequest,
+    CreateOrganizationRequest,
+    CreatePlatformCarrierRequest,
     CreatePublishingAccountRequest,
     CreateSeriesRequest,
     CreateTenantRequest,
@@ -63,6 +65,7 @@ from src.gateway.api.contracts import (
     MaterialUploadRequest,
     ReorderSeriesRequest,
     RevisionRequest,
+    SaveBrandProductRequest,
     SavedVersionResponse,
     UnmetCapabilityRequest,
     UnmetCapabilityResponseRequest,
@@ -405,6 +408,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         def tenant_organizations(request: Request) -> list[dict[str, str]]:
             return production_authority.repository.tenant_organizations(formal_manager_identity(request))
 
+        @app.post(
+            "/api/v1/tenant-management/organizations",
+            status_code=status.HTTP_201_CREATED,
+            responses=business_failures,
+        )
+        def create_tenant_organization(
+            payload: CreateOrganizationRequest,
+            request: Request,
+        ) -> dict[str, str]:
+            return production_authority.repository.create_tenant_organization(
+                formal_manager_identity(request),
+                payload.name,
+            )
+
         @app.post("/api/v1/tenant-management/users/{user_id}/reset", responses=business_failures)
         def reset_tenant_user(user_id: UUID, request: Request) -> dict[str, str]:
             identity = formal_manager_identity(request)
@@ -665,6 +682,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> list[dict[str, object]]:
         return workbench_service.management_accounts(scope)
 
+    @app.get("/api/v1/tenant-management/brand-products", responses=business_failures)
+    def management_products(
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.management_products(scope)
+
+    @app.put("/api/v1/tenant-management/brand-products", responses=business_failures)
+    def save_management_product(
+        payload: SaveBrandProductRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.save_management_product(
+            scope,
+            payload.sku,
+            payload.display_name,
+            payload.category,
+            tuple(payload.colors),
+            payload.material_or_structure,
+            payload.silhouette,
+            payload.observable_features,
+            payload.source_note,
+            payload.applicability,
+        )
+
     @app.post(
         "/api/v1/tenant-management/publishing-accounts",
         status_code=status.HTTP_201_CREATED,
@@ -682,6 +723,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.voice_boundary,
             payload.operator_id,
             payload.control_organization_id,
+            payload.operator_can_maintain_expression_profile,
+        )
+
+    @app.post(
+        "/api/v1/tenant-management/platform-carriers",
+        status_code=status.HTTP_201_CREATED,
+        responses=business_failures,
+    )
+    def create_platform_carrier(
+        payload: CreatePlatformCarrierRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.create_platform_carrier(
+            scope,
+            payload.source_account_id,
+            payload.name,
+            payload.channel,
+            payload.operator_id,
         )
 
     @app.post(
@@ -1231,6 +1290,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 payload.reuse_version_id,
                 target,
                 _controls(payload, bypassed),
+                payload.series_id,
+                payload.series_position,
             )
 
     @app.post(
@@ -1449,13 +1510,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         target = _target(fields.get("target", [None])[0], weak_seed)
         try:
             scope = authority.require_content_target(request, target)
+            raw_series_id = fields.get("series_id", [""])[0]
+            raw_series_position = fields.get("series_position", [""])[0]
+            series_id = UUID(raw_series_id) if raw_series_id else None
+            series_position = int(raw_series_position) if raw_series_position else None
             if requests_display_merchandising(weak_seed):
                 return RedirectResponse(
                     "/content?" + urlencode({"notice": "这是给门店内部执行的陈列任务，请切换到陈列搭配。"}),
                     status_code=status.HTTP_303_SEE_OTHER,
                 )
             with model_slot(request):
-                result = service.create_from_weak_seed(scope, weak_seed, target=target)
+                result = service.create_from_weak_seed(
+                    scope,
+                    weak_seed,
+                    target=target,
+                    series_id=series_id,
+                    series_position=series_position,
+                )
         except DomainError as exc:
             return RedirectResponse("/content?notice=" + str(exc), status_code=status.HTTP_303_SEE_OTHER)
         if result["kind"] in {"greeting", "question"}:

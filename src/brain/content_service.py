@@ -5,6 +5,7 @@ from uuid import UUID
 
 from src.brain.content_control_service import (
     PREFERENCE_ABSENT,
+    PREFERENCE_BYPASSED,
     ContentControlService,
 )
 from src.brain.content_expression import direction_from_snapshot, snapshot_document
@@ -18,8 +19,10 @@ from src.brain.p1_contract import assert_content_complete
 from src.brain.platform_directions import direction_for, target_from_text
 from src.ports.content_generator import ContentGenerator
 from src.ports.content_repository import ContentRepository
+from src.shared.content_snapshot import frozen_series_context
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.types import (
+    AccountExpression,
     ActiveAsset,
     BrandContext,
     ContentControlContext,
@@ -31,6 +34,7 @@ from src.shared.types import (
     ReferenceMaterial,
     RequestedControls,
     RoutingInput,
+    SeriesContext,
     TrustedScope,
 )
 
@@ -63,10 +67,18 @@ class ContentService:
         reuse_version_id: UUID | None = None,
         target: ContentTarget = "douyin_video",
         controls: RequestedControls | None = None,
+        series_id: UUID | None = None,
+        series_position: int | None = None,
     ) -> dict[str, object]:
         if reuse_version_id is None and is_natural_chat(weak_seed):
             return {"kind": "greeting", "message": natural_reply()}
-        continuation = reuse_version_id is None and requests_continuation(weak_seed)
+        if series_position is not None and series_id is None:
+            raise DomainError("指定系列集数前，请先选择一个系列。")
+        continuation = (
+            reuse_version_id is None
+            and series_id is None
+            and requests_continuation(weak_seed)
+        )
         if continuation:
             reuse_version_id = self._repository.latest_visible_version(scope)
             if reuse_version_id is None:
@@ -80,6 +92,11 @@ class ContentService:
             scope, direction.media_format, production_conditions
         )
         self._assert_target_context(context, direction.platform)
+        series_context = (
+            self._series_context(scope, series_id, series_position, sanitized_seed)
+            if series_id is not None
+            else None
+        )
         primary_product: ContentProduct | None
         is_recompile = False
         if reuse_version_id is not None:
@@ -110,7 +127,14 @@ class ContentService:
                     "kind": "question",
                     "message": "要讲当前品牌的具体商品，请先指定一件已经确认资料的商品。",
                 }
-            primary_product = self._generator.route(RoutingInput(sanitized_seed, context, products))
+            series_prior = (
+                series_context.prior_entries[-1].body
+                if series_context is not None and series_context.prior_entries
+                else None
+            )
+            primary_product = self._generator.route(
+                RoutingInput(sanitized_seed, context, products, series_prior)
+            )
             prior_body = None
             source_description = None
         if primary_product is None:
@@ -141,7 +165,13 @@ class ContentService:
             source_description,
             production_conditions,
             control,
-            snapshot_document(control, context.content_role_name),
+            snapshot_document(
+                control,
+                context.content_role_name,
+                products,
+                series_context,
+            ),
+            series_context,
         )
         return self._generate_and_persist(
             scope,
@@ -158,6 +188,7 @@ class ContentService:
             direction,
             source_description,
             control,
+            series_context,
         )
 
     def _control_context(
@@ -217,7 +248,28 @@ class ContentService:
         """A revision reads its own frozen conditions; today's settings never stand in."""
         profile_id = snapshot.get("account_expression_profile_id")
         expression = None
-        if self._control is not None and isinstance(profile_id, str) and profile_id:
+        frozen_expression = snapshot.get("account_expression")
+        if isinstance(frozen_expression, dict):
+            raw_version = frozen_expression.get("version")
+            expression = AccountExpression(
+                profile_id=(
+                    UUID(str(frozen_expression["profile_id"]))
+                    if frozen_expression.get("profile_id")
+                    else None
+                ),
+                version=raw_version if isinstance(raw_version, int) else None,
+                identity_position=str(frozen_expression.get("identity_position") or ""),
+                authority_boundary=str(frozen_expression.get("authority_boundary") or ""),
+                audience_relationship=str(
+                    frozen_expression.get("audience_relationship") or ""
+                ),
+                content_territories=str(frozen_expression.get("content_territories") or ""),
+                default_production_conditions=str(
+                    frozen_expression.get("default_production_conditions") or ""
+                ),
+                is_draft=False,
+            )
+        elif self._control is not None and isinstance(profile_id, str) and profile_id:
             expression = self._control.expression_for_generation(scope, UUID(profile_id))
             if expression is None:
                 raise DomainError(_MISSING_FROZEN_PROFILE)
@@ -331,6 +383,7 @@ class ContentService:
             scope, primary_product, instruction, products, target, False
         )
         control = self._replayed_control(scope, snapshot)
+        series_context = frozen_series_context(snapshot)
         context = self._replayed_context(context, control)
         run_id, parent_version_id, weak_seed, primary_product = self._repository.revise_task(
             scope,
@@ -344,6 +397,7 @@ class ContentService:
             direction,
             production_conditions,
             control,
+            series_context,
         )
         return self._generate_and_persist(
             scope,
@@ -360,6 +414,7 @@ class ContentService:
             direction,
             None,
             control,
+            series_context,
         )
 
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:
@@ -377,19 +432,72 @@ class ContentService:
         target: ContentTarget,
         controls: RequestedControls | None = None,
     ) -> dict[str, object]:
-        """Adapt an existing task to another goal by recompiling its own latest version.
-
-        This is still that task's revision, not a fresh request, so it must not quietly pull in
-        today's private preference: the default here is already preference-free, and a caller may
-        only narrow it further.
-        """
+        """Recompile one frozen source version for an explicitly resolved platform carrier."""
+        del controls
         source_version_id = self._repository.latest_task_version(source_scope, task_id)
-        return self.create_from_weak_seed(
+        source = self._repository.load_recompile_source(source_scope, source_version_id)
+        snapshot = self._repository.load_content_context_snapshot(source_scope, source.task_id)
+        if snapshot is None:
+            return {"kind": "question", "message": _NO_FROZEN_CONTEXT}
+        direction = direction_for(target)
+        production_conditions = self._production_conditions(
+            instruction, direction.media_format
+        )
+        context = self._repository.load_brand_context(
+            target_scope, direction.media_format, production_conditions
+        )
+        self._assert_target_context(context, direction.platform)
+        control = self._replayed_control(source_scope, snapshot)
+        control = self._recompile_control(control)
+        context = self._replayed_context(context, control)
+        series_context = frozen_series_context(snapshot)
+        assets = self._repository.load_active_assets(
             target_scope,
+            source.primary_product,
             instruction,
-            source_version_id,
+            source.products,
             target,
-            controls or RequestedControls(use_personal_preferences=False),
+            True,
+        )
+        target_task_id, run_id, prior_body = self._repository.create_task_and_running_run(
+            target_scope,
+            source.weak_seed,
+            source.primary_product,
+            source_version_id,
+            self._generator.model_name,
+            assets,
+            context,
+            source.products,
+            target,
+            direction.media_format,
+            direction,
+            source.source_description,
+            production_conditions,
+            control,
+            snapshot_document(
+                control,
+                control.content_role or context.content_role_name,
+                source.products,
+                series_context,
+            ),
+            None,
+        )
+        return self._generate_and_persist(
+            target_scope,
+            target_task_id,
+            run_id,
+            source.weak_seed,
+            source.primary_product,
+            instruction,
+            prior_body,
+            context,
+            assets,
+            source.products,
+            target,
+            direction,
+            source.source_description,
+            control,
+            series_context,
         )
 
     def identity_summary(
@@ -427,6 +535,7 @@ class ContentService:
         direction: PlatformDirection,
         source_version_description: str | None,
         control: ContentControlContext | None = None,
+        series_context: SeriesContext | None = None,
     ) -> dict[str, object]:
         try:
             artifact = self._generator.generate(
@@ -448,6 +557,7 @@ class ContentService:
                     account_expression=control.account_expression if control else None,
                     reference_materials=control.materials if control else (),
                     collaboration_note=control.collaboration_note if control else "",
+                    series_context=series_context,
                 )
             )
             assert_content_complete(artifact)
@@ -494,6 +604,57 @@ class ContentService:
                 [item.applied_label for item in creative.selections] if creative else []
             ),
         }
+
+    def _series_context(
+        self,
+        scope: TrustedScope,
+        series_id: UUID,
+        position: int | None,
+        natural_text: str,
+    ) -> SeriesContext:
+        context = self._repository.load_series_context(scope, series_id, position)
+        return replace(
+            context,
+            user_asserted_published_continuity=any(
+                marker in natural_text
+                for marker in (
+                    "上一期已经",
+                    "上一集已经",
+                    "上期已经",
+                    "之前发布",
+                    "上一期讲过",
+                    "上一集讲过",
+                )
+            ),
+        )
+
+    @staticmethod
+    def _recompile_control(control: ContentControlContext) -> ContentControlContext:
+        """Carry task choices across platforms without reapplying a private saved default."""
+        direction = control.direction
+        if direction is None:
+            return control
+        selections = tuple(item for item in direction.selections if item.origin != "default")
+        replayed_direction = (
+            replace(
+                direction,
+                selections=selections,
+                translation_notice=(
+                    direction.translation_notice
+                    if any(item.translated for item in selections)
+                    else None
+                ),
+            )
+            if selections or direction.custom_text
+            else None
+        )
+        return replace(
+            control,
+            direction=replayed_direction,
+            preference_mode=PREFERENCE_BYPASSED,
+            preference_version=None,
+            collaboration_note="",
+        )
 
     @staticmethod
     def _production_conditions(text: str, media_format: str, previous: str | None = None) -> str:

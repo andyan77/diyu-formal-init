@@ -151,6 +151,36 @@ ContentProductionBundle: TypeAlias = VideoProductionBundle | GraphicProductionBu
 class ProductFact:
     sku: str
     facts: dict[str, object]
+    display_name: str = ""
+    source_kind: str = "legacy_seed"
+    source_note: str = ""
+    fact_version: int = 1
+    applicability: str = "legacy_scope"
+
+
+@dataclass(frozen=True)
+class SeriesEntry:
+    """One immutable prior version actually compiled for a new series episode."""
+
+    task_id: UUID
+    version_id: UUID
+    version: int
+    position: int
+    outline: str
+    body: str
+
+
+@dataclass(frozen=True)
+class SeriesContext:
+    """A bounded projection of one explicitly selected account series."""
+
+    series_id: UUID
+    revision: int
+    title: str
+    premise: str
+    target_position: int
+    prior_entries: tuple[SeriesEntry, ...] = ()
+    user_asserted_published_continuity: bool = False
 
 
 @dataclass(frozen=True)
@@ -281,6 +311,7 @@ class GenerationInput:
     account_expression: AccountExpression | None = None
     reference_materials: tuple[ReferenceMaterial, ...] = ()
     collaboration_note: str = ""
+    series_context: SeriesContext | None = None
 
 
 @dataclass(frozen=True)

@@ -343,6 +343,31 @@
             ],
             "title": "Reuse Version Id"
           },
+          "series_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "series_position": {
+            "anyOf": [
+              {
+                "maximum": 999.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Position"
+          },
           "target": {
             "anyOf": [
               {
@@ -428,6 +453,44 @@
         "title": "CreateOperatorRequest",
         "type": "object"
       },
+      "CreatePlatformCarrierRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "enum": [
+              "抖音",
+              "小红书",
+              "微信视频号"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "operator_id": {
+            "format": "uuid",
+            "title": "Operator Id",
+            "type": "string"
+          },
+          "source_account_id": {
+            "format": "uuid",
+            "title": "Source Account Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_account_id",
+          "name",
+          "channel",
+          "operator_id"
+        ],
+        "title": "CreatePlatformCarrierRequest",
+        "type": "object"
+      },
       "CreatePublishingAccountRequest": {
         "additionalProperties": false,
         "properties": {
@@ -463,6 +526,11 @@
             "minLength": 1,
             "title": "Name",
             "type": "string"
+          },
+          "operator_can_maintain_expression_profile": {
+            "default": false,
+            "title": "Operator Can Maintain Expression Profile",
+            "type": "boolean"
           },
           "operator_id": {
             "format": "uuid",
@@ -842,6 +910,75 @@
           "instruction"
         ],
         "title": "RevisionRequest",
+        "type": "object"
+      },
+      "SaveBrandProductRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "applicability": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Applicability",
+            "type": "string"
+          },
+          "category": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Category",
+            "type": "string"
+          },
+          "colors": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Colors",
+            "type": "array"
+          },
+          "display_name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "material_or_structure": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Material Or Structure",
+            "type": "string"
+          },
+          "observable_features": {
+            "default": "",
+            "maxLength": 800,
+            "title": "Observable Features",
+            "type": "string"
+          },
+          "silhouette": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Silhouette",
+            "type": "string"
+          },
+          "sku": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Sku",
+            "type": "string"
+          },
+          "source_note": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Source Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sku",
+          "display_name",
+          "source_note",
+          "applicability"
+        ],
+        "title": "SaveBrandProductRequest",
         "type": "object"
       },
       "SavedVersionResponse": {
@@ -2506,6 +2643,85 @@
         "summary": "Get Version"
       }
     },
+    "/api/v1/tenant-management/brand-products": {
+      "get": {
+        "operationId": "management_products_api_v1_tenant_management_brand_products_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Management Products Api V1 Tenant Management Brand Products Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Products"
+      },
+      "put": {
+        "operationId": "save_management_product_api_v1_tenant_management_brand_products_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveBrandProductRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Management Product Api V1 Tenant Management Brand Products Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Save Management Product"
+      }
+    },
     "/api/v1/tenant-management/control-organizations": {
       "get": {
         "operationId": "control_organizations_api_v1_tenant_management_control_organizations_get",
@@ -2620,6 +2836,50 @@
           }
         ],
         "summary": "Create Operator"
+      }
+    },
+    "/api/v1/tenant-management/platform-carriers": {
+      "post": {
+        "operationId": "create_platform_carrier_api_v1_tenant_management_platform_carriers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlatformCarrierRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Platform Carrier Api V1 Tenant Management Platform Carriers Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Platform Carrier"
       }
     },
     "/api/v1/tenant-management/publishing-accounts": {

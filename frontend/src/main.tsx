@@ -169,6 +169,7 @@ interface Series {
   id: string;
   title: string;
   premise: string;
+  revision: number;
   items: Array<{ task_id: string; position: number; title: string }>;
 }
 
@@ -188,6 +189,8 @@ interface PublishingAccount {
   channel: string;
   content_role: string;
   voice_boundary: string;
+  carrier_of_account_id?: string | null;
+  carrier_of_account?: string | null;
 }
 
 interface TenantOrganization {
@@ -201,6 +204,18 @@ interface CreatePublishingAccount {
   content_role_name: string;
   voice_boundary: string;
   operator_id: string;
+}
+
+interface BrandProduct {
+  sku: string;
+  display_name: string;
+  facts: Record<string, unknown>;
+  source_note: string;
+  fact_version: number;
+  applicability: string;
+  status: "active" | "retired";
+  updated_by?: string | null;
+  updated_at: string;
 }
 
 interface Operator {
@@ -382,7 +397,10 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
   const [customText, setCustomText] = useState("");
   const [noPreferenceSession, setNoPreferenceSession] = useState(false);
   const [materialIds, setMaterialIds] = useState<string[]>([]);
+  const [seriesId, setSeriesId] = useState("");
+  const [seriesPosition, setSeriesPosition] = useState("");
   const recent = useQuery({ queryKey: ["content-recent"], queryFn: () => api<RecentItem[]>("/api/v1/content/tasks") });
+  const series = useQuery({ queryKey: ["series"], queryFn: () => api<Series[]>("/api/v1/content/series") });
   const catalog = useQuery({ queryKey: ["expression-catalog"], queryFn: () => api<ExpressionCatalog>("/api/v1/content/expression-catalog") });
   const materials = useQuery({ queryKey: ["materials"], queryFn: () => api<Material[]>("/api/v1/materials") });
   const opportunities = useQuery({ queryKey: ["opportunities"], queryFn: () => api<OpportunityList>("/api/v1/content/opportunities", { method: "POST" }) });
@@ -407,11 +425,13 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
           body_related_opt_in: catalog.data?.body_related_enabled ?? false
         },
         use_personal_preferences: !noPreferenceSession,
-        material_ids: materialIds
+        material_ids: materialIds,
+        series_id: seriesId || null,
+        series_position: seriesPosition ? Number(seriesPosition) : null
       })
     }),
     onSuccess: payload => {
-      if ("task_id" in payload) { setArtifact(payload); setMobileView("artifact"); setNotice(null); client.invalidateQueries({ queryKey: ["content-recent"] }); }
+      if ("task_id" in payload) { setArtifact(payload); setMobileView("artifact"); setNotice(null); client.invalidateQueries({ queryKey: ["content-recent"] }); client.invalidateQueries({ queryKey: ["series"] }); }
       else setNotice(payload.message);
     },
     onError: error => setNotice(error.message)
@@ -450,7 +470,7 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
   };
   if (surface !== "compose") {
     return <section className="workbench content-workbench">{sidebar}<main className="admin-main">
-      {surface === "series" && <SeriesPanel />}
+      {surface === "series" && <SeriesPanel onContinue={(selectedSeries, position) => { setSeriesId(selectedSeries.id); setSeriesPosition(position ? String(position) : ""); setSeed(`接着《${selectedSeries.title}》做下一篇。`); setSurface("compose"); setNotice(position ? `已经选中《${selectedSeries.title}》的第 ${position} 个位置；你可以继续补充这篇要说什么。` : `已经选中《${selectedSeries.title}》；生成成功后会接到当前最后一篇后面。`); }} />}
       {surface === "materials" && <MaterialsPanel />}
       {surface === "profile" && <AccountProfilePanel />}
       {surface === "plan" && <PlanPanel onStart={startFromPlan} />}
@@ -470,6 +490,11 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
         target={target}
         onTarget={setTarget}
         onSubmit={() => { if (seed.trim()) create.mutate(); }}
+        series={series.data ?? []}
+        seriesId={seriesId}
+        onSeriesId={value => { setSeriesId(value); setSeriesPosition(""); }}
+        seriesPosition={seriesPosition}
+        onSeriesPosition={setSeriesPosition}
       >
         <DirectionPanel
           catalog={catalog.data}
@@ -503,9 +528,9 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
   </section>;
 }
 
-function ContentComposer({ targets, busy, seed, onSeed, target, onTarget, onSubmit, children }: { targets: Array<{ value: Target; label: string }>; busy: boolean; seed: string; onSeed: (value: string) => void; target: Target; onTarget: (value: Target) => void; onSubmit: () => void; children: ReactNode }): JSX.Element {
+function ContentComposer({ targets, busy, seed, onSeed, target, onTarget, onSubmit, series, seriesId, onSeriesId, seriesPosition, onSeriesPosition, children }: { targets: Array<{ value: Target; label: string }>; busy: boolean; seed: string; onSeed: (value: string) => void; target: Target; onTarget: (value: Target) => void; onSubmit: () => void; series: Series[]; seriesId: string; onSeriesId: (value: string) => void; seriesPosition: string; onSeriesPosition: (value: string) => void; children: ReactNode }): JSX.Element {
   const submit = (event: FormEvent): void => { event.preventDefault(); onSubmit(); };
-  return <form className="composer" onSubmit={submit}><label>这次要做成<select value={target} onChange={event => onTarget(event.target.value as Target)}>{targets.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><textarea value={seed} onChange={event => onSeed(event.target.value)} maxLength={1000} placeholder="例如：我想把一件衣服的取舍说清楚，别只讲卖点。" aria-label="内容需求" />{children}<div className="composer-foot"><span>不需要填写表单；必要时只追问一个会改变成品的问题。</span><button className="primary" disabled={busy}>{busy ? "正在整理成品……" : "生成当前成品"}</button></div></form>;
+  return <form className="composer" onSubmit={submit}><label>这次要做成<select value={target} onChange={event => onTarget(event.target.value as Target)}>{targets.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><textarea value={seed} onChange={event => onSeed(event.target.value)} maxLength={1000} placeholder="例如：我想把一件衣服的取舍说清楚，别只讲卖点。" aria-label="内容需求" />{series.length > 0 && <div className="series-compose"><label>放进连续系列<select value={seriesId} onChange={event => onSeriesId(event.target.value)}><option value="">这次不承接系列</option>{series.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>{seriesId && <label>放在第几篇<input type="number" min={1} max={999} value={seriesPosition} onChange={event => onSeriesPosition(event.target.value)} placeholder="留空就是接着下一篇" aria-label="系列位置" /></label>}<small>{seriesId ? "留空会接到最后；也可以跳到第 5 篇或指定中间位置。只有生成成功才会写入系列。" : "普通生成、阅读、复制和导出都不会改变系列。"}</small></div>}{children}<div className="composer-foot"><span>不需要填写表单；必要时只追问一个会改变成品的问题。</span><button className="primary" disabled={busy}>{busy ? "正在整理成品……" : "生成当前成品"}</button></div></form>;
 }
 
 type AxisState = "explicit" | "default" | "cleared" | "unset";
@@ -780,7 +805,9 @@ function disclosureForTransfer(artifact: ContentVersion): string {
 function ArtifactPane({ artifact, onArtifact, onNotice, context, mobileView, onShowConversation }: { artifact: ContentVersion | null; onArtifact: (value: ContentVersion) => void; onNotice: (value: string) => void; context: Context; mobileView: "conversation" | "artifact"; onShowConversation: () => void }): JSX.Element {
   const client = useQueryClient();
   const [instruction, setInstruction] = useState("");
+  const [platformTarget, setPlatformTarget] = useState<Target>("douyin_video");
   const versions = useQuery({ queryKey: ["content-versions", artifact?.task_id ?? "none"], queryFn: () => api<ContentHistoryVersion[]>(`/api/v1/content/tasks/${artifact?.task_id}/versions`), enabled: artifact !== null });
+  useEffect(() => { if (artifact?.target_key) setPlatformTarget(artifact.target_key); }, [artifact?.target_key]);
   const revise = useMutation({
     mutationFn: () => { const target = artifact?.target_key ?? "douyin_video"; return api<ContentVersion | { kind: string; message: string }>(`/api/v1/tasks/${artifact?.task_id}/revisions`, { method: "POST", body: JSON.stringify({ instruction, target, source_target: target }) }); },
     onSuccess: value => {
@@ -788,6 +815,21 @@ function ArtifactPane({ artifact, onArtifact, onNotice, context, mobileView, onS
       if (!("task_id" in value)) { onNotice(value.message); return; }
       onArtifact(value); setInstruction(""); client.invalidateQueries({ queryKey: ["content-recent"] }); client.invalidateQueries({ queryKey: ["content-versions", value.task_id] });
     },
+    onError: error => onNotice(error.message)
+  });
+  const recompile = useMutation({
+    mutationFn: () => {
+      const sourceTarget = artifact?.target_key ?? "douyin_video";
+      return api<ContentVersion>(`/api/v1/tasks/${artifact?.task_id}/revisions`, {
+        method: "POST",
+        body: JSON.stringify({
+          instruction: "另做这个平台的版本：保留核心判断、已确认商品事实、账号身份、系列前情和主要受众价值，按目标平台重组标题、开头、结构、媒体组织与发布辅助信息。",
+          target: platformTarget,
+          source_target: sourceTarget
+        })
+      });
+    },
+    onSuccess: value => { onArtifact(value); client.invalidateQueries({ queryKey: ["content-recent"] }); onNotice("新的平台版本已经做好，源版本仍然保留。"); },
     onError: error => onNotice(error.message)
   });
   const copy = async (): Promise<void> => { if (!artifact) return; await navigator.clipboard.writeText(disclosureForTransfer(artifact)).catch(() => undefined); onNotice("已复制当前成品全文。"); };
@@ -799,6 +841,7 @@ function ArtifactPane({ artifact, onArtifact, onNotice, context, mobileView, onS
       <ArtifactText value={artifact.body} />
       <VersionRail versions={versions.data ?? []} currentVersion={artifact.version} onSelect={value => onArtifact({ ...value, kind: "content" })} />
       <form className="revision-form" onSubmit={event => { event.preventDefault(); if (instruction.trim()) revise.mutate(); }}><label>继续改，只说这次要变什么<textarea value={instruction} onChange={event => setInstruction(event.target.value)} placeholder="例如：把结尾改短一点，其他不动。" maxLength={1000} /></label><button className="primary" disabled={revise.isPending}>{revise.isPending ? "正在生成新版本……" : `生成 V${artifact.version + 1}`}</button></form>
+      {(context.targets ?? []).length > 1 && <div className="platform-recompile"><label>另做平台版本<select value={platformTarget} onChange={event => setPlatformTarget(event.target.value as Target)}>{(context.targets ?? []).map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><button type="button" disabled={platformTarget === (artifact.target_key ?? "douyin_video") || recompile.isPending} onClick={() => recompile.mutate()}>{recompile.isPending ? "正在重编译……" : "生成这个平台的版本"}</button><small>会保留当前源版本；目标平台、形式和本次适配条件会随新任务保留。</small></div>}
       <div className="artifact-boundary"><span>{context.identity.account}</span><span>旧版本不会被覆盖</span></div>
       <button className="mobile-back" onClick={onShowConversation}>继续改一条新内容</button>
     </>}
@@ -826,8 +869,8 @@ function DisplayWorkbench({ context }: { context: Context }): JSX.Element {
 }
 
 function AdminWorkspace({ context }: { context: Context }): JSX.Element {
-  const [section, setSection] = useState<"readiness" | "operators">("readiness");
-  return <section className="admin-workspace"><aside className="sidebar"><p className="sidebar-label">租户管理</p><nav aria-label="租户管理工作面"><button type="button" aria-current={section === "readiness" ? "page" : undefined} className={section === "readiness" ? "active" : ""} onClick={() => setSection("readiness")}>入驻与就绪</button><button type="button" aria-current={section === "operators" ? "page" : undefined} className={section === "operators" ? "active" : ""} onClick={() => setSection("operators")}>账号与操作人</button></nav></aside><main className="admin-main">{section === "readiness" && <ReadinessPanel />}{section === "operators" && <OperatorPanel formalRuntime={context.formal_runtime === true} brandName={context.identity.brand} />}</main></section>;
+  const [section, setSection] = useState<"readiness" | "operators" | "products">("readiness");
+  return <section className="admin-workspace"><aside className="sidebar"><p className="sidebar-label">租户管理</p><nav aria-label="租户管理工作面"><button type="button" aria-current={section === "readiness" ? "page" : undefined} className={section === "readiness" ? "active" : ""} onClick={() => setSection("readiness")}>入驻与就绪</button><button type="button" aria-current={section === "operators" ? "page" : undefined} className={section === "operators" ? "active" : ""} onClick={() => setSection("operators")}>账号与操作人</button><button type="button" aria-current={section === "products" ? "page" : undefined} className={section === "products" ? "active" : ""} onClick={() => setSection("products")}>本轮商品资料</button></nav></aside><main className="admin-main">{section === "readiness" && <ReadinessPanel />}{section === "operators" && <OperatorPanel formalRuntime={context.formal_runtime === true} brandName={context.identity.brand} />}{section === "products" && <ProductFactsPanel />}</main></section>;
 }
 
 function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; brandName: string }): JSX.Element {
@@ -843,6 +886,11 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
   const [voiceBoundary, setVoiceBoundary] = useState(isDiyuFashion ? "代表品牌讲已确认的品牌立场、生活关系和内容方向；不冒充创始人、研发、门店或顾客，不讲未确认商品和经营事实。" : "");
   const [operatorId, setOperatorId] = useState("");
   const [controlOrganizationId, setControlOrganizationId] = useState("");
+  const [operatorMaintainsProfile, setOperatorMaintainsProfile] = useState(false);
+  const [carrierSourceId, setCarrierSourceId] = useState("");
+  const [carrierName, setCarrierName] = useState("");
+  const [carrierChannel, setCarrierChannel] = useState<CreatePublishingAccount["channel"]>("小红书");
+  const [carrierOperatorId, setCarrierOperatorId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [accountId, setAccountId] = useState("");
   const [formalName, setFormalName] = useState("");
@@ -850,6 +898,8 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
   const [formalOrganizationId, setFormalOrganizationId] = useState("");
   const [formalAccountId, setFormalAccountId] = useState("");
   const [formalGrantsMaterialMaintenance, setFormalGrantsMaterialMaintenance] = useState(false);
+  const [formalGrantsProfileMaintenance, setFormalGrantsProfileMaintenance] = useState(false);
+  const [organizationName, setOrganizationName] = useState("");
   const [activationLink, setActivationLink] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
@@ -867,6 +917,7 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
         voice_boundary: voiceBoundary,
         operator_id: operatorId,
         control_organization_id: controlOrganizationId || null,
+        operator_can_maintain_expression_profile: operatorMaintainsProfile
       }),
     }),
     onSuccess: () => {
@@ -876,6 +927,7 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
       setVoiceBoundary("");
       setOperatorId("");
       setControlOrganizationId("");
+      setOperatorMaintainsProfile(false);
       client.invalidateQueries({ queryKey: ["publishing-accounts"] });
       client.invalidateQueries({ queryKey: ["operators"] });
       client.invalidateQueries({ queryKey: ["readiness"] });
@@ -883,12 +935,14 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
     },
     onError: error => setNotice(error.message),
   });
+  const createCarrier = useMutation({ mutationFn: () => api<PublishingAccount>("/api/v1/tenant-management/platform-carriers", { method: "POST", body: JSON.stringify({ source_account_id: carrierSourceId, name: carrierName, channel: carrierChannel, operator_id: carrierOperatorId }) }), onSuccess: () => { setCarrierSourceId(""); setCarrierName(""); setCarrierChannel("小红书"); setCarrierOperatorId(""); client.invalidateQueries({ queryKey: ["publishing-accounts"] }); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("平台版本载体已明确连接到原表达账号；没有创建账号组或共享密码。"); }, onError: error => setNotice(error.message) });
   const create = useMutation({ mutationFn: () => api<Operator>("/api/v1/tenant-management/operators", { method: "POST", body: JSON.stringify({ display_name: displayName, account_id: accountId }) }), onSuccess: () => { setDisplayName(""); setAccountId(""); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("已创建最小自然人操作身份并授予指定企业发布账号。未创建或共享密码。"); }, onError: error => setNotice(error.message) });
-  const createFormalUser = useMutation({ mutationFn: () => api<{ activation_link: string }>("/api/v1/tenant-management/users", { method: "POST", body: JSON.stringify({ display_name: formalName, username: formalUsername, organization_id: formalOrganizationId || null, account_id: formalAccountId || null, grants_material_maintenance: formalGrantsMaterialMaintenance }) }), onSuccess: value => { setFormalName(""); setFormalUsername(""); setFormalOrganizationId(""); setFormalAccountId(""); setFormalGrantsMaterialMaintenance(false); setActivationLink(value.activation_link); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("已建立独立自然人登录身份；请安全复制一次性激活链接交付本人。"); }, onError: error => setNotice(error.message) });
+  const createFormalUser = useMutation({ mutationFn: () => api<{ activation_link: string }>("/api/v1/tenant-management/users", { method: "POST", body: JSON.stringify({ display_name: formalName, username: formalUsername, organization_id: formalOrganizationId || null, account_id: formalAccountId || null, grants_material_maintenance: formalGrantsMaterialMaintenance, grants_expression_profile_maintenance: formalGrantsProfileMaintenance }) }), onSuccess: value => { setFormalName(""); setFormalUsername(""); setFormalOrganizationId(""); setFormalAccountId(""); setFormalGrantsMaterialMaintenance(false); setFormalGrantsProfileMaintenance(false); setActivationLink(value.activation_link); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("已建立独立自然人登录身份；请安全复制一次性激活链接交付本人。"); }, onError: error => setNotice(error.message) });
+  const createOrganization = useMutation({ mutationFn: () => api<TenantOrganization>("/api/v1/tenant-management/organizations", { method: "POST", body: JSON.stringify({ name: organizationName.trim() }) }), onSuccess: value => { setOrganizationName(""); client.invalidateQueries({ queryKey: ["tenant-organizations"] }); client.invalidateQueries({ queryKey: ["control-organizations"] }); setNotice(`已创建组织“${value.name}”。`); }, onError: error => setNotice(error.message) });
   return <>
     <header className="page-heading"><p className="eyebrow">账号与操作人</p><h1>企业发布账号不是登录账号。</h1><p>多人可以运营同一企业发布账号；每一位内部、临时或外部代运营操作者都必须是单独登记的自然人身份。</p></header>
     {notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}
-    <section className="account-grid">{accounts.data?.map(account => <article key={account.id} className="series-card"><p className="eyebrow">{account.channel}</p><h2>{account.name}</h2><p>企业表达身份：{account.content_role}</p><small>{account.voice_boundary}</small><AdminAccountExpression accountId={account.id} /></article>)}</section>
+    <section className="account-grid">{accounts.data?.map(account => <article key={account.id} className="series-card"><p className="eyebrow">{account.channel}{account.carrier_of_account ? " · 平台版本载体" : " · 表达账号"}</p><h2>{account.name}</h2><p>企业表达身份：{account.content_role}</p>{account.carrier_of_account && <p>承接自：{account.carrier_of_account}</p>}<small>{account.voice_boundary}</small>{!account.carrier_of_account_id && <AdminAccountExpression accountId={account.id} />}</article>)}</section>
     <form className="series-create" onSubmit={event => {
       event.preventDefault();
       if (!newAccountName.trim() || !contentRoleName.trim() || !voiceBoundary.trim() || !operatorId) {
@@ -904,12 +958,48 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
       <textarea value={voiceBoundary} onChange={event => setVoiceBoundary(event.target.value)} placeholder="这份企业表达身份在什么边界内成立？" maxLength={500} aria-label="企业表达身份成立边界" />
       <select value={operatorId} onChange={event => setOperatorId(event.target.value)} aria-label="已登记操作者"><option value="">选择已登记操作者</option>{operators.data?.map(operator => <option key={operator.id} value={operator.id}>{operator.display_name} · {operator.organization}</option>)}</select>
       <select value={controlOrganizationId} onChange={event => setControlOrganizationId(event.target.value)} aria-label="控制这个账号的组织"><option value="">暂不声明控制组织（画像先无人可维护）</option>{controlOrganizations.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+      <label className="minor-check"><input type="checkbox" checked={operatorMaintainsProfile} onChange={event => setOperatorMaintainsProfile(event.target.checked)} />允许这位实际使用者维护账号五段画像</label>
       <p className="muted">控制组织决定谁可以维护这个账号的表达画像。不选就先空着，之后由有权主体明确声明；系统不会按账号名、身份名或操作者姓名替你推断。</p>
       <button className="primary" disabled={createAccount.isPending}>{createAccount.isPending ? "正在创建……" : "创建账号并授权操作者"}</button>
     </form>
-    {formalRuntime ? <form className="series-create" onSubmit={event => { event.preventDefault(); if (formalName.trim() && formalUsername.trim()) createFormalUser.mutate(); }}><p>创建独立自然人登录身份。发布账号不是密码；每位内部或外部操作者都必须各自激活并登录。</p><input value={formalName} onChange={event => setFormalName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><input value={formalUsername} onChange={event => setFormalUsername(event.target.value)} placeholder="全平台唯一登录用户名" minLength={3} maxLength={80} /><select value={formalOrganizationId} onChange={event => setFormalOrganizationId(event.target.value)} aria-label="所属组织"><option value="">使用当前管理员所属组织</option>{organizations.data?.map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select><select value={formalAccountId} onChange={event => setFormalAccountId(event.target.value)}><option value="">暂不授予发布账号（可稍后配置）</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><label className="minor-check"><input type="checkbox" checked={formalGrantsMaterialMaintenance} onChange={event => setFormalGrantsMaterialMaintenance(event.target.checked)} />允许维护该组织素材</label><button className="primary" disabled={createFormalUser.isPending}>{createFormalUser.isPending ? "正在创建……" : "创建并生成激活链接"}</button>{activationLink && <p className="notice">一次性激活链接：<code>{activationLink}</code></p>}</form> : <form className="series-create" onSubmit={event => { event.preventDefault(); if (displayName.trim() && accountId) create.mutate(); }}><p>登记一位实际操作者（不设置密码；生产开户与一次性激活在 M5-4）。</p><input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">授予哪个企业发布账号</option>{accounts.data?.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><button className="primary" disabled={create.isPending}>{create.isPending ? "正在登记……" : "登记并授权操作人"}</button></form>}
+    <form className="series-create" onSubmit={event => { event.preventDefault(); if (carrierSourceId && carrierName.trim() && carrierOperatorId) createCarrier.mutate(); }}><p>给一个真实表达账号补本次需要的平台载体。它沿用原账号的表达身份和控制组织，不是账号组。</p><select value={carrierSourceId} onChange={event => setCarrierSourceId(event.target.value)}><option value="">选择原表达账号</option>{accounts.data?.filter(account => !account.carrier_of_account_id).map(account => <option key={account.id} value={account.id}>{account.name} · {account.channel}</option>)}</select><select value={carrierChannel} onChange={event => setCarrierChannel(event.target.value as CreatePublishingAccount["channel"])}><option value="抖音">抖音</option><option value="小红书">小红书</option><option value="微信视频号">微信视频号</option></select><input value={carrierName} onChange={event => setCarrierName(event.target.value)} placeholder="这个平台上的账号名称" maxLength={120} /><select value={carrierOperatorId} onChange={event => setCarrierOperatorId(event.target.value)}><option value="">选择实际使用者</option>{operators.data?.map(operator => <option key={operator.id} value={operator.id}>{operator.display_name} · {operator.organization}</option>)}</select><button className="primary" disabled={createCarrier.isPending}>{createCarrier.isPending ? "正在创建……" : "补齐这个平台载体"}</button></form>
+    {formalRuntime ? <><form className="series-create" onSubmit={event => { event.preventDefault(); if (organizationName.trim()) createOrganization.mutate(); }}><p>真实门店或分支组织不在列表时，只需先创建一次。</p><input value={organizationName} onChange={event => setOrganizationName(event.target.value)} placeholder="真实组织或门店名称" maxLength={120} /><button className="primary" disabled={createOrganization.isPending}>{createOrganization.isPending ? "正在创建……" : "创建组织"}</button></form><form className="series-create" onSubmit={event => { event.preventDefault(); if (formalName.trim() && formalUsername.trim()) createFormalUser.mutate(); }}><p>创建独立自然人登录身份。发布账号不是密码；每位内部或外部操作者都必须各自激活并登录。</p><input value={formalName} onChange={event => setFormalName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><input value={formalUsername} onChange={event => setFormalUsername(event.target.value)} placeholder="全平台唯一登录用户名" minLength={3} maxLength={80} /><select value={formalOrganizationId} onChange={event => setFormalOrganizationId(event.target.value)} aria-label="所属组织"><option value="">使用当前管理员所属组织</option>{organizations.data?.map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select><select value={formalAccountId} onChange={event => setFormalAccountId(event.target.value)}><option value="">暂不授予发布账号（可稍后配置）</option>{accounts.data?.filter(account => !account.carrier_of_account_id).map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><label className="minor-check"><input type="checkbox" checked={formalGrantsMaterialMaintenance} onChange={event => setFormalGrantsMaterialMaintenance(event.target.checked)} />允许维护该组织素材</label><label className="minor-check"><input type="checkbox" checked={formalGrantsProfileMaintenance} disabled={!formalAccountId} onChange={event => setFormalGrantsProfileMaintenance(event.target.checked)} />允许维护所选账号五段画像</label><button className="primary" disabled={createFormalUser.isPending}>{createFormalUser.isPending ? "正在创建……" : "创建并生成激活链接"}</button>{activationLink && <p className="notice">一次性激活链接：<code>{activationLink}</code></p>}</form></> : <form className="series-create" onSubmit={event => { event.preventDefault(); if (displayName.trim() && accountId) create.mutate(); }}><p>登记一位实际操作者（不设置密码；生产开户与一次性激活在 M5-4）。</p><input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">授予哪个企业发布账号</option>{accounts.data?.filter(account => !account.carrier_of_account_id).map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><button className="primary" disabled={create.isPending}>{create.isPending ? "正在登记……" : "登记并授权操作人"}</button></form>}
     <section className="readiness-list">{operators.data?.map(operator => <article className="readiness-card ready" key={operator.id}><div><p className="eyebrow">{operator.manages_tenant ? "具备租户管理资格" : "业务操作人"}</p><h2>{operator.display_name}</h2><p>{operator.organization} · {operator.publishing_accounts || "尚未授予发布账号"}</p><small>{operator.default_persona ? `本人默认表达人设：${operator.default_persona}` : "尚未设置本人默认表达人设"}</small></div></article>)}</section>
   </>;
+}
+
+function ProductFactsPanel(): JSX.Element {
+  const client = useQueryClient();
+  const products = useQuery({ queryKey: ["brand-products"], queryFn: () => api<BrandProduct[]>("/api/v1/tenant-management/brand-products") });
+  const [sku, setSku] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [category, setCategory] = useState("");
+  const [colors, setColors] = useState("");
+  const [material, setMaterial] = useState("");
+  const [silhouette, setSilhouette] = useState("");
+  const [features, setFeatures] = useState("");
+  const [sourceNote, setSourceNote] = useState("");
+  const [applicability, setApplicability] = useState("仅用于当前品牌正式内容，直至责任来源更新");
+  const [notice, setNotice] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: () => api<BrandProduct>("/api/v1/tenant-management/brand-products", {
+      method: "PUT",
+      body: JSON.stringify({
+        sku: sku.trim(),
+        display_name: displayName.trim(),
+        category: category.trim(),
+        colors: colors.split(/[、,，]/).map(item => item.trim()).filter(Boolean),
+        material_or_structure: material.trim(),
+        silhouette: silhouette.trim(),
+        observable_features: features.trim(),
+        source_note: sourceNote.trim(),
+        applicability: applicability.trim()
+      })
+    }),
+    onSuccess: value => { setSku(""); setDisplayName(""); setCategory(""); setColors(""); setMaterial(""); setSilhouette(""); setFeatures(""); setSourceNote(""); client.invalidateQueries({ queryKey: ["brand-products"] }); setNotice(`已保存 ${value.display_name} 的第 ${value.fact_version} 版事实。`); },
+    onError: error => setNotice(error.message)
+  });
+  return <><header className="page-heading"><p className="eyebrow">真实商品事实</p><h1>只录本轮内容真正需要的 1—3 件商品。</h1><p>不要求价格、库存、性能或设计动机；每次保存都会保留责任来源、版本和适用范围。</p></header>{notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}<section className="account-grid">{products.data?.map(product => <article className="series-card" key={product.sku}><p className="eyebrow">{product.sku} · 事实 V{product.fact_version}</p><h2>{product.display_name}</h2><p>{Object.entries(product.facts).map(([key, value]) => `${key}：${Array.isArray(value) ? value.join("、") : String(value)}`).join("；")}</p><small>来源：{product.source_note} · 范围：{product.applicability}{product.updated_by ? ` · 由 ${product.updated_by} 保存` : ""}</small></article>)}</section><form className="series-create" onSubmit={event => { event.preventDefault(); if (sku.trim() && displayName.trim() && sourceNote.trim() && applicability.trim()) save.mutate(); }}><input value={sku} onChange={event => setSku(event.target.value)} placeholder="商品名称或编号中的稳定编号" maxLength={80} /><input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="商品名称" maxLength={120} /><input value={category} onChange={event => setCategory(event.target.value)} placeholder="品类（按本轮需要）" maxLength={120} /><input value={colors} onChange={event => setColors(event.target.value)} placeholder="颜色，用逗号分开" maxLength={200} /><textarea value={material} onChange={event => setMaterial(event.target.value)} placeholder="材质或结构（不用就留空）" maxLength={500} /><textarea value={silhouette} onChange={event => setSilhouette(event.target.value)} placeholder="轮廓（不用就留空）" maxLength={300} /><textarea value={features} onChange={event => setFeatures(event.target.value)} placeholder="肉眼可以确认的特征" maxLength={800} /><input value={sourceNote} onChange={event => setSourceNote(event.target.value)} placeholder="这份资料由谁负责提供？" maxLength={300} /><input value={applicability} onChange={event => setApplicability(event.target.value)} placeholder="这些事实适用于什么范围？" maxLength={300} /><button className="primary" disabled={save.isPending}>{save.isPending ? "正在保存……" : "保存这一版商品事实"}</button></form></>;
 }
 
 function ReadinessPanel(): JSX.Element {
@@ -923,7 +1013,7 @@ function ReadinessPanel(): JSX.Element {
   return <><header className="page-heading"><p className="eyebrow">企业管理</p><h1>入驻与就绪</h1><p>只列出现在真的会影响哪项能力的事项，不使用统一完成度。</p></header>{notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}<section className="readiness-list">{readiness.isLoading ? <Loading label="正在读取当前就绪条件……" /> : readiness.data?.items.map(item => <article className={`readiness-card ${item.state}`} key={item.id}><div><p className="eyebrow">{item.state === "ready" ? "已具备" : "需要处理"}</p><h2>{item.title}</h2><p>{item.detail}</p><small>完成后：{item.unlock}</small></div>{item.id === "brand_expression" && item.state === "needs_action" && <button className="primary" onClick={() => document.getElementById("brand-expression")?.scrollIntoView({ behavior: "smooth" })}>确认草案</button>}</article>)}</section><section id="brand-expression" className="expression-card"><div><p className="eyebrow">品牌表达草案</p><h2>先判断“像不像我们”。</h2><p>这份草案可修改；未确认前不会被当成正式表达基线。</p></div><textarea value={draft} onChange={event => setDraft(event.target.value)} aria-label="品牌表达草案" /><div className="expression-foot"><span>{expression.data?.status === "confirmed" ? `已确认 V${expression.data.version}` : "等待确认"}</span><button className="primary" onClick={() => confirm.mutate()} disabled={confirm.isPending || draft.trim().length < 8}>{confirm.isPending ? "正在确认……" : "确认这版表达"}</button></div></section></>;
 }
 
-function SeriesPanel(): JSX.Element {
+function SeriesPanel({ onContinue }: { onContinue: (series: Series, position?: number) => void }): JSX.Element {
   const client = useQueryClient();
   const series = useQuery({ queryKey: ["series"], queryFn: () => api<Series[]>("/api/v1/content/series") });
   const recent = useQuery({ queryKey: ["series-candidates"], queryFn: () => api<RecentItem[]>("/api/v1/content/tasks") });
@@ -933,13 +1023,14 @@ function SeriesPanel(): JSX.Element {
   const add = useMutation({ mutationFn: ({ seriesId, taskId }: { seriesId: string; taskId: string }) => api<Series>(`/api/v1/content/series/${seriesId}/items`, { method: "POST", body: JSON.stringify({ task_id: taskId }) }), onSuccess: () => client.invalidateQueries({ queryKey: ["series"] }) });
   const reorder = useMutation({ mutationFn: ({ seriesId, taskIds }: { seriesId: string; taskIds: string[] }) => api<Series>(`/api/v1/content/series/${seriesId}/items`, { method: "PUT", body: JSON.stringify({ task_ids: taskIds }) }), onSuccess: () => client.invalidateQueries({ queryKey: ["series"] }) });
   const reset = useMutation({ mutationFn: (id: string) => api<Series>(`/api/v1/content/series/${id}/reset`, { method: "POST", body: JSON.stringify({}) }), onSuccess: () => client.invalidateQueries({ queryKey: ["series"] }) });
-  return <><header className="page-heading"><p className="eyebrow">连续系列</p><h1>系列由你决定怎样继续。</h1><p>可以跳集、插集、改序；只有明确要求承接前情时才会把它带入下一次内容。</p></header><form className="series-create" onSubmit={event => { event.preventDefault(); if (title.trim()) create.mutate(); }}><input value={title} onChange={event => setTitle(event.target.value)} placeholder="系列名称" maxLength={100} /><textarea value={premise} onChange={event => setPremise(event.target.value)} placeholder="这组内容想持续谈什么？（可选）" maxLength={500} /><button className="primary">新建系列</button></form><section className="series-grid">{series.data?.map(item => <SeriesCard key={item.id} item={item} candidates={recent.data ?? []} onAdd={(taskId) => add.mutate({ seriesId: item.id, taskId })} onMove={(from, to) => { const next = [...item.items]; const [moved] = next.splice(from, 1); next.splice(to, 0, moved); reorder.mutate({ seriesId: item.id, taskIds: next.map(entry => entry.task_id) }); }} onReset={() => reset.mutate(item.id)} />)}</section></>;
+  return <><header className="page-heading"><p className="eyebrow">连续系列</p><h1>系列由你决定怎样继续。</h1><p>可以跳集、插集、改序；只有明确要求承接前情时才会把它带入下一次内容。</p></header><form className="series-create" onSubmit={event => { event.preventDefault(); if (title.trim()) create.mutate(); }}><input value={title} onChange={event => setTitle(event.target.value)} placeholder="系列名称" maxLength={100} /><textarea value={premise} onChange={event => setPremise(event.target.value)} placeholder="这组内容想持续谈什么？（可选）" maxLength={500} /><button className="primary">新建系列</button></form><section className="series-grid">{series.data?.map(item => <SeriesCard key={item.id} item={item} candidates={recent.data ?? []} onContinue={position => onContinue(item, position)} onAdd={(taskId) => add.mutate({ seriesId: item.id, taskId })} onMove={(from, to) => { const next = [...item.items]; const [moved] = next.splice(from, 1); next.splice(to, 0, moved); reorder.mutate({ seriesId: item.id, taskIds: next.map(entry => entry.task_id) }); }} onReset={() => reset.mutate(item.id)} />)}</section></>;
 }
 
-function SeriesCard({ item, candidates, onAdd, onMove, onReset }: { item: Series; candidates: RecentItem[]; onAdd: (taskId: string) => void; onMove: (from: number, to: number) => void; onReset: () => void }): JSX.Element {
+function SeriesCard({ item, candidates, onContinue, onAdd, onMove, onReset }: { item: Series; candidates: RecentItem[]; onContinue: (position?: number) => void; onAdd: (taskId: string) => void; onMove: (from: number, to: number) => void; onReset: () => void }): JSX.Element {
   const [taskId, setTaskId] = useState("");
+  const [position, setPosition] = useState("");
   const available = candidates.filter(candidate => !item.items.some(entry => entry.task_id === candidate.task_id));
-  return <article className="series-card"><p className="eyebrow">{item.items.length} 集已明确安排</p><h2>{item.title}</h2><p>{item.premise || "还没有预设前情；每一集仍从当前任务开始。"}</p><ol>{item.items.map((entry, index) => <li key={`${entry.task_id}-${entry.position}`}><span>{entry.title}</span><span className="series-order"><button disabled={index === 0} onClick={() => onMove(index, index - 1)}>上移</button><button disabled={index === item.items.length - 1} onClick={() => onMove(index, index + 1)}>下移</button></span></li>)}</ol>{available.length > 0 && <div className="series-add"><select value={taskId} onChange={event => setTaskId(event.target.value)}><option value="">把已有成品插入系列</option>{available.map(candidate => <option key={candidate.task_id} value={candidate.task_id}>{candidate.title}</option>)}</select><button onClick={() => { if (taskId) { onAdd(taskId); setTaskId(""); } }}>插入</button></div>}<div><button onClick={onReset}>重置编排</button><span>不会删除已有成品</span></div></article>;
+  return <article className="series-card"><p className="eyebrow">{item.items.length} 集已明确安排 · 编排 V{item.revision}</p><h2>{item.title}</h2><p>{item.premise || "还没有预设前情；每一集仍从当前任务开始。"}</p><div className="series-add"><button className="primary" type="button" onClick={() => onContinue()}>接着做下一篇</button><input type="number" min={1} max={999} value={position} onChange={event => setPosition(event.target.value)} placeholder="指定第几篇" aria-label={`《${item.title}》指定位置`} /><button type="button" disabled={!position} onClick={() => { if (position) onContinue(Number(position)); }}>去这个位置写</button></div><ol>{item.items.map((entry, index) => <li key={`${entry.task_id}-${entry.position}`}><span>第 {entry.position} 篇 · {entry.title}</span><span className="series-order"><button disabled={index === 0} onClick={() => onMove(index, index - 1)}>上移</button><button disabled={index === item.items.length - 1} onClick={() => onMove(index, index + 1)}>下移</button></span></li>)}</ol>{available.length > 0 && <div className="series-add"><select value={taskId} onChange={event => setTaskId(event.target.value)}><option value="">把已有成品插入系列</option>{available.map(candidate => <option key={candidate.task_id} value={candidate.task_id}>{candidate.title}</option>)}</select><button onClick={() => { if (taskId) { onAdd(taskId); setTaskId(""); } }}>插入</button></div>}<div><button onClick={onReset}>重置编排</button><span>不会删除已有成品</span></div></article>;
 }
 
 function MaterialsPanel(): JSX.Element {

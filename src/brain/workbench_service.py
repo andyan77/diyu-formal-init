@@ -49,6 +49,48 @@ class WorkbenchService:
     def management_accounts(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         return self._repository.management_accounts(scope)
 
+    def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]:
+        return self._repository.management_products(scope)
+
+    def save_management_product(
+        self,
+        scope: TenantManagementScope,
+        sku: str,
+        display_name: str,
+        category: str,
+        colors: tuple[str, ...],
+        material_or_structure: str,
+        silhouette: str,
+        observable_features: str,
+        source_note: str,
+        applicability: str,
+    ) -> dict[str, object]:
+        if not sku.strip() or not display_name.strip():
+            raise DomainError("商品编号和商品名称需要填写。")
+        if not source_note.strip() or not applicability.strip():
+            raise DomainError("请说明商品资料由谁提供，以及适用于什么范围。")
+        facts: dict[str, object] = {
+            key: value
+            for key, value in (
+                ("category", category.strip()),
+                ("colors", [item.strip() for item in colors if item.strip()]),
+                ("material_or_structure", material_or_structure.strip()),
+                ("silhouette", silhouette.strip()),
+                ("observable_features", observable_features.strip()),
+            )
+            if value
+        }
+        if not facts:
+            raise DomainError("请至少填写一项本轮内容实际需要的商品事实。")
+        return self._repository.save_management_product(
+            scope,
+            sku.strip(),
+            display_name.strip(),
+            facts,
+            source_note.strip(),
+            applicability.strip(),
+        )
+
     def create_publishing_account(
         self,
         scope: TenantManagementScope,
@@ -58,12 +100,35 @@ class WorkbenchService:
         voice_boundary: str,
         operator_id: UUID,
         control_organization_id: UUID | None = None,
+        operator_can_maintain_expression_profile: bool = False,
     ) -> dict[str, object]:
         values = (name.strip(), channel.strip(), content_role_name.strip(), voice_boundary.strip())
         if not all(values):
             raise DomainError("发布账号、独立表达身份和成立边界都需要填写。")
         return self._repository.create_publishing_account(
-            scope, *values, operator_id, control_organization_id
+            scope,
+            *values,
+            operator_id,
+            control_organization_id,
+            operator_can_maintain_expression_profile,
+        )
+
+    def create_platform_carrier(
+        self,
+        scope: TenantManagementScope,
+        source_account_id: UUID,
+        name: str,
+        channel: str,
+        operator_id: UUID,
+    ) -> dict[str, object]:
+        if not name.strip() or not channel.strip():
+            raise DomainError("平台版本载体需要账号名称和目标平台。")
+        return self._repository.create_platform_carrier(
+            scope,
+            source_account_id,
+            name.strip(),
+            channel.strip(),
+            operator_id,
         )
 
     def create_operator(

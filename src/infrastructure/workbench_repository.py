@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from src.ports.workbench_repository import WorkbenchRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
@@ -189,12 +190,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT a.id, a.name, a.channel, r.name AS content_role, r.voice_boundary
+                SELECT a.id, a.name, a.channel, r.name AS content_role, r.voice_boundary,
+                       a.carrier_of_account_id, source.name AS carrier_of_account
                 FROM content_accounts a
                 JOIN account_content_roles account_role ON account_role.tenant_id = a.tenant_id
                     AND account_role.account_id = a.id
                 JOIN content_roles r ON r.id = account_role.content_role_id
                     AND r.tenant_id = account_role.tenant_id
+                LEFT JOIN content_accounts source
+                  ON source.id = a.carrier_of_account_id AND source.tenant_id = a.tenant_id
                 WHERE a.tenant_id = %s AND a.brand_id = %s AND a.enabled = true
                 ORDER BY a.name
                 """,
@@ -208,9 +212,116 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "channel": str(row["channel"]),
                 "content_role": str(row["content_role"]),
                 "voice_boundary": str(row["voice_boundary"]),
+                "carrier_of_account_id": (
+                    str(row["carrier_of_account_id"])
+                    if row["carrier_of_account_id"] is not None
+                    else None
+                ),
+                "carrier_of_account": (
+                    str(row["carrier_of_account"])
+                    if row["carrier_of_account"] is not None
+                    else None
+                ),
             }
             for row in rows
         ]
+
+    def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT product.sku, product.display_name, product.facts,
+                       product.source_note, product.fact_version,
+                       product.applicability, product.status,
+                       person.display_name AS updated_by, product.updated_at
+                FROM brand_products product
+                LEFT JOIN users person
+                  ON person.id = product.updated_by AND person.tenant_id = product.tenant_id
+                WHERE product.tenant_id = %s AND product.brand_id = %s
+                ORDER BY product.updated_at DESC, product.sku
+                """,
+                (scope.tenant_id, scope.brand_id),
+            )
+            rows = cursor.fetchall()
+        return [
+            {
+                "sku": str(row["sku"]),
+                "display_name": str(row["display_name"]),
+                "facts": row["facts"] if isinstance(row["facts"], dict) else {},
+                "source_note": str(row["source_note"]),
+                "fact_version": self._integer(row["fact_version"]),
+                "applicability": str(row["applicability"]),
+                "status": str(row["status"]),
+                "updated_by": (
+                    str(row["updated_by"]) if row["updated_by"] is not None else None
+                ),
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        ]
+
+    def save_management_product(
+        self,
+        scope: TenantManagementScope,
+        sku: str,
+        display_name: str,
+        facts: dict[str, object],
+        source_note: str,
+        applicability: str,
+    ) -> dict[str, object]:
+        product_id = uuid4()
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                INSERT INTO brand_products
+                    (id, tenant_id, brand_id, sku, display_name, facts,
+                     source_kind, source_note, fact_version, applicability,
+                     status, updated_by, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 'responsible_person',
+                        %s, 1, %s, 'active', %s, now())
+                ON CONFLICT (tenant_id, brand_id, sku) DO UPDATE
+                SET display_name = EXCLUDED.display_name,
+                    facts = EXCLUDED.facts,
+                    source_kind = EXCLUDED.source_kind,
+                    source_note = EXCLUDED.source_note,
+                    fact_version = brand_products.fact_version + 1,
+                    applicability = EXCLUDED.applicability,
+                    status = 'active',
+                    updated_by = EXCLUDED.updated_by,
+                    updated_at = now()
+                RETURNING id, fact_version, updated_at
+                """,
+                (
+                    product_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    sku,
+                    display_name,
+                    Jsonb(facts),
+                    source_note,
+                    applicability,
+                    scope.user_id,
+                ),
+            )
+            row = self._one(cursor, "商品资料保存失败")
+            self._event(
+                cursor,
+                scope,
+                "brand_product.fact_version_saved",
+                "brand_product",
+                UUID(str(row["id"])),
+            )
+        return {
+            "sku": sku,
+            "display_name": display_name,
+            "facts": facts,
+            "source_kind": "responsible_person",
+            "source_note": source_note,
+            "fact_version": self._integer(row["fact_version"]),
+            "applicability": applicability,
+            "status": "active",
+            "updated_at": row["updated_at"],
+        }
 
     def create_publishing_account(
         self,
@@ -221,6 +332,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         voice_boundary: str,
         operator_id: UUID,
         control_organization_id: UUID | None = None,
+        operator_can_maintain_expression_profile: bool = False,
     ) -> dict[str, object]:
         account_id = uuid4()
         content_role_id = uuid4()
@@ -260,7 +372,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                              AND grant_record.account_id = account.id
                              AND grant_record.user_id = %s
                              AND grant_record.enabled = true
-                       ) AS has_operator
+                       ) AS has_operator,
+                       COALESCE((
+                           SELECT grant_record.can_maintain_expression_profile
+                           FROM auth_grants grant_record
+                           WHERE grant_record.tenant_id = account.tenant_id
+                             AND grant_record.account_id = account.id
+                             AND grant_record.user_id = %s
+                             AND grant_record.enabled = true
+                       ), false) AS operator_can_maintain
                 FROM content_accounts account
                 JOIN account_content_roles account_role
                   ON account_role.tenant_id = account.tenant_id
@@ -274,7 +394,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                   AND account.name = %s
                   AND account.enabled = true
                 """,
-                (operator_id, scope.tenant_id, scope.brand_id, name),
+                (operator_id, operator_id, scope.tenant_id, scope.brand_id, name),
             )
             existing = cursor.fetchone()
             if existing is not None:
@@ -284,6 +404,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     or str(existing["content_role"]) != content_role_name
                     or str(existing["voice_boundary"]) != voice_boundary
                     or not bool(existing["has_operator"])
+                    or bool(existing["operator_can_maintain"])
+                    != operator_can_maintain_expression_profile
                     # Control organization decides who may maintain the profile, so a repeat that
                     # names a different one is a different account, not the same one again.
                     or (str(existing_control) if existing_control is not None else None)
@@ -336,8 +458,17 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 (uuid4(), scope.tenant_id, account_id, content_role_id),
             )
             cursor.execute(
-                "INSERT INTO auth_grants (id, tenant_id, user_id, account_id, role_name) VALUES (%s, %s, %s, %s, %s)",
-                (uuid4(), scope.tenant_id, operator_id, account_id, "发布账号操作资格"),
+                "INSERT INTO auth_grants "
+                "(id, tenant_id, user_id, account_id, role_name, "
+                "can_maintain_expression_profile) VALUES (%s, %s, %s, %s, %s, %s)",
+                (
+                    uuid4(),
+                    scope.tenant_id,
+                    operator_id,
+                    account_id,
+                    "发布账号操作资格",
+                    operator_can_maintain_expression_profile,
+                ),
             )
             self._event(cursor, scope, "publishing_account.created", "content_account", account_id)
         return {
@@ -346,6 +477,134 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "channel": channel,
             "content_role": content_role_name,
             "voice_boundary": voice_boundary,
+            "operator_id": str(operator_id),
+            "shared_password": False,
+        }
+
+    def create_platform_carrier(
+        self,
+        scope: TenantManagementScope,
+        source_account_id: UUID,
+        name: str,
+        channel: str,
+        operator_id: UUID,
+    ) -> dict[str, object]:
+        carrier_id = uuid4()
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT source.channel, source.control_organization_id,
+                       source.control_organization_source, account_role.content_role_id,
+                       role.name AS content_role, role.voice_boundary
+                FROM content_accounts source
+                JOIN account_content_roles account_role
+                  ON account_role.tenant_id = source.tenant_id
+                 AND account_role.account_id = source.id
+                JOIN content_roles role
+                  ON role.tenant_id = account_role.tenant_id
+                 AND role.id = account_role.content_role_id
+                JOIN auth_grants grant_record
+                  ON grant_record.tenant_id = source.tenant_id
+                 AND grant_record.account_id = source.id
+                 AND grant_record.user_id = %s
+                 AND grant_record.enabled = true
+                WHERE source.tenant_id = %s AND source.brand_id = %s
+                  AND source.id = %s AND source.enabled = true
+                  AND source.carrier_of_account_id IS NULL
+                """,
+                (operator_id, scope.tenant_id, scope.brand_id, source_account_id),
+            )
+            source = self._one(
+                cursor,
+                "只能为当前品牌已授权的真实表达账号补充平台版本载体",
+            )
+            if str(source["channel"]) == channel:
+                raise DomainError("这个平台已经由原发布账号承载。")
+            cursor.execute(
+                """
+                SELECT carrier.id, carrier.name, grant_record.user_id
+                FROM content_accounts carrier
+                LEFT JOIN auth_grants grant_record
+                  ON grant_record.tenant_id = carrier.tenant_id
+                 AND grant_record.account_id = carrier.id
+                 AND grant_record.user_id = %s
+                 AND grant_record.enabled = true
+                WHERE carrier.tenant_id = %s
+                  AND carrier.carrier_of_account_id = %s
+                  AND carrier.channel = %s
+                """,
+                (operator_id, scope.tenant_id, source_account_id, channel),
+            )
+            existing = cursor.fetchone()
+            if existing is not None:
+                if (
+                    str(existing["name"]) != name
+                    or str(existing["user_id"]) != str(operator_id)
+                ):
+                    raise DomainError("这个表达身份在目标平台已有不同的明确载体。")
+                carrier_id = UUID(str(existing["id"]))
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO content_accounts
+                        (id, tenant_id, brand_id, name, channel,
+                         control_organization_id, control_organization_source,
+                         carrier_of_account_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        carrier_id,
+                        scope.tenant_id,
+                        scope.brand_id,
+                        name,
+                        channel,
+                        source["control_organization_id"],
+                        source["control_organization_source"],
+                        source_account_id,
+                    ),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO account_content_roles
+                        (id, tenant_id, account_id, content_role_id)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (
+                        uuid4(),
+                        scope.tenant_id,
+                        carrier_id,
+                        source["content_role_id"],
+                    ),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO auth_grants
+                        (id, tenant_id, user_id, account_id, role_name,
+                         can_maintain_expression_profile)
+                    VALUES (%s, %s, %s, %s, %s, false)
+                    """,
+                    (
+                        uuid4(),
+                        scope.tenant_id,
+                        operator_id,
+                        carrier_id,
+                        "平台版本载体操作资格",
+                    ),
+                )
+                self._event(
+                    cursor,
+                    scope,
+                    "publishing_account.platform_carrier_created",
+                    "content_account",
+                    carrier_id,
+                )
+        return {
+            "id": str(carrier_id),
+            "name": name,
+            "channel": channel,
+            "carrier_of_account_id": str(source_account_id),
+            "content_role": str(source["content_role"]),
+            "voice_boundary": str(source["voice_boundary"]),
             "operator_id": str(operator_id),
             "shared_password": False,
         }
@@ -755,7 +1014,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._content_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT id, title, premise FROM content_series
+                SELECT id, title, premise, revision FROM content_series
                 WHERE tenant_id = %s AND brand_id = %s AND created_by = %s AND account_id = %s
                 ORDER BY created_at DESC
                 """,
@@ -784,6 +1043,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                         "id": str(series["id"]),
                         "title": str(series["title"]),
                         "premise": str(series["premise"]),
+                        "revision": self._integer(series["revision"]),
                         "items": [
                             {
                                 "task_id": str(item["task_id"]),
@@ -815,7 +1075,13 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 ),
             )
             self._event(cursor, scope, "content_series.created", "content_series", series_id)
-        return {"id": str(series_id), "title": title, "premise": premise, "items": []}
+        return {
+            "id": str(series_id),
+            "title": title,
+            "premise": premise,
+            "revision": 1,
+            "items": [],
+        }
 
     def add_series_item(
         self, scope: TrustedScope, series_id: UUID, task_id: UUID, position: int | None
@@ -837,6 +1103,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 raise DomainError("系列插入位置无效。")
             existing.insert(insert_at, task_id)
             self._replace_series_items(cursor, scope, series_id, existing)
+            self._increment_series_revision(cursor, scope, series_id)
             self._event(cursor, scope, "content_series.item_added", "content_series", series_id)
         return self._series_value(scope, series_id)
 
@@ -846,6 +1113,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             if len(task_ids) != len(existing) or set(task_ids) != set(existing):
                 raise DomainError("只能重排当前系列已有的内容。")
             self._replace_series_items(cursor, scope, series_id, list(task_ids))
+            self._increment_series_revision(cursor, scope, series_id)
             self._event(cursor, scope, "content_series.reordered", "content_series", series_id)
         return self._series_value(scope, series_id)
 
@@ -856,6 +1124,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "DELETE FROM content_series_items WHERE tenant_id = %s AND series_id = %s",
                 (scope.tenant_id, series_id),
             )
+            self._increment_series_revision(cursor, scope, series_id)
             self._event(cursor, scope, "content_series.reset", "content_series", series_id)
         return self._series_value(scope, series_id)
 
@@ -1053,6 +1322,18 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "INSERT INTO content_series_items (id, tenant_id, series_id, task_id, position) VALUES (%s, %s, %s, %s, %s)",
                 (uuid4(), scope.tenant_id, series_id, task_id, position),
             )
+
+    @staticmethod
+    def _increment_series_revision(
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TrustedScope,
+        series_id: UUID,
+    ) -> None:
+        cursor.execute(
+            "UPDATE content_series SET revision = revision + 1 "
+            "WHERE tenant_id = %s AND id = %s",
+            (scope.tenant_id, series_id),
+        )
 
     def _series_value(self, scope: TrustedScope, series_id: UUID) -> dict[str, object]:
         values = self.list_series(scope)

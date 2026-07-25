@@ -32,6 +32,8 @@ class DeterministicContentGenerator(ContentGenerator):
             return "local_response"
         if any(value in text for value in ("店长", "自我怀疑", "三位客人", "我会注意")):
             return "brand_life_narrative"
+        if any(value in text for value in ("接着这个系列", "系列下一篇", "下一篇内容")):
+            return "brand_life_narrative"
         if any(value in text for value in ("单独拍", "单独用", "画面", "视觉重音", "走动里换", "重音")):
             return "visual_styling_story"
         if any(value in text for value in ("一件顶两件", "解释双面", "不要替两面站队", "商品")):

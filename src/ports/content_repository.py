@@ -14,6 +14,7 @@ from src.shared.types import (
     PlatformDirection,
     ProductFact,
     RecompileSource,
+    SeriesContext,
     TrustedScope,
 )
 
@@ -43,6 +44,7 @@ class ContentRepository(ABC):
         production_conditions: str,
         control: ContentControlContext | None = None,
         snapshot: dict[str, object] | None = None,
+        series_context: SeriesContext | None = None,
     ) -> tuple[UUID, UUID, str | None]:
         """Create a task, freeze its content context and open an auditable running run."""
 
@@ -81,6 +83,7 @@ class ContentRepository(ABC):
         platform_direction: PlatformDirection,
         production_conditions: str,
         control: ContentControlContext | None = None,
+        series_context: SeriesContext | None = None,
     ) -> tuple[UUID, UUID, str, ContentProduct]:
         """Create the next auditable run for a revision request."""
 
@@ -146,3 +149,12 @@ class ContentRepository(ABC):
     @abstractmethod
     def load_recompile_source(self, scope: TrustedScope, version_id: UUID) -> RecompileSource:
         """Read an explicit same-user source version without exposing a source account identifier."""
+
+    @abstractmethod
+    def load_series_context(
+        self,
+        scope: TrustedScope,
+        series_id: UUID,
+        position: int | None,
+    ) -> SeriesContext:
+        """Freeze a bounded view of one explicitly selected account series."""

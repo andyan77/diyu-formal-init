@@ -367,6 +367,15 @@ def seed_demo() -> None:
                 "WHERE tenant_id = %s AND id = %s",
                 (control_organization_id, TENANT_ID, account_id),
             )
+        for carrier_id in (
+            HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
+            HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID,
+        ):
+            cursor.execute(
+                "UPDATE content_accounts SET carrier_of_account_id = %s "
+                "WHERE tenant_id = %s AND id = %s",
+                (ACCOUNT_ID, TENANT_ID, carrier_id),
+            )
         for grant_id, can_maintain in (
             (GRANT_ID, True),
             (HEADQUARTERS_XIAOHONGSHU_GRANT_ID, True),

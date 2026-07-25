@@ -231,6 +231,26 @@ class BoundaryContext:
                     f"用户本次明确选入的原件《{material.title}》的人工说明（系统未读取原件本身，"
                     f"不得据此描述画面细节）：{material.reference_note}"
                 )
+        series = request.series_context
+        if series is not None:
+            prior_series = "\n".join(
+                f"- 系列位置 {entry.position}，冻结版本 V{entry.version}："
+                f"{entry.outline}\n{entry.body}"
+                for entry in series.prior_entries
+            )
+            direction_lines.append(
+                f"本次明确承接系列《{series.title}》第 {series.target_position} 个位置；"
+                f"系列约定：{series.premise or '没有额外约定。'}\n"
+                f"实际冻结并使用的必要前情：\n{prior_series or '（此前没有成品。）'}\n"
+                + (
+                    "用户本次明确把前情作为已经公开的连续叙事前提，可以自然承接。"
+                    if series.user_asserted_published_continuity
+                    else (
+                        "这些前情只用于保持判断、人物和主题连续，不证明受众看过或内容已经发布；"
+                        "不得对受众说“上一期/上集已经讲过”。"
+                    )
+                )
+            )
         topic = "\n".join(
             part
             for part in (request.weak_seed, request.revision_instruction, *direction_lines)
@@ -248,7 +268,14 @@ class BoundaryContext:
             user_actuality_source = None
 
         products_text = (
-            "；".join(DeepSeekGenerator._natural_product(product.sku, product.facts) for product in request.products)
+            "；".join(
+                DeepSeekGenerator._natural_product(
+                    product.sku,
+                    product.display_name,
+                    product.facts,
+                )
+                for product in request.products
+            )
             or "无已确认商品"
         )
         confirmed = "\n".join(
@@ -281,6 +308,14 @@ class BoundaryContext:
             premise_sources.append((_USER_ACTUALITY_SOURCE_ID, "用户本次明确提供的真实情况"))
         if request.prior_saved_body:
             premise_sources.append((_PRIOR_VERSION_SOURCE_ID, "已授权复用的旧版本正文"))
+        if series is not None:
+            premise_sources.extend(
+                (
+                    f"source:series:{entry.version_id}",
+                    f"系列《{series.title}》位置 {entry.position} 的冻结版本",
+                )
+                for entry in series.prior_entries
+            )
         premise_sources.extend(
             (f"source:material:{material.asset_id}", f"用户本次明确选入的参考《{material.title}》")
             for material in request.reference_materials
@@ -744,10 +779,8 @@ class DeepSeekGenerator(ContentGenerator):
             if claim.basis == "confirmed_fact" and claim.actuality != "non_event":
                 issues.append(UnitIssue(claim.claim_id, "invented_actuality", claim.text))
         for step in core.scene_steps:
-            if any(ref not in context.actor_ids for ref in step.actor_refs) or any(
-                ref not in context.resource_ids for ref in step.resource_refs
-            ):
-                issues.append(UnitIssue(step.step_id, "unsupported_resource", step.action_text))
+            if any(ref not in context.actor_ids for ref in step.actor_refs):
+                issues.append(UnitIssue(step.step_id, "untrusted_role", step.action_text))
         return tuple(issues)
 
     @staticmethod
@@ -838,7 +871,6 @@ class DeepSeekGenerator(ContentGenerator):
         reason_by_flag: tuple[tuple[str, ReasonCode], ...] = (
             ("identity_ok", "untrusted_role"),
             ("actuality_ok", "invented_actuality"),
-            ("resource_ok", "unsupported_resource"),
             ("fact_ok", "factual_conflict"),
         )
         step_by_id = {step.step_id: step for step in core.scene_steps}
@@ -1320,6 +1352,11 @@ class DeepSeekGenerator(ContentGenerator):
         prior = request.prior_saved_body or "（未授权复用旧正文）"
         revision = request.revision_instruction or "（首次生成）"
         source = request.source_version_description or "（不是跨目标重编译）"
+        series_rule = (
+            "本次已把所选系列的冻结前情编入边界一；保持必要连续，但不从前情推断发布事实。"
+            if request.series_context is not None
+            else "本次没有选择系列，不得自行补造系列前情。"
+        )
         fixed_seconds = DeepSeekGenerator._fixed_duration_seconds(request.brand.production_conditions)
         transform_boundary = (
             f"用户明确要求 {fixed_seconds} 秒；spoken 单元的完整口播必须真实适配，不要只改时长标签。"
@@ -1367,6 +1404,7 @@ class DeepSeekGenerator(ContentGenerator):
 已授权前情：{prior}
 来源关系：{source}
 本次修改：{revision}
+系列承接：{series_rule}
 
 创作要求：标题、观点、比喻、幽默、节奏、完整口播和互动由你自然创作，允许口语化、停顿感和真实的不完美；
 不得写成培训讲义、企业宣言、口号堆叠或固定安全模板。同时：
@@ -1559,37 +1597,51 @@ c1、s2 这类编号，必须把编号替换为对应台词原文或删去，不
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _natural_product(sku: str, facts: dict[str, object]) -> str:
+    def _natural_product(
+        sku: str,
+        display_name: str,
+        facts: dict[str, object],
+    ) -> str:
         category = DeepSeekGenerator._natural_category(facts.get("category"))
         raw_colors = facts.get("colors")
         colors = (
             "、".join(value for value in raw_colors if isinstance(value, str)) if isinstance(raw_colors, list) else ""
         )
+        parts = [f"商品 {display_name or sku}（编号 {sku}）"]
+        if category != "未提供品类":
+            parts.append(f"品类：{category}")
+        if colors:
+            parts.append(f"颜色：{colors}")
+        for key, label in (
+            ("material_or_structure", "材质或结构"),
+            ("material", "材质"),
+            ("structure", "结构"),
+            ("silhouette", "轮廓"),
+            ("observable_features", "可观察特征"),
+        ):
+            value = facts.get(key)
+            if isinstance(value, str) and value.strip():
+                parts.append(f"{label}：{value.strip()}")
         weight = facts.get("sample_weight_m_grams")
         comparison = facts.get("comparison_single_layer_short_coat_m_grams")
         both_sides_complete = facts.get("both_sides_complete")
-        both_sides = (
-            "两面均为完整外观"
-            if both_sides_complete is True
-            else "两面完整外观情况未提供"
-            if both_sides_complete is None
-            else "两面完整外观未得到确认"
-        )
+        if isinstance(both_sides_complete, bool):
+            parts.append("两面均为完整外观" if both_sides_complete else "两面完整外观未得到确认")
         functional_pockets = facts.get("pockets_functional_both_sides")
-        pockets = (
-            "两面口袋均可正常使用"
-            if functional_pockets is True
-            else "两面口袋可用性未提供"
-            if functional_pockets is None
-            else "两面口袋不能确认均可正常使用"
-        )
-        weight_boundary = DeepSeekGenerator._weight_boundary(facts.get("weight_boundary"))
-        return (
-            f"商品 {sku}（{category}）：颜色为{colors or '未提供'}；{both_sides}；{pockets}；"
-            f"M 码当前样衣为{weight if isinstance(weight, int) else '未提供'}克；"
-            f"同季同长度单层短外套 M 码样衣为{comparison if isinstance(comparison, int) else '未提供'}克；"
-            f"{weight_boundary}"
-        )
+        if isinstance(functional_pockets, bool):
+            parts.append(
+                "两面口袋均可正常使用"
+                if functional_pockets
+                else "两面口袋不能确认均可正常使用"
+            )
+        if isinstance(weight, int):
+            parts.append(f"M 码当前样衣为 {weight} 克")
+        if isinstance(comparison, int):
+            parts.append(f"同季同长度单层短外套 M 码样衣为 {comparison} 克")
+        raw_boundary = facts.get("weight_boundary")
+        if isinstance(raw_boundary, str) and raw_boundary.strip():
+            parts.append(DeepSeekGenerator._weight_boundary(raw_boundary))
+        return "；".join(parts)
 
     @staticmethod
     def _weight_boundary(value: object) -> str:

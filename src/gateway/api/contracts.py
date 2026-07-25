@@ -32,6 +32,8 @@ class CreateContentRequest(BaseModel):
     creative_direction: CreativeDirectionRequest | None = None
     use_personal_preferences: bool = True
     material_ids: list[UUID] = Field(default_factory=list, max_length=5)
+    series_id: UUID | None = None
+    series_position: int | None = Field(default=None, ge=1, le=999)
 
 
 class RevisionRequest(BaseModel):
@@ -244,6 +246,30 @@ class CreatePublishingAccountRequest(BaseModel):
     # Which organization controls this account.  There is no default: leaving it empty means
     # nobody may maintain this account's expression profile until it is explicitly declared.
     control_organization_id: UUID | None = None
+    operator_can_maintain_expression_profile: bool = False
+
+
+class CreatePlatformCarrierRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_account_id: UUID
+    name: str = Field(min_length=1, max_length=120)
+    channel: Literal["抖音", "小红书", "微信视频号"]
+    operator_id: UUID
+
+
+class SaveBrandProductRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sku: str = Field(min_length=1, max_length=80)
+    display_name: str = Field(min_length=1, max_length=120)
+    category: str = Field(default="", max_length=120)
+    colors: list[str] = Field(default_factory=list, max_length=8)
+    material_or_structure: str = Field(default="", max_length=500)
+    silhouette: str = Field(default="", max_length=300)
+    observable_features: str = Field(default="", max_length=800)
+    source_note: str = Field(min_length=1, max_length=300)
+    applicability: str = Field(min_length=1, max_length=300)
 
 
 class LoginRequest(BaseModel):
@@ -278,6 +304,12 @@ class CreateTenantUserRequest(BaseModel):
     grants_material_maintenance: bool = False
     # Account use never implies profile maintenance; this is the separate, explicit grant.
     grants_expression_profile_maintenance: bool = False
+
+
+class CreateOrganizationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
 
 
 class CreateTenantRequest(BaseModel):

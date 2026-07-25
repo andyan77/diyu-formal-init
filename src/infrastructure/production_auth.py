@@ -562,6 +562,35 @@ class ProductionAuthRepository:
             )
             return [{"id": str(row["id"]), "name": str(row["name"])} for row in cursor.fetchall()]
 
+    def create_tenant_organization(
+        self, manager: TenantSession, name: str
+    ) -> dict[str, str]:
+        organization_id = uuid4()
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise DomainError("请填写真实组织名称")
+        with self._tenant_tx(manager.tenant_id) as cursor:
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO organizations (id, tenant_id, name)
+                    VALUES (%s, %s, %s)
+                    RETURNING id, name
+                    """,
+                    (organization_id, manager.tenant_id, normalized_name),
+                )
+                row = self._one(cursor, "组织创建失败")
+            except psycopg.errors.UniqueViolation as exc:
+                raise DomainError("当前租户已有同名组织") from exc
+            self._tenant_audit(
+                cursor,
+                manager.tenant_id,
+                manager.user_id,
+                "organization.created",
+                organization_id,
+            )
+        return {"id": str(row["id"]), "name": str(row["name"])}
+
     def bootstrap_existing_tenant_admin(self, tenant_id: UUID, user_id: UUID, username: str) -> str:
         """Create the first one-time activation material without creating a synthetic password."""
         raw_token, digest = self._token()
@@ -742,38 +771,91 @@ class ProductionAuthRepository:
         with self._tenant_tx(identity.tenant_id) as cursor:
             cursor.execute(
                 """
-                SELECT account.id AS account_id, account.brand_id
+                SELECT account.id AS account_id, account.brand_id, account.channel
                 FROM auth_grants grant_record
                 JOIN content_accounts account ON account.id = grant_record.account_id
                     AND account.tenant_id = grant_record.tenant_id
                 WHERE grant_record.tenant_id = %s AND grant_record.user_id = %s
                   AND grant_record.enabled = true AND account.enabled = true
-                  AND (%s::text IS NULL OR (account.channel = CASE WHEN %s LIKE 'xiaohongshu%%' THEN '小红书'
-                     WHEN %s = 'wechat_channels_video' THEN '微信视频号' ELSE '抖音' END))
-                ORDER BY account.name LIMIT 1
+                  AND account.carrier_of_account_id IS NULL
                 """,
-                (identity.tenant_id, identity.user_id, target, target, target),
+                (identity.tenant_id, identity.user_id),
             )
-            row = self._one(cursor, "当前自然人没有可用发布账号资格")
+            roots = cursor.fetchall()
+            if len(roots) != 1:
+                raise DomainError("当前自然人的表达身份不唯一，请由管理员检查发布账号资格")
+            root = roots[0]
+            target_channel = self._target_channel(target)
+            if target is None or root["channel"] == target_channel:
+                row = root
+            else:
+                cursor.execute(
+                    """
+                    SELECT carrier.id AS account_id, carrier.brand_id, carrier.channel
+                    FROM content_accounts carrier
+                    JOIN auth_grants grant_record
+                      ON grant_record.account_id = carrier.id
+                     AND grant_record.tenant_id = carrier.tenant_id
+                    WHERE carrier.tenant_id = %s
+                      AND carrier.carrier_of_account_id = %s
+                      AND carrier.channel = %s
+                      AND carrier.enabled = true
+                      AND grant_record.user_id = %s
+                      AND grant_record.enabled = true
+                    """,
+                    (
+                        identity.tenant_id,
+                        root["account_id"],
+                        target_channel,
+                        identity.user_id,
+                    ),
+                )
+                carriers = cursor.fetchall()
+                if len(carriers) != 1:
+                    raise DomainError("当前表达身份没有明确配置这个平台的发布载体")
+                row = carriers[0]
         return TrustedScope(
             identity.tenant_id, identity.user_id, UUID(str(row["brand_id"])), UUID(str(row["account_id"]))
         )
 
     def allowed_content_targets(self, identity: TenantSession) -> tuple[str, ...]:
-        targets: list[str] = []
         with self._tenant_tx(identity.tenant_id) as cursor:
             cursor.execute(
                 """
-                SELECT DISTINCT account.channel
+                SELECT account.id, account.channel
                 FROM auth_grants grant_record
                 JOIN content_accounts account ON account.id = grant_record.account_id
                     AND account.tenant_id = grant_record.tenant_id
                 WHERE grant_record.tenant_id = %s AND grant_record.user_id = %s
                   AND grant_record.enabled = true AND account.enabled = true
+                  AND account.carrier_of_account_id IS NULL
                 """,
                 (identity.tenant_id, identity.user_id),
             )
-            channels = {str(row["channel"]) for row in cursor.fetchall()}
+            roots = cursor.fetchall()
+            if len(roots) != 1:
+                return ()
+            root = roots[0]
+            cursor.execute(
+                """
+                SELECT carrier.channel
+                FROM content_accounts carrier
+                JOIN auth_grants grant_record
+                  ON grant_record.account_id = carrier.id
+                 AND grant_record.tenant_id = carrier.tenant_id
+                WHERE carrier.tenant_id = %s
+                  AND carrier.carrier_of_account_id = %s
+                  AND carrier.enabled = true
+                  AND grant_record.user_id = %s
+                  AND grant_record.enabled = true
+                """,
+                (identity.tenant_id, root["id"], identity.user_id),
+            )
+            channels = {
+                str(root["channel"]),
+                *(str(row["channel"]) for row in cursor.fetchall()),
+            }
+        targets: list[str] = []
         if "抖音" in channels:
             targets.append("douyin_video")
         if "小红书" in channels:
@@ -781,6 +863,14 @@ class ProductionAuthRepository:
         if "微信视频号" in channels:
             targets.append("wechat_channels_video")
         return tuple(targets)
+
+    @staticmethod
+    def _target_channel(target: str | None) -> str:
+        if target is not None and target.startswith("xiaohongshu"):
+            return "小红书"
+        if target == "wechat_channels_video":
+            return "微信视频号"
+        return "抖音"
 
     def display_scope(self, identity: TenantSession) -> DisplayScope:
         with self._tenant_tx(identity.tenant_id) as cursor:

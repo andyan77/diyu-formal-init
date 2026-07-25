@@ -85,6 +85,10 @@ a { color:inherit; }
 .control-organization select { min-width:0; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--white); font-size:13px; }
 .identity-bar dd button.ghost { margin-left:8px; border:1px solid var(--line); border-radius:8px; padding:3px 8px; background:var(--white); color:var(--ink-soft); font-size:12px; }
 .applied-direction { margin:0; padding-top:20px; color:var(--stone); font-size:12px; }
+.series-compose,.platform-recompile { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:10px 0 16px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--paper-deep); }
+.series-compose input,.platform-recompile select { min-width:120px; padding:6px 8px; border:1px solid var(--line); border-radius:8px; background:var(--white); }
+.series-compose small,.platform-recompile small { flex-basis:100%; color:var(--stone); line-height:1.6; }
+.platform-recompile button { border:1px solid var(--line); border-radius:8px; padding:8px 10px; background:var(--white); color:var(--ink-soft); }
 .sidebar nav a[aria-current],.sidebar nav button[aria-current] { color:var(--ink); background:var(--white); font-weight:700; box-shadow:inset 3px 0 0 var(--red); }
 .version-rail button[aria-current] { font-weight:700; }
 @media (max-width:680px) {

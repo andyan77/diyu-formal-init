@@ -31,6 +31,20 @@ class WorkbenchRepository(ABC):
     def management_accounts(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
 
     @abstractmethod
+    def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def save_management_product(
+        self,
+        scope: TenantManagementScope,
+        sku: str,
+        display_name: str,
+        facts: dict[str, object],
+        source_note: str,
+        applicability: str,
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
     def create_publishing_account(
         self,
         scope: TenantManagementScope,
@@ -40,6 +54,17 @@ class WorkbenchRepository(ABC):
         voice_boundary: str,
         operator_id: UUID,
         control_organization_id: UUID | None = None,
+        operator_can_maintain_expression_profile: bool = False,
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def create_platform_carrier(
+        self,
+        scope: TenantManagementScope,
+        source_account_id: UUID,
+        name: str,
+        channel: str,
+        operator_id: UUID,
     ) -> dict[str, object]: ...
 
     @abstractmethod

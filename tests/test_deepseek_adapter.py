@@ -369,7 +369,7 @@ def test_legacy_sparse_violations_shape_is_no_longer_accepted(
         _generator().generate(generation_input)
 
 
-def test_verdict_failure_triggers_one_unit_repair_then_full_rereview(
+def test_resource_verdict_stays_a_human_review_condition(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,
 ) -> None:
@@ -387,40 +387,21 @@ def test_verdict_failure_triggers_one_unit_repair_then_full_rereview(
         ),
     ]
     core = _video_core(steps=steps)
-    repaired_action = "当前创作者正对手机，用手写关键词辅助口播。"
     _install_fake(
         monkeypatch,
         [
             _core_response(core),
             _verdicts(core, {"s2": ("resource_ok",)}),
-            _repairs(
-                {
-                    "step_id": "s2",
-                    "action_text": repaired_action,
-                    "sound_text": "手机直接收录当前创作者的人声。",
-                    "production_note": "",
-                    "actor_refs": ["actor:creator"],
-                    "resource_refs": ["resource:phone", "resource:onsite_text"],
-                    "claim_refs": ["c8", "c9"],
-                }
-            ),
-            _verdicts(core),
         ],
     )
 
     artifact = _generator().generate(generation_input)
 
     assert isinstance(artifact.production, VideoProductionBundle)
-    assert artifact.production.visual_actions == repaired_action
-    assert unsafe not in artifact.body
-    assert {receipt.field for receipt in artifact.fact_repair_receipts} == {"visual_actions"}
-    assert len(FakeClient.requests) == 4
-    repair_json = FakeClient.requests[2]["json"]
-    assert isinstance(repair_json, dict)
-    repair_prompt = str(repair_json["messages"])
-    assert "unsupported_resource" in repair_prompt
-    assert "只修复下列单元" in repair_prompt
-    assert "固定安全文案" in repair_prompt
+    assert artifact.production.visual_actions == unsafe
+    assert unsafe in artifact.body
+    assert artifact.fact_repair_receipts == ()
+    assert len(FakeClient.requests) == 2
 
 
 def test_shared_invariant_forbids_unsourced_history_claims_in_every_prompt(
@@ -805,7 +786,7 @@ def test_repaired_step_with_claim_reference_shorthand_is_also_resolved(
     assert len(FakeClient.requests) == 4
 
 
-def test_scene_steps_only_reference_registered_actors_and_resources(
+def test_unknown_actor_remains_an_identity_boundary_not_a_resource_gate(
     generation_input: GenerationInput,
 ) -> None:
     context = BoundaryContext.from_request(generation_input)
@@ -834,7 +815,9 @@ def test_scene_steps_only_reference_registered_actors_and_resources(
 
     issues = DeepSeekGenerator._closed_world_issues(context, core)
 
-    assert {(issue.unit_id, issue.reason_code) for issue in issues} == {("s2", "unsupported_resource")}
+    assert {(issue.unit_id, issue.reason_code) for issue in issues} == {
+        ("s2", "untrusted_role")
+    }
 
 
 def test_structural_core_failures_get_exactly_one_regeneration(
