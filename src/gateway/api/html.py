@@ -117,7 +117,7 @@ def render_display_workbench(
         ("当前门店", identity["store"]),
         ("当前能力", "墙面双层挂杆执行方案"),
     )
-    content = f"<a href='/'>返回应用首页</a><h1>陈列搭配（对内）</h1>{identity_text}<p>DM01 确定性陈列编译：只从已验证的库存、品牌标准和挂杆档案生成方案。</p>{_notice(notice)}<form method='post' action='/ui/display/generate'><textarea name='inventory_text' required placeholder='今天这组墙可用：ZX-C218 3 件……'></textarea><button>生成墙面方案</button></form>{artifact}"
+    content = f"<a href='/'>返回应用首页</a><h1>陈列搭配（对内）</h1>{identity_text}<p>DM01 确定性陈列编译：只从已验证的库存、品牌标准和挂杆档案生成方案。</p>{_notice(notice)}<form method='post' action='/ui/display/generate'><textarea name='inventory_text' required placeholder='今天这组墙可用：商品编号 3 件……'></textarea><button>生成墙面方案</button></form>{artifact}"
     return _page("陈列搭配（对内）", content)
 
 

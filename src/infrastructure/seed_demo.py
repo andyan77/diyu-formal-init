@@ -128,16 +128,28 @@ def seed_demo() -> None:
             ),
         )
         cursor.execute(
-            "INSERT INTO display_policies (id,tenant_id,brand_id,version,body) VALUES (%s,%s,%s,'1.0',%s) ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO display_policies (id,tenant_id,brand_id,version,body) VALUES (%s,%s,%s,'1.0',%s) "
+            "ON CONFLICT (id) DO UPDATE SET body=EXCLUDED.body",
             (
                 POLICY_ID,
                 TENANT_ID,
                 BRAND_ID,
-                Jsonb({"focus": "left primary, right weaker response", "density": "do not fill"}),
+                Jsonb(
+                    {
+                        "schema": "dm01-wall-double-rail-v1",
+                        "theme": "双面短外套与低饱和上下装",
+                        "density": "中低密度",
+                        "primary_focus_skus": ["ZX-C218"],
+                        "secondary_response_skus": ["ZX-C218"],
+                        "secondary_required": False,
+                    }
+                ),
             ),
         )
         cursor.execute(
-            "INSERT INTO display_stores (id,tenant_id,brand_id,control_organization_id,execution_organization_id,name,profile_version,rail_profile) VALUES (%s,%s,%s,%s,%s,%s,'1.0',%s) ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO display_stores (id,tenant_id,brand_id,control_organization_id,execution_organization_id,"
+            "name,profile_version,rail_profile) VALUES (%s,%s,%s,%s,%s,%s,'1.0',%s) "
+            "ON CONFLICT (id) DO UPDATE SET rail_profile=EXCLUDED.rail_profile",
             (
                 STORE_ID,
                 TENANT_ID,
@@ -145,24 +157,65 @@ def seed_demo() -> None:
                 ORG_ID,
                 STORE_ORG_ID,
                 "折线之间·南城店",
-                Jsonb({"upper_side_max": 6, "lower_max": 8, "approach": "left", "front_points": 2}),
+                Jsonb(
+                    {
+                        "schema": "dm01-wall-double-rail-v1",
+                        "upper_comfort_capacity": 8,
+                        "lower_comfort_capacity": 8,
+                        "primary_position": "left",
+                        "secondary_position": "right",
+                        "golden_sight": "上杆左侧主正挂与右侧较弱回应",
+                        "approach": "left",
+                        "lower_reserved_positions": [],
+                        "avoid_long_upper_lower_overlap": True,
+                        "constraints": ["保持两个固定正挂点", "不超过舒适容量", "不遮挡取放动线"],
+                    }
+                ),
             ),
         )
         for sku, facts in {
             "ZX-C218": {
+                "name": "双面短外套",
                 "category": "double-faced short coat",
                 "colors": ["炭灰纯色", "深绿细格纹"],
+                "display_family": "upper",
+                "is_long": False,
                 "both_sides_complete": True,
                 "pockets_functional_both_sides": True,
                 "sample_weight_m_grams": 960,
                 "comparison_single_layer_short_coat_m_grams": 650,
                 "weight_boundary": "only the current sample weight difference is known; do not attribute all difference to the double-faced structure",
             },
-            "ZX-S104": {"category": "warm white shirt"},
-            "ZX-K126": {"category": "oat thin knit"},
-            "ZX-P211": {"category": "charcoal straight trousers"},
-            "ZX-V113": {"category": "charcoal short vest"},
-            "ZX-Q117": {"category": "deep olive skirt"},
+            "ZX-S104": {
+                "name": "暖白衬衫",
+                "category": "warm white shirt",
+                "display_family": "upper",
+                "is_long": False,
+            },
+            "ZX-K126": {
+                "name": "燕麦薄针织",
+                "category": "oat thin knit",
+                "display_family": "upper",
+                "is_long": False,
+            },
+            "ZX-P211": {
+                "name": "炭灰直筒裤",
+                "category": "charcoal straight trousers",
+                "display_family": "lower",
+                "is_long": False,
+            },
+            "ZX-V113": {
+                "name": "炭灰短马甲",
+                "category": "charcoal short vest",
+                "display_family": "upper",
+                "is_long": False,
+            },
+            "ZX-Q117": {
+                "name": "深橄榄半裙",
+                "category": "deep olive skirt",
+                "display_family": "lower",
+                "is_long": False,
+            },
         }.items():
             cursor.execute(
                 "INSERT INTO brand_products (id,tenant_id,brand_id,sku,facts) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (tenant_id,brand_id,sku) DO UPDATE SET facts=EXCLUDED.facts",

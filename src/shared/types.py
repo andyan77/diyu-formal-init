@@ -219,6 +219,7 @@ class DisplayScope:
     user_id: UUID
     brand_id: UUID
     organization_id: UUID
+    actor_organization_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -226,12 +227,13 @@ class DisplayContext:
     brand_name: str
     organization_name: str
     operator_name: str
+    submitter_name: str
     policy_version: str
-    policy: str
+    policy: dict[str, object]
     store_name: str
     store_profile_version: str
-    rail_profile: str
-    products: tuple[tuple[str, str], ...]
+    rail_profile: dict[str, object]
+    products: tuple[tuple[str, dict[str, object]], ...]
 
 
 @dataclass(frozen=True)
@@ -243,6 +245,7 @@ class DisplayGenerationInput:
     active_domain_assets: tuple[ActiveAsset, ...]
     feedback: str | None = None
     prior_plan: dict[str, object] | None = None
+    revision_target: tuple[str, str, str] | None = None
 
 
 @dataclass(frozen=True)

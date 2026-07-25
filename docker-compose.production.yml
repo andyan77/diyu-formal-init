@@ -66,3 +66,15 @@ services:
       - /etc/diyu:/run/diyu-ops
     profiles: ["maintenance"]
     command: ["uv", "run", "--no-sync", "python", "-m", "src.infrastructure.production_bootstrap"]
+
+  activate-dm01:
+    image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
+    env_file:
+      - /etc/diyu/app.env
+      - /etc/diyu/migrator.env
+    network_mode: host
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=64m
+    profiles: ["maintenance"]
+    command: ["uv", "run", "--no-sync", "python", "-m", "src.composition.activate_confirmed_dm01"]

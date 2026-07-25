@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from dataclasses import replace
+from pathlib import Path
+from typing import cast
 from uuid import uuid4
 
 import psycopg
@@ -10,18 +13,17 @@ from fastapi.testclient import TestClient
 
 from src.brain.display_contract import assert_display_complete
 from src.brain.display_service import DisplayService
-from src.brain.dm01_display_compiler import DM01DisplayCompiler
+from src.brain.display_text import compile_display_body
+from src.brain.dm01_display_compiler import DM01DisplayCompiler, required_inventory_gap
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
 from src.infrastructure.display_repository import PostgresDisplayRepository
 from src.infrastructure.seed_demo import BRAND_ID, STORE_ORG_ID, STORE_USER_ID, TENANT_ID
 from src.shared.errors import GenerationFailed
-from src.shared.types import DisplayGenerationInput, DisplayScope
+from src.shared.types import DisplayContext, DisplayGenerationInput, DisplayScope
 
 _INVENTORY = "今天这组墙可用：ZX-C218 3 件、ZX-S104 3 件、ZX-K126 4 件、ZX-P211 3 件、ZX-V113 3 件、ZX-Q117 4 件。"
-_FEEDBACK = (
-    "左侧主焦点和下杆都没问题；右上正挂袖子压到旁边马甲，最靠近的一件不好拿。其他位置都没变。"
-)
+_FEEDBACK = "中间上杆 ZX-V113 太挤，请减少一件；其他内容不变。"
 _INVENTORY_PAIRS = (
     ("ZX-C218", 3),
     ("ZX-S104", 3),
@@ -41,23 +43,17 @@ def test_display_v1_v2_preserves_history_and_records_dm01_assets(app_database_ur
         assert v1["version"] == 1
         assert "15 件上墙" in v1["body"]
         assert "20 件" in v1["body"]
-        revised = client.post(
-            f"/api/v1/display-tasks/{v1['task_id']}/revisions", json={"feedback": _FEEDBACK}
-        )
+        revised = client.post(f"/api/v1/display-tasks/{v1['task_id']}/revisions", json={"feedback": _FEEDBACK})
         assert revised.status_code == 201
         v2 = revised.json()
         assert v2["version"] == 2
         assert "14 件上墙" in v2["body"]
         assert "6 件不上墙" in v2["body"]
-        assert "ZX-V113 ×1（侧挂）" in v2["body"]
-        assert (
-            client.get(f"/api/v1/display-tasks/{v1['task_id']}/versions/1").json()["body"]
-            == v1["body"]
-        )
-        changed = client.post(
-            "/api/v1/display", json={"inventory_text": _INVENTORY.replace("ZX-C218 3", "ZX-C218 1")}
-        )
-        assert "取消同款右侧回应" in changed.json()["body"]
+        assert "炭灰短马甲（ZX-V113）×1（侧挂）" in v2["body"]
+        assert "仅将中间上杆" in v2["body"]
+        assert client.get(f"/api/v1/display-tasks/{v1['task_id']}/versions/1").json()["body"] == v1["body"]
+        changed = client.post("/api/v1/display", json={"inventory_text": _INVENTORY.replace("ZX-C218 3", "ZX-C218 1")})
+        assert "右侧（较弱回应）：上杆 明确留空" in changed.json()["body"]
         unrelated = client.post(
             f"/api/v1/display-tasks/{v1['task_id']}/revisions",
             json={"feedback": "B 区看起来有点空，先观察一下。"},
@@ -100,12 +96,65 @@ def test_visible_body_comes_only_from_verified_layout_and_rejects_bad_c_rail(
 
     context = PostgresDisplayRepository(app_database_url).load_context(scope)
     assert context is not None
-    artifact = DM01DisplayCompiler().generate(
-        DisplayGenerationInput(uuid4(), uuid4(), _INVENTORY_PAIRS, context, ())
-    )
+    artifact = DM01DisplayCompiler().generate(DisplayGenerationInput(uuid4(), uuid4(), _INVENTORY_PAIRS, context, ()))
     invalid_plan = deepcopy(artifact.plan)
     zones = invalid_plan["layout"]["zones"]  # type: ignore[index]
-    zones["C"]["upper"] = zones["C"]["lower"]
-    zones["C"]["lower"] = [{"sku": "ZX-V113", "quantity": 2, "mount": "side_hang"}]
+    zones["center"]["upper"] = zones["center"]["lower"]
+    zones["center"]["lower"] = []
     with pytest.raises(GenerationFailed):
         assert_display_complete(replace(artifact, plan=invalid_plan), _INVENTORY_PAIRS)
+
+
+def test_real_keqiao_v1_uses_confirmed_snapshot_without_zx_or_long_term_product_facts() -> None:
+    raw = json.loads(Path("config/confirmed_inputs/diyu_clothing_keqiao_dm01_v1.json").read_text(encoding="utf-8"))
+    assert isinstance(raw, dict)
+    record = cast(dict[str, object], raw)
+    policy = cast(dict[str, object], record["policy"])
+    rail_profile = {
+        **cast(dict[str, object], record["rail_profile"]),
+        "confirmation": {
+            "confirmed_by": "阿丹",
+            "confirmed_at": "2026-07-25",
+            "system_submitted_by": "笛语服饰管理员",
+        },
+        "inventory_snapshot": {
+            "record_id": record["record_id"],
+            "record_version": record["record_version"],
+            "enforce_exact": True,
+            "items": record["inventory"],
+        },
+    }
+    items = cast(list[dict[str, object]], record["inventory"])
+    products = tuple((cast(str, item["sku"]), item) for item in items)
+    inventory = tuple((cast(str, item["sku"]), cast(int, item["confirmed_quantity"])) for item in items)
+    context = DisplayContext(
+        "笛语服饰",
+        "浙江分公司",
+        "阿丹",
+        "笛语服饰管理员",
+        cast(str, record["record_version"]),
+        policy,
+        "笛语柯桥店",
+        cast(str, record["record_version"]),
+        rail_profile,
+        products,
+    )
+    compiler = DM01DisplayCompiler()
+    artifact = compiler.generate(DisplayGenerationInput(uuid4(), uuid4(), inventory, context, ()))
+    assert_display_complete(artifact, inventory)
+    body = compile_display_body(context, artifact.plan, revision=False)
+
+    assert sum(cast(dict[str, int], artifact.plan["mounted"]).values()) == 18
+    assert sum(cast(dict[str, int], artifact.plan["unmounted"]).values()) == 12
+    assert "上杆右侧约三分之一" in body
+    assert "右侧（主焦点）" in body
+    assert "女童浅绿机能叠穿马甲（DIYU-CSPU-007）" in body
+    assert "女童自然度假白色连衣裙（DIYU-CSPU-006）" in body
+    assert "左侧（较弱回应）" in body
+    assert "男童深蓝轻学院长款衬衫（DIYU-CSPU-005）" in body
+    assert "左侧、右侧；用于避开长款上下重叠" in body
+    assert "执行步骤" in body
+    assert "ZX-" not in body
+
+    changed = tuple((sku, amount - 1 if sku == "DIYU-CSPU-007" else amount) for sku, amount in inventory)
+    assert "已确认 3 件" in str(required_inventory_gap(changed, context))
