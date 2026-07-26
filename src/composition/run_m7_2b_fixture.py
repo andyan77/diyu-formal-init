@@ -259,6 +259,23 @@ def _ensure_carriers(
 ) -> list[dict[str, Any]]:
     created: list[dict[str, Any]] = []
     for channel in ("小红书", "微信视频号"):
+        accounts = _response_json(
+            admin, "GET", "/api/v1/tenant-management/publishing-accounts"
+        )
+        existing = next(
+            (
+                item
+                for item in accounts
+                if str(item.get("carrier_of_account_id") or "") == str(account["id"])
+                and str(item.get("channel") or "") == channel
+            ),
+            None,
+        )
+        if existing is not None:
+            if existing.get("business_data_kind") != "synthetic_business_fixture":
+                raise RuntimeError(f"{channel} 载体不是等深模拟作用域，拒绝复用")
+            created.append(existing)
+            continue
         value = _response_json(
             admin,
             "POST",
@@ -386,8 +403,6 @@ def _new_series(
     current = _response_json(client, "GET", "/api/v1/content/series")
     existing = _find_named(current, "title", title)
     if existing is not None:
-        if existing.get("items"):
-            raise RuntimeError(f"系列 {title} 已有内容；拒绝重复生成或随机重跑")
         return existing
     return cast(
         dict[str, Any],
@@ -449,6 +464,89 @@ def _revise(
     )
     time.sleep(2.0)
     return cast(dict[str, Any], result)
+
+
+def _task_version(
+    client: httpx.Client,
+    task_id: str,
+    version: int | None = None,
+) -> dict[str, Any]:
+    versions = _response_json(
+        client,
+        "GET",
+        f"/api/v1/content/tasks/{task_id}/versions",
+    )
+    if not isinstance(versions, list):
+        raise RuntimeError(f"任务 {task_id} 的版本响应无效")
+    selected = next(
+        (
+            item
+            for item in versions
+            if version is None or int(str(item.get("version") or "0")) == version
+        ),
+        None,
+    )
+    if not isinstance(selected, dict):
+        expected = "当前版" if version is None else f"V{version}"
+        raise RuntimeError(f"任务 {task_id} 缺少{expected}")
+    return selected
+
+
+def _existing_series_artifact(
+    client: httpx.Client,
+    series: dict[str, Any],
+    position: int,
+) -> dict[str, Any] | None:
+    items = series.get("items")
+    if not isinstance(items, list):
+        return None
+    item = next(
+        (
+            candidate
+            for candidate in items
+            if isinstance(candidate, dict)
+            and int(str(candidate.get("position") or "0")) == position
+        ),
+        None,
+    )
+    if not isinstance(item, dict):
+        return None
+    return _task_version(client, str(item["task_id"]))
+
+
+def _ensure_generated(
+    client: httpx.Client,
+    *,
+    seed: str,
+    series: dict[str, Any],
+    position: int,
+    direction: dict[str, object],
+) -> dict[str, Any]:
+    existing = _existing_series_artifact(client, series, position)
+    if existing is not None:
+        return existing
+    return _generate(
+        client,
+        seed=seed,
+        series_id=str(series["id"]),
+        position=position,
+        direction=direction,
+    )
+
+
+def _ensure_revision(
+    client: httpx.Client,
+    artifact: dict[str, Any],
+    instruction: str,
+) -> dict[str, Any]:
+    versions = _response_json(
+        client,
+        "GET",
+        f"/api/v1/content/tasks/{artifact['task_id']}/versions",
+    )
+    if isinstance(versions, list) and len(versions) >= 2:
+        return _task_version(client, str(artifact["task_id"]), 2)
+    return _revise(client, artifact, instruction)
 
 
 def _recompile(
@@ -572,14 +670,14 @@ def run() -> dict[str, object]:
             ),
         )
 
-        h1_v1 = _generate(
+        h1_current = _ensure_generated(
             hq_client,
             seed=(
                 "走进门店只想自己看看，这种沉默是不是也应该被尊重？"
                 "请从总部品牌内容岗位形成当前立场，但不要写成全国门店已经执行的服务，"
                 "不要编造被问过很多次、长期观察到或内部反复讨论；一人面对手机自然说。"
             ),
-            series_id=str(hq_series["id"]),
+            series=hq_series,
             position=1,
             direction=_direction(
                 style=_STYLE_EMPATHY,
@@ -587,12 +685,13 @@ def run() -> dict[str, object]:
                 custom_text="保留明确判断，但不要写成高声量品牌宣言。",
             ),
         )
-        h1_v2 = _revise(
+        h1_v1 = _task_version(hq_client, str(h1_current["task_id"]), 1)
+        h1_v2 = _ensure_revision(
             hq_client,
-            h1_v1,
+            h1_current,
             "判断保留，但不要写成品牌宣言，改成一人面对手机能自然说出的版本。",
         )
-        h2 = _generate(
+        h2 = _ensure_generated(
             hq_client,
             seed=(
                 "接着这个系列做下一篇。请解释演示商品 DIYU-CSPU-009："
@@ -600,22 +699,26 @@ def run() -> dict[str, object]:
                 "商品取舍。不得推断面料、保暖性能、设计动机、价格、库存或真实在售状态；"
                 "用一人持衣和局部特写完成。"
             ),
-            series_id=str(hq_series["id"]),
+            series=hq_series,
+            position=2,
             direction=_direction(
                 style=_STYLE_PRACTICAL,
                 form=_FORM_DETAILS,
                 custom_text="让商品新增理解、限制和成立边界都能直接看懂。",
             ),
         )
-        h3 = _generate(
+        h3 = _ensure_generated(
             hq_client,
             seed=(
-                "接着这个系列做下一篇。用演示商品 DIYU-CSPU-001 与 DIYU-CSPU-006，"
-                "让受众从画面看见“明亮黄色只做一个视觉重音、白色或米白色留出呼吸”的"
-                "穿着可能。不要安排儿童、顾客或模特出镜，用持衣、平铺、局部特写和旁白；"
+                "接着这个系列做下一篇。只依据演示商品 DIYU-CSPU-001 肉眼可见的"
+                "明亮黄色短袖上衣，以及 DIYU-CSPU-006 肉眼可见的白色或米白色连衣裙，"
+                "做一次两件衣服并排与分开的画面实验：让受众直接比较“把明亮黄色集中在一处”"
+                "和“让白色或米白色占更多画面”这两种穿着组织可能。不要推断搭配效果、适合人群"
+                "或真实穿着结果，不安排儿童、顾客或模特出镜，只用持衣、平铺、局部特写和旁白。"
                 "想保留一点幽默，但不要吵闹叫卖。"
             ),
-            series_id=str(hq_series["id"]),
+            series=hq_series,
+            position=3,
             direction=_direction(
                 style=_STYLE_HUMOUR,
                 form=_FORM_IMAGES,
@@ -623,14 +726,14 @@ def run() -> dict[str, object]:
             ),
         )
 
-        s1_v1 = _generate(
+        s1_current = _ensure_generated(
             store_client,
             seed=(
                 "走进门店只想自己看看，这种沉默是不是也应该被尊重？"
                 "请从柯桥门店人物的模拟位置回应同一个问题。没有真实本店做法，"
                 "只表达我当前的理解、建议或愿望，不冒充真实店员确认。"
             ),
-            series_id=str(store_series["id"]),
+            series=store_series,
             position=1,
             direction=_direction(
                 style=_STYLE_FRIEND,
@@ -638,12 +741,13 @@ def run() -> dict[str, object]:
                 custom_text="像站在衣架旁对一个人说话，不照搬总部口径。",
             ),
         )
-        s1_v2 = _revise(
+        s1_v1 = _task_version(store_client, str(s1_current["task_id"]), 1)
+        s1_v2 = _ensure_revision(
             store_client,
-            s1_v1,
+            s1_current,
             "不要安排顾客出镜，用我、衣架和现有演示商品就能拍；保留门店人物自己的语气。",
         )
-        s2 = _generate(
+        s2 = _ensure_generated(
             store_client,
             seed=(
                 "接着这个系列做下一篇：一家三口拍合照，先统一颜色，还是先保留每个人"
@@ -651,14 +755,15 @@ def run() -> dict[str, object]:
                 "内容：给一个有条件的优先选择、一条会让选择反转的条件，以及一个不需要"
                 "顾客、儿童或一家三口出镜的低成本验证动作。"
             ),
-            series_id=str(store_series["id"]),
+            series=store_series,
+            position=2,
             direction=_direction(
                 style=_STYLE_PRACTICAL,
                 form=_FORM_DETAILS,
                 custom_text="用持衣、色块图卡和局部特写完成，不声称这是本店真实案例。",
             ),
         )
-        s3 = _generate(
+        s3 = _ensure_generated(
             store_client,
             seed=(
                 "接着这个系列做下一篇。等深模拟门店生活种子：关店前把试衣镜擦干净时，"
@@ -666,7 +771,8 @@ def run() -> dict[str, object]:
                 "请充分增益成完整内容，但明确它是模拟种子，不强行商品化、励志化、"
                 "戏剧化或改成品牌宣言；一人、手机、镜面局部和字幕就能拍。"
             ),
-            series_id=str(store_series["id"]),
+            series=store_series,
+            position=3,
             direction=_direction(
                 style=_STYLE_EMPATHY,
                 form=_FORM_SPEAK,
