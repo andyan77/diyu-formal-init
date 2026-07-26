@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>笛语运维</title>
+    <link rel="icon" href="../../../../assets/brand/diyu-vi/svg/favicon.svg" />
+    <link rel="stylesheet" href="../shared/product.css" />
+  </head>
+  <body class="ops-page">
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="app-header__brand">
+          <img class="brand-mark" src="../../../../assets/brand/diyu-vi/svg/diyu-symbol.svg" alt="" />
+          <div><strong>笛语运维</strong><span>租户与服务</span></div>
+        </div>
+        <div class="app-header__context"><span>运维工作区</span><span class="avatar">运</span></div>
+      </header>
+
+      <main class="page">
+        <header class="page-heading">
+          <div><p class="eyebrow">今日概览</p><h1 data-ops-title>服务正常，有 2 条需求等待处理。</h1></div>
+          <button class="button button--primary" type="button" data-open-feedback>处理下一条</button>
+        </header>
+
+        <section class="ops-mast">
+          <article class="ops-priority surface">
+            <span class="pill">优先事项</span>
+            <h2 data-ops-priority-title>先回复“想做门店直播切片”</h2>
+            <p data-ops-priority-copy>提交者已说明使用场景，下一步是分类并给出自然语言回告。</p>
+          </article>
+          <div class="service-board surface">
+            <div class="service-metric"><span class="muted small">租户</span><strong>5</strong><span class="status-dot">均可访问</span></div>
+            <div class="service-metric"><span class="muted small">内容服务</span><strong>正常</strong><span class="muted small">刚刚检查</span></div>
+            <div class="service-metric"><span class="muted small">陈列服务</span><strong>正常</strong><span class="muted small">刚刚检查</span></div>
+            <div class="service-metric"><span class="muted small">待处理需求</span><strong data-feedback-count>2</strong><span class="muted small">本周新增</span></div>
+          </div>
+        </section>
+
+        <section class="ops-columns">
+          <div>
+            <div class="brand-section__head"><div><p class="eyebrow">租户</p><h2>当前服务关系</h2></div><a class="text-link" href="#tenant-list">查看全部</a></div>
+            <div class="ops-table surface" id="tenant-list">
+              <div class="ops-row"><span>品牌</span><span>账号</span><span>最近使用</span><span>状态</span></div>
+              <div class="ops-row"><strong>笛语服饰</strong><span>2 个</span><span>今天</span><span class="status-dot">正常</span></div>
+              <div class="ops-row"><strong>杭州演示品牌</strong><span>1 个</span><span>昨天</span><span class="status-dot">正常</span></div>
+              <div class="ops-row"><strong>绍兴演示品牌</strong><span>1 个</span><span>3 天前</span><span class="status-dot">正常</span></div>
+            </div>
+          </div>
+
+          <aside class="feedback-queue surface">
+            <p class="eyebrow">需求反馈</p>
+            <section class="feedback-editor" data-feedback-editor hidden>
+              <p class="eyebrow">正在处理</p>
+              <h2 data-feedback-editor-title>门店直播切片</h2>
+              <label>
+                归到哪里
+                <select><option>内容形式</option><option>商品资料</option><option>使用建议</option></select>
+              </label>
+              <label>
+                给提交者的回复
+                <textarea>已经记下这个需求。当前可以先从直播原稿整理文字内容；视频切片能力会在有真实素材和明确使用需求时另行补齐。</textarea>
+              </label>
+              <button class="button" type="button" data-feedback-complete>完成分类并回复</button>
+            </section>
+            <div class="feedback-item" data-feedback-item="live">
+              <span class="pill">内容形式</span>
+              <p><strong>想把一场店播整理成三条短内容</strong></p>
+              <p class="muted small">笛语服饰 · 8 分钟前</p>
+              <button class="button" type="button" data-feedback-action>分类并回复</button>
+            </div>
+            <div class="feedback-item" data-feedback-item="series">
+              <span class="pill">商品资料</span>
+              <p><strong>希望支持按商品组继续同一个系列</strong></p>
+              <p class="muted small">杭州演示品牌 · 昨天</p>
+              <button class="button" type="button" data-feedback-action>分类并回复</button>
+            </div>
+          </aside>
+        </section>
+      </main>
+    </div>
+    <div class="toast" data-toast role="status" aria-live="polite"></div>
+    <script src="../shared/product.js"></script>
+  </body>
+</html>

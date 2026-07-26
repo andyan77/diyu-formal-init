@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>墙面挂杆方案 · 笛语</title>
+    <link rel="icon" href="../../../../assets/brand/diyu-vi/svg/favicon.svg" />
+    <link rel="stylesheet" href="../shared/product.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <a class="app-header__brand" href="content-workspace.html?view=home">
+          <img class="brand-mark" src="../../../../assets/brand/diyu-vi/svg/diyu-symbol.svg" alt="" />
+          <div><strong>陈列工作空间</strong><span>柯桥门店 · 墙面挂杆</span></div>
+        </a>
+        <div class="app-header__context">
+          <span data-display-version>当前方案 · V1</span>
+          <span class="avatar">柯</span>
+        </div>
+      </header>
+
+      <main class="page">
+        <section class="display-input surface" data-display-input-view hidden>
+          <div class="display-input__intro">
+            <p class="eyebrow">开始一份陈列</p>
+            <h1>把这次能用的商品和现场条件说清楚。</h1>
+            <p>不用整理成表格。商品数量、挂杆条件和真正不能改变的要求，写到当前任务里就可以。</p>
+          </div>
+          <form class="display-input__form" data-display-input-form>
+            <label>
+              这次想先解决什么
+              <textarea required>让砖红外套先被看到，同时把相近的中性色分开，拿取不要太挤。</textarea>
+            </label>
+            <div class="display-input__fields">
+              <label>
+                墙面条件
+                <input value="两层固定挂杆，上层 5 件、下层 4 件" />
+              </label>
+              <label>
+                本次商品
+                <input value="砖红、米色、炭灰、白色、棕色、深蓝、灰白、棕色、黑色，共 9 件" />
+              </label>
+            </div>
+            <p class="muted small">现场尺寸如果变化，可以先生成，再只调整受影响的部分。</p>
+            <button class="button button--primary" type="submit">生成参考方案</button>
+          </form>
+        </section>
+
+        <div data-display-plan-view>
+          <header class="page-heading">
+            <div>
+              <p class="eyebrow">本周墙面</p>
+              <h1>先让主推组被看见，再留出好拿取的间距。</h1>
+              <p data-display-note>这份方案按两层固定挂杆、9 件上墙和现有商品关系整理。</p>
+            </div>
+            <button class="button button--primary" type="button" data-display-adjust="focus">突出主推组</button>
+          </header>
+
+          <section class="display-layout">
+            <div class="fixture-board surface">
+              <div class="fixture-title">
+                <strong>面向顾客的墙面</strong>
+                <span class="pill">上层 5 件 · 下层 4 件</span>
+              </div>
+              <div class="rail">
+                <div class="garments" data-upper-group>
+                  <span class="garment" style="--garment:#bd4933" title="砖红外套"></span>
+                  <span class="garment" style="--garment:#d7c6a5" title="米色针织"></span>
+                  <span class="garment" style="--garment:#4e5657" title="炭灰外套"></span>
+                  <span class="garment" style="--garment:#ece6dc" title="白色上装"></span>
+                  <span class="garment" style="--garment:#8d735d" title="棕色上装"></span>
+                </div>
+              </div>
+              <div class="rail">
+                <div class="garments" data-lower-group>
+                  <span class="garment" style="--garment:#29394b" title="深蓝下装"></span>
+                  <span class="garment" style="--garment:#d6d0c4" title="灰白下装"></span>
+                  <span class="garment" style="--garment:#7a664f" title="棕色下装"></span>
+                  <span class="garment" style="--garment:#222321" title="黑色下装"></span>
+                </div>
+              </div>
+              <div class="fixture-legend">
+                <span>左侧入口</span><span>焦点组</span><span>右侧试衣区</span>
+              </div>
+            </div>
+
+            <aside class="plan-panel surface">
+              <p class="eyebrow">执行顺序</p>
+              <h2>先定关系，再补数量</h2>
+              <ol class="plan-steps">
+                <li data-plan-step="primary"><strong>先挂砖红外套和深蓝下装</strong><br />它们组成第一眼能读懂的主推组。</li>
+                <li data-plan-step="secondary"><strong>用米色与灰白回应</strong><br />上下层形成轻重变化，不挤在一起。</li>
+                <li><strong>最后补中性色</strong><br />按实际宽度留出一手掌以上的拿取空间。</li>
+              </ol>
+              <div class="adjustments" aria-label="局部调整">
+                <button type="button" data-display-adjust="swap">交换上下呼应组</button>
+                <button type="button" data-display-adjust="breathe">把相近颜色再分开</button>
+              </div>
+              <p class="muted small">这是陈列参考，请按现场尺寸和商品状态调整。</p>
+            </aside>
+          </section>
+        </div>
+      </main>
+    </div>
+    <div class="toast" data-toast role="status" aria-live="polite"></div>
+    <script src="../shared/product.js"></script>
+  </body>
+</html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UI-01R 创始人评审</title>
+    <link rel="icon" href="../../../../assets/brand/diyu-vi/svg/favicon.svg" />
+    <link rel="stylesheet" href="review.css" />
+  </head>
+  <body>
+    <main class="review-shell">
+      <aside class="review-sidebar" data-sidebar>
+        <a class="review-brand" href="index.html">
+          <img class="brand-mark" src="../../../../assets/brand/diyu-vi/svg/diyu-symbol.svg" alt="" />
+          <div><strong>产品方向评审</strong><small>UI-01R</small></div>
+        </a>
+
+        <div class="review-mode" aria-label="评审模式">
+          <button type="button" data-mode="free" aria-pressed="true">自由评审</button>
+          <button type="button" data-mode="flow" aria-pressed="false">产品流程</button>
+        </div>
+
+        <p class="review-section-title">页面目录</p>
+        <nav class="review-pages" data-page-list aria-label="页面目录"></nav>
+
+        <p class="review-section-title">身份流程</p>
+        <div class="identity-list">
+          <button type="button" data-identity="user"><span class="identity-mini">用</span><span>租户用户</span></button>
+          <button type="button" data-identity="brand"><span class="identity-mini">品</span><span>品牌管理员</span></button>
+          <button type="button" data-identity="ops"><span class="identity-mini">运</span><span>笛语运维</span></button>
+          <button type="button" data-identity="activate"><span class="identity-mini">启</span><span>激活流程</span></button>
+        </div>
+      </aside>
+
+      <section class="review-main">
+        <header class="review-toolbar">
+          <button class="review-drawer-toggle" type="button" data-menu aria-label="打开评审目录">目录</button>
+          <div class="review-title">
+            <strong data-current-name>公开首页</strong>
+            <small data-current-count>1 / 7</small>
+          </div>
+          <div class="review-toolbar__controls">
+            <button type="button" data-prev aria-label="上一页">←</button>
+            <button type="button" data-next aria-label="下一页">→</button>
+            <div class="viewport-switch" aria-label="画布尺寸">
+              <button type="button" data-viewport="desktop" aria-pressed="true">桌面</button>
+              <button type="button" data-viewport="mobile" aria-pressed="false">移动</button>
+            </div>
+            <a href="../product/home.html" target="_blank" rel="noreferrer" data-open-page>新窗口</a>
+          </div>
+        </header>
+
+        <div class="review-canvas" data-canvas data-viewport="desktop">
+          <div class="review-frame-wrap">
+            <iframe
+              class="review-frame"
+              data-review-frame
+              title="当前产品页面"
+              src="../product/home.html"
+            ></iframe>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="review.js"></script>
+  </body>
+</html>

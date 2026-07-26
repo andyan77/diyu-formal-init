@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>我的工作 · 笛语</title>
+    <link rel="icon" href="../../../../assets/brand/diyu-vi/svg/favicon.svg" />
+    <link rel="stylesheet" href="../shared/product.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <a class="app-header__brand" href="content-workspace.html?view=home">
+          <img
+            class="brand-mark"
+            src="../../../../assets/brand/diyu-vi/svg/diyu-symbol.svg"
+            alt=""
+          />
+          <div><strong>我的工作</strong><span>柯桥门店人物账号</span></div>
+        </a>
+        <div class="app-header__context">
+          <span>今天想先做什么？</span>
+          <span class="avatar" aria-label="当前成员">柯</span>
+        </div>
+      </header>
+
+      <main class="page" data-hub-view>
+        <header class="page-heading">
+          <div>
+            <p class="eyebrow">下午好</p>
+            <h1>从一句真实想法开始。</h1>
+            <p>你可以继续上次的系列，也可以先整理今天的陈列。</p>
+          </div>
+          <span class="status-dot">工作空间已就绪</span>
+        </header>
+
+        <section class="hub-strip">
+          <article class="hub-primary surface">
+            <span class="pill">内容工作空间</span>
+            <h2>把门店里的一个观察，做成下一篇。</h2>
+            <p>上次做到「在门店里，安静也可以被尊重」第 3 篇。</p>
+            <a class="button button--primary" href="content-workspace.html?view=content&amp;mode=create">开始下一篇</a>
+          </article>
+          <article class="hub-secondary surface">
+            <div>
+              <span class="pill">陈列工作空间</span>
+              <h2>整理墙面挂杆</h2>
+              <p>从本次商品和现场条件出发，先得到一份可执行的参考方案。</p>
+            </div>
+            <a class="text-link" href="display-plan.html?view=input">开始整理 →</a>
+          </article>
+        </section>
+
+        <div class="recent-line">
+          <div>
+            <strong>最近成品</strong>
+            <span class="muted small">同一系列 · 当前版本 V2</span>
+          </div>
+          <a class="text-link" href="content-workspace.html?view=content">查看成品</a>
+        </div>
+      </main>
+
+      <main class="page" data-workbench-view hidden>
+        <div class="mobile-workbench-tabs" aria-label="工作面切换">
+          <button type="button" data-mobile-tab="conversation" aria-selected="true">对话</button>
+          <button type="button" data-mobile-tab="artifact" aria-selected="false">成品</button>
+        </div>
+
+        <section class="workbench" data-workbench data-mobile-view="conversation">
+          <div class="conversation">
+            <header class="workbench-bar">
+              <div><strong data-workbench-title>接着这个系列</strong><small data-workbench-subtitle>第 4 篇 · 门店观察</small></div>
+              <span class="pill">小红书图文</span>
+            </header>
+            <div class="thread" data-thread>
+              <div class="message message--self">
+                有时候顾客只是想自己看看，我不想每次都立刻迎上去。
+              </div>
+              <div class="message">
+                可以把重点放在“给对方留出选择距离”，从你站在门店里的位置说，不替顾客下判断。
+              </div>
+              <div class="message" data-revision-note>
+                右侧是当前成品。想改哪里，直接像和同事说话一样告诉我。
+              </div>
+            </div>
+            <form class="composer" data-revision-form data-content-mode="revision">
+              <details class="direction-panel">
+                <summary>创作方向（可选）</summary>
+                <div class="direction-grid">
+                  <label>表达感觉
+                    <select><option>保持自然</option><option>克制的幽默</option><option>更像聊天</option></select>
+                  </label>
+                  <label>呈现方式
+                    <select><option>图文</option><option>一人对镜说</option><option>旁白加画面</option></select>
+                  </label>
+                </div>
+              </details>
+              <textarea aria-label="内容想法或修改要求" placeholder="例如：判断保留，说得再像我一点……"></textarea>
+              <div class="composer-actions">
+                <span class="muted small" data-composer-help>直接说想改什么，不必填写表格。</span>
+                <button class="button button--primary" type="submit" data-content-submit>继续修改</button>
+              </div>
+            </form>
+          </div>
+
+          <article class="artifact">
+            <div class="artifact-kicker">
+              <span data-current-version>当前版本 · V2</span>
+              <span>约 45 秒可读完</span>
+            </div>
+            <div class="artifact-empty" data-artifact-empty hidden>
+              <span class="pill">等待你的想法</span>
+              <h1>先说一件今天真正想表达的事。</h1>
+              <p>创作方向都可以不选。成品会直接出现在这里，再用自然语言继续修改。</p>
+            </div>
+            <div data-artifact-content>
+              <h1 data-artifact-title>有时候，最合适的招呼是先留一点距离</h1>
+              <p class="artifact-summary" data-artifact-summary>
+                这篇从门店人物的日常位置出发，给正在独自浏览的人留出选择空间；受众能带走的不是服务口号，而是一种更轻松的相处方式。
+              </p>
+              <section class="artifact-section">
+                <h2>发布正文</h2>
+                <p data-artifact-body="opening">
+                  有人走进店里，会先看颜色，再摸一摸衣服，也有人只是慢慢走一圈。这个时候，我更愿意先站在能被看见、又不会挡住她的位置。
+                </p>
+                <p data-artifact-body="closing">
+                  想问的时候，她一抬头就能找到我；还没想好，也不用急着回应。逛衣服本来就可以有一点自己的安静。
+                </p>
+              </section>
+              <section class="artifact-section">
+                <h2>画面与声音</h2>
+                <ol>
+                  <li data-artifact-shot>手机固定，对着一面干净的墙和半个挂杆。</li>
+                  <li>你从画面边缘进入，在能被看到的位置停下，不安排其他人出镜。</li>
+                  <li>保留一次自然呼吸和停顿，环境声即可。</li>
+                </ol>
+              </section>
+              <section class="artifact-section">
+                <h2>发布配文</h2>
+                <p data-artifact-caption>不用每一次靠近，都急着变成一次交谈。#门店日常 #逛店也可以很安静</p>
+              </section>
+              <p class="muted small">这份内容由笛语协助生成，请在使用前按实际情况确认。</p>
+              <div class="artifact-actions">
+                <button class="button" type="button" data-copy>复制</button>
+                <button class="button" type="button" data-export>导出</button>
+                <a class="button" href="content-workspace.html?view=home">先放一放</a>
+              </div>
+              <details class="history" data-history>
+                <summary data-history-count>历史版本（1）</summary>
+                <div class="history-list" data-history-list>
+                  <div class="history-row"><span>V1 · 第一次成稿</span><button class="button button--quiet" type="button">查看</button></div>
+                </div>
+              </details>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+    <div class="toast" data-toast role="status" aria-live="polite"></div>
+    <script src="../shared/product.js"></script>
+  </body>
+</html>
