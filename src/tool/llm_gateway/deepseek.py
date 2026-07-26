@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass, replace
@@ -28,6 +29,7 @@ from src.shared.types import (
     VideoProductionBundle,
 )
 
+_LOGGER = logging.getLogger(__name__)
 _CONTRACT_FIELDS: dict[ContentProduct, tuple[str, str, str]] = {
     "dressing_decision": ("choice", "boundary", "next_action"),
     "product_truth": ("product_insight", "tradeoff_or_limit", "validity_condition"),
@@ -591,6 +593,13 @@ class DeepSeekGenerator(ContentGenerator):
             provider_payloads.append(judgement_payload)
             retries += judgement_retries
             if final_issues:
+                _LOGGER.warning(
+                    "content boundary remained unsatisfied after unit repair: %s",
+                    ",".join(
+                        f"{issue.unit_id}:{issue.reason_code}"
+                        for issue in final_issues
+                    ),
+                )
                 raise GenerationFailed("内容边界无法在一次单元修复内满足")
             fact_repair_receipts = self._issue_receipts(request, core, issues)
             core = repaired_core
