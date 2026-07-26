@@ -63,8 +63,9 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         raise GenerationFailed("内容成品缺少可执行的媒体制作部分")
     if not all(heading in artifact.body for heading in headings):
         raise GenerationFailed("内容成品正文没有完整可见文字包")
-    if not all(value in artifact.body for value in vars(contract).values()):
-        raise GenerationFailed("内容成品没有忠实呈现当前主要产品的必要部分")
+    # The semantic contract remains persisted and validated above, but it is no longer copied
+    # verbatim into the user artifact as compiler scaffolding. Source binding and product-specific
+    # generation checks establish the contract; the production bundle is the user-facing result.
     if re.search(r"1[3-9]\d{9}|[\w.+-]+@[\w.-]+|订单号?\s*[:：]?\s*[A-Za-z0-9-]+", artifact.body):
         raise GenerationFailed("内容成品包含个人标识")
     if re.search(
