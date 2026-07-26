@@ -390,6 +390,11 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         )
         series_row = cursor.fetchone()
         artifacts: list[dict[str, object]] = []
+        series_code_prefix = (
+            "H"
+            if str(identity["name"]) == "总部品牌内容运营演示账号"
+            else "S"
+        )
         if series_row is not None:
             cursor.execute(
                 """
@@ -428,6 +433,10 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 artifacts.append(
                     {
                         "position": self._integer(artifact_row["position"]),
+                        "series_code": (
+                            f"{series_code_prefix}"
+                            f"{self._integer(artifact_row['position'])}"
+                        ),
                         "value": self._content_value_label(
                             str(artifact_row["primary_content_product"])
                         ),
@@ -524,14 +533,18 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         account_id: UUID,
         artifacts: list[dict[str, object]],
     ) -> list[dict[str, object]]:
-        source_versions: dict[str, dict[str, object]] = {}
+        source_versions: dict[str, tuple[dict[str, object], str]] = {}
         for artifact in artifacts:
             raw_versions = artifact.get("versions")
             if not isinstance(raw_versions, list):
                 continue
+            series_code = str(artifact.get("series_code") or "")
             for version in raw_versions:
                 if isinstance(version, dict):
-                    source_versions[str(version["version_id"])] = version
+                    source_versions[str(version["version_id"])] = (
+                        version,
+                        series_code,
+                    )
         if not source_versions:
             return []
         cursor.execute(
@@ -576,10 +589,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             complete,
             key=lambda group: max(str(row["created_at"]) for row in group[1]),
         )
-        source = dict(source_versions[source_id])
+        source_version, source_code = source_versions[source_id]
+        source = dict(source_version)
+        source_label = f"{source_code} V{source['version']}".strip()
         source["platform"] = "抖音"
         source["media"] = "视频"
         source["adaptation"] = "系列源成品"
+        source["source_label"] = source_label
+        source["source_version_id"] = source_id
+        source["parent_version_id"] = None
         projections = [source]
         newest_by_channel: dict[str, dict[str, object]] = {}
         for row in rows:
@@ -589,6 +607,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         ):
             projection = self._demo_version(row)
             projection["adaptation"] = "由所选源成品另做的平台版本"
+            projection["source_label"] = source_label
+            projection["source_version_id"] = source_id
+            projection["parent_version_id"] = str(row["parent_version_id"])
             projections.append(projection)
         return projections
 

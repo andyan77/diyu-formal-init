@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import psycopg
@@ -16,8 +17,9 @@ from src.infrastructure.seed_demo import (
     STORE_CONTENT_USER_ID,
     TENANT_ID,
 )
+from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.errors import GenerationFailed
-from src.shared.types import GenerationInput
+from src.shared.types import GenerationInput, TenantManagementScope
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 
 
@@ -303,3 +305,105 @@ def test_demo_acceptance_index_is_manager_scoped_and_uses_no_fallback_fixture() 
         content_user.get("/ui/select/content")
         denied = content_user.get("/api/v1/tenant-management/demo-content-index")
         assert denied.status_code == 403
+
+
+def test_demo_platform_index_selects_and_exposes_the_latest_complete_source_group() -> None:
+    source_v4_id = uuid4()
+    source_v6_id = uuid4()
+    account_id = uuid4()
+
+    def source_version(version: int, version_id: UUID) -> dict[str, object]:
+        return {
+            "version_id": str(version_id),
+            "version": version,
+            "title": "同一对衣服，三种配色主次",
+            "body": "两件完整商品在同平面、同距离形成三种主次关系。",
+            "platform": "抖音",
+            "media": "视频",
+            "ai_generated": True,
+            "aigc_label": "AI 辅助生成",
+            "aigc_release_reminder": "发布前请使用平台 AI 内容声明功能。",
+            "translation_notice": "",
+            "applied_direction": ["克制的冷幽默", "多图合集"],
+            "created_at": datetime(2026, 7, 26, tzinfo=timezone.utc).isoformat(),
+        }
+
+    def platform_row(
+        channel: str,
+        parent_version_id: UUID,
+        created_at: datetime,
+    ) -> dict[str, object]:
+        return {
+            "id": uuid4(),
+            "version_number": 1,
+            "outline": f"{channel}平台版本",
+            "body": "两件完整商品在同平面、同距离形成三种主次关系。",
+            "created_at": created_at,
+            "model": "deepseek-v4-flash",
+            "content_context_snapshot": {},
+            "channel": channel,
+            "media_format": "graphic" if channel == "小红书" else "video",
+            "parent_version_id": parent_version_id,
+        }
+
+    rows = [
+        platform_row(
+            "小红书",
+            source_v6_id,
+            datetime(2026, 7, 26, 2, tzinfo=timezone.utc),
+        ),
+        platform_row(
+            "微信视频号",
+            source_v6_id,
+            datetime(2026, 7, 26, 2, tzinfo=timezone.utc),
+        ),
+        platform_row(
+            "小红书",
+            source_v4_id,
+            datetime(2026, 7, 26, 1, tzinfo=timezone.utc),
+        ),
+        platform_row(
+            "微信视频号",
+            source_v4_id,
+            datetime(2026, 7, 26, 1, tzinfo=timezone.utc),
+        ),
+    ]
+
+    class DemoCursor:
+        def execute(self, _query: str, _params: tuple[object, ...]) -> None:
+            return None
+
+        def fetchall(self) -> list[dict[str, object]]:
+            return rows
+
+    repository = PostgresWorkbenchRepository("postgresql://unused")
+    projected = repository._demo_platform_versions(
+        cast(Any, DemoCursor()),
+        TenantManagementScope(TENANT_ID, uuid4(), uuid4()),
+        account_id,
+        [
+            {
+                "position": 3,
+                "series_code": "H3",
+                "versions": [
+                    source_version(4, source_v4_id),
+                    source_version(6, source_v6_id),
+                ],
+            }
+        ],
+    )
+
+    assert len(projected) == 3
+    source = next(item for item in projected if item["platform"] == "抖音")
+    children = [item for item in projected if item["platform"] != "抖音"]
+    assert source["version"] == 6
+    assert source["source_label"] == "H3 V6"
+    assert source["source_version_id"] == str(source_v6_id)
+    assert source["parent_version_id"] is None
+    assert {item["parent_version_id"] for item in children} == {
+        str(source_v6_id)
+    }
+    assert {item["source_version_id"] for item in children} == {
+        str(source_v6_id)
+    }
+    assert {item["source_label"] for item in children} == {"H3 V6"}

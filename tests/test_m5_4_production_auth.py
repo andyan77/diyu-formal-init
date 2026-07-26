@@ -257,6 +257,16 @@ def test_activation_paths_are_redacted_and_edge_access_logs_are_disabled(
         nginx = (root / "deploy" / "nginx" / name).read_text(encoding="utf-8")
         assert nginx.count("location ^~ /activate/") == 2
         assert nginx.count("access_log off;") == 2
+        assert nginx.count("error_log /dev/null crit;") == 2
+        assert nginx.count('add_header Referrer-Policy "no-referrer" always;') == 2
+    application_nginx = (
+        root / "deploy" / "nginx" / "diyuai.cc.conf"
+    ).read_text(encoding="utf-8")
+    http_activation = application_nginx.split(
+        "location ^~ /activate/ {", maxsplit=1
+    )[1].split("}", maxsplit=1)[0]
+    assert "$request_uri" not in http_activation
+    assert "return 303 https://$host/;" in http_activation
     compose = (root / "docker-compose.production.yml").read_text(encoding="utf-8")
     assert "--no-access-log" in compose
 

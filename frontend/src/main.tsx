@@ -276,6 +276,9 @@ interface DemoAcceptanceVersion {
   translation_notice?: string | null;
   applied_direction: string[];
   adaptation?: string;
+  source_label?: string;
+  source_version_id?: string;
+  parent_version_id?: string | null;
 }
 
 interface DemoAcceptanceIdentity {
@@ -1014,7 +1017,12 @@ function DemoAcceptancePanel(): JSX.Element {
 }
 
 function DemoVersion({ value, compact = false }: { value: DemoAcceptanceVersion; compact?: boolean }): JSX.Element {
-  return <details className={`demo-version ${compact ? "compact" : ""}`}><summary><span>{compact ? `${value.platform}${value.media}` : `V${value.version}`}</span><strong>{value.title}</strong></summary><div>{value.adaptation && <p className="muted">{value.adaptation}</p>}{value.translation_notice && <p className="translation-notice">{value.translation_notice}</p>}<ArtifactText value={value.body} />{value.ai_generated && <p className="artifact-disclosure">{value.aigc_label}</p>}{value.aigc_release_reminder && <p className="artifact-reminder">{value.aigc_release_reminder}</p>}</div></details>;
+  const sourceRelation = value.source_label
+    ? value.parent_version_id
+      ? `父版本：${value.source_label}`
+      : `源成品：${value.source_label}`
+    : null;
+  return <details className={`demo-version ${compact ? "compact" : ""}`}><summary><span>{compact ? `${value.platform}${value.media}` : `V${value.version}`}</span><strong>{value.title}</strong></summary><div>{value.adaptation && <p className="muted">{value.adaptation}</p>}{sourceRelation && <p className="muted">{sourceRelation}</p>}{value.translation_notice && <p className="translation-notice">{value.translation_notice}</p>}<ArtifactText value={value.body} />{value.ai_generated && <p className="artifact-disclosure">{value.aigc_label}</p>}{value.aigc_release_reminder && <p className="artifact-reminder">{value.aigc_release_reminder}</p>}</div></details>;
 }
 
 function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; brandName: string }): JSX.Element {

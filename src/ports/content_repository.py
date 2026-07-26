@@ -84,6 +84,7 @@ class ContentRepository(ABC):
         production_conditions: str,
         control: ContentControlContext | None = None,
         series_context: SeriesContext | None = None,
+        source_description: str | None = None,
     ) -> tuple[UUID, UUID, str, ContentProduct]:
         """Create the next auditable run for a revision request."""
 
@@ -143,8 +144,8 @@ class ContentRepository(ABC):
     @abstractmethod
     def task_details(
         self, scope: TrustedScope, task_id: UUID
-    ) -> tuple[str, ContentProduct, MediaFormat, str]:
-        """Load the current user's original seed and stable primary product."""
+    ) -> tuple[str, ContentProduct, MediaFormat, str, str | None]:
+        """Load stable task details, including an original adaptation relation."""
 
     @abstractmethod
     def load_recompile_source(self, scope: TrustedScope, version_id: UUID) -> RecompileSource:

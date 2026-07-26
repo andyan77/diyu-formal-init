@@ -137,7 +137,10 @@ def test_recompile_isolated_and_same_target_revisions_stay_on_one_item(
         assert revised.status_code == 201
         graphic_v2 = revised.json()
         assert graphic_v2["version"] == 2
+        assert graphic_v2["adapted_from"] == "由抖音视频 V1 改编"
         assert "只补拍四张" in graphic_v2["body"]
+        revision_receipt = _receipt(app_database_url, graphic["task_id"])
+        assert revision_receipt["source_description"] == "由抖音视频 V1 改编"
         assert client.get(
             f"/api/v1/content/tasks/{graphic['task_id']}/versions"
             "?target=xiaohongshu_graphic"
@@ -148,6 +151,39 @@ def test_recompile_isolated_and_same_target_revisions_stay_on_one_item(
             ]
             == source["body"]
         )
+
+
+def test_same_target_reuse_parent_is_not_mislabeled_as_platform_adaptation(
+    app_database_url: str,
+) -> None:
+    with TestClient(create_app(Settings.model_validate({}))) as client:
+        client.get("/ui/select/content")
+        source = client.post(
+            "/api/v1/content",
+            json={"weak_seed": _P2D, "target": "douyin_video"},
+        ).json()
+        separate = client.post(
+            "/api/v1/content",
+            json={
+                "weak_seed": "另外做一条独立内容，保留商品事实并换一个讲法。",
+                "reuse_version_id": source["version_id"],
+                "target": "douyin_video",
+            },
+        )
+        assert separate.status_code == 200
+        separate_value = separate.json()
+        assert separate_value["task_id"] != source["task_id"]
+        revised = client.post(
+            f"/api/v1/tasks/{separate_value['task_id']}/revisions",
+            json={
+                "instruction": "只把开头说得更直接。",
+                "target": "douyin_video",
+            },
+        )
+        assert revised.status_code == 201
+        assert revised.json()["adapted_from"] is None
+        receipt = _receipt(app_database_url, separate_value["task_id"])
+        assert receipt["source_description"] is None
 
 
 def test_transform_boundaries_receipts_and_silent_store_video(app_database_url: str) -> None:

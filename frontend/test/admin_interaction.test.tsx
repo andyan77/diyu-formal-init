@@ -103,6 +103,9 @@ async function main(): Promise<void> {
   assert.match(document.body.textContent ?? "", /V1→V2，旧版保留/);
   assert.match(document.body.textContent ?? "", /同一对衣服，三种配色主次设想/);
   assert.match(document.body.textContent ?? "", /怎样让被转发的人看懂三画面/);
+  const demoText = document.body.textContent ?? "";
+  assert.equal((demoText.match(/源成品：H3 V6/g) ?? []).length, 1);
+  assert.equal((demoText.match(/父版本：H3 V6/g) ?? []).length, 2);
   for (const internal of ["账号观察", "受众获得", "账号关系", "演示商品锚点", "可见造型命题", "画面成立条件"]) {
     assert.doesNotMatch(
       document.body.textContent ?? "",

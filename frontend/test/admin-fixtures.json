@@ -169,6 +169,21 @@
                   "applied_direction": [
                     "克制的冷幽默"
                   ]
+                },
+                {
+                  "version": 6,
+                  "title": "同一对衣服，三种配色主次",
+                  "body": "标题：同一对衣服，三种配色主次\n\n正文：两件完整商品在同平面、同距离，以等权、居中和侧边形成三种配色主次。",
+                  "platform": "抖音",
+                  "media": "视频",
+                  "ai_generated": true,
+                  "aigc_label": "AI 辅助生成",
+                  "aigc_release_reminder": "发布前请使用平台 AI 内容声明功能。",
+                  "translation_notice": "保留幽默，收成克制冷幽默。",
+                  "applied_direction": [
+                    "克制的冷幽默",
+                    "多图合集"
+                  ]
                 }
               ]
             }
@@ -176,7 +191,10 @@
         },
         "platform_versions": [
           {
-            "version": 1,
+            "version": 6,
+            "source_label": "H3 V6",
+            "source_version_id": "source-h3-v6",
+            "parent_version_id": null,
             "title": "同一对衣服，三种配色主次",
             "body": "抖音版",
             "platform": "抖音",
@@ -187,7 +205,10 @@
             "adaptation": "系列源成品"
           },
           {
-            "version": 2,
+            "version": 1,
+            "source_label": "H3 V6",
+            "source_version_id": "source-h3-v6",
+            "parent_version_id": "source-h3-v6",
             "title": "同一对衣服，三种配色主次设想",
             "body": "小红书四图阅读链。",
             "platform": "小红书",
@@ -198,7 +219,10 @@
             "adaptation": "由所选源成品另做的平台版本"
           },
           {
-            "version": 3,
+            "version": 1,
+            "source_label": "H3 V6",
+            "source_version_id": "source-h3-v6",
+            "parent_version_id": "source-h3-v6",
             "title": "怎样让被转发的人看懂三画面",
             "body": "视频号从第三组结果开场。",
             "platform": "微信视频号",

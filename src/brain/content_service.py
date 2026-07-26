@@ -369,9 +369,13 @@ class ContentService:
         snapshot = self._repository.load_content_context_snapshot(scope, task_id)
         if snapshot is None:
             return {"kind": "question", "message": _NO_FROZEN_CONTEXT}
-        weak_seed, primary_product, media_format, prior_conditions = self._repository.task_details(
-            scope, task_id
-        )
+        (
+            weak_seed,
+            primary_product,
+            media_format,
+            prior_conditions,
+            source_description,
+        ) = self._repository.task_details(scope, task_id)
         if media_format != direction.media_format:
             raise GenerationFailed("改换图文或平台请从当前版本选择目标并新建改编版本")
         production_conditions = self._production_conditions(
@@ -381,7 +385,12 @@ class ContentService:
         self._assert_target_context(context, direction.platform)
         products = self._repository.load_task_product_facts(scope, task_id)
         assets = self._repository.load_active_assets(
-            scope, primary_product, instruction, products, target, False
+            scope,
+            primary_product,
+            instruction,
+            products,
+            target,
+            source_description is not None,
         )
         control = self._replayed_control(scope, snapshot)
         series_context = frozen_series_context(snapshot)
@@ -399,6 +408,7 @@ class ContentService:
             production_conditions,
             control,
             series_context,
+            source_description,
         )
         return self._generate_and_persist(
             scope,
@@ -413,7 +423,7 @@ class ContentService:
             products,
             target,
             direction,
-            None,
+            source_description,
             control,
             series_context,
         )

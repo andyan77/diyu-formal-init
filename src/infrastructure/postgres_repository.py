@@ -390,6 +390,7 @@ class PostgresContentRepository(ContentRepository):
         production_conditions: str,
         control: ContentControlContext | None = None,
         series_context: SeriesContext | None = None,
+        source_description: str | None = None,
     ) -> tuple[UUID, UUID, str, ContentProduct]:
         run_id = uuid4()
         with self._tx(scope) as cursor:
@@ -431,7 +432,7 @@ class PostgresContentRepository(ContentRepository):
                             target,
                             platform_direction,
                             parent_version_id,
-                            None,
+                            source_description,
                             control,
                             series_context,
                         )
@@ -588,12 +589,32 @@ class PostgresContentRepository(ContentRepository):
 
     def task_details(
         self, scope: TrustedScope, task_id: UUID
-    ) -> tuple[str, ContentProduct, MediaFormat, str]:
+    ) -> tuple[str, ContentProduct, MediaFormat, str, str | None]:
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT weak_seed, primary_content_product, media_format, production_conditions FROM business_tasks
-                WHERE tenant_id = %s AND id = %s AND brand_id = %s AND account_id = %s AND created_by = %s
+                SELECT task.weak_seed, task.primary_content_product,
+                       task.media_format, task.production_conditions,
+                       target_account.channel AS target_channel,
+                       source_version.version_number AS source_version_number,
+                       source_task.media_format AS source_media_format,
+                       source_account.channel AS source_channel
+                FROM business_tasks task
+                JOIN content_accounts target_account
+                  ON target_account.id = task.account_id
+                 AND target_account.tenant_id = task.tenant_id
+                LEFT JOIN content_versions source_version
+                  ON source_version.id = task.parent_version_id
+                 AND source_version.tenant_id = task.tenant_id
+                LEFT JOIN business_tasks source_task
+                  ON source_task.id = source_version.task_id
+                 AND source_task.tenant_id = source_version.tenant_id
+                LEFT JOIN content_accounts source_account
+                  ON source_account.id = source_task.account_id
+                 AND source_account.tenant_id = source_task.tenant_id
+                WHERE task.tenant_id = %s AND task.id = %s
+                  AND task.brand_id = %s AND task.account_id = %s
+                  AND task.created_by = %s
                 """,
                 (scope.tenant_id, task_id, scope.brand_id, scope.account_id, scope.user_id),
             )
@@ -601,11 +622,30 @@ class PostgresContentRepository(ContentRepository):
         media_format = row["media_format"]
         if media_format not in {"video", "graphic"}:
             raise DomainError("内容任务的媒体格式数据无效")
+        source_description: str | None = None
+        source_version = row["source_version_number"]
+        source_media = row["source_media_format"]
+        source_channel = row["source_channel"]
+        target_channel = row["target_channel"]
+        if source_version is not None and (
+            source_media != media_format or source_channel != target_channel
+        ):
+            if (
+                not isinstance(source_version, int)
+                or source_media not in {"video", "graphic"}
+                or not isinstance(source_channel, str)
+            ):
+                raise DomainError("内容任务的改编来源数据无效")
+            media_label = "图文" if source_media == "graphic" else "视频"
+            source_description = (
+                f"由{source_channel}{media_label} V{source_version} 改编"
+            )
         return (
             str(row["weak_seed"]),
             self._product(row["primary_content_product"]),
             cast(MediaFormat, media_format),
             str(row["production_conditions"]),
+            source_description,
         )
 
     def load_recompile_source(self, scope: TrustedScope, version_id: UUID) -> RecompileSource:
