@@ -861,7 +861,7 @@ function ArtifactPane({ artifact, onArtifact, onNotice, context, mobileView, onS
   const client = useQueryClient();
   const [instruction, setInstruction] = useState("");
   const [platformTarget, setPlatformTarget] = useState<Target>("douyin_video");
-  const versions = useQuery({ queryKey: ["content-versions", artifact?.task_id ?? "none"], queryFn: () => api<ContentHistoryVersion[]>(`/api/v1/content/tasks/${artifact?.task_id}/versions`), enabled: artifact !== null });
+  const versions = useQuery({ queryKey: ["content-versions", artifact?.task_id ?? "none", artifact?.target_key ?? "douyin_video"], queryFn: () => api<ContentHistoryVersion[]>(`/api/v1/content/tasks/${artifact?.task_id}/versions?target=${artifact?.target_key ?? "douyin_video"}`), enabled: artifact !== null });
   useEffect(() => { if (artifact?.target_key) setPlatformTarget(artifact.target_key); }, [artifact?.target_key]);
   const revise = useMutation({
     mutationFn: () => { const target = artifact?.target_key ?? "douyin_video"; return api<ContentVersion | { kind: string; message: string }>(`/api/v1/tasks/${artifact?.task_id}/revisions`, { method: "POST", body: JSON.stringify({ instruction, target, source_target: target }) }); },

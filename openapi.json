@@ -1962,6 +1962,28 @@
               "title": "Task Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "douyin_video",
+                    "xiaohongshu_video",
+                    "xiaohongshu_graphic",
+                    "wechat_channels_video"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
           }
         ],
         "responses": {

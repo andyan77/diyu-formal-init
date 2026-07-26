@@ -470,11 +470,13 @@ def _task_version(
     client: httpx.Client,
     task_id: str,
     version: int | None = None,
+    target: str | None = None,
 ) -> dict[str, Any]:
+    target_query = "" if target is None else f"?target={target}"
     versions = _response_json(
         client,
         "GET",
-        f"/api/v1/content/tasks/{task_id}/versions",
+        f"/api/v1/content/tasks/{task_id}/versions{target_query}",
     )
     if not isinstance(versions, list):
         raise RuntimeError(f"任务 {task_id} 的版本响应无效")
@@ -596,7 +598,7 @@ def _ensure_recompiled(
     if len(matching) > 1:
         raise RuntimeError(f"{target} 已有多个演示成品，拒绝隐式选择")
     if matching:
-        return _task_version(client, str(matching[0]["task_id"]))
+        return _task_version(client, str(matching[0]["task_id"]), target=target)
     return _recompile(client, artifact, target)
 
 
