@@ -1113,6 +1113,15 @@ class DeepSeekGenerator(ContentGenerator):
     def _compiled_spoken(core: ContentCore) -> str:
         return "".join(core.claim(claim_id).text for claim_id in core.spoken_order)
 
+    @staticmethod
+    def _image_step_text(value: str) -> str:
+        return re.sub(
+            r"^(?:首图|第\s*\d+\s*张)\s*[:：]?\s*",
+            "",
+            value.strip(),
+            count=1,
+        )
+
     def _compile_core(
         self,
         request: GenerationInput,
@@ -1152,11 +1161,18 @@ class DeepSeekGenerator(ContentGenerator):
                 release_caption_and_interaction=self._visible_text(slot_text["release_caption"]),
             )
         else:
+            image_steps = (cover, *scenes)
             production = GraphicProductionBundle(
                 natural_guide=self._visible_text(slot_text["natural_guide"]),
                 hero_image=self._visible_text(cover.action_text),
                 image_sequence=self._visible_text(
-                    "".join(f"第{index}张：{step.action_text}" for index, step in enumerate(scenes, start=1))
+                    "".join(
+                        (
+                            "首图：" if index == 1 else f"第{index}张："
+                        )
+                        + self._image_step_text(step.action_text)
+                        for index, step in enumerate(image_steps, start=1)
+                    )
                 ),
                 full_body=spoken,
                 layout_and_production=self._visible_text(

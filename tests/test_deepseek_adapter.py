@@ -396,7 +396,8 @@ def test_full_pass_compiles_visible_product_from_passed_units(
     assert artifact.production.natural_duration == f"约 {DeepSeekGenerator._natural_spoken_seconds(spoken)} 秒"
     assert artifact.outline == "不必穿成同款"
     assert "标题：不必穿成同款" in artifact.body
-    assert "当前选择：先保留每个人舒服的选择" in artifact.body
+    assert vars(artifact.semantic_contract)["choice"] == "先保留每个人舒服的选择"
+    assert "当前选择：" not in artifact.body
     assert artifact.fact_repair_receipts == ()
     assert artifact.retry_count == 0
     assert len(FakeClient.requests) == 2
@@ -1191,7 +1192,11 @@ def test_graphic_core_compiles_reading_chain(
 
     assert isinstance(artifact.production, GraphicProductionBundle)
     assert artifact.production.hero_image == "手写标题卡特写。"
-    assert artifact.production.image_sequence == ("第1张：创作者手持字卡示意两种选择。第2张：屏幕文字总结下一步。")
+    assert artifact.production.image_sequence == (
+        "首图：手写标题卡特写。"
+        "第2张：创作者手持字卡示意两种选择。"
+        "第3张：屏幕文字总结下一步。"
+    )
     assert artifact.production.full_body == "家庭感不一定来自同款。先尊重差异，再找自然呼应。"
     assert artifact.production.layout_and_production == "自然光拍摄字卡。同一机位连拍。"
     assert "首图方案" in artifact.body
@@ -1252,7 +1257,8 @@ def test_visual_only_story_derives_duration_from_scene_steps(
     assert isinstance(artifact.production, VideoProductionBundle)
     assert artifact.production.spoken_lines == "无口播、无对白、无解说"
     assert artifact.production.natural_duration == "约 6 秒"
-    assert "真实商品锚点" in artifact.body
+    assert "两面外观完整" in vars(artifact.semantic_contract)["real_product_anchor"]
+    assert "真实商品锚点" not in artifact.body
 
 
 def test_adapter_retries_provider_429_without_adding_a_boundary_retry_layer(
