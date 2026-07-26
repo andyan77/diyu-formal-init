@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 
 from src.ports.workbench_repository import WorkbenchRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
+from src.shared.content_presentation import project_content_body
 from src.shared.content_snapshot import visible_direction
 from src.shared.errors import DomainError
 from src.shared.types import DisplayScope, TenantManagementScope, TrustedScope
@@ -612,7 +613,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "version_id": str(row["id"]),
             "version": self._integer(row["version_number"]),
             "title": str(row["outline"]),
-            "body": str(row["body"]),
+            "body": project_content_body(str(row["body"])),
             "platform": channel,
             "media": "图文" if media == "graphic" else "视频",
             "ai_generated": is_ai_generated_content(row["model"]),
@@ -1152,7 +1153,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "version_id": str(row["version_id"]),
                 "version": self._integer(row["version_number"]),
                 "outline": str(row["outline"]),
-                "body": str(row["body"]),
+                "body": project_content_body(str(row["body"])),
                 "target_key": str(row["target_key"]),
                 "ai_generated": is_ai_generated_content(row["model"]),
                 "aigc_label": aigc_disclosure(row["model"])[0],

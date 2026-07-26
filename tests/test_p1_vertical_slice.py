@@ -94,7 +94,7 @@ def test_workbench_renders_complete_artifact_without_internal_trace() -> None:
         page = client.get(generated.headers["location"])
         assert "内容概要" in page.text
         assert "完整文字成品" in page.text
-        assert "自然导读" in page.text
+        assert "内容概要" in page.text
         assert "完整台词/解说" in page.text
         assert "画面与动作" in page.text
         assert "字幕" in page.text

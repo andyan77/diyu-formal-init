@@ -276,7 +276,7 @@ def _colors(facts: dict[str, object]) -> tuple[str, ...]:
 def _visible_body(title: str, production: VideoProductionBundle | GraphicProductionBundle) -> str:
     if isinstance(production, VideoProductionBundle):
         sections: tuple[tuple[str, str], ...] = (
-            ("自然导读", production.natural_guide),
+            ("内容概要", production.natural_guide),
             ("封面/首帧", production.cover_or_first_frame),
             ("完整观看链", production.viewing_flow),
             ("完整台词/解说", production.spoken_lines),
@@ -288,7 +288,7 @@ def _visible_body(title: str, production: VideoProductionBundle | GraphicProduct
         )
     else:
         sections = (
-            ("自然导读", production.natural_guide),
+            ("内容概要", production.natural_guide),
             ("首图方案", production.hero_image),
             ("图序与每张职责", production.image_sequence),
             ("完整发布正文", production.full_body),

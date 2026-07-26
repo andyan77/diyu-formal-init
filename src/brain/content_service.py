@@ -594,6 +594,7 @@ class ContentService:
         creative = control.direction if control else None
         return completed | {
             "kind": "content",
+            "body": visible["body"],
             "ai_generated": visible["ai_generated"],
             "aigc_label": visible["aigc_label"],
             "aigc_release_reminder": visible["aigc_release_reminder"],

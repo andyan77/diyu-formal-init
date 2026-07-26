@@ -36,7 +36,7 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         required = vars(artifact.production).values()
         headings: tuple[str, ...] = (
             "标题",
-            "自然导读",
+            "内容概要",
             "封面/首帧",
             "完整观看链",
             "完整台词/解说",
@@ -50,7 +50,7 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         required = vars(artifact.production).values()
         headings = (
             "标题",
-            "自然导读",
+            "内容概要",
             "首图方案",
             "图序与每张职责",
             "完整发布正文",

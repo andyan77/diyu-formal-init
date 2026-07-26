@@ -27,6 +27,7 @@ services:
       - --proxy-headers
       - --forwarded-allow-ips
       - 127.0.0.1
+      - --no-access-log
 
   migrate:
     image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}

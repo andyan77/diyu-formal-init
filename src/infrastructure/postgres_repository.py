@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 
 from src.ports.content_repository import ContentRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
+from src.shared.content_presentation import project_content_body
 from src.shared.content_snapshot import frozen_product_facts, visible_direction
 from src.shared.errors import DomainError
 from src.shared.types import (
@@ -504,7 +505,7 @@ class PostgresContentRepository(ContentRepository):
             "task_id": str(row["task_id"]),
             "version": self._integer(row["version_number"]),
             "outline": str(row["outline"]),
-            "body": str(row["body"]),
+            "body": project_content_body(str(row["body"])),
             "model": str(row["model"]),
             "ai_generated": is_ai_generated_content(row["model"]),
             "aigc_label": disclosure,

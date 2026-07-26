@@ -58,7 +58,8 @@ _DELIVERABLE_REQUIREMENTS: dict[ContentProduct, str] = {
         "本卡的主回报是帮助选择，不能把商品介绍或画面变化写成主回报。"
     ),
     "product_truth": (
-        "必须形成一项商品专属新增理解，逐项说清可确认事实、相伴限制与当前不能下的结论。"
+        "必须形成一项商品专属新增理解：教受众先看肉眼可见结构，再把必须查资料才能判断的性能"
+        "留给资料，并用一句自然边界收束。"
         "画面只能作为商品认知的证据，不能替用户选面或把视觉变化写成主回报。"
         "新增理解、限制和成立边界必须由当前商品事实与当前适用资产共同形成，不能把资产的一般表述冒充为商品事实。"
     ),
@@ -1304,7 +1305,7 @@ class DeepSeekGenerator(ContentGenerator):
     ) -> str:
         if isinstance(production, VideoProductionBundle):
             sections: tuple[tuple[str, str], ...] = (
-                ("自然导读", production.natural_guide),
+                ("内容概要", production.natural_guide),
                 ("封面/首帧", production.cover_or_first_frame),
                 ("完整观看链", production.viewing_flow),
                 ("完整台词/解说", production.spoken_lines),
@@ -1316,7 +1317,7 @@ class DeepSeekGenerator(ContentGenerator):
             )
         elif isinstance(production, GraphicProductionBundle):
             sections = (
-                ("自然导读", production.natural_guide),
+                ("内容概要", production.natural_guide),
                 ("首图方案", production.hero_image),
                 ("图序与每张职责", production.image_sequence),
                 ("完整发布正文", production.full_body),
@@ -1326,48 +1327,13 @@ class DeepSeekGenerator(ContentGenerator):
         else:  # Backward-compatible helper for pre-M5-2 deterministic test fixtures.
             legacy = cast(Any, production)
             sections = (
-                ("自然导读", legacy.natural_guide),
+                ("内容概要", legacy.natural_guide),
                 ("完整台词/解说", legacy.spoken_lines),
                 ("画面与动作", legacy.visual_actions),
                 ("字幕", legacy.subtitles),
                 ("声音与制作提示", legacy.sound_and_production),
             )
-        contract_sections: tuple[tuple[str, str], ...] = ()
-        if isinstance(contract, P2SemanticContract):
-            contract_sections = (
-                ("商品新增理解", contract.product_insight),
-                ("限制", contract.tradeoff_or_limit),
-                ("成立边界", contract.validity_condition),
-            )
-        elif isinstance(contract, P1SemanticContract):
-            contract_sections = (
-                ("当前选择", contract.choice),
-                ("改变条件", contract.boundary),
-                ("下一步", contract.next_action),
-            )
-        elif isinstance(contract, P3SemanticContract):
-            contract_sections = (
-                ("账号观察", contract.persona_observation),
-                ("受众获得", contract.audience_return),
-                ("账号关系", contract.brand_account_link),
-            )
-        elif isinstance(contract, P4SemanticContract):
-            contract_sections = (
-                ("近场信号", contract.local_reality_or_signal),
-                ("账号回应", contract.legitimate_account_response),
-                ("公开关系回报", contract.public_relationship_return),
-            )
-        elif isinstance(contract, P5SemanticContract):
-            contract_sections = (
-                (
-                    "演示商品锚点"
-                    if synthetic_business_fixture
-                    else "真实商品锚点",
-                    contract.real_product_anchor,
-                ),
-                ("可见造型命题", contract.visible_styling_proposition),
-                ("画面成立条件", contract.visual_dependency),
-            )
+        del contract, synthetic_business_fixture
         transform_sections: tuple[tuple[str, str], ...] = ()
         if isinstance(production, VideoProductionBundle) and re.search(r"(?<!\d)8\s*秒", production.natural_duration):
             transform_sections = (("变换边界", "这是 8 秒窄主题版，不等同于原完整版本。"),)
@@ -1375,7 +1341,7 @@ class DeepSeekGenerator(ContentGenerator):
             "标题："
             + title
             + "\n\n"
-            + "\n\n".join(f"{heading}：{value}" for heading, value in contract_sections + transform_sections + sections)
+            + "\n\n".join(f"{heading}：{value}" for heading, value in transform_sections + sections)
         )
 
     @staticmethod
@@ -1569,6 +1535,7 @@ class DeepSeekGenerator(ContentGenerator):
 系列承接：{series_rule}
 
 创作要求：标题、观点、比喻、幽默、节奏、完整口播和互动由你自然创作，允许口语化、停顿感和真实的不完美；
+事实与资源约束在后台静默遵守；成品优先交付受众回报，不把防错边界复述成合规说明。
 不得写成培训讲义、企业宣言、口号堆叠或固定安全模板。同时：
 - 话题中出现对象不表示账号或创作者就是该对象，也不表示事件已经发生或对象可供拍摄；
 - 第一人称只能表达当前品牌观点或当前拍摄动作，不能补写操作人的生活经历、刚刚做过的事、

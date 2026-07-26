@@ -351,20 +351,46 @@ class ProductionAuthRepository:
                 """,
                 (token_digest,),
             )
-            token = self._one(cursor, "激活或重置链接无效或已过期")
-            tenant_id = UUID(str(token["tenant_id"]))
-            user_id = UUID(str(token["user_id"]))
+            candidate = self._one(cursor, "激活或重置链接无效或已过期")
+            tenant_id = UUID(str(candidate["tenant_id"]))
+            user_id = UUID(str(candidate["user_id"]))
             cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant_id),))
+            cursor.execute(
+                "SELECT id FROM users WHERE tenant_id = %s AND id = %s AND enabled = true FOR UPDATE",
+                (tenant_id, user_id),
+            )
+            self._one(cursor, "激活或重置链接无效或已过期")
+            cursor.execute(
+                """
+                SELECT id, tenant_id, user_id FROM user_activation_tokens
+                WHERE token_digest = %s AND tenant_id = %s AND user_id = %s
+                  AND used_at IS NULL AND expires_at > now()
+                FOR UPDATE
+                """,
+                (token_digest, tenant_id, user_id),
+            )
+            token = self._one(cursor, "激活或重置链接无效或已过期")
             cursor.execute(
                 "UPDATE user_credentials SET password_hash = %s, password_changed_at = now() "
                 "WHERE tenant_id = %s AND user_id = %s",
                 (self._password_hash(password), token["tenant_id"], token["user_id"]),
             )
-            cursor.execute("UPDATE user_activation_tokens SET used_at = now() WHERE id = %s", (token["id"],))
+            cursor.execute(
+                "UPDATE user_activation_tokens SET used_at = now() "
+                "WHERE tenant_id = %s AND user_id = %s AND used_at IS NULL",
+                (token["tenant_id"], token["user_id"]),
+            )
             cursor.execute(
                 "UPDATE tenant_sessions SET revoked_at = now() "
                 "WHERE tenant_id = %s AND user_id = %s AND revoked_at IS NULL",
                 (token["tenant_id"], token["user_id"]),
+            )
+            self._tenant_audit(
+                cursor,
+                tenant_id,
+                user_id,
+                "password.pending_links_invalidated_on_use",
+                user_id,
             )
             self._tenant_audit(cursor, tenant_id, user_id, "password.activated_or_reset", user_id)
             cursor.execute(
@@ -499,10 +525,22 @@ class ProductionAuthRepository:
         raw_token, digest = self._token()
         with self._tenant_tx(manager.tenant_id) as cursor:
             cursor.execute(
-                "SELECT id FROM users WHERE tenant_id = %s AND id = %s AND enabled = true",
+                "SELECT id FROM users WHERE tenant_id = %s AND id = %s AND enabled = true FOR UPDATE",
                 (manager.tenant_id, user_id),
             )
             self._one(cursor, "找不到当前租户可重置的自然人")
+            cursor.execute(
+                "UPDATE user_activation_tokens SET used_at = now() "
+                "WHERE tenant_id = %s AND user_id = %s AND used_at IS NULL",
+                (manager.tenant_id, user_id),
+            )
+            self._tenant_audit(
+                cursor,
+                manager.tenant_id,
+                manager.user_id,
+                "password.pending_links_invalidated_on_issue",
+                user_id,
+            )
             cursor.execute(
                 "INSERT INTO user_activation_tokens "
                 "(id, tenant_id, user_id, purpose, token_digest, expires_at, created_by) "
@@ -518,6 +556,31 @@ class ProductionAuthRepository:
             )
             self._tenant_audit(cursor, manager.tenant_id, manager.user_id, "password.reset_issued", user_id)
         return raw_token
+
+    def invalidate_pending_activation_tokens(
+        self, manager: TenantSession, user_id: UUID
+    ) -> int:
+        """Invalidate a user's outstanding links without reading their token material."""
+        with self._tenant_tx(manager.tenant_id) as cursor:
+            cursor.execute(
+                "SELECT id FROM users WHERE tenant_id = %s AND id = %s AND enabled = true FOR UPDATE",
+                (manager.tenant_id, user_id),
+            )
+            self._one(cursor, "找不到当前租户可失效链接的自然人")
+            cursor.execute(
+                "UPDATE user_activation_tokens SET used_at = now() "
+                "WHERE tenant_id = %s AND user_id = %s AND used_at IS NULL",
+                (manager.tenant_id, user_id),
+            )
+            invalidated = cursor.rowcount
+            self._tenant_audit(
+                cursor,
+                manager.tenant_id,
+                manager.user_id,
+                "password.pending_links_invalidated",
+                user_id,
+            )
+        return invalidated
 
     def disable_tenant_user(self, manager: TenantSession, user_id: UUID) -> None:
         """Disable a natural login and every current work grant in its own tenant."""
