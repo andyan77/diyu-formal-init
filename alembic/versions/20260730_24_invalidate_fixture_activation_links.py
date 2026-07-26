@@ -18,32 +18,36 @@ def upgrade() -> None:
         """
         DO $$
         DECLARE
+            tenant_record record;
             affected record;
         BEGIN
-            FOR affected IN
-                SELECT DISTINCT token.tenant_id, token.user_id
-                FROM public.user_activation_tokens token
-                JOIN public.auth_grants grant_record
-                  ON grant_record.tenant_id = token.tenant_id
-                 AND grant_record.user_id = token.user_id
-                JOIN public.content_accounts account
-                  ON account.tenant_id = grant_record.tenant_id
-                 AND account.id = grant_record.account_id
-                WHERE token.used_at IS NULL
-                  AND account.business_data_kind = 'synthetic_business_fixture'
-            LOOP
-                PERFORM set_config('app.tenant_id', affected.tenant_id::text, true);
-                UPDATE public.user_activation_tokens
-                   SET used_at = now()
-                 WHERE tenant_id = affected.tenant_id
-                   AND user_id = affected.user_id
-                   AND used_at IS NULL;
-                INSERT INTO public.activity_events
-                    (id, tenant_id, actor_id, event_type, entity_type, entity_id)
-                VALUES
-                    (gen_random_uuid(), affected.tenant_id, affected.user_id,
-                     'password.pending_links_invalidated_by_migration',
-                     'formal_identity', affected.user_id);
+            FOR tenant_record IN SELECT id FROM public.tenants LOOP
+                PERFORM set_config('app.tenant_id', tenant_record.id::text, true);
+                FOR affected IN
+                    SELECT DISTINCT token.user_id
+                    FROM public.user_activation_tokens token
+                    JOIN public.auth_grants grant_record
+                      ON grant_record.tenant_id = token.tenant_id
+                     AND grant_record.user_id = token.user_id
+                    JOIN public.content_accounts account
+                      ON account.tenant_id = grant_record.tenant_id
+                     AND account.id = grant_record.account_id
+                    WHERE token.tenant_id = tenant_record.id
+                      AND token.used_at IS NULL
+                      AND account.business_data_kind = 'synthetic_business_fixture'
+                LOOP
+                    UPDATE public.user_activation_tokens
+                       SET used_at = now()
+                     WHERE tenant_id = tenant_record.id
+                       AND user_id = affected.user_id
+                       AND used_at IS NULL;
+                    INSERT INTO public.activity_events
+                        (id, tenant_id, actor_id, event_type, entity_type, entity_id)
+                    VALUES
+                        (gen_random_uuid(), tenant_record.id, affected.user_id,
+                         'password.pending_links_invalidated_by_migration',
+                         'formal_identity', affected.user_id);
+                END LOOP;
             END LOOP;
         END
         $$
