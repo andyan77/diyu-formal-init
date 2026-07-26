@@ -320,6 +320,17 @@ def test_routing_prompt_describes_p5_by_general_audience_value(
     assert "双面不等于一件顶两件" not in prompt
 
 
+def test_p5_prompt_keeps_product_anchor_on_registered_facts(
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(generation_input, primary_product="visual_styling_story")
+    prompt = DeepSeekGenerator._generation_prompt(request)
+
+    assert "real_product_anchor 只能复述边界四已登记商品" in prompt
+    assert "不得把画面命题、搭配效果、适合人群或穿着结果混入商品锚点" in prompt
+    assert "visible_styling_proposition 和 visual_dependency" in prompt
+
+
 def test_full_pass_compiles_visible_product_from_passed_units(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,

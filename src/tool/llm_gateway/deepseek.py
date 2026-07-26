@@ -1423,6 +1423,15 @@ class DeepSeekGenerator(ContentGenerator):
             if fixed_seconds is not None
             else "用户未要求固定时长；保留完整口播，由服务端根据最终口播形成自然时长。"
         )
+        product_contract_rule = (
+            "本次是画面承重的造型内容：real_product_anchor 只能复述边界四已登记商品的名称、"
+            "品类、颜色、材质/结构、轮廓或肉眼可观察特征，basis=confirmed_fact、"
+            "actuality=non_event，并引用相应 source:product:…；不得把画面命题、搭配效果、"
+            "适合人群或穿着结果混入商品锚点。visible_styling_proposition 和 visual_dependency "
+            "只承载本次要求的画面组织与成立条件，不能伪装成已确认商品事实。"
+            if request.primary_product == "visual_styling_story"
+            else ""
+        )
         if request.media_format == "video":
             media_contract = (
                 "交付可直接拍摄、表演、录音和剪辑的完整观看链。口播必须完整自然；"
@@ -1452,6 +1461,7 @@ class DeepSeekGenerator(ContentGenerator):
         return f"""为“{request.brand.account_name}”编写一个完整中文{request.brand.media_format}成品的结构化底稿 ContentCore。
 本次受众价值：{_PRODUCT_VALUE[request.primary_product]}；必须只兑现这一价值，不说明路由。
 本次交付门：{_DELIVERABLE_REQUIREMENTS[request.primary_product]}
+{product_contract_rule}
 当前媒体合同：{media_contract}
 受众：{request.brand.audience_description}；平台/形式：{request.brand.platform}／{request.brand.media_format}。
 目标平台方向：{request.platform_direction.direction}
