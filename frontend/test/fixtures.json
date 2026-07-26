@@ -8,12 +8,25 @@
       "organization": "折线之间总部",
       "account": "总部抖音账号",
       "content_role": "品牌官方",
-      "brand": "折线之间"
+      "brand": "折线之间",
+      "business_data_kind": "synthetic_business_fixture"
     },
     "targets": [
       {
         "value": "douyin_video",
         "label": "抖音短视频"
+      },
+      {
+        "value": "xiaohongshu_video",
+        "label": "小红书视频"
+      },
+      {
+        "value": "xiaohongshu_graphic",
+        "label": "小红书图文"
+      },
+      {
+        "value": "wechat_channels_video",
+        "label": "微信视频号视频"
       }
     ]
   },

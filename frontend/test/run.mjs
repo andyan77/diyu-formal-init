@@ -56,6 +56,7 @@ dom.window.HTMLAnchorElement.prototype.click = () => undefined;
 const routes = JSON.parse(
   await (await import("node:fs/promises")).readFile(new URL("./fixtures.json", import.meta.url), "utf8")
 );
+dom.window.__DIYU_BOOTSTRAP__ = routes["/api/v1/session/context"];
 globalThis.fetch = async (input, init) => {
   const path = String(input).split("?")[0];
   const headers = init?.headers ?? {};

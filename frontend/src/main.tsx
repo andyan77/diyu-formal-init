@@ -388,11 +388,12 @@ function App(): JSX.Element {
   const location = useLocation();
   const bootstrap = window.__DIYU_BOOTSTRAP__;
   const isEntry = location.pathname === "/";
-  const { data: context } = useQuery({
+  const { data: fallbackContext } = useQuery({
     queryKey: ["session-context"],
     queryFn: () => api<Context>("/api/v1/session/context"),
-    enabled: !isEntry && bootstrap !== null
+    enabled: !isEntry && bootstrap === undefined
   });
+  const context = bootstrap === undefined ? fallbackContext : bootstrap;
   if (isEntry || bootstrap === null) return <Entry />;
   if (!context) return <Loading label="正在确认当前工作身份……" />;
   if (location.pathname.startsWith("/tenant-admin")) return <TenantManagementShell context={context}><AdminWorkspace context={context} /></TenantManagementShell>;

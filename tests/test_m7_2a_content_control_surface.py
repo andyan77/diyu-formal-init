@@ -141,16 +141,64 @@ def test_catalog_is_versioned_reconciled_and_only_shows_runnable_options() -> No
     # The frozen research enumeration only defines 41 of the 44 declared genre positions, so the
     # three missing positions are registered as gaps instead of being invented.
     assert summary["体裁"] == {"defined": 41, "declared_target": 44, "source_gaps": 3}
-    assert len(gaps) == 3
-    assert all(identifier.startswith("CAT-SOURCE-GAP-") for identifier in gaps)
+    assert set(gaps) == {
+        "CAT-SOURCE-GAP-GENRE-001",
+        "CAT-SOURCE-GAP-GENRE-002",
+        "CAT-SOURCE-GAP-GENRE-003",
+    }
     assert sum(item["defined"] for item in summary.values()) == 116
     assert sum(item["declared_target"] for item in summary.values()) == 119
+    assert {
+        state: sum(
+            record["capability_state"] == state for record in inventory
+        )
+        for state in CAPABILITY_STATES
+    } == {
+        "verified": 10,
+        "composable": 64,
+        "experimental": 6,
+        "unsupported": 38,
+        "explicitly_out_of_scope": 1,
+    }
 
     by_id = {str(record["stable_id"]): record for record in inventory}
     for gap in gaps:
         assert by_id[gap]["visible_in_compact_v1"] is False
         assert by_id[gap]["gap_type"] == "source_gap"
         assert "F10" in str(by_id[gap]["destination"])
+
+    redirected_after_m7_2b = {
+        "CAT-TOPIC-TEACH-07",
+        "CAT-TOPIC-NEWITEM-01",
+        "CAT-TOPIC-NEWITEM-06",
+        "CAT-TOPIC-TREND-01",
+        "CAT-TOPIC-STORE-02",
+        "CAT-TOPIC-STORE-05",
+        "CAT-GENRE-VLOG-01",
+        "CAT-GENRE-INTERACT-01",
+        "CAT-GENRE-INTERACT-06",
+    }
+    for stable_id in redirected_after_m7_2b:
+        record = by_id[stable_id]
+        assert record["capability_state"] == "unsupported"
+        assert record["visible_in_compact_v1"] is False
+        assert "F10" in str(record["destination"])
+        assert "M7-2B" not in str(record["destination"])
+    assert all(
+        "M7-2B" not in str(record["destination"])
+        for record in inventory
+        if record["capability_state"] == "unsupported"
+    )
+    deferred_states = {"unsupported", "explicitly_out_of_scope"}
+    allowed_destinations = {"F03", "F06", "F07", "F08", "F10"}
+    assert all(
+        any(
+            destination in str(record["destination"])
+            for destination in allowed_destinations
+        )
+        for record in inventory
+        if record["capability_state"] in deferred_states
+    )
 
     visible = {
         str(record["stable_id"])

@@ -1,24 +1,66 @@
 {
+  "schema_version": "platform-direction-resource-v2",
   "version": "M5-2-platform-directions-v1",
+  "metadata_revision": "M7-3-platform-direction-provenance-1",
+  "provenance": {
+    "source_kind": "user_confirmed_internal_product_contract",
+    "source_refs": [
+      "docs/架构决策/ADR-015-首期平台媒体成品与跨平台重编译.md",
+      "docs/M5-2-三平台与视频图文语境重编译执行包.md"
+    ],
+    "official_platform_rule_version": null,
+    "official_version_note": "本资源没有采用平台算法权重或外部硬规则版本；它是用户已确认的首期媒体与重编译合同。",
+    "observed_or_effective_at": "2026-07-21",
+    "last_verified_at": "2026-07-26",
+    "verification_status": "verified_against_repository_sources",
+    "freshness_status": "current_for_phase_1",
+    "supersedes": [],
+    "superseded_by": null,
+    "maintenance_owner": "笛语系统运维"
+  },
   "targets": {
     "douyin_video": {
+      "rule_id": "platform-direction/douyin_video",
+      "rule_kind": "internal_platform_media_direction",
       "platform": "抖音",
       "media_format": "video",
+      "applicability": "首期抖音视频文字制作成品与跨平台重编译；不覆盖发布、审核、算法或流量预测。",
+      "platform_capability_source_ref": "https://open.douyin.com/platform/resource/docs/ability/content-management/douyin-publish-solution/",
+      "platform_capability_source_scope": "仅支持抖音存在视频内容能力这一平台与媒体范围；不支持本资源的编辑方向，也不作为自动发布授权。",
+      "direction_digest": "9e5b718ff31ef56ada3b2fc3219f62fa94cc8794996e3a1aadd8c56c04c92468",
       "direction": "让信息流里的观看理由和动态回报尽早可感知；不要把这写成固定三秒钩子、喊叫、反转或统一秒数。"
     },
     "xiaohongshu_video": {
+      "rule_id": "platform-direction/xiaohongshu_video",
+      "rule_kind": "internal_platform_media_direction",
       "platform": "小红书",
       "media_format": "video",
+      "applicability": "首期小红书视频文字制作成品与跨平台重编译；不覆盖发布、审核、算法或流量预测。",
+      "platform_capability_source_ref": "https://agora.xiaohongshu.com/doc",
+      "platform_capability_source_scope": "仅支持小红书存在视频分享能力这一平台与媒体范围；不支持本资源的编辑方向，也不作为自动发布授权。",
+      "direction_digest": "1f7b4c51ea08f384a63ec3ec069c7eaff66de053deb59a64d348bf9aee63daae",
       "direction": "标题、封面、视频与发布正文共同组成独立理解的内容单元；不要强制教程化、种草体或知识卡。"
     },
     "xiaohongshu_graphic": {
+      "rule_id": "platform-direction/xiaohongshu_graphic",
+      "rule_kind": "internal_platform_media_direction",
       "platform": "小红书",
       "media_format": "graphic",
+      "applicability": "首期小红书图文文字制作成品与跨平台重编译；不覆盖发布、审核、算法或流量预测。",
+      "platform_capability_source_ref": "https://agora.xiaohongshu.com/doc",
+      "platform_capability_source_scope": "仅支持小红书存在图文分享能力这一平台与媒体范围；不支持本资源的编辑方向，也不作为自动发布授权。",
+      "direction_digest": "16c0672a525f53fda167fe127fcbcf46af65420990abd312ead7f3348ff5ee81",
       "direction": "标题、首图、图序与完整正文共同形成可执行阅读链；不得把视频截图、台词卡或切碎长文当作图文。"
     },
     "wechat_channels_video": {
+      "rule_id": "platform-direction/wechat_channels_video",
+      "rule_kind": "internal_platform_media_direction",
       "platform": "微信视频号",
       "media_format": "video",
+      "applicability": "首期微信视频号视频文字制作成品与跨平台重编译；不覆盖发布、审核、算法或流量预测。",
+      "platform_capability_source_ref": "https://www.tencent.com/zh-cn/products/weixin-wechat/",
+      "platform_capability_source_scope": "仅支持视频号是微信生态的一项相关功能与产品这一范围；不支持本资源的编辑方向，也不作为自动发布授权。",
+      "direction_digest": "37e99fef02034d3d8aaed00920af6323adda1774b86af517498bb69ad6a936ac",
       "direction": "在微信内被独立看到或转发时仍须语境完整、人物可信；不要因此强制更长、更严肃、正能量或特定年龄层。"
     }
   }

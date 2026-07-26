@@ -1094,9 +1094,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> HTMLResponse:
         scope = authority.require_display(request)
         del task, version, notice
+        context = workbench_service.display_context(
+            scope, current_settings.generator_mode
+        )
+        if current_settings.is_production:
+            context["formal_runtime"] = True
         return HTMLResponse(
             render_spa_shell(
-                workbench_service.display_context(scope, current_settings.generator_mode),
+                context,
                 "<p>当前能力：墙面双层挂杆参考执行方案</p>",
                 "<h1>陈列搭配</h1><p>当前工作只给出门店内部参考建议。</p>",
             )
@@ -1581,6 +1586,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         del notice, target
         context = workbench_service.content_context(scope, current_settings.generator_mode)
         context["targets"] = content_targets(scope, request)
+        if current_settings.is_production:
+            context["formal_runtime"] = True
         return HTMLResponse(
             render_spa_shell(
                 context,

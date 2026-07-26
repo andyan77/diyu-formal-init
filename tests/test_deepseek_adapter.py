@@ -268,6 +268,13 @@ def test_generation_prompt_separates_six_input_semantics(
     assert "source:user_request" in prompt
     assert "只要点名当前商品的名称、品类、颜色、结构或可观察特征" in prompt
     assert "标题、观点、比喻、幽默、节奏、完整口播和互动由你自然创作" in prompt
+    assert generation_input.platform_direction.direction in prompt
+    assert generation_input.platform_direction.platform_capability_source_ref not in prompt
+    assert generation_input.platform_direction.provenance.maintenance_owner not in prompt
+    assert not any(
+        source_ref in prompt
+        for source_ref in generation_input.platform_direction.provenance.source_refs
+    )
     assert "B-001" not in prompt
     assert "schema_version" not in prompt
 

@@ -58,11 +58,35 @@ class BrandContext:
 
 
 @dataclass(frozen=True)
+class PlatformDirectionProvenance:
+    resource_schema_version: str
+    metadata_revision: str
+    source_kind: str
+    source_refs: tuple[str, ...]
+    official_platform_rule_version: str | None
+    official_version_note: str
+    observed_or_effective_at: str
+    last_verified_at: str
+    verification_status: str
+    freshness_status: str
+    supersedes: tuple[str, ...]
+    superseded_by: str | None
+    maintenance_owner: str
+
+
+@dataclass(frozen=True)
 class PlatformDirection:
     version: str
+    rule_id: str
+    rule_kind: str
     platform: str
     media_format: MediaFormat
+    applicability: str
+    platform_capability_source_ref: str
+    platform_capability_source_scope: str
+    direction_digest: str
     direction: str
+    provenance: PlatformDirectionProvenance
 
 
 @dataclass(frozen=True)

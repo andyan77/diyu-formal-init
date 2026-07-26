@@ -42,6 +42,10 @@ async function main(): Promise<void> {
   const root = createRoot(container);
   await act(async () => root.render(<Root />));
   await settle();
+  assert.ok(
+    requests.some(item => item.path === "/api/v1/session/context"),
+    "没有服务端 bootstrap 的测试壳仍须保留既有会话上下文回退"
+  );
 
   await click(find(".sidebar nav button", "本轮商品资料"));
   await settle();

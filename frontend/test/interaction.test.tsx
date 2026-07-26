@@ -54,6 +54,24 @@ async function main(): Promise<void> {
     root.render(<Root />);
   });
   await settle();
+  assert.ok(
+    !requests.some(item => item.path === "/api/v1/session/context"),
+    "正式页面必须保留服务端按当前路由冻结的内容身份，不能被通用用户身份覆盖"
+  );
+  assert.match(
+    document.body.textContent ?? "",
+    /等深模拟业务资料/,
+    "演示内容入口必须持续显示模拟资料边界"
+  );
+  assert.ok(document.querySelector('a[href="/content"]'));
+  assert.ok(document.querySelector('a[href="/display"]'));
+  assert.equal(document.querySelectorAll('a[href^="/ui/select/"]').length, 0);
+  assert.match(document.querySelector(".identity-bar")?.textContent ?? "", /总部抖音账号/);
+  assert.match(document.querySelector(".identity-bar")?.textContent ?? "", /品牌官方/);
+  assert.deepEqual(
+    texts('.composer select option'),
+    ["抖音短视频", "小红书视频", "小红书图文", "微信视频号视频"]
+  );
 
   // 1. Natural input is usable without opening anything; the panel stays collapsed.
   const composer = document.querySelector('textarea[aria-label="内容需求"]');

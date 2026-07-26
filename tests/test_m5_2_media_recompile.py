@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import psycopg
+import pytest
 from fastapi.testclient import TestClient
 
+from src.brain import platform_directions
+from src.brain.platform_directions import direction_for
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
 from src.infrastructure.seed_demo import (
@@ -10,6 +16,7 @@ from src.infrastructure.seed_demo import (
     HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
     TENANT_ID,
 )
+from src.shared.types import ContentTarget
 
 _P2D = (
     "请解释 ZX-C218 的双面不等于一件顶两件。两面均为完整正面；两种完整外观与当前样衣分量同时存在；"
@@ -43,6 +50,60 @@ def _receipt(database_url: str, task_id: str) -> dict[str, object]:
         row = cursor.fetchone()
     assert row is not None
     return dict(row[0])
+
+
+def test_platform_directions_have_complete_honest_provenance() -> None:
+    targets: tuple[ContentTarget, ...] = (
+        "douyin_video",
+        "xiaohongshu_video",
+        "xiaohongshu_graphic",
+        "wechat_channels_video",
+    )
+    for target in targets:
+        direction = direction_for(target)
+        provenance = direction.provenance
+        assert direction.version == "M5-2-platform-directions-v1"
+        assert direction.rule_id == f"platform-direction/{target}"
+        assert direction.rule_kind == "internal_platform_media_direction"
+        assert direction.applicability
+        assert direction.platform_capability_source_ref.startswith("https://")
+        assert "不支持本资源的编辑方向" in direction.platform_capability_source_scope
+        assert len(direction.direction_digest) == 64
+        assert provenance.resource_schema_version == "platform-direction-resource-v2"
+        assert provenance.metadata_revision == "M7-3-platform-direction-provenance-1"
+        assert provenance.source_kind == "user_confirmed_internal_product_contract"
+        assert all(source.startswith("docs/") for source in provenance.source_refs)
+        assert all(Path(source).is_file() for source in provenance.source_refs)
+        assert provenance.official_platform_rule_version is None
+        assert "没有采用平台算法权重" in provenance.official_version_note
+        assert provenance.observed_or_effective_at == "2026-07-21"
+        assert provenance.last_verified_at == "2026-07-26"
+        assert provenance.verification_status == "verified_against_repository_sources"
+        assert provenance.freshness_status == "current_for_phase_1"
+        assert provenance.supersedes == ()
+        assert provenance.superseded_by is None
+        assert provenance.maintenance_owner == "笛语系统运维"
+
+
+@pytest.mark.parametrize(
+    "missing_key",
+    ("official_platform_rule_version", "superseded_by"),
+)
+def test_platform_provenance_distinguishes_explicit_null_from_a_missing_field(
+    missing_key: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    resource = json.loads(
+        platform_directions._SOURCE.read_text(encoding="utf-8")
+    )
+    del resource["provenance"][missing_key]
+    source = tmp_path / "platform_directions.json"
+    source.write_text(json.dumps(resource, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(platform_directions, "_SOURCE", source)
+
+    with pytest.raises(RuntimeError, match="可选版本字段缺失"):
+        direction_for("douyin_video")
 
 
 def test_four_targets_are_complete_and_server_mapped(app_database_url: str) -> None:
@@ -209,6 +270,18 @@ def test_transform_boundaries_receipts_and_silent_store_video(app_database_url: 
         assert receipt["target_platform"] == "抖音"
         assert receipt["media_format"] == "video"
         assert receipt["platform_direction_version"] == "M5-2-platform-directions-v1"
+        snapshot = receipt["platform_direction_snapshot"]
+        assert isinstance(snapshot, dict)
+        assert snapshot["version"] == receipt["platform_direction_version"]
+        assert snapshot["rule_id"] == "platform-direction/douyin_video"
+        assert snapshot["rule_kind"] == "internal_platform_media_direction"
+        assert snapshot["official_platform_rule_version"] is None
+        assert snapshot["last_verified_at"] == "2026-07-26"
+        assert snapshot["freshness_status"] == "current_for_phase_1"
+        assert snapshot["maintenance_owner"] == "笛语系统运维"
+        assert snapshot["direction_digest"] == direction_for(
+            "douyin_video"
+        ).direction_digest
         assert "8 秒" in str(receipt["production_conditions"])
     with TestClient(create_app(Settings.model_validate({}))) as store:
         store.get("/ui/select/content-store")

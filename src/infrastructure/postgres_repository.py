@@ -1040,6 +1040,43 @@ class PostgresContentRepository(ContentRepository):
             "target_platform": platform_direction.platform,
             "media_format": platform_direction.media_format,
             "platform_direction_version": platform_direction.version,
+            "platform_direction_snapshot": {
+                "version": platform_direction.version,
+                "resource_schema_version": (
+                    platform_direction.provenance.resource_schema_version
+                ),
+                "metadata_revision": platform_direction.provenance.metadata_revision,
+                "rule_id": platform_direction.rule_id,
+                "rule_kind": platform_direction.rule_kind,
+                "source_kind": platform_direction.provenance.source_kind,
+                "source_refs": list(platform_direction.provenance.source_refs),
+                "applicability": platform_direction.applicability,
+                "platform_capability_source_ref": (
+                    platform_direction.platform_capability_source_ref
+                ),
+                "platform_capability_source_scope": (
+                    platform_direction.platform_capability_source_scope
+                ),
+                "direction": platform_direction.direction,
+                "direction_digest": platform_direction.direction_digest,
+                "official_platform_rule_version": (
+                    platform_direction.provenance.official_platform_rule_version
+                ),
+                "official_version_note": (
+                    platform_direction.provenance.official_version_note
+                ),
+                "observed_or_effective_at": (
+                    platform_direction.provenance.observed_or_effective_at
+                ),
+                "last_verified_at": platform_direction.provenance.last_verified_at,
+                "verification_status": (
+                    platform_direction.provenance.verification_status
+                ),
+                "freshness_status": platform_direction.provenance.freshness_status,
+                "supersedes": list(platform_direction.provenance.supersedes),
+                "superseded_by": platform_direction.provenance.superseded_by,
+                "maintenance_owner": platform_direction.provenance.maintenance_owner,
+            },
             "production_conditions": context.production_conditions,
             "source_version_id": str(source_version_id) if source_version_id else None,
             "source_description": source_description,
