@@ -789,6 +789,7 @@ def run() -> dict[str, object]:
                 "适合某种风格，以及羊毛混纺、聚酯、厚薄等没有来源的具体例子；明确这些可见结构"
                 "不能证明面料、保暖、耐用、好打理、设计动机、品质或真实在售。只用持衣与局部特写。"
             ),
+            desired_version=3,
         )
         h3_seed = (
             "接着这个系列做下一篇。只依据演示商品 DIYU-CSPU-001 肉眼可见的"
@@ -803,7 +804,11 @@ def run() -> dict[str, object]:
         existing_h3 = _existing_series_artifact(hq_client, hq_series, 3)
         if (
             existing_h3 is not None
-            and "演示商品锚点：" not in str(existing_h3.get("body") or "")
+            and (
+                "演示商品锚点：" not in str(existing_h3.get("body") or "")
+                or str(existing_h3.get("created_at") or "")
+                < str(h2.get("created_at") or "")
+            )
         ):
             hq_series = _reset_series_with_tasks(
                 hq_client,
@@ -852,7 +857,7 @@ def run() -> dict[str, object]:
                 "把同一问题明确写成假设：如果有人只想安静看看，我更愿意先留一点距离，等对方"
                 "发出需要帮助的信号再开口。这只是当前理解和建议，不是本店已执行服务。"
             ),
-            desired_version=3,
+            desired_version=4,
         )
         s2_current = _ensure_generated(
             store_client,
@@ -892,15 +897,27 @@ def run() -> dict[str, object]:
                 "取景框里手持两件演示商品，比较明亮黄色与白色或米白色所占位置，再由拍摄者按这次"
                 "目标选择；不外推真实穿着结果。全篇保持假设，不新增桌子、纸笔或人物出镜。"
             ),
-            desired_version=3,
+            desired_version=4,
         )
+        existing_s3 = _existing_series_artifact(store_client, store_series, 3)
+        if (
+            existing_s3 is not None
+            and str(existing_s3.get("created_at") or "")
+            < str(s2.get("created_at") or "")
+        ):
+            store_series = _reset_series_with_tasks(
+                store_client,
+                str(store_series["id"]),
+                (str(s1["task_id"]), str(s2["task_id"])),
+            )
         s3_current = _ensure_generated(
             store_client,
             seed=(
-                "接着这个系列做下一篇。等深模拟门店生活种子：关店前把试衣镜擦干净时，"
-                "才发现一天里最安静的几分钟，反而能让人把自己的节奏找回来。"
-                "请充分增益成完整内容，但明确它是模拟种子，不强行商品化、励志化、"
-                "戏剧化或改成品牌宣言；一人、手机、镜面局部和字幕就能拍。"
+                "接着这个系列做下一篇。等深模拟门店生活种子：假设关店前有几分钟安静下来，"
+                "一个门店人物可能会重新听见自己的节奏。请把它充分增益成完整的假设情境演示："
+                "标题、导读、口播、画面和配文都不得声称今天、每天或任何真实门店已经发生过这件事，"
+                "也不补顾客、问价、销售或真实员工经历。不强行商品化、励志化、戏剧化或改成品牌宣言；"
+                "只用一名创作者、一部手机，拍手机黑屏反光或空墙静镜头，不使用试衣镜、抹布或额外道具。"
             ),
             series=store_series,
             position=3,
@@ -910,16 +927,7 @@ def run() -> dict[str, object]:
                 custom_text="小事本身成立，不追加顾客故事、销售意义或鸡汤结论。",
             ),
         )
-        s3 = _ensure_revision(
-            store_client,
-            s3_current,
-            (
-                "把它改成明确的等深模拟演示脚本：不得声称“每天都擦”“今天店里只剩我”、"
-                "白天有人试衣聊天问价或我一直回应别人。用“假设关店前有几分钟擦试衣镜”"
-                "来承载这条模拟种子，只表达门店人物会怎样理解这段安静，不把它包装成真实员工"
-                "经历、励志故事或品牌宣言。若现场没有镜子，就用手机黑屏反光或空墙静镜头替代。"
-            ),
-        )
+        s3 = s3_current
 
         hq_platforms = {
             "douyin": h3,

@@ -271,6 +271,24 @@ def test_generation_prompt_separates_six_input_semantics(
     assert "schema_version" not in prompt
 
 
+def test_revision_prompt_applies_the_instruction_to_every_visible_unit(
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(
+        generation_input,
+        revision_instruction="不要使用桌子和纸笔。",
+        prior_saved_body="旧稿仍安排了桌面字卡。",
+    )
+    prompt = DeepSeekGenerator._generation_prompt(
+        request,
+        BoundaryContext.from_request(request),
+    )
+
+    assert "修改要求约束全部可见单元" in prompt
+    assert "画面动作、声音、制作提示和发布互动" in prompt
+    assert "不能只改合同字段、摘要或时长标签" in prompt
+
+
 def test_weak_seed_stays_topic_unless_product_requires_near_field_signal(
     generation_input: GenerationInput,
 ) -> None:

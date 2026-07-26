@@ -1457,6 +1457,13 @@ class DeepSeekGenerator(ContentGenerator):
         prior = request.prior_saved_body or "（未授权复用旧正文）"
         revision = request.revision_instruction or "（首次生成）"
         source = request.source_version_description or "（不是跨目标重编译）"
+        revision_rule = (
+            "本次是自然修改：已授权前情只是待修改的旧稿，不是事实来源。修改要求约束全部可见单元；"
+            "逐一检查标题、合同字段、导读、完整正文/口播、画面动作、声音、制作提示和发布互动，"
+            "凡与修改要求冲突的旧内容都必须删除或重写，不能只改合同字段、摘要或时长标签。"
+            if request.revision_instruction
+            else "本次是首次生成，不存在需要照搬的旧稿。"
+        )
         series_rule = (
             "本次已把所选系列的冻结前情编入边界一；保持必要连续，但不从前情推断发布事实。"
             if request.series_context is not None
@@ -1519,6 +1526,7 @@ class DeepSeekGenerator(ContentGenerator):
 已授权前情：{prior}
 来源关系：{source}
 本次修改：{revision}
+修改一致性：{revision_rule}
 系列承接：{series_rule}
 
 创作要求：标题、观点、比喻、幽默、节奏、完整口播和互动由你自然创作，允许口语化、停顿感和真实的不完美；
