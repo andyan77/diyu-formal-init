@@ -573,6 +573,30 @@ def _recompile(
     return cast(dict[str, Any], result)
 
 
+def _ensure_recompiled(
+    client: httpx.Client,
+    artifact: dict[str, Any],
+    target: str,
+) -> dict[str, Any]:
+    recent = _response_json(
+        client,
+        "GET",
+        f"/api/v1/content/tasks?target={target}",
+    )
+    if not isinstance(recent, list):
+        raise RuntimeError(f"{target} 成品列表响应无效")
+    matching = [
+        item
+        for item in recent
+        if isinstance(item, dict) and str(item.get("target") or "") == target
+    ]
+    if len(matching) > 1:
+        raise RuntimeError(f"{target} 已有多个演示成品，拒绝隐式选择")
+    if matching:
+        return _task_version(client, str(matching[0]["task_id"]))
+    return _recompile(client, artifact, target)
+
+
 def run() -> dict[str, object]:
     if _required("DIYU_M7_2B_EXECUTE") != _CONFIRMATION:
         raise RuntimeError("DIYU_M7_2B_EXECUTE 必须明确等于 synthetic_business_fixture")
@@ -782,17 +806,19 @@ def run() -> dict[str, object]:
 
         hq_platforms = {
             "douyin": h3,
-            "xiaohongshu": _recompile(hq_client, h3, "xiaohongshu_graphic"),
-            "wechat_channels": _recompile(
+            "xiaohongshu": _ensure_recompiled(
+                hq_client, h3, "xiaohongshu_graphic"
+            ),
+            "wechat_channels": _ensure_recompiled(
                 hq_client, h3, "wechat_channels_video"
             ),
         }
         store_platforms = {
             "douyin": s2,
-            "xiaohongshu": _recompile(
+            "xiaohongshu": _ensure_recompiled(
                 store_client, s2, "xiaohongshu_graphic"
             ),
-            "wechat_channels": _recompile(
+            "wechat_channels": _ensure_recompiled(
                 store_client, s2, "wechat_channels_video"
             ),
         }

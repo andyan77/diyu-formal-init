@@ -647,8 +647,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/content/tasks", responses=business_failures)
     def list_content_tasks(
-        scope: TrustedScope = Depends(scope_from_request),
+        request: Request,
+        target: ContentTarget | None = None,
+        current_scope: TrustedScope = Depends(scope_from_request),
     ) -> list[dict[str, object]]:
+        scope = (
+            current_scope
+            if target is None
+            else authority.require_content_target(request, target)
+        )
+        if not workbench_service.is_content_operator(scope):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="当前自然人没有此发布账号工作资格",
+            )
         return workbench_service.recent_content(scope)
 
     @app.get("/api/v1/content/tasks/{task_id}/versions", responses=business_failures)

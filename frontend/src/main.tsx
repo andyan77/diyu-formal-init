@@ -437,7 +437,18 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
   const [materialIds, setMaterialIds] = useState<string[]>([]);
   const [seriesId, setSeriesId] = useState("");
   const [seriesPosition, setSeriesPosition] = useState("");
-  const recent = useQuery({ queryKey: ["content-recent"], queryFn: () => api<RecentItem[]>("/api/v1/content/tasks") });
+  const recent = useQuery({
+    queryKey: ["content-recent", ...(context.targets?.map(item => item.value) ?? [])],
+    queryFn: async () => {
+      const targetValues = context.targets?.map(item => item.value) ?? ["douyin_video"];
+      const batches = await Promise.all(
+        targetValues.map(value => api<RecentItem[]>(`/api/v1/content/tasks?target=${value}`))
+      );
+      return Array.from(
+        new Map(batches.flat().map(item => [item.task_id, item])).values()
+      ).sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+    }
+  });
   const series = useQuery({ queryKey: ["series"], queryFn: () => api<Series[]>("/api/v1/content/series") });
   const catalog = useQuery({ queryKey: ["expression-catalog"], queryFn: () => api<ExpressionCatalog>("/api/v1/content/expression-catalog") });
   const materials = useQuery({ queryKey: ["materials"], queryFn: () => api<Material[]>("/api/v1/materials") });
