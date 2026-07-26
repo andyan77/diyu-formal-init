@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>租户用户登录 · 笛语</title>
+    <link
+      rel="icon"
+      href="../../../../assets/brand/diyu-vi/svg/favicon.svg"
+    />
+    <link rel="stylesheet" href="../shared/prototype.css" />
+    <script src="../shared/prototype.js" defer></script>
+  </head>
+  <body>
+    <main class="auth-page">
+      <section class="auth-brand" aria-hidden="true">
+        <img
+          src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal-ondark.svg"
+          alt=""
+        />
+        <div class="auth-brand__copy">
+          <p class="eyebrow">内容与陈列协作</p>
+          <h1>把今天要做的事，直接变成可用成果。</h1>
+          <p>登录后进入本人已有资格的内容生产或陈列搭配工作。</p>
+        </div>
+      </section>
+      <section class="auth-panel">
+        <div class="auth-card">
+          <img
+            class="auth-card__logo"
+            src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg"
+            alt="笛语"
+          />
+          <a class="text-link" href="home.html">← 返回首页</a>
+          <h1>租户用户登录</h1>
+          <p>进入你的业务工作空间。</p>
+          <form
+            class="auth-form"
+            data-demo-form="登录动作仅作原型演示。"
+          >
+            <label class="field"
+              >用户名
+              <input
+                name="username"
+                autocomplete="username"
+                placeholder="请输入用户名"
+                required
+              />
+            </label>
+            <label class="field"
+              >密码
+              <input
+                type="password"
+                name="password"
+                autocomplete="current-password"
+                placeholder="请输入密码"
+                required
+              />
+            </label>
+            <button class="button button--primary" type="submit">登录</button>
+          </form>
+          <p class="auth-help">
+            如果还没有账号，或无法进入，请联系所在团队的租户管理员。
+          </p>
+        </div>
+      </section>
+    </main>
+    <div class="toast" data-toast role="status"></div>
+    <span class="prototype-mark">静态原型</span>
+  </body>
+</html>

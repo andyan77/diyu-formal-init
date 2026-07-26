@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>发布账号与成员 · 笛语</title>
+    <link rel="icon" href="../../../../assets/brand/diyu-vi/svg/favicon.svg" />
+    <link rel="stylesheet" href="../shared/prototype.css" />
+    <script src="../shared/prototype.js" defer></script>
+  </head>
+  <body>
+    <header class="product-header">
+      <a class="product-header__brand" href="admin-overview.html">
+        <img class="brand-image brand-image--compact" src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" />
+      </a>
+      <div class="product-header__context"><strong>折线之间 · 品牌管理</strong><span class="status-pill status-pill--demo">演示资料</span></div>
+      <details class="product-header__account">
+        <summary><span>品牌管理员</span>⌄</summary>
+        <div class="identity-popover">
+          <dl>
+            <div><dt>当前品牌</dt><dd>折线之间</dd></div>
+            <div><dt>管理范围</dt><dd>品牌资料与内容账号</dd></div>
+            <div><dt>入口</dt><dd>租户管理员</dd></div>
+          </dl>
+        </div>
+      </details>
+    </header>
+    <div class="app-shell">
+      <aside class="side-nav">
+        <p class="side-nav__label">品牌管理</p>
+        <nav aria-label="品牌管理导航">
+          <a href="admin-overview.html">品牌资料</a>
+          <a href="admin-brand.html">品牌表达</a>
+          <a href="admin-accounts.html" aria-current="page">发布账号与成员</a>
+          <a href="admin-products-materials.html">商品与组织素材</a>
+          <a href="admin-demo.html">内容演示</a>
+        </nav>
+      </aside>
+      <main class="main-column" data-tab-scope>
+        <header class="page-heading">
+          <div class="page-heading__copy">
+            <p class="eyebrow">发布账号与成员</p>
+            <h1 class="page-title">谁在用什么身份表达，一眼看清。</h1>
+            <p class="page-lede">发布账号、成员与负责团队分开管理。添加成员不会自动新建账号，添加平台版本也不会连接外部平台。</p>
+          </div>
+          <button class="button button--primary" type="button" data-open-drawer="new-account">新建发布账号</button>
+        </header>
+
+        <div class="tabs" data-tabs role="tablist" aria-label="账号成员与团队">
+          <button type="button" role="tab" data-tab="accounts" aria-selected="true">发布账号</button>
+          <button type="button" role="tab" data-tab="members" aria-selected="false">成员</button>
+          <button type="button" role="tab" data-tab="teams" aria-selected="false">门店与部门</button>
+        </div>
+
+        <section data-tab-panel="accounts">
+          <div class="panel panel--flat">
+            <div class="section-heading">
+              <div><h2>2 个发布账号</h2><p>每个账号有自己的定位、负责团队和使用者。</p></div>
+              <button class="button button--small" type="button" data-open-drawer="platform">添加平台版本</button>
+            </div>
+            <ul class="object-list">
+              <li class="object-row">
+                <div><strong>折线之间 · 品牌内容账号</strong><small>品牌判断与商品关系 · 当前定位已完成</small></div>
+                <div class="object-row__meta">品牌内容团队 · 1 位成员<br />抖音 / 小红书 / 微信视频号</div>
+                <button class="button button--small" type="button" data-demo-action="已打开品牌内容账号。">查看</button>
+              </li>
+              <li class="object-row">
+                <div><strong>折线之间 · 南城店账号</strong><small>门店日常观察 · 当前定位已完成</small></div>
+                <div class="object-row__meta">南城店 · 1 位成员<br />抖音 / 小红书 / 微信视频号</div>
+                <button class="button button--small" type="button" data-demo-action="已打开南城店账号。">查看</button>
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section data-tab-panel="members" hidden>
+          <div class="panel panel--flat">
+            <div class="section-heading">
+              <div><h2>3 位演示成员</h2><p>这些是原型演示身份，不对应真实自然人。</p></div>
+              <button class="button button--small" type="button" data-open-drawer="member">添加成员</button>
+            </div>
+            <ul class="object-list">
+              <li class="object-row"><div><strong>林澄</strong><small>内容创作者 · 演示身份</small></div><div class="object-row__meta">南城店账号</div><button class="button button--small" type="button" data-demo-action="已打开成员详情。">查看</button></li>
+              <li class="object-row"><div><strong>周屿</strong><small>品牌内容运营 · 演示身份</small></div><div class="object-row__meta">品牌内容账号</div><button class="button button--small" type="button" data-demo-action="已打开成员详情。">查看</button></li>
+              <li class="object-row"><div><strong>品牌管理员</strong><small>资料维护 · 演示身份</small></div><div class="object-row__meta">折线之间</div><button class="button button--small" type="button" data-demo-action="已打开成员详情。">查看</button></li>
+            </ul>
+          </div>
+        </section>
+
+        <section data-tab-panel="teams" hidden>
+          <div class="panel panel--flat">
+            <div class="section-heading"><div><h2>门店与部门</h2><p>负责团队决定谁可以维护对应账号资料。</p></div></div>
+            <ul class="object-list">
+              <li class="object-row"><div><strong>品牌内容团队</strong><small>负责品牌内容账号</small></div><div class="object-row__meta">1 个账号 · 2 位成员</div><button class="button button--small" type="button" data-demo-action="已打开团队详情。">查看</button></li>
+              <li class="object-row"><div><strong>南城店</strong><small>负责南城店账号</small></div><div class="object-row__meta">1 个账号 · 1 位成员</div><button class="button button--small" type="button" data-demo-action="已打开团队详情。">查看</button></li>
+              <li class="object-row"><div><strong>华东区域</strong><small>区域演示组织</small></div><div class="object-row__meta">0 个账号 · 1 位成员</div><button class="button button--small" type="button" data-demo-action="已打开团队详情。">查看</button></li>
+            </ul>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <aside class="drawer" data-drawer="new-account" aria-hidden="true" aria-labelledby="new-account-title">
+      <header class="drawer__head"><div><p class="eyebrow">发布账号</p><h2 id="new-account-title">新建发布账号</h2></div><button class="drawer__close" type="button" data-close-drawer aria-label="关闭">×</button></header>
+      <form class="drawer__body" data-demo-form="已模拟新建发布账号。">
+        <label class="field">账号名称<input type="text" placeholder="例如：折线之间 · 湖滨店账号" /></label>
+        <label class="field">负责团队<select><option>选择门店或部门</option><option>品牌内容团队</option><option>南城店</option></select></label>
+        <label class="field">账号定位<textarea placeholder="这个账号从什么位置说话，主要与谁建立什么关系？"></textarea></label>
+        <button class="button" type="submit">创建账号草稿</button>
+      </form>
+    </aside>
+    <aside class="drawer" data-drawer="member" aria-hidden="true" aria-labelledby="member-title">
+      <header class="drawer__head"><div><p class="eyebrow">成员</p><h2 id="member-title">添加成员</h2></div><button class="drawer__close" type="button" data-close-drawer aria-label="关闭">×</button></header>
+      <form class="drawer__body" data-demo-form="已模拟添加成员。">
+        <label class="field">成员名称<input type="text" placeholder="演示成员名称" /></label>
+        <label class="field">所属团队<select><option>南城店</option><option>品牌内容团队</option></select></label>
+        <label class="field">可以使用的发布账号<select><option>折线之间 · 南城店账号</option><option>折线之间 · 品牌内容账号</option></select></label>
+        <button class="button" type="submit">添加成员</button>
+      </form>
+    </aside>
+    <aside class="drawer" data-drawer="platform" aria-hidden="true" aria-labelledby="platform-title">
+      <header class="drawer__head"><div><p class="eyebrow">平台版本</p><h2 id="platform-title">添加内容载体</h2></div><button class="drawer__close" type="button" data-close-drawer aria-label="关闭">×</button></header>
+      <form class="drawer__body" data-demo-form="已模拟添加平台版本。">
+        <label class="field">发布账号<select><option>折线之间 · 品牌内容账号</option><option>折线之间 · 南城店账号</option></select></label>
+        <label class="field">平台<select><option>抖音</option><option>小红书</option><option>微信视频号</option></select></label>
+        <p class="notice">这里只准备内容版本，不连接平台，也不需要平台凭据。</p>
+        <button class="button" type="submit">添加内容载体</button>
+      </form>
+    </aside>
+    <div class="drawer-backdrop" aria-hidden="true"></div>
+    <div class="toast" data-toast role="status" aria-live="polite"></div>
+    <span class="prototype-mark">静态产品原型</span>
+  </body>
+</html>

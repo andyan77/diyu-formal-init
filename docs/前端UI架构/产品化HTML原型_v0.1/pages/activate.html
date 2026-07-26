@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>设置笛语密码</title>
+    <link
+      rel="icon"
+      href="../../../../assets/brand/diyu-vi/svg/favicon.svg"
+    />
+    <link rel="stylesheet" href="../shared/prototype.css" />
+    <script src="../shared/prototype.js" defer></script>
+  </head>
+  <body>
+    <main class="auth-page">
+      <section class="auth-brand" aria-hidden="true">
+        <img
+          src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal-ondark.svg"
+          alt=""
+        />
+        <div class="auth-brand__copy">
+          <p class="eyebrow">首次进入</p>
+          <h1>先设置只属于你的登录密码。</h1>
+          <p>完成后，请从收到通知时对应的入口登录。</p>
+        </div>
+      </section>
+      <section class="auth-panel">
+        <div class="auth-card">
+          <img
+            class="auth-card__logo"
+            src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg"
+            alt="笛语"
+          />
+          <h1>设置笛语密码</h1>
+          <p>链接仅供本次使用，页面不会要求你再次填写个人或企业资料。</p>
+          <form
+            class="auth-form"
+            data-demo-form="密码设置动作仅作原型演示。"
+          >
+            <label class="field"
+              >新密码
+              <input
+                type="password"
+                autocomplete="new-password"
+                placeholder="至少 12 个字符"
+                minlength="12"
+                required
+              />
+            </label>
+            <label class="field"
+              >再次输入
+              <input
+                type="password"
+                autocomplete="new-password"
+                placeholder="请再次输入新密码"
+                minlength="12"
+                required
+              />
+            </label>
+            <button class="button button--primary" type="submit">
+              完成设置
+            </button>
+          </form>
+          <p class="auth-help">
+            如果页面提示链接已失效，请联系向你发出邀请的管理员重新生成。
+          </p>
+        </div>
+      </section>
+    </main>
+    <div class="toast" data-toast role="status"></div>
+    <span class="prototype-mark">静态原型 · 未包含真实链接</span>
+  </body>
+</html>

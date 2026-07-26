@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>公共状态 · 笛语产品原型</title>
+    <link rel="icon" href="../../../../assets/brand/diyu-vi/svg/favicon.svg" />
+    <link rel="stylesheet" href="../shared/prototype.css" />
+    <script src="../shared/prototype.js" defer></script>
+  </head>
+  <body>
+    <header class="product-header">
+      <a class="product-header__brand" href="../index.html">
+        <img class="brand-image brand-image--compact" src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" />
+      </a>
+      <div class="product-header__context"><strong>公共状态样式</strong></div>
+    </header>
+    <main class="main-column" style="width: min(100%, 1180px); margin: 0 auto; padding-left: 0; padding-right: 0;">
+      <header class="page-heading">
+        <div class="page-heading__copy">
+          <p class="eyebrow">统一状态</p>
+          <h1 class="page-title">需要停下来时，也把下一步说清楚。</h1>
+          <p class="page-lede">这些状态在不同入口复用，不为每一种错误建立独立页面。</p>
+        </div>
+      </header>
+      <section class="state-grid">
+        <article class="state-sample">
+          <div class="spinner" aria-label="正在加载"></div>
+          <h2>正在准备你的内容</h2>
+          <p>很快就好，可以留在这个页面。</p>
+        </article>
+        <article class="state-sample">
+          <img width="34" src="../../../../assets/brand/diyu-vi/svg/diyu-symbol.svg" alt="" />
+          <h2>这里还没有内容</h2>
+          <p>先说一句想做什么，第一条内容会从这里开始。</p>
+          <a class="text-link" href="content-empty.html">开始一条内容</a>
+        </article>
+        <article class="state-sample">
+          <span class="status-pill status-pill--current">可以重试</span>
+          <h2>刚才没有完成</h2>
+          <p>你的输入已经保留。检查网络后，可以从同一个位置继续。</p>
+          <button class="button button--primary" type="button" data-demo-action="已模拟恢复并重新尝试。">再试一次</button>
+        </article>
+        <article class="state-sample">
+          <span class="status-pill">没有访问资格</span>
+          <h2>当前账号不能进入这里</h2>
+          <p>请返回自己的内容入口，或退出后使用有相应资格的账号重新登录。</p>
+          <div class="button-row">
+            <a class="button" href="user-home.html">返回内容入口</a>
+            <a class="text-link" href="login-user.html">退出并重登</a>
+          </div>
+        </article>
+        <article class="state-sample">
+          <span class="status-pill status-pill--ready">已经完成</span>
+          <h2>修改已保存</h2>
+          <p>新版本已经成为当前版，旧版本仍可在历史版本中查看。</p>
+          <button class="button" type="button" data-demo-action="已模拟关闭成功提示。">知道了</button>
+        </article>
+        <article class="state-sample">
+          <span class="status-pill">需要确认</span>
+          <h2>删除这份素材？</h2>
+          <p>删除后不会再用于后续协作，已经形成的旧成品不会改变。</p>
+          <button class="button" type="button" data-open-dialog="state-delete">查看确认弹窗</button>
+        </article>
+      </section>
+    </main>
+    <dialog id="state-delete">
+      <div class="dialog-body">
+        <h2>确认删除？</h2>
+        <p>这项操作只影响所选素材。</p>
+        <div class="dialog-actions">
+          <button class="button" type="button" data-close-dialog>取消</button>
+          <button class="button button--danger" type="button" data-confirm-dialog="已模拟删除。">确认删除</button>
+        </div>
+      </div>
+    </dialog>
+    <div class="toast" data-toast role="status" aria-live="polite"></div>
+    <span class="prototype-mark">静态产品原型</span>
+  </body>
+</html>

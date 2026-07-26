@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>笛语运维登录</title>
+    <link
+      rel="icon"
+      href="../../../../assets/brand/diyu-vi/svg/favicon.svg"
+    />
+    <link rel="stylesheet" href="../shared/prototype.css" />
+    <script src="../shared/prototype.js" defer></script>
+  </head>
+  <body>
+    <main class="auth-page">
+      <section class="auth-brand" aria-hidden="true">
+        <img
+          src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal-ondark.svg"
+          alt=""
+        />
+        <div class="auth-brand__copy">
+          <p class="eyebrow">笛语运维</p>
+          <h1>只处理平台运行与必要的租户操作。</h1>
+          <p>该入口与租户用户、租户管理员的工作空间完全分开。</p>
+        </div>
+      </section>
+      <section class="auth-panel">
+        <div class="auth-card">
+          <img
+            class="auth-card__logo"
+            src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg"
+            alt="笛语"
+          />
+          <h1>笛语运维登录</h1>
+          <p>请完成账号、密码与验证码验证。</p>
+          <form
+            class="auth-form"
+            data-demo-form="登录动作仅作原型演示。"
+          >
+            <label class="field"
+              >用户名
+              <input
+                name="username"
+                autocomplete="username"
+                placeholder="请输入用户名"
+                required
+              />
+            </label>
+            <label class="field"
+              >密码
+              <input
+                type="password"
+                name="password"
+                autocomplete="current-password"
+                placeholder="请输入密码"
+                required
+              />
+            </label>
+            <label class="field"
+              >验证码
+              <input
+                name="totp"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                placeholder="6 位验证码"
+                required
+              />
+            </label>
+            <button class="button button--primary" type="submit">登录</button>
+          </form>
+          <p class="auth-help">无法验证时，请按内部运维恢复流程处理。</p>
+        </div>
+      </section>
+    </main>
+    <div class="toast" data-toast role="status"></div>
+    <span class="prototype-mark">静态原型</span>
+  </body>
+</html>

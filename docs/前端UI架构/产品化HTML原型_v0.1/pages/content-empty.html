@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>开始一条内容 · 笛语</title>
+    <link
+      rel="icon"
+      href="../../../../assets/brand/diyu-vi/svg/favicon.svg"
+    />
+    <link rel="stylesheet" href="../shared/prototype.css" />
+    <script src="../shared/prototype.js" defer></script>
+  </head>
+  <body>
+    <header class="product-header">
+      <a class="product-header__brand" href="user-home.html">
+        <img
+          class="brand-image brand-image--compact"
+          src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg"
+          alt="笛语"
+        />
+      </a>
+      <nav class="app-tabs" aria-label="工作切换">
+        <a href="content-empty.html" aria-current="page">内容生产</a>
+        <a href="display-input.html">陈列搭配</a>
+      </nav>
+      <div class="product-header__context">
+        <strong>折线之间 · 南城店账号</strong>
+      </div>
+      <details class="product-header__account">
+        <summary><span>林澄</span>⌄</summary>
+        <div class="identity-popover">
+          <dl>
+            <div><dt>发布账号</dt><dd>折线之间 · 南城店账号</dd></div>
+            <div><dt>账号定位</dt><dd>从门店日常位置观察人与衣服的关系</dd></div>
+            <div><dt>负责团队</dt><dd>南城店</dd></div>
+            <div><dt>平台版本</dt><dd>小红书图文</dd></div>
+          </dl>
+        </div>
+      </details>
+    </header>
+    <section class="workbench" data-mobile-view="conversation">
+      <aside class="workbench__nav">
+        <div class="side-nav">
+          <p class="side-nav__label">内容生产</p>
+          <nav aria-label="内容工作导航">
+            <a href="content-empty.html" aria-current="page">开始一条内容</a>
+            <a href="content-result.html">最近成品</a>
+            <a href="series-plan.html">连续系列</a>
+            <a href="series-plan.html#plan">内容计划</a>
+            <a href="private-space.html">我的私人空间</a>
+          </nav>
+        </div>
+      </aside>
+      <main class="workbench__conversation">
+        <header class="conversation-heading">
+          <p class="eyebrow">内容生产</p>
+          <h1>自然说清这次想完成什么。</h1>
+          <p>一句想法就可以开始；方向、素材和系列都按需选择。</p>
+        </header>
+
+        <form
+          class="composer"
+          data-demo-form="已模拟生成内容；当前输入不会离开这个页面。"
+        >
+          <div class="composer__head">
+            <label
+              >这次要做成
+              <select aria-label="这次要做成">
+                <option>小红书图文</option>
+                <option>抖音视频</option>
+                <option>微信视频号视频</option>
+              </select>
+            </label>
+          </div>
+          <textarea
+            aria-label="内容想法"
+            placeholder="例如：走进门店只想自己看看，这种沉默是不是也应该被尊重？"
+          ></textarea>
+          <details class="details">
+            <summary>创作方向（可选）</summary>
+            <div class="details__body">
+              <p class="small muted">
+                不指定也可以。每一项都只用于这次内容。
+              </p>
+              <div class="chip-row" aria-label="题材">
+                <button class="choice-chip" type="button" data-chip aria-pressed="false">
+                  门店观察
+                </button>
+                <button class="choice-chip" type="button" data-chip aria-pressed="false">
+                  商品解释
+                </button>
+                <button class="choice-chip" type="button" data-chip aria-pressed="false">
+                  关系选择
+                </button>
+              </div>
+              <div class="chip-row" aria-label="风格">
+                <button class="choice-chip" type="button" data-chip aria-pressed="false">
+                  克制
+                </button>
+                <button class="choice-chip" type="button" data-chip aria-pressed="false">
+                  轻松
+                </button>
+                <button class="choice-chip" type="button" data-chip aria-pressed="false">
+                  冷幽默
+                </button>
+              </div>
+              <label class="field"
+                >还想补一句
+                <textarea
+                  placeholder="例如：一人、一部固定手机就能完成。"
+                ></textarea>
+              </label>
+              <label class="check"
+                ><input type="checkbox" /> 临时不读取也不写入我的私人偏好</label
+              >
+            </div>
+          </details>
+          <details class="details">
+            <summary>这次参考（可选）</summary>
+            <div class="details__body">
+              <label class="check"
+                ><input type="checkbox" /> 门店安静时段的一句观察</label
+              >
+              <label class="check"
+                ><input type="checkbox" /> 商品 A 的可见结构说明</label
+              >
+            </div>
+          </details>
+          <div class="composer__foot">
+            <span>当前账号 · 小红书图文</span>
+            <button class="button button--primary" type="submit">
+              生成内容
+            </button>
+          </div>
+        </form>
+
+        <section class="suggestion-list">
+          <h2>也可以这样开始</h2>
+          <button type="button" data-demo-action="已把这条想法带入输入框。">
+            <strong>把“自己看看”说成一种被尊重的选择</strong>
+            <span>适合当前门店账号，用本人理解而不是门店制度来表达。</span>
+          </button>
+          <button type="button" data-demo-action="已把这条想法带入输入框。">
+            <strong>用一件外套讲清“看得见”和“要查资料”</strong>
+            <span>只说肉眼可见结构，把其他判断留给资料。</span>
+          </button>
+        </section>
+      </main>
+      <aside class="workbench__artifact">
+        <div class="artifact-empty">
+          <img
+            src="../../../../assets/brand/diyu-vi/svg/diyu-symbol.svg"
+            alt=""
+          />
+          <h2>成品会出现在这里</h2>
+          <p>生成后可以完整阅读、继续修改、复制或导出。</p>
+        </div>
+      </aside>
+      <nav class="mobile-work-tabs" aria-label="移动工作面">
+        <button type="button" data-mobile-tab="conversation" aria-selected="true">
+          对话
+        </button>
+        <button type="button" data-mobile-tab="artifact" aria-selected="false">
+          成品
+        </button>
+      </nav>
+    </section>
+    <div class="toast" data-toast role="status"></div>
+    <span class="prototype-mark">静态原型 · 演示资料</span>
+  </body>
+</html>

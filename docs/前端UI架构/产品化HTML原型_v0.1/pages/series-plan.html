@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>连续系列与内容计划 · 笛语</title>
+    <link rel="icon" href="../../../../assets/brand/diyu-vi/svg/favicon.svg" />
+    <link rel="stylesheet" href="../shared/prototype.css" />
+    <script src="../shared/prototype.js" defer></script>
+  </head>
+  <body>
+    <header class="product-header">
+      <a class="product-header__brand" href="user-home.html">
+        <img class="brand-image brand-image--compact" src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" />
+      </a>
+      <nav class="app-tabs" aria-label="工作切换">
+        <a href="content-empty.html" aria-current="page">内容生产</a>
+        <a href="display-input.html">陈列搭配</a>
+      </nav>
+      <div class="product-header__context"><strong>折线之间 · 南城店账号</strong></div>
+      <details class="product-header__account">
+        <summary><span>林澄</span>⌄</summary>
+        <div class="identity-popover">
+          <dl>
+            <div><dt>发布账号</dt><dd>折线之间 · 南城店账号</dd></div>
+            <div><dt>账号定位</dt><dd>从门店日常位置观察人与衣服的关系</dd></div>
+            <div><dt>负责团队</dt><dd>南城店</dd></div>
+            <div><dt>平台版本</dt><dd>小红书图文</dd></div>
+          </dl>
+        </div>
+      </details>
+    </header>
+    <div class="app-shell">
+      <aside class="side-nav">
+        <p class="side-nav__label">内容生产</p>
+        <nav aria-label="内容工作导航">
+          <a href="content-empty.html">开始一条内容</a>
+          <a href="content-result.html">最近成品</a>
+          <a href="series-plan.html" aria-current="page">连续系列</a>
+          <a href="#plan">内容计划</a>
+          <a href="private-space.html">我的私人空间</a>
+        </nav>
+      </aside>
+      <main class="main-column" data-tab-scope>
+        <header class="page-heading">
+          <div class="page-heading__copy">
+            <p class="eyebrow">连续创作</p>
+            <h1 class="page-title">让下一篇，接得住前一篇。</h1>
+            <p class="page-lede">先看系列目前走到哪里，再继续、插入或调整顺序。当前账号的其他内容不会混进来。</p>
+          </div>
+          <a class="button button--primary" href="content-empty.html">接着做下一篇</a>
+        </header>
+
+        <div class="tabs" data-tabs role="tablist" aria-label="系列与计划">
+          <button type="button" role="tab" data-tab="series" aria-selected="true">连续系列</button>
+          <button type="button" role="tab" data-tab="plan" aria-selected="false">内容计划</button>
+        </div>
+
+        <section data-tab-panel="series">
+          <div class="series-card">
+            <div class="series-card__head">
+              <div>
+                <div class="chip-row">
+                  <span class="status-pill status-pill--current">正在继续</span>
+                  <span class="meta-pill">3 篇</span>
+                </div>
+                <h2>在店里，给选择留一点空间</h2>
+                <p>从门店人物的位置，记录选择衣服时那些不必被催促的时刻。</p>
+              </div>
+              <button class="button button--small" type="button" data-demo-action="已进入系列顺序调整。">调整顺序</button>
+            </div>
+            <ol class="episode-list">
+              <li><span><strong>第 1 篇</strong> · 想自己看看，也是一种清楚的需要</span><a class="text-link" href="content-result.html">查看</a></li>
+              <li><span><strong>第 2 篇</strong> · 合照先统一颜色，还是先让人舒服</span><button class="button button--small" type="button" data-demo-action="已打开第 2 篇。">查看</button></li>
+              <li><span><strong>第 3 篇</strong> · 安静下来以后，门店里还剩下什么</span><button class="button button--small" type="button" data-demo-action="已打开第 3 篇。">查看</button></li>
+            </ol>
+            <div class="button-row">
+              <button class="button" type="button" data-demo-action="已模拟在第 2 篇后插入一篇。">在中间补一篇</button>
+              <button class="button" type="button" data-demo-action="已跳到第 5 篇的创作位置。">跳到第 5 篇</button>
+            </div>
+          </div>
+          <div class="series-card">
+            <div class="series-card__head">
+              <div>
+                <div class="chip-row"><span class="status-pill">暂存</span><span class="meta-pill">1 篇</span></div>
+                <h2>一件衣服，可以怎样被看见</h2>
+                <p>用看得见的结构，帮助人形成自己的观察方法。</p>
+              </div>
+              <button class="button button--small" type="button" data-demo-action="已切换到这个系列。">打开系列</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="plan" data-tab-panel="plan" hidden>
+          <div class="panel panel--flat">
+            <div class="section-heading">
+              <div><h2>接下来可以做</h2><p>这是轻量计划，可以随时改变。</p></div>
+            </div>
+            <ul class="object-list">
+              <li class="object-row">
+                <div><strong>回应一个常见犹豫</strong><small>从“想自己看看”接到“什么时候需要一句建议”</small></div>
+                <div class="object-row__meta">南城店账号 · 本周</div>
+                <button class="button button--small" type="button" data-demo-action="已把方向带入创作输入。">用这个方向</button>
+              </li>
+              <li class="object-row">
+                <div><strong>看清两件衣服的关系</strong><small>用同一画面呈现主次，而不是只讲搭配结论</small></div>
+                <div class="object-row__meta">品牌账号 · 待安排</div>
+                <button class="button button--small" type="button" data-demo-action="已把方向带入创作输入。">用这个方向</button>
+              </li>
+              <li class="object-row">
+                <div><strong>门店里的一次自然停顿</strong><small>保持小事本身成立，不强行关联商品</small></div>
+                <div class="object-row__meta">南城店账号 · 待安排</div>
+                <button class="button button--small" type="button" data-demo-action="已把方向带入创作输入。">用这个方向</button>
+              </li>
+            </ul>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div class="toast" data-toast role="status" aria-live="polite"></div>
+    <span class="prototype-mark">静态产品原型</span>
+  </body>
+</html>

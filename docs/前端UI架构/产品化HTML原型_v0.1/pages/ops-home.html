@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>笛语运维 · 租户总览</title>
+    <link rel="icon" href="../../../../assets/brand/diyu-vi/svg/favicon.svg" />
+    <link rel="stylesheet" href="../shared/prototype.css" />
+    <script src="../shared/prototype.js" defer></script>
+  </head>
+  <body>
+    <div class="ops-shell">
+      <aside class="ops-nav">
+        <img src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" />
+        <nav aria-label="运维导航">
+          <a href="ops-home.html" aria-current="page">租户总览</a>
+          <a href="#needs">需求候选</a>
+          <a href="#status">运行状态</a>
+        </nav>
+      </aside>
+      <main class="ops-main">
+        <header class="page-heading">
+          <div class="page-heading__copy">
+            <p class="eyebrow">笛语运维</p>
+            <h1 class="page-title">租户与运行总览</h1>
+            <p class="page-lede">先看需要处理的租户事项，再进入具体范围操作。</p>
+          </div>
+          <button class="button button--primary" type="button" data-open-drawer="tenant">创建租户</button>
+        </header>
+
+        <section id="status" class="metric-row" aria-label="基础运行状态">
+          <div class="metric"><span>租户</span><strong>3</strong><small class="muted">2 个正常使用</small></div>
+          <div class="metric"><span>今日任务</span><strong>18</strong><small class="muted">均已完成</small></div>
+          <div class="metric"><span>待回复需求</span><strong>2</strong><small class="muted">无紧急项</small></div>
+          <div class="metric"><span>基础服务</span><strong>正常</strong><small class="muted">刚刚检查</small></div>
+        </section>
+
+        <div class="section-heading"><div><h2>租户</h2><p>只展示必要状态与可执行动作。</p></div></div>
+        <table class="data-table">
+          <thead><tr><th>租户</th><th>品牌</th><th>当前状态</th><th>最近活动</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td><strong>折线之间演示空间</strong><br /><span class="small muted">演示资料</span></td><td>折线之间</td><td><span class="status-pill status-pill--ready">可用</span></td><td>今天 11:20</td><td><button class="button button--small" type="button" data-demo-action="已打开租户详情。">查看</button></td></tr>
+            <tr><td><strong>云岫服饰</strong></td><td>云岫</td><td><span class="status-pill status-pill--ready">可用</span></td><td>昨天 17:42</td><td><button class="button button--small" type="button" data-demo-action="已打开租户详情。">查看</button></td></tr>
+            <tr><td><strong>新租户准备区</strong></td><td>尚未添加</td><td><span class="status-pill">待配置</span></td><td>7 月 23 日</td><td><button class="button button--small" type="button" data-demo-action="已打开租户详情。">继续</button></td></tr>
+          </tbody>
+        </table>
+
+        <div id="needs" class="section-heading"><div><h2>未满足需求候选</h2><p>分类和回复不会自动改变产品资料。</p></div></div>
+        <section class="panel">
+          <ul class="object-list">
+            <li class="object-row">
+              <div><strong>希望一次查看同系列的封面方向</strong><small>来自：折线之间演示空间 · 内容生产</small></div>
+              <div class="object-row__meta">待分类 · 今天 10:12</div>
+              <button class="button button--small" type="button" data-open-drawer="need">处理</button>
+            </li>
+            <li class="object-row">
+              <div><strong>门店希望保留常用墙面尺寸</strong><small>来自：云岫服饰 · 陈列搭配</small></div>
+              <div class="object-row__meta">已回复 · 昨天 16:08</div>
+              <button class="button button--small" type="button" data-demo-action="已打开回复记录。">查看</button>
+            </li>
+          </ul>
+        </section>
+      </main>
+    </div>
+
+    <aside class="drawer" data-drawer="tenant" aria-hidden="true" aria-labelledby="tenant-title">
+      <header class="drawer__head"><div><p class="eyebrow">租户</p><h2 id="tenant-title">创建租户</h2></div><button class="drawer__close" type="button" data-close-drawer aria-label="关闭">×</button></header>
+      <form class="drawer__body" data-demo-form="已模拟创建租户草稿。">
+        <label class="field">租户名称<input type="text" placeholder="企业或项目名称" /></label>
+        <label class="field">首个品牌名称<input type="text" placeholder="可以稍后补充" /></label>
+        <label class="field">租户管理员<input type="text" placeholder="填写演示成员名称" /></label>
+        <button class="button" type="submit">创建租户草稿</button>
+      </form>
+    </aside>
+    <aside class="drawer" data-drawer="need" aria-hidden="true" aria-labelledby="need-title">
+      <header class="drawer__head"><div><p class="eyebrow">需求候选</p><h2 id="need-title">分类并回复</h2></div><button class="drawer__close" type="button" data-close-drawer aria-label="关闭">×</button></header>
+      <form class="drawer__body" data-demo-form="已模拟发送自然语言回复。">
+        <label class="field">分类<select><option>需要进一步理解</option><option>已有使用方法</option><option>后续产品候选</option><option>当前不支持</option></select></label>
+        <label class="field">给用户的回复<textarea placeholder="用自然语言说明当前结果或下一步。"></textarea></label>
+        <p class="notice">分类与回复只形成候选记录，不会自动改变品牌资料或用户内容。</p>
+        <button class="button" type="submit">发送回复</button>
+      </form>
+    </aside>
+    <div class="drawer-backdrop" aria-hidden="true"></div>
+    <div class="toast" data-toast role="status" aria-live="polite"></div>
+    <span class="prototype-mark">静态产品原型</span>
+  </body>
+</html>
