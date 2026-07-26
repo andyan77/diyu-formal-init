@@ -266,7 +266,7 @@ def _ensure_carriers(
             expected=(201,),
             json_body={
                 "source_account_id": str(account["id"]),
-                "name": str(account["name"]),
+                "name": f"{account['name']}·{channel}",
                 "channel": channel,
                 "operator_id": operator_id,
                 "confirm_internal_carrier": True,

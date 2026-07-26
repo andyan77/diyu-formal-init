@@ -148,7 +148,7 @@ class WorkbenchService:
                     {
                         "source_account_id": str(account["id"]),
                         "source_account_name": str(account["name"]),
-                        "name": str(account["name"]),
+                        "name": f"{account['name']}·{channel}",
                         "channel": channel,
                         "operator_id": (str(only_operator.get("id") or "") if isinstance(only_operator, dict) else ""),
                         "operator_name": (

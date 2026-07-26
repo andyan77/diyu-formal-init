@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   const carrierName = document.querySelector(
     'input[placeholder="这个平台上的内部内容载体名称"]'
   ) as HTMLInputElement;
-  assert.equal(carrierName.value, "笛语服饰品牌官方账号");
+  assert.equal(carrierName.value, "笛语服饰品牌官方账号·小红书");
   await click(find("button", "确认并建立内部内容载体"));
   await settle();
   const carrierRequest = requests.find(item =>
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
   assert.ok(carrierRequest);
   assert.deepEqual(carrierRequest.body, {
     source_account_id: "account-hq",
-    name: "笛语服饰品牌官方账号",
+    name: "笛语服饰品牌官方账号·小红书",
     channel: "小红书",
     operator_id: "operator-1",
     confirm_internal_carrier: true

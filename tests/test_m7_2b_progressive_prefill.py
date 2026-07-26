@@ -67,7 +67,7 @@ def test_platform_carrier_prefill_freezes_explicit_source_and_operator() -> None
         {
             "source_account_id": "source-account",
             "source_account_name": "品牌官方账号",
-            "name": "品牌官方账号",
+            "name": "品牌官方账号·微信视频号",
             "channel": "微信视频号",
             "operator_id": "operator-1",
             "operator_name": "现有使用者",
