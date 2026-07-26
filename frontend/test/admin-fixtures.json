@@ -55,6 +55,177 @@
   "/api/v1/tenant-management/users/operator-1/reset#POST": {
     "reset_link": "/activate/one-time-test-link"
   },
+  "/api/v1/tenant-management/users/demo-hq/reset#POST": {
+    "reset_link": "/activate/demo-one-time-link"
+  },
+  "/api/v1/tenant-management/demo-content-index": {
+    "fixture_status": "ready",
+    "fixture_label": "等深模拟业务资料",
+    "boundary": "组织关系、账号画像、商品和内容均为演示资料；生产路径按正式能力运行。",
+    "safe_entry": "由租户管理员为对应演示操作者生成一次性重置链接。",
+    "identities": [
+      {
+        "name": "总部品牌内容运营演示账号",
+        "channel": "抖音",
+        "content_role": "总部品牌内容运营演示身份",
+        "voice_boundary": "从总部岗位提出当前判断，不冒充门店现场。",
+        "operator": {
+          "id": "demo-hq",
+          "name": "M7-2B总部内容演示操作者（模拟）",
+          "username": "m72b-hq-demo"
+        },
+        "profile": {
+          "version": 1,
+          "segments": [
+            {
+              "label": "表达身份",
+              "body": "从总部岗位提出品牌判断。"
+            },
+            {
+              "label": "权威边界",
+              "body": "不冒充真实经营事实。"
+            },
+            {
+              "label": "受众关系",
+              "body": "与受众平等讨论选择。"
+            },
+            {
+              "label": "内容领地",
+              "body": "讨论穿衣问题和商品边界。"
+            },
+            {
+              "label": "长期制作条件",
+              "body": "一人、一部手机、普通室内。"
+            }
+          ]
+        },
+        "series": {
+          "title": "总部｜让选择保留余地（M7-2B演示）",
+          "premise": "连续讨论人的节奏、商品边界和画面可能。",
+          "revision": 3,
+          "artifacts": [
+            {
+              "position": 1,
+              "value": "建立账号关系",
+              "prior_context_count": 0,
+              "versions": [
+                {
+                  "version": 1,
+                  "title": "沉默应该被尊重吗",
+                  "body": "标题：沉默应该被尊重吗\n\n正文：这是 V1。",
+                  "platform": "抖音",
+                  "media": "视频",
+                  "ai_generated": true,
+                  "aigc_label": "AI 辅助生成",
+                  "aigc_release_reminder": "发布前请使用平台 AI 内容声明功能。",
+                  "applied_direction": []
+                },
+                {
+                  "version": 2,
+                  "title": "沉默应该被尊重吗",
+                  "body": "标题：沉默应该被尊重吗\n\n正文：这是自然修改后的 V2。",
+                  "platform": "抖音",
+                  "media": "视频",
+                  "ai_generated": true,
+                  "aigc_label": "AI 辅助生成",
+                  "aigc_release_reminder": "发布前请使用平台 AI 内容声明功能。",
+                  "applied_direction": []
+                }
+              ]
+            },
+            {
+              "position": 2,
+              "value": "解释商品事实与取舍边界",
+              "prior_context_count": 1,
+              "versions": [
+                {
+                  "version": 1,
+                  "title": "这些结构能确认什么",
+                  "body": "标题：这些结构能确认什么\n\n正文：只解释已登记结构。",
+                  "platform": "抖音",
+                  "media": "视频",
+                  "ai_generated": true,
+                  "aigc_label": "AI 辅助生成",
+                  "aigc_release_reminder": "发布前请使用平台 AI 内容声明功能。",
+                  "applied_direction": []
+                }
+              ]
+            },
+            {
+              "position": 3,
+              "value": "让受众从画面看见新的穿着可能",
+              "prior_context_count": 2,
+              "versions": [
+                {
+                  "version": 1,
+                  "title": "同一对衣服，三种配色主次",
+                  "body": "标题：同一对衣服，三种配色主次\n\n正文：三组连续画面。",
+                  "platform": "抖音",
+                  "media": "视频",
+                  "ai_generated": true,
+                  "aigc_label": "AI 辅助生成",
+                  "aigc_release_reminder": "发布前请使用平台 AI 内容声明功能。",
+                  "translation_notice": "保留幽默，收成克制冷幽默。",
+                  "applied_direction": [
+                    "克制的冷幽默"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "platform_versions": [
+          {
+            "version": 1,
+            "title": "同一对衣服，三种配色主次",
+            "body": "抖音版",
+            "platform": "抖音",
+            "media": "视频",
+            "ai_generated": true,
+            "aigc_label": "AI 辅助生成",
+            "applied_direction": [],
+            "adaptation": "系列源成品"
+          },
+          {
+            "version": 2,
+            "title": "同一对衣服，三种配色主次设想",
+            "body": "小红书四图阅读链。",
+            "platform": "小红书",
+            "media": "图文",
+            "ai_generated": true,
+            "aigc_label": "AI 辅助生成",
+            "applied_direction": [],
+            "adaptation": "由所选源成品另做的平台版本"
+          },
+          {
+            "version": 3,
+            "title": "怎样让被转发的人看懂三画面",
+            "body": "视频号从第三组结果开场。",
+            "platform": "微信视频号",
+            "media": "视频",
+            "ai_generated": true,
+            "aigc_label": "AI 辅助生成",
+            "applied_direction": [],
+            "adaptation": "由所选源成品另做的平台版本"
+          }
+        ]
+      },
+      {
+        "name": "柯桥门店人物演示账号",
+        "channel": "抖音",
+        "content_role": "柯桥门店人物演示身份",
+        "voice_boundary": "从模拟一线人物位置说理解，不冒充真实店员。",
+        "operator": {
+          "id": "demo-store",
+          "name": "M7-2B柯桥门店演示操作者（模拟）",
+          "username": "m72b-keqiao-demo"
+        },
+        "profile": null,
+        "series": null,
+        "platform_versions": []
+      }
+    ]
+  },
   "/api/v1/tenant-management/control-organizations": [
     {
       "id": "org-hq",

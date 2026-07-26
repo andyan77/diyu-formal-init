@@ -34,6 +34,11 @@ class WorkbenchRepository(ABC):
     def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
 
     @abstractmethod
+    def management_demo_content_index(
+        self, scope: TenantManagementScope
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
     def save_management_product(
         self,
         scope: TenantManagementScope,

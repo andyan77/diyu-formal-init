@@ -291,6 +291,338 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             for row in rows
         ]
 
+    def management_demo_content_index(
+        self, scope: TenantManagementScope
+    ) -> dict[str, object]:
+        """Project the equal-depth fixture as a tenant-scoped, read-only acceptance index.
+
+        This is deliberately a projection over the normal production objects.  It neither
+        creates a milestone state store nor copies generated prose into a second persistence
+        path.  FORCE RLS remains active for every query in the transaction.
+        """
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT account.id, account.name, account.channel,
+                       role.name AS content_role, role.voice_boundary,
+                       operator.id AS operator_id, operator.display_name AS operator_name,
+                       credential.username,
+                       profile.id AS profile_id, profile.version AS profile_version,
+                       profile.identity_position, profile.authority_boundary,
+                       profile.audience_relationship, profile.content_territories,
+                       profile.default_production_conditions
+                FROM content_accounts account
+                JOIN account_content_roles account_role
+                  ON account_role.tenant_id = account.tenant_id
+                 AND account_role.account_id = account.id
+                JOIN content_roles role
+                  ON role.tenant_id = account_role.tenant_id
+                 AND role.id = account_role.content_role_id
+                LEFT JOIN account_expression_profile_versions profile
+                  ON profile.tenant_id = account.tenant_id
+                 AND profile.id = account.current_expression_profile_id
+                JOIN LATERAL (
+                    SELECT person.id, person.display_name
+                    FROM auth_grants grant_record
+                    JOIN users person
+                      ON person.tenant_id = grant_record.tenant_id
+                     AND person.id = grant_record.user_id
+                     AND person.enabled = true
+                    WHERE grant_record.tenant_id = account.tenant_id
+                      AND grant_record.account_id = account.id
+                      AND grant_record.enabled = true
+                    ORDER BY person.id
+                    LIMIT 1
+                ) operator ON true
+                LEFT JOIN user_credentials credential
+                  ON credential.tenant_id = account.tenant_id
+                 AND credential.user_id = operator.id
+                WHERE account.tenant_id = %s
+                  AND account.brand_id = %s
+                  AND account.enabled = true
+                  AND account.carrier_of_account_id IS NULL
+                  AND account.business_data_kind = 'synthetic_business_fixture'
+                ORDER BY account.name
+                """,
+                (scope.tenant_id, scope.brand_id),
+            )
+            identity_rows = cursor.fetchall()
+            identities = [
+                self._demo_identity_projection(cursor, scope, row)
+                for row in identity_rows
+            ]
+
+        return {
+            "fixture_status": "ready" if len(identities) == 2 else "not_ready",
+            "fixture_label": "等深模拟业务资料",
+            "boundary": (
+                "组织关系、账号画像、商品和内容均为演示资料；生产代码、正式数据库、"
+                "租户隔离和模型调用路径按正式能力运行。它不代表真实员工、真实在售"
+                "商品、真实门店经营、真实发布或市场结果。"
+            ),
+            "safe_entry": (
+                "由租户管理员为对应演示操作者生成一次性重置链接；本人设置独立密码"
+                "后进入内容工作台。系统不提供共享密码，也不连接任何内容平台。"
+            ),
+            "identities": identities,
+        }
+
+    def _demo_identity_projection(
+        self,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TenantManagementScope,
+        identity: dict[str, object],
+    ) -> dict[str, object]:
+        account_id = UUID(str(identity["id"]))
+        cursor.execute(
+            """
+            SELECT series.id, series.title, series.premise, series.revision
+            FROM content_series series
+            WHERE series.tenant_id = %s
+              AND series.brand_id = %s
+              AND series.account_id = %s
+              AND series.title LIKE '%%M7-2B演示%%'
+            ORDER BY series.created_at DESC
+            LIMIT 1
+            """,
+            (scope.tenant_id, scope.brand_id, account_id),
+        )
+        series_row = cursor.fetchone()
+        artifacts: list[dict[str, object]] = []
+        if series_row is not None:
+            cursor.execute(
+                """
+                SELECT item.position, task.id AS task_id,
+                       task.primary_content_product,
+                       task.content_context_snapshot,
+                       current_version.id AS current_version_id
+                FROM content_series_items item
+                JOIN business_tasks task
+                  ON task.tenant_id = item.tenant_id
+                 AND task.id = item.task_id
+                JOIN content_items content_item
+                  ON content_item.tenant_id = task.tenant_id
+                 AND content_item.task_id = task.id
+                JOIN content_versions current_version
+                  ON current_version.tenant_id = content_item.tenant_id
+                 AND current_version.task_id = content_item.task_id
+                 AND current_version.version_number = content_item.current_version
+                WHERE item.tenant_id = %s AND item.series_id = %s
+                ORDER BY item.position
+                """,
+                (scope.tenant_id, series_row["id"]),
+            )
+            for artifact_row in cursor.fetchall():
+                versions = self._demo_task_versions(
+                    cursor, scope, UUID(str(artifact_row["task_id"]))
+                )
+                snapshot = artifact_row["content_context_snapshot"]
+                prior_count = 0
+                if isinstance(snapshot, dict):
+                    series_context = snapshot.get("series_context")
+                    if isinstance(series_context, dict):
+                        prior_entries = series_context.get("prior_entries")
+                        if isinstance(prior_entries, list):
+                            prior_count = len(prior_entries)
+                artifacts.append(
+                    {
+                        "position": self._integer(artifact_row["position"]),
+                        "value": self._content_value_label(
+                            str(artifact_row["primary_content_product"])
+                        ),
+                        "prior_context_count": prior_count,
+                        "current_version_id": str(
+                            artifact_row["current_version_id"]
+                        ),
+                        "versions": versions,
+                    }
+                )
+
+        platform_versions = self._demo_platform_versions(
+            cursor, scope, account_id, artifacts
+        )
+        profile = (
+            {
+                "version": self._integer(identity["profile_version"]),
+                "segments": [
+                    {"label": "表达身份", "body": str(identity["identity_position"])},
+                    {"label": "权威边界", "body": str(identity["authority_boundary"])},
+                    {
+                        "label": "受众关系",
+                        "body": str(identity["audience_relationship"]),
+                    },
+                    {"label": "内容领地", "body": str(identity["content_territories"])},
+                    {
+                        "label": "长期制作条件",
+                        "body": str(identity["default_production_conditions"]),
+                    },
+                ],
+            }
+            if identity["profile_id"] is not None
+            else None
+        )
+        return {
+            "name": str(identity["name"]),
+            "channel": str(identity["channel"]),
+            "content_role": str(identity["content_role"]),
+            "voice_boundary": str(identity["voice_boundary"]),
+            "operator": {
+                "id": str(identity["operator_id"]),
+                "name": str(identity["operator_name"]),
+                "username": (
+                    str(identity["username"])
+                    if identity["username"] is not None
+                    else ""
+                ),
+            },
+            "profile": profile,
+            "series": (
+                {
+                    "title": str(series_row["title"]),
+                    "premise": str(series_row["premise"]),
+                    "revision": self._integer(series_row["revision"]),
+                    "artifacts": artifacts,
+                }
+                if series_row is not None
+                else None
+            ),
+            "platform_versions": platform_versions,
+        }
+
+    def _demo_task_versions(
+        self,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TenantManagementScope,
+        task_id: UUID,
+    ) -> list[dict[str, object]]:
+        cursor.execute(
+            """
+            SELECT version.id, version.version_number, version.outline, version.body,
+                   version.created_at, run.model, task.content_context_snapshot,
+                   account.channel, task.media_format
+            FROM content_versions version
+            JOIN generation_runs run
+              ON run.tenant_id = version.tenant_id AND run.id = version.run_id
+            JOIN business_tasks task
+              ON task.tenant_id = version.tenant_id AND task.id = version.task_id
+            JOIN content_accounts account
+              ON account.tenant_id = task.tenant_id AND account.id = task.account_id
+            WHERE version.tenant_id = %s
+              AND task.brand_id = %s
+              AND version.task_id = %s
+            ORDER BY version.version_number
+            """,
+            (scope.tenant_id, scope.brand_id, task_id),
+        )
+        return [self._demo_version(row) for row in cursor.fetchall()]
+
+    def _demo_platform_versions(
+        self,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TenantManagementScope,
+        account_id: UUID,
+        artifacts: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        source_versions: dict[str, dict[str, object]] = {}
+        for artifact in artifacts:
+            raw_versions = artifact.get("versions")
+            if not isinstance(raw_versions, list):
+                continue
+            for version in raw_versions:
+                if isinstance(version, dict):
+                    source_versions[str(version["version_id"])] = version
+        if not source_versions:
+            return []
+        cursor.execute(
+            """
+            SELECT version.id, version.version_number, version.outline, version.body,
+                   version.created_at, run.model, task.content_context_snapshot,
+                   account.channel, task.media_format, task.parent_version_id
+            FROM content_accounts account
+            JOIN business_tasks task
+              ON task.tenant_id = account.tenant_id AND task.account_id = account.id
+            JOIN content_items item
+              ON item.tenant_id = task.tenant_id AND item.task_id = task.id
+            JOIN content_versions version
+              ON version.tenant_id = item.tenant_id
+             AND version.task_id = item.task_id
+             AND version.version_number = item.current_version
+            JOIN generation_runs run
+              ON run.tenant_id = version.tenant_id AND run.id = version.run_id
+            WHERE account.tenant_id = %s
+              AND account.brand_id = %s
+              AND account.carrier_of_account_id = %s
+              AND task.parent_version_id IS NOT NULL
+            ORDER BY version.created_at DESC
+            """,
+            (scope.tenant_id, scope.brand_id, account_id),
+        )
+        grouped: dict[str, list[dict[str, object]]] = {}
+        for row in cursor.fetchall():
+            source_version_id = str(row["parent_version_id"])
+            if source_version_id not in source_versions:
+                continue
+            grouped.setdefault(source_version_id, []).append(row)
+        complete = [
+            (source_id, rows)
+            for source_id, rows in grouped.items()
+            if {"小红书", "微信视频号"}
+            <= {str(row["channel"]) for row in rows}
+        ]
+        if not complete:
+            return []
+        source_id, rows = max(
+            complete,
+            key=lambda group: max(str(row["created_at"]) for row in group[1]),
+        )
+        source = dict(source_versions[source_id])
+        source["platform"] = "抖音"
+        source["media"] = "视频"
+        source["adaptation"] = "系列源成品"
+        projections = [source]
+        newest_by_channel: dict[str, dict[str, object]] = {}
+        for row in rows:
+            newest_by_channel.setdefault(str(row["channel"]), row)
+        for row in sorted(
+            newest_by_channel.values(), key=lambda item: str(item["channel"])
+        ):
+            projection = self._demo_version(row)
+            projection["adaptation"] = "由所选源成品另做的平台版本"
+            projections.append(projection)
+        return projections
+
+    @staticmethod
+    def _content_value_label(value: str) -> str:
+        return {
+            "dressing_decision": "帮助受众按条件做选择",
+            "product_truth": "解释商品事实与取舍边界",
+            "brand_life_narrative": "建立品牌生活关系",
+            "local_response": "从在地位置回应现实问题",
+            "visual_styling_story": "让受众从画面看见新的穿着可能",
+        }.get(value, "提供完整受众价值")
+
+    def _demo_version(self, row: dict[str, object]) -> dict[str, object]:
+        channel = str(row["channel"])
+        media = str(row["media_format"])
+        translation_notice, applied_direction = visible_direction(
+            row["content_context_snapshot"]
+        )
+        disclosure, reminder = aigc_disclosure(row["model"])
+        return {
+            "version_id": str(row["id"]),
+            "version": self._integer(row["version_number"]),
+            "title": str(row["outline"]),
+            "body": str(row["body"]),
+            "platform": channel,
+            "media": "图文" if media == "graphic" else "视频",
+            "ai_generated": is_ai_generated_content(row["model"]),
+            "aigc_label": disclosure,
+            "aigc_release_reminder": reminder,
+            "translation_notice": translation_notice,
+            "applied_direction": applied_direction,
+            "created_at": self._time(row["created_at"]),
+        }
+
     def save_management_product(
         self,
         scope: TenantManagementScope,

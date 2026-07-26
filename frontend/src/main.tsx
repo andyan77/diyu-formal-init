@@ -264,6 +264,52 @@ interface Operator {
   manages_tenant: boolean;
 }
 
+interface DemoAcceptanceVersion {
+  version: number;
+  title: string;
+  body: string;
+  platform: string;
+  media: string;
+  ai_generated: boolean;
+  aigc_label?: string | null;
+  aigc_release_reminder?: string | null;
+  translation_notice?: string | null;
+  applied_direction: string[];
+  adaptation?: string;
+}
+
+interface DemoAcceptanceIdentity {
+  name: string;
+  channel: string;
+  content_role: string;
+  voice_boundary: string;
+  operator: { id: string; name: string; username: string };
+  profile: {
+    version: number;
+    segments: Array<{ label: string; body: string }>;
+  } | null;
+  series: {
+    title: string;
+    premise: string;
+    revision: number;
+    artifacts: Array<{
+      position: number;
+      value: string;
+      prior_context_count: number;
+      versions: DemoAcceptanceVersion[];
+    }>;
+  } | null;
+  platform_versions: DemoAcceptanceVersion[];
+}
+
+interface DemoAcceptanceIndex {
+  fixture_status: "ready" | "not_ready";
+  fixture_label: string;
+  boundary: string;
+  safe_entry: string;
+  identities: DemoAcceptanceIdentity[];
+}
+
 declare global {
   interface Window {
     __DIYU_BOOTSTRAP__?: Context | null;
@@ -924,8 +970,51 @@ function DisplayWorkbench({ context }: { context: Context }): JSX.Element {
 }
 
 function AdminWorkspace({ context }: { context: Context }): JSX.Element {
-  const [section, setSection] = useState<"readiness" | "operators" | "products">("readiness");
-  return <section className="admin-workspace"><aside className="sidebar"><p className="sidebar-label">租户管理</p><nav aria-label="租户管理工作面"><button type="button" aria-current={section === "readiness" ? "page" : undefined} className={section === "readiness" ? "active" : ""} onClick={() => setSection("readiness")}>入驻与就绪</button><button type="button" aria-current={section === "operators" ? "page" : undefined} className={section === "operators" ? "active" : ""} onClick={() => setSection("operators")}>账号与操作人</button><button type="button" aria-current={section === "products" ? "page" : undefined} className={section === "products" ? "active" : ""} onClick={() => setSection("products")}>本轮商品资料</button></nav></aside><main className="admin-main">{section === "readiness" && <ReadinessPanel />}{section === "operators" && <OperatorPanel formalRuntime={context.formal_runtime === true} brandName={context.identity.brand} />}{section === "products" && <ProductFactsPanel />}</main></section>;
+  const initialSection = new URLSearchParams(window.location.search).get("section") === "demo" ? "demo" : "readiness";
+  const [section, setSection] = useState<"readiness" | "operators" | "products" | "demo">(initialSection);
+  return <section className="admin-workspace"><aside className="sidebar"><p className="sidebar-label">租户管理</p><nav aria-label="租户管理工作面"><button type="button" aria-current={section === "readiness" ? "page" : undefined} className={section === "readiness" ? "active" : ""} onClick={() => setSection("readiness")}>入驻与就绪</button><button type="button" aria-current={section === "demo" ? "page" : undefined} className={section === "demo" ? "active" : ""} onClick={() => setSection("demo")}>演示内容验收</button><button type="button" aria-current={section === "operators" ? "page" : undefined} className={section === "operators" ? "active" : ""} onClick={() => setSection("operators")}>账号与操作人</button><button type="button" aria-current={section === "products" ? "page" : undefined} className={section === "products" ? "active" : ""} onClick={() => setSection("products")}>本轮商品资料</button></nav></aside><main className="admin-main">{section === "readiness" && <ReadinessPanel />}{section === "demo" && <DemoAcceptancePanel />}{section === "operators" && <OperatorPanel formalRuntime={context.formal_runtime === true} brandName={context.identity.brand} />}{section === "products" && <ProductFactsPanel />}</main></section>;
+}
+
+function DemoAcceptancePanel(): JSX.Element {
+  const index = useQuery({
+    queryKey: ["demo-content-index"],
+    queryFn: () => api<DemoAcceptanceIndex>("/api/v1/tenant-management/demo-content-index")
+  });
+  const [activationLink, setActivationLink] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const reset = useMutation<string, DemoAcceptanceIdentity["operator"]>({
+    mutationFn: async operator => {
+      const value = await api<{ reset_link: string }>(`/api/v1/tenant-management/users/${operator.id}/reset`, { method: "POST" });
+      return value.reset_link;
+    },
+    onSuccess: value => {
+      setActivationLink(value);
+      setNotice("一次性重置链接已生成。请只由本次演示验收者打开并设置独立密码。");
+    },
+    onError: error => setNotice(error.message)
+  });
+  if (index.isLoading) return <Loading label="正在整理演示内容验收索引……" />;
+  if (index.error) return <Notice value={index.error.message} onDismiss={() => undefined} />;
+  if (!index.data || index.data.fixture_status !== "ready") return <><header className="page-heading"><p className="eyebrow">演示内容验收</p><h1>演示资料还没有完整就绪。</h1><p>本页只读取正式生产对象，不会用临时文本或测试旁路拼出验收结果。</p></header></>;
+  return <>
+    <header className="page-heading"><p className="eyebrow">{index.data.fixture_label}</p><h1>从这里安全进入，也在这里完整验收。</h1><p>{index.data.boundary}</p></header>
+    <p className="mode-note">{index.data.safe_entry}</p>
+    {notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}
+    {activationLink && <p className="notice demo-activation"><span>一次性进入激活：<a href={activationLink}>打开安全激活流程</a>。该链接使用后失效，不是共享密码。</span></p>}
+    <section className="demo-identities">
+      {index.data.identities.map(identity => <article className="demo-identity" key={identity.name}>
+        <header><p className="eyebrow">演示表达身份</p><h2>{identity.name}</h2><p>{identity.content_role} · 默认承载于{identity.channel}</p><small>{identity.voice_boundary}</small></header>
+        <div className="demo-entry"><div><strong>{identity.operator.name}</strong><span>登录用户名：{identity.operator.username}</span></div><button type="button" disabled={reset.isPending} onClick={() => reset.mutate(identity.operator)}>生成一次性安全进入链接</button></div>
+        {identity.profile && <details className="demo-profile"><summary>查看五段画像 · 当前 V{identity.profile.version}</summary><dl>{identity.profile.segments.map(segment => <div key={segment.label}><dt>{segment.label}</dt><dd>{segment.body}</dd></div>)}</dl></details>}
+        {identity.series && <section className="demo-series"><p className="eyebrow">连续系列</p><h3>{identity.series.title}</h3><p>{identity.series.premise}</p>{identity.series.artifacts.map(artifact => <article className="demo-artifact" key={artifact.position}><div className="demo-artifact-heading"><div><strong>第 {artifact.position} 篇 · {artifact.versions.at(-1)?.title}</strong><span>{artifact.value}{artifact.position > 1 ? ` · 冻结读取 ${artifact.prior_context_count} 篇必要前情` : ""}</span></div><span>{artifact.versions.length > 1 ? `V1→V${artifact.versions.at(-1)?.version}，旧版保留` : "V1 当前版"}</span></div><div className="demo-version-list">{artifact.versions.map(version => <DemoVersion key={version.version} value={version} />)}</div></article>)}</section>}
+        <section className="demo-platforms"><p className="eyebrow">三平台当前成品</p><div className="demo-platform-grid">{identity.platform_versions.map(version => <DemoVersion key={`${version.platform}-${version.version}`} value={version} compact />)}</div></section>
+      </article>)}
+    </section>
+  </>;
+}
+
+function DemoVersion({ value, compact = false }: { value: DemoAcceptanceVersion; compact?: boolean }): JSX.Element {
+  return <details className={`demo-version ${compact ? "compact" : ""}`}><summary><span>{compact ? `${value.platform}${value.media}` : `V${value.version}`}</span><strong>{value.title}</strong></summary><div>{value.adaptation && <p className="muted">{value.adaptation}</p>}{value.translation_notice && <p className="translation-notice">{value.translation_notice}</p>}<ArtifactText value={value.body} />{value.ai_generated && <p className="artifact-disclosure">{value.aigc_label}</p>}{value.aigc_release_reminder && <p className="artifact-reminder">{value.aigc_release_reminder}</p>}</div></details>;
 }
 
 function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; brandName: string }): JSX.Element {

@@ -731,6 +731,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> list[dict[str, object]]:
         return workbench_service.management_products(scope)
 
+    @app.get(
+        "/api/v1/tenant-management/demo-content-index",
+        responses=business_failures,
+    )
+    def management_demo_content_index(
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.management_demo_content_index(scope)
+
     @app.get("/api/v1/tenant-management/onboarding-prefill", responses=business_failures)
     def management_onboarding_prefill(
         scope: TenantManagementScope = Depends(management_scope_from_request),

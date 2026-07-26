@@ -276,3 +276,30 @@ def test_platform_scope_uses_the_explicit_carrier_relation() -> None:
     identity = TenantSession(TENANT_ID, STORE_CONTENT_USER_ID, "tenant-user")
     assert repository.content_scope(identity, "xiaohongshu_graphic").account_id == carrier_id
     assert repository.content_scope(identity, "douyin_video").account_id == STORE_CONTENT_ACCOUNT_ID
+
+
+def test_demo_acceptance_index_is_manager_scoped_and_uses_no_fallback_fixture() -> None:
+    settings = Settings.model_validate({})
+    with TestClient(create_app(settings)) as manager:
+        manager.get("/ui/select/admin")
+        response = manager.get("/api/v1/tenant-management/demo-content-index")
+        assert response.status_code == 200
+        assert response.json() == {
+            "fixture_status": "not_ready",
+            "fixture_label": "等深模拟业务资料",
+            "boundary": (
+                "组织关系、账号画像、商品和内容均为演示资料；生产代码、正式数据库、"
+                "租户隔离和模型调用路径按正式能力运行。它不代表真实员工、真实在售"
+                "商品、真实门店经营、真实发布或市场结果。"
+            ),
+            "safe_entry": (
+                "由租户管理员为对应演示操作者生成一次性重置链接；本人设置独立密码"
+                "后进入内容工作台。系统不提供共享密码，也不连接任何内容平台。"
+            ),
+            "identities": [],
+        }
+
+    with TestClient(create_app(settings)) as content_user:
+        content_user.get("/ui/select/content")
+        denied = content_user.get("/api/v1/tenant-management/demo-content-index")
+        assert denied.status_code == 403

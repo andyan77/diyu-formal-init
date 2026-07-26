@@ -96,8 +96,23 @@ async function main(): Promise<void> {
   ));
   assert.match(document.body.textContent ?? "", /一次性激活或重置链接/);
 
+  await click(find(".sidebar nav button", "演示内容验收"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /总部品牌内容运营演示账号/);
+  assert.match(document.body.textContent ?? "", /总部｜让选择保留余地/);
+  assert.match(document.body.textContent ?? "", /V1→V2，旧版保留/);
+  assert.match(document.body.textContent ?? "", /同一对衣服，三种配色主次设想/);
+  assert.match(document.body.textContent ?? "", /怎样让被转发的人看懂三画面/);
+  await click(find("button", "生成一次性安全进入链接"));
+  await settle();
+  assert.ok(requests.some(item =>
+    item.method === "POST"
+    && item.path === "/api/v1/tenant-management/users/demo-hq/reset"
+  ));
+  assert.match(document.body.textContent ?? "", /打开安全激活流程/);
+
   await act(async () => root.unmount());
-  process.stdout.write("frontend admin prefill interaction checks passed\n");
+  process.stdout.write("frontend admin prefill and demo acceptance checks passed\n");
 }
 
 main().catch(error => {

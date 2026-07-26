@@ -53,6 +53,11 @@ class WorkbenchService:
     def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         return self._repository.management_products(scope)
 
+    def management_demo_content_index(
+        self, scope: TenantManagementScope
+    ) -> dict[str, object]:
+        return self._repository.management_demo_content_index(scope)
+
     def management_onboarding_prefill(
         self,
         scope: TenantManagementScope,
