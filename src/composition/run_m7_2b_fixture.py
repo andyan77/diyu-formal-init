@@ -1020,29 +1020,27 @@ def run() -> dict[str, object]:
         )
         store_xiaohongshu = _ensure_platform_revision(
             store_client,
-            _ensure_recompiled(store_client, s2, "xiaohongshu_graphic"),
+            _ensure_recompiled(store_client, s1, "xiaohongshu_graphic"),
             "xiaohongshu_graphic",
             (
-                "继续自然修改小红书图文版：上一版擅自安排爸爸、妈妈和小朋友分别穿童装，全部删除。"
-                "不得把任何演示商品分配给家庭成员，也不得推断实际穿着和搭配结果。标题与正文开头"
-                "不要再沿用“一家三口合照，先统一颜色还是先各自舒服”的原句，改从“先明确这次"
-                "更在意什么”进入。首图和后续图分别承担两个条件与手持验证；只出现一名创作者、"
-                "两件演示商品和手机，不新增人物、桌子或纸笔，完整正文可独立阅读。"
+                "自然修改成真正的小红书图文当前版：标题和正文开头不能沿用抖音源版，改从"
+                "“有些沉默不是拒绝”进入。用首图提出假设，后续图片分别承担留一点距离、"
+                "等待帮助信号和这是当前建议而非本店做法；完整正文可独立阅读。只出现一名创作者"
+                "和手机，不新增顾客、衣架、商品、桌子或纸笔，不猜任何人的真实经历。"
             ),
-            desired_version=3,
+            desired_version=2,
         )
         store_wechat = _ensure_platform_revision(
             store_client,
-            _ensure_recompiled(store_client, s2, "wechat_channels_video"),
+            _ensure_recompiled(store_client, s1, "wechat_channels_video"),
             "wechat_channels_video",
             (
-                "继续自然修改视频号版：上一版把“受众价值、本卡、交付、scene_steps、确定性派生”等"
-                "内部合同话写进可见成品，必须从标题、合同字段、口播、画面和制作提示全部删除。"
-                "标题和开头不要沿用抖音原句，改从“先问这次合照最在意什么”进入；先交代这是一个"
-                "假设选择，再依次给出优先条件、反转条件和手持验证，使被单独转发的人也能看懂。"
-                "只用一名创作者、两件演示商品和手机，不分配给家庭成员，不新增桌子或纸笔。"
+                "自然修改成真正的微信视频号当前版：标题和开头不能沿用抖音源版；先用一秒停顿"
+                "建立被单独看到或转发时也能理解的情境，再提出“如果有人只想安静看看”的假设，"
+                "最后给出留一点距离、等待帮助信号的当前建议。重组镜头顺序、封面字和收尾互动，"
+                "不机械截短。只出现一名创作者和手机，不新增顾客、衣架、商品或真实本店做法。"
             ),
-            desired_version=3,
+            desired_version=2,
         )
         hq_platforms = {
             "douyin": h3,
@@ -1050,7 +1048,7 @@ def run() -> dict[str, object]:
             "wechat_channels": hq_wechat,
         }
         store_platforms = {
-            "douyin": s2,
+            "douyin": s1,
             "xiaohongshu": store_xiaohongshu,
             "wechat_channels": store_wechat,
         }
