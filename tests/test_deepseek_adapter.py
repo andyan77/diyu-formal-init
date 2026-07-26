@@ -967,6 +967,51 @@ def test_deterministic_unit_checks_keep_identifiers_and_values_exact(
     assert any(fragment.startswith("source:") for fragment in fragments)
 
 
+def test_registered_product_identifiers_are_replaced_only_in_visible_copy(
+    generation_input: GenerationInput,
+) -> None:
+    product = ProductFact(
+        "DIYU-CSPU-001",
+        {"category": "male children short-sleeve", "colors": ["亮黄色"]},
+        display_name="男童亮黄短袖（M7-2B演示商品）",
+        source_kind="synthetic_business_fixture",
+    )
+    request = _with(generation_input, products=(product,))
+    core = _video_core()
+    claims = cast("list[dict[str, object]]", core["claims"])
+    claims[4] = _claim(
+        "c5",
+        "choice",
+        "先看 DIYU-CSPU-001 在当前画面里的颜色关系",
+        "confirmed_fact",
+        "non_event",
+        ("source:product:DIYU-CSPU-001",),
+    )
+    steps = cast("list[dict[str, object]]", core["scene_steps"])
+    steps[0] = _step(
+        "s1",
+        "cover",
+        "手持 DIYU-CSPU-001 面向手机。",
+        ("c1",),
+        actor_refs=("actor:creator",),
+        resource_refs=("resource:product:DIYU-CSPU-001", "resource:phone"),
+        production_note="画面字写 DIYU-CSPU-001。",
+    )
+    normalized = DeepSeekGenerator._replace_registered_product_identifiers(
+        request,
+        _generator()._parse_core(request, BoundaryContext.from_request(request), core),
+    )
+
+    assert "DIYU-CSPU-001" not in normalized.claim("c5").text
+    assert normalized.claim("c5").source_refs == ("source:product:DIYU-CSPU-001",)
+    assert normalized.scene_steps[0].resource_refs == (
+        "resource:product:DIYU-CSPU-001",
+        "resource:phone",
+    )
+    assert "男童亮黄短袖（M7-2B演示商品）" in normalized.scene_steps[0].action_text
+    assert "男童亮黄短袖（M7-2B演示商品）" in normalized.scene_steps[0].production_note
+
+
 def test_fixed_duration_repairs_the_copy_instead_of_only_the_label(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,

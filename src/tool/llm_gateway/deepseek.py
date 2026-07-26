@@ -560,6 +560,7 @@ class DeepSeekGenerator(ContentGenerator):
                     context,
                     json.loads(self._json_content(str(payload["choices"][0]["message"]["content"]))),
                 )
+                core = self._replace_registered_product_identifiers(request, core)
                 break
             except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 if format_attempt:
@@ -587,6 +588,7 @@ class DeepSeekGenerator(ContentGenerator):
                     issues,
                     json.loads(self._json_content(str(payload["choices"][0]["message"]["content"]))),
                 )
+                repaired_core = self._replace_registered_product_identifiers(request, repaired_core)
             except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 raise GenerationFailed("模型边界修复返回格式不完整") from exc
             final_issues, judgement_payload, judgement_retries = self._review_core(request, context, repaired_core)
@@ -595,10 +597,7 @@ class DeepSeekGenerator(ContentGenerator):
             if final_issues:
                 _LOGGER.warning(
                     "content boundary remained unsatisfied after unit repair: %s",
-                    ",".join(
-                        f"{issue.unit_id}:{issue.reason_code}:{issue.fragment[:300]!r}"
-                        for issue in final_issues
-                    ),
+                    ",".join(f"{issue.unit_id}:{issue.reason_code}" for issue in final_issues),
                 )
                 raise GenerationFailed("内容边界无法在一次单元修复内满足")
             fact_repair_receipts = self._issue_receipts(request, core, issues)
@@ -769,6 +768,52 @@ class DeepSeekGenerator(ContentGenerator):
             claims=core.claims,
             spoken_order=core.spoken_order,
             scene_steps=tuple(steps),
+        )
+
+    @staticmethod
+    def _replace_registered_product_identifiers(
+        request: GenerationInput,
+        core: ContentCore,
+    ) -> ContentCore:
+        """Keep internal product identifiers out of the visible artifact.
+
+        Product source and resource references retain the frozen SKU. Only
+        user-visible prose is normalized, using the display name from the same
+        registered ProductFact snapshot rather than a model guess.
+        """
+
+        replacements = tuple(
+            sorted(
+                (
+                    (product.sku, product.display_name.strip() or "当前商品")
+                    for product in request.products
+                    if product.sku and product.sku != product.display_name.strip()
+                ),
+                key=lambda item: len(item[0]),
+                reverse=True,
+            )
+        )
+        if not replacements:
+            return core
+
+        def visible(text: str) -> str:
+            for identifier, display_name in replacements:
+                text = text.replace(identifier, display_name)
+            return text
+
+        return ContentCore(
+            speaker_ref=core.speaker_ref,
+            claims=tuple(replace(claim, text=visible(claim.text)) for claim in core.claims),
+            spoken_order=core.spoken_order,
+            scene_steps=tuple(
+                replace(
+                    step,
+                    action_text=visible(step.action_text),
+                    sound_text=visible(step.sound_text),
+                    production_note=visible(step.production_note),
+                )
+                for step in core.scene_steps
+            ),
         )
 
     @staticmethod
