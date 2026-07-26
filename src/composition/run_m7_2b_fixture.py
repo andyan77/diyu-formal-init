@@ -640,6 +640,7 @@ def _ensure_platform_revision(
     artifact: dict[str, Any],
     target: str,
     instruction: str,
+    desired_version: int = 2,
 ) -> dict[str, Any]:
     versions = _response_json(
         client,
@@ -648,13 +649,13 @@ def _ensure_platform_revision(
     )
     if isinstance(versions, list) and any(
         isinstance(item, dict)
-        and int(str(item.get("version") or "0")) == 2
+        and int(str(item.get("version") or "0")) == desired_version
         for item in versions
     ):
         return _task_version(
             client,
             str(artifact["task_id"]),
-            2,
+            desired_version,
             target=target,
         )
     result = _response_json(
@@ -1009,33 +1010,39 @@ def run() -> dict[str, object]:
             _ensure_recompiled(hq_client, h3, "wechat_channels_video"),
             "wechat_channels_video",
             (
-                "自然修改成真正的微信视频号当前版：标题和开头不能沿用抖音源版；"
-                "先补足被单独看到或转发时需要的情境，再重组判断顺序、镜头节奏、封面字和收尾互动。"
-                "保持完整视频，不机械截短，不只替换平台名或标签；核心判断、演示商品事实、账号身份、"
-                "系列前情和画面造型价值不变。"
+                "继续自然修改视频号版：上一版标题和开头仍太像抖音，这次标题不要再使用"
+                "“同一对衣服”或“三种配色主次”原句，开头先交代“手边只有一件亮黄短袖和一件"
+                "白色连衣裙，怎样让被单独转发的人看懂这组三画面”。先展示第三组结果，再回到完整"
+                "并列和白色为主的两组，最后收束三种画面关系，实质改变信息顺序、镜头节奏、封面字"
+                "和收尾互动。商品事实、账号身份和画面造型价值不变，不机械截短。"
             ),
+            desired_version=3,
         )
         store_xiaohongshu = _ensure_platform_revision(
             store_client,
             _ensure_recompiled(store_client, s2, "xiaohongshu_graphic"),
             "xiaohongshu_graphic",
             (
-                "自然修改成真正的小红书图文当前版：标题和正文开头不能沿用抖音源版；"
-                "首图先给出这次选择的两个条件，后续图片分别承担优先选择、反转条件和低成本验证，"
-                "完整正文可独立阅读。不要把视频台词切成图卡，不只替换平台名或标签。"
-                "保持假设语气、演示商品事实、门店人物位置和帮助选择价值，不新增桌子或纸笔。"
+                "继续自然修改小红书图文版：上一版擅自安排爸爸、妈妈和小朋友分别穿童装，全部删除。"
+                "不得把任何演示商品分配给家庭成员，也不得推断实际穿着和搭配结果。标题与正文开头"
+                "不要再沿用“一家三口合照，先统一颜色还是先各自舒服”的原句，改从“先明确这次"
+                "更在意什么”进入。首图和后续图分别承担两个条件与手持验证；只出现一名创作者、"
+                "两件演示商品和手机，不新增人物、桌子或纸笔，完整正文可独立阅读。"
             ),
+            desired_version=3,
         )
         store_wechat = _ensure_platform_revision(
             store_client,
             _ensure_recompiled(store_client, s2, "wechat_channels_video"),
             "wechat_channels_video",
             (
-                "自然修改成真正的微信视频号当前版：标题和开头不能沿用抖音源版；"
-                "先交代一家三口合照只是一个假设选择，再重组优先条件、反转条件、手持验证的镜头顺序、"
-                "封面字和收尾互动，使内容被单独转发也能看懂。不要机械截短，不只替换平台名或标签。"
-                "保持演示商品事实、门店人物位置和帮助选择价值，不新增桌子或纸笔。"
+                "继续自然修改视频号版：上一版把“受众价值、本卡、交付、scene_steps、确定性派生”等"
+                "内部合同话写进可见成品，必须从标题、合同字段、口播、画面和制作提示全部删除。"
+                "标题和开头不要沿用抖音原句，改从“先问这次合照最在意什么”进入；先交代这是一个"
+                "假设选择，再依次给出优先条件、反转条件和手持验证，使被单独转发的人也能看懂。"
+                "只用一名创作者、两件演示商品和手机，不分配给家庭成员，不新增桌子或纸笔。"
             ),
+            desired_version=3,
         )
         hq_platforms = {
             "douyin": h3,
