@@ -260,8 +260,16 @@ class BoundaryContext:
         # actuality.  Only a local_response request qualifies: its routing
         # contract already requires the user to hand over a real near-field
         # signal.  Every other seed stays a topic and proves nothing.
+        is_synthetic_fixture = (
+            request.brand.business_data_kind == "synthetic_business_fixture"
+        )
         if request.primary_product == "local_response":
-            user_actuality = f"用户本次明确给出的真实近场信号（仅限本次使用）：{request.weak_seed}"
+            user_actuality = (
+                "本次等深模拟业务夹具提供的近场信号（仅用于演示软件能力，"
+                f"不是真实员工经历或真实门店经营事实）：{request.weak_seed}"
+                if is_synthetic_fixture
+                else f"用户本次明确给出的真实近场信号（仅限本次使用）：{request.weak_seed}"
+            )
             user_actuality_source: str | None = _USER_ACTUALITY_SOURCE_ID
         else:
             user_actuality = ""
@@ -278,14 +286,29 @@ class BoundaryContext:
             )
             or "无已确认商品"
         )
-        confirmed = "\n".join(
-            (
-                f"品牌“{request.brand.brand_name}”属组织“{request.brand.organization_name}”；"
-                f"当前发布账号“{request.brand.account_name}”真实存在。",
-                f"当前商品事实：{products_text}。",
-                "除以上外：无已确认门店事实、无已执行服务、无顾客案例、无家庭事件、无既有照片或素材。",
+        if is_synthetic_fixture:
+            confirmed = "\n".join(
+                (
+                    f"品牌“{request.brand.brand_name}”的生产验收作用域包含等深模拟组织"
+                    f"“{request.brand.organization_name}”和等深模拟表达身份"
+                    f"“{request.brand.account_name}”；这些对象真实存在于生产数据库，"
+                    "但不代表现实员工或现实经营账号。",
+                    f"当前演示商品事实：{products_text}。这些事实只用于等深模拟业务验收，"
+                    "不证明真实在售、库存、价格、性能、设计动机或销售结果。",
+                    "除以上演示资料外：无真实门店事实、无已执行服务、无顾客案例、"
+                    "无家庭事件、无既有照片或素材。成品属于演示成品，不得冒充现实经营记录。",
+                )
             )
-        )
+        else:
+            confirmed = "\n".join(
+                (
+                    f"品牌“{request.brand.brand_name}”属组织“{request.brand.organization_name}”；"
+                    f"当前发布账号“{request.brand.account_name}”真实存在。",
+                    f"当前商品事实：{products_text}。",
+                    "除以上外：无已确认门店事实、无已执行服务、无顾客案例、无家庭事件、"
+                    "无既有照片或素材。",
+                )
+            )
         method = (
             ("\n".join(asset.body for asset in request.active_domain_assets) + "\n")
             if request.active_domain_assets
@@ -297,9 +320,23 @@ class BoundaryContext:
             (_ROLE_BOUNDARY_SOURCE_ID, "账号内容角色与表达边界"),
         )
         confirmed_sources: tuple[tuple[str, str], ...] = (
-            (_ORGANIZATION_SOURCE_ID, "品牌、组织与发布账号在册事实"),
+            (
+                _ORGANIZATION_SOURCE_ID,
+                (
+                    "生产数据库内的等深模拟组织与表达身份"
+                    if is_synthetic_fixture
+                    else "品牌、组织与发布账号在册事实"
+                ),
+            ),
             *(
-                (f"source:product:{product.sku}", f"已确认商品 {product.sku} 的登记事实")
+                (
+                    f"source:product:{product.sku}",
+                    (
+                        f"演示商品 {product.sku} 的等深模拟登记事实"
+                        if product.source_kind == "synthetic_business_fixture"
+                        else f"已确认商品 {product.sku} 的登记事实"
+                    ),
+                )
                 for product in request.products
             ),
         )
@@ -1072,7 +1109,14 @@ class DeepSeekGenerator(ContentGenerator):
                 ),
                 release_caption_and_interaction=self._visible_text(slot_text["release_caption"]),
             )
-        return title, contract, production, self._visible_body(title, production, contract)
+        return title, contract, production, self._visible_body(
+            title,
+            production,
+            contract,
+            synthetic_business_fixture=(
+                request.brand.business_data_kind == "synthetic_business_fixture"
+            ),
+        )
 
     @staticmethod
     def _contract(product: ContentProduct, slot_text: dict[str, str]) -> ContentSemanticContract:
@@ -1201,6 +1245,8 @@ class DeepSeekGenerator(ContentGenerator):
         title: str,
         production: ContentProductionBundle,
         contract: ContentSemanticContract | None = None,
+        *,
+        synthetic_business_fixture: bool = False,
     ) -> str:
         if isinstance(production, VideoProductionBundle):
             sections: tuple[tuple[str, str], ...] = (
@@ -1259,7 +1305,12 @@ class DeepSeekGenerator(ContentGenerator):
             )
         elif isinstance(contract, P5SemanticContract):
             contract_sections = (
-                ("真实商品锚点", contract.real_product_anchor),
+                (
+                    "演示商品锚点"
+                    if synthetic_business_fixture
+                    else "真实商品锚点",
+                    contract.real_product_anchor,
+                ),
                 ("可见造型命题", contract.visible_styling_proposition),
                 ("画面成立条件", contract.visual_dependency),
             )

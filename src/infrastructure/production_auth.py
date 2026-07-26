@@ -557,27 +557,49 @@ class ProductionAuthRepository:
         """Return only the manager's tenant organizations for qualification assignment."""
         with self._tenant_tx(manager.tenant_id) as cursor:
             cursor.execute(
-                "SELECT id, name FROM organizations WHERE tenant_id = %s ORDER BY name",
+                "SELECT id, name, business_data_kind "
+                "FROM organizations WHERE tenant_id = %s ORDER BY name",
                 (manager.tenant_id,),
             )
-            return [{"id": str(row["id"]), "name": str(row["name"])} for row in cursor.fetchall()]
+            return [
+                {
+                    "id": str(row["id"]),
+                    "name": str(row["name"]),
+                    "business_data_kind": str(row["business_data_kind"]),
+                }
+                for row in cursor.fetchall()
+            ]
 
     def create_tenant_organization(
-        self, manager: TenantSession, name: str
+        self,
+        manager: TenantSession,
+        name: str,
+        as_synthetic_business_fixture: bool = False,
     ) -> dict[str, str]:
         organization_id = uuid4()
         normalized_name = name.strip()
         if not normalized_name:
             raise DomainError("请填写真实组织名称")
+        business_data_kind = (
+            "synthetic_business_fixture"
+            if as_synthetic_business_fixture
+            else "formal_business_data"
+        )
         with self._tenant_tx(manager.tenant_id) as cursor:
             try:
                 cursor.execute(
                     """
-                    INSERT INTO organizations (id, tenant_id, name)
-                    VALUES (%s, %s, %s)
-                    RETURNING id, name
+                    INSERT INTO organizations
+                        (id, tenant_id, name, business_data_kind)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, name, business_data_kind
                     """,
-                    (organization_id, manager.tenant_id, normalized_name),
+                    (
+                        organization_id,
+                        manager.tenant_id,
+                        normalized_name,
+                        business_data_kind,
+                    ),
                 )
                 row = self._one(cursor, "组织创建失败")
             except psycopg.errors.UniqueViolation as exc:
@@ -589,7 +611,11 @@ class ProductionAuthRepository:
                 "organization.created",
                 organization_id,
             )
-        return {"id": str(row["id"]), "name": str(row["name"])}
+        return {
+            "id": str(row["id"]),
+            "name": str(row["name"]),
+            "business_data_kind": str(row["business_data_kind"]),
+        }
 
     def bootstrap_existing_tenant_admin(self, tenant_id: UUID, user_id: UUID, username: str) -> str:
         """Create the first one-time activation material without creating a synthetic password."""

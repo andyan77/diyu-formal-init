@@ -198,6 +198,7 @@ def test_real_tenant_onboarding_is_atomic_account_independent_and_idempotent(
             {
                 "id": str(administrator_id),
                 "display_name": "笛语服饰负责人",
+                "username": username,
                 "organization": f"{tenant_name}管理组织",
                 "publishing_accounts": "",
                 "default_persona": "",

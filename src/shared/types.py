@@ -54,6 +54,7 @@ class BrandContext:
     platform: str
     media_format: str
     production_conditions: str
+    business_data_kind: str = "formal_business_data"
 
 
 @dataclass(frozen=True)

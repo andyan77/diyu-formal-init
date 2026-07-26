@@ -59,7 +59,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT b.name AS brand, u.display_name AS operator, o.name AS organization,
-                       a.name AS account, r.name AS content_role
+                       a.name AS account, r.name AS content_role, a.business_data_kind
                 FROM users u
                 JOIN organizations o ON o.id = u.organization_id AND o.tenant_id = u.tenant_id
                 JOIN brands b ON b.id = %s AND b.tenant_id = u.tenant_id
@@ -153,6 +153,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT u.id, u.display_name, o.name AS organization,
+                       credential.username,
                        COALESCE(string_agg(DISTINCT a.name, '、'), '') AS publishing_accounts,
                        COALESCE(persona.name, '') AS default_persona,
                        EXISTS (
@@ -167,8 +168,11 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 LEFT JOIN content_accounts a ON a.id = assignment.account_id AND a.tenant_id = assignment.tenant_id
                 LEFT JOIN user_default_personas persona ON persona.tenant_id = u.tenant_id
                     AND persona.user_id = u.id
+                LEFT JOIN user_credentials credential
+                  ON credential.tenant_id = u.tenant_id AND credential.user_id = u.id
                 WHERE u.tenant_id = %s AND u.enabled = true
-                GROUP BY u.id, u.display_name, o.name, persona.name, u.tenant_id
+                GROUP BY u.id, u.display_name, o.name, credential.username,
+                         persona.name, u.tenant_id
                 ORDER BY u.display_name
                 """,
                 (scope.tenant_id,),
@@ -178,6 +182,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             {
                 "id": str(row["id"]),
                 "display_name": str(row["display_name"]),
+                "username": (
+                    str(row["username"]) if row["username"] is not None else ""
+                ),
                 "organization": str(row["organization"]),
                 "publishing_accounts": str(row["publishing_accounts"]),
                 "default_persona": str(row["default_persona"]),
@@ -191,6 +198,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT a.id, a.name, a.channel, r.name AS content_role, r.voice_boundary,
+                       a.business_data_kind,
                        a.carrier_of_account_id, source.name AS carrier_of_account,
                        COALESCE(
                            (
@@ -232,6 +240,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "channel": str(row["channel"]),
                 "content_role": str(row["content_role"]),
                 "voice_boundary": str(row["voice_boundary"]),
+                "business_data_kind": str(row["business_data_kind"]),
                 "carrier_of_account_id": (
                     str(row["carrier_of_account_id"])
                     if row["carrier_of_account_id"] is not None
@@ -252,7 +261,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT product.sku, product.display_name, product.facts,
-                       product.source_note, product.fact_version,
+                       product.source_kind, product.source_note, product.fact_version,
                        product.applicability, product.status,
                        person.display_name AS updated_by, product.updated_at
                 FROM brand_products product
@@ -269,6 +278,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "sku": str(row["sku"]),
                 "display_name": str(row["display_name"]),
                 "facts": row["facts"] if isinstance(row["facts"], dict) else {},
+                "source_kind": str(row["source_kind"]),
                 "source_note": str(row["source_note"]),
                 "fact_version": self._integer(row["fact_version"]),
                 "applicability": str(row["applicability"]),
@@ -287,6 +297,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         sku: str,
         display_name: str,
         facts: dict[str, object],
+        source_kind: str,
         source_note: str,
         applicability: str,
     ) -> dict[str, object]:
@@ -298,7 +309,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     (id, tenant_id, brand_id, sku, display_name, facts,
                      source_kind, source_note, fact_version, applicability,
                      status, updated_by, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, 'brand_user_confirmed',
+                VALUES (%s, %s, %s, %s, %s, %s, %s,
                         %s, 1, %s, 'active', %s, now())
                 ON CONFLICT (tenant_id, brand_id, sku) DO UPDATE
                 SET display_name = EXCLUDED.display_name,
@@ -319,6 +330,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     sku,
                     display_name,
                     Jsonb(facts),
+                    source_kind,
                     source_note,
                     applicability,
                     scope.user_id,
@@ -336,7 +348,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "sku": sku,
             "display_name": display_name,
             "facts": facts,
-            "source_kind": "brand_user_confirmed",
+            "source_kind": source_kind,
             "source_note": source_note,
             "fact_version": self._integer(row["fact_version"]),
             "applicability": applicability,
@@ -354,6 +366,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         operator_id: UUID,
         control_organization_id: UUID | None = None,
         operator_can_maintain_expression_profile: bool = False,
+        business_data_kind: str = "formal_business_data",
     ) -> dict[str, object]:
         account_id = uuid4()
         content_role_id = uuid4()
@@ -386,6 +399,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 """
                 SELECT account.id, account.channel, role.name AS content_role,
                        role.voice_boundary, account.control_organization_id,
+                       account.business_data_kind,
                        EXISTS (
                            SELECT 1
                            FROM auth_grants grant_record
@@ -427,6 +441,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     or not bool(existing["has_operator"])
                     or bool(existing["operator_can_maintain"])
                     != operator_can_maintain_expression_profile
+                    or str(existing["business_data_kind"]) != business_data_kind
                     # Control organization decides who may maintain the profile, so a repeat that
                     # names a different one is a different account, not the same one again.
                     or (str(existing_control) if existing_control is not None else None)
@@ -452,8 +467,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 raise DomainError("当前品牌已有同名企业表达人设。")
             cursor.execute(
                 "INSERT INTO content_accounts (id, tenant_id, brand_id, name, channel, "
-                "control_organization_id, control_organization_source) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                "control_organization_id, control_organization_source, "
+                "business_data_kind) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     account_id,
                     scope.tenant_id,
@@ -462,6 +478,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     channel,
                     control_organization_id,
                     "declared" if control_organization_id is not None else "unset",
+                    business_data_kind,
                 ),
             )
             cursor.execute(
@@ -516,7 +533,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 """
                 SELECT source.channel, source.control_organization_id,
                        source.control_organization_source, account_role.content_role_id,
-                       role.name AS content_role, role.voice_boundary
+                       role.name AS content_role, role.voice_boundary,
+                       source.business_data_kind
                 FROM content_accounts source
                 JOIN account_content_roles account_role
                   ON account_role.tenant_id = source.tenant_id
@@ -570,8 +588,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     INSERT INTO content_accounts
                         (id, tenant_id, brand_id, name, channel,
                          control_organization_id, control_organization_source,
-                         carrier_of_account_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                         carrier_of_account_id, business_data_kind)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         carrier_id,
@@ -582,6 +600,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                         source["control_organization_id"],
                         source["control_organization_source"],
                         source_account_id,
+                        source["business_data_kind"],
                     ),
                 )
                 cursor.execute(

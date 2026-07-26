@@ -70,11 +70,16 @@ from src.gateway.api.contracts import (
     UnmetCapabilityRequest,
     UnmetCapabilityResponseRequest,
 )
-from src.gateway.api.html import render_spa_shell, workbench_location
+from src.gateway.api.html import (
+    render_spa_shell,
+    render_tenant_admin_access_denied,
+    workbench_location,
+)
 from src.gateway.api.session import (
     ApplicationId,
     ProductionSessionAuthority,
     SessionAuthority,
+    clear_production_tenant_cookie,
     set_production_ops_cookie,
     set_production_tenant_cookie,
     set_session_cookie,
@@ -316,6 +321,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "/tenant-admin",
             )
 
+        @app.post("/tenant-admin/logout", include_in_schema=False)
+        def tenant_admin_logout(request: Request) -> RedirectResponse:
+            token = request.cookies.get("diyu_session", "")
+            if token:
+                production_authority.repository.revoke_tenant_session(token)
+            response = RedirectResponse(
+                "/tenant-admin/login",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+            clear_production_tenant_cookie(response)
+            return response
+
         @app.get("/ops/login", include_in_schema=False)
         def ops_login_page() -> HTMLResponse:
             return HTMLResponse(
@@ -420,6 +437,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return production_authority.repository.create_tenant_organization(
                 formal_manager_identity(request),
                 payload.name,
+                payload.as_synthetic_business_fixture,
             )
 
         @app.post("/api/v1/tenant-management/users/{user_id}/reset", responses=business_failures)
@@ -711,6 +729,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.source_note,
             payload.applicability,
             payload.confirm_as_current_brand_fact,
+            payload.as_synthetic_business_fixture,
         )
 
     @app.post(
@@ -731,6 +750,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.operator_id,
             payload.control_organization_id,
             payload.operator_can_maintain_expression_profile,
+            payload.as_synthetic_business_fixture,
         )
 
     @app.post(
@@ -1430,11 +1450,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dependencies=[Security(session_cookie)],
         responses=business_failures,
     )
-    def tenant_management_portal(request: Request) -> HTMLResponse:
+    def tenant_management_portal(request: Request) -> Response:
         if production_authority is not None:
-            identity = production_authority._tenant_identity(request)
+            try:
+                identity = production_authority._tenant_identity(request)
+            except HTTPException as exc:
+                if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                    return RedirectResponse(
+                        "/tenant-admin/login",
+                        status_code=status.HTTP_303_SEE_OTHER,
+                    )
+                raise
             if identity.audience != "tenant-admin":
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="当前正式会话没有租户管理入口资格")
+                return HTMLResponse(
+                    render_tenant_admin_access_denied(),
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
             try:
                 context = workbench_service.tenant_management_context(
                     production_authority.repository.manager_scope(identity)

@@ -82,6 +82,7 @@ class WorkbenchService:
         source_note: str,
         applicability: str,
         confirm_as_current_brand_fact: bool,
+        as_synthetic_business_fixture: bool = False,
     ) -> dict[str, object]:
         if not confirm_as_current_brand_fact:
             raise DomainError("请先纠正草案，并明确确认它是当前品牌商品事实。")
@@ -107,6 +108,11 @@ class WorkbenchService:
             sku.strip(),
             display_name.strip(),
             facts,
+            (
+                "synthetic_business_fixture"
+                if as_synthetic_business_fixture
+                else "brand_user_confirmed"
+            ),
             source_note.strip(),
             applicability.strip(),
         )
@@ -162,6 +168,7 @@ class WorkbenchService:
         operator_id: UUID,
         control_organization_id: UUID | None = None,
         operator_can_maintain_expression_profile: bool = False,
+        as_synthetic_business_fixture: bool = False,
     ) -> dict[str, object]:
         values = (name.strip(), channel.strip(), content_role_name.strip(), voice_boundary.strip())
         if not all(values):
@@ -172,6 +179,11 @@ class WorkbenchService:
             operator_id,
             control_organization_id,
             operator_can_maintain_expression_profile,
+            (
+                "synthetic_business_fixture"
+                if as_synthetic_business_fixture
+                else "formal_business_data"
+            ),
         )
 
     def create_platform_carrier(

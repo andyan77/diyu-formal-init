@@ -40,6 +40,7 @@ class WorkbenchRepository(ABC):
         sku: str,
         display_name: str,
         facts: dict[str, object],
+        source_kind: str,
         source_note: str,
         applicability: str,
     ) -> dict[str, object]: ...
@@ -55,6 +56,7 @@ class WorkbenchRepository(ABC):
         operator_id: UUID,
         control_organization_id: UUID | None = None,
         operator_can_maintain_expression_profile: bool = False,
+        business_data_kind: str = "formal_business_data",
     ) -> dict[str, object]: ...
 
     @abstractmethod

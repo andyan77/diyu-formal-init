@@ -48,6 +48,9 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
     app = create_app(_settings(app_database_url))
     with TestClient(app, base_url="https://diyuai.cc") as client:
         assert client.get("/", follow_redirects=False).headers["location"] == "/login"
+        tenant_admin_entry = client.get("/tenant-admin", follow_redirects=False)
+        assert tenant_admin_entry.status_code == 303
+        assert tenant_admin_entry.headers["location"] == "/tenant-admin/login"
         assert client.get("/ui/select/content").status_code == 404
         activated = client.post(
             f"/activate/{admin_activation}",
@@ -118,7 +121,17 @@ def test_production_created_user_uses_one_time_link_and_cannot_escalate(
             == 303
         )
         assert client.get("/user").status_code == 200
-        assert client.get("/tenant-admin").status_code == 403
+        refused = client.get("/tenant-admin")
+        assert refused.status_code == 403
+        assert refused.headers["content-type"].startswith("text/html")
+        assert "当前账号没有租户管理资格" in refused.text
+        assert "返回内容入口" in refused.text
+        assert "/tenant-admin/logout" in refused.text
+        assert "租户管理入口资格" not in refused.text
+        signed_out = client.post("/tenant-admin/logout", follow_redirects=False)
+        assert signed_out.status_code == 303
+        assert signed_out.headers["location"] == "/tenant-admin/login"
+        assert client.get("/tenant-admin", follow_redirects=False).status_code == 303
         repository.disable_tenant_user(manager, UUID(created["user_id"]))
         assert client.get("/user").status_code == 401
         assert (

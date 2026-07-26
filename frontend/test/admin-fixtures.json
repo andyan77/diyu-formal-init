@@ -21,6 +21,7 @@
     {
       "id": "operator-1",
       "display_name": "笛语服饰负责人",
+      "username": "diyu-owner",
       "organization": "笛语服饰管理组织",
       "publishing_accounts": "笛语服饰品牌官方账号",
       "default_persona": "",
@@ -34,6 +35,7 @@
       "channel": "抖音",
       "content_role": "品牌官方 / 品牌定义者",
       "voice_boundary": "只讲已确认的品牌立场。",
+      "business_data_kind": "formal_business_data",
       "carrier_of_account_id": null,
       "carrier_of_account": null,
       "operators": [
@@ -50,6 +52,9 @@
       "name": "笛语服饰管理组织"
     }
   ],
+  "/api/v1/tenant-management/users/operator-1/reset#POST": {
+    "reset_link": "/activate/one-time-test-link"
+  },
   "/api/v1/tenant-management/control-organizations": [
     {
       "id": "org-hq",
@@ -129,6 +134,7 @@
         "明亮黄色"
       ]
     },
+    "source_kind": "brand_user_confirmed",
     "source_note": "品牌方在本页纠正并确认",
     "fact_version": 1,
     "applicability": "当前品牌正式内容",

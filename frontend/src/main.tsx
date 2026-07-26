@@ -193,11 +193,13 @@ interface PublishingAccount {
   carrier_of_account_id?: string | null;
   carrier_of_account?: string | null;
   operators?: Array<{ id: string; display_name: string }>;
+  business_data_kind?: "formal_business_data" | "synthetic_business_fixture";
 }
 
 interface TenantOrganization {
   id: string;
   name: string;
+  business_data_kind?: "formal_business_data" | "synthetic_business_fixture";
 }
 
 interface CreatePublishingAccount {
@@ -212,6 +214,7 @@ interface BrandProduct {
   sku: string;
   display_name: string;
   facts: Record<string, unknown>;
+  source_kind: string;
   source_note: string;
   fact_version: number;
   applicability: string;
@@ -254,6 +257,7 @@ interface OnboardingPrefill {
 interface Operator {
   id: string;
   display_name: string;
+  username?: string;
   organization: string;
   publishing_accounts: string;
   default_persona: string;
@@ -412,6 +416,7 @@ function WorkbenchShell({ context, children }: { context: Context; children: Rea
         {context.application === "content" && <div><dt>账号画像</dt><dd>{profile ? `当前 V${profile.version} · ${profile.identity_position.slice(0, 60)}${profile.identity_position.length > 60 ? "……" : ""}` : "还没有保存过版本；可在「账号画像」里先看草案。"}<button type="button" className="ghost" onClick={() => window.dispatchEvent(new CustomEvent("diyu-open-surface", { detail: "profile" }))}>去看这张画像</button></dd></div>}
       </dl></details>
     </header>
+    {context.application === "content" && identity.business_data_kind === "synthetic_business_fixture" && <div className="notice" role="status"><strong>等深模拟业务资料</strong>：这里的组织、表达身份、商品和内容是生产验收夹具，不代表真实员工、真实在售商品或真实经营记录。</div>}
     <div className="application-body">{children}</div>
   </div>;
 }
@@ -990,10 +995,21 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
   const create = useMutation({ mutationFn: () => api<Operator>("/api/v1/tenant-management/operators", { method: "POST", body: JSON.stringify({ display_name: displayName, account_id: accountId }) }), onSuccess: () => { setDisplayName(""); setAccountId(""); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("已创建最小自然人操作身份并授予指定企业发布账号。未创建或共享密码。"); }, onError: error => setNotice(error.message) });
   const createFormalUser = useMutation({ mutationFn: () => api<{ activation_link: string }>("/api/v1/tenant-management/users", { method: "POST", body: JSON.stringify({ display_name: formalName, username: formalUsername, organization_id: formalOrganizationId || null, account_id: formalAccountId || null, grants_material_maintenance: formalGrantsMaterialMaintenance, grants_expression_profile_maintenance: formalGrantsProfileMaintenance }) }), onSuccess: value => { setFormalName(""); setFormalUsername(""); setFormalOrganizationId(""); setFormalAccountId(""); setFormalGrantsMaterialMaintenance(false); setFormalGrantsProfileMaintenance(false); setActivationLink(value.activation_link); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("已建立独立自然人登录身份；请安全复制一次性激活链接交付本人。"); }, onError: error => setNotice(error.message) });
   const createOrganization = useMutation({ mutationFn: () => api<TenantOrganization>("/api/v1/tenant-management/organizations", { method: "POST", body: JSON.stringify({ name: organizationName.trim() }) }), onSuccess: value => { setOrganizationName(""); client.invalidateQueries({ queryKey: ["tenant-organizations"] }); client.invalidateQueries({ queryKey: ["control-organizations"] }); setNotice(`已创建组织“${value.name}”。`); }, onError: error => setNotice(error.message) });
+  const resetFormalUser = useMutation<string, Operator>({
+    mutationFn: async operator => {
+      const value = await api<{ reset_link: string }>(`/api/v1/tenant-management/users/${operator.id}/reset`, { method: "POST" });
+      return value.reset_link;
+    },
+    onSuccess: value => {
+      setActivationLink(value);
+      setNotice("已生成一次性重置链接。只有本人完成设置后，才会形成新的登录密码。");
+    },
+    onError: error => setNotice(error.message)
+  });
   return <>
     <header className="page-heading"><p className="eyebrow">账号与操作人</p><h1>企业发布账号不是登录账号。</h1><p>多人可以运营同一企业发布账号；每一位内部、临时或外部代运营操作者都必须是单独登记的自然人身份。</p></header>
     {notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}
-    <section className="account-grid">{accounts.data?.map(account => <article key={account.id} className="series-card"><p className="eyebrow">{account.channel}{account.carrier_of_account ? " · 平台版本载体" : " · 表达账号"}</p><h2>{account.name}</h2><p>企业表达身份：{account.content_role}</p>{account.carrier_of_account && <p>承接自：{account.carrier_of_account}</p>}<small>{account.voice_boundary}</small>{!account.carrier_of_account_id && <AdminAccountExpression accountId={account.id} />}</article>)}</section>
+    <section className="account-grid">{accounts.data?.map(account => <article key={account.id} className="series-card"><p className="eyebrow">{account.business_data_kind === "synthetic_business_fixture" ? "等深模拟业务资料 · " : ""}{account.channel}{account.carrier_of_account ? " · 平台版本载体" : " · 表达账号"}</p><h2>{account.name}</h2><p>企业表达身份：{account.content_role}</p>{account.carrier_of_account && <p>承接自：{account.carrier_of_account}</p>}<small>{account.voice_boundary}</small>{!account.carrier_of_account_id && <AdminAccountExpression accountId={account.id} />}</article>)}</section>
     <form className="series-create" onSubmit={event => {
       event.preventDefault();
       if (!newAccountName.trim() || !contentRoleName.trim() || !voiceBoundary.trim() || !operatorId) {
@@ -1023,7 +1039,8 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
       <button className="primary" disabled={createCarrier.isPending}>{createCarrier.isPending ? "正在建立……" : "确认并建立内部内容载体"}</button>
     </form>
     {formalRuntime ? <><form className="series-create" onSubmit={event => { event.preventDefault(); if (organizationName.trim()) createOrganization.mutate(); }}><p>真实门店或分支组织不在列表时，只需先创建一次。</p><input value={organizationName} onChange={event => setOrganizationName(event.target.value)} placeholder="真实组织或门店名称" maxLength={120} /><button className="primary" disabled={createOrganization.isPending}>{createOrganization.isPending ? "正在创建……" : "创建组织"}</button></form><form className="series-create" onSubmit={event => { event.preventDefault(); if (formalName.trim() && formalUsername.trim()) createFormalUser.mutate(); }}><p>创建独立自然人登录身份。发布账号不是密码；每位内部或外部操作者都必须各自激活并登录。</p><input value={formalName} onChange={event => setFormalName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><input value={formalUsername} onChange={event => setFormalUsername(event.target.value)} placeholder="全平台唯一登录用户名" minLength={3} maxLength={80} /><select value={formalOrganizationId} onChange={event => setFormalOrganizationId(event.target.value)} aria-label="所属组织"><option value="">使用当前管理员所属组织</option>{organizations.data?.map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select><select value={formalAccountId} onChange={event => setFormalAccountId(event.target.value)}><option value="">暂不授予发布账号（可稍后配置）</option>{accounts.data?.filter(account => !account.carrier_of_account_id).map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><label className="minor-check"><input type="checkbox" checked={formalGrantsMaterialMaintenance} onChange={event => setFormalGrantsMaterialMaintenance(event.target.checked)} />允许维护该组织素材</label><label className="minor-check"><input type="checkbox" checked={formalGrantsProfileMaintenance} disabled={!formalAccountId} onChange={event => setFormalGrantsProfileMaintenance(event.target.checked)} />允许维护所选账号五段画像</label><button className="primary" disabled={createFormalUser.isPending}>{createFormalUser.isPending ? "正在创建……" : "创建并生成激活链接"}</button>{activationLink && <p className="notice">一次性激活链接：<code>{activationLink}</code></p>}</form></> : <form className="series-create" onSubmit={event => { event.preventDefault(); if (displayName.trim() && accountId) create.mutate(); }}><p>登记一位实际操作者（不设置密码；生产开户与一次性激活在 M5-4）。</p><input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">授予哪个企业发布账号</option>{accounts.data?.filter(account => !account.carrier_of_account_id).map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><button className="primary" disabled={create.isPending}>{create.isPending ? "正在登记……" : "登记并授权操作人"}</button></form>}
-    <section className="readiness-list">{operators.data?.map(operator => <article className="readiness-card ready" key={operator.id}><div><p className="eyebrow">{operator.manages_tenant ? "具备租户管理资格" : "业务操作人"}</p><h2>{operator.display_name}</h2><p>{operator.organization} · {operator.publishing_accounts || "尚未授予发布账号"}</p><small>{operator.default_persona ? `本人默认表达人设：${operator.default_persona}` : "尚未设置本人默认表达人设"}</small></div></article>)}</section>
+    {activationLink && <p className="notice">一次性激活或重置链接：<code>{activationLink}</code></p>}
+    <section className="readiness-list">{operators.data?.map(operator => <article className="readiness-card ready" key={operator.id}><div><p className="eyebrow">{operator.manages_tenant ? "具备租户管理资格" : "业务操作人"}</p><h2>{operator.display_name}</h2><p>{operator.organization} · {operator.publishing_accounts || "尚未授予发布账号"}</p>{operator.username && <p>登录用户名：{operator.username}</p>}<small>{operator.default_persona ? `本人默认表达人设：${operator.default_persona}` : "尚未设置本人默认表达人设"}</small>{formalRuntime && operator.username && <button type="button" disabled={resetFormalUser.isPending} onClick={() => resetFormalUser.mutate(operator)}>生成一次性重置链接</button>}</div></article>)}</section>
   </>;
 }
 
@@ -1099,7 +1116,7 @@ function ProductFactsPanel(): JSX.Element {
   return <>
     <header className="page-heading"><p className="eyebrow">真实商品事实</p><h1>纠正并确认本轮需要的 1—3 件商品。</h1><p>系统已从候选资料预填最小草案；价格、库存、性能、设计动机和推断字段没有带入。草案在你确认前不会参与生成。</p></header>
     {notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}
-    <section className="account-grid">{products.data?.map(product => <article className="series-card" key={product.sku}><p className="eyebrow">{product.sku} · 事实 V{product.fact_version}</p><h2>{product.display_name}</h2><p>{Object.entries(product.facts).map(([key, value]) => `${key}：${Array.isArray(value) ? value.join("、") : String(value)}`).join("；")}</p><small>来源：{product.source_note} · 范围：{product.applicability}{product.updated_by ? ` · 由 ${product.updated_by} 保存` : ""}</small></article>)}</section>
+    <section className="account-grid">{products.data?.map(product => <article className="series-card" key={product.sku}><p className="eyebrow">{product.source_kind === "synthetic_business_fixture" ? "演示商品事实 · " : ""}{product.sku} · 事实 V{product.fact_version}</p><h2>{product.display_name}</h2><p>{Object.entries(product.facts).map(([key, value]) => `${key}：${Array.isArray(value) ? value.join("、") : String(value)}`).join("；")}</p><small>来源：{product.source_note} · 范围：{product.applicability}{product.updated_by ? ` · 由 ${product.updated_by} 保存` : ""}</small></article>)}</section>
     {(onboarding.data?.product_drafts.length ?? 0) > 0 && <section className="account-grid">{onboarding.data?.product_drafts.map(draft => <article className="series-card" key={draft.sku}><p className="eyebrow">{draft.sku} · 可编辑候选草案</p><h2>{draft.display_name}</h2><p>{draft.candidate_evidence}</p><button type="button" onClick={() => loadDraft(draft)}>载入并纠正这份草案</button></article>)}</section>}
     <form className="series-create" onSubmit={event => { event.preventDefault(); if (sku.trim() && displayName.trim() && sourceNote.trim() && applicability.trim()) save.mutate(); }}>
       {candidateEvidence && <p className="muted">当前预填边界：{candidateEvidence}</p>}

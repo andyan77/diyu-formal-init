@@ -256,6 +256,16 @@ def set_production_tenant_cookie(response: object, token: str) -> None:
     )
 
 
+def clear_production_tenant_cookie(response: object) -> None:
+    response.delete_cookie(  # type: ignore[attr-defined]
+        _COOKIE_NAME,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=True,
+    )
+
+
 def set_production_ops_cookie(response: object, token: str) -> None:
     response.set_cookie(  # type: ignore[attr-defined]
         "diyu_ops_session",

@@ -247,6 +247,7 @@ class CreatePublishingAccountRequest(BaseModel):
     # nobody may maintain this account's expression profile until it is explicitly declared.
     control_organization_id: UUID | None = None
     operator_can_maintain_expression_profile: bool = False
+    as_synthetic_business_fixture: bool = False
 
 
 class CreatePlatformCarrierRequest(BaseModel):
@@ -272,6 +273,7 @@ class SaveBrandProductRequest(BaseModel):
     source_note: str = Field(min_length=1, max_length=300)
     applicability: str = Field(min_length=1, max_length=300)
     confirm_as_current_brand_fact: Literal[True]
+    as_synthetic_business_fixture: bool = False
 
 
 class LoginRequest(BaseModel):
@@ -312,6 +314,7 @@ class CreateOrganizationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=120)
+    as_synthetic_business_fixture: bool = False
 
 
 class CreateTenantRequest(BaseModel):

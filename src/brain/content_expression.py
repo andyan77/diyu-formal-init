@@ -418,6 +418,7 @@ def snapshot_document(
     content_role: str,
     products: tuple[ProductFact, ...] = (),
     series_context: SeriesContext | None = None,
+    business_data_kind: str = "formal_business_data",
 ) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
@@ -474,6 +475,7 @@ def snapshot_document(
         "account_expression_profile_version": (
             control.account_expression.version if control.account_expression else None
         ),
+        "business_data_kind": business_data_kind,
         "account_expression": (
             {
                 "profile_id": (

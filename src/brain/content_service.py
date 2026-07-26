@@ -170,6 +170,7 @@ class ContentService:
                 context.content_role_name,
                 products,
                 series_context,
+                context.business_data_kind,
             ),
             series_context,
         )
@@ -479,6 +480,7 @@ class ContentService:
                 control.content_role or context.content_role_name,
                 source.products,
                 series_context,
+                context.business_data_kind,
             ),
             None,
         )

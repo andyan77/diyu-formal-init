@@ -66,7 +66,7 @@ class PostgresContentRepository(ContentRepository):
                 SELECT b.name AS brand_name, b.positioning, b.decision_order, b.tone, a.name AS account_name,
                        u.display_name AS operator_name, o.name AS organization_name,
                        cr.name AS content_role_name, cr.voice_boundary, ba.description AS audience_description,
-                       b.strategy_version, a.channel
+                       b.strategy_version, a.channel, a.business_data_kind
                 FROM brands b
                 JOIN content_accounts a ON a.brand_id = b.id AND a.tenant_id = b.tenant_id
                 JOIN auth_grants g ON g.account_id = a.id AND g.tenant_id = a.tenant_id
@@ -97,6 +97,7 @@ class PostgresContentRepository(ContentRepository):
             platform=str(row["channel"]),
             media_format="图文" if media_format == "graphic" else "视频",
             production_conditions=production_conditions,
+            business_data_kind=str(row["business_data_kind"]),
         )
 
     def create_task_and_running_run(
@@ -982,6 +983,7 @@ class PostgresContentRepository(ContentRepository):
             "brand_strategy_version": context.strategy_version,
             "publishing_account": context.account_name,
             "content_role": context.content_role_name,
+            "business_data_kind": context.business_data_kind,
             "product_refs": [
                 {
                     "sku": item.sku,

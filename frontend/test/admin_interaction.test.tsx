@@ -88,6 +88,13 @@ async function main(): Promise<void> {
     operator_id: "operator-1",
     confirm_internal_carrier: true
   });
+  await click(find("button", "生成一次性重置链接"));
+  await settle();
+  assert.ok(requests.some(item =>
+    item.method === "POST"
+    && item.path === "/api/v1/tenant-management/users/operator-1/reset"
+  ));
+  assert.match(document.body.textContent ?? "", /一次性激活或重置链接/);
 
   await act(async () => root.unmount());
   process.stdout.write("frontend admin prefill interaction checks passed\n");
