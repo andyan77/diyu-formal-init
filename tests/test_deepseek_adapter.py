@@ -292,6 +292,8 @@ def test_revision_prompt_applies_the_instruction_to_every_visible_unit(
     assert "旧稿仍安排了桌面字卡" not in prompt
     assert "冲突的创作和制作要求已被本次修改替代" in prompt
     assert "本次修改（当前最高优先级" in prompt
+    assert "用“不要、不能、不得、只用”表达的硬边界也应静默遵守" in prompt
+    assert "不得把这些后台约束逐项搬进正文、口播、字幕或制作提示" in prompt
 
 
 def test_platform_recompile_keeps_source_but_demands_target_native_change(
