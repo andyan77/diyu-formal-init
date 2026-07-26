@@ -156,7 +156,9 @@ def test_production_created_user_uses_one_time_link_and_cannot_escalate(
         assert signed_out.headers["location"] == "/tenant-admin/login"
         assert client.get("/tenant-admin", follow_redirects=False).status_code == 303
         repository.disable_tenant_user(manager, UUID(created["user_id"]))
-        assert client.get("/user").status_code == 401
+        disabled_entry = client.get("/user", follow_redirects=False)
+        assert disabled_entry.status_code == 303
+        assert disabled_entry.headers["location"] == "/login"
         assert (
             client.post(
                 f"/activate/{created['activation_token']}",

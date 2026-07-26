@@ -62,6 +62,38 @@ def render_tenant_admin_access_denied() -> str:
     )
 
 
+def render_tenant_user_access_denied(
+    entry_name: str,
+    return_href: str,
+    return_label: str,
+) -> str:
+    """Render a plain recovery path for a forbidden tenant-user work page."""
+    safe_entry_name = escape(entry_name)
+    safe_return_href = escape(return_href, quote=True)
+    safe_return_label = escape(return_label)
+    return (
+        "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{safe_entry_name} · 笛语</title>"
+        "<link rel='stylesheet' href='/app/assets/index.css'></head><body>"
+        "<main class='entry-page'><header class='entry-brand'>"
+        "<img src='/assets/diyu-logo-horizontal.svg' alt='笛语'></header>"
+        f"<section class='entry-copy'><p class='eyebrow'>{safe_entry_name}</p>"
+        "<h1>当前账号不能使用这个入口。</h1>"
+        "<p>账号资格没有被更改。你可以返回当前账号已有的入口，"
+        "也可以退出后使用具备这项工作资格的租户用户账号重新登录。</p></section>"
+        "<section class='entry-choices' aria-label='可选操作'>"
+        f"<a class='entry-choice' href='{safe_return_href}'><span>继续工作</span>"
+        f"<strong>{safe_return_label}</strong>"
+        "<small>继续使用当前账号已有的工作资格。</small></a>"
+        "<form class='entry-choice' method='post' action='/tenant-admin/logout?next=user'>"
+        "<span>切换账号</span><strong>退出当前账号</strong>"
+        "<small>退出后进入租户用户登录页；不会改变任何账号资格。</small>"
+        "<button class='primary' type='submit'>退出并使用其他租户用户账号登录</button>"
+        "</form></section></main></body></html>"
+    )
+
+
 def workbench_location(
     result: dict[str, object], notice: str | None = None, target: str | None = None
 ) -> str:

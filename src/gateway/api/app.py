@@ -73,6 +73,7 @@ from src.gateway.api.contracts import (
 from src.gateway.api.html import (
     render_spa_shell,
     render_tenant_admin_access_denied,
+    render_tenant_user_access_denied,
     workbench_location,
 )
 from src.gateway.api.session import (
@@ -190,12 +191,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def display_scope_from_request(request: Request, _: str | None = Security(session_cookie)) -> DisplayScope:
         return authority.require_display(request)
 
-    def content_targets(scope: TrustedScope, request: Request | None = None) -> list[dict[str, str]]:
+    def content_targets(
+        scope: TrustedScope,
+        request: Request | None = None,
+        identity: TenantSession | None = None,
+    ) -> list[dict[str, str]]:
         if current_settings.is_production:
             if production_authority is None or request is None:
                 raise RuntimeError("正式内容目标必须从当前正式会话解析")
+            resolved_identity = identity or production_authority._tenant_identity(request)
             allowed = set(
-                production_authority.repository.allowed_content_targets(production_authority._tenant_identity(request))
+                production_authority.repository.allowed_content_targets(resolved_identity)
             )
             return [{"value": value, "label": label} for value, label in _HEADQUARTERS_TARGETS if value in allowed]
         options = (
@@ -340,8 +346,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             token = request.cookies.get("diyu_session", "")
             if token:
                 production_authority.repository.revoke_tenant_session(token)
+            destination = (
+                "/login"
+                if request.query_params.get("next") == "user"
+                else "/tenant-admin/login"
+            )
             response = RedirectResponse(
-                "/tenant-admin/login",
+                destination,
                 status_code=status.HTTP_303_SEE_OTHER,
             )
             clear_production_tenant_cookie(response)
@@ -530,8 +541,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
         @app.get("/ops", include_in_schema=False)
-        def ops_dashboard(request: Request) -> HTMLResponse:
-            operator = production_authority.require_ops(request)
+        def ops_dashboard(request: Request) -> Response:
+            try:
+                operator = production_authority.require_ops(request)
+            except HTTPException as exc:
+                if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                    return RedirectResponse(
+                        "/ops/login",
+                        status_code=status.HTTP_303_SEE_OTHER,
+                    )
+                raise
             summary = production_authority.repository.runtime_summary(operator)
             pending = [
                 item
@@ -1091,8 +1110,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         task: UUID | None = None,
         version: int | None = None,
         notice: str | None = None,
-    ) -> HTMLResponse:
-        scope = authority.require_display(request)
+    ) -> Response:
+        if production_authority is not None:
+            try:
+                identity = production_authority._tenant_identity(request)
+            except HTTPException as exc:
+                if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                    return RedirectResponse(
+                        "/login",
+                        status_code=status.HTTP_303_SEE_OTHER,
+                    )
+                raise
+            if identity.audience != "tenant-user":
+                return HTMLResponse(
+                    render_tenant_user_access_denied(
+                        "陈列搭配入口",
+                        "/tenant-admin",
+                        "返回租户管理入口",
+                    ),
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+            try:
+                scope = production_authority.repository.display_scope(identity)
+            except DomainError:
+                return HTMLResponse(
+                    render_tenant_user_access_denied(
+                        "陈列搭配入口",
+                        "/user",
+                        "返回租户用户入口",
+                    ),
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+        else:
+            scope = authority.require_display(request)
         del task, version, notice
         context = workbench_service.display_context(
             scope, current_settings.generator_mode
@@ -1458,11 +1508,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dependencies=[Security(session_cookie)],
         responses=business_failures,
     )
-    def tenant_user_portal(request: Request) -> HTMLResponse:
+    def tenant_user_portal(request: Request) -> Response:
         if production_authority is not None:
-            identity = production_authority._tenant_identity(request)
+            try:
+                identity = production_authority._tenant_identity(request)
+            except HTTPException as exc:
+                if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                    return RedirectResponse(
+                        "/login",
+                        status_code=status.HTTP_303_SEE_OTHER,
+                    )
+                raise
             if identity.audience != "tenant-user":
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="当前正式会话没有租户用户入口资格")
+                return HTMLResponse(
+                    render_tenant_user_access_denied(
+                        "租户用户入口",
+                        "/tenant-admin",
+                        "返回租户管理入口",
+                    ),
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
             try:
                 context = workbench_service.user_portal_context(production_authority.repository.content_scope(identity))
             except DomainError:
@@ -1565,9 +1630,56 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version: int | None = None,
         notice: str | None = None,
         target: ContentTarget = "douyin_video",
-    ) -> HTMLResponse:
-        scope_from_request(request)
-        scope = authority.require_content_target(request, target)
+    ) -> Response:
+        if production_authority is not None:
+            try:
+                identity = production_authority._tenant_identity(request)
+            except HTTPException as exc:
+                if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                    return RedirectResponse(
+                        "/login",
+                        status_code=status.HTTP_303_SEE_OTHER,
+                    )
+                raise
+            if identity.audience != "tenant-user":
+                return HTMLResponse(
+                    render_tenant_user_access_denied(
+                        "内容生产入口",
+                        "/tenant-admin",
+                        "返回租户管理入口",
+                    ),
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+            try:
+                scope = production_authority.repository.content_scope(identity, target)
+                if not workbench_service.is_content_operator(scope):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="当前自然人没有此发布账号工作资格",
+                    )
+            except DomainError:
+                return HTMLResponse(
+                    render_tenant_user_access_denied(
+                        "内容生产入口",
+                        "/user",
+                        "返回租户用户入口",
+                    ),
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+            except HTTPException as exc:
+                if exc.status_code != status.HTTP_403_FORBIDDEN:
+                    raise
+                return HTMLResponse(
+                    render_tenant_user_access_denied(
+                        "内容生产入口",
+                        "/user",
+                        "返回租户用户入口",
+                    ),
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+        else:
+            scope_from_request(request)
+            scope = authority.require_content_target(request, target)
         fallback_extra = ""
         if task is not None and version is not None:
             try:
@@ -1583,9 +1695,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         if current_settings.generator_mode == "stub":
             fallback_extra = "<p>离线确定性测试模式：此页结果不是实际模型调用。</p>" + fallback_extra
-        del notice, target
+        del notice
         context = workbench_service.content_context(scope, current_settings.generator_mode)
-        context["targets"] = content_targets(scope, request)
+        context["targets"] = content_targets(scope, request, identity if production_authority else None)
+        context["current_target"] = target
         if current_settings.is_production:
             context["formal_runtime"] = True
         return HTMLResponse(

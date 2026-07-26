@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 
 const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
-  url: "http://localhost/content",
+  url: "http://localhost/content?target=xiaohongshu_graphic",
   pretendToBeVisual: true
 });
 // defineProperty rather than assignment: Node 20 has no global navigator, while Node 22 defines

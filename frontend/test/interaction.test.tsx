@@ -66,11 +66,29 @@ async function main(): Promise<void> {
   assert.ok(document.querySelector('a[href="/content"]'));
   assert.ok(document.querySelector('a[href="/display"]'));
   assert.equal(document.querySelectorAll('a[href^="/ui/select/"]').length, 0);
-  assert.match(document.querySelector(".identity-bar")?.textContent ?? "", /总部抖音账号/);
+  assert.equal(
+    window.location.pathname + window.location.search,
+    "/content?target=xiaohongshu_graphic"
+  );
+  assert.match(
+    document.querySelector(".identity-bar")?.textContent ?? "",
+    /总部小红书发布账号/,
+    "身份栏必须显示服务端已为当前目标解析的发布账号"
+  );
   assert.match(document.querySelector(".identity-bar")?.textContent ?? "", /品牌官方/);
   assert.deepEqual(
     texts('.composer select option'),
     ["抖音短视频", "小红书视频", "小红书图文", "微信视频号视频"]
+  );
+  const targetSelect = document.querySelector(".composer select") as HTMLSelectElement;
+  assert.equal(
+    targetSelect.value,
+    "xiaohongshu_graphic",
+    "已解析的小红书目标必须成为默认值，不能回退到 targets 列表首项"
+  );
+  assert.equal(
+    targetSelect.selectedOptions[0]?.textContent,
+    "小红书图文"
   );
 
   // 1. Natural input is usable without opening anything; the panel stays collapsed.
@@ -127,6 +145,11 @@ async function main(): Promise<void> {
   await settle();
   const created = requests.filter(item => item.method === "POST" && item.path === "/api/v1/content");
   assert.equal(created.length, 1);
+  assert.equal(
+    (created[0].body as { target: string }).target,
+    "xiaohongshu_graphic",
+    "不手工切换时，生成请求必须保留服务端解析的 current_target"
+  );
   const direction = (created[0].body as { creative_direction: { cleared_axes: string[]; selections: Record<string, string> } }).creative_direction;
   assert.deepEqual(direction.cleared_axes, ["style"]);
   assert.deepEqual(direction.selections, {});

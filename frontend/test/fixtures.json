@@ -6,11 +6,12 @@
     "identity": {
       "operator": "总部内容运营甲",
       "organization": "折线之间总部",
-      "account": "总部抖音账号",
+      "account": "总部小红书发布账号",
       "content_role": "品牌官方",
       "brand": "折线之间",
       "business_data_kind": "synthetic_business_fixture"
     },
+    "current_target": "xiaohongshu_graphic",
     "targets": [
       {
         "value": "douyin_video",
@@ -112,7 +113,7 @@
     "updated_at": null
   },
   "/api/v1/content/account-expression-profile": {
-    "account": "总部抖音账号",
+    "account": "总部小红书发布账号",
     "content_role": "品牌官方",
     "control_organization": "折线之间总部",
     "control_organization_source": "declared",
@@ -156,7 +157,7 @@
     "ai_generated": true,
     "aigc_label": "AI 辅助生成",
     "aigc_release_reminder": "发布前请使用平台 AI 内容声明功能。",
-    "target_key": "douyin_video",
+    "target_key": "xiaohongshu_graphic",
     "applied_direction": []
   },
   "/api/v1/content/tasks/t1/versions": [
@@ -169,7 +170,7 @@
       "ai_generated": true,
       "aigc_label": "AI 辅助生成",
       "aigc_release_reminder": "发布前请使用平台 AI 内容声明功能。",
-      "target_key": "douyin_video",
+      "target_key": "xiaohongshu_graphic",
       "applied_direction": []
     }
   ]

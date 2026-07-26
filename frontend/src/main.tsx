@@ -9,6 +9,7 @@ interface Context {
   application: Application;
   generator_mode: "stub" | "deepseek";
   identity: Record<string, string>;
+  current_target?: Target | null;
   targets?: Array<{ value: Target; label: string }>;
   formal_runtime?: boolean;
 }
@@ -479,7 +480,9 @@ function ContentWorkbench({ context }: { context: Context }): JSX.Element {
   const [surface, setSurface] = useState<"compose" | "series" | "materials" | "profile" | "plan">("compose");
   // The whole composing state lives here so a failed request never loses the person's input.
   const [seed, setSeed] = useState("");
-  const [target, setTarget] = useState<Target>(context.targets?.[0]?.value ?? "douyin_video");
+  const [target, setTarget] = useState<Target>(
+    context.current_target ?? context.targets?.[0]?.value ?? "douyin_video"
+  );
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [clearedAxes, setClearedAxes] = useState<string[]>([]);
   const [customText, setCustomText] = useState("");
