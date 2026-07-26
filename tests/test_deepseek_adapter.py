@@ -312,6 +312,7 @@ def test_platform_recompile_keeps_source_but_demands_target_native_change(
     assert "标题和正文开头不得沿用源视频" in prompt
     assert "首图承诺、递进图序和可独立阅读的完整正文" in prompt
     assert "改变标题、开头、内容顺序、媒体组织、画面节奏" in prompt
+    assert "不能只用 source:prior_version 承载商品事实或品牌立场" in prompt
 
 
 def test_weak_seed_stays_topic_unless_product_requires_near_field_signal(

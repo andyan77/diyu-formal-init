@@ -1495,7 +1495,10 @@ class DeepSeekGenerator(ContentGenerator):
             platform_recompile_rule = (
                 "本次必须实质重编译：保留核心判断、商品事实、账号身份、系列前情和主要受众价值；"
                 "同时改变标题、开头、内容顺序、媒体组织、画面节奏，以及确有需要的封面字、"
-                f"互动或 FAQ。{target_delta}"
+                "互动或 FAQ。源版本正文只说明要保留和重组的内容，不是现实事实来源；每个单元必须"
+                "按冻结边界重新绑定来源：商品锚点继续引用 source:product:…，品牌立场引用品牌来源，"
+                "条件建议引用方法或品牌来源，不能只用 source:prior_version 承载商品事实或品牌立场。"
+                f"{target_delta}"
             )
         else:
             platform_recompile_rule = "本次不是跨平台重编译，按当前目标媒体合同形成成品。"
