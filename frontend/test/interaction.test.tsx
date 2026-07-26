@@ -6,9 +6,16 @@ import Root from "../src/main";
 // The window, the recording fetch and the canned routes are installed by test/run.mjs before
 // this bundle is imported; see the comment there for why the order matters.
 const harness = (globalThis as unknown as {
-  __DIYU_INTERACTION__: { requests: Array<{ method: string; path: string; body: unknown; preferenceSession: string | null }>; window: Window & typeof globalThis };
+  __DIYU_INTERACTION__: {
+    requests: Array<{ method: string; path: string; body: unknown; preferenceSession: string | null }>;
+    copiedTexts: string[];
+    exportedBlobs: Blob[];
+    window: Window & typeof globalThis;
+  };
 }).__DIYU_INTERACTION__;
 const requests = harness.requests;
+const copiedTexts = harness.copiedTexts;
+const exportedBlobs = harness.exportedBlobs;
 const window = harness.window;
 const document = window.document;
 
@@ -105,6 +112,24 @@ async function main(): Promise<void> {
   const direction = (created[0].body as { creative_direction: { cleared_axes: string[]; selections: Record<string, string> } }).creative_direction;
   assert.deepEqual(direction.cleared_axes, ["style"]);
   assert.deepEqual(direction.selections, {});
+  const artifactText = document.querySelector(".artifact-text")?.textContent ?? "";
+  assert.match(artifactText, /内容概要：受众会得到一个能直接使用的观察方法/);
+  assert.match(artifactText, /完整台词\/解说：先看结构，再查性能/);
+  for (const internal of ["账号观察", "受众获得", "账号关系", "演示商品锚点", "可见造型命题", "画面成立条件"]) {
+    assert.doesNotMatch(artifactText, new RegExp(internal), `页面不得显示内部脚手架「${internal}」`);
+  }
+  await click(find(".artifact-actions button", "复制"));
+  assert.equal(copiedTexts.length, 1);
+  assert.match(copiedTexts[0], /AI 辅助生成/);
+  assert.match(copiedTexts[0], /发布提醒：发布前请使用平台 AI 内容声明功能/);
+  assert.match(copiedTexts[0], /内容概要：受众会得到一个能直接使用的观察方法/);
+  await click(find(".artifact-actions button", "导出"));
+  assert.equal(exportedBlobs.length, 1);
+  const exported = await exportedBlobs[0].text();
+  assert.equal(exported, copiedTexts[0], "复制和导出必须使用同一用户可见口径");
+  for (const internal of ["账号观察", "受众获得", "账号关系", "演示商品锚点", "可见造型命题", "画面成立条件"]) {
+    assert.doesNotMatch(exported, new RegExp(internal), `导出不得显示内部脚手架「${internal}」`);
+  }
 
   // 6. A temporary preference-free session really stops reading the private preference.
   const beforeSession = requests.length;

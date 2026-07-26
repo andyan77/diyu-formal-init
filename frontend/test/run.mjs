@@ -37,6 +37,22 @@ for (const name of [
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const requests = [];
+const copiedTexts = [];
+const exportedBlobs = [];
+Object.defineProperty(dom.window.navigator, "clipboard", {
+  value: {
+    writeText: async value => {
+      copiedTexts.push(String(value));
+    }
+  },
+  configurable: true
+});
+URL.createObjectURL = blob => {
+  exportedBlobs.push(blob);
+  return "blob:diyu-export";
+};
+URL.revokeObjectURL = () => undefined;
+dom.window.HTMLAnchorElement.prototype.click = () => undefined;
 const routes = JSON.parse(
   await (await import("node:fs/promises")).readFile(new URL("./fixtures.json", import.meta.url), "utf8")
 );
@@ -52,7 +68,12 @@ globalThis.fetch = async (input, init) => {
   const payload = routes[path] ?? {};
   return { ok: true, json: async () => payload };
 };
-globalThis.__DIYU_INTERACTION__ = { requests, window: dom.window };
+globalThis.__DIYU_INTERACTION__ = {
+  requests,
+  copiedTexts,
+  exportedBlobs,
+  window: dom.window
+};
 
 const workdir = fileURLToPath(new URL("../node_modules/.diyu-interaction/", import.meta.url));
 const outfile = `${workdir}interaction.mjs`;

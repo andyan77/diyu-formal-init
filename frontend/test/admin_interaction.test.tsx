@@ -103,6 +103,13 @@ async function main(): Promise<void> {
   assert.match(document.body.textContent ?? "", /V1→V2，旧版保留/);
   assert.match(document.body.textContent ?? "", /同一对衣服，三种配色主次设想/);
   assert.match(document.body.textContent ?? "", /怎样让被转发的人看懂三画面/);
+  for (const internal of ["账号观察", "受众获得", "账号关系", "演示商品锚点", "可见造型命题", "画面成立条件"]) {
+    assert.doesNotMatch(
+      document.body.textContent ?? "",
+      new RegExp(`${internal}：`),
+      `演示验收页不得显示内部脚手架「${internal}」`
+    );
+  }
   await click(find("button", "生成一次性安全进入链接"));
   await settle();
   assert.ok(requests.some(item =>

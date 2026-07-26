@@ -138,10 +138,26 @@
     "task_id": "t1",
     "version_id": "v1",
     "version": 1,
-    "outline": "标题",
-    "body": "正文",
+    "outline": "先看结构，再查性能",
+    "body": "标题：先看结构，再查性能\n\n内容概要：受众会得到一个能直接使用的观察方法。\n\n完整台词/解说：先看结构，再查性能。\n\n画面与动作：手机先固定，创作者持衣进入画面。\n\n发布配文与互动：先看结构，再查性能。",
     "ai_generated": true,
+    "aigc_label": "AI 辅助生成",
+    "aigc_release_reminder": "发布前请使用平台 AI 内容声明功能。",
+    "target_key": "douyin_video",
     "applied_direction": []
   },
-  "/api/v1/content/tasks/t1/versions": []
+  "/api/v1/content/tasks/t1/versions": [
+    {
+      "task_id": "t1",
+      "version_id": "v1",
+      "version": 1,
+      "outline": "先看结构，再查性能",
+      "body": "标题：先看结构，再查性能\n\n内容概要：受众会得到一个能直接使用的观察方法。\n\n完整台词/解说：先看结构，再查性能。\n\n画面与动作：手机先固定，创作者持衣进入画面。\n\n发布配文与互动：先看结构，再查性能。",
+      "ai_generated": true,
+      "aigc_label": "AI 辅助生成",
+      "aigc_release_reminder": "发布前请使用平台 AI 内容声明功能。",
+      "target_key": "douyin_video",
+      "applied_direction": []
+    }
+  ]
 }
