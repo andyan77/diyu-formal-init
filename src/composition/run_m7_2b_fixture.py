@@ -776,7 +776,7 @@ def run() -> dict[str, object]:
             s1_current,
             "不要安排顾客出镜，用我、衣架和现有演示商品就能拍；保留门店人物自己的语气。",
         )
-        s2 = _ensure_generated(
+        s2_current = _ensure_generated(
             store_client,
             seed=(
                 "接着这个系列做下一篇：一家三口拍合照，先统一颜色，还是先保留每个人"
@@ -790,6 +790,18 @@ def run() -> dict[str, object]:
                 style=_STYLE_PRACTICAL,
                 form=_FORM_DETAILS,
                 custom_text="用持衣、色块图卡和局部特写完成，不声称这是本店真实案例。",
+            ),
+        )
+        s2_v1 = _task_version(store_client, str(s2_current["task_id"]), 1)
+        s2 = _ensure_revision(
+            store_client,
+            s2_current,
+            (
+                "保留帮助选择的条件、反转条件和低成本验证动作，但把它改成真正可成立的当前版："
+                "不要声称舒服会让表情姿态更自然、某种颜色会压住另一种颜色、正式照片会更耐看，"
+                "也不要判断搭配结果。所有家庭与拍照场景都明确作为假设；验证只比较两件演示商品"
+                "肉眼可见的明亮黄色与白色或米白色在手机取景框里的面积，不外推真实穿着结果。"
+                "只用一名创作者、两件演示商品和手机，不新增桌子、纸笔、顾客、儿童或一家三口出镜。"
             ),
         )
         s3 = _ensure_generated(
@@ -881,6 +893,7 @@ def run() -> dict[str, object]:
                     "artifacts": {
                         "S1_V1": s1_v1,
                         "S1_V2": s1_v2,
+                        "S2_V1": s2_v1,
                         "S2": s2,
                         "S3": s3,
                     },
