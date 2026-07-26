@@ -125,6 +125,11 @@ def test_recompile_isolated_and_same_target_revisions_stay_on_one_item(
         task_account, product, refs, media_format = _task_row(app_database_url, graphic["task_id"])
         assert task_account == str(HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID)
         assert (product, refs, media_format) == ("product_truth", ["ZX-C218"], "graphic")
+        target_history = client.get(
+            "/api/v1/content/tasks?target=xiaohongshu_graphic"
+        ).json()
+        persisted = next(item for item in target_history if item["task_id"] == graphic["task_id"])
+        assert persisted["source_version_id"] == source["version_id"]
         revised = client.post(
             f"/api/v1/tasks/{graphic['task_id']}/revisions",
             json={"instruction": "我只能补拍四张。", "target": "xiaohongshu_graphic"},
@@ -133,6 +138,10 @@ def test_recompile_isolated_and_same_target_revisions_stay_on_one_item(
         graphic_v2 = revised.json()
         assert graphic_v2["version"] == 2
         assert "只补拍四张" in graphic_v2["body"]
+        assert client.get(
+            f"/api/v1/content/tasks/{graphic['task_id']}/versions"
+            "?target=xiaohongshu_graphic"
+        ).json()[0]["version"] == 2
         assert (
             client.get(f"/api/v1/tasks/{source['task_id']}/versions/1?target=douyin_video").json()[
                 "body"

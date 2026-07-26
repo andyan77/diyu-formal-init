@@ -752,7 +752,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._content_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT t.id AS task_id, cv.id AS version_id, cv.version_number, cv.outline, cv.created_at,
+                SELECT t.id AS task_id, t.parent_version_id, cv.id AS version_id,
+                       cv.version_number, cv.outline, cv.created_at,
                        CASE
                          WHEN a.channel = '抖音' AND t.media_format = 'video' THEN 'douyin_video'
                          WHEN a.channel = '小红书' AND t.media_format = 'video' THEN 'xiaohongshu_video'
@@ -774,6 +775,11 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         return [
             {
                 "task_id": str(row["task_id"]),
+                "source_version_id": (
+                    str(row["parent_version_id"])
+                    if row["parent_version_id"] is not None
+                    else None
+                ),
                 "version_id": str(row["version_id"]),
                 "version": self._integer(row["version_number"]),
                 "title": str(row["outline"]),

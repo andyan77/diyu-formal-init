@@ -251,6 +251,14 @@ class BoundaryContext:
                     )
                 )
             )
+        is_synthetic_fixture = (
+            request.brand.business_data_kind == "synthetic_business_fixture"
+        )
+        if request.primary_product == "local_response" and is_synthetic_fixture:
+            direction_lines.append(
+                "本次近场种子属于等深模拟业务夹具，只能作为假设情境和演示脚本起点；"
+                "不得用第一人称或现实陈述写成当前账号、操作者、门店或顾客真实发生过的经历。"
+            )
         topic = "\n".join(
             part
             for part in (request.weak_seed, request.revision_instruction, *direction_lines)
@@ -260,16 +268,8 @@ class BoundaryContext:
         # actuality.  Only a local_response request qualifies: its routing
         # contract already requires the user to hand over a real near-field
         # signal.  Every other seed stays a topic and proves nothing.
-        is_synthetic_fixture = (
-            request.brand.business_data_kind == "synthetic_business_fixture"
-        )
-        if request.primary_product == "local_response":
-            user_actuality = (
-                "本次等深模拟业务夹具提供的近场信号（仅用于演示软件能力，"
-                f"不是真实员工经历或真实门店经营事实）：{request.weak_seed}"
-                if is_synthetic_fixture
-                else f"用户本次明确给出的真实近场信号（仅限本次使用）：{request.weak_seed}"
-            )
+        if request.primary_product == "local_response" and not is_synthetic_fixture:
+            user_actuality = f"用户本次明确给出的真实近场信号（仅限本次使用）：{request.weak_seed}"
             user_actuality_source: str | None = _USER_ACTUALITY_SOURCE_ID
         else:
             user_actuality = ""
@@ -1348,7 +1348,7 @@ class DeepSeekGenerator(ContentGenerator):
 按主要受众最终获得的价值判断；只有纯问候或情绪交流返回普通交流。凡是要求把具体商品观察、选择疑问、账号观察、近场回应或画面设想做成可发布内容的输入，必须选择一个内容价值，不能回落为普通交流。独立、可单独采用的新成果重新判断。
 帮助选择强调条件、改变条件和下一步；解释商品强调已知事实、限制与不能下的结论；建立人格强调账号怎样观察、判断和待人；经营关系强调近场信号、合法回应和可迁移许可；视觉造型强调必须由画面承重的穿着可能。
 解释商品必须以当前已点名且有已确认事实的商品为对象；当前没有已点名商品时不得选择解释商品。品牌、账号或家庭生活观点主要让受众认识账号怎样观察、判断和待人时，选择建立人格。
-经营关系必须有用户明确给出的真实评论、门店观察或近场事件；只有一个假设、一般问题或品牌关系观点而没有真实近场信号时，选择建立人格，不能把问题补成门店事实。当输入的主回报是让没到店、未参与原事件的人带走一句可迁移的门店关系许可，且已经有真实近场信号时，即使同时提到店长性格、商品或镜头，也选经营关系。只有主回报是让受众认识账号/店长怎样观察、判断和待人，才选建立人格。明确要求“同一个人、同一动作、两面在画面中换重音”，且不要选择建议或商品说明时，选视觉造型；明确要求解释“双面不等于一件顶两件”、说明已知与未知时，选解释商品。
+经营关系必须有用户明确给出的真实评论、门店观察或近场事件；等深模拟业务作用域中明确标记的模拟近场种子也可用于演示这一内容机制，但不能写成真实经历。只有一个假设、一般问题或品牌关系观点而没有近场信号时，选择建立人格，不能把问题补成门店事实。当输入的主回报是让没到店、未参与原事件的人带走一句可迁移的门店关系许可，且已经有近场信号时，即使同时提到人物性格、商品或镜头，也选经营关系。只有主回报是让受众认识账号怎样观察、判断和待人，才选建立人格。当主回报必须通过真实商品与画面变化，让受众直接看见一种新的穿着或造型可能，并且不是帮助选择或解释商品时，选视觉造型；当主回报是说明商品已知、限制和不能下的结论时，选解释商品。
 品牌：{request.brand.brand_name}；账号：{request.brand.account_name}；角色：{request.brand.content_role_name}；受众：{request.brand.audience_description}。
 当前已点名商品：{products}。
 用户输入：{request.weak_seed}"""

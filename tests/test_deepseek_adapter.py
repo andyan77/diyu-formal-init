@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import replace
 from typing import Any, cast
 from uuid import UUID
 
@@ -16,6 +17,7 @@ from src.shared.types import (
     GenerationInput,
     GraphicProductionBundle,
     ProductFact,
+    RoutingInput,
     VideoProductionBundle,
 )
 from src.tool.llm_gateway.deepseek import (
@@ -280,6 +282,42 @@ def test_weak_seed_stays_topic_unless_product_requires_near_field_signal(
     assert "source:user_actuality" not in topic_context.source_ids
     assert near_field_context.user_actuality_source == "source:user_actuality"
     assert generation_input.weak_seed in near_field_context.user_presented_actuality
+
+
+def test_synthetic_near_field_seed_stays_a_hypothetical_premise(
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(
+        generation_input,
+        primary_product="local_response",
+        brand=replace(
+            generation_input.brand,
+            business_data_kind="synthetic_business_fixture",
+        ),
+    )
+    context = BoundaryContext.from_request(request)
+
+    assert context.user_presented_actuality == ""
+    assert context.user_actuality_source is None
+    assert "source:user_actuality" not in context.source_ids
+    assert "只能作为假设情境和演示脚本起点" in context.task_topic_or_request
+    assert "不得用第一人称" in context.task_topic_or_request
+
+
+def test_routing_prompt_describes_p5_by_general_audience_value(
+    generation_input: GenerationInput,
+) -> None:
+    prompt = DeepSeekGenerator._routing_prompt(
+        RoutingInput(
+            weak_seed="让人从同一取景框里的画面变化看见新的穿着可能。",
+            brand=generation_input.brand,
+            products=(),
+        )
+    )
+
+    assert "必须通过真实商品与画面变化" in prompt
+    assert "同一个人、同一动作、两面" not in prompt
+    assert "双面不等于一件顶两件" not in prompt
 
 
 def test_full_pass_compiles_visible_product_from_passed_units(

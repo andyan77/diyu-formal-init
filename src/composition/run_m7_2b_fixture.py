@@ -540,15 +540,46 @@ def _ensure_revision(
     client: httpx.Client,
     artifact: dict[str, Any],
     instruction: str,
+    desired_version: int = 2,
 ) -> dict[str, Any]:
     versions = _response_json(
         client,
         "GET",
         f"/api/v1/content/tasks/{artifact['task_id']}/versions",
     )
-    if isinstance(versions, list) and len(versions) >= 2:
-        return _task_version(client, str(artifact["task_id"]), 2)
+    if isinstance(versions, list) and any(
+        isinstance(item, dict)
+        and int(str(item.get("version") or "0")) == desired_version
+        for item in versions
+    ):
+        return _task_version(client, str(artifact["task_id"]), desired_version)
     return _revise(client, artifact, instruction)
+
+
+def _reset_series_with_tasks(
+    client: httpx.Client,
+    series_id: str,
+    task_ids: tuple[str, ...],
+) -> dict[str, Any]:
+    _response_json(
+        client,
+        "POST",
+        f"/api/v1/content/series/{series_id}/reset",
+    )
+    current: dict[str, Any] | None = None
+    for position, task_id in enumerate(task_ids, start=1):
+        current = cast(
+            dict[str, Any],
+            _response_json(
+                client,
+                "POST",
+                f"/api/v1/content/series/{series_id}/items",
+                json_body={"task_id": task_id, "position": position},
+            ),
+        )
+    if current is None:
+        raise RuntimeError("系列重建至少需要一个既有任务")
+    return current
 
 
 def _recompile(
@@ -593,7 +624,9 @@ def _ensure_recompiled(
     matching = [
         item
         for item in recent
-        if isinstance(item, dict) and str(item.get("target") or "") == target
+        if isinstance(item, dict)
+        and str(item.get("target") or "") == target
+        and str(item.get("source_version_id") or "") == str(artifact["version_id"])
     ]
     if len(matching) > 1:
         raise RuntimeError(f"{target} 已有多个演示成品，拒绝隐式选择")
@@ -720,7 +753,18 @@ def run() -> dict[str, object]:
             h1_current,
             "判断保留，但不要写成品牌宣言，改成一人面对手机能自然说出的版本。",
         )
-        h2 = _ensure_generated(
+        h1 = _ensure_revision(
+            hq_client,
+            h1_v2,
+            (
+                "继续只改事实边界：保留“沉默应被尊重”的总部当前判断，但删除“你有没有过这种经历”、"
+                "“在笛语的店里你可以”“我们都在、我们也懂”等会被听成现实服务已经发生的表述。"
+                "只说品牌现在主张、希望和建议怎样理解这个假设处境；不冒充门店已经执行，仍是一人对手机"
+                "自然说出的完整版本。"
+            ),
+            desired_version=3,
+        )
+        h2_current = _ensure_generated(
             hq_client,
             seed=(
                 "接着这个系列做下一篇。请解释演示商品 DIYU-CSPU-009："
@@ -736,16 +780,38 @@ def run() -> dict[str, object]:
                 custom_text="让商品新增理解、限制和成立边界都能直接看懂。",
             ),
         )
+        h2 = _ensure_revision(
+            hq_client,
+            h2_current,
+            (
+                "保留商品新增理解、限制和成立边界，但只使用已登记的演示事实：这是一件女童中长款"
+                "秋冬外套，画面能看见牛角扣和学院外套结构。删除翻领、肩章、直筒剪裁、经典关联、"
+                "适合某种风格，以及羊毛混纺、聚酯、厚薄等没有来源的具体例子；明确这些可见结构"
+                "不能证明面料、保暖、耐用、好打理、设计动机、品质或真实在售。只用持衣与局部特写。"
+            ),
+        )
+        h3_seed = (
+            "接着这个系列做下一篇。只依据演示商品 DIYU-CSPU-001 肉眼可见的"
+            "明亮黄色短袖上衣，以及 DIYU-CSPU-006 肉眼可见的白色或米白色连衣裙，"
+            "让受众必须通过同一手机取景框里两件衣服靠近、错开和留白的画面变化，"
+            "直接看见一种从单件颜色变成家庭穿着呼应线索的新造型可能。主回报是画面承重的"
+            "穿着可能，不是建议受众怎么选，也不是解释商品。不要推断搭配效果、适合人群或"
+            "真实穿着结果，不安排儿童、顾客或模特出镜，只用一名创作者持衣、局部特写和旁白。"
+            "想保留一点幽默，但不要吵闹叫卖。"
+        )
+        existing_h3 = _existing_series_artifact(hq_client, hq_series, 3)
+        if (
+            existing_h3 is not None
+            and "演示商品锚点：" not in str(existing_h3.get("body") or "")
+        ):
+            hq_series = _reset_series_with_tasks(
+                hq_client,
+                str(hq_series["id"]),
+                (str(h1["task_id"]), str(h2["task_id"])),
+            )
         h3 = _ensure_generated(
             hq_client,
-            seed=(
-                "接着这个系列做下一篇。只依据演示商品 DIYU-CSPU-001 肉眼可见的"
-                "明亮黄色短袖上衣，以及 DIYU-CSPU-006 肉眼可见的白色或米白色连衣裙，"
-                "做一次两件衣服并排与分开的画面实验：让受众直接比较“把明亮黄色集中在一处”"
-                "和“让白色或米白色占更多画面”这两种穿着组织可能。不要推断搭配效果、适合人群"
-                "或真实穿着结果，不安排儿童、顾客或模特出镜，只用持衣、平铺、局部特写和旁白。"
-                "想保留一点幽默，但不要吵闹叫卖。"
-            ),
+            seed=h3_seed,
             series=hq_series,
             position=3,
             direction=_direction(
@@ -776,6 +842,17 @@ def run() -> dict[str, object]:
             s1_current,
             "不要安排顾客出镜，用我、衣架和现有演示商品就能拍；保留门店人物自己的语气。",
         )
+        s1 = _ensure_revision(
+            store_client,
+            s1_v2,
+            (
+                "继续只改事实边界：删除“有人进店”“我以前会”“后来发现”“我现在会这样做”等"
+                "真实经历和本店做法，也不猜顾客刚下班或怕推销。保留门店人物近距离的观察位置，"
+                "把同一问题明确写成假设：如果有人只想安静看看，我更愿意先留一点距离，等对方"
+                "发出需要帮助的信号再开口。这只是当前理解和建议，不是本店已执行服务。"
+            ),
+            desired_version=3,
+        )
         s2_current = _ensure_generated(
             store_client,
             seed=(
@@ -804,7 +881,19 @@ def run() -> dict[str, object]:
                 "只用一名创作者、两件演示商品和手机，不新增桌子、纸笔、顾客、儿童或一家三口出镜。"
             ),
         )
-        s3 = _ensure_generated(
+        s2 = _ensure_revision(
+            store_client,
+            s2,
+            (
+                "再把条件性选择收准确：如果一家人这次更在意各自穿得舒服，就先各自舒服，再只找"
+                "一个颜色呼应点；如果这次明确更在意画面统一，就先约定一个共同颜色关系。不要声称"
+                "哪种会更自然、更耐看、颜色会压住另一种或两件放着舒服。低成本验证只是在同一手机"
+                "取景框里手持两件演示商品，比较明亮黄色与白色或米白色所占位置，再由拍摄者按这次"
+                "目标选择；不外推真实穿着结果。全篇保持假设，不新增桌子、纸笔或人物出镜。"
+            ),
+            desired_version=3,
+        )
+        s3_current = _ensure_generated(
             store_client,
             seed=(
                 "接着这个系列做下一篇。等深模拟门店生活种子：关店前把试衣镜擦干净时，"
@@ -818,6 +907,16 @@ def run() -> dict[str, object]:
                 style=_STYLE_EMPATHY,
                 form=_FORM_SPEAK,
                 custom_text="小事本身成立，不追加顾客故事、销售意义或鸡汤结论。",
+            ),
+        )
+        s3 = _ensure_revision(
+            store_client,
+            s3_current,
+            (
+                "把它改成明确的等深模拟演示脚本：不得声称“每天都擦”“今天店里只剩我”、"
+                "白天有人试衣聊天问价或我一直回应别人。用“假设关店前有几分钟擦试衣镜”"
+                "来承载这条模拟种子，只表达门店人物会怎样理解这段安静，不把它包装成真实员工"
+                "经历、励志故事或品牌宣言。若现场没有镜子，就用手机黑屏反光或空墙静镜头替代。"
             ),
         )
 
@@ -880,19 +979,29 @@ def run() -> dict[str, object]:
             "products": products,
             "series": {
                 "headquarters": {
-                    "series": hq_series,
+                    "series": _find_named(
+                        _response_json(hq_client, "GET", "/api/v1/content/series"),
+                        "title",
+                        str(hq_series["title"]),
+                    ),
                     "artifacts": {
                         "H1_V1": h1_v1,
                         "H1_V2": h1_v2,
+                        "H1": h1,
                         "H2": h2,
                         "H3": h3,
                     },
                 },
                 "store": {
-                    "series": store_series,
+                    "series": _find_named(
+                        _response_json(store_client, "GET", "/api/v1/content/series"),
+                        "title",
+                        str(store_series["title"]),
+                    ),
                     "artifacts": {
                         "S1_V1": s1_v1,
                         "S1_V2": s1_v2,
+                        "S1": s1,
                         "S2_V1": s2_v1,
                         "S2": s2,
                         "S3": s3,
