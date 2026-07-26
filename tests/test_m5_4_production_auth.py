@@ -51,6 +51,14 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
         tenant_admin_entry = client.get("/tenant-admin", follow_redirects=False)
         assert tenant_admin_entry.status_code == 303
         assert tenant_admin_entry.headers["location"] == "/tenant-admin/login"
+        demo_entry = client.get(
+            "/tenant-admin?section=demo", follow_redirects=False
+        )
+        assert demo_entry.status_code == 303
+        assert demo_entry.headers["location"] == "/tenant-admin/login?next=demo"
+        assert "name='next' value='demo'" in client.get(
+            "/tenant-admin/login?next=demo"
+        ).text
         assert client.get("/ui/select/content").status_code == 404
         activated = client.post(
             f"/activate/{admin_activation}",
@@ -67,6 +75,16 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
         assert signed_in.status_code == 303
         assert signed_in.headers["location"] == "/tenant-admin"
         assert client.get("/tenant-admin").status_code == 200
+        client.post("/tenant-admin/logout")
+        demo_signed_in = client.post(
+            "/tenant-admin/login",
+            content=(
+                "username=formal-admin&password=a-long-enough-password&next=demo"
+            ),
+            follow_redirects=False,
+        )
+        assert demo_signed_in.status_code == 303
+        assert demo_signed_in.headers["location"] == "/tenant-admin?section=demo"
         assert client.get("/user").status_code == 403
         display_name = f"重复自然人-{uuid4().hex[:8]}"
         first = client.post(

@@ -302,10 +302,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
         @app.get("/tenant-admin/login", include_in_schema=False)
-        def tenant_admin_login_page() -> HTMLResponse:
+        def tenant_admin_login_page(request: Request) -> HTMLResponse:
+            next_value = (
+                "demo" if request.query_params.get("next") == "demo" else ""
+            )
+            hidden_next = (
+                "<input type='hidden' name='next' value='demo'>"
+                if next_value
+                else ""
+            )
             return HTMLResponse(
                 "<main><h1>笛语</h1><h2>租户管理员登录</h2>"
-                "<form method='post' action='/tenant-admin/login'><label>用户名 <input name='username' autocomplete='username' required></label>"
+                "<form method='post' action='/tenant-admin/login'>"
+                + hidden_next
+                + "<label>用户名 <input name='username' autocomplete='username' required></label>"
                 "<label>密码 <input type='password' name='password' autocomplete='current-password' required></label>"
                 "<button type='submit'>登录</button></form></main>"
             )
@@ -318,7 +328,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 fields.get("username", [""])[0],
                 fields.get("password", [""])[0],
                 "tenant-admin",
-                "/tenant-admin",
+                (
+                    "/tenant-admin?section=demo"
+                    if fields.get("next", [""])[0] == "demo"
+                    else "/tenant-admin"
+                ),
             )
 
         @app.post("/tenant-admin/logout", include_in_schema=False)
@@ -1490,8 +1504,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 identity = production_authority._tenant_identity(request)
             except HTTPException as exc:
                 if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                    destination = (
+                        "/tenant-admin/login?next=demo"
+                        if request.query_params.get("section") == "demo"
+                        else "/tenant-admin/login"
+                    )
                     return RedirectResponse(
-                        "/tenant-admin/login",
+                        destination,
                         status_code=status.HTTP_303_SEE_OTHER,
                     )
                 raise
