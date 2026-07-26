@@ -1,0 +1,148 @@
+{
+  "/api/v1/session/context": {
+    "application": "tenant_management",
+    "generator_mode": "deepseek",
+    "formal_runtime": true,
+    "identity": {
+      "operator": "笛语服饰负责人",
+      "organization": "笛语服饰管理组织",
+      "brand": "笛语服饰"
+    }
+  },
+  "/api/v1/admin/readiness": {
+    "items": []
+  },
+  "/api/v1/admin/brand-expression": {
+    "version": 1,
+    "status": "confirmed",
+    "draft": "已确认品牌表达"
+  },
+  "/api/v1/tenant-management/operators": [
+    {
+      "id": "operator-1",
+      "display_name": "笛语服饰负责人",
+      "organization": "笛语服饰管理组织",
+      "publishing_accounts": "笛语服饰品牌官方账号",
+      "default_persona": "",
+      "manages_tenant": true
+    }
+  ],
+  "/api/v1/tenant-management/publishing-accounts": [
+    {
+      "id": "account-hq",
+      "name": "笛语服饰品牌官方账号",
+      "channel": "抖音",
+      "content_role": "品牌官方 / 品牌定义者",
+      "voice_boundary": "只讲已确认的品牌立场。",
+      "carrier_of_account_id": null,
+      "carrier_of_account": null,
+      "operators": [
+        {
+          "id": "operator-1",
+          "display_name": "笛语服饰负责人"
+        }
+      ]
+    }
+  ],
+  "/api/v1/tenant-management/organizations": [
+    {
+      "id": "org-hq",
+      "name": "笛语服饰管理组织"
+    }
+  ],
+  "/api/v1/tenant-management/control-organizations": [
+    {
+      "id": "org-hq",
+      "name": "笛语服饰管理组织"
+    }
+  ],
+  "/api/v1/tenant-management/publishing-accounts/account-hq/expression-profile": {
+    "account": "笛语服饰品牌官方账号",
+    "content_role": "品牌官方 / 品牌定义者",
+    "control_organization": "笛语服饰管理组织",
+    "control_organization_source": "inferred",
+    "can_maintain": false,
+    "can_declare": true,
+    "current": null,
+    "draft": {
+      "profile_id": null,
+      "version": null,
+      "is_draft": true,
+      "content_role": "品牌官方 / 品牌定义者",
+      "identity_position": "这是笛语服饰品牌官方账号的总部岗位型表达身份。",
+      "authority_boundary": "只使用已经确认的品牌基线、当前版本商品事实和已授权素材。",
+      "audience_relationship": "与受众平等协作，不说教、不制造焦虑。",
+      "content_territories": "真实穿衣问题、商品取舍、生活关系和造型灵感。",
+      "default_production_conditions": "一人、一部手机、普通室内和现有商品。"
+    },
+    "draft_source": "依据现有候选资料预填；确认前不构成事实。",
+    "segment_labels": {
+      "identity_position": "表达身份",
+      "authority_boundary": "真实资格与权威边界",
+      "audience_relationship": "主要受众关系",
+      "content_territories": "可持续经营的内容领地",
+      "default_production_conditions": "可长期依赖的制作条件"
+    }
+  },
+  "/api/v1/tenant-management/brand-products": [],
+  "/api/v1/tenant-management/onboarding-prefill": {
+    "schema_version": "m7-2b-progressive-prefill-v1",
+    "status": "review_candidate",
+    "source_summary": "候选资料草案，确认前不是事实。",
+    "source_refs": [
+      "DIYU-BRAND-BASELINE-001",
+      "DIYU-CANDIDATE-PRODUCT-MASTER-001"
+    ],
+    "product_drafts": [
+      {
+        "sku": "DIYU-CSPU-001",
+        "display_name": "男童亮黄城市工装宽松短袖（候选名）",
+        "category": "男童短袖上衣",
+        "colors": [
+          "明亮黄色"
+        ],
+        "material_or_structure": "",
+        "silhouette": "",
+        "observable_features": "视频画面可见：短袖上衣，明亮黄色。",
+        "source_note": "品牌方在本页纠正并确认",
+        "applicability": "当前品牌正式内容",
+        "candidate_evidence": "只预填视频视觉确认项。"
+      }
+    ],
+    "platform_carrier_drafts": [
+      {
+        "source_account_id": "account-hq",
+        "source_account_name": "笛语服饰品牌官方账号",
+        "name": "笛语服饰品牌官方账号",
+        "channel": "小红书",
+        "operator_id": "operator-1",
+        "operator_name": "笛语服饰负责人"
+      }
+    ]
+  },
+  "/api/v1/tenant-management/brand-products#PUT": {
+    "sku": "DIYU-CSPU-001",
+    "display_name": "男童亮黄城市工装宽松短袖",
+    "facts": {
+      "category": "男童短袖上衣",
+      "colors": [
+        "明亮黄色"
+      ]
+    },
+    "source_note": "品牌方在本页纠正并确认",
+    "fact_version": 1,
+    "applicability": "当前品牌正式内容",
+    "status": "active",
+    "updated_at": "2026-07-25T00:00:00Z"
+  },
+  "/api/v1/tenant-management/platform-carriers#POST": {
+    "id": "carrier-xhs",
+    "name": "笛语服饰品牌官方账号",
+    "channel": "小红书",
+    "carrier_of_account_id": "account-hq",
+    "content_role": "品牌官方 / 品牌定义者",
+    "voice_boundary": "只讲已确认的品牌立场。",
+    "operator_id": "operator-1",
+    "shared_password": false
+  }
+}

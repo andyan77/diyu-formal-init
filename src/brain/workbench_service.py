@@ -5,6 +5,7 @@ from contextlib import suppress
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from src.brain.onboarding_prefill import product_prefills
 from src.ports.material_object_store import MaterialObjectStore
 from src.ports.workbench_repository import WorkbenchRepository
 from src.shared.errors import DomainError
@@ -52,6 +53,22 @@ class WorkbenchService:
     def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         return self._repository.management_products(scope)
 
+    def management_onboarding_prefill(
+        self,
+        scope: TenantManagementScope,
+    ) -> dict[str, object]:
+        identity = self._repository.management_identity(scope)
+        product_drafts, metadata = product_prefills(identity["brand"])
+        accounts = self._repository.management_accounts(scope)
+        confirmed_skus = {str(item["sku"]) for item in self._repository.management_products(scope)}
+        pending_products = [item for item in product_drafts if str(item.get("sku") or "") not in confirmed_skus]
+        carrier_drafts = self._platform_carrier_prefills(accounts) if metadata else []
+        return {
+            **metadata,
+            "product_drafts": pending_products,
+            "platform_carrier_drafts": carrier_drafts,
+        }
+
     def save_management_product(
         self,
         scope: TenantManagementScope,
@@ -64,11 +81,14 @@ class WorkbenchService:
         observable_features: str,
         source_note: str,
         applicability: str,
+        confirm_as_current_brand_fact: bool,
     ) -> dict[str, object]:
+        if not confirm_as_current_brand_fact:
+            raise DomainError("请先纠正草案，并明确确认它是当前品牌商品事实。")
         if not sku.strip() or not display_name.strip():
             raise DomainError("商品编号和商品名称需要填写。")
         if not source_note.strip() or not applicability.strip():
-            raise DomainError("请说明商品资料由谁提供，以及适用于什么范围。")
+            raise DomainError("请保留资料来源说明，并说明这版事实适用于什么范围。")
         facts: dict[str, object] = {
             key: value
             for key, value in (
@@ -90,6 +110,47 @@ class WorkbenchService:
             source_note.strip(),
             applicability.strip(),
         )
+
+    @staticmethod
+    def _platform_carrier_prefills(
+        accounts: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        channels = ("抖音", "小红书", "微信视频号")
+        existing = {
+            (str(item.get("carrier_of_account_id") or ""), str(item["channel"]))
+            for item in accounts
+            if item.get("carrier_of_account_id")
+        }
+        drafts: list[dict[str, object]] = []
+        for account in accounts:
+            if account.get("carrier_of_account_id"):
+                continue
+            operators = account.get("operators")
+            checked_operators = operators if isinstance(operators, list) else []
+            only_operator = checked_operators[0] if len(checked_operators) == 1 else None
+            for channel in channels:
+                if (
+                    channel == str(account["channel"])
+                    or (
+                        str(account["id"]),
+                        channel,
+                    )
+                    in existing
+                ):
+                    continue
+                drafts.append(
+                    {
+                        "source_account_id": str(account["id"]),
+                        "source_account_name": str(account["name"]),
+                        "name": str(account["name"]),
+                        "channel": channel,
+                        "operator_id": (str(only_operator.get("id") or "") if isinstance(only_operator, dict) else ""),
+                        "operator_name": (
+                            str(only_operator.get("display_name") or "") if isinstance(only_operator, dict) else ""
+                        ),
+                    }
+                )
+        return drafts
 
     def create_publishing_account(
         self,
@@ -120,7 +181,10 @@ class WorkbenchService:
         name: str,
         channel: str,
         operator_id: UUID,
+        confirm_internal_carrier: bool,
     ) -> dict[str, object]:
+        if not confirm_internal_carrier:
+            raise DomainError("请先确认这只是内部内容载体，不会连接或登录真实平台。")
         if not name.strip() or not channel.strip():
             raise DomainError("平台版本载体需要账号名称和目标平台。")
         return self._repository.create_platform_carrier(

@@ -73,6 +73,7 @@ interface AccountExpression {
   can_declare?: boolean;
   current: ExpressionSegments | null;
   draft?: ExpressionSegments | null;
+  draft_source?: string | null;
   segment_labels: Record<string, string>;
 }
 
@@ -191,6 +192,7 @@ interface PublishingAccount {
   voice_boundary: string;
   carrier_of_account_id?: string | null;
   carrier_of_account?: string | null;
+  operators?: Array<{ id: string; display_name: string }>;
 }
 
 interface TenantOrganization {
@@ -216,6 +218,37 @@ interface BrandProduct {
   status: "active" | "retired";
   updated_by?: string | null;
   updated_at: string;
+}
+
+interface ProductPrefill {
+  sku: string;
+  display_name: string;
+  category: string;
+  colors: string[];
+  material_or_structure: string;
+  silhouette: string;
+  observable_features: string;
+  source_note: string;
+  applicability: string;
+  candidate_evidence: string;
+}
+
+interface PlatformCarrierPrefill {
+  source_account_id: string;
+  source_account_name: string;
+  name: string;
+  channel: CreatePublishingAccount["channel"];
+  operator_id: string;
+  operator_name: string;
+}
+
+interface OnboardingPrefill {
+  schema_version?: string;
+  status?: "review_candidate";
+  source_summary?: string;
+  source_refs?: string[];
+  product_drafts: ProductPrefill[];
+  platform_carrier_drafts: PlatformCarrierPrefill[];
 }
 
 interface Operator {
@@ -651,6 +684,7 @@ function ExpressionProfileCard({ heading, detail, data, saving, onSave }: { head
         {data.control_organization ? ` · 控制组织：${data.control_organization}` : ""}
         {data.current ? ` · 当前 V${data.current.version}` : " · 还没有保存过版本，下面是可编辑草案"}
       </p>
+      {!data.current && data.draft_source && <p className="muted">草案来源边界：{data.draft_source}</p>}
     </div>
     {SEGMENT_ORDER.map(key => <label key={key} className="profile-field">
       <span>{data.segment_labels[key] ?? key}</span>
@@ -779,6 +813,11 @@ function ControlOrganizationCard({ accountId, data, onNotice }: { accountId: str
   const client = useQueryClient();
   const [organizationId, setOrganizationId] = useState("");
   const organizations = useQuery({ queryKey: ["control-organizations"], queryFn: () => api<TenantOrganization[]>("/api/v1/tenant-management/control-organizations"), enabled: data.can_declare === true });
+  useEffect(() => {
+    if (organizationId || !data.control_organization || !organizations.data) return;
+    const inferred = organizations.data.find(item => item.name === data.control_organization);
+    if (inferred) setOrganizationId(inferred.id);
+  }, [data.control_organization, organizationId, organizations.data]);
   const declare = useMutation({
     mutationFn: () => api<{ control_organization: string }>(`/api/v1/tenant-management/publishing-accounts/${accountId}/control-organization`, { method: "POST", body: JSON.stringify({ organization_id: organizationId }) }),
     onSuccess: value => { client.invalidateQueries({ queryKey: ["management-expression", accountId] }); onNotice(`已声明由「${value.control_organization}」控制这个账号。只有这一步成立，画像才有人可以维护。`); },
@@ -879,6 +918,7 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
   const accounts = useQuery({ queryKey: ["publishing-accounts"], queryFn: () => api<PublishingAccount[]>("/api/v1/tenant-management/publishing-accounts") });
   const organizations = useQuery({ queryKey: ["tenant-organizations"], queryFn: () => api<TenantOrganization[]>("/api/v1/tenant-management/organizations"), enabled: formalRuntime });
   const controlOrganizations = useQuery({ queryKey: ["control-organizations"], queryFn: () => api<TenantOrganization[]>("/api/v1/tenant-management/control-organizations") });
+  const onboarding = useQuery({ queryKey: ["onboarding-prefill"], queryFn: () => api<OnboardingPrefill>("/api/v1/tenant-management/onboarding-prefill") });
   const isDiyuFashion = brandName === "笛语服饰";
   const [newAccountName, setNewAccountName] = useState(isDiyuFashion ? "笛语服饰品牌官方账号" : "");
   const [channel, setChannel] = useState<CreatePublishingAccount["channel"]>("抖音");
@@ -891,6 +931,7 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
   const [carrierName, setCarrierName] = useState("");
   const [carrierChannel, setCarrierChannel] = useState<CreatePublishingAccount["channel"]>("小红书");
   const [carrierOperatorId, setCarrierOperatorId] = useState("");
+  const [didAutoLoadCarrier, setDidAutoLoadCarrier] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [accountId, setAccountId] = useState("");
   const [formalName, setFormalName] = useState("");
@@ -907,6 +948,16 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
       setOperatorId(operators.data[0].id);
     }
   }, [operatorId, operators.data]);
+  useEffect(() => {
+    if (didAutoLoadCarrier || carrierSourceId || carrierName || carrierOperatorId) return;
+    const draft = onboarding.data?.platform_carrier_drafts[0];
+    if (!draft) return;
+    setCarrierSourceId(draft.source_account_id);
+    setCarrierName(draft.name);
+    setCarrierChannel(draft.channel);
+    setCarrierOperatorId(draft.operator_id);
+    setDidAutoLoadCarrier(true);
+  }, [carrierName, carrierOperatorId, carrierSourceId, didAutoLoadCarrier, onboarding.data]);
   const createAccount = useMutation({
     mutationFn: () => api<PublishingAccount>("/api/v1/tenant-management/publishing-accounts", {
       method: "POST",
@@ -935,7 +986,7 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
     },
     onError: error => setNotice(error.message),
   });
-  const createCarrier = useMutation({ mutationFn: () => api<PublishingAccount>("/api/v1/tenant-management/platform-carriers", { method: "POST", body: JSON.stringify({ source_account_id: carrierSourceId, name: carrierName, channel: carrierChannel, operator_id: carrierOperatorId }) }), onSuccess: () => { setCarrierSourceId(""); setCarrierName(""); setCarrierChannel("小红书"); setCarrierOperatorId(""); client.invalidateQueries({ queryKey: ["publishing-accounts"] }); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("平台版本载体已明确连接到原表达账号；没有创建账号组或共享密码。"); }, onError: error => setNotice(error.message) });
+  const createCarrier = useMutation({ mutationFn: () => api<PublishingAccount>("/api/v1/tenant-management/platform-carriers", { method: "POST", body: JSON.stringify({ source_account_id: carrierSourceId, name: carrierName, channel: carrierChannel, operator_id: carrierOperatorId, confirm_internal_carrier: true }) }), onSuccess: () => { const next = onboarding.data?.platform_carrier_drafts.find(draft => draft.source_account_id !== carrierSourceId || draft.channel !== carrierChannel); if (next) { setCarrierSourceId(next.source_account_id); setCarrierName(next.name); setCarrierChannel(next.channel); setCarrierOperatorId(next.operator_id); } else { setCarrierSourceId(""); setCarrierName(""); setCarrierChannel("小红书"); setCarrierOperatorId(""); } client.invalidateQueries({ queryKey: ["publishing-accounts"] }); client.invalidateQueries({ queryKey: ["operators"] }); client.invalidateQueries({ queryKey: ["onboarding-prefill"] }); setNotice("内部平台内容载体已经建立；没有连接平台、索取凭据或创建账号组。"); }, onError: error => setNotice(error.message) });
   const create = useMutation({ mutationFn: () => api<Operator>("/api/v1/tenant-management/operators", { method: "POST", body: JSON.stringify({ display_name: displayName, account_id: accountId }) }), onSuccess: () => { setDisplayName(""); setAccountId(""); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("已创建最小自然人操作身份并授予指定企业发布账号。未创建或共享密码。"); }, onError: error => setNotice(error.message) });
   const createFormalUser = useMutation({ mutationFn: () => api<{ activation_link: string }>("/api/v1/tenant-management/users", { method: "POST", body: JSON.stringify({ display_name: formalName, username: formalUsername, organization_id: formalOrganizationId || null, account_id: formalAccountId || null, grants_material_maintenance: formalGrantsMaterialMaintenance, grants_expression_profile_maintenance: formalGrantsProfileMaintenance }) }), onSuccess: value => { setFormalName(""); setFormalUsername(""); setFormalOrganizationId(""); setFormalAccountId(""); setFormalGrantsMaterialMaintenance(false); setFormalGrantsProfileMaintenance(false); setActivationLink(value.activation_link); client.invalidateQueries({ queryKey: ["operators"] }); setNotice("已建立独立自然人登录身份；请安全复制一次性激活链接交付本人。"); }, onError: error => setNotice(error.message) });
   const createOrganization = useMutation({ mutationFn: () => api<TenantOrganization>("/api/v1/tenant-management/organizations", { method: "POST", body: JSON.stringify({ name: organizationName.trim() }) }), onSuccess: value => { setOrganizationName(""); client.invalidateQueries({ queryKey: ["tenant-organizations"] }); client.invalidateQueries({ queryKey: ["control-organizations"] }); setNotice(`已创建组织“${value.name}”。`); }, onError: error => setNotice(error.message) });
@@ -962,7 +1013,15 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
       <p className="muted">控制组织决定谁可以维护这个账号的表达画像。不选就先空着，之后由有权主体明确声明；系统不会按账号名、身份名或操作者姓名替你推断。</p>
       <button className="primary" disabled={createAccount.isPending}>{createAccount.isPending ? "正在创建……" : "创建账号并授权操作者"}</button>
     </form>
-    <form className="series-create" onSubmit={event => { event.preventDefault(); if (carrierSourceId && carrierName.trim() && carrierOperatorId) createCarrier.mutate(); }}><p>给一个真实表达账号补本次需要的平台载体。它沿用原账号的表达身份和控制组织，不是账号组。</p><select value={carrierSourceId} onChange={event => setCarrierSourceId(event.target.value)}><option value="">选择原表达账号</option>{accounts.data?.filter(account => !account.carrier_of_account_id).map(account => <option key={account.id} value={account.id}>{account.name} · {account.channel}</option>)}</select><select value={carrierChannel} onChange={event => setCarrierChannel(event.target.value as CreatePublishingAccount["channel"])}><option value="抖音">抖音</option><option value="小红书">小红书</option><option value="微信视频号">微信视频号</option></select><input value={carrierName} onChange={event => setCarrierName(event.target.value)} placeholder="这个平台上的账号名称" maxLength={120} /><select value={carrierOperatorId} onChange={event => setCarrierOperatorId(event.target.value)}><option value="">选择实际使用者</option>{operators.data?.map(operator => <option key={operator.id} value={operator.id}>{operator.display_name} · {operator.organization}</option>)}</select><button className="primary" disabled={createCarrier.isPending}>{createCarrier.isPending ? "正在创建……" : "补齐这个平台载体"}</button></form>
+    <form className="series-create" onSubmit={event => { event.preventDefault(); if (carrierSourceId && carrierName.trim() && carrierOperatorId) createCarrier.mutate(); }}>
+      <p>系统已按现有表达账号预填本次缺少的内部平台内容载体。它只用于另做平台版本，不连接平台，也不需要平台账号或凭据。</p>
+      {(onboarding.data?.platform_carrier_drafts.length ?? 0) > 0 && <div className="plan-actions">{onboarding.data?.platform_carrier_drafts.map(draft => <button key={`${draft.source_account_id}-${draft.channel}`} type="button" onClick={() => { setCarrierSourceId(draft.source_account_id); setCarrierName(draft.name); setCarrierChannel(draft.channel); setCarrierOperatorId(draft.operator_id); }}>{draft.source_account_name} · {draft.channel}草案</button>)}</div>}
+      <select value={carrierSourceId} onChange={event => setCarrierSourceId(event.target.value)}><option value="">选择原表达账号</option>{accounts.data?.filter(account => !account.carrier_of_account_id).map(account => <option key={account.id} value={account.id}>{account.name} · {account.channel}</option>)}</select>
+      <select value={carrierChannel} onChange={event => setCarrierChannel(event.target.value as CreatePublishingAccount["channel"])}><option value="抖音">抖音</option><option value="小红书">小红书</option><option value="微信视频号">微信视频号</option></select>
+      <input value={carrierName} onChange={event => setCarrierName(event.target.value)} placeholder="这个平台上的内部内容载体名称" maxLength={120} />
+      <select value={carrierOperatorId} onChange={event => setCarrierOperatorId(event.target.value)}><option value="">选择现有实际使用者</option>{operators.data?.map(operator => <option key={operator.id} value={operator.id}>{operator.display_name} · {operator.organization}</option>)}</select>
+      <button className="primary" disabled={createCarrier.isPending}>{createCarrier.isPending ? "正在建立……" : "确认并建立内部内容载体"}</button>
+    </form>
     {formalRuntime ? <><form className="series-create" onSubmit={event => { event.preventDefault(); if (organizationName.trim()) createOrganization.mutate(); }}><p>真实门店或分支组织不在列表时，只需先创建一次。</p><input value={organizationName} onChange={event => setOrganizationName(event.target.value)} placeholder="真实组织或门店名称" maxLength={120} /><button className="primary" disabled={createOrganization.isPending}>{createOrganization.isPending ? "正在创建……" : "创建组织"}</button></form><form className="series-create" onSubmit={event => { event.preventDefault(); if (formalName.trim() && formalUsername.trim()) createFormalUser.mutate(); }}><p>创建独立自然人登录身份。发布账号不是密码；每位内部或外部操作者都必须各自激活并登录。</p><input value={formalName} onChange={event => setFormalName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><input value={formalUsername} onChange={event => setFormalUsername(event.target.value)} placeholder="全平台唯一登录用户名" minLength={3} maxLength={80} /><select value={formalOrganizationId} onChange={event => setFormalOrganizationId(event.target.value)} aria-label="所属组织"><option value="">使用当前管理员所属组织</option>{organizations.data?.map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select><select value={formalAccountId} onChange={event => setFormalAccountId(event.target.value)}><option value="">暂不授予发布账号（可稍后配置）</option>{accounts.data?.filter(account => !account.carrier_of_account_id).map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><label className="minor-check"><input type="checkbox" checked={formalGrantsMaterialMaintenance} onChange={event => setFormalGrantsMaterialMaintenance(event.target.checked)} />允许维护该组织素材</label><label className="minor-check"><input type="checkbox" checked={formalGrantsProfileMaintenance} disabled={!formalAccountId} onChange={event => setFormalGrantsProfileMaintenance(event.target.checked)} />允许维护所选账号五段画像</label><button className="primary" disabled={createFormalUser.isPending}>{createFormalUser.isPending ? "正在创建……" : "创建并生成激活链接"}</button>{activationLink && <p className="notice">一次性激活链接：<code>{activationLink}</code></p>}</form></> : <form className="series-create" onSubmit={event => { event.preventDefault(); if (displayName.trim() && accountId) create.mutate(); }}><p>登记一位实际操作者（不设置密码；生产开户与一次性激活在 M5-4）。</p><input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="自然人姓名或工作名" maxLength={80} /><select value={accountId} onChange={event => setAccountId(event.target.value)}><option value="">授予哪个企业发布账号</option>{accounts.data?.filter(account => !account.carrier_of_account_id).map(account => <option key={account.id} value={account.id}>{account.name}</option>)}</select><button className="primary" disabled={create.isPending}>{create.isPending ? "正在登记……" : "登记并授权操作人"}</button></form>}
     <section className="readiness-list">{operators.data?.map(operator => <article className="readiness-card ready" key={operator.id}><div><p className="eyebrow">{operator.manages_tenant ? "具备租户管理资格" : "业务操作人"}</p><h2>{operator.display_name}</h2><p>{operator.organization} · {operator.publishing_accounts || "尚未授予发布账号"}</p><small>{operator.default_persona ? `本人默认表达人设：${operator.default_persona}` : "尚未设置本人默认表达人设"}</small></div></article>)}</section>
   </>;
@@ -971,6 +1030,7 @@ function OperatorPanel({ formalRuntime, brandName }: { formalRuntime: boolean; b
 function ProductFactsPanel(): JSX.Element {
   const client = useQueryClient();
   const products = useQuery({ queryKey: ["brand-products"], queryFn: () => api<BrandProduct[]>("/api/v1/tenant-management/brand-products") });
+  const onboarding = useQuery({ queryKey: ["onboarding-prefill"], queryFn: () => api<OnboardingPrefill>("/api/v1/tenant-management/onboarding-prefill") });
   const [sku, setSku] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [category, setCategory] = useState("");
@@ -979,8 +1039,37 @@ function ProductFactsPanel(): JSX.Element {
   const [silhouette, setSilhouette] = useState("");
   const [features, setFeatures] = useState("");
   const [sourceNote, setSourceNote] = useState("");
-  const [applicability, setApplicability] = useState("仅用于当前品牌正式内容，直至责任来源更新");
+  const [applicability, setApplicability] = useState("仅用于当前品牌正式内容，直至品牌方更新");
+  const [candidateEvidence, setCandidateEvidence] = useState("");
+  const [didAutoLoadDraft, setDidAutoLoadDraft] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const loadDraft = (draft: ProductPrefill): void => {
+    setSku(draft.sku);
+    setDisplayName(draft.display_name);
+    setCategory(draft.category);
+    setColors(draft.colors.join("、"));
+    setMaterial(draft.material_or_structure);
+    setSilhouette(draft.silhouette);
+    setFeatures(draft.observable_features);
+    setSourceNote(draft.source_note);
+    setApplicability(draft.applicability);
+    setCandidateEvidence(draft.candidate_evidence);
+  };
+  useEffect(() => {
+    if (didAutoLoadDraft || sku || !onboarding.data?.product_drafts[0]) return;
+    const draft = onboarding.data.product_drafts[0];
+    setSku(draft.sku);
+    setDisplayName(draft.display_name);
+    setCategory(draft.category);
+    setColors(draft.colors.join("、"));
+    setMaterial(draft.material_or_structure);
+    setSilhouette(draft.silhouette);
+    setFeatures(draft.observable_features);
+    setSourceNote(draft.source_note);
+    setApplicability(draft.applicability);
+    setCandidateEvidence(draft.candidate_evidence);
+    setDidAutoLoadDraft(true);
+  }, [didAutoLoadDraft, onboarding.data, sku]);
   const save = useMutation({
     mutationFn: () => api<BrandProduct>("/api/v1/tenant-management/brand-products", {
       method: "PUT",
@@ -993,13 +1082,39 @@ function ProductFactsPanel(): JSX.Element {
         silhouette: silhouette.trim(),
         observable_features: features.trim(),
         source_note: sourceNote.trim(),
-        applicability: applicability.trim()
+        applicability: applicability.trim(),
+        confirm_as_current_brand_fact: true
       })
     }),
-    onSuccess: value => { setSku(""); setDisplayName(""); setCategory(""); setColors(""); setMaterial(""); setSilhouette(""); setFeatures(""); setSourceNote(""); client.invalidateQueries({ queryKey: ["brand-products"] }); setNotice(`已保存 ${value.display_name} 的第 ${value.fact_version} 版事实。`); },
+    onSuccess: value => {
+      client.invalidateQueries({ queryKey: ["brand-products"] });
+      client.invalidateQueries({ queryKey: ["onboarding-prefill"] });
+      const next = onboarding.data?.product_drafts.find(draft => draft.sku !== value.sku);
+      if (next) loadDraft(next);
+      else { setSku(""); setDisplayName(""); setCategory(""); setColors(""); setMaterial(""); setSilhouette(""); setFeatures(""); setSourceNote(""); setCandidateEvidence(""); }
+      setNotice(`已由当前品牌方确认并保存 ${value.display_name} 的第 ${value.fact_version} 版事实。`);
+    },
     onError: error => setNotice(error.message)
   });
-  return <><header className="page-heading"><p className="eyebrow">真实商品事实</p><h1>只录本轮内容真正需要的 1—3 件商品。</h1><p>不要求价格、库存、性能或设计动机；每次保存都会保留资料来源、版本和适用范围。</p></header>{notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}<section className="account-grid">{products.data?.map(product => <article className="series-card" key={product.sku}><p className="eyebrow">{product.sku} · 事实 V{product.fact_version}</p><h2>{product.display_name}</h2><p>{Object.entries(product.facts).map(([key, value]) => `${key}：${Array.isArray(value) ? value.join("、") : String(value)}`).join("；")}</p><small>来源：{product.source_note} · 范围：{product.applicability}{product.updated_by ? ` · 由 ${product.updated_by} 保存` : ""}</small></article>)}</section><form className="series-create" onSubmit={event => { event.preventDefault(); if (sku.trim() && displayName.trim() && sourceNote.trim() && applicability.trim()) save.mutate(); }}><input value={sku} onChange={event => setSku(event.target.value)} placeholder="商品名称或编号中的稳定编号" maxLength={80} /><input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="商品名称" maxLength={120} /><input value={category} onChange={event => setCategory(event.target.value)} placeholder="品类（按本轮需要）" maxLength={120} /><input value={colors} onChange={event => setColors(event.target.value)} placeholder="颜色，用逗号分开" maxLength={200} /><textarea value={material} onChange={event => setMaterial(event.target.value)} placeholder="材质或结构（不用就留空）" maxLength={500} /><textarea value={silhouette} onChange={event => setSilhouette(event.target.value)} placeholder="轮廓（不用就留空）" maxLength={300} /><textarea value={features} onChange={event => setFeatures(event.target.value)} placeholder="肉眼可以确认的特征" maxLength={800} /><input value={sourceNote} onChange={event => setSourceNote(event.target.value)} placeholder="资料来源说明（例如：品牌当前商品资料）" maxLength={300} /><input value={applicability} onChange={event => setApplicability(event.target.value)} placeholder="这些事实适用于什么范围？" maxLength={300} /><button className="primary" disabled={save.isPending}>{save.isPending ? "正在保存……" : "保存这一版商品事实"}</button></form></>;
+  return <>
+    <header className="page-heading"><p className="eyebrow">真实商品事实</p><h1>纠正并确认本轮需要的 1—3 件商品。</h1><p>系统已从候选资料预填最小草案；价格、库存、性能、设计动机和推断字段没有带入。草案在你确认前不会参与生成。</p></header>
+    {notice && <Notice value={notice} onDismiss={() => setNotice(null)} />}
+    <section className="account-grid">{products.data?.map(product => <article className="series-card" key={product.sku}><p className="eyebrow">{product.sku} · 事实 V{product.fact_version}</p><h2>{product.display_name}</h2><p>{Object.entries(product.facts).map(([key, value]) => `${key}：${Array.isArray(value) ? value.join("、") : String(value)}`).join("；")}</p><small>来源：{product.source_note} · 范围：{product.applicability}{product.updated_by ? ` · 由 ${product.updated_by} 保存` : ""}</small></article>)}</section>
+    {(onboarding.data?.product_drafts.length ?? 0) > 0 && <section className="account-grid">{onboarding.data?.product_drafts.map(draft => <article className="series-card" key={draft.sku}><p className="eyebrow">{draft.sku} · 可编辑候选草案</p><h2>{draft.display_name}</h2><p>{draft.candidate_evidence}</p><button type="button" onClick={() => loadDraft(draft)}>载入并纠正这份草案</button></article>)}</section>}
+    <form className="series-create" onSubmit={event => { event.preventDefault(); if (sku.trim() && displayName.trim() && sourceNote.trim() && applicability.trim()) save.mutate(); }}>
+      {candidateEvidence && <p className="muted">当前预填边界：{candidateEvidence}</p>}
+      <input value={sku} onChange={event => setSku(event.target.value)} placeholder="商品稳定编号" maxLength={80} />
+      <input value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder="商品名称；候选名不准确时直接改" maxLength={120} />
+      <input value={category} onChange={event => setCategory(event.target.value)} placeholder="品类（按本轮需要）" maxLength={120} />
+      <input value={colors} onChange={event => setColors(event.target.value)} placeholder="颜色，用逗号分开" maxLength={200} />
+      <textarea value={material} onChange={event => setMaterial(event.target.value)} placeholder="材质或结构（只有确认过才保留）" maxLength={500} />
+      <textarea value={silhouette} onChange={event => setSilhouette(event.target.value)} placeholder="轮廓（只有确认过才保留）" maxLength={300} />
+      <textarea value={features} onChange={event => setFeatures(event.target.value)} placeholder="肉眼可以确认的特征" maxLength={800} />
+      <input value={sourceNote} onChange={event => setSourceNote(event.target.value)} placeholder="资料来源说明" maxLength={300} />
+      <input value={applicability} onChange={event => setApplicability(event.target.value)} placeholder="这些事实适用于什么范围？" maxLength={300} />
+      <button className="primary" disabled={save.isPending}>{save.isPending ? "正在保存……" : "确认并保存为当前商品事实"}</button>
+    </form>
+  </>;
 }
 
 function ReadinessPanel(): JSX.Element {

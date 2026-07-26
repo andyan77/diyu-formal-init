@@ -191,7 +191,27 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT a.id, a.name, a.channel, r.name AS content_role, r.voice_boundary,
-                       a.carrier_of_account_id, source.name AS carrier_of_account
+                       a.carrier_of_account_id, source.name AS carrier_of_account,
+                       COALESCE(
+                           (
+                               SELECT jsonb_agg(
+                                   jsonb_build_object(
+                                       'id', operator.id,
+                                       'display_name', operator.display_name
+                                   )
+                                   ORDER BY operator.display_name
+                               )
+                               FROM auth_grants operator_grant
+                               JOIN users operator
+                                 ON operator.id = operator_grant.user_id
+                                AND operator.tenant_id = operator_grant.tenant_id
+                                AND operator.enabled = true
+                               WHERE operator_grant.tenant_id = a.tenant_id
+                                 AND operator_grant.account_id = a.id
+                                 AND operator_grant.enabled = true
+                           ),
+                           '[]'::jsonb
+                       ) AS operators
                 FROM content_accounts a
                 JOIN account_content_roles account_role ON account_role.tenant_id = a.tenant_id
                     AND account_role.account_id = a.id
@@ -222,6 +242,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     if row["carrier_of_account"] is not None
                     else None
                 ),
+                "operators": row["operators"] if isinstance(row["operators"], list) else [],
             }
             for row in rows
         ]
@@ -277,7 +298,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     (id, tenant_id, brand_id, sku, display_name, facts,
                      source_kind, source_note, fact_version, applicability,
                      status, updated_by, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, 'responsible_person',
+                VALUES (%s, %s, %s, %s, %s, %s, 'brand_user_confirmed',
                         %s, 1, %s, 'active', %s, now())
                 ON CONFLICT (tenant_id, brand_id, sku) DO UPDATE
                 SET display_name = EXCLUDED.display_name,
@@ -315,7 +336,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "sku": sku,
             "display_name": display_name,
             "facts": facts,
-            "source_kind": "responsible_person",
+            "source_kind": "brand_user_confirmed",
             "source_note": source_note,
             "fact_version": self._integer(row["fact_version"]),
             "applicability": applicability,

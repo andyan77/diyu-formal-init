@@ -465,6 +465,11 @@
             "title": "Channel",
             "type": "string"
           },
+          "confirm_internal_carrier": {
+            "const": true,
+            "title": "Confirm Internal Carrier",
+            "type": "boolean"
+          },
           "name": {
             "maxLength": 120,
             "minLength": 1,
@@ -486,7 +491,8 @@
           "source_account_id",
           "name",
           "channel",
-          "operator_id"
+          "operator_id",
+          "confirm_internal_carrier"
         ],
         "title": "CreatePlatformCarrierRequest",
         "type": "object"
@@ -935,6 +941,11 @@
             "title": "Colors",
             "type": "array"
           },
+          "confirm_as_current_brand_fact": {
+            "const": true,
+            "title": "Confirm As Current Brand Fact",
+            "type": "boolean"
+          },
           "display_name": {
             "maxLength": 120,
             "minLength": 1,
@@ -976,7 +987,8 @@
           "sku",
           "display_name",
           "source_note",
-          "applicability"
+          "applicability",
+          "confirm_as_current_brand_fact"
         ],
         "title": "SaveBrandProductRequest",
         "type": "object"
@@ -2757,6 +2769,40 @@
           }
         ],
         "summary": "Control Organizations"
+      }
+    },
+    "/api/v1/tenant-management/onboarding-prefill": {
+      "get": {
+        "operationId": "management_onboarding_prefill_api_v1_tenant_management_onboarding_prefill_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Management Onboarding Prefill Api V1 Tenant Management Onboarding Prefill Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Onboarding Prefill"
       }
     },
     "/api/v1/tenant-management/operators": {

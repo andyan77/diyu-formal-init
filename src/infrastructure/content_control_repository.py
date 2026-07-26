@@ -399,7 +399,8 @@ class PostgresContentControlRepository(ContentControlRepository):
             cursor.execute(
                 """
                 SELECT account.id, account.name, account.channel,
-                       role.name AS content_role,
+                       brand.name AS brand_name, role.name AS content_role,
+                       role.voice_boundary,
                        control_organization.name AS control_organization,
                        account.control_organization_source,
                        profile.version AS profile_version,
@@ -408,6 +409,8 @@ class PostgresContentControlRepository(ContentControlRepository):
                         AND account.control_organization_id = manager.organization_id) AS can_maintain,
                        (account.control_organization_source <> 'declared') AS can_declare
                 FROM content_accounts account
+                JOIN brands brand
+                  ON brand.id = account.brand_id AND brand.tenant_id = account.tenant_id
                 JOIN users manager ON manager.tenant_id = account.tenant_id AND manager.id = %s
                     AND manager.enabled = true
                 JOIN account_content_roles account_role
@@ -432,7 +435,9 @@ class PostgresContentControlRepository(ContentControlRepository):
                 "id": str(row["id"]),
                 "name": str(row["name"]),
                 "channel": str(row["channel"]),
+                "brand_name": str(row["brand_name"]),
                 "content_role": str(row["content_role"]),
+                "voice_boundary": str(row["voice_boundary"]),
                 "control_organization": (
                     str(row["control_organization"]) if row["control_organization"] else ""
                 ),

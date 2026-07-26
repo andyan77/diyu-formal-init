@@ -256,6 +256,7 @@ class CreatePlatformCarrierRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     channel: Literal["抖音", "小红书", "微信视频号"]
     operator_id: UUID
+    confirm_internal_carrier: Literal[True]
 
 
 class SaveBrandProductRequest(BaseModel):
@@ -270,6 +271,7 @@ class SaveBrandProductRequest(BaseModel):
     observable_features: str = Field(default="", max_length=800)
     source_note: str = Field(min_length=1, max_length=300)
     applicability: str = Field(min_length=1, max_length=300)
+    confirm_as_current_brand_fact: Literal[True]
 
 
 class LoginRequest(BaseModel):

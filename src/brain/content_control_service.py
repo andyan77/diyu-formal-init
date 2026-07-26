@@ -12,6 +12,7 @@ from src.brain.content_expression import (
     read_natural_text,
     resolve_direction,
 )
+from src.brain.onboarding_prefill import account_profile_prefill
 from src.ports.content_control_repository import ContentControlRepository
 from src.ports.material_object_store import MaterialObjectStore
 from src.shared.errors import DomainError
@@ -151,6 +152,17 @@ class ContentControlService:
         if account is None:
             raise DomainError("找不到当前范围内的发布账号。")
         current = self._repository.current_account_expression(scope.tenant_id, account_id)
+        prefill = (
+            account_profile_prefill(
+                str(account["brand_name"]),
+                str(account["name"]),
+                str(account["content_role"]),
+            )
+            if current is None
+            else None
+        )
+        draft = prefill[0] if prefill is not None else None
+        draft_source = prefill[1] if prefill is not None else None
         return {
             "account": account["name"],
             "content_role": account["content_role"],
@@ -159,6 +171,8 @@ class ContentControlService:
             "can_maintain": account["can_maintain"],
             "can_declare": account["can_declare"],
             "current": current,
+            "draft": draft,
+            "draft_source": draft_source,
             "segment_labels": dict(_SEGMENT_LABELS),
         }
 

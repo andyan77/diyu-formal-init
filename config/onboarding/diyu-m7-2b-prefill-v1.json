@@ -1,0 +1,68 @@
+{
+  "schema_version": "m7-2b-progressive-prefill-v1",
+  "brand_name": "笛语服饰",
+  "status": "review_candidate",
+  "source_summary": "依据现有笛语服饰品牌候选资料和候选商品主档生成的可编辑草案；未由当前品牌方确认前，不进入生成上下文，也不构成商品或账号事实。",
+  "source_refs": [
+    "DIYU-BRAND-BASELINE-001",
+    "DIYU-BRAND-VOICE-001",
+    "DIYU-CONTENT-ROLE-001",
+    "DIYU-ACCOUNT-MATRIX-001",
+    "DIYU-CANDIDATE-PRODUCT-MASTER-001"
+  ],
+  "account_profiles": [
+    {
+      "account_name": "笛语服饰品牌官方账号",
+      "content_role_contains": "品牌官方",
+      "segments": {
+        "identity_position": "这是笛语服饰品牌官方账号的总部岗位型表达身份，代表品牌说清当前确认的品牌立场、家庭关系观、内容主题和正式说明；它不是创始人、研发人员、门店店员或顾客本人。",
+        "authority_boundary": "只使用已经确认的品牌基线、当前版本商品事实和已授权素材。可以说“我们主张、希望、建议、尊重”，不把候选商品、推断、单店做法或个人经历写成品牌现实；不编面料、性能、设计动机、库存、销量、顾客反馈和全国执行情况。",
+        "audience_relationship": "主要服务希望家庭成员各自有型、又能自然呼应的家庭审美组织者，也尊重儿童和每位家庭成员自己的选择。与受众平等协作，帮助判断适合谁、解决什么、有什么取舍，不说教、不制造焦虑、不逼迫购买。",
+        "content_territories": "持续讨论真实穿衣问题与家庭审美、商品事实和专业取舍、品牌对生活关系的判断，以及人物与商品如何在真实场景中形成造型灵感。总部负责提出品牌立场和方法，不冒充门店现场。",
+        "default_production_conditions": "默认按一人、一部手机、普通室内或现有门店空间、现有商品完成；优先口播、持衣演示、局部特写、旁白和字幕，不安排顾客、儿童、模特或复杂场地，除非用户明确提供且授权。"
+      }
+    }
+  ],
+  "product_drafts": [
+    {
+      "sku": "DIYU-CSPU-001",
+      "display_name": "男童亮黄城市工装宽松短袖（候选名）",
+      "category": "男童短袖上衣",
+      "colors": [
+        "明亮黄色"
+      ],
+      "material_or_structure": "",
+      "silhouette": "",
+      "observable_features": "视频画面可见：短袖上衣，明亮黄色。",
+      "source_note": "品牌方在本页基于候选商品主档 DIYU-CSPU-001 的视频视觉确认项纠正并确认",
+      "applicability": "当前品牌正式内容，直至品牌方更新这版事实",
+      "candidate_evidence": "品类和主色为 V 级视频视觉确认；候选名称不是企业正式商品名，轮廓、面料、价格和取舍未预填。"
+    },
+    {
+      "sku": "DIYU-CSPU-006",
+      "display_name": "女童自然度假白色连衣裙（候选名）",
+      "category": "女童连衣裙",
+      "colors": [
+        "白色或米白色"
+      ],
+      "material_or_structure": "",
+      "silhouette": "",
+      "observable_features": "视频画面可见：女童连衣裙，白色或米白色。",
+      "source_note": "品牌方在本页基于候选商品主档 DIYU-CSPU-006 的视频视觉确认项纠正并确认",
+      "applicability": "当前品牌正式内容，直至品牌方更新这版事实",
+      "candidate_evidence": "品类和主色为 V 级视频视觉确认；候选名称不是企业正式商品名，轮廓、面料、价格和取舍未预填。"
+    },
+    {
+      "sku": "DIYU-CSPU-009",
+      "display_name": "女童复古学院牛角扣外套（候选名）",
+      "category": "女童中长款秋冬外套",
+      "colors": [],
+      "material_or_structure": "牛角扣、学院外套结构",
+      "silhouette": "",
+      "observable_features": "视频画面可见：中长款秋冬外套，带牛角扣和学院外套结构。",
+      "source_note": "品牌方在本页基于候选商品主档 DIYU-CSPU-009 的视频视觉确认项纠正并确认",
+      "applicability": "当前品牌正式内容，直至品牌方更新这版事实",
+      "candidate_evidence": "品类和牛角扣、学院外套结构为 V 级视频视觉确认；颜色、面料、价格和取舍未预填。"
+    }
+  ]
+}

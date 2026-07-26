@@ -688,6 +688,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> list[dict[str, object]]:
         return workbench_service.management_products(scope)
 
+    @app.get("/api/v1/tenant-management/onboarding-prefill", responses=business_failures)
+    def management_onboarding_prefill(
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.management_onboarding_prefill(scope)
+
     @app.put("/api/v1/tenant-management/brand-products", responses=business_failures)
     def save_management_product(
         payload: SaveBrandProductRequest,
@@ -704,6 +710,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.observable_features,
             payload.source_note,
             payload.applicability,
+            payload.confirm_as_current_brand_fact,
         )
 
     @app.post(
@@ -741,6 +748,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.name,
             payload.channel,
             payload.operator_id,
+            payload.confirm_internal_carrier,
         )
 
     @app.post(

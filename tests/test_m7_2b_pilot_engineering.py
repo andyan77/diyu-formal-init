@@ -164,7 +164,7 @@ def test_failed_series_generation_writes_no_series_item_or_partial_version(
     assert audit == {"status": "failed", "versions": 0, "series_items": 0}
 
 
-def test_product_revision_replays_the_responsibility_sourced_fact_version(
+def test_product_revision_replays_the_brand_confirmed_fact_version(
     app_database_url: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -194,6 +194,7 @@ def test_product_revision_replays_the_responsibility_sourced_fact_version(
                 "observable_features": "正面一排纽扣",
                 "source_note": "当前品牌商品负责人当面提供",
                 "applicability": "当前品牌正式内容",
+                "confirm_as_current_brand_fact": True,
             },
         )
         assert saved.status_code == 200
@@ -223,6 +224,7 @@ def test_product_revision_replays_the_responsibility_sourced_fact_version(
                 "observable_features": "正面一排纽扣",
                 "source_note": "当前品牌商品负责人补充",
                 "applicability": "当前品牌正式内容",
+                "confirm_as_current_brand_fact": True,
             },
         )
         assert changed.json()["fact_version"] == 2
@@ -245,7 +247,7 @@ def test_product_revision_replays_the_responsibility_sourced_fact_version(
             (task_id,),
         )["content_context_snapshot"]
         assert snapshot["product_facts"][0]["fact_version"] == 1
-        assert snapshot["product_facts"][0]["source_kind"] == "responsible_person"
+        assert snapshot["product_facts"][0]["source_kind"] == "brand_user_confirmed"
 
 
 def test_platform_scope_uses_the_explicit_carrier_relation() -> None:
@@ -264,6 +266,7 @@ def test_platform_scope_uses_the_explicit_carrier_relation() -> None:
                 "name": "折线之间·南城店账号·小红书",
                 "channel": "小红书",
                 "operator_id": store_operator["id"],
+                "confirm_internal_carrier": True,
             },
         )
         assert created.status_code == 201
