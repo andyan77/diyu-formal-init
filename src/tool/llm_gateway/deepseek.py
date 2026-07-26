@@ -596,7 +596,7 @@ class DeepSeekGenerator(ContentGenerator):
                 _LOGGER.warning(
                     "content boundary remained unsatisfied after unit repair: %s",
                     ",".join(
-                        f"{issue.unit_id}:{issue.reason_code}"
+                        f"{issue.unit_id}:{issue.reason_code}:{issue.fragment[:300]!r}"
                         for issue in final_issues
                     ),
                 )
