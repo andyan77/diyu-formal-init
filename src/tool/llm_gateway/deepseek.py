@@ -1502,7 +1502,12 @@ class DeepSeekGenerator(ContentGenerator):
             "适合人群或穿着结果混入商品锚点。visible_styling_proposition 和 visual_dependency "
             "只承载本次要求的画面组织与成立条件，不能伪装成已确认商品事实。"
             if request.primary_product == "visual_styling_story"
-            else ""
+            else (
+                "本次是商品解释内容：tradeoff_or_limit 和可见口播都只用一句自然边界收束，"
+                "不逐项复述后台未确认事项；受众回报是能立即使用的观察方法。"
+                if request.primary_product == "product_truth"
+                else ""
+            )
         )
         if request.media_format == "video":
             media_contract = (
