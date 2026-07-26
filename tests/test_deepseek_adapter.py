@@ -287,6 +287,31 @@ def test_revision_prompt_applies_the_instruction_to_every_visible_unit(
     assert "修改要求约束全部可见单元" in prompt
     assert "画面动作、声音、制作提示和发布互动" in prompt
     assert "不能只改合同字段、摘要或时长标签" in prompt
+    assert "旧稿逐段带入模型" in prompt
+    assert "旧稿仍安排了桌面字卡" not in prompt
+
+
+def test_platform_recompile_keeps_source_but_demands_target_native_change(
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(
+        generation_input,
+        target="xiaohongshu_graphic",
+        media_format="graphic",
+        platform_direction=direction_for("xiaohongshu_graphic"),
+        revision_instruction="另做小红书图文版。",
+        prior_saved_body="源视频完整正文。",
+        source_version_description="由抖音视频 V2 改编",
+    )
+    prompt = DeepSeekGenerator._generation_prompt(
+        request,
+        BoundaryContext.from_request(request),
+    )
+
+    assert "源视频完整正文" in prompt
+    assert "标题和正文开头不得沿用源视频" in prompt
+    assert "首图承诺、递进图序和可独立阅读的完整正文" in prompt
+    assert "改变标题、开头、内容顺序、媒体组织、画面节奏" in prompt
 
 
 def test_weak_seed_stays_topic_unless_product_requires_near_field_signal(

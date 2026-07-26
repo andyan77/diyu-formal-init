@@ -561,12 +561,14 @@ def _reset_series_with_tasks(
     series_id: str,
     task_ids: tuple[str, ...],
 ) -> dict[str, Any]:
-    _response_json(
-        client,
-        "POST",
-        f"/api/v1/content/series/{series_id}/reset",
+    current = cast(
+        dict[str, Any],
+        _response_json(
+            client,
+            "POST",
+            f"/api/v1/content/series/{series_id}/reset",
+        ),
     )
-    current: dict[str, Any] | None = None
     for position, task_id in enumerate(task_ids, start=1):
         current = cast(
             dict[str, Any],
@@ -577,8 +579,6 @@ def _reset_series_with_tasks(
                 json_body={"task_id": task_id, "position": position},
             ),
         )
-    if current is None:
-        raise RuntimeError("系列重建至少需要一个既有任务")
     return current
 
 
@@ -764,13 +764,32 @@ def run() -> dict[str, object]:
             ),
             desired_version=3,
         )
+        existing_h2 = _existing_series_artifact(hq_client, hq_series, 2)
+        if existing_h2 is not None and any(
+            marker in str(existing_h2.get("body") or "")
+            for marker in (
+                "它属于学院风格",
+                "经典的闭合方式",
+                "羊毛混纺",
+                "纯聚酯",
+                "展示厚度",
+            )
+        ):
+            hq_series = _reset_series_with_tasks(
+                hq_client,
+                str(hq_series["id"]),
+                (str(h1["task_id"]),),
+            )
         h2_current = _ensure_generated(
             hq_client,
             seed=(
                 "接着这个系列做下一篇。请解释演示商品 DIYU-CSPU-009："
-                "牛角扣和学院外套结构能说明什么、又不能说明什么，讲清一个容易被误解的"
-                "商品取舍。不得推断面料、保暖性能、设计动机、价格、库存或真实在售状态；"
-                "用一人持衣和局部特写完成。"
+                "已登记事实只有它是女童中长款秋冬外套，肉眼可见牛角扣和学院外套结构。"
+                "讲清一个容易被误解的商品取舍：这些可见结构可以作为看外观结构的检查入口，"
+                "但“学院外套结构”只是登记的结构名称，不能据此推断经典、学院风归属、适合人群、"
+                "面料、厚薄、保暖、耐用、好打理、品质、设计动机、价格、库存或真实在售。"
+                "不要举羊毛、聚酯、填充物等未登记例子，不捏面料、不上桌，只用一人持衣与"
+                "牛角扣和整体结构的局部特写完成。"
             ),
             series=hq_series,
             position=2,
@@ -789,25 +808,25 @@ def run() -> dict[str, object]:
                 "适合某种风格，以及羊毛混纺、聚酯、厚薄等没有来源的具体例子；明确这些可见结构"
                 "不能证明面料、保暖、耐用、好打理、设计动机、品质或真实在售。只用持衣与局部特写。"
             ),
-            desired_version=3,
+            desired_version=2,
         )
         h3_seed = (
             "接着这个系列做下一篇。只依据演示商品 DIYU-CSPU-001 肉眼可见的"
             "明亮黄色短袖上衣，以及 DIYU-CSPU-006 肉眼可见的白色或米白色连衣裙，"
-            "让一名创作者在同一手机取景框里同时手持两件衣服：第一组让明亮黄色靠近镜头、"
-            "白色或米白色稍后；第二组交换前后位置。受众通过两个画面直接比较同一组商品"
-            "改变前后位置时，哪一件在取景框里占据更靠前的位置。主回报必须是由画面承重的"
-            "造型组织可能，不给选择建议，也不解释商品。不要声称哪组更好看、更适合谁、"
-            "更有家庭感或形成了真实穿着结果，不安排儿童、顾客或模特出镜，不新增桌子、"
-            "纸笔、衣架或其他道具。想保留一点幽默，但不要吵闹叫卖。"
+            "让一名创作者在同一手机取景框里手持两件衣服做三组画面：先完整并列；再让白色"
+            "连衣裙占画面主体、亮黄短袖只从侧边露出一小块颜色；最后交换主次，让亮黄短袖"
+            "占主体、白色连衣裙只露局部。受众必须从画面直接看见：同一对衣服可以被组织成"
+            "“完整并列、白色为主亮黄点一下、亮黄为主白色留一块”三种穿衣配色主次设想。"
+            "主回报是只有看到三组画面才成立的造型组织可能，不给购买或穿着选择建议，也不"
+            "解释商品，不声称哪组更好看、更适合谁、更有家庭感或已经形成真实穿着结果。"
+            "不安排儿童、顾客或模特，不新增桌子、纸笔、衣架或其他道具。保留一点克制冷幽默。"
         )
         existing_h3 = _existing_series_artifact(hq_client, hq_series, 3)
         if (
             existing_h3 is not None
             and (
                 "演示商品锚点：" not in str(existing_h3.get("body") or "")
-                or str(existing_h3.get("created_at") or "")
-                < str(h2.get("created_at") or "")
+                or "哪件更靠前" in str(existing_h3.get("outline") or "")
             )
         ):
             hq_series = _reset_series_with_tasks(
@@ -827,52 +846,73 @@ def run() -> dict[str, object]:
             ),
         )
 
+        existing_s1 = _existing_series_artifact(store_client, store_series, 1)
+        if existing_s1 is not None and any(
+            marker in str(existing_s1.get("body") or "")
+            for marker in ("可能刚下班", "不想被推销", "我会先离他远一点")
+        ):
+            store_series = _reset_series_with_tasks(
+                store_client,
+                str(store_series["id"]),
+                (),
+            )
         s1_current = _ensure_generated(
             store_client,
             seed=(
                 "走进门店只想自己看看，这种沉默是不是也应该被尊重？"
-                "请从柯桥门店人物的模拟位置回应同一个问题。没有真实本店做法，"
-                "只表达我当前的理解、建议或愿望，不冒充真实店员确认。"
+                "请从柯桥门店人物的模拟位置回应同一个假设问题。没有真实顾客、进店事件或本店做法，"
+                "不要猜对方刚下班、怕推销或有任何具体经历，只表达：如果有人只想安静看看，"
+                "我当前更愿意先留一点距离，等对方发出需要帮助的信号再开口。这是当前理解和建议，"
+                "不是本店已执行服务；只用一名创作者面对手机口播，不用顾客、衣架或商品出镜。"
             ),
             series=store_series,
             position=1,
             direction=_direction(
                 style=_STYLE_FRIEND,
                 form=_FORM_SPEAK,
-                custom_text="像站在衣架旁对一个人说话，不照搬总部口径。",
+                custom_text="像在现场认真听人说话，但全篇保持假设，不照搬总部口径。",
             ),
         )
         s1_v1 = _task_version(store_client, str(s1_current["task_id"]), 1)
         s1_v2 = _ensure_revision(
             store_client,
             s1_current,
-            "不要安排顾客出镜，用我、衣架和现有演示商品就能拍；保留门店人物自己的语气。",
-        )
-        s1 = _ensure_revision(
-            store_client,
-            s1_v2,
             (
-                "继续只改事实边界：删除“有人进店”“我以前会”“后来发现”“我现在会这样做”等"
-                "真实经历和本店做法，也不猜顾客刚下班或怕推销。保留门店人物近距离的观察位置，"
-                "把同一问题明确写成假设：如果有人只想安静看看，我更愿意先留一点距离，等对方"
-                "发出需要帮助的信号再开口。这只是当前理解和建议，不是本店已执行服务。"
+                "判断保留，但改成一名创作者面对手机能自然说出的完整版本。不要安排顾客、衣架或"
+                "商品出镜；不猜顾客经历，不写真实本店做法。开头直接用“如果有人只想安静看看”，"
+                "保持门店人物近距离、像在认真听人的语气。"
             ),
-            desired_version=4,
+            desired_version=2,
         )
+        s1 = s1_v2
+        existing_s2 = _existing_series_artifact(store_client, store_series, 2)
+        if existing_s2 is not None and any(
+            marker in str(existing_s2.get("body") or "")
+            for marker in ("桌面", "白纸", "马克笔", "压住了", "放在一起看着舒服")
+        ):
+            store_series = _reset_series_with_tasks(
+                store_client,
+                str(store_series["id"]),
+                (str(s1["task_id"]),),
+            )
         s2_current = _ensure_generated(
             store_client,
             seed=(
                 "接着这个系列做下一篇：一家三口拍合照，先统一颜色，还是先保留每个人"
                 "舒服的穿法？结合演示商品 DIYU-CSPU-001 和 DIYU-CSPU-006 做成帮助选择的"
-                "内容：给一个有条件的优先选择、一条会让选择反转的条件，以及一个不需要"
-                "顾客、儿童或一家三口出镜的低成本验证动作。"
+                "假设内容：如果这次更在意各自舒服，就先各自舒服，再只找一个颜色呼应点；"
+                "如果这次明确更在意画面统一，就先约定一个共同颜色关系。不要声称哪种会更自然、"
+                "更耐看、颜色会压住另一种或形成真实穿着结果。低成本验证只让一名创作者在同一"
+                "手机取景框里手持两件演示商品，分别改变明亮黄色和白色或米白色在画面中的位置，"
+                "再由拍摄者按本次目标决定；不需要顾客、儿童或一家三口出镜，不新增桌子、纸笔、"
+                "字卡、衣架或其他道具。"
             ),
             series=store_series,
             position=2,
             direction=_direction(
                 style=_STYLE_PRACTICAL,
                 form=_FORM_DETAILS,
-                custom_text="用持衣、色块图卡和局部特写完成，不声称这是本店真实案例。",
+                custom_text="只用持衣和同一手机取景框完成，不声称这是本店真实案例。",
             ),
         )
         s2_v1 = _task_version(store_client, str(s2_current["task_id"]), 1)
@@ -886,24 +926,15 @@ def run() -> dict[str, object]:
                 "肉眼可见的明亮黄色与白色或米白色在手机取景框里的面积，不外推真实穿着结果。"
                 "只用一名创作者、两件演示商品和手机，不新增桌子、纸笔、顾客、儿童或一家三口出镜。"
             ),
-        )
-        s2 = _ensure_revision(
-            store_client,
-            s2,
-            (
-                "再把条件性选择收准确：如果一家人这次更在意各自穿得舒服，就先各自舒服，再只找"
-                "一个颜色呼应点；如果这次明确更在意画面统一，就先约定一个共同颜色关系。不要声称"
-                "哪种会更自然、更耐看、颜色会压住另一种或两件放着舒服。低成本验证只是在同一手机"
-                "取景框里手持两件演示商品，比较明亮黄色与白色或米白色所占位置，再由拍摄者按这次"
-                "目标选择；不外推真实穿着结果。全篇保持假设，不新增桌子、纸笔或人物出镜。"
-            ),
-            desired_version=4,
+            desired_version=2,
         )
         existing_s3 = _existing_series_artifact(store_client, store_series, 3)
         if (
             existing_s3 is not None
-            and str(existing_s3.get("created_at") or "")
-            < str(s2.get("created_at") or "")
+            and any(
+                marker in str(existing_s3.get("body") or "")
+                for marker in ("其实每天都要擦", "试衣镜", "白天的时候，这里人来人往")
+            )
         ):
             store_series = _reset_series_with_tasks(
                 store_client,

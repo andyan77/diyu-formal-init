@@ -1454,7 +1454,16 @@ class DeepSeekGenerator(ContentGenerator):
     ) -> str:
         boundary = context or BoundaryContext.from_request(request)
         contract_fields = _CONTRACT_FIELDS[request.primary_product]
-        prior = request.prior_saved_body or "（未授权复用旧正文）"
+        is_recompile = request.source_version_description is not None
+        if request.prior_saved_body and is_recompile:
+            prior = request.prior_saved_body
+        elif request.prior_saved_body:
+            prior = (
+                "（旧版本已不可变保留。本次只重放原任务冻结快照、原始种子和修改要求来重新形成完整成品，"
+                "不把旧稿逐段带入模型；不得因此丢失修改要求明确要求保留的核心判断。）"
+            )
+        else:
+            prior = "（未授权复用旧正文）"
         revision = request.revision_instruction or "（首次生成）"
         source = request.source_version_description or "（不是跨目标重编译）"
         revision_rule = (
@@ -1464,6 +1473,32 @@ class DeepSeekGenerator(ContentGenerator):
             if request.revision_instruction
             else "本次是首次生成，不存在需要照搬的旧稿。"
         )
+        if is_recompile:
+            target_delta = {
+                "xiaohongshu_graphic": (
+                    "这是小红书图文：标题和正文开头不得沿用源视频；用首图承诺、递进图序和可独立阅读的"
+                    "完整正文重新组织信息，不能把视频分镜截图化、台词卡化或只替换平台名称和标签。"
+                ),
+                "xiaohongshu_video": (
+                    "这是小红书视频：标题、封面、视频开头与发布正文要共同形成独立内容单元；"
+                    "不得沿用源标题和开头，也不能只替换平台名称和标签。"
+                ),
+                "wechat_channels_video": (
+                    "这是微信视频号视频：标题和开头不得沿用源视频；先补足独立看到或转发时所需语境，"
+                    "再重组判断、画面节奏和收尾互动，不能只替换平台名称和标签。"
+                ),
+                "douyin_video": (
+                    "这是抖音视频：标题和开头不得沿用源版本；让信息流中的观看理由与动态画面回报"
+                    "尽早可见，但不固定秒数、不喊叫、不只替换平台名称和标签。"
+                ),
+            }[request.target]
+            platform_recompile_rule = (
+                "本次必须实质重编译：保留核心判断、商品事实、账号身份、系列前情和主要受众价值；"
+                "同时改变标题、开头、内容顺序、媒体组织、画面节奏，以及确有需要的封面字、"
+                f"互动或 FAQ。{target_delta}"
+            )
+        else:
+            platform_recompile_rule = "本次不是跨平台重编译，按当前目标媒体合同形成成品。"
         series_rule = (
             "本次已把所选系列的冻结前情编入边界一；保持必要连续，但不从前情推断发布事实。"
             if request.series_context is not None
@@ -1527,6 +1562,7 @@ class DeepSeekGenerator(ContentGenerator):
 来源关系：{source}
 本次修改：{revision}
 修改一致性：{revision_rule}
+平台重编译：{platform_recompile_rule}
 系列承接：{series_rule}
 
 创作要求：标题、观点、比喻、幽默、节奏、完整口播和互动由你自然创作，允许口语化、停顿感和真实的不完美；
