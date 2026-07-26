@@ -262,11 +262,20 @@ class BoundaryContext:
                 "本次近场种子属于等深模拟业务夹具，只能作为假设情境和演示脚本起点；"
                 "不得用第一人称或现实陈述写成当前账号、操作者、门店或顾客真实发生过的经历。"
             )
-        topic = "\n".join(
-            part
-            for part in (request.weak_seed, request.revision_instruction, *direction_lines)
-            if part
-        )
+        topic_parts = [
+            (
+                "原始请求（保留未被本次修改改变的目标；冲突的创作和制作要求已被本次修改替代）："
+                f"{request.weak_seed}"
+                if request.revision_instruction
+                else request.weak_seed
+            )
+        ]
+        if request.revision_instruction:
+            topic_parts.append(
+                "本次修改（当前最高优先级；只改变用户点名的成品要求，不改变冻结事实与作用域）："
+                f"{request.revision_instruction}"
+            )
+        topic = "\n".join(part for part in (*topic_parts, *direction_lines) if part)
         # The request contract has no separate channel for user-presented
         # actuality.  Only a local_response request qualifies: its routing
         # contract already requires the user to hand over a real near-field

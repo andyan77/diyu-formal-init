@@ -290,6 +290,8 @@ def test_revision_prompt_applies_the_instruction_to_every_visible_unit(
     assert "不能只改合同字段、摘要或时长标签" in prompt
     assert "旧稿逐段带入模型" in prompt
     assert "旧稿仍安排了桌面字卡" not in prompt
+    assert "冲突的创作和制作要求已被本次修改替代" in prompt
+    assert "本次修改（当前最高优先级" in prompt
 
 
 def test_platform_recompile_keeps_source_but_demands_target_native_change(
