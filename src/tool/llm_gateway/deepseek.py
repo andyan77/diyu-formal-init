@@ -1599,6 +1599,9 @@ brand_viewpoint ↔ source:brand_baseline / source:role_boundary / source:organi
 confirmed_fact ↔ source:organization / source:product:…；
 user_premise ↔ source:user_request / source:user_actuality / source:prior_version；
 conditional_guidance ↔ source:method:… / source:brand_baseline / source:role_boundary。
+任何可见单元只要点名当前商品的名称、品类、颜色、结构或可观察特征，就必须把这部分拆成
+basis=confirmed_fact、actuality=non_event 并引用对应的 source:product:…；不能把商品事实混在
+brand_viewpoint、conditional_guidance 或只引用 source:prior_version 的句子里。
 共享不变量：凡声称现实品牌、账号、组织或人物曾经、反复或长期发生过询问、讨论、观察、经历、
 服务、执行或改变，必须使用 user_premise 且引用 source:user_actuality，或 confirmed_fact 且引用
 已确认来源；没有这类来源时，保留观点本身，删除经历外壳，或改写为问题、假设或条件表达。
