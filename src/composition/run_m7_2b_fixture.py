@@ -635,6 +635,43 @@ def _ensure_recompiled(
     return _recompile(client, artifact, target)
 
 
+def _ensure_platform_revision(
+    client: httpx.Client,
+    artifact: dict[str, Any],
+    target: str,
+    instruction: str,
+) -> dict[str, Any]:
+    versions = _response_json(
+        client,
+        "GET",
+        f"/api/v1/content/tasks/{artifact['task_id']}/versions?target={target}",
+    )
+    if isinstance(versions, list) and any(
+        isinstance(item, dict)
+        and int(str(item.get("version") or "0")) == 2
+        for item in versions
+    ):
+        return _task_version(
+            client,
+            str(artifact["task_id"]),
+            2,
+            target=target,
+        )
+    result = _response_json(
+        client,
+        "POST",
+        f"/api/v1/tasks/{artifact['task_id']}/revisions",
+        expected=(201,),
+        json_body={
+            "instruction": instruction,
+            "target": target,
+            "source_target": target,
+        },
+    )
+    time.sleep(2.0)
+    return cast(dict[str, Any], result)
+
+
 def run() -> dict[str, object]:
     if _required("DIYU_M7_2B_EXECUTE") != _CONFIRMATION:
         raise RuntimeError("DIYU_M7_2B_EXECUTE 必须明确等于 synthetic_business_fixture")
@@ -956,23 +993,59 @@ def run() -> dict[str, object]:
         )
         s3 = s3_current
 
+        hq_xiaohongshu = _ensure_platform_revision(
+            hq_client,
+            _ensure_recompiled(hq_client, h3, "xiaohongshu_graphic"),
+            "xiaohongshu_graphic",
+            (
+                "自然修改成真正的小红书图文当前版：标题和正文开头不能沿用抖音源版；"
+                "开头先说明读完这组图片能看见什么，再用首图、递进图序和完整正文重新组织。"
+                "每张图承担不同信息，不把视频分镜改名为图序，不只替换平台名或标签。"
+                "核心判断、演示商品事实、账号身份、系列前情和画面造型价值保持不变。"
+            ),
+        )
+        hq_wechat = _ensure_platform_revision(
+            hq_client,
+            _ensure_recompiled(hq_client, h3, "wechat_channels_video"),
+            "wechat_channels_video",
+            (
+                "自然修改成真正的微信视频号当前版：标题和开头不能沿用抖音源版；"
+                "先补足被单独看到或转发时需要的情境，再重组判断顺序、镜头节奏、封面字和收尾互动。"
+                "保持完整视频，不机械截短，不只替换平台名或标签；核心判断、演示商品事实、账号身份、"
+                "系列前情和画面造型价值不变。"
+            ),
+        )
+        store_xiaohongshu = _ensure_platform_revision(
+            store_client,
+            _ensure_recompiled(store_client, s2, "xiaohongshu_graphic"),
+            "xiaohongshu_graphic",
+            (
+                "自然修改成真正的小红书图文当前版：标题和正文开头不能沿用抖音源版；"
+                "首图先给出这次选择的两个条件，后续图片分别承担优先选择、反转条件和低成本验证，"
+                "完整正文可独立阅读。不要把视频台词切成图卡，不只替换平台名或标签。"
+                "保持假设语气、演示商品事实、门店人物位置和帮助选择价值，不新增桌子或纸笔。"
+            ),
+        )
+        store_wechat = _ensure_platform_revision(
+            store_client,
+            _ensure_recompiled(store_client, s2, "wechat_channels_video"),
+            "wechat_channels_video",
+            (
+                "自然修改成真正的微信视频号当前版：标题和开头不能沿用抖音源版；"
+                "先交代一家三口合照只是一个假设选择，再重组优先条件、反转条件、手持验证的镜头顺序、"
+                "封面字和收尾互动，使内容被单独转发也能看懂。不要机械截短，不只替换平台名或标签。"
+                "保持演示商品事实、门店人物位置和帮助选择价值，不新增桌子或纸笔。"
+            ),
+        )
         hq_platforms = {
             "douyin": h3,
-            "xiaohongshu": _ensure_recompiled(
-                hq_client, h3, "xiaohongshu_graphic"
-            ),
-            "wechat_channels": _ensure_recompiled(
-                hq_client, h3, "wechat_channels_video"
-            ),
+            "xiaohongshu": hq_xiaohongshu,
+            "wechat_channels": hq_wechat,
         }
         store_platforms = {
             "douyin": s2,
-            "xiaohongshu": _ensure_recompiled(
-                store_client, s2, "xiaohongshu_graphic"
-            ),
-            "wechat_channels": _ensure_recompiled(
-                store_client, s2, "wechat_channels_video"
-            ),
+            "xiaohongshu": store_xiaohongshu,
+            "wechat_channels": store_wechat,
         }
         return {
             "fixture_kind": _CONFIRMATION,
