@@ -1450,8 +1450,10 @@ class DeepSeekGenerator(ContentGenerator):
             prior = request.prior_saved_body
         elif request.prior_saved_body:
             prior = (
-                "（旧版本已不可变保留。本次只重放原任务冻结快照、原始种子和修改要求来重新形成完整成品，"
-                "不把旧稿逐段带入模型；不得因此丢失修改要求明确要求保留的核心判断。）"
+                "（以下是已不可变保留、仅供本次自然修改的当前旧稿。它不是现实事实来源；商品、账号、"
+                "系列、画像与资源仍只以冻结边界为准。应在这份旧稿上落实本次修改，未被点名且不与"
+                "修改冲突的成品内容可以保留。）\n"
+                f"{request.prior_saved_body}"
             )
         else:
             prior = "（未授权复用旧正文）"

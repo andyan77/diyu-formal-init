@@ -288,8 +288,9 @@ def test_revision_prompt_applies_the_instruction_to_every_visible_unit(
     assert "修改要求约束全部可见单元" in prompt
     assert "画面动作、声音、制作提示和发布互动" in prompt
     assert "不能只改合同字段、摘要或时长标签" in prompt
-    assert "旧稿逐段带入模型" in prompt
-    assert "旧稿仍安排了桌面字卡" not in prompt
+    assert "仅供本次自然修改的当前旧稿" in prompt
+    assert "它不是现实事实来源" in prompt
+    assert "旧稿仍安排了桌面字卡" in prompt
     assert "冲突的创作和制作要求已被本次修改替代" in prompt
     assert "本次修改（当前最高优先级" in prompt
     assert "用“不要、不能、不得、只用”表达的硬边界也应静默遵守" in prompt
