@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>登录笛语</title>
+    <link rel="icon" href="../../../../assets/brand/diyu-vi/svg/favicon.svg" />
+    <link rel="stylesheet" href="../shared/product.css" />
+  </head>
+  <body class="auth-page">
+    <main class="auth-shell">
+      <section class="auth-atmosphere" aria-hidden="true">
+        <img
+          class="brand-wordmark"
+          src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal-ondark.svg"
+          alt=""
+        />
+        <blockquote data-auth-quote>把今天想说的话，整理成真正属于品牌的表达。</blockquote>
+        <span>笛语</span>
+      </section>
+
+      <section class="auth-panel">
+        <div class="auth-form">
+          <img
+            class="brand-mark"
+            src="../../../../assets/brand/diyu-vi/svg/diyu-symbol.svg"
+            alt=""
+          />
+          <p class="eyebrow" data-auth-eyebrow>创作空间</p>
+          <h1 data-auth-title>登录创作空间</h1>
+          <p data-auth-subtitle>继续你的内容与陈列工作</p>
+          <form data-auth-form>
+            <label data-login-username>
+              用户名
+              <input name="username" autocomplete="username" placeholder="请输入用户名" required />
+            </label>
+            <label>
+              <span data-password-label>密码</span>
+              <input
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="请输入密码"
+                required
+              />
+            </label>
+            <label data-confirm-password hidden>
+              再输入一次
+              <input
+                name="password-confirm"
+                type="password"
+                autocomplete="new-password"
+                placeholder="再次输入新密码"
+              />
+            </label>
+            <button class="button button--primary" type="submit" data-auth-submit>登录</button>
+          </form>
+          <p class="field-help" data-auth-help>忘记密码时，请联系为你开通账号的团队成员。</p>
+        </div>
+      </section>
+    </main>
+    <script src="../shared/product.js"></script>
+  </body>
+</html>

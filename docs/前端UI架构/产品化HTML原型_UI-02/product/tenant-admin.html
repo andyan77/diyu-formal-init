@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>品牌管理 · 笛语</title>
+    <link rel="icon" href="../../../../assets/brand/diyu-vi/svg/favicon.svg" />
+    <link rel="stylesheet" href="../shared/product.css" />
+  </head>
+  <body class="admin-page">
+    <div class="management-shell">
+      <aside class="management-nav">
+        <a class="management-brand" href="tenant-admin.html?view=overview">
+          <img
+            class="brand-mark"
+            src="../../../../assets/brand/diyu-vi/svg/diyu-symbol.svg"
+            alt=""
+          />
+          <span><strong>品牌管理</strong><small>笛语服饰</small></span>
+        </a>
+        <nav aria-label="品牌管理">
+          <a href="tenant-admin.html?view=overview" data-admin-nav="overview">概览与待处理</a>
+          <a href="tenant-admin.html?view=members" data-admin-nav="members">成员与权限</a>
+          <a href="tenant-admin.html?view=accounts" data-admin-nav="accounts">发布账号</a>
+          <a href="tenant-admin.html?view=library" data-admin-nav="library">品牌、商品与组织素材</a>
+          <a href="tenant-admin.html?view=readiness" data-admin-nav="readiness">生产就绪与缺口</a>
+        </nav>
+        <div class="management-member">
+          <span class="avatar">管</span>
+          <span><strong>品牌管理员</strong><small>笛语服饰管理组织</small></span>
+        </div>
+      </aside>
+
+      <main class="management-main">
+        <header class="management-topbar">
+          <button class="icon-button management-menu" type="button" data-management-menu aria-label="打开导航">菜单</button>
+          <div><strong data-admin-location>概览与待处理</strong><small>笛语服饰</small></div>
+          <a class="text-link" href="login.html?entry=admin">退出</a>
+        </header>
+
+        <section class="management-view" data-admin-view="overview">
+          <header class="management-heading">
+            <div>
+              <p class="eyebrow">今天</p>
+              <h1>先处理 2 件会影响使用的事。</h1>
+            </div>
+            <a class="button button--primary" href="tenant-admin.html?view=members" data-admin-primary>处理成员激活</a>
+          </header>
+
+          <div class="attention-list">
+            <article class="attention-row attention-row--urgent">
+              <span class="attention-index">01</span>
+              <div>
+                <strong>陈晓的体验链接今天到期</strong>
+                <p>她将使用“柯桥门店人物”账号进行内容和陈列工作。</p>
+              </div>
+              <a class="text-link" href="tenant-admin.html?view=members&amp;member=chen">查看成员</a>
+            </article>
+            <article class="attention-row">
+              <span class="attention-index">02</span>
+              <div>
+                <strong>春季商品组还缺 1 件可用资料</strong>
+                <p>补齐颜色、结构和肉眼可见特征后，就能继续做这组内容。</p>
+              </div>
+              <a class="text-link" href="tenant-admin.html?view=library&amp;tab=products">查看商品</a>
+            </article>
+          </div>
+
+          <section class="management-summary">
+            <div>
+              <p class="eyebrow">品牌使用概况</p>
+              <h2>两个账号正在使用，资料边界清楚。</h2>
+            </div>
+            <dl class="summary-metrics">
+              <div><dt>成员</dt><dd>6</dd><span>5 人已启用</span></div>
+              <div><dt>发布账号</dt><dd>2</dd><span>总部 1 · 门店 1</span></div>
+              <div><dt>商品资料</dt><dd>3</dd><span>2 件可直接使用</span></div>
+              <div><dt>组织素材</dt><dd>8</dd><span>均有来源说明</span></div>
+            </dl>
+          </section>
+        </section>
+
+        <section class="management-view" data-admin-view="members" hidden>
+          <header class="management-heading">
+            <div>
+              <p class="eyebrow">成员与权限</p>
+              <h1>谁能从哪个入口，使用哪些账号。</h1>
+            </div>
+            <button class="button button--primary" type="button" data-open-admin-drawer="member" data-admin-primary>添加成员</button>
+          </header>
+
+          <div class="success-strip" data-member-success hidden>
+            <strong>成员已加入。</strong>
+            <span>体验链接已经准备好，可以单独交给本人。</span>
+          </div>
+
+          <div class="member-layout">
+            <section class="data-list" aria-label="成员列表">
+              <div class="data-list__head"><span>成员</span><span>所属组织</span><span>入口与能力</span><span>状态</span><span></span></div>
+              <div class="data-row" data-member-row="chen">
+                <div><strong>陈晓</strong><small>门店使用者</small></div>
+                <span>柯桥门店</span>
+                <div class="tag-line"><span>创作空间</span><span>内容</span><span>陈列</span></div>
+                <span class="status status--waiting" data-chen-status>待激活</span>
+                <a class="text-link" href="tenant-admin.html?view=members&amp;member=chen">查看</a>
+              </div>
+              <div class="data-row">
+                <div><strong>林岚</strong><small>总部内容运营</small></div>
+                <span>笛语服饰管理组织</span>
+                <div class="tag-line"><span>创作空间</span><span>内容</span></div>
+                <span class="status">使用中</span>
+                <a class="text-link" href="tenant-admin.html?view=members&amp;member=lin">查看</a>
+              </div>
+              <div class="data-row">
+                <div><strong>周宁</strong><small>品牌管理员</small></div>
+                <span>笛语服饰管理组织</span>
+                <div class="tag-line"><span>品牌管理</span></div>
+                <span class="status">使用中</span>
+                <a class="text-link" href="tenant-admin.html?view=members&amp;member=zhou">查看</a>
+              </div>
+              <div data-new-member-row></div>
+            </section>
+
+            <aside class="member-detail" data-member-detail>
+              <p class="eyebrow">当前成员</p>
+              <h2>陈晓</h2>
+              <dl>
+                <div><dt>所属组织</dt><dd>柯桥门店</dd></div>
+                <div><dt>可以进入</dt><dd>创作空间</dd></div>
+                <div><dt>可以使用</dt><dd>内容生产、陈列搭配</dd></div>
+                <div><dt>发布账号</dt><dd>柯桥门店人物</dd></div>
+                <div><dt>激活状态</dt><dd data-member-access-status>等待本人设置密码</dd></div>
+              </dl>
+              <button class="button" type="button" data-activation-link>重新生成体验链接</button>
+              <button class="text-button danger-link" type="button" data-stop-member>停用这个成员</button>
+              <p class="inline-result" data-activation-result hidden>新链接已准备好，旧链接已失效。</p>
+            </aside>
+          </div>
+        </section>
+
+        <section class="management-view" data-admin-view="accounts" hidden>
+          <header class="management-heading">
+            <div>
+              <p class="eyebrow">发布账号</p>
+              <h1>账号的表达位置、负责团队和使用者。</h1>
+            </div>
+            <button class="button button--primary" type="button" data-open-admin-drawer="account" data-admin-primary>建立发布账号</button>
+          </header>
+
+          <div class="success-strip" data-account-success hidden>
+            <strong>发布账号已建立。</strong>
+            <span>表达身份、负责团队和使用者已经放在同一个对象里。</span>
+          </div>
+
+          <div class="account-list">
+            <article class="account-record">
+              <div class="account-record__mark">总</div>
+              <div>
+                <p class="eyebrow">总部品牌表达</p>
+                <h2>总部品牌内容运营</h2>
+                <p>从品牌当前判断与商品关系出发，面向较广的受众表达。</p>
+              </div>
+              <dl>
+                <div><dt>负责团队</dt><dd>笛语服饰管理组织</dd></div>
+                <div><dt>使用者</dt><dd>林岚</dd></div>
+                <div><dt>平台版本</dt><dd>抖音、小红书、视频号</dd></div>
+              </dl>
+              <a class="text-link" href="creator.html?role=hq&amp;task=content&amp;state=v1">查看内容演示</a>
+            </article>
+            <article class="account-record">
+              <div class="account-record__mark">店</div>
+              <div>
+                <p class="eyebrow">门店人物表达</p>
+                <h2>柯桥门店人物</h2>
+                <p>从门店日常、近场关系与本人观察出发，不代替总部发言。</p>
+              </div>
+              <dl>
+                <div><dt>负责团队</dt><dd>柯桥门店</dd></div>
+                <div><dt>使用者</dt><dd>陈晓</dd></div>
+                <div><dt>可用任务</dt><dd>内容生产、陈列搭配</dd></div>
+              </dl>
+              <a class="text-link" href="creator.html?role=store&amp;task=content&amp;state=v1">查看内容演示</a>
+            </article>
+            <div data-new-account-row></div>
+          </div>
+        </section>
+
+        <section class="management-view" data-admin-view="library" hidden>
+          <header class="management-heading">
+            <div>
+              <p class="eyebrow">品牌、商品与组织素材</p>
+              <h1>只维护团队共同使用的资料。</h1>
+            </div>
+            <button class="button button--primary" type="button" data-library-add data-admin-primary>补充商品资料</button>
+          </header>
+
+          <nav class="section-tabs" aria-label="资料类型">
+            <button type="button" data-library-tab="brand" aria-pressed="true">品牌表达</button>
+            <button type="button" data-library-tab="products" aria-pressed="false">商品资料</button>
+            <button type="button" data-library-tab="materials" aria-pressed="false">组织素材</button>
+          </nav>
+
+          <section class="library-panel" data-library-panel="brand">
+            <div class="editorial-record">
+              <div>
+                <span class="status">当前版本</span>
+                <h2>不急着替人做决定，先把衣服与生活之间的关系说清楚。</h2>
+              </div>
+              <dl>
+                <div><dt>适用范围</dt><dd>笛语服饰全部发布账号</dd></div>
+                <div><dt>最近更新</dt><dd>本月</dd></div>
+              </dl>
+            </div>
+          </section>
+
+          <section class="library-panel" data-library-panel="products" hidden>
+            <div class="data-list">
+              <div class="data-list__head"><span>商品</span><span>品类</span><span>可见事实</span><span>状态</span><span></span></div>
+              <div class="data-row"><strong>双面呢牛角扣外套</strong><span>外套</span><span>双色、牛角扣、直身轮廓</span><span class="status">可使用</span><button class="text-button" type="button">查看</button></div>
+              <div class="data-row"><strong>亮黄短袖上装</strong><span>上装</span><span>亮黄色、短袖、完整轮廓</span><span class="status">可使用</span><button class="text-button" type="button">查看</button></div>
+              <div class="data-row"><strong>春季米色针织</strong><span>针织</span><span>还缺结构说明</span><span class="status status--waiting">待补充</span><button class="text-button" type="button">补充</button></div>
+            </div>
+          </section>
+
+          <section class="library-panel" data-library-panel="materials" hidden>
+            <div class="material-list">
+              <article><strong>品牌门店环境</strong><span>6 项 · 笛语服饰全部账号</span></article>
+              <article><strong>春季商品静物</strong><span>2 项 · 总部与柯桥门店</span></article>
+              <article><strong>品牌视觉文件</strong><span>正式标志与基础识别</span></article>
+            </div>
+          </section>
+        </section>
+
+        <section class="management-view" data-admin-view="readiness" hidden>
+          <header class="management-heading">
+            <div>
+              <p class="eyebrow">生产就绪与缺口</p>
+              <h1>内容已经能开始，春季商品组还差一项。</h1>
+            </div>
+            <a class="button button--primary" href="tenant-admin.html?view=library&amp;tab=products" data-admin-primary>补春季商品资料</a>
+          </header>
+
+          <div class="readiness-board">
+            <section>
+              <p class="eyebrow">已经就绪</p>
+              <ul class="readiness-list">
+                <li><span>品牌表达</span><strong>当前版本可用</strong></li>
+                <li><span>总部品牌内容运营</span><strong>账号与使用者清楚</strong></li>
+                <li><span>柯桥门店人物</span><strong>内容与陈列可用</strong></li>
+                <li><span>平台版本</span><strong>三个发布方向已准备</strong></li>
+              </ul>
+            </section>
+            <aside class="readiness-gap">
+              <span class="attention-index">01</span>
+              <p class="eyebrow">当前缺口</p>
+              <h2>春季米色针织缺少可观察结构。</h2>
+              <p>补充领口、袖型或轮廓中现在能确认的部分即可；不用补价格、库存或设计动机。</p>
+            </aside>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="drawer-backdrop" data-admin-backdrop></div>
+    <aside class="admin-drawer" data-admin-drawer aria-hidden="true">
+      <header>
+        <div><p class="eyebrow" data-drawer-eyebrow>成员与权限</p><h2 data-drawer-title>添加成员</h2></div>
+        <button class="icon-button" type="button" data-close-admin-drawer>关闭</button>
+      </header>
+
+      <form data-member-form>
+        <label>成员姓名<input name="name" value="许知夏" required /></label>
+        <label>所属组织<select><option>柯桥门店</option><option>浙江区域</option><option>笛语服饰管理组织</option></select></label>
+        <fieldset>
+          <legend>可以进入</legend>
+          <label class="check-row"><input type="checkbox" checked />创作空间</label>
+          <label class="check-row"><input type="checkbox" />品牌管理</label>
+        </fieldset>
+        <fieldset>
+          <legend>可以使用</legend>
+          <label class="check-row"><input type="checkbox" checked />内容生产</label>
+          <label class="check-row"><input type="checkbox" checked />陈列搭配</label>
+        </fieldset>
+        <label>默认发布账号<select><option>柯桥门店人物</option><option>总部品牌内容运营</option></select></label>
+        <button class="button button--primary" type="submit">添加并生成体验链接</button>
+      </form>
+
+      <form data-account-form hidden>
+        <label>账号名称<input name="account-name" value="浙江区域内容观察" required /></label>
+        <label>表达身份
+          <select><option>区域内容运营</option><option>总部品牌内容运营</option><option>门店人物</option></select>
+        </label>
+        <label>负责团队<select><option>浙江区域</option><option>笛语服饰管理组织</option><option>柯桥门店</option></select></label>
+        <label>实际使用者<select><option>许知夏</option><option>林岚</option><option>陈晓</option></select></label>
+        <button class="button button--primary" type="submit">建立发布账号</button>
+      </form>
+    </aside>
+
+    <dialog class="confirm-dialog" data-stop-member-dialog>
+      <form method="dialog">
+        <p class="eyebrow">成员与权限</p>
+        <h2>停用陈晓？</h2>
+        <p>她将不能再进入创作空间，已经保存的内容和账号关系仍会保留。</p>
+        <div>
+          <button class="button" value="cancel" type="submit">暂不停用</button>
+          <button class="button button--primary" value="confirm" type="submit">确认停用</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="../shared/product.js"></script>
+  </body>
+</html>

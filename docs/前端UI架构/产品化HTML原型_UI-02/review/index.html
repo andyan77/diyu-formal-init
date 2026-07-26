@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UI-02 连续旅程评审</title>
+    <link rel="stylesheet" href="review.css" />
+  </head>
+  <body>
+    <aside class="review-nav">
+      <header>
+        <p>笛语 UI-02</p>
+        <h1>连续旅程评审</h1>
+      </header>
+
+      <section class="review-mode">
+        <label>
+          浏览方式
+          <select data-review-mode>
+            <option value="flow">产品流程模式</option>
+            <option value="free">自由评审模式</option>
+          </select>
+        </label>
+        <label data-flow-field>
+          当前旅程
+          <select data-flow-select>
+            <option value="auth">一 · 公开与认证</option>
+            <option value="admin">二 · 租户管理</option>
+            <option value="content">三 · 内容生产</option>
+            <option value="display">四 · 陈列搭配</option>
+          </select>
+        </label>
+      </section>
+
+      <nav class="review-pages" data-review-pages aria-label="原型页面"></nav>
+
+      <section class="review-identities">
+        <p>直接进入演示身份</p>
+        <div>
+          <button type="button" data-identity-entry="admin">租户管理员</button>
+          <button type="button" data-identity-entry="hq">总部操作者</button>
+          <button type="button" data-identity-entry="store">门店操作者</button>
+          <button type="button" data-identity-entry="ops">笛语运维</button>
+        </div>
+      </section>
+    </aside>
+
+    <main class="review-main">
+      <header class="review-toolbar">
+        <div class="review-current">
+          <span data-current-index>1 / 1</span>
+          <strong data-current-name>公开首页</strong>
+        </div>
+        <div class="review-actions">
+          <button type="button" data-review-prev aria-label="上一页">上一页</button>
+          <button type="button" data-review-next aria-label="下一页">下一页</button>
+          <div class="canvas-switch" aria-label="评审画布">
+            <button type="button" data-canvas="desktop" aria-pressed="true">桌面</button>
+            <button type="button" data-canvas="mobile" aria-pressed="false">手机</button>
+          </div>
+          <button type="button" data-open-raw>新窗口打开裸页面</button>
+        </div>
+      </header>
+      <section class="review-stage" data-review-stage data-canvas-size="desktop">
+        <div class="frame-shell">
+          <iframe
+            title="笛语 UI-02 产品原型"
+            src="../product/home.html"
+            data-review-frame
+          ></iframe>
+        </div>
+      </section>
+    </main>
+    <script src="review.js"></script>
+  </body>
+</html>

@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>创作空间 · 笛语</title>
+    <link rel="icon" href="../../../../assets/brand/diyu-vi/svg/favicon.svg" />
+    <link rel="stylesheet" href="../shared/product.css" />
+  </head>
+  <body class="creator-page">
+    <div class="creator-shell">
+      <aside class="creator-sidebar" data-creator-sidebar>
+        <a class="creator-brand" href="creator.html?role=store&amp;task=content&amp;state=empty">
+          <img
+            class="brand-mark"
+            src="../../../../assets/brand/diyu-vi/svg/diyu-symbol.svg"
+            alt=""
+          />
+          <span><strong>笛语</strong><small>创作空间</small></span>
+        </a>
+        <a class="new-thread" href="creator.html?role=store&amp;task=content&amp;state=empty">＋ 新对话</a>
+
+        <section class="creator-sidebar__section">
+          <p>最近内容</p>
+          <div data-sidebar-history>
+            <a href="creator.html?role=store&amp;task=content&amp;state=v2" class="is-current">
+              <strong>先留一点选择距离</strong><small>当前 V2</small>
+            </a>
+            <a href="creator.html?role=store&amp;task=content&amp;state=v1">
+              <strong>安静也可以被尊重</strong><small>昨天</small>
+            </a>
+          </div>
+          <div class="sidebar-empty" data-sidebar-empty hidden>还没有历史内容。从一句想法开始就好。</div>
+        </section>
+
+        <section class="creator-sidebar__section">
+          <p>连续系列</p>
+          <div data-sidebar-series>
+            <a href="creator.html?role=store&amp;task=content&amp;state=v2">
+              <strong data-series-name>留一点选择距离</strong><small data-series-count>第 4 篇</small>
+            </a>
+          </div>
+        </section>
+
+        <button class="identity-entry" type="button" data-account-drawer-open>
+          <span class="avatar" data-sidebar-avatar>店</span>
+          <span><strong data-sidebar-account>柯桥门店人物</strong><small>切换发布账号</small></span>
+        </button>
+      </aside>
+
+      <main class="creator-main">
+        <header class="creator-topbar">
+          <button class="icon-button creator-menu" type="button" data-creator-menu aria-label="打开历史和系列">菜单</button>
+          <button class="identity-summary" type="button" data-account-drawer-open>
+            <strong data-current-account>柯桥门店人物</strong>
+            <span data-current-expression>门店人物表达</span>
+          </button>
+          <nav class="task-switch" data-task-switch aria-label="当前任务">
+            <a href="creator.html?role=store&amp;task=content&amp;state=empty" data-task-link="content">内容生产</a>
+            <a href="creator.html?role=store&amp;task=display&amp;state=empty" data-task-link="display">陈列搭配</a>
+          </nav>
+          <div class="target-summary">
+            <span data-target-label>小红书图文</span>
+            <button class="text-button" type="button" data-target-drawer-open>更换</button>
+          </div>
+        </header>
+
+        <div class="mobile-work-tabs" aria-label="工作面">
+          <button type="button" data-mobile-work="conversation" aria-selected="true">对话</button>
+          <button type="button" data-mobile-work="artifact" aria-selected="false">成品</button>
+        </div>
+
+        <section class="creator-work" data-creator-work data-mobile-view="conversation">
+          <section class="conversation-pane">
+            <header class="conversation-heading">
+              <div>
+                <p class="eyebrow" data-conversation-eyebrow>接着这个系列</p>
+                <h1 data-conversation-title>从一句真实观察开始。</h1>
+              </div>
+              <span class="quiet-status" data-conversation-status>第 4 篇</span>
+            </header>
+
+            <div class="thread" data-thread>
+              <div class="message message--assistant">
+                先说一件今天真正想表达的事。写一句就够，其他部分我来整理。
+              </div>
+            </div>
+
+            <form class="creator-composer" data-creator-form>
+              <details class="direction-panel" data-direction-panel>
+                <summary>创作方向（可选）</summary>
+                <div class="direction-options">
+                  <label>表达感觉
+                    <select data-direction-style>
+                      <option>让系统判断</option>
+                      <option>干货攻略</option>
+                      <option>情感共鸣</option>
+                      <option>真实记录</option>
+                      <option>闺蜜聊天</option>
+                      <option>幽默玩梗</option>
+                    </select>
+                  </label>
+                  <label>内容机制
+                    <select data-direction-topic>
+                      <option>让系统判断</option>
+                      <option>搭配公式</option>
+                      <option>一衣多穿</option>
+                      <option>避坑纠错</option>
+                      <option>通勤上班</option>
+                      <option>连续系列</option>
+                      <option>面料对比</option>
+                      <option>品牌故事</option>
+                    </select>
+                  </label>
+                  <label>呈现方式
+                    <select data-direction-genre>
+                      <option>让系统判断</option>
+                      <option>真人口播</option>
+                      <option>多图合集</option>
+                      <option>上身试穿</option>
+                      <option>细节特写</option>
+                      <option>步骤教程</option>
+                      <option>公式图解</option>
+                      <option>避坑指南</option>
+                      <option>清单盘点</option>
+                      <option>故事品牌</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="check-row body-optin">
+                  <input type="checkbox" data-body-optin />
+                  我想主动选择体型相关方向
+                </label>
+                <label class="body-direction" data-body-direction hidden>
+                  体型方向
+                  <select data-body-select>
+                    <option>显高显瘦</option>
+                    <option>小个子</option>
+                    <option>微胖梨形</option>
+                    <option>苹果型</option>
+                  </select>
+                </label>
+              </details>
+
+              <div class="material-choice">
+                <button class="text-button" type="button" data-material-toggle>＋ 本次素材</button>
+                <span data-material-state>未选择</span>
+              </div>
+
+              <textarea
+                data-creator-input
+                aria-label="说出你的想法"
+                placeholder="例如：有人进店后只想自己看看，我想先给她一点空间……"
+              ></textarea>
+              <div class="composer-footer">
+                <span data-composer-help>自然说出想法即可。</span>
+                <button class="button button--primary" type="submit" data-creator-submit>生成成品</button>
+              </div>
+            </form>
+
+            <div class="conversation-recovery" data-conversation-recovery hidden>
+              <h2 data-recovery-heading>这次没有整理完成。</h2>
+              <p data-recovery-message>原来的输入还在，可以直接重新整理。</p>
+              <button class="button button--primary" type="button" data-retry>重新整理</button>
+            </div>
+          </section>
+
+          <article class="artifact-pane">
+            <header class="artifact-topline">
+              <span data-version-label>等待成品</span>
+              <span data-artifact-meta>当前发布账号</span>
+            </header>
+
+            <section class="artifact-empty" data-artifact-state="empty">
+              <span class="artifact-empty__line"></span>
+              <h2>完整成品会出现在这里。</h2>
+              <p data-empty-copy>先在左侧说一句真实想法；创作方向和素材都可以不选。</p>
+            </section>
+
+            <section class="artifact-loading" data-artifact-state="loading" hidden aria-live="polite">
+              <span class="loading-mark"></span>
+              <p>正在整理成完整内容……</p>
+              <div class="loading-line"></div>
+              <div class="loading-line loading-line--short"></div>
+              <div class="loading-block"></div>
+            </section>
+
+            <section class="artifact-clarify" data-artifact-state="clarify" hidden>
+              <p class="eyebrow">还差一件必要信息</p>
+              <h2>这次是说你个人的理解，还是门店已经在做的事？</h2>
+              <p>把这个边界和可用条件一起说清楚就可以，不会再逐项追问。</p>
+              <div class="clarify-options">
+                <button class="button" type="button" data-clarify-choice="personal">只表达我的理解</button>
+                <button class="button button--primary" type="button" data-clarify-choice="practice">门店已有这个做法</button>
+              </div>
+            </section>
+
+            <section class="artifact-access" data-artifact-state="no-capability" hidden>
+              <p class="eyebrow">当前账号没有这项任务</p>
+              <h2>这个发布账号目前只用于内容生产。</h2>
+              <p>陈列入口不会出现在它的工作区。你可以返回内容生产，或显式切换到有资格的门店账号。</p>
+              <a class="button button--primary" href="creator.html?role=hq&amp;task=content&amp;state=empty">返回内容生产</a>
+            </section>
+
+            <section class="artifact-content" data-artifact-state="content" hidden>
+              <div class="artifact-intro">
+                <p class="eyebrow">这篇为什么这样做</p>
+                <p data-content-summary>从门店人物的位置回应独自浏览的需要，让受众带走一种不打扰、也不失联的相处方式。</p>
+              </div>
+              <h1 data-content-title>想自己看一会儿，也不用急着回应</h1>
+              <section>
+                <h2>发布正文</h2>
+                <p data-content-opening>进店后想先自己看看，不需要马上进入一段对话。我会站在能被看见、又不会挡住衣服的位置。</p>
+                <p data-content-closing>想问的时候，一抬头就能找到我；还没想好，也可以继续慢慢看。逛衣服本来就能有一点自己的安静。</p>
+              </section>
+              <section>
+                <h2>画面与声音</h2>
+                <ol>
+                  <li data-content-shot>手机固定，对着干净的墙和半个挂杆；先留两秒空画面。</li>
+                  <li>你从画面边缘进入，在能被看见的位置停下。</li>
+                  <li>保留一次自然呼吸和停顿，环境声即可。</li>
+                </ol>
+              </section>
+              <section>
+                <h2>发布配文</h2>
+                <p data-content-caption>想自己看一会儿，也是一种舒服的逛店节奏。#门店日常 #慢慢看</p>
+              </section>
+              <p class="assist-note">这份内容由笛语协助生成，请在使用前按实际情况确认。</p>
+              <div class="artifact-actions">
+                <button class="button" type="button" data-copy>复制</button>
+                <button class="button" type="button" data-export>导出</button>
+                <button class="button" type="button" data-series-add>加入系列</button>
+                <button class="button" type="button" data-history-return hidden>返回当前版本</button>
+              </div>
+              <p class="inline-result" data-artifact-action-result hidden></p>
+              <details class="history-block" data-content-history>
+                <summary data-history-summary>历史版本（0）</summary>
+                <div data-history-list>
+                  <button class="history-record" type="button" data-history-open>
+                    <span>V1</span><strong>修改前版本</strong><small>可完整回读</small>
+                  </button>
+                </div>
+              </details>
+            </section>
+
+            <section class="artifact-display" data-artifact-state="display" hidden>
+              <div class="artifact-intro">
+                <p class="eyebrow">本次参考目标</p>
+                <p data-display-summary>用现有 15 件商品完成两层墙面挂杆：先建立左、中、右关系，再按现场宽度调整数量和间距。</p>
+              </div>
+              <h1 data-display-title>先定主焦点，再让两侧有轻重回应</h1>
+              <section>
+                <h2>位置与数量</h2>
+                <div class="plan-table" role="table" aria-label="陈列位置与数量">
+                  <div class="plan-row plan-row--head" role="row">
+                    <span role="columnheader">位置</span><span role="columnheader">商品与挂法</span><span role="columnheader">数量</span><span role="columnheader">作用</span>
+                  </div>
+                  <div class="plan-row" role="row" data-plan-row="left">
+                    <strong role="cell">左侧</strong><span role="cell">米色针织侧挂，灰白下装在下杆回应</span><span role="cell">4 件</span><span role="cell">较弱开场</span>
+                  </div>
+                  <div class="plan-row" role="row" data-plan-row="center">
+                    <strong role="cell">中间</strong><span role="cell">砖红外套正挂，深蓝下装在下杆承接</span><span role="cell">5 件</span><span role="cell">主焦点</span>
+                  </div>
+                  <div class="plan-row" role="row" data-plan-row="right">
+                    <strong role="cell">右侧</strong><span role="cell">炭灰与白色上装侧挂，黑色下装收尾</span><span role="cell">6 件</span><span role="cell">稳定回应</span>
+                  </div>
+                </div>
+              </section>
+              <section>
+                <h2>间距与替代</h2>
+                <ul>
+                  <li data-display-spacing>正挂主焦点两侧各留一手掌以上，侧挂按实际宽度减量。</li>
+                  <li>砖红外套不可用时，用亮黄上装正挂；其他关系不变。</li>
+                  <li>商品少于 15 件时，先保留中间主焦点，再缩减右侧数量。</li>
+                </ul>
+              </section>
+              <section>
+                <h2>执行顺序</h2>
+                <ol>
+                  <li data-display-step="one">先把砖红外套正挂在中间，确认第一眼焦点。</li>
+                  <li data-display-step="two">再挂深蓝下装，让上下杆形成完整主推组。</li>
+                  <li>左侧放轻，右侧用中性色收住，最后按拿取空间减量。</li>
+                </ol>
+              </section>
+              <p class="assist-note">这是陈列参考建议，请按现场尺寸和实际商品状态调整。</p>
+              <div class="artifact-actions">
+                <button class="button" type="button" data-copy>复制方案</button>
+                <button class="button" type="button" data-history-return hidden>返回当前版本</button>
+              </div>
+              <p class="inline-result" data-artifact-action-result hidden></p>
+              <details class="history-block" data-display-history>
+                <summary data-history-summary>历史版本（0）</summary>
+                <div>
+                  <button class="history-record" type="button" data-history-open>
+                    <span>V1</span><strong>修改前方案</strong><small>可完整回读</small>
+                  </button>
+                </div>
+              </details>
+            </section>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div class="drawer-backdrop" data-creator-backdrop></div>
+    <aside class="creator-drawer" data-account-drawer aria-hidden="true">
+      <header>
+        <div><p class="eyebrow">发布账号</p><h2>明确切换到另一个身份</h2></div>
+        <button class="icon-button" type="button" data-creator-drawer-close>关闭</button>
+      </header>
+      <p>切换后会进入对应账号的独立历史、系列和可用任务。</p>
+      <div class="account-choice-list">
+        <a href="creator.html?role=hq&amp;task=content&amp;state=empty">
+          <span class="account-choice__mark">总</span>
+          <span><strong>总部品牌内容运营</strong><small>总部品牌表达 · 仅内容生产</small></span>
+        </a>
+        <a href="creator.html?role=store&amp;task=content&amp;state=empty">
+          <span class="account-choice__mark">店</span>
+          <span><strong>柯桥门店人物</strong><small>门店人物表达 · 内容与陈列</small></span>
+        </a>
+      </div>
+      <section class="creator-personal-control">
+        <div>
+          <p class="eyebrow">当前账号定位</p>
+          <strong data-drawer-profile-title>门店人物表达</strong>
+          <p data-drawer-profile-copy>从门店日常、近场关系和本人观察出发，不代替总部发言。</p>
+        </div>
+        <div>
+          <p class="eyebrow">我的协作偏好</p>
+          <p data-collab-summary>先给一份完整版本；修改时保留原来的判断。</p>
+          <button class="text-button" type="button" data-collab-edit>调整</button>
+          <form class="collab-form" data-collab-form hidden>
+            <label>
+              希望怎样一起工作
+              <textarea>先给一份完整版本；修改时保留原来的判断。</textarea>
+            </label>
+            <button class="button" type="submit">保存我的偏好</button>
+          </form>
+          <p class="inline-result" data-collab-result hidden>已保存，只在你的创作会话中使用。</p>
+        </div>
+      </section>
+    </aside>
+
+    <aside class="creator-drawer" data-target-drawer aria-hidden="true">
+      <header>
+        <div><p class="eyebrow">这次要做成</p><h2>选择目标形式</h2></div>
+        <button class="icon-button" type="button" data-creator-drawer-close>关闭</button>
+      </header>
+      <div class="target-choice-list">
+        <button type="button" data-target-choice="小红书图文">小红书图文<span>多图与发布正文</span></button>
+        <button type="button" data-target-choice="抖音视频">抖音视频<span>口播、画面与发布配文</span></button>
+        <button type="button" data-target-choice="微信视频号">微信视频号<span>连续视频与发布辅助</span></button>
+      </div>
+    </aside>
+    <script src="../shared/product.js"></script>
+  </body>
+</html>
