@@ -358,6 +358,37 @@ def test_topic_only_life_content_forbids_invented_dialogue_and_possessions(
         assert "穿着" in prompt and "具体衣物" in prompt
 
 
+def test_repair_discards_an_experience_shell_instead_of_paraphrasing_it(
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(
+        generation_input,
+        weak_seed="写一条家庭关系主题的小红书。",
+        user_actuality_quotes=(),
+        products=(),
+    )
+    context = BoundaryContext.from_request(request)
+    core = _generator()._parse_core(request, context, _video_core())
+
+    prompt = DeepSeekGenerator._unit_repair_prompt(
+        request,
+        context,
+        core,
+        (
+            UnitIssue(
+                "c8",
+                "invented_actuality",
+                "这个账号最近一直在想一段家庭关系。",
+            ),
+        ),
+    )
+
+    assert "必须丢弃原句的经历外壳" in prompt
+    assert "不能近义改写或换一个假想人物继续叙事" in prompt
+    assert "本次话题对象 + 当前一般判断" in prompt
+    assert "actuality 必须是" in prompt and "non_event" in prompt
+
+
 def test_platform_recompile_keeps_source_but_demands_target_native_change(
     generation_input: GenerationInput,
 ) -> None:
@@ -1167,7 +1198,7 @@ def test_resource_repairs_compile_only_rejected_steps_onto_registered_rails(
             _claim(
                 "c1",
                 "title",
-                "先看双面结构",
+                "当前商品已登记的品类是双面短外套。",
                 "confirmed_fact",
                 "non_event",
                 ("source:product:ZX-C218",),
@@ -1325,6 +1356,149 @@ def test_closed_world_allows_only_exact_frozen_user_actuality_claims(
     assert ("c9", "invented_actuality") in {
         (issue.unit_id, issue.reason_code) for issue in issues
     }
+
+
+def test_closed_world_allows_only_registered_atomic_product_claims(
+    generation_input: GenerationInput,
+) -> None:
+    product = ProductFact(
+        "ZX-C218",
+        {
+            "category": "双面短外套",
+            "observable_features": (
+                "M码当前样衣记录960克，对照单层短外套M码样衣记录650克；"
+                "约310克差异不能全部归因于双面结构。"
+            ),
+        },
+    )
+    request = _with(generation_input, products=(product,))
+    context = BoundaryContext.from_request(request)
+    exact_fact = next(
+        statement
+        for _, statement in context.product_fact_claims
+        if "可观察特征" in statement
+    )
+    claims = [
+        *cast("list[dict[str, object]]", _video_core()["claims"])[:7],
+        _claim(
+            "c8",
+            "spoken",
+            exact_fact,
+            "confirmed_fact",
+            "non_event",
+            ("source:product:ZX-C218",),
+        ),
+        _claim(
+            "c9",
+            "spoken",
+            "双面结构让一件衣服有两种穿法，但重量会比单层外套多约310克。",
+            "confirmed_fact",
+            "non_event",
+            ("source:product:ZX-C218",),
+        ),
+    ]
+    core = _generator()._parse_core(request, context, _video_core(claims=claims))
+
+    issues = DeepSeekGenerator._closed_world_issues(context, core)
+    reasons = {(issue.unit_id, issue.reason_code) for issue in issues}
+
+    assert ("c8", "factual_conflict") not in reasons
+    assert ("c9", "factual_conflict") in reasons
+
+
+def test_product_truth_production_uses_only_registered_rails(
+    generation_input: GenerationInput,
+) -> None:
+    product = ProductFact(
+        "ZX-C218",
+        {"category": "双面短外套"},
+    )
+    request = _with(
+        generation_input,
+        primary_product="product_truth",
+        products=(product,),
+    )
+    context = BoundaryContext.from_request(request)
+    exact_fact = next(
+        statement
+        for _, statement in context.product_fact_claims
+        if "品类" in statement
+    )
+    claims = [
+        _claim("c1", "title", "先看登记事实"),
+        _claim(
+            "c2",
+            "natural_guide",
+            "从商品编号进入",
+            "user_premise",
+            "non_event",
+            ("source:user_request",),
+        ),
+        _claim(
+            "c3",
+            "viewing_flow",
+            "依次看登记事实和判断边界",
+            "conditional_guidance",
+            "non_event",
+        ),
+        _claim("c4", "release_caption", "你会先看什么？"),
+        _claim("c5", "product_insight", "先区分观察和推断。"),
+        _claim("c6", "tradeoff_or_limit", "不能从品类推导性能。"),
+        _claim("c7", "validity_condition", "只在登记事实范围内成立。"),
+        _claim(
+            "c8",
+            "spoken",
+            exact_fact,
+            "confirmed_fact",
+            "non_event",
+            ("source:product:ZX-C218",),
+        ),
+        _claim("c9", "spoken", "我们主张先看登记事实。"),
+    ]
+    steps = [
+        _step(
+            "s1",
+            "cover",
+            "把商品放在未登记木桌上，展示无里布结构。",
+            ("c8",),
+            resource_refs=("resource:product:ZX-C218",),
+        ),
+        _step(
+            "s2",
+            "scene",
+            "使用一张未登记家庭合照。",
+            ("c9",),
+            resource_refs=("resource:family_photo",),
+            production_note="用未登记相框完成。",
+        ),
+    ]
+    core = _generator()._parse_core(
+        request,
+        context,
+        _video_core(claims=claims, steps=steps),
+    )
+
+    stabilized = DeepSeekGenerator._stabilize_product_truth_production(
+        request,
+        context,
+        core,
+    )
+
+    product_step, text_step = stabilized.scene_steps
+    assert product_step.action_text == "用手机拍摄当前商品的整体轮廓，作为干净首图。"
+    assert product_step.resource_refs == (
+        "resource:phone",
+        "resource:venue",
+        "resource:product:ZX-C218",
+    )
+    assert text_step.action_text == "用手机拍摄现场手写观点字卡，画面保持简洁。"
+    assert text_step.resource_refs == (
+        "resource:phone",
+        "resource:venue",
+        "resource:onsite_text",
+    )
+    assert "木桌" not in product_step.action_text
+    assert "合照" not in text_step.action_text
 
 
 def test_closed_world_blocks_confirmed_fact_that_is_not_a_recorded_state(
@@ -1880,6 +2054,12 @@ def test_visual_only_story_derives_duration_from_scene_steps(
 ) -> None:
     product = ProductFact("ZX-C218", {"category": "double-faced short coat", "colors": ["炭灰面", "深绿面"]})
     request = _with(generation_input, primary_product="visual_styling_story", products=(product,))
+    context = BoundaryContext.from_request(request)
+    exact_anchor = next(
+        statement
+        for _, statement in context.product_fact_claims
+        if "品类" in statement
+    )
     claims = [
         _claim("c1", "title", "两面各有重音"),
         _claim("c2", "natural_guide", "从翻面进入", "user_premise", "non_event", ("source:user_request",)),
@@ -1888,7 +2068,7 @@ def test_visual_only_story_derives_duration_from_scene_steps(
         _claim(
             "c5",
             "real_product_anchor",
-            "当前商品 ZX-C218 两面外观完整。",
+            exact_anchor,
             "confirmed_fact",
             "non_event",
             ("source:product:ZX-C218",),
@@ -1929,7 +2109,7 @@ def test_visual_only_story_derives_duration_from_scene_steps(
     assert isinstance(artifact.production, VideoProductionBundle)
     assert artifact.production.spoken_lines == "无口播、无对白、无解说"
     assert artifact.production.natural_duration == "约 6 秒"
-    assert "两面外观完整" in vars(artifact.semantic_contract)["real_product_anchor"]
+    assert "双面短外套" in vars(artifact.semantic_contract)["real_product_anchor"]
     assert "真实商品锚点" not in artifact.body
 
 
