@@ -843,6 +843,11 @@ class DeepSeekGenerator(ContentGenerator):
                     issues,
                     json.loads(self._json_content(str(payload["choices"][0]["message"]["content"]))),
                 )
+                repaired_core = self._stabilize_product_fact_repairs(
+                    request,
+                    repaired_core,
+                    issues,
+                )
                 repaired_core = self._stabilize_resource_repairs(
                     request,
                     context,
@@ -1456,6 +1461,87 @@ class DeepSeekGenerator(ContentGenerator):
         )
         DeepSeekGenerator._assert_media_presence(request, stabilized)
         return stabilized
+
+    @staticmethod
+    def _stabilize_product_fact_repairs(
+        request: GenerationInput,
+        core: ContentCore,
+        issues: tuple[UnitIssue, ...],
+    ) -> ContentCore:
+        """Render rejected product claims from the frozen ProductFact itself.
+
+        The system may choose any supported audience-value route for a product
+        seed. When a claim on that task has already failed the fact review,
+        replacing it with another model paraphrase cannot make the model its own
+        evidence. Keep the selected route and all passing units, but compile only
+        the rejected claim from the current product snapshot.
+        """
+
+        fact_units = {
+            issue.unit_id
+            for issue in issues
+            if issue.reason_code == "factual_conflict"
+        }
+        if not fact_units or not request.products:
+            return core
+
+        products_by_source = {
+            f"source:product:{product.sku}": product
+            for product in request.products
+        }
+        changed = False
+        claims: list[ContentClaim] = []
+        for claim in core.claims:
+            if claim.claim_id not in fact_units:
+                claims.append(claim)
+                continue
+            product = next(
+                (
+                    products_by_source[source_ref]
+                    for source_ref in claim.source_refs
+                    if source_ref in products_by_source
+                ),
+                request.products[0] if len(request.products) == 1 else None,
+            )
+            if product is None:
+                claims.append(claim)
+                continue
+            source_ref = f"source:product:{product.sku}"
+            display_name = product.display_name.strip() or "当前商品"
+            natural = DeepSeekGenerator._natural_product(
+                product.sku,
+                product.display_name,
+                product.facts,
+            )
+            fact_parts = natural.split("；")[1:]
+            fact_statement = (
+                f"{display_name}当前资料可确认：" + "；".join(fact_parts) + "。"
+                if fact_parts
+                else f"{display_name}是本次已确认的商品。"
+            )
+            slot_text = {
+                "title": f"{display_name}，先看能确认的信息",
+                "natural_guide": "先把这件商品当前能确认的信息说清楚。",
+                "release_caption": "你会先看这件商品的哪一项可见信息？",
+            }
+            claims.append(
+                replace(
+                    claim,
+                    text=slot_text.get(claim.slot, fact_statement),
+                    basis="confirmed_fact",
+                    actuality="non_event",
+                    source_refs=(source_ref,),
+                )
+            )
+            changed = True
+        if not changed:
+            return core
+        return ContentCore(
+            speaker_ref=core.speaker_ref,
+            claims=tuple(claims),
+            spoken_order=core.spoken_order,
+            scene_steps=core.scene_steps,
+        )
 
     def _issue_receipts(
         self,
@@ -2326,11 +2412,13 @@ c1、s2 这类编号，必须把编号替换为对应台词原文或删去，不
         ):
             return "当前只知道这两份样衣存在重量差异；没有结构测试，现有资料无法归因。"
         if isinstance(value, str) and value.strip():
-            return "当前重量边界已登记；只能以两份样衣的已记录重量为准，不能从重量推断其他未测试性质。"
+            return "这里只能以两份样衣的已记录重量为准，不能从重量推断其他未测试性质。"
         return "当前只可确认已记录的样衣重量，不能从重量推断其他性质。"
 
     @staticmethod
     def _natural_category(value: object) -> str:
         if value == "double-faced short coat":
             return "双面短外套"
-        return "类别未提供"
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return "未提供品类"

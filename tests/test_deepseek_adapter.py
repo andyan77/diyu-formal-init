@@ -1205,6 +1205,66 @@ def test_resource_repairs_compile_only_rejected_steps_onto_registered_rails(
     assert not DeepSeekGenerator._closed_world_issues(context, stabilized)
 
 
+def test_product_fact_repairs_render_only_rejected_claims_from_frozen_snapshot(
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(
+        generation_input,
+        products=(
+            ProductFact(
+                "ZX-C218",
+                {
+                    "category": "双面短外套",
+                    "colors": ["炭灰纯色", "深绿细格纹"],
+                    "material_or_structure": "双面结构；两面口袋均可使用",
+                },
+                display_name="双面短外套",
+            ),
+        ),
+    )
+    generator = _generator()
+    context = BoundaryContext.from_request(request)
+    core = generator._parse_core(request, context, _video_core())
+
+    stabilized = generator._stabilize_product_fact_repairs(
+        request,
+        core,
+        (
+            UnitIssue("c1", "factual_conflict", "越界标题"),
+            UnitIssue("c9", "factual_conflict", "越界商品推断"),
+        ),
+    )
+
+    assert stabilized.claim("c1").text == "双面短外套，先看能确认的信息"
+    assert stabilized.claim("c9").text == (
+        "双面短外套当前资料可确认：品类：双面短外套；"
+        "颜色：炭灰纯色、深绿细格纹；材质或结构：双面结构；两面口袋均可使用。"
+    )
+    assert stabilized.claim("c9").basis == "confirmed_fact"
+    assert stabilized.claim("c9").actuality == "non_event"
+    assert stabilized.claim("c9").source_refs == ("source:product:ZX-C218",)
+    assert stabilized.claim("c8") == core.claim("c8")
+    assert not DeepSeekGenerator._closed_world_issues(context, stabilized)
+
+    ambiguous_request = _with(
+        request,
+        products=(
+            *request.products,
+            ProductFact(
+                "ZX-C219",
+                {"category": "短外套"},
+                display_name="另一件短外套",
+            ),
+        ),
+    )
+    ambiguous = generator._stabilize_product_fact_repairs(
+        ambiguous_request,
+        core,
+        (UnitIssue("c9", "factual_conflict", "未绑定商品的推断"),),
+    )
+    assert ambiguous.claim("c9") == core.claim("c9")
+
+
 def test_closed_world_rejects_unregistered_source_before_any_model_verdict(
     generation_input: GenerationInput,
 ) -> None:
