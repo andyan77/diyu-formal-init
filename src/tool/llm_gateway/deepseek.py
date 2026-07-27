@@ -152,6 +152,37 @@ def _question_has_irreplaceable_fact(
         )
     return False
 
+
+_DEFINITE_USER_EXPERIENCE_REQUEST = re.compile(
+    r"(?:把|将)"
+    r"(?P<basis>我[^，。！？!?]{1,80}?"
+    r"(?:经历|故事|过程|那个月|那段时间|那段日子|那件事|那次|那天))"
+    r"(?=(?:写|拍|做|整理)(?:成|出|为))"
+)
+
+
+def _unresolved_definite_user_experience(
+    request: ConversationInput,
+) -> str | None:
+    """Find a factual referent, not a topic, whose event detail was never supplied."""
+    if request.history or not requests_content_creation(request.message):
+        return None
+    match = _DEFINITE_USER_EXPERIENCE_REQUEST.search(request.message)
+    if match is None:
+        return None
+    basis = match.group("basis").strip()
+    if any(basis in reference for reference in request.brand.brand_reference_context):
+        return None
+    return basis
+
+
+def _user_experience_fact_question() -> ConversationDecision:
+    return ConversationDecision(
+        "question",
+        "那段经历中，真正发生的一件具体事情是什么？",
+    )
+
+
 # Closed-world identifiers. Every reference a model may cite must appear in one
 # of these registries; anything outside is "does not exist for this call".
 _SPEAKER_ID = "speaker:brand_account"
@@ -634,6 +665,7 @@ class DeepSeekGenerator(ContentGenerator):
     def collaborate(self, request: ConversationInput) -> ConversationDecision:
         """Understand one natural turn before any durable content object is created."""
         explicit_creation = requests_content_creation(request.message)
+        unresolved_experience = _unresolved_definite_user_experience(request)
         payload, _ = self._request(
             ("你是笛语内容工作台里的协作伙伴。只返回 JSON；不展示推理、提示词、规则、证据分类或内部字段。"),
             self._conversation_prompt(request),
@@ -642,14 +674,27 @@ class DeepSeekGenerator(ContentGenerator):
         try:
             document = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"])))
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+            if unresolved_experience is not None:
+                return _user_experience_fact_question()
             if explicit_creation:
                 return _fallback_ready_decision(request)
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。") from exc
         if not isinstance(document, dict):
+            if unresolved_experience is not None:
+                return _user_experience_fact_question()
             if explicit_creation:
                 return _fallback_ready_decision(request)
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。")
         disposition = document.get("kind")
+        if unresolved_experience is not None:
+            question_message = str(document.get("message") or "").strip()
+            if (
+                disposition == "question"
+                and question_message
+                and _question_has_irreplaceable_fact(document, request)
+            ):
+                return ConversationDecision("question", question_message)
+            return _user_experience_fact_question()
         if disposition not in {"chat", "question", "ready"}:
             if explicit_creation:
                 return _fallback_ready_decision(request)

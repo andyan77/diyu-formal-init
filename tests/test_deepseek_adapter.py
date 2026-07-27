@@ -624,6 +624,86 @@ def test_collaborate_keeps_one_irreplaceable_user_fact_question(
     assert decision.message == "那个月最难的一件具体事情是什么？"
 
 
+def test_collaborate_overrides_ready_for_an_unresolved_definite_user_experience(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    message = "把我去年创业最难的那个月写成视频。"
+    _install_fake(
+        monkeypatch,
+        [
+            _completion(
+                json.dumps(
+                    {
+                        "kind": "ready",
+                        "message": "我直接写一版。",
+                        "user_premises": [message],
+                        "user_actuality_quotes": [],
+                        "system_creative_plan": "把那个月写成一段创业回顾。",
+                        "primary_value": "建立人格",
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        ],
+    )
+
+    decision = _generator().collaborate(
+        ConversationInput(
+            message=message,
+            history=(),
+            brand=generation_input.brand,
+            products=(),
+            target="xiaohongshu_video",
+        )
+    )
+
+    assert len(FakeClient.requests) == 1
+    assert decision.disposition == "question"
+    assert decision.message == "那段经历中，真正发生的一件具体事情是什么？"
+    assert decision.user_premises == ()
+
+
+def test_collaborate_does_not_question_a_supplied_life_fragment(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    message = "把我今天店里忙了一天、回家因为谁洗碗拌了两句写成小红书。"
+    _install_fake(
+        monkeypatch,
+        [
+            _completion(
+                json.dumps(
+                    {
+                        "kind": "ready",
+                        "message": "我直接写一版。",
+                        "user_premises": [message],
+                        "user_actuality_quotes": [
+                            "我今天店里忙了一天、回家因为谁洗碗拌了两句"
+                        ],
+                        "system_creative_plan": "从疲惫落在小事上的错位选择主线。",
+                        "primary_value": "建立人格",
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        ],
+    )
+
+    decision = _generator().collaborate(
+        ConversationInput(
+            message=message,
+            history=(),
+            brand=generation_input.brand,
+            products=(),
+            target="xiaohongshu_graphic",
+        )
+    )
+
+    assert decision.disposition == "ready"
+    assert decision.user_premises == (message,)
+
+
 def test_p3_exact_actuality_and_system_plan_enter_different_fact_channels(
     generation_input: GenerationInput,
 ) -> None:

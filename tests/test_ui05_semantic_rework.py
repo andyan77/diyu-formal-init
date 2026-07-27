@@ -53,6 +53,12 @@ _BAIT_ORG_ID = UUID("80500000-0000-0000-0000-000000000210")
 _BAIT_USER_ID = UUID("80500000-0000-0000-0000-000000000211")
 _BAIT_LIBRARY_ID = UUID("80500000-0000-0000-0000-000000000212")
 _SIBLING_LIBRARY_ID = UUID("80500000-0000-0000-0000-000000000213")
+_SAFE_MARKER_DIGITS = str.maketrans("0123456789", "klmnopqrst")
+
+
+def _safe_marker(prefix: str) -> str:
+    """Retain per-run entropy without ever looking like a phone or order identifier."""
+    return f"{prefix}-{uuid4().hex.translate(_SAFE_MARKER_DIGITS)}"
 
 
 class _UI05Generator(DeterministicContentGenerator):
@@ -238,7 +244,7 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
     with TestClient(_app(app_database_url, monkeypatch), base_url="https://diyuai.cc") as client:
         client.cookies.set("diyu_session", token)
 
-        g1_marker = f"G1-{uuid4().hex}"
+        g1_marker = _safe_marker("G1")
         chat = _stream_events(
             client,
             _conversation_payload(f"今天有点累，陪我聊两句。{g1_marker}"),
@@ -247,7 +253,7 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         assert chat[-1]["kind"] == "chat"
         assert _task_counts(app_database_url, g1_marker)["tasks"] == 0
 
-        old_marker = f"OLD-{uuid4().hex}"
+        old_marker = _safe_marker("OLD")
         old_observation = _stream_events(
             client,
             _conversation_payload(f"最近店里总有人只想自己看看。{old_marker}"),
@@ -259,7 +265,7 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         assert _task_counts(app_database_url, old_marker)["tasks"] == 0
         time.sleep(2.05)
 
-        g2_marker = f"G2-{uuid4().hex}"
+        g2_marker = _safe_marker("G2")
         g2 = _stream_events(
             client,
             _conversation_payload(f"ZX-C218，帮我生成一篇小红书文案。{g2_marker}"),
@@ -302,7 +308,7 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         }
         time.sleep(2.05)
 
-        g3_marker = f"G3-{uuid4().hex}"
+        g3_marker = _safe_marker("G3")
         g3 = _stream_events(
             client,
             _conversation_payload(
@@ -324,7 +330,7 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         assert g3_snapshot["user_actuality_quotes"] == []
         time.sleep(2.05)
 
-        g4_marker = f"G4-{uuid4().hex}"
+        g4_marker = _safe_marker("G4")
         g4_message = (
             "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
             f"帮我发条小红书。{g4_marker}"
@@ -348,7 +354,7 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         assert g4_snapshot["user_premise"] == g4_message
         time.sleep(2.05)
 
-        g5_marker = f"G5-{uuid4().hex}"
+        g5_marker = _safe_marker("G5")
         g5 = _stream_events(
             client,
             _conversation_payload(f"今天不知道发什么，帮我做条小红书。{g5_marker}"),
@@ -386,7 +392,7 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         assert v1.json()["body"] == g4_result["body"]
 
         time.sleep(2.05)
-        failed_marker = f"UI05_FORCE_FAILURE-{uuid4().hex}"
+        failed_marker = _safe_marker("UI05_FORCE_FAILURE")
         failed = _stream_events(
             client,
             _conversation_payload(f"请直接写一条完整内容。{failed_marker}"),
@@ -405,7 +411,7 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         }
         assert all("UI05_FORCE_FAILURE" not in json.dumps(item, ensure_ascii=False) for item in failed)
 
-        disconnected_marker = f"UI05_DISCONNECTED-{uuid4().hex}"
+        disconnected_marker = _safe_marker("UI05_DISCONNECTED")
 
         def disconnect_at_finalizing(stage: str) -> None:
             if stage == "finalizing":
@@ -431,7 +437,7 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
             "versions": 0,
         }
 
-        early_disconnect_marker = f"UI05_EARLY_DISCONNECTED-{uuid4().hex}"
+        early_disconnect_marker = _safe_marker("UI05_EARLY_DISCONNECTED")
 
         def disconnect_at_generating(stage: str) -> None:
             if stage == "generating":
