@@ -908,6 +908,12 @@ class DeepSeekGenerator(ContentGenerator):
                     repaired_core,
                     issues,
                 )
+                repaired_core = self._stabilize_product_resource_cascade(
+                    request,
+                    context,
+                    repaired_core,
+                    issues,
+                )
                 repaired_core = self._stabilize_product_truth_production(
                     request,
                     context,
@@ -1332,7 +1338,7 @@ class DeepSeekGenerator(ContentGenerator):
             verdict = verdicts[unit_id]
             fragment = core.claim(unit_id).text if unit_id not in step_by_id else step_by_id[unit_id].action_text
             compiler_owned_product_step = (
-                request.primary_product == "product_truth"
+                bool(context.product_fact_claims)
                 and unit_id in step_by_id
                 and self._is_compiled_product_step(
                     context,
@@ -1653,6 +1659,44 @@ class DeepSeekGenerator(ContentGenerator):
             )
             return step.resource_refs == (*base, *onsite)
         return False
+
+    @staticmethod
+    def _stabilize_product_resource_cascade(
+        request: GenerationInput,
+        context: BoundaryContext,
+        core: ContentCore,
+        issues: tuple[UnitIssue, ...],
+    ) -> ContentCore:
+        """Compile every product scene when one scene breaks the resource set.
+
+        A holistic repair can move an unsupported prop from the rejected scene
+        into a previously accepted scene. Product-backed content already has a
+        complete closed-world production set for this call, so one resource
+        rejection makes the whole scene bundle compiler-owned. The normal
+        instruction and identity review still runs afterward.
+        """
+
+        if (
+            not context.product_fact_claims
+            or not any(
+                issue.reason_code == "unsupported_resource"
+                for issue in issues
+            )
+        ):
+            return core
+        return DeepSeekGenerator._stabilize_resource_repairs(
+            request,
+            context,
+            core,
+            tuple(
+                UnitIssue(
+                    step.step_id,
+                    "unsupported_resource",
+                    step.action_text,
+                )
+                for step in core.scene_steps
+            ),
+        )
 
     @staticmethod
     def _stabilize_resource_repairs(

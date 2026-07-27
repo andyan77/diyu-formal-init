@@ -1281,6 +1281,18 @@ def test_resource_repairs_compile_only_rejected_steps_onto_registered_rails(
     assert product_step.sound_text == text_step.sound_text == ""
     assert not DeepSeekGenerator._closed_world_issues(context, stabilized)
 
+    cascaded = generator._stabilize_product_resource_cascade(
+        request,
+        context,
+        core,
+        (UnitIssue("s1", "unsupported_resource", "木桌"),),
+    )
+    cascaded_product, cascaded_text = cascaded.scene_steps
+    assert cascaded_product == product_step
+    assert cascaded_text == text_step
+    assert "模特" not in cascaded_text.action_text
+    assert set(cascaded_text.resource_refs) <= set(context.resource_ids)
+
 
 def test_closed_world_rejects_unregistered_source_before_any_model_verdict(
     generation_input: GenerationInput,
@@ -1658,6 +1670,28 @@ def test_product_truth_production_uses_only_registered_rails(
     assert {(issue.unit_id, issue.reason_code) for issue in judged} == {
         ("s1", "instruction_conflict")
     }
+
+    _install_fake(
+        monkeypatch,
+        [
+            _verdicts(
+                _video_core(claims=claims, steps=steps),
+                {
+                    "s1": ("resource_ok", "fact_ok", "instruction_ok"),
+                    "s2": ("resource_ok", "fact_ok"),
+                },
+            )
+        ],
+    )
+    judged_other_product_route, _, _ = _generator()._judgement_issues(
+        _with(request, primary_product="dressing_decision"),
+        context,
+        stabilized,
+    )
+    assert {
+        (issue.unit_id, issue.reason_code)
+        for issue in judged_other_product_route
+    } == {("s1", "instruction_conflict")}
 
 
 def test_closed_world_blocks_confirmed_fact_that_is_not_a_recorded_state(
