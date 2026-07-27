@@ -435,7 +435,7 @@ def test_conversation_prompt_makes_creative_judgement_the_systems_job(
     assert '"brief"' not in prompt
 
 
-def test_collaborate_preserves_exact_user_premise_and_separates_system_plan(
+def test_collaborate_preserves_exact_premise_but_replaces_untrusted_model_plan(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,
 ) -> None:
@@ -452,7 +452,7 @@ def test_collaborate_preserves_exact_user_premise_and_separates_system_plan(
                         "user_actuality_quotes": [
                             "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
                         ],
-                        "system_creative_plan": "选择疲惫与小事错位的主线，用克制的荒诞感组织图文。",
+                        "system_creative_plan": "补出丈夫的对白和争执结果，用克制的荒诞感组织图文。",
                         "primary_value": "建立人格",
                     },
                     ensure_ascii=False,
@@ -478,7 +478,9 @@ def test_collaborate_preserves_exact_user_premise_and_separates_system_plan(
     assert decision.user_actuality_quotes == (
         "今天店里忙了一天，回家还因为谁洗碗拌了两句。",
     )
-    assert "疲惫与小事错位" in decision.system_creative_plan
+    assert "补出丈夫" not in decision.system_creative_plan
+    assert "只以用户本轮明确原话作为现实片段" in decision.system_creative_plan
+    assert "不补人物关系" in decision.system_creative_plan
     assert "今天有点累" not in "\n".join(decision.user_premises)
 
 
@@ -497,7 +499,7 @@ def test_collaborate_discards_an_invented_actuality_quote(
                         "message": "我先写一版。",
                         "user_premises": [message],
                         "user_actuality_quotes": ["我和婆婆昨天吵了一架。"],
-                        "system_creative_plan": "用一般观察写关系中的分寸。",
+                        "system_creative_plan": "写一个一起做饭的具体片段并安排生活照片。",
                         "primary_value": "建立人格",
                     },
                     ensure_ascii=False,
@@ -520,6 +522,8 @@ def test_collaborate_discards_an_invented_actuality_quote(
     assert decision.user_premises == (message,)
     assert decision.user_actuality_quotes == ()
     assert "我和婆婆昨天吵了一架" not in decision.system_creative_plan
+    assert "一起做饭" not in decision.system_creative_plan
+    assert "现实场景" in decision.system_creative_plan
 
 
 def test_collaborate_compiles_exact_premise_when_ready_payload_is_incomplete(

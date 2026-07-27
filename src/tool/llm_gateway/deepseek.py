@@ -100,6 +100,7 @@ def _fallback_ready_decision(
     message: str = "",
 ) -> ConversationDecision:
     """Compile a safe ready decision when the model mishandles system-owned choices."""
+    user_actuality_quotes = _explicit_actuality_quotes(request.message)
     if request.products:
         primary_product: ContentProduct = "product_truth"
         plan = (
@@ -107,18 +108,26 @@ def _fallback_ready_decision(
             "平台组织；不补造性能、价格、库存、设计动机或穿着结果。"
         )
         handoff = "我先从这件商品当前能确认的事实里选一个最值得说清的切口，直接写一版。"
+    elif user_actuality_quotes:
+        primary_product = "brand_life_narrative"
+        plan = (
+            "只以用户本轮明确原话作为现实片段，自主选择一条值得表达的主线，完成观点、"
+            "结构、风格和平台组织；不补人物关系、动机、情绪、对白、前因、结果或长期习惯。"
+        )
+        handoff = "我先从你说过的这段小事里选一条主线，事实停在你的原话，直接写一版。"
     else:
         primary_product = "brand_life_narrative"
         plan = (
             "依据当前账号画像、内容领地和用户本轮种子自主选择一个安全主线，完成观点、"
-            "结构和平台组织；题材写成一般观察、条件表达或明确演绎，不冒充用户亲历。"
+            "结构、风格和平台组织；题材写成一般观察、条件表达或抽象演绎，不冒充用户亲历，"
+            "不补具体对白、人物关系、事件过程、个人持有物、现实场景或结果。"
         )
         handoff = "我先结合这个账号的位置选一个安全主线，直接写一版。"
     return ConversationDecision(
         "ready",
         message or handoff,
         user_premises=(request.message,),
-        user_actuality_quotes=_explicit_actuality_quotes(request.message),
+        user_actuality_quotes=user_actuality_quotes,
         system_creative_plan=plan,
         primary_product=primary_product,
     )
@@ -718,7 +727,6 @@ class DeepSeekGenerator(ContentGenerator):
             return ConversationDecision("question", message)
         raw_premises = document.get("user_premises")
         raw_actualities = document.get("user_actuality_quotes")
-        system_creative_plan = str(document.get("system_creative_plan") or "").strip()
         value = document.get("primary_value")
         mapping: dict[str, ContentProduct] = {
             "帮助选择": "dressing_decision",
@@ -767,9 +775,10 @@ class DeepSeekGenerator(ContentGenerator):
             message,
             user_premises=user_premises,
             user_actuality_quotes=user_actuality_quotes,
-            system_creative_plan=(
-                system_creative_plan or fallback.system_creative_plan
-            ),
+            # A provider may propose creative details, but only the system's
+            # source-aware plan is frozen and replayed. This prevents an
+            # imagined scene in a model brief from becoming a fact source.
+            system_creative_plan=fallback.system_creative_plan,
             primary_product=(
                 mapping[value]
                 if isinstance(value, str) and value in mapping
