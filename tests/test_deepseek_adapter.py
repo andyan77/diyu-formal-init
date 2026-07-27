@@ -1243,7 +1243,7 @@ def test_resource_repairs_compile_only_rejected_steps_onto_registered_rails(
         "resource:venue",
         "resource:product:ZX-C218",
     )
-    assert product_step.action_text == "用手机拍摄当前商品的整体轮廓，作为干净首图。"
+    assert product_step.action_text == "用手机拍摄已登记的当前商品，作为干净首图。"
     assert text_step.resource_refs == (
         "resource:phone",
         "resource:venue",
@@ -1528,7 +1528,7 @@ def test_product_truth_production_uses_only_registered_rails(
     )
 
     product_step, text_step = stabilized.scene_steps
-    assert product_step.action_text == "用手机拍摄当前商品的整体轮廓，作为干净首图。"
+    assert product_step.action_text == "用手机拍摄已登记的当前商品，作为干净首图。"
     assert product_step.resource_refs == (
         "resource:phone",
         "resource:venue",
@@ -1542,6 +1542,9 @@ def test_product_truth_production_uses_only_registered_rails(
     )
     assert "木桌" not in product_step.action_text
     assert "合照" not in text_step.action_text
+    assert "轮廓" not in product_step.action_text
+    assert "结构" not in product_step.action_text
+    assert product_step.production_note == "普通室内环境，单人用手机完成。"
 
 
 def test_closed_world_blocks_confirmed_fact_that_is_not_a_recorded_state(
