@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import Root from "./main";
+import Root from "./app/Root";
 
 const container = document.getElementById("root");
 if (!container) throw new Error("缺少应用根节点");

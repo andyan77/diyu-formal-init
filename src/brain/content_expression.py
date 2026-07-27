@@ -21,9 +21,7 @@ _CATALOG_FILE = _CATALOG_DIR / "catalog-v1.json"
 _INVENTORY_FILE = _CATALOG_DIR / "capability-inventory-v1.jsonl"
 
 AXIS_ORDER: tuple[str, ...] = ("topic", "mechanism", "style", "form", "continuity")
-CAPABILITY_STATES = frozenset(
-    {"verified", "composable", "experimental", "unsupported", "explicitly_out_of_scope"}
-)
+CAPABILITY_STATES = frozenset({"verified", "composable", "experimental", "unsupported", "explicitly_out_of_scope"})
 COMPACT_STATES = frozenset({"verified", "composable"})
 GAP_TYPES = frozenset(
     {
@@ -110,9 +108,7 @@ def _load_catalog_document(path: Path) -> ExpressionCatalog:
     axes_raw = raw.get("axes")
     if not isinstance(axes_raw, list) or [item.get("key") for item in axes_raw] != list(AXIS_ORDER):
         raise _fail("内容表达目录必须恰好覆盖固定五轴")
-    axes = tuple(
-        CatalogAxis(str(item["key"]), str(item["label"]), str(item["question"])) for item in axes_raw
-    )
+    axes = tuple(CatalogAxis(str(item["key"]), str(item["label"]), str(item["question"])) for item in axes_raw)
     markers_raw = raw.get("brand_restraint_markers")
     if not isinstance(markers_raw, list) or not markers_raw:
         raise _fail("内容表达目录缺少品牌克制标记")
@@ -196,6 +192,39 @@ def load_inventory(path: Path = _INVENTORY_FILE) -> tuple[dict[str, object], ...
     return tuple(records)
 
 
+def assert_custom_direction_available(custom_text: str) -> None:
+    """Fail honestly when a custom direction is exactly a declared non-stable catalog label.
+
+    This is a state lookup against the versioned inventory, not fuzzy text classification. Free
+    wording remains free wording; only an exact declared label can reach this guard. The caller
+    keeps the person's input in place so the system never substitutes a supposedly supported
+    direction or creates a half task.
+    """
+    requested = custom_text.strip()
+    if not requested:
+        return
+    for record in load_inventory():
+        labels = {
+            str(record.get("source_label", "")).strip(),
+            str(record.get("normalized_label", "")).strip(),
+        }
+        if requested not in labels:
+            continue
+        state = str(record.get("capability_state", ""))
+        if state in COMPACT_STATES:
+            return
+        label = str(record.get("normalized_label") or record.get("source_label") or requested)
+        if state == "experimental":
+            raise _fail(
+                f"「{label}」目前还是试验方向，暂不能作为稳定选项使用。你的原话会留在输入框中，可以换一种方向再试。"
+            )
+        if state == "explicitly_out_of_scope":
+            raise _fail(f"「{label}」不属于当前内容创作范围。你的原话会留在输入框中，可以换成内容表达方向。")
+        raise _fail(
+            f"「{label}」目前还缺少可靠资料或直接能力，暂不能稳定完成。你的原话会留在输入框中，可以换一种方向再试。"
+        )
+
+
 def reconcile_sources(
     records: tuple[dict[str, object], ...],
 ) -> tuple[dict[str, dict[str, int]], tuple[str, ...]]:
@@ -203,11 +232,7 @@ def reconcile_sources(
     summary: dict[str, dict[str, int]] = {}
     gaps: list[str] = []
     for family_label, family_code, target in DECLARED_SOURCE_TARGETS:
-        defined = [
-            record
-            for record in records
-            if str(record["stable_id"]).startswith(f"CAT-{family_code}-")
-        ]
+        defined = [record for record in records if str(record["stable_id"]).startswith(f"CAT-{family_code}-")]
         family_gaps = [
             str(record["stable_id"])
             for record in records
@@ -326,9 +351,7 @@ def resolve_direction(
     if requested_catalog_version and requested_catalog_version != catalog.catalog_version:
         raise _fail("创作方向目录已更新，请刷新后重新选择。")
     defaults = dict(saved_defaults or {})
-    unknown_axes = [
-        axis for axis in (*selections, *defaults, *cleared_axes) if axis not in AXIS_ORDER
-    ]
+    unknown_axes = [axis for axis in (*selections, *defaults, *cleared_axes) if axis not in AXIS_ORDER]
     if unknown_axes:
         raise _fail("创作方向只使用固定的五个方面。")
     restrained = boundary_is_restrained(catalog, boundary_text)
@@ -346,8 +369,7 @@ def resolve_direction(
             if asked is not None and asked.body_related and not body_related_opt_in:
                 # A hard conflict: never silently apply it, never silently replace the wording.
                 suggestions.append(
-                    f"你提到的「{asked.label}」属于体型相关表达，需要你自己先打开才会使用；"
-                    "这次按你原话保留，没有替换。"
+                    f"你提到的「{asked.label}」属于体型相关表达，需要你自己先打开才会使用；这次按你原话保留，没有替换。"
                 )
                 asked = None
             if asked is not None:
@@ -479,18 +501,14 @@ def snapshot_document(
         "account_expression": (
             {
                 "profile_id": (
-                    str(control.account_expression.profile_id)
-                    if control.account_expression.profile_id
-                    else None
+                    str(control.account_expression.profile_id) if control.account_expression.profile_id else None
                 ),
                 "version": control.account_expression.version,
                 "identity_position": control.account_expression.identity_position,
                 "authority_boundary": control.account_expression.authority_boundary,
                 "audience_relationship": control.account_expression.audience_relationship,
                 "content_territories": control.account_expression.content_territories,
-                "default_production_conditions": (
-                    control.account_expression.default_production_conditions
-                ),
+                "default_production_conditions": (control.account_expression.default_production_conditions),
             }
             if control.account_expression is not None
             else None
@@ -498,8 +516,7 @@ def snapshot_document(
         "private_preference_mode": control.preference_mode,
         "private_preference_version": control.preference_version,
         "material_refs": [
-            {"asset_id": str(item.asset_id), "reference_version": item.reference_version}
-            for item in control.materials
+            {"asset_id": str(item.asset_id), "reference_version": item.reference_version} for item in control.materials
         ],
         "product_facts": [
             {
@@ -520,9 +537,7 @@ def snapshot_document(
                 "title": series_context.title,
                 "premise": series_context.premise,
                 "target_position": series_context.target_position,
-                "user_asserted_published_continuity": (
-                    series_context.user_asserted_published_continuity
-                ),
+                "user_asserted_published_continuity": (series_context.user_asserted_published_continuity),
                 "prior_entries": [
                     {
                         "task_id": str(item.task_id),

@@ -1,27 +1,19 @@
 import assert from "node:assert/strict";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import Root from "../src/main";
+import Root from "../src/app/Root";
 
-// The window, the recording fetch and the canned routes are installed by test/run.mjs before
-// this bundle is imported; see the comment there for why the order matters.
 const harness = (globalThis as unknown as {
   __DIYU_INTERACTION__: {
-    requests: Array<{ method: string; path: string; body: unknown; preferenceSession: string | null }>;
+    requests: Array<{ method: string; path: string; query: string; body: unknown }>;
     copiedTexts: string[];
     exportedBlobs: Blob[];
+    setCopyFailure: (value: boolean) => void;
     window: Window & typeof globalThis;
   };
 }).__DIYU_INTERACTION__;
-const requests = harness.requests;
-const copiedTexts = harness.copiedTexts;
-const exportedBlobs = harness.exportedBlobs;
-const window = harness.window;
+const { requests, copiedTexts, exportedBlobs, setCopyFailure, window } = harness;
 const document = window.document;
-
-function texts(selector: string): string[] {
-  return Array.from(document.querySelectorAll(selector)).map(node => (node.textContent ?? "").trim());
-}
 
 function find(selector: string, contains: string): HTMLElement {
   const node = Array.from(document.querySelectorAll(selector)).find(item =>
@@ -34,6 +26,17 @@ function find(selector: string, contains: string): HTMLElement {
 async function click(node: Element): Promise<void> {
   await act(async () => {
     node.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+}
+
+async function input(node: HTMLInputElement | HTMLTextAreaElement, value: string): Promise<void> {
+  await act(async () => {
+    const prototype =
+      node instanceof window.HTMLTextAreaElement
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(node, value);
+    node.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
 }
 
@@ -50,185 +53,230 @@ async function main(): Promise<void> {
   const container = document.getElementById("root");
   assert.ok(container);
   const root = createRoot(container);
-  await act(async () => {
-    root.render(<Root />);
-  });
+  await act(async () => root.render(<Root />));
   await settle();
+
   assert.ok(
     !requests.some(item => item.path === "/api/v1/session/context"),
-    "正式页面必须保留服务端按当前路由冻结的内容身份，不能被通用用户身份覆盖"
+    "正式 /content 必须消费页面 bootstrap，不能用通用上下文覆盖可信目标"
   );
-  assert.match(
-    document.body.textContent ?? "",
-    /等深模拟业务资料/,
-    "演示内容入口必须持续显示模拟资料边界"
-  );
-  assert.ok(document.querySelector('a[href="/content"]'));
-  assert.ok(document.querySelector('a[href="/display"]'));
-  assert.equal(document.querySelectorAll('a[href^="/ui/select/"]').length, 0);
-  assert.equal(
-    window.location.pathname + window.location.search,
-    "/content?target=xiaohongshu_graphic"
-  );
-  assert.match(
-    document.querySelector(".identity-bar")?.textContent ?? "",
-    /总部小红书发布账号/,
-    "身份栏必须显示服务端已为当前目标解析的发布账号"
-  );
-  assert.match(document.querySelector(".identity-bar")?.textContent ?? "", /品牌官方/);
   assert.deepEqual(
-    texts('.composer select option'),
-    ["抖音短视频", "小红书视频", "小红书图文", "微信视频号视频"]
+    requests
+      .filter(item => item.path === "/api/v1/content/tasks")
+      .map(item => item.query),
+    ["?target=xiaohongshu_graphic"],
+    "历史只能读取服务端为当前页面解析的平台作用域"
   );
-  const targetSelect = document.querySelector(".composer select") as HTMLSelectElement;
-  assert.equal(
-    targetSelect.value,
-    "xiaohongshu_graphic",
-    "已解析的小红书目标必须成为默认值，不能回退到 targets 列表首项"
-  );
-  assert.equal(
-    targetSelect.selectedOptions[0]?.textContent,
-    "小红书图文"
-  );
-
-  // 1. Natural input is usable without opening anything; the panel stays collapsed.
-  const composer = document.querySelector('textarea[aria-label="内容需求"]');
-  assert.ok(composer, "自然输入区应当直接可用");
-  const panel = document.querySelector("details.direction-panel") as HTMLDetailsElement;
-  assert.equal(panel.open, false, "创作方向面板默认收起");
-
-  // 2. A saved default is shown as a carried-over default, never as 不指定.
-  const summary = (document.querySelector(".direction-summary")?.textContent ?? "").trim();
-  assert.match(summary, /沿用你保存的默认/, `收起时应说明沿用默认，实际是「${summary}」`);
-  assert.doesNotMatch(summary, /不指定/);
-  await act(async () => {
-    panel.open = true;
-  });
-  assert.ok(
-    texts("button").some(label => label.includes("本次不用默认：干货攻略")),
-    "每一轴都要能单独关掉这次的默认"
-  );
-
-  // 3. Switching an axis off is a third state: it is neither the default nor 不指定.
-  await click(find("button", "本次不用默认：干货攻略"));
-  const cleared = (document.querySelector(".direction-summary")?.textContent ?? "").trim();
-  assert.match(cleared, /风格：本次不使用/, `关掉后应显示本次不使用，实际是「${cleared}」`);
-
-  // 4. An original nobody wrote a note for cannot be selected, and the note entry is right there.
-  const boxes = Array.from(document.querySelectorAll(".reference-picker input[type=checkbox]"));
-  assert.equal(boxes.length, 2);
-  assert.equal((boxes[0] as HTMLInputElement).disabled, false, "文字素材可以直接勾选");
-  assert.equal((boxes[1] as HTMLInputElement).disabled, true, "缺人工说明的图片不可勾选");
-  await click(find(".reference-picker button", "先补一句说明"));
-  const noteInput = document.querySelector('.reference-note-form input') as HTMLInputElement;
-  assert.ok(noteInput, "应当就地提供补写说明的入口");
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-    setter?.call(noteInput, "这张图里是那条裤子的口袋。");
-    noteInput.dispatchEvent(new window.Event("input", { bubbles: true }));
-  });
-  const noteButton = find(".reference-note-form button", "保存这句说明") as HTMLButtonElement;
-  await click(noteButton);
-  await settle();
-  assert.ok(
-    requests.some(item => item.method === "PATCH" && item.path === "/api/v1/materials/asset-image/reference-note"),
-    "补写说明应当写回这份原件"
-  );
-
-  // 5. This task's real request carries the switched-off axis, and only that.
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-    setter?.call(composer, "帮我讲清这次要说什么。");
-    composer.dispatchEvent(new window.Event("input", { bubbles: true }));
-  });
-  await click(find(".composer-foot button", "生成当前成品"));
-  await settle();
-  const created = requests.filter(item => item.method === "POST" && item.path === "/api/v1/content");
-  assert.equal(created.length, 1);
-  assert.equal(
-    (created[0].body as { target: string }).target,
-    "xiaohongshu_graphic",
-    "不手工切换时，生成请求必须保留服务端解析的 current_target"
-  );
-  const direction = (created[0].body as { creative_direction: { cleared_axes: string[]; selections: Record<string, string> } }).creative_direction;
-  assert.deepEqual(direction.cleared_axes, ["style"]);
-  assert.deepEqual(direction.selections, {});
-  const artifactText = document.querySelector(".artifact-text")?.textContent ?? "";
-  assert.match(artifactText, /内容概要：受众会得到一个能直接使用的观察方法/);
-  assert.match(artifactText, /完整台词\/解说：先看结构，再查性能/);
-  for (const internal of ["账号观察", "受众获得", "账号关系", "演示商品锚点", "可见造型命题", "画面成立条件"]) {
-    assert.doesNotMatch(artifactText, new RegExp(internal), `页面不得显示内部脚手架「${internal}」`);
+  assert.match(document.querySelector(".identity-trigger")?.textContent ?? "", /总部小红书发布账号/);
+  assert.match(document.querySelector(".identity-trigger")?.textContent ?? "", /品牌官方/);
+  const target = document.querySelector(".target-switch select") as HTMLSelectElement;
+  assert.equal(target.value, "xiaohongshu_graphic");
+  assert.equal(target.selectedOptions[0]?.textContent, "小红书图文");
+  assert.equal(document.querySelector(".creator-artifact"), null, "空态不应常驻巨大成品面板");
+  assert.equal(document.querySelectorAll(".mobile-work-tabs button").length, 0);
+  for (const forbidden of ["Tenant", "ContentRole", "RLS", "schema", "GenerationRun"]) {
+    assert.doesNotMatch(document.body.textContent ?? "", new RegExp(forbidden));
   }
+
+  const directionToggle = find("button", "创作方向（可选）");
+  assert.equal(directionToggle.getAttribute("aria-expanded"), "false");
+  await click(directionToggle);
+  assert.equal(document.querySelectorAll(".direction-axis").length, 3, "首屏只展开题材、风格、形式");
+  assert.match(document.body.textContent ?? "", /没有合适的？直接说你想要的方向/);
+  assert.doesNotMatch(document.body.textContent ?? "", /显高显瘦|小个子|微胖梨形|苹果型/);
+  for (const nonStable of ["反精致", "上新直播", "到店核销", "CAT-SOURCE-GAP"]) {
+    assert.doesNotMatch(document.body.textContent ?? "", new RegExp(nonStable));
+  }
+  await click(find("button", "更多：讲法与连续方式"));
+  assert.equal(document.querySelectorAll(".direction-axis").length, 5);
+  assert.equal(
+    document.querySelectorAll(".direction-options button:not(.quiet-choice)").length,
+    21,
+    "默认目录必须完全来自服务端并恰好显示 21 项"
+  );
+
+  const custom = document.querySelector(".custom-direction input") as HTMLInputElement;
+  const composer = document.querySelector(
+    'textarea[aria-label="内容需求"]'
+  ) as HTMLTextAreaElement;
+  await input(custom, "上新直播");
+  await input(composer, "请按这个方向整理一份完整内容。");
+  await click(find(".composer-submit button", "生成内容"));
+  await settle();
+  assert.equal(document.querySelector(".creator-artifact"), null);
+  assert.equal(custom.value, "上新直播");
+  assert.equal(composer.value, "请按这个方向整理一份完整内容。");
+  assert.match(
+    document.querySelector(".conversation-notice")?.textContent ?? "",
+    /暂不能稳定完成/
+  );
+
+  const humour = find(".direction-options button", "幽默玩梗");
+  await click(humour);
+  await input(custom, "保留判断，但像一位熟悉门店的人自然说。");
+  const unreadable = Array.from(
+    document.querySelectorAll(".material-options input")
+  ).find(item => (item.parentElement?.textContent ?? "").includes("尚未说明的图片")) as
+    | HTMLInputElement
+    | undefined;
+  assert.equal(unreadable?.disabled, true, "缺人工说明的图片不可勾选");
+  const material = document.querySelector(".material-options input:not(:disabled)") as HTMLInputElement;
+  await click(material);
+  await click(find(".direction-footer button", "以后优先这样帮我"));
+  await settle();
+  const savedDefault = requests.find(
+    item =>
+      item.method === "PUT" &&
+      item.path === "/api/v1/user/creation-preferences" &&
+      Boolean(
+        (item.body as { direction_defaults?: Record<string, string> } | null)
+          ?.direction_defaults?.style
+      )
+  );
+  assert.ok(savedDefault, "只有显式选择「以后优先这样帮我」才保存个人默认");
+  await click(find(".direction-options button", "本次不使用"));
+  assert.equal(
+    find(".direction-options button", "本次不使用").getAttribute("aria-pressed"),
+    "true"
+  );
+  await click(humour);
+
+  await click(document.querySelector(".identity-trigger") as HTMLElement);
+  await settle();
+  assert.equal(
+    (document.activeElement as HTMLElement | null)?.getAttribute("aria-label"),
+    "关闭"
+  );
+  assert.match(document.querySelector(".account-drawer")?.textContent ?? "", /账号定位 · V2/);
+  const bodyToggle = document.querySelector(".switch-line input") as HTMLInputElement;
+  await click(bodyToggle);
+  await settle();
+  assert.ok(
+    requests.some(item => item.method === "PUT" && item.path === "/api/v1/user/creation-preferences"),
+    "体型方向只能由本人显式保存后开启"
+  );
+  assert.match(document.querySelector(".account-drawer")?.textContent ?? "", /系统不会自行推断/);
+  await click(document.querySelector(".account-drawer .icon-button") as HTMLElement);
+  await settle();
+  assert.equal(document.activeElement, document.querySelector(".identity-trigger"));
+  await click(document.querySelector(".identity-trigger") as HTMLElement);
+  await settle();
+  await act(async () => {
+    document.querySelector(".account-drawer")?.dispatchEvent(
+      new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+    );
+  });
+  await settle();
+  assert.equal(document.querySelector(".account-drawer"), null);
+  assert.equal(document.activeElement, document.querySelector(".identity-trigger"));
+  assert.equal(
+    document.querySelectorAll(".direction-options button:not(.quiet-choice)").length,
+    25,
+    "本人主动启用后，服务端目录才增加 4 项体型方向"
+  );
+
+  await input(composer, "走进门店只想自己看看，这种沉默是不是也应该被尊重？");
+  await click(find(".composer-submit button", "生成内容"));
+  await settle();
+  const created = requests.find(
+    item =>
+      item.method === "POST" &&
+      item.path === "/api/v1/content" &&
+      (item.body as { creative_direction?: { custom_text?: string } } | null)
+        ?.creative_direction?.custom_text ===
+        "保留判断，但像一位熟悉门店的人自然说。"
+  );
+  assert.ok(created);
+  const createBody = created.body as {
+    target: string;
+    material_ids: string[];
+    creative_direction: {
+      selections: Record<string, string>;
+      custom_text: string;
+      body_related_opt_in: boolean;
+    };
+  };
+  assert.equal(createBody.target, "xiaohongshu_graphic");
+  assert.deepEqual(createBody.material_ids, ["11111111-1111-4111-8111-111111111111"]);
+  assert.equal(
+    createBody.creative_direction.custom_text,
+    "保留判断，但像一位熟悉门店的人自然说。"
+  );
+  assert.equal(createBody.creative_direction.body_related_opt_in, true);
+  assert.ok(Object.values(createBody.creative_direction.selections).length === 1);
+  assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /当前版本 · V1/);
+  assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /内容概要/);
+  assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /完整台词/);
+  assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /画面与动作/);
+  assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /AI 辅助生成/);
+
+  const revision = document.querySelector('textarea[aria-label="修改要求"]') as HTMLTextAreaElement;
+  await input(revision, "判断保留，但不要像宣言，改成一人面对手机能自然说出的版本。");
+  await click(find(".composer-submit button", "生成 V2"));
+  await settle();
+  assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /当前版本 · V2/);
+  assert.match(
+    document.querySelector(".translation-notice")?.textContent ?? "",
+    /保留了.*轻松感，收成克制的冷幽默/
+  );
+
   await click(find(".artifact-actions button", "复制"));
-  assert.equal(copiedTexts.length, 1);
-  assert.match(copiedTexts[0], /AI 辅助生成/);
-  assert.match(copiedTexts[0], /发布提醒：发布前请使用平台 AI 内容声明功能/);
-  assert.match(copiedTexts[0], /内容概要：受众会得到一个能直接使用的观察方法/);
   await click(find(".artifact-actions button", "导出"));
+  assert.equal(copiedTexts.length, 1);
   assert.equal(exportedBlobs.length, 1);
-  const exported = await exportedBlobs[0].text();
-  assert.equal(exported, copiedTexts[0], "复制和导出必须使用同一用户可见口径");
-  for (const internal of ["账号观察", "受众获得", "账号关系", "演示商品锚点", "可见造型命题", "画面成立条件"]) {
-    assert.doesNotMatch(exported, new RegExp(internal), `导出不得显示内部脚手架「${internal}」`);
-  }
-
-  // 6. A temporary preference-free session really stops reading the private preference.
-  const beforeSession = requests.length;
-  const bypass = find(".direction-foot label", "临时不读取").querySelector("input") as HTMLInputElement;
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "checked")?.set;
-    setter?.call(bypass, true);
-    bypass.dispatchEvent(new window.Event("click", { bubbles: true }));
-  });
-  await settle();
-  const afterSession = requests.slice(beforeSession);
-  assert.ok(afterSession.length > 0, "进入临时会话应当重新读取当前面板");
+  assert.equal(await exportedBlobs[0].text(), copiedTexts[0]);
+  assert.match(copiedTexts[0], /AI 辅助生成/);
+  assert.match(copiedTexts[0], /发布提醒/);
+  assert.match(copiedTexts[0], /完整台词/);
   assert.ok(
-    afterSession.every(item => item.preferenceSession === "bypass"),
-    "临时会话期间每一次请求都要声明自己"
+    copiedTexts[0].indexOf("保留了你想要的轻松感") <
+      copiedTexts[0].indexOf("内容概要")
   );
-  assert.ok(
-    !afterSession.some(item => item.path === "/api/v1/user/creation-preferences"),
-    "临时会话期间不再读取私人偏好"
-  );
-  assert.ok(
-    !texts(".direction-foot button").some(label => label.includes("以后优先这样帮我")),
-    "临时会话期间不提供写入偏好的按钮"
-  );
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "checked")?.set;
-    setter?.call(bypass, false);
-    bypass.dispatchEvent(new window.Event("click", { bubbles: true }));
-  });
+  assert.ok(copiedTexts[0].indexOf("内容概要") < copiedTexts[0].indexOf("AI 辅助生成"));
+  setCopyFailure(true);
+  await click(find(".artifact-actions button", "复制"));
   await settle();
+  assert.match(
+    document.querySelector(".conversation-notice")?.textContent ?? "",
+    /没有复制成功/
+  );
+  setCopyFailure(false);
 
-  // 7. A plan item only comes back to the natural input area; it creates nothing.
-  await click(find(".sidebar nav button", "内容计划"));
-  await settle();
-  const beforePlan = requests.filter(item => item.method === "POST" && item.path === "/api/v1/content").length;
-  await click(find(".plan-row button", "用这条开始"));
-  await settle();
-  const afterPlan = requests.filter(item => item.method === "POST" && item.path === "/api/v1/content").length;
-  assert.equal(afterPlan, beforePlan, "点「用这条开始」之前不得创建任务");
-  const returned = document.querySelector('textarea[aria-label="内容需求"]') as HTMLTextAreaElement;
-  assert.match(returned.value, /先讲清楚我们从什么位置说话/);
-  assert.match(returned.value, /只用已经确认的品牌立场。/);
-
-  // 8. The identity drawer opens the existing profile card instead of a new settings page.
-  await click(find(".identity-bar dd button", "去看这张画像"));
-  await settle();
-  assert.ok(
-    texts(".page-heading h1").some(title => title.includes("这个账号从什么位置说话")),
-    "身份抽屉应当能进入现有账号画像编辑卡"
+  await click(document.querySelector(".version-history summary") as HTMLElement);
+  assert.match(
+    document.querySelector(".version-history summary")?.textContent ?? "",
+    /历史版本（1）/
   );
+  await click(find(".version-history button", "V1"));
+  assert.match(document.querySelector(".history-reading")?.textContent ?? "", /当前版仍是 V2/);
+  assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /历史版本 · V1/);
+  await click(find(".history-reading button", "回到当前版"));
+  assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /当前版本 · V2/);
+  assert.equal(document.querySelectorAll(".mobile-work-tabs button").length, 2);
 
-  await act(async () => {
-    root.unmount();
-  });
-  process.stdout.write("frontend interaction checks passed\n");
+  assert.ok(
+    !document.querySelector(".creator-app")?.textContent?.includes("概览与待处理"),
+    "创作壳不得混入租户管理业务 DOM"
+  );
+  await click(find(".composer-submit button", "另起一条"));
+  await click(find("button", "创作方向（可选）"));
+  assert.equal(
+    (document.querySelector(".custom-direction input") as HTMLInputElement).value,
+    ""
+  );
+  assert.equal(document.querySelectorAll(".material-options input:checked").length, 0);
+  assert.equal(
+    document.querySelectorAll(".direction-options button[aria-pressed='true']").length,
+    0,
+    "上一次的本次选择不得带入新任务"
+  );
+  await act(async () => root.unmount());
+  process.stdout.write("UI-03 creator interaction checks passed\n");
 }
 
 main().catch(error => {
-  process.stderr.write(`${String(error && (error as Error).stack ? (error as Error).stack : error)}\n`);
+  process.stderr.write(
+    `${String(error && (error as Error).stack ? (error as Error).stack : error)}\n`
+  );
   process.exit(1);
 });

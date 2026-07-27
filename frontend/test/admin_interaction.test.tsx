@@ -1,25 +1,19 @@
 import assert from "node:assert/strict";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import Root from "../src/main";
+import Root from "../src/app/Root";
 
 const harness = (globalThis as unknown as {
   __DIYU_ADMIN_INTERACTION__: {
-    requests: Array<{ method: string; path: string; body: unknown }>;
     window: Window & typeof globalThis;
+    setReducedMotion: (value: boolean) => void;
   };
 }).__DIYU_ADMIN_INTERACTION__;
-const requests = harness.requests;
-const window = harness.window;
+const { window, setReducedMotion } = harness;
 const document = window.document;
-
-function find(selector: string, contains: string): HTMLElement {
-  const node = Array.from(document.querySelectorAll(selector)).find(item =>
-    (item.textContent ?? "").includes(contains)
-  );
-  assert.ok(node, `找不到包含「${contains}」的 ${selector}`);
-  return node as HTMLElement;
-}
+const bootstrapWindow = window as unknown as {
+  __DIYU_BOOTSTRAP__: Record<string, unknown> | null;
+};
 
 async function click(node: Element): Promise<void> {
   await act(async () => {
@@ -31,105 +25,126 @@ async function settle(): Promise<void> {
   await act(async () => {
     await new Promise(resolve => setTimeout(resolve, 0));
   });
-  await act(async () => {
-    await new Promise(resolve => setTimeout(resolve, 0));
-  });
 }
 
-async function main(): Promise<void> {
+async function renderAt(
+  path: string,
+  bootstrap: Record<string, unknown> | null
+): Promise<ReturnType<typeof createRoot>> {
+  window.history.replaceState({}, "", path);
+  bootstrapWindow.__DIYU_BOOTSTRAP__ = bootstrap;
   const container = document.getElementById("root");
   assert.ok(container);
   const root = createRoot(container);
   await act(async () => root.render(<Root />));
   await settle();
-  assert.ok(
-    requests.some(item => item.path === "/api/v1/session/context"),
-    "没有服务端 bootstrap 的测试壳仍须保留既有会话上下文回退"
-  );
+  return root;
+}
 
-  await click(find(".sidebar nav button", "本轮商品资料"));
-  await settle();
-  const sku = document.querySelector('input[placeholder="商品稳定编号"]') as HTMLInputElement;
-  assert.equal(sku.value, "DIYU-CSPU-001", "首份候选商品草案应自动预填");
-  assert.match(document.body.textContent ?? "", /草案在你确认前不会参与生成/);
-  await click(find("button", "确认并保存为当前商品事实"));
-  await settle();
-  const productRequest = requests.find(item =>
-    item.method === "PUT" && item.path === "/api/v1/tenant-management/brand-products"
-  );
-  assert.ok(productRequest);
-  assert.equal(
-    (productRequest.body as { confirm_as_current_brand_fact: boolean }).confirm_as_current_brand_fact,
-    true
-  );
-
-  await click(find(".sidebar nav button", "账号与操作人"));
-  await settle();
-  await click(find("summary", "表达画像"));
-  await settle();
-  const control = document.querySelector('select[aria-label="声明控制组织"]') as HTMLSelectElement;
-  assert.equal(control.value, "org-hq", "推断的控制组织应只作为待确认预选值");
-  assert.match(document.body.textContent ?? "", /依据现有候选资料预填/);
-  assert.match(
-    (document.querySelector('.profile-field textarea') as HTMLTextAreaElement).value,
-    /总部岗位型表达身份/
-  );
-
-  const carrierName = document.querySelector(
-    'input[placeholder="这个平台上的内部内容载体名称"]'
-  ) as HTMLInputElement;
-  assert.equal(carrierName.value, "笛语服饰品牌官方账号·小红书");
-  await click(find("button", "确认并建立内部内容载体"));
-  await settle();
-  const carrierRequest = requests.find(item =>
-    item.method === "POST" && item.path === "/api/v1/tenant-management/platform-carriers"
-  );
-  assert.ok(carrierRequest);
-  assert.deepEqual(carrierRequest.body, {
-    source_account_id: "account-hq",
-    name: "笛语服饰品牌官方账号·小红书",
-    channel: "小红书",
-    operator_id: "operator-1",
-    confirm_internal_carrier: true
-  });
-  await click(find("button", "生成一次性重置链接"));
-  await settle();
-  assert.ok(requests.some(item =>
-    item.method === "POST"
-    && item.path === "/api/v1/tenant-management/users/operator-1/reset"
-  ));
-  assert.match(document.body.textContent ?? "", /一次性激活或重置链接/);
-
-  await click(find(".sidebar nav button", "演示内容验收"));
-  await settle();
-  assert.match(document.body.textContent ?? "", /总部品牌内容运营演示账号/);
-  assert.match(document.body.textContent ?? "", /总部｜让选择保留余地/);
-  assert.match(document.body.textContent ?? "", /V1→V2，旧版保留/);
-  assert.match(document.body.textContent ?? "", /同一对衣服，三种配色主次设想/);
-  assert.match(document.body.textContent ?? "", /怎样让被转发的人看懂三画面/);
-  const demoText = document.body.textContent ?? "";
-  assert.equal((demoText.match(/源成品：H3 V6/g) ?? []).length, 1);
-  assert.equal((demoText.match(/父版本：H3 V6/g) ?? []).length, 2);
-  for (const internal of ["账号观察", "受众获得", "账号关系", "演示商品锚点", "可见造型命题", "画面成立条件"]) {
-    assert.doesNotMatch(
-      document.body.textContent ?? "",
-      new RegExp(`${internal}：`),
-      `演示验收页不得显示内部脚手架「${internal}」`
-    );
-  }
-  await click(find("button", "生成一次性安全进入链接"));
-  await settle();
-  assert.ok(requests.some(item =>
-    item.method === "POST"
-    && item.path === "/api/v1/tenant-management/users/demo-hq/reset"
-  ));
-  assert.match(document.body.textContent ?? "", /打开安全激活流程/);
-
+async function unmount(root: ReturnType<typeof createRoot>): Promise<void> {
   await act(async () => root.unmount());
-  process.stdout.write("frontend admin prefill and demo acceptance checks passed\n");
+}
+
+async function main(): Promise<void> {
+  setReducedMotion(false);
+  let root = await renderAt("/", { application: "public" });
+  assert.equal(
+    document.querySelector(".motion-final img")?.getAttribute("src"),
+    "/assets/diyu-logo-primary.svg",
+    "A 动效必须交接正式 VI SVG"
+  );
+  assert.ok(document.querySelector(".seed-path.uncertain"));
+  assert.ok(document.querySelector(".direction-turn"));
+  assert.equal(document.querySelectorAll(".direction-turn").length, 1, "朱砂只承担一次方向转折");
+  assert.equal(document.querySelectorAll(".motion-skip").length, 1);
+  await click(document.querySelector(".motion-skip") as HTMLElement);
+  assert.ok(document.querySelector(".public-home")?.classList.contains("motion-finished"));
+  assert.equal(document.querySelector('a.button.primary')?.getAttribute("href"), "/login");
+  assert.ok(document.querySelector('a[href="/tenant-admin/login"]'));
+  assert.ok(document.querySelector('a[href="/ops/login"]'));
+  await click(
+    Array.from(document.querySelectorAll("button")).find(item =>
+      item.textContent?.includes("重播动效")
+    ) as HTMLElement
+  );
+  assert.equal(
+    document.querySelector(".public-home")?.classList.contains("motion-finished"),
+    false,
+    "重播必须先恢复动效态"
+  );
+  await unmount(root);
+
+  setReducedMotion(true);
+  root = await renderAt("/", { application: "public" });
+  assert.ok(document.querySelector(".public-home")?.classList.contains("motion-finished"));
+  assert.equal(document.querySelector(".motion-skip"), null, "减少动效时直接进入正式 Logo 与首页");
+  await unmount(root);
+
+  root = await renderAt("/login", {
+    application: "login",
+    entry: "tenant-user"
+  });
+  assert.equal(document.querySelector("form")?.getAttribute("action"), "/login");
+  assert.match(document.body.textContent ?? "", /内容创作/);
+  assert.doesNotMatch(document.body.textContent ?? "", /品牌管理|笛语运维/);
+  await unmount(root);
+
+  root = await renderAt("/tenant-admin/login", {
+    application: "login",
+    entry: "tenant-admin"
+  });
+  assert.equal(
+    document.querySelector("form")?.getAttribute("action"),
+    "/tenant-admin/login"
+  );
+  assert.match(document.body.textContent ?? "", /品牌管理/);
+  assert.equal(document.querySelector('input[name="totp_code"]'), null);
+  await unmount(root);
+
+  root = await renderAt("/ops/login", {
+    application: "login",
+    entry: "ops"
+  });
+  assert.equal(document.querySelector("form")?.getAttribute("action"), "/ops/login");
+  assert.ok(document.querySelector('input[name="totp_code"]'));
+  assert.doesNotMatch(document.body.textContent ?? "", /内容创作|品牌管理/);
+  await unmount(root);
+
+  root = await renderAt("/tenant-admin", {
+    application: "tenant_management",
+    formal_runtime: true,
+    identity: {
+      operator: "品牌管理员",
+      organization: "笛语服饰管理组织",
+      brand: "笛语服饰"
+    }
+  });
+  assert.match(document.body.textContent ?? "", /概览与待处理/);
+  assert.match(document.body.textContent ?? "", /成员与权限/);
+  assert.doesNotMatch(document.body.textContent ?? "", /下一阶段|施工|验收/);
+  assert.equal(document.querySelector('a[href*="section=demo"]'), null);
+  assert.equal(document.querySelector(".creator-app"), null);
+  assert.equal(document.querySelector('textarea[aria-label="内容需求"]'), null);
+  await unmount(root);
+
+  root = await renderAt("/ops", {
+    application: "ops",
+    formal_runtime: true,
+    runtime_summary: { enabled_tenants: 3, content_runs: 12 },
+    pending_requests: 2
+  });
+  assert.match(document.body.textContent ?? "", /服务运行正常/);
+  assert.match(document.body.textContent ?? "", /启用租户/);
+  assert.equal(document.querySelector(".creator-app"), null);
+  assert.doesNotMatch(document.body.textContent ?? "", /成员与权限|生成内容/);
+  await unmount(root);
+
+  process.stdout.write("UI-03 public, auth and isolated shell checks passed\n");
 }
 
 main().catch(error => {
-  process.stderr.write(`${String(error && (error as Error).stack ? (error as Error).stack : error)}\n`);
+  process.stderr.write(
+    `${String(error && (error as Error).stack ? (error as Error).stack : error)}\n`
+  );
   process.exit(1);
 });

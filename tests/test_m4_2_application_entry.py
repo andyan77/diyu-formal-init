@@ -32,8 +32,9 @@ def test_two_application_entries_bind_identity_and_reject_cross_application_call
     with TestClient(app) as client:
         home = client.get("/")
         assert home.status_code == 200
-        assert "租户用户入口" in home.text
-        assert "租户管理入口" in home.text
+        assert '"application": "public"' in home.text
+        assert "/app/assets/index.js" in home.text
+        assert "开始创作" in home.text
         assert "总部内容运营甲" not in home.text
         assert client.post("/api/v1/content", json={"weak_seed": _SEED}).status_code == 401
 
@@ -42,9 +43,7 @@ def test_two_application_entries_bind_identity_and_reject_cross_application_call
         for value in ("总部内容运营甲", "折线之间总部", "品牌母账号·抖音", "总部零售/服务专家"):
             assert value in content.text
         content_v1 = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
-        assert (
-            client.post("/api/v1/display", json={"inventory_text": _INVENTORY}).status_code == 403
-        )
+        assert client.post("/api/v1/display", json={"inventory_text": _INVENTORY}).status_code == 403
 
         client.get("/ui/select/display")
         display = client.get("/display")
@@ -59,10 +58,7 @@ def test_two_application_entries_bind_identity_and_reject_cross_application_call
         client.get("/ui/select/content")
         assert client.get(f"/api/v1/tasks/{content_v1['task_id']}/versions/1").status_code == 200
         client.get("/ui/select/display")
-        assert (
-            client.get(f"/api/v1/display-tasks/{display_v1['task_id']}/versions/1").status_code
-            == 200
-        )
+        assert client.get(f"/api/v1/display-tasks/{display_v1['task_id']}/versions/1").status_code == 200
 
 
 def test_clear_wrong_application_requests_only_offer_a_switch(app_database_url: str) -> None:

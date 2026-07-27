@@ -21,7 +21,7 @@
 |---|---|---|
 | 243 条系统领域资产 | `首批领域数据库知识数据/第六批-G零售经营陈列知识与墙面挂杆闭环包-v0.1/15-双应用全库机器导入候选-v0.2.jsonl` | `f0aa764a4e78198eb141f39a7ac7af33c3fc5b9d364fa07a58f066f0741eec11` |
 | 41 条运行激活及 4 条夹具绑定 | `首批领域数据库知识数据/第五批：评测与导入包/12-系统资产运行治理-v1.json` | `c8cdf923d1933a5aaef51d1eda325b672d77899960c8041913fcf1a12ba6e507` |
-| 119 个内容表达目录位置 | `config/content_expression/capability-inventory-v1.jsonl` | `64e96da77a109e532158a99dd7913d2b74fd1b75b6e75ebe9edfd12bdfd9fa76` |
+| 119 个内容表达目录位置 | `config/content_expression/capability-inventory-v1.jsonl` | `876290faeb93a123716d51c7534e2ad02f5ca871e9a0e0c9798b613292f37aaf` |
 
 投影建立时的仓库基线为
 `9dca6e36ca5fd6932de00f16950bd6b799677de7`。CSV 每行同时保留真源路径和真源 SHA-256；
@@ -40,6 +40,10 @@ python3 docs/能力资产台账/export_readable_projections.py
 第一条只覆盖本目录的两份 CSV，不修改任何 JSON/JSONL 真源；第二条不写文件，只验证
 投影内容、来源摘要、243/119 行数、ID 唯一性、41 条运行激活和 6 条直接资产关联。真源
 摘要变化时脚本会停止，要求先人工理解变更，不会静默刷新总账。
+
+UI-03 只补齐了 5 个既有实验项的唯一后续去向，使 45 个非稳定稳定 ID 对账为
+`F10 41 / F03 1 / F06 1 / F07 1 / F08 1`；能力状态、精简目录可见性和运行激活集合
+均未改变。
 
 ## 阅读边界
 

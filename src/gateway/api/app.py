@@ -27,7 +27,7 @@ from fastapi.security import APIKeyCookie
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
-from src.brain.content_expression import GAP_TYPES
+from src.brain.content_expression import assert_custom_direction_available
 from src.brain.platform_directions import target_from_text
 from src.composition.bootstrap import (
     build_content_control_service,
@@ -71,6 +71,7 @@ from src.gateway.api.contracts import (
     UnmetCapabilityResponseRequest,
 )
 from src.gateway.api.html import (
+    render_login_failure,
     render_spa_shell,
     render_tenant_admin_access_denied,
     render_tenant_user_access_denied,
@@ -200,9 +201,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if production_authority is None or request is None:
                 raise RuntimeError("正式内容目标必须从当前正式会话解析")
             resolved_identity = identity or production_authority._tenant_identity(request)
-            allowed = set(
-                production_authority.repository.allowed_content_targets(resolved_identity)
-            )
+            allowed = set(production_authority.repository.allowed_content_targets(resolved_identity))
             return [{"value": value, "label": label} for value, label in _HEADQUARTERS_TARGETS if value in allowed]
         options = (
             _STORE_TARGETS
@@ -273,14 +272,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         def tenant_login_response(
             request: Request, username: str, password: str, audience: str, redirect_to: str
-        ) -> RedirectResponse:
+        ) -> Response:
+            entry_name = "品牌管理登录" if audience == "tenant-admin" else "内容创作登录"
+            login_href = "/tenant-admin/login" if audience == "tenant-admin" else "/login"
             if not production_authority.login_limiter.allow(
                 f"tenant:{request.client.host if request.client else 'unknown'}:{username.lower()}"
             ):
-                raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="请稍后再试")
+                return HTMLResponse(
+                    render_login_failure(entry_name, login_href, "尝试次数较多，请稍后再试。"),
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
             identity = production_authority.repository.authenticate_tenant_user(username, password, audience)
             if identity is None:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名、密码或入口资格不正确")
+                return HTMLResponse(
+                    render_login_failure(
+                        entry_name,
+                        login_href,
+                        "用户名、密码或当前入口不匹配，请确认后重新登录。",
+                    ),
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                )
             response = RedirectResponse(redirect_to, status_code=status.HTTP_303_SEE_OTHER)
             set_production_tenant_cookie(response, production_authority.repository.create_tenant_session(identity))
             return response
@@ -294,14 +305,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         @app.get("/login", include_in_schema=False)
         def tenant_login_page() -> HTMLResponse:
             return HTMLResponse(
-                "<main><h1>笛语</h1><h2>租户用户登录</h2>"
-                "<form method='post' action='/login'><label>用户名 <input name='username' autocomplete='username' required></label>"
-                "<label>密码 <input type='password' name='password' autocomplete='current-password' required></label>"
-                "<button type='submit'>登录</button></form></main>"
+                render_spa_shell(
+                    {"application": "login", "entry": "tenant-user"},
+                    fallback=(
+                        "<main><h1>笛语内容创作</h1><form method='post' action='/login'>"
+                        "<label>用户名 <input name='username' autocomplete='username' required></label>"
+                        "<label>密码 <input type='password' name='password' "
+                        "autocomplete='current-password' required></label>"
+                        "<button type='submit'>登录</button></form></main>"
+                    ),
+                )
             )
 
         @app.post("/login", include_in_schema=False)
-        async def tenant_login(request: Request) -> RedirectResponse:
+        async def tenant_login(request: Request) -> Response:
             fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
             return tenant_login_response(
                 request, fields.get("username", [""])[0], fields.get("password", [""])[0], "tenant-user", "/user"
@@ -309,36 +326,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         @app.get("/tenant-admin/login", include_in_schema=False)
         def tenant_admin_login_page(request: Request) -> HTMLResponse:
-            next_value = (
-                "demo" if request.query_params.get("next") == "demo" else ""
-            )
-            hidden_next = (
-                "<input type='hidden' name='next' value='demo'>"
-                if next_value
-                else ""
-            )
+            next_value = "demo" if request.query_params.get("next") == "demo" else ""
+            hidden_next = "<input type='hidden' name='next' value='demo'>" if next_value else ""
             return HTMLResponse(
-                "<main><h1>笛语</h1><h2>租户管理员登录</h2>"
-                "<form method='post' action='/tenant-admin/login'>"
-                + hidden_next
-                + "<label>用户名 <input name='username' autocomplete='username' required></label>"
-                "<label>密码 <input type='password' name='password' autocomplete='current-password' required></label>"
-                "<button type='submit'>登录</button></form></main>"
+                render_spa_shell(
+                    {"application": "login", "entry": "tenant-admin"},
+                    fallback=(
+                        "<main><h1>笛语品牌管理</h1>"
+                        "<form method='post' action='/tenant-admin/login'>"
+                        + hidden_next
+                        + "<label>用户名 <input name='username' autocomplete='username' "
+                        "required></label><label>密码 <input type='password' name='password' "
+                        "autocomplete='current-password' required></label>"
+                        "<button type='submit'>登录</button></form></main>"
+                    ),
+                )
             )
 
         @app.post("/tenant-admin/login", include_in_schema=False)
-        async def tenant_admin_login(request: Request) -> RedirectResponse:
+        async def tenant_admin_login(request: Request) -> Response:
             fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
             return tenant_login_response(
                 request,
                 fields.get("username", [""])[0],
                 fields.get("password", [""])[0],
                 "tenant-admin",
-                (
-                    "/tenant-admin?section=demo"
-                    if fields.get("next", [""])[0] == "demo"
-                    else "/tenant-admin"
-                ),
+                ("/tenant-admin?section=demo" if fields.get("next", [""])[0] == "demo" else "/tenant-admin"),
             )
 
         @app.post("/tenant-admin/logout", include_in_schema=False)
@@ -346,11 +359,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             token = request.cookies.get("diyu_session", "")
             if token:
                 production_authority.repository.revoke_tenant_session(token)
-            destination = (
-                "/login"
-                if request.query_params.get("next") == "user"
-                else "/tenant-admin/login"
-            )
+            destination = "/login" if request.query_params.get("next") == "user" else "/tenant-admin/login"
             response = RedirectResponse(
                 destination,
                 status_code=status.HTTP_303_SEE_OTHER,
@@ -361,26 +370,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         @app.get("/ops/login", include_in_schema=False)
         def ops_login_page() -> HTMLResponse:
             return HTMLResponse(
-                "<main><h1>笛语</h1><h2>平台运维登录</h2>"
-                "<form method='post' action='/ops/login'><label>用户名 <input name='username' autocomplete='username' required></label>"
-                "<label>密码 <input type='password' name='password' autocomplete='current-password' required></label>"
-                "<label>验证码 <input name='totp_code' inputmode='numeric' autocomplete='one-time-code' required></label>"
-                "<button type='submit'>登录</button></form></main>"
+                render_spa_shell(
+                    {"application": "login", "entry": "ops"},
+                    fallback=(
+                        "<main><h1>笛语运维</h1><form method='post' action='/ops/login'>"
+                        "<label>用户名 <input name='username' autocomplete='username' "
+                        "required></label><label>密码 <input type='password' name='password' "
+                        "autocomplete='current-password' required></label>"
+                        "<label>验证码 <input name='totp_code' inputmode='numeric' "
+                        "autocomplete='one-time-code' required></label>"
+                        "<button type='submit'>登录</button></form></main>"
+                    ),
+                )
             )
 
         @app.post("/ops/login", include_in_schema=False)
-        async def ops_login(request: Request) -> RedirectResponse:
+        async def ops_login(request: Request) -> Response:
             fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
             username = fields.get("username", [""])[0]
             if not production_authority.login_limiter.allow(
                 f"ops:{request.client.host if request.client else 'unknown'}:{username.lower()}"
             ):
-                raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="请稍后再试")
+                return HTMLResponse(
+                    render_login_failure("笛语运维登录", "/ops/login", "尝试次数较多，请稍后再试。"),
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
             identity = production_authority.repository.authenticate_operator(
                 username, fields.get("password", [""])[0], fields.get("totp_code", [""])[0]
             )
             if identity is None:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="登录信息或验证码不正确")
+                return HTMLResponse(
+                    render_login_failure(
+                        "笛语运维登录",
+                        "/ops/login",
+                        "登录信息、验证码或当前入口不匹配，请确认后重新登录。",
+                    ),
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                )
             response = RedirectResponse("/ops", status_code=status.HTTP_303_SEE_OTHER)
             set_production_ops_cookie(response, production_authority.repository.create_operator_session(identity))
             return response
@@ -388,10 +414,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         @app.get("/activate/{activation_token}", include_in_schema=False)
         def activation_page(activation_token: str) -> HTMLResponse:
             return HTMLResponse(
-                "<main><h1>设置笛语密码</h1><form method='post' action='/activate/"
-                + escape(activation_token)
-                + "'><label>新密码 <input type='password' name='password' autocomplete='new-password' required></label>"
-                "<button type='submit'>完成设置</button></form></main>"
+                render_spa_shell(
+                    {"application": "activation"},
+                    fallback=(
+                        "<main><h1>设置笛语密码</h1><form method='post' action='/activate/"
+                        + escape(activation_token)
+                        + "'><label>新密码 <input type='password' name='password' "
+                        "autocomplete='new-password' required></label>"
+                        "<button type='submit'>完成设置</button></form></main>"
+                    ),
+                )
             )
 
         @app.post("/activate/{activation_token}", include_in_schema=False)
@@ -404,12 +436,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             password = fields.get("password", [""])[0]
             if len(password) < 12:
                 raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="密码至少需要 12 个字符")
-            audience = production_authority.repository.complete_activation(
-                activation_token, password
-            )
-            destination = (
-                "/tenant-admin/login" if audience == "tenant-admin" else "/login"
-            )
+            audience = production_authority.repository.complete_activation(activation_token, password)
+            destination = "/tenant-admin/login" if audience == "tenant-admin" else "/login"
             return RedirectResponse(destination, status_code=status.HTTP_303_SEE_OTHER)
 
         @app.post("/api/v1/auth/password", responses=business_failures)
@@ -552,49 +580,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
                 raise
             summary = production_authority.repository.runtime_summary(operator)
-            pending = [
-                item
-                for item in control_service.ops_unmet_requests()
-                if str(item["status"]) != "answered"
-            ]
-            gap_options = "".join(
-                f"<option value='{escape(value)}'>{escape(value)}</option>" for value in GAP_TYPES
-            )
-            candidates = "".join(
-                "<li><p>" + escape(str(item["request_text"])) + "</p>"
-                "<small>" + escape(str(item["stable_request_id"])) + " · "
-                + escape(str(item["gap_type"])) + " · " + escape(str(item["status"]))
-                + "</small>"
-                "<form method='post' action='/ops/unmet-capability-requests'>"
-                "<input type='hidden' name='stable_request_id' value='"
-                + escape(str(item["stable_request_id"]))
-                + "'><label>缺口分类 <select name='gap_type'>"
-                + gap_options
-                + "</select></label><label>状态 <select name='status'>"
-                "<option value='classified'>已分类</option>"
-                "<option value='answered'>已回告</option></select></label>"
-                "<label>回告 <input name='response_text' maxlength='1000'></label>"
-                "<button type='submit'>保存分类与回告</button></form></li>"
-                for item in pending
-            )
+            pending = [item for item in control_service.ops_unmet_requests() if str(item["status"]) != "answered"]
             return HTMLResponse(
-                "<main><h1>笛语平台运维</h1><p>只提供租户开户、停用与运行聚合；不提供租户正文或素材读取。</p>"
-                "<dl><dt>已登记租户</dt><dd>"
-                + str(summary["registered_tenants"])
-                + "</dd><dt>启用租户</dt><dd>"
-                + str(summary["enabled_tenants"])
-                + "</dd><dt>内容生成</dt><dd>"
-                + str(summary["content_runs"])
-                + "</dd><dt>平均模型耗时（毫秒）</dt><dd>"
-                + (str(summary["average_latency_ms"]) if summary["average_latency_ms"] is not None else "暂无")
-                + "</dd></dl>"
-                "<form method='post' action='/ops/tenants'><label>租户名称 <input name='tenant_name' required></label>"
-                "<label>首位管理员 <input name='administrator_name' required></label>"
-                "<label>管理员用户名 <input name='administrator_username' required></label>"
-                "<button type='submit'>创建租户壳</button></form>"
-                "<h2>未满足需求候选</h2><p>只做人工分类与一句回告；不改目录、知识、账号画像或任何人的偏好。</p>"
-                + ("<ul>" + candidates + "</ul>" if candidates else "<p>当前没有待处理的候选。</p>")
-                + "</main>"
+                render_spa_shell(
+                    {
+                        "application": "ops",
+                        "identity": {"operator": str(operator.operator_id)},
+                        "runtime_summary": summary,
+                        "pending_requests": len(pending),
+                        "formal_runtime": True,
+                    },
+                    fallback="<main><h1>笛语运维</h1><p>服务运行状态已读取。</p></main>",
+                )
             )
 
         @app.post("/ops/unmet-capability-requests", include_in_schema=False)
@@ -684,11 +681,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         target: ContentTarget | None = None,
         current_scope: TrustedScope = Depends(scope_from_request),
     ) -> list[dict[str, object]]:
-        scope = (
-            current_scope
-            if target is None
-            else authority.require_content_target(request, target)
-        )
+        scope = current_scope if target is None else authority.require_content_target(request, target)
         if not workbench_service.is_content_operator(scope):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -703,11 +696,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         target: ContentTarget | None = None,
         current_scope: TrustedScope = Depends(scope_from_request),
     ) -> list[dict[str, object]]:
-        scope = (
-            current_scope
-            if target is None
-            else authority.require_content_target(request, target)
-        )
+        scope = current_scope if target is None else authority.require_content_target(request, target)
         if not workbench_service.is_content_operator(scope):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -1099,6 +1088,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def logo() -> FileResponse:
         return FileResponse("assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg")
 
+    @app.get("/assets/diyu-logo-horizontal-ondark.svg", include_in_schema=False)
+    def logo_on_dark() -> FileResponse:
+        return FileResponse("assets/brand/diyu-vi/svg/diyu-logo-horizontal-ondark.svg")
+
+    @app.get("/assets/diyu-logo-primary.svg", include_in_schema=False)
+    def primary_logo() -> FileResponse:
+        return FileResponse("assets/brand/diyu-vi/svg/diyu-logo-primary.svg")
+
+    @app.get("/assets/diyu-symbol.svg", include_in_schema=False)
+    def symbol() -> FileResponse:
+        return FileResponse("assets/brand/diyu-vi/svg/diyu-symbol.svg")
+
+    @app.get("/assets/diyu-symbol-ondark.svg", include_in_schema=False)
+    def symbol_on_dark() -> FileResponse:
+        return FileResponse("assets/brand/diyu-vi/svg/diyu-symbol-ondark.svg")
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> FileResponse:
+        return FileResponse("assets/brand/diyu-vi/favicon/favicon.ico")
+
     @app.get(
         "/display",
         response_class=HTMLResponse,
@@ -1144,9 +1153,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         else:
             scope = authority.require_display(request)
         del task, version, notice
-        context = workbench_service.display_context(
-            scope, current_settings.generator_mode
-        )
+        context = workbench_service.display_context(scope, current_settings.generator_mode)
         if current_settings.is_production:
             context["formal_runtime"] = True
         return HTMLResponse(
@@ -1267,9 +1274,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: AccountExpressionVersionRequest,
         scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> dict[str, object]:
-        return control_service.save_management_account_expression(
-            scope, account_id, payload.model_dump()
-        )
+        return control_service.save_management_account_expression(scope, account_id, payload.model_dump())
 
     @app.get("/api/v1/tenant-management/control-organizations", responses=business_failures)
     def control_organizations(
@@ -1291,9 +1296,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         A value a migration inferred from a creation event is not evidence and grants nothing;
         this is the explicit decision that makes profile maintenance possible.
         """
-        return control_service.declare_control_organization(
-            scope, account_id, payload.organization_id
-        )
+        return control_service.declare_control_organization(scope, account_id, payload.organization_id)
 
     @app.get("/api/v1/user/creation-preferences", responses=business_failures)
     def read_creation_preferences(
@@ -1334,9 +1337,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scope: TrustedScope = Depends(scope_from_request),
     ) -> dict[str, object]:
         """One sentence about an original nobody read; without it the original stays unusable."""
-        return control_service.set_material_reference_note(
-            scope, asset_id, payload.reference_note
-        )
+        return control_service.set_material_reference_note(scope, asset_id, payload.reference_note)
 
     @app.post("/api/v1/content/opportunities", responses=business_failures)
     def content_opportunities(
@@ -1354,9 +1355,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def save_content_plan(
         payload: ContentPlanRequest, scope: TrustedScope = Depends(scope_from_request)
     ) -> dict[str, object]:
-        return control_service.save_plan(
-            scope, {"items": [item.model_dump() for item in payload.items]}
-        )
+        return control_service.save_plan(scope, {"items": [item.model_dump() for item in payload.items]})
 
     @app.post(
         "/api/v1/content/unmet-capability-requests",
@@ -1413,6 +1412,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "kind": "handoff",
                 "message": "这是给门店内部执行的陈列任务，请切换到陈列搭配。",
             }
+        if payload.creative_direction is not None:
+            assert_custom_direction_available(payload.creative_direction.custom_text)
         target = _target(payload.target, payload.weak_seed)
         with model_slot(request):
             return service.create_from_weak_seed(
@@ -1493,14 +1494,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version: int | None = None,
         notice: str | None = None,
     ) -> object:
-        if current_settings.is_production:
-            return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
         if task is not None and version is not None:
             return RedirectResponse(
                 "/content?" + urlencode({"task": str(task), "version": str(version)}),
                 status_code=status.HTTP_303_SEE_OTHER,
             )
-        return HTMLResponse(render_spa_shell())
+        return HTMLResponse(
+            render_spa_shell(
+                {"application": "public"},
+                fallback=(
+                    "<main><h1>笛语</h1><p>把一句想法，变成真正属于品牌的表达。</p><a href='/login'>开始创作</a></main>"
+                ),
+            )
+        )
 
     @app.get(
         "/user",

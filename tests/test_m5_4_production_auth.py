@@ -52,18 +52,27 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
     admin_activation = repository.bootstrap_existing_tenant_admin(TENANT_ID, TENANT_ADMIN_USER_ID, "formal-admin")
     app = create_app(_settings(app_database_url))
     with TestClient(app, base_url="https://diyuai.cc") as client:
-        assert client.get("/", follow_redirects=False).headers["location"] == "/login"
+        public_home = client.get("/", follow_redirects=False)
+        assert public_home.status_code == 200
+        assert public_home.headers["content-type"].startswith("text/html")
+        assert '"application": "public"' in public_home.text
+        assert "开始创作" in public_home.text
         tenant_admin_entry = client.get("/tenant-admin", follow_redirects=False)
         assert tenant_admin_entry.status_code == 303
         assert tenant_admin_entry.headers["location"] == "/tenant-admin/login"
-        demo_entry = client.get(
-            "/tenant-admin?section=demo", follow_redirects=False
-        )
+        demo_entry = client.get("/tenant-admin?section=demo", follow_redirects=False)
         assert demo_entry.status_code == 303
         assert demo_entry.headers["location"] == "/tenant-admin/login?next=demo"
-        assert "name='next' value='demo'" in client.get(
-            "/tenant-admin/login?next=demo"
-        ).text
+        assert "name='next' value='demo'" in client.get("/tenant-admin/login?next=demo").text
+        failed_login = client.post(
+            "/tenant-admin/login",
+            content="username=not-an-admin&password=not-the-password",
+        )
+        assert failed_login.status_code == 401
+        assert failed_login.headers["content-type"].startswith("text/html")
+        assert "这次没有登录成功" in failed_login.text
+        assert "/tenant-admin/login" in failed_login.text
+        assert '{"detail":' not in failed_login.text
         assert client.get("/ui/select/content").status_code == 404
         activated = client.post(
             f"/activate/{admin_activation}",
@@ -83,9 +92,7 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
         client.post("/tenant-admin/logout")
         demo_signed_in = client.post(
             "/tenant-admin/login",
-            content=(
-                "username=formal-admin&password=a-long-enough-password&next=demo"
-            ),
+            content=("username=formal-admin&password=a-long-enough-password&next=demo"),
             follow_redirects=False,
         )
         assert demo_signed_in.status_code == 303
@@ -187,9 +194,7 @@ def test_new_reset_link_invalidates_previous_link_and_activation_revokes_session
     )
     user_id = UUID(created["user_id"])
     repository.complete_activation(created["activation_token"], "initial-password-is-long")
-    identity = repository.authenticate_tenant_user(
-        username, "initial-password-is-long", "tenant-user"
-    )
+    identity = repository.authenticate_tenant_user(username, "initial-password-is-long", "tenant-user")
     assert identity is not None
     old_session = repository.create_tenant_session(identity)
 
@@ -197,24 +202,18 @@ def test_new_reset_link_invalidates_previous_link_and_activation_revokes_session
     second_reset = repository.create_reset_token(manager, user_id)
     with pytest.raises(DomainError, match="无效或已过期"):
         repository.complete_activation(first_reset, "first-link-must-not-work")
-    assert (
-        repository.complete_activation(second_reset, "second-link-works-once")
-        == "tenant-user"
-    )
+    assert repository.complete_activation(second_reset, "second-link-works-once") == "tenant-user"
     with pytest.raises(DomainError, match="无效或已过期"):
         repository.complete_activation(second_reset, "second-link-must-not-work-twice")
     assert repository.load_tenant_session(old_session) is None
-    new_identity = repository.authenticate_tenant_user(
-        username, "second-link-works-once", "tenant-user"
-    )
+    new_identity = repository.authenticate_tenant_user(username, "second-link-works-once", "tenant-user")
     assert new_identity is not None
     new_session = repository.create_tenant_session(new_identity)
     assert repository.load_tenant_session(new_session) == new_identity
 
     with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
         cursor.execute(
-            "SELECT count(*) FROM user_activation_tokens "
-            "WHERE tenant_id = %s AND user_id = %s AND used_at IS NULL",
+            "SELECT count(*) FROM user_activation_tokens WHERE tenant_id = %s AND user_id = %s AND used_at IS NULL",
             (TENANT_ID, user_id),
         )
         assert cursor.fetchone() == (0,)
@@ -240,18 +239,12 @@ def test_activation_paths_are_redacted_and_edge_access_logs_are_disabled(
 ) -> None:
     _clear_auth_state(migrator_database_url)
     repository = ProductionAuthRepository(app_database_url)
-    activation = repository.bootstrap_existing_tenant_admin(
-        TENANT_ID, TENANT_ADMIN_USER_ID, "redaction-admin"
-    )
+    activation = repository.bootstrap_existing_tenant_admin(TENANT_ID, TENANT_ADMIN_USER_ID, "redaction-admin")
     caplog.set_level(logging.INFO, logger="diyu.runtime")
     app = create_app(_settings(app_database_url))
     with TestClient(app, base_url="https://diyuai.cc") as client:
         assert client.get(f"/activate/{activation}").status_code == 200
-    request_events = [
-        json.loads(record.message)
-        for record in caplog.records
-        if record.name == "diyu.runtime"
-    ]
+    request_events = [json.loads(record.message) for record in caplog.records if record.name == "diyu.runtime"]
     assert request_events[-1]["path"] == "/activate/:token"
 
     root = Path(__file__).resolve().parents[1]
@@ -261,12 +254,8 @@ def test_activation_paths_are_redacted_and_edge_access_logs_are_disabled(
         assert nginx.count("access_log off;") == 2
         assert nginx.count("error_log /dev/null crit;") == 2
         assert nginx.count('add_header Referrer-Policy "no-referrer" always;') == 2
-    application_nginx = (
-        root / "deploy" / "nginx" / "diyuai.cc.conf"
-    ).read_text(encoding="utf-8")
-    http_activation = application_nginx.split(
-        "location ^~ /activate/ {", maxsplit=1
-    )[1].split("}", maxsplit=1)[0]
+    application_nginx = (root / "deploy" / "nginx" / "diyuai.cc.conf").read_text(encoding="utf-8")
+    http_activation = application_nginx.split("location ^~ /activate/ {", maxsplit=1)[1].split("}", maxsplit=1)[0]
     assert "$request_uri" not in http_activation
     assert "return 303 https://$host/;" in http_activation
     compose = (root / "docker-compose.production.yml").read_text(encoding="utf-8")

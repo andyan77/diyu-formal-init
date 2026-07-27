@@ -22,11 +22,7 @@ def render_spa_shell(
         identity = bootstrap.get("identity")
         if isinstance(identity, dict):
             rendered_fallback += (
-                "<p>"
-                + " · ".join(
-                    escape(str(value)) for value in identity.values() if isinstance(value, str)
-                )
-                + "</p>"
+                "<p>" + " · ".join(escape(str(value)) for value in identity.values() if isinstance(value, str)) + "</p>"
             )
     return (
         "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'>"
@@ -94,9 +90,32 @@ def render_tenant_user_access_denied(
     )
 
 
-def workbench_location(
-    result: dict[str, object], notice: str | None = None, target: str | None = None
-) -> str:
+def render_login_failure(entry_name: str, login_href: str, message: str) -> str:
+    """Keep browser form failures in the product surface instead of returning API JSON."""
+    safe_entry_name = escape(entry_name)
+    safe_login_href = escape(login_href, quote=True)
+    safe_message = escape(message)
+    return (
+        "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{safe_entry_name} · 笛语</title>"
+        "<link rel='stylesheet' href='/app/assets/index.css'></head><body>"
+        "<main class='entry-page'><header class='entry-brand'>"
+        "<img src='/assets/diyu-logo-horizontal.svg' alt='笛语'></header>"
+        f"<section class='entry-copy'><p class='eyebrow'>{safe_entry_name}</p>"
+        "<h1>这次没有登录成功。</h1>"
+        f"<p>{safe_message}</p></section>"
+        "<section class='entry-choices' aria-label='可选操作'>"
+        f"<a class='entry-choice' href='{safe_login_href}'><span>重新进入</span>"
+        f"<strong>返回{safe_entry_name}</strong>"
+        "<small>检查用户名、密码和你收到的入口地址后再试。</small></a>"
+        "<a class='entry-choice' href='/'><span>暂时离开</span>"
+        "<strong>返回笛语首页</strong><small>不会改变任何账号或入口资格。</small></a>"
+        "</section></main></body></html>"
+    )
+
+
+def workbench_location(result: dict[str, object], notice: str | None = None, target: str | None = None) -> str:
     query = {"task": str(result["task_id"]), "version": str(result["version"])}
     if target:
         query["target"] = target

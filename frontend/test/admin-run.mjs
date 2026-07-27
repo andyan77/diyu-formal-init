@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { JSDOM } from "jsdom";
 
 const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
-  url: "http://localhost/tenant-admin",
+  url: "http://localhost/",
   pretendToBeVisual: true
 });
 for (const name of [
@@ -13,6 +13,7 @@ for (const name of [
   "navigator",
   "Event",
   "CustomEvent",
+  "KeyboardEvent",
   "MouseEvent",
   "Node",
   "HTMLElement",
@@ -28,28 +29,26 @@ for (const name of [
   });
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-const requests = [];
-const routes = JSON.parse(
-  await (await import("node:fs/promises")).readFile(
-    new URL("./admin-fixtures.json", import.meta.url),
-    "utf8"
-  )
-);
-globalThis.fetch = async (input, init) => {
-  const path = String(input).split("?")[0];
-  const method = init?.method ?? "GET";
-  requests.push({
-    method,
-    path,
-    body: init?.body ? JSON.parse(String(init.body)) : null
-  });
-  const payload = routes[`${path}#${method}`] ?? routes[path] ?? {};
-  return { ok: true, json: async () => payload };
+let reducedMotion = false;
+dom.window.matchMedia = query => ({
+  matches: query.includes("prefers-reduced-motion") && reducedMotion,
+  media: query,
+  onchange: null,
+  addListener: () => undefined,
+  removeListener: () => undefined,
+  addEventListener: () => undefined,
+  removeEventListener: () => undefined,
+  dispatchEvent: () => true
+});
+globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({}) });
+globalThis.__DIYU_ADMIN_INTERACTION__ = {
+  window: dom.window,
+  setReducedMotion: value => {
+    reducedMotion = value;
+  }
 };
-globalThis.__DIYU_ADMIN_INTERACTION__ = { requests, window: dom.window };
 
-const workdir = fileURLToPath(new URL("../node_modules/.diyu-admin-interaction/", import.meta.url));
+const workdir = fileURLToPath(new URL("../node_modules/.diyu-ui03-surfaces/", import.meta.url));
 const outfile = `${workdir}interaction.mjs`;
 try {
   await build({
@@ -64,9 +63,7 @@ try {
     loader: { ".css": "empty" },
     logLevel: "warning"
   });
-  await import(
-    new URL("../node_modules/.diyu-admin-interaction/interaction.mjs", import.meta.url).href
-  );
+  await import(new URL("../node_modules/.diyu-ui03-surfaces/interaction.mjs", import.meta.url).href);
 } finally {
   await rm(workdir, { recursive: true, force: true });
 }
