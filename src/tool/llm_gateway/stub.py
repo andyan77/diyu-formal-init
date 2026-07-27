@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.brain.natural_entry import requests_content_creation
 from src.ports.content_generator import ContentGenerator
 from src.shared.types import (
     ContentProduct,
@@ -293,23 +294,7 @@ def _ordinary_chat(text: str) -> bool:
 
 def _requests_content(text: str) -> bool:
     """Recognize explicit production intent in the offline double, never infer it from a topic."""
-    return any(
-        value in text
-        for value in (
-            "写",
-            "生成",
-            "文案",
-            "内容",
-            "小红书",
-            "视频",
-            "口播",
-            "脚本",
-            "帮我做",
-            "帮我发",
-            "发条",
-            "不知道发什么",
-        )
-    )
+    return requests_content_creation(text)
 
 
 def _explicit_actuality_quotes(text: str) -> tuple[str, ...]:

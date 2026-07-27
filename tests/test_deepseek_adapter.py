@@ -398,6 +398,8 @@ def test_conversation_prompt_makes_creative_judgement_the_systems_job(
     assert "user_premises" in prompt
     assert "user_actuality_quotes" in prompt
     assert "system_creative_plan" in prompt
+    assert "missing_fact_kind" in prompt
+    assert "missing_fact_basis" in prompt
     assert '"brief"' not in prompt
 
 
@@ -448,7 +450,7 @@ def test_collaborate_preserves_exact_user_premise_and_separates_system_plan(
     assert "今天有点累" not in "\n".join(decision.user_premises)
 
 
-def test_collaborate_rejects_an_invented_actuality_quote(
+def test_collaborate_discards_an_invented_actuality_quote(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,
 ) -> None:
@@ -472,16 +474,154 @@ def test_collaborate_rejects_an_invented_actuality_quote(
         ],
     )
 
-    with pytest.raises(GenerationFailed, match="区分题材和真实情况"):
-        _generator().collaborate(
-            ConversationInput(
-                message=message,
-                history=(),
-                brand=generation_input.brand,
-                products=(),
-                target="xiaohongshu_graphic",
-            )
+    decision = _generator().collaborate(
+        ConversationInput(
+            message=message,
+            history=(),
+            brand=generation_input.brand,
+            products=(),
+            target="xiaohongshu_graphic",
         )
+    )
+
+    assert decision.disposition == "ready"
+    assert decision.user_premises == (message,)
+    assert decision.user_actuality_quotes == ()
+    assert "我和婆婆昨天吵了一架" not in decision.system_creative_plan
+
+
+def test_collaborate_compiles_exact_premise_when_ready_payload_is_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    message = "今天不知道发什么，帮我做条小红书。"
+    _install_fake(
+        monkeypatch,
+        [
+            _completion(
+                json.dumps(
+                    {
+                        "kind": "ready",
+                        "message": "我先按当前账号的位置写一版。",
+                        "user_premises": ["模型改写过的前提"],
+                        "user_actuality_quotes": ["今天发生了一件事。"],
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        ],
+    )
+
+    decision = _generator().collaborate(
+        ConversationInput(
+            message=message,
+            history=(),
+            brand=generation_input.brand,
+            products=(),
+            target="xiaohongshu_graphic",
+        )
+    )
+
+    assert decision.disposition == "ready"
+    assert decision.user_premises == (message,)
+    assert decision.user_actuality_quotes == ()
+    assert decision.primary_product == "brand_life_narrative"
+    assert decision.system_creative_plan
+
+
+@pytest.mark.parametrize(
+    ("model_document", "products", "expected_product"),
+    [
+        (
+            {"kind": "chat", "message": "这个编号是想讲哪一面？"},
+            (
+                ProductFact(
+                    "ZX-C218",
+                    {"category": "双面短外套"},
+                    display_name="ZX-C218 双面短外套",
+                ),
+            ),
+            "product_truth",
+        ),
+        (
+            {
+                "kind": "question",
+                "message": "你想从什么角度写？",
+                "missing_fact_kind": "user_experience",
+                "missing_fact_basis": "婆媳主题",
+            },
+            (),
+            "brand_life_narrative",
+        ),
+    ],
+)
+def test_collaborate_does_not_return_system_owned_choices_to_the_user(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+    model_document: dict[str, object],
+    products: tuple[ProductFact, ...],
+    expected_product: str,
+) -> None:
+    message = (
+        "ZX-C218，帮我生成一篇小红书文案。"
+        if products
+        else "帮我写条婆媳主题的小红书，别狗血。"
+    )
+    _install_fake(
+        monkeypatch,
+        [_completion(json.dumps(model_document, ensure_ascii=False))],
+    )
+
+    decision = _generator().collaborate(
+        ConversationInput(
+            message=message,
+            history=(),
+            brand=generation_input.brand,
+            products=products,
+            target="xiaohongshu_graphic",
+        )
+    )
+
+    assert decision.disposition == "ready"
+    assert decision.user_premises == (message,)
+    assert decision.primary_product == expected_product
+    assert decision.system_creative_plan
+
+
+def test_collaborate_keeps_one_irreplaceable_user_fact_question(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    message = "把我去年创业最难的那个月写成视频。"
+    _install_fake(
+        monkeypatch,
+        [
+            _completion(
+                json.dumps(
+                    {
+                        "kind": "question",
+                        "message": "那个月最难的一件具体事情是什么？",
+                        "missing_fact_kind": "user_experience",
+                        "missing_fact_basis": "我去年创业最难的那个月",
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        ],
+    )
+
+    decision = _generator().collaborate(
+        ConversationInput(
+            message=message,
+            history=(),
+            brand=generation_input.brand,
+            products=(),
+            target="xiaohongshu_graphic",
+        )
+    )
+
+    assert decision.disposition == "question"
+    assert decision.message == "那个月最难的一件具体事情是什么？"
 
 
 def test_p3_exact_actuality_and_system_plan_enter_different_fact_channels(

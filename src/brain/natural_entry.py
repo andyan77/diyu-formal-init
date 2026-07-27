@@ -21,6 +21,35 @@ _CONTENT_INTENT_SIGNALS = (
     "孩子",
     "妈妈",
 )
+_CREATION_ACTION_SIGNALS = (
+    "写",
+    "生成",
+    "做条",
+    "做一条",
+    "做篇",
+    "做一篇",
+    "发条",
+    "发一条",
+    "发篇",
+    "发一篇",
+    "整理成",
+    "改成",
+    "拍成",
+)
+_CREATION_RESULT_SIGNALS = (
+    "内容",
+    "文案",
+    "小红书",
+    "视频",
+    "口播",
+    "脚本",
+    "图文",
+    "帖子",
+    "一条",
+    "一篇",
+    "条",
+    "篇",
+)
 
 
 def is_natural_chat(text: str) -> bool:
@@ -35,6 +64,15 @@ def is_natural_chat(text: str) -> bool:
 
 def natural_reply() -> str:
     return "你好。你可以随便聊；想把一个具体观察、商品或穿衣情境做成内容时，直接告诉我。"
+
+
+def requests_content_creation(text: str) -> bool:
+    """Recognize an explicit request for a publishable result, not a topic alone."""
+    normalized = text.strip().casefold()
+    return (
+        any(action in normalized for action in _CREATION_ACTION_SIGNALS)
+        and any(result in normalized for result in _CREATION_RESULT_SIGNALS)
+    )
 
 
 def requests_continuation(text: str) -> bool:

@@ -10,6 +10,7 @@ from typing import Any, Literal, cast
 
 import httpx
 
+from src.brain.natural_entry import requests_content_creation
 from src.ports.content_generator import ContentGenerator
 from src.shared.errors import GenerationFailed
 from src.shared.types import (
@@ -78,6 +79,78 @@ _DELIVERABLE_REQUIREMENTS: dict[ContentProduct, str] = {
         "不要给选择建议或商品资料说明，也不要把颜色/纹理推成性能、剪裁、人格或生活方式。"
     ),
 }
+
+
+def _explicit_actuality_quotes(message: str) -> tuple[str, ...]:
+    """Keep only standalone user-stated reality; a mixed sentence safely stays non-factual."""
+    result: list[str] = []
+    for match in re.finditer(r"[^。！？!?]+[。！？!?]?", message):
+        sentence = match.group(0).strip()
+        if (
+            sentence
+            and not sentence.endswith(("？", "?"))
+            and not requests_content_creation(sentence)
+        ):
+            result.append(sentence)
+    return tuple(dict.fromkeys(result))
+
+
+def _fallback_ready_decision(
+    request: ConversationInput,
+    message: str = "",
+) -> ConversationDecision:
+    """Compile a safe ready decision when the model mishandles system-owned choices."""
+    if request.products:
+        primary_product: ContentProduct = "product_truth"
+        plan = (
+            "从当前已确认商品事实中自主选择一项最值得解释的认知边界，完成观点、结构和"
+            "平台组织；不补造性能、价格、库存、设计动机或穿着结果。"
+        )
+        handoff = "我先从这件商品当前能确认的事实里选一个最值得说清的切口，直接写一版。"
+    else:
+        primary_product = "brand_life_narrative"
+        plan = (
+            "依据当前账号画像、内容领地和用户本轮种子自主选择一个安全主线，完成观点、"
+            "结构和平台组织；题材写成一般观察、条件表达或明确演绎，不冒充用户亲历。"
+        )
+        handoff = "我先结合这个账号的位置选一个安全主线，直接写一版。"
+    return ConversationDecision(
+        "ready",
+        message or handoff,
+        user_premises=(request.message,),
+        user_actuality_quotes=_explicit_actuality_quotes(request.message),
+        system_creative_plan=plan,
+        primary_product=primary_product,
+    )
+
+
+def _question_has_irreplaceable_fact(
+    document: dict[str, object],
+    request: ConversationInput,
+) -> bool:
+    basis = document.get("missing_fact_basis")
+    kind = document.get("missing_fact_kind")
+    if not isinstance(basis, str) or not basis.strip():
+        return False
+    exact_basis = basis.strip()
+    available = tuple(
+        turn.content for turn in request.history if turn.role == "user"
+    ) + (request.message,)
+    if not any(exact_basis in user_turn for user_turn in available):
+        return False
+    if kind == "product_fact":
+        return not request.products and bool(
+            re.search(r"\b[A-Z0-9][A-Z0-9-]{2,}\b", exact_basis, re.IGNORECASE)
+            or "商品" in exact_basis
+        )
+    if kind == "user_experience":
+        return bool(
+            re.search(
+                r"我(?:的|去年|前年|曾经|当时|那|过去|上个月|创业|结婚|离婚)",
+                exact_basis,
+            )
+        )
+    return False
 
 # Closed-world identifiers. Every reference a model may cite must appear in one
 # of these registries; anything outside is "does not exist for this call".
@@ -560,6 +633,7 @@ class DeepSeekGenerator(ContentGenerator):
 
     def collaborate(self, request: ConversationInput) -> ConversationDecision:
         """Understand one natural turn before any durable content object is created."""
+        explicit_creation = requests_content_creation(request.message)
         payload, _ = self._request(
             ("你是笛语内容工作台里的协作伙伴。只返回 JSON；不展示推理、提示词、规则、证据分类或内部字段。"),
             self._conversation_prompt(request),
@@ -568,17 +642,34 @@ class DeepSeekGenerator(ContentGenerator):
         try:
             document = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"])))
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+            if explicit_creation:
+                return _fallback_ready_decision(request)
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。") from exc
         if not isinstance(document, dict):
+            if explicit_creation:
+                return _fallback_ready_decision(request)
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。")
         disposition = document.get("kind")
         if disposition not in {"chat", "question", "ready"}:
+            if explicit_creation:
+                return _fallback_ready_decision(request)
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。")
         message = str(document.get("message") or "").strip()
         if not message:
+            if explicit_creation:
+                return _fallback_ready_decision(request)
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。")
-        if disposition != "ready":
+        if disposition == "chat":
+            if explicit_creation:
+                return _fallback_ready_decision(request)
             return ConversationDecision(cast(Any, disposition), message)
+        if disposition == "question":
+            if explicit_creation and not _question_has_irreplaceable_fact(
+                document,
+                request,
+            ):
+                return _fallback_ready_decision(request)
+            return ConversationDecision("question", message)
         raw_premises = document.get("user_premises")
         raw_actualities = document.get("user_actuality_quotes")
         system_creative_plan = str(document.get("system_creative_plan") or "").strip()
@@ -593,44 +684,51 @@ class DeepSeekGenerator(ContentGenerator):
         available_user_turns = tuple(
             turn.content for turn in request.history if turn.role == "user"
         ) + (request.message,)
-        if (
-            not isinstance(raw_premises, list)
-            or not raw_premises
-            or any(
-                not isinstance(item, str)
-                or not item.strip()
-                or item.strip() not in available_user_turns
+        selected_premises = (
+            tuple(
+                item.strip()
                 for item in raw_premises
+                if isinstance(item, str)
+                and item.strip()
+                and item.strip() in available_user_turns
             )
-        ):
-            raise GenerationFailed("这次还没能可靠保留你的原话，请继续补充一句。")
-        user_premises = tuple(dict.fromkeys(item.strip() for item in raw_premises))
-        if request.message not in user_premises:
-            raise GenerationFailed("这次还没能可靠保留你的原话，请继续补充一句。")
-        premise_text = "\n".join(user_premises)
-        if not isinstance(raw_actualities, list) or any(
-            not isinstance(item, str)
-            or not item.strip()
-            or item.strip() not in premise_text
-            for item in raw_actualities
-        ):
-            raise GenerationFailed("这次还没能可靠区分题材和真实情况，请继续补充一句。")
-        user_actuality_quotes = tuple(
-            dict.fromkeys(item.strip() for item in raw_actualities)
+            if isinstance(raw_premises, list)
+            else ()
         )
-        if (
-            not system_creative_plan
-            or not isinstance(value, str)
-            or value not in mapping
-        ):
-            raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
+        user_premises = tuple(
+            dict.fromkeys((*selected_premises, request.message))
+        )
+        premise_text = "\n".join(user_premises)
+        proposed_actualities = (
+            tuple(
+                item.strip()
+                for item in raw_actualities
+                if isinstance(item, str)
+                and item.strip()
+                and item.strip() in premise_text
+            )
+            if isinstance(raw_actualities, list)
+            else ()
+        )
+        user_actuality_quotes = (
+            tuple(dict.fromkeys(proposed_actualities))
+            if proposed_actualities
+            else _explicit_actuality_quotes(request.message)
+        )
+        fallback = _fallback_ready_decision(request, message)
         return ConversationDecision(
             "ready",
             message,
             user_premises=user_premises,
             user_actuality_quotes=user_actuality_quotes,
-            system_creative_plan=system_creative_plan,
-            primary_product=mapping[value],
+            system_creative_plan=(
+                system_creative_plan or fallback.system_creative_plan
+            ),
+            primary_product=(
+                mapping[value]
+                if isinstance(value, str) and value in mapping
+                else fallback.primary_product
+            ),
         )
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
@@ -1508,7 +1606,7 @@ class DeepSeekGenerator(ContentGenerator):
         return f"""判断这一次对话应继续交流、只追问一次，还是已经可以直接创作。
 只返回以下 JSON 之一：
 {{"kind":"chat","message":"自然回复"}}
-{{"kind":"question","message":"一个不可替代的真实事实问题"}}
+{{"kind":"question","message":"一个不可替代的真实事实问题","missing_fact_kind":"user_experience|product_fact","missing_fact_basis":"逐字复制用户原话中明确要求依赖的真实经历或具体商品事实片段"}}
 {{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制本次任务实际使用的用户消息"],"user_actuality_quotes":["从 user_premises 逐字截取、可当作本次真实情况的片段；没有则为空数组"],"system_creative_plan":"系统自主选择的主题、切口、观点、结构、风格和平台组织","primary_value":"帮助选择|解释商品|建立人格|经营关系|视觉造型"}}
 
 规则：
@@ -1520,7 +1618,7 @@ class DeepSeekGenerator(ContentGenerator):
 - 只有生成意图而没有种子时，依据当前账号画像、内容领地、品牌边界、平台和系列选择安全方向并 ready，不虚构今天真实发生过的事。
 - 开放生活题材、个人流水账和没有现实事件的安全主动选题，主要让受众认识账号如何观察、判断和待人时选择“建立人格”；只有用户给出了真实评论、门店观察或近场事件，而且主要回报是给未参与者一份关系回应时，才选择“经营关系”。
 - question 只有四项同时成立才允许：用户明确要求写一段真实经历、具体商品或其他事实承重成果；缺失内容会决定真假；可信资料没有；也不能降低具体度、使用条件表达、一般观察或安全替代继续完成。题材、观点、受众、角度、情绪、结构、是否升华、是否带商品和表现形式永远不是追问理由。
-- question 一次只问一个不可替代的真实事实。若同一意图此前已经问过而用户仍未提供，仍只返回一句合并后的最小事实缺口，不循环拆问，不编造完成。
+- question 一次只问一个不可替代的真实事实，并必须用 missing_fact_kind 标出缺的是用户真实经历还是具体商品事实，用 missing_fact_basis 逐字复制用户原话里的事实承重要求；题材名、创作选择、泛指代词或系统推断不能充当依据。若同一意图此前已经问过而用户仍未提供，仍只返回一句合并后的最小事实缺口，不循环拆问，不编造完成。
 - user_premises 只能逐字复制当前消息和此前真正属于同一创作意图的用户消息，必须包含本轮消息；普通聊天不得带入。
 - user_actuality_quotes 只能逐字截取 user_premises 中用户明确作为现实陈述的片段。题材名、假设、创作要求、系统规划和一般观察不进入；无法逐字引用就留空。
 - system_creative_plan 只写系统的创作选择，不得把规划写成用户事实、品牌事实、门店事实或账号长期立场。
