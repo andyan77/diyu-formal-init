@@ -1406,6 +1406,49 @@ def test_closed_world_allows_only_registered_atomic_product_claims(
     assert ("c9", "factual_conflict") in reasons
 
 
+def test_product_claim_binding_replaces_causal_copy_with_the_frozen_fact(
+    generation_input: GenerationInput,
+) -> None:
+    product = ProductFact(
+        "ZX-C218",
+        {
+            "category": "双面短外套",
+            "observable_features": (
+                "M码当前样衣记录960克，对照单层短外套M码样衣记录650克；"
+                "约310克差异不能全部归因于双面结构。"
+            ),
+        },
+    )
+    request = _with(generation_input, products=(product,))
+    context = BoundaryContext.from_request(request)
+    claims = [
+        *cast("list[dict[str, object]]", _video_core()["claims"])[:7],
+        _claim(
+            "c8",
+            "spoken",
+            "双面结构让一件衣服有两种穿法，重量会比单层外套多约310克。",
+            "confirmed_fact",
+            "non_event",
+            ("source:product:ZX-C218",),
+        ),
+        _claim("c9", "spoken", "我们主张先看登记事实。"),
+    ]
+    core = _generator()._parse_core(request, context, _video_core(claims=claims))
+
+    normalized = DeepSeekGenerator._normalize_registered_product_claims(
+        context,
+        core,
+    )
+
+    assert normalized.claim("c8").text == (
+        "当前商品已登记的可观察特征为："
+        "M码当前样衣记录960克，对照单层短外套M码样衣记录650克；"
+        "约310克差异不能全部归因于双面结构。"
+    )
+    assert normalized.claim("c8").source_refs == ("source:product:ZX-C218",)
+    assert not DeepSeekGenerator._closed_world_issues(context, normalized)
+
+
 def test_product_truth_production_uses_only_registered_rails(
     generation_input: GenerationInput,
 ) -> None:

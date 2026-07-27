@@ -5,6 +5,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, replace
+from difflib import SequenceMatcher
 from email.utils import parsedate_to_datetime
 from typing import Any, Literal, cast
 
@@ -846,6 +847,7 @@ class DeepSeekGenerator(ContentGenerator):
                     json.loads(self._json_content(str(payload["choices"][0]["message"]["content"]))),
                 )
                 core = self._replace_registered_product_identifiers(request, core)
+                core = self._normalize_registered_product_claims(context, core)
                 core = self._stabilize_product_truth_production(
                     request,
                     context,
@@ -889,6 +891,15 @@ class DeepSeekGenerator(ContentGenerator):
                     issues,
                 )
                 repaired_core = self._replace_registered_product_identifiers(request, repaired_core)
+                repaired_core = self._normalize_registered_product_claims(
+                    context,
+                    repaired_core,
+                )
+                repaired_core = self._stabilize_product_truth_production(
+                    request,
+                    context,
+                    repaired_core,
+                )
             except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 _LOGGER.warning(
                     "content boundary repair response rejected: %s",
@@ -1457,6 +1468,60 @@ class DeepSeekGenerator(ContentGenerator):
                 UnitIssue(step.step_id, "unsupported_resource", step.action_text)
                 for step in core.scene_steps
             ),
+        )
+
+    @staticmethod
+    def _normalize_registered_product_claims(
+        context: BoundaryContext,
+        core: ContentCore,
+    ) -> ContentCore:
+        """Bind product-sourced copy to one exact fact from the frozen record.
+
+        The model still chooses the unit's role and intended fact.  Text
+        similarity resolves that intent only among this call's registered
+        atomic statements; it can never introduce a new product assertion.
+        The normal complete judgement runs after this binding.
+        """
+
+        normalized: list[ContentClaim] = []
+        changed = False
+        for claim in core.claims:
+            product_refs = tuple(
+                ref for ref in claim.source_refs if ref.startswith("source:product:")
+            )
+            candidates = tuple(
+                (source_ref, statement)
+                for source_ref, statement in context.product_fact_claims
+                if source_ref in product_refs
+            )
+            if not candidates:
+                normalized.append(claim)
+                continue
+            source_ref, statement = max(
+                candidates,
+                key=lambda candidate: SequenceMatcher(
+                    None,
+                    claim.text.casefold(),
+                    candidate[1].casefold(),
+                    autojunk=False,
+                ).ratio(),
+            )
+            replacement = replace(
+                claim,
+                text=statement,
+                basis="confirmed_fact",
+                actuality="non_event",
+                source_refs=(source_ref,),
+            )
+            normalized.append(replacement)
+            changed = changed or replacement != claim
+        if not changed:
+            return core
+        return ContentCore(
+            speaker_ref=core.speaker_ref,
+            claims=tuple(normalized),
+            spoken_order=core.spoken_order,
+            scene_steps=core.scene_steps,
         )
 
     @staticmethod
