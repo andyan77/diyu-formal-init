@@ -1532,7 +1532,6 @@ def test_rejected_product_claim_is_bound_even_after_repair_drops_its_source(
     )
 
     bound = DeepSeekGenerator._bind_rejected_product_claims(
-        request,
         context,
         core,
         (UnitIssue("c8", "factual_conflict", core.claim("c8").text),),

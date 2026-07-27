@@ -903,7 +903,6 @@ class DeepSeekGenerator(ContentGenerator):
                     repaired_core,
                 )
                 repaired_core = self._bind_rejected_product_claims(
-                    request,
                     context,
                     repaired_core,
                     issues,
@@ -1561,20 +1560,17 @@ class DeepSeekGenerator(ContentGenerator):
 
     @staticmethod
     def _bind_rejected_product_claims(
-        request: GenerationInput,
         context: BoundaryContext,
         core: ContentCore,
         issues: tuple[UnitIssue, ...],
     ) -> ContentCore:
-        """Close rejected P2 assertions against the frozen product record.
+        """Close rejected product assertions against the frozen record.
 
         A repair can preserve an unsafe concrete assertion while changing its
         declared source. Only claim units already rejected for factual conflict
         are rebound, and only to one atomic fact frozen for this call.
         """
 
-        if request.primary_product != "product_truth":
-            return core
         rejected = {
             issue.unit_id
             for issue in issues
