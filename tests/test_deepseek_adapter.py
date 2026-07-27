@@ -288,6 +288,25 @@ def test_generation_prompt_separates_six_input_semantics(
     assert "schema_version" not in prompt
 
 
+def test_judgement_reads_the_complete_visible_candidate_before_unit_verdicts(
+    generation_input: GenerationInput,
+) -> None:
+    generator = _generator()
+    context = BoundaryContext.from_request(generation_input)
+    core = generator._parse_core(generation_input, context, _video_core())
+
+    prompt = DeepSeekGenerator._judgement_prompt(
+        generation_input,
+        context,
+        core,
+    )
+
+    assert "候选按用户阅读/制作顺序展开后的完整可见成品" in prompt
+    assert "一家人的家庭感，不一定来自穿成同款。" in prompt
+    assert "一个单元单独看似" in prompt
+    assert "不能把已知" in prompt and "重量类比" in prompt
+
+
 def test_revision_prompt_applies_the_instruction_to_every_visible_unit(
     generation_input: GenerationInput,
 ) -> None:
@@ -1268,6 +1287,44 @@ def test_closed_world_blocks_viewpoint_or_guidance_marked_as_happened(
 
     assert ("c8", "invented_actuality") in {(issue.unit_id, issue.reason_code) for issue in issues}
     assert not any(issue.unit_id == "c9" for issue in issues)
+
+
+def test_closed_world_allows_only_exact_frozen_user_actuality_claims(
+    generation_input: GenerationInput,
+) -> None:
+    actuality = "今天店里忙了一天，回家因为谁洗碗拌了两句。"
+    request = _with(
+        generation_input,
+        user_actuality_quotes=(actuality,),
+    )
+    context = BoundaryContext.from_request(request)
+    claims = [
+        *cast("list[dict[str, object]]", _video_core()["claims"])[:7],
+        _claim(
+            "c8",
+            "spoken",
+            actuality,
+            "user_premise",
+            "user_presented_actual",
+            ("source:user_actuality",),
+        ),
+        _claim(
+            "c9",
+            "spoken",
+            actuality + "两个人都不想动。",
+            "user_premise",
+            "user_presented_actual",
+            ("source:user_actuality",),
+        ),
+    ]
+    core = _generator()._parse_core(request, context, _video_core(claims=claims))
+
+    issues = DeepSeekGenerator._closed_world_issues(context, core)
+
+    assert not any(issue.unit_id == "c8" for issue in issues)
+    assert ("c9", "invented_actuality") in {
+        (issue.unit_id, issue.reason_code) for issue in issues
+    }
 
 
 def test_closed_world_blocks_confirmed_fact_that_is_not_a_recorded_state(

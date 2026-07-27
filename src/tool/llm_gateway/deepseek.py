@@ -259,6 +259,7 @@ class BoundaryContext:
     premise_sources: tuple[tuple[str, str], ...]
     guidance_sources: tuple[tuple[str, str], ...]
     user_actuality_source: str | None
+    user_actuality_quotes: tuple[str, ...]
     product_skus: tuple[str, ...] = ()
     known_numbers: tuple[int, ...] = ()
     known_colors: tuple[str, ...] = ()
@@ -397,18 +398,23 @@ class BoundaryContext:
             )
         topic = "\n".join(part for part in (*topic_parts, *direction_lines) if part)
         if request.user_actuality_quotes is not None:
+            exact_actuality_quotes = tuple(
+                dict.fromkeys(quote.strip() for quote in request.user_actuality_quotes)
+            )
             user_actuality = "\n".join(
-                f"用户原话：{quote}" for quote in request.user_actuality_quotes
+                f"用户原话：{quote}" for quote in exact_actuality_quotes
             )
             user_actuality_source = (
-                _USER_ACTUALITY_SOURCE_ID if request.user_actuality_quotes else None
+                _USER_ACTUALITY_SOURCE_ID if exact_actuality_quotes else None
             )
         # Legacy direct API calls predate the separated conversation compiler.
         # Preserve their narrow P4 contract without making every life topic a fact.
         elif request.primary_product == "local_response" and not is_synthetic_fixture:
+            exact_actuality_quotes = (request.weak_seed,)
             user_actuality = f"用户本次明确给出的真实近场信号（仅限本次使用）：{request.weak_seed}"
             user_actuality_source = _USER_ACTUALITY_SOURCE_ID
         else:
+            exact_actuality_quotes = ()
             user_actuality = ""
             user_actuality_source = None
 
@@ -565,6 +571,7 @@ class BoundaryContext:
             premise_sources=tuple(premise_sources),
             guidance_sources=guidance_sources,
             user_actuality_source=user_actuality_source,
+            user_actuality_quotes=exact_actuality_quotes,
             product_skus=tuple(product.sku for product in request.products),
             known_numbers=tuple(dict.fromkeys(numbers)),
             known_colors=tuple(dict.fromkeys(colors)),
@@ -1132,10 +1139,18 @@ class DeepSeekGenerator(ContentGenerator):
                 or not any(ref in allowed for ref in claim.source_refs)
             ):
                 issues.append(UnitIssue(claim.claim_id, "factual_conflict", claim.text))
-            if claim.actuality == "user_presented_actual" and (
-                context.user_actuality_source is None or _USER_ACTUALITY_SOURCE_ID not in claim.source_refs
+            has_actuality_ref = _USER_ACTUALITY_SOURCE_ID in claim.source_refs
+            if (
+                claim.actuality == "user_presented_actual" or has_actuality_ref
+            ) and (
+                context.user_actuality_source is None
+                or claim.actuality != "user_presented_actual"
+                or not has_actuality_ref
+                or claim.text not in context.user_actuality_quotes
             ):
-                issues.append(UnitIssue(claim.claim_id, "invented_actuality", claim.text))
+                issues.append(
+                    UnitIssue(claim.claim_id, "invented_actuality", claim.text)
+                )
             if (
                 claim.basis in ("brand_viewpoint", "conditional_guidance")
                 and claim.actuality == "user_presented_actual"
@@ -1227,7 +1242,10 @@ class DeepSeekGenerator(ContentGenerator):
         core: ContentCore,
     ) -> tuple[tuple[UnitIssue, ...], dict[str, Any], int]:
         payload, retries = self._request(
-            ("你是笛语内容边界判定器。对每个单元独立做完整判定，只返回最终 JSON；不改写成品，不展示核对过程或推理。"),
+            (
+                "你是笛语内容边界判定器。先阅读完整成品，再把整体问题归回具体单元；只返回最终 JSON，"
+                "不改写成品，不展示核对过程或推理。"
+            ),
             self._judgement_prompt(request, context, core),
             # Provider reasoning tokens are billed inside max_tokens; the
             # bounded budget must leave room for reasoning plus one complete
@@ -2141,6 +2159,17 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
             ensure_ascii=False,
         )
         unit_ids = ", ".join(core.unit_ids)
+        whole_candidate = "\n".join(
+            (
+                "【可见文字单元】",
+                *(f"{claim.claim_id}：{claim.text}" for claim in core.claims),
+                "【可见制作单元】",
+                *(
+                    f"{step.step_id}：{step.action_text}；{step.sound_text}；{step.production_note}"
+                    for step in core.scene_steps
+                ),
+            )
+        )
         revision_audit = (
             "本次是自然修改。请把下面旧成品与本次修改逐单元对照：被点名的表达特征必须在完整正文"
             "及相关标题、导读、互动或制作单元中发生可观察的实质变化，不能只删无关短句、只改摘要"
@@ -2150,7 +2179,7 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
             if request.revision_instruction
             else "本次是首次生成；只核对用户原始请求中的明确内容要求与禁止项。"
         )
-        return f"""只依据以下六类临时边界，对候选底稿的每个单元独立完成完整判定。
+        return f"""只依据以下六类临时边界，对候选底稿完成整体阅读，再把结论归回每个具体单元。
 边界未明确提供的事实或资源一律视为不存在，不能用常识、常见拍法或话题里出现的对象补足。
 
 {DeepSeekGenerator._boundary_sections(context)}
@@ -2158,11 +2187,16 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
 候选底稿 ContentCore：
 {serialized}
 
+候选按用户阅读/制作顺序展开后的完整可见成品：
+{whole_candidate}
+
 用户要求与修改核对：
 {revision_audit}
 
-采用“先找越界、后决定是否通过”的方式；候选自身填写的 basis、actuality 和 source_refs 只是待审声明，
-不能代替对可见文字真实含义的判断。对下面列出的每一个 id 各返回一条完整判定，五项都必须给出 true/false：
+采用“先把整篇读成一个成品、找出整体越界，再归回参与构成问题的单元”的方式；
+候选自身填写的 basis、actuality 和 source_refs 只是待审声明，不能代替对可见文字真实含义的判断。一个单元单独看似
+中性，但与前后单元组合后形成了未经提供的人生经历、人物关系、商品结论、场景或修改逃逸，也必须判 false。
+对下面列出的每一个 id 各返回一条完整判定，五项都必须给出 true/false：
 - identity_ok：为 false 当该单元让账号或当前创作者以第一人称、表演或叙事位置冒充边界外的自然人或岗位
   （妈妈、家长、孩子的照护者、店长、店员、顾客、研发人员等）。用户只是在话题中提到某类人，
   不构成账号具备该身份。当前创作者以拍摄者、口播者或账号运营身份自称（如“我是品牌账号运营”、
@@ -2176,7 +2210,10 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
   如果边界二为空，任何第一人称生活回忆、个人日常习惯、具体家庭/工作场景都为 false；给具体人物补写
   对白、身份与关系、持有物、动机、情绪、事件过程或结果，即使前面写了“如果、假设、想象”，仍为 false。
   如果边界二不为空，只允许原话明确支持的现实细节；顺着常理补出的动机、情绪、对白、关系、前因、
-  结果或习惯仍为 false。一般观点与可能性必须和现实叙事清楚分开。
+  结果或习惯仍为 false。例如用户只说发生过一件小事，不能据此补成“两个人在家”、谁负责、以前如何、
+  事后如何、人物心里怎么想或某个家中空间。一般观点与可能性必须和现实叙事清楚分开。
+  题材本身没有现实片段时，“我最近一直在想、我见过、我们生活里”等个人持续经历或观察也为 false；
+  只能直接给出当前观点、一般观察、条件表达或明确不冒充事实的抽象演绎。
 - resource_ok：为 false 当该单元的画面、动作、声音或制作步骤实际需要边界六未登记的人物、商品、衣物、
   图片、合照、场地、家具、道具或既有素材；叠加品牌 logo、贴纸、成品图形或已有照片同样属于使用
   未登记素材。话题对象可以被口播抽象讨论，但不能出镜、行动、发声或被当作现有素材。
@@ -2184,14 +2221,15 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
   商品事实、价格、参数；边界四没有相应已确认商品时，声称品牌的商品线、商品能力或“我们做某类
   衣服”同样为 false。边界四没有登记商品时，账号/创作者拥有、穿着、展示的具体衣物或穿搭，以及
   面料、颜色、版型、弹性、舒适度等具体商品表现都为 false；有登记商品时，也只能使用逐项登记事实，
-  不能从品类或结构推导性能、效果、适用人群、穿着结果或设计动机。
+  不能从品类、结构或重量推导性能、保暖/温差用途、效果、适用人群、穿着结果或设计动机；不能把已知
+  重量类比成另一件未登记衣物的重量，不能把未登记比较品、搭配品或用户现有衣物写进建议或验证动作。
 - instruction_ok：为 false 当该单元违反用户明确的内容要求或禁止项；自然修改时，若被修改要求点名的
   表达特征仍沿用旧稿、只做无关删减、只改摘要而完整正文没有实质变化，也为 false。未被点名且不冲突的
   单元可以保留；首次生成时不要求与不存在的旧稿比较。
 不要误杀：依据品牌基线表达的一般观点与条件性建议、不带具体人物事实的抽象假设与比喻、普通视觉标题、
 当前创作者对手机口播、现有场地中的中性动作，以及对“本次话题/请求”的忠实抽象讨论，可以通过。
 关键区别是“谈论某个对象”不需要该资源；“让该对象出镜、行动、发声或把事件写成已经发生”需要当前依据。
-对每个单元只依据其自身文本与上述边界独立判定；不要因为其他单元存在问题而改变对本单元的判定。
+只把整体问题归回实际参与构成问题的单元；不要误伤没有参与该问题的其他单元。
 
 待判定 id：{unit_ids}
 只返回：{{"verdicts":[{{"id":"…","identity_ok":true,"actuality_ok":true,"resource_ok":true,"fact_ok":true,"instruction_ok":true}}]}}。
