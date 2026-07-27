@@ -126,7 +126,7 @@ async function main(): Promise<void> {
   );
 
   await send("最近店里总有人只想自己看看。");
-  assert.match(document.body.textContent ?? "", /沉默也应该被尊重/);
+  assert.doesNotMatch(document.body.textContent ?? "", /沉默也应该被尊重|什么时候适合主动介绍/);
   assert.equal(document.querySelector(".creator-artifact"), null);
 
   const directionToggle = find("button", "创作方向（可选）");
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
   const custom = document.querySelector(".custom-direction input") as HTMLInputElement;
   await input(custom, "想聊婆媳之间买衣服意见不一样，不要把任何一方写成反派。");
 
-  await send("讲前一个，别像品牌宣言，要像店员自己的感受。");
+  await send("最近店里总有人只想自己看看，帮我写条小红书。");
   const streamRequest = requests
     .filter(item => item.path === "/api/v1/content/stream")
     .at(-1);
@@ -148,7 +148,11 @@ async function main(): Promise<void> {
     | Array<{ role: string; content: string }>
     | undefined;
   assert.equal(conversation?.at(-1)?.role, "assistant");
-  assert.match(conversation?.at(-1)?.content ?? "", /沉默也应该被尊重/);
+  assert.doesNotMatch(
+    conversation?.at(-1)?.content ?? "",
+    /沉默也应该被尊重|什么时候适合主动介绍/,
+    "旧二选一追问不得恢复"
+  );
   assert.match(
     String(
       (
@@ -162,6 +166,11 @@ async function main(): Promise<void> {
   );
   assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /当前版本 · V1/);
   assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /完整台词/);
+  assert.match(
+    document.body.textContent ?? "",
+    /我先从想自己看一会儿这件小事写一版/,
+    "系统自主选择方向时只显示一句自然承接并立即交付成品"
+  );
 
   const revision = document.querySelector(
     'textarea[aria-label="修改要求"]'

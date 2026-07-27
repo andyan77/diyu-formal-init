@@ -35,7 +35,14 @@ from src.infrastructure.seed_demo import (
 )
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.errors import DomainError, GenerationFailed
-from src.shared.types import GeneratedArtifact, GenerationInput, TenantManagementScope, TrustedScope
+from src.shared.types import (
+    ConversationDecision,
+    ConversationInput,
+    GeneratedArtifact,
+    GenerationInput,
+    TenantManagementScope,
+    TrustedScope,
+)
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 from tests.conftest import BAIT_BRAND_ID, BAIT_TENANT_ID, SIBLING_BRAND_ID
 
@@ -55,6 +62,17 @@ class _UI05Generator(DeterministicContentGenerator):
         if "UI05_FORCE_FAILURE" in request.weak_seed:
             raise GenerationFailed("UI-05 controlled generation failure")
         return super().generate(request)
+
+
+class _MissingFactUI05Generator(_UI05Generator):
+    """One configured seam outcome for the legitimate-fact-question API path."""
+
+    def collaborate(self, request: ConversationInput) -> ConversationDecision:
+        del request
+        return ConversationDecision(
+            "question",
+            "那个月最难的一件具体事情是什么？",
+        )
 
 
 class _RequestDisconnected(BaseException):
@@ -96,11 +114,19 @@ def _stub_builder(settings: Settings) -> ContentService:
 def _app(
     database_url: str,
     monkeypatch: pytest.MonkeyPatch,
+    generator: DeterministicContentGenerator | None = None,
 ) -> Any:
+    def builder(settings: Settings) -> ContentService:
+        return ContentService(
+            PostgresContentRepository(settings.app_database_url),
+            generator or _UI05Generator(),
+            build_content_control_service(settings),
+        )
+
     monkeypatch.setattr(
         app_module,
         "build_content_service",
-        cast(Callable[[Settings], ContentService], _stub_builder),
+        cast(Callable[[Settings], ContentService], builder),
     )
     return app_module.create_app(_settings(database_url))
 
@@ -181,46 +207,65 @@ def _persistence_counts(database_url: str) -> dict[str, int]:
     return {key: int(row[key]) for key in ("tasks", "runs", "running", "failed", "versions")}
 
 
-def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
+def _task_snapshot(database_url: str, marker: str) -> dict[str, object]:
+    with psycopg.connect(database_url, row_factory=dict_row) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+        cursor.execute(
+            """
+            SELECT weak_seed, product_refs, content_context_snapshot
+            FROM business_tasks
+            WHERE tenant_id = %s AND weak_seed LIKE %s
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (TENANT_ID, f"%{marker}%"),
+        )
+        row = cursor.fetchone()
+    assert row is not None
+    snapshot = row["content_context_snapshot"]
+    assert isinstance(snapshot, dict)
+    return {
+        "weak_seed": row["weak_seed"],
+        "product_refs": row["product_refs"],
+        "snapshot": snapshot,
+    }
+
+
+def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
     app_database_url: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     token = _session_token(app_database_url, USER_ID, "tenant-user")
-    marker = uuid4().hex
     with TestClient(_app(app_database_url, monkeypatch), base_url="https://diyuai.cc") as client:
         client.cookies.set("diyu_session", token)
 
-        chat = _stream_events(client, _conversation_payload(f"你好，今天有点困。{marker}"))
+        g1_marker = f"G1-{uuid4().hex}"
+        chat = _stream_events(
+            client,
+            _conversation_payload(f"今天有点累，陪我聊两句。{g1_marker}"),
+        )
         assert chat[-1]["event"] == "conversation"
         assert chat[-1]["kind"] == "chat"
-        assert _task_counts(app_database_url, marker)["tasks"] == 0
+        assert _task_counts(app_database_url, g1_marker)["tasks"] == 0
         time.sleep(2.05)
 
-        question_text = f"最近店里总有人只想自己看看。{marker}"
-        question = _stream_events(client, _conversation_payload(question_text))
-        assert question[-1]["event"] == "conversation"
-        assert question[-1]["kind"] == "question"
-        assert _task_counts(app_database_url, marker)["tasks"] == 0
-        time.sleep(2.05)
-
-        ready_text = f"讲前一个，写成小红书图文，像店员自己的感受，不像品牌宣言。{marker}"
-        ready = _stream_events(
+        old_marker = f"OLD-{uuid4().hex}"
+        old_observation = _stream_events(
             client,
-            _conversation_payload(
-                ready_text,
-                conversation=[
-                    {"role": "user", "content": question_text},
-                    {
-                        "role": "assistant",
-                        "content": (
-                            "这个观察可以做成门店人物内容。你更想讲沉默也应该被尊重，还是讨论店员什么时候适合主动介绍？"
-                        ),
-                    },
-                ],
-            ),
+            _conversation_payload(f"最近店里总有人只想自己看看。{old_marker}"),
         )
-        event_names = [str(item["event"]) for item in ready]
-        assert event_names == [
+        assert old_observation[-1]["event"] == "conversation"
+        assert old_observation[-1]["kind"] == "chat"
+        assert "沉默也应该被尊重" not in str(old_observation[-1]["message"])
+        assert "什么时候适合主动介绍" not in str(old_observation[-1]["message"])
+        assert _task_counts(app_database_url, old_marker)["tasks"] == 0
+        time.sleep(2.05)
+
+        g2_marker = f"G2-{uuid4().hex}"
+        g2 = _stream_events(
+            client,
+            _conversation_payload(f"ZX-C218，帮我生成一篇小红书文案。{g2_marker}"),
+        )
+        assert [str(item["event"]) for item in g2] == [
             "received",
             "compiling_context",
             "generating",
@@ -228,10 +273,29 @@ def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
             "finalizing",
             "completed",
         ]
-        completed = cast(dict[str, object], ready[-1]["result"])
-        assert completed["kind"] == "content"
-        assert completed["version"] == 1
-        assert _task_counts(app_database_url, marker) == {
+        g2_result = cast(dict[str, object], g2[-1]["result"])
+        assert g2_result["kind"] == "content"
+        assert g2_result["version"] == 1
+        assert "标题：" in str(g2_result["body"])
+        assert "内容概要：" in str(g2_result["body"])
+        assert "图序与每张职责：" in str(g2_result["body"])
+        assert "完整发布正文：" in str(g2_result["body"])
+        assert all(
+            forbidden not in str(g2_result["body"])
+            for forbidden in ("售价", "库存充足", "防水", "设计师想")
+        )
+        g2_task = _task_snapshot(app_database_url, g2_marker)
+        g2_snapshot = cast(dict[str, object], g2_task["snapshot"])
+        assert g2_task["product_refs"] == ["ZX-C218"]
+        assert g2_snapshot["schema"] == "content-context-snapshot-v2"
+        assert g2_snapshot["user_premise"] == g2_task["weak_seed"]
+        system_plan = str(g2_snapshot["system_creative_plan"])
+        assert system_plan
+        assert system_plan not in str(g2_task["weak_seed"])
+        product_facts = cast(list[dict[str, object]], g2_snapshot["product_facts"])
+        assert product_facts[0]["sku"] == "ZX-C218"
+        assert product_facts[0]["fact_version"] == 1
+        assert _task_counts(app_database_url, g2_marker) == {
             "tasks": 1,
             "running": 0,
             "failed": 0,
@@ -239,6 +303,90 @@ def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
         }
         time.sleep(2.05)
 
+        g3_marker = f"G3-{uuid4().hex}"
+        g3 = _stream_events(
+            client,
+            _conversation_payload(
+                "帮我写条婆媳主题的小红书，别狗血，也不要把任何一方写成反派。"
+                f"{g3_marker}"
+            ),
+        )
+        assert g3[-1]["event"] == "completed"
+        g3_result = cast(dict[str, object], g3[-1]["result"])
+        assert g3_result["version"] == 1
+        assert all(
+            invented not in str(g3_result["body"])
+            for invented in ("我婆婆", "我儿媳", "孩子今年", "结婚以来", "顾客说")
+        )
+        g3_snapshot = cast(
+            dict[str, object],
+            _task_snapshot(app_database_url, g3_marker)["snapshot"],
+        )
+        assert g3_snapshot["user_actuality_quotes"] == []
+        time.sleep(2.05)
+
+        g4_marker = f"G4-{uuid4().hex}"
+        g4_message = (
+            "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
+            f"帮我发条小红书。{g4_marker}"
+        )
+        g4 = _stream_events(client, _conversation_payload(g4_message))
+        assert g4[-1]["event"] == "completed"
+        g4_result = cast(dict[str, object], g4[-1]["result"])
+        assert g4_result["version"] == 1
+        assert "今天店里忙了一天，回家还因为谁洗碗拌了两句。" in str(
+            g4_result["body"]
+        )
+        assert all(
+            invented not in str(g4_result["body"])
+            for invented in ("丈夫", "孩子", "婆婆", "最后谁洗", "她说", "他说")
+        )
+        g4_task = _task_snapshot(app_database_url, g4_marker)
+        g4_snapshot = cast(dict[str, object], g4_task["snapshot"])
+        assert g4_snapshot["user_actuality_quotes"] == [
+            "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
+        ]
+        assert g4_snapshot["user_premise"] == g4_message
+        time.sleep(2.05)
+
+        g5_marker = f"G5-{uuid4().hex}"
+        g5 = _stream_events(
+            client,
+            _conversation_payload(f"今天不知道发什么，帮我做条小红书。{g5_marker}"),
+        )
+        assert g5[-1]["event"] == "completed"
+        g5_result = cast(dict[str, object], g5[-1]["result"])
+        assert g5_result["version"] == 1
+        assert "真实发生" not in str(g5_result["body"])
+        assert _task_counts(app_database_url, g5_marker)["versions"] == 1
+
+        time.sleep(2.05)
+        revision = client.post(
+            f"/api/v1/tasks/{g4_result['task_id']}/revisions",
+            json={
+                "instruction": "别说教，荒诞一点，事实别变。",
+                "publishing_identity_id": str(ACCOUNT_ID),
+                "target": "xiaohongshu_graphic",
+                "source_target": "xiaohongshu_graphic",
+            },
+        )
+        assert revision.status_code == 201, revision.text
+        g7_result = revision.json()
+        assert g7_result["version"] == 2
+        assert "今天店里忙了一天，回家还因为谁洗碗拌了两句。" in g7_result["body"]
+        assert _task_snapshot(app_database_url, g4_marker)["snapshot"] == g4_snapshot
+        v1 = client.get(
+            f"/api/v1/tasks/{g4_result['task_id']}/versions/1",
+            params={
+                "target": "xiaohongshu_graphic",
+                "publishing_identity_id": str(ACCOUNT_ID),
+            },
+        )
+        assert v1.status_code == 200
+        assert v1.json()["version"] == 1
+        assert v1.json()["body"] == g4_result["body"]
+
+        time.sleep(2.05)
         failed_marker = f"UI05_FORCE_FAILURE-{uuid4().hex}"
         failed = _stream_events(
             client,
@@ -312,6 +460,23 @@ def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
             "failed": before_early_disconnect["failed"] + 1,
             "versions": before_early_disconnect["versions"],
         }
+
+    before_question = _persistence_counts(app_database_url)
+    with TestClient(
+        _app(app_database_url, monkeypatch, _MissingFactUI05Generator()),
+        base_url="https://diyuai.cc",
+    ) as question_client:
+        question_client.cookies.set("diyu_session", token)
+        g6 = _stream_events(
+            question_client,
+            _conversation_payload("把我去年创业最难的那个月写成视频。"),
+        )
+    assert g6[-1] == {
+        "event": "conversation",
+        "kind": "question",
+        "message": "那个月最难的一件具体事情是什么？",
+    }
+    assert _persistence_counts(app_database_url) == before_question
 
 
 def test_ui05_b_entry_qualifications_are_mutually_exclusive_and_api_errors_stay_json(

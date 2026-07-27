@@ -60,6 +60,7 @@ export interface ContentVersion {
   adapted_from?: string | null;
   translation_notice?: string | null;
   applied_direction?: string[];
+  conversation_message?: string | null;
   created_at?: string;
 }
 

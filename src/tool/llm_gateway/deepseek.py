@@ -91,6 +91,7 @@ _ROLE_BOUNDARY_SOURCE_ID = "source:role_boundary"
 _ORGANIZATION_SOURCE_ID = "source:organization"
 _USER_REQUEST_SOURCE_ID = "source:user_request"
 _USER_ACTUALITY_SOURCE_ID = "source:user_actuality"
+_SYSTEM_PLAN_SOURCE_ID = "source:system_creative_plan"
 _PRIOR_VERSION_SOURCE_ID = "source:prior_version"
 
 _CLAIM_BASES = ("brand_viewpoint", "user_premise", "confirmed_fact", "conditional_guidance")
@@ -272,13 +273,18 @@ class BoundaryContext:
                 f"{request.revision_instruction}"
             )
         topic = "\n".join(part for part in (*topic_parts, *direction_lines) if part)
-        # The request contract has no separate channel for user-presented
-        # actuality.  Only a local_response request qualifies: its routing
-        # contract already requires the user to hand over a real near-field
-        # signal.  Every other seed stays a topic and proves nothing.
-        if request.primary_product == "local_response" and not is_synthetic_fixture:
+        if request.user_actuality_quotes is not None:
+            user_actuality = "\n".join(
+                f"用户原话：{quote}" for quote in request.user_actuality_quotes
+            )
+            user_actuality_source = (
+                _USER_ACTUALITY_SOURCE_ID if request.user_actuality_quotes else None
+            )
+        # Legacy direct API calls predate the separated conversation compiler.
+        # Preserve their narrow P4 contract without making every life topic a fact.
+        elif request.primary_product == "local_response" and not is_synthetic_fixture:
             user_actuality = f"用户本次明确给出的真实近场信号（仅限本次使用）：{request.weak_seed}"
-            user_actuality_source: str | None = _USER_ACTUALITY_SOURCE_ID
+            user_actuality_source = _USER_ACTUALITY_SOURCE_ID
         else:
             user_actuality = ""
             user_actuality_source = None
@@ -325,11 +331,19 @@ class BoundaryContext:
                     "除以上外：无已确认门店事实、无已执行服务、无顾客案例、无家庭事件、无既有照片或素材。",
                 )
             )
-        method = (
-            ("\n".join(asset.body for asset in request.active_domain_assets) + "\n")
-            if request.active_domain_assets
-            else ""
-        ) + "方法资料只提供创作与制作方法，不证明任何现实人物、物品、场地或素材存在。"
+        method_parts: list[str] = []
+        if request.system_creative_plan:
+            method_parts.append(
+                "系统为本次成品自主编译的创作规划（只决定主题、切口、观点、结构、"
+                "风格和平台组织，不是用户原话，不是现实事实，也不得反向写成账号长期立场）："
+                + request.system_creative_plan
+            )
+        method_parts.extend(asset.body for asset in request.active_domain_assets)
+        method_parts.append(
+            "系统创作规划和方法资料只提供创作与制作方法，不证明任何现实人物、"
+            "物品、场地或素材存在，也不证明任何经历或经营做法已经发生。"
+        )
+        method = "\n".join(method_parts)
 
         viewpoint_sources: tuple[tuple[str, str], ...] = (
             (_BRAND_BASELINE_SOURCE_ID, "品牌定位、判断顺序与语气基线"),
@@ -369,9 +383,12 @@ class BoundaryContext:
             (f"source:material:{material.asset_id}", f"用户本次明确选入的参考《{material.title}》")
             for material in request.reference_materials
         )
-        guidance_sources: tuple[tuple[str, str], ...] = tuple(
-            (f"source:method:{index}", asset.display_name)
-            for index, asset in enumerate(request.active_domain_assets, start=1)
+        guidance_sources: tuple[tuple[str, str], ...] = (
+            *(((_SYSTEM_PLAN_SOURCE_ID, "本次系统创作规划"),) if request.system_creative_plan else ()),
+            *(
+                (f"source:method:{index}", asset.display_name)
+                for index, asset in enumerate(request.active_domain_assets, start=1)
+            ),
         )
         resources: tuple[tuple[str, str], ...] = (
             (_PHONE_RESOURCE_ID, "一部手机（拍摄与收音）"),
@@ -562,7 +579,9 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。")
         if disposition != "ready":
             return ConversationDecision(cast(Any, disposition), message)
-        brief = str(document.get("brief") or "").strip()
+        raw_premises = document.get("user_premises")
+        raw_actualities = document.get("user_actuality_quotes")
+        system_creative_plan = str(document.get("system_creative_plan") or "").strip()
         value = document.get("primary_value")
         mapping: dict[str, ContentProduct] = {
             "帮助选择": "dressing_decision",
@@ -571,12 +590,46 @@ class DeepSeekGenerator(ContentGenerator):
             "经营关系": "local_response",
             "视觉造型": "visual_styling_story",
         }
-        if not brief or not isinstance(value, str) or value not in mapping:
+        available_user_turns = tuple(
+            turn.content for turn in request.history if turn.role == "user"
+        ) + (request.message,)
+        if (
+            not isinstance(raw_premises, list)
+            or not raw_premises
+            or any(
+                not isinstance(item, str)
+                or not item.strip()
+                or item.strip() not in available_user_turns
+                for item in raw_premises
+            )
+        ):
+            raise GenerationFailed("这次还没能可靠保留你的原话，请继续补充一句。")
+        user_premises = tuple(dict.fromkeys(item.strip() for item in raw_premises))
+        if request.message not in user_premises:
+            raise GenerationFailed("这次还没能可靠保留你的原话，请继续补充一句。")
+        premise_text = "\n".join(user_premises)
+        if not isinstance(raw_actualities, list) or any(
+            not isinstance(item, str)
+            or not item.strip()
+            or item.strip() not in premise_text
+            for item in raw_actualities
+        ):
+            raise GenerationFailed("这次还没能可靠区分题材和真实情况，请继续补充一句。")
+        user_actuality_quotes = tuple(
+            dict.fromkeys(item.strip() for item in raw_actualities)
+        )
+        if (
+            not system_creative_plan
+            or not isinstance(value, str)
+            or value not in mapping
+        ):
             raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
         return ConversationDecision(
             "ready",
             message,
-            brief=brief,
+            user_premises=user_premises,
+            user_actuality_quotes=user_actuality_quotes,
+            system_creative_plan=system_creative_plan,
             primary_product=mapping[value],
         )
 
@@ -1455,17 +1508,25 @@ class DeepSeekGenerator(ContentGenerator):
         return f"""判断这一次对话应继续交流、只追问一次，还是已经可以直接创作。
 只返回以下 JSON 之一：
 {{"kind":"chat","message":"自然回复"}}
-{{"kind":"question","message":"一个最有价值的人话问题"}}
-{{"kind":"ready","message":"一句自然承接","brief":"完整而紧凑的本次创作要求","primary_value":"帮助选择|解释商品|建立人格|经营关系|视觉造型"}}
+{{"kind":"question","message":"一个不可替代的真实事实问题"}}
+{{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制本次任务实际使用的用户消息"],"user_actuality_quotes":["从 user_premises 逐字截取、可当作本次真实情况的片段；没有则为空数组"],"system_creative_plan":"系统自主选择的主题、切口、观点、结构、风格和平台组织","primary_value":"帮助选择|解释商品|建立人格|经营关系|视觉造型"}}
 
 规则：
-- chat：普通交流、讨论或尚未提出内容成果意图。自然回答，不创建任务。
-- question：已经明确想做内容，但只缺一个会实质改变结果的信息。一次只问一个问题；已知品牌、账号、平台、形式和已有资料不得重复询问。
-- ready：一句话已足够，或此前问题已经得到足够补充；立即整理 brief，不再要求确认。
-- brief 必须保留用户原话中的人物关系、否定边界和创作要求；“婆媳、夫妻、同事、亲子”等是开放情境，不是固定风格，不得替换或丢失。
+- chat：只有普通交流、抱怨、讨论，没有要求产出可发布内容时返回。自然回应，不把聊天自动变成创作素材。
+- ready：只要已有内容生产意图，即使只有一个商品编号、一句生活题材、一段流水账／抱怨／感悟，或只有“不知道发什么”的生成请求，也必须直接 ready。系统读取可信账号、品牌、平台、商品和系列上下文，自主决定主题、观点、受众价值、切口、结构、风格和平台组织，不能把这些创作判断交还用户。
+- 商品编号加生成请求已经足够 ready；有已确认商品事实时自主选择一条帮助选择、商品认知或视觉穿着主线，不询问主题、观点、结构或观看回报。
+- 开放生活题材加生成请求已经足够 ready；题材不等于用户履历。没有真实事件时写成一般观察、条件表达或明确演绎，不补造人物身份、对白、事件结果、家庭状态、创业履历、顾客案例或门店做法。
+- 生活流水账、抱怨或感悟加生成请求已经足够 ready；可以使用用户明确陈述的真实片段，系统自主选择主线，不追问创作方向。
+- 只有生成意图而没有种子时，依据当前账号画像、内容领地、品牌边界、平台和系列选择安全方向并 ready，不虚构今天真实发生过的事。
+- 开放生活题材、个人流水账和没有现实事件的安全主动选题，主要让受众认识账号如何观察、判断和待人时选择“建立人格”；只有用户给出了真实评论、门店观察或近场事件，而且主要回报是给未参与者一份关系回应时，才选择“经营关系”。
+- question 只有四项同时成立才允许：用户明确要求写一段真实经历、具体商品或其他事实承重成果；缺失内容会决定真假；可信资料没有；也不能降低具体度、使用条件表达、一般观察或安全替代继续完成。题材、观点、受众、角度、情绪、结构、是否升华、是否带商品和表现形式永远不是追问理由。
+- question 一次只问一个不可替代的真实事实。若同一意图此前已经问过而用户仍未提供，仍只返回一句合并后的最小事实缺口，不循环拆问，不编造完成。
+- user_premises 只能逐字复制当前消息和此前真正属于同一创作意图的用户消息，必须包含本轮消息；普通聊天不得带入。
+- user_actuality_quotes 只能逐字截取 user_premises 中用户明确作为现实陈述的片段。题材名、假设、创作要求、系统规划和一般观察不进入；无法逐字引用就留空。
+- system_creative_plan 只写系统的创作选择，不得把规划写成用户事实、品牌事实、门店事实或账号长期立场。
 - 当前页面明确选择的平台和形式优先，不得被自然语言静默改写。
 - 没有责任来源的商品、经历、顾客、门店做法、性能、价格和库存不得补造。
-- 只允许选择一个主要受众价值；商品资料不足时，如商品事实确实承重，应在 question 中询问具体且必要的一项。
+- 只允许选择一个主要受众价值。信息不够具体时优先降低事实具体度，不追问创作选择。
 
 当前品牌：{request.brand.brand_name}
 当前发布账号：{request.brand.account_name}

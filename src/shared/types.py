@@ -259,7 +259,9 @@ class ConversationDecision:
 
     disposition: ConversationDisposition
     message: str
-    brief: str = ""
+    user_premises: tuple[str, ...] = ()
+    user_actuality_quotes: tuple[str, ...] = ()
+    system_creative_plan: str = ""
     primary_product: ContentProduct | None = None
 
 
@@ -355,6 +357,13 @@ class ContentControlContext:
 
 @dataclass(frozen=True)
 class GenerationInput:
+    """One frozen generation request.
+
+    ``weak_seed`` is the preserved user premise for legacy callers.  System-selected
+    theme, angle, value and structure live only in ``system_creative_plan``; they
+    must never be promoted to a user, brand or operating fact.
+    """
+
     run_id: UUID
     task_id: UUID
     weak_seed: str
@@ -373,6 +382,8 @@ class GenerationInput:
     reference_materials: tuple[ReferenceMaterial, ...] = ()
     collaboration_note: str = ""
     series_context: SeriesContext | None = None
+    user_actuality_quotes: tuple[str, ...] | None = None
+    system_creative_plan: str = ""
 
 
 @dataclass(frozen=True)

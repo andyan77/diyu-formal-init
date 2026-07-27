@@ -934,7 +934,8 @@ export default function CreatorApp({
           setViewed(streamEvent.result);
           await loadVersions(streamEvent.result);
           appendAssistant(
-            "第一版已经整理好。你可以直接阅读，也可以继续告诉我哪里要变。"
+            streamEvent.result.conversation_message?.trim() ||
+              "第一版已经整理好。你可以直接阅读，也可以继续告诉我哪里要变。"
           );
           setSeed("");
           setDirectionsOpen(false);

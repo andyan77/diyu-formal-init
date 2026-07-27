@@ -65,23 +65,21 @@ class DeterministicContentGenerator(ContentGenerator):
         """Deterministic interaction double; production semantics stay in DeepSeek."""
         text = request.message.strip()
         normalized = text.casefold()
-        if _ordinary_chat(normalized):
+        if _ordinary_chat(normalized) or not _requests_content(normalized):
             return ConversationDecision("chat", "可以。你想随便聊聊，或把一个观察慢慢说清楚，都可以。")
-        if (
-            not request.history
-            and "只想自己看看" in text
-            and not any(marker in text for marker in ("写", "做成", "内容", "图文", "口播"))
-        ):
-            return ConversationDecision(
-                "question",
-                "这个观察可以做成门店人物内容。你更想讲沉默也应该被尊重，还是讨论店员什么时候适合主动介绍？",
-            )
         combined = "\n".join([*(turn.content for turn in request.history), text])
-        product = self.route(RoutingInput(combined, request.brand, request.products, None)) or "brand_life_narrative"
+        product = self.route(RoutingInput(combined, request.brand, request.products, None))
+        if product is None:
+            product = "product_truth" if request.products else "brand_life_narrative"
         return ConversationDecision(
             "ready",
-            f"好，我按当前选择的{request.brand.platform}{request.brand.media_format}整理。",
-            brief=combined,
+            f"我先按当前账号的位置选一条主线，直接整理成{request.brand.platform}{request.brand.media_format}。",
+            user_premises=(text,),
+            user_actuality_quotes=_explicit_actuality_quotes(text),
+            system_creative_plan=(
+                "从用户本轮种子中自主选择一个安全主线，完成观点、结构和平台组织；"
+                "不把题材或创作规划写成用户真实经历。"
+            ),
             primary_product=product,
         )
 
@@ -197,17 +195,34 @@ class DeterministicContentGenerator(ContentGenerator):
                     "一家人，可以自然呼应。\n也可以，各自成立。",
                     "使用普通室内环境与轻微生活声；不制造儿童、身体、年龄或家庭焦虑。",
                 )
+            actuality = "；".join(request.user_actuality_quotes or ())
+            if actuality:
+                return (
+                    P3SemanticContract(
+                        f"只从用户本次明确提供的生活片段出发：{actuality}",
+                        "受众得到的是一种不急着判输赢的观看位置，也不被要求接受一个标准答案。",
+                        "当前账号只组织用户本次前提，不补写家庭身份、顾客、对白、结果或长期履历。",
+                    ),
+                    "从用户明确提供的小事里选择一条主线，不替任何人补写前因后果。",
+                    f"{actuality} 小事没有自动站到谁的一边，也不必立刻被写成道理。"
+                    "先把当时的疲惫和那一点别扭放在同一个画面里，事实停在用户说过的位置。",
+                    "一人一手机，用现场手写字卡承接节奏；不补拍家庭成员、顾客、商品或未提供的现实场景。",
+                    "先不判输赢。\n把小事放回当时的疲惫里。",
+                    "普通室内环境与自然停顿即可；不补造对白、关系身份、争执结果或经营事实。",
+                )
             return (
                 P3SemanticContract(
-                    "南城店店长会把“我先看看”当成需要被尊重的停顿，而不是必须立刻解决的犹豫。",
-                    "受众能看见这家店怎样克制地观察和待人，而不是被要求接受一个标准答案。",
-                    "这来自南城店店长/门店经营者的合法观察位置，不冒充顾客经历或总部政策。",
+                    "从开放生活题材作一般观察或条件表达，不把题材写成当前账号的真实履历。",
+                    "受众得到一个可以自行代入、但不被替写经历的观看角度。",
+                    "当前账号只表达本篇观察，不补造家庭成员、婚姻状态、创业经历、顾客或门店事实。",
                 ),
-                "从门店里三个相似的停顿，讲清账号愿意怎样把空间留给人。",
-                "今天有三位客人都说：我先看看。店长没有急着把这句话接成成交话术，只把那件 ZX-C218 挂回原位，等对方自己走近。她也会怀疑自己是不是太克制，但还是愿意把选择留在顾客手里。",
-                "一人手机拍店长整理炭灰面和深绿细格纹的两次停顿；不拍顾客正脸，不复述任何个人识别信息。",
-                "“我先看看”，可以只是看看。\n把空间留出来，也是一种服务。",
-                "门店环境声即可；这是账号的生活观察，不是店内巡检、承诺或全国服务政策。",
+                "把开放题材写成一般情境和观察，不冒充一段真实经历。",
+                "如果两个人都带着自己的疲惫走进同一件小事，分歧未必需要一个反派。"
+                "先让彼此的处境都站得住，再看那件小事为什么会突然变重；这是一种情境演绎，"
+                "不是当前账号或任何具体家庭的经历。",
+                "一人一手机，以现场手写字卡和留白完成画面；不补拍家庭成员、顾客、商品或门店事件。",
+                "不替谁判输赢。\n先让两边都站得住。",
+                "普通室内环境与自然停顿即可；不制造人物身份、对白、结果或现实履历。",
             )
         if product == "local_response":
             return (
@@ -274,6 +289,35 @@ def _ordinary_chat(text: str) -> bool:
     return any(value in text for value in ("hello", "你好", "有点困", "挺安静", "谢谢")) and not any(
         value in text for value in ("写", "内容", "双面", "外套", "穿", "商品", "拍")
     )
+
+
+def _requests_content(text: str) -> bool:
+    """Recognize explicit production intent in the offline double, never infer it from a topic."""
+    return any(
+        value in text
+        for value in (
+            "写",
+            "生成",
+            "文案",
+            "内容",
+            "小红书",
+            "视频",
+            "口播",
+            "脚本",
+            "帮我做",
+            "帮我发",
+            "发条",
+            "不知道发什么",
+        )
+    )
+
+
+def _explicit_actuality_quotes(text: str) -> tuple[str, ...]:
+    """Keep a separately stated seed sentence distinct from the following production request."""
+    premise, separator, request = text.partition("。")
+    if separator and premise.strip() and _requests_content(request) and not _requests_content(premise):
+        return (premise.strip() + separator,)
+    return ()
 
 
 def _outline(product: ContentProduct) -> str:

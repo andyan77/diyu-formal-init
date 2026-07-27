@@ -14,6 +14,8 @@ from src.shared.errors import GenerationFailed
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
+    ConversationInput,
+    ConversationTurn,
     GenerationInput,
     GraphicProductionBundle,
     ProductFact,
@@ -375,6 +377,142 @@ def test_routing_prompt_describes_p5_by_general_audience_value(
     assert "必须通过真实商品与画面变化" in prompt
     assert "同一个人、同一动作、两面" not in prompt
     assert "双面不等于一件顶两件" not in prompt
+
+
+def test_conversation_prompt_makes_creative_judgement_the_systems_job(
+    generation_input: GenerationInput,
+) -> None:
+    request = ConversationInput(
+        message="今天不知道发什么，帮我做条小红书。",
+        history=(),
+        brand=generation_input.brand,
+        products=(),
+        target="xiaohongshu_graphic",
+    )
+
+    prompt = DeepSeekGenerator._conversation_prompt(request)
+
+    assert "系统读取可信账号、品牌、平台、商品和系列上下文" in prompt
+    assert "自主决定主题、观点、受众价值、切口、结构、风格和平台组织" in prompt
+    assert "题材、观点、受众、角度、情绪、结构、是否升华" in prompt
+    assert "user_premises" in prompt
+    assert "user_actuality_quotes" in prompt
+    assert "system_creative_plan" in prompt
+    assert '"brief"' not in prompt
+
+
+def test_collaborate_preserves_exact_user_premise_and_separates_system_plan(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    message = "今天店里忙了一天，回家还因为谁洗碗拌了两句。帮我发条小红书。"
+    _install_fake(
+        monkeypatch,
+        [
+            _completion(
+                json.dumps(
+                    {
+                        "kind": "ready",
+                        "message": "我先从两个人都很累，却把情绪落在小事上写一版。",
+                        "user_premises": [message],
+                        "user_actuality_quotes": [
+                            "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
+                        ],
+                        "system_creative_plan": "选择疲惫与小事错位的主线，用克制的荒诞感组织图文。",
+                        "primary_value": "建立人格",
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        ],
+    )
+    request = ConversationInput(
+        message=message,
+        history=(
+            ConversationTurn("user", "今天有点累，陪我聊两句。"),
+            ConversationTurn("assistant", "那就先慢一点。"),
+        ),
+        brand=generation_input.brand,
+        products=(),
+        target="xiaohongshu_graphic",
+    )
+
+    decision = _generator().collaborate(request)
+
+    assert decision.disposition == "ready"
+    assert decision.user_premises == (message,)
+    assert decision.user_actuality_quotes == (
+        "今天店里忙了一天，回家还因为谁洗碗拌了两句。",
+    )
+    assert "疲惫与小事错位" in decision.system_creative_plan
+    assert "今天有点累" not in "\n".join(decision.user_premises)
+
+
+def test_collaborate_rejects_an_invented_actuality_quote(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    message = "帮我写条婆媳主题的小红书，别狗血。"
+    _install_fake(
+        monkeypatch,
+        [
+            _completion(
+                json.dumps(
+                    {
+                        "kind": "ready",
+                        "message": "我先写一版。",
+                        "user_premises": [message],
+                        "user_actuality_quotes": ["我和婆婆昨天吵了一架。"],
+                        "system_creative_plan": "用一般观察写关系中的分寸。",
+                        "primary_value": "建立人格",
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        ],
+    )
+
+    with pytest.raises(GenerationFailed, match="区分题材和真实情况"):
+        _generator().collaborate(
+            ConversationInput(
+                message=message,
+                history=(),
+                brand=generation_input.brand,
+                products=(),
+                target="xiaohongshu_graphic",
+            )
+        )
+
+
+def test_p3_exact_actuality_and_system_plan_enter_different_fact_channels(
+    generation_input: GenerationInput,
+) -> None:
+    actuality = "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
+    request = _with(
+        generation_input,
+        weak_seed=actuality + "帮我发条小红书。",
+        primary_product="brand_life_narrative",
+        user_actuality_quotes=(actuality,),
+        system_creative_plan="从疲惫落在小事上的错位选择主线，用荒诞节奏组织。",
+    )
+
+    context = BoundaryContext.from_request(request)
+
+    assert actuality in context.user_presented_actuality
+    assert context.user_actuality_source == "source:user_actuality"
+    assert "疲惫落在小事上的错位" in context.method_guidance
+    assert "疲惫落在小事上的错位" not in context.user_presented_actuality
+    assert "source:system_creative_plan" in context.source_ids
+
+    topic_only = BoundaryContext.from_request(
+        _with(
+            request,
+            weak_seed="帮我写条婆媳主题的小红书，别狗血。",
+            user_actuality_quotes=(),
+        )
+    )
+    assert topic_only.user_presented_actuality == ""
+    assert topic_only.user_actuality_source is None
 
 
 def test_p5_prompt_keeps_product_anchor_on_registered_facts(

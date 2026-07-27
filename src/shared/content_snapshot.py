@@ -7,6 +7,36 @@ from src.shared.errors import DomainError
 from src.shared.types import ProductFact, SeriesContext, SeriesEntry
 
 
+def frozen_user_premise(snapshot: Mapping[str, object], fallback: str) -> str:
+    """Read the preserved user premise without promoting a system plan into it."""
+    value = snapshot.get("user_premise")
+    return value if isinstance(value, str) and value.strip() else fallback
+
+
+def frozen_user_actuality_quotes(
+    snapshot: Mapping[str, object],
+) -> tuple[str, ...] | None:
+    """Return ``None`` only for legacy tasks that predate separated premises."""
+    value = snapshot.get("user_actuality_quotes")
+    if value is None:
+        return None
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() for item in value
+    ):
+        raise DomainError("内容任务冻结的用户事实前提无效")
+    return tuple(dict.fromkeys(item.strip() for item in value))
+
+
+def frozen_system_creative_plan(snapshot: Mapping[str, object]) -> str:
+    """Read the frozen system plan as guidance, never as a user or brand fact."""
+    value = snapshot.get("system_creative_plan")
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise DomainError("内容任务冻结的系统创作规划无效")
+    return value.strip()
+
+
 def visible_direction(snapshot: object) -> tuple[str | None, list[str]]:
     """Project only what a reader of a finished version may see.
 
