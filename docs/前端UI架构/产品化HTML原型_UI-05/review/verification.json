@@ -1,0 +1,589 @@
+{
+  "schema_version": "ui05-gate-a-verification-v1",
+  "verified_at_utc": "2026-07-27T11:52:41.794Z",
+  "git_base_sha": "58520b965baa1c3d67eb04aa571e83647d2b912e",
+  "prototype_source_sha256": "83e547d44cf14370fc597cac22781a4ae299f469a907f05ff79909d178254f4a",
+  "verifier_sha256": "9fa33a96fa5ceefc478db9b64765eeb1fb25bf8cc16ed803c447ca43be620834",
+  "environment": {
+    "node": "v20.20.1",
+    "browser": "/home/faye/.cache/puppeteer/chrome/linux-148.0.7778.97/chrome-linux64/chrome",
+    "mode": "local-file-headless-chrome",
+    "viewports": [
+      "1440x900",
+      "390x844"
+    ]
+  },
+  "summary": {
+    "status": "passed",
+    "total": 19,
+    "passed": 19,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "id": "static.local_links",
+      "category": "static",
+      "status": "passed",
+      "evidence": {
+        "html_files": 13,
+        "broken": [],
+        "external": []
+      }
+    },
+    {
+      "id": "static.product_language",
+      "category": "static",
+      "status": "passed",
+      "evidence": {
+        "forbidden_findings": []
+      }
+    },
+    {
+      "id": "static.admin_no_creator_links",
+      "category": "static",
+      "status": "passed",
+      "evidence": {
+        "links": []
+      }
+    },
+    {
+      "id": "static.library_scope_language",
+      "category": "static",
+      "status": "passed",
+      "evidence": {
+        "old_matches": []
+      }
+    },
+    {
+      "id": "static.javascript_syntax",
+      "category": "static",
+      "status": "passed",
+      "evidence": [
+        {
+          "file": "docs/前端UI架构/产品化HTML原型_UI-05/shared/product.js",
+          "status": 0
+        },
+        {
+          "file": "docs/前端UI架构/产品化HTML原型_UI-05/review/review.js",
+          "status": 0
+        },
+        {
+          "file": "docs/前端UI架构/产品化HTML原型_UI-05/review/verify-ui05-gate-a.mjs",
+          "status": 0
+        }
+      ]
+    },
+    {
+      "id": "browser.journey_separation",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "homeVisible": true,
+        "admin": [
+          "1. 管理概览",
+          "2. 团队使用",
+          "3. 成员与互斥入口资格",
+          "4. 发布账号与账号画像",
+          "5. 品牌资料库三级范围",
+          "6. 当前可用与待补",
+          "7. 管理员访问创作端被拒绝"
+        ],
+        "creator": [
+          "1. 选择账号、平台与自然交流",
+          "2. 婆媳关系开放输入",
+          "3. 生成过程、V1/V2与历史",
+          "4. 生成失败与恢复",
+          "5. 租户用户访问管理端被拒绝"
+        ],
+        "adminFirstSrc": "../product/admin-overview.html",
+        "creatorFirstSrc": "../product/creator-empty.html?account=store&platform=xiaohongshu&format=graphic"
+      }
+    },
+    {
+      "id": "browser.entry_type_exclusive",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "adminState": {
+          "mutuallyExclusive": true,
+          "userHidden": true,
+          "userDisabled": true,
+          "adminVisible": true
+        },
+        "userState": {
+          "mutuallyExclusive": true,
+          "userVisible": true,
+          "userEnabled": true,
+          "adminHidden": true
+        }
+      }
+    },
+    {
+      "id": "browser.identities_and_targets",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "hq": {
+          "name": "总部品牌内容运营",
+          "platforms": [
+            "抖音",
+            "小红书",
+            "微信视频号"
+          ],
+          "targets": 4,
+          "profile": "从总部岗位表达品牌当前立场"
+        },
+        "store": {
+          "name": "柯桥门店人物",
+          "platforms": [
+            "小红书",
+            "微信视频号"
+          ],
+          "targets": 3,
+          "profile": "从门店日常与本人观察出发"
+        },
+        "path": "/home/faye/workspace/diyu-formal-init/docs/%E5%89%8D%E7%AB%AFUI%E6%9E%B6%E6%9E%84/%E4%BA%A7%E5%93%81%E5%8C%96HTML%E5%8E%9F%E5%9E%8B_UI-05/product/creator-empty.html"
+      }
+    },
+    {
+      "id": "browser.ordinary_chat",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "stage": "chat",
+        "navigated": false,
+        "artifactPresent": false,
+        "text": "你今天有点不知道从哪儿开始。笛语没关系，可以先说最近发生的一件小事，或者一个一直没想明白的感觉。"
+      }
+    },
+    {
+      "id": "browser.clarification_before_generation",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "stage": "clarifying",
+        "firstRoundPreserved": true,
+        "oneQuestion": true,
+        "noVersion": true
+      }
+    },
+    {
+      "id": "browser.five_axes",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "axes": [
+          "topic",
+          "approach",
+          "style",
+          "format",
+          "continuity"
+        ],
+        "counts": [
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "hasMore": true,
+        "summary": "本次方向：题材：品牌观点 · 讲法：先讲一个观察 · 风格：克制真诚 · 形式：自然口播 · 系列与互动：独立单篇 · 自定义：保留店员自己的停顿",
+        "customMissing": false
+      }
+    },
+    {
+      "id": "browser.complete_requirement_starts_generation",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "stage": "generating",
+        "account": "store",
+        "platform": "xiaohongshu",
+        "format": "graphic",
+        "frozen": true,
+        "text": "\n              发布账号柯桥门店人物\n              账号画像从门店日常与本人观察出发\n              平台与形式小红书 · 图文\n              这次要保留沉默也应该被尊重；像店员自己的感受，不写成品牌宣言\n              创作方向题材：品牌观点 · 讲法：先讲一个观察 · 风格：克制真诚 · 形式：自然口播 · 系列与互动：独立单篇 · 自定义：保留店员自己的停顿\n            "
+      }
+    },
+    {
+      "id": "browser.v1_v2_history",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "stage": "completed",
+        "artifactVisible": true,
+        "v1HasStoreFeeling": true,
+        "v2": {
+          "version": "V2",
+          "title": "有些沉默，只是想先看一会儿",
+          "main": "这是我在店里会遇到的一种感受：有人走进来，只想先安静看一会儿。我以前总担心是不是该马上介绍。现在我会先停一下，让对方看看颜色、摸摸衣服，也让那一点还没想好的时间自然过去。沉默不一定是在拒绝谁。有时，它只是在认真感受。等对方愿意开口，再从那句话开始。"
+        },
+        "backToV1": true,
+        "v1Restored": true
+      }
+    },
+    {
+      "id": "browser.optional_directions_stay_unselected",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "text": "本次方向：未选择（按自然交流整理）",
+        "inventedSelection": false
+      }
+    },
+    {
+      "id": "browser.relationship_verbatim",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "original": "想聊婆媳之间买衣服意见不一样，不要把任何一方写成反派。",
+        "noClosedReplacement": true
+      }
+    },
+    {
+      "id": "browser.failure_recovery",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "stage": "failed",
+        "message": "\n            这次还没能整理成一份可靠的成品\n            你的想法仍然保留，可以直接再试一次，也可以告诉我最想保留哪部分。\n          ",
+        "originalInput": "我最想保留“沉默也应该被尊重”，还要像店员自己的感受。",
+        "artifactPresent": false,
+        "fakeVersion": false,
+        "actions": [
+          "继续补充",
+          "再试一次"
+        ]
+      }
+    },
+    {
+      "id": "browser.library_scopes",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "filters": [
+          "全部",
+          "品牌全员",
+          "总部专用",
+          "指定区域"
+        ],
+        "rows": [
+          {
+            "scope": "brand",
+            "text": "\n                    品牌表达基线品牌当前主张、长期主题和表达原则。\n                    来源：品牌管理团队版本 V3更新时间：7 月 24 日谁可用：品牌全员\n                    当前使用\n                  "
+          },
+          {
+            "scope": "hq",
+            "text": "\n                    公司品牌叙事说明供总部岗位说明公司层面的品牌选择，不下放为门店个人经历。\n                    来源：品牌内容负责人版本 V1更新时间：7 月 18 日谁可用：总部专用\n                    当前使用\n                  "
+          },
+          {
+            "scope": "brand",
+            "text": "\n                    牛角扣短外套品类、颜色、轮廓、可见结构与可观察特征。\n                    来源：品牌商品资料表版本 V2更新时间：7 月 25 日谁可用：品牌全员\n                    有 1 项待补\n                  "
+          },
+          {
+            "scope": "region",
+            "text": "\n                    浙江区域针织开衫资料品类、颜色、结构与正面可见细节；其他区域不可用。\n                    来源：浙江区域商品表版本 V1更新时间：7 月 22 日谁可用：浙江区域可用\n                    可引用\n                  "
+          },
+          {
+            "scope": "region",
+            "text": "\n                    浙江区域与柯桥门店事实组织关系、区域范围和可用于内容的门店事实；其他区域不可用。\n                    来源：浙江区域管理员版本 V1更新时间：7 月 20 日谁可用：浙江区域可用\n                    当前使用\n                  "
+          },
+          {
+            "scope": "hq",
+            "text": "\n                    品牌季度沟通参考可以作为总部创作参考；不会自动变成商品事实或长期规则。\n                    来源：品牌策略组版本 V1更新时间：7 月 21 日谁可用：总部专用\n                    参考资料\n                  "
+          },
+          {
+            "scope": "brand",
+            "text": "\n                    2026 秋季商品静物照12 张官方图片，附人工说明；创作者仍需明确选择“本次参考”。\n                    来源：品牌视觉组版本 V1更新时间：7 月 23 日谁可用：品牌全员\n                    可选择\n                  "
+          },
+          {
+            "scope": "region",
+            "text": "\n                    浙江区域商品资料表 · 2 条2 条已形成第 1 版；空字段仍保持待补，其他区域不可用。\n                    来源：浙江区域商品表版本 V1更新时间：7 月 25 日 14:32谁可用：浙江区域可用\n                    已保存\n                  "
+          }
+        ],
+        "regionFieldVisible": true,
+        "blockedWithoutRegion": true,
+        "finalScope": "浙江区域可用",
+        "noAccountCategory": true
+      }
+    },
+    {
+      "id": "browser.viewport_quality",
+      "category": "browser",
+      "status": "passed",
+      "evidence": {
+        "combinations": 24,
+        "layout_failures": [],
+        "console_errors": [],
+        "external_requests": []
+      }
+    },
+    {
+      "id": "negative.proofs",
+      "category": "negative",
+      "status": "passed",
+      "evidence": [
+        {
+          "id": "negative.admin_creator_link",
+          "mutation": "向管理员链接注入 creator-empty.html",
+          "caught": true,
+          "error_message": "管理员旅程出现了创作链接"
+        },
+        {
+          "id": "negative.ordinary_chat_direct_artifact",
+          "mutation": "把普通交流证据改为已出现成品",
+          "caught": true,
+          "error_message": "普通交流直接进入了成品"
+        },
+        {
+          "id": "negative.missing_approach_axis",
+          "mutation": "从五轴证据删除讲法轴",
+          "caught": true,
+          "error_message": "缺少 approach 轴"
+        },
+        {
+          "id": "negative.relation_replaced",
+          "mutation": "把婆媳原词替换为闺蜜",
+          "caught": true,
+          "error_message": "人物关系原话或本次边界没有保留"
+        },
+        {
+          "id": "negative.missing_hq_scope",
+          "mutation": "从范围证据删除总部专用",
+          "caught": true,
+          "error_message": "缺少 总部专用 范围"
+        }
+      ]
+    }
+  ],
+  "negative_proofs": [
+    {
+      "id": "negative.admin_creator_link",
+      "mutation": "向管理员链接注入 creator-empty.html",
+      "caught": true,
+      "error_message": "管理员旅程出现了创作链接"
+    },
+    {
+      "id": "negative.ordinary_chat_direct_artifact",
+      "mutation": "把普通交流证据改为已出现成品",
+      "caught": true,
+      "error_message": "普通交流直接进入了成品"
+    },
+    {
+      "id": "negative.missing_approach_axis",
+      "mutation": "从五轴证据删除讲法轴",
+      "caught": true,
+      "error_message": "缺少 approach 轴"
+    },
+    {
+      "id": "negative.relation_replaced",
+      "mutation": "把婆媳原词替换为闺蜜",
+      "caught": true,
+      "error_message": "人物关系原话或本次边界没有保留"
+    },
+    {
+      "id": "negative.missing_hq_scope",
+      "mutation": "从范围证据删除总部专用",
+      "caught": true,
+      "error_message": "缺少 总部专用 范围"
+    }
+  ],
+  "layout": [
+    {
+      "page": "product/admin-overview.html",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/team-usage.html",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1425,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/members.html",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/publishing-account.html",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1425,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/brand-library.html",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/readiness.html",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1425,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/access-admin-creator.html",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/creator-empty.html?account=store&platform=xiaohongshu&format=graphic",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1425,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/creator-relationship.html?account=store&platform=xiaohongshu&format=graphic",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1425,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/creator-generating.html?account=store&platform=xiaohongshu&format=graphic",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1425,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/creator-failure.html?account=store&platform=xiaohongshu&format=graphic",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1425,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/access-user-admin.html",
+      "viewport": "desktop",
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/admin-overview.html",
+      "viewport": "mobile",
+      "innerWidth": 578,
+      "scrollWidth": 578,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/team-usage.html",
+      "viewport": "mobile",
+      "innerWidth": 578,
+      "scrollWidth": 578,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/members.html",
+      "viewport": "mobile",
+      "innerWidth": 578,
+      "scrollWidth": 578,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/publishing-account.html",
+      "viewport": "mobile",
+      "innerWidth": 578,
+      "scrollWidth": 578,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/brand-library.html",
+      "viewport": "mobile",
+      "innerWidth": 578,
+      "scrollWidth": 578,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/readiness.html",
+      "viewport": "mobile",
+      "innerWidth": 578,
+      "scrollWidth": 578,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/access-admin-creator.html",
+      "viewport": "mobile",
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/creator-empty.html?account=store&platform=xiaohongshu&format=graphic",
+      "viewport": "mobile",
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/creator-relationship.html?account=store&platform=xiaohongshu&format=graphic",
+      "viewport": "mobile",
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/creator-generating.html?account=store&platform=xiaohongshu&format=graphic",
+      "viewport": "mobile",
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/creator-failure.html?account=store&platform=xiaohongshu&format=graphic",
+      "viewport": "mobile",
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "undersized": []
+    },
+    {
+      "page": "product/access-user-admin.html",
+      "viewport": "mobile",
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "overflow": false,
+      "undersized": []
+    }
+  ],
+  "console_errors": [],
+  "external_requests": [],
+  "forbidden_terms": [],
+  "asset_activation_delta": 0,
+  "failure": ""
+}

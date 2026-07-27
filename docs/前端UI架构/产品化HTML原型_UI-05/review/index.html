@@ -10,24 +10,43 @@
     <main class="review-shell">
       <aside class="review-nav">
         <header>
-          <small>UI-05 · Gate A</small>
+          <small>UI-05 · Gate A 返工候选</small>
           <h1>租户管理与创作体验</h1>
-          <p>八张代表页面串成一条连续评审路径。评审工具只存在于此页，不进入产品页面。</p>
+          <p>先选择一个身份旅程。这里是创始人评审工具，不是产品导航，也不会让身份跨入口穿透。</p>
         </header>
+        <div class="journey-switch" aria-label="评审旅程">
+          <button type="button" data-journey="admin">租户管理员旅程</button>
+          <button type="button" data-journey="creator">租户用户创作旅程</button>
+        </div>
         <nav class="page-list" data-page-list aria-label="原型页面"></nav>
         <footer>演示资料不代表真实员工、真实商品或真实采用。当前只用于产品语义裁决。</footer>
       </aside>
       <section class="review-stage">
         <header class="review-toolbar">
-          <div class="review-title"><strong data-review-title></strong><small data-review-position></small></div>
-          <button type="button" data-prev aria-label="上一页">←</button>
-          <button type="button" data-next aria-label="下一页">→</button>
+          <button type="button" data-home>选择旅程</button>
+          <div class="review-title"><strong data-review-title>选择评审旅程</strong><small data-review-position>管理员与租户用户彼此独立</small></div>
+          <button type="button" data-prev aria-label="上一页" hidden>←</button>
+          <button type="button" data-next aria-label="下一页" hidden>→</button>
           <button class="active" type="button" data-viewport="desktop" data-desktop>桌面</button>
           <button type="button" data-viewport="mobile" data-mobile>移动</button>
-          <a href="../product/admin-overview.html" target="_blank" rel="noreferrer" data-open-raw>新窗口打开</a>
+          <a href="../product/admin-overview.html" target="_blank" rel="noreferrer" data-open-raw hidden>新窗口打开</a>
         </header>
         <div class="canvas-area">
-          <div class="canvas" data-review-canvas>
+          <section class="journey-home" data-journey-home>
+            <p>创始人评审工具</p>
+            <h2>请选择一个独立身份旅程</h2>
+            <div class="journey-cards">
+              <button type="button" data-journey="admin">
+                <strong>租户管理员旅程</strong>
+                <span>成员与入口、发布账号、品牌资料和团队使用</span>
+              </button>
+              <button type="button" data-journey="creator">
+                <strong>租户用户创作旅程</strong>
+                <span>账号与平台、自然交流、澄清、生成、版本和失败恢复</span>
+              </button>
+            </div>
+          </section>
+          <div class="canvas" data-review-canvas hidden>
             <iframe title="笛语 UI-05 产品原型" data-review-frame></iframe>
           </div>
         </div>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>开放人物关系 · 笛语</title>
+    <link rel="stylesheet" href="../shared/product.css" />
+  </head>
+  <body class="creator-page" data-mobile-view="conversation" data-product-space="creator" data-conversation-stage="clarifying">
+    <header class="creator-topbar">
+      <img class="brand-symbol" src="../../../../assets/brand/diyu-vi/svg/diyu-symbol.svg" alt="笛语" />
+      <label class="identity-control">发布账号
+        <select data-identity-select><option value="hq">总部品牌内容运营</option><option value="store">柯桥门店人物</option></select>
+      </label>
+      <div class="creator-identity"><span>账号画像</span><strong data-profile-summary>从总部岗位表达品牌当前立场</strong></div>
+      <div class="target-controls"><label>平台<select data-platform-select></select></label><label>内容形式<select data-format-select></select></label></div>
+    </header>
+
+    <main class="creator-layout">
+      <aside class="creator-sidebar">
+        <a class="button-link new-creation" href="creator-empty.html?account=store&amp;platform=xiaohongshu&amp;format=graphic">＋ 新交流</a>
+        <nav aria-label="创作次级导航">
+          <span>当前交流</span>
+          <a class="active" href="creator-relationship.html?account=store&amp;platform=xiaohongshu&amp;format=graphic">婆媳买衣服意见不同<small>正在澄清表达者</small></a>
+          <span>这次已经保留</span>
+          <span class="sidebar-note">人物关系：婆媳</span>
+          <span class="sidebar-note">不把任何一方写成反派</span>
+        </nav>
+      </aside>
+
+      <section class="creator-conversation">
+        <div class="conversation-body">
+          <div class="message-list" data-message-list aria-live="polite">
+            <article class="message user" data-message-role="user">
+              <span>你</span>
+              <p data-original-relation>想聊婆媳之间买衣服意见不一样，不要把任何一方写成反派。</p>
+            </article>
+            <article class="message assistant" data-message-role="assistant">
+              <span>笛语</span>
+              <p>可以。婆媳是这次的人物关系，“不把任何一方写成反派”会保留为本次边界。你希望由门店店员讲自己的观察，还是由其中一位当事人来讲？</p>
+            </article>
+            <section class="requirement-preview" data-relation-evidence>
+              <div><span>人物关系</span><strong>婆媳</strong></div>
+              <div><span>本次边界</span><strong>不把任何一方写成反派</strong></div>
+              <div><span>还需要知道</span><strong>当前表达者或想采用的讲法</strong></div>
+            </section>
+            <article class="message assistant" data-relationship-result hidden>
+              <span>笛语</span>
+              <p>明白，这次由门店店员讲自己的观察，不替任何一方下结论。你还可以继续补充，也可以直接说想做成什么形式。</p>
+            </article>
+          </div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <label class="sr-only" for="relationship-input">继续补充</label>
+            <textarea id="relationship-input" data-relationship-input>由门店店员讲自己的观察，先讲一个现场里常见的分歧。</textarea>
+            <div class="composer-actions">
+              <span class="muted">人物关系由原话承接，不需要先在分类里找到</span>
+              <button class="composer-submit primary" type="button" aria-label="发送" data-relationship-submit>↑</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="pill" data-page-notice hidden></div>
+    <script src="../shared/product.js"></script>
+  </body>
+</html>

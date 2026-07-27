@@ -6,7 +6,7 @@
     <title>品牌资料库 · 笛语品牌管理</title>
     <link rel="stylesheet" href="../shared/product.css" />
   </head>
-  <body data-page="library">
+  <body data-page="library" data-product-space="admin">
     <div class="admin-shell">
       <aside class="admin-rail" data-admin-rail></aside>
       <main class="admin-main">
@@ -18,16 +18,23 @@
           <header class="page-heading">
             <div>
               <p class="eyebrow">品牌资料库</p>
-              <h1>把创作需要的品牌资料放在正确位置</h1>
-              <p class="lede">每份资料都保留来源、适用范围和版本；私人素材不在这里管理。</p>
+              <h1>品牌资料放在正确位置，也只给正确的人使用</h1>
+              <p class="lede">管理员维护品牌资料，但不会因此获得内容创作资格；私人素材始终由本人单独管理。</p>
             </div>
             <button class="primary" type="button" data-open-drawer="import">导入资料</button>
           </header>
 
+          <div class="scope-filter" role="group" aria-label="谁可以使用">
+            <span>谁可用</span>
+            <button class="active" type="button" data-scope-filter="all">全部</button>
+            <button type="button" data-scope-filter="brand">品牌全员</button>
+            <button type="button" data-scope-filter="hq">总部专用</button>
+            <button type="button" data-scope-filter="region">指定区域</button>
+          </div>
+
           <div class="library-shell">
             <nav class="library-categories" data-tab-group="library" aria-label="资料分类">
-              <button class="active" type="button" data-tab="strategy">品牌战略与表达</button>
-              <button type="button" data-tab="accounts">发布账号与画像</button>
+              <button class="active" type="button" data-tab="strategy">品牌战略与表达资料</button>
               <button type="button" data-tab="products">商品资料</button>
               <button type="button" data-tab="organization">组织、区域与门店事实</button>
               <button type="button" data-tab="reference">品牌知识与参考资料</button>
@@ -38,71 +45,75 @@
             <section>
               <div data-tab-panel-group="library" data-tab-panel="strategy">
                 <div class="library-list">
-                  <article class="library-row">
-                    <div><h3>品牌表达</h3><p>品牌当前主张、能代表什么、不能代表什么，以及长期主题。</p></div>
-                    <div class="source-meta"><span>来源：品牌管理团队</span><span>适用：笛语服饰全品牌</span><span>版本 V3 · 7 月 24 日</span></div>
+                  <article class="library-row" data-library-row data-library-scope="brand">
+                    <div><h3>品牌表达基线</h3><p>品牌当前主张、长期主题和表达原则。</p></div>
+                    <div class="source-meta"><span>来源：品牌管理团队</span><span>版本 V3</span><span>更新时间：7 月 24 日</span><strong>谁可用：品牌全员</strong></div>
                     <span class="status-pill good">当前使用</span>
                   </article>
-                  <article class="library-row">
-                    <div><h3>服务关系表达说明</h3><p>帮助内容区分品牌立场、门店建议和已经发生的做法。</p></div>
-                    <div class="source-meta"><span>来源：品牌内容负责人</span><span>适用：品牌内容</span><span>版本 V1 · 7 月 18 日</span></div>
+                  <article class="library-row" data-library-row data-library-scope="hq">
+                    <div><h3>公司品牌叙事说明</h3><p>供总部岗位说明公司层面的品牌选择，不下放为门店个人经历。</p></div>
+                    <div class="source-meta"><span>来源：品牌内容负责人</span><span>版本 V1</span><span>更新时间：7 月 18 日</span><strong>谁可用：总部专用</strong></div>
                     <span class="status-pill good">当前使用</span>
                   </article>
                 </div>
               </div>
-              <div data-tab-panel-group="library" data-tab-panel="accounts" hidden>
-                <div class="library-list">
-                  <article class="library-row">
-                    <div><h3>总部品牌内容运营</h3><p>一份账号画像，供抖音、小红书和微信视频号共同使用。</p></div>
-                    <div class="source-meta"><span>负责团队：笛语服饰管理组织</span><span>版本 V2 · 今天 10:24</span></div>
-                    <a class="text-action" href="publishing-account.html">查看账号</a>
-                  </article>
-                </div>
-              </div>
+
               <div data-tab-panel-group="library" data-tab-panel="products" hidden>
                 <div class="library-list">
-                  <article class="library-row">
+                  <article class="library-row" data-library-row data-library-scope="brand">
                     <div><h3>牛角扣短外套</h3><p>品类、颜色、轮廓、可见结构与可观察特征。</p></div>
-                    <div class="source-meta"><span>来源：既有商品资料，经管理员核对</span><span>适用：演示内容</span><span>版本 V2 · 7 月 25 日</span></div>
+                    <div class="source-meta"><span>来源：品牌商品资料表</span><span>版本 V2</span><span>更新时间：7 月 25 日</span><strong>谁可用：品牌全员</strong></div>
                     <span class="status-pill conditional">有 1 项待补</span>
                   </article>
-                  <article class="library-row">
-                    <div><h3>针织开衫</h3><p>品类、颜色、结构与正面可见细节。</p></div>
-                    <div class="source-meta"><span>来源：商品资料表</span><span>适用：演示内容</span><span>版本 V1 · 7 月 22 日</span></div>
+                  <article class="library-row" data-library-row data-library-scope="region">
+                    <div><h3>浙江区域针织开衫资料</h3><p>品类、颜色、结构与正面可见细节；其他区域不可用。</p></div>
+                    <div class="source-meta"><span>来源：浙江区域商品表</span><span>版本 V1</span><span>更新时间：7 月 22 日</span><strong>谁可用：浙江区域可用</strong></div>
                     <span class="status-pill good">可引用</span>
                   </article>
                 </div>
               </div>
+
               <div data-tab-panel-group="library" data-tab-panel="organization" hidden>
                 <div class="library-list">
-                  <article class="library-row">
-                    <div><h3>浙江区域与柯桥门店</h3><p>组织关系、区域范围和可用于内容的门店事实。</p></div>
-                    <div class="source-meta"><span>来源：租户管理员</span><span>适用：浙江区域</span><span>版本 V1 · 7 月 20 日</span></div>
+                  <article class="library-row" data-library-row data-library-scope="region">
+                    <div><h3>浙江区域与柯桥门店事实</h3><p>组织关系、区域范围和可用于内容的门店事实；其他区域不可用。</p></div>
+                    <div class="source-meta"><span>来源：浙江区域管理员</span><span>版本 V1</span><span>更新时间：7 月 20 日</span><strong>谁可用：浙江区域可用</strong></div>
                     <span class="status-pill good">当前使用</span>
                   </article>
                 </div>
               </div>
+
               <div data-tab-panel-group="library" data-tab-panel="reference" hidden>
-                <div class="library-empty-note">可以保存品牌手册、内部说明和可信参考文件。新资料先作为参考使用；需要成为可引用事实时，再由管理员单独确认。</div>
+                <div class="library-list">
+                  <article class="library-row" data-library-row data-library-scope="hq">
+                    <div><h3>品牌季度沟通参考</h3><p>可以作为总部创作参考；不会自动变成商品事实或长期规则。</p></div>
+                    <div class="source-meta"><span>来源：品牌策略组</span><span>版本 V1</span><span>更新时间：7 月 21 日</span><strong>谁可用：总部专用</strong></div>
+                    <span class="status-pill conditional">参考资料</span>
+                  </article>
+                </div>
               </div>
+
               <div data-tab-panel-group="library" data-tab-panel="media" hidden>
                 <div class="library-list">
-                  <article class="library-row">
-                    <div><h3>2026 秋季商品静物照</h3><p>12 张官方图片，已附人工说明；创作者仍需明确选择“本次参考”。</p></div>
-                    <div class="source-meta"><span>来源：品牌视觉组</span><span>适用：总部内容组</span><span>版本 V1 · 7 月 23 日</span></div>
+                  <article class="library-row" data-library-row data-library-scope="brand">
+                    <div><h3>2026 秋季商品静物照</h3><p>12 张官方图片，附人工说明；创作者仍需明确选择“本次参考”。</p></div>
+                    <div class="source-meta"><span>来源：品牌视觉组</span><span>版本 V1</span><span>更新时间：7 月 23 日</span><strong>谁可用：品牌全员</strong></div>
                     <span class="status-pill good">可选择</span>
                   </article>
                 </div>
               </div>
+
               <div data-tab-panel-group="library" data-tab-panel="imports" hidden>
                 <div class="library-list">
-                  <article class="library-row">
-                    <div><h3>商品资料表 · 2 条</h3><p>1 条保存成功，1 条因缺少资料来源暂未保存。</p></div>
-                    <div class="source-meta"><span>导入人：林岚</span><span>7 月 25 日 14:32</span></div>
-                    <span class="status-pill conditional">部分完成</span>
+                  <article class="library-row" data-library-row data-library-scope="region">
+                    <div><h3>浙江区域商品资料表 · 2 条</h3><p>2 条已形成第 1 版；空字段仍保持待补，其他区域不可用。</p></div>
+                    <div class="source-meta"><span>来源：浙江区域商品表</span><span>版本 V1</span><span>更新时间：7 月 25 日 14:32</span><strong>谁可用：浙江区域可用</strong></div>
+                    <span class="status-pill good">已保存</span>
                   </article>
                 </div>
               </div>
+
+              <p class="library-empty-note" data-scope-empty hidden>当前分类没有符合这个可用范围的资料。</p>
             </section>
           </div>
         </div>
@@ -116,7 +127,7 @@
           <button class="icon-button" type="button" aria-label="关闭" data-close-drawer>×</button>
         </header>
         <div class="stepper" aria-label="导入步骤">
-          <span class="active" data-step="1">选择来源</span><span data-step="2">预览字段</span><span data-step="3">资料范围</span><span data-step="4">保存结果</span>
+          <span class="active" data-step="1">选择来源</span><span data-step="2">预览字段</span><span data-step="3">可用范围</span><span data-step="4">保存结果</span>
         </div>
         <section class="form-stack" data-import-step="1">
           <label>录入方式<select><option>粘贴表格</option><option>上传 CSV 文件</option><option>手工填写一件商品</option></select></label>
@@ -125,7 +136,7 @@
 针织开衫,开衫,深灰,,合身,正面排扣</textarea></label>
         </section>
         <section class="form-stack" data-import-step="2" hidden>
-          <p class="inline-callout">预览只确认字段是否可读；保存前还需要补充资料来源和适用范围。</p>
+          <p class="inline-callout">预览只确认字段是否可读；保存前还需要补充来源和谁可以使用。</p>
           <div class="preview-table">
             <div class="preview-row"><strong>牛角扣短外套</strong><span>6 个字段可读</span></div>
             <div class="preview-row error"><strong>针织开衫</strong><span>“结构”为空，可补充或留空保存</span></div>
@@ -134,14 +145,29 @@
         <section class="form-stack" data-import-step="3" hidden>
           <label>资料来源<input type="text" value="品牌商品资料表（演示）" /></label>
           <label>所属品牌<input type="text" value="笛语服饰" /></label>
-          <label>适用组织<select><option>笛语服饰全品牌</option><option>浙江区域</option><option>柯桥门店</option></select></label>
-          <label>适用时间<input type="text" value="2026 秋季演示期" /></label>
-          <p class="inline-callout">保存后形成新版本；留空字段不会被系统补造。</p>
+          <label>谁可以使用
+            <select data-scope-select>
+              <option value="brand">品牌全员</option>
+              <option value="hq">总部专用</option>
+              <option value="region">指定区域</option>
+            </select>
+          </label>
+          <label data-region-field hidden>选择具体区域
+            <select data-region-select>
+              <option value="">请选择区域</option>
+              <option value="浙江区域">浙江区域</option>
+              <option value="江苏区域">江苏区域</option>
+            </select>
+          </label>
+          <p class="field-error" data-region-error hidden>选择“指定区域”后，需要先选择一个具体区域。</p>
+          <label>适用时间<input type="text" value="2026 秋季" /></label>
+          <p class="inline-callout">保存后形成新版本；留空字段不会被补造，指定区域的资料不会自动提供给其他区域。</p>
         </section>
         <section class="form-stack" data-import-step="4" hidden>
           <span class="status-pill good">2 条可保存</span>
           <h3>这次补充会改善什么</h3>
-          <p class="muted">两条商品都会形成第 1 版。牛角扣短外套可以引用已确认的品类、颜色、结构、轮廓与可观察特征；针织开衫的空字段会原样保留为待补。</p>
+          <p class="muted">两条商品会形成第 1 版，空字段继续保持待补。</p>
+          <p class="inline-callout">谁可用：<strong data-import-scope-summary>品牌全员</strong></p>
         </section>
         <div class="drawer-actions">
           <button class="quiet" type="button" data-import-back>上一步</button>

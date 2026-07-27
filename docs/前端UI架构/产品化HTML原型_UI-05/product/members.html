@@ -6,7 +6,7 @@
     <title>成员与权限 · 笛语品牌管理</title>
     <link rel="stylesheet" href="../shared/product.css" />
   </head>
-  <body data-page="members">
+  <body data-page="members" data-product-space="admin">
     <div class="admin-shell">
       <aside class="admin-rail" data-admin-rail></aside>
       <main class="admin-main">
@@ -18,8 +18,8 @@
           <header class="page-heading">
             <div>
               <p class="eyebrow">成员与权限</p>
-              <h1>谁可以进入，谁可以操作哪些账号</h1>
-              <p class="lede">登录成员与发布账号分别管理；同一成员可以获准操作多个发布账号。</p>
+              <h1>谁从哪个入口进入，谁可以操作哪些账号</h1>
+              <p class="lede">首期一个登录成员只属于一种入口：品牌管理员，或租户用户。</p>
             </div>
             <button class="primary" type="button" data-open-drawer="add-member">添加成员</button>
           </header>
@@ -48,35 +48,35 @@
                 <tbody>
                   <tr data-member-status="enabled">
                     <td data-label="成员"><strong>周宁</strong><small>总部内容组</small></td>
-                    <td data-label="入口资格">内容创作</td>
+                    <td data-label="入口资格">租户用户 · 内容创作</td>
                     <td data-label="可操作发布账号">总部品牌内容运营</td>
                     <td data-label="最后使用">今天 11:42</td>
                     <td data-label="状态"><span class="status-pill good">启用</span></td>
                   </tr>
                   <tr data-member-status="enabled">
                     <td data-label="成员"><strong>陈晓</strong><small>柯桥门店</small></td>
-                    <td data-label="入口资格">内容创作、陈列搭配</td>
+                    <td data-label="入口资格">租户用户 · 内容创作、陈列搭配</td>
                     <td data-label="可操作发布账号">柯桥门店人物</td>
                     <td data-label="最后使用">昨天 16:08</td>
                     <td data-label="状态"><span class="status-pill good">启用</span></td>
                   </tr>
                   <tr data-member-status="pending">
                     <td data-label="成员"><strong>吴澄</strong><small>浙江区域</small></td>
-                    <td data-label="入口资格">内容创作</td>
+                    <td data-label="入口资格">租户用户 · 内容创作</td>
                     <td data-label="可操作发布账号">总部品牌内容运营</td>
                     <td data-label="最后使用">尚未使用</td>
                     <td data-label="状态"><span class="status-pill conditional">待激活</span></td>
                   </tr>
                   <tr data-member-status="enabled">
                     <td data-label="成员"><strong>林岚</strong><small>品牌管理</small></td>
-                    <td data-label="入口资格">品牌管理</td>
+                    <td data-label="入口资格">租户管理员</td>
                     <td data-label="可操作发布账号">未分配</td>
                     <td data-label="最后使用">今天 10:24</td>
                     <td data-label="状态"><span class="status-pill good">启用</span></td>
                   </tr>
                   <tr data-member-status="disabled">
                     <td data-label="成员"><strong>赵行</strong><small>浙江区域</small></td>
-                    <td data-label="入口资格">内容创作</td>
+                    <td data-label="入口资格">租户用户 · 内容创作</td>
                     <td data-label="可操作发布账号">总部品牌内容运营</td>
                     <td data-label="最后使用">20 天前</td>
                     <td data-label="状态"><span class="status-pill blocked">停用</span></td>
@@ -99,22 +99,31 @@
           <label>姓名<input type="text" value="顾晨" /></label>
           <label>所属团队<select><option>总部内容组</option><option>浙江区域</option><option>柯桥门店</option></select></label>
           <fieldset>
-            <legend>入口资格</legend>
-            <label class="check-line"><input type="checkbox" checked /> 内容创作</label>
-            <label class="check-line"><input type="checkbox" /> 陈列搭配</label>
-            <label class="check-line"><input type="checkbox" /> 品牌管理</label>
+            <legend>入口类型</legend>
+            <label class="check-line"><input type="radio" name="entry-type" value="tenant-user" checked data-entry-type /> 租户用户</label>
+            <label class="check-line"><input type="radio" name="entry-type" value="tenant-admin" data-entry-type /> 租户管理员</label>
           </fieldset>
-          <fieldset>
-            <legend>可操作发布账号</legend>
-            <label class="check-line"><input type="checkbox" checked /> 总部品牌内容运营</label>
-            <label class="check-line"><input type="checkbox" /> 柯桥门店人物</label>
-          </fieldset>
+          <div class="entry-dependent" data-entry-user>
+            <fieldset>
+              <legend>租户用户可以做什么</legend>
+              <label class="check-line"><input type="checkbox" checked /> 内容创作</label>
+              <label class="check-line"><input type="checkbox" /> 陈列搭配</label>
+            </fieldset>
+            <fieldset>
+              <legend>可操作发布账号</legend>
+              <label class="check-line"><input type="checkbox" checked /> 总部品牌内容运营</label>
+              <label class="check-line"><input type="checkbox" /> 柯桥门店人物</label>
+            </fieldset>
+          </div>
+          <div class="entry-dependent inline-callout" data-entry-admin hidden>
+            租户管理员只进入品牌管理，维护成员、发布账号和品牌资料；不会获得内容创作或陈列搭配入口。
+          </div>
           <p class="inline-callout">保存后会生成一条有时限、仅能使用一次的体验链接，由管理员交给本人。</p>
         </div>
         <section class="stable-success" data-member-success hidden>
           <span class="status-pill good">成员已添加</span>
-          <h3>体验链接已生成</h3>
-          <p>链接在 24 小时内仅能使用一次。这里不显示链接正文；请通过正式页面复制并交给顾晨本人。</p>
+          <h3 data-member-success-title>租户用户体验链接已生成</h3>
+          <p data-member-success-copy>顾晨将从租户用户入口进入。链接在 24 小时内仅能使用一次；这里不显示链接正文。</p>
           <button type="button" data-action-message="演示：体验链接已复制。">复制体验链接</button>
           <div class="drawer-actions"><button class="primary" type="button" data-close-drawer>完成</button></div>
         </section>
