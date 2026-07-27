@@ -383,10 +383,17 @@ class BoundaryContext:
             )
         is_synthetic_fixture = request.brand.business_data_kind == "synthetic_business_fixture"
         if request.primary_product == "local_response" and is_synthetic_fixture:
-            direction_lines.append(
-                "本次近场种子属于等深模拟业务夹具，只能作为假设情境和演示脚本起点；"
-                "不得用第一人称或现实陈述写成当前账号、操作者、门店或顾客真实发生过的经历。"
-            )
+            if request.user_actuality_quotes:
+                direction_lines.append(
+                    "本次属于严格隔离的等深模拟业务验收。边界二列出的用户原话可以作为本次内容作者"
+                    "明确提供的事实逐字使用；这只授权当前成品，不证明现实账号、操作者或门店具有相应"
+                    "身份和履历，也不得写入长期画像。原话之外仍不得补造人物关系、动机、对白或结果。"
+                )
+            else:
+                direction_lines.append(
+                    "本次近场种子属于等深模拟业务夹具，只能作为假设情境和演示脚本起点；"
+                    "不得用第一人称或现实陈述写成当前账号、操作者、门店或顾客真实发生过的经历。"
+                )
         topic_parts = [
             (
                 f"原始请求（保留未被本次修改改变的目标；冲突的创作和制作要求已被本次修改替代）：{request.weak_seed}"
@@ -1654,19 +1661,23 @@ class DeepSeekGenerator(ContentGenerator):
         core: ContentCore,
         issues: tuple[UnitIssue, ...],
     ) -> ContentCore:
-        """Compile resource violations onto the call's registered production rails.
+        """Compile scene actuality/resource violations onto registered rails.
 
-        A model-authored repair may remove an unknown resource id while its visible
-        action still requires an unregistered prop, person or existing asset.  For
-        only those already-rejected scene units, keep the associated content claims
-        and page order but compile the production step from the closed-world
-        registry.  The resulting core still receives the normal complete review.
+        A model-authored repair may remove an unknown resource id while its
+        visible action still requires an unregistered prop, or may reenact a
+        user premise with invented detail. For only those already-rejected
+        scene units, keep the associated claims and page order but compile the
+        production step from the closed-world registry. The resulting core
+        still receives the normal complete review.
         """
 
         resource_units = {
             issue.unit_id
             for issue in issues
-            if issue.reason_code == "unsupported_resource"
+            if issue.reason_code in (
+                "unsupported_resource",
+                "invented_actuality",
+            )
         }
         if not resource_units:
             return core
@@ -2462,7 +2473,9 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
 - identity_ok：为 false 当该单元让账号或当前创作者以第一人称、表演或叙事位置冒充边界外的自然人或岗位
   （妈妈、家长、孩子的照护者、店长、店员、顾客、研发人员等）。用户只是在话题中提到某类人，
   不构成账号具备该身份。当前创作者以拍摄者、口播者或账号运营身份自称（如“我是品牌账号运营”、
-  “这里是品牌官方账号”）不属于冒充。
+  “这里是品牌官方账号”）不属于冒充。边界二逐字列出的用户现实原话可以作为本次内容作者提供的
+  第一人称事实使用；不能仅因技术发布账号与内容作者不是同一身份就判 false，但原话没有提供的岗位、
+  家庭关系、履历与长期身份仍为 false。
 - actuality_ok：为 false 当该单元把观点、假设、话题对象或未知情况写成操作人亲历、真实案例、已经发生的
   动作/场景、门店已执行做法或普遍政策；或把品牌“认为、希望、主张、建议”写成已经发生或正在执行；
   或出现“我们见过、我们观察到、有位顾客、很多家庭”等边界二、四未提供的经历与观察；

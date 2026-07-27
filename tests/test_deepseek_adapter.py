@@ -446,6 +446,33 @@ def test_synthetic_near_field_seed_stays_a_hypothetical_premise(
     assert "不得用第一人称" in context.task_topic_or_request
 
 
+def test_synthetic_user_actuality_is_authorized_only_for_the_current_artifact(
+    generation_input: GenerationInput,
+) -> None:
+    actuality = "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
+    request = _with(
+        generation_input,
+        weak_seed=f"{actuality}帮我发条小红书。",
+        primary_product="local_response",
+        user_actuality_quotes=(actuality,),
+        brand=replace(
+            generation_input.brand,
+            business_data_kind="synthetic_business_fixture",
+        ),
+    )
+    context = BoundaryContext.from_request(request)
+
+    assert context.user_presented_actuality == f"用户原话：{actuality}"
+    assert context.user_actuality_quotes == (actuality,)
+    assert "可以作为本次内容作者明确提供的事实逐字使用" in (
+        context.task_topic_or_request
+    )
+    assert "不证明现实账号、操作者或门店具有相应身份和履历" in (
+        context.task_topic_or_request
+    )
+    assert "不得写入长期画像" in context.task_topic_or_request
+
+
 def test_routing_prompt_describes_p5_by_general_audience_value(
     generation_input: GenerationInput,
 ) -> None:
@@ -1233,7 +1260,7 @@ def test_resource_repairs_compile_only_rejected_steps_onto_registered_rails(
         core,
         (
             UnitIssue("s1", "unsupported_resource", "木桌"),
-            UnitIssue("s2", "unsupported_resource", "模特"),
+            UnitIssue("s2", "invented_actuality", "模特"),
         ),
     )
 
