@@ -907,6 +907,12 @@ class DeepSeekGenerator(ContentGenerator):
                     repaired_core,
                     issues,
                 )
+                repaired_core = self._bind_rejected_nonactual_claims(
+                    request,
+                    context,
+                    repaired_core,
+                    issues,
+                )
                 repaired_core = self._stabilize_product_resource_cascade(
                     request,
                     context,
@@ -1601,6 +1607,66 @@ class DeepSeekGenerator(ContentGenerator):
                 actuality="non_event",
                 source_refs=(source_ref,),
             )
+            normalized.append(replacement)
+            changed = changed or replacement != claim
+        if not changed:
+            return core
+        return ContentCore(
+            speaker_ref=core.speaker_ref,
+            claims=tuple(normalized),
+            spoken_order=core.spoken_order,
+            scene_steps=core.scene_steps,
+        )
+
+    @staticmethod
+    def _bind_rejected_nonactual_claims(
+        request: GenerationInput,
+        context: BoundaryContext,
+        core: ContentCore,
+        issues: tuple[UnitIssue, ...],
+    ) -> ContentCore:
+        """Replace rejected experience shells with frozen brand viewpoints.
+
+        This fallback applies only when the user supplied no lived fact. It
+        preserves the model's slot and overall structure while preventing a
+        second paraphrase from turning a topic into an account history.
+        """
+
+        if context.user_actuality_source is not None:
+            return core
+        rejected = {
+            issue.unit_id
+            for issue in issues
+            if issue.reason_code == "invented_actuality"
+        }
+        viewpoints = tuple(
+            dict.fromkeys(
+                text.strip().rstrip("。") + "。"
+                for text in (
+                    request.brand.positioning,
+                    request.brand.decision_order,
+                )
+                if text.strip()
+            )
+        )
+        if not rejected or not viewpoints:
+            return core
+
+        normalized: list[ContentClaim] = []
+        replacement_index = 0
+        changed = False
+        for claim in core.claims:
+            if claim.claim_id not in rejected:
+                normalized.append(claim)
+                continue
+            replacement = replace(
+                claim,
+                text=viewpoints[replacement_index % len(viewpoints)],
+                basis="brand_viewpoint",
+                actuality="non_event",
+                source_refs=(_BRAND_BASELINE_SOURCE_ID,),
+            )
+            replacement_index += 1
             normalized.append(replacement)
             changed = changed or replacement != claim
         if not changed:

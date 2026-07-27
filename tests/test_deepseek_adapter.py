@@ -1545,6 +1545,55 @@ def test_rejected_product_claim_is_bound_even_after_repair_drops_its_source(
     assert not DeepSeekGenerator._closed_world_issues(context, bound)
 
 
+def test_rejected_experience_shell_uses_frozen_viewpoint_without_user_actuality(
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(
+        generation_input,
+        weak_seed="写一条开放关系题材的小红书。",
+        user_actuality_quotes=(),
+        products=(),
+    )
+    context = BoundaryContext.from_request(request)
+    core = _generator()._parse_core(
+        request,
+        context,
+        _video_core(),
+    )
+
+    bound = DeepSeekGenerator._bind_rejected_nonactual_claims(
+        request,
+        context,
+        core,
+        (
+            UnitIssue("c8", "invented_actuality", core.claim("c8").text),
+            UnitIssue("c9", "invented_actuality", core.claim("c9").text),
+        ),
+    )
+
+    assert bound.claim("c8").text == generation_input.brand.positioning + "。"
+    assert bound.claim("c9").text == generation_input.brand.decision_order + "。"
+    for claim_id in ("c8", "c9"):
+        claim = bound.claim(claim_id)
+        assert claim.basis == "brand_viewpoint"
+        assert claim.actuality == "non_event"
+        assert claim.source_refs == ("source:brand_baseline",)
+    assert not DeepSeekGenerator._closed_world_issues(context, bound)
+
+    actuality_request = _with(
+        request,
+        user_actuality_quotes=("今天真实发生了一件小事。",),
+    )
+    actuality_context = BoundaryContext.from_request(actuality_request)
+    unchanged = DeepSeekGenerator._bind_rejected_nonactual_claims(
+        actuality_request,
+        actuality_context,
+        core,
+        (UnitIssue("c8", "invented_actuality", core.claim("c8").text),),
+    )
+    assert unchanged is core
+
+
 def test_product_truth_production_uses_only_registered_rails(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,
