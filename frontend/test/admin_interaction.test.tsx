@@ -121,7 +121,12 @@ async function main(): Promise<void> {
   });
   assert.match(document.body.textContent ?? "", /概览与待处理/);
   assert.match(document.body.textContent ?? "", /成员与权限/);
+  assert.match(document.body.textContent ?? "", /品牌与创作资料/);
   assert.doesNotMatch(document.body.textContent ?? "", /下一阶段|施工|验收/);
+  assert.doesNotMatch(
+    document.body.textContent ?? "",
+    /已可使用|保持就绪|运行正常|笛语运维|需求反馈/
+  );
   assert.equal(document.querySelector('a[href*="section=demo"]'), null);
   assert.equal(document.querySelector(".creator-app"), null);
   assert.equal(document.querySelector('textarea[aria-label="内容需求"]'), null);
@@ -133,10 +138,13 @@ async function main(): Promise<void> {
     runtime_summary: { enabled_tenants: 3, content_runs: 12 },
     pending_requests: 2
   });
-  assert.match(document.body.textContent ?? "", /服务运行正常/);
+  assert.match(document.body.textContent ?? "", /当前运行汇总/);
   assert.match(document.body.textContent ?? "", /启用租户/);
   assert.equal(document.querySelector(".creator-app"), null);
-  assert.doesNotMatch(document.body.textContent ?? "", /成员与权限|生成内容/);
+  assert.doesNotMatch(
+    document.body.textContent ?? "",
+    /成员与权限|发布账号|生成内容|已可使用|保持就绪|运行正常/
+  );
   await unmount(root);
 
   process.stdout.write("UI-03 public, auth and isolated shell checks passed\n");

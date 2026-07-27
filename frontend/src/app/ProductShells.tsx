@@ -56,9 +56,9 @@ export function TenantAdminShell({
           </form>
         </header>
         <section className="control-overview">
-          <p className="eyebrow">概览</p>
-          <h1>品牌创作已可使用</h1>
-          <p>当前品牌表达、发布账号与创作资料保持就绪。</p>
+          <p className="eyebrow">品牌管理</p>
+          <h1>品牌与创作资料</h1>
+          <p>在这里维护品牌、发布账号与创作资料。</p>
         </section>
       </main>
     </div>
@@ -85,8 +85,8 @@ export function OpsShell({ context }: { context: BootstrapContext }): JSX.Elemen
           <span>平台运行</span>
         </header>
         <section className="ops-overview">
-          <p className="eyebrow">当前状态</p>
-          <h1>服务运行正常</h1>
+          <p className="eyebrow">运行概览</p>
+          <h1>当前运行汇总</h1>
           <dl>
             <div>
               <dt>启用租户</dt>

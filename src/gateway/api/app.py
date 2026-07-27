@@ -1635,8 +1635,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         task: UUID | None = None,
         version: int | None = None,
         notice: str | None = None,
-        target: ContentTarget = "douyin_video",
+        target: ContentTarget | None = None,
     ) -> Response:
+        identity: TenantSession | None = None
         if production_authority is not None:
             try:
                 identity = production_authority._tenant_identity(request)
@@ -1657,7 +1658,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     status_code=status.HTTP_403_FORBIDDEN,
                 )
             try:
-                scope = production_authority.repository.content_scope(identity, target)
+                root_scope = production_authority.repository.content_scope(identity)
+                target_options = content_targets(root_scope, request, identity)
+                if not target_options:
+                    raise DomainError("当前表达身份没有可用的内容平台目标")
+                allowed_targets = {item["value"] for item in target_options}
+                resolved_target = target if target is not None else cast(ContentTarget, target_options[0]["value"])
+                if resolved_target not in allowed_targets:
+                    raise DomainError("当前表达身份没有这个内容平台目标")
+                scope = production_authority.repository.content_scope(identity, resolved_target)
                 if not workbench_service.is_content_operator(scope):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
@@ -1685,7 +1694,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
         else:
             scope_from_request(request)
-            scope = authority.require_content_target(request, target)
+            resolved_target = target or "douyin_video"
+            scope = authority.require_content_target(request, resolved_target)
+            target_options = content_targets(scope, request)
         fallback_extra = ""
         if task is not None and version is not None:
             try:
@@ -1703,8 +1714,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             fallback_extra = "<p>离线确定性测试模式：此页结果不是实际模型调用。</p>" + fallback_extra
         del notice
         context = workbench_service.content_context(scope, current_settings.generator_mode)
-        context["targets"] = content_targets(scope, request, identity if production_authority else None)
-        context["current_target"] = target
+        context["targets"] = target_options
+        context["current_target"] = resolved_target
         if current_settings.is_production:
             context["formal_runtime"] = True
         return HTMLResponse(

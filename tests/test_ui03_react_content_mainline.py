@@ -20,9 +20,11 @@ from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.production_auth import ProductionAuthRepository, TenantSession
 from src.infrastructure.seed_demo import (
     ACCOUNT_ID,
+    BRAND_ID,
     HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID,
     HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
     ORG_ID,
+    ROLE_ID,
     STORE_CONTENT_ACCOUNT_ID,
     STORE_ORG_ID,
     TENANT_ID,
@@ -279,3 +281,110 @@ def test_production_session_api_and_postgres_form_one_v1_v2_v1_chain(
     finally:
         repository.revoke_tenant_session(headquarters_token)
         repository.revoke_tenant_session(store_token)
+
+
+def test_content_page_resolves_a_stable_default_from_each_formal_session(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    xiaohongshu_user_id = uuid4()
+    wechat_user_id = uuid4()
+    douyin_user_id = uuid4()
+    xiaohongshu_account_id = uuid4()
+    wechat_account_id = uuid4()
+    fixtures = (
+        (
+            xiaohongshu_user_id,
+            xiaohongshu_account_id,
+            ORG_ID,
+            "小红书",
+            "xiaohongshu_video",
+        ),
+        (
+            wechat_user_id,
+            wechat_account_id,
+            ORG_ID,
+            "微信视频号",
+            "wechat_channels_video",
+        ),
+    )
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+        for user_id, account_id, organization_id, channel, _ in fixtures:
+            suffix = user_id.hex[:8]
+            cursor.execute(
+                """
+                INSERT INTO users (id, tenant_id, organization_id, display_name)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (user_id, TENANT_ID, organization_id, f"UI-03 {channel}默认目标夹具-{suffix}"),
+            )
+            cursor.execute(
+                """
+                INSERT INTO content_accounts (id, tenant_id, brand_id, name, channel)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                (account_id, TENANT_ID, BRAND_ID, f"UI-03 {channel}单平台账号-{suffix}", channel),
+            )
+            cursor.execute(
+                """
+                INSERT INTO auth_grants (id, tenant_id, user_id, account_id, role_name)
+                VALUES (%s, %s, %s, %s, 'UI-03 单平台默认目标')
+                """,
+                (uuid4(), TENANT_ID, user_id, account_id),
+            )
+            cursor.execute(
+                """
+                INSERT INTO account_content_roles (id, tenant_id, account_id, content_role_id)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (uuid4(), TENANT_ID, account_id, ROLE_ID),
+            )
+        cursor.execute(
+            """
+            INSERT INTO users (id, tenant_id, organization_id, display_name)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (douyin_user_id, TENANT_ID, ORG_ID, f"UI-03 抖音默认目标夹具-{douyin_user_id.hex[:8]}"),
+        )
+        cursor.execute(
+            """
+            INSERT INTO auth_grants (id, tenant_id, user_id, account_id, role_name)
+            VALUES (%s, %s, %s, %s, 'UI-03 抖音默认目标')
+            """,
+            (uuid4(), TENANT_ID, douyin_user_id, ACCOUNT_ID),
+        )
+
+    repository = ProductionAuthRepository(app_database_url)
+    sessions = {
+        user_id: repository.create_tenant_session(TenantSession(TENANT_ID, user_id, "tenant-user"))
+        for user_id in (xiaohongshu_user_id, wechat_user_id, douyin_user_id)
+    }
+    app: FastAPI = app_module.create_app(_settings(app_database_url))
+    try:
+        with TestClient(app, base_url="https://diyuai.cc") as client:
+            for user_id, _, _, _, expected_target in fixtures:
+                client.cookies.set("diyu_session", sessions[user_id])
+                assert client.get("/user").status_code == 200
+                content_page = client.get("/content")
+                assert content_page.status_code == 200, content_page.text
+                context = _bootstrap(content_page.text)
+                assert context["current_target"] == expected_target
+                assert expected_target in {item["value"] for item in cast(list[dict[str, str]], context["targets"])}
+
+            client.cookies.set("diyu_session", sessions[xiaohongshu_user_id])
+            forbidden = client.get(
+                "/content?target=wechat_channels_video",
+                follow_redirects=False,
+            )
+            assert forbidden.status_code == 403
+            assert forbidden.headers["content-type"].startswith("text/html")
+            assert "当前账号不能使用这个入口" in forbidden.text
+
+            client.cookies.set("diyu_session", sessions[douyin_user_id])
+            douyin_page = client.get("/content")
+            assert douyin_page.status_code == 200
+            assert _bootstrap(douyin_page.text)["current_target"] == "douyin_video"
+    finally:
+        for token in sessions.values():
+            repository.revoke_tenant_session(token)
