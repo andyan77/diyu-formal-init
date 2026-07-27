@@ -917,7 +917,10 @@ def test_resource_verdict_repairs_an_unprovisioned_scene_before_compilation(
     artifact = _generator().generate(generation_input)
 
     assert isinstance(artifact.production, VideoProductionBundle)
-    assert artifact.production.visual_actions == "当前创作者正对手机自然口播。"
+    assert artifact.production.visual_actions == (
+        "用手机拍摄现场手写观点字卡，画面保持简洁。"
+    )
+    assert artifact.production.sound_and_production == "普通室内环境，单人用手机完成。"
     assert unsafe not in artifact.body
     assert {receipt.field for receipt in artifact.fact_repair_receipts} == {
         "visual_actions"
@@ -1125,6 +1128,81 @@ def test_repair_accepts_an_exact_unit_mapping_without_relaxing_the_id_set(
 
     assert repaired.claim("c8").text == "家庭感不一定来自穿成同款。"
     assert repaired.claim("c9") == core.claim("c9")
+
+
+def test_resource_repairs_compile_only_rejected_steps_onto_registered_rails(
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(
+        generation_input,
+        products=(
+            ProductFact(
+                "ZX-C218",
+                {"category": "双面短外套"},
+                display_name="双面短外套",
+            ),
+        ),
+    )
+    raw = _video_core(
+        claims=[
+            _claim(
+                "c1",
+                "title",
+                "先看双面结构",
+                "confirmed_fact",
+                "non_event",
+                ("source:product:ZX-C218",),
+            ),
+            *_video_core()["claims"][1:],  # type: ignore[index]
+        ],
+        steps=[
+            _step(
+                "s1",
+                "cover",
+                "把样衣放在未登记木桌上。",
+                ("c1",),
+                resource_refs=("resource:wooden_table",),
+            ),
+            _step(
+                "s2",
+                "scene",
+                "让未登记模特对镜展示。",
+                ("c8",),
+                resource_refs=("resource:model",),
+                production_note="由未登记模特完成。",
+            ),
+        ],
+    )
+    generator = _generator()
+    context = BoundaryContext.from_request(request)
+    core = generator._parse_core(request, context, raw)
+
+    stabilized = generator._stabilize_resource_repairs(
+        request,
+        context,
+        core,
+        (
+            UnitIssue("s1", "unsupported_resource", "木桌"),
+            UnitIssue("s2", "unsupported_resource", "模特"),
+        ),
+    )
+
+    product_step, text_step = stabilized.scene_steps
+    assert product_step.resource_refs == (
+        "resource:phone",
+        "resource:venue",
+        "resource:product:ZX-C218",
+    )
+    assert product_step.action_text == "用手机拍摄当前商品的整体轮廓，作为干净首图。"
+    assert text_step.resource_refs == (
+        "resource:phone",
+        "resource:venue",
+        "resource:onsite_text",
+    )
+    assert text_step.action_text == "用手机拍摄现场手写观点字卡，画面保持简洁。"
+    assert product_step.actor_refs == text_step.actor_refs == ()
+    assert product_step.sound_text == text_step.sound_text == ""
+    assert not DeepSeekGenerator._closed_world_issues(context, stabilized)
 
 
 def test_closed_world_rejects_unregistered_source_before_any_model_verdict(

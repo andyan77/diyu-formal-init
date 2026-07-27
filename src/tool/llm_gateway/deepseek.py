@@ -843,6 +843,12 @@ class DeepSeekGenerator(ContentGenerator):
                     issues,
                     json.loads(self._json_content(str(payload["choices"][0]["message"]["content"]))),
                 )
+                repaired_core = self._stabilize_resource_repairs(
+                    request,
+                    context,
+                    repaired_core,
+                    issues,
+                )
                 repaired_core = self._replace_registered_product_identifiers(request, repaired_core)
             except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 _LOGGER.warning(
@@ -1358,6 +1364,98 @@ class DeepSeekGenerator(ContentGenerator):
         )
         self._assert_media_presence(request, repaired)
         return repaired
+
+    @staticmethod
+    def _stabilize_resource_repairs(
+        request: GenerationInput,
+        context: BoundaryContext,
+        core: ContentCore,
+        issues: tuple[UnitIssue, ...],
+    ) -> ContentCore:
+        """Compile resource violations onto the call's registered production rails.
+
+        A model-authored repair may remove an unknown resource id while its visible
+        action still requires an unregistered prop, person or existing asset.  For
+        only those already-rejected scene units, keep the associated content claims
+        and page order but compile the production step from the closed-world
+        registry.  The resulting core still receives the normal complete review.
+        """
+
+        resource_units = {
+            issue.unit_id
+            for issue in issues
+            if issue.reason_code == "unsupported_resource"
+        }
+        if not resource_units:
+            return core
+
+        claim_by_id = {claim.claim_id: claim for claim in core.claims}
+        available = context.resource_ids
+        steps: list[SceneStep] = []
+        changed = False
+        for step in core.scene_steps:
+            if step.step_id not in resource_units:
+                steps.append(step)
+                continue
+
+            product_resources = tuple(
+                dict.fromkeys(
+                    source_ref.replace("source:product:", "resource:product:", 1)
+                    for claim_ref in step.claim_refs
+                    if (claim := claim_by_id.get(claim_ref)) is not None
+                    for source_ref in claim.source_refs
+                    if source_ref.startswith("source:product:")
+                    and source_ref.replace(
+                        "source:product:",
+                        "resource:product:",
+                        1,
+                    )
+                    in available
+                )
+            )
+            resources = tuple(
+                resource
+                for resource in (
+                    _PHONE_RESOURCE_ID,
+                    _VENUE_RESOURCE_ID,
+                    *(product_resources or (_ONSITE_TEXT_RESOURCE_ID,)),
+                )
+                if resource in available
+            )
+            if product_resources:
+                action = (
+                    "用手机拍摄当前商品的整体轮廓，作为干净首图。"
+                    if step.purpose == _COVER_PURPOSE
+                    else "用手机补拍当前商品的结构细节，画面保持简洁。"
+                )
+            else:
+                action = (
+                    "用手机拍摄现场手写标题字卡，作为干净首图。"
+                    if step.purpose == _COVER_PURPOSE
+                    else "用手机拍摄现场手写观点字卡，画面保持简洁。"
+                )
+            steps.append(
+                replace(
+                    step,
+                    actor_refs=(),
+                    resource_refs=resources,
+                    action_text=action,
+                    sound_text="",
+                    production_note="普通室内环境，单人用手机完成。",
+                )
+            )
+            changed = True
+
+        if not changed:
+            return core
+        stabilized = ContentCore(
+            speaker_ref=core.speaker_ref,
+            claims=core.claims,
+            spoken_order=core.spoken_order,
+            scene_steps=tuple(steps),
+        )
+        DeepSeekGenerator._assert_media_presence(request, stabilized)
+        return stabilized
 
     def _issue_receipts(
         self,
