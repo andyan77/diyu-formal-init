@@ -110,7 +110,7 @@
 
     <div class="meta">
       <span class="pill"><span class="k">更新</span> <b>2026-07-27（UTC）</b></span>
-      <span class="pill"><span class="k">当前位置</span> <b>全部既定里程碑已收口</b></span>
+      <span class="pill"><span class="k">当前位置</span> <b>UI-05 极小修复等待定向终审</b></span>
       <span class="pill"><span class="k">业务语义</span> <b>双应用合同与 25 类模型已关闭</b></span>
       <span class="pill"><span class="k">领域资产</span> <b>243 条当前候选快照 · 41 条已激活（内容与媒体 28、DM01 13）</b></span>
       <span class="pill"><span class="k">首期容量</span> <b>预计 2—3、最多 5 租户 · 合计 ≤ 200 已启用账号</b></span>
@@ -118,8 +118,8 @@
   </header>
 
   <div class="nextbar">
-    <div class="lab">收口状态</div>
-    <div class="txt">UI-04 保持 CLOSED；UI-05 Gate A 首次候选 <code>58520b9…</code> 未通过产品审查并保留历史，返工候选 <code>438e904…</code> 已通过产品裁决。<b>Gate A、Gate B、Gate C 均已完成；UI-05 于 2026-07-27（UTC）通过主控独立终审并正式 CLOSED，Gate C 不再重复执行。</b></div>
+    <div class="lab">当前状态</div>
+    <div class="txt">UI-04 保持 CLOSED；UI-05 Gate A、Gate B、Gate C 与原主控关闭结论均保留为历史。关闭后新发现的首页动效交接、品牌管理员账户安全和运维第二因素语义缺口已以前向实现完成唯一 CI、同 SHA 部署与定向生产复验。<b>UI-05 当前为 REVIEW，等待主控对这三项修复做定向终审；不启动新里程碑。</b></div>
   </div>
 
   <div class="legend">
@@ -259,17 +259,17 @@
     <div class="phase mile"><div class="mile-card"><span class="flag">🏁</span> 第一阶段已通过主控产品级独立终审，M7-3 正式 CLOSED</div></div>
 
     <!-- UI 产品化 -->
-    <div class="phase done">
+    <div class="phase now">
       <div class="pcard">
-        <div class="ph-head"><p class="ph-title"><span class="idx">UI</span>产品化重构</p><span class="badge b-done">UI-05 · CLOSED</span></div>
-        <p class="ph-desc">UI-04 的正式功能与生产替换保持关闭；UI-05 已完成真实使用暴露的管理和创作产品语义缺口修复，并通过主控独立终审。</p>
+        <div class="ph-head"><p class="ph-title"><span class="idx">UI</span>产品化重构</p><span class="badge b-now">UI-05 · REVIEW</span></div>
+        <p class="ph-desc">UI-04 的正式功能与生产替换保持关闭；UI-05 原 Gate A/B/C 与主控关闭结论保留为历史，关闭后新增的三个生产 UI 缺口已完成前向修复并等待定向终审。</p>
         <ul class="nodes">
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">首版页面覆盖盘点<span class="ncode">UI-01 · SUPERSEDED</span></div><div class="ndesc">19 张静态页面完整保留为覆盖盘点与历史反例；因首页无产品叙事、功能机械铺页、说明书化及产品/评审模式混用被取代，不表示通过或关闭</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">产品叙事、资产总账与评审体系<span class="ncode">UI-01R · CLOSED</span></div><div class="ndesc">只表示产品策略探索、资产盘点和方向裁决完成；首页采用 A“种子找到声音”，B/C 留作历史候选，六张代表页不是 React 复制模板</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">角色任务架构与全链路高保真 HTML 原型<span class="ncode">UI-02 · CLOSED</span></div><div class="ndesc">有限关闭：三套隔离空间、四条静态旅程、纯文字 DM01、25 项精简能力映射和 UI-G/CAP-G 产品合同成立，不证明正式 React 或生产 UI</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">正式 React 产品骨架与内容主链<span class="ncode">UI-03 · CLOSED</span></div><div class="ndesc">主控独立终审通过；公共首页 A 动效、三入口、统一创作端和正式内容主链成立，未部署或切换生产默认 UI</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">全业务接入与生产替换<span class="ncode">UI-04 · CLOSED</span></div><div class="ndesc">主控独立终审 PASS；纯文字 DM01、系列、素材、租户管理、运维与状态页已进入正式 React；最终承重 CI、备份、生产切换、schema 20260731_27、冒烟和回退核验成立，资产激活仍为 41 条</div></div></li>
-          <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">租户管理与创作体验语义重构<span class="ncode">UI-05 · CLOSED</span></div><div class="ndesc">Gate A 首次候选未通过并保留历史，返工候选 438e904… 已通过产品裁决；承重实现/部署 7cf470f7f01e4c3f2e422853bf51779f5136b00f 已完成管理员／租户用户入口互斥、逻辑账号多平台、自然交流、信息不足时每次只问一个最有价值的问题并避免重复追问、五轴开放控制、真实进度、失败恢复、资料三级范围、团队使用和能力诊断。唯一 CI 30275795461 success，镜像 sha256:7337c492c489900926caf96c41804ea5dce04ffb7f677364866fcc979b08f298，schema 20260801_28；有界验收备份 20260727T143917Z-ui05-predeploy、部署脚本备份 20260727T143946Z-predeploy、readiness 与无 downgrade 回退往返成立；资产激活增量 0。2026-07-27（UTC）主控独立终审 PASS，UI-05 正式关闭</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">租户管理与创作体验语义重构<span class="ncode">UI-05 · REVIEW</span></div><div class="ndesc">原 Gate A/B/C 与主控 CLOSED 结论保留为历史。前向实现/部署 845f63291ba5060e60f87d1afa5cfc1cdb057e3b 已关闭首页临时图形叠显、品牌管理员缺少账户安全入口和运维 TOTP 文案含混；唯一 CI 30284933465 success，镜像 sha256:da964a92c28979131ab7f19d037c773d16bd3a3ca04461e61c32883018d77ec5，schema 20260801_28，备份 20260727T163227Z-predeploy 校验通过，公网／回环 readiness 与前一健康镜像回退锚点成立。生产 Chrome 证明 7.210 秒完成且最终仅正式 VI；租户用户和品牌管理员登录无 TOTP，仅运维显示“身份验证器 6 位码”。资产激活增量仍为 0；当前等待主控定向终审</div></div></li>
         </ul>
         <div class="tip"><span class="h">资产边界</span>UI-01R 的 CSV/Markdown 只是现有 JSON/JSONL 真源的人可读投影；候选登记、运行激活、本次调用、已验证能力和真实租户采用不得混为一谈。</div>
       </div>
@@ -330,7 +330,7 @@
 
   <footer>
     依据 <code>docs/项目记忆.md</code>、<code>docs/待决策清单.md</code>、正式 ADR、用户提供的 <code>首批领域数据库知识数据</code> 与 D-007 两份资料成果更新。<br>
-    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料、WSL 唯一 Git 主仓迁移、M3-1/M3-2、M4-1/M4-2、M5-1—M5-3、M5-K、M5-4、M6-1 与 M6-2；M6-3 未通过并已 SUPERSEDED 至已关闭的 M7-2B；M7-1、M7-2A、M7-2B、M7-3 均已 CLOSED。目录对账仍为风格 20/20、题材 55/55、体裁 41/44（缺 3 条来源缺口），能力状态为 10/64/6/38/1；关闭不证明真实员工采用、真实商品采用、真实门店现场执行、真实发布、平台流量、排名、爆款、GMV、销售、企业采用、真实跨租户市场差异、企业 SLA 或 20/55/44 全组合稳定支持。UI-01 已 SUPERSEDED 至已关闭的 UI-01R；UI-01R、UI-02、UI-03、UI-04 与 UI-05 均已 CLOSED。UI-05 Gate A 首次候选失败记录与静态原型历史保留；返工候选、Gate B/C 正式 React、API、迁移和生产替换均已通过主控独立终审。全部既定里程碑现为 CLOSED，或具有已关闭 successor 的 SUPERSEDED；当前不指定新里程碑。运行资产仍为 41 条，UI-05 激活增量为 0。F01—F10/F12 继续只按真实触发条件保留；唯一下一动作是停止执行，等待用户决定是否启动新的独立里程碑。
+    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料、WSL 唯一 Git 主仓迁移、M3-1/M3-2、M4-1/M4-2、M5-1—M5-3、M5-K、M5-4、M6-1 与 M6-2；M6-3 未通过并已 SUPERSEDED 至已关闭的 M7-2B；M7-1、M7-2A、M7-2B、M7-3 均已 CLOSED。目录对账仍为风格 20/20、题材 55/55、体裁 41/44（缺 3 条来源缺口），能力状态为 10/64/6/38/1；不证明真实员工采用、真实商品采用、真实门店现场执行、真实发布、平台流量、排名、爆款、GMV、销售、企业采用、真实跨租户市场差异、企业 SLA 或 20/55/44 全组合稳定支持。UI-01 已 SUPERSEDED 至已关闭的 UI-01R；UI-01R、UI-02、UI-03 与 UI-04 均已 CLOSED。UI-05 原 Gate A/B/C 和主控关闭记录完整保留；关闭后新增的三个生产 UI 缺口已完成前向修复、唯一 CI、同 SHA 部署与定向生产复验，当前为 REVIEW。运行资产仍为 41 条，UI-05 激活增量为 0。F01—F10/F12 继续只按真实触发条件保留；唯一下一动作是主控对首页动画交接、品牌管理员账户安全和三入口第二因素语义做一次定向终审，不启动新里程碑。
   </footer>
 
 </div>
