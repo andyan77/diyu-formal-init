@@ -845,6 +845,10 @@ class DeepSeekGenerator(ContentGenerator):
                 )
                 repaired_core = self._replace_registered_product_identifiers(request, repaired_core)
             except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                _LOGGER.warning(
+                    "content boundary repair response rejected: %s",
+                    exc,
+                )
                 raise GenerationFailed("模型边界修复返回格式不完整") from exc
             final_issues, judgement_payload, judgement_retries = self._review_core(request, context, repaired_core)
             provider_payloads.append(judgement_payload)
@@ -1283,8 +1287,15 @@ class DeepSeekGenerator(ContentGenerator):
         if not isinstance(raw, dict):
             raise TypeError("repair must be an object")
         raw_repairs = raw.get("repairs")
+        if isinstance(raw_repairs, dict):
+            normalized_repairs: list[object] = []
+            for unit_id, value in raw_repairs.items():
+                if not isinstance(unit_id, str) or not isinstance(value, dict):
+                    raise TypeError("repairs mapping must contain unit objects")
+                normalized_repairs.append({"id": unit_id, **value})
+            raw_repairs = normalized_repairs
         if not isinstance(raw_repairs, list):
-            raise TypeError("repairs must be a list")
+            raise TypeError("repairs must be a list or unit mapping")
         requested = {issue.unit_id for issue in issues}
         claim_ids = {claim.claim_id for claim in core.claims}
         replacements_claims: dict[str, ContentClaim] = {}
@@ -1292,8 +1303,14 @@ class DeepSeekGenerator(ContentGenerator):
         for entry in raw_repairs:
             if not isinstance(entry, dict):
                 raise TypeError("repair unit must be an object")
+            generic_id = entry.get("id")
             claim_id = entry.get("claim_id")
             step_id = entry.get("step_id")
+            if isinstance(generic_id, str):
+                if generic_id in claim_ids and claim_id is None:
+                    claim_id = generic_id
+                elif generic_id not in claim_ids and step_id is None:
+                    step_id = generic_id
             if isinstance(claim_id, str) and claim_id in claim_ids:
                 if claim_id not in requested or claim_id in replacements_claims:
                     raise TypeError("repair units do not match the requested units")
@@ -2153,7 +2170,8 @@ c1、s2 这类编号，必须把编号替换为对应台词原文或删去，不
 严格只返回一个 JSON 对象：{{"repairs":[…]}}。repairs 中每个元素是完整替换单元：claim 用
 {{"claim_id":"…","text":"…","basis":"…","actuality":"…","source_refs":["…"]}}；scene step 用
 {{"step_id":"…","action_text":"…","sound_text":"…","production_note":"…","actor_refs":[],
-"resource_refs":[],"claim_refs":["…"]}}。repairs 必须恰好覆盖：{", ".join(reasons_by_unit)}。"""
+"resource_refs":[],"claim_refs":["…"]}}。一个单元即使有多个问题也只返回一次；repairs 必须恰好
+{len(reasons_by_unit)} 个元素，并按这里的顺序各覆盖一次：{", ".join(reasons_by_unit)}。"""
 
     # ------------------------------------------------------------------
     # Natural-language rendering of confirmed product facts

@@ -25,6 +25,7 @@ from src.shared.types import (
 from src.tool.llm_gateway.deepseek import (
     BoundaryContext,
     DeepSeekGenerator,
+    UnitIssue,
 )
 
 
@@ -1092,6 +1093,38 @@ def test_repair_must_cover_exactly_the_violating_units(
 
     with pytest.raises(GenerationFailed, match="修复返回格式不完整"):
         _generator().generate(generation_input)
+
+
+def test_repair_accepts_an_exact_unit_mapping_without_relaxing_the_id_set(
+    generation_input: GenerationInput,
+) -> None:
+    generator = _generator()
+    context = BoundaryContext.from_request(generation_input)
+    core = generator._parse_core(generation_input, context, _video_core())
+    repaired = generator._merge_repaired_units(
+        generation_input,
+        core,
+        (
+            UnitIssue(
+                "c8",
+                "invented_actuality",
+                "一家人的家庭感，不一定来自穿成同款。",
+            ),
+        ),
+        {
+            "repairs": {
+                "c8": {
+                    "text": "家庭感不一定来自穿成同款。",
+                    "basis": "brand_viewpoint",
+                    "actuality": "non_event",
+                    "source_refs": ["source:brand_baseline"],
+                }
+            }
+        },
+    )
+
+    assert repaired.claim("c8").text == "家庭感不一定来自穿成同款。"
+    assert repaired.claim("c9") == core.claim("c9")
 
 
 def test_closed_world_rejects_unregistered_source_before_any_model_verdict(
