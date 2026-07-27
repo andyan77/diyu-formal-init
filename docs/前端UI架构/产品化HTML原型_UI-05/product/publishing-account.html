@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>发布账号 · 笛语品牌管理</title>
+    <link rel="stylesheet" href="../shared/product.css" />
+  </head>
+  <body data-page="accounts">
+    <div class="admin-shell">
+      <aside class="admin-rail" data-admin-rail></aside>
+      <main class="admin-main">
+        <header class="admin-topbar">
+          <strong>笛语服饰</strong>
+          <div><span class="muted">演示资料</span><span class="avatar">岚</span></div>
+        </header>
+        <div class="admin-page">
+          <section class="account-hero">
+            <div class="account-identity">
+              <span class="account-monogram">笛</span>
+              <div>
+                <p class="eyebrow">发布账号</p>
+                <h1>总部品牌内容运营</h1>
+                <p>由笛语服饰管理组织负责，用品牌当前立场与消费者沟通。</p>
+              </div>
+            </div>
+            <div class="account-numbers" aria-label="账号摘要">
+              <div><strong>1</strong><span>账号画像</span></div>
+              <div><strong>3</strong><span>可用平台</span></div>
+              <div><strong>4</strong><span>内容目标</span></div>
+            </div>
+          </section>
+
+          <div class="account-layout">
+            <section class="profile-card">
+              <header>
+                <div><p class="eyebrow">当前版本 <span data-profile-version>V2</span></p><h2>账号画像</h2></div>
+                <button class="primary" type="button" data-open-drawer="edit-profile">编辑账号画像</button>
+              </header>
+              <div class="profile-parts">
+                <div class="profile-part"><span>我是谁、以什么身份出现</span><p>笛语服饰的品牌内容运营，以总部岗位视角说明品牌选择与商品观察。</p></div>
+                <div class="profile-part"><span>我能代表什么、不能代表什么</span><p>可以表达当前品牌立场和已记录商品事实；不代表每家门店已经执行某项做法，也不替消费者作决定。</p></div>
+                <div class="profile-part"><span>我与受众是什么关系</span><p>像一个了解品牌又尊重选择的编辑，先帮助受众看清，再邀请他们形成自己的判断。</p></div>
+                <div class="profile-part"><span>我长期讲什么</span><p>品牌取舍、商品结构、穿着关系，以及门店与人之间值得被认真对待的细节。</p></div>
+                <div class="profile-part"><span>我具备什么长期制作条件</span><p>一名创作者、一部手机、普通室内和现有商品；不默认有顾客、模特或复杂场地。</p></div>
+              </div>
+            </section>
+
+            <div>
+              <section class="side-card">
+                <header><h2>平台与形式</h2><span class="pill">共享同一账号画像</span></header>
+                <div class="target-list">
+                  <div class="target-row"><strong>抖音</strong><span class="status-pill good">视频</span><small>短视频口播与画面组织</small></div>
+                  <div class="target-row"><strong>小红书</strong><span class="status-pill good">图文 / 视频</span><small>图文合集或视频内容</small></div>
+                  <div class="target-row"><strong>微信视频号</strong><span class="status-pill good">视频</span><small>视频与发布辅助内容</small></div>
+                </div>
+              </section>
+              <section class="side-card" style="margin-top:24px">
+                <header><h2>获准操作的成员</h2><a class="text-action" href="members.html">管理成员</a></header>
+                <div class="member-chips">
+                  <span class="member-chip"><i>周</i>周宁</span>
+                  <span class="member-chip"><i>吴</i>吴澄</span>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div class="drawer-layer" data-drawer="edit-profile" hidden>
+      <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">
+        <header>
+          <div><p class="eyebrow">保存后形成新版本</p><h2 id="edit-profile-title">编辑账号画像</h2></div>
+          <button class="icon-button" type="button" aria-label="关闭" data-close-drawer>×</button>
+        </header>
+        <div class="form-stack">
+          <label>我是谁、以什么身份出现<textarea>笛语服饰的品牌内容运营，以总部岗位视角说明品牌选择与商品观察。</textarea></label>
+          <label>我能代表什么、不能代表什么<textarea>可以表达当前品牌立场和已记录商品事实；不代表每家门店已经执行某项做法，也不替消费者作决定。</textarea></label>
+          <label>我与受众是什么关系<textarea>像一个了解品牌又尊重选择的编辑，先帮助受众看清，再邀请他们形成自己的判断。</textarea></label>
+          <label>我长期讲什么<textarea>品牌取舍、商品结构、穿着关系，以及门店与人之间值得被认真对待的细节。</textarea></label>
+          <label>我具备什么长期制作条件<textarea>一名创作者、一部手机、普通室内和现有商品；不默认有顾客、模特或复杂场地。</textarea></label>
+        </div>
+        <div class="drawer-actions">
+          <button class="quiet" type="button" data-close-drawer>取消</button>
+          <button class="primary" type="button" data-profile-save>保存新版本</button>
+        </div>
+      </aside>
+    </div>
+    <div class="pill" data-page-notice hidden></div>
+    <script src="../shared/product.js"></script>
+  </body>
+</html>

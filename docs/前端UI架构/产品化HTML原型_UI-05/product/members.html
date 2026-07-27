@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>成员与权限 · 笛语品牌管理</title>
+    <link rel="stylesheet" href="../shared/product.css" />
+  </head>
+  <body data-page="members">
+    <div class="admin-shell">
+      <aside class="admin-rail" data-admin-rail></aside>
+      <main class="admin-main">
+        <header class="admin-topbar">
+          <strong>笛语服饰</strong>
+          <div><span class="muted">演示资料</span><span class="avatar">岚</span></div>
+        </header>
+        <div class="admin-page">
+          <header class="page-heading">
+            <div>
+              <p class="eyebrow">成员与权限</p>
+              <h1>谁可以进入，谁可以操作哪些账号</h1>
+              <p class="lede">登录成员与发布账号分别管理；同一成员可以获准操作多个发布账号。</p>
+            </div>
+            <button class="primary" type="button" data-open-drawer="add-member">添加成员</button>
+          </header>
+
+          <div class="member-summary" aria-label="成员摘要">
+            <span class="pill">12 位成员</span>
+            <span class="pill">10 位已激活</span>
+            <span class="pill">9 位已启用</span>
+            <span class="pill">2 位等待首次登录</span>
+          </div>
+
+          <section class="section">
+            <header>
+              <h2>成员列表</h2>
+              <div class="filter-bar" role="group" aria-label="成员状态">
+                <button class="active" type="button" data-member-filter="all">全部</button>
+                <button type="button" data-member-filter="pending">待激活</button>
+                <button type="button" data-member-filter="disabled">已停用</button>
+              </div>
+            </header>
+            <div class="data-card">
+              <table class="data-table">
+                <thead>
+                  <tr><th>成员</th><th>入口资格</th><th>可操作发布账号</th><th>最后使用</th><th>状态</th></tr>
+                </thead>
+                <tbody>
+                  <tr data-member-status="enabled">
+                    <td data-label="成员"><strong>周宁</strong><small>总部内容组</small></td>
+                    <td data-label="入口资格">内容创作</td>
+                    <td data-label="可操作发布账号">总部品牌内容运营</td>
+                    <td data-label="最后使用">今天 11:42</td>
+                    <td data-label="状态"><span class="status-pill good">启用</span></td>
+                  </tr>
+                  <tr data-member-status="enabled">
+                    <td data-label="成员"><strong>陈晓</strong><small>柯桥门店</small></td>
+                    <td data-label="入口资格">内容创作、陈列搭配</td>
+                    <td data-label="可操作发布账号">柯桥门店人物</td>
+                    <td data-label="最后使用">昨天 16:08</td>
+                    <td data-label="状态"><span class="status-pill good">启用</span></td>
+                  </tr>
+                  <tr data-member-status="pending">
+                    <td data-label="成员"><strong>吴澄</strong><small>浙江区域</small></td>
+                    <td data-label="入口资格">内容创作</td>
+                    <td data-label="可操作发布账号">总部品牌内容运营</td>
+                    <td data-label="最后使用">尚未使用</td>
+                    <td data-label="状态"><span class="status-pill conditional">待激活</span></td>
+                  </tr>
+                  <tr data-member-status="enabled">
+                    <td data-label="成员"><strong>林岚</strong><small>品牌管理</small></td>
+                    <td data-label="入口资格">品牌管理</td>
+                    <td data-label="可操作发布账号">未分配</td>
+                    <td data-label="最后使用">今天 10:24</td>
+                    <td data-label="状态"><span class="status-pill good">启用</span></td>
+                  </tr>
+                  <tr data-member-status="disabled">
+                    <td data-label="成员"><strong>赵行</strong><small>浙江区域</small></td>
+                    <td data-label="入口资格">内容创作</td>
+                    <td data-label="可操作发布账号">总部品牌内容运营</td>
+                    <td data-label="最后使用">20 天前</td>
+                    <td data-label="状态"><span class="status-pill blocked">停用</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div class="drawer-layer" data-drawer="add-member" hidden>
+      <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="add-member-title">
+        <header>
+          <div><p class="eyebrow">添加成员</p><h2 id="add-member-title">邀请本人首次进入</h2></div>
+          <button class="icon-button" type="button" aria-label="关闭" data-close-drawer>×</button>
+        </header>
+        <div class="form-stack" data-member-form>
+          <label>姓名<input type="text" value="顾晨" /></label>
+          <label>所属团队<select><option>总部内容组</option><option>浙江区域</option><option>柯桥门店</option></select></label>
+          <fieldset>
+            <legend>入口资格</legend>
+            <label class="check-line"><input type="checkbox" checked /> 内容创作</label>
+            <label class="check-line"><input type="checkbox" /> 陈列搭配</label>
+            <label class="check-line"><input type="checkbox" /> 品牌管理</label>
+          </fieldset>
+          <fieldset>
+            <legend>可操作发布账号</legend>
+            <label class="check-line"><input type="checkbox" checked /> 总部品牌内容运营</label>
+            <label class="check-line"><input type="checkbox" /> 柯桥门店人物</label>
+          </fieldset>
+          <p class="inline-callout">保存后会生成一条有时限、仅能使用一次的体验链接，由管理员交给本人。</p>
+        </div>
+        <section class="stable-success" data-member-success hidden>
+          <span class="status-pill good">成员已添加</span>
+          <h3>体验链接已生成</h3>
+          <p>链接在 24 小时内仅能使用一次。这里不显示链接正文；请通过正式页面复制并交给顾晨本人。</p>
+          <button type="button" data-action-message="演示：体验链接已复制。">复制体验链接</button>
+          <div class="drawer-actions"><button class="primary" type="button" data-close-drawer>完成</button></div>
+        </section>
+        <div class="drawer-actions" data-member-form-actions>
+          <button class="quiet" type="button" data-close-drawer>取消</button>
+          <button class="primary" type="button" data-member-create>添加并生成体验链接</button>
+        </div>
+      </aside>
+    </div>
+    <div class="pill" data-page-notice hidden></div>
+    <script src="../shared/product.js"></script>
+  </body>
+</html>

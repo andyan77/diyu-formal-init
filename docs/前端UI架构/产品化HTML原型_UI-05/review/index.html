@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UI-05 产品语义原型评审</title>
+    <link rel="stylesheet" href="review.css" />
+  </head>
+  <body>
+    <main class="review-shell">
+      <aside class="review-nav">
+        <header>
+          <small>UI-05 · Gate A</small>
+          <h1>租户管理与创作体验</h1>
+          <p>八张代表页面串成一条连续评审路径。评审工具只存在于此页，不进入产品页面。</p>
+        </header>
+        <nav class="page-list" data-page-list aria-label="原型页面"></nav>
+        <footer>演示资料不代表真实员工、真实商品或真实采用。当前只用于产品语义裁决。</footer>
+      </aside>
+      <section class="review-stage">
+        <header class="review-toolbar">
+          <div class="review-title"><strong data-review-title></strong><small data-review-position></small></div>
+          <button type="button" data-prev aria-label="上一页">←</button>
+          <button type="button" data-next aria-label="下一页">→</button>
+          <button class="active" type="button" data-viewport="desktop" data-desktop>桌面</button>
+          <button type="button" data-viewport="mobile" data-mobile>移动</button>
+          <a href="../product/admin-overview.html" target="_blank" rel="noreferrer" data-open-raw>新窗口打开</a>
+        </header>
+        <div class="canvas-area">
+          <div class="canvas" data-review-canvas>
+            <iframe title="笛语 UI-05 产品原型" data-review-frame></iframe>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="review.js"></script>
+  </body>
+</html>

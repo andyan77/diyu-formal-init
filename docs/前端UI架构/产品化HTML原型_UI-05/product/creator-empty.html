@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>开始创作 · 笛语</title>
+    <link rel="stylesheet" href="../shared/product.css" />
+  </head>
+  <body class="creator-page empty" data-mobile-view="conversation">
+    <header class="creator-topbar">
+      <img class="brand-symbol" src="../../../../assets/brand/diyu-vi/svg/diyu-symbol.svg" alt="笛语" />
+      <div class="creator-identity">
+        <strong>总部品牌内容运营</strong>
+        <span>从总部岗位表达品牌当前立场</span>
+      </div>
+      <div class="target-controls">
+        <label>平台
+          <select data-platform-select>
+            <option value="douyin">抖音</option>
+            <option value="xiaohongshu">小红书</option>
+            <option value="wechat_channels">微信视频号</option>
+          </select>
+        </label>
+        <label>内容形式
+          <select data-format-select>
+            <option value="video">视频</option>
+            <option value="graphic">图文</option>
+          </select>
+        </label>
+      </div>
+    </header>
+
+    <main class="creator-layout">
+      <aside class="creator-sidebar">
+        <p class="eyebrow" style="padding:10px 9px">创作空间</p>
+        <nav aria-label="创作次级导航">
+          <span>最近内容</span>
+          <a class="active" href="creator-empty.html">新的想法<small>尚未开始</small></a>
+          <a href="creator-generating.html?platform=xiaohongshu&format=graphic">沉默也值得被尊重<small>当前版 V2</small></a>
+          <span>连续系列</span>
+          <a href="creator-generating.html">品牌选择的另一面<small>3 篇</small></a>
+          <a href="creator-generating.html?platform=wechat_channels&format=video">门店里的一分钟<small>3 篇</small></a>
+          <span>本次选择</span>
+          <a href="creator-empty.html">未选择素材<small>可在输入区添加</small></a>
+        </nav>
+      </aside>
+
+      <section class="creator-conversation">
+        <div class="conversation-body">
+          <div class="creator-welcome">
+            <p class="eyebrow">当前：<span data-platform-label>抖音</span> · <span data-format-label>视频</span></p>
+            <h1>今天想表达什么？</h1>
+            <p>从一句想法开始。平台和形式已经选好，需要时再补创作方向或素材。</p>
+          </div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <label class="sr-only" for="creator-input">说说这次想做什么</label>
+            <textarea id="creator-input" data-creator-input>想做一篇小红书图文：走进门店只想自己看看，这种沉默是不是也应该被尊重？</textarea>
+            <div class="composer-actions">
+              <div class="composer-tools">
+                <button type="button" data-direction-toggle aria-expanded="false">创作方向（可选）</button>
+                <button type="button" data-open-drawer="materials">选择本次素材</button>
+                <button type="button" data-open-drawer="series">加入系列</button>
+              </div>
+              <button class="composer-submit primary" type="button" aria-label="开始生成" data-create-submit>↑</button>
+            </div>
+          </div>
+
+          <section class="direction-panel" data-direction-panel hidden>
+            <header><h2>创作方向</h2><small>每项都可以不选</small></header>
+            <div class="direction-groups">
+              <div class="direction-group"><span>题材</span><div class="chip-row"><button type="button">品牌观点</button><button type="button">商品观察</button><button type="button">门店日常</button></div></div>
+              <div class="direction-group"><span>风格</span><div class="chip-row"><button type="button">克制</button><button type="button">温和直接</button><button type="button">轻松幽默</button></div></div>
+              <div class="direction-group"><span>形式</span><div class="chip-row"><button type="button">自然口播</button><button type="button">多图合集</button><button type="button">旁白短片</button></div></div>
+            </div>
+            <p class="muted" style="margin-top:12px;font-size:12px">没有合适的？直接在上面说你想要的方向。</p>
+          </section>
+
+          <section class="selection-conflict" data-target-conflict hidden>
+            <strong>你选的是 <span data-conflict-current></span>，文字里提到了 <span data-conflict-named></span>。</strong>
+            <p>这次要保持当前选择，还是切换后再生成？</p>
+            <div><button type="button" data-conflict-keep>保持当前选择</button><button type="button" data-conflict-switch>切换平台</button></div>
+          </section>
+          <div class="context-line">
+            <span data-material-summary>未选择素材</span>
+            <span data-series-summary>单篇创作</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="drawer-layer" data-drawer="materials" hidden>
+      <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="materials-title">
+        <header>
+          <div><p class="eyebrow">仅用于这次创作</p><h2 id="materials-title">选择参考素材</h2></div>
+          <button class="icon-button" type="button" aria-label="关闭" data-close-drawer>×</button>
+        </header>
+        <div class="form-stack">
+          <fieldset>
+            <legend>我的素材</legend>
+            <label class="check-line"><input type="checkbox" /> 手机拍摄的门店空镜说明</label>
+            <label class="check-line"><input type="checkbox" /> 关于“先自己看看”的一句观察</label>
+          </fieldset>
+          <fieldset>
+            <legend>组织官方素材</legend>
+            <label class="check-line"><input type="checkbox" /> 2026 秋季商品静物照</label>
+          </fieldset>
+          <p class="inline-callout">没有明确勾选的素材不会进入这次创作。</p>
+        </div>
+        <div class="drawer-actions">
+          <button class="quiet" type="button" data-close-drawer>取消</button>
+          <button class="primary" type="button" data-material-save>使用所选素材</button>
+        </div>
+      </aside>
+    </div>
+
+    <div class="drawer-layer" data-drawer="series" hidden>
+      <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="series-title">
+        <header>
+          <div><p class="eyebrow">连续方式</p><h2 id="series-title">这次放在哪个系列</h2></div>
+          <button class="icon-button" type="button" aria-label="关闭" data-close-drawer>×</button>
+        </header>
+        <div class="form-stack">
+          <fieldset>
+            <legend>选择</legend>
+            <label class="check-line"><input type="radio" name="series" value="单篇创作" checked /> 单篇创作</label>
+            <label class="check-line"><input type="radio" name="series" value="品牌选择的另一面" /> 品牌选择的另一面</label>
+            <label class="check-line"><input type="radio" name="series" value="门店里的一分钟" /> 门店里的一分钟</label>
+          </fieldset>
+        </div>
+        <div class="drawer-actions">
+          <button class="quiet" type="button" data-close-drawer>取消</button>
+          <button class="primary" type="button" data-series-save>确定</button>
+        </div>
+      </aside>
+    </div>
+    <div class="pill" data-page-notice hidden></div>
+    <script src="../shared/product.js"></script>
+  </body>
+</html>

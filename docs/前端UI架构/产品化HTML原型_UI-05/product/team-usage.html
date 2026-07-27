@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>团队使用 · 笛语品牌管理</title>
+    <link rel="stylesheet" href="../shared/product.css" />
+  </head>
+  <body data-page="usage">
+    <div class="admin-shell">
+      <aside class="admin-rail" data-admin-rail></aside>
+      <main class="admin-main">
+        <header class="admin-topbar">
+          <strong>笛语服饰</strong>
+          <div><span class="muted">演示资料</span><span class="avatar">岚</span></div>
+        </header>
+        <div class="admin-page">
+          <header class="page-heading">
+            <div>
+              <p class="eyebrow">团队使用</p>
+              <h1>团队在怎么使用笛语</h1>
+              <p class="lede">这里只看工作频率与用量汇总，不展示成员写过的正文或私人资料。</p>
+            </div>
+            <div class="segment-control" aria-label="时间范围">
+              <button type="button" class="active" data-range="7">近 7 日</button>
+              <button type="button" data-range="30">近 30 日</button>
+            </div>
+          </header>
+
+          <section class="metric-strip" aria-label="成员摘要">
+            <div class="metric"><span>注册成员</span><strong>12</strong><small>已激活 10</small></div>
+            <div class="metric"><span>已启用</span><strong>9</strong><small>停用 1</small></div>
+            <div class="metric"><span data-range-label>近7日</span><strong data-range-value data-value7="6" data-value30="9">6</strong><small>有过实际使用</small></div>
+            <div class="metric"><span>受限请求</span><strong data-range-value data-value7="1" data-value30="3">1</strong><small>达到当前请求上限</small></div>
+          </section>
+
+          <div class="usage-layout">
+            <section class="usage-card">
+              <header>
+                <h2>工作类型</h2>
+                <div>
+                  <span class="pill">成功 <span data-range-value data-value7="23" data-value30="55">23</span></span>
+                  <span class="pill">失败 <span data-range-value data-value7="1" data-value30="2">1</span></span>
+                </div>
+              </header>
+              <div class="bar-list">
+                <div class="bar-row"><div><span>内容生成</span><strong data-range-value data-value7="14" data-value30="32">14</strong></div><div class="bar-track"><span data-range-width data-width7="68%" data-width30="64%" style="width:68%"></span></div></div>
+                <div class="bar-row"><div><span>继续修改</span><strong data-range-value data-value7="5" data-value30="12">5</strong></div><div class="bar-track"><span data-range-width data-width7="32%" data-width30="38%" style="width:32%"></span></div></div>
+                <div class="bar-row"><div><span>系列续写</span><strong data-range-value data-value7="2" data-value30="5">2</strong></div><div class="bar-track"><span data-range-width data-width7="18%" data-width30="24%" style="width:18%"></span></div></div>
+                <div class="bar-row"><div><span>陈列参考方案</span><strong data-range-value data-value7="2" data-value30="6">2</strong></div><div class="bar-track"><span data-range-width data-width7="18%" data-width30="28%" style="width:18%"></span></div></div>
+              </div>
+            </section>
+
+            <section class="usage-card">
+              <header><h2>发布账号与平台</h2><span class="pill">2 个发布账号 · 3 个平台</span></header>
+              <div class="bar-list">
+                <div class="bar-row"><div><span>总部品牌内容运营</span><strong data-range-value data-value7="18" data-value30="43">18</strong></div><div class="bar-track"><span data-range-width data-width7="78%" data-width30="82%" style="width:78%"></span></div></div>
+                <div class="bar-row"><div><span>柯桥门店人物</span><strong data-range-value data-value7="3" data-value30="6">3</strong></div><div class="bar-track"><span data-range-width data-width7="18%" data-width30="24%" style="width:18%"></span></div></div>
+                <div class="bar-row"><div><span>抖音视频</span><strong data-range-value data-value7="13" data-value30="29">13</strong></div><div class="bar-track"><span data-range-width data-width7="58%" data-width30="59%" style="width:58%"></span></div></div>
+                <div class="bar-row"><div><span>小红书图文 / 视频</span><strong data-range-value data-value7="6" data-value30="14">6</strong></div><div class="bar-track"><span data-range-width data-width7="31%" data-width30="34%" style="width:31%"></span></div></div>
+                <div class="bar-row"><div><span>微信视频号</span><strong data-range-value data-value7="2" data-value30="6">2</strong></div><div class="bar-track"><span data-range-width data-width7="18%" data-width30="22%" style="width:18%"></span></div></div>
+              </div>
+              <div class="recorded-usage">
+                <span class="muted">已记录模型用量</span>
+                <strong data-range-value data-value7="84,620 个文本计量单位" data-value30="188,430 个文本计量单位">84,620 个文本计量单位</strong>
+                <small>只统计系统已收到的调用记录，不等同于供应商账单或完整成本。</small>
+                <span class="muted" style="margin-top:10px">本月租户内容额度</span>
+                <strong>49 / 200 次</strong>
+                <small>当前租户方案 · 2026 年 7 月；只统计计入额度的内容工作，不代表费用账单。</small>
+              </div>
+            </section>
+          </div>
+
+          <section class="section" style="margin-top:28px">
+            <header><h2>成员使用</h2><a class="text-action" href="members.html">管理成员</a></header>
+            <div class="data-card">
+              <table class="data-table">
+                <thead><tr><th>成员</th><th>最后使用</th><th>内容工作</th><th>陈列方案</th><th>当前状态</th></tr></thead>
+                <tbody>
+                  <tr><td data-label="成员"><strong>周宁</strong><small>总部内容组</small></td><td data-label="最后使用">今天 11:42</td><td data-label="内容工作">12</td><td data-label="陈列方案">0</td><td data-label="当前状态"><span class="status-pill good">启用</span></td></tr>
+                  <tr><td data-label="成员"><strong>陈晓</strong><small>柯桥门店</small></td><td data-label="最后使用">昨天 16:08</td><td data-label="内容工作">5</td><td data-label="陈列方案">2</td><td data-label="当前状态"><span class="status-pill good">启用</span></td></tr>
+                  <tr><td data-label="成员"><strong>吴澄</strong><small>浙江区域</small></td><td data-label="最后使用">尚未使用</td><td data-label="内容工作">0</td><td data-label="陈列方案">0</td><td data-label="当前状态"><span class="status-pill conditional">待激活</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+    <div class="pill" data-page-notice hidden></div>
+    <script src="../shared/product.js"></script>
+  </body>
+</html>
