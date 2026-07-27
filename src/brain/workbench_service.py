@@ -53,6 +53,76 @@ class WorkbenchService:
     def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         return self._repository.management_products(scope)
 
+    def management_organization_materials(
+        self,
+        scope: TenantManagementScope,
+    ) -> list[dict[str, object]]:
+        return self._repository.management_organization_materials(scope)
+
+    def add_management_organization_material(
+        self,
+        scope: TenantManagementScope,
+        organization_id: UUID,
+        title: str,
+        filename: str,
+        content_type: str,
+        payload: bytes,
+        declares_identifiable_minor: bool,
+        reference_note: str,
+    ) -> dict[str, object]:
+        if declares_identifiable_minor:
+            raise DomainError("第一版不能保存认得出真人未成年人的照片、视频或声音。")
+        if not title.strip() or len(title.strip()) > 120:
+            raise DomainError("素材名称需要在 1 到 120 个字符之间。")
+        if len(payload) == 0 or len(payload) > _MAX_MEDIA_BYTES:
+            raise DomainError("素材文件为空或超过首期 50MB 上限。")
+        if len(reference_note.strip()) > 500:
+            raise DomainError("原件说明请控制在 500 字以内。")
+        media_type = self._media_type(content_type)
+        if media_type in {"image", "video"} and len(reference_note.strip()) < 2:
+            raise DomainError("图片或视频请先写一句人工说明。")
+        suffix = Path(filename).suffix
+        asset_id = uuid4()
+        try:
+            object_key = self._object_store.put(asset_id, suffix, payload)
+            return self._repository.create_management_organization_material(
+                scope,
+                organization_id,
+                asset_id,
+                title.strip(),
+                media_type,
+                object_key,
+                len(payload),
+                filename,
+                hashlib.sha256(payload).hexdigest(),
+                reference_note.strip(),
+            )
+        except (OSError, ValueError) as exc:
+            if "object_key" in locals():
+                self._delete_after_failed_metadata_write(object_key)
+            raise DomainError("素材原件暂时无法保存，请检查文件后重试。") from exc
+        except DomainError:
+            if "object_key" in locals():
+                self._delete_after_failed_metadata_write(object_key)
+            raise
+
+    def delete_management_organization_material(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+    ) -> None:
+        object_key = self._repository.request_management_material_deletion(
+            scope,
+            asset_id,
+        )
+        try:
+            self._object_store.delete(object_key)
+            self._repository.finalize_management_material_deletion(scope, asset_id)
+        except (OSError, ValueError) as exc:
+            raise DomainError(
+                "素材删除尚未完成；当前记录已标记为待删除，可直接重试。"
+            ) from exc
+
     def management_demo_content_index(
         self, scope: TenantManagementScope
     ) -> dict[str, object]:

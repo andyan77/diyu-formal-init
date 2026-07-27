@@ -63,14 +63,17 @@ from src.gateway.api.contracts import (
     GreetingResponse,
     MaterialReferenceNoteRequest,
     MaterialUploadRequest,
+    OrganizationMaterialUploadRequest,
     ReorderSeriesRequest,
     RevisionRequest,
     SaveBrandProductRequest,
     SavedVersionResponse,
     UnmetCapabilityRequest,
     UnmetCapabilityResponseRequest,
+    UpdateTenantUserGrantsRequest,
 )
 from src.gateway.api.html import (
+    render_activation_failure,
     render_login_failure,
     render_spa_shell,
     render_tenant_admin_access_denied,
@@ -81,6 +84,7 @@ from src.gateway.api.session import (
     ApplicationId,
     ProductionSessionAuthority,
     SessionAuthority,
+    clear_production_ops_cookie,
     clear_production_tenant_cookie,
     set_production_ops_cookie,
     set_production_tenant_cookie,
@@ -166,6 +170,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         403: {"description": "当前可信会话属于另一应用。"},
     }
 
+    def dependencies_are_ready() -> bool:
+        """Check only the two dependencies already used by readiness."""
+        if not current_settings.is_production:
+            return True
+        try:
+            with (
+                psycopg.connect(current_settings.app_database_url) as connection,
+                connection.cursor() as cursor,
+            ):
+                cursor.execute("SELECT 1")
+            assert current_settings.s3_endpoint_url is not None
+            assert current_settings.s3_bucket is not None
+            assert current_settings.s3_access_key_id is not None
+            assert current_settings.s3_secret_access_key is not None
+            assert current_settings.s3_region is not None
+            return S3ObjectStore(
+                current_settings.s3_endpoint_url,
+                current_settings.s3_bucket,
+                current_settings.s3_access_key_id.get_secret_value(),
+                current_settings.s3_secret_access_key.get_secret_value(),
+                current_settings.s3_region,
+            ).is_ready()
+        except (AssertionError, psycopg.Error, RuntimeError, ValueError):
+            return False
+
     def scope_from_request(request: Request, _: str | None = Security(session_cookie)) -> TrustedScope:
         scope = authority.require_content(request)
         if not workbench_service.is_content_operator(scope):
@@ -177,6 +206,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def user_scope_from_request(request: Request, _: str | None = Security(session_cookie)) -> TrustedScope:
         return authority.require_user_portal(request)
+
+    def optional_target_scope(
+        request: Request,
+        target: ContentTarget | None,
+        current_scope: TrustedScope,
+    ) -> TrustedScope:
+        scope = (
+            current_scope
+            if target is None
+            else authority.require_content_target(request, target)
+        )
+        if not workbench_service.is_content_operator(scope):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="当前自然人没有此发布账号工作资格",
+            )
+        return scope
 
     def management_scope_from_request(
         request: Request, _: str | None = Security(session_cookie)
@@ -427,16 +473,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
         @app.post("/activate/{activation_token}", include_in_schema=False)
-        async def activate(activation_token: str, request: Request) -> RedirectResponse:
+        async def activate(activation_token: str, request: Request) -> Response:
             if not production_authority.login_limiter.allow(
                 f"activation:{request.client.host if request.client else 'unknown'}"
             ):
-                raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="请稍后再试")
+                return HTMLResponse(
+                    render_activation_failure("尝试次数较多，请稍后再试，或请管理员重新生成体验链接。"),
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
             fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
             password = fields.get("password", [""])[0]
             if len(password) < 12:
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="密码至少需要 12 个字符")
-            audience = production_authority.repository.complete_activation(activation_token, password)
+                return HTMLResponse(
+                    render_activation_failure("新密码至少需要 12 个字符；请返回收到的链接重新设置。"),
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+            try:
+                audience = production_authority.repository.complete_activation(
+                    activation_token, password
+                )
+            except DomainError:
+                return HTMLResponse(
+                    render_activation_failure("链接可能已使用、已失效或已过期，请管理员重新生成。"),
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
             destination = "/tenant-admin/login" if audience == "tenant-admin" else "/login"
             return RedirectResponse(destination, status_code=status.HTTP_303_SEE_OTHER)
 
@@ -514,6 +574,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             production_authority.repository.revoke_account_grant(identity, user_id, account_id)
             return {"revoked": True}
 
+        @app.patch(
+            "/api/v1/tenant-management/users/{user_id}/grants",
+            responses=business_failures,
+        )
+        def update_tenant_user_grants(
+            user_id: UUID,
+            payload: UpdateTenantUserGrantsRequest,
+            request: Request,
+        ) -> dict[str, bool]:
+            return production_authority.repository.update_tenant_user_grants(
+                formal_manager_identity(request),
+                user_id,
+                payload.account_id,
+                payload.grants_account_access,
+                payload.grants_tenant_management,
+                payload.grants_material_maintenance,
+                payload.grants_expression_profile_maintenance,
+            )
+
         @app.post("/api/v1/ops/tenants", status_code=status.HTTP_201_CREATED)
         def provision_tenant(payload: CreateTenantRequest, request: Request) -> dict[str, str]:
             operator = production_authority.require_ops(request)
@@ -532,6 +611,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             operator = production_authority.require_ops(request)
             production_authority.repository.set_tenant_enabled(operator, tenant_id, False)
             return {"disabled": True}
+
+        @app.post("/api/v1/ops/tenants/{tenant_id}/enable")
+        def enable_tenant(tenant_id: UUID, request: Request) -> dict[str, bool]:
+            operator = production_authority.require_ops(request)
+            production_authority.repository.set_tenant_enabled(operator, tenant_id, True)
+            return {"enabled": True}
+
+        @app.get("/api/v1/ops/tenants")
+        def list_ops_tenants(request: Request) -> list[dict[str, object]]:
+            operator = production_authority.require_ops(request)
+            return production_authority.repository.list_tenants(operator)
 
         @app.get("/api/v1/ops/runtime-summary")
         def ops_runtime_summary(request: Request) -> dict[str, int | float | None]:
@@ -590,7 +680,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         "pending_requests": len(pending),
                         "formal_runtime": True,
                     },
-                    fallback="<main><h1>笛语运维</h1><p>服务运行状态已读取。</p></main>",
+                    fallback="<main><h1>笛语运维</h1><p>当前运行汇总。</p></main>",
                 )
             )
 
@@ -611,6 +701,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 + escape(str(answered["status"]))
                 + "</p><p><a href='/ops'>返回</a></p></main>"
             )
+
+        @app.post("/ops/logout", include_in_schema=False)
+        def ops_logout(request: Request) -> RedirectResponse:
+            token = request.cookies.get("diyu_ops_session", "")
+            if token:
+                production_authority.repository.revoke_operator_session(token)
+            response = RedirectResponse(
+                "/ops/login",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+            clear_production_ops_cookie(response)
+            return response
 
         @app.post("/ops/tenants", include_in_schema=False)
         async def provision_tenant_from_form(request: Request) -> HTMLResponse:
@@ -637,27 +739,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         @app.get("/health/ready", include_in_schema=False)
         def health_ready() -> dict[str, str]:
-            try:
-                with psycopg.connect(current_settings.app_database_url) as connection, connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-                assert current_settings.s3_endpoint_url is not None
-                assert current_settings.s3_bucket is not None
-                assert current_settings.s3_access_key_id is not None
-                assert current_settings.s3_secret_access_key is not None
-                assert current_settings.s3_region is not None
-                if not S3ObjectStore(
-                    current_settings.s3_endpoint_url,
-                    current_settings.s3_bucket,
-                    current_settings.s3_access_key_id.get_secret_value(),
-                    current_settings.s3_secret_access_key.get_secret_value(),
-                    current_settings.s3_region,
-                ).is_ready():
-                    raise RuntimeError("对象存储尚未就绪")
-            except psycopg.Error as exc:
-                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="服务暂不可用") from exc
-            except (RuntimeError, ValueError) as exc:
-                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="服务暂不可用") from exc
+            if not dependencies_are_ready():
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="服务暂不可用",
+                )
             return {"status": "ready"}
+
+    @app.get("/status", response_class=HTMLResponse, include_in_schema=False)
+    def public_status() -> HTMLResponse:
+        service_state = "available" if dependencies_are_ready() else "unavailable"
+        return HTMLResponse(
+            render_spa_shell(
+                {
+                    "application": "status",
+                    "service_state": service_state,
+                },
+                fallback=(
+                    "<main><h1>服务状态</h1><p>"
+                    + (
+                        "笛语当前可以使用。"
+                        if service_state == "available"
+                        else "笛语暂时不可用，请稍后再试。"
+                    )
+                    + "</p></main>"
+                ),
+            )
+        )
 
     @app.get("/api/v1/session/context", responses=business_failures)
     def session_context(request: Request) -> dict[str, object]:
@@ -752,6 +860,53 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> list[dict[str, object]]:
         return workbench_service.management_products(scope)
+
+    @app.get(
+        "/api/v1/tenant-management/organization-materials",
+        responses=business_failures,
+    )
+    def management_organization_materials(
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.management_organization_materials(scope)
+
+    @app.post(
+        "/api/v1/tenant-management/organization-materials",
+        status_code=status.HTTP_201_CREATED,
+        responses=business_failures,
+    )
+    def create_management_organization_material(
+        upload: OrganizationMaterialUploadRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        try:
+            payload = base64.b64decode(upload.content_base64, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="素材原件编码无效",
+            ) from exc
+        return workbench_service.add_management_organization_material(
+            scope,
+            upload.organization_id,
+            upload.title,
+            upload.filename,
+            upload.content_type,
+            payload,
+            upload.declares_identifiable_minor,
+            upload.reference_note,
+        )
+
+    @app.delete(
+        "/api/v1/tenant-management/organization-materials/{asset_id}",
+        responses=business_failures,
+    )
+    def delete_management_organization_material(
+        asset_id: UUID,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, bool]:
+        workbench_service.delete_management_organization_material(scope, asset_id)
+        return {"deleted": True}
 
     @app.get(
         "/api/v1/tenant-management/demo-content-index",
@@ -857,34 +1012,68 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return workbench_service.update_default_persona(scope, payload.name, payload.boundary)
 
     @app.get("/api/v1/content/series", responses=business_failures)
-    def list_series(scope: TrustedScope = Depends(scope_from_request)) -> list[dict[str, object]]:
-        return workbench_service.list_series(scope)
+    def list_series(
+        request: Request,
+        target: ContentTarget | None = None,
+        current_scope: TrustedScope = Depends(scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.list_series(
+            optional_target_scope(request, target, current_scope)
+        )
 
     @app.post("/api/v1/content/series", status_code=status.HTTP_201_CREATED, responses=business_failures)
     def create_series(
-        payload: CreateSeriesRequest, scope: TrustedScope = Depends(scope_from_request)
+        payload: CreateSeriesRequest,
+        request: Request,
+        target: ContentTarget | None = None,
+        current_scope: TrustedScope = Depends(scope_from_request),
     ) -> dict[str, object]:
-        return workbench_service.create_series(scope, payload.title, payload.premise)
+        return workbench_service.create_series(
+            optional_target_scope(request, target, current_scope),
+            payload.title,
+            payload.premise,
+        )
 
     @app.post("/api/v1/content/series/{series_id}/items", responses=business_failures)
     def add_series_item(
         series_id: UUID,
         payload: AddSeriesItemRequest,
-        scope: TrustedScope = Depends(scope_from_request),
+        request: Request,
+        target: ContentTarget | None = None,
+        current_scope: TrustedScope = Depends(scope_from_request),
     ) -> dict[str, object]:
-        return workbench_service.add_series_item(scope, series_id, payload.task_id, payload.position)
+        return workbench_service.add_series_item(
+            optional_target_scope(request, target, current_scope),
+            series_id,
+            payload.task_id,
+            payload.position,
+        )
 
     @app.put("/api/v1/content/series/{series_id}/items", responses=business_failures)
     def reorder_series(
         series_id: UUID,
         payload: ReorderSeriesRequest,
-        scope: TrustedScope = Depends(scope_from_request),
+        request: Request,
+        target: ContentTarget | None = None,
+        current_scope: TrustedScope = Depends(scope_from_request),
     ) -> dict[str, object]:
-        return workbench_service.reorder_series(scope, series_id, tuple(payload.task_ids))
+        return workbench_service.reorder_series(
+            optional_target_scope(request, target, current_scope),
+            series_id,
+            tuple(payload.task_ids),
+        )
 
     @app.post("/api/v1/content/series/{series_id}/reset", responses=business_failures)
-    def reset_series(series_id: UUID, scope: TrustedScope = Depends(scope_from_request)) -> dict[str, object]:
-        return workbench_service.reset_series(scope, series_id)
+    def reset_series(
+        series_id: UUID,
+        request: Request,
+        target: ContentTarget | None = None,
+        current_scope: TrustedScope = Depends(scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.reset_series(
+            optional_target_scope(request, target, current_scope),
+            series_id,
+        )
 
     @app.get("/api/v1/materials", responses=business_failures)
     def list_materials(
@@ -1239,9 +1428,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/content/account-expression-profile", responses=business_failures)
     def account_expression_profile(
-        scope: TrustedScope = Depends(scope_from_request),
+        request: Request,
+        target: ContentTarget | None = None,
+        current_scope: TrustedScope = Depends(scope_from_request),
     ) -> dict[str, object]:
-        return control_service.account_expression(scope)
+        return control_service.account_expression(
+            optional_target_scope(request, target, current_scope)
+        )
 
     @app.post(
         "/api/v1/content/account-expression-profile/versions",
@@ -1250,9 +1443,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     def save_account_expression_profile(
         payload: AccountExpressionVersionRequest,
-        scope: TrustedScope = Depends(scope_from_request),
+        request: Request,
+        target: ContentTarget | None = None,
+        current_scope: TrustedScope = Depends(scope_from_request),
     ) -> dict[str, object]:
-        return control_service.save_account_expression(scope, payload.model_dump())
+        return control_service.save_account_expression(
+            optional_target_scope(request, target, current_scope),
+            payload.model_dump(),
+        )
 
     @app.get(
         "/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile",
@@ -1534,9 +1732,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     ),
                     status_code=status.HTTP_403_FORBIDDEN,
                 )
+            capabilities: list[str] = []
+            context: dict[str, object] | None = None
             try:
-                context = workbench_service.user_portal_context(production_authority.repository.content_scope(identity))
+                content_scope = production_authority.repository.content_scope(identity)
             except DomainError:
+                pass
+            else:
+                context = workbench_service.user_portal_context(content_scope)
+                capabilities.append("content")
+            try:
+                display_scope = production_authority.repository.display_scope(identity)
+            except DomainError:
+                pass
+            else:
+                capabilities.append("display")
+                if context is None:
+                    display_context = workbench_service.display_context(
+                        display_scope,
+                        current_settings.generator_mode,
+                    )
+                    context = {
+                        "application": "tenant_user",
+                        "identity": display_context["identity"],
+                    }
+            if context is None:
                 try:
                     production_authority.repository.manager_scope(identity)
                 except DomainError:
@@ -1552,9 +1772,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     + manager_guidance
                     + "</p></main>"
                 )
+            context["capabilities"] = capabilities
             context["formal_runtime"] = True
         else:
             context = workbench_service.user_portal_context(user_scope_from_request(request))
+            context["capabilities"] = ["content", "display"]
         return HTMLResponse(
             render_spa_shell(
                 context,

@@ -43,6 +43,8 @@ _BANNED_VISIBLE_WORDS = (
     "已确认商品",
     "授权",
     "审批",
+    "批准",
+    "是否采用",
     "阿丹",
 )
 _INVENTORY_PAIRS = (
@@ -138,9 +140,7 @@ def test_no_display_surface_shows_confirmation_or_authorisation_wording(app_data
         surfaces.append(refused.text)
         narrowed = client.post("/api/v1/display", json={"inventory_text": "今天这组墙可用：ZX-C218 1 件。"})
         surfaces.append(narrowed.text)
-        surfaces.append(
-            client.post("/api/v1/display", json={"inventory_text": "今天这组墙可用：ZX-P211 2 件。"}).text
-        )
+        surfaces.append(client.post("/api/v1/display", json={"inventory_text": "今天这组墙可用：ZX-P211 2 件。"}).text)
 
     scope = DisplayScope(TENANT_ID, STORE_USER_ID, BRAND_ID, STORE_ORG_ID)
     context = PostgresDisplayRepository(app_database_url).load_context(scope)
@@ -158,9 +158,7 @@ def test_no_display_surface_shows_confirmation_or_authorisation_wording(app_data
         )
     surfaces.append(str(capacity_failure.value))
     with pytest.raises(GenerationFailed) as focus_failure:
-        broken = DM01DisplayCompiler().generate(
-            DisplayGenerationInput(uuid4(), uuid4(), _INVENTORY_PAIRS, context, ())
-        )
+        broken = DM01DisplayCompiler().generate(DisplayGenerationInput(uuid4(), uuid4(), _INVENTORY_PAIRS, context, ()))
         zones = cast(dict[str, dict[str, object]], cast(dict[str, object], broken.plan["layout"])["zones"])
         for zone in zones.values():
             for slot in cast(list[dict[str, object]], zone["upper"]):
@@ -223,8 +221,7 @@ def test_keqiao_task_snapshot_compiles_a_conserving_reference_plan_without_zx_or
     assert "ZX-" not in body
     for banned in _BANNED_VISIBLE_WORDS:
         assert banned not in body
-    assert "这是系统根据本次任务输入给出的参考建议" in body
-    assert "也不表示现场已经执行" in body
+    assert "这是根据本次库存和现场条件整理的文字参考方案" in body
 
 
 def test_reference_plan_never_asks_for_confirmation_and_accepts_a_changed_inventory() -> None:
@@ -232,9 +229,7 @@ def test_reference_plan_never_asks_for_confirmation_and_accepts_a_changed_invent
     compiler = DM01DisplayCompiler()
 
     changed = tuple(
-        (sku, amount - 1 if sku == "DIYU-CSPU-007" else amount)
-        for sku, amount in inventory
-        if sku != "DIYU-CSPU-008"
+        (sku, amount - 1 if sku == "DIYU-CSPU-007" else amount) for sku, amount in inventory if sku != "DIYU-CSPU-008"
     ) + (("DIYU-CSPU-999", 2),)
     assert required_inventory_gap(changed, context) is None
     changed_artifact = compiler.generate(DisplayGenerationInput(uuid4(), uuid4(), changed, context, ()))

@@ -275,3 +275,13 @@ def set_production_ops_cookie(response: object, token: str) -> None:
         secure=True,
         max_age=60 * 60 * 8,
     )
+
+
+def clear_production_ops_cookie(response: object) -> None:
+    response.delete_cookie(  # type: ignore[attr-defined]
+        "diyu_ops_session",
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=True,
+    )

@@ -219,6 +219,10 @@ class MaterialUploadRequest(BaseModel):
     reference_note: str = Field(default="", max_length=500)
 
 
+class OrganizationMaterialUploadRequest(MaterialUploadRequest):
+    organization_id: UUID
+
+
 class DefaultPersonaRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -307,6 +311,16 @@ class CreateTenantUserRequest(BaseModel):
     grants_tenant_management: bool = False
     grants_material_maintenance: bool = False
     # Account use never implies profile maintenance; this is the separate, explicit grant.
+    grants_expression_profile_maintenance: bool = False
+
+
+class UpdateTenantUserGrantsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: UUID | None = None
+    grants_account_access: bool = False
+    grants_tenant_management: bool = False
+    grants_material_maintenance: bool = False
     grants_expression_profile_maintenance: bool = False
 
 

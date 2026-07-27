@@ -74,8 +74,7 @@ def compile_display_body(context: DisplayContext, plan: dict[str, object], revis
             + " ".join(
                 f"{index}. {step}" for index, step in enumerate(cast(list[str], layout["execution_steps"]), start=1)
             ),
-            "这是系统根据本次任务输入给出的参考建议，门店自行决定是否采用；"
-            "系统不代表总部批准，不核验库存，也不表示现场已经执行。",
+            "这是根据本次库存和现场条件整理的文字参考方案。",
         ]
     )
     return f"{context.store_name}墙面挂杆参考执行方案\n\n" + change + "\n\n".join(sections)

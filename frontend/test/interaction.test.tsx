@@ -67,6 +67,14 @@ async function main(): Promise<void> {
     ["?target=xiaohongshu_graphic"],
     "历史只能读取服务端为当前页面解析的平台作用域"
   );
+  assert.ok(
+    requests.some(
+      item =>
+        item.path === "/api/v1/content/account-expression-profile" &&
+        item.query === "?target=xiaohongshu_graphic"
+    ),
+    "账号定位必须读取当前页面的可信发布账号作用域"
+  );
   assert.match(document.querySelector(".identity-trigger")?.textContent ?? "", /总部小红书发布账号/);
   assert.match(document.querySelector(".identity-trigger")?.textContent ?? "", /品牌官方/);
   const target = document.querySelector(".target-switch select") as HTMLSelectElement;
@@ -77,6 +85,22 @@ async function main(): Promise<void> {
   for (const forbidden of ["Tenant", "ContentRole", "RLS", "schema", "GenerationRun"]) {
     assert.doesNotMatch(document.body.textContent ?? "", new RegExp(forbidden));
   }
+
+  await click(find(".creator-tools button", "连续系列"));
+  await settle();
+  assert.ok(
+    requests.some(
+      item =>
+        item.path === "/api/v1/content/series" &&
+        item.query === "?target=xiaohongshu_graphic"
+    ),
+    "系列只能读取当前页面由服务端解析的发布账号作用域"
+  );
+  assert.match(document.querySelector(".creator-tool-drawer")?.textContent ?? "", /门店里的安静时刻/);
+  await click(find(".creator-tool-drawer button", "接着做下一篇"));
+  await settle();
+  assert.equal(document.querySelector(".creator-tool-drawer"), null);
+  assert.match(document.querySelector(".composer-context")?.textContent ?? "", /连续系列/);
 
   const directionToggle = find("button", "创作方向（可选）");
   assert.equal(directionToggle.getAttribute("aria-expanded"), "false");
@@ -190,6 +214,8 @@ async function main(): Promise<void> {
   const createBody = created.body as {
     target: string;
     material_ids: string[];
+    series_id: string | null;
+    series_position: number | null;
     creative_direction: {
       selections: Record<string, string>;
       custom_text: string;
@@ -198,6 +224,8 @@ async function main(): Promise<void> {
   };
   assert.equal(createBody.target, "xiaohongshu_graphic");
   assert.deepEqual(createBody.material_ids, ["11111111-1111-4111-8111-111111111111"]);
+  assert.equal(createBody.series_id, "33333333-3333-4333-8333-333333333333");
+  assert.equal(createBody.series_position, null);
   assert.equal(
     createBody.creative_direction.custom_text,
     "保留判断，但像一位熟悉门店的人自然说。"
@@ -265,6 +293,7 @@ async function main(): Promise<void> {
     ""
   );
   assert.equal(document.querySelectorAll(".material-options input:checked").length, 0);
+  assert.equal(document.querySelector(".composer-context"), null);
   assert.equal(
     document.querySelectorAll(".direction-options button[aria-pressed='true']").length,
     0,

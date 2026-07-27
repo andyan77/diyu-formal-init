@@ -341,6 +341,14 @@ class ProductionAuthRepository:
                 (self._digest(token),),
             )
 
+    def revoke_operator_session(self, token: str) -> None:
+        """Revoke only the current operations session."""
+        with self._tx() as cursor:
+            cursor.execute(
+                "UPDATE platform_sessions SET revoked_at = now() WHERE token_digest = %s",
+                (self._digest(token),),
+            )
+
     def complete_activation(self, raw_token: str, password: str) -> str:
         token_digest = self._digest(raw_token)
         with self._tx() as cursor:
@@ -405,9 +413,7 @@ class ProductionAuthRepository:
                 """,
                 (tenant_id, user_id),
             )
-            is_manager = bool(
-                self._one(cursor, "无法确认激活后的入口资格")["is_manager"]
-            )
+            is_manager = bool(self._one(cursor, "无法确认激活后的入口资格")["is_manager"])
         return "tenant-admin" if is_manager else "tenant-user"
 
     def change_password(self, identity: TenantSession, current_password: str, new_password: str) -> bool:
@@ -557,9 +563,7 @@ class ProductionAuthRepository:
             self._tenant_audit(cursor, manager.tenant_id, manager.user_id, "password.reset_issued", user_id)
         return raw_token
 
-    def invalidate_pending_activation_tokens(
-        self, manager: TenantSession, user_id: UUID
-    ) -> int:
+    def invalidate_pending_activation_tokens(self, manager: TenantSession, user_id: UUID) -> int:
         """Invalidate a user's outstanding links without reading their token material."""
         with self._tenant_tx(manager.tenant_id) as cursor:
             cursor.execute(
@@ -584,6 +588,8 @@ class ProductionAuthRepository:
 
     def disable_tenant_user(self, manager: TenantSession, user_id: UUID) -> None:
         """Disable a natural login and every current work grant in its own tenant."""
+        if user_id == manager.user_id:
+            raise DomainError("不能停用当前正在使用品牌管理的自己")
         with self._tenant_tx(manager.tenant_id) as cursor:
             cursor.execute(
                 "UPDATE users SET enabled = false WHERE tenant_id = %s AND id = %s AND enabled = true RETURNING id",
@@ -616,12 +622,141 @@ class ProductionAuthRepository:
             self._one(cursor, "找不到当前租户可撤销的发布账号资格")
             self._tenant_audit(cursor, manager.tenant_id, manager.user_id, "publishing_account_grant.revoked", user_id)
 
+    def update_tenant_user_grants(
+        self,
+        manager: TenantSession,
+        user_id: UUID,
+        account_id: UUID | None,
+        grants_account_access: bool,
+        grants_tenant_management: bool,
+        grants_material_maintenance: bool,
+        grants_expression_profile_maintenance: bool,
+    ) -> dict[str, bool]:
+        """Replace the small editable grant set in one tenant transaction."""
+        if user_id == manager.user_id and not grants_tenant_management:
+            raise DomainError("不能在当前登录会话中撤销自己的品牌管理资格")
+        if grants_expression_profile_maintenance and not grants_account_access:
+            raise DomainError("维护账号定位前，需要先具备这个发布账号的使用资格")
+        if account_id is None and (grants_account_access or grants_expression_profile_maintenance):
+            raise DomainError("请选择需要维护资格的发布账号")
+        with self._tenant_tx(manager.tenant_id) as cursor:
+            cursor.execute(
+                "SELECT organization_id FROM users WHERE tenant_id = %s AND id = %s AND enabled = true FOR UPDATE",
+                (manager.tenant_id, user_id),
+            )
+            target = self._one(cursor, "找不到当前租户可维护的成员")
+            organization_id = UUID(str(target["organization_id"]))
+
+            if account_id is not None:
+                cursor.execute(
+                    "SELECT id FROM content_accounts "
+                    "WHERE tenant_id = %s AND id = %s AND enabled = true "
+                    "AND carrier_of_account_id IS NULL",
+                    (manager.tenant_id, account_id),
+                )
+                self._one(cursor, "只能维护当前租户已启用的表达账号资格")
+                if grants_account_access:
+                    cursor.execute(
+                        """
+                        UPDATE auth_grants grant_record
+                        SET enabled = false,
+                            can_maintain_expression_profile = false
+                        FROM content_accounts account
+                        WHERE grant_record.tenant_id = %s
+                          AND grant_record.user_id = %s
+                          AND grant_record.enabled = true
+                          AND account.tenant_id = grant_record.tenant_id
+                          AND account.id = grant_record.account_id
+                          AND COALESCE(account.carrier_of_account_id, account.id) <> %s
+                        """,
+                        (manager.tenant_id, user_id, account_id),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        UPDATE auth_grants
+                        SET enabled = false,
+                            can_maintain_expression_profile = false
+                        WHERE tenant_id = %s AND user_id = %s AND enabled = true
+                        """,
+                        (manager.tenant_id, user_id),
+                    )
+                cursor.execute(
+                    """
+                    INSERT INTO auth_grants
+                        (id, tenant_id, user_id, account_id, role_name, enabled,
+                         can_maintain_expression_profile)
+                    VALUES (%s, %s, %s, %s, '发布账号操作资格', %s, %s)
+                    ON CONFLICT (tenant_id, user_id, account_id) DO UPDATE
+                    SET enabled = EXCLUDED.enabled,
+                        can_maintain_expression_profile =
+                            EXCLUDED.can_maintain_expression_profile
+                    """,
+                    (
+                        uuid4(),
+                        manager.tenant_id,
+                        user_id,
+                        account_id,
+                        grants_account_access,
+                        grants_expression_profile_maintenance,
+                    ),
+                )
+            elif not grants_account_access:
+                cursor.execute(
+                    """
+                    UPDATE auth_grants
+                    SET enabled = false,
+                        can_maintain_expression_profile = false
+                    WHERE tenant_id = %s AND user_id = %s AND enabled = true
+                    """,
+                    (manager.tenant_id, user_id),
+                )
+
+            cursor.execute(
+                """
+                INSERT INTO tenant_management_grants (id, tenant_id, user_id, enabled)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (tenant_id, user_id) DO UPDATE
+                SET enabled = EXCLUDED.enabled
+                """,
+                (uuid4(), manager.tenant_id, user_id, grants_tenant_management),
+            )
+            if grants_material_maintenance:
+                cursor.execute(
+                    """
+                    INSERT INTO organization_material_maintainers
+                        (id, tenant_id, organization_id, user_id)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (tenant_id, organization_id, user_id) DO NOTHING
+                    """,
+                    (uuid4(), manager.tenant_id, organization_id, user_id),
+                )
+            else:
+                cursor.execute(
+                    "DELETE FROM organization_material_maintainers "
+                    "WHERE tenant_id = %s AND organization_id = %s AND user_id = %s",
+                    (manager.tenant_id, organization_id, user_id),
+                )
+
+            self._tenant_audit(
+                cursor,
+                manager.tenant_id,
+                manager.user_id,
+                "tenant_user.grants_updated",
+                user_id,
+            )
+        return {
+            "account_access": grants_account_access,
+            "tenant_management": grants_tenant_management,
+            "material_maintenance": grants_material_maintenance,
+            "expression_profile_maintenance": grants_expression_profile_maintenance,
+        }
+
     def tenant_organizations(self, manager: TenantSession) -> list[dict[str, str]]:
         """Return only the manager's tenant organizations for qualification assignment."""
         with self._tenant_tx(manager.tenant_id) as cursor:
             cursor.execute(
-                "SELECT id, name, business_data_kind "
-                "FROM organizations WHERE tenant_id = %s ORDER BY name",
+                "SELECT id, name, business_data_kind FROM organizations WHERE tenant_id = %s ORDER BY name",
                 (manager.tenant_id,),
             )
             return [
@@ -643,11 +778,7 @@ class ProductionAuthRepository:
         normalized_name = name.strip()
         if not normalized_name:
             raise DomainError("请填写真实组织名称")
-        business_data_kind = (
-            "synthetic_business_fixture"
-            if as_synthetic_business_fixture
-            else "formal_business_data"
-        )
+        business_data_kind = "synthetic_business_fixture" if as_synthetic_business_fixture else "formal_business_data"
         with self._tenant_tx(manager.tenant_id) as cursor:
             try:
                 cursor.execute(
@@ -841,6 +972,30 @@ class ProductionAuthRepository:
                 (uuid4(), operator.operator_id, "tenant.enabled" if enabled else "tenant.disabled", tenant_id),
             )
 
+    def list_tenants(self, operator: OpsSession) -> list[dict[str, object]]:
+        """Return the minimum operations registry projection, never tenant content."""
+        del operator
+        with self._tx() as cursor:
+            cursor.execute(
+                """
+                SELECT tenant_id, tenant_name, enabled, created_at, disabled_at
+                FROM ops_list_tenants()
+                """
+            )
+            rows = cursor.fetchall()
+        return [
+            {
+                "tenant_id": str(row["tenant_id"]),
+                "tenant_name": str(row["tenant_name"]),
+                "enabled": bool(row["enabled"]),
+                "created_at": (
+                    row["created_at"].isoformat() if isinstance(row["created_at"], datetime) else str(row["created_at"])
+                ),
+                "disabled_at": (row["disabled_at"].isoformat() if isinstance(row["disabled_at"], datetime) else None),
+            }
+            for row in rows
+        ]
+
     def runtime_summary(self, operator: OpsSession) -> dict[str, int | float | None]:
         """Return only fleet-level counters; the controlled function exposes no tenant bodies."""
         del operator
@@ -986,21 +1141,26 @@ class ProductionAuthRepository:
         with self._tenant_tx(identity.tenant_id) as cursor:
             cursor.execute(
                 """
-                SELECT brand.id AS brand_id
+                SELECT DISTINCT brand.id AS brand_id
                 FROM users user_record
                 JOIN tenant_management_grants management_grant
                   ON management_grant.tenant_id = user_record.tenant_id
                  AND management_grant.user_id = user_record.id
                  AND management_grant.enabled = true
                 JOIN brands brand ON brand.tenant_id = user_record.tenant_id
+                JOIN brand_expression_baselines baseline
+                  ON baseline.tenant_id = brand.tenant_id
+                 AND baseline.brand_id = brand.id
                 WHERE user_record.tenant_id = %s AND user_record.id = %s
                   AND user_record.enabled = true
-                ORDER BY brand.name
-                LIMIT 1
+                ORDER BY brand.id
                 """,
                 (identity.tenant_id, identity.user_id),
             )
-            row = self._one(cursor, "当前租户尚无可管理的品牌身份")
+            rows = cursor.fetchall()
+            if len(rows) != 1:
+                raise DomainError("当前租户的品牌管理范围尚未唯一确定")
+            row = rows[0]
         return TenantManagementScope(
             identity.tenant_id,
             identity.user_id,

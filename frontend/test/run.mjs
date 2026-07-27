@@ -172,6 +172,22 @@ globalThis.fetch = async (input, init = {}) => {
         reference_note: ""
       }
     ];
+  } else if (path === "/api/v1/content/series" && method === "GET") {
+    payload = [
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        title: "门店里的安静时刻",
+        premise: "从真实门店位置继续观察人与选择。",
+        revision: 2,
+        items: [
+          {
+            task_id: "series-task-1",
+            position: 1,
+            title: "沉默，也可以被尊重"
+          }
+        ]
+      }
+    ];
   } else if (path === "/api/v1/content/account-expression-profile") {
     payload = {
       account: "总部小红书发布账号",

@@ -493,6 +493,32 @@ a {
   letter-spacing: -0.04em;
 }
 
+.user-task-choices {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.button.task-secondary {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+  border: 1px solid var(--stone-200);
+  border-radius: 999px;
+  background: var(--white);
+  font-weight: 680;
+}
+
+.user-home-recovery {
+  max-width: 420px;
+  margin: 0 auto;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
 /* Creator */
 .creator-app {
   display: grid;
@@ -602,6 +628,36 @@ a {
   font-size: 0.72rem;
   font-weight: 720;
   letter-spacing: 0.08em;
+}
+
+.creator-tools {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.creator-tools button {
+  display: grid;
+  min-height: 54px;
+  align-content: center;
+  padding: 7px 10px;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.creator-tools button:hover {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.creator-tools span {
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.creator-tools small {
+  margin-top: 3px;
+  color: var(--stone-400);
+  font-size: 0.69rem;
 }
 
 .creator-history nav {
@@ -1133,6 +1189,25 @@ a {
   display: none;
 }
 
+.composer-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 2px 0;
+}
+
+.composer-resource-actions {
+  display: none;
+}
+
+.composer-context span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--stone-50);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
 /* Identity drawer */
 .drawer-layer {
   position: fixed;
@@ -1150,6 +1225,25 @@ a {
   overflow-y: auto;
   background: var(--white);
   box-shadow: var(--shadow);
+}
+
+.creator-tool-drawer {
+  position: relative;
+  width: min(760px, 94vw);
+  height: 100%;
+  padding: 34px clamp(22px, 5vw, 56px);
+  overflow-y: auto;
+  background: var(--white);
+  box-shadow: var(--shadow);
+}
+
+.tool-drawer-close {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  float: right;
+  margin: -12px -20px 0 12px;
+  background: var(--white);
 }
 
 .account-drawer > header {
@@ -1425,6 +1519,22 @@ a {
     display: none;
   }
 
+  .composer-resource-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .composer-resource-actions button {
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--stone-200);
+    border-radius: 8px;
+    background: var(--white);
+    color: var(--ink-soft);
+    font-size: 0.76rem;
+  }
+
   .artifact-workspace {
     display: block;
   }
@@ -1485,6 +1595,11 @@ a {
   .quiet-entry-links {
     flex-wrap: wrap;
     gap: 4px 16px;
+  }
+
+  .user-task-choices {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .motion-skip {

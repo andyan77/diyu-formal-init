@@ -107,6 +107,29 @@
         "title": "BrandExpressionConfirmRequest",
         "type": "object"
       },
+      "ChangePasswordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "current_password": {
+            "maxLength": 512,
+            "minLength": 12,
+            "title": "Current Password",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 512,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "current_password"
+        ],
+        "title": "ChangePasswordRequest",
+        "type": "object"
+      },
       "ContentPlanItem": {
         "additionalProperties": false,
         "properties": {
@@ -453,6 +476,27 @@
         "title": "CreateOperatorRequest",
         "type": "object"
       },
+      "CreateOrganizationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "as_synthetic_business_fixture": {
+            "default": false,
+            "title": "As Synthetic Business Fixture",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateOrganizationRequest",
+        "type": "object"
+      },
       "CreatePlatformCarrierRequest": {
         "additionalProperties": false,
         "properties": {
@@ -585,6 +629,98 @@
           "title"
         ],
         "title": "CreateSeriesRequest",
+        "type": "object"
+      },
+      "CreateTenantRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "administrator_name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Administrator Name",
+            "type": "string"
+          },
+          "administrator_username": {
+            "maxLength": 80,
+            "minLength": 3,
+            "title": "Administrator Username",
+            "type": "string"
+          },
+          "tenant_name": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Tenant Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_name",
+          "administrator_name",
+          "administrator_username"
+        ],
+        "title": "CreateTenantRequest",
+        "type": "object"
+      },
+      "CreateTenantUserRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "display_name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "grants_expression_profile_maintenance": {
+            "default": false,
+            "title": "Grants Expression Profile Maintenance",
+            "type": "boolean"
+          },
+          "grants_material_maintenance": {
+            "default": false,
+            "title": "Grants Material Maintenance",
+            "type": "boolean"
+          },
+          "grants_tenant_management": {
+            "default": false,
+            "title": "Grants Tenant Management",
+            "type": "boolean"
+          },
+          "organization_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Id"
+          },
+          "username": {
+            "maxLength": 80,
+            "minLength": 3,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "username"
+        ],
+        "title": "CreateTenantUserRequest",
         "type": "object"
       },
       "CreationPreferenceRequest": {
@@ -855,6 +991,60 @@
         "title": "MaterialUploadRequest",
         "type": "object"
       },
+      "OrganizationMaterialUploadRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content_base64": {
+            "maxLength": 70000000,
+            "minLength": 1,
+            "title": "Content Base64",
+            "type": "string"
+          },
+          "content_type": {
+            "maxLength": 100,
+            "minLength": 3,
+            "title": "Content Type",
+            "type": "string"
+          },
+          "declares_identifiable_minor": {
+            "default": false,
+            "title": "Declares Identifiable Minor",
+            "type": "boolean"
+          },
+          "filename": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          },
+          "organization_id": {
+            "format": "uuid",
+            "title": "Organization Id",
+            "type": "string"
+          },
+          "reference_note": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Reference Note",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "filename",
+          "content_type",
+          "content_base64",
+          "organization_id"
+        ],
+        "title": "OrganizationMaterialUploadRequest",
+        "type": "object"
+      },
       "ReorderSeriesRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1047,6 +1237,85 @@
           "request_text"
         ],
         "title": "UnmetCapabilityRequest",
+        "type": "object"
+      },
+      "UnmetCapabilityResponseRequest": {
+        "additionalProperties": false,
+        "description": "笛语运维's minimum classification and reply; it changes nothing else.",
+        "properties": {
+          "gap_type": {
+            "enum": [
+              "unclassified",
+              "knowledge",
+              "generation_method",
+              "media_tool",
+              "product_scope",
+              "policy_conflict",
+              "source_gap"
+            ],
+            "title": "Gap Type",
+            "type": "string"
+          },
+          "response_text": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Response Text",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "received",
+              "classified",
+              "answered"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gap_type",
+          "status"
+        ],
+        "title": "UnmetCapabilityResponseRequest",
+        "type": "object"
+      },
+      "UpdateTenantUserGrantsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "grants_account_access": {
+            "default": false,
+            "title": "Grants Account Access",
+            "type": "boolean"
+          },
+          "grants_expression_profile_maintenance": {
+            "default": false,
+            "title": "Grants Expression Profile Maintenance",
+            "type": "boolean"
+          },
+          "grants_material_maintenance": {
+            "default": false,
+            "title": "Grants Material Maintenance",
+            "type": "boolean"
+          },
+          "grants_tenant_management": {
+            "default": false,
+            "title": "Grants Tenant Management",
+            "type": "boolean"
+          }
+        },
+        "title": "UpdateTenantUserGrantsRequest",
         "type": "object"
       },
       "ValidationError": {
@@ -1314,6 +1583,47 @@
         "summary": "Readiness"
       }
     },
+    "/api/v1/auth/password": {
+      "post": {
+        "operationId": "change_password_api_v1_auth_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Change Password Api V1 Auth Password Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Change Password"
+      }
+    },
     "/api/v1/content": {
       "post": {
         "operationId": "create_content_api_v1_content_post",
@@ -1433,6 +1743,30 @@
     "/api/v1/content/account-expression-profile": {
       "get": {
         "operationId": "account_expression_profile_api_v1_content_account_expression_profile_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "douyin_video",
+                    "xiaohongshu_video",
+                    "xiaohongshu_graphic",
+                    "wechat_channels_video"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1467,6 +1801,30 @@
     "/api/v1/content/account-expression-profile/versions": {
       "post": {
         "operationId": "save_account_expression_profile_api_v1_content_account_expression_profile_versions_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "douyin_video",
+                    "xiaohongshu_video",
+                    "xiaohongshu_graphic",
+                    "wechat_channels_video"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1656,6 +2014,30 @@
     "/api/v1/content/series": {
       "get": {
         "operationId": "list_series_api_v1_content_series_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "douyin_video",
+                    "xiaohongshu_video",
+                    "xiaohongshu_graphic",
+                    "wechat_channels_video"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1691,6 +2073,30 @@
       },
       "post": {
         "operationId": "create_series_api_v1_content_series_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "douyin_video",
+                    "xiaohongshu_video",
+                    "xiaohongshu_graphic",
+                    "wechat_channels_video"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1745,6 +2151,28 @@
               "title": "Series Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "douyin_video",
+                    "xiaohongshu_video",
+                    "xiaohongshu_graphic",
+                    "wechat_channels_video"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
           }
         ],
         "requestBody": {
@@ -1798,6 +2226,28 @@
               "format": "uuid",
               "title": "Series Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "douyin_video",
+                    "xiaohongshu_video",
+                    "xiaohongshu_graphic",
+                    "wechat_channels_video"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
             }
           }
         ],
@@ -1854,6 +2304,28 @@
               "format": "uuid",
               "title": "Series Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "douyin_video",
+                    "xiaohongshu_video",
+                    "xiaohongshu_graphic",
+                    "wechat_channels_video"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
             }
           }
         ],
@@ -2550,6 +3022,265 @@
         "summary": "Create Material"
       }
     },
+    "/api/v1/ops/runtime-summary": {
+      "get": {
+        "operationId": "ops_runtime_summary_api_v1_ops_runtime_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "title": "Response Ops Runtime Summary Api V1 Ops Runtime Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ops Runtime Summary"
+      }
+    },
+    "/api/v1/ops/tenants": {
+      "get": {
+        "operationId": "list_ops_tenants_api_v1_ops_tenants_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Ops Tenants Api V1 Ops Tenants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Ops Tenants"
+      },
+      "post": {
+        "operationId": "provision_tenant_api_v1_ops_tenants_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Provision Tenant Api V1 Ops Tenants Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Provision Tenant"
+      }
+    },
+    "/api/v1/ops/tenants/{tenant_id}/disable": {
+      "post": {
+        "operationId": "disable_tenant_api_v1_ops_tenants__tenant_id__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Disable Tenant Api V1 Ops Tenants  Tenant Id  Disable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disable Tenant"
+      }
+    },
+    "/api/v1/ops/tenants/{tenant_id}/enable": {
+      "post": {
+        "operationId": "enable_tenant_api_v1_ops_tenants__tenant_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Enable Tenant Api V1 Ops Tenants  Tenant Id  Enable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Tenant"
+      }
+    },
+    "/api/v1/ops/unmet-capability-requests": {
+      "get": {
+        "description": "The gap candidates users submitted, read through the controlled function only.",
+        "operationId": "ops_unmet_capability_requests_api_v1_ops_unmet_capability_requests_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Ops Unmet Capability Requests Api V1 Ops Unmet Capability Requests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ops Unmet Capability Requests"
+      }
+    },
+    "/api/v1/ops/unmet-capability-requests/{stable_request_id}": {
+      "post": {
+        "description": "Classify one candidate and write one plain answer back to the person who asked.\n\nThis is the whole consumption entry: no queue, no approval state machine, and no\nchange to the catalog, brand knowledge, an account profile or anybody's preference.",
+        "operationId": "classify_unmet_capability_request_api_v1_ops_unmet_capability_requests__stable_request_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "stable_request_id",
+            "required": true,
+            "schema": {
+              "title": "Stable Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnmetCapabilityResponseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Classify Unmet Capability Request Api V1 Ops Unmet Capability Requests  Stable Request Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Classify Unmet Capability Request"
+      }
+    },
     "/api/v1/session/context": {
       "get": {
         "operationId": "session_context_api_v1_session_context_get",
@@ -2974,6 +3705,206 @@
         "summary": "Create Operator"
       }
     },
+    "/api/v1/tenant-management/organization-materials": {
+      "get": {
+        "operationId": "management_organization_materials_api_v1_tenant_management_organization_materials_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Management Organization Materials Api V1 Tenant Management Organization Materials Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Organization Materials"
+      },
+      "post": {
+        "operationId": "create_management_organization_material_api_v1_tenant_management_organization_materials_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationMaterialUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Management Organization Material Api V1 Tenant Management Organization Materials Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Management Organization Material"
+      }
+    },
+    "/api/v1/tenant-management/organization-materials/{asset_id}": {
+      "delete": {
+        "operationId": "delete_management_organization_material_api_v1_tenant_management_organization_materials__asset_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Delete Management Organization Material Api V1 Tenant Management Organization Materials  Asset Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Delete Management Organization Material"
+      }
+    },
+    "/api/v1/tenant-management/organizations": {
+      "get": {
+        "operationId": "tenant_organizations_api_v1_tenant_management_organizations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "title": "Response Tenant Organizations Api V1 Tenant Management Organizations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Tenant Organizations"
+      },
+      "post": {
+        "operationId": "create_tenant_organization_api_v1_tenant_management_organizations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrganizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Create Tenant Organization Api V1 Tenant Management Organizations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Create Tenant Organization"
+      }
+    },
     "/api/v1/tenant-management/platform-carriers": {
       "post": {
         "operationId": "create_platform_carrier_api_v1_tenant_management_platform_carriers_post",
@@ -3254,6 +4185,239 @@
           }
         ],
         "summary": "Save Management Account Expression Profile"
+      }
+    },
+    "/api/v1/tenant-management/users": {
+      "post": {
+        "operationId": "create_tenant_user_api_v1_tenant_management_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Create Tenant User Api V1 Tenant Management Users Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Create Tenant User"
+      }
+    },
+    "/api/v1/tenant-management/users/{user_id}/disable": {
+      "post": {
+        "operationId": "disable_tenant_user_api_v1_tenant_management_users__user_id__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Disable Tenant User Api V1 Tenant Management Users  User Id  Disable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Disable Tenant User"
+      }
+    },
+    "/api/v1/tenant-management/users/{user_id}/grants": {
+      "patch": {
+        "operationId": "update_tenant_user_grants_api_v1_tenant_management_users__user_id__grants_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantUserGrantsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Update Tenant User Grants Api V1 Tenant Management Users  User Id  Grants Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Update Tenant User Grants"
+      }
+    },
+    "/api/v1/tenant-management/users/{user_id}/publishing-accounts/{account_id}/revoke": {
+      "post": {
+        "operationId": "revoke_publishing_account_grant_api_v1_tenant_management_users__user_id__publishing_accounts__account_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Revoke Publishing Account Grant Api V1 Tenant Management Users  User Id  Publishing Accounts  Account Id  Revoke Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Revoke Publishing Account Grant"
+      }
+    },
+    "/api/v1/tenant-management/users/{user_id}/reset": {
+      "post": {
+        "operationId": "reset_tenant_user_api_v1_tenant_management_users__user_id__reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Reset Tenant User Api V1 Tenant Management Users  User Id  Reset Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Reset Tenant User"
       }
     },
     "/api/v1/user/creation-preferences": {

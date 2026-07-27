@@ -174,14 +174,16 @@ sha256sum "$snapshot/database.dump" >"$snapshot/SHA256SUMS"
 sha256sum "$snapshot/manifest.json" >>"$snapshot/SHA256SUMS"
 find "$snapshot/objects" -type f -print0 | sort -z | xargs -0 -r sha256sum >>"$snapshot/SHA256SUMS"
 
-mapfile -t snapshots < <(find "$backup_root" -mindepth 1 -maxdepth 1 -type d -name '20*' -printf '%T@ %p\n' | sort -n | awk '{print $2}')
-while (( ${#snapshots[@]} > 7 )); do
-  oldest="${snapshots[0]}"
-  case "$oldest" in
-    "$backup_root"/20*) rm -rf -- "$oldest" ;;
-    *) echo "Refusing unsafe backup retention target." >&2; exit 1 ;;
-  esac
-  snapshots=("${snapshots[@]:1}")
-done
+if [[ "${DIYU_PRESERVE_EXISTING_BACKUPS:-0}" != "1" ]]; then
+  mapfile -t snapshots < <(find "$backup_root" -mindepth 1 -maxdepth 1 -type d -name '20*' -printf '%T@ %p\n' | sort -n | awk '{print $2}')
+  while (( ${#snapshots[@]} > 7 )); do
+    oldest="${snapshots[0]}"
+    case "$oldest" in
+      "$backup_root"/20*) rm -rf -- "$oldest" ;;
+      *) echo "Refusing unsafe backup retention target." >&2; exit 1 ;;
+    esac
+    snapshots=("${snapshots[@]:1}")
+  done
+fi
 
 printf 'Database and independent object-storage backup completed: %s\n' "$stamp"

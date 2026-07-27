@@ -34,6 +34,40 @@ class WorkbenchRepository(ABC):
     def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
 
     @abstractmethod
+    def management_organization_materials(
+        self, scope: TenantManagementScope
+    ) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def create_management_organization_material(
+        self,
+        scope: TenantManagementScope,
+        organization_id: UUID,
+        asset_id: UUID,
+        title: str,
+        media_type: str,
+        object_key: str,
+        byte_size: int,
+        original_filename: str,
+        checksum_sha256: str,
+        reference_note: str,
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def request_management_material_deletion(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+    ) -> str: ...
+
+    @abstractmethod
+    def finalize_management_material_deletion(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+    ) -> None: ...
+
+    @abstractmethod
     def management_demo_content_index(
         self, scope: TenantManagementScope
     ) -> dict[str, object]: ...

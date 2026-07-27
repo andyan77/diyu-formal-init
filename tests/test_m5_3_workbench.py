@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
+from src.infrastructure.production_auth import ProductionAuthRepository, TenantSession
+from src.infrastructure.seed_demo import ORG_ID, TENANT_ADMIN_USER_ID, TENANT_ID
 
 _SEED = "请解释 ZX-C218 的双面不等于一件顶两件，保留两面完整外观与样衣分量的边界。"
 
@@ -86,14 +88,24 @@ def test_dual_qualified_person_stays_one_identity_and_external_operator_never_sh
         assert created.json()["shared_password"] is False
 
 
-def test_manager_creates_distinct_account_role_and_grants_registered_operator_only() -> None:
+def test_manager_creates_distinct_account_role_and_grants_registered_operator_only(
+    app_database_url: str,
+) -> None:
+    repository = ProductionAuthRepository(app_database_url)
+    operator_id = repository.create_tenant_user(
+        TenantSession(TENANT_ID, TENANT_ADMIN_USER_ID, "tenant-admin"),
+        f"专题协作者-{uuid4().hex[:8]}",
+        f"topic-operator-{uuid4().hex[:12]}",
+        ORG_ID,
+        None,
+        grants_tenant_management=False,
+        grants_material_maintenance=False,
+    )["user_id"]
     app = create_app(Settings.model_validate({}))
     with TestClient(app) as manager:
         manager.get("/ui/select/admin")
         external_operator = next(
-            item
-            for item in manager.get("/api/v1/tenant-management/operators").json()
-            if item["display_name"] == "外部代运营乙"
+            item for item in manager.get("/api/v1/tenant-management/operators").json() if item["id"] == operator_id
         )
         account_name = f"外部代运营专题账号-{uuid4()}"
         role_name = f"专题表达身份-{uuid4()}"

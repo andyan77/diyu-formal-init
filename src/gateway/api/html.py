@@ -115,6 +115,31 @@ def render_login_failure(entry_name: str, login_href: str, message: str) -> str:
     )
 
 
+def render_activation_failure(message: str) -> str:
+    """Keep expired, reused and invalid activation attempts in a safe product page."""
+    safe_message = escape(message)
+    return (
+        "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<meta name='referrer' content='no-referrer'>"
+        "<title>体验链接 · 笛语</title>"
+        "<link rel='stylesheet' href='/app/assets/index.css'></head><body>"
+        "<main class='entry-page'><header class='entry-brand'>"
+        "<img src='/assets/diyu-logo-horizontal.svg' alt='笛语'></header>"
+        "<section class='entry-copy'><p class='eyebrow'>体验链接</p>"
+        "<h1>这个链接现在不能继续使用。</h1>"
+        f"<p>{safe_message}</p></section>"
+        "<section class='entry-choices' aria-label='可选操作'>"
+        "<a class='entry-choice' href='/login'><span>已有账号</span>"
+        "<strong>返回内容创作登录</strong>"
+        "<small>如果你已经设置过密码，可以从这里继续。</small></a>"
+        "<a class='entry-choice' href='/'><span>需要新链接</span>"
+        "<strong>返回笛语首页</strong>"
+        "<small>请联系为你开通账号的管理员重新生成体验链接。</small></a>"
+        "</section></main></body></html>"
+    )
+
+
 def workbench_location(result: dict[str, object], notice: str | None = None, target: str | None = None) -> str:
     query = {"task": str(result["task_id"]), "version": str(result["version"])}
     if target:

@@ -10,15 +10,19 @@ export interface BootstrapContext {
     | "login"
     | "activation"
     | "content"
+    | "display"
     | "tenant_user"
     | "tenant_management"
-    | "ops";
+    | "ops"
+    | "status";
   identity?: Record<string, string>;
   entry?: "tenant-user" | "tenant-admin" | "ops";
   current_target?: Target | null;
   targets?: Array<{ value: Target; label: string }>;
   formal_runtime?: boolean;
   generator_mode?: "stub" | "deepseek";
+  capabilities?: Array<"content" | "display">;
+  service_state?: "available" | "unavailable";
   runtime_summary?: Record<string, number | null>;
   pending_requests?: number;
 }

@@ -24,11 +24,13 @@ from src.brain.content_expression import (
 from src.composition.bootstrap import build_content_control_service
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
+from src.infrastructure.production_auth import ProductionAuthRepository, TenantSession
 from src.infrastructure.seed_demo import (
     ACCOUNT_ID,
     ORG_ID,
     STORE_CONTENT_ACCOUNT_ID,
     STORE_CONTENT_USER_ID,
+    TENANT_ADMIN_USER_ID,
     TENANT_ID,
     USER_ID,
 )
@@ -122,6 +124,19 @@ def _clear_preference(app_database_url: str, user_id: UUID) -> None:
             "DELETE FROM user_creation_preferences WHERE tenant_id = %s AND user_id = %s",
             (str(TENANT_ID), str(user_id)),
         )
+
+
+def _unassigned_operator(app_database_url: str, label: str) -> str:
+    repository = ProductionAuthRepository(app_database_url)
+    return repository.create_tenant_user(
+        TenantSession(TENANT_ID, TENANT_ADMIN_USER_ID, "tenant-admin"),
+        f"{label}-{uuid4().hex[:8]}",
+        f"control-scope-{uuid4().hex[:12]}",
+        ORG_ID,
+        None,
+        grants_tenant_management=False,
+        grants_material_maintenance=False,
+    )["user_id"]
 
 
 # ---- A. versioned catalog and honest source reconciliation ------------------------------
@@ -750,7 +765,10 @@ def test_no_backend_only_field_reaches_the_visible_artifact(app_database_url: st
     assert "collaboration_note" not in json.dumps(snapshot, ensure_ascii=False)
 
 
-def test_account_creation_only_records_an_explicitly_declared_control_organization() -> None:
+def test_account_creation_only_records_an_explicitly_declared_control_organization(
+    app_database_url: str,
+) -> None:
+    operator_id = _unassigned_operator(app_database_url, "控制组织回归操作者")
     app = create_app(Settings.model_validate({}))
     with TestClient(app) as manager:
         manager.get("/ui/select/admin")
@@ -764,7 +782,7 @@ def test_account_creation_only_records_an_explicitly_declared_control_organizati
                 "channel": "抖音",
                 "content_role_name": f"控制组织回归表达身份-{uuid4().hex[:8]}",
                 "voice_boundary": "只用于验证新建账号只接受明确指定的控制组织。",
-                "operator_id": str(USER_ID),
+                "operator_id": operator_id,
                 "control_organization_id": own["id"],
             },
         )
@@ -782,7 +800,10 @@ def test_account_creation_only_records_an_explicitly_declared_control_organizati
         assert saved.json()["version"] == 1
 
 
-def test_same_name_account_idempotency_compares_the_control_organization() -> None:
+def test_same_name_account_idempotency_compares_the_control_organization(
+    app_database_url: str,
+) -> None:
+    operator_id = _unassigned_operator(app_database_url, "幂等控制组织操作者")
     app = create_app(Settings.model_validate({}))
     with TestClient(app) as manager:
         manager.get("/ui/select/admin")
@@ -795,7 +816,7 @@ def test_same_name_account_idempotency_compares_the_control_organization() -> No
             "channel": "抖音",
             "content_role_name": f"幂等控制组织表达身份-{uuid4().hex[:8]}",
             "voice_boundary": "只用于验证同名幂等比较包含控制组织。",
-            "operator_id": str(USER_ID),
+            "operator_id": operator_id,
             "control_organization_id": own["id"],
         }
         first = manager.post("/api/v1/tenant-management/publishing-accounts", json=payload)
@@ -844,6 +865,7 @@ def _set_control_organization(app_database_url: str, account_id: str, organizati
 def test_an_inferred_control_organization_grants_nothing_until_it_is_declared(
     app_database_url: str,
 ) -> None:
+    operator_id = _unassigned_operator(app_database_url, "未声明控制组织操作者")
     app = create_app(Settings.model_validate({}))
     with TestClient(app) as manager:
         manager.get("/ui/select/admin")
@@ -856,7 +878,7 @@ def test_an_inferred_control_organization_grants_nothing_until_it_is_declared(
                 "channel": "抖音",
                 "content_role_name": f"未声明控制组织表达身份-{uuid4().hex[:8]}",
                 "voice_boundary": "只用于验证推断值不授予任何维护资格。",
-                "operator_id": str(USER_ID),
+                "operator_id": operator_id,
             },
         )
         assert created.status_code == 201

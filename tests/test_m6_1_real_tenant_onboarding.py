@@ -200,9 +200,11 @@ def test_real_tenant_onboarding_is_atomic_account_independent_and_idempotent(
                 "display_name": "笛语服饰负责人",
                 "username": username,
                 "organization": f"{tenant_name}管理组织",
+                "organization_id": operators[0]["organization_id"],
                 "publishing_accounts": "",
-                "default_persona": "",
                 "manages_tenant": True,
+                "maintains_organization_materials": False,
+                "account_grants": [],
             }
         ]
         account_payload = {
@@ -333,9 +335,7 @@ def test_real_brand_non_product_p3_has_no_demo_tenant_context(
     assert "一家人，可以自然呼应" in body
     for forbidden in ("折线之间", "南城店", "ZX-C218", "炭灰", "深绿细格纹"):
         assert forbidden not in body
-    assert not is_natural_chat(
-        "品牌官方账号能不能聊聊：走进门店只想自己看看，这种沉默是不是也应该被尊重？"
-    )
+    assert not is_natural_chat("品牌官方账号能不能聊聊：走进门店只想自己看看，这种沉默是不是也应该被尊重？")
     relationship_service = ContentService(
         PostgresContentRepository(app_database_url),
         ForcedBrandLifeGenerator(),

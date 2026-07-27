@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BrandMark } from "../components/Brand";
 import { api, transferredContent } from "../services/api";
+import { MaterialsPanel } from "./MaterialsPanel";
+import { SeriesPanel } from "./SeriesPanel";
+import type { SeriesSelection } from "./SeriesPanel";
 import type {
   AccountExpression,
   AssistantReply,
@@ -484,6 +487,8 @@ export default function CreatorApp({
   const [materialIds, setMaterialIds] = useState<string[]>([]);
   const [directionsOpen, setDirectionsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [toolOpen, setToolOpen] = useState<"series" | "materials" | null>(null);
+  const [seriesSelection, setSeriesSelection] = useState<SeriesSelection | null>(null);
   const [mobileView, setMobileView] = useState<"conversation" | "artifact">("conversation");
   const [current, setCurrent] = useState<ContentVersion | null>(null);
   const [viewed, setViewed] = useState<ContentVersion | null>(null);
@@ -507,7 +512,9 @@ export default function CreatorApp({
           api<ExpressionCatalog>("/api/v1/content/expression-catalog"),
           api<CreationPreference>("/api/v1/user/creation-preferences"),
           api<Material[]>("/api/v1/materials"),
-          api<AccountExpression>("/api/v1/content/account-expression-profile")
+          api<AccountExpression>(
+            `/api/v1/content/account-expression-profile?target=${encodeURIComponent(currentTarget)}`
+          )
         ]);
       setCatalog(catalogValue);
       setPreference(preferenceValue);
@@ -544,6 +551,7 @@ export default function CreatorApp({
     setClearedAxes([]);
     setCustomText("");
     setMaterialIds([]);
+    setSeriesSelection(null);
     setDirectionsOpen(false);
   };
 
@@ -577,6 +585,31 @@ export default function CreatorApp({
       setMobileView("artifact");
     } catch (reason) {
       setNotice(reason instanceof Error ? reason.message : "无法打开这份成品。");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const openSeriesTask = async (taskId: string): Promise<void> => {
+    setPending(true);
+    setNotice("");
+    try {
+      const values = await api<ContentVersion[]>(
+        `/api/v1/content/tasks/${taskId}/versions?target=${currentTarget}`
+      );
+      const latest = values
+        .slice()
+        .sort((left, right) => right.version - left.version)[0];
+      if (!latest) throw new Error("这个系列条目还没有可读成品。");
+      clearOneTimeControls();
+      setMessages([]);
+      setVersions(values);
+      setCurrent(latest);
+      setViewed(latest);
+      setToolOpen(null);
+      setMobileView("artifact");
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : "无法打开这篇系列内容。");
     } finally {
       setPending(false);
     }
@@ -643,8 +676,8 @@ export default function CreatorApp({
             },
             use_personal_preferences: true,
             material_ids: materialIds,
-            series_id: null,
-            series_position: null
+            series_id: seriesSelection?.seriesId ?? null,
+            series_position: seriesSelection?.position ?? null
           })
         });
         if (!("task_id" in payload)) {
@@ -771,6 +804,16 @@ export default function CreatorApp({
         <button className="new-content" type="button" onClick={startFresh}>
           ＋ 新创作
         </button>
+        <div className="creator-tools" aria-label="创作资料">
+          <button type="button" onClick={() => setToolOpen("series")}>
+            <span>连续系列</span>
+            <small>{seriesSelection ? "本次已选择" : "创建、继续与编排"}</small>
+          </button>
+          <button type="button" onClick={() => setToolOpen("materials")}>
+            <span>我的素材</span>
+            <small>{materialIds.length ? `本次参考 ${materialIds.length} 份` : "管理与选择"}</small>
+          </button>
+        </div>
         <p>最近</p>
         <nav aria-label="最近成品">
           {recent.length === 0 && <span className="empty-history">还没有成品</span>}
@@ -840,6 +883,25 @@ export default function CreatorApp({
           />
           {!current && (
             <>
+              <div className="composer-resource-actions" aria-label="创作资料">
+                <button type="button" onClick={() => setToolOpen("series")}>
+                  {seriesSelection ? "连续系列 · 已选择" : "连续系列"}
+                </button>
+                <button type="button" onClick={() => setToolOpen("materials")}>
+                  {materialIds.length ? `素材 · ${materialIds.length} 份` : "素材"}
+                </button>
+              </div>
+              {(seriesSelection || materialIds.length > 0) && (
+                <div className="composer-context" aria-label="本次承接">
+                  {seriesSelection && (
+                    <span>
+                      连续系列
+                      {seriesSelection.position ? ` · 第 ${seriesSelection.position} 篇` : ""}
+                    </span>
+                  )}
+                  {materialIds.length > 0 && <span>参考素材 {materialIds.length} 份</span>}
+                </div>
+              )}
               <button
                 className="direction-toggle"
                 type="button"
@@ -921,6 +983,54 @@ export default function CreatorApp({
           }}
           onPreference={updatePreference}
         />
+      )}
+      {toolOpen && (
+        <div
+          className="drawer-layer"
+          role="presentation"
+          onMouseDown={() => {
+            setToolOpen(null);
+            void loadWorkspace();
+          }}
+        >
+          <aside
+            className="creator-tool-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={toolOpen === "series" ? "连续系列" : "我的素材"}
+            onMouseDown={event => event.stopPropagation()}
+          >
+            <button
+              className="icon-button tool-drawer-close"
+              type="button"
+              aria-label="关闭"
+              onClick={() => {
+                setToolOpen(null);
+                void loadWorkspace();
+              }}
+            >
+              ×
+            </button>
+            {toolOpen === "series" ? (
+              <SeriesPanel
+                selected={seriesSelection}
+                onSelect={setSeriesSelection}
+                target={currentTarget}
+                onOpenTask={taskId => void openSeriesTask(taskId)}
+                onContinue={value => {
+                  startFresh();
+                  setSeriesSelection(value);
+                  setToolOpen(null);
+                }}
+              />
+            ) : (
+              <MaterialsPanel
+                selectedIds={materialIds}
+                onSelectedIdsChange={setMaterialIds}
+              />
+            )}
+          </aside>
+        </div>
       )}
       {bodyOptIn && <span className="sr-only">体型相关方向已由本人主动启用</span>}
     </div>
