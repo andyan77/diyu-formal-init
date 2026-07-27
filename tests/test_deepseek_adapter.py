@@ -1314,6 +1314,55 @@ def test_resource_repairs_compile_only_rejected_steps_onto_registered_rails(
     assert claim_only_issue is core
 
 
+def test_nonactual_claim_rejection_compiles_all_scenes_without_user_actuality(
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(
+        generation_input,
+        weak_seed="写一条开放关系题材的小红书。",
+        user_actuality_quotes=(),
+        products=(),
+    )
+    context = BoundaryContext.from_request(request)
+    core = _generator()._parse_core(request, context, _video_core())
+
+    stabilized = DeepSeekGenerator._stabilize_nonactual_scene_cascade(
+        request,
+        context,
+        core,
+        (UnitIssue("c8", "invented_actuality", core.claim("c8").text),),
+    )
+
+    assert stabilized is not core
+    assert all(not step.actor_refs for step in stabilized.scene_steps)
+    assert all(
+        set(step.resource_refs) <= set(context.resource_ids)
+        for step in stabilized.scene_steps
+    )
+    assert all(
+        step.action_text
+        in (
+            "用手机拍摄现场手写标题字卡，作为干净首图。",
+            "用手机拍摄现场手写观点字卡，画面保持简洁。",
+        )
+        for step in stabilized.scene_steps
+    )
+    assert not DeepSeekGenerator._closed_world_issues(context, stabilized)
+
+    actuality_request = _with(
+        request,
+        user_actuality_quotes=("今天真实发生了一件小事。",),
+    )
+    actuality_context = BoundaryContext.from_request(actuality_request)
+    unchanged = DeepSeekGenerator._stabilize_nonactual_scene_cascade(
+        actuality_request,
+        actuality_context,
+        core,
+        (UnitIssue("c8", "invented_actuality", core.claim("c8").text),),
+    )
+    assert unchanged is core
+
+
 def test_closed_world_rejects_unregistered_source_before_any_model_verdict(
     generation_input: GenerationInput,
 ) -> None:

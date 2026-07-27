@@ -913,6 +913,12 @@ class DeepSeekGenerator(ContentGenerator):
                     repaired_core,
                     issues,
                 )
+                repaired_core = self._stabilize_nonactual_scene_cascade(
+                    request,
+                    context,
+                    repaired_core,
+                    issues,
+                )
                 repaired_core = self._stabilize_product_resource_cascade(
                     request,
                     context,
@@ -1721,6 +1727,44 @@ class DeepSeekGenerator(ContentGenerator):
             )
             return step.resource_refs == (*base, *onsite)
         return False
+
+    @staticmethod
+    def _stabilize_nonactual_scene_cascade(
+        request: GenerationInput,
+        context: BoundaryContext,
+        core: ContentCore,
+        issues: tuple[UnitIssue, ...],
+    ) -> ContentCore:
+        """Keep an open topic from becoming a staged account history.
+
+        When the user supplied no lived fact and the complete first review
+        already found invented actuality, repairing only the rejected claim can
+        leave the same invented event in a previously accepted scene. Compile
+        the whole scene bundle onto registered non-event production resources;
+        the complete final review still checks every resulting unit.
+        """
+
+        if (
+            context.user_actuality_source is not None
+            or not any(
+                issue.reason_code == "invented_actuality"
+                for issue in issues
+            )
+        ):
+            return core
+        return DeepSeekGenerator._stabilize_resource_repairs(
+            request,
+            context,
+            core,
+            tuple(
+                UnitIssue(
+                    step.step_id,
+                    "invented_actuality",
+                    step.action_text,
+                )
+                for step in core.scene_steps
+            ),
+        )
 
     @staticmethod
     def _stabilize_product_resource_cascade(
