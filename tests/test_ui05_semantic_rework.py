@@ -246,7 +246,6 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         assert chat[-1]["event"] == "conversation"
         assert chat[-1]["kind"] == "chat"
         assert _task_counts(app_database_url, g1_marker)["tasks"] == 0
-        time.sleep(2.05)
 
         old_marker = f"OLD-{uuid4().hex}"
         old_observation = _stream_events(

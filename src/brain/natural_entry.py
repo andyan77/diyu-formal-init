@@ -3,7 +3,17 @@ from __future__ import annotations
 import re
 
 _CONTINUATION_SIGNALS = ("接着上一条", "延续之前", "继续上一条", "沿用上一条")
-_SMALL_TALK_SIGNALS = ("hello", "hi", "你好", "您好", "有点困", "挺安静", "聊聊", "谢谢")
+_SMALL_TALK_SIGNALS = (
+    "hello",
+    "hi",
+    "你好",
+    "您好",
+    "有点困",
+    "挺安静",
+    "聊聊",
+    "陪我聊",
+    "谢谢",
+)
 _CONTENT_INTENT_SIGNALS = (
     "内容",
     "口播",

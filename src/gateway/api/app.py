@@ -36,6 +36,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from src.brain.content_expression import assert_custom_direction_available
+from src.brain.natural_entry import is_natural_chat, natural_reply
 from src.brain.platform_directions import target_from_text
 from src.composition.bootstrap import (
     build_content_control_service,
@@ -1884,6 +1885,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             "event": "conversation",
                             "kind": "chat",
                             "message": "这是门店内部陈列任务，请从陈列搭配入口继续。",
+                        }
+                    )
+                    return
+                if not payload.conversation and is_natural_chat(payload.message):
+                    events.put(
+                        {
+                            "event": "conversation",
+                            "kind": "chat",
+                            "message": natural_reply(),
                         }
                     )
                     return
