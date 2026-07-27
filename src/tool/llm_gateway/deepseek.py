@@ -220,6 +220,7 @@ ReasonCode = Literal[
     "invented_actuality",
     "unsupported_resource",
     "factual_conflict",
+    "instruction_conflict",
     "media_contract",
 ]
 
@@ -1084,7 +1085,7 @@ class DeepSeekGenerator(ContentGenerator):
             *self._deterministic_unit_issues(context, core),
             *self._media_issues(request, core),
         )
-        judged, payload, retries = self._judgement_issues(context, core)
+        judged, payload, retries = self._judgement_issues(request, context, core)
         merged: dict[tuple[str, str], UnitIssue] = {}
         for issue in (*server_side, *judged):
             merged.setdefault((issue.unit_id, issue.reason_code), issue)
@@ -1117,6 +1118,10 @@ class DeepSeekGenerator(ContentGenerator):
         for step in core.scene_steps:
             if any(ref not in context.actor_ids for ref in step.actor_refs):
                 issues.append(UnitIssue(step.step_id, "untrusted_role", step.action_text))
+            if any(ref not in context.resource_ids for ref in step.resource_refs):
+                issues.append(
+                    UnitIssue(step.step_id, "unsupported_resource", step.action_text)
+                )
         return tuple(issues)
 
     @staticmethod
@@ -1189,12 +1194,13 @@ class DeepSeekGenerator(ContentGenerator):
 
     def _judgement_issues(
         self,
+        request: GenerationInput,
         context: BoundaryContext,
         core: ContentCore,
     ) -> tuple[tuple[UnitIssue, ...], dict[str, Any], int]:
         payload, retries = self._request(
             ("你是笛语内容边界判定器。对每个单元独立做完整判定，只返回最终 JSON；不改写成品，不展示核对过程或推理。"),
-            self._judgement_prompt(context, core),
+            self._judgement_prompt(request, context, core),
             # Provider reasoning tokens are billed inside max_tokens; the
             # bounded budget must leave room for reasoning plus one complete
             # verdict per unit, or the verdict JSON truncates and fails closed.
@@ -1207,7 +1213,9 @@ class DeepSeekGenerator(ContentGenerator):
         reason_by_flag: tuple[tuple[str, ReasonCode], ...] = (
             ("identity_ok", "untrusted_role"),
             ("actuality_ok", "invented_actuality"),
+            ("resource_ok", "unsupported_resource"),
             ("fact_ok", "factual_conflict"),
+            ("instruction_ok", "instruction_conflict"),
         )
         step_by_id = {step.step_id: step for step in core.scene_steps}
         for unit_id in core.unit_ids:
@@ -1234,7 +1242,13 @@ class DeepSeekGenerator(ContentGenerator):
                 if not isinstance(unit_id, str) or unit_id not in expected_ids or unit_id in verdicts:
                     raise TypeError("verdict id set does not match the units under review")
                 flags: dict[str, bool] = {}
-                for flag in ("identity_ok", "actuality_ok", "resource_ok", "fact_ok"):
+                for flag in (
+                    "identity_ok",
+                    "actuality_ok",
+                    "resource_ok",
+                    "fact_ok",
+                    "instruction_ok",
+                ):
                     value = entry.get(flag)
                     if not isinstance(value, bool):
                         raise TypeError("verdict flags must be complete booleans")
@@ -1666,7 +1680,10 @@ class DeepSeekGenerator(ContentGenerator):
 - question 一次只问一个不可替代的真实事实，并必须用 missing_fact_kind 标出缺的是用户真实经历还是具体商品事实，用 missing_fact_basis 逐字复制用户原话里的事实承重要求；题材名、创作选择、泛指代词或系统推断不能充当依据。若同一意图此前已经问过而用户仍未提供，仍只返回一句合并后的最小事实缺口，不循环拆问，不编造完成。
 - user_premises 只能逐字复制当前消息和此前真正属于同一创作意图的用户消息，必须包含本轮消息；普通聊天不得带入。
 - user_actuality_quotes 只能逐字截取 user_premises 中用户明确作为现实陈述的片段。题材名、假设、创作要求、系统规划和一般观察不进入；无法逐字引用就留空。
-- system_creative_plan 只写系统的创作选择，不得把规划写成用户事实、品牌事实、门店事实或账号长期立场。
+- system_creative_plan 只写系统选择的主题、一般观点、切口、结构、风格和平台组织，不得把规划写成
+  用户事实、品牌事实、门店事实或账号长期立场。规划不得先行补出具体对白、人物关系与身份、事件过程
+  与结果、个人日常习惯、未登记商品或衣物、商品性能与穿着结果；没有用户现实片段时，应明确采用一般
+  观察、条件表达或不冒充现实事件的抽象演绎。规划中的创意不是事实来源。
 - 当前页面明确选择的平台和形式优先，不得被自然语言静默改写。
 - 没有责任来源的商品、经历、顾客、门店做法、性能、价格和库存不得补造。
 - 只允许选择一个主要受众价值。信息不够具体时优先降低事实具体度，不追问创作选择。
@@ -1686,6 +1703,26 @@ class DeepSeekGenerator(ContentGenerator):
 
     @staticmethod
     def _boundary_sections(context: BoundaryContext) -> str:
+        actuality_contract = (
+            "这里的原话只支持它逐字表达的事实。不能顺着常理补出人物关系、动机、情绪、对白、"
+            "事前原因、事后结果或长期习惯；创作者由此形成的理解必须明确写成当前观点、可能性或"
+            "一般观察，不能继续扩写成这段经历的现实细节。"
+            if context.user_actuality_source is not None
+            else (
+                "本次没有用户现实片段。生活、家庭、工作或情绪题材只能写成一般观察、条件表达或"
+                "不冒充现实事件的抽象演绎；即使加上“如果、假设、想象”等提示，也不能补造具体对白、"
+                "人物身份与关系、个人持有物、日常习惯、事件过程或结果。"
+            )
+        )
+        product_contract = (
+            "登记商品只支持这里逐项列出的商品事实；不得从品类或结构推导性能、穿着结果、适用人群、"
+            "设计动机、价格、库存或销售情况。"
+            if context.product_skus
+            else (
+                "本次没有登记商品。不得写账号或创作者拥有、穿着、展示或长期使用某件衣服，也不得"
+                "给“这件衣服/这套穿搭”补充面料、颜色、版型、弹性、舒适度或其他具体商品表现。"
+            )
+        )
         registry_lines = "\n".join(
             (
                 f"可用说话人：{context.speaker_id} = 当前发布账号（唯一合法说话人）",
@@ -1710,12 +1747,14 @@ class DeepSeekGenerator(ContentGenerator):
 
 【二、用户明确提供的真实情况 user_presented_actuality】只有这里列出的内容可以当作用户提供的真实经历、事件或经营事实，仅限本次使用：
 {context.user_presented_actuality or "（本次没有。没有列出即为不存在，不得虚构。）"}
+{actuality_contract}
 
 【三、品牌观点与立场 brand_viewpoint】
 {context.brand_viewpoint}
 
 【四、已确认现实 confirmed_actuality】
 {context.confirmed_actuality}
+{product_contract}
 
 【五、方法与领域知识 method_guidance】
 {context.method_guidance}
@@ -1832,6 +1871,27 @@ class DeepSeekGenerator(ContentGenerator):
                 + "、".join(f"{field}（1条，合同字段）" for field in contract_fields)
                 + "、spoken（≥1条，完整发布正文按顺序拆成的自然段落）"
             )
+        actuality_creation_rule = (
+            "本次有用户现实片段：至少一条 user_presented_actual 单元逐字保留用户提供的事实。"
+            "除此之外不得补写未提供的动机、情绪、对白、人物关系、前因、结果或习惯；想表达的理解"
+            "必须另写成品牌当前观点、一般观察或可能性，不能把解释粘回现实叙事。"
+            if boundary.user_actuality_source is not None
+            else (
+                "本次没有用户现实片段：不得用第一人称生活回忆、日常习惯或具体家庭/工作场景制造真实感；"
+                "也不得借“如果、假设、想象”补写具体对白、人物关系与身份、个人持有物、事件经过或结果。"
+                "完整成品应由一般观察、条件表达、抽象演绎、比喻和当前品牌观点承担。"
+            )
+        )
+        product_creation_rule = (
+            "商品内容逐项锚定已登记商品；任何性能、效果、适用人群、穿着结果、设计动机、价格、"
+            "库存或销售说法若未登记，一律不写。画面也不得临时增加其他衣物作比较或搭配。"
+            if boundary.product_skus
+            else (
+                "本次没有登记商品：成品不能安排或描述账号/创作者拥有、穿着、展示的具体衣物或穿搭，"
+                "不能写面料、颜色、版型、弹性、舒适度等具体商品表现。需要画面时只用当前创作者、手机、"
+                "现场手写字卡或屏幕文字表达观点。"
+            )
+        )
         return f"""为“{request.brand.account_name}”编写一个完整中文{request.brand.media_format}成品的结构化底稿 ContentCore。
 本次受众价值：{_PRODUCT_VALUE[request.primary_product]}；必须只兑现这一价值，不说明路由。
 本次交付门：{_DELIVERABLE_REQUIREMENTS[request.primary_product]}
@@ -1851,6 +1911,8 @@ class DeepSeekGenerator(ContentGenerator):
 修改一致性：{revision_rule}
 平台重编译：{platform_recompile_rule}
 系列承接：{series_rule}
+现实片段写作合同：{actuality_creation_rule}
+商品写作合同：{product_creation_rule}
 
 创作要求：标题、观点、比喻、幽默、节奏、完整口播和互动由你自然创作，允许口语化、停顿感和真实的不完美；
 事实与资源约束在后台静默遵守；成品优先交付受众回报，不把防错边界复述成合规说明。
@@ -1865,6 +1927,10 @@ class DeepSeekGenerator(ContentGenerator):
   “我们的导购会/不会……”这类现实描述；
 - 不得声称品牌的商品线、商品能力或“我们做某类衣服”；边界四没有已确认商品时，只能谈观点与方法；
 - 一般颜色、品类和搭配只可作为明确的假设例子被口播讨论，不能被当作现有实物安排出镜；
+- 系统创作规划只提供主题、观点、切口、结构和风格；其中若出现边界二、四没有登记的具体人物、
+  对白、事件、个人习惯、衣物、商品属性或现实场景，必须丢弃这些细节，不能写进任何可见单元；
+- 用户要求自然修改时，必须让被点名的表达特征在完整正文及相关标题、导读、互动或制作单元中
+  发生可观察的实质变化；不能只删一个无关短句、只改摘要或原样复述旧稿。未点名的用户事实不变；
 - 私人协作偏好说明只调整协作方式与表达取舍，成品中不得出现它的原文、转述或对它的解释；
 - 可用条件存在多个替代项时，采用能完成内容的最小资源组合。
 
@@ -1905,7 +1971,11 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
 每个字段都必须是字符串或字符串数组，不要嵌套其他对象。"""
 
     @staticmethod
-    def _judgement_prompt(context: BoundaryContext, core: ContentCore) -> str:
+    def _judgement_prompt(
+        request: GenerationInput,
+        context: BoundaryContext,
+        core: ContentCore,
+    ) -> str:
         serialized = json.dumps(
             {
                 "speaker_ref": core.speaker_ref,
@@ -1938,6 +2008,15 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
             ensure_ascii=False,
         )
         unit_ids = ", ".join(core.unit_ids)
+        revision_audit = (
+            "本次是自然修改。请把下面旧成品与本次修改逐单元对照：被点名的表达特征必须在完整正文"
+            "及相关标题、导读、互动或制作单元中发生可观察的实质变化，不能只删无关短句、只改摘要"
+            "或几乎原样复制；未点名的用户事实不得改变。\n"
+            f"本次修改：{request.revision_instruction}\n"
+            f"旧成品：\n{request.prior_saved_body or '（旧成品缺失，判 instruction_ok=false）'}"
+            if request.revision_instruction
+            else "本次是首次生成；只核对用户原始请求中的明确内容要求与禁止项。"
+        )
         return f"""只依据以下六类临时边界，对候选底稿的每个单元独立完成完整判定。
 边界未明确提供的事实或资源一律视为不存在，不能用常识、常见拍法或话题里出现的对象补足。
 
@@ -1946,7 +2025,11 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
 候选底稿 ContentCore：
 {serialized}
 
-对下面列出的每一个 id 各返回一条完整判定，四项都必须给出 true/false：
+用户要求与修改核对：
+{revision_audit}
+
+采用“先找越界、后决定是否通过”的方式；候选自身填写的 basis、actuality 和 source_refs 只是待审声明，
+不能代替对可见文字真实含义的判断。对下面列出的每一个 id 各返回一条完整判定，五项都必须给出 true/false：
 - identity_ok：为 false 当该单元让账号或当前创作者以第一人称、表演或叙事位置冒充边界外的自然人或岗位
   （妈妈、家长、孩子的照护者、店长、店员、顾客、研发人员等）。用户只是在话题中提到某类人，
   不构成账号具备该身份。当前创作者以拍摄者、口播者或账号运营身份自称（如“我是品牌账号运营”、
@@ -1957,19 +2040,28 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
   或在没有边界二（用户明确前提）或边界四（已确认事实）来源支撑时，声称现实品牌、账号、组织或人物
   曾经、反复或长期发生过询问、讨论、观察、经历、服务、执行或改变——无论该表述出现在 text、
   sound_text、production_note 还是其中引述的口播词句里。品牌观点只能承载当前立场、希望、主张和建议。
+  如果边界二为空，任何第一人称生活回忆、个人日常习惯、具体家庭/工作场景都为 false；给具体人物补写
+  对白、身份与关系、持有物、动机、情绪、事件过程或结果，即使前面写了“如果、假设、想象”，仍为 false。
+  如果边界二不为空，只允许原话明确支持的现实细节；顺着常理补出的动机、情绪、对白、关系、前因、
+  结果或习惯仍为 false。一般观点与可能性必须和现实叙事清楚分开。
 - resource_ok：为 false 当该单元的画面、动作、声音或制作步骤实际需要边界六未登记的人物、商品、衣物、
   图片、合照、场地、家具、道具或既有素材；叠加品牌 logo、贴纸、成品图形或已有照片同样属于使用
   未登记素材。话题对象可以被口播抽象讨论，但不能出镜、行动、发声或被当作现有素材。
 - fact_ok：为 false 当该单元与边界三、四中的品牌、商品、资料或明确作用域冲突，或提出了边界外的具体
   商品事实、价格、参数；边界四没有相应已确认商品时，声称品牌的商品线、商品能力或“我们做某类
-  衣服”同样为 false。
-不要误杀：依据品牌基线表达的观点与条件性建议、明确标注的假设与比喻、普通视觉标题、当前创作者对手机
-口播、现有场地中的中性动作，以及对“本次话题/请求”的忠实抽象讨论，这些应当四项均为 true。
+  衣服”同样为 false。边界四没有登记商品时，账号/创作者拥有、穿着、展示的具体衣物或穿搭，以及
+  面料、颜色、版型、弹性、舒适度等具体商品表现都为 false；有登记商品时，也只能使用逐项登记事实，
+  不能从品类或结构推导性能、效果、适用人群、穿着结果或设计动机。
+- instruction_ok：为 false 当该单元违反用户明确的内容要求或禁止项；自然修改时，若被修改要求点名的
+  表达特征仍沿用旧稿、只做无关删减、只改摘要而完整正文没有实质变化，也为 false。未被点名且不冲突的
+  单元可以保留；首次生成时不要求与不存在的旧稿比较。
+不要误杀：依据品牌基线表达的一般观点与条件性建议、不带具体人物事实的抽象假设与比喻、普通视觉标题、
+当前创作者对手机口播、现有场地中的中性动作，以及对“本次话题/请求”的忠实抽象讨论，可以通过。
 关键区别是“谈论某个对象”不需要该资源；“让该对象出镜、行动、发声或把事件写成已经发生”需要当前依据。
 对每个单元只依据其自身文本与上述边界独立判定；不要因为其他单元存在问题而改变对本单元的判定。
 
 待判定 id：{unit_ids}
-只返回：{{"verdicts":[{{"id":"…","identity_ok":true,"actuality_ok":true,"resource_ok":true,"fact_ok":true}}]}}。
+只返回：{{"verdicts":[{{"id":"…","identity_ok":true,"actuality_ok":true,"resource_ok":true,"fact_ok":true,"instruction_ok":true}}]}}。
 verdicts 必须恰好覆盖上面列出的每个 id，一次且仅一次；不得返回解释、理由、置信度或其他字段。"""
 
     @staticmethod
@@ -2026,7 +2118,8 @@ verdicts 必须恰好覆盖上面列出的每个 id，一次且仅一次；不�
 问题含义：untrusted_role = 冒充边界外身份；invented_actuality = 把观点、假设或话题写成已发生的经历、
 案例或门店已执行做法；unsupported_resource = 使用了未登记的人物、商品、图片、场地、家具或素材；
 factual_conflict = 与已确认品牌、商品、资料或作用域冲突，或引用了不允许的来源；media_contract =
-必须真实缩短口播以适配用户指定时长，不能只改时长标签。
+必须真实缩短口播以适配用户指定时长，不能只改时长标签；instruction_conflict = 违反用户明确内容要求，
+或自然修改没有让被点名的表达特征在相关可见单元中发生实质变化。
 修复要求：保留原话题价值；身份或现实主张越界时改成品牌明确标示的观点、建议或条件性判断；
 制作资源越界时改用登记表中的创作者、手机、现场手写字卡和场地内中性动作；话题人物、商品、图片和
 道具只可被抽象谈论，不能出镜或当作已持有素材。修复后的 claim 需要给出正确的 basis、actuality 和
@@ -2038,6 +2131,15 @@ c1、s2 这类编号，必须把编号替换为对应台词原文或删去，不
 若问题单元是没有用户明确前提或已确认事实来源、却声称现实品牌/账号/组织/人物曾经、反复或长期
 发生过询问、讨论、观察、经历、服务、执行或改变的表述：保留观点本身，删除经历外壳，或改写为
 问题、假设或条件表达；不得为其编造来源。
+边界二为空时，不得以第一人称生活回忆、个人习惯或具体家庭/工作场景制造真实感；即使明确写成假设，
+也不能补造具体对白、人物身份与关系、个人持有物、事件过程或结果。边界二有原话时，只保留原话逐字
+支持的事实，不补动机、情绪、对白、关系、前因、结果或习惯。边界四没有登记商品时，不能补具体衣物、
+穿搭或商品表现；有商品时也只能逐项使用登记事实，画面不能增加未登记的比较品或搭配品。
+本次用户要求：{request.weak_seed}
+本次自然修改：{request.revision_instruction or "（首次生成）"}
+若为自然修改，下面旧成品只用于确定哪些表达需改变，不是事实来源；instruction_conflict 单元必须真正落实
+修改，不能仅做无关删减或几乎原样返回：
+{request.prior_saved_body or "（没有旧成品）"}
 不要输出分类、证据、审查过程或解释。
 严格只返回一个 JSON 对象：{{"repairs":[…]}}。repairs 中每个元素是完整替换单元：claim 用
 {{"claim_id":"…","text":"…","basis":"…","actuality":"…","source_refs":["…"]}}；scene step 用

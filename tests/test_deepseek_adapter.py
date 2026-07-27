@@ -220,7 +220,13 @@ def _verdicts(
     verdicts = []
     for unit_id in _unit_ids(core):
         entry: dict[str, object] = {"id": unit_id}
-        for flag in ("identity_ok", "actuality_ok", "resource_ok", "fact_ok"):
+        for flag in (
+            "identity_ok",
+            "actuality_ok",
+            "resource_ok",
+            "fact_ok",
+            "instruction_ok",
+        ):
             entry[flag] = flag not in failures.get(unit_id, ())
         verdicts.append(entry)
     return _completion(json.dumps({"verdicts": verdicts}, ensure_ascii=False))
@@ -304,6 +310,32 @@ def test_revision_prompt_applies_the_instruction_to_every_visible_unit(
     assert "本次修改（当前最高优先级" in prompt
     assert "用“不要、不能、不得、只用”表达的硬边界也应静默遵守" in prompt
     assert "不得把这些后台约束逐项搬进正文、口播、字幕或制作提示" in prompt
+    assert "发生可观察的实质变化" in prompt
+    assert "不能只删一个无关短句" in prompt
+
+
+def test_topic_only_life_content_forbids_invented_dialogue_and_possessions(
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(
+        generation_input,
+        weak_seed="写一条家庭关系主题的小红书。",
+        user_actuality_quotes=(),
+        products=(),
+        system_creative_plan="用一般观察选择关系里的边界感作为主线。",
+    )
+    context = BoundaryContext.from_request(request)
+
+    writer_prompt = DeepSeekGenerator._generation_prompt(request, context)
+    core = _generator()._parse_core(request, context, _video_core())
+    judge_prompt = DeepSeekGenerator._judgement_prompt(request, context, core)
+
+    for prompt in (writer_prompt, judge_prompt):
+        assert "具体对白" in prompt
+        assert "个人" in prompt and "习惯" in prompt
+        assert "即使" in prompt and ("假设" in prompt or "想象" in prompt)
+        assert "本次没有登记商品" in prompt
+        assert "穿着" in prompt and "具体衣物" in prompt
 
 
 def test_platform_recompile_keeps_source_but_demands_target_native_change(
@@ -794,6 +826,8 @@ def test_judgement_uses_bounded_config_independent_of_writer(
     assert "对下面列出的每一个 id 各返回一条完整判定" in judge_prompt
     assert "identity_ok" in judge_prompt and "actuality_ok" in judge_prompt
     assert "resource_ok" in judge_prompt and "fact_ok" in judge_prompt
+    assert "instruction_ok" in judge_prompt
+    assert "候选自身填写的 basis、actuality 和 source_refs 只是待审声明" in judge_prompt
     assert "恰好覆盖上面列出的每个 id" in judge_prompt
 
 
@@ -804,6 +838,10 @@ def test_judgement_uses_bounded_config_independent_of_writer(
         lambda verdicts: [*verdicts, {**verdicts[0], "id": "unknown"}],
         lambda verdicts: [*verdicts, verdicts[0]],
         lambda verdicts: [{**verdicts[0], "identity_ok": "yes"}, *verdicts[1:]],
+        lambda verdicts: [
+            {key: value for key, value in verdicts[0].items() if key != "instruction_ok"},
+            *verdicts[1:],
+        ],
     ],
 )
 def test_incomplete_or_drifting_verdict_sets_fail_closed(
@@ -834,7 +872,7 @@ def test_legacy_sparse_violations_shape_is_no_longer_accepted(
         _generator().generate(generation_input)
 
 
-def test_resource_verdict_stays_a_human_review_condition(
+def test_resource_verdict_repairs_an_unprovisioned_scene_before_compilation(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,
 ) -> None:
@@ -852,21 +890,107 @@ def test_resource_verdict_stays_a_human_review_condition(
         ),
     ]
     core = _video_core(steps=steps)
+    repaired = _step(
+        "s2",
+        "scene",
+        "当前创作者正对手机自然口播。",
+        ("c8", "c9"),
+        actor_refs=("actor:creator",),
+        resource_refs=("resource:phone",),
+        sound_text="手机直接收录当前创作者的人声。",
+    )
     _install_fake(
         monkeypatch,
         [
             _core_response(core),
             _verdicts(core, {"s2": ("resource_ok",)}),
+            _repairs(repaired),
+            _verdicts(core),
         ],
     )
 
     artifact = _generator().generate(generation_input)
 
     assert isinstance(artifact.production, VideoProductionBundle)
-    assert artifact.production.visual_actions == unsafe
-    assert unsafe in artifact.body
-    assert artifact.fact_repair_receipts == ()
-    assert len(FakeClient.requests) == 2
+    assert artifact.production.visual_actions == "当前创作者正对手机自然口播。"
+    assert unsafe not in artifact.body
+    assert {receipt.field for receipt in artifact.fact_repair_receipts} == {
+        "visual_actions"
+    }
+    assert len(FakeClient.requests) == 4
+
+
+def test_revision_verdict_repairs_unchanged_expression_and_preserves_premise(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(
+        generation_input,
+        weak_seed="今天店里忙了一天，回家因为谁洗碗拌了两句。",
+        primary_product="brand_life_narrative",
+        user_actuality_quotes=(
+            "今天店里忙了一天，回家因为谁洗碗拌了两句。",
+        ),
+        revision_instruction="别说教，荒诞一点，事实别变。",
+        prior_saved_body=(
+            "今天店里忙了一天，回家因为谁洗碗拌了两句。"
+            "这种小摩擦很真实，大家要互相理解。"
+        ),
+    )
+    core = _video_core(
+        claims=[
+            *cast("list[dict[str, object]]", _video_core()["claims"])[:4],
+            _claim("c5", "persona_observation", "疲惫有时会落在一件小事上。"),
+            _claim("c6", "audience_return", "先看见共同的疲惫，不急着判输赢。"),
+            _claim("c7", "brand_account_link", "我们愿意保留这种不判输赢的观察。"),
+            _claim(
+                "c8",
+                "spoken",
+                "今天店里忙了一天，回家因为谁洗碗拌了两句。",
+                "user_premise",
+                "user_presented_actual",
+                ("source:user_actuality",),
+            ),
+            _claim(
+                "c9",
+                "spoken",
+                "这种小摩擦很真实，大家要互相理解。",
+            ),
+        ],
+    )
+    changed: dict[str, object] = {
+        "claim_id": "c9",
+        "text": "洗碗池像临时议会，但今晚没有议长，只有两位电量见底的代表。",
+        "basis": "conditional_guidance",
+        "actuality": "hypothetical",
+        "source_refs": ["source:brand_baseline"],
+    }
+    _install_fake(
+        monkeypatch,
+        [
+            _core_response(core),
+            _verdicts(core, {"c9": ("instruction_ok",)}),
+            _repairs(changed),
+            _verdicts(core),
+        ],
+    )
+
+    artifact = _generator().generate(request)
+
+    assert "今天店里忙了一天，回家因为谁洗碗拌了两句。" in artifact.body
+    assert "洗碗池像临时议会" in artifact.body
+    assert "大家要互相理解" not in artifact.body
+    assert {receipt.field for receipt in artifact.fact_repair_receipts} == {
+        "spoken_lines"
+    }
+    repair_json = FakeClient.requests[2]["json"]
+    assert isinstance(repair_json, dict)
+    repair_prompt = str(repair_json["messages"])
+    assert "instruction_conflict" in repair_prompt
+    assert request.revision_instruction is not None
+    assert request.prior_saved_body is not None
+    assert request.revision_instruction in repair_prompt
+    assert request.prior_saved_body in repair_prompt
 
 
 def test_shared_invariant_forbids_unsourced_history_claims_in_every_prompt(
@@ -1251,7 +1375,7 @@ def test_repaired_step_with_claim_reference_shorthand_is_also_resolved(
     assert len(FakeClient.requests) == 4
 
 
-def test_unknown_actor_remains_an_identity_boundary_not_a_resource_gate(
+def test_closed_world_rejects_unknown_actor_and_resource_independently(
     generation_input: GenerationInput,
 ) -> None:
     context = BoundaryContext.from_request(generation_input)
@@ -1281,7 +1405,8 @@ def test_unknown_actor_remains_an_identity_boundary_not_a_resource_gate(
     issues = DeepSeekGenerator._closed_world_issues(context, core)
 
     assert {(issue.unit_id, issue.reason_code) for issue in issues} == {
-        ("s2", "untrusted_role")
+        ("s2", "untrusted_role"),
+        ("s2", "unsupported_resource"),
     }
 
 

@@ -321,7 +321,15 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         assert g3_result["version"] == 1
         assert all(
             invented not in str(g3_result["body"])
-            for invented in ("我婆婆", "我儿媳", "孩子今年", "结婚以来", "顾客说")
+            for invented in (
+                "我婆婆",
+                "我儿媳",
+                "孩子今年",
+                "结婚以来",
+                "顾客说",
+                "“",
+                "”",
+            )
         )
         g3_snapshot = cast(
             dict[str, object],
@@ -344,7 +352,15 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         )
         assert all(
             invented not in str(g4_result["body"])
-            for invented in ("丈夫", "孩子", "婆婆", "最后谁洗", "她说", "他说")
+            for invented in (
+                "丈夫",
+                "孩子",
+                "婆婆",
+                "最后谁洗",
+                "她说",
+                "他说",
+                "谁都不想动",
+            )
         )
         g4_task = _task_snapshot(app_database_url, g4_marker)
         g4_snapshot = cast(dict[str, object], g4_task["snapshot"])
@@ -362,7 +378,17 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         assert g5[-1]["event"] == "completed"
         g5_result = cast(dict[str, object], g5[-1]["result"])
         assert g5_result["version"] == 1
-        assert "真实发生" not in str(g5_result["body"])
+        assert all(
+            invented not in str(g5_result["body"])
+            for invented in (
+                "真实发生",
+                "我平时上班",
+                "这件上衣",
+                "面料",
+                "弹性",
+                "直筒裤",
+            )
+        )
         assert _task_counts(app_database_url, g5_marker)["versions"] == 1
 
         time.sleep(2.05)
@@ -378,6 +404,7 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity(
         assert revision.status_code == 201, revision.text
         g7_result = revision.json()
         assert g7_result["version"] == 2
+        assert g7_result["body"] != g4_result["body"]
         assert "今天店里忙了一天，回家还因为谁洗碗拌了两句。" in g7_result["body"]
         assert _task_snapshot(app_database_url, g4_marker)["snapshot"] == g4_snapshot
         v1 = client.get(
