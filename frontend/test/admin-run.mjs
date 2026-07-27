@@ -263,6 +263,22 @@ globalThis.fetch = async (input, init = {}) => {
       activation_link: "/activate/ui04-obviously-fake-browser-fixture"
     };
   } else if (
+    path === "/api/v1/tenant-management/users/22222222-2222-4222-8222-222222222222/reset" &&
+    method === "POST"
+  ) {
+    value = {
+      reset_link: "/activate/ui05-obviously-fake-reset-fixture"
+    };
+  } else if (path === "/api/v1/auth/password" && method === "POST") {
+    if (body.current_password === "incorrect-current-password") {
+      return {
+        ok: false,
+        status: 401,
+        json: async () => ({ detail: "当前密码不正确" })
+      };
+    }
+    value = { changed: true };
+  } else if (
     path === "/api/v1/tenant-management/publishing-accounts" &&
     method === "POST"
   ) {

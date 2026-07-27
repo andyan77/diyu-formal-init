@@ -103,7 +103,7 @@ function TenantProvisioning({
       setActivationLink(created.activation_link ?? null);
       setNotice(
         created.activation_link
-          ? "租户已开通。一次性体验链接只在当前页面暂时显示。"
+          ? "租户已开通。一次性激活链接只在当前页面暂时显示。"
           : "租户已开通。请按既有安全流程交付首次进入方式。"
       );
       onCreated();
@@ -141,16 +141,16 @@ function TenantProvisioning({
         </label>
         {notice && <p className="ops-notice" role="status">{notice}</p>}
         {activationLink && (
-          <section className="ops-activation-link" aria-label="一次性体验链接">
+          <section className="ops-activation-link" aria-label="一次性激活链接">
             <p>请通过受保护的渠道交付。关闭这里、刷新或离开页面后，这条链接不会继续显示。</p>
             <div>
-              <input readOnly value={activationLink} aria-label="一次性体验链接" />
+              <input readOnly value={activationLink} aria-label="一次性激活链接" />
               <button
                 className="ops-outline-button"
                 type="button"
                 onClick={() => {
                   void navigator.clipboard.writeText(activationLink).then(
-                    () => setNotice("已复制一次性体验链接。"),
+                    () => setNotice("已复制一次性激活链接。"),
                     () => setNotice("这次没有复制成功，请使用受保护的方式重新生成。")
                   );
                 }}

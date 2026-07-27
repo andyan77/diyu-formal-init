@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import Root from "../src/app/Root";
+import TenantAdminApp from "../src/app/TenantAdminApp";
+import type { BootstrapContext } from "../src/app/types";
 
 const harness = (globalThis as unknown as {
   __DIYU_ADMIN_INTERACTION__: {
@@ -75,14 +77,91 @@ async function renderAt(
   return root;
 }
 
+async function renderTenantAdmin(
+  context: BootstrapContext,
+  onPasswordUpdated: (path: string) => void
+): Promise<ReturnType<typeof createRoot>> {
+  window.history.replaceState({}, "", "/tenant-admin");
+  const container = document.getElementById("root");
+  assert.ok(container);
+  const root = createRoot(container);
+  await act(async () =>
+    root.render(
+      <TenantAdminApp
+        context={context}
+        onPasswordUpdated={onPasswordUpdated}
+      />
+    )
+  );
+  await settle();
+  return root;
+}
+
 async function main(): Promise<void> {
-  setReducedMotion(true);
+  setReducedMotion(false);
   let root = await renderAt("/", { application: "public" });
+  const rhythms = Array.from(document.querySelectorAll(".rhythm"));
+  assert.equal(rhythms.length, 3);
+  assert.deepEqual(
+    rhythms.map(item => item.getAttribute("cx")),
+    ["210", "210", "210"],
+    "三个临时节奏点必须沿正式 VI 的竖向中轴排列"
+  );
+  assert.deepEqual(
+    rhythms.map(item => item.getAttribute("cy")),
+    ["132", "160", "188"]
+  );
+  await click(find("button", "跳过"));
+  assert.ok(document.querySelector(".public-home")?.classList.contains("motion-finished"));
+  await act(async () => root.unmount());
+
+  setReducedMotion(true);
+  root = await renderAt("/", { application: "public" });
   assert.ok(document.querySelector(".public-home")?.classList.contains("motion-finished"));
   assert.equal(document.querySelector(".motion-final img")?.getAttribute("src"), "/assets/diyu-logo-primary.svg");
   await act(async () => root.unmount());
 
-  root = await renderAt("/tenant-admin", {
+  root = await renderAt("/login", {
+    application: "login",
+    entry: "tenant-user"
+  });
+  assert.match(document.body.textContent ?? "", /内容创作/);
+  assert.equal(document.querySelector('[name="totp_code"]'), null);
+  await act(async () => root.unmount());
+
+  root = await renderAt("/tenant-admin/login", {
+    application: "login",
+    entry: "tenant-admin"
+  });
+  assert.match(document.body.textContent ?? "", /品牌管理/);
+  assert.equal(document.querySelector('[name="totp_code"]'), null);
+  assert.match(document.body.textContent ?? "", /忘记密码/);
+  assert.match(
+    document.body.textContent ?? "",
+    /另一名品牌管理员或笛语运维.*一次性重设密码链接/
+  );
+  await act(async () => root.unmount());
+
+  root = await renderAt("/ops/login", {
+    application: "login",
+    entry: "ops"
+  });
+  assert.match(document.body.textContent ?? "", /笛语运维/);
+  assert.ok(document.querySelector('[name="totp_code"]'));
+  assert.match(document.body.textContent ?? "", /身份验证器 6 位码/);
+  assert.match(document.body.textContent ?? "", /来自已绑定的身份验证器/);
+  await act(async () => root.unmount());
+
+  root = await renderAt("/activate/ui05-reset-fixture", {
+    application: "activation",
+    activation_purpose: "reset"
+  });
+  assert.match(document.body.textContent ?? "", /重设密码.*重新设置密码/s);
+  assert.match(document.body.textContent ?? "", /更新密码/);
+  await act(async () => root.unmount());
+
+  let passwordRedirect = "";
+  root = await renderTenantAdmin({
     application: "tenant_management",
     formal_runtime: true,
     identity: {
@@ -91,6 +170,8 @@ async function main(): Promise<void> {
       organization: "笛语服饰管理组织",
       brand: "笛语服饰"
     }
+  }, path => {
+    passwordRedirect = path;
   });
   for (const label of [
     "概览与当前待办",
@@ -123,7 +204,7 @@ async function main(): Promise<void> {
   await click(find(".tenant-drawer label", "租户用户"));
   assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /内容创作/);
   assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /陈列搭配/);
-  await click(find(".tenant-drawer button", "创建并生成体验链接"));
+  await click(find(".tenant-drawer button", "创建并生成一次性激活链接"));
   await settle();
   const memberCreate = requests.find(
     item => item.path === "/api/v1/tenant-management/users" && item.method === "POST"
@@ -133,6 +214,22 @@ async function main(): Promise<void> {
   assert.deepEqual(memberCreate?.body?.publishing_identity_ids, []);
   assert.equal(memberCreate?.body?.grants_material_maintenance, false);
 
+  await click(find(".tenant-drawer button", "关闭"));
+  await click(find("button", "查看与处理"));
+  assert.match(
+    document.querySelector(".tenant-drawer")?.textContent ?? "",
+    /生成一次性重设密码链接/
+  );
+  await click(find(".tenant-drawer button", "生成一次性重设密码链接"));
+  await settle();
+  assert.match(
+    document.body.textContent ?? "",
+    /新的一次性重设密码链接已生成，此前未使用的重设链接已失效/
+  );
+  assert.match(
+    document.querySelector(".tenant-drawer")?.textContent ?? "",
+    /ui05-obviously-fake-reset-fixture/
+  );
   await click(find(".tenant-drawer button", "关闭"));
   await click(find(".tenant-nav button", "发布账号与账号画像"));
   await click(find("button", "创建发布账号"));
@@ -249,6 +346,74 @@ async function main(): Promise<void> {
   for (const forbidden of ["tenant_id", "ContentRole", "RLS", "schema", "测试通过"]) {
     assert.doesNotMatch(document.body.textContent ?? "", new RegExp(forbidden));
   }
+
+  await click(find(".tenant-account-menu summary", "品牌管理员"));
+  await click(find(".tenant-account-menu button", "账户安全"));
+  let passwordFields = Array.from(
+    document.querySelectorAll(".tenant-drawer input")
+  ) as HTMLInputElement[];
+  assert.equal(passwordFields.length, 3);
+  await input(passwordFields[0], "incorrect-current-password");
+  await input(passwordFields[1], "replacement-password-2026");
+  await input(passwordFields[2], "different-password-2026");
+  const passwordRequestsBeforeMismatch = requests.filter(
+    item => item.path === "/api/v1/auth/password"
+  ).length;
+  await click(find(".tenant-drawer button", "修改密码"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /两次输入的新密码不一致/);
+  assert.equal(
+    requests.filter(item => item.path === "/api/v1/auth/password").length,
+    passwordRequestsBeforeMismatch,
+    "两次密码不一致时不得发送请求"
+  );
+
+  passwordFields = Array.from(
+    document.querySelectorAll(".tenant-drawer input")
+  ) as HTMLInputElement[];
+  await input(passwordFields[2], "replacement-password-2026");
+  await click(find(".tenant-drawer button", "修改密码"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /当前密码不正确，请重新输入/);
+  assert.equal(window.location.pathname, "/tenant-admin");
+
+  passwordFields = Array.from(
+    document.querySelectorAll(".tenant-drawer input")
+  ) as HTMLInputElement[];
+  await input(passwordFields[0], "correct-current-password");
+  await click(find(".tenant-drawer button", "修改密码"));
+  await settle();
+  const successfulPasswordRequest = requests
+    .filter(item => item.path === "/api/v1/auth/password")
+    .at(-1);
+  assert.deepEqual(successfulPasswordRequest?.body, {
+    current_password: "correct-current-password",
+    password: "replacement-password-2026"
+  });
+  assert.equal(
+    "confirmation" in (successfulPasswordRequest?.body ?? {}),
+    false,
+    "确认密码不得发给服务端"
+  );
+  assert.equal(
+    passwordRedirect,
+    "/tenant-admin/login?password_updated=1",
+    "成功修改密码后必须返回品牌管理登录页"
+  );
+  assert.deepEqual(
+    Array.from(document.querySelectorAll<HTMLInputElement>(".tenant-drawer input")).map(
+      field => field.value
+    ),
+    ["", "", ""],
+    "成功后不得把任何密码继续留在页面字段中"
+  );
+  await act(async () => root.unmount());
+
+  root = await renderAt("/tenant-admin/login?password_updated=1", {
+    application: "login",
+    entry: "tenant-admin"
+  });
+  assert.match(document.body.textContent ?? "", /密码已更新，请重新登录/);
   await act(async () => root.unmount());
 }
 

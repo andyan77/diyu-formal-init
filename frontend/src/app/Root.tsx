@@ -33,7 +33,7 @@ export default function Root(): JSX.Element {
   if (pathname === "/") return <PublicHome />;
   if (pathname === "/status") return <StatusPage />;
   if (pathname === "/activate" || pathname.startsWith("/activate/")) {
-    return <ActivationPage />;
+    return <ActivationPage context={bootstrap} />;
   }
   if (
     pathname === "/login" ||

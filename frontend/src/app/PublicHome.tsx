@@ -53,9 +53,9 @@ export default function PublicHome(): JSX.Element {
           <path className="seed-path return" d="M164 135 C196 178 237 177 270 146" />
           <circle className="seed-dot origin" cx="72" cy="146" r="7" />
           <path className="direction-turn" d="M210 63 L232 103 L188 103 Z" />
-          <circle className="rhythm rhythm-one" cx="174" cy="160" r="7" />
+          <circle className="rhythm rhythm-one" cx="210" cy="132" r="7" />
           <circle className="rhythm rhythm-two" cx="210" cy="160" r="7" />
-          <circle className="rhythm rhythm-three" cx="246" cy="160" r="7" />
+          <circle className="rhythm rhythm-three" cx="210" cy="188" r="7" />
         </svg>
         <div className="motion-final">
           <img src="/assets/diyu-logo-primary.svg" alt="笛语 DIYU AGENT" />

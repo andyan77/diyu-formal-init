@@ -10,6 +10,9 @@ const TITLES = {
 
 export function LoginPage({ context }: { context: BootstrapContext }): JSX.Element {
   const entry = context.entry ?? "tenant-user";
+  const passwordUpdated =
+    entry === "tenant-admin" &&
+    new URLSearchParams(window.location.search).get("password_updated") === "1";
   const action =
     entry === "tenant-admin"
       ? "/tenant-admin/login"
@@ -24,6 +27,11 @@ export function LoginPage({ context }: { context: BootstrapContext }): JSX.Eleme
       <section className="auth-panel">
         <p className="eyebrow">{TITLES[entry]}</p>
         <h1>登录笛语</h1>
+        {passwordUpdated && (
+          <p className="auth-notice" role="status">
+            密码已更新，请重新登录。
+          </p>
+        )}
         <form method="post" action={action}>
           <label>
             用户名
@@ -40,13 +48,17 @@ export function LoginPage({ context }: { context: BootstrapContext }): JSX.Eleme
           </label>
           {entry === "ops" && (
             <label>
-              验证码
+              身份验证器 6 位码
               <input
                 name="totp_code"
                 inputMode="numeric"
                 autoComplete="one-time-code"
+                minLength={6}
+                maxLength={6}
+                pattern="[0-9]{6}"
                 required
               />
+              <span className="auth-inline-help">来自已绑定的身份验证器。</span>
             </label>
           )}
           {entry === "tenant-admin" &&
@@ -56,21 +68,34 @@ export function LoginPage({ context }: { context: BootstrapContext }): JSX.Eleme
           <button className="primary" type="submit">
             登录
           </button>
+          {entry === "tenant-admin" && (
+            <details className="auth-recovery">
+              <summary>忘记密码</summary>
+              <p>
+                请联系另一名品牌管理员或笛语运维，获取一次性重设密码链接。
+              </p>
+            </details>
+          )}
         </form>
       </section>
     </main>
   );
 }
 
-export function ActivationPage(): JSX.Element {
+export function ActivationPage({
+  context
+}: {
+  context?: BootstrapContext | null;
+}): JSX.Element {
+  const resetting = context?.activation_purpose === "reset";
   return (
     <main className="auth-page">
       <a className="auth-brand" href="/" aria-label="返回笛语首页">
         <BrandMark />
       </a>
       <section className="auth-panel">
-        <p className="eyebrow">首次进入</p>
-        <h1>设置你的密码</h1>
+        <p className="eyebrow">{resetting ? "重设密码" : "首次进入"}</p>
+        <h1>{resetting ? "重新设置密码" : "设置你的密码"}</h1>
         <p className="field-help">请使用至少 12 个字符，只在这里输入新密码。</p>
         <form method="post" action={window.location.pathname}>
           <label>
@@ -84,7 +109,7 @@ export function ActivationPage(): JSX.Element {
             />
           </label>
           <button className="primary" type="submit">
-            完成设置
+            {resetting ? "更新密码" : "完成设置"}
           </button>
         </form>
       </section>

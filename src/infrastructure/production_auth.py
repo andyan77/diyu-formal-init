@@ -383,6 +383,23 @@ class ProductionAuthRepository:
                 (self._digest(token),),
             )
 
+    def activation_purpose(self, raw_token: str) -> str | None:
+        """Return a known link purpose so expired or used reset pages remain truthful."""
+        with self._tx() as cursor:
+            cursor.execute(
+                """
+                SELECT purpose
+                FROM user_activation_tokens
+                WHERE token_digest = %s
+                """,
+                (self._digest(raw_token),),
+            )
+            row = cursor.fetchone()
+        if row is None:
+            return None
+        purpose = str(row["purpose"])
+        return purpose if purpose in {"activate", "reset"} else None
+
     def complete_activation(self, raw_token: str, password: str) -> str:
         token_digest = self._digest(raw_token)
         with self._tx() as cursor:

@@ -495,7 +495,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         + "<label>用户名 <input name='username' autocomplete='username' "
                         "required></label><label>密码 <input type='password' name='password' "
                         "autocomplete='current-password' required></label>"
-                        "<button type='submit'>登录</button></form></main>"
+                        "<button type='submit'>登录</button></form>"
+                        "<details><summary>忘记密码</summary>"
+                        "<p>请联系另一名品牌管理员或笛语运维，获取一次性重设密码链接。</p>"
+                        "</details></main>"
                     ),
                 )
             )
@@ -534,8 +537,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         "<label>用户名 <input name='username' autocomplete='username' "
                         "required></label><label>密码 <input type='password' name='password' "
                         "autocomplete='current-password' required></label>"
-                        "<label>验证码 <input name='totp_code' inputmode='numeric' "
-                        "autocomplete='one-time-code' required></label>"
+                        "<label>身份验证器 6 位码 <input name='totp_code' inputmode='numeric' "
+                        "autocomplete='one-time-code' minlength='6' maxlength='6' "
+                        "pattern='[0-9]{6}' required>"
+                        "<small>来自已绑定的身份验证器。</small></label>"
                         "<button type='submit'>登录</button></form></main>"
                     ),
                 )
@@ -560,7 +565,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     render_login_failure(
                         "笛语运维登录",
                         "/ops/login",
-                        "登录信息、验证码或当前入口不匹配，请确认后重新登录。",
+                        "用户名、密码、身份验证器 6 位码或当前入口不匹配，请确认后重新登录。",
                     ),
                     status_code=status.HTTP_401_UNAUTHORIZED,
                 )
@@ -570,15 +575,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         @app.get("/activate/{activation_token}", include_in_schema=False)
         def activation_page(activation_token: str) -> HTMLResponse:
+            activation_purpose = (
+                production_authority.repository.activation_purpose(activation_token)
+                or "activate"
+            )
+            resetting = activation_purpose == "reset"
+            heading = "重新设置密码" if resetting else "设置笛语密码"
+            action = "更新密码" if resetting else "完成设置"
             return HTMLResponse(
                 render_spa_shell(
-                    {"application": "activation"},
+                    {
+                        "application": "activation",
+                        "activation_purpose": activation_purpose,
+                    },
                     fallback=(
-                        "<main><h1>设置笛语密码</h1><form method='post' action='/activate/"
+                        "<main><h1>"
+                        + heading
+                        + "</h1><form method='post' action='/activate/"
                         + escape(activation_token)
                         + "'><label>新密码 <input type='password' name='password' "
                         "autocomplete='new-password' required></label>"
-                        "<button type='submit'>完成设置</button></form></main>"
+                        "<button type='submit'>"
+                        + action
+                        + "</button></form></main>"
                     ),
                 )
             )
@@ -589,7 +608,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 f"activation:{request.client.host if request.client else 'unknown'}"
             ):
                 return HTMLResponse(
-                    render_activation_failure("尝试次数较多，请稍后再试，或请管理员重新生成体验链接。"),
+                    render_activation_failure("尝试次数较多，请稍后再试，或请管理员重新生成一次性链接。"),
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 )
             fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)

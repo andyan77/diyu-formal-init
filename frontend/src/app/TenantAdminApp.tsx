@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BrandMark } from "../components/Brand";
-import { api } from "../services/api";
+import { ApiError, api } from "../services/api";
 import "../styles/tenant-admin.css";
 import type { BootstrapContext, Target } from "./types";
 
@@ -365,6 +365,108 @@ function Drawer({
         {children}
       </section>
     </div>
+  );
+}
+
+function AccountSecurity({
+  onClose,
+  onPasswordUpdated
+}: {
+  onClose: () => void;
+  onPasswordUpdated?: (path: string) => void;
+}): JSX.Element {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    setError("");
+    if (newPassword.length < 12) {
+      setError("新密码至少需要 12 个字符。");
+      return;
+    }
+    if (newPassword !== confirmation) {
+      setError("两次输入的新密码不一致，请重新确认。");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api<{ changed: boolean }>("/api/v1/auth/password", {
+        method: "POST",
+        body: JSON.stringify({
+          current_password: currentPassword,
+          password: newPassword
+        })
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmation("");
+      const loginPath = "/tenant-admin/login?password_updated=1";
+      if (onPasswordUpdated) {
+        onPasswordUpdated(loginPath);
+      } else {
+        window.location.assign(loginPath);
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError && caught.status === 401
+          ? "当前密码不正确，请重新输入。"
+          : "密码暂时没有更新，请稍后再试。"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Drawer title="账户安全" onClose={onClose}>
+      <form className="tenant-form" onSubmit={event => void submit(event)}>
+        <p className="tenant-security-note">修改后，所有已登录设备都需要重新登录。</p>
+        <label>
+          当前密码
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={event => setCurrentPassword(event.target.value)}
+            required
+          />
+        </label>
+        <label>
+          新密码
+          <input
+            type="password"
+            autoComplete="new-password"
+            minLength={12}
+            value={newPassword}
+            onChange={event => setNewPassword(event.target.value)}
+            required
+          />
+        </label>
+        <label>
+          再次输入新密码
+          <input
+            type="password"
+            autoComplete="new-password"
+            minLength={12}
+            value={confirmation}
+            onChange={event => setConfirmation(event.target.value)}
+            required
+          />
+        </label>
+        {error && (
+          <p className="tenant-form-error" role="alert">
+            {error}
+          </p>
+        )}
+        <button className="primary" type="submit" disabled={saving}>
+          修改密码
+        </button>
+      </form>
+    </Drawer>
   );
 }
 
@@ -773,7 +875,7 @@ function Members({
         }
       );
       setActivationLink(created.activation_link);
-    }, "成员已建立。请把本次体验链接安全交给本人。");
+    }, "成员已建立。请把本次一次性激活链接安全交给本人。");
   };
   const toggleAccount = (accountId: string): void => {
     setForm(value => ({
@@ -960,11 +1062,11 @@ function Members({
               </>
             )}
             <button className="primary" type="submit" disabled={saving}>
-              创建并生成体验链接
+              创建并生成一次性激活链接
             </button>
             {activationLink && (
               <div className="one-time-link">
-                <p>链接只显示这一次，请安全交给本人。</p>
+                <p>一次性激活链接只显示这一次，请安全交给本人。</p>
                 <code>{activationLink}</code>
                 <button
                   type="button"
@@ -1095,10 +1197,10 @@ function Members({
                     { method: "POST" }
                   );
                   setActivationLink(value.reset_link);
-                }, "新的体验链接已生成，此前未使用的链接已失效。")
+                }, "新的一次性重设密码链接已生成，此前未使用的重设链接已失效。")
               }
             >
-              生成新的体验链接
+              生成一次性重设密码链接
             </button>
             {activationLink && <code className="reset-link">{activationLink}</code>}
             {drawer.id !== currentUserId && drawer.enabled && (
@@ -2553,12 +2655,15 @@ function Readiness({ onSection }: { onSection: (section: Section) => void }): JS
 }
 
 export default function TenantAdminApp({
-  context
+  context,
+  onPasswordUpdated
 }: {
   context: BootstrapContext;
+  onPasswordUpdated?: (path: string) => void;
 }): JSX.Element {
   const [section, setSection] = useState<Section>("overview");
   const [notice, setNotice] = useState<Notice>(null);
+  const [securityOpen, setSecurityOpen] = useState(false);
   const identity = context.identity ?? {};
   const title = useMemo(() => identity.brand ?? "品牌管理", [identity.brand]);
   return (
@@ -2584,16 +2689,29 @@ export default function TenantAdminApp({
             </button>
           ))}
         </nav>
-        <form method="post" action="/tenant-admin/logout">
-          <button type="submit" className="quiet">
-            退出
-          </button>
-        </form>
       </aside>
       <main>
         <header className="tenant-topbar">
           <span>{title}</span>
-          <span>{identity.operator ?? ""}</span>
+          <details className="tenant-account-menu">
+            <summary>
+              <span>{identity.operator ?? "个人菜单"}</span>
+            </summary>
+            <div>
+              <button
+                type="button"
+                onClick={event => {
+                  setSecurityOpen(true);
+                  event.currentTarget.closest("details")?.removeAttribute("open");
+                }}
+              >
+                账户安全
+              </button>
+              <form method="post" action="/tenant-admin/logout">
+                <button type="submit">退出登录</button>
+              </form>
+            </div>
+          </details>
         </header>
         <PageNotice notice={notice} onDismiss={() => setNotice(null)} />
         {section === "overview" && <Overview onSection={setSection} />}
@@ -2605,6 +2723,12 @@ export default function TenantAdminApp({
         {section === "library" && <BrandLibrary setNotice={setNotice} />}
         {section === "readiness" && <Readiness onSection={setSection} />}
       </main>
+      {securityOpen && (
+        <AccountSecurity
+          onClose={() => setSecurityOpen(false)}
+          onPasswordUpdated={onPasswordUpdated}
+        />
+      )}
     </div>
   );
 }

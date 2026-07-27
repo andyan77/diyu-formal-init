@@ -57,6 +57,20 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
         assert public_home.headers["content-type"].startswith("text/html")
         assert '"application": "public"' in public_home.text
         assert "开始创作" in public_home.text
+        content_login = client.get("/login")
+        assert "内容创作" in content_login.text
+        assert "totp_code" not in content_login.text
+        admin_login = client.get("/tenant-admin/login")
+        assert "品牌管理" in admin_login.text
+        assert "totp_code" not in admin_login.text
+        assert "忘记密码" in admin_login.text
+        ops_login = client.get("/ops/login")
+        assert "笛语运维" in ops_login.text
+        assert "name='totp_code'" in ops_login.text
+        assert "身份验证器 6 位码" in ops_login.text
+        activation_page = client.get(f"/activate/{admin_activation}")
+        assert '"activation_purpose": "activate"' in activation_page.text
+        assert "设置笛语密码" in activation_page.text
         tenant_admin_entry = client.get("/tenant-admin", follow_redirects=False)
         assert tenant_admin_entry.status_code == 303
         assert tenant_admin_entry.headers["location"] == "/tenant-admin/login"
@@ -200,11 +214,21 @@ def test_new_reset_link_invalidates_previous_link_and_activation_revokes_session
 
     first_reset = repository.create_reset_token(manager, user_id)
     second_reset = repository.create_reset_token(manager, user_id)
+    app = create_app(_settings(app_database_url))
+    with TestClient(app, base_url="https://diyuai.cc") as client:
+        reset_page = client.get(f"/activate/{second_reset}")
+        assert reset_page.status_code == 200
+        assert '"activation_purpose": "reset"' in reset_page.text
+        assert "重新设置密码" in reset_page.text
     with pytest.raises(DomainError, match="无效或已过期"):
         repository.complete_activation(first_reset, "first-link-must-not-work")
     assert repository.complete_activation(second_reset, "second-link-works-once") == "tenant-user"
     with pytest.raises(DomainError, match="无效或已过期"):
         repository.complete_activation(second_reset, "second-link-must-not-work-twice")
+    with TestClient(app, base_url="https://diyuai.cc") as client:
+        used_reset_page = client.get(f"/activate/{second_reset}")
+        assert '"activation_purpose": "reset"' in used_reset_page.text
+        assert "重新设置密码" in used_reset_page.text
     assert repository.load_tenant_session(old_session) is None
     new_identity = repository.authenticate_tenant_user(username, "second-link-works-once", "tenant-user")
     assert new_identity is not None
@@ -230,6 +254,88 @@ def test_new_reset_link_invalidates_previous_link_and_activation_revokes_session
         "password.pending_links_invalidated_on_use",
         "password.activated_or_reset",
     } <= events
+
+
+def test_tenant_admin_changes_password_without_exposing_or_keeping_old_sessions(
+    app_database_url: str, migrator_database_url: str
+) -> None:
+    _clear_auth_state(migrator_database_url)
+    repository = ProductionAuthRepository(app_database_url)
+    username = f"password-admin-{uuid4().hex[:10]}"
+    activation = repository.bootstrap_existing_tenant_admin(
+        TENANT_ID,
+        TENANT_ADMIN_USER_ID,
+        username,
+    )
+    initial_password = "synthetic-initial-password"
+    replacement_password = "synthetic-replacement-password"
+    repository.complete_activation(activation, initial_password)
+    identity = repository.authenticate_tenant_user(
+        username,
+        initial_password,
+        "tenant-admin",
+    )
+    assert identity is not None
+    second_session = repository.create_tenant_session(identity)
+
+    app = create_app(_settings(app_database_url))
+    with TestClient(app, base_url="https://diyuai.cc") as client:
+        signed_in = client.post(
+            "/tenant-admin/login",
+            content=f"username={username}&password={initial_password}",
+            follow_redirects=False,
+        )
+        assert signed_in.status_code == 303
+
+        wrong_current = client.post(
+            "/api/v1/auth/password",
+            json={
+                "current_password": "synthetic-wrong-password",
+                "password": replacement_password,
+            },
+        )
+        assert wrong_current.status_code == 401
+        assert wrong_current.json() == {"detail": "当前密码不正确"}
+        assert client.get("/tenant-admin").status_code == 200
+        assert repository.load_tenant_session(second_session) == identity
+
+        changed = client.post(
+            "/api/v1/auth/password",
+            json={
+                "current_password": initial_password,
+                "password": replacement_password,
+            },
+        )
+        assert changed.status_code == 200
+        assert changed.json() == {"changed": True}
+        assert repository.load_tenant_session(second_session) is None
+        stale_api = client.get("/api/v1/tenant-management/operators")
+        assert stale_api.status_code == 401
+        assert stale_api.headers["content-type"].startswith("application/json")
+
+        assert (
+            repository.authenticate_tenant_user(
+                username,
+                initial_password,
+                "tenant-admin",
+            )
+            is None
+        )
+        assert (
+            client.post(
+                "/tenant-admin/login",
+                content=f"username={username}&password={initial_password}",
+                follow_redirects=False,
+            ).status_code
+            == 401
+        )
+        signed_in_again = client.post(
+            "/tenant-admin/login",
+            content=f"username={username}&password={replacement_password}",
+            follow_redirects=False,
+        )
+        assert signed_in_again.status_code == 303
+        assert signed_in_again.headers["location"] == "/tenant-admin"
 
 
 def test_activation_paths_are_redacted_and_edge_access_logs_are_disabled(
