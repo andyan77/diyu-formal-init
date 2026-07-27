@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent, JSX } from "react";
-import { api } from "../services/api";
+import { api, scopedContentPath } from "../services/api";
+import type { Target } from "./types";
 import "../styles/user-extensions.css";
 
 export type ReferenceMaterial = {
@@ -63,10 +64,14 @@ export function MaterialPicker({
 
 export function MaterialsPanel({
   selectedIds = [],
-  onSelectedIdsChange = () => undefined
+  onSelectedIdsChange = () => undefined,
+  publishingIdentityId = "current",
+  target = "douyin_video"
 }: {
   selectedIds?: string[];
   onSelectedIdsChange?: (value: string[]) => void;
+  publishingIdentityId?: string;
+  target?: Target;
 }): JSX.Element {
   const [materials, setMaterials] = useState<ReferenceMaterial[]>([]);
   const [title, setTitle] = useState("");
@@ -80,7 +85,11 @@ export function MaterialsPanel({
 
   const reload = async (): Promise<void> => {
     try {
-      setMaterials(await api<ReferenceMaterial[]>("/api/v1/materials"));
+      setMaterials(
+        await api<ReferenceMaterial[]>(
+          scopedContentPath("/api/v1/materials", publishingIdentityId, target)
+        )
+      );
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "暂时无法读取素材。");
     }
@@ -96,7 +105,9 @@ export function MaterialsPanel({
     setBusy(true);
     setNotice("");
     try {
-      await api<ReferenceMaterial>("/api/v1/materials/personal", {
+      await api<ReferenceMaterial>(
+        scopedContentPath("/api/v1/materials/personal", publishingIdentityId, target),
+        {
         method: "POST",
         body: JSON.stringify({
           title: title.trim(),
@@ -106,7 +117,8 @@ export function MaterialsPanel({
           declares_identifiable_minor: minor,
           reference_note: note.trim()
         })
-      });
+        }
+      );
       setTitle("");
       setNote("");
       setFile(null);
@@ -125,10 +137,17 @@ export function MaterialsPanel({
     if (!editing || editingNote.trim().length < 2 || busy) return;
     setBusy(true);
     try {
-      await api<ReferenceMaterial>(`/api/v1/materials/${editing.id}/reference-note`, {
-        method: "PATCH",
-        body: JSON.stringify({ reference_note: editingNote.trim() })
-      });
+      await api<ReferenceMaterial>(
+        scopedContentPath(
+          `/api/v1/materials/${editing.id}/reference-note`,
+          publishingIdentityId,
+          target
+        ),
+        {
+          method: "PATCH",
+          body: JSON.stringify({ reference_note: editingNote.trim() })
+        }
+      );
       setEditing(null);
       setEditingNote("");
       await reload();
@@ -144,7 +163,10 @@ export function MaterialsPanel({
     if (busy || !window.confirm(`移除《${item.title}》？`)) return;
     setBusy(true);
     try {
-      await api<{ deleted: boolean }>(`/api/v1/materials/${item.id}`, { method: "DELETE" });
+      await api<{ deleted: boolean }>(
+        scopedContentPath(`/api/v1/materials/${item.id}`, publishingIdentityId, target),
+        { method: "DELETE" }
+      );
       onSelectedIdsChange(selectedIds.filter(id => id !== item.id));
       await reload();
       setNotice("已移除这份素材。");

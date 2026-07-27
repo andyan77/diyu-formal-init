@@ -81,14 +81,16 @@ def test_formal_pages_freeze_their_route_specific_context_in_the_spa_bootstrap(
     admin_user_id = uuid4()
     with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
-        for user_id, organization_id, display_name in (
-            (content_user_id, ORG_ID, "M7-3 路由内容夹具"),
-            (display_user_id, STORE_ORG_ID, "M7-3 路由陈列夹具"),
-            (admin_user_id, ORG_ID, "M7-3 路由管理夹具"),
+        for user_id, organization_id, display_name, entry_kind in (
+            (content_user_id, ORG_ID, "M7-3 路由内容夹具", "tenant_user"),
+            (display_user_id, STORE_ORG_ID, "M7-3 路由陈列夹具", "tenant_user"),
+            (admin_user_id, ORG_ID, "M7-3 路由管理夹具", "tenant_admin"),
         ):
             cursor.execute(
-                "INSERT INTO users (id, tenant_id, organization_id, display_name) VALUES (%s, %s, %s, %s)",
-                (user_id, TENANT_ID, organization_id, display_name),
+                "INSERT INTO users "
+                "(id, tenant_id, organization_id, display_name, entry_kind) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (user_id, TENANT_ID, organization_id, display_name, entry_kind),
             )
         for account_id in (
             ACCOUNT_ID,
@@ -109,6 +111,13 @@ def test_formal_pages_freeze_their_route_specific_context_in_the_spa_bootstrap(
             """,
             (uuid4(), TENANT_ID, admin_user_id),
         )
+        cursor.execute(
+            """
+            INSERT INTO display_access_grants (id, tenant_id, user_id)
+            VALUES (%s, %s, %s)
+            """,
+            (uuid4(), TENANT_ID, display_user_id),
+        )
     repository = ProductionAuthRepository(app_database_url)
     identities = {
         "content": TenantSession(TENANT_ID, content_user_id, "tenant-user"),
@@ -125,7 +134,7 @@ def test_formal_pages_freeze_their_route_specific_context_in_the_spa_bootstrap(
         )
         assert content["application"] == "content"
         assert content["formal_runtime"] is True
-        assert content["identity"]["account"] == "折线之间品牌母账号·小红书"
+        assert content["identity"]["account"] == "折线之间品牌母账号·抖音"
         assert content["identity"]["content_role"] == "总部零售/服务专家"
         assert content["identity"]["business_data_kind"] == "formal_business_data"
         assert content["current_target"] == "xiaohongshu_graphic"
@@ -164,6 +173,10 @@ def test_formal_pages_freeze_their_route_specific_context_in_the_spa_bootstrap(
                 (TENANT_ID, content_user_id),
             )
             cursor.execute(
+                "DELETE FROM display_access_grants WHERE tenant_id = %s AND user_id = %s",
+                (TENANT_ID, display_user_id),
+            )
+            cursor.execute(
                 "DELETE FROM users WHERE tenant_id = %s AND id = ANY(%s)",
                 (TENANT_ID, [content_user_id, display_user_id, admin_user_id]),
             )
@@ -173,9 +186,7 @@ def test_formal_pages_recover_to_login_without_changing_json_api_failures(
     app_database_url: str,
 ) -> None:
     repository = ProductionAuthRepository(app_database_url)
-    admin_token = repository.create_tenant_session(
-        TenantSession(TENANT_ID, TENANT_ADMIN_USER_ID, "tenant-admin")
-    )
+    admin_token = repository.create_tenant_session(TenantSession(TENANT_ID, TENANT_ADMIN_USER_ID, "tenant-admin"))
     app = create_app(_production_settings(app_database_url))
     try:
         with TestClient(app, base_url="https://diyuai.cc") as client:
@@ -193,9 +204,7 @@ def test_formal_pages_recover_to_login_without_changing_json_api_failures(
 
             anonymous_api = client.get("/api/v1/content/tasks")
             assert anonymous_api.status_code == 401
-            assert anonymous_api.headers["content-type"].startswith(
-                "application/json"
-            )
+            assert anonymous_api.headers["content-type"].startswith("application/json")
             assert "detail" in anonymous_api.json()
 
             client.cookies.set("diyu_session", admin_token)
@@ -210,9 +219,7 @@ def test_formal_pages_recover_to_login_without_changing_json_api_failures(
 
             forbidden_api = client.get("/api/v1/content/tasks")
             assert forbidden_api.status_code == 403
-            assert forbidden_api.headers["content-type"].startswith(
-                "application/json"
-            )
+            assert forbidden_api.headers["content-type"].startswith("application/json")
             assert "detail" in forbidden_api.json()
 
             signed_out = client.post(

@@ -166,22 +166,33 @@ def capacity_fixture(
             brand_id = UUID(created["brand_id"])
             administrator_id = UUID(created["administrator_id"])
             management_scope = TenantManagementScope(tenant_id, administrator_id, brand_id)
+            manager = TenantSession(tenant_id, administrator_id, "tenant-admin")
             draft = workbench.brand_expression(management_scope)["draft"]
             assert isinstance(draft, str)
             workbench.confirm_brand_expression(management_scope, draft)
+            first_user = repository.create_tenant_user(
+                manager,
+                f"容量自然人-{tenant_index}-0-{suffix}",
+                f"m62-user-{suffix}-{tenant_index}-0",
+                None,
+                None,
+                grants_tenant_management=False,
+                grants_material_maintenance=False,
+            )
+            first_user_id = UUID(first_user["user_id"])
             account = workbench.create_publishing_account(
                 management_scope,
                 f"容量发布账号-{tenant_index}",
                 "抖音",
                 f"容量内容角色-{tenant_index}",
                 "只在当前隔离租户的已确认品牌边界内表达。",
-                administrator_id,
+                first_user_id,
             )
             account_id = UUID(str(account["id"]))
-            user_ids = [administrator_id]
+            user_ids = [first_user_id]
             for user_index in range(1, 40):
                 user = repository.create_tenant_user(
-                    TenantSession(tenant_id, administrator_id, "tenant-admin"),
+                    manager,
                     f"容量自然人-{tenant_index}-{user_index}-{suffix}",
                     f"m62-user-{suffix}-{tenant_index}-{user_index}",
                     None,
@@ -309,8 +320,17 @@ def test_capacity_fixture_has_five_tenants_two_hundred_enabled_linked_users_and_
         visible_users = workbench_repository.management_operators(
             TenantManagementScope(tenant.tenant_id, tenant.administrator_id, tenant.brand_id)
         )
-        visible_ids = {UUID(str(user["id"])) for user in visible_users}
+        visible_ids = {
+            UUID(str(user["id"]))
+            for user in visible_users
+            if user["entry_type"] == "tenant_user"
+        }
         assert visible_ids == set(tenant.user_ids)
+        assert {
+            UUID(str(user["id"]))
+            for user in visible_users
+            if user["entry_type"] == "tenant_admin"
+        } == {tenant.administrator_id}
         tenant_user_sets.append(visible_ids)
         for user_id in tenant.user_ids:
             identity = workbench_repository.content_identity(
@@ -322,10 +342,17 @@ def test_capacity_fixture_has_five_tenants_two_hundred_enabled_linked_users_and_
     assert all(left.isdisjoint(right) for index, left in enumerate(tenant_user_sets) for right in tenant_user_sets[index + 1 :])
     with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
         cursor.execute(
-            "SELECT count(*) FROM users WHERE tenant_id = ANY(%s) AND enabled = true",
+            "SELECT count(*) FROM users "
+            "WHERE tenant_id = ANY(%s) AND enabled = true AND entry_kind = 'tenant_user'",
             ([tenant.tenant_id for tenant in capacity_fixture.tenants],),
         )
         assert cursor.fetchone() == (200,)
+        cursor.execute(
+            "SELECT count(*) FROM users "
+            "WHERE tenant_id = ANY(%s) AND enabled = true AND entry_kind = 'tenant_admin'",
+            ([tenant.tenant_id for tenant in capacity_fixture.tenants],),
+        )
+        assert cursor.fetchone() == (5,)
 
     first, second = capacity_fixture.tenants[:2]
     with pytest.raises(DomainError):

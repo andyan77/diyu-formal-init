@@ -182,12 +182,14 @@ def _assert_focus(layout: dict[object, object]) -> None:
         or not isinstance(secondary_present, bool)
     ):
         raise GenerationFailed("陈列方案主次焦点商品无效")
-    if zones[primary_position]["role"] != "primary_focus":
+    resolved_primary_position = primary_position
+    resolved_secondary_position = secondary_position
+    if zones[resolved_primary_position]["role"] != "primary_focus":
         raise GenerationFailed("主焦点角色与固定位置不一致")
-    primary_front = _front_skus(zones[primary_position]["upper"])
+    primary_front = _front_skus(zones[resolved_primary_position]["upper"])
     if not set(cast(list[str], primary_skus)) <= primary_front:
         raise GenerationFailed("主焦点没有进入固定上杆正挂")
-    secondary_front = _front_skus(zones[secondary_position]["upper"])
+    secondary_front = _front_skus(zones[resolved_secondary_position]["upper"])
     if secondary_present and not set(cast(list[str], secondary_skus)) <= secondary_front:
         raise GenerationFailed("较弱回应没有进入固定上杆正挂")
     fixed_front_count = sum(

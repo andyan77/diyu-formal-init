@@ -186,27 +186,55 @@ def test_real_tenant_onboarding_is_atomic_account_independent_and_idempotent(
         assert "account" not in context["identity"]
 
         readiness = client.get("/api/v1/admin/readiness").json()["items"]
-        states = {item["id"]: item["state"] for item in readiness}
-        assert states == {
-            "brand_expression": "needs_action",
-            "account_role": "needs_action",
-            "product_facts": "needs_action",
-            "dm01_profile": "needs_action",
+        statuses = {item["id"]: item["status"] for item in readiness}
+        assert statuses == {
+            "brand_expression": "unavailable",
+            "non_product_content": "unavailable",
+            "product_facts": "unavailable",
+            "continuous_series": "unavailable",
+            "platform_recompile": "unavailable",
+            "dm01_display": "unavailable",
         }
         operators = client.get("/api/v1/tenant-management/operators").json()
-        assert operators == [
-            {
-                "id": str(administrator_id),
-                "display_name": "笛语服饰负责人",
-                "username": username,
-                "organization": f"{tenant_name}管理组织",
-                "organization_id": operators[0]["organization_id"],
-                "publishing_accounts": "",
-                "manages_tenant": True,
-                "maintains_organization_materials": False,
-                "account_grants": [],
-            }
-        ]
+        assert len(operators) == 1
+        administrator = operators[0]
+        assert administrator["id"] == str(administrator_id)
+        assert administrator["display_name"] == "笛语服饰负责人"
+        assert administrator["username"] == username
+        assert administrator["organization"] == f"{tenant_name}管理组织"
+        assert administrator["entry_type"] == "tenant_admin"
+        assert administrator["capabilities"] == {"content": False, "display": False}
+        assert administrator["publishing_accounts"] == ""
+        assert administrator["manages_tenant"] is True
+        assert administrator["maintains_organization_materials"] is False
+        assert administrator["account_grants"] == []
+
+        publishing_username = f"diyu-brand-operator-{suffix}"
+        publishing_operator = client.post(
+            "/api/v1/tenant-management/users",
+            json={
+                "display_name": "笛语服饰内容运营",
+                "username": publishing_username,
+                "organization_id": administrator["organization_id"],
+                "entry_type": "tenant_user",
+                "capabilities": [],
+                "publishing_identity_ids": [],
+            },
+        )
+        assert publishing_operator.status_code == 201
+        publishing_operator_payload = publishing_operator.json()
+        publishing_operator_id = UUID(publishing_operator_payload["user_id"])
+        assert publishing_operator_id != administrator_id
+
+        publishing_password = "m6-1-publishing-password-is-long"
+        operator_activated = client.post(
+            publishing_operator_payload["activation_link"],
+            content=f"password={publishing_password}",
+            follow_redirects=False,
+        )
+        assert operator_activated.status_code == 303
+        assert operator_activated.headers["location"] == "/login"
+
         account_payload = {
             "name": "笛语服饰品牌官方账号",
             "channel": "抖音",
@@ -215,7 +243,7 @@ def test_real_tenant_onboarding_is_atomic_account_independent_and_idempotent(
                 "代表品牌讲已确认的品牌立场、生活关系和内容方向；不冒充创始人、研发、门店或顾客，"
                 "不讲未确认商品和经营事实。"
             ),
-            "operator_id": str(administrator_id),
+            "operator_id": str(publishing_operator_id),
         }
         before_confirmation = client.post(
             "/api/v1/tenant-management/publishing-accounts",
@@ -242,6 +270,12 @@ def test_real_tenant_onboarding_is_atomic_account_independent_and_idempotent(
         )
         assert wrong_operator.status_code == 422
 
+        administrator_as_operator = client.post(
+            "/api/v1/tenant-management/publishing-accounts",
+            json={**account_payload, "operator_id": str(administrator_id)},
+        )
+        assert administrator_as_operator.status_code == 422
+
         account = client.post(
             "/api/v1/tenant-management/publishing-accounts",
             json=account_payload,
@@ -253,6 +287,26 @@ def test_real_tenant_onboarding_is_atomic_account_independent_and_idempotent(
         assert account.status_code == 201
         assert retried_account.status_code == 201
         assert retried_account.json()["id"] == account.json()["id"]
+        updated_operators = {
+            item["id"]: item for item in client.get("/api/v1/tenant-management/operators").json()
+        }
+        assert updated_operators[str(administrator_id)]["entry_type"] == "tenant_admin"
+        registered_operator = updated_operators[str(publishing_operator_id)]
+        assert registered_operator["entry_type"] == "tenant_user"
+        assert registered_operator["manages_tenant"] is False
+        assert registered_operator["capabilities"] == {"content": True, "display": False}
+        assert account_payload["name"] in registered_operator["publishing_accounts"]
+
+    with TestClient(app, base_url="https://diyuai.cc") as publishing_client:
+        publishing_sign_in = publishing_client.post(
+            "/login",
+            content=f"username={publishing_username}&password={publishing_password}",
+            follow_redirects=False,
+        )
+        assert publishing_sign_in.status_code == 303
+        assert publishing_sign_in.headers["location"] == "/user"
+        assert publishing_client.get("/content").status_code == 200
+        assert publishing_client.get("/tenant-admin").status_code == 403
 
     with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
         cursor.execute(
@@ -286,11 +340,30 @@ def test_real_brand_non_product_p3_has_no_demo_tenant_context(
         username,
     )
     tenant_id = UUID(created["tenant_id"])
-    user_id = UUID(created["administrator_id"])
-    manager = TenantSession(tenant_id, user_id, "tenant-admin")
+    administrator_id = UUID(created["administrator_id"])
+    manager = TenantSession(tenant_id, administrator_id, "tenant-admin")
     repository.complete_activation(
         created["activation_token"],
         "m6-1-content-password-is-long",
+    )
+    publishing_operator = repository.create_tenant_user(
+        manager,
+        "笛语服饰内容运营",
+        f"diyu-content-operator-{suffix}",
+        None,
+        None,
+        grants_tenant_management=False,
+        grants_material_maintenance=False,
+        entry_type="tenant_user",
+    )
+    publishing_operator_id = UUID(publishing_operator["user_id"])
+    assert publishing_operator_id != administrator_id
+    assert (
+        repository.complete_activation(
+            publishing_operator["activation_token"],
+            "m6-1-operator-password-is-long",
+        )
+        == "tenant-user"
     )
 
     management_scope = repository.manager_scope(manager)
@@ -303,9 +376,11 @@ def test_real_brand_non_product_p3_has_no_demo_tenant_context(
         "抖音",
         "品牌官方 / 品牌定义者",
         "只讲已确认品牌立场和生活关系；不讲未确认商品、门店或经营事实。",
-        user_id,
+        publishing_operator_id,
     )
-    scope = repository.content_scope(TenantSession(tenant_id, user_id, "tenant-user"))
+    scope = repository.content_scope(
+        TenantSession(tenant_id, publishing_operator_id, "tenant-user")
+    )
     assert str(scope.account_id) == account["id"]
 
     guarded_service = ContentService(
@@ -381,7 +456,7 @@ def test_real_brand_non_product_p3_has_no_demo_tenant_context(
         service.fetch_version(
             TrustedScope(
                 UUID("00000000-0000-0000-0000-000000000002"),
-                user_id,
+                publishing_operator_id,
                 UUID(created["brand_id"]),
                 scope.account_id,
             ),
@@ -390,7 +465,12 @@ def test_real_brand_non_product_p3_has_no_demo_tenant_context(
         )
     with pytest.raises(DomainError):
         service.fetch_version(
-            TrustedScope(tenant_id, user_id, UUID(created["brand_id"]), uuid4()),
+            TrustedScope(
+                tenant_id,
+                publishing_operator_id,
+                UUID(created["brand_id"]),
+                uuid4(),
+            ),
             task_id,
             1,
         )

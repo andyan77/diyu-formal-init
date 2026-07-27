@@ -4,6 +4,21 @@ export type Target =
   | "xiaohongshu_graphic"
   | "wechat_channels_video";
 
+export interface PlatformTarget {
+  value: Target;
+  label: string;
+  platform_label: string;
+  format_label: string;
+}
+
+export interface PublishingIdentity {
+  id: string;
+  name: string;
+  profile_summary: string;
+  content_role: string;
+  platform_targets: PlatformTarget[];
+}
+
 export interface BootstrapContext {
   application:
     | "public"
@@ -18,7 +33,9 @@ export interface BootstrapContext {
   identity?: Record<string, string>;
   entry?: "tenant-user" | "tenant-admin" | "ops";
   current_target?: Target | null;
-  targets?: Array<{ value: Target; label: string }>;
+  targets?: PlatformTarget[];
+  publishing_identities?: PublishingIdentity[];
+  current_publishing_identity_id?: string | null;
   formal_runtime?: boolean;
   generator_mode?: "stub" | "deepseek";
   capabilities?: Array<"content" | "display">;
@@ -110,6 +127,35 @@ export interface AccountExpression {
 }
 
 export type AssistantReply = {
-  kind: "greeting" | "question" | "handoff";
+  kind: "chat" | "question" | "handoff";
   message: string;
 };
+
+export type ConversationTurn = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type GenerationStage =
+  | "received"
+  | "compiling_context"
+  | "generating"
+  | "validating"
+  | "finalizing";
+
+export type ContentStreamEvent =
+  | { event: GenerationStage }
+  | {
+      event: "conversation";
+      kind: "chat" | "question";
+      message: string;
+      conversation_id?: string | null;
+    }
+  | {
+      event: "target_conflict";
+      mentioned_target: Target;
+      label: string;
+      message?: string;
+    }
+  | { event: "completed"; result: ContentVersion; conversation_id?: string | null }
+  | { event: "failed"; message?: string };

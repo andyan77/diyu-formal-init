@@ -129,6 +129,14 @@ def _delete_test_records(
                 "DELETE FROM unmet_capability_requests WHERE tenant_id = %s AND stable_request_id = %s",
                 (TENANT_ID, stable_request_id),
             )
+        cursor.execute(
+            "DELETE FROM content_series WHERE tenant_id = %s AND created_by = %s",
+            (TENANT_ID, user_id),
+        )
+        cursor.execute(
+            "DELETE FROM activity_events WHERE tenant_id = %s AND actor_id = %s",
+            (TENANT_ID, user_id),
+        )
         cursor.execute("DELETE FROM tenant_sessions WHERE tenant_id = %s AND user_id = %s", (TENANT_ID, user_id))
         cursor.execute(
             "DELETE FROM organization_material_maintainers WHERE tenant_id = %s AND user_id = %s",
@@ -214,7 +222,20 @@ def test_ui04_production_product_seams_are_human_scoped_and_atomic(
 
             readiness = client.get("/api/v1/admin/readiness")
             assert readiness.status_code == 200, readiness.text
-            assert next(item for item in readiness.json()["items"] if item["id"] == "account_role")["state"] == "ready"
+            readiness_items = readiness.json()["items"]
+            assert [item["id"] for item in readiness_items] == [
+                "brand_expression",
+                "non_product_content",
+                "product_facts",
+                "continuous_series",
+                "platform_recompile",
+                "dm01_display",
+            ]
+            assert all(item["status"] in {"available", "conditional", "unavailable"} for item in readiness_items)
+            assert all(
+                set(item) >= {"evidence", "gaps", "impact", "action", "source", "version", "evaluated_at"}
+                for item in readiness_items
+            )
 
             refused_self_disable = client.post(f"/api/v1/tenant-management/users/{TENANT_ADMIN_USER_ID}/disable")
             assert refused_self_disable.status_code == 422
@@ -224,54 +245,59 @@ def test_ui04_production_product_seams_are_human_scoped_and_atomic(
             updated = client.patch(
                 f"/api/v1/tenant-management/users/{user_id}/grants",
                 json={
-                    "account_id": str(ACCOUNT_ID),
-                    "grants_account_access": True,
-                    "grants_tenant_management": False,
+                    "entry_type": "tenant_user",
+                    "capabilities": ["content"],
+                    "publishing_identity_ids": [str(ACCOUNT_ID)],
                     "grants_material_maintenance": True,
                     "grants_expression_profile_maintenance": True,
                 },
             )
             assert updated.status_code == 200
             assert updated.json() == {
+                "entry_type": "tenant_user",
                 "account_access": True,
+                "account_ids": [str(ACCOUNT_ID)],
                 "tenant_management": False,
+                "display_access": False,
                 "material_maintenance": True,
                 "expression_profile_maintenance": True,
             }
             assert _grant_projection(migrator_database_url, user_id) == (True, False, True, True)
             assert _enabled_root_accounts(migrator_database_url, user_id) == (ACCOUNT_ID,)
 
-            switched = client.patch(
+            expanded = client.patch(
                 f"/api/v1/tenant-management/users/{user_id}/grants",
                 json={
-                    "account_id": str(STORE_CONTENT_ACCOUNT_ID),
-                    "grants_account_access": True,
-                    "grants_tenant_management": False,
-                    "grants_material_maintenance": True,
-                    "grants_expression_profile_maintenance": False,
-                },
-            )
-            assert switched.status_code == 200
-            assert _enabled_root_accounts(migrator_database_url, user_id) == (STORE_CONTENT_ACCOUNT_ID,)
-            client.cookies.set("diyu_session", member_token)
-            assert client.get("/content").status_code == 200
-
-            client.cookies.set("diyu_session", manager_token)
-            switched_back = client.patch(
-                f"/api/v1/tenant-management/users/{user_id}/grants",
-                json={
-                    "account_id": str(ACCOUNT_ID),
-                    "grants_account_access": True,
-                    "grants_tenant_management": False,
+                    "entry_type": "tenant_user",
+                    "capabilities": ["content"],
+                    "publishing_identity_ids": [
+                        str(ACCOUNT_ID),
+                        str(STORE_CONTENT_ACCOUNT_ID),
+                    ],
                     "grants_material_maintenance": True,
                     "grants_expression_profile_maintenance": True,
                 },
             )
-            assert switched_back.status_code == 200
-            assert _enabled_root_accounts(migrator_database_url, user_id) == (ACCOUNT_ID,)
+            assert expanded.status_code == 200
+            assert expanded.json()["account_ids"] == [
+                str(ACCOUNT_ID),
+                str(STORE_CONTENT_ACCOUNT_ID),
+            ]
+            assert _enabled_root_accounts(migrator_database_url, user_id) == (
+                ACCOUNT_ID,
+                STORE_CONTENT_ACCOUNT_ID,
+            )
+            member_token = repository.create_tenant_session(
+                TenantSession(TENANT_ID, user_id, "tenant-user")
+            )
+            client.cookies.set("diyu_session", member_token)
+            without_identity = client.get("/content")
+            assert without_identity.status_code == 200
+            assert '"current_publishing_identity_id": null' in without_identity.text
+            assert str(ACCOUNT_ID) in without_identity.text
+            assert str(STORE_CONTENT_ACCOUNT_ID) in without_identity.text
 
             before_refusal = _grant_projection(migrator_database_url, user_id)
-            client.cookies.set("diyu_session", member_token)
             refused = client.patch(
                 f"/api/v1/tenant-management/users/{user_id}/grants",
                 json={
@@ -286,16 +312,35 @@ def test_ui04_production_product_seams_are_human_scoped_and_atomic(
             assert refused.headers["content-type"].startswith("application/json")
             assert _grant_projection(migrator_database_url, user_id) == before_refusal
 
-            client.cookies.set("diyu_session", member_token)
-            scoped_series = client.get("/api/v1/content/series?target=douyin_video")
+            series_query = f"publishing_identity_id={ACCOUNT_ID}"
+            created_series = client.post(
+                f"/api/v1/content/series?target=douyin_video&{series_query}",
+                json={
+                    "title": f"UI04 跨平台系列-{uuid4().hex[:8]}",
+                    "premise": "同一个逻辑发布账号在不同平台继续使用同一系列。",
+                },
+            )
+            assert created_series.status_code == 201, created_series.text
+            series_id = created_series.json()["id"]
+            scoped_series = client.get(
+                f"/api/v1/content/series?target=douyin_video&{series_query}"
+            )
             assert scoped_series.status_code == 200
-            forbidden_series = client.get("/api/v1/content/series?target=xiaohongshu_graphic")
-            assert forbidden_series.status_code == 422
-            assert forbidden_series.headers["content-type"].startswith("application/json")
-            assert "没有明确配置这个平台的发布载体" in forbidden_series.json()["detail"]
+            cross_platform_series = client.get(
+                f"/api/v1/content/series?target=xiaohongshu_graphic&{series_query}"
+            )
+            assert cross_platform_series.status_code == 200
+            assert series_id in {item["id"] for item in scoped_series.json()}
+            assert series_id in {item["id"] for item in cross_platform_series.json()}
+            other_identity_series = client.get(
+                "/api/v1/content/series"
+                f"?target=douyin_video&publishing_identity_id={STORE_CONTENT_ACCOUNT_ID}"
+            )
+            assert other_identity_series.status_code == 200
+            assert series_id not in {item["id"] for item in other_identity_series.json()}
 
             submitted = client.post(
-                "/api/v1/content/unmet-capability-requests",
+                f"/api/v1/content/unmet-capability-requests?publishing_identity_id={ACCOUNT_ID}",
                 json={"request_text": f"我想按门店当天客流自动排内容，现在做不到。{uuid4().hex[:6]}"},
             )
             assert submitted.status_code == 201

@@ -53,6 +53,12 @@ const v2 = {
     "内容概要：保留尊重沉默的判断，改成一人面对手机能自然说出的版本。\n\n标题：先让人安静看一会儿\n\n完整台词：有时候进店，就是想先看看。那就先看，不用急着把每件衣服都解释一遍。合适的衣服不会因为安静十秒就错过你。\n\n画面与动作：手机固定，创作者站在空墙前说；最后自然停一下。\n\n发布配文：先看一会儿，再决定要不要聊。",
   translation_notice: "保留了你想要的轻松感，收成克制的冷幽默，不做吵闹玩梗。"
 };
+const v3 = {
+  ...v2,
+  version_id: "v3",
+  version: 3,
+  outline: "失败后重放形成的新版本"
+};
 
 const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
   url: "http://localhost/content?target=xiaohongshu_graphic",
@@ -82,6 +88,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let bodyEnabled = false;
 let revised = false;
+let currentRevision = v1;
+let revisionFailureCount = 0;
 let copyShouldFail = false;
 const requests = [];
 const copiedTexts = [];
@@ -108,16 +116,41 @@ dom.window.__DIYU_BOOTSTRAP__ = {
   identity: {
     operator: "总部内容运营甲",
     organization: "笛语服饰管理组织",
-    account: "总部小红书发布账号",
+    account: "总部品牌内容运营",
     content_role: "品牌官方",
     brand: "笛语服饰"
   },
   current_target: "xiaohongshu_graphic",
+  current_publishing_identity_id: "identity-hq",
+  publishing_identities: [
+    {
+      id: "identity-hq",
+      name: "总部品牌内容运营",
+      content_role: "品牌官方",
+      profile_summary: "从品牌整体选择和长期表达的位置说话。",
+      platform_targets: [
+        { value: "douyin_video", label: "抖音视频", platform_label: "抖音", format_label: "视频" },
+        { value: "xiaohongshu_graphic", label: "小红书图文", platform_label: "小红书", format_label: "图文" },
+        { value: "xiaohongshu_video", label: "小红书视频", platform_label: "小红书", format_label: "视频" },
+        { value: "wechat_channels_video", label: "微信视频号", platform_label: "微信视频号", format_label: "视频" }
+      ]
+    },
+    {
+      id: "identity-store",
+      name: "柯桥门店人物",
+      content_role: "门店人物",
+      profile_summary: "从门店日常和本人可确认的观察出发。",
+      platform_targets: [
+        { value: "douyin_video", label: "抖音视频", platform_label: "抖音", format_label: "视频" },
+        { value: "xiaohongshu_graphic", label: "小红书图文", platform_label: "小红书", format_label: "图文" }
+      ]
+    }
+  ],
   targets: [
-    { value: "douyin_video", label: "抖音短视频" },
-    { value: "xiaohongshu_video", label: "小红书视频" },
-    { value: "xiaohongshu_graphic", label: "小红书图文" },
-    { value: "wechat_channels_video", label: "微信视频号视频" }
+    { value: "douyin_video", label: "抖音视频", platform_label: "抖音", format_label: "视频" },
+    { value: "xiaohongshu_video", label: "小红书视频", platform_label: "小红书", format_label: "视频" },
+    { value: "xiaohongshu_graphic", label: "小红书图文", platform_label: "小红书", format_label: "图文" },
+    { value: "wechat_channels_video", label: "微信视频号", platform_label: "微信视频号", format_label: "视频" }
   ]
 };
 
@@ -202,22 +235,72 @@ globalThis.fetch = async (input, init = {}) => {
       }
     };
   } else if (path === "/api/v1/content/tasks") payload = [];
-  else if (
-    path === "/api/v1/content" &&
-    body?.creative_direction?.custom_text === "上新直播"
-  ) {
-    ok = false;
-    status = 422;
-    payload = {
-      detail:
-        "「上新直播」目前还缺少可靠资料或直接能力，暂不能稳定完成。你的原话会留在输入框中，可以换一种方向再试。"
-    };
-  } else if (path === "/api/v1/content") payload = v1;
+  else if (path === "/api/v1/content/stream") {
+    let events;
+    if (body?.message === "你好") {
+      events = [
+        { event: "received" },
+        { event: "conversation", kind: "chat", message: "你好。今天想聊点什么？" }
+      ];
+    } else if (body?.message === "最近店里总有人只想自己看看。") {
+      events = [
+        { event: "received" },
+        { event: "compiling_context" },
+        {
+          event: "conversation",
+          kind: "question",
+          message:
+            "这个观察可以做成门店人物内容。你更想讲“沉默也应该被尊重”，还是讨论“店员什么时候适合主动介绍”？"
+        }
+      ];
+    } else if (
+      body?.message?.includes("抖音") &&
+      body?.target_conflict_resolution !== "keep_selected"
+    ) {
+      events = [
+        {
+          event: "target_conflict",
+          mentioned_target: "douyin_video",
+          label: "抖音视频"
+        }
+      ];
+    } else if (body?.message?.includes("模拟失败")) {
+      events = [
+        { event: "received" },
+        { event: "compiling_context" },
+        { event: "failed" }
+      ];
+    } else {
+      events = [
+        { event: "received" },
+        { event: "compiling_context" },
+        { event: "generating" },
+        { event: "validating" },
+        { event: "finalizing" },
+        { event: "completed", result: v1 }
+      ];
+    }
+    return new Response(`${events.map(event => JSON.stringify(event)).join("\n")}\n`, {
+      status: 200,
+      headers: { "Content-Type": "application/x-ndjson" }
+    });
+  }
   else if (path === "/api/v1/tasks/t1/revisions") {
-    revised = true;
-    payload = v2;
+    if (
+      body?.instruction?.includes("模拟修改失败") &&
+      revisionFailureCount === 0
+    ) {
+      revisionFailureCount += 1;
+      ok = false;
+      status = 503;
+      payload = { detail: "这次修改没有完成。" };
+    } else {
+      revised = true;
+      currentRevision = body?.instruction?.includes("模拟修改失败") ? v3 : v2;
+      payload = currentRevision;
+    }
   } else if (path === "/api/v1/content/tasks/t1/versions") {
-    payload = revised ? [v2, v1] : [v1];
+    payload = revised ? [currentRevision, v1] : [v1];
   } else if (path === "/api/v1/tasks/t1/versions/1") payload = v1;
   return {
     ok,

@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BrandMark } from "../components/Brand";
-import { api, transferredContent } from "../services/api";
+import {
+  api,
+  scopedContentPath,
+  streamApi,
+  transferredContent
+} from "../services/api";
 import { MaterialsPanel } from "./MaterialsPanel";
 import { SeriesPanel } from "./SeriesPanel";
 import type { SeriesSelection } from "./SeriesPanel";
@@ -10,10 +15,15 @@ import type {
   AssistantReply,
   BootstrapContext,
   CatalogAxis,
+  ContentStreamEvent,
   ContentVersion,
+  ConversationTurn,
   CreationPreference,
   ExpressionCatalog,
+  GenerationStage,
   Material,
+  PlatformTarget,
+  PublishingIdentity,
   RecentContent,
   Target
 } from "./types";
@@ -24,7 +34,79 @@ type ConversationMessage = {
   text: string;
 };
 
+type FailedAttempt = {
+  kind: "stream" | "revision";
+  instruction: string;
+};
+
 const PRIMARY_AXES = new Set(["topic", "style", "form"]);
+const STAGE_LABELS: Record<GenerationStage, string> = {
+  received: "已接收",
+  compiling_context: "已准备本次条件",
+  generating: "正在生成",
+  validating: "正在检查",
+  finalizing: "正在收尾"
+};
+
+function targetMetadata(target: Target, label?: string): PlatformTarget {
+  if (target === "xiaohongshu_graphic") {
+    return {
+      value: target,
+      label: label ?? "小红书图文",
+      platform_label: "小红书",
+      format_label: "图文"
+    };
+  }
+  if (target === "xiaohongshu_video") {
+    return {
+      value: target,
+      label: label ?? "小红书视频",
+      platform_label: "小红书",
+      format_label: "视频"
+    };
+  }
+  if (target === "wechat_channels_video") {
+    return {
+      value: target,
+      label: label ?? "微信视频号视频",
+      platform_label: "微信视频号",
+      format_label: "视频"
+    };
+  }
+  return {
+    value: target,
+    label: label ?? "抖音视频",
+    platform_label: "抖音",
+    format_label: "视频"
+  };
+}
+
+function normalizedTargets(context: BootstrapContext): PlatformTarget[] {
+  return (context.targets ?? []).map(item => ({
+    ...targetMetadata(item.value, item.label),
+    ...item
+  }));
+}
+
+function normalizedIdentities(context: BootstrapContext): PublishingIdentity[] {
+  if (context.publishing_identities?.length) return context.publishing_identities;
+  const identity = context.identity ?? {};
+  return [
+    {
+      id: identity.publishing_identity_id ?? identity.account_id ?? "current",
+      name: identity.account ?? "当前发布账号",
+      content_role: identity.content_role ?? "当前表达身份",
+      profile_summary: identity.profile_summary ?? "沿用当前账号画像",
+      platform_targets: normalizedTargets(context)
+    }
+  ];
+}
+
+function contentLocation(identityId: string, target?: Target): string {
+  const query = new URLSearchParams({ publishing_identity_id: identityId });
+  if (target) query.set("target", target);
+  return `/content?${query.toString()}`;
+}
 
 function targetOf(version: ContentVersion, fallback: Target): Target {
   return version.target_key ?? version.target ?? fallback;
@@ -62,7 +144,9 @@ function DirectionAxis({
   saved,
   cleared,
   onChoose,
-  onClear
+  onClear,
+  customValue,
+  onCustom
 }: {
   axis: CatalogAxis;
   selection?: string;
@@ -70,8 +154,22 @@ function DirectionAxis({
   cleared: boolean;
   onChoose: (value: string) => void;
   onClear: () => void;
+  customValue?: string;
+  onCustom: (value: string) => void;
 }): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const [search, setSearch] = useState("");
   const savedLabel = axis.options.find(option => option.stable_id === saved)?.label;
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const matching = normalizedSearch
+    ? axis.options.filter(option =>
+        option.label.toLocaleLowerCase().includes(normalizedSearch)
+      )
+    : axis.options;
+  const visible = expanded ? matching : matching.slice(0, 4);
+  const canKeepCustom =
+    Boolean(search.trim()) &&
+    !axis.options.some(option => option.label === search.trim());
   return (
     <fieldset className="direction-axis">
       <legend>
@@ -79,7 +177,7 @@ function DirectionAxis({
         <small>{axis.question}</small>
       </legend>
       <div className="direction-options">
-        {axis.options.map(option => {
+        {visible.map(option => {
           const selected = selection === option.stable_id;
           const inherited = !selection && !cleared && saved === option.stable_id;
           return (
@@ -105,7 +203,33 @@ function DirectionAxis({
             本次不使用{savedLabel ? `「${savedLabel}」` : ""}
           </button>
         )}
+        {(axis.options.length > 4 || expanded) && (
+          <button
+            type="button"
+            className="quiet-choice"
+            aria-expanded={expanded}
+            onClick={() => setExpanded(value => !value)}
+          >
+            {expanded ? "收起" : "更多 / 搜索"}
+          </button>
+        )}
       </div>
+      {expanded && (
+        <div className="axis-search">
+          <input
+            type="search"
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            placeholder={`搜索或输入更多${axis.label}`}
+          />
+          {canKeepCustom && (
+            <button type="button" onClick={() => onCustom(search.trim())}>
+              保留“{search.trim()}”作为本次要求
+            </button>
+          )}
+          {customValue && <small>本次保留：{customValue}</small>}
+        </div>
+      )}
     </fieldset>
   );
 }
@@ -115,11 +239,13 @@ function DirectionPanel({
   selections,
   clearedAxes,
   customText,
+  customAxes,
   materials,
   materialIds,
   onSelections,
   onClearedAxes,
   onCustomText,
+  onCustomAxes,
   onMaterialIds,
   onSaveDefaults,
   saving
@@ -128,11 +254,13 @@ function DirectionPanel({
   selections: Record<string, string>;
   clearedAxes: string[];
   customText: string;
+  customAxes: Record<string, string>;
   materials: Material[];
   materialIds: string[];
   onSelections: (value: Record<string, string>) => void;
   onClearedAxes: (value: string[]) => void;
   onCustomText: (value: string) => void;
+  onCustomAxes: (value: Record<string, string>) => void;
   onMaterialIds: (value: string[]) => void;
   onSaveDefaults: () => void;
   saving: boolean;
@@ -153,6 +281,11 @@ function DirectionPanel({
       onChoose={value => {
         onSelections({ ...selections, [axis.key]: value });
         onClearedAxes(clearedAxes.filter(item => item !== axis.key));
+        if (customAxes[axis.key]) {
+          const next = { ...customAxes };
+          delete next[axis.key];
+          onCustomAxes(next);
+        }
       }}
       onClear={() => {
         const next = { ...selections };
@@ -164,24 +297,32 @@ function DirectionPanel({
             : [...clearedAxes, axis.key]
         );
       }}
+      customValue={customAxes[axis.key]}
+      onCustom={value => {
+        const nextSelections = { ...selections };
+        delete nextSelections[axis.key];
+        onSelections(nextSelections);
+        onClearedAxes(clearedAxes.filter(item => item !== axis.key));
+        onCustomAxes({ ...customAxes, [axis.key]: value });
+      }}
     />
   );
   return (
     <div className="direction-content">
       {primary.map(renderAxis)}
       <button className="text-action" type="button" onClick={() => setMore(value => !value)}>
-        {more ? "收起更多" : "更多：讲法与连续方式"}
+        {more ? "收起更多" : "更多：讲法与系列互动"}
       </button>
       {more && <div className="more-directions">{secondary.map(renderAxis)}</div>}
       <label className="custom-direction">
-        没有合适的？直接说你想要的方向。
+        还有其他要求？直接用自己的话说。
         <input
           value={customText}
           onChange={event => onCustomText(event.target.value)}
           maxLength={500}
           placeholder="例如：像给熟悉的朋友解释，不用口号。"
         />
-        <small>你的原话会随本次任务保留，不会被悄悄换成相近选项。</small>
+        <small>人物关系和你的原话会随本次任务保留，不会被悄悄换成相近选项。</small>
       </label>
       {materials.length > 0 && (
         <fieldset className="material-options">
@@ -232,12 +373,16 @@ function DirectionPanel({
 
 function AccountDrawer({
   context,
+  publishingIdentity,
+  preferencePath,
   preference,
   profile,
   onClose,
   onPreference
 }: {
   context: BootstrapContext;
+  publishingIdentity: PublishingIdentity;
+  preferencePath: string;
   preference: CreationPreference | null;
   profile: AccountExpression | null;
   onClose: () => void;
@@ -281,7 +426,7 @@ function AccountDrawer({
     setSaving(true);
     setError("");
     try {
-      const next = await api<CreationPreference>("/api/v1/user/creation-preferences", {
+      const next = await api<CreationPreference>(preferencePath, {
         method: "PUT",
         body: JSON.stringify({
           enabled: preference.enabled,
@@ -313,7 +458,7 @@ function AccountDrawer({
         <header>
           <div>
             <p className="eyebrow">当前发布身份</p>
-            <h2 id="account-drawer-title">{identity.account ?? "当前发布账号"}</h2>
+            <h2 id="account-drawer-title">{publishingIdentity.name}</h2>
           </div>
           <button
             ref={closeRef}
@@ -328,13 +473,14 @@ function AccountDrawer({
         <dl className="identity-details">
           <div>
             <dt>表达身份</dt>
-            <dd>{identity.content_role ?? "—"}</dd>
+            <dd>{publishingIdentity.content_role || identity.content_role || "—"}</dd>
           </div>
           <div>
             <dt>负责团队</dt>
             <dd>{identity.organization ?? "—"}</dd>
           </div>
         </dl>
+        <p className="profile-one-line">{publishingIdentity.profile_summary}</p>
         {profile?.current && (
           <section className="profile-summary">
             <h3>账号定位 · V{profile.current.version}</h3>
@@ -472,8 +618,40 @@ export default function CreatorApp({
 }: {
   context: BootstrapContext;
 }): JSX.Element {
+  const publishingIdentities = normalizedIdentities(context);
+  const currentPublishingIdentityId =
+    context.current_publishing_identity_id ??
+    (publishingIdentities.length === 1 ? publishingIdentities[0]?.id : null) ??
+    "";
+  const resolvedPublishingIdentity = publishingIdentities.find(
+    item => item.id === currentPublishingIdentityId
+  );
+  const currentPublishingIdentity = resolvedPublishingIdentity ?? {
+    id: "",
+    name: "请选择发布账号",
+    profile_summary: "选择后会显示这个账号的表达位置。",
+    content_role: "尚未选择",
+    platform_targets: [] as PlatformTarget[]
+  };
+  const hasResolvedIdentity = Boolean(resolvedPublishingIdentity);
+  const availableTargets =
+    currentPublishingIdentity.platform_targets.map(item => ({
+      ...targetMetadata(item.value, item.label),
+      ...item
+    }));
   const currentTarget =
-    context.current_target ?? context.targets?.[0]?.value ?? "douyin_video";
+    availableTargets.some(item => item.value === context.current_target)
+      ? (context.current_target as Target)
+      : availableTargets[0]?.value ?? "douyin_video";
+  const currentTargetMetadata =
+    availableTargets.find(item => item.value === currentTarget) ??
+    targetMetadata(currentTarget);
+  const platformLabels = Array.from(
+    new Set(availableTargets.map(item => item.platform_label))
+  );
+  const formatTargets = availableTargets.filter(
+    item => item.platform_label === currentTargetMetadata.platform_label
+  );
   const [catalog, setCatalog] = useState<ExpressionCatalog | null>(null);
   const [preference, setPreference] = useState<CreationPreference | null>(null);
   const [profile, setProfile] = useState<AccountExpression | null>(null);
@@ -484,6 +662,7 @@ export default function CreatorApp({
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [clearedAxes, setClearedAxes] = useState<string[]>([]);
   const [customText, setCustomText] = useState("");
+  const [customAxes, setCustomAxes] = useState<Record<string, string>>({});
   const [materialIds, setMaterialIds] = useState<string[]>([]);
   const [directionsOpen, setDirectionsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -494,26 +673,38 @@ export default function CreatorApp({
   const [viewed, setViewed] = useState<ContentVersion | null>(null);
   const [versions, setVersions] = useState<ContentVersion[]>([]);
   const [pending, setPending] = useState(false);
+  const [stages, setStages] = useState<GenerationStage[]>([]);
+  const [targetConflict, setTargetConflict] = useState<{
+    target: Target;
+    label: string;
+    instruction: string;
+  } | null>(null);
+  const [generationFailed, setGenerationFailed] = useState(false);
+  const [lastFailedAttempt, setLastFailedAttempt] =
+    useState<FailedAttempt | null>(null);
   const [savingDefaults, setSavingDefaults] = useState(false);
   const [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
   const identityTriggerRef = useRef<HTMLButtonElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const identity = context.identity ?? {};
-  const targetLabel =
-    context.targets?.find(item => item.value === currentTarget)?.label ?? "当前平台";
+  const targetLabel = currentTargetMetadata.label;
   const bodyOptIn = preference?.body_related_opt_in ?? false;
+  const scope = (path: string): string =>
+    scopedContentPath(path, currentPublishingIdentityId, currentTarget);
 
   const loadWorkspace = async (): Promise<void> => {
+    if (!hasResolvedIdentity) return;
     setLoadError("");
     try {
       const [catalogValue, preferenceValue, materialValue, profileValue] =
         await Promise.all([
-          api<ExpressionCatalog>("/api/v1/content/expression-catalog"),
-          api<CreationPreference>("/api/v1/user/creation-preferences"),
-          api<Material[]>("/api/v1/materials"),
+          api<ExpressionCatalog>(scope("/api/v1/content/expression-catalog")),
+          api<CreationPreference>(scope("/api/v1/user/creation-preferences")),
+          api<Material[]>(scope("/api/v1/materials")),
           api<AccountExpression>(
-            `/api/v1/content/account-expression-profile?target=${encodeURIComponent(currentTarget)}`
+            scope("/api/v1/content/account-expression-profile")
           )
         ]);
       setCatalog(catalogValue);
@@ -521,7 +712,7 @@ export default function CreatorApp({
       setMaterials(materialValue);
       setProfile(profileValue);
       const currentRecent = await api<RecentContent[]>(
-        `/api/v1/content/tasks?target=${currentTarget}`
+        scope("/api/v1/content/tasks")
       );
       setRecent(
         currentRecent
@@ -540,8 +731,25 @@ export default function CreatorApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+    },
+    []
+  );
+
+  useEffect(() => {
+    const draft = window.sessionStorage.getItem("diyu-content-draft");
+    if (draft) {
+      setSeed(draft);
+      window.sessionStorage.removeItem("diyu-content-draft");
+    }
+  }, []);
+
   const reloadCatalog = async (): Promise<void> => {
-    const value = await api<ExpressionCatalog>("/api/v1/content/expression-catalog");
+    const value = await api<ExpressionCatalog>(
+      scope("/api/v1/content/expression-catalog")
+    );
     setCatalog(value);
   };
 
@@ -550,9 +758,14 @@ export default function CreatorApp({
     setSelections({});
     setClearedAxes([]);
     setCustomText("");
+    setCustomAxes({});
     setMaterialIds([]);
     setSeriesSelection(null);
     setDirectionsOpen(false);
+    setStages([]);
+    setTargetConflict(null);
+    setGenerationFailed(false);
+    setLastFailedAttempt(null);
   };
 
   const loadVersions = async (artifact: ContentVersion): Promise<void> => {
@@ -560,7 +773,7 @@ export default function CreatorApp({
       throw new Error("这份成品属于另一个平台，请先切换平台再打开。");
     }
     const values = await api<ContentVersion[]>(
-      `/api/v1/content/tasks/${artifact.task_id}/versions?target=${currentTarget}`
+      scope(`/api/v1/content/tasks/${artifact.task_id}/versions`)
     );
     setVersions(values);
   };
@@ -568,14 +781,14 @@ export default function CreatorApp({
   const openRecent = async (item: RecentContent): Promise<void> => {
     const target = item.target ?? currentTarget;
     if (target !== currentTarget) {
-      window.location.assign(`/content?target=${target}`);
+      window.location.assign(contentLocation(currentPublishingIdentityId, target));
       return;
     }
     setPending(true);
     setNotice("");
     try {
       const value = await api<ContentVersion>(
-        `/api/v1/tasks/${item.task_id}/versions/${item.version}?target=${currentTarget}`
+        scope(`/api/v1/tasks/${item.task_id}/versions/${item.version}`)
       );
       clearOneTimeControls();
       setMessages([]);
@@ -595,7 +808,7 @@ export default function CreatorApp({
     setNotice("");
     try {
       const values = await api<ContentVersion[]>(
-        `/api/v1/content/tasks/${taskId}/versions?target=${currentTarget}`
+        scope(`/api/v1/content/tasks/${taskId}/versions`)
       );
       const latest = values
         .slice()
@@ -615,102 +828,214 @@ export default function CreatorApp({
     }
   };
 
+  const creativeCustomText = (): string =>
+    [
+      ...Object.entries(customAxes).map(([axisKey, value]) => {
+        const label = catalog?.axes.find(axis => axis.key === axisKey)?.label ?? axisKey;
+        return `${label}：${value}`;
+      }),
+      customText.trim()
+    ]
+      .filter(Boolean)
+      .join("；");
+
+  const conversationTurns = (
+    source: ConversationMessage[]
+  ): ConversationTurn[] =>
+    source.map(message => ({
+      role: message.speaker,
+      content: message.text
+    }));
+
+  const appendAssistant = (text: string): void => {
+    setMessages(value => [
+      ...value,
+      { id: Date.now() + value.length, speaker: "assistant", text }
+    ]);
+  };
+
+  const runCreationStream = async (
+    instruction: string,
+    appendUser: boolean,
+    targetConflictResolution?: "keep_selected"
+  ): Promise<void> => {
+    if (pending) return;
+    const priorMessages =
+      !appendUser &&
+      messages.at(-1)?.speaker === "user" &&
+      messages.at(-1)?.text === instruction
+        ? messages.slice(0, -1)
+        : messages;
+    const nextConversation = conversationTurns(priorMessages);
+    if (appendUser) {
+      setMessages(value => [
+        ...value,
+        { id: Date.now(), speaker: "user", text: instruction }
+      ]);
+    }
+    setPending(true);
+    setNotice("");
+    setGenerationFailed(false);
+    setLastFailedAttempt(null);
+    setTargetConflict(null);
+    setStages([]);
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    let terminal = false;
+    try {
+      for await (const streamEvent of streamApi<ContentStreamEvent>(
+        "/api/v1/content/stream",
+        {
+          message: instruction,
+          conversation: nextConversation,
+          publishing_identity_id: currentPublishingIdentityId,
+          target: currentTarget,
+          target_conflict_resolution: targetConflictResolution,
+          creative_direction: {
+            catalog_version: catalog?.catalog_version ?? null,
+            selections,
+            cleared_axes: clearedAxes,
+            custom_text: creativeCustomText(),
+            body_related_opt_in: catalog?.body_related_enabled ?? false
+          },
+          use_personal_preferences: true,
+          material_ids: materialIds,
+          series_id: seriesSelection?.seriesId ?? null,
+          series_position: seriesSelection?.position ?? null
+        },
+        controller.signal
+      )) {
+        if (streamEvent.event in STAGE_LABELS) {
+          const stage = streamEvent.event as GenerationStage;
+          setStages(value => (value.includes(stage) ? value : [...value, stage]));
+          continue;
+        }
+        if (streamEvent.event === "conversation") {
+          appendAssistant(streamEvent.message);
+          setSeed("");
+          setDirectionsOpen(false);
+          setLastFailedAttempt(null);
+          terminal = true;
+          continue;
+        }
+        if (streamEvent.event === "target_conflict") {
+          setTargetConflict({
+            target: streamEvent.mentioned_target,
+            label: streamEvent.label,
+            instruction
+          });
+          setLastFailedAttempt(null);
+          terminal = true;
+          continue;
+        }
+        if (streamEvent.event === "completed") {
+          setCurrent(streamEvent.result);
+          setViewed(streamEvent.result);
+          await loadVersions(streamEvent.result);
+          appendAssistant(
+            "第一版已经整理好。你可以直接阅读，也可以继续告诉我哪里要变。"
+          );
+          setSeed("");
+          setDirectionsOpen(false);
+          setMobileView("artifact");
+          setLastFailedAttempt(null);
+          terminal = true;
+          continue;
+        }
+        if (streamEvent.event === "failed") {
+          setGenerationFailed(true);
+          setLastFailedAttempt({ kind: "stream", instruction });
+          terminal = true;
+        }
+      }
+      if (!terminal) {
+        setGenerationFailed(true);
+        setLastFailedAttempt({ kind: "stream", instruction });
+      }
+    } catch (reason) {
+      if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+        setGenerationFailed(true);
+        setLastFailedAttempt({ kind: "stream", instruction });
+      }
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+      setPending(false);
+    }
+  };
+
+  const runRevision = async (
+    instruction: string,
+    appendUser: boolean
+  ): Promise<void> => {
+    if (!current || pending) return;
+    setPending(true);
+    setNotice("");
+    setGenerationFailed(false);
+    setLastFailedAttempt(null);
+    if (appendUser) {
+      setMessages(value => [
+        ...value,
+        { id: Date.now(), speaker: "user", text: instruction }
+      ]);
+    }
+    try {
+      const payload = await api<ContentVersion | AssistantReply>(
+        scope(`/api/v1/tasks/${current.task_id}/revisions`),
+        {
+          method: "POST",
+          body: JSON.stringify({
+            instruction,
+            publishing_identity_id: currentPublishingIdentityId,
+            target: currentTarget,
+            source_target: currentTarget
+          })
+        }
+      );
+      if (!("task_id" in payload)) {
+        appendAssistant(payload.message);
+      } else {
+        setCurrent(payload);
+        setViewed(payload);
+        await loadVersions(payload);
+        appendAssistant(
+          `已经按你的话改成 V${payload.version}，上一版完整保留。`
+        );
+        setMobileView("artifact");
+      }
+      setSeed("");
+      setDirectionsOpen(false);
+      setLastFailedAttempt(null);
+    } catch {
+      setGenerationFailed(true);
+      setLastFailedAttempt({ kind: "revision", instruction });
+    } finally {
+      setPending(false);
+    }
+  };
+
   const submit = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     const instruction = seed.trim();
     if (!instruction || pending) return;
-    if (current && targetOf(current, currentTarget) !== currentTarget) {
-      window.location.assign(`/content?target=${targetOf(current, currentTarget)}`);
+    if (!hasResolvedIdentity) {
+      setNotice("请先选择一个发布账号。");
       return;
     }
-    setPending(true);
-    setNotice("");
-    setMessages(value => [
-      ...value,
-      { id: Date.now(), speaker: "user", text: instruction }
-    ]);
-    try {
-      if (current) {
-        const payload = await api<ContentVersion | AssistantReply>(
-          `/api/v1/tasks/${current.task_id}/revisions`,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              instruction,
-              target: currentTarget,
-              source_target: currentTarget
-            })
-          }
-        );
-        if (!("task_id" in payload)) {
-          setMessages(value => [
-            ...value,
-            { id: Date.now() + 1, speaker: "assistant", text: payload.message }
-          ]);
-        } else {
-          setCurrent(payload);
-          setViewed(payload);
-          await loadVersions(payload);
-          setMessages(value => [
-            ...value,
-            {
-              id: Date.now() + 1,
-              speaker: "assistant",
-              text: `已经按你的话改成 V${payload.version}，上一版完整保留。`
-            }
-          ]);
-          setMobileView("artifact");
-        }
-      } else {
-        const payload = await api<ContentVersion | AssistantReply>("/api/v1/content", {
-          method: "POST",
-          body: JSON.stringify({
-            weak_seed: instruction,
-            target: currentTarget,
-            creative_direction: {
-              catalog_version: catalog?.catalog_version ?? null,
-              selections,
-              cleared_axes: clearedAxes,
-              custom_text: customText.trim(),
-              body_related_opt_in: catalog?.body_related_enabled ?? false
-            },
-            use_personal_preferences: true,
-            material_ids: materialIds,
-            series_id: seriesSelection?.seriesId ?? null,
-            series_position: seriesSelection?.position ?? null
-          })
-        });
-        if (!("task_id" in payload)) {
-          setMessages(value => [
-            ...value,
-            { id: Date.now() + 1, speaker: "assistant", text: payload.message }
-          ]);
-        } else {
-          setCurrent(payload);
-          setViewed(payload);
-          await loadVersions(payload);
-          setMessages(value => [
-            ...value,
-            {
-              id: Date.now() + 1,
-              speaker: "assistant",
-              text: "第一版已经整理好。你可以直接阅读，也可以继续告诉我哪里要变。"
-            }
-          ]);
-          setMobileView("artifact");
-        }
-      }
-      setSeed("");
-      setDirectionsOpen(false);
-    } catch (reason) {
-      setNotice(
-        reason instanceof Error
-          ? reason.message
-          : "这次没有生成内容，你的输入仍然保留。"
+    if (current && targetOf(current, currentTarget) !== currentTarget) {
+      window.location.assign(
+        contentLocation(
+          currentPublishingIdentityId,
+          targetOf(current, currentTarget)
+        )
       );
-    } finally {
-      setPending(false);
+      return;
     }
+    if (!current) {
+      await runCreationStream(instruction, true);
+      return;
+    }
+    await runRevision(instruction, true);
   };
 
   const saveDefaults = async (): Promise<void> => {
@@ -721,7 +1046,9 @@ export default function CreatorApp({
     setSavingDefaults(true);
     setNotice("");
     try {
-      const value = await api<CreationPreference>("/api/v1/user/creation-preferences", {
+      const value = await api<CreationPreference>(
+        scope("/api/v1/user/creation-preferences"),
+        {
         method: "PUT",
         body: JSON.stringify({
           enabled: true,
@@ -730,7 +1057,8 @@ export default function CreatorApp({
           collaboration_note: preference.collaboration_note,
           body_related_opt_in: preference.body_related_opt_in
         })
-      });
+        }
+      );
       setPreference(value);
       await reloadCatalog();
       setNotice("已经保存为你的默认方向；只会在你没有提出本次方向时使用。");
@@ -759,12 +1087,14 @@ export default function CreatorApp({
     if (!catalog) return "";
     const labels = catalog.axes.flatMap(axis => {
       if (clearedAxes.includes(axis.key)) return [`${axis.label}：本次不使用`];
+      if (customAxes[axis.key]) return [`${axis.label}：${customAxes[axis.key]}`];
       const stableId = selections[axis.key] ?? catalog.saved_defaults[axis.key];
       const option = axis.options.find(item => item.stable_id === stableId);
       return option ? [`${axis.label}：${option.label}`] : [];
     });
+    if (customText.trim()) labels.push(`补充：${customText.trim()}`);
     return labels.length ? labels.join(" · ") : "这次不预设方向";
-  }, [catalog, clearedAxes, selections]);
+  }, [catalog, clearedAxes, customAxes, customText, selections]);
 
   return (
     <div className={`creator-app ${current ? "has-artifact" : "empty-creator"}`}>
@@ -772,32 +1102,83 @@ export default function CreatorApp({
         <a className="creator-brand" href="/user">
           <BrandMark compact />
         </a>
-        <button
-          ref={identityTriggerRef}
-          className="identity-trigger"
-          type="button"
-          onClick={() => setAccountOpen(true)}
-        >
-          <strong>{identity.account ?? "当前发布账号"}</strong>
-          <span>
-            {identity.content_role ?? "当前表达身份"} · {targetLabel}
-          </span>
-        </button>
-        <label className="target-switch">
-          <span className="sr-only">切换平台版本</span>
-          <select
-            value={currentTarget}
-            onChange={event => {
-              window.location.assign(`/content?target=${event.target.value}`);
-            }}
+        <div className="creator-identity-controls">
+          <label>
+            <span>发布账号</span>
+            <select
+              aria-label="发布账号"
+              value={currentPublishingIdentityId}
+              onChange={event => {
+                window.location.assign(contentLocation(event.target.value));
+              }}
+            >
+              {!hasResolvedIdentity && <option value="">请选择发布账号</option>}
+              {publishingIdentities.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            ref={identityTriggerRef}
+            className="identity-trigger"
+            type="button"
+            disabled={!hasResolvedIdentity}
+            onClick={() => setAccountOpen(true)}
           >
-            {(context.targets ?? []).map(item => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            <strong>{currentPublishingIdentity.content_role}</strong>
+            <span>{currentPublishingIdentity.profile_summary}</span>
+          </button>
+        </div>
+        <div className="creator-target-controls">
+          <label>
+            <span>平台</span>
+            <select
+              aria-label="平台"
+              value={currentTargetMetadata.platform_label}
+              disabled={!hasResolvedIdentity}
+              onChange={event => {
+                const next = availableTargets.find(
+                  item => item.platform_label === event.target.value
+                );
+                if (next) {
+                  window.location.assign(
+                    contentLocation(currentPublishingIdentityId, next.value)
+                  );
+                }
+              }}
+            >
+              {platformLabels.map(platform => (
+                <option key={platform} value={platform}>
+                  {platform}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>内容形式</span>
+            <select
+              aria-label="内容形式"
+              value={currentTarget}
+              disabled={!hasResolvedIdentity}
+              onChange={event => {
+                window.location.assign(
+                  contentLocation(
+                    currentPublishingIdentityId,
+                    event.target.value as Target
+                  )
+                );
+              }}
+            >
+              {formatTargets.map(item => (
+                <option key={item.value} value={item.value}>
+                  {item.format_label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </header>
 
       <aside className="creator-history">
@@ -805,11 +1186,19 @@ export default function CreatorApp({
           ＋ 新创作
         </button>
         <div className="creator-tools" aria-label="创作资料">
-          <button type="button" onClick={() => setToolOpen("series")}>
+          <button
+            type="button"
+            disabled={!hasResolvedIdentity}
+            onClick={() => setToolOpen("series")}
+          >
             <span>连续系列</span>
             <small>{seriesSelection ? "本次已选择" : "创建、继续与编排"}</small>
           </button>
-          <button type="button" onClick={() => setToolOpen("materials")}>
+          <button
+            type="button"
+            disabled={!hasResolvedIdentity}
+            onClick={() => setToolOpen("materials")}
+          >
             <span>我的素材</span>
             <small>{materialIds.length ? `本次参考 ${materialIds.length} 份` : "管理与选择"}</small>
           </button>
@@ -840,8 +1229,12 @@ export default function CreatorApp({
           {messages.length === 0 ? (
             <div className="creator-welcome">
               <p className="eyebrow">{targetLabel}</p>
-              <h1>今天想说什么？</h1>
-              <p>写一句想法就可以，其他的交给笛语。</p>
+              <h1>{hasResolvedIdentity ? "今天想说什么？" : "先选择发布账号"}</h1>
+              <p>
+                {hasResolvedIdentity
+                  ? "写一句想法就可以，其他的交给笛语。"
+                  : "选择后再决定平台和内容形式。"}
+              </p>
             </div>
           ) : (
             messages.map(message => (
@@ -850,6 +1243,91 @@ export default function CreatorApp({
                 <p>{message.text}</p>
               </article>
             ))
+          )}
+          {pending && stages.length > 0 && (
+            <div className="generation-progress" role="status" aria-live="polite">
+              <span className="progress-pulse" aria-hidden="true" />
+              <div>
+                <strong>{STAGE_LABELS[stages.at(-1) ?? "received"]}</strong>
+                <small>{targetLabel} · 完整成品会在检查完成后一次呈现</small>
+              </div>
+            </div>
+          )}
+          {targetConflict && (
+            <div className="target-conflict" role="status">
+              <p>
+                你提到了{targetConflict.label}，但页面当前选的是{targetLabel}。这次想用哪个？
+              </p>
+              <div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void runCreationStream(
+                      targetConflict.instruction,
+                      false,
+                      "keep_selected"
+                    )
+                  }
+                >
+                  继续使用{targetLabel}
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    window.sessionStorage.setItem(
+                      "diyu-content-draft",
+                      targetConflict.instruction
+                    );
+                    window.location.assign(
+                      contentLocation(
+                        currentPublishingIdentityId,
+                        targetConflict.target
+                      )
+                    );
+                  }}
+                >
+                  切换到{targetConflict.label}
+                </button>
+              </div>
+            </div>
+          )}
+          {generationFailed && (
+            <div className="generation-failure" role="alert">
+              <p>
+                这次还没能整理成一份可靠的成品。你的想法仍然保留，可以直接再试一次，也可以告诉我最想保留哪部分。
+              </p>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGenerationFailed(false);
+                    setLastFailedAttempt(null);
+                    composerRef.current?.focus();
+                  }}
+                >
+                  继续补充
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!lastFailedAttempt || pending}
+                  onClick={() => {
+                    if (!lastFailedAttempt) return;
+                    if (lastFailedAttempt.kind === "stream") {
+                      void runCreationStream(
+                        lastFailedAttempt.instruction,
+                        false
+                      );
+                    } else {
+                      void runRevision(lastFailedAttempt.instruction, false);
+                    }
+                  }}
+                >
+                  再试一次
+                </button>
+              </div>
+            </div>
           )}
           {loadError && (
             <div className="inline-error" role="alert">
@@ -871,6 +1349,7 @@ export default function CreatorApp({
 
         <form className="creator-composer" onSubmit={event => void submit(event)}>
           <textarea
+            ref={composerRef}
             aria-label={current ? "修改要求" : "内容需求"}
             value={seed}
             onChange={event => setSeed(event.target.value)}
@@ -878,16 +1357,26 @@ export default function CreatorApp({
             placeholder={
               current
                 ? `告诉我 V${current.version} 哪些地方要变，其他内容会保留。`
-                : "例如：想讲讲进门后只想自己看看，沉默也应该被尊重。"
+                : hasResolvedIdentity
+                  ? "例如：想讲讲进门后只想自己看看，沉默也应该被尊重。"
+                  : "请先在顶部选择发布账号。"
             }
           />
           {!current && (
             <>
               <div className="composer-resource-actions" aria-label="创作资料">
-                <button type="button" onClick={() => setToolOpen("series")}>
+                <button
+                  type="button"
+                  disabled={!hasResolvedIdentity}
+                  onClick={() => setToolOpen("series")}
+                >
                   {seriesSelection ? "连续系列 · 已选择" : "连续系列"}
                 </button>
-                <button type="button" onClick={() => setToolOpen("materials")}>
+                <button
+                  type="button"
+                  disabled={!hasResolvedIdentity}
+                  onClick={() => setToolOpen("materials")}
+                >
                   {materialIds.length ? `素材 · ${materialIds.length} 份` : "素材"}
                 </button>
               </div>
@@ -905,6 +1394,7 @@ export default function CreatorApp({
               <button
                 className="direction-toggle"
                 type="button"
+                disabled={!hasResolvedIdentity}
                 aria-expanded={directionsOpen}
                 onClick={() => setDirectionsOpen(value => !value)}
               >
@@ -917,11 +1407,13 @@ export default function CreatorApp({
                   selections={selections}
                   clearedAxes={clearedAxes}
                   customText={customText}
+                  customAxes={customAxes}
                   materials={materials}
                   materialIds={materialIds}
                   onSelections={setSelections}
                   onClearedAxes={setClearedAxes}
                   onCustomText={setCustomText}
+                  onCustomAxes={setCustomAxes}
                   onMaterialIds={setMaterialIds}
                   onSaveDefaults={() => void saveDefaults()}
                   saving={savingDefaults}
@@ -935,9 +1427,15 @@ export default function CreatorApp({
                 另起一条
               </button>
             )}
-            <button className="primary" type="submit" disabled={!seed.trim() || pending}>
-              {pending ? "正在整理……" : current ? `生成 V${current.version + 1}` : "生成内容"}
-            </button>
+            {!targetConflict && !generationFailed && (
+              <button className="primary" type="submit" disabled={!seed.trim() || pending}>
+                {pending
+                  ? STAGE_LABELS[stages.at(-1) ?? "received"]
+                  : current
+                    ? `生成 V${current.version + 1}`
+                    : "发送"}
+              </button>
+            )}
           </div>
         </form>
       </main>
@@ -975,6 +1473,8 @@ export default function CreatorApp({
       {accountOpen && (
         <AccountDrawer
           context={context}
+          publishingIdentity={currentPublishingIdentity}
+          preferencePath={scope("/api/v1/user/creation-preferences")}
           preference={preference}
           profile={profile}
           onClose={() => {
@@ -1015,6 +1515,7 @@ export default function CreatorApp({
               <SeriesPanel
                 selected={seriesSelection}
                 onSelect={setSeriesSelection}
+                publishingIdentityId={currentPublishingIdentityId}
                 target={currentTarget}
                 onOpenTask={taskId => void openSeriesTask(taskId)}
                 onContinue={value => {
@@ -1027,6 +1528,8 @@ export default function CreatorApp({
               <MaterialsPanel
                 selectedIds={materialIds}
                 onSelectedIdsChange={setMaterialIds}
+                publishingIdentityId={currentPublishingIdentityId}
+                target={currentTarget}
               />
             )}
           </aside>

@@ -31,12 +31,37 @@ class WorkbenchRepository(ABC):
     def management_accounts(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
 
     @abstractmethod
+    def team_usage(
+        self,
+        scope: TenantManagementScope,
+        window_days: int,
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
     def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
 
     @abstractmethod
-    def management_organization_materials(
-        self, scope: TenantManagementScope
+    def management_organization_materials(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def brand_library_entries(
+        self,
+        scope: TenantManagementScope,
     ) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def create_brand_library_entry(
+        self,
+        scope: TenantManagementScope,
+        category: str,
+        title: str,
+        source_note: str,
+        content: str,
+        version: str,
+        status: str,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+    ) -> dict[str, object]: ...
 
     @abstractmethod
     def create_management_organization_material(
@@ -51,6 +76,8 @@ class WorkbenchRepository(ABC):
         original_filename: str,
         checksum_sha256: str,
         reference_note: str,
+        visibility_scope: str = "organizations",
+        organization_ids: tuple[UUID, ...] = (),
     ) -> dict[str, object]: ...
 
     @abstractmethod
@@ -68,9 +95,7 @@ class WorkbenchRepository(ABC):
     ) -> None: ...
 
     @abstractmethod
-    def management_demo_content_index(
-        self, scope: TenantManagementScope
-    ) -> dict[str, object]: ...
+    def management_demo_content_index(self, scope: TenantManagementScope) -> dict[str, object]: ...
 
     @abstractmethod
     def save_management_product(
@@ -82,6 +107,8 @@ class WorkbenchRepository(ABC):
         source_kind: str,
         source_note: str,
         applicability: str,
+        visibility_scope: str = "brand_all",
+        organization_ids: tuple[UUID, ...] = (),
     ) -> dict[str, object]: ...
 
     @abstractmethod
@@ -96,6 +123,7 @@ class WorkbenchRepository(ABC):
         control_organization_id: UUID | None = None,
         operator_can_maintain_expression_profile: bool = False,
         business_data_kind: str = "formal_business_data",
+        initial_profile: dict[str, str] | None = None,
     ) -> dict[str, object]: ...
 
     @abstractmethod
@@ -137,7 +165,7 @@ class WorkbenchRepository(ABC):
     def display_versions(self, scope: DisplayScope, task_id: UUID) -> list[dict[str, object]]: ...
 
     @abstractmethod
-    def readiness(self, scope: TenantManagementScope) -> list[dict[str, str]]: ...
+    def readiness(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
 
     @abstractmethod
     def brand_expression(self, scope: TenantManagementScope) -> dict[str, object]: ...

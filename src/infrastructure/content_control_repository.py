@@ -83,7 +83,7 @@ class PostgresContentControlRepository(ContentControlRepository):
             cursor.execute(
                 """
                 SELECT brand.name AS brand_name, brand.positioning, brand.tone,
-                       account.name AS account_name, account.channel,
+                       root_account.name AS account_name, target_account.channel,
                        organization.name AS organization_name,
                        role.name AS content_role_name, role.voice_boundary,
                        audience.description AS audience_description,
@@ -92,34 +92,72 @@ class PostgresContentControlRepository(ContentControlRepository):
                        COALESCE((
                            SELECT string_agg(product.sku, ',' ORDER BY product.sku)
                            FROM brand_products product
-                           WHERE product.tenant_id = account.tenant_id
-                             AND product.brand_id = account.brand_id
+                           WHERE product.tenant_id = root_account.tenant_id
+                             AND product.brand_id = root_account.brand_id
+                             AND product.status = 'active'
+                             AND (
+                               product.visibility_scope = 'brand_all'
+                               OR (
+                                 root_account.control_organization_id IS NOT NULL
+                                 AND EXISTS (
+                                   SELECT 1
+                                   FROM brand_product_scope_organizations product_scope
+                                   JOIN organizations scoped_organization
+                                     ON scoped_organization.tenant_id =
+                                          product_scope.tenant_id
+                                    AND scoped_organization.id =
+                                          product_scope.organization_id
+                                   WHERE product_scope.tenant_id =
+                                           product.tenant_id
+                                     AND product_scope.product_id = product.id
+                                     AND product_scope.organization_id =
+                                           root_account.control_organization_id
+                                     AND (
+                                       product.visibility_scope = 'organizations'
+                                       OR (
+                                         product.visibility_scope = 'headquarters'
+                                         AND scoped_organization.organization_level =
+                                             'company'
+                                       )
+                                     )
+                                 )
+                               )
+                             )
                        ), '') AS confirmed_product_skus
-                FROM content_accounts account
-                JOIN brands brand ON brand.id = account.brand_id AND brand.tenant_id = account.tenant_id
+                FROM content_accounts target_account
+                JOIN content_accounts root_account
+                  ON root_account.tenant_id = target_account.tenant_id
+                 AND root_account.id = COALESCE(
+                       target_account.carrier_of_account_id, target_account.id
+                     )
+                 AND root_account.carrier_of_account_id IS NULL
+                JOIN brands brand
+                  ON brand.id = root_account.brand_id
+                 AND brand.tenant_id = root_account.tenant_id
                 JOIN account_content_roles account_role
-                  ON account_role.account_id = account.id AND account_role.tenant_id = account.tenant_id
+                  ON account_role.account_id = root_account.id
+                 AND account_role.tenant_id = root_account.tenant_id
                 JOIN content_roles role
                   ON role.id = account_role.content_role_id AND role.tenant_id = account_role.tenant_id
                 LEFT JOIN organizations organization
-                  ON organization.id = account.control_organization_id
-                 AND organization.tenant_id = account.tenant_id
+                  ON organization.id = root_account.control_organization_id
+                 AND organization.tenant_id = root_account.tenant_id
                 LEFT JOIN brand_audiences audience
                   ON audience.brand_id = brand.id AND audience.tenant_id = brand.tenant_id
                 LEFT JOIN brand_expression_baselines baseline
                   ON baseline.brand_id = brand.id AND baseline.tenant_id = brand.tenant_id
-                WHERE account.tenant_id = %s AND account.id = %s AND account.brand_id = %s
-                  AND account.enabled = true
-                ORDER BY role.name LIMIT 1
+                WHERE target_account.tenant_id = %s
+                  AND target_account.id = %s
+                  AND root_account.brand_id = %s
+                  AND target_account.enabled = true
+                  AND root_account.enabled = true
                 """,
                 (scope.tenant_id, scope.account_id, scope.brand_id),
             )
             row = self._one(cursor, "找不到当前发布账号的表达来源")
         return {key: str(value if value is not None else "") for key, value in row.items()}
 
-    def current_account_expression(
-        self, tenant_id: UUID, account_id: UUID
-    ) -> dict[str, object] | None:
+    def current_account_expression(self, tenant_id: UUID, account_id: UUID) -> dict[str, object] | None:
         with self._tenant_tx(tenant_id) as cursor:
             cursor.execute(
                 # Tenant, account and profile must all line up; a pointer that names another
@@ -129,23 +167,26 @@ class PostgresContentControlRepository(ContentControlRepository):
                        profile.identity_position, profile.authority_boundary,
                        profile.audience_relationship, profile.content_territories,
                        profile.default_production_conditions
-                FROM content_accounts account
+                FROM content_accounts target_account
+                JOIN content_accounts account
+                  ON account.tenant_id = target_account.tenant_id
+                 AND account.id = COALESCE(
+                       target_account.carrier_of_account_id, target_account.id
+                     )
                 JOIN account_expression_profile_versions profile
                   ON profile.id = account.current_expression_profile_id
                  AND profile.tenant_id = account.tenant_id
                  AND profile.account_id = account.id
                 JOIN content_roles role
                   ON role.id = profile.content_role_id AND role.tenant_id = profile.tenant_id
-                WHERE account.tenant_id = %s AND account.id = %s
+                WHERE target_account.tenant_id = %s AND target_account.id = %s
                 """,
                 (tenant_id, account_id),
             )
             row = cursor.fetchone()
         return self._profile_value(row) if row is not None else None
 
-    def account_expression_by_id(
-        self, tenant_id: UUID, account_id: UUID, profile_id: UUID
-    ) -> dict[str, object] | None:
+    def account_expression_by_id(self, tenant_id: UUID, account_id: UUID, profile_id: UUID) -> dict[str, object] | None:
         with self._tenant_tx(tenant_id) as cursor:
             cursor.execute(
                 """
@@ -153,15 +194,37 @@ class PostgresContentControlRepository(ContentControlRepository):
                        profile.identity_position, profile.authority_boundary,
                        profile.audience_relationship, profile.content_territories,
                        profile.default_production_conditions
-                FROM account_expression_profile_versions profile
+                FROM content_accounts target_account
+                JOIN content_accounts root_account
+                  ON root_account.tenant_id = target_account.tenant_id
+                 AND root_account.id = COALESCE(
+                       target_account.carrier_of_account_id, target_account.id
+                     )
+                JOIN account_expression_profile_versions profile
+                  ON profile.tenant_id = root_account.tenant_id
+                 AND profile.account_id = root_account.id
                 JOIN content_roles role
                   ON role.id = profile.content_role_id AND role.tenant_id = profile.tenant_id
-                WHERE profile.tenant_id = %s AND profile.account_id = %s AND profile.id = %s
+                WHERE target_account.tenant_id = %s
+                  AND target_account.id = %s AND profile.id = %s
                 """,
                 (tenant_id, account_id, profile_id),
             )
             row = cursor.fetchone()
         return self._profile_value(row) if row is not None else None
+
+    def _canonical_account_id(self, tenant_id: UUID, account_id: UUID) -> UUID:
+        with self._tenant_tx(tenant_id) as cursor:
+            cursor.execute(
+                """
+                SELECT COALESCE(carrier_of_account_id, id) AS account_id
+                FROM content_accounts
+                WHERE tenant_id = %s AND id = %s AND enabled = true
+                """,
+                (tenant_id, account_id),
+            )
+            row = self._one(cursor, "找不到当前发布账号")
+        return UUID(str(row["account_id"]))
 
     # One predicate, used both to decide what the interface may show and, inside the writing
     # transaction, to decide whether the version may be appended at all.  A control organization
@@ -172,11 +235,16 @@ class PostgresContentControlRepository(ContentControlRepository):
             FROM auth_grants grant_record
             JOIN users person
               ON person.id = grant_record.user_id AND person.tenant_id = grant_record.tenant_id
+            JOIN content_accounts target_account
+              ON target_account.id = %s
+             AND target_account.tenant_id = grant_record.tenant_id
             JOIN content_accounts account
-              ON account.id = grant_record.account_id
-             AND account.tenant_id = grant_record.tenant_id
+              ON account.id = COALESCE(
+                   target_account.carrier_of_account_id, target_account.id
+                 )
+             AND account.tenant_id = target_account.tenant_id
             WHERE grant_record.tenant_id = %s AND grant_record.user_id = %s
-              AND grant_record.account_id = %s AND grant_record.enabled = true
+              AND grant_record.account_id = account.id AND grant_record.enabled = true
               AND grant_record.can_maintain_expression_profile = true
               AND person.enabled = true AND account.enabled = true
               AND account.brand_id = %s
@@ -198,9 +266,17 @@ class PostgresContentControlRepository(ContentControlRepository):
              AND management_grant.enabled = true
             WHERE account.tenant_id = %s AND account.id = %s AND account.brand_id = %s
               AND account.enabled = true
+              AND account.carrier_of_account_id IS NULL
               AND account.control_organization_id IS NOT NULL
               AND account.control_organization_source = 'declared'
               AND account.control_organization_id = manager.organization_id
+              AND EXISTS (
+                SELECT 1
+                FROM organizations headquarters
+                WHERE headquarters.tenant_id = account.tenant_id
+                  AND headquarters.id = account.control_organization_id
+                  AND headquarters.organization_level = 'company'
+              )
         ) AS allowed
     """
 
@@ -208,13 +284,16 @@ class PostgresContentControlRepository(ContentControlRepository):
         with self._tenant_tx(scope.tenant_id) as cursor:
             cursor.execute(
                 self._OPERATOR_MAINTENANCE,
-                (scope.tenant_id, scope.user_id, scope.account_id, scope.brand_id),
+                (
+                    scope.account_id,
+                    scope.tenant_id,
+                    scope.user_id,
+                    scope.brand_id,
+                ),
             )
             return bool(self._one(cursor, "无法读取账号画像维护资格")["allowed"])
 
-    def can_manage_account_expression(
-        self, scope: TenantManagementScope, account_id: UUID
-    ) -> bool:
+    def can_manage_account_expression(self, scope: TenantManagementScope, account_id: UUID) -> bool:
         with self._tenant_tx(scope.tenant_id) as cursor:
             cursor.execute(
                 self._MANAGER_MAINTENANCE,
@@ -225,13 +304,14 @@ class PostgresContentControlRepository(ContentControlRepository):
     def save_account_expression_as_operator(
         self, scope: TrustedScope, segments: tuple[str, str, str, str, str]
     ) -> dict[str, object]:
+        account_id = self._canonical_account_id(scope.tenant_id, scope.account_id)
         return self._append_version(
             scope.tenant_id,
-            scope.account_id,
+            account_id,
             scope.user_id,
             segments,
             self._OPERATOR_MAINTENANCE,
-            (scope.tenant_id, scope.user_id, scope.account_id, scope.brand_id),
+            (scope.account_id, scope.tenant_id, scope.user_id, scope.brand_id),
             "你现在只能查看这个账号的表达画像。维护资格由已声明的账号控制组织决定。",
         )
 
@@ -273,7 +353,8 @@ class PostgresContentControlRepository(ContentControlRepository):
             self._one(cursor, "只能声明当前租户已有的组织")
             cursor.execute(
                 "SELECT control_organization_source FROM content_accounts "
-                "WHERE tenant_id = %s AND id = %s AND brand_id = %s AND enabled = true FOR UPDATE",
+                "WHERE tenant_id = %s AND id = %s AND brand_id = %s "
+                "AND enabled = true AND carrier_of_account_id IS NULL FOR UPDATE",
                 (scope.tenant_id, account_id, scope.brand_id),
             )
             account = self._one(cursor, "找不到当前范围内的发布账号")
@@ -364,8 +445,7 @@ class PostgresContentControlRepository(ContentControlRepository):
             )
             saved = self._one(cursor, "账号画像没有保存成功")
             cursor.execute(
-                "UPDATE content_accounts SET current_expression_profile_id = %s "
-                "WHERE tenant_id = %s AND id = %s",
+                "UPDATE content_accounts SET current_expression_profile_id = %s WHERE tenant_id = %s AND id = %s",
                 (profile_id, tenant_id, account_id),
             )
             cursor.execute(
@@ -392,9 +472,7 @@ class PostgresContentControlRepository(ContentControlRepository):
             "created_at": self._time(saved["created_at"]),
         }
 
-    def management_accounts_with_expression(
-        self, scope: TenantManagementScope
-    ) -> list[dict[str, object]]:
+    def management_accounts_with_expression(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         with self._tenant_tx(scope.tenant_id) as cursor:
             cursor.execute(
                 """
@@ -406,7 +484,13 @@ class PostgresContentControlRepository(ContentControlRepository):
                        profile.version AS profile_version,
                        (account.control_organization_id IS NOT NULL
                         AND account.control_organization_source = 'declared'
-                        AND account.control_organization_id = manager.organization_id) AS can_maintain,
+                        AND account.control_organization_id = manager.organization_id
+                        AND EXISTS (
+                          SELECT 1 FROM organizations headquarters
+                          WHERE headquarters.tenant_id = account.tenant_id
+                            AND headquarters.id = account.control_organization_id
+                            AND headquarters.organization_level = 'company'
+                        )) AS can_maintain,
                        (account.control_organization_source <> 'declared') AS can_declare
                 FROM content_accounts account
                 JOIN brands brand
@@ -424,7 +508,9 @@ class PostgresContentControlRepository(ContentControlRepository):
                   ON profile.id = account.current_expression_profile_id
                  AND profile.tenant_id = account.tenant_id
                  AND profile.account_id = account.id
-                WHERE account.tenant_id = %s AND account.brand_id = %s AND account.enabled = true
+                WHERE account.tenant_id = %s AND account.brand_id = %s
+                  AND account.enabled = true
+                  AND account.carrier_of_account_id IS NULL
                 ORDER BY account.name
                 """,
                 (scope.user_id, scope.tenant_id, scope.brand_id),
@@ -438,9 +524,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                 "brand_name": str(row["brand_name"]),
                 "content_role": str(row["content_role"]),
                 "voice_boundary": str(row["voice_boundary"]),
-                "control_organization": (
-                    str(row["control_organization"]) if row["control_organization"] else ""
-                ),
+                "control_organization": (str(row["control_organization"]) if row["control_organization"] else ""),
                 "control_organization_source": str(row["control_organization_source"]),
                 "profile_version": row["profile_version"],
                 "can_maintain": bool(row["can_maintain"]),
@@ -452,11 +536,18 @@ class PostgresContentControlRepository(ContentControlRepository):
     def management_organizations(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         with self._tenant_tx(scope.tenant_id) as cursor:
             cursor.execute(
-                "SELECT id, name FROM organizations WHERE tenant_id = %s ORDER BY name",
+                "SELECT id, name, organization_level FROM organizations WHERE tenant_id = %s ORDER BY name",
                 (scope.tenant_id,),
             )
             rows = cursor.fetchall()
-        return [{"id": str(row["id"]), "name": str(row["name"])} for row in rows]
+        return [
+            {
+                "id": str(row["id"]),
+                "name": str(row["name"]),
+                "organization_level": str(row["organization_level"]),
+            }
+            for row in rows
+        ]
 
     def creation_preference(self, scope: TrustedScope) -> dict[str, object] | None:
         with self._owner_tx(scope) as cursor:
@@ -533,9 +624,7 @@ class PostgresContentControlRepository(ContentControlRepository):
             )
             return cursor.rowcount == 1
 
-    def selected_materials(
-        self, scope: TrustedScope, asset_ids: tuple[UUID, ...]
-    ) -> tuple[dict[str, object], ...]:
+    def selected_materials(self, scope: TrustedScope, asset_ids: tuple[UUID, ...]) -> tuple[dict[str, object], ...]:
         if not asset_ids:
             return ()
         with self._tenant_tx(scope.tenant_id) as cursor:
@@ -548,9 +637,39 @@ class PostgresContentControlRepository(ContentControlRepository):
                   AND asset.id = ANY(%s)
                   AND (
                     (asset.scope = 'personal' AND asset.owner_user_id = %s)
-                    OR (asset.scope = 'organization' AND asset.owner_organization_id = (
-                        SELECT organization_id FROM users WHERE tenant_id = %s AND id = %s
-                    ))
+                    OR (
+                      asset.scope = 'organization'
+                      AND (
+                        asset.visibility_scope = 'brand_all'
+                        OR EXISTS (
+                          SELECT 1
+                          FROM content_accounts target_account
+                          JOIN content_accounts root_account
+                            ON root_account.tenant_id = target_account.tenant_id
+                           AND root_account.id = COALESCE(
+                                 target_account.carrier_of_account_id,
+                                 target_account.id
+                               )
+                          JOIN material_asset_scope_organizations material_scope
+                            ON material_scope.tenant_id = asset.tenant_id
+                           AND material_scope.asset_id = asset.id
+                           AND material_scope.organization_id =
+                               root_account.control_organization_id
+                          JOIN organizations scoped_organization
+                            ON scoped_organization.tenant_id = material_scope.tenant_id
+                           AND scoped_organization.id = material_scope.organization_id
+                          WHERE target_account.tenant_id = %s
+                            AND target_account.id = %s
+                            AND (
+                              asset.visibility_scope = 'organizations'
+                              OR (
+                                asset.visibility_scope = 'headquarters'
+                                AND scoped_organization.organization_level = 'company'
+                              )
+                            )
+                        )
+                      )
+                    )
                   )
                 ORDER BY asset.created_at
                 """,
@@ -560,7 +679,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                     list(asset_ids),
                     scope.user_id,
                     scope.tenant_id,
-                    scope.user_id,
+                    scope.account_id,
                 ),
             )
             rows = cursor.fetchall()
@@ -588,13 +707,49 @@ class PostgresContentControlRepository(ContentControlRepository):
                 WHERE asset.tenant_id = %s AND asset.brand_id = %s AND asset.status = 'active'
                   AND (
                     (asset.scope = 'personal' AND asset.owner_user_id = %s)
-                    OR (asset.scope = 'organization' AND asset.owner_organization_id = (
-                        SELECT organization_id FROM users WHERE tenant_id = %s AND id = %s
-                    ))
+                    OR (
+                      asset.scope = 'organization'
+                      AND (
+                        asset.visibility_scope = 'brand_all'
+                        OR EXISTS (
+                          SELECT 1
+                          FROM content_accounts target_account
+                          JOIN content_accounts root_account
+                            ON root_account.tenant_id = target_account.tenant_id
+                           AND root_account.id = COALESCE(
+                                 target_account.carrier_of_account_id,
+                                 target_account.id
+                               )
+                          JOIN material_asset_scope_organizations material_scope
+                            ON material_scope.tenant_id = asset.tenant_id
+                           AND material_scope.asset_id = asset.id
+                           AND material_scope.organization_id =
+                               root_account.control_organization_id
+                          JOIN organizations scoped_organization
+                            ON scoped_organization.tenant_id = material_scope.tenant_id
+                           AND scoped_organization.id = material_scope.organization_id
+                          WHERE target_account.tenant_id = %s
+                            AND target_account.id = %s
+                            AND (
+                              asset.visibility_scope = 'organizations'
+                              OR (
+                                asset.visibility_scope = 'headquarters'
+                                AND scoped_organization.organization_level = 'company'
+                              )
+                            )
+                        )
+                      )
+                    )
                   )
                 ORDER BY asset.created_at DESC LIMIT 20
                 """,
-                (scope.tenant_id, scope.brand_id, scope.user_id, scope.tenant_id, scope.user_id),
+                (
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.user_id,
+                    scope.tenant_id,
+                    scope.account_id,
+                ),
             )
             rows = cursor.fetchall()
         return tuple(
@@ -710,9 +865,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                 "status": str(row["status"]),
                 "response_text": str(row["response_text"]),
                 "created_at": self._time(row["created_at"]),
-                "responded_at": (
-                    self._time(row["responded_at"]) if row["responded_at"] is not None else None
-                ),
+                "responded_at": (self._time(row["responded_at"]) if row["responded_at"] is not None else None),
             }
             for row in rows
         ]
@@ -737,9 +890,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                 "status": str(row["status"]),
                 "response_text": str(row["response_text"]),
                 "created_at": self._time(row["created_at"]),
-                "responded_at": (
-                    self._time(row["responded_at"]) if row["responded_at"] is not None else None
-                ),
+                "responded_at": (self._time(row["responded_at"]) if row["responded_at"] is not None else None),
             }
             for row in rows
         ]

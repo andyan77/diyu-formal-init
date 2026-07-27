@@ -60,16 +60,22 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT b.name AS brand, u.display_name AS operator, o.name AS organization,
-                       a.name AS account, r.name AS content_role, a.business_data_kind
+                       root.name AS account, target.channel AS platform,
+                       r.name AS content_role, root.business_data_kind
                 FROM users u
                 JOIN organizations o ON o.id = u.organization_id AND o.tenant_id = u.tenant_id
                 JOIN brands b ON b.id = %s AND b.tenant_id = u.tenant_id
-                JOIN content_accounts a ON a.id = %s AND a.tenant_id = u.tenant_id
+                JOIN content_accounts target ON target.id = %s AND target.tenant_id = u.tenant_id
+                JOIN content_accounts root
+                  ON root.tenant_id = target.tenant_id
+                 AND root.id = COALESCE(target.carrier_of_account_id, target.id)
                 JOIN auth_grants assignment ON assignment.tenant_id = u.tenant_id AND assignment.user_id = u.id
-                    AND assignment.account_id = a.id AND assignment.enabled = true
-                JOIN account_content_roles acr ON acr.account_id = a.id AND acr.tenant_id = a.tenant_id
+                    AND assignment.account_id = root.id AND assignment.enabled = true
+                JOIN account_content_roles acr ON acr.account_id = root.id AND acr.tenant_id = root.tenant_id
                 JOIN content_roles r ON r.id = acr.content_role_id AND r.tenant_id = acr.tenant_id
-                WHERE u.tenant_id = %s AND u.id = %s AND u.enabled = true AND a.enabled = true
+                WHERE u.tenant_id = %s AND u.id = %s AND u.enabled = true
+                  AND u.entry_kind = 'tenant_user'
+                  AND target.enabled = true AND root.enabled = true
                 ORDER BY r.name LIMIT 1
                 """,
                 (scope.brand_id, scope.account_id, scope.tenant_id, scope.user_id),
@@ -113,6 +119,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 WHERE user_record.tenant_id = %s
                   AND user_record.id = %s
                   AND user_record.enabled = true
+                  AND user_record.entry_kind = 'tenant_admin'
                 """,
                 (scope.brand_id, scope.tenant_id, scope.user_id),
             )
@@ -126,12 +133,19 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 SELECT EXISTS (
                     SELECT 1 FROM auth_grants assignment
                     JOIN users u ON u.id = assignment.user_id AND u.tenant_id = assignment.tenant_id
-                    JOIN content_accounts a ON a.id = assignment.account_id AND a.tenant_id = assignment.tenant_id
-                    WHERE assignment.tenant_id = %s AND assignment.user_id = %s AND assignment.account_id = %s
-                      AND assignment.enabled = true AND u.enabled = true AND a.enabled = true
+                    JOIN content_accounts target
+                      ON target.id = %s AND target.tenant_id = assignment.tenant_id
+                    JOIN content_accounts root
+                      ON root.tenant_id = target.tenant_id
+                     AND root.id = COALESCE(target.carrier_of_account_id, target.id)
+                     AND root.id = assignment.account_id
+                    WHERE assignment.tenant_id = %s AND assignment.user_id = %s
+                      AND assignment.enabled = true AND u.enabled = true
+                      AND u.entry_kind = 'tenant_user'
+                      AND target.enabled = true AND root.enabled = true
                 ) AS allowed
                 """,
-                (scope.tenant_id, scope.user_id, scope.account_id),
+                (scope.account_id, scope.tenant_id, scope.user_id),
             )
             return bool(self._one(cursor, "无法读取内容工作资格")["allowed"])
 
@@ -144,6 +158,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     JOIN users u ON u.id = management_grant.user_id AND u.tenant_id = management_grant.tenant_id
                     WHERE management_grant.tenant_id = %s AND management_grant.user_id = %s
                       AND management_grant.enabled = true AND u.enabled = true
+                      AND u.entry_kind = 'tenant_admin'
                 ) AS allowed
                 """,
                 (scope.tenant_id, scope.user_id),
@@ -154,15 +169,20 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT u.id, u.display_name, o.id AS organization_id,
+                SELECT u.id, u.display_name, u.enabled, o.id AS organization_id,
                        o.name AS organization,
-                       credential.username,
-                       COALESCE(string_agg(DISTINCT a.name, '、'), '') AS publishing_accounts,
+                       credential.username, u.entry_kind,
                        EXISTS (
                          SELECT 1 FROM tenant_management_grants manager
                          WHERE manager.tenant_id = u.tenant_id AND manager.user_id = u.id
                            AND manager.enabled = true
                        ) AS manages_tenant,
+                       EXISTS (
+                         SELECT 1 FROM display_access_grants display_grant
+                         WHERE display_grant.tenant_id = u.tenant_id
+                           AND display_grant.user_id = u.id
+                           AND display_grant.enabled = true
+                       ) AS can_use_display,
                        EXISTS (
                          SELECT 1 FROM organization_material_maintainers maintainer
                          WHERE maintainer.tenant_id = u.tenant_id
@@ -190,17 +210,27 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                              AND granted_account.carrier_of_account_id IS NULL
                          ),
                          '[]'::jsonb
-                       ) AS account_grants
+                       ) AS account_grants,
+                       COALESCE(
+                         (
+                           SELECT string_agg(granted_account.name, '、'
+                                             ORDER BY granted_account.name)
+                           FROM auth_grants account_grant
+                           JOIN content_accounts granted_account
+                             ON granted_account.tenant_id = account_grant.tenant_id
+                            AND granted_account.id = account_grant.account_id
+                            AND granted_account.carrier_of_account_id IS NULL
+                           WHERE account_grant.tenant_id = u.tenant_id
+                             AND account_grant.user_id = u.id
+                             AND account_grant.enabled = true
+                         ),
+                         ''
+                       ) AS publishing_accounts
                 FROM users u
                 JOIN organizations o ON o.id = u.organization_id AND o.tenant_id = u.tenant_id
-                LEFT JOIN auth_grants assignment ON assignment.tenant_id = u.tenant_id AND assignment.user_id = u.id
-                    AND assignment.enabled = true
-                LEFT JOIN content_accounts a ON a.id = assignment.account_id AND a.tenant_id = assignment.tenant_id
                 LEFT JOIN user_credentials credential
                   ON credential.tenant_id = u.tenant_id AND credential.user_id = u.id
-                WHERE u.tenant_id = %s AND u.enabled = true
-                GROUP BY u.id, u.display_name, o.id, o.name, credential.username,
-                         u.tenant_id
+                WHERE u.tenant_id = %s
                 ORDER BY u.display_name
                 """,
                 (scope.tenant_id,),
@@ -214,6 +244,12 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "organization": str(row["organization"]),
                 "organization_id": str(row["organization_id"]),
                 "publishing_accounts": str(row["publishing_accounts"]),
+                "entry_type": str(row["entry_kind"]),
+                "enabled": bool(row["enabled"]),
+                "capabilities": {
+                    "content": bool(row["account_grants"]),
+                    "display": bool(row["can_use_display"]),
+                },
                 "manages_tenant": bool(row["manages_tenant"]),
                 "maintains_organization_materials": bool(row["maintains_organization_materials"]),
                 "account_grants": (row["account_grants"] if isinstance(row["account_grants"], list) else []),
@@ -225,9 +261,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT a.id, a.name, a.channel, r.name AS content_role, r.voice_boundary,
-                       a.business_data_kind,
-                       a.carrier_of_account_id, source.name AS carrier_of_account,
+                SELECT root.id, root.name, root.business_data_kind,
+                       root.control_organization_source,
+                       control_organization.id AS control_organization_id,
+                       control_organization.name AS control_organization,
+                       role.name AS content_role, role.voice_boundary,
+                       profile.id AS profile_id, profile.version AS profile_version,
+                       profile.identity_position, profile.authority_boundary,
+                       profile.audience_relationship, profile.content_territories,
+                       profile.default_production_conditions,
                        COALESCE(
                            (
                                SELECT jsonb_agg(
@@ -242,43 +284,387 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                                  ON operator.id = operator_grant.user_id
                                 AND operator.tenant_id = operator_grant.tenant_id
                                 AND operator.enabled = true
-                               WHERE operator_grant.tenant_id = a.tenant_id
-                                 AND operator_grant.account_id = a.id
+                                AND operator.entry_kind = 'tenant_user'
+                               WHERE operator_grant.tenant_id = root.tenant_id
+                                 AND operator_grant.account_id = root.id
                                  AND operator_grant.enabled = true
                            ),
                            '[]'::jsonb
-                       ) AS operators
-                FROM content_accounts a
-                JOIN account_content_roles account_role ON account_role.tenant_id = a.tenant_id
-                    AND account_role.account_id = a.id
-                JOIN content_roles r ON r.id = account_role.content_role_id
-                    AND r.tenant_id = account_role.tenant_id
-                LEFT JOIN content_accounts source
-                  ON source.id = a.carrier_of_account_id AND source.tenant_id = a.tenant_id
-                WHERE a.tenant_id = %s AND a.brand_id = %s AND a.enabled = true
-                ORDER BY a.name
+                       ) AS operators,
+                       COALESCE(
+                           (
+                               SELECT jsonb_agg(
+                                   jsonb_build_object(
+                                       'id', physical.id,
+                                       'name', physical.name,
+                                       'channel', physical.channel
+                                   )
+                                   ORDER BY
+                                     CASE WHEN physical.id = root.id THEN 0 ELSE 1 END,
+                                     physical.channel
+                               )
+                               FROM content_accounts physical
+                               WHERE physical.tenant_id = root.tenant_id
+                                 AND physical.brand_id = root.brand_id
+                                 AND physical.enabled = true
+                                 AND (
+                                   physical.id = root.id
+                                   OR physical.carrier_of_account_id = root.id
+                                 )
+                           ),
+                           '[]'::jsonb
+                       ) AS physical_targets,
+                       (
+                           SELECT count(*)
+                           FROM content_accounts carrier
+                           WHERE carrier.tenant_id = root.tenant_id
+                             AND carrier.carrier_of_account_id = root.id
+                             AND carrier.enabled = true
+                       ) AS carrier_count
+                FROM content_accounts root
+                JOIN account_content_roles account_role
+                  ON account_role.tenant_id = root.tenant_id
+                 AND account_role.account_id = root.id
+                JOIN content_roles role
+                  ON role.id = account_role.content_role_id
+                 AND role.tenant_id = account_role.tenant_id
+                LEFT JOIN organizations control_organization
+                  ON control_organization.tenant_id = root.tenant_id
+                 AND control_organization.id = root.control_organization_id
+                LEFT JOIN account_expression_profile_versions profile
+                  ON profile.tenant_id = root.tenant_id
+                 AND profile.account_id = root.id
+                 AND profile.id = root.current_expression_profile_id
+                WHERE root.tenant_id = %s AND root.brand_id = %s
+                  AND root.enabled = true
+                  AND root.carrier_of_account_id IS NULL
+                ORDER BY root.name
                 """,
                 (scope.tenant_id, scope.brand_id),
             )
             rows = cursor.fetchall()
-        return [
-            {
-                "id": str(row["id"]),
-                "name": str(row["name"]),
-                "channel": str(row["channel"]),
-                "content_role": str(row["content_role"]),
-                "voice_boundary": str(row["voice_boundary"]),
-                "business_data_kind": str(row["business_data_kind"]),
-                "carrier_of_account_id": (
-                    str(row["carrier_of_account_id"]) if row["carrier_of_account_id"] is not None else None
+        identities: list[dict[str, object]] = []
+        for row in rows:
+            raw_targets = row["physical_targets"]
+            physical_targets = raw_targets if isinstance(raw_targets, list) else []
+            profile = (
+                {
+                    "id": str(row["profile_id"]),
+                    "version": self._integer(row["profile_version"]),
+                    "segments": {
+                        "identity_position": str(row["identity_position"]),
+                        "authority_boundary": str(row["authority_boundary"]),
+                        "audience_relationship": str(row["audience_relationship"]),
+                        "content_territories": str(row["content_territories"]),
+                        "default_production_conditions": str(row["default_production_conditions"]),
+                    },
+                }
+                if row["profile_id"] is not None
+                else None
+            )
+            identities.append(
+                {
+                    "id": str(row["id"]),
+                    "name": str(row["name"]),
+                    "control_organization": (
+                        {
+                            "id": str(row["control_organization_id"]),
+                            "name": str(row["control_organization"]),
+                            "source": str(row["control_organization_source"]),
+                        }
+                        if row["control_organization_id"] is not None
+                        else None
+                    ),
+                    "content_role": {
+                        "name": str(row["content_role"]),
+                        "authority_boundary": str(row["voice_boundary"]),
+                    },
+                    "profile": profile,
+                    "operators": (row["operators"] if isinstance(row["operators"], list) else []),
+                    "platform_targets": self._platform_targets(physical_targets),
+                    "carrier_count": self._integer(row["carrier_count"]),
+                    "business_data_kind": str(row["business_data_kind"]),
+                }
+            )
+        return identities
+
+    def team_usage(
+        self,
+        scope: TenantManagementScope,
+        window_days: int,
+    ) -> dict[str, object]:
+        if window_days not in {7, 30}:
+            raise DomainError("团队使用情况只支持查看近 7 日或近 30 日。")
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                  count(*) AS registered,
+                  count(*) FILTER (WHERE credential.password_hash IS NOT NULL) AS activated,
+                  count(*) FILTER (WHERE user_record.enabled) AS enabled,
+                  count(*) FILTER (WHERE NOT user_record.enabled) AS disabled,
+                  count(*) FILTER (
+                    WHERE usage.last_used_at >= now() - (%s * interval '1 day')
+                  ) AS active
+                FROM users user_record
+                LEFT JOIN user_credentials credential
+                  ON credential.tenant_id = user_record.tenant_id
+                 AND credential.user_id = user_record.id
+                LEFT JOIN LATERAL (
+                  SELECT max(value.used_at) AS last_used_at
+                  FROM (
+                    SELECT max(session_record.issued_at) AS used_at
+                    FROM tenant_sessions session_record
+                    WHERE session_record.tenant_id = user_record.tenant_id
+                      AND session_record.user_id = user_record.id
+                    UNION ALL
+                    SELECT max(task.created_at)
+                    FROM business_tasks task
+                    WHERE task.tenant_id = user_record.tenant_id
+                      AND task.created_by = user_record.id
+                    UNION ALL
+                    SELECT max(display_task.created_at)
+                    FROM display_tasks display_task
+                    WHERE display_task.tenant_id = user_record.tenant_id
+                      AND display_task.created_by = user_record.id
+                  ) value
+                ) usage ON true
+                WHERE user_record.tenant_id = %s
+                """,
+                (window_days, scope.tenant_id),
+            )
+            membership = self._one(cursor, "无法读取团队成员汇总")
+            cursor.execute(
+                """
+                SELECT user_record.id, user_record.display_name,
+                       user_record.entry_kind, user_record.enabled,
+                       usage.last_used_at,
+                       COALESCE(content_usage.attempts, 0) AS content_attempts,
+                       COALESCE(display_usage.attempts, 0) AS display_attempts
+                FROM users user_record
+                LEFT JOIN LATERAL (
+                  SELECT max(value.used_at) AS last_used_at
+                  FROM (
+                    SELECT max(session_record.issued_at) AS used_at
+                    FROM tenant_sessions session_record
+                    WHERE session_record.tenant_id = user_record.tenant_id
+                      AND session_record.user_id = user_record.id
+                    UNION ALL
+                    SELECT max(task.created_at)
+                    FROM business_tasks task
+                    WHERE task.tenant_id = user_record.tenant_id
+                      AND task.created_by = user_record.id
+                    UNION ALL
+                    SELECT max(display_task.created_at)
+                    FROM display_tasks display_task
+                    WHERE display_task.tenant_id = user_record.tenant_id
+                      AND display_task.created_by = user_record.id
+                  ) value
+                ) usage ON true
+                LEFT JOIN LATERAL (
+                  SELECT count(*) AS attempts
+                  FROM business_tasks task
+                  WHERE task.tenant_id = user_record.tenant_id
+                    AND task.created_by = user_record.id
+                    AND task.created_at >= now() - (%s * interval '1 day')
+                ) content_usage ON true
+                LEFT JOIN LATERAL (
+                  SELECT count(*) AS attempts
+                  FROM display_tasks task
+                  WHERE task.tenant_id = user_record.tenant_id
+                    AND task.created_by = user_record.id
+                    AND task.created_at >= now() - (%s * interval '1 day')
+                ) display_usage ON true
+                WHERE user_record.tenant_id = %s
+                ORDER BY usage.last_used_at DESC NULLS LAST, user_record.display_name
+                """,
+                (window_days, window_days, scope.tenant_id),
+            )
+            member_rows = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT
+                  (SELECT count(*) FROM generation_runs run
+                   WHERE run.tenant_id = %s
+                     AND run.started_at >= now() - (%s * interval '1 day')) AS content_attempts,
+                  (SELECT count(*) FROM generation_runs run
+                   WHERE run.tenant_id = %s AND run.status = 'succeeded'
+                     AND run.started_at >= now() - (%s * interval '1 day')) AS content_successes,
+                  (SELECT count(*) FROM generation_runs run
+                   WHERE run.tenant_id = %s AND run.status = 'failed'
+                     AND run.started_at >= now() - (%s * interval '1 day')) AS content_failures,
+                  (SELECT count(*) FROM business_tasks task
+                   WHERE task.tenant_id = %s AND task.revision_instruction IS NOT NULL
+                     AND task.created_at >= now() - (%s * interval '1 day')) AS revisions,
+                  (SELECT count(*) FROM business_tasks task
+                   WHERE task.tenant_id = %s AND task.series_id IS NOT NULL
+                     AND task.created_at >= now() - (%s * interval '1 day')) AS series_continuations,
+                  (SELECT count(*) FROM display_generation_runs run
+                   WHERE run.tenant_id = %s
+                     AND run.started_at >= now() - (%s * interval '1 day')) AS display_attempts,
+                  (SELECT count(*) FROM display_generation_runs run
+                   WHERE run.tenant_id = %s AND run.status = 'succeeded'
+                     AND run.started_at >= now() - (%s * interval '1 day')) AS display_successes,
+                  (SELECT count(*) FROM display_generation_runs run
+                   WHERE run.tenant_id = %s AND run.status = 'failed'
+                     AND run.started_at >= now() - (%s * interval '1 day')) AS display_failures,
+                  (SELECT count(*) FROM activity_events event
+                   WHERE event.tenant_id = %s
+                     AND event.event_type IN (
+                       'content.rate_limited',
+                       'display.rate_limited',
+                       'request.rate_limited'
+                     )
+                     AND event.created_at >= now() - (%s * interval '1 day')) AS rate_limited,
+                  (
+                    SELECT COALESCE(sum(tokens), 0)::bigint
+                    FROM (
+                      SELECT CASE
+                        WHEN run.provider_usage ->> 'total_tokens' ~ '^[0-9]+$'
+                        THEN (run.provider_usage ->> 'total_tokens')::bigint
+                        ELSE 0
+                      END AS tokens
+                      FROM generation_runs run
+                      WHERE run.tenant_id = %s
+                        AND run.started_at >= now() - (%s * interval '1 day')
+                      UNION ALL
+                      SELECT CASE
+                        WHEN run.provider_usage ->> 'total_tokens' ~ '^[0-9]+$'
+                        THEN (run.provider_usage ->> 'total_tokens')::bigint
+                        ELSE 0
+                      END
+                      FROM display_generation_runs run
+                      WHERE run.tenant_id = %s
+                        AND run.started_at >= now() - (%s * interval '1 day')
+                    ) recorded
+                  ) AS recorded_tokens
+                """,
+                (
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
                 ),
-                "carrier_of_account": (
-                    str(row["carrier_of_account"]) if row["carrier_of_account"] is not None else None
-                ),
-                "operators": row["operators"] if isinstance(row["operators"], list) else [],
-            }
-            for row in rows
-        ]
+            )
+            activity = self._one(cursor, "无法读取团队使用汇总")
+            cursor.execute(
+                """
+                SELECT root.id, root.name, count(*) AS attempts
+                FROM business_tasks task
+                JOIN content_accounts root
+                  ON root.tenant_id = task.tenant_id
+                 AND root.id = task.logical_account_id
+                WHERE task.tenant_id = %s
+                  AND task.created_at >= now() - (%s * interval '1 day')
+                GROUP BY root.id, root.name
+                ORDER BY attempts DESC, root.name
+                """,
+                (scope.tenant_id, window_days),
+            )
+            account_rows = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT
+                  CASE
+                    WHEN account.channel = '抖音' AND task.media_format = 'video'
+                      THEN 'douyin_video'
+                    WHEN account.channel = '小红书' AND task.media_format = 'graphic'
+                      THEN 'xiaohongshu_graphic'
+                    WHEN account.channel = '小红书' AND task.media_format = 'video'
+                      THEN 'xiaohongshu_video'
+                    WHEN account.channel = '微信视频号' AND task.media_format = 'video'
+                      THEN 'wechat_channels_video'
+                    ELSE 'other'
+                  END AS target,
+                  count(*) AS attempts
+                FROM business_tasks task
+                JOIN content_accounts account
+                  ON account.tenant_id = task.tenant_id
+                 AND account.id = task.account_id
+                WHERE task.tenant_id = %s
+                  AND task.created_at >= now() - (%s * interval '1 day')
+                GROUP BY target
+                ORDER BY attempts DESC, target
+                """,
+                (scope.tenant_id, window_days),
+            )
+            platform_rows = cursor.fetchall()
+        return {
+            "window_days": window_days,
+            "members": {
+                "registered": self._integer(membership["registered"]),
+                "activated": self._integer(membership["activated"]),
+                "enabled": self._integer(membership["enabled"]),
+                "disabled": self._integer(membership["disabled"]),
+                "active": self._integer(membership["active"]),
+                "items": [
+                    {
+                        "id": str(row["id"]),
+                        "display_name": str(row["display_name"]),
+                        "entry_type": str(row["entry_kind"]),
+                        "enabled": bool(row["enabled"]),
+                        "last_used_at": (self._time(row["last_used_at"]) if row["last_used_at"] is not None else None),
+                        "content_attempts": self._integer(row["content_attempts"]),
+                        "display_attempts": self._integer(row["display_attempts"]),
+                    }
+                    for row in member_rows
+                ],
+            },
+            "activity": {
+                key: self._integer(activity[key])
+                for key in (
+                    "content_attempts",
+                    "content_successes",
+                    "content_failures",
+                    "revisions",
+                    "series_continuations",
+                    "display_attempts",
+                    "display_successes",
+                    "display_failures",
+                    "rate_limited",
+                )
+            },
+            "provider_usage": {
+                "label": "已记录模型用量",
+                "total_tokens": self._integer(activity["recorded_tokens"]),
+                "is_complete_billing_total": False,
+            },
+            "distribution": {
+                "publishing_identities": [
+                    {
+                        "id": str(row["id"]),
+                        "name": str(row["name"]),
+                        "attempts": self._integer(row["attempts"]),
+                    }
+                    for row in account_rows
+                ],
+                "platforms": [
+                    {
+                        "target": str(row["target"]),
+                        "attempts": self._integer(row["attempts"]),
+                    }
+                    for row in platform_rows
+                ],
+            },
+        }
 
     def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         with self._management_tx(scope) as cursor:
@@ -287,7 +673,27 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 SELECT product.sku, product.display_name, product.facts,
                        product.source_kind, product.source_note, product.fact_version,
                        product.applicability, product.status,
-                       person.display_name AS updated_by, product.updated_at
+                       product.visibility_scope,
+                       person.display_name AS updated_by, product.updated_at,
+                       COALESCE(
+                         (
+                           SELECT jsonb_agg(
+                             jsonb_build_object(
+                               'id', organization.id,
+                               'name', organization.name,
+                               'level', organization.organization_level
+                             )
+                             ORDER BY organization.name
+                           )
+                           FROM brand_product_scope_organizations product_scope
+                           JOIN organizations organization
+                             ON organization.tenant_id = product_scope.tenant_id
+                            AND organization.id = product_scope.organization_id
+                           WHERE product_scope.tenant_id = product.tenant_id
+                             AND product_scope.product_id = product.id
+                         ),
+                         '[]'::jsonb
+                       ) AS scope_organizations
                 FROM brand_products product
                 LEFT JOIN users person
                   ON person.id = product.updated_by AND person.tenant_id = product.tenant_id
@@ -307,8 +713,12 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "fact_version": self._integer(row["fact_version"]),
                 "applicability": str(row["applicability"]),
                 "status": str(row["status"]),
+                "visibility_scope": str(row["visibility_scope"]),
+                "scope_organizations": (
+                    row["scope_organizations"] if isinstance(row["scope_organizations"], list) else []
+                ),
                 "updated_by": (str(row["updated_by"]) if row["updated_by"] is not None else None),
-                "updated_at": row["updated_at"],
+                "updated_at": self._time(row["updated_at"]),
             }
             for row in rows
         ]
@@ -323,9 +733,29 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 SELECT material.id, material.title, material.media_type,
                        material.created_at, material.status,
                        material.original_filename, material.byte_size,
-                       material.reference_note,
+                       material.reference_note, material.reference_version,
+                       material.visibility_scope,
                        organization.id AS organization_id,
-                       organization.name AS organization
+                       organization.name AS organization,
+                       COALESCE(
+                         (
+                           SELECT jsonb_agg(
+                             jsonb_build_object(
+                               'id', scoped_organization.id,
+                               'name', scoped_organization.name,
+                               'level', scoped_organization.organization_level
+                             )
+                             ORDER BY scoped_organization.name
+                           )
+                           FROM material_asset_scope_organizations material_scope
+                           JOIN organizations scoped_organization
+                             ON scoped_organization.tenant_id = material_scope.tenant_id
+                            AND scoped_organization.id = material_scope.organization_id
+                           WHERE material_scope.tenant_id = material.tenant_id
+                             AND material_scope.asset_id = material.id
+                         ),
+                         '[]'::jsonb
+                       ) AS scope_organizations
                 FROM material_assets material
                 JOIN organizations organization
                   ON organization.id = material.owner_organization_id
@@ -349,11 +779,183 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "original_filename": str(row["original_filename"]),
                 "byte_size": self._integer(row["byte_size"]),
                 "reference_note": str(row["reference_note"]),
+                "reference_version": self._integer(row["reference_version"]),
+                "visibility_scope": str(row["visibility_scope"]),
+                "scope_organizations": (
+                    row["scope_organizations"] if isinstance(row["scope_organizations"], list) else []
+                ),
                 "organization_id": str(row["organization_id"]),
                 "organization": str(row["organization"]),
             }
             for row in rows
         ]
+
+    def brand_library_entries(
+        self,
+        scope: TenantManagementScope,
+    ) -> list[dict[str, object]]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT entry.id, entry.category, entry.title, entry.source_note,
+                       entry.content, entry.version, entry.status,
+                       entry.visibility_scope, entry.updated_at,
+                       person.display_name AS updated_by,
+                       COALESCE(
+                         (
+                           SELECT jsonb_agg(
+                             jsonb_build_object(
+                               'id', organization.id,
+                               'name', organization.name,
+                               'level', organization.organization_level
+                             )
+                             ORDER BY organization.name
+                           )
+                           FROM brand_library_entry_organizations entry_scope
+                           JOIN organizations organization
+                             ON organization.tenant_id = entry_scope.tenant_id
+                            AND organization.id = entry_scope.organization_id
+                           WHERE entry_scope.tenant_id = entry.tenant_id
+                             AND entry_scope.entry_id = entry.id
+                         ),
+                         '[]'::jsonb
+                       ) AS scope_organizations
+                FROM brand_library_entries entry
+                LEFT JOIN users person
+                  ON person.tenant_id = entry.tenant_id
+                 AND person.id = entry.updated_by
+                WHERE entry.tenant_id = %s AND entry.brand_id = %s
+                ORDER BY entry.updated_at DESC, entry.title
+                """,
+                (scope.tenant_id, scope.brand_id),
+            )
+            rows = cursor.fetchall()
+        return [
+            {
+                "id": str(row["id"]),
+                "category": str(row["category"]),
+                "title": str(row["title"]),
+                "source_note": str(row["source_note"]),
+                "content": str(row["content"]),
+                "version": str(row["version"]),
+                "status": str(row["status"]),
+                "visibility_scope": str(row["visibility_scope"]),
+                "visibility_label": self._visibility_label(
+                    str(row["visibility_scope"]),
+                    row["scope_organizations"],
+                ),
+                "scope_organizations": (
+                    row["scope_organizations"] if isinstance(row["scope_organizations"], list) else []
+                ),
+                "updated_by": (str(row["updated_by"]) if row["updated_by"] is not None else None),
+                "updated_at": self._time(row["updated_at"]),
+                "impact": self._library_impact(str(row["category"])),
+            }
+            for row in rows
+        ]
+
+    def create_brand_library_entry(
+        self,
+        scope: TenantManagementScope,
+        category: str,
+        title: str,
+        source_note: str,
+        content: str,
+        version: str,
+        status: str,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+    ) -> dict[str, object]:
+        entry_id = uuid4()
+        with self._management_tx(scope) as cursor:
+            organizations: list[dict[str, object]] = []
+            if organization_ids:
+                cursor.execute(
+                    """
+                    SELECT id, name, organization_level
+                    FROM organizations
+                    WHERE tenant_id = %s AND id = ANY(%s)
+                    ORDER BY name
+                    """,
+                    (scope.tenant_id, list(organization_ids)),
+                )
+                organizations = cursor.fetchall()
+                if len(organizations) != len(organization_ids):
+                    raise DomainError("资料可用范围只能选择当前租户已有的组织。")
+            if visibility_scope == "brand_all" and organizations:
+                raise DomainError("品牌全员资料不需要指定组织。")
+            if visibility_scope == "headquarters":
+                if len(organizations) != 1:
+                    raise DomainError("总部专用资料需要明确选择一个公司级组织。")
+                if str(organizations[0]["organization_level"]) != "company":
+                    raise DomainError("总部专用资料只能绑定明确登记的公司级组织。")
+            if visibility_scope == "organizations" and not organizations:
+                raise DomainError("指定区域资料至少需要选择一个具体区域。")
+            cursor.execute(
+                """
+                INSERT INTO brand_library_entries
+                  (id, tenant_id, brand_id, category, title, source_note,
+                   content, version, status, visibility_scope, updated_by, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                RETURNING updated_at
+                """,
+                (
+                    entry_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    category,
+                    title,
+                    source_note,
+                    content,
+                    version,
+                    status,
+                    visibility_scope,
+                    scope.user_id,
+                ),
+            )
+            row = self._one(cursor, "品牌资料没有保存成功")
+            for organization in organizations:
+                cursor.execute(
+                    """
+                    INSERT INTO brand_library_entry_organizations
+                      (id, entry_id, tenant_id, organization_id)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (uuid4(), entry_id, scope.tenant_id, organization["id"]),
+                )
+            self._event(
+                cursor,
+                scope,
+                "brand_library.entry_saved",
+                "brand_library_entry",
+                entry_id,
+            )
+        scope_organizations = [
+            {
+                "id": str(organization["id"]),
+                "name": str(organization["name"]),
+                "level": str(organization["organization_level"]),
+            }
+            for organization in organizations
+        ]
+        return {
+            "id": str(entry_id),
+            "category": category,
+            "title": title,
+            "source_note": source_note,
+            "content": content,
+            "version": version,
+            "status": status,
+            "visibility_scope": visibility_scope,
+            "visibility_label": self._visibility_label(
+                visibility_scope,
+                scope_organizations,
+            ),
+            "scope_organizations": scope_organizations,
+            "updated_by": str(scope.user_id),
+            "updated_at": self._time(row["updated_at"]),
+            "impact": self._library_impact(category),
+        }
 
     def create_management_organization_material(
         self,
@@ -367,21 +969,47 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         original_filename: str,
         checksum_sha256: str,
         reference_note: str,
+        visibility_scope: str = "organizations",
+        organization_ids: tuple[UUID, ...] = (),
     ) -> dict[str, object]:
         with self._management_tx(scope) as cursor:
             cursor.execute(
-                "SELECT name FROM organizations WHERE tenant_id = %s AND id = %s",
+                "SELECT name, organization_level FROM organizations WHERE tenant_id = %s AND id = %s",
                 (scope.tenant_id, organization_id),
             )
             organization = self._one(cursor, "只能把组织素材保存到当前租户的团队")
+            scoped_organizations: list[dict[str, object]] = []
+            if organization_ids:
+                cursor.execute(
+                    """
+                    SELECT id, name, organization_level
+                    FROM organizations
+                    WHERE tenant_id = %s AND id = ANY(%s)
+                    ORDER BY name
+                    """,
+                    (scope.tenant_id, list(organization_ids)),
+                )
+                scoped_organizations = cursor.fetchall()
+                if len(scoped_organizations) != len(organization_ids):
+                    raise DomainError("素材可用范围只能选择当前租户已有的组织。")
+            if visibility_scope == "brand_all" and scoped_organizations:
+                raise DomainError("品牌全员素材不需要指定可用组织。")
+            if visibility_scope == "headquarters":
+                if len(scoped_organizations) != 1:
+                    raise DomainError("总部专用素材需要明确选择一个公司级组织。")
+                if str(scoped_organizations[0]["organization_level"]) != "company":
+                    raise DomainError("总部专用素材只能绑定明确登记的公司级组织。")
+            if visibility_scope == "organizations" and not scoped_organizations:
+                raise DomainError("指定区域素材至少需要选择一个具体区域。")
             cursor.execute(
                 """
                 INSERT INTO material_assets
                     (id, tenant_id, brand_id, scope, owner_user_id,
                      owner_organization_id, title, media_type, object_key,
-                     byte_size, original_filename, checksum_sha256, reference_note)
+                     byte_size, original_filename, checksum_sha256, reference_note,
+                     visibility_scope)
                 VALUES (%s, %s, %s, 'organization', NULL, %s, %s, %s, %s,
-                        %s, %s, %s, %s)
+                        %s, %s, %s, %s, %s)
                 RETURNING id, title, media_type, created_at, status,
                           original_filename, byte_size, reference_note
                 """,
@@ -397,9 +1025,24 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     original_filename,
                     checksum_sha256,
                     reference_note,
+                    visibility_scope,
                 ),
             )
             row = self._one(cursor, "组织素材没有保存成功")
+            for scoped_organization in scoped_organizations:
+                cursor.execute(
+                    """
+                    INSERT INTO material_asset_scope_organizations
+                      (id, asset_id, tenant_id, organization_id)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (
+                        uuid4(),
+                        asset_id,
+                        scope.tenant_id,
+                        scoped_organization["id"],
+                    ),
+                )
             cursor.execute(
                 """
                 INSERT INTO activity_events
@@ -418,6 +1061,19 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "original_filename": str(row["original_filename"]),
             "byte_size": self._integer(row["byte_size"]),
             "reference_note": str(row["reference_note"]),
+            "visibility_scope": visibility_scope,
+            "visibility_label": self._visibility_label(
+                visibility_scope,
+                scoped_organizations,
+            ),
+            "scope_organizations": [
+                {
+                    "id": str(scoped_organization["id"]),
+                    "name": str(scoped_organization["name"]),
+                    "level": str(scoped_organization["organization_level"]),
+                }
+                for scoped_organization in scoped_organizations
+            ],
             "organization_id": str(organization_id),
             "organization": str(organization["name"]),
         }
@@ -561,7 +1217,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             FROM content_series series
             WHERE series.tenant_id = %s
               AND series.brand_id = %s
-              AND series.account_id = %s
+              AND series.logical_account_id = %s
               AND series.title LIKE '%%M7-2B演示%%'
             ORDER BY series.created_at DESC
             LIMIT 1
@@ -810,17 +1466,42 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         source_kind: str,
         source_note: str,
         applicability: str,
+        visibility_scope: str = "brand_all",
+        organization_ids: tuple[UUID, ...] = (),
     ) -> dict[str, object]:
         product_id = uuid4()
         with self._management_tx(scope) as cursor:
+            organizations: list[dict[str, object]] = []
+            if organization_ids:
+                cursor.execute(
+                    """
+                    SELECT id, name, organization_level
+                    FROM organizations
+                    WHERE tenant_id = %s AND id = ANY(%s)
+                    ORDER BY name
+                    """,
+                    (scope.tenant_id, list(organization_ids)),
+                )
+                organizations = cursor.fetchall()
+                if len(organizations) != len(organization_ids):
+                    raise DomainError("商品资料范围只能选择当前租户已有的组织。")
+            if visibility_scope == "brand_all" and organizations:
+                raise DomainError("品牌全员商品资料不需要指定组织。")
+            if visibility_scope == "headquarters":
+                if len(organizations) != 1:
+                    raise DomainError("总部专用商品资料需要明确选择一个公司级组织。")
+                if str(organizations[0]["organization_level"]) != "company":
+                    raise DomainError("总部专用商品资料只能绑定明确登记的公司级组织。")
+            if visibility_scope == "organizations" and not organizations:
+                raise DomainError("指定区域商品资料至少需要选择一个具体区域。")
             cursor.execute(
                 """
                 INSERT INTO brand_products
                     (id, tenant_id, brand_id, sku, display_name, facts,
                      source_kind, source_note, fact_version, applicability,
-                     status, updated_by, updated_at)
+                     status, updated_by, updated_at, visibility_scope)
                 VALUES (%s, %s, %s, %s, %s, %s, %s,
-                        %s, 1, %s, 'active', %s, now())
+                        %s, 1, %s, 'active', %s, now(), %s)
                 ON CONFLICT (tenant_id, brand_id, sku) DO UPDATE
                 SET display_name = EXCLUDED.display_name,
                     facts = EXCLUDED.facts,
@@ -829,6 +1510,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     fact_version = brand_products.fact_version + 1,
                     applicability = EXCLUDED.applicability,
                     status = 'active',
+                    visibility_scope = EXCLUDED.visibility_scope,
                     updated_by = EXCLUDED.updated_by,
                     updated_at = now()
                 RETURNING id, fact_version, updated_at
@@ -844,15 +1526,35 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     source_note,
                     applicability,
                     scope.user_id,
+                    visibility_scope,
                 ),
             )
             row = self._one(cursor, "商品资料保存失败")
+            saved_product_id = UUID(str(row["id"]))
+            cursor.execute(
+                "DELETE FROM brand_product_scope_organizations WHERE tenant_id = %s AND product_id = %s",
+                (scope.tenant_id, saved_product_id),
+            )
+            for organization in organizations:
+                cursor.execute(
+                    """
+                    INSERT INTO brand_product_scope_organizations
+                        (id, tenant_id, product_id, organization_id)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (
+                        uuid4(),
+                        scope.tenant_id,
+                        saved_product_id,
+                        organization["id"],
+                    ),
+                )
             self._event(
                 cursor,
                 scope,
                 "brand_product.fact_version_saved",
                 "brand_product",
-                UUID(str(row["id"])),
+                saved_product_id,
             )
         return {
             "sku": sku,
@@ -863,6 +1565,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "fact_version": self._integer(row["fact_version"]),
             "applicability": applicability,
             "status": "active",
+            "visibility_scope": visibility_scope,
+            "scope_organizations": [
+                {
+                    "id": str(organization["id"]),
+                    "name": str(organization["name"]),
+                    "level": str(organization["organization_level"]),
+                }
+                for organization in organizations
+            ],
             "updated_at": row["updated_at"],
         }
 
@@ -877,6 +1588,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         control_organization_id: UUID | None = None,
         operator_can_maintain_expression_profile: bool = False,
         business_data_kind: str = "formal_business_data",
+        initial_profile: dict[str, str] | None = None,
     ) -> dict[str, object]:
         account_id = uuid4()
         content_role_id = uuid4()
@@ -890,11 +1602,12 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 (scope.tenant_id, scope.brand_id),
             )
             self._one(cursor, "请先由品牌方确认当前品牌表达草案，再创建正式发布账号")
-            # Serialize root-account assignment for this person. Without this row lock,
-            # two concurrent create requests could both observe no existing root grant.
+            # Serialize grants for this person while allowing one natural person to operate
+            # several explicitly authorized logical publishing identities.
             cursor.execute(
                 "SELECT id FROM users "
-                "WHERE tenant_id = %s AND id = %s AND enabled = true FOR UPDATE",
+                "WHERE tenant_id = %s AND id = %s AND enabled = true "
+                "AND entry_kind = 'tenant_user' FOR UPDATE",
                 (scope.tenant_id, operator_id),
             )
             self._one(cursor, "只能向当前租户已登记且启用的自然人授权发布账号")
@@ -902,17 +1615,29 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             # later by a tenant authority.  Nothing is defaulted, inferred from the creating
             # administrator, or guessed from an account name, a role name or an operator's name;
             # an account created without one simply has no maintainable profile until declared.
+            control_organization_level: str | None = None
             if control_organization_id is not None:
                 cursor.execute(
-                    "SELECT id FROM organizations WHERE tenant_id = %s AND id = %s",
+                    "SELECT id, organization_level FROM organizations WHERE tenant_id = %s AND id = %s",
                     (scope.tenant_id, control_organization_id),
                 )
-                self._one(cursor, "只能指定当前租户已有的组织作为账号控制组织")
+                control_organization = self._one(
+                    cursor,
+                    "只能指定当前租户已有的组织作为账号控制组织",
+                )
+                control_organization_level = str(control_organization["organization_level"])
+            if initial_profile is not None and control_organization_level != "company":
+                raise DomainError("租户管理员只能在明确的公司级负责团队下建立账号画像。")
             cursor.execute(
                 """
                 SELECT account.id, account.channel, role.name AS content_role,
                        role.voice_boundary, account.control_organization_id,
                        account.business_data_kind,
+                       profile.identity_position,
+                       profile.authority_boundary,
+                       profile.audience_relationship,
+                       profile.content_territories,
+                       profile.default_production_conditions,
                        EXISTS (
                            SELECT 1
                            FROM auth_grants grant_record
@@ -937,10 +1662,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                   ON role.tenant_id = account_role.tenant_id
                  AND role.id = account_role.content_role_id
                  AND role.brand_id = account.brand_id
+                LEFT JOIN account_expression_profile_versions profile
+                  ON profile.tenant_id = account.tenant_id
+                 AND profile.account_id = account.id
+                 AND profile.id = account.current_expression_profile_id
                 WHERE account.tenant_id = %s
                   AND account.brand_id = %s
                   AND account.name = %s
                   AND account.enabled = true
+                  AND account.carrier_of_account_id IS NULL
                 """,
                 (operator_id, operator_id, scope.tenant_id, scope.brand_id, name),
             )
@@ -960,6 +1690,17 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     != (str(control_organization_id) if control_organization_id else None)
                 ):
                     raise DomainError("当前品牌已有同名发布账号，但平台、表达身份、操作者或控制组织不同。")
+                if initial_profile is not None and any(
+                    str(existing[key] or "") != initial_profile[key]
+                    for key in (
+                        "identity_position",
+                        "authority_boundary",
+                        "audience_relationship",
+                        "content_territories",
+                        "default_production_conditions",
+                    )
+                ):
+                    raise DomainError("当前品牌已有同名发布账号，但账号画像不同。")
                 return {
                     "id": str(existing["id"]),
                     "name": name,
@@ -969,25 +1710,6 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     "operator_id": str(operator_id),
                     "shared_password": False,
                 }
-            cursor.execute(
-                """
-                SELECT account.name
-                FROM auth_grants grant_record
-                JOIN content_accounts account
-                  ON account.tenant_id = grant_record.tenant_id
-                 AND account.id = grant_record.account_id
-                WHERE grant_record.tenant_id = %s
-                  AND grant_record.user_id = %s
-                  AND grant_record.enabled = true
-                  AND account.enabled = true
-                  AND account.carrier_of_account_id IS NULL
-                LIMIT 1
-                """,
-                (scope.tenant_id, operator_id),
-            )
-            existing_root = cursor.fetchone()
-            if existing_root is not None:
-                raise DomainError("这位成员已有表达账号。请先在成员资格中明确切换，再建立新的账号关系。")
             cursor.execute(
                 "SELECT 1 FROM content_roles WHERE tenant_id = %s AND brand_id = %s AND name = %s",
                 (scope.tenant_id, scope.brand_id, content_role_name),
@@ -1024,6 +1746,35 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "INSERT INTO account_content_roles (id, tenant_id, account_id, content_role_id) VALUES (%s, %s, %s, %s)",
                 (uuid4(), scope.tenant_id, account_id, content_role_id),
             )
+            profile_id: UUID | None = None
+            if initial_profile is not None:
+                profile_id = uuid4()
+                cursor.execute(
+                    """
+                    INSERT INTO account_expression_profile_versions
+                        (id, tenant_id, account_id, content_role_id, version,
+                         identity_position, authority_boundary,
+                         audience_relationship, content_territories,
+                         default_production_conditions, created_by)
+                    VALUES (%s, %s, %s, %s, 1, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        profile_id,
+                        scope.tenant_id,
+                        account_id,
+                        content_role_id,
+                        initial_profile["identity_position"],
+                        initial_profile["authority_boundary"],
+                        initial_profile["audience_relationship"],
+                        initial_profile["content_territories"],
+                        initial_profile["default_production_conditions"],
+                        scope.user_id,
+                    ),
+                )
+                cursor.execute(
+                    "UPDATE content_accounts SET current_expression_profile_id = %s WHERE tenant_id = %s AND id = %s",
+                    (profile_id, scope.tenant_id, account_id),
+                )
             cursor.execute(
                 "INSERT INTO auth_grants "
                 "(id, tenant_id, user_id, account_id, role_name, "
@@ -1038,6 +1789,14 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 ),
             )
             self._event(cursor, scope, "publishing_account.created", "content_account", account_id)
+            if profile_id is not None:
+                self._event(
+                    cursor,
+                    scope,
+                    "account_expression_profile.version_saved",
+                    "account_expression_profile",
+                    profile_id,
+                )
         return {
             "id": str(account_id),
             "name": name,
@@ -1071,16 +1830,23 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 JOIN content_roles role
                   ON role.tenant_id = account_role.tenant_id
                  AND role.id = account_role.content_role_id
-                JOIN auth_grants grant_record
-                  ON grant_record.tenant_id = source.tenant_id
-                 AND grant_record.account_id = source.id
-                 AND grant_record.user_id = %s
-                 AND grant_record.enabled = true
                 WHERE source.tenant_id = %s AND source.brand_id = %s
                   AND source.id = %s AND source.enabled = true
                   AND source.carrier_of_account_id IS NULL
+                  AND EXISTS (
+                    SELECT 1 FROM auth_grants grant_record
+                    JOIN users operator
+                      ON operator.tenant_id = grant_record.tenant_id
+                     AND operator.id = grant_record.user_id
+                     AND operator.enabled = true
+                     AND operator.entry_kind = 'tenant_user'
+                    WHERE grant_record.tenant_id = source.tenant_id
+                      AND grant_record.account_id = source.id
+                      AND grant_record.user_id = %s
+                      AND grant_record.enabled = true
+                  )
                 """,
-                (operator_id, scope.tenant_id, scope.brand_id, source_account_id),
+                (scope.tenant_id, scope.brand_id, source_account_id, operator_id),
             )
             source = self._one(
                 cursor,
@@ -1090,22 +1856,17 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 raise DomainError("这个平台已经由原发布账号承载。")
             cursor.execute(
                 """
-                SELECT carrier.id, carrier.name, grant_record.user_id
+                SELECT carrier.id, carrier.name
                 FROM content_accounts carrier
-                LEFT JOIN auth_grants grant_record
-                  ON grant_record.tenant_id = carrier.tenant_id
-                 AND grant_record.account_id = carrier.id
-                 AND grant_record.user_id = %s
-                 AND grant_record.enabled = true
                 WHERE carrier.tenant_id = %s
                   AND carrier.carrier_of_account_id = %s
                   AND carrier.channel = %s
                 """,
-                (operator_id, scope.tenant_id, source_account_id, channel),
+                (scope.tenant_id, source_account_id, channel),
             )
             existing = cursor.fetchone()
             if existing is not None:
-                if str(existing["name"]) != name or str(existing["user_id"]) != str(operator_id):
+                if str(existing["name"]) != name:
                     raise DomainError("这个表达身份在目标平台已有不同的明确载体。")
                 carrier_id = UUID(str(existing["id"]))
             else:
@@ -1129,6 +1890,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                         source["business_data_kind"],
                     ),
                 )
+                # Keep the matching relation during the expand-first rollback
+                # window.  The UI-05 runtime never consumes it as an independent
+                # role: every read resolves through source_account_id.
                 cursor.execute(
                     """
                     INSERT INTO account_content_roles
@@ -1142,21 +1906,6 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                         source["content_role_id"],
                     ),
                 )
-                cursor.execute(
-                    """
-                    INSERT INTO auth_grants
-                        (id, tenant_id, user_id, account_id, role_name,
-                         can_maintain_expression_profile)
-                    VALUES (%s, %s, %s, %s, %s, false)
-                    """,
-                    (
-                        uuid4(),
-                        scope.tenant_id,
-                        operator_id,
-                        carrier_id,
-                        "平台版本载体操作资格",
-                    ),
-                )
                 self._event(
                     cursor,
                     scope,
@@ -1164,6 +1913,28 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     "content_account",
                     carrier_id,
                 )
+            # The previous healthy image authorizes a physical carrier directly.
+            # Preserve that internal compatibility grant for rollback, while the
+            # UI-05 authority resolves only enabled logical-root grants.
+            cursor.execute(
+                """
+                INSERT INTO auth_grants
+                    (id, tenant_id, user_id, account_id, role_name,
+                     can_maintain_expression_profile)
+                VALUES (%s, %s, %s, %s, %s, false)
+                ON CONFLICT (tenant_id, user_id, account_id) DO UPDATE
+                    SET enabled = true,
+                        role_name = EXCLUDED.role_name,
+                        can_maintain_expression_profile = false
+                """,
+                (
+                    uuid4(),
+                    scope.tenant_id,
+                    operator_id,
+                    carrier_id,
+                    "平台版本载体兼容资格",
+                ),
+            )
         return {
             "id": str(carrier_id),
             "name": name,
@@ -1187,7 +1958,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         grant_id = uuid4()
         with self._management_tx(scope) as cursor:
             cursor.execute(
-                "SELECT id FROM content_accounts WHERE tenant_id = %s AND brand_id = %s AND id = %s AND enabled = true",
+                "SELECT id FROM content_accounts "
+                "WHERE tenant_id = %s AND brand_id = %s AND id = %s "
+                "AND enabled = true AND carrier_of_account_id IS NULL",
                 (scope.tenant_id, scope.brand_id, account_id),
             )
             self._one(cursor, "只能授权当前品牌已有的发布账号")
@@ -1203,7 +1976,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             if bool(self._one(cursor, "无法检查自然人身份")["exists"]):
                 raise DomainError("当前租户已经有同名自然人身份。")
             cursor.execute(
-                "INSERT INTO users (id, tenant_id, organization_id, display_name) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO users "
+                "(id, tenant_id, organization_id, display_name, entry_kind) "
+                "VALUES (%s, %s, %s, %s, 'tenant_user')",
                 (operator_id, scope.tenant_id, organization_id, display_name),
             )
             cursor.execute(
@@ -1268,6 +2043,13 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 JOIN display_stores s ON s.execution_organization_id = %s AND s.brand_id = b.id
                     AND s.tenant_id = b.tenant_id
                 WHERE u.tenant_id = %s AND u.id = %s
+                  AND u.enabled = true AND u.entry_kind = 'tenant_user'
+                  AND EXISTS (
+                    SELECT 1 FROM display_access_grants display_grant
+                    WHERE display_grant.tenant_id = u.tenant_id
+                      AND display_grant.user_id = u.id
+                      AND display_grant.enabled = true
+                  )
                 """,
                 (scope.brand_id, scope.organization_id, scope.tenant_id, scope.user_id),
             )
@@ -1276,6 +2058,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
 
     def recent_content(self, scope: TrustedScope) -> list[dict[str, object]]:
         with self._content_tx(scope) as cursor:
+            logical_account_id = self._logical_account_id(cursor, scope)
             cursor.execute(
                 """
                 SELECT t.id AS task_id, t.parent_version_id, cv.id AS version_id,
@@ -1292,10 +2075,11 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 JOIN content_versions cv ON cv.task_id = t.id AND cv.tenant_id = t.tenant_id
                     AND cv.version_number = item.current_version
                 JOIN content_accounts a ON a.id = t.account_id AND a.tenant_id = t.tenant_id
-                WHERE t.tenant_id = %s AND t.brand_id = %s AND t.account_id = %s AND t.created_by = %s
+                WHERE t.tenant_id = %s AND t.brand_id = %s
+                  AND t.logical_account_id = %s AND t.created_by = %s
                 ORDER BY cv.created_at DESC LIMIT 20
                 """,
-                (scope.tenant_id, scope.brand_id, scope.account_id, scope.user_id),
+                (scope.tenant_id, scope.brand_id, logical_account_id, scope.user_id),
             )
             rows = cursor.fetchall()
         return [
@@ -1314,6 +2098,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
 
     def content_versions(self, scope: TrustedScope, task_id: UUID) -> list[dict[str, object]]:
         with self._content_tx(scope) as cursor:
+            logical_account_id = self._logical_account_id(cursor, scope)
             cursor.execute(
                 """
                 SELECT cv.id AS version_id, cv.version_number, cv.outline, cv.body, cv.created_at, gr.model,
@@ -1330,10 +2115,16 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 JOIN business_tasks t ON t.id = cv.task_id AND t.tenant_id = cv.tenant_id
                 JOIN content_accounts a ON a.id = t.account_id AND a.tenant_id = t.tenant_id
                 WHERE cv.tenant_id = %s AND cv.task_id = %s AND t.brand_id = %s
-                  AND t.account_id = %s AND t.created_by = %s
+                  AND t.logical_account_id = %s AND t.created_by = %s
                 ORDER BY cv.version_number DESC
                 """,
-                (scope.tenant_id, task_id, scope.brand_id, scope.account_id, scope.user_id),
+                (
+                    scope.tenant_id,
+                    task_id,
+                    scope.brand_id,
+                    logical_account_id,
+                    scope.user_id,
+                ),
             )
             rows = cursor.fetchall()
         return [
@@ -1406,46 +2197,72 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             for row in rows
         ]
 
-    def readiness(self, scope: TenantManagementScope) -> list[dict[str, str]]:
-        expression = self.brand_expression(scope)
+    def readiness(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
                 SELECT
-                    EXISTS (
-                        SELECT 1
-                        FROM content_accounts account
-                        JOIN account_content_roles account_role
-                          ON account_role.tenant_id = account.tenant_id
-                         AND account_role.account_id = account.id
-                        JOIN content_roles role
-                          ON role.tenant_id = account_role.tenant_id
-                         AND role.id = account_role.content_role_id
-                         AND role.brand_id = account.brand_id
-                        JOIN auth_grants grant_record
-                          ON grant_record.tenant_id = account.tenant_id
-                         AND grant_record.account_id = account.id
-                         AND grant_record.enabled = true
-                        JOIN users operator
-                          ON operator.tenant_id = grant_record.tenant_id
-                         AND operator.id = grant_record.user_id
-                         AND operator.enabled = true
-                        WHERE account.tenant_id = %s
-                          AND account.brand_id = %s
-                          AND account.enabled = true
-                    ) AS has_account_role,
-                    EXISTS (
-                        SELECT 1
-                        FROM brand_products product
-                        WHERE product.tenant_id = %s
-                          AND product.brand_id = %s
-                    ) AS has_confirmed_products,
-                    EXISTS (
-                        SELECT 1
-                        FROM display_stores store
-                        WHERE store.tenant_id = %s
-                          AND store.brand_id = %s
-                    ) AS has_dm01_profile
+                  COALESCE(
+                    (SELECT baseline.status FROM brand_expression_baselines baseline
+                     WHERE baseline.tenant_id = %s AND baseline.brand_id = %s),
+                    'missing'
+                  ) AS expression_status,
+                  (SELECT count(*) FROM content_accounts account
+                   WHERE account.tenant_id = %s AND account.brand_id = %s
+                     AND account.enabled = true
+                     AND account.carrier_of_account_id IS NULL) AS root_accounts,
+                  (SELECT count(DISTINCT account.id)
+                   FROM content_accounts account
+                   JOIN account_content_roles account_role
+                     ON account_role.tenant_id = account.tenant_id
+                    AND account_role.account_id = account.id
+                   JOIN auth_grants grant_record
+                     ON grant_record.tenant_id = account.tenant_id
+                    AND grant_record.account_id = account.id
+                    AND grant_record.enabled = true
+                   JOIN users operator
+                     ON operator.tenant_id = grant_record.tenant_id
+                    AND operator.id = grant_record.user_id
+                    AND operator.enabled = true
+                    AND operator.entry_kind = 'tenant_user'
+                   WHERE account.tenant_id = %s AND account.brand_id = %s
+                     AND account.enabled = true
+                     AND account.carrier_of_account_id IS NULL
+                     AND account.current_expression_profile_id IS NOT NULL) AS expression_accounts,
+                  (SELECT count(*) FROM brand_products product
+                   WHERE product.tenant_id = %s AND product.brand_id = %s
+                     AND product.status = 'active' AND product.source_note <> ''
+                     AND product.facts <> '{}'::jsonb) AS product_facts,
+                  (SELECT count(*) FROM content_series series
+                   WHERE series.tenant_id = %s AND series.brand_id = %s) AS series_count,
+                  (SELECT count(*) FROM (
+                     SELECT root.id
+                     FROM content_accounts root
+                     JOIN content_accounts physical
+                       ON physical.tenant_id = root.tenant_id
+                      AND physical.enabled = true
+                      AND (physical.id = root.id OR physical.carrier_of_account_id = root.id)
+                     WHERE root.tenant_id = %s AND root.brand_id = %s
+                       AND root.enabled = true
+                       AND root.carrier_of_account_id IS NULL
+                     GROUP BY root.id
+                     HAVING count(DISTINCT physical.channel) >= 2
+                   ) multi_target) AS multi_target_accounts,
+                  (SELECT count(*) FROM display_stores store
+                   WHERE store.tenant_id = %s AND store.brand_id = %s) AS display_stores,
+                  (SELECT count(*) FROM brand_products product
+                   WHERE product.tenant_id = %s AND product.brand_id = %s
+                     AND product.status = 'active'
+                     AND product.facts ? 'display_family') AS display_products,
+                  (SELECT count(*) FROM display_access_grants display_grant
+                   JOIN users display_user
+                     ON display_user.tenant_id = display_grant.tenant_id
+                    AND display_user.id = display_grant.user_id
+                    AND display_user.enabled = true
+                    AND display_user.entry_kind = 'tenant_user'
+                   WHERE display_grant.tenant_id = %s
+                     AND display_grant.enabled = true) AS display_users,
+                  now() AS evaluated_at
                 """,
                 (
                     scope.tenant_id,
@@ -1454,49 +2271,133 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     scope.brand_id,
                     scope.tenant_id,
                     scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
                 ),
             )
-            state = self._one(cursor, "无法读取当前入驻条件")
-        has_account_role = bool(state["has_account_role"])
-        has_confirmed_products = bool(state["has_confirmed_products"])
-        has_dm01_profile = bool(state["has_dm01_profile"])
+            state = self._one(cursor, "无法读取当前可用条件")
+        expression_confirmed = str(state["expression_status"]) == "confirmed"
+        root_accounts = self._integer(state["root_accounts"])
+        expression_accounts = self._integer(state["expression_accounts"])
+        product_facts = self._integer(state["product_facts"])
+        series_count = self._integer(state["series_count"])
+        multi_target_accounts = self._integer(state["multi_target_accounts"])
+        display_stores = self._integer(state["display_stores"])
+        display_products = self._integer(state["display_products"])
+        display_users = self._integer(state["display_users"])
+        evaluated_at = self._time(state["evaluated_at"])
+        expression_available = expression_confirmed and expression_accounts > 0
+        expression_status = self._condition_status(
+            expression_available,
+            expression_confirmed or root_accounts > 0,
+        )
+        product_status = self._condition_status(
+            expression_available and product_facts > 0,
+            expression_confirmed or product_facts > 0,
+        )
+        series_status = self._condition_status(
+            expression_accounts > 0,
+            root_accounts > 0,
+        )
+        recompile_status = self._condition_status(
+            expression_accounts > 0 and multi_target_accounts > 0,
+            root_accounts > 0,
+        )
+        display_status = self._condition_status(
+            display_stores > 0 and display_products > 0 and display_users > 0,
+            display_stores > 0 or display_products > 0 or display_users > 0,
+        )
+        common: dict[str, object] = {
+            "source": "当前租户的正式业务对象",
+            "version": "ui05-readiness-v1",
+            "evaluated_at": evaluated_at,
+        }
         return [
-            {
-                "id": "brand_expression",
-                "title": "确认品牌表达草案",
-                "detail": "当前草案等待确认。确认前仍可继续讨论，但不会成为正式表达基线。"
-                if expression["status"] == "draft"
-                else "当前品牌表达基线已经确认，可在需要时再更新。",
-                "unlock": "内容生产会使用已确认的表达边界。",
-                "state": "needs_action" if expression["status"] == "draft" else "ready",
-            },
-            {
-                "id": "account_role",
-                "title": "发布账号、表达身份与操作者",
-                "detail": "当前品牌已有一个发布账号、独立表达身份和获授权自然人。"
-                if has_account_role
-                else "还需要确认一个实际使用的发布账号、独立表达身份，并授权当前自然人。",
-                "unlock": "以服务端可信的品牌、账号和自然人身份生产内容。",
-                "state": "ready" if has_account_role else "needs_action",
-            },
-            {
-                "id": "product_facts",
-                "title": "已确认商品资料",
-                "detail": "已有可供商品承重内容使用的已确认资料。"
-                if has_confirmed_products
-                else "具体商品和价格仍未确认；P3/P4 可以使用，商品承重的 P1/P2/P5 暂不启用。",
-                "unlock": "启用需要具体商品硬事实的内容能力。",
-                "state": "ready" if has_confirmed_products else "needs_action",
-            },
-            {
-                "id": "dm01_profile",
-                "title": "真实双层挂杆条件",
-                "detail": "已有当前品牌可执行的真实门店挂杆档案。"
-                if has_dm01_profile
-                else "真实门店双层挂杆条件尚未确认；只限制 DM01，不影响内容生产。",
-                "unlock": "在真实门店范围内启用 DM01 执行方案。",
-                "state": "ready" if has_dm01_profile else "needs_action",
-            },
+            self._diagnosis(
+                "brand_expression",
+                "品牌与账号表达",
+                expression_status,
+                [
+                    f"已确认品牌表达：{'是' if expression_confirmed else '否'}",
+                    f"具备账号画像和操作者的发布账号：{expression_accounts}",
+                ],
+                [] if expression_available else ["确认品牌表达，并补齐账号画像和操作者。"],
+                "影响内容是否持续保持同一品牌和发布身份的表达边界。",
+                "管理发布账号",
+                "publishing-accounts",
+                common,
+            ),
+            self._diagnosis(
+                "non_product_content",
+                "日常非商品内容",
+                expression_status,
+                [f"可承担表达的逻辑发布账号：{expression_accounts}"],
+                [] if expression_available else ["补齐品牌表达、账号画像和成员操作资格。"],
+                "影响观点、关系和日常观察类内容能否形成完整成品。",
+                "补账号资料",
+                "publishing-accounts",
+                common,
+            ),
+            self._diagnosis(
+                "product_facts",
+                "商品选择与解释",
+                product_status,
+                [f"有来源且有可用事实的商品资料：{product_facts}"],
+                [] if product_status == "available" else ["补充有来源、版本和可观察事实的商品资料。"],
+                "只影响需要具体商品承担判断、解释或搭配关系的内容。",
+                "补商品资料",
+                "brand-library",
+                common,
+            ),
+            self._diagnosis(
+                "continuous_series",
+                "连续系列",
+                series_status,
+                [
+                    f"可操作的逻辑发布账号：{expression_accounts}",
+                    f"已有连续系列：{series_count}",
+                ],
+                [] if series_status == "available" else ["先补齐一个可操作的发布账号和账号画像。"],
+                "影响新建系列、续写和冻结系列前情。",
+                "管理发布账号",
+                "publishing-accounts",
+                common,
+            ),
+            self._diagnosis(
+                "platform_recompile",
+                "跨平台版本",
+                recompile_status,
+                [f"具备两个以上平台的逻辑发布账号：{multi_target_accounts}"],
+                [] if recompile_status == "available" else ["为发布账号补充至少两个明确的平台载体。"],
+                "影响从同一源成品另做其他平台版本。",
+                "管理平台版本",
+                "publishing-accounts",
+                common,
+            ),
+            self._diagnosis(
+                "dm01_display",
+                "门店墙面挂杆参考方案",
+                display_status,
+                [
+                    f"门店挂杆档案：{display_stores}",
+                    f"具备陈列关系的商品资料：{display_products}",
+                    f"具备陈列资格的成员：{display_users}",
+                ],
+                ([] if display_status == "available" else ["补齐门店挂杆条件、陈列商品资料和成员陈列资格中的缺项。"]),
+                "只影响门店墙面双层挂杆的文字参考方案。",
+                "补门店资料",
+                "brand-library",
+                common,
+            ),
         ]
 
     def brand_expression(self, scope: TenantManagementScope) -> dict[str, object]:
@@ -1582,13 +2483,20 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
 
     def list_series(self, scope: TrustedScope) -> list[dict[str, object]]:
         with self._content_tx(scope) as cursor:
+            logical_account_id = self._logical_account_id(cursor, scope)
             cursor.execute(
                 """
                 SELECT id, title, premise, revision FROM content_series
-                WHERE tenant_id = %s AND brand_id = %s AND created_by = %s AND account_id = %s
+                WHERE tenant_id = %s AND brand_id = %s
+                  AND created_by = %s AND logical_account_id = %s
                 ORDER BY created_at DESC
                 """,
-                (scope.tenant_id, scope.brand_id, scope.user_id, scope.account_id),
+                (
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.user_id,
+                    logical_account_id,
+                ),
             )
             series_rows = cursor.fetchall()
             result: list[dict[str, object]] = []
@@ -1603,10 +2511,11 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                         AND content_item.tenant_id = item.tenant_id
                     JOIN content_versions cv ON cv.task_id = item.task_id AND cv.tenant_id = item.tenant_id
                         AND cv.version_number = content_item.current_version
-                    WHERE item.tenant_id = %s AND item.series_id = %s AND task.account_id = %s
+                    WHERE item.tenant_id = %s AND item.series_id = %s
+                      AND task.logical_account_id = %s
                     ORDER BY item.position
                     """,
-                    (scope.tenant_id, series["id"], scope.account_id),
+                    (scope.tenant_id, series["id"], logical_account_id),
                 )
                 result.append(
                     {
@@ -1629,16 +2538,20 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
     def create_series(self, scope: TrustedScope, title: str, premise: str) -> dict[str, object]:
         series_id = uuid4()
         with self._content_tx(scope) as cursor:
+            logical_account_id = self._logical_account_id(cursor, scope)
             cursor.execute(
                 """
-                INSERT INTO content_series (id, tenant_id, brand_id, account_id, created_by, title, premise)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO content_series
+                    (id, tenant_id, brand_id, account_id,
+                     logical_account_id, created_by, title, premise)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     series_id,
                     scope.tenant_id,
                     scope.brand_id,
                     scope.account_id,
+                    logical_account_id,
                     scope.user_id,
                     title,
                     premise,
@@ -1657,13 +2570,21 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         self, scope: TrustedScope, series_id: UUID, task_id: UUID, position: int | None
     ) -> dict[str, object]:
         with self._content_tx(scope) as cursor:
+            logical_account_id = self._logical_account_id(cursor, scope)
             existing = self._series_task_ids(cursor, scope, series_id)
             cursor.execute(
                 """
                 SELECT id FROM business_tasks
-                WHERE tenant_id = %s AND id = %s AND brand_id = %s AND created_by = %s AND account_id = %s
+                WHERE tenant_id = %s AND id = %s AND brand_id = %s
+                  AND created_by = %s AND logical_account_id = %s
                 """,
-                (scope.tenant_id, task_id, scope.brand_id, scope.user_id, scope.account_id),
+                (
+                    scope.tenant_id,
+                    task_id,
+                    scope.brand_id,
+                    scope.user_id,
+                    logical_account_id,
+                ),
             )
             self._one(cursor, "只能把当前发布账号的内容纳入系列")
             if task_id in existing:
@@ -1704,18 +2625,54 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 """
                 SELECT m.id, m.title, m.media_type, m.scope, m.created_at, m.status,
                        m.original_filename, m.byte_size, m.checksum_sha256, m.reference_version,
-                       m.reference_note
+                       m.reference_note, m.visibility_scope
                 FROM material_assets m
                 WHERE m.tenant_id = %s AND m.brand_id = %s AND m.status = 'active'
                   AND (
                     (m.scope = 'personal' AND m.owner_user_id = %s)
-                    OR (m.scope = 'organization' AND m.owner_organization_id = (
-                        SELECT organization_id FROM users WHERE tenant_id = %s AND id = %s
-                    ))
+                    OR (
+                      m.scope = 'organization'
+                      AND (
+                        m.visibility_scope = 'brand_all'
+                        OR EXISTS (
+                          SELECT 1
+                          FROM content_accounts target_account
+                          JOIN content_accounts root_account
+                            ON root_account.tenant_id = target_account.tenant_id
+                           AND root_account.id = COALESCE(
+                                 target_account.carrier_of_account_id,
+                                 target_account.id
+                               )
+                          JOIN material_asset_scope_organizations material_scope
+                            ON material_scope.tenant_id = m.tenant_id
+                           AND material_scope.asset_id = m.id
+                           AND material_scope.organization_id =
+                               root_account.control_organization_id
+                          JOIN organizations scoped_organization
+                            ON scoped_organization.tenant_id = material_scope.tenant_id
+                           AND scoped_organization.id = material_scope.organization_id
+                          WHERE target_account.tenant_id = %s
+                            AND target_account.id = %s
+                            AND (
+                              m.visibility_scope = 'organizations'
+                              OR (
+                                m.visibility_scope = 'headquarters'
+                                AND scoped_organization.organization_level = 'company'
+                              )
+                            )
+                        )
+                      )
+                    )
                   )
                 ORDER BY m.created_at DESC
                 """,
-                (scope.tenant_id, scope.brand_id, scope.user_id, scope.tenant_id, scope.user_id),
+                (
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.user_id,
+                    scope.tenant_id,
+                    scope.account_id,
+                ),
             )
             rows = cursor.fetchall()
         return [
@@ -1731,6 +2688,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "checksum_sha256": str(row["checksum_sha256"]),
                 "reference_version": self._integer(row["reference_version"]),
                 "reference_note": str(row["reference_note"]),
+                "visibility_scope": str(row["visibility_scope"]),
             }
             for row in rows
         ]
@@ -1775,8 +2733,12 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 INSERT INTO material_assets
-                    (id, tenant_id, brand_id, scope, owner_user_id, owner_organization_id, title, media_type, object_key, byte_size, original_filename, checksum_sha256, reference_note)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (id, tenant_id, brand_id, scope, owner_user_id,
+                     owner_organization_id, title, media_type, object_key,
+                     byte_size, original_filename, checksum_sha256,
+                     reference_note, visibility_scope)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s)
                 RETURNING id, title, media_type, scope, created_at, status, original_filename, byte_size, checksum_sha256, reference_version, reference_note
                 """,
                 (
@@ -1793,9 +2755,19 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     original_filename,
                     checksum_sha256,
                     reference_note,
+                    "organizations" if asset_scope == "organization" else "brand_all",
                 ),
             )
             row = self._one(cursor, "素材元数据没有保存成功")
+            if owner_organization_id is not None:
+                cursor.execute(
+                    """
+                    INSERT INTO material_asset_scope_organizations
+                      (id, asset_id, tenant_id, organization_id)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (uuid4(), asset_id, scope.tenant_id, owner_organization_id),
+                )
             self._event(cursor, scope, "material.created", "material_asset", asset_id)
         return {
             "id": str(row["id"]),
@@ -1809,6 +2781,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "checksum_sha256": str(row["checksum_sha256"]),
             "reference_version": self._integer(row["reference_version"]),
             "reference_note": str(row["reference_note"]),
+            "visibility_scope": ("organizations" if asset_scope == "organization" else "personal"),
         }
 
     def request_material_deletion(self, scope: TrustedScope, asset_id: UUID) -> str:
@@ -1856,23 +2829,31 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
     def _series_task_ids(
         self, cursor: psycopg.Cursor[dict[str, object]], scope: TrustedScope, series_id: UUID
     ) -> list[UUID]:
+        logical_account_id = self._logical_account_id(cursor, scope)
         cursor.execute(
             """
             SELECT series.id FROM content_series series
             WHERE series.tenant_id = %s AND series.id = %s AND series.brand_id = %s
-              AND series.created_by = %s AND series.account_id = %s
+              AND series.created_by = %s AND series.logical_account_id = %s
             """,
-            (scope.tenant_id, series_id, scope.brand_id, scope.user_id, scope.account_id),
+            (
+                scope.tenant_id,
+                series_id,
+                scope.brand_id,
+                scope.user_id,
+                logical_account_id,
+            ),
         )
         self._one(cursor, "找不到当前内容系列")
         cursor.execute(
             """
             SELECT item.task_id FROM content_series_items item
             JOIN business_tasks task ON task.id = item.task_id AND task.tenant_id = item.tenant_id
-            WHERE item.tenant_id = %s AND item.series_id = %s AND task.account_id = %s
+            WHERE item.tenant_id = %s AND item.series_id = %s
+              AND task.logical_account_id = %s
             ORDER BY item.position
             """,
-            (scope.tenant_id, series_id, scope.account_id),
+            (scope.tenant_id, series_id, logical_account_id),
         )
         return [UUID(str(row["task_id"])) for row in cursor.fetchall()]
 
@@ -1923,6 +2904,107 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "INSERT INTO activity_events (id, tenant_id, actor_id, event_type, entity_type, entity_id) VALUES (%s, %s, %s, %s, %s, %s)",
             (uuid4(), scope.tenant_id, scope.user_id, event_type, entity_type, entity_id),
         )
+
+    def _logical_account_id(
+        self,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TrustedScope,
+    ) -> UUID:
+        cursor.execute(
+            """
+            SELECT COALESCE(account.carrier_of_account_id, account.id) AS logical_account_id
+            FROM content_accounts account
+            WHERE account.tenant_id = %s AND account.brand_id = %s
+              AND account.id = %s AND account.enabled = true
+            """,
+            (scope.tenant_id, scope.brand_id, scope.account_id),
+        )
+        row = self._one(cursor, "找不到当前逻辑发布账号")
+        return UUID(str(row["logical_account_id"]))
+
+    @staticmethod
+    def _platform_targets(
+        physical_targets: list[object],
+    ) -> list[dict[str, str]]:
+        result: list[dict[str, str]] = []
+        for raw_target in physical_targets:
+            if not isinstance(raw_target, dict):
+                continue
+            account_id = str(raw_target.get("id") or "")
+            channel = str(raw_target.get("channel") or "")
+            definitions = {
+                "抖音": (("douyin_video", "抖音", "视频"),),
+                "小红书": (
+                    ("xiaohongshu_graphic", "小红书", "图文"),
+                    ("xiaohongshu_video", "小红书", "视频"),
+                ),
+                "微信视频号": (("wechat_channels_video", "微信视频号", "视频"),),
+            }.get(channel, ())
+            for target, platform, media in definitions:
+                result.append(
+                    {
+                        "account_id": account_id,
+                        "target": target,
+                        "platform": platform,
+                        "media": media,
+                    }
+                )
+        return result
+
+    @staticmethod
+    def _condition_status(available: bool, conditional: bool) -> str:
+        if available:
+            return "available"
+        if conditional:
+            return "conditional"
+        return "unavailable"
+
+    @staticmethod
+    def _diagnosis(
+        stable_id: str,
+        title: str,
+        status: str,
+        evidence: list[str],
+        gaps: list[str],
+        impact: str,
+        action_label: str,
+        action_section: str,
+        common: dict[str, object],
+    ) -> dict[str, object]:
+        return {
+            "id": stable_id,
+            "title": title,
+            "status": status,
+            "evidence": evidence,
+            "gaps": gaps,
+            "impact": impact,
+            "action": {"label": action_label, "section": action_section},
+            **common,
+        }
+
+    @staticmethod
+    def _visibility_label(
+        visibility_scope: str,
+        raw_organizations: object,
+    ) -> str:
+        if visibility_scope == "brand_all":
+            return "品牌全员"
+        if visibility_scope == "headquarters":
+            return "总部专用"
+        organizations = raw_organizations if isinstance(raw_organizations, list) else []
+        if len(organizations) == 1 and isinstance(organizations[0], dict):
+            return f"{organizations[0].get('name', '指定区域')}可用"
+        return "指定区域可用"
+
+    @staticmethod
+    def _library_impact(category: str) -> str:
+        return {
+            "brand_expression": "改善品牌与账号表达",
+            "product": "改善需要具体商品事实的内容",
+            "organization_fact": "改善组织、区域或门店事实相关内容",
+            "reference": "为内容创作提供候选参考资料",
+            "official_material": "为获准创作者提供组织官方素材",
+        }.get(category, "为当前品牌资料提供有来源的候选参考")
 
     @staticmethod
     def _integer(value: object) -> int:

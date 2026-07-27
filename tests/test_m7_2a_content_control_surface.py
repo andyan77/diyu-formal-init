@@ -984,8 +984,9 @@ def test_a_revision_keeps_the_frozen_content_role_after_the_account_is_renamed(
         created = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
         snapshot = _snapshot(app_database_url, created["task_id"])
         frozen_role = str(snapshot["content_role"])
+        frozen_boundary = str(snapshot["content_role_boundary"])
         assert frozen_role
-        assert snapshot["content_role_boundary"]
+        assert frozen_boundary
         assert _receipt(app_database_url, created["task_id"])["content_role"] == frozen_role
 
         renamed = f"{frozen_role}（改名后）"
@@ -1009,8 +1010,8 @@ def test_a_revision_keeps_the_frozen_content_role_after_the_account_is_renamed(
             with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
                 cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
                 cursor.execute(
-                    "UPDATE content_roles SET name = %s WHERE tenant_id = %s AND name = %s",
-                    (frozen_role, str(TENANT_ID), renamed),
+                    "UPDATE content_roles SET name = %s, voice_boundary = %s WHERE tenant_id = %s AND name = %s",
+                    (frozen_role, frozen_boundary, str(TENANT_ID), renamed),
                 )
 
 

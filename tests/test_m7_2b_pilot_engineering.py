@@ -88,9 +88,7 @@ def test_series_generation_freezes_real_prior_versions_and_revisions_replay_them
         frozen = captured[-1].series_context
         assert frozen is not None
         assert frozen.target_position == 2
-        assert [str(item.version_id) for item in frozen.prior_entries] == [
-            first_value["version_id"]
-        ]
+        assert [str(item.version_id) for item in frozen.prior_entries] == [first_value["version_id"]]
         assert frozen.prior_entries[0].body == first_value["body"]
 
         reset = client.post(
@@ -109,9 +107,7 @@ def test_series_generation_freezes_real_prior_versions_and_revisions_replay_them
         assert revised.status_code == 201
         replayed = captured[-1].series_context
         assert replayed == frozen
-        assert client.get(
-            f"/api/v1/content/tasks/{second_value['task_id']}/versions"
-        ).json()[0]["version"] == 2
+        assert client.get(f"/api/v1/content/tasks/{second_value['task_id']}/versions").json()[0]["version"] == 2
 
 
 def test_failed_series_generation_writes_no_series_item_or_partial_version(
@@ -140,11 +136,7 @@ def test_failed_series_generation_writes_no_series_item_or_partial_version(
             },
         )
         assert response.status_code == 422
-        current = next(
-            item
-            for item in client.get("/api/v1/content/series").json()
-            if item["id"] == series["id"]
-        )
+        current = next(item for item in client.get("/api/v1/content/series").json() if item["id"] == series["id"])
         assert current["items"] == []
     audit = _row(
         app_database_url,
@@ -252,32 +244,52 @@ def test_product_revision_replays_the_brand_confirmed_fact_version(
         assert snapshot["product_facts"][0]["source_kind"] == "brand_user_confirmed"
 
 
-def test_platform_scope_uses_the_explicit_carrier_relation() -> None:
+def test_platform_scope_uses_the_explicit_carrier_relation(
+    app_database_url: str,
+) -> None:
     settings = Settings.model_validate({})
-    with TestClient(create_app(settings)) as manager:
-        manager.get("/ui/select/admin")
-        store_operator = next(
-            item
-            for item in manager.get("/api/v1/tenant-management/operators").json()
-            if item["id"] == str(STORE_CONTENT_USER_ID)
-        )
-        created = manager.post(
-            "/api/v1/tenant-management/platform-carriers",
-            json={
-                "source_account_id": str(STORE_CONTENT_ACCOUNT_ID),
-                "name": "折线之间·南城店账号·小红书",
-                "channel": "小红书",
-                "operator_id": store_operator["id"],
-                "confirm_internal_carrier": True,
-            },
-        )
-        assert created.status_code == 201
-        carrier_id = UUID(created.json()["id"])
+    carrier_id: UUID | None = None
+    try:
+        with TestClient(create_app(settings)) as manager:
+            manager.get("/ui/select/admin")
+            store_operator = next(
+                item
+                for item in manager.get("/api/v1/tenant-management/operators").json()
+                if item["id"] == str(STORE_CONTENT_USER_ID)
+            )
+            created = manager.post(
+                "/api/v1/tenant-management/platform-carriers",
+                json={
+                    "source_account_id": str(STORE_CONTENT_ACCOUNT_ID),
+                    "name": "折线之间·南城店账号·小红书",
+                    "channel": "小红书",
+                    "operator_id": store_operator["id"],
+                    "confirm_internal_carrier": True,
+                },
+            )
+            assert created.status_code == 201
+            carrier_id = UUID(created.json()["id"])
 
-    repository = ProductionAuthRepository(settings.app_database_url)
-    identity = TenantSession(TENANT_ID, STORE_CONTENT_USER_ID, "tenant-user")
-    assert repository.content_scope(identity, "xiaohongshu_graphic").account_id == carrier_id
-    assert repository.content_scope(identity, "douyin_video").account_id == STORE_CONTENT_ACCOUNT_ID
+        repository = ProductionAuthRepository(settings.app_database_url)
+        identity = TenantSession(TENANT_ID, STORE_CONTENT_USER_ID, "tenant-user")
+        assert repository.content_scope(identity, "xiaohongshu_graphic").account_id == carrier_id
+        assert repository.content_scope(identity, "douyin_video").account_id == STORE_CONTENT_ACCOUNT_ID
+    finally:
+        if carrier_id is not None:
+            with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+                cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+                cursor.execute(
+                    "DELETE FROM auth_grants WHERE tenant_id = %s AND account_id = %s",
+                    (TENANT_ID, carrier_id),
+                )
+                cursor.execute(
+                    "DELETE FROM account_content_roles WHERE tenant_id = %s AND account_id = %s",
+                    (TENANT_ID, carrier_id),
+                )
+                cursor.execute(
+                    "DELETE FROM content_accounts WHERE tenant_id = %s AND id = %s",
+                    (TENANT_ID, carrier_id),
+                )
 
 
 def test_demo_acceptance_index_is_manager_scoped_and_uses_no_fallback_fixture() -> None:
@@ -400,10 +412,6 @@ def test_demo_platform_index_selects_and_exposes_the_latest_complete_source_grou
     assert source["source_label"] == "H3 V6"
     assert source["source_version_id"] == str(source_v6_id)
     assert source["parent_version_id"] is None
-    assert {item["parent_version_id"] for item in children} == {
-        str(source_v6_id)
-    }
-    assert {item["source_version_id"] for item in children} == {
-        str(source_v6_id)
-    }
+    assert {item["parent_version_id"] for item in children} == {str(source_v6_id)}
+    assert {item["source_version_id"] for item in children} == {str(source_v6_id)}
     assert {item["source_label"] for item in children} == {"H3 V6"}

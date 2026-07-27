@@ -34,6 +34,31 @@ class CreateContentRequest(BaseModel):
     material_ids: list[UUID] = Field(default_factory=list, max_length=5)
     series_id: UUID | None = None
     series_position: int | None = Field(default=None, ge=1, le=999)
+    publishing_identity_id: UUID | None = None
+
+
+class ConversationTurnRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=1200)
+
+
+class CreateConversationRequest(BaseModel):
+    """One bounded natural turn; only a `ready` result may create a content task."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1, max_length=1200)
+    conversation: list[ConversationTurnRequest] = Field(default_factory=list, max_length=8)
+    publishing_identity_id: UUID
+    target: ContentTarget
+    creative_direction: CreativeDirectionRequest | None = None
+    use_personal_preferences: bool = True
+    material_ids: list[UUID] = Field(default_factory=list, max_length=5)
+    series_id: UUID | None = None
+    series_position: int | None = Field(default=None, ge=1, le=999)
+    target_conflict_resolution: Literal["keep_selected", "switch"] | None = None
 
 
 class RevisionRequest(BaseModel):
@@ -42,6 +67,7 @@ class RevisionRequest(BaseModel):
     instruction: str = Field(min_length=2, max_length=1000)
     target: ContentTarget | None = None
     source_target: ContentTarget | None = None
+    publishing_identity_id: UUID | None = None
 
 
 class ContentVersionResponse(BaseModel):
@@ -221,6 +247,8 @@ class MaterialUploadRequest(BaseModel):
 
 class OrganizationMaterialUploadRequest(MaterialUploadRequest):
     organization_id: UUID
+    visibility_scope: Literal["brand_all", "headquarters", "organizations"] = "organizations"
+    organization_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
 
 class DefaultPersonaRequest(BaseModel):
@@ -245,8 +273,12 @@ class CreatePublishingAccountRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     channel: Literal["抖音", "小红书", "微信视频号"]
     content_role_name: str = Field(min_length=1, max_length=80)
-    voice_boundary: str = Field(min_length=1, max_length=500)
     operator_id: UUID
+    # Legacy API callers may still send the internal boundary alone.  The product UI sends
+    # one complete account profile instead, and its authority segment becomes this short
+    # ContentRole's internal boundary without asking the user to repeat it.
+    voice_boundary: str | None = Field(default=None, min_length=1, max_length=500)
+    initial_profile: AccountExpressionVersionRequest | None = None
     # Which organization controls this account.  There is no default: leaving it empty means
     # nobody may maintain this account's expression profile until it is explicitly declared.
     control_organization_id: UUID | None = None
@@ -278,6 +310,8 @@ class SaveBrandProductRequest(BaseModel):
     applicability: str = Field(min_length=1, max_length=300)
     confirm_as_current_brand_fact: Literal[True]
     as_synthetic_business_fixture: bool = False
+    visibility_scope: Literal["brand_all", "headquarters", "organizations"] = "brand_all"
+    organization_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
 
 class LoginRequest(BaseModel):
@@ -312,6 +346,9 @@ class CreateTenantUserRequest(BaseModel):
     grants_material_maintenance: bool = False
     # Account use never implies profile maintenance; this is the separate, explicit grant.
     grants_expression_profile_maintenance: bool = False
+    entry_type: Literal["tenant_admin", "tenant_user"] | None = None
+    capabilities: list[Literal["content", "display"]] = Field(default_factory=list, max_length=2)
+    publishing_identity_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
 
 class UpdateTenantUserGrantsRequest(BaseModel):
@@ -322,6 +359,9 @@ class UpdateTenantUserGrantsRequest(BaseModel):
     grants_tenant_management: bool = False
     grants_material_maintenance: bool = False
     grants_expression_profile_maintenance: bool = False
+    entry_type: Literal["tenant_admin", "tenant_user"] | None = None
+    capabilities: list[Literal["content", "display"]] = Field(default_factory=list, max_length=2)
+    publishing_identity_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
 
 class CreateOrganizationRequest(BaseModel):
@@ -329,6 +369,26 @@ class CreateOrganizationRequest(BaseModel):
 
     name: str = Field(min_length=1, max_length=120)
     as_synthetic_business_fixture: bool = False
+    organization_level: Literal["company", "region", "operating_unit", "unspecified"] = "unspecified"
+
+
+class BrandLibraryEntryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category: Literal[
+        "brand_expression",
+        "product",
+        "organization_fact",
+        "reference",
+        "official_material",
+    ]
+    title: str = Field(min_length=1, max_length=160)
+    source_note: str = Field(min_length=2, max_length=500)
+    content: str = Field(min_length=1, max_length=20_000)
+    version: str = Field(min_length=1, max_length=80)
+    status: Literal["candidate", "active"] = "candidate"
+    visibility_scope: Literal["brand_all", "headquarters", "organizations"]
+    organization_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
 
 class CreateTenantRequest(BaseModel):

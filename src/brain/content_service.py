@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from uuid import UUID
 
@@ -16,7 +17,7 @@ from src.brain.natural_entry import (
     sanitize_seed,
 )
 from src.brain.p1_contract import assert_content_complete
-from src.brain.platform_directions import direction_for, target_from_text
+from src.brain.platform_directions import direction_for
 from src.ports.content_generator import ContentGenerator
 from src.ports.content_repository import ContentRepository
 from src.shared.content_snapshot import frozen_series_context
@@ -28,6 +29,9 @@ from src.shared.types import (
     ContentControlContext,
     ContentProduct,
     ContentTarget,
+    ConversationDecision,
+    ConversationInput,
+    ConversationTurn,
     GenerationInput,
     PlatformDirection,
     ProductFact,
@@ -38,15 +42,9 @@ from src.shared.types import (
     TrustedScope,
 )
 
-_NO_FROZEN_CONTEXT = (
-    "这条历史内容没有保留完整的创作条件，请按当前输入新建一条。"
-)
-_MISSING_FROZEN_MATERIAL = (
-    "这条内容当时用到的参考素材已经不可用，请按当前输入新建一条。"
-)
-_MISSING_FROZEN_PROFILE = (
-    "这条内容当时用到的账号表达画像已经读不到了，请按当前输入新建一条。"
-)
+_NO_FROZEN_CONTEXT = "这条历史内容没有保留完整的创作条件，请按当前输入新建一条。"
+_MISSING_FROZEN_MATERIAL = "这条内容当时用到的参考素材已经不可用，请按当前输入新建一条。"
+_MISSING_FROZEN_PROFILE = "这条内容当时用到的账号表达画像已经读不到了，请按当前输入新建一条。"
 
 
 class ContentService:
@@ -69,33 +67,25 @@ class ContentService:
         controls: RequestedControls | None = None,
         series_id: UUID | None = None,
         series_position: int | None = None,
+        primary_product_override: ContentProduct | None = None,
+        progress: Callable[[str], None] | None = None,
     ) -> dict[str, object]:
-        if reuse_version_id is None and is_natural_chat(weak_seed):
+        if primary_product_override is None and reuse_version_id is None and is_natural_chat(weak_seed):
             return {"kind": "greeting", "message": natural_reply()}
         if series_position is not None and series_id is None:
             raise DomainError("指定系列集数前，请先选择一个系列。")
-        continuation = (
-            reuse_version_id is None
-            and series_id is None
-            and requests_continuation(weak_seed)
-        )
+        continuation = reuse_version_id is None and series_id is None and requests_continuation(weak_seed)
         if continuation:
             reuse_version_id = self._repository.latest_visible_version(scope)
             if reuse_version_id is None:
                 return {"kind": "greeting", "message": "还没有当前账号可继续的上一条内容。"}
         sanitized_seed = sanitize_seed(weak_seed)
-        natural_target = target_from_text(sanitized_seed)
-        target = natural_target or target
         direction = direction_for(target)
         production_conditions = self._production_conditions(sanitized_seed, direction.media_format)
-        context = self._repository.load_brand_context(
-            scope, direction.media_format, production_conditions
-        )
+        context = self._repository.load_brand_context(scope, direction.media_format, production_conditions)
         self._assert_target_context(context, direction.platform)
         series_context = (
-            self._series_context(scope, series_id, series_position, sanitized_seed)
-            if series_id is not None
-            else None
+            self._series_context(scope, series_id, series_position, sanitized_seed) if series_id is not None else None
         )
         primary_product: ContentProduct | None
         is_recompile = False
@@ -110,9 +100,7 @@ class ContentService:
             products = source.products
             prior_body = source.body
             if self._requests_independent_result(sanitized_seed):
-                primary_product = self._generator.route(
-                    RoutingInput(sanitized_seed, context, products, prior_body)
-                )
+                primary_product = self._generator.route(RoutingInput(sanitized_seed, context, products, prior_body))
                 source_description = None
             else:
                 primary_product = source.primary_product
@@ -120,9 +108,7 @@ class ContentService:
                 source_description = source.source_description if is_recompile else None
         else:
             products = self._repository.load_product_facts(scope, sanitized_seed)
-            if not products and self._requires_confirmed_product(
-                sanitized_seed, context.brand_name
-            ):
+            if not products and self._requires_confirmed_product(sanitized_seed, context.brand_name):
                 return {
                     "kind": "question",
                     "message": "要讲当前品牌的具体商品，请先指定一件已经确认资料的商品。",
@@ -132,7 +118,7 @@ class ContentService:
                 if series_context is not None and series_context.prior_entries
                 else None
             )
-            primary_product = self._generator.route(
+            primary_product = primary_product_override or self._generator.route(
                 RoutingInput(sanitized_seed, context, products, series_prior)
             )
             prior_body = None
@@ -171,6 +157,7 @@ class ContentService:
                 products,
                 series_context,
                 context.business_data_kind,
+                context.brand_reference_context,
             ),
             series_context,
         )
@@ -190,7 +177,89 @@ class ContentService:
             source_description,
             control,
             series_context,
+            progress,
         )
+
+    def respond_to_conversation(
+        self,
+        scope: TrustedScope,
+        message: str,
+        history: tuple[ConversationTurn, ...],
+        target: ContentTarget,
+        controls: RequestedControls | None = None,
+        series_id: UUID | None = None,
+        series_position: int | None = None,
+        progress: Callable[[str], None] | None = None,
+    ) -> dict[str, object]:
+        """Collaborate without persistence until one request is genuinely generation-ready."""
+        sanitized_message = sanitize_seed(message)
+        sanitized_history = tuple(ConversationTurn(turn.role, sanitize_seed(turn.content)) for turn in history[-8:])
+        if (
+            sanitized_history
+            and sanitized_history[-1].role == "user"
+            and sanitized_history[-1].content == sanitized_message
+        ):
+            sanitized_history = sanitized_history[:-1]
+        if not sanitized_history and is_natural_chat(sanitized_message):
+            return {"kind": "chat", "message": natural_reply()}
+        if progress is not None:
+            progress("compiling_context")
+        direction = direction_for(target)
+        production_conditions = self._production_conditions(sanitized_message, direction.media_format)
+        context = self._repository.load_brand_context(scope, direction.media_format, production_conditions)
+        self._assert_target_context(context, direction.platform)
+        combined_text = "\n".join(
+            [
+                *(turn.content for turn in sanitized_history if turn.role == "user"),
+                sanitized_message,
+            ]
+        )
+        products = self._repository.load_product_facts(scope, combined_text)
+        control = self._control_context(scope, context, controls, combined_text)
+        selected_direction = ""
+        if control.direction is not None:
+            selected_direction = "；".join(
+                [
+                    *(f"{item.axis}：{item.applied_label}" for item in control.direction.selections),
+                    *((f"自然补充：{control.direction.custom_text}",) if control.direction.custom_text else ()),
+                ]
+            )
+        series_summary = ""
+        if series_id is not None:
+            series = self._series_context(scope, series_id, series_position, combined_text)
+            series_summary = (
+                f"系列《{series.title}》第 {series.target_position} 个位置；"
+                f"已有 {len(series.prior_entries)} 条必要前情。"
+            )
+        decision: ConversationDecision = self._generator.collaborate(
+            ConversationInput(
+                message=sanitized_message,
+                history=sanitized_history,
+                brand=context,
+                products=products,
+                target=target,
+                selected_direction=selected_direction,
+                prior_series_summary=series_summary,
+            )
+        )
+        if decision.disposition != "ready":
+            return {
+                "kind": decision.disposition,
+                "message": decision.message,
+            }
+        if decision.primary_product is None or not decision.brief:
+            raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
+        result = self.create_from_weak_seed(
+            scope,
+            decision.brief,
+            target=target,
+            controls=controls,
+            series_id=series_id,
+            series_position=series_position,
+            primary_product_override=decision.primary_product,
+            progress=progress,
+        )
+        return result | {"conversation_message": decision.message}
 
     def _control_context(
         self,
@@ -243,9 +312,7 @@ class ContentService:
             collaboration_note=collaboration_note,
         )
 
-    def _replayed_control(
-        self, scope: TrustedScope, snapshot: dict[str, object]
-    ) -> ContentControlContext:
+    def _replayed_control(self, scope: TrustedScope, snapshot: dict[str, object]) -> ContentControlContext:
         """A revision reads its own frozen conditions; today's settings never stand in."""
         profile_id = snapshot.get("account_expression_profile_id")
         expression = None
@@ -254,20 +321,14 @@ class ContentService:
             raw_version = frozen_expression.get("version")
             expression = AccountExpression(
                 profile_id=(
-                    UUID(str(frozen_expression["profile_id"]))
-                    if frozen_expression.get("profile_id")
-                    else None
+                    UUID(str(frozen_expression["profile_id"])) if frozen_expression.get("profile_id") else None
                 ),
                 version=raw_version if isinstance(raw_version, int) else None,
                 identity_position=str(frozen_expression.get("identity_position") or ""),
                 authority_boundary=str(frozen_expression.get("authority_boundary") or ""),
-                audience_relationship=str(
-                    frozen_expression.get("audience_relationship") or ""
-                ),
+                audience_relationship=str(frozen_expression.get("audience_relationship") or ""),
                 content_territories=str(frozen_expression.get("content_territories") or ""),
-                default_production_conditions=str(
-                    frozen_expression.get("default_production_conditions") or ""
-                ),
+                default_production_conditions=str(frozen_expression.get("default_production_conditions") or ""),
                 is_draft=False,
             )
         elif self._control is not None and isinstance(profile_id, str) and profile_id:
@@ -289,9 +350,7 @@ class ContentService:
             except DomainError as exc:
                 raise DomainError(_MISSING_FROZEN_MATERIAL) from exc
             # A reference that moved on is not the reference this task froze.
-            if any(
-                frozen_versions[item.asset_id] != item.reference_version for item in materials
-            ):
+            if any(frozen_versions[item.asset_id] != item.reference_version for item in materials):
                 raise DomainError(_MISSING_FROZEN_MATERIAL)
         catalog_version = snapshot.get("catalog_version")
         preference_version = snapshot.get("private_preference_version")
@@ -303,44 +362,47 @@ class ContentService:
             account_expression=expression,
             materials=materials,
             preference_mode=str(snapshot.get("private_preference_mode") or PREFERENCE_ABSENT),
-            preference_version=(
-                preference_version if isinstance(preference_version, int) else None
-            ),
+            preference_version=(preference_version if isinstance(preference_version, int) else None),
             content_role=str(frozen_role) if isinstance(frozen_role, str) else "",
-            content_role_boundary=(
-                str(frozen_boundary) if isinstance(frozen_boundary, str) else ""
-            ),
+            content_role_boundary=(str(frozen_boundary) if isinstance(frozen_boundary, str) else ""),
             # A revision replays conditions; it never reads today's private preference.
             collaboration_note="",
         )
 
     @staticmethod
-    def _replayed_context(context: BrandContext, control: ContentControlContext) -> BrandContext:
+    def _replayed_context(
+        context: BrandContext,
+        control: ContentControlContext,
+        snapshot: dict[str, object] | None = None,
+    ) -> BrandContext:
         """Speak from the identity this task froze, not from whatever the account carries today.
 
         Renaming the account's expression identity, or rewriting its boundary, changes what the
         next new task says.  It must not silently rewrite the identity an existing task and all
         of its later versions were produced under.
         """
+        raw_references = snapshot.get("brand_reference_context") if snapshot is not None else None
+        frozen_references = (
+            tuple(str(item) for item in raw_references if isinstance(item, str))
+            if isinstance(raw_references, list)
+            else context.brand_reference_context
+        )
         if not control.content_role:
-            return context
+            return replace(context, brand_reference_context=frozen_references)
         return replace(
             context,
             content_role_name=control.content_role,
             content_role_boundary=control.content_role_boundary or context.content_role_boundary,
+            brand_reference_context=frozen_references,
         )
 
     @staticmethod
     def _requires_confirmed_product(seed: str, brand_name: str) -> bool:
         """Fail closed only for an explicit current-brand factual product request."""
         product_subject = any(
-            marker in seed
-            for marker in ("商品", "外套", "上衣", "裤子", "裙子", "连衣裙", "鞋", "这件", "这款")
+            marker in seed for marker in ("商品", "外套", "上衣", "裤子", "裙子", "连衣裙", "鞋", "这件", "这款")
         )
-        current_brand = any(
-            marker in seed
-            for marker in (brand_name, "当前品牌", "你们品牌", "我们品牌")
-        )
+        current_brand = any(marker in seed for marker in (brand_name, "当前品牌", "你们品牌", "我们品牌"))
         factual_request = any(
             marker in seed
             for marker in (
@@ -378,9 +440,7 @@ class ContentService:
         ) = self._repository.task_details(scope, task_id)
         if media_format != direction.media_format:
             raise GenerationFailed("改换图文或平台请从当前版本选择目标并新建改编版本")
-        production_conditions = self._production_conditions(
-            instruction, media_format, prior_conditions
-        )
+        production_conditions = self._production_conditions(instruction, media_format, prior_conditions)
         context = self._repository.load_brand_context(scope, media_format, production_conditions)
         self._assert_target_context(context, direction.platform)
         products = self._repository.load_task_product_facts(scope, task_id)
@@ -394,7 +454,7 @@ class ContentService:
         )
         control = self._replayed_control(scope, snapshot)
         series_context = frozen_series_context(snapshot)
-        context = self._replayed_context(context, control)
+        context = self._replayed_context(context, control, snapshot)
         run_id, parent_version_id, weak_seed, primary_product = self._repository.revise_task(
             scope,
             task_id,
@@ -451,16 +511,12 @@ class ContentService:
         if snapshot is None:
             return {"kind": "question", "message": _NO_FROZEN_CONTEXT}
         direction = direction_for(target)
-        production_conditions = self._production_conditions(
-            instruction, direction.media_format
-        )
-        context = self._repository.load_brand_context(
-            target_scope, direction.media_format, production_conditions
-        )
+        production_conditions = self._production_conditions(instruction, direction.media_format)
+        context = self._repository.load_brand_context(target_scope, direction.media_format, production_conditions)
         self._assert_target_context(context, direction.platform)
         control = self._replayed_control(source_scope, snapshot)
         control = self._recompile_control(control)
-        context = self._replayed_context(context, control)
+        context = self._replayed_context(context, control, snapshot)
         series_context = frozen_series_context(snapshot)
         assets = self._repository.load_active_assets(
             target_scope,
@@ -491,6 +547,7 @@ class ContentService:
                 source.products,
                 series_context,
                 context.business_data_kind,
+                context.brand_reference_context,
             ),
             None,
         )
@@ -512,9 +569,7 @@ class ContentService:
             series_context,
         )
 
-    def identity_summary(
-        self, scope: TrustedScope, target: ContentTarget = "douyin_video"
-    ) -> dict[str, str]:
+    def identity_summary(self, scope: TrustedScope, target: ContentTarget = "douyin_video") -> dict[str, str]:
         direction = direction_for(target)
         context = self._repository.load_brand_context(
             scope,
@@ -548,8 +603,14 @@ class ContentService:
         source_version_description: str | None,
         control: ContentControlContext | None = None,
         series_context: SeriesContext | None = None,
+        progress: Callable[[str], None] | None = None,
     ) -> dict[str, object]:
         try:
+            # The run is already durable here. Keep the first generation event
+            # inside the failure guard so a disconnected stream cannot strand
+            # it in the running state.
+            if progress is not None:
+                progress("generating")
             artifact = self._generator.generate(
                 GenerationInput(
                     run_id=run_id,
@@ -572,6 +633,8 @@ class ContentService:
                     series_context=series_context,
                 )
             )
+            if progress is not None:
+                progress("validating")
             assert_content_complete(artifact)
         except GenerationFailed as exc:
             self._repository.fail_run(scope, task_id, run_id, str(exc))
@@ -584,19 +647,31 @@ class ContentService:
             # generation run looking active after the request slot is released.
             self._repository.fail_run(scope, task_id, run_id, "模型调用已取消")
             raise
-        completed = self._repository.complete_run_with_version(
-            scope,
-            task_id,
-            run_id,
-            artifact.outline,
-            artifact.body,
-            artifact.model,
-            artifact.latency_ms,
-            artifact.retry_count,
-            artifact.provider_usage,
-            {key: str(value) for key, value in vars(artifact.semantic_contract).items()},
-            artifact.fact_repair_receipts,
-        )
+        try:
+            if progress is not None:
+                progress("finalizing")
+            completed = self._repository.complete_run_with_version(
+                scope,
+                task_id,
+                run_id,
+                artifact.outline,
+                artifact.body,
+                artifact.model,
+                artifact.latency_ms,
+                artifact.retry_count,
+                artifact.provider_usage,
+                {key: str(value) for key, value in vars(artifact.semantic_contract).items()},
+                artifact.fact_repair_receipts,
+            )
+        except GenerationFailed as exc:
+            self._repository.fail_run(scope, task_id, run_id, str(exc))
+            raise
+        except Exception as exc:
+            self._repository.fail_run(scope, task_id, run_id, "成品保存失败，请稍后重试")
+            raise GenerationFailed("成品保存失败，请稍后重试") from exc
+        except BaseException:
+            self._repository.fail_run(scope, task_id, run_id, "成品保存已取消")
+            raise
         version_value = completed["version"]
         if not isinstance(version_value, int):
             raise GenerationFailed("内容版本数据无效")
@@ -613,9 +688,7 @@ class ContentService:
             "adapted_from": visible["adapted_from"],
             # Shown before the artifact, never inside it, and never a review report.
             "translation_notice": creative.translation_notice if creative else None,
-            "applied_direction": (
-                [item.applied_label for item in creative.selections] if creative else []
-            ),
+            "applied_direction": ([item.applied_label for item in creative.selections] if creative else []),
         }
 
     def _series_context(
@@ -653,9 +726,7 @@ class ContentService:
                 direction,
                 selections=selections,
                 translation_notice=(
-                    direction.translation_notice
-                    if any(item.translated for item in selections)
-                    else None
+                    direction.translation_notice if any(item.translated for item in selections) else None
                 ),
             )
             if selections or direction.custom_text

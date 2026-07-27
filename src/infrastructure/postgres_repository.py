@@ -64,25 +64,85 @@ class PostgresContentRepository(ContentRepository):
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT b.name AS brand_name, b.positioning, b.decision_order, b.tone, a.name AS account_name,
+                SELECT b.name AS brand_name, b.positioning, b.decision_order, b.tone,
+                       root_account.name AS account_name,
                        u.display_name AS operator_name, o.name AS organization_name,
                        cr.name AS content_role_name, cr.voice_boundary, ba.description AS audience_description,
-                       b.strategy_version, a.channel, a.business_data_kind
+                       b.strategy_version, target_account.channel, root_account.business_data_kind,
+                       root_account.control_organization_id
                 FROM brands b
-                JOIN content_accounts a ON a.brand_id = b.id AND a.tenant_id = b.tenant_id
-                JOIN auth_grants g ON g.account_id = a.id AND g.tenant_id = a.tenant_id
+                JOIN content_accounts target_account
+                  ON target_account.brand_id = b.id AND target_account.tenant_id = b.tenant_id
+                JOIN content_accounts root_account
+                  ON root_account.id = COALESCE(
+                       target_account.carrier_of_account_id, target_account.id
+                     )
+                 AND root_account.tenant_id = target_account.tenant_id
+                 AND root_account.carrier_of_account_id IS NULL
+                JOIN auth_grants g
+                  ON g.account_id = root_account.id AND g.tenant_id = root_account.tenant_id
                 JOIN users u ON u.id = g.user_id AND u.tenant_id = g.tenant_id
                 JOIN organizations o ON o.id = u.organization_id AND o.tenant_id = u.tenant_id
-                JOIN account_content_roles acr ON acr.account_id = a.id AND acr.tenant_id = a.tenant_id
+                JOIN account_content_roles acr
+                  ON acr.account_id = root_account.id
+                 AND acr.tenant_id = root_account.tenant_id
                 JOIN content_roles cr ON cr.id = acr.content_role_id AND cr.tenant_id = acr.tenant_id
                     AND cr.brand_id = b.id
                 JOIN brand_audiences ba ON ba.brand_id = b.id AND ba.tenant_id = b.tenant_id
-                WHERE b.tenant_id = %s AND b.id = %s AND a.id = %s AND g.user_id = %s
-                  AND a.enabled AND g.enabled AND u.enabled
+                WHERE b.tenant_id = %s AND b.id = %s
+                  AND target_account.id = %s AND g.user_id = %s
+                  AND target_account.enabled AND root_account.enabled AND g.enabled AND u.enabled
+                  AND u.entry_kind = 'tenant_user'
                 """,
                 (scope.tenant_id, scope.brand_id, scope.account_id, scope.user_id),
             )
             row = self._one(cursor, "当前身份没有可用内容账号授权")
+            cursor.execute(
+                """
+                SELECT entry.category, entry.title, entry.source_note,
+                       entry.content, entry.version
+                FROM brand_library_entries entry
+                WHERE entry.tenant_id = %s
+                  AND entry.brand_id = %s
+                  AND entry.status = 'active'
+                  AND (
+                    entry.visibility_scope = 'brand_all'
+                    OR EXISTS (
+                        SELECT 1
+                        FROM brand_library_entry_organizations entry_scope
+                        JOIN organizations scoped_organization
+                          ON scoped_organization.tenant_id = entry_scope.tenant_id
+                         AND scoped_organization.id = entry_scope.organization_id
+                        WHERE entry_scope.tenant_id = entry.tenant_id
+                          AND entry_scope.entry_id = entry.id
+                          AND entry_scope.organization_id = %s
+                          AND (
+                            entry.visibility_scope = 'organizations'
+                            OR (
+                              entry.visibility_scope = 'headquarters'
+                              AND scoped_organization.organization_level = 'company'
+                            )
+                          )
+                    )
+                  )
+                ORDER BY entry.updated_at DESC, entry.id
+                LIMIT 6
+                """,
+                (
+                    scope.tenant_id,
+                    scope.brand_id,
+                    row["control_organization_id"],
+                ),
+            )
+            reference_rows = cursor.fetchall()
+        brand_reference_context = tuple(
+            (
+                f"{str(reference['title'])}（{str(reference['category'])}；"
+                f"版本 {str(reference['version'])}；来源：{str(reference['source_note'])}）："
+                f"{str(reference['content'])[:1200]}"
+            )
+            for reference in reference_rows
+        )
         return BrandContext(
             brand_name=str(row["brand_name"]),
             positioning=str(row["positioning"]),
@@ -99,6 +159,7 @@ class PostgresContentRepository(ContentRepository):
             media_format="图文" if media_format == "graphic" else "视频",
             production_conditions=production_conditions,
             business_data_kind=str(row["business_data_kind"]),
+            brand_reference_context=brand_reference_context,
         )
 
     def create_task_and_running_run(
@@ -122,6 +183,15 @@ class PostgresContentRepository(ContentRepository):
     ) -> tuple[UUID, UUID, str | None]:
         task_id, run_id = uuid4(), uuid4()
         with self._tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT COALESCE(carrier_of_account_id, id) AS logical_account_id
+                FROM content_accounts
+                WHERE tenant_id = %s AND brand_id = %s AND id = %s AND enabled = true
+                """,
+                (scope.tenant_id, scope.brand_id, scope.account_id),
+            )
+            logical_account_id = UUID(str(self._one(cursor, "当前发布账号不可用")["logical_account_id"]))
             prior_body: str | None = None
             if parent_version_id is not None:
                 cursor.execute(
@@ -152,17 +222,19 @@ class PostgresContentRepository(ContentRepository):
             cursor.execute(
                 """
                 INSERT INTO business_tasks
-                    (id, tenant_id, brand_id, account_id, created_by, weak_seed,
+                    (id, tenant_id, brand_id, account_id, logical_account_id,
+                     created_by, weak_seed,
                      primary_content_product, product_refs, parent_version_id, media_format,
                      production_conditions, content_context_snapshot, series_id,
                      series_position, series_revision_used)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     task_id,
                     scope.tenant_id,
                     scope.brand_id,
                     scope.account_id,
+                    logical_account_id,
                     scope.user_id,
                     weak_seed,
                     primary_product,
@@ -170,7 +242,18 @@ class PostgresContentRepository(ContentRepository):
                     parent_version_id,
                     media_format,
                     production_conditions,
-                    Jsonb(snapshot) if snapshot is not None else None,
+                    (
+                        Jsonb(
+                            snapshot
+                            | {
+                                "logical_publishing_identity_id": str(logical_account_id),
+                                "platform_carrier_id": str(scope.account_id),
+                                "target": target,
+                            }
+                        )
+                        if snapshot is not None
+                        else None
+                    ),
                     series_context.series_id if series_context is not None else None,
                     series_context.target_position if series_context is not None else None,
                     series_context.revision if series_context is not None else None,
@@ -627,9 +710,7 @@ class PostgresContentRepository(ContentRepository):
         source_media = row["source_media_format"]
         source_channel = row["source_channel"]
         target_channel = row["target_channel"]
-        if source_version is not None and (
-            source_media != media_format or source_channel != target_channel
-        ):
+        if source_version is not None and (source_media != media_format or source_channel != target_channel):
             if (
                 not isinstance(source_version, int)
                 or source_media not in {"video", "graphic"}
@@ -637,9 +718,7 @@ class PostgresContentRepository(ContentRepository):
             ):
                 raise DomainError("内容任务的改编来源数据无效")
             media_label = "图文" if source_media == "graphic" else "视频"
-            source_description = (
-                f"由{source_channel}{media_label} V{source_version} 改编"
-            )
+            source_description = f"由{source_channel}{media_label} V{source_version} 改编"
         return (
             str(row["weak_seed"]),
             self._product(row["primary_content_product"]),
@@ -685,17 +764,13 @@ class PostgresContentRepository(ContentRepository):
             raise DomainError("源版本媒体格式无效")
         media_label = "图文" if source_media == "graphic" else "视频"
         snapshot = row["content_context_snapshot"]
-        frozen_products = (
-            frozen_product_facts(snapshot) if isinstance(snapshot, dict) else None
-        )
+        frozen_products = frozen_product_facts(snapshot) if isinstance(snapshot, dict) else None
         return RecompileSource(
             task_id=UUID(str(row["task_id"])),
             weak_seed=str(row["weak_seed"]),
             primary_product=self._product(row["primary_content_product"]),
             products=(
-                frozen_products
-                if frozen_products is not None
-                else self._product_facts_for_refs(scope, tuple(refs))
+                frozen_products if frozen_products is not None else self._product_facts_for_refs(scope, tuple(refs))
             ),
             body=str(row["body"]),
             source_description=f"由{row['channel']}{media_label} V{row['version_number']} 改编",
@@ -714,17 +789,24 @@ class PostgresContentRepository(ContentRepository):
                 SELECT series.title, series.premise, series.revision,
                        COALESCE(max(item.position), 0) AS last_position
                 FROM content_series series
+                JOIN content_accounts requested_account
+                  ON requested_account.tenant_id = series.tenant_id
+                 AND requested_account.id = %s
                 LEFT JOIN content_series_items item
                   ON item.series_id = series.id AND item.tenant_id = series.tenant_id
                 WHERE series.tenant_id = %s AND series.id = %s AND series.brand_id = %s
-                  AND series.account_id = %s AND series.created_by = %s
+                  AND series.logical_account_id = COALESCE(
+                        requested_account.carrier_of_account_id,
+                        requested_account.id
+                      )
+                  AND series.created_by = %s
                 GROUP BY series.id, series.title, series.premise, series.revision
                 """,
                 (
+                    scope.account_id,
                     scope.tenant_id,
                     series_id,
                     scope.brand_id,
-                    scope.account_id,
                     scope.user_id,
                 ),
             )
@@ -747,7 +829,12 @@ class PostgresContentRepository(ContentRepository):
                  AND version.version_number = content_item.current_version
                 WHERE item.tenant_id = %s AND item.series_id = %s
                   AND item.position < %s AND task.brand_id = %s
-                  AND task.account_id = %s AND task.created_by = %s
+                  AND task.logical_account_id = (
+                    SELECT COALESCE(carrier_of_account_id, id)
+                    FROM content_accounts
+                    WHERE tenant_id = %s AND id = %s
+                  )
+                  AND task.created_by = %s
                 ORDER BY item.position DESC
                 LIMIT 3
                 """,
@@ -756,6 +843,7 @@ class PostgresContentRepository(ContentRepository):
                     series_id,
                     target_position,
                     scope.brand_id,
+                    scope.tenant_id,
                     scope.account_id,
                     scope.user_id,
                 ),
@@ -806,9 +894,7 @@ class PostgresContentRepository(ContentRepository):
             self._active_asset(row, primary_product, products)
             for row in rows
             if self._applies(str(row["asset_id"]), primary_product, weak_seed)
-            and self._media_asset_applies(
-                str(row["asset_id"]), primary_product, weak_seed, target, is_recompile
-            )
+            and self._media_asset_applies(str(row["asset_id"]), primary_product, weak_seed, target, is_recompile)
         )
 
     def load_product_facts(self, scope: TrustedScope, weak_seed: str) -> tuple[ProductFact, ...]:
@@ -817,11 +903,45 @@ class PostgresContentRepository(ContentRepository):
                 """
                 SELECT sku, display_name, facts, source_kind, source_note,
                        fact_version, applicability
-                FROM brand_products
-                WHERE tenant_id = %s AND brand_id = %s AND status = 'active'
-                ORDER BY sku
+                FROM brand_products product
+                JOIN content_accounts target_account
+                  ON target_account.tenant_id = product.tenant_id
+                 AND target_account.brand_id = product.brand_id
+                 AND target_account.id = %s
+                JOIN content_accounts root_account
+                  ON root_account.tenant_id = target_account.tenant_id
+                 AND root_account.id = COALESCE(
+                       target_account.carrier_of_account_id, target_account.id
+                     )
+                WHERE product.tenant_id = %s AND product.brand_id = %s
+                  AND product.status = 'active'
+                  AND (
+                    product.visibility_scope = 'brand_all'
+                    OR (
+                      root_account.control_organization_id IS NOT NULL
+                      AND EXISTS (
+                        SELECT 1
+                        FROM brand_product_scope_organizations product_scope
+                        JOIN organizations scoped_organization
+                          ON scoped_organization.tenant_id = product_scope.tenant_id
+                         AND scoped_organization.id = product_scope.organization_id
+                        WHERE product_scope.tenant_id = product.tenant_id
+                          AND product_scope.product_id = product.id
+                          AND product_scope.organization_id =
+                              root_account.control_organization_id
+                          AND (
+                            product.visibility_scope = 'organizations'
+                            OR (
+                              product.visibility_scope = 'headquarters'
+                              AND scoped_organization.organization_level = 'company'
+                            )
+                          )
+                      )
+                    )
+                  )
+                ORDER BY product.sku
                 """,
-                (scope.tenant_id, scope.brand_id),
+                (scope.account_id, scope.tenant_id, scope.brand_id),
             )
             rows = cursor.fetchall()
         normalized_seed = weak_seed.casefold()
@@ -829,10 +949,7 @@ class PostgresContentRepository(ContentRepository):
             row
             for row in rows
             if str(row["sku"]).casefold() in normalized_seed
-            or (
-                str(row["display_name"]).strip()
-                and str(row["display_name"]).casefold() in normalized_seed
-            )
+            or (str(row["display_name"]).strip() and str(row["display_name"]).casefold() in normalized_seed)
         ]
         if (
             not matched
@@ -842,9 +959,7 @@ class PostgresContentRepository(ContentRepository):
             matched = rows
         return tuple(self._product_fact(row) for row in matched)
 
-    def load_task_product_facts(
-        self, scope: TrustedScope, task_id: UUID
-    ) -> tuple[ProductFact, ...]:
+    def load_task_product_facts(self, scope: TrustedScope, task_id: UUID) -> tuple[ProductFact, ...]:
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
@@ -860,15 +975,11 @@ class PostgresContentRepository(ContentRepository):
             if frozen_products is not None:
                 return frozen_products
         stored_refs = row["product_refs"]
-        if not isinstance(stored_refs, list) or not all(
-            isinstance(ref, str) for ref in stored_refs
-        ):
+        if not isinstance(stored_refs, list) or not all(isinstance(ref, str) for ref in stored_refs):
             raise DomainError("内容任务商品引用无效")
         return self._product_facts_for_refs(scope, tuple(stored_refs))
 
-    def _product_facts_for_refs(
-        self, scope: TrustedScope, refs: tuple[str, ...]
-    ) -> tuple[ProductFact, ...]:
+    def _product_facts_for_refs(self, scope: TrustedScope, refs: tuple[str, ...]) -> tuple[ProductFact, ...]:
         if not refs:
             return ()
         with self._tx(scope) as cursor:
@@ -876,10 +987,44 @@ class PostgresContentRepository(ContentRepository):
                 """
                 SELECT sku, display_name, facts, source_kind, source_note,
                        fact_version, applicability
-                FROM brand_products
-                WHERE tenant_id = %s AND brand_id = %s AND sku = ANY(%s)
+                FROM brand_products product
+                JOIN content_accounts target_account
+                  ON target_account.tenant_id = product.tenant_id
+                 AND target_account.brand_id = product.brand_id
+                 AND target_account.id = %s
+                JOIN content_accounts root_account
+                  ON root_account.tenant_id = target_account.tenant_id
+                 AND root_account.id = COALESCE(
+                       target_account.carrier_of_account_id, target_account.id
+                     )
+                WHERE product.tenant_id = %s AND product.brand_id = %s
+                  AND product.sku = ANY(%s)
+                  AND (
+                    product.visibility_scope = 'brand_all'
+                    OR (
+                      root_account.control_organization_id IS NOT NULL
+                      AND EXISTS (
+                        SELECT 1
+                        FROM brand_product_scope_organizations product_scope
+                        JOIN organizations scoped_organization
+                          ON scoped_organization.tenant_id = product_scope.tenant_id
+                         AND scoped_organization.id = product_scope.organization_id
+                        WHERE product_scope.tenant_id = product.tenant_id
+                          AND product_scope.product_id = product.id
+                          AND product_scope.organization_id =
+                              root_account.control_organization_id
+                          AND (
+                            product.visibility_scope = 'organizations'
+                            OR (
+                              product.visibility_scope = 'headquarters'
+                              AND scoped_organization.organization_level = 'company'
+                            )
+                          )
+                      )
+                    )
+                  )
                 """,
-                (scope.tenant_id, scope.brand_id, list(refs)),
+                (scope.account_id, scope.tenant_id, scope.brand_id, list(refs)),
             )
             rows = cursor.fetchall()
         return tuple(self._product_fact(row) for row in rows if isinstance(row["facts"], dict))
@@ -912,16 +1057,25 @@ class PostgresContentRepository(ContentRepository):
     ) -> None:
         cursor.execute(
             """
-            SELECT id FROM content_series
-            WHERE tenant_id = %s AND id = %s AND brand_id = %s
-              AND account_id = %s AND created_by = %s
+            SELECT content_series.id FROM content_series
+            JOIN content_accounts requested_account
+              ON requested_account.tenant_id = content_series.tenant_id
+             AND requested_account.id = %s
+            WHERE content_series.tenant_id = %s
+              AND content_series.id = %s
+              AND content_series.brand_id = %s
+              AND content_series.logical_account_id = COALESCE(
+                    requested_account.carrier_of_account_id,
+                    requested_account.id
+                  )
+              AND content_series.created_by = %s
             FOR UPDATE
             """,
             (
+                scope.account_id,
                 scope.tenant_id,
                 series_id,
                 scope.brand_id,
-                scope.account_id,
                 scope.user_id,
             ),
         )
@@ -1003,9 +1157,7 @@ class PostgresContentRepository(ContentRepository):
 
     @staticmethod
     def _asset_receipts(assets: tuple[ActiveAsset, ...]) -> list[dict[str, str]]:
-        return [
-            {"asset_id": asset.asset_id, "schema_version": asset.schema_version} for asset in assets
-        ]
+        return [{"asset_id": asset.asset_id, "schema_version": asset.schema_version} for asset in assets]
 
     @staticmethod
     def _input_receipt(
@@ -1025,6 +1177,7 @@ class PostgresContentRepository(ContentRepository):
             "publishing_account": context.account_name,
             "content_role": context.content_role_name,
             "business_data_kind": context.business_data_kind,
+            "brand_reference_context": list(context.brand_reference_context),
             "product_refs": [
                 {
                     "sku": item.sku,
@@ -1042,36 +1195,22 @@ class PostgresContentRepository(ContentRepository):
             "platform_direction_version": platform_direction.version,
             "platform_direction_snapshot": {
                 "version": platform_direction.version,
-                "resource_schema_version": (
-                    platform_direction.provenance.resource_schema_version
-                ),
+                "resource_schema_version": (platform_direction.provenance.resource_schema_version),
                 "metadata_revision": platform_direction.provenance.metadata_revision,
                 "rule_id": platform_direction.rule_id,
                 "rule_kind": platform_direction.rule_kind,
                 "source_kind": platform_direction.provenance.source_kind,
                 "source_refs": list(platform_direction.provenance.source_refs),
                 "applicability": platform_direction.applicability,
-                "platform_capability_source_ref": (
-                    platform_direction.platform_capability_source_ref
-                ),
-                "platform_capability_source_scope": (
-                    platform_direction.platform_capability_source_scope
-                ),
+                "platform_capability_source_ref": (platform_direction.platform_capability_source_ref),
+                "platform_capability_source_scope": (platform_direction.platform_capability_source_scope),
                 "direction": platform_direction.direction,
                 "direction_digest": platform_direction.direction_digest,
-                "official_platform_rule_version": (
-                    platform_direction.provenance.official_platform_rule_version
-                ),
-                "official_version_note": (
-                    platform_direction.provenance.official_version_note
-                ),
-                "observed_or_effective_at": (
-                    platform_direction.provenance.observed_or_effective_at
-                ),
+                "official_platform_rule_version": (platform_direction.provenance.official_platform_rule_version),
+                "official_version_note": (platform_direction.provenance.official_version_note),
+                "observed_or_effective_at": (platform_direction.provenance.observed_or_effective_at),
                 "last_verified_at": platform_direction.provenance.last_verified_at,
-                "verification_status": (
-                    platform_direction.provenance.verification_status
-                ),
+                "verification_status": (platform_direction.provenance.verification_status),
                 "freshness_status": platform_direction.provenance.freshness_status,
                 "supersedes": list(platform_direction.provenance.supersedes),
                 "superseded_by": platform_direction.provenance.superseded_by,
@@ -1085,9 +1224,7 @@ class PostgresContentRepository(ContentRepository):
                     "series_id": str(series_context.series_id),
                     "revision": series_context.revision,
                     "target_position": series_context.target_position,
-                    "prior_version_ids": [
-                        str(item.version_id) for item in series_context.prior_entries
-                    ],
+                    "prior_version_ids": [str(item.version_id) for item in series_context.prior_entries],
                 }
                 if series_context is not None
                 else None
@@ -1122,9 +1259,7 @@ class PostgresContentRepository(ContentRepository):
         )
         return receipt
 
-    def load_content_context_snapshot(
-        self, scope: TrustedScope, task_id: UUID
-    ) -> dict[str, object] | None:
+    def load_content_context_snapshot(self, scope: TrustedScope, task_id: UUID) -> dict[str, object] | None:
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
@@ -1154,12 +1289,7 @@ class PostgresContentRepository(ContentRepository):
         elif primary_product == "product_truth":
             summary = cls._p2_asset_projection(asset_id, body, products)
         else:
-            summary = (
-                body.get("statement")
-                or body.get("name")
-                or body.get("title")
-                or row["display_name"]
-            )
+            summary = body.get("statement") or body.get("name") or body.get("title") or row["display_name"]
         return ActiveAsset(
             asset_id=asset_id,
             schema_version=str(row["schema_version"]),
@@ -1169,9 +1299,7 @@ class PostgresContentRepository(ContentRepository):
         )
 
     @classmethod
-    def _p2_asset_projection(
-        cls, asset_id: str, body: dict[str, object], products: tuple[ProductFact, ...]
-    ) -> str:
+    def _p2_asset_projection(cls, asset_id: str, body: dict[str, object], products: tuple[ProductFact, ...]) -> str:
         """Compile only the parts of a P2 asset supported by this product input."""
         parts: list[str] = []
         if cls._p2_statement_applies(asset_id, body, products):
@@ -1203,15 +1331,10 @@ class PostgresContentRepository(ContentRepository):
                 parts.append(value)
         if asset_id == "E-ADAPT-001":
             parts = [part for part in parts if "同一任务版本链" not in part and "持久" not in part]
-        return (
-            "；".join(part for part in parts if part)
-            or "按当前媒体合同重组表达，不复用不适用制作建议。"
-        )
+        return "；".join(part for part in parts if part) or "按当前媒体合同重组表达，不复用不适用制作建议。"
 
     @staticmethod
-    def _p2_statement_applies(
-        asset_id: str, body: dict[str, object], products: tuple[ProductFact, ...]
-    ) -> bool:
+    def _p2_statement_applies(asset_id: str, body: dict[str, object], products: tuple[ProductFact, ...]) -> bool:
         if not isinstance(body.get("statement"), str):
             return False
         if asset_id == "A-MAT-005":
@@ -1250,9 +1373,7 @@ class PostgresContentRepository(ContentRepository):
         if product == "dressing_decision" and asset_id == "B-TPO-001":
             return any(word in weak_seed for word in ("会", "正式", "工作", "见", "场合"))
         if product == "dressing_decision" and asset_id == "C-COMMUTE-001":
-            return any(
-                word in weak_seed for word in ("之后", "后", "再", "转身", "接孩子", "接人", "换场")
-            )
+            return any(word in weak_seed for word in ("之后", "后", "再", "转身", "接孩子", "接人", "换场"))
         return True
 
     @staticmethod

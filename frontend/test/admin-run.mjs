@@ -35,12 +35,56 @@ const organizations = [
   {
     id: "11111111-1111-4111-8111-111111111111",
     name: "笛语服饰管理组织",
+    level: "company",
+    organization_level: "company",
+    business_data_kind: "formal_business_data"
+  },
+  {
+    id: "11111111-1111-4111-8111-111111111112",
+    name: "浙江区域",
+    level: "region",
+    organization_level: "region",
+    business_data_kind: "formal_business_data"
+  },
+  {
+    id: "11111111-1111-4111-8111-111111111113",
+    name: "柯桥门店",
+    level: "operating_unit",
+    organization_level: "operating_unit",
     business_data_kind: "formal_business_data"
   }
 ];
 let operators = [];
 let accounts = [];
-let products = [];
+let products = [
+  {
+    sku: "DEMO-A",
+    display_name: "牛角扣外套",
+    facts: {
+      category: "外套",
+      observable_features: "完整轮廓与牛角扣结构可见"
+    },
+    source_note: "品牌管理员录入",
+    applicability: "演示资料",
+    fact_version: 2,
+    visibility_scope: "organizations",
+    scope_organizations: [organizations[1]],
+    updated_at: "2026-07-27T00:00:00Z"
+  }
+];
+let organizationMaterials = [
+  {
+    id: "44444444-4444-4444-8444-444444444444",
+    title: "浙江区域门店拍摄说明",
+    original_filename: "shooting-note.txt",
+    organization: "浙江区域",
+    reference_note: "只参考已确认的室内制作条件",
+    reference_version: 1,
+    visibility_scope: "organizations",
+    scope_organizations: [organizations[1]],
+    created_at: "2026-07-27T00:00:00Z"
+  }
+];
 let failedPath = null;
 let unmetRequest = {
   stable_request_id: "UI04-UNMET-FIXTURE",
@@ -76,18 +120,69 @@ globalThis.fetch = async (input, init = {}) => {
   let value = {};
   if (path === "/api/v1/admin/readiness") {
     value = {
-      items:
-        operators.length && accounts.length && products.length
-          ? []
-          : [
-              {
-                id: "first-publishing-chain",
-                title: "补齐首个创作身份",
-                detail: "还缺成员、发布账号或商品资料。",
-                unlock: "开始日常创作",
-                state: "needs_action"
-              }
-            ]
+      items: [
+        {
+          id: "account-expression",
+          title: "品牌与账号表达",
+          status: accounts.length ? "available" : "unavailable",
+          evidence: accounts.length ? ["已有发布账号和当前账号画像"] : [],
+          gaps: accounts.length ? [] : ["还缺一个逻辑发布账号"],
+          impact: "影响内容能否以清楚身份开始",
+          action: { label: "管理发布账号", section: "accounts" },
+          source: "当前租户资料",
+          version: "V1",
+          evaluated_at: "2026-07-27T00:00:00Z"
+        },
+        {
+          id: "product-content",
+          title: "商品选择与解释",
+          status: products.length ? "available" : "conditional",
+          evidence: products.length ? ["已有商品事实"] : ["非商品内容仍可使用"],
+          gaps: products.length ? [] : ["还缺商品资料"],
+          impact: "只影响需要商品承重的内容",
+          action: { label: "补商品资料", section: "library" },
+          source: "当前品牌资料",
+          version: "V1",
+          evaluated_at: "2026-07-27T00:00:00Z"
+        }
+      ]
+    };
+  } else if (path === "/api/v1/tenant-management/team-usage") {
+    value = {
+      window_days: Number(url.searchParams.get("window_days") ?? "7"),
+      members: {
+        registered: operators.length,
+        activated: operators.length,
+        enabled: operators.filter(item => item.enabled).length,
+        disabled: operators.filter(item => !item.enabled).length,
+        active: operators.length,
+        items: operators.map(item => ({
+          id: item.id,
+          display_name: item.display_name,
+          entry_type: item.entry_type,
+          enabled: item.enabled,
+          last_used_at: "2026-07-27T00:00:00Z",
+          content_attempts: item.capabilities?.includes("content") ? 3 : 0,
+          display_attempts: item.capabilities?.includes("display") ? 1 : 0
+        }))
+      },
+      activity: {
+        content_attempts: 3,
+        content_successes: 2,
+        content_failures: 1,
+        revisions: 1,
+        series_continuations: 1,
+        display_attempts: 1,
+        display_successes: 1,
+        display_failures: 0,
+        rate_limited: 0
+      },
+      provider_usage: {
+        label: "已记录模型用量",
+        total_tokens: 1200,
+        is_complete_billing_total: false
+      },
+      distribution: { publishing_identities: [], platforms: [] }
     };
   } else if (path === "/api/v1/tenant-management/operators" && method === "GET") {
     value = operators;
@@ -97,10 +192,41 @@ globalThis.fetch = async (input, init = {}) => {
     value = organizations;
   } else if (path === "/api/v1/tenant-management/publishing-accounts" && method === "GET") {
     value = accounts;
+  } else if (path === "/api/v1/tenant-management/brand-library" && method === "GET") {
+    value = [];
+  } else if (path === "/api/v1/tenant-management/brand-library" && method === "POST") {
+    value = { id: "library-fixture", ...body };
   } else if (path === "/api/v1/tenant-management/brand-products" && method === "GET") {
     value = products;
   } else if (
-    path === "/api/v1/tenant-management/organization-materials" ||
+    path === "/api/v1/tenant-management/organization-materials" &&
+    method === "GET"
+  ) {
+    value = organizationMaterials;
+  } else if (
+    path === "/api/v1/tenant-management/organization-materials" &&
+    method === "POST"
+  ) {
+    organizationMaterials = [
+      ...organizationMaterials,
+      {
+        id: "55555555-5555-4555-8555-555555555555",
+        title: body.title,
+        original_filename: body.filename,
+        organization: organizations.find(
+          item => item.id === body.organization_id
+        )?.name,
+        reference_note: body.reference_note,
+        reference_version: 1,
+        visibility_scope: body.visibility_scope,
+        scope_organizations: organizations.filter(item =>
+          body.organization_ids?.includes(item.id)
+        ),
+        created_at: "2026-07-27T00:00:00Z"
+      }
+    ];
+    value = organizationMaterials.at(-1);
+  } else if (
     path === "/api/v1/ops/tenants" ||
     path === "/api/v1/display/tasks"
   ) {
@@ -124,9 +250,10 @@ globalThis.fetch = async (input, init = {}) => {
         username: body.username,
         organization_id: organizations[0].id,
         organization: organizations[0].name,
-        publishing_accounts: "",
-        manages_tenant: Boolean(body.grants_tenant_management),
-        maintains_organization_materials: Boolean(body.grants_material_maintenance),
+        entry_type: body.entry_type,
+        enabled: true,
+        capabilities: body.capabilities,
+        manages_tenant: body.entry_type === "tenant_admin",
         account_grants: []
       }
     ];
@@ -143,12 +270,30 @@ globalThis.fetch = async (input, init = {}) => {
       {
         id: "33333333-3333-4333-8333-333333333333",
         name: body.name,
-        channel: body.channel,
-        content_role: body.content_role_name,
-        voice_boundary: body.voice_boundary,
-        carrier_of_account_id: null,
-        carrier_of_account: null,
-        operators: [{ id: body.operator_id, display_name: operators[0].display_name }]
+        control_organization: {
+          id: body.control_organization_id,
+          name: organizations[0].name,
+          source: "declared"
+        },
+        content_role: {
+          name: body.content_role_name,
+          authority_boundary: body.initial_profile.authority_boundary
+        },
+        profile: {
+          id: "profile-fixture",
+          version: 1,
+          segments: body.initial_profile
+        },
+        platform_targets: [
+          {
+            account_id: "carrier-fixture",
+            target: body.target,
+            platform: "抖音",
+            media: "视频"
+          }
+        ],
+        carrier_count: 1,
+        operators: [{ id: body.operator_id, display_name: operators[0]?.display_name ?? "成员" }]
       }
     ];
     value = accounts[0];

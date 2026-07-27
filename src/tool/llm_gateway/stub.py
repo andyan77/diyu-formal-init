@@ -4,6 +4,8 @@ from src.ports.content_generator import ContentGenerator
 from src.shared.types import (
     ContentProduct,
     ContentSemanticContract,
+    ConversationDecision,
+    ConversationInput,
     GeneratedArtifact,
     GenerationInput,
     GraphicProductionBundle,
@@ -58,6 +60,30 @@ class DeterministicContentGenerator(ContentGenerator):
         ):
             return "dressing_decision"
         return "brand_life_narrative" if "内容" in text or "写一条" in text else None
+
+    def collaborate(self, request: ConversationInput) -> ConversationDecision:
+        """Deterministic interaction double; production semantics stay in DeepSeek."""
+        text = request.message.strip()
+        normalized = text.casefold()
+        if _ordinary_chat(normalized):
+            return ConversationDecision("chat", "可以。你想随便聊聊，或把一个观察慢慢说清楚，都可以。")
+        if (
+            not request.history
+            and "只想自己看看" in text
+            and not any(marker in text for marker in ("写", "做成", "内容", "图文", "口播"))
+        ):
+            return ConversationDecision(
+                "question",
+                "这个观察可以做成门店人物内容。你更想讲沉默也应该被尊重，还是讨论店员什么时候适合主动介绍？",
+            )
+        combined = "\n".join([*(turn.content for turn in request.history), text])
+        product = self.route(RoutingInput(combined, request.brand, request.products, None)) or "brand_life_narrative"
+        return ConversationDecision(
+            "ready",
+            f"好，我按当前选择的{request.brand.platform}{request.brand.media_format}整理。",
+            brief=combined,
+            primary_product=product,
+        )
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
         contract, guide, spoken, visuals, subtitles, sound = self._parts(request)
@@ -233,18 +259,14 @@ def _control_sections(request: GenerationInput) -> str:
     direction = request.creative_direction
     if direction is not None:
         if direction.selections:
-            parts.append(
-                "\n\n本次创作方向：" + "、".join(item.applied_label for item in direction.selections)
-            )
+            parts.append("\n\n本次创作方向：" + "、".join(item.applied_label for item in direction.selections))
         if direction.custom_text:
             parts.append("\n\n本次自然补充：" + direction.custom_text)
     if request.account_expression is not None:
         # The account's own words may appear; its internal version number is a receipt field.
         parts.append("\n\n当前账号表达位置：" + request.account_expression.identity_position)
     if request.reference_materials:
-        parts.append(
-            "\n\n本次参考：" + "、".join(item.title for item in request.reference_materials)
-        )
+        parts.append("\n\n本次参考：" + "、".join(item.title for item in request.reference_materials))
     return "".join(parts)
 
 

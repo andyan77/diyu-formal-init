@@ -107,6 +107,83 @@
         "title": "BrandExpressionConfirmRequest",
         "type": "object"
       },
+      "BrandLibraryEntryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "enum": [
+              "brand_expression",
+              "product",
+              "organization_fact",
+              "reference",
+              "official_material"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "organization_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Organization Ids",
+            "type": "array"
+          },
+          "source_note": {
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Source Note",
+            "type": "string"
+          },
+          "status": {
+            "default": "candidate",
+            "enum": [
+              "candidate",
+              "active"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "enum": [
+              "brand_all",
+              "headquarters",
+              "organizations"
+            ],
+            "title": "Visibility Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "title",
+          "source_note",
+          "content",
+          "version",
+          "visibility_scope"
+        ],
+        "title": "BrandLibraryEntryRequest",
+        "type": "object"
+      },
       "ChangePasswordRequest": {
         "additionalProperties": false,
         "properties": {
@@ -332,6 +409,31 @@
         "title": "ControlOrganizationRequest",
         "type": "object"
       },
+      "ConversationTurnRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ConversationTurnRequest",
+        "type": "object"
+      },
       "CreateContentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -353,6 +455,18 @@
             "maxItems": 5,
             "title": "Material Ids",
             "type": "array"
+          },
+          "publishing_identity_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publishing Identity Id"
           },
           "reuse_version_id": {
             "anyOf": [
@@ -426,6 +540,112 @@
         "title": "CreateContentRequest",
         "type": "object"
       },
+      "CreateConversationRequest": {
+        "additionalProperties": false,
+        "description": "One bounded natural turn; only a `ready` result may create a content task.",
+        "properties": {
+          "conversation": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationTurnRequest"
+            },
+            "maxItems": 8,
+            "title": "Conversation",
+            "type": "array"
+          },
+          "creative_direction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CreativeDirectionRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "material_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Material Ids",
+            "type": "array"
+          },
+          "message": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "publishing_identity_id": {
+            "format": "uuid",
+            "title": "Publishing Identity Id",
+            "type": "string"
+          },
+          "series_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          },
+          "series_position": {
+            "anyOf": [
+              {
+                "maximum": 999.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Position"
+          },
+          "target": {
+            "enum": [
+              "douyin_video",
+              "xiaohongshu_video",
+              "xiaohongshu_graphic",
+              "wechat_channels_video"
+            ],
+            "title": "Target",
+            "type": "string"
+          },
+          "target_conflict_resolution": {
+            "anyOf": [
+              {
+                "enum": [
+                  "keep_selected",
+                  "switch"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Conflict Resolution"
+          },
+          "use_personal_preferences": {
+            "default": true,
+            "title": "Use Personal Preferences",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "message",
+          "publishing_identity_id",
+          "target"
+        ],
+        "title": "CreateConversationRequest",
+        "type": "object"
+      },
       "CreateDisplayRequest": {
         "additionalProperties": false,
         "properties": {
@@ -488,6 +708,17 @@
             "maxLength": 120,
             "minLength": 1,
             "title": "Name",
+            "type": "string"
+          },
+          "organization_level": {
+            "default": "unspecified",
+            "enum": [
+              "company",
+              "region",
+              "operating_unit",
+              "unspecified"
+            ],
+            "title": "Organization Level",
             "type": "string"
           }
         },
@@ -576,6 +807,16 @@
             ],
             "title": "Control Organization Id"
           },
+          "initial_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountExpressionVersionRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "maxLength": 120,
             "minLength": 1,
@@ -593,17 +834,23 @@
             "type": "string"
           },
           "voice_boundary": {
-            "maxLength": 500,
-            "minLength": 1,
-            "title": "Voice Boundary",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Boundary"
           }
         },
         "required": [
           "name",
           "channel",
           "content_role_name",
-          "voice_boundary",
           "operator_id"
         ],
         "title": "CreatePublishingAccountRequest",
@@ -676,11 +923,38 @@
             ],
             "title": "Account Id"
           },
+          "capabilities": {
+            "items": {
+              "enum": [
+                "content",
+                "display"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "title": "Capabilities",
+            "type": "array"
+          },
           "display_name": {
             "maxLength": 80,
             "minLength": 1,
             "title": "Display Name",
             "type": "string"
+          },
+          "entry_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "tenant_admin",
+                  "tenant_user"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Type"
           },
           "grants_expression_profile_maintenance": {
             "default": false,
@@ -708,6 +982,15 @@
               }
             ],
             "title": "Organization Id"
+          },
+          "publishing_identity_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Publishing Identity Ids",
+            "type": "array"
           },
           "username": {
             "maxLength": 80,
@@ -1022,6 +1305,15 @@
             "title": "Organization Id",
             "type": "string"
           },
+          "organization_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Organization Ids",
+            "type": "array"
+          },
           "reference_note": {
             "default": "",
             "maxLength": 500,
@@ -1032,6 +1324,16 @@
             "maxLength": 120,
             "minLength": 1,
             "title": "Title",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "default": "organizations",
+            "enum": [
+              "brand_all",
+              "headquarters",
+              "organizations"
+            ],
+            "title": "Visibility Scope",
             "type": "string"
           }
         },
@@ -1071,6 +1373,18 @@
             "minLength": 2,
             "title": "Instruction",
             "type": "string"
+          },
+          "publishing_identity_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publishing Identity Id"
           },
           "source_target": {
             "anyOf": [
@@ -1164,6 +1478,15 @@
             "title": "Observable Features",
             "type": "string"
           },
+          "organization_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Organization Ids",
+            "type": "array"
+          },
           "silhouette": {
             "default": "",
             "maxLength": 300,
@@ -1180,6 +1503,16 @@
             "maxLength": 300,
             "minLength": 1,
             "title": "Source Note",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "default": "brand_all",
+            "enum": [
+              "brand_all",
+              "headquarters",
+              "organizations"
+            ],
+            "title": "Visibility Scope",
             "type": "string"
           }
         },
@@ -1294,6 +1627,33 @@
             ],
             "title": "Account Id"
           },
+          "capabilities": {
+            "items": {
+              "enum": [
+                "content",
+                "display"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "entry_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "tenant_admin",
+                  "tenant_user"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Type"
+          },
           "grants_account_access": {
             "default": false,
             "title": "Grants Account Access",
@@ -1313,6 +1673,15 @@
             "default": false,
             "title": "Grants Tenant Management",
             "type": "boolean"
+          },
+          "publishing_identity_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Publishing Identity Ids",
+            "type": "array"
           }
         },
         "title": "UpdateTenantUserGrantsRequest",
@@ -1709,6 +2078,23 @@
               "title": "Target",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "publishing_identity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Publishing Identity Id"
+            }
           }
         ],
         "responses": {
@@ -1732,11 +2118,6 @@
             "description": "业务失败；生成失败时不会产生半成品版本。"
           }
         },
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "summary": "Save Version"
       }
     },
@@ -2009,6 +2390,38 @@
           }
         ],
         "summary": "Save Content Plan"
+      }
+    },
+    "/api/v1/content/publishing-identities": {
+      "get": {
+        "operationId": "list_content_publishing_identities_api_v1_content_publishing_identities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Content Publishing Identities Api V1 Content Publishing Identities Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "List Content Publishing Identities"
       }
     },
     "/api/v1/content/series": {
@@ -2358,6 +2771,42 @@
           }
         ],
         "summary": "Reset Series"
+      }
+    },
+    "/api/v1/content/stream": {
+      "post": {
+        "description": "Stream real lifecycle stages; the validated artifact is emitted only once.",
+        "operationId": "create_content_stream_api_v1_content_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConversationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Content Stream"
       }
     },
     "/api/v1/content/tasks": {
@@ -3365,11 +3814,6 @@
             "description": "业务失败；生成失败时不会产生半成品版本。"
           }
         },
-        "security": [
-          {
-            "APIKeyCookie": []
-          }
-        ],
         "summary": "Revise Content"
       }
     },
@@ -3411,6 +3855,23 @@
               "title": "Target",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "publishing_identity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Publishing Identity Id"
+            }
           }
         ],
         "responses": {
@@ -3434,12 +3895,86 @@
             "description": "业务失败；生成失败时不会产生半成品版本。"
           }
         },
+        "summary": "Get Version"
+      }
+    },
+    "/api/v1/tenant-management/brand-library": {
+      "get": {
+        "operationId": "management_brand_library_api_v1_tenant_management_brand_library_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Management Brand Library Api V1 Tenant Management Brand Library Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
         "security": [
           {
             "APIKeyCookie": []
           }
         ],
-        "summary": "Get Version"
+        "summary": "Management Brand Library"
+      },
+      "post": {
+        "operationId": "create_management_brand_library_entry_api_v1_tenant_management_brand_library_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandLibraryEntryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Management Brand Library Entry Api V1 Tenant Management Brand Library Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Management Brand Library Entry"
       }
     },
     "/api/v1/tenant-management/brand-products": {
@@ -4187,6 +4722,52 @@
         "summary": "Save Management Account Expression Profile"
       }
     },
+    "/api/v1/tenant-management/team-usage": {
+      "get": {
+        "operationId": "management_team_usage_api_v1_tenant_management_team_usage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "window_days",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "title": "Window Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Management Team Usage Api V1 Tenant Management Team Usage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Team Usage"
+      }
+    },
     "/api/v1/tenant-management/users": {
       "post": {
         "operationId": "create_tenant_user_api_v1_tenant_management_users_post",
@@ -4301,9 +4882,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "boolean"
-                  },
+                  "additionalProperties": true,
                   "title": "Response Update Tenant User Grants Api V1 Tenant Management Users  User Id  Grants Patch",
                   "type": "object"
                 }
@@ -4645,6 +5224,23 @@
                 }
               ],
               "title": "Target"
+            }
+          },
+          {
+            "in": "query",
+            "name": "publishing_identity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Publishing Identity Id"
             }
           }
         ],

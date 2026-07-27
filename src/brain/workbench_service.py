@@ -50,6 +50,15 @@ class WorkbenchService:
     def management_accounts(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         return self._repository.management_accounts(scope)
 
+    def team_usage(
+        self,
+        scope: TenantManagementScope,
+        window_days: int,
+    ) -> dict[str, object]:
+        if window_days not in {7, 30}:
+            raise DomainError("团队使用情况只支持查看近 7 日或近 30 日。")
+        return self._repository.team_usage(scope, window_days)
+
     def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         return self._repository.management_products(scope)
 
@@ -58,6 +67,56 @@ class WorkbenchService:
         scope: TenantManagementScope,
     ) -> list[dict[str, object]]:
         return self._repository.management_organization_materials(scope)
+
+    def brand_library_entries(
+        self,
+        scope: TenantManagementScope,
+    ) -> list[dict[str, object]]:
+        return self._repository.brand_library_entries(scope)
+
+    def create_brand_library_entry(
+        self,
+        scope: TenantManagementScope,
+        category: str,
+        title: str,
+        source_note: str,
+        content: str,
+        version: str,
+        status: str,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+    ) -> dict[str, object]:
+        normalized = (
+            category.strip(),
+            title.strip(),
+            source_note.strip(),
+            content.strip(),
+            version.strip(),
+        )
+        if not all(normalized):
+            raise DomainError("资料名称、内容、自然来源说明和版本都需要填写。")
+        if len(normalized[1]) > 160:
+            raise DomainError("资料名称请控制在 160 个字符以内。")
+        if len(normalized[2]) > 500:
+            raise DomainError("自然来源说明请控制在 500 个字符以内。")
+        if status not in {"candidate", "active", "retired"}:
+            raise DomainError("资料状态无效。")
+        if visibility_scope not in {"brand_all", "headquarters", "organizations"}:
+            raise DomainError("请选择品牌全员、总部专用或指定区域。")
+        unique_organizations = tuple(dict.fromkeys(organization_ids))
+        if visibility_scope == "brand_all" and unique_organizations:
+            raise DomainError("品牌全员资料不需要指定组织。")
+        if visibility_scope == "headquarters" and len(unique_organizations) != 1:
+            raise DomainError("总部专用资料需要明确选择一个公司级组织。")
+        if visibility_scope == "organizations" and not unique_organizations:
+            raise DomainError("指定区域资料至少需要选择一个具体区域。")
+        return self._repository.create_brand_library_entry(
+            scope,
+            *normalized,
+            status,
+            visibility_scope,
+            unique_organizations,
+        )
 
     def add_management_organization_material(
         self,
@@ -69,6 +128,8 @@ class WorkbenchService:
         payload: bytes,
         declares_identifiable_minor: bool,
         reference_note: str,
+        visibility_scope: str = "organizations",
+        organization_ids: tuple[UUID, ...] = (),
     ) -> dict[str, object]:
         if declares_identifiable_minor:
             raise DomainError("第一版不能保存认得出真人未成年人的照片、视频或声音。")
@@ -81,6 +142,15 @@ class WorkbenchService:
         media_type = self._media_type(content_type)
         if media_type in {"image", "video"} and len(reference_note.strip()) < 2:
             raise DomainError("图片或视频请先写一句人工说明。")
+        if visibility_scope not in {"brand_all", "headquarters", "organizations"}:
+            raise DomainError("请选择品牌全员、总部专用或指定区域。")
+        unique_organizations = tuple(dict.fromkeys(organization_ids))
+        if visibility_scope == "brand_all" and unique_organizations:
+            raise DomainError("品牌全员素材不需要指定可用组织。")
+        if visibility_scope == "headquarters" and len(unique_organizations) != 1:
+            raise DomainError("总部专用素材需要明确选择一个公司级组织。")
+        if visibility_scope == "organizations" and not unique_organizations:
+            unique_organizations = (organization_id,)
         suffix = Path(filename).suffix
         asset_id = uuid4()
         try:
@@ -96,6 +166,8 @@ class WorkbenchService:
                 filename,
                 hashlib.sha256(payload).hexdigest(),
                 reference_note.strip(),
+                visibility_scope,
+                unique_organizations,
             )
         except (OSError, ValueError) as exc:
             if "object_key" in locals():
@@ -119,13 +191,9 @@ class WorkbenchService:
             self._object_store.delete(object_key)
             self._repository.finalize_management_material_deletion(scope, asset_id)
         except (OSError, ValueError) as exc:
-            raise DomainError(
-                "素材删除尚未完成；当前记录已标记为待删除，可直接重试。"
-            ) from exc
+            raise DomainError("素材删除尚未完成；当前记录已标记为待删除，可直接重试。") from exc
 
-    def management_demo_content_index(
-        self, scope: TenantManagementScope
-    ) -> dict[str, object]:
+    def management_demo_content_index(self, scope: TenantManagementScope) -> dict[str, object]:
         return self._repository.management_demo_content_index(scope)
 
     def management_onboarding_prefill(
@@ -158,6 +226,8 @@ class WorkbenchService:
         applicability: str,
         confirm_as_current_brand_fact: bool,
         as_synthetic_business_fixture: bool = False,
+        visibility_scope: str = "brand_all",
+        organization_ids: tuple[UUID, ...] = (),
     ) -> dict[str, object]:
         if not confirm_as_current_brand_fact:
             raise DomainError("请先纠正草案，并明确确认它是当前品牌商品事实。")
@@ -178,52 +248,85 @@ class WorkbenchService:
         }
         if not facts:
             raise DomainError("请至少填写一项本轮内容实际需要的商品事实。")
+        if visibility_scope not in {"brand_all", "headquarters", "organizations"}:
+            raise DomainError("请选择品牌全员、总部专用或指定区域。")
+        unique_organizations = tuple(dict.fromkeys(organization_ids))
+        if visibility_scope == "brand_all" and unique_organizations:
+            raise DomainError("品牌全员商品资料不需要指定组织。")
+        if visibility_scope == "headquarters" and len(unique_organizations) != 1:
+            raise DomainError("总部专用商品资料需要明确选择一个公司级组织。")
+        if visibility_scope == "organizations" and not unique_organizations:
+            raise DomainError("指定区域商品资料至少需要选择一个具体区域。")
         return self._repository.save_management_product(
             scope,
             sku.strip(),
             display_name.strip(),
             facts,
-            (
-                "synthetic_business_fixture"
-                if as_synthetic_business_fixture
-                else "brand_user_confirmed"
-            ),
+            ("synthetic_business_fixture" if as_synthetic_business_fixture else "brand_user_confirmed"),
             source_note.strip(),
             applicability.strip(),
+            visibility_scope,
+            unique_organizations,
         )
 
     @staticmethod
     def _platform_carrier_prefills(
         accounts: list[dict[str, object]],
     ) -> list[dict[str, object]]:
-        channels = ("抖音", "小红书", "微信视频号")
-        existing = {
-            (str(item.get("carrier_of_account_id") or ""), str(item["channel"]))
-            for item in accounts
-            if item.get("carrier_of_account_id")
+        channels = {
+            "抖音": "douyin_video",
+            "小红书": "xiaohongshu_graphic",
+            "微信视频号": "wechat_channels_video",
         }
-        drafts: list[dict[str, object]] = []
+        roots: dict[str, dict[str, object]] = {}
         for account in accounts:
-            if account.get("carrier_of_account_id"):
+            root_id = str(account.get("carrier_of_account_id") or account["id"])
+            if account.get("carrier_of_account_id") is None:
+                roots[root_id] = {
+                    "account": account,
+                    "targets": set(),
+                }
+            root = roots.setdefault(
+                root_id,
+                {
+                    "account": account,
+                    "targets": set(),
+                },
+            )
+            raw_target_set = root["targets"]
+            if not isinstance(raw_target_set, set):
                 continue
-            operators = account.get("operators")
+            channel = str(account.get("channel") or "")
+            channel_target = channels.get(channel)
+            if channel_target:
+                raw_target_set.add(channel_target)
+            raw_targets = account.get("platform_targets")
+            targets = raw_targets if isinstance(raw_targets, list) else []
+            for target in targets:
+                if not isinstance(target, dict):
+                    continue
+                value = str(target.get("target") or target.get("value") or "")
+                if value:
+                    raw_target_set.add(value)
+
+        drafts: list[dict[str, object]] = []
+        for root in roots.values():
+            root_account = root["account"]
+            if not isinstance(root_account, dict):
+                continue
+            operators = root_account.get("operators")
             checked_operators = operators if isinstance(operators, list) else []
             only_operator = checked_operators[0] if len(checked_operators) == 1 else None
-            for channel in channels:
-                if (
-                    channel == str(account["channel"])
-                    or (
-                        str(account["id"]),
-                        channel,
-                    )
-                    in existing
-                ):
+            raw_target_set = root["targets"]
+            existing_targets = raw_target_set if isinstance(raw_target_set, set) else set()
+            for channel, target in channels.items():
+                if target in existing_targets:
                     continue
                 drafts.append(
                     {
-                        "source_account_id": str(account["id"]),
-                        "source_account_name": str(account["name"]),
-                        "name": f"{account['name']}·{channel}",
+                        "source_account_id": str(root_account["id"]),
+                        "source_account_name": str(root_account["name"]),
+                        "name": f"{root_account['name']}·{channel}",
                         "channel": channel,
                         "operator_id": (str(only_operator.get("id") or "") if isinstance(only_operator, dict) else ""),
                         "operator_name": (
@@ -239,26 +342,57 @@ class WorkbenchService:
         name: str,
         channel: str,
         content_role_name: str,
-        voice_boundary: str,
+        voice_boundary: str | None,
         operator_id: UUID,
         control_organization_id: UUID | None = None,
         operator_can_maintain_expression_profile: bool = False,
         as_synthetic_business_fixture: bool = False,
+        initial_profile: dict[str, str] | None = None,
     ) -> dict[str, object]:
-        values = (name.strip(), channel.strip(), content_role_name.strip(), voice_boundary.strip())
+        normalized_profile = (
+            {key: value.strip() for key, value in initial_profile.items()} if initial_profile is not None else None
+        )
+        if normalized_profile is not None and (
+            set(normalized_profile)
+            != {
+                "identity_position",
+                "authority_boundary",
+                "audience_relationship",
+                "content_territories",
+                "default_production_conditions",
+            }
+            or not all(normalized_profile.values())
+        ):
+            raise DomainError("请一次填写完整的五段账号画像。")
+        if (
+            normalized_profile is not None
+            and voice_boundary is not None
+            and voice_boundary.strip() != normalized_profile["authority_boundary"]
+        ):
+            raise DomainError("账号画像的权威边界与内部账号类型边界不一致。")
+        resolved_boundary = (
+            normalized_profile["authority_boundary"]
+            if normalized_profile is not None
+            else (voice_boundary or "").strip()
+        )
+        values = (
+            name.strip(),
+            channel.strip(),
+            content_role_name.strip(),
+            resolved_boundary,
+        )
         if not all(values):
-            raise DomainError("发布账号、独立表达身份和成立边界都需要填写。")
+            raise DomainError("发布账号、账号类型短标签和账号画像都需要填写。")
+        if normalized_profile is not None and control_organization_id is None:
+            raise DomainError("建立账号画像前，请先明确负责团队。")
         return self._repository.create_publishing_account(
             scope,
             *values,
             operator_id,
             control_organization_id,
             operator_can_maintain_expression_profile,
-            (
-                "synthetic_business_fixture"
-                if as_synthetic_business_fixture
-                else "formal_business_data"
-            ),
+            ("synthetic_business_fixture" if as_synthetic_business_fixture else "formal_business_data"),
+            normalized_profile,
         )
 
     def create_platform_carrier(

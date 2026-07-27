@@ -1,5 +1,5 @@
 {
-  "catalog_version": "content-expression-catalog-v1",
+  "catalog_version": "content-expression-catalog-v2",
   "inventory_file": "capability-inventory-v1.jsonl",
   "axes": [
     {
@@ -24,8 +24,8 @@
     },
     {
       "key": "continuity",
-      "label": "连续",
-      "question": "独立单篇就不用选；要接着已有系列再选"
+      "label": "系列与互动",
+      "question": "独立单篇、连续系列，还是邀请受众参与"
     }
   ],
   "brand_restraint_markers": [
@@ -52,11 +52,13 @@
       "preserved_aspect": ""
     },
     {
-      "stable_id": "CAT-STYLE-PERSONA-02",
+      "stable_id": "CAT-STYLE-RHYTHM-03",
       "axis": "style",
-      "label": "闺蜜聊天",
-      "source_label": "闺蜜聊天",
-      "aliases": [],
+      "label": "口语短句",
+      "source_label": "口语短句",
+      "aliases": [
+        "口语短句"
+      ],
       "capability_state": "composable",
       "body_related": false,
       "restrained_variant": "",

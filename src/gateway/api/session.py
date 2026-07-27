@@ -130,10 +130,17 @@ class SessionAuthority:
     def require_content(self, request: Request) -> TrustedScope:
         return self._content_scope(self._require_application(request, _CONTENT_APPLICATIONS))
 
-    def require_content_target(self, request: Request, target: ContentTarget) -> TrustedScope:
+    def require_content_target(
+        self,
+        request: Request,
+        target: ContentTarget,
+        publishing_identity_id: UUID | None = None,
+    ) -> TrustedScope:
         """Map a natural target to the server-trusted account; clients never send account IDs."""
         application = self._require_application(request, _CONTENT_APPLICATIONS)
         scope = self._content_scope(application)
+        if publishing_identity_id is not None and publishing_identity_id != scope.account_id:
+            raise HTTPException(status_code=403, detail="当前合成会话没有这个发布账号资格")
         if application == "content-production-store":
             if target != "douyin_video":
                 raise HTTPException(status_code=403, detail="南城店内容身份不能切换到总部平台账号")
@@ -213,11 +220,20 @@ class ProductionSessionAuthority:
             raise HTTPException(status_code=403, detail="当前正式会话没有租户用户入口资格")
         return self.repository.content_scope(identity)
 
-    def require_content_target(self, request: Request, target: ContentTarget) -> TrustedScope:
+    def require_content_target(
+        self,
+        request: Request,
+        target: ContentTarget,
+        publishing_identity_id: UUID | None = None,
+    ) -> TrustedScope:
         identity = self._tenant_identity(request)
         if identity.audience != "tenant-user":
             raise HTTPException(status_code=403, detail="当前正式会话没有租户用户入口资格")
-        return self.repository.content_scope(identity, target)
+        return self.repository.content_scope(
+            identity,
+            target,
+            publishing_identity_id,
+        )
 
     def require_display(self, request: Request) -> DisplayScope:
         identity = self._tenant_identity(request)

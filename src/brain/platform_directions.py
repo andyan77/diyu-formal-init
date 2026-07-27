@@ -62,10 +62,7 @@ def _load_resource() -> tuple[str, PlatformDirectionProvenance, dict[str, object
     ):
         raise RuntimeError("平台方向资源无效")
     provenance_raw = cast(dict[str, object], provenance_value)
-    if (
-        "official_platform_rule_version" not in provenance_raw
-        or "superseded_by" not in provenance_raw
-    ):
+    if "official_platform_rule_version" not in provenance_raw or "superseded_by" not in provenance_raw:
         raise RuntimeError("平台方向可选版本字段缺失")
     provenance = PlatformDirectionProvenance(
         resource_schema_version=schema_version,

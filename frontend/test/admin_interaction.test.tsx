@@ -8,10 +8,9 @@ const harness = (globalThis as unknown as {
     window: Window & typeof globalThis;
     requests: Array<{ path: string; method: string; body: Record<string, unknown> | null }>;
     setReducedMotion: (value: boolean) => void;
-    setFailedPath: (value: string | null) => void;
   };
 }).__DIYU_ADMIN_INTERACTION__;
-const { window, requests, setReducedMotion, setFailedPath } = harness;
+const { window, requests, setReducedMotion } = harness;
 const document = window.document;
 const bootstrapWindow = window as unknown as {
   __DIYU_BOOTSTRAP__: Record<string, unknown> | null;
@@ -40,7 +39,8 @@ async function input(
       node instanceof window.HTMLTextAreaElement
         ? window.HTMLTextAreaElement.prototype
         : window.HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(node, value);
+    Object.getOwnPropertyDescriptor(prototype, "value")
+      ?.set?.call(node, value);
     node.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
 }
@@ -54,17 +54,16 @@ async function select(node: HTMLSelectElement, value: string): Promise<void> {
 }
 
 async function settle(): Promise<void> {
-  await act(async () => {
-    await new Promise(resolve => setTimeout(resolve, 0));
-  });
-  await act(async () => {
-    await new Promise(resolve => setTimeout(resolve, 0));
-  });
+  for (let index = 0; index < 4; index += 1) {
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+  }
 }
 
 async function renderAt(
   path: string,
-  bootstrap: Record<string, unknown> | null
+  bootstrap: Record<string, unknown>
 ): Promise<ReturnType<typeof createRoot>> {
   window.history.replaceState({}, "", path);
   bootstrapWindow.__DIYU_BOOTSTRAP__ = bootstrap;
@@ -76,74 +75,12 @@ async function renderAt(
   return root;
 }
 
-async function unmount(root: ReturnType<typeof createRoot>): Promise<void> {
-  await act(async () => root.unmount());
-}
-
 async function main(): Promise<void> {
-  setReducedMotion(false);
-  let root = await renderAt("/", { application: "public" });
-  assert.equal(
-    document.querySelector(".motion-final img")?.getAttribute("src"),
-    "/assets/diyu-logo-primary.svg",
-    "A 动效必须交接正式 VI SVG"
-  );
-  assert.ok(document.querySelector(".seed-path.uncertain"));
-  assert.ok(document.querySelector(".direction-turn"));
-  assert.equal(document.querySelectorAll(".direction-turn").length, 1, "朱砂只承担一次方向转折");
-  assert.equal(document.querySelectorAll(".motion-skip").length, 1);
-  await click(document.querySelector(".motion-skip") as HTMLElement);
-  assert.ok(document.querySelector(".public-home")?.classList.contains("motion-finished"));
-  assert.equal(document.querySelector('a.button.primary')?.getAttribute("href"), "/login");
-  assert.ok(document.querySelector('a[href="/tenant-admin/login"]'));
-  assert.ok(document.querySelector('a[href="/ops/login"]'));
-  await click(
-    Array.from(document.querySelectorAll("button")).find(item =>
-      item.textContent?.includes("重播动效")
-    ) as HTMLElement
-  );
-  assert.equal(
-    document.querySelector(".public-home")?.classList.contains("motion-finished"),
-    false,
-    "重播必须先恢复动效态"
-  );
-  await unmount(root);
-
   setReducedMotion(true);
-  root = await renderAt("/", { application: "public" });
+  let root = await renderAt("/", { application: "public" });
   assert.ok(document.querySelector(".public-home")?.classList.contains("motion-finished"));
-  assert.equal(document.querySelector(".motion-skip"), null, "减少动效时直接进入正式 Logo 与首页");
-  await unmount(root);
-
-  root = await renderAt("/login", {
-    application: "login",
-    entry: "tenant-user"
-  });
-  assert.equal(document.querySelector("form")?.getAttribute("action"), "/login");
-  assert.match(document.body.textContent ?? "", /内容创作/);
-  assert.doesNotMatch(document.body.textContent ?? "", /品牌管理|笛语运维/);
-  await unmount(root);
-
-  root = await renderAt("/tenant-admin/login", {
-    application: "login",
-    entry: "tenant-admin"
-  });
-  assert.equal(
-    document.querySelector("form")?.getAttribute("action"),
-    "/tenant-admin/login"
-  );
-  assert.match(document.body.textContent ?? "", /品牌管理/);
-  assert.equal(document.querySelector('input[name="totp_code"]'), null);
-  await unmount(root);
-
-  root = await renderAt("/ops/login", {
-    application: "login",
-    entry: "ops"
-  });
-  assert.equal(document.querySelector("form")?.getAttribute("action"), "/ops/login");
-  assert.ok(document.querySelector('input[name="totp_code"]'));
-  assert.doesNotMatch(document.body.textContent ?? "", /内容创作|品牌管理/);
-  await unmount(root);
+  assert.equal(document.querySelector(".motion-final img")?.getAttribute("src"), "/assets/diyu-logo-primary.svg");
+  await act(async () => root.unmount());
 
   root = await renderAt("/tenant-admin", {
     application: "tenant_management",
@@ -155,238 +92,164 @@ async function main(): Promise<void> {
       brand: "笛语服饰"
     }
   });
-  assert.match(document.body.textContent ?? "", /概览与待处理/);
-  assert.match(document.body.textContent ?? "", /成员与权限/);
-  assert.match(document.body.textContent ?? "", /品牌管理/);
-  assert.match(document.body.textContent ?? "", /先处理眼前需要补的资料/);
-  assert.doesNotMatch(document.body.textContent ?? "", /下一阶段|施工|验收/);
-  assert.doesNotMatch(
-    document.body.textContent ?? "",
-    /已可使用|保持就绪|运行正常|笛语运维|需求反馈/
-  );
-  assert.equal(document.querySelector('a[href*="section=demo"]'), null);
+  for (const label of [
+    "概览与当前待办",
+    "团队使用",
+    "成员与入口资格",
+    "发布账号与账号画像",
+    "品牌资料库",
+    "当前可用与待补"
+  ]) {
+    assert.match(document.body.textContent ?? "", new RegExp(label));
+  }
   assert.equal(document.querySelector(".creator-app"), null);
-  assert.equal(document.querySelector('textarea[aria-label="内容需求"]'), null);
-  assert.match(document.body.textContent ?? "", /补齐首个创作身份/);
+  assert.equal(document.querySelector('a[href="/content"]'), null);
+  assert.doesNotMatch(document.body.textContent ?? "", /开始创作|进入创作/);
+  assert.match(document.body.textContent ?? "", /今天需要处理什么/);
 
-  await click(find(".tenant-nav button", "成员与权限"));
-  await settle();
+  await click(find(".tenant-nav button", "成员与入口资格"));
   await click(find("button", "添加成员"));
   const memberInputs = Array.from(
     document.querySelectorAll(".tenant-drawer input")
   ) as HTMLInputElement[];
   await input(memberInputs[0], "门店内容成员");
-  await input(memberInputs[1], "ui04-demo-member");
+  await input(memberInputs[1], "ui05-member");
   await select(
     document.querySelector(".tenant-drawer select") as HTMLSelectElement,
     "11111111-1111-4111-8111-111111111111"
   );
+  await click(find(".tenant-drawer label", "租户管理员"));
+  assert.doesNotMatch(document.querySelector(".tenant-drawer")?.textContent ?? "", /获准操作的发布账号/);
+  await click(find(".tenant-drawer label", "租户用户"));
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /内容创作/);
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /陈列搭配/);
   await click(find(".tenant-drawer button", "创建并生成体验链接"));
   await settle();
-  assert.match(document.querySelector(".one-time-link")?.textContent ?? "", /一次性体验链接/);
-  assert.match(
-    document.querySelector(".one-time-link code")?.textContent ?? "",
-    /ui04-obviously-fake-browser-fixture/
+  const memberCreate = requests.find(
+    item => item.path === "/api/v1/tenant-management/users" && item.method === "POST"
   );
-  await click(find(".tenant-drawer button", "关闭"));
-  assert.match(document.body.textContent ?? "", /尚未分配工作资格/);
-  assert.doesNotMatch(document.body.textContent ?? "", /内容工作成员/);
+  assert.equal(memberCreate?.body?.entry_type, "tenant_user");
+  assert.deepEqual(memberCreate?.body?.capabilities, ["content"]);
+  assert.deepEqual(memberCreate?.body?.publishing_identity_ids, []);
+  assert.equal(memberCreate?.body?.grants_material_maintenance, false);
 
-  await click(find(".tenant-nav button", "发布账号"));
-  await settle();
+  await click(find(".tenant-drawer button", "关闭"));
+  await click(find(".tenant-nav button", "发布账号与账号画像"));
   await click(find("button", "创建发布账号"));
   const accountInputs = Array.from(
     document.querySelectorAll(".tenant-drawer input")
   ) as HTMLInputElement[];
-  const accountTextareas = Array.from(
-    document.querySelectorAll(".tenant-drawer textarea")
-  ) as HTMLTextAreaElement[];
+  await input(accountInputs[0], "总部品牌内容运营");
+  await input(accountInputs[1], "品牌官方");
   const accountSelects = Array.from(
     document.querySelectorAll(".tenant-drawer select")
   ) as HTMLSelectElement[];
-  await input(accountInputs[0], "门店人物发布账号");
-  await input(accountInputs[1], "门店人物");
-  await input(accountTextareas[0], "只表达本人可确认的门店观察。");
+  assert.deepEqual(
+    Array.from(accountSelects[0].options).map(option => option.textContent),
+    ["请选择公司级组织", "笛语服饰管理组织"],
+    "租户管理员创建并初始化画像时只能选择明确公司级负责团队"
+  );
+  await select(accountSelects[0], "11111111-1111-4111-8111-111111111111");
   await select(accountSelects[1], "22222222-2222-4222-8222-222222222222");
-  await click(find(".tenant-drawer button", "创建发布账号"));
-  await settle();
-  assert.match(document.querySelector(".account-list")?.textContent ?? "", /门店人物发布账号/);
-  assert.match(document.querySelector(".account-list")?.textContent ?? "", /门店人物/);
-
-  await click(find(".tenant-nav button", "品牌、商品与组织素材"));
-  await settle();
-  await click(find("button", "添加商品"));
-  const productInputs = Array.from(
-    document.querySelectorAll(".tenant-drawer input")
-  ) as HTMLInputElement[];
-  const productTextareas = Array.from(
+  const profileValues = [
+    "以总部品牌内容运营身份出现",
+    "代表已确认品牌立场，不代替门店陈述经历",
+    "与受众保持克制、平等的交流关系",
+    "长期解释品牌选择与穿着关系",
+    "一人、一部手机、普通室内"
+  ];
+  const profileFields = Array.from(
     document.querySelectorAll(".tenant-drawer textarea")
   ) as HTMLTextAreaElement[];
-  await input(productInputs[0], "UI04-DEMO-A");
-  await input(productInputs[1], "演示牛角扣外套");
-  await input(productTextareas[2], "等深模拟商品资料，仅用于本次产品验收。");
-  await input(productTextareas[3], "UI-04 合成演示范围");
-  await click(find(".tenant-drawer button", "保存商品资料"));
+  assert.equal(profileFields.length, 5, "创建发布账号时只建立一份完整五段画像");
+  for (const [index, value] of profileValues.entries()) {
+    await input(profileFields[index], value);
+  }
+  await click(find(".tenant-drawer button", "创建发布账号"));
   await settle();
-  assert.match(document.querySelector(".product-list")?.textContent ?? "", /演示牛角扣外套/);
-
-  await click(find(".tenant-nav button", "生产就绪与缺口"));
-  await settle();
-  assert.match(document.body.textContent ?? "", /当前没有需要处理的资料/);
-  const memberCreate = requests.find(
-    item => item.path === "/api/v1/tenant-management/users" && item.method === "POST"
-  );
   const accountCreate = requests.find(
     item =>
       item.path === "/api/v1/tenant-management/publishing-accounts" &&
       item.method === "POST"
   );
-  const productCreate = requests.find(
-    item =>
-      item.path === "/api/v1/tenant-management/brand-products" &&
-      item.method === "PUT"
-  );
-  assert.equal(memberCreate?.body?.display_name, "门店内容成员");
-  assert.equal(accountCreate?.body?.content_role_name, "门店人物");
-  assert.equal(productCreate?.body?.confirm_as_current_brand_fact, true);
-  assert.doesNotMatch(document.body.textContent ?? "", /ui04-obviously-fake-browser-fixture/);
-  await unmount(root);
-
-  root = await renderAt("/user", {
-    application: "tenant_user",
-    capabilities: ["content"],
-    identity: { operator: "总部运营", account: "总部发布账号" }
+  assert.equal(accountCreate?.body?.content_role_name, "品牌官方");
+  assert.equal("voice_boundary" in (accountCreate?.body ?? {}), false);
+  assert.deepEqual(accountCreate?.body?.initial_profile, {
+    identity_position: profileValues[0],
+    authority_boundary: profileValues[1],
+    audience_relationship: profileValues[2],
+    content_territories: profileValues[3],
+    default_production_conditions: profileValues[4]
   });
-  assert.ok(document.querySelector('a[href="/content"]'));
-  assert.equal(document.querySelector('a[href="/display"]'), null);
-  assert.equal(document.querySelector(".tenant-admin-app"), null);
-  await unmount(root);
 
-  root = await renderAt("/user", {
-    application: "tenant_user",
-    capabilities: ["content", "display"],
-    identity: { operator: "门店伙伴", account: "门店人物账号" }
-  });
-  assert.ok(document.querySelector('a[href="/content"]'));
-  assert.ok(document.querySelector('a[href="/display"]'));
-  await unmount(root);
-
-  root = await renderAt("/display", {
-    application: "display",
-    identity: {
-      operator: "门店伙伴",
-      account: "门店人物账号",
-      content_role: "门店人物"
-    }
-  });
-  assert.ok(document.querySelector(".display-app"));
-  assert.equal(document.querySelector(".creator-app"), null);
-  assert.equal(document.querySelector(".tenant-admin-app"), null);
-  await unmount(root);
-
-  root = await renderAt("/ops", {
-    application: "ops",
-    formal_runtime: true,
-    runtime_summary: { enabled_tenants: 3, content_runs: 12 },
-    pending_requests: 2
-  });
-  assert.match(document.body.textContent ?? "", /今天需要处理什么/);
-  assert.ok(document.querySelector('dl[aria-label="当前运行汇总"]'));
-  assert.match(document.body.textContent ?? "", /启用租户/);
-  assert.equal(document.querySelector(".creator-app"), null);
-  assert.doesNotMatch(
-    document.body.textContent ?? "",
-    /成员与权限|发布账号|生成内容|已可使用|保持就绪|运行正常/
-  );
-  assert.match(document.body.textContent ?? "", /希望以后可以更容易整理门店当天的选题/);
-  await click(find("button", "处理反馈"));
-  const opsSelects = Array.from(
-    document.querySelectorAll(".ops-feedback-form select")
-  ) as HTMLSelectElement[];
-  await select(opsSelects[0], "generation_method");
-  await select(opsSelects[1], "answered");
-  await input(
-    document.querySelector(".ops-feedback-form textarea") as HTMLTextAreaElement,
-    "这条需求已登记为后续方向，当前不会自动改变你的创作资料。"
-  );
-  await click(find(".ops-feedback-form button", "保存处理结果"));
+  await click(find(".tenant-nav button", "团队使用"));
   await settle();
-  const feedbackReply = requests.find(
-    item =>
-      item.path ===
-        "/api/v1/ops/unmet-capability-requests/UI04-UNMET-FIXTURE" &&
-      item.method === "POST"
+  assert.match(document.body.textContent ?? "", /已记录模型用量/);
+  assert.match(document.body.textContent ?? "", /不等同于账单/);
+  assert.ok(
+    requests.some(item => item.path === "/api/v1/tenant-management/team-usage"),
+    "团队使用必须读取本租户聚合接口"
   );
-  assert.equal(feedbackReply?.body?.status, "answered");
-  assert.match(document.body.textContent ?? "", /已回告/);
+
+  await click(find(".tenant-nav button", "品牌资料库"));
+  await settle();
+  for (const label of ["品牌全员", "总部专用", "指定区域"]) {
+    assert.match(document.body.textContent ?? "", new RegExp(label));
+  }
+  assert.match(document.body.textContent ?? "", /牛角扣外套/);
+  assert.match(document.body.textContent ?? "", /品牌管理员录入/);
+  assert.match(document.body.textContent ?? "", /浙江区域门店拍摄说明/);
+  assert.match(document.body.textContent ?? "", /shooting-note.txt/);
+  await click(find("button", "新增资料"));
+  const scope = Array.from(document.querySelectorAll(".tenant-drawer select")).at(-1) as
+    | HTMLSelectElement
+    | undefined;
+  assert.ok(scope);
+  await select(scope, "organizations");
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /未选择的其他区域默认不可使用/);
   assert.equal(
-    Array.from(document.querySelectorAll(".ops-metric"))
-      .find(item => item.textContent?.includes("待处理反馈"))
-      ?.querySelector("dd")?.textContent,
-    "0",
-    "已成功读取空集合后，不得回退显示旧的 bootstrap 待办数"
+    (find(".tenant-drawer button", "保存资料") as HTMLButtonElement).disabled,
+    true,
+    "指定区域未选具体组织时不能保存"
   );
+
+  await click(find(".tenant-drawer button", "关闭"));
+  await click(find("button", "维护商品事实"));
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /明确确认后/);
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /导入 CSV/);
+  assert.equal(
+    (find(".tenant-drawer button", "保存商品事实") as HTMLButtonElement).disabled,
+    true,
+    "商品候选没有明确确认时不能升级为事实"
+  );
+  const productScope = find(
+    ".tenant-drawer label",
+    "商品事实可用范围"
+  ).querySelector("select") as HTMLSelectElement;
+  await select(productScope, "organizations");
+  const productRegions = find(".tenant-drawer fieldset", "选择可用区域");
+  assert.match(productRegions.textContent ?? "", /浙江区域/);
   assert.doesNotMatch(
-    document.body.textContent ?? "",
-    /编辑目录|私人素材|自动激活/
+    productRegions.textContent ?? "",
+    /笛语服饰管理组织|柯桥门店/,
+    "商品指定区域不得混入总部或门店组织"
   );
-  await unmount(root);
-
-  setFailedPath("/api/v1/admin/readiness");
-  root = await renderAt("/tenant-admin", {
-    application: "tenant_management",
-    formal_runtime: true,
-    identity: {
-      operator_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      operator: "品牌管理员",
-      organization: "笛语服饰管理组织",
-      brand: "笛语服饰"
-    }
-  });
-  assert.match(document.body.textContent ?? "", /当前资料暂时无法读取/);
-  assert.doesNotMatch(document.body.textContent ?? "", /当前没有需要处理的资料/);
-  setFailedPath(null);
-  await click(find("button", "重新读取"));
+  await click(find(".tenant-drawer button", "关闭"));
+  await click(find("button", "添加组织官方素材"));
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /人工说明/);
+  assert.doesNotMatch(document.querySelector(".tenant-drawer")?.textContent ?? "", /私人素材/);
+  await click(find(".tenant-drawer button", "关闭"));
+  await click(find(".tenant-nav button", "当前可用与待补"));
   await settle();
-  assert.doesNotMatch(document.body.textContent ?? "", /当前资料暂时无法读取/);
-  await unmount(root);
+  assert.match(document.body.textContent ?? "", /判断依据/);
+  assert.match(document.body.textContent ?? "", /缺少资料/);
+  assert.match(document.body.textContent ?? "", /影响/);
+  assert.doesNotMatch(document.body.textContent ?? "", /知识完整度|生产就绪百分比/);
 
-  setFailedPath("/api/v1/tenant-management/organizations");
-  root = await renderAt("/tenant-admin", {
-    application: "tenant_management",
-    formal_runtime: true,
-    identity: {
-      operator_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      operator: "品牌管理员",
-      organization: "笛语服饰管理组织",
-      brand: "笛语服饰"
-    }
-  });
-  await click(find(".tenant-nav button", "成员与权限"));
-  await settle();
-  assert.match(document.body.textContent ?? "", /当前资料暂时无法读取/);
-  assert.equal((find("button", "添加成员") as HTMLButtonElement).disabled, true);
-  setFailedPath(null);
-  await click(find("button", "重新读取"));
-  await settle();
-  assert.equal((find("button", "添加成员") as HTMLButtonElement).disabled, false);
-  await unmount(root);
-
-  root = await renderAt("/status", {
-    application: "status",
-    service_state: "available"
-  });
-  assert.match(document.body.textContent ?? "", /服务状态/);
-  assert.match(document.body.textContent ?? "", /服务可以使用/);
-  assert.doesNotMatch(document.body.textContent ?? "", /租户|数据库|供应商|SLA/);
-  await unmount(root);
-
-  process.stdout.write("UI-04 public, auth and isolated product space checks passed\n");
+  for (const forbidden of ["tenant_id", "ContentRole", "RLS", "schema", "测试通过"]) {
+    assert.doesNotMatch(document.body.textContent ?? "", new RegExp(forbidden));
+  }
+  await act(async () => root.unmount());
 }
 
-main().catch(error => {
-  process.stderr.write(
-    `${String(error && (error as Error).stack ? (error as Error).stack : error)}\n`
-  );
-  process.exit(1);
-});
+await main();

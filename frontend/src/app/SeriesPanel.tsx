@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent, JSX } from "react";
-import { api } from "../services/api";
+import { api, scopedContentPath } from "../services/api";
 import "../styles/user-extensions.css";
 import type { Target } from "./types";
 
@@ -28,13 +28,15 @@ export function SeriesPanel({
   onSelect,
   onContinue,
   onOpenTask,
-  target
+  target,
+  publishingIdentityId = "current"
 }: {
   selected: SeriesSelection | null;
   onSelect: (value: SeriesSelection | null) => void;
   onContinue: (value: SeriesSelection) => void;
   onOpenTask?: (taskId: string) => void;
   target: Target;
+  publishingIdentityId?: string;
 }): JSX.Element {
   const [series, setSeries] = useState<ContentSeries[]>([]);
   const [title, setTitle] = useState("");
@@ -46,7 +48,7 @@ export function SeriesPanel({
     try {
       setSeries(
         await api<ContentSeries[]>(
-          `/api/v1/content/series?target=${encodeURIComponent(target)}`
+          scopedContentPath("/api/v1/content/series", publishingIdentityId, target)
         )
       );
     } catch (error) {
@@ -65,7 +67,7 @@ export function SeriesPanel({
     setNotice("");
     try {
       const value = await api<ContentSeries>(
-        `/api/v1/content/series?target=${encodeURIComponent(target)}`,
+        scopedContentPath("/api/v1/content/series", publishingIdentityId, target),
         {
         method: "POST",
         body: JSON.stringify({ title: title.trim(), premise: premise.trim() })
@@ -91,7 +93,11 @@ export function SeriesPanel({
     setNotice("");
     try {
       await api<ContentSeries>(
-        `/api/v1/content/series/${item.id}/items?target=${encodeURIComponent(target)}`,
+        scopedContentPath(
+          `/api/v1/content/series/${item.id}/items`,
+          publishingIdentityId,
+          target
+        ),
         {
           method: "PUT",
           body: JSON.stringify({ task_ids: next.map(entry => entry.task_id) })

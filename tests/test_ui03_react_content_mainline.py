@@ -141,7 +141,7 @@ def test_production_session_api_and_postgres_form_one_v1_v2_v1_chain(
             assert headquarters["application"] == "content"
             assert headquarters["current_target"] == "xiaohongshu_graphic"
             headquarters_identity = cast(dict[str, str], headquarters["identity"])
-            assert headquarters_identity["account"] == "折线之间品牌母账号·小红书"
+            assert headquarters_identity["account"] == "折线之间品牌母账号·抖音"
             assert headquarters_identity["content_role"] == "总部零售/服务专家"
 
             catalog = client.get("/api/v1/content/expression-catalog").json()

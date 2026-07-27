@@ -44,6 +44,7 @@ DUAL_TENANT_ADMIN_GRANT_ID = UUID("00000000-0000-0000-0000-000000000094")
 USER_DEFAULT_PERSONA_ID = UUID("00000000-0000-0000-0000-000000000095")
 DUAL_DEFAULT_PERSONA_ID = UUID("00000000-0000-0000-0000-000000000096")
 EXTERNAL_DEFAULT_PERSONA_ID = UUID("00000000-0000-0000-0000-000000000097")
+STORE_DISPLAY_ACCESS_GRANT_ID = UUID("00000000-0000-0000-0000-000000000098")
 
 
 def seed_demo() -> None:
@@ -61,40 +62,64 @@ def seed_demo() -> None:
         )
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
         cursor.execute(
-            "INSERT INTO organizations (id,tenant_id,name) VALUES (%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO organizations (id,tenant_id,name,organization_level) "
+            "VALUES (%s,%s,%s,'operating_unit') "
+            "ON CONFLICT (id) DO UPDATE SET organization_level = EXCLUDED.organization_level",
             (STORE_ORG_ID, TENANT_ID, "折线之间·南城店"),
         )
         cursor.execute(
-            "INSERT INTO users (id,tenant_id,organization_id,display_name) VALUES (%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO users "
+            "(id,tenant_id,organization_id,display_name,entry_kind) "
+            "VALUES (%s,%s,%s,%s,'tenant_user') "
+            "ON CONFLICT (id) DO UPDATE SET entry_kind = EXCLUDED.entry_kind",
             (STORE_USER_ID, TENANT_ID, STORE_ORG_ID, "南城店陈列执行甲"),
         )
         cursor.execute(
-            "INSERT INTO users (id,tenant_id,organization_id,display_name) VALUES (%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO users "
+            "(id,tenant_id,organization_id,display_name,entry_kind) "
+            "VALUES (%s,%s,%s,%s,'tenant_user') "
+            "ON CONFLICT (id) DO UPDATE SET entry_kind = EXCLUDED.entry_kind",
             (STORE_CONTENT_USER_ID, TENANT_ID, STORE_ORG_ID, "南城店内容运营甲"),
         )
         cursor.execute(
-            "INSERT INTO organizations (id, tenant_id, name) VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO organizations "
+            "(id, tenant_id, name, organization_level) "
+            "VALUES (%s, %s, %s, 'company') "
+            "ON CONFLICT (id) DO UPDATE SET organization_level = EXCLUDED.organization_level",
             (ORG_ID, TENANT_ID, "折线之间总部"),
         )
         cursor.execute(
-            "INSERT INTO organizations (id, tenant_id, name) VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO organizations "
+            "(id, tenant_id, name, organization_level) "
+            "VALUES (%s, %s, %s, 'operating_unit') "
+            "ON CONFLICT (id) DO UPDATE SET organization_level = EXCLUDED.organization_level",
             (EXTERNAL_OPERATOR_ORG_ID, TENANT_ID, "折线之间外部代运营服务方"),
         )
         cursor.execute(
             """
-                INSERT INTO users (id, tenant_id, organization_id, display_name)
-                VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING
+                INSERT INTO users
+                    (id, tenant_id, organization_id, display_name, entry_kind)
+                VALUES (%s, %s, %s, %s, 'tenant_user')
+                ON CONFLICT (id) DO UPDATE SET entry_kind = EXCLUDED.entry_kind
                 """,
             (USER_ID, TENANT_ID, ORG_ID, "总部内容运营甲"),
         )
-        for user_id, organization_id, display_name in (
-            (TENANT_ADMIN_USER_ID, ORG_ID, "总部租户管理员甲"),
-            (DUAL_QUALIFIED_USER_ID, ORG_ID, "总部内容与租户管理兼任甲"),
-            (EXTERNAL_OPERATOR_USER_ID, EXTERNAL_OPERATOR_ORG_ID, "外部代运营乙"),
+        for user_id, organization_id, display_name, entry_kind in (
+            (TENANT_ADMIN_USER_ID, ORG_ID, "总部租户管理员甲", "tenant_admin"),
+            (DUAL_QUALIFIED_USER_ID, ORG_ID, "总部租户管理员乙", "tenant_admin"),
+            (
+                EXTERNAL_OPERATOR_USER_ID,
+                EXTERNAL_OPERATOR_ORG_ID,
+                "外部代运营乙",
+                "tenant_user",
+            ),
         ):
             cursor.execute(
-                "INSERT INTO users (id, tenant_id, organization_id, display_name) VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
-                (user_id, TENANT_ID, organization_id, display_name),
+                "INSERT INTO users "
+                "(id, tenant_id, organization_id, display_name, entry_kind) "
+                "VALUES (%s, %s, %s, %s, %s) "
+                "ON CONFLICT (id) DO UPDATE SET entry_kind = EXCLUDED.entry_kind",
+                (user_id, TENANT_ID, organization_id, display_name, entry_kind),
             )
         cursor.execute(
             """
@@ -249,14 +274,18 @@ def seed_demo() -> None:
                 """,
             (GRANT_ID, TENANT_ID, USER_ID, ACCOUNT_ID, "总部零售/服务专家"),
         )
-        for grant_id, user_id, role_name in (
-            (DUAL_QUALIFIED_GRANT_ID, DUAL_QUALIFIED_USER_ID, "总部内容运营权限"),
-            (EXTERNAL_OPERATOR_GRANT_ID, EXTERNAL_OPERATOR_USER_ID, "受托代运营权限"),
-        ):
-            cursor.execute(
-                "INSERT INTO auth_grants (id, tenant_id, user_id, account_id, role_name) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
-                (grant_id, TENANT_ID, user_id, ACCOUNT_ID, role_name),
-            )
+        cursor.execute(
+            "INSERT INTO auth_grants "
+            "(id, tenant_id, user_id, account_id, role_name) "
+            "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
+            (
+                EXTERNAL_OPERATOR_GRANT_ID,
+                TENANT_ID,
+                EXTERNAL_OPERATOR_USER_ID,
+                ACCOUNT_ID,
+                "受托代运营权限",
+            ),
+        )
         cursor.execute(
             """
                 INSERT INTO content_roles (id, tenant_id, brand_id, name, voice_boundary)
@@ -277,33 +306,21 @@ def seed_demo() -> None:
                 """,
             (ACCOUNT_ROLE_ID, TENANT_ID, ACCOUNT_ID, ROLE_ID),
         )
-        for account_id, name, channel, grant_id, account_role_id in (
+        for account_id, name, channel in (
             (
                 HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
                 "折线之间品牌母账号·小红书",
                 "小红书",
-                HEADQUARTERS_XIAOHONGSHU_GRANT_ID,
-                HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ROLE_ID,
             ),
             (
                 HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID,
                 "折线之间品牌母账号·微信视频号",
                 "微信视频号",
-                HEADQUARTERS_WECHAT_CHANNELS_GRANT_ID,
-                HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ROLE_ID,
             ),
         ):
             cursor.execute(
                 "INSERT INTO content_accounts (id, tenant_id, brand_id, name, channel) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
                 (account_id, TENANT_ID, BRAND_ID, name, channel),
-            )
-            cursor.execute(
-                "INSERT INTO auth_grants (id, tenant_id, user_id, account_id, role_name) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
-                (grant_id, TENANT_ID, USER_ID, account_id, "总部零售/服务专家"),
-            )
-            cursor.execute(
-                "INSERT INTO account_content_roles (id, tenant_id, account_id, content_role_id) VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING",
-                (account_role_id, TENANT_ID, account_id, ROLE_ID),
             )
         cursor.execute(
             "INSERT INTO content_accounts (id,tenant_id,brand_id,name,channel) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
@@ -386,23 +403,26 @@ def seed_demo() -> None:
             HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID,
         ):
             cursor.execute(
-                "UPDATE content_accounts SET carrier_of_account_id = %s "
-                "WHERE tenant_id = %s AND id = %s",
+                "UPDATE content_accounts SET carrier_of_account_id = %s WHERE tenant_id = %s AND id = %s",
                 (ACCOUNT_ID, TENANT_ID, carrier_id),
             )
         for grant_id, can_maintain in (
             (GRANT_ID, True),
-            (HEADQUARTERS_XIAOHONGSHU_GRANT_ID, True),
-            (HEADQUARTERS_WECHAT_CHANNELS_GRANT_ID, True),
             (STORE_CONTENT_GRANT_ID, False),
-            (DUAL_QUALIFIED_GRANT_ID, False),
             (EXTERNAL_OPERATOR_GRANT_ID, True),
         ):
             cursor.execute(
-                "UPDATE auth_grants SET can_maintain_expression_profile = %s "
-                "WHERE tenant_id = %s AND id = %s",
+                "UPDATE auth_grants SET can_maintain_expression_profile = %s WHERE tenant_id = %s AND id = %s",
                 (can_maintain, TENANT_ID, grant_id),
             )
+        cursor.execute(
+            "INSERT INTO display_access_grants "
+            "(id, tenant_id, user_id, enabled) "
+            "VALUES (%s, %s, %s, true) "
+            "ON CONFLICT (tenant_id, user_id) DO UPDATE "
+            "SET enabled = EXCLUDED.enabled",
+            (STORE_DISPLAY_ACCESS_GRANT_ID, TENANT_ID, STORE_USER_ID),
+        )
         for persona_id, user_id, name, boundary in (
             (
                 USER_DEFAULT_PERSONA_ID,
@@ -413,8 +433,8 @@ def seed_demo() -> None:
             (
                 DUAL_DEFAULT_PERSONA_ID,
                 DUAL_QUALIFIED_USER_ID,
-                "兼任者的默认表达",
-                "同一自然人可兼任两个入口，但每次只在当前入口按其资格行动。",
+                "历史管理员默认表达",
+                "该身份当前只保留租户管理入口；历史私人设置不授予内容创作资格。",
             ),
             (
                 EXTERNAL_DEFAULT_PERSONA_ID,

@@ -240,6 +240,12 @@ class ProductionAuthRepository:
             return False
 
     def authenticate_tenant_user(self, username: str, password: str, audience: str) -> TenantSession | None:
+        expected_entry_kind = {
+            "tenant-admin": "tenant_admin",
+            "tenant-user": "tenant_user",
+        }.get(audience)
+        if expected_entry_kind is None:
+            return None
         with self._tx() as cursor:
             cursor.execute(
                 """
@@ -259,7 +265,9 @@ class ProductionAuthRepository:
         with self._tenant_tx(tenant_id) as cursor:
             cursor.execute(
                 """
-                SELECT user_record.enabled AS user_enabled, registry.enabled AS tenant_enabled,
+                SELECT user_record.enabled AS user_enabled,
+                       user_record.entry_kind,
+                       registry.enabled AS tenant_enabled,
                        EXISTS (
                          SELECT 1 FROM tenant_management_grants grant_record
                          WHERE grant_record.tenant_id = %s
@@ -274,7 +282,11 @@ class ProductionAuthRepository:
             access = cursor.fetchone()
         if access is None or not bool(access["user_enabled"]) or not bool(access["tenant_enabled"]):
             return None
+        if str(access["entry_kind"]) != expected_entry_kind:
+            return None
         if audience == "tenant-admin" and not bool(access["is_manager"]):
+            return None
+        if audience == "tenant-user" and bool(access["is_manager"]):
             return None
         return TenantSession(tenant_id, user_id, audience)
 
@@ -315,7 +327,9 @@ class ProductionAuthRepository:
         with self._tenant_tx(tenant_id) as cursor:
             cursor.execute(
                 """
-                SELECT user_record.enabled AS user_enabled, registry.enabled AS tenant_enabled,
+                SELECT user_record.enabled AS user_enabled,
+                       user_record.entry_kind,
+                       registry.enabled AS tenant_enabled,
                        EXISTS (
                          SELECT 1 FROM tenant_management_grants grant_record
                          WHERE grant_record.tenant_id = %s
@@ -330,15 +344,35 @@ class ProductionAuthRepository:
             access = cursor.fetchone()
         if access is None or not bool(access["user_enabled"]) or not bool(access["tenant_enabled"]):
             return None
-        if str(row["audience"]) == "tenant-admin" and not bool(access["is_manager"]):
+        audience = str(row["audience"])
+        expected_entry_kind = {
+            "tenant-admin": "tenant_admin",
+            "tenant-user": "tenant_user",
+        }.get(audience)
+        if expected_entry_kind is None or str(access["entry_kind"]) != expected_entry_kind:
             return None
-        return TenantSession(tenant_id, user_id, str(row["audience"]))
+        if audience == "tenant-admin" and not bool(access["is_manager"]):
+            return None
+        if audience == "tenant-user" and bool(access["is_manager"]):
+            return None
+        return TenantSession(tenant_id, user_id, audience)
 
     def revoke_tenant_session(self, token: str) -> None:
         with self._tx() as cursor:
             cursor.execute(
                 "UPDATE tenant_sessions SET revoked_at = now() WHERE token_digest = %s",
                 (self._digest(token),),
+            )
+
+    def record_content_rate_limit(self, identity: TenantSession) -> None:
+        """Record only the bounded event; never persist a prompt or content body."""
+        with self._tenant_tx(identity.tenant_id) as cursor:
+            self._tenant_audit(
+                cursor,
+                identity.tenant_id,
+                identity.user_id,
+                "content.rate_limited",
+                identity.user_id,
             )
 
     def revoke_operator_session(self, token: str) -> None:
@@ -403,18 +437,15 @@ class ProductionAuthRepository:
             self._tenant_audit(cursor, tenant_id, user_id, "password.activated_or_reset", user_id)
             cursor.execute(
                 """
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM tenant_management_grants management_grant
-                    WHERE management_grant.tenant_id = %s
-                      AND management_grant.user_id = %s
-                      AND management_grant.enabled = true
-                ) AS is_manager
+                SELECT entry_kind
+                  FROM users
+                 WHERE tenant_id = %s
+                   AND id = %s
                 """,
                 (tenant_id, user_id),
             )
-            is_manager = bool(self._one(cursor, "无法确认激活后的入口资格")["is_manager"])
-        return "tenant-admin" if is_manager else "tenant-user"
+            entry_kind = str(self._one(cursor, "无法确认激活后的入口资格")["entry_kind"])
+        return "tenant-admin" if entry_kind == "tenant_admin" else "tenant-user"
 
     def change_password(self, identity: TenantSession, current_password: str, new_password: str) -> bool:
         with self._tx() as cursor:
@@ -452,7 +483,37 @@ class ProductionAuthRepository:
         grants_tenant_management: bool,
         grants_material_maintenance: bool,
         grants_expression_profile_maintenance: bool = False,
+        *,
+        entry_type: str | None = None,
+        account_ids: tuple[UUID, ...] | None = None,
+        grants_content_access: bool | None = None,
+        grants_display_access: bool = False,
     ) -> dict[str, str]:
+        resolved_entry_type = entry_type or ("tenant_admin" if grants_tenant_management else "tenant_user")
+        if resolved_entry_type not in {"tenant_admin", "tenant_user"}:
+            raise DomainError("请选择租户管理员或租户用户入口")
+        requested_content_access = account_id is not None if grants_content_access is None else grants_content_access
+        requested_account_ids = tuple(
+            dict.fromkeys(account_ids if account_ids is not None else ((account_id,) if account_id is not None else ()))
+        )
+        if requested_content_access and not requested_account_ids:
+            raise DomainError("内容创作资格至少需要一个发布账号")
+        if not requested_content_access and requested_account_ids:
+            raise DomainError("未开通内容创作时不能分配发布账号")
+        if resolved_entry_type == "tenant_admin":
+            if (
+                requested_content_access
+                or grants_display_access
+                or grants_material_maintenance
+                or grants_expression_profile_maintenance
+            ):
+                raise DomainError("租户管理员与内容创作、陈列搭配资格不能同时开通")
+            grants_tenant_management = True
+        elif grants_tenant_management:
+            raise DomainError("租户用户不能同时获得租户管理入口")
+        if grants_expression_profile_maintenance and not requested_content_access:
+            raise DomainError("维护账号定位前，需要先具备发布账号使用资格")
+
         user_id = uuid4()
         activation_id = uuid4()
         raw_token, digest = self._token()
@@ -469,8 +530,16 @@ class ProductionAuthRepository:
             )
             self._one(cursor, "只能授予当前租户的组织资格")
             cursor.execute(
-                "INSERT INTO users (id, tenant_id, organization_id, display_name) VALUES (%s, %s, %s, %s)",
-                (user_id, manager.tenant_id, selected_organization_id, display_name),
+                "INSERT INTO users "
+                "(id, tenant_id, organization_id, display_name, entry_kind) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (
+                    user_id,
+                    manager.tenant_id,
+                    selected_organization_id,
+                    display_name,
+                    resolved_entry_type,
+                ),
             )
             cursor.execute(
                 "INSERT INTO user_credentials (user_id, tenant_id, username) VALUES (%s, %s, %s)",
@@ -489,10 +558,12 @@ class ProductionAuthRepository:
                     manager.user_id,
                 ),
             )
-            if account_id is not None:
+            for requested_account_id in requested_account_ids:
                 cursor.execute(
-                    "SELECT id FROM content_accounts WHERE tenant_id = %s AND id = %s AND enabled = true",
-                    (manager.tenant_id, account_id),
+                    "SELECT id FROM content_accounts "
+                    "WHERE tenant_id = %s AND id = %s AND enabled = true "
+                    "AND carrier_of_account_id IS NULL",
+                    (manager.tenant_id, requested_account_id),
                 )
                 self._one(cursor, "只能授予当前租户已启用的企业发布账号")
                 cursor.execute(
@@ -503,7 +574,7 @@ class ProductionAuthRepository:
                         uuid4(),
                         manager.tenant_id,
                         user_id,
-                        account_id,
+                        requested_account_id,
                         "发布账号操作资格",
                         grants_expression_profile_maintenance,
                     ),
@@ -519,12 +590,25 @@ class ProductionAuthRepository:
                     "VALUES (%s, %s, %s, %s)",
                     (uuid4(), manager.tenant_id, selected_organization_id, user_id),
                 )
+            if grants_display_access:
+                cursor.execute(
+                    "SELECT id FROM display_stores "
+                    "WHERE tenant_id = %s AND execution_organization_id = %s "
+                    "ORDER BY id LIMIT 1",
+                    (manager.tenant_id, selected_organization_id),
+                )
+                self._one(cursor, "所选成员组织当前没有陈列搭配入口")
+                cursor.execute(
+                    "INSERT INTO display_access_grants (id, tenant_id, user_id, enabled) VALUES (%s, %s, %s, true)",
+                    (uuid4(), manager.tenant_id, user_id),
+                )
             self._tenant_audit(cursor, manager.tenant_id, manager.user_id, "tenant_user.created", user_id)
         return {
             "user_id": str(user_id),
             "username": username,
             "activation_token": raw_token,
             "activation_id": str(activation_id),
+            "entry_type": resolved_entry_type,
         }
 
     def create_reset_token(self, manager: TenantSession, user_id: UUID) -> str:
@@ -587,7 +671,7 @@ class ProductionAuthRepository:
         return invalidated
 
     def disable_tenant_user(self, manager: TenantSession, user_id: UUID) -> None:
-        """Disable a natural login and every current work grant in its own tenant."""
+        """Disable a login and irreversibly invalidate all current authentication material."""
         if user_id == manager.user_id:
             raise DomainError("不能停用当前正在使用品牌管理的自己")
         with self._tenant_tx(manager.tenant_id) as cursor:
@@ -606,6 +690,25 @@ class ProductionAuthRepository:
                 (manager.tenant_id, user_id),
             )
             cursor.execute(
+                "UPDATE display_access_grants SET enabled = false "
+                "WHERE tenant_id = %s AND user_id = %s AND enabled = true",
+                (manager.tenant_id, user_id),
+            )
+            cursor.execute(
+                "DELETE FROM organization_material_maintainers WHERE tenant_id = %s AND user_id = %s",
+                (manager.tenant_id, user_id),
+            )
+            cursor.execute(
+                "UPDATE user_activation_tokens SET used_at = now() "
+                "WHERE tenant_id = %s AND user_id = %s AND used_at IS NULL",
+                (manager.tenant_id, user_id),
+            )
+            cursor.execute(
+                "UPDATE user_credentials SET password_hash = NULL, password_changed_at = now() "
+                "WHERE tenant_id = %s AND user_id = %s",
+                (manager.tenant_id, user_id),
+            )
+            cursor.execute(
                 "UPDATE tenant_sessions SET revoked_at = now() WHERE tenant_id = %s AND user_id = %s "
                 "AND revoked_at IS NULL",
                 (manager.tenant_id, user_id),
@@ -615,11 +718,27 @@ class ProductionAuthRepository:
     def revoke_account_grant(self, manager: TenantSession, user_id: UUID, account_id: UUID) -> None:
         with self._tenant_tx(manager.tenant_id) as cursor:
             cursor.execute(
-                "UPDATE auth_grants SET enabled = false WHERE tenant_id = %s AND user_id = %s "
-                "AND account_id = %s AND enabled = true RETURNING id",
+                """
+                UPDATE auth_grants AS grant_record
+                   SET enabled = false,
+                       can_maintain_expression_profile = false
+                  FROM content_accounts AS account
+                 WHERE grant_record.tenant_id = %s
+                   AND grant_record.user_id = %s
+                   AND grant_record.enabled = true
+                   AND account.tenant_id = grant_record.tenant_id
+                   AND account.id = grant_record.account_id
+                   AND COALESCE(account.carrier_of_account_id, account.id) = %s
+                RETURNING grant_record.id
+                """,
                 (manager.tenant_id, user_id, account_id),
             )
             self._one(cursor, "找不到当前租户可撤销的发布账号资格")
+            cursor.execute(
+                "UPDATE tenant_sessions SET revoked_at = now() "
+                "WHERE tenant_id = %s AND user_id = %s AND revoked_at IS NULL",
+                (manager.tenant_id, user_id),
+            )
             self._tenant_audit(cursor, manager.tenant_id, manager.user_id, "publishing_account_grant.revoked", user_id)
 
     def update_tenant_user_grants(
@@ -631,14 +750,41 @@ class ProductionAuthRepository:
         grants_tenant_management: bool,
         grants_material_maintenance: bool,
         grants_expression_profile_maintenance: bool,
-    ) -> dict[str, bool]:
-        """Replace the small editable grant set in one tenant transaction."""
-        if user_id == manager.user_id and not grants_tenant_management:
+        *,
+        entry_type: str | None = None,
+        account_ids: tuple[UUID, ...] | None = None,
+        grants_content_access: bool | None = None,
+        grants_display_access: bool | None = None,
+    ) -> dict[str, object]:
+        """Replace one member's mutually exclusive entry and root-account grants."""
+        resolved_entry_type = entry_type or ("tenant_admin" if grants_tenant_management else "tenant_user")
+        if resolved_entry_type not in {"tenant_admin", "tenant_user"}:
+            raise DomainError("请选择租户管理员或租户用户入口")
+        requested_content_access = grants_account_access if grants_content_access is None else grants_content_access
+        requested_account_ids = tuple(
+            dict.fromkeys(account_ids if account_ids is not None else ((account_id,) if account_id is not None else ()))
+        )
+        requested_display_access = bool(grants_display_access)
+        if requested_content_access and not requested_account_ids:
+            raise DomainError("内容创作资格至少需要一个发布账号")
+        if not requested_content_access and requested_account_ids:
+            raise DomainError("未开通内容创作时不能分配发布账号")
+        if resolved_entry_type == "tenant_admin":
+            if (
+                requested_content_access
+                or requested_display_access
+                or grants_material_maintenance
+                or grants_expression_profile_maintenance
+            ):
+                raise DomainError("租户管理员与内容创作、陈列搭配资格不能同时开通")
+            grants_tenant_management = True
+        elif grants_tenant_management:
+            raise DomainError("租户用户不能同时获得租户管理入口")
+        if user_id == manager.user_id and resolved_entry_type != "tenant_admin":
             raise DomainError("不能在当前登录会话中撤销自己的品牌管理资格")
-        if grants_expression_profile_maintenance and not grants_account_access:
+        if grants_expression_profile_maintenance and not requested_content_access:
             raise DomainError("维护账号定位前，需要先具备这个发布账号的使用资格")
-        if account_id is None and (grants_account_access or grants_expression_profile_maintenance):
-            raise DomainError("请选择需要维护资格的发布账号")
+
         with self._tenant_tx(manager.tenant_id) as cursor:
             cursor.execute(
                 "SELECT organization_id FROM users WHERE tenant_id = %s AND id = %s AND enabled = true FOR UPDATE",
@@ -647,81 +793,99 @@ class ProductionAuthRepository:
             target = self._one(cursor, "找不到当前租户可维护的成员")
             organization_id = UUID(str(target["organization_id"]))
 
-            if account_id is not None:
+            for requested_account_id in requested_account_ids:
                 cursor.execute(
                     "SELECT id FROM content_accounts "
                     "WHERE tenant_id = %s AND id = %s AND enabled = true "
                     "AND carrier_of_account_id IS NULL",
-                    (manager.tenant_id, account_id),
+                    (manager.tenant_id, requested_account_id),
                 )
                 self._one(cursor, "只能维护当前租户已启用的表达账号资格")
-                if grants_account_access:
+
+            cursor.execute(
+                "UPDATE users SET entry_kind = %s WHERE tenant_id = %s AND id = %s",
+                (resolved_entry_type, manager.tenant_id, user_id),
+            )
+            cursor.execute(
+                """
+                UPDATE auth_grants
+                   SET enabled = false,
+                       can_maintain_expression_profile = false
+                 WHERE tenant_id = %s
+                   AND user_id = %s
+                   AND (enabled = true OR can_maintain_expression_profile = true)
+                """,
+                (manager.tenant_id, user_id),
+            )
+
+            if resolved_entry_type == "tenant_user":
+                for requested_account_id in requested_account_ids:
                     cursor.execute(
                         """
-                        UPDATE auth_grants grant_record
-                        SET enabled = false,
-                            can_maintain_expression_profile = false
-                        FROM content_accounts account
-                        WHERE grant_record.tenant_id = %s
-                          AND grant_record.user_id = %s
-                          AND grant_record.enabled = true
-                          AND account.tenant_id = grant_record.tenant_id
-                          AND account.id = grant_record.account_id
-                          AND COALESCE(account.carrier_of_account_id, account.id) <> %s
+                        INSERT INTO auth_grants
+                            (id, tenant_id, user_id, account_id, role_name, enabled,
+                             can_maintain_expression_profile)
+                        VALUES (%s, %s, %s, %s, '发布账号操作资格', true, %s)
+                        ON CONFLICT (tenant_id, user_id, account_id) DO UPDATE
+                        SET enabled = true,
+                            can_maintain_expression_profile =
+                                EXCLUDED.can_maintain_expression_profile
                         """,
-                        (manager.tenant_id, user_id, account_id),
+                        (
+                            uuid4(),
+                            manager.tenant_id,
+                            user_id,
+                            requested_account_id,
+                            grants_expression_profile_maintenance,
+                        ),
                     )
-                else:
-                    cursor.execute(
-                        """
-                        UPDATE auth_grants
-                        SET enabled = false,
-                            can_maintain_expression_profile = false
-                        WHERE tenant_id = %s AND user_id = %s AND enabled = true
-                        """,
-                        (manager.tenant_id, user_id),
-                    )
+
+            cursor.execute(
+                """
+                INSERT INTO tenant_management_grants
+                    (id, tenant_id, user_id, enabled)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (tenant_id, user_id) DO UPDATE
+                SET enabled = EXCLUDED.enabled
+                """,
+                (
+                    uuid4(),
+                    manager.tenant_id,
+                    user_id,
+                    resolved_entry_type == "tenant_admin",
+                ),
+            )
+
+            if resolved_entry_type == "tenant_user" and requested_display_access:
+                cursor.execute(
+                    "SELECT id FROM display_stores "
+                    "WHERE tenant_id = %s AND execution_organization_id = %s "
+                    "ORDER BY id LIMIT 1",
+                    (manager.tenant_id, organization_id),
+                )
+                self._one(cursor, "所选成员组织当前没有陈列搭配入口")
                 cursor.execute(
                     """
-                    INSERT INTO auth_grants
-                        (id, tenant_id, user_id, account_id, role_name, enabled,
-                         can_maintain_expression_profile)
-                    VALUES (%s, %s, %s, %s, '发布账号操作资格', %s, %s)
-                    ON CONFLICT (tenant_id, user_id, account_id) DO UPDATE
-                    SET enabled = EXCLUDED.enabled,
-                        can_maintain_expression_profile =
-                            EXCLUDED.can_maintain_expression_profile
+                    INSERT INTO display_access_grants
+                        (id, tenant_id, user_id, enabled)
+                    VALUES (%s, %s, %s, true)
+                    ON CONFLICT (tenant_id, user_id) DO UPDATE
+                    SET enabled = EXCLUDED.enabled
                     """,
                     (
                         uuid4(),
                         manager.tenant_id,
                         user_id,
-                        account_id,
-                        grants_account_access,
-                        grants_expression_profile_maintenance,
                     ),
                 )
-            elif not grants_account_access:
+            else:
                 cursor.execute(
-                    """
-                    UPDATE auth_grants
-                    SET enabled = false,
-                        can_maintain_expression_profile = false
-                    WHERE tenant_id = %s AND user_id = %s AND enabled = true
-                    """,
+                    "UPDATE display_access_grants SET enabled = false "
+                    "WHERE tenant_id = %s AND user_id = %s AND enabled = true",
                     (manager.tenant_id, user_id),
                 )
 
-            cursor.execute(
-                """
-                INSERT INTO tenant_management_grants (id, tenant_id, user_id, enabled)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (tenant_id, user_id) DO UPDATE
-                SET enabled = EXCLUDED.enabled
-                """,
-                (uuid4(), manager.tenant_id, user_id, grants_tenant_management),
-            )
-            if grants_material_maintenance:
+            if resolved_entry_type == "tenant_user" and grants_material_maintenance:
                 cursor.execute(
                     """
                     INSERT INTO organization_material_maintainers
@@ -738,6 +902,11 @@ class ProductionAuthRepository:
                     (manager.tenant_id, organization_id, user_id),
                 )
 
+            cursor.execute(
+                "UPDATE tenant_sessions SET revoked_at = now() "
+                "WHERE tenant_id = %s AND user_id = %s AND revoked_at IS NULL",
+                (manager.tenant_id, user_id),
+            )
             self._tenant_audit(
                 cursor,
                 manager.tenant_id,
@@ -746,8 +915,11 @@ class ProductionAuthRepository:
                 user_id,
             )
         return {
-            "account_access": grants_account_access,
-            "tenant_management": grants_tenant_management,
+            "entry_type": resolved_entry_type,
+            "account_access": requested_content_access,
+            "account_ids": [str(value) for value in requested_account_ids],
+            "tenant_management": resolved_entry_type == "tenant_admin",
+            "display_access": requested_display_access,
             "material_maintenance": grants_material_maintenance,
             "expression_profile_maintenance": grants_expression_profile_maintenance,
         }
@@ -756,7 +928,8 @@ class ProductionAuthRepository:
         """Return only the manager's tenant organizations for qualification assignment."""
         with self._tenant_tx(manager.tenant_id) as cursor:
             cursor.execute(
-                "SELECT id, name, business_data_kind FROM organizations WHERE tenant_id = %s ORDER BY name",
+                "SELECT id, name, business_data_kind, organization_level "
+                "FROM organizations WHERE tenant_id = %s ORDER BY name",
                 (manager.tenant_id,),
             )
             return [
@@ -764,6 +937,7 @@ class ProductionAuthRepository:
                     "id": str(row["id"]),
                     "name": str(row["name"]),
                     "business_data_kind": str(row["business_data_kind"]),
+                    "organization_level": str(row["organization_level"]),
                 }
                 for row in cursor.fetchall()
             ]
@@ -773,26 +947,35 @@ class ProductionAuthRepository:
         manager: TenantSession,
         name: str,
         as_synthetic_business_fixture: bool = False,
+        organization_level: str = "unspecified",
     ) -> dict[str, str]:
         organization_id = uuid4()
         normalized_name = name.strip()
         if not normalized_name:
             raise DomainError("请填写真实组织名称")
+        if organization_level not in {
+            "company",
+            "region",
+            "operating_unit",
+            "unspecified",
+        }:
+            raise DomainError("请选择公司、区域、经营单元或暂未指定")
         business_data_kind = "synthetic_business_fixture" if as_synthetic_business_fixture else "formal_business_data"
         with self._tenant_tx(manager.tenant_id) as cursor:
             try:
                 cursor.execute(
                     """
                     INSERT INTO organizations
-                        (id, tenant_id, name, business_data_kind)
-                    VALUES (%s, %s, %s, %s)
-                    RETURNING id, name, business_data_kind
+                        (id, tenant_id, name, business_data_kind, organization_level)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id, name, business_data_kind, organization_level
                     """,
                     (
                         organization_id,
                         manager.tenant_id,
                         normalized_name,
                         business_data_kind,
+                        organization_level,
                     ),
                 )
                 row = self._one(cursor, "组织创建失败")
@@ -809,6 +992,7 @@ class ProductionAuthRepository:
             "id": str(row["id"]),
             "name": str(row["name"]),
             "business_data_kind": str(row["business_data_kind"]),
+            "organization_level": str(row["organization_level"]),
         }
 
     def bootstrap_existing_tenant_admin(self, tenant_id: UUID, user_id: UUID, username: str) -> str:
@@ -820,6 +1004,25 @@ class ProductionAuthRepository:
                 (tenant_id, user_id),
             )
             self._one(cursor, "指定自然人不是当前租户管理员")
+            cursor.execute(
+                "UPDATE users SET entry_kind = 'tenant_admin' WHERE tenant_id = %s AND id = %s",
+                (tenant_id, user_id),
+            )
+            cursor.execute(
+                "UPDATE auth_grants SET enabled = false, "
+                "can_maintain_expression_profile = false "
+                "WHERE tenant_id = %s AND user_id = %s",
+                (tenant_id, user_id),
+            )
+            cursor.execute(
+                "UPDATE display_access_grants SET enabled = false WHERE tenant_id = %s AND user_id = %s",
+                (tenant_id, user_id),
+            )
+            cursor.execute(
+                "UPDATE tenant_sessions SET revoked_at = now() "
+                "WHERE tenant_id = %s AND user_id = %s AND revoked_at IS NULL",
+                (tenant_id, user_id),
+            )
             cursor.execute(
                 "SELECT user_id FROM user_credentials WHERE tenant_id = %s AND user_id = %s",
                 (tenant_id, user_id),
@@ -956,6 +1159,37 @@ class ProductionAuthRepository:
                     UUID(str(provisioned["tenant_id"])),
                 ),
             )
+            provisioned_tenant_id = UUID(str(provisioned["tenant_id"]))
+            provisioned_user_id = UUID(str(provisioned["user_id"]))
+            cursor.execute(
+                "SELECT set_config('app.tenant_id', %s, true)",
+                (str(provisioned_tenant_id),),
+            )
+            cursor.execute(
+                "UPDATE organizations SET organization_level = 'company' "
+                "WHERE tenant_id = %s AND id = ("
+                "SELECT organization_id FROM users "
+                "WHERE tenant_id = %s AND id = %s)",
+                (
+                    provisioned_tenant_id,
+                    provisioned_tenant_id,
+                    provisioned_user_id,
+                ),
+            )
+            cursor.execute(
+                "UPDATE users SET entry_kind = 'tenant_admin' WHERE tenant_id = %s AND id = %s",
+                (provisioned_tenant_id, provisioned_user_id),
+            )
+            cursor.execute(
+                "UPDATE auth_grants SET enabled = false, "
+                "can_maintain_expression_profile = false "
+                "WHERE tenant_id = %s AND user_id = %s",
+                (provisioned_tenant_id, provisioned_user_id),
+            )
+            cursor.execute(
+                "UPDATE display_access_grants SET enabled = false WHERE tenant_id = %s AND user_id = %s",
+                (provisioned_tenant_id, provisioned_user_id),
+            )
         return {
             "tenant_id": str(provisioned["tenant_id"]),
             "administrator_id": str(provisioned["user_id"]),
@@ -1011,47 +1245,204 @@ class ProductionAuthRepository:
         summary["provider_total_tokens"] = int(str(provider["provider_total_tokens"] or 0))
         return summary
 
-    def content_scope(self, identity: TenantSession, target: str | None = None) -> TrustedScope:
+    @staticmethod
+    def _targets_for_channel(channel: str) -> tuple[str, ...]:
+        return {
+            "抖音": ("douyin_video",),
+            "小红书": ("xiaohongshu_graphic", "xiaohongshu_video"),
+            "微信视频号": ("wechat_channels_video",),
+        }.get(channel, ())
+
+    @staticmethod
+    def _target_channel(target: str) -> str:
+        channel = {
+            "douyin_video": "抖音",
+            "xiaohongshu_graphic": "小红书",
+            "xiaohongshu_video": "小红书",
+            "wechat_channels_video": "微信视频号",
+        }.get(target)
+        if channel is None:
+            raise DomainError("请选择当前发布账号已经开通的平台与内容形式")
+        return channel
+
+    @staticmethod
+    def _publishing_identity_rows(
+        cursor: psycopg.Cursor[dict[str, object]],
+        identity: TenantSession,
+    ) -> list[dict[str, object]]:
+        cursor.execute(
+            """
+            SELECT DISTINCT
+                   root.id,
+                   root.brand_id,
+                   root.name,
+                   root.channel,
+                   root.control_organization_id,
+                   role_record.name AS content_role_name,
+                   profile.identity_position
+              FROM users AS user_record
+              JOIN auth_grants AS grant_record
+                ON grant_record.tenant_id = user_record.tenant_id
+               AND grant_record.user_id = user_record.id
+               AND grant_record.enabled = true
+              JOIN content_accounts AS root
+                ON root.tenant_id = grant_record.tenant_id
+               AND root.id = grant_record.account_id
+               AND root.enabled = true
+               AND root.carrier_of_account_id IS NULL
+              LEFT JOIN account_content_roles AS account_role
+                ON account_role.tenant_id = root.tenant_id
+               AND account_role.account_id = root.id
+              LEFT JOIN content_roles AS role_record
+                ON role_record.tenant_id = account_role.tenant_id
+               AND role_record.id = account_role.content_role_id
+              LEFT JOIN account_expression_profile_versions AS profile
+                ON profile.tenant_id = root.tenant_id
+               AND profile.account_id = root.id
+               AND profile.id = root.current_expression_profile_id
+             WHERE user_record.tenant_id = %s
+               AND user_record.id = %s
+               AND user_record.enabled = true
+               AND user_record.entry_kind = 'tenant_user'
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM tenant_management_grants AS management_grant
+                    WHERE management_grant.tenant_id = user_record.tenant_id
+                      AND management_grant.user_id = user_record.id
+                      AND management_grant.enabled = true
+               )
+             ORDER BY root.name, root.id
+            """,
+            (identity.tenant_id, identity.user_id),
+        )
+        return list(cursor.fetchall())
+
+    def list_publishing_identities(
+        self,
+        identity: TenantSession,
+    ) -> list[dict[str, object]]:
+        """Return logical publishing identities; physical carriers are target details only."""
+        if identity.audience != "tenant-user":
+            raise DomainError("这个登录账号不能进入内容创作")
         with self._tenant_tx(identity.tenant_id) as cursor:
-            cursor.execute(
-                """
-                SELECT account.id AS account_id, account.brand_id, account.channel
-                FROM auth_grants grant_record
-                JOIN content_accounts account ON account.id = grant_record.account_id
-                    AND account.tenant_id = grant_record.tenant_id
-                WHERE grant_record.tenant_id = %s AND grant_record.user_id = %s
-                  AND grant_record.enabled = true AND account.enabled = true
-                  AND account.carrier_of_account_id IS NULL
-                """,
-                (identity.tenant_id, identity.user_id),
-            )
-            roots = cursor.fetchall()
-            if len(roots) != 1:
-                raise DomainError("当前自然人的表达身份不唯一，请由管理员检查发布账号资格")
+            roots = self._publishing_identity_rows(cursor, identity)
+            result: list[dict[str, object]] = []
+            for root in roots:
+                root_id = UUID(str(root["id"]))
+                cursor.execute(
+                    """
+                    SELECT id, channel
+                      FROM content_accounts
+                     WHERE tenant_id = %s
+                       AND enabled = true
+                       AND (id = %s OR carrier_of_account_id = %s)
+                     ORDER BY CASE channel
+                         WHEN '抖音' THEN 1
+                         WHEN '小红书' THEN 2
+                         WHEN '微信视频号' THEN 3
+                         ELSE 4 END,
+                         id
+                    """,
+                    (identity.tenant_id, root_id, root_id),
+                )
+                platform_targets: list[dict[str, str]] = []
+                seen_targets: set[str] = set()
+                for account in cursor.fetchall():
+                    for target in self._targets_for_channel(str(account["channel"])):
+                        if target in seen_targets:
+                            continue
+                        seen_targets.add(target)
+                        platform_targets.append(
+                            {
+                                "value": target,
+                                "platform": str(account["channel"]),
+                                "media_format": ("graphic" if target == "xiaohongshu_graphic" else "video"),
+                                "carrier_id": str(account["id"]),
+                            }
+                        )
+                result.append(
+                    {
+                        "id": str(root_id),
+                        "name": str(root["name"]),
+                        "brand_id": str(root["brand_id"]),
+                        "control_organization_id": (
+                            str(root["control_organization_id"])
+                            if root["control_organization_id"] is not None
+                            else None
+                        ),
+                        "content_role": str(root["content_role_name"] or ""),
+                        "profile_summary": str(root["identity_position"] or ""),
+                        "platform_targets": platform_targets,
+                    }
+                )
+        return result
+
+    def content_scope(
+        self,
+        identity: TenantSession,
+        target: str | None = None,
+        publishing_identity_id: UUID | None = None,
+    ) -> TrustedScope:
+        if identity.audience != "tenant-user":
+            raise DomainError("这个登录账号不能进入内容创作")
+        with self._tenant_tx(identity.tenant_id) as cursor:
+            roots = self._publishing_identity_rows(cursor, identity)
+            if publishing_identity_id is not None:
+                roots = [root for root in roots if UUID(str(root["id"])) == publishing_identity_id]
+                if not roots:
+                    raise DomainError("当前登录账号没有获准操作这个发布账号")
+            if not roots:
+                raise DomainError("当前登录账号还没有可使用的发布账号")
+            if len(roots) > 1:
+                raise DomainError("请先选择这次要使用的发布账号")
             root = roots[0]
-            target_channel = self._target_channel(target)
-            if target is None or root["channel"] == target_channel:
-                row = root
+            root_id = UUID(str(root["id"]))
+            resolved_target = target
+            if resolved_target is None:
+                cursor.execute(
+                    """
+                    SELECT channel
+                      FROM content_accounts
+                     WHERE tenant_id = %s
+                       AND enabled = true
+                       AND (id = %s OR carrier_of_account_id = %s)
+                     ORDER BY CASE channel
+                         WHEN '抖音' THEN 1
+                         WHEN '小红书' THEN 2
+                         WHEN '微信视频号' THEN 3
+                         ELSE 4 END,
+                         id
+                    """,
+                    (identity.tenant_id, root_id, root_id),
+                )
+                target_row = self._one(
+                    cursor,
+                    "当前发布账号还没有可使用的平台载体",
+                )
+                channel_targets = self._targets_for_channel(str(target_row["channel"]))
+                if not channel_targets:
+                    raise DomainError("当前发布账号还没有可使用的平台载体")
+                resolved_target = channel_targets[0]
+            target_channel = self._target_channel(resolved_target)
+            if str(root["channel"]) == target_channel:
+                row = {
+                    "account_id": root["id"],
+                    "brand_id": root["brand_id"],
+                }
             else:
                 cursor.execute(
                     """
                     SELECT carrier.id AS account_id, carrier.brand_id, carrier.channel
                     FROM content_accounts carrier
-                    JOIN auth_grants grant_record
-                      ON grant_record.account_id = carrier.id
-                     AND grant_record.tenant_id = carrier.tenant_id
                     WHERE carrier.tenant_id = %s
                       AND carrier.carrier_of_account_id = %s
                       AND carrier.channel = %s
                       AND carrier.enabled = true
-                      AND grant_record.user_id = %s
-                      AND grant_record.enabled = true
                     """,
                     (
                         identity.tenant_id,
-                        root["account_id"],
+                        root_id,
                         target_channel,
-                        identity.user_id,
                     ),
                 )
                 carriers = cursor.fetchall()
@@ -1062,74 +1453,52 @@ class ProductionAuthRepository:
             identity.tenant_id, identity.user_id, UUID(str(row["brand_id"])), UUID(str(row["account_id"]))
         )
 
-    def allowed_content_targets(self, identity: TenantSession) -> tuple[str, ...]:
-        with self._tenant_tx(identity.tenant_id) as cursor:
-            cursor.execute(
-                """
-                SELECT account.id, account.channel
-                FROM auth_grants grant_record
-                JOIN content_accounts account ON account.id = grant_record.account_id
-                    AND account.tenant_id = grant_record.tenant_id
-                WHERE grant_record.tenant_id = %s AND grant_record.user_id = %s
-                  AND grant_record.enabled = true AND account.enabled = true
-                  AND account.carrier_of_account_id IS NULL
-                """,
-                (identity.tenant_id, identity.user_id),
-            )
-            roots = cursor.fetchall()
-            if len(roots) != 1:
-                return ()
-            root = roots[0]
-            cursor.execute(
-                """
-                SELECT carrier.channel
-                FROM content_accounts carrier
-                JOIN auth_grants grant_record
-                  ON grant_record.account_id = carrier.id
-                 AND grant_record.tenant_id = carrier.tenant_id
-                WHERE carrier.tenant_id = %s
-                  AND carrier.carrier_of_account_id = %s
-                  AND carrier.enabled = true
-                  AND grant_record.user_id = %s
-                  AND grant_record.enabled = true
-                """,
-                (identity.tenant_id, root["id"], identity.user_id),
-            )
-            channels = {
-                str(root["channel"]),
-                *(str(row["channel"]) for row in cursor.fetchall()),
-            }
-        targets: list[str] = []
-        if "抖音" in channels:
-            targets.append("douyin_video")
-        if "小红书" in channels:
-            targets.extend(("xiaohongshu_video", "xiaohongshu_graphic"))
-        if "微信视频号" in channels:
-            targets.append("wechat_channels_video")
-        return tuple(targets)
-
-    @staticmethod
-    def _target_channel(target: str | None) -> str:
-        if target is not None and target.startswith("xiaohongshu"):
-            return "小红书"
-        if target == "wechat_channels_video":
-            return "微信视频号"
-        return "抖音"
+    def allowed_content_targets(
+        self,
+        identity: TenantSession,
+        publishing_identity_id: UUID | None = None,
+    ) -> tuple[str, ...]:
+        identities = self.list_publishing_identities(identity)
+        if publishing_identity_id is not None:
+            identities = [item for item in identities if UUID(str(item["id"])) == publishing_identity_id]
+        if len(identities) != 1:
+            return ()
+        platform_targets = identities[0].get("platform_targets")
+        if not isinstance(platform_targets, list):
+            return ()
+        return tuple(str(item["value"]) for item in platform_targets if isinstance(item, dict) and "value" in item)
 
     def display_scope(self, identity: TenantSession) -> DisplayScope:
+        if identity.audience != "tenant-user":
+            raise DomainError("这个登录账号不能进入陈列搭配")
         with self._tenant_tx(identity.tenant_id) as cursor:
             cursor.execute(
                 """
                 SELECT store.brand_id, user_record.organization_id
                 FROM users user_record
+                JOIN display_access_grants display_grant
+                  ON display_grant.tenant_id = user_record.tenant_id
+                 AND display_grant.user_id = user_record.id
+                 AND display_grant.enabled = true
                 JOIN display_stores store ON store.tenant_id = user_record.tenant_id
                     AND store.execution_organization_id = user_record.organization_id
                 WHERE user_record.tenant_id = %s AND user_record.id = %s AND user_record.enabled = true
-                ORDER BY store.name LIMIT 1
+                  AND user_record.entry_kind = 'tenant_user'
+                  AND NOT EXISTS (
+                      SELECT 1
+                        FROM tenant_management_grants AS management_grant
+                       WHERE management_grant.tenant_id = user_record.tenant_id
+                         AND management_grant.user_id = user_record.id
+                         AND management_grant.enabled = true
+                  )
+                ORDER BY store.name
                 """,
                 (identity.tenant_id, identity.user_id),
             )
-            row = self._one(cursor, "当前自然人没有陈列执行资格")
+            rows = cursor.fetchall()
+            if len(rows) != 1:
+                raise DomainError("当前登录账号没有唯一可用的陈列搭配范围")
+            row = rows[0]
         return DisplayScope(
             identity.tenant_id,
             identity.user_id,
@@ -1138,6 +1507,8 @@ class ProductionAuthRepository:
         )
 
     def manager_scope(self, identity: TenantSession) -> TenantManagementScope:
+        if identity.audience != "tenant-admin":
+            raise DomainError("这个登录账号不能进入品牌管理")
         with self._tenant_tx(identity.tenant_id) as cursor:
             cursor.execute(
                 """
@@ -1153,6 +1524,7 @@ class ProductionAuthRepository:
                  AND baseline.brand_id = brand.id
                 WHERE user_record.tenant_id = %s AND user_record.id = %s
                   AND user_record.enabled = true
+                  AND user_record.entry_kind = 'tenant_admin'
                 ORDER BY brand.id
                 """,
                 (identity.tenant_id, identity.user_id),

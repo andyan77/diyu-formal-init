@@ -39,12 +39,17 @@ def test_workbench_context_and_onboarding_are_server_scoped() -> None:
         assert manager.get("/ui/select/content").status_code == 403
         assert manager.get("/ui/select/user").status_code == 403
         readiness = manager.get("/api/v1/admin/readiness").json()
-        assert {item["id"] for item in readiness["items"]} == {
+        readiness_items = readiness["items"]
+        assert {item["id"] for item in readiness_items} == {
             "brand_expression",
-            "account_role",
+            "non_product_content",
             "product_facts",
-            "dm01_profile",
+            "continuous_series",
+            "platform_recompile",
+            "dm01_display",
         }
+        assert all(item["status"] in {"available", "conditional", "unavailable"} for item in readiness_items)
+        assert all("state" not in item for item in readiness_items)
         baseline = manager.get("/api/v1/admin/brand-expression").json()
         confirmed = manager.post(
             "/api/v1/admin/brand-expression/confirm",
@@ -54,19 +59,13 @@ def test_workbench_context_and_onboarding_are_server_scoped() -> None:
         assert confirmed.json()["status"] == "confirmed"
 
 
-def test_dual_qualified_person_stays_one_identity_and_external_operator_never_shares_an_account_login() -> None:
+def test_admin_and_tenant_user_are_distinct_and_external_operator_never_shares_an_account_login() -> None:
     app = create_app(Settings.model_validate({}))
-    with TestClient(app) as dual:
-        dual.get("/ui/select/dual-user")
-        user_context = dual.get("/api/v1/session/context").json()
-        assert user_context["identity"]["operator"] == "总部内容与租户管理兼任甲"
-        assert "/ui/select/admin" not in dual.get("/user").text
-        dual.get("/ui/select/content")
-        assert dual.get("/content").status_code == 200
-        dual.get("/ui/select/dual-admin")
-        management_context = dual.get("/api/v1/session/context").json()
-        assert management_context["identity"]["operator"] == user_context["identity"]["operator"]
-        assert "/ui/select/content" not in dual.get("/tenant-admin").text
+    with TestClient(app) as content_operator:
+        content_operator.get("/ui/select/content")
+        user_context = content_operator.get("/api/v1/session/context").json()
+        assert user_context["identity"]["operator"] == "总部内容运营甲"
+        assert content_operator.get("/tenant-admin").status_code == 403
 
     with TestClient(app) as external:
         external.get("/ui/select/external-content")
@@ -76,8 +75,19 @@ def test_dual_qualified_person_stays_one_identity_and_external_operator_never_sh
 
     with TestClient(app) as manager:
         manager.get("/ui/select/admin")
+        management_context = manager.get("/api/v1/session/context").json()
+        assert management_context["identity"]["operator"] == "总部租户管理员甲"
+        assert management_context["identity"]["operator"] != user_context["identity"]["operator"]
+        assert manager.get("/content").status_code == 403
         operators = manager.get("/api/v1/tenant-management/operators").json()
+        administrator = next(item for item in operators if item["display_name"] == "总部租户管理员甲")
         external_operator = next(item for item in operators if item["display_name"] == "外部代运营乙")
+        assert administrator["id"] != external_operator["id"]
+        assert administrator["entry_type"] == "tenant_admin"
+        assert administrator["capabilities"] == {"content": False, "display": False}
+        assert administrator["publishing_accounts"] == ""
+        assert external_operator["entry_type"] == "tenant_user"
+        assert external_operator["manages_tenant"] is False
         assert "折线之间品牌母账号·抖音" in external_operator["publishing_accounts"]
         account = manager.get("/api/v1/tenant-management/publishing-accounts").json()[0]
         created = manager.post(
@@ -206,7 +216,7 @@ def test_series_is_explicitly_created_inserted_reordered_and_reset() -> None:
         assert reset.json()["items"] == []
 
 
-def test_series_rejects_task_from_another_publishing_account() -> None:
+def test_series_accepts_tasks_across_platform_carriers_of_same_logical_account() -> None:
     with TestClient(create_app(Settings.model_validate({}))) as client:
         client.get("/ui/select/content")
         douyin_task = client.post("/api/v1/content", json={"weak_seed": _SEED}).json()
@@ -227,15 +237,17 @@ def test_series_rejects_task_from_another_publishing_account() -> None:
             ).status_code
             == 200
         )
-        rejected = client.post(
+        added = client.post(
             f"/api/v1/content/series/{series_id}/items",
             json={"task_id": xiaohongshu_task["task_id"]},
         )
-        assert rejected.status_code == 422
-        assert "当前发布账号" in rejected.json()["detail"]
+        assert added.status_code == 200
         listed = client.get("/api/v1/content/series").json()
         series = next(item for item in listed if item["id"] == series_id)
-        assert [item["task_id"] for item in series["items"]] == [douyin_task["task_id"]]
+        assert [item["task_id"] for item in series["items"]] == [
+            douyin_task["task_id"],
+            xiaohongshu_task["task_id"],
+        ]
 
 
 def _material_payload(

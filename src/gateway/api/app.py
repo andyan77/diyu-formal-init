@@ -4,6 +4,8 @@ import base64
 import binascii
 import json
 import logging
+import queue
+import threading
 import time
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
@@ -22,7 +24,13 @@ from fastapi import (
     Security,
     status,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from fastapi.security import APIKeyCookie
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
@@ -40,12 +48,14 @@ from src.gateway.api.contracts import (
     AddSeriesItemRequest,
     ApplicationHandoffResponse,
     BrandExpressionConfirmRequest,
+    BrandLibraryEntryRequest,
     ChangePasswordRequest,
     ContentPlanRequest,
     ContentQuestionResponse,
     ContentVersionResponse,
     ControlOrganizationRequest,
     CreateContentRequest,
+    CreateConversationRequest,
     CreateDisplayRequest,
     CreateOperatorRequest,
     CreateOrganizationRequest,
@@ -97,9 +107,10 @@ from src.shared.application_handoff import (
     requests_content_production,
     requests_display_merchandising,
 )
-from src.shared.errors import DomainError
+from src.shared.errors import DomainError, GenerationFailed
 from src.shared.types import (
     ContentTarget,
+    ConversationTurn,
     CreativeDirection,
     DirectionSelection,
     DisplayScope,
@@ -126,9 +137,7 @@ def _safe_log_path(path: str) -> str:
 
 
 def _target(value: str | None, text: str = "") -> ContentTarget:
-    natural = target_from_text(text)
-    if natural is not None:
-        return natural
+    del text
     if value in {
         "douyin_video",
         "xiaohongshu_video",
@@ -137,6 +146,22 @@ def _target(value: str | None, text: str = "") -> ContentTarget:
     }:
         return cast(ContentTarget, value)
     return "douyin_video"
+
+
+def _target_metadata(value: ContentTarget) -> dict[str, str]:
+    labels: dict[ContentTarget, tuple[str, str, str]] = {
+        "douyin_video": ("抖音视频", "抖音", "视频"),
+        "xiaohongshu_graphic": ("小红书图文", "小红书", "图文"),
+        "xiaohongshu_video": ("小红书视频", "小红书", "视频"),
+        "wechat_channels_video": ("微信视频号视频", "微信视频号", "视频"),
+    }
+    label, platform_label, format_label = labels[value]
+    return {
+        "value": value,
+        "label": label,
+        "platform_label": platform_label,
+        "format_label": format_label,
+    }
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -195,16 +220,65 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except (AssertionError, psycopg.Error, RuntimeError, ValueError):
             return False
 
-    def scope_from_request(request: Request, _: str | None = Security(session_cookie)) -> TrustedScope:
-        scope = authority.require_content(request)
+    def requested_publishing_identity(request: Request) -> UUID | None:
+        raw = request.query_params.get("publishing_identity_id")
+        if not raw:
+            return None
+        try:
+            return UUID(raw)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="请选择一个当前可用的发布账号",
+            ) from exc
+
+    def resolve_content_scope(
+        request: Request,
+        target: ContentTarget | None = None,
+        publishing_identity_id: UUID | None = None,
+    ) -> TrustedScope:
+        if current_settings.is_production:
+            assert production_authority is not None
+            identity = production_authority._tenant_identity(request)
+            if identity.audience != "tenant-user":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="这个账号不能使用内容创作入口",
+                )
+            scope = production_authority.repository.content_scope(
+                identity,
+                target,
+                publishing_identity_id,
+            )
+        else:
+            scope = (
+                authority.require_content(request)
+                if target is None
+                else authority.require_content_target(request, target)
+            )
         if not workbench_service.is_content_operator(scope):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="当前自然人没有此发布账号工作资格",
+                detail="你没有使用这个发布账号的资格",
             )
         return scope
 
+    def scope_from_request(request: Request, _: str | None = Security(session_cookie)) -> TrustedScope:
+        raw_target = request.query_params.get("target")
+        target = _target(raw_target) if raw_target in {item[0] for item in _HEADQUARTERS_TARGETS} else None
+        return resolve_content_scope(
+            request,
+            target,
+            requested_publishing_identity(request),
+        )
+
     def user_scope_from_request(request: Request, _: str | None = Security(session_cookie)) -> TrustedScope:
+        if current_settings.is_production:
+            return resolve_content_scope(
+                request,
+                None,
+                requested_publishing_identity(request),
+            )
         return authority.require_user_portal(request)
 
     def optional_target_scope(
@@ -215,7 +289,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scope = (
             current_scope
             if target is None
-            else authority.require_content_target(request, target)
+            else resolve_content_scope(
+                request,
+                target,
+                requested_publishing_identity(request),
+            )
         )
         if not workbench_service.is_content_operator(scope):
             raise HTTPException(
@@ -242,19 +320,51 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scope: TrustedScope,
         request: Request | None = None,
         identity: TenantSession | None = None,
+        publishing_identity_id: UUID | None = None,
     ) -> list[dict[str, str]]:
         if current_settings.is_production:
             if production_authority is None or request is None:
                 raise RuntimeError("正式内容目标必须从当前正式会话解析")
             resolved_identity = identity or production_authority._tenant_identity(request)
-            allowed = set(production_authority.repository.allowed_content_targets(resolved_identity))
-            return [{"value": value, "label": label} for value, label in _HEADQUARTERS_TARGETS if value in allowed]
+            allowed = set(
+                production_authority.repository.allowed_content_targets(
+                    resolved_identity,
+                    publishing_identity_id,
+                )
+            )
+            return [_target_metadata(value) for value, _label in _HEADQUARTERS_TARGETS if value in allowed]
         options = (
             _STORE_TARGETS
             if scope.account_id == current_settings.demo_store_content_account_id
             else _HEADQUARTERS_TARGETS
         )
-        return [{"value": value, "label": label} for value, label in options]
+        return [_target_metadata(value) for value, _label in options]
+
+    def publishing_identities(identity: TenantSession) -> list[dict[str, object]]:
+        """Project logical identities; physical carriers stay nested platform targets."""
+        if production_authority is None:
+            return []
+        projected: list[dict[str, object]] = []
+        for item in production_authority.repository.list_publishing_identities(identity):
+            raw_targets = item.get("platform_targets")
+            target_values = (
+                [str(target.get("value")) for target in raw_targets if isinstance(target, dict) and target.get("value")]
+                if isinstance(raw_targets, list)
+                else []
+            )
+            projected_targets = [
+                _target_metadata(value) for value, _label in _HEADQUARTERS_TARGETS if value in target_values
+            ]
+            projected.append(
+                {
+                    "id": str(item["id"]),
+                    "name": str(item["name"]),
+                    "profile_summary": str(item.get("profile_summary") or "尚未填写账号画像"),
+                    "content_role": str(item.get("content_role") or "发布账号"),
+                    "platform_targets": projected_targets,
+                }
+            )
+        return projected
 
     production_authority = cast(ProductionSessionAuthority, authority) if current_settings.is_production else None
 
@@ -265,6 +375,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return
         identity = production_authority._tenant_identity(request)
         if not production_authority.model_limiter.acquire(identity.tenant_id, identity.user_id):
+            production_authority.repository.record_content_rate_limit(identity)
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="当前模型请求过于密集或并发已满，请稍后重试",
@@ -489,9 +600,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 )
             try:
-                audience = production_authority.repository.complete_activation(
-                    activation_token, password
-                )
+                audience = production_authority.repository.complete_activation(activation_token, password)
             except DomainError:
                 return HTMLResponse(
                     render_activation_failure("链接可能已使用、已失效或已过期，请管理员重新生成。"),
@@ -522,6 +631,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     payload.grants_tenant_management,
                     payload.grants_material_maintenance,
                     payload.grants_expression_profile_maintenance,
+                    entry_type=payload.entry_type,
+                    account_ids=tuple(payload.publishing_identity_ids),
+                    grants_content_access="content" in payload.capabilities,
+                    grants_display_access="display" in payload.capabilities,
                 )
             except psycopg.errors.UniqueViolation as exc:
                 raise HTTPException(
@@ -551,6 +664,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 formal_manager_identity(request),
                 payload.name,
                 payload.as_synthetic_business_fixture,
+                payload.organization_level,
             )
 
         @app.post("/api/v1/tenant-management/users/{user_id}/reset", responses=business_failures)
@@ -582,7 +696,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             user_id: UUID,
             payload: UpdateTenantUserGrantsRequest,
             request: Request,
-        ) -> dict[str, bool]:
+        ) -> dict[str, object]:
             return production_authority.repository.update_tenant_user_grants(
                 formal_manager_identity(request),
                 user_id,
@@ -591,6 +705,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 payload.grants_tenant_management,
                 payload.grants_material_maintenance,
                 payload.grants_expression_profile_maintenance,
+                entry_type=payload.entry_type,
+                account_ids=tuple(payload.publishing_identity_ids),
+                grants_content_access="content" in payload.capabilities,
+                grants_display_access="display" in payload.capabilities,
             )
 
         @app.post("/api/v1/ops/tenants", status_code=status.HTTP_201_CREATED)
@@ -757,11 +875,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 },
                 fallback=(
                     "<main><h1>服务状态</h1><p>"
-                    + (
-                        "笛语当前可以使用。"
-                        if service_state == "available"
-                        else "笛语暂时不可用，请稍后再试。"
-                    )
+                    + ("笛语当前可以使用。" if service_state == "available" else "笛语暂时不可用，请稍后再试。")
                     + "</p></main>"
                 ),
             )
@@ -773,6 +887,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if application in {"tenant-admin", "dual-tenant-admin"}:
             return workbench_service.tenant_management_context(management_scope_from_request(request))
         if application in {"tenant-user", "dual-tenant-user"}:
+            if production_authority is not None:
+                identity = production_authority._tenant_identity(request)
+                identities = publishing_identities(identity)
+                capabilities: list[str] = []
+                if identities:
+                    capabilities.append("content")
+                try:
+                    production_authority.repository.display_scope(identity)
+                except DomainError:
+                    pass
+                else:
+                    capabilities.append("display")
+                return {
+                    "application": "tenant_user",
+                    "identity": {},
+                    "publishing_identities": identities,
+                    "capabilities": capabilities,
+                    "formal_runtime": True,
+                }
             return workbench_service.user_portal_context(user_scope_from_request(request))
         if application == "display-merchandising":
             return workbench_service.display_context(
@@ -783,18 +916,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         context["targets"] = content_targets(scope, request)
         return context
 
+    @app.get("/api/v1/content/publishing-identities", responses=business_failures)
+    def list_content_publishing_identities(
+        request: Request,
+    ) -> list[dict[str, object]]:
+        if production_authority is not None:
+            identity = production_authority._tenant_identity(request)
+            if identity.audience != "tenant-user":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="这个账号不能使用内容创作入口",
+                )
+            return publishing_identities(identity)
+        scope = authority.require_content(request)
+        return [
+            {
+                "id": str(scope.account_id),
+                "name": "当前发布账号",
+                "profile_summary": "沿用当前账号画像",
+                "content_role": "当前表达身份",
+                "platform_targets": content_targets(scope, request),
+            }
+        ]
+
     @app.get("/api/v1/content/tasks", responses=business_failures)
     def list_content_tasks(
         request: Request,
         target: ContentTarget | None = None,
         current_scope: TrustedScope = Depends(scope_from_request),
     ) -> list[dict[str, object]]:
-        scope = current_scope if target is None else authority.require_content_target(request, target)
-        if not workbench_service.is_content_operator(scope):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="当前自然人没有此发布账号工作资格",
-            )
+        scope = optional_target_scope(request, target, current_scope)
         return workbench_service.recent_content(scope)
 
     @app.get("/api/v1/content/tasks/{task_id}/versions", responses=business_failures)
@@ -804,12 +955,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         target: ContentTarget | None = None,
         current_scope: TrustedScope = Depends(scope_from_request),
     ) -> list[dict[str, object]]:
-        scope = current_scope if target is None else authority.require_content_target(request, target)
-        if not workbench_service.is_content_operator(scope):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="当前自然人没有此发布账号工作资格",
-            )
+        scope = optional_target_scope(request, target, current_scope)
         return workbench_service.content_versions(scope, task_id)
 
     @app.get("/api/v1/display/tasks", responses=business_failures)
@@ -855,6 +1001,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> list[dict[str, object]]:
         return workbench_service.management_accounts(scope)
 
+    @app.get("/api/v1/tenant-management/team-usage", responses=business_failures)
+    def management_team_usage(
+        window_days: int = 7,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        result = workbench_service.team_usage(scope, window_days)
+        result["tenant_quota"] = {
+            "model_concurrency": current_settings.model_tenant_concurrency,
+            "model_requests_per_minute": current_settings.model_tenant_rate_per_minute,
+            "label": "当前租户请求额度",
+        }
+        return result
+
+    @app.get("/api/v1/tenant-management/brand-library", responses=business_failures)
+    def management_brand_library(
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.brand_library_entries(scope)
+
+    @app.post(
+        "/api/v1/tenant-management/brand-library",
+        status_code=status.HTTP_201_CREATED,
+        responses=business_failures,
+    )
+    def create_management_brand_library_entry(
+        payload: BrandLibraryEntryRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.create_brand_library_entry(
+            scope,
+            payload.category,
+            payload.title,
+            payload.source_note,
+            payload.content,
+            payload.version,
+            payload.status,
+            payload.visibility_scope,
+            tuple(payload.organization_ids),
+        )
+
     @app.get("/api/v1/tenant-management/brand-products", responses=business_failures)
     def management_products(
         scope: TenantManagementScope = Depends(management_scope_from_request),
@@ -895,6 +1081,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload,
             upload.declares_identifiable_minor,
             upload.reference_note,
+            upload.visibility_scope,
+            tuple(upload.organization_ids),
         )
 
     @app.delete(
@@ -941,6 +1129,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.applicability,
             payload.confirm_as_current_brand_fact,
             payload.as_synthetic_business_fixture,
+            payload.visibility_scope,
+            tuple(payload.organization_ids),
         )
 
     @app.post(
@@ -962,6 +1152,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.control_organization_id,
             payload.operator_can_maintain_expression_profile,
             payload.as_synthetic_business_fixture,
+            (
+                payload.initial_profile.model_dump()
+                if payload.initial_profile is not None
+                else None
+            ),
         )
 
     @app.post(
@@ -1017,9 +1212,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         target: ContentTarget | None = None,
         current_scope: TrustedScope = Depends(scope_from_request),
     ) -> list[dict[str, object]]:
-        return workbench_service.list_series(
-            optional_target_scope(request, target, current_scope)
-        )
+        return workbench_service.list_series(optional_target_scope(request, target, current_scope))
 
     @app.post("/api/v1/content/series", status_code=status.HTTP_201_CREATED, responses=business_failures)
     def create_series(
@@ -1119,7 +1312,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             current_application = authority.application(request)
         except HTTPException:
             current_application = None
-        if current_application == "tenant-admin":
+        if current_application in {"tenant-admin", "dual-tenant-admin"}:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="当前自然人没有业务工作资格")
         application: ApplicationId = (
             "dual-content-production"
@@ -1138,7 +1331,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             current_application = authority.application(request)
         except HTTPException:
             current_application = None
-        if current_application == "tenant-admin":
+        if current_application in {"tenant-admin", "dual-tenant-admin"}:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="当前自然人没有租户用户入口资格")
         response = RedirectResponse("/user", status_code=status.HTTP_303_SEE_OTHER)
         set_session_cookie(
@@ -1162,6 +1355,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "content-production-store",
             "display-merchandising",
             "external-content-production",
+            "dual-tenant-user",
+            "dual-content-production",
         }:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="当前自然人没有租户管理资格")
         response = RedirectResponse("/tenant-admin", status_code=status.HTTP_303_SEE_OTHER)
@@ -1178,9 +1373,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def select_dual_user_portal() -> RedirectResponse:
         if current_settings.is_production:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        response = RedirectResponse("/user", status_code=status.HTTP_303_SEE_OTHER)
-        set_session_cookie(response, synthetic_authority, "dual-tenant-user")
-        return response
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="租户管理员不能进入租户用户入口")
 
     @app.get("/ui/select/dual-admin", include_in_schema=False)
     def select_dual_tenant_admin() -> RedirectResponse:
@@ -1194,9 +1387,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def select_dual_content() -> RedirectResponse:
         if current_settings.is_production:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-        response = RedirectResponse("/content", status_code=status.HTTP_303_SEE_OTHER)
-        set_session_cookie(response, synthetic_authority, "dual-content-production")
-        return response
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="租户管理员不能进入内容创作入口")
 
     @app.get("/ui/select/external-content", include_in_schema=False)
     def select_external_content() -> RedirectResponse:
@@ -1390,7 +1581,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return RedirectResponse("/display?" + urlencode({"notice": str(result["message"])}), status_code=303)
         return RedirectResponse(f"/display?task={result['task_id']}&version={result['version']}", status_code=303)
 
-    def _controls(payload: CreateContentRequest, bypassed: bool) -> RequestedControls:
+    def _controls(
+        payload: CreateContentRequest | CreateConversationRequest,
+        bypassed: bool,
+    ) -> RequestedControls:
         """Client control input stays untrusted data; it can never carry a scope."""
         direction = payload.creative_direction
         return RequestedControls(
@@ -1432,9 +1626,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         target: ContentTarget | None = None,
         current_scope: TrustedScope = Depends(scope_from_request),
     ) -> dict[str, object]:
-        return control_service.account_expression(
-            optional_target_scope(request, target, current_scope)
-        )
+        return control_service.account_expression(optional_target_scope(request, target, current_scope))
 
     @app.post(
         "/api/v1/content/account-expression-profile/versions",
@@ -1498,7 +1690,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/user/creation-preferences", responses=business_failures)
     def read_creation_preferences(
-        scope: TrustedScope = Depends(user_scope_from_request),
+        scope: TrustedScope = Depends(scope_from_request),
         bypassed: bool = Depends(preference_session_bypassed),
     ) -> dict[str, object]:
         _refuse_in_bypass(bypassed)
@@ -1507,7 +1699,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.put("/api/v1/user/creation-preferences", responses=business_failures)
     def save_creation_preferences(
         payload: CreationPreferenceRequest,
-        scope: TrustedScope = Depends(user_scope_from_request),
+        scope: TrustedScope = Depends(scope_from_request),
         bypassed: bool = Depends(preference_session_bypassed),
     ) -> dict[str, object]:
         _refuse_in_bypass(bypassed)
@@ -1522,7 +1714,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.delete("/api/v1/user/creation-preferences", responses=business_failures)
     def delete_creation_preferences(
-        scope: TrustedScope = Depends(user_scope_from_request),
+        scope: TrustedScope = Depends(scope_from_request),
         bypassed: bool = Depends(preference_session_bypassed),
     ) -> dict[str, object]:
         _refuse_in_bypass(bypassed)
@@ -1602,7 +1794,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def create_content(
         payload: CreateContentRequest,
         request: Request,
-        _: TrustedScope = Depends(scope_from_request),
+        _session_token: str | None = Security(session_cookie),
         bypassed: bool = Depends(preference_session_bypassed),
     ) -> dict[str, object]:
         if payload.reuse_version_id is None and requests_display_merchandising(payload.weak_seed):
@@ -1612,10 +1804,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             }
         if payload.creative_direction is not None:
             assert_custom_direction_available(payload.creative_direction.custom_text)
-        target = _target(payload.target, payload.weak_seed)
+        target = _target(payload.target)
+        scope = resolve_content_scope(
+            request,
+            target,
+            payload.publishing_identity_id,
+        )
         with model_slot(request):
             return service.create_from_weak_seed(
-                authority.require_content_target(request, target),
+                scope,
                 payload.weak_seed,
                 payload.reuse_version_id,
                 target,
@@ -1623,6 +1820,145 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 payload.series_id,
                 payload.series_position,
             )
+
+    @app.post(
+        "/api/v1/content/stream",
+        response_class=StreamingResponse,
+        responses=business_failures,
+    )
+    def create_content_stream(
+        payload: CreateConversationRequest,
+        request: Request,
+        _session_token: str | None = Security(session_cookie),
+        bypassed: bool = Depends(preference_session_bypassed),
+    ) -> StreamingResponse:
+        """Stream real lifecycle stages; the validated artifact is emitted only once."""
+        if payload.creative_direction is not None:
+            assert_custom_direction_available(payload.creative_direction.custom_text)
+        selected_target = payload.target
+        mentioned_target = target_from_text(payload.message)
+        if (
+            mentioned_target is not None
+            and mentioned_target != selected_target
+            and payload.target_conflict_resolution == "switch"
+        ):
+            selected_target = mentioned_target
+        scope = resolve_content_scope(
+            request,
+            selected_target,
+            payload.publishing_identity_id,
+        )
+        events: queue.Queue[dict[str, object] | None] = queue.Queue(maxsize=16)
+        cancelled = threading.Event()
+
+        def emit(stage: str) -> None:
+            if cancelled.is_set():
+                raise GenerationFailed("生成已取消")
+            events.put({"event": stage})
+
+        def worker() -> None:
+            try:
+                emit("received")
+                if requests_display_merchandising(payload.message):
+                    events.put(
+                        {
+                            "event": "conversation",
+                            "kind": "chat",
+                            "message": "这是门店内部陈列任务，请从陈列搭配入口继续。",
+                        }
+                    )
+                    return
+                if (
+                    mentioned_target is not None
+                    and mentioned_target != selected_target
+                    and payload.target_conflict_resolution is None
+                ):
+                    events.put(
+                        {
+                            "event": "target_conflict",
+                            "mentioned_target": mentioned_target,
+                            "selected_target": selected_target,
+                            "label": _target_metadata(mentioned_target)["label"],
+                            "message": ("你在文字里提到了另一个平台。要切换过去，还是继续使用当前选择？"),
+                        }
+                    )
+                    return
+                with model_slot(request):
+                    result = service.respond_to_conversation(
+                        scope,
+                        payload.message,
+                        tuple(ConversationTurn(turn.role, turn.content) for turn in payload.conversation),
+                        selected_target,
+                        _controls(payload, bypassed),
+                        payload.series_id,
+                        payload.series_position,
+                        emit,
+                    )
+                if result.get("kind") == "content":
+                    events.put({"event": "completed", "result": result})
+                else:
+                    events.put(
+                        {
+                            "event": "conversation",
+                            "kind": result.get("kind", "chat"),
+                            "message": result.get("message", ""),
+                        }
+                    )
+            except HTTPException as exc:
+                message = (
+                    "当前请求较多，请稍后再试。"
+                    if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+                    else "当前入口不能完成这次操作，请返回后重新进入。"
+                )
+                events.put({"event": "failed", "message": message})
+            except (DomainError, GenerationFailed):
+                events.put(
+                    {
+                        "event": "failed",
+                        "message": (
+                            "这次还没能整理成一份可靠的成品。你的想法仍然保留，"
+                            "可以直接再试一次，也可以告诉我最想保留哪部分。"
+                        ),
+                    }
+                )
+            except Exception:
+                _RUNTIME_LOGGER.exception("content collaboration failed")
+                events.put(
+                    {
+                        "event": "failed",
+                        "message": (
+                            "这次还没能整理成一份可靠的成品。你的想法仍然保留，"
+                            "可以直接再试一次，也可以告诉我最想保留哪部分。"
+                        ),
+                    }
+                )
+            finally:
+                events.put(None)
+
+        def event_stream() -> Iterator[bytes]:
+            thread = threading.Thread(
+                target=worker,
+                name="content-collaboration",
+                daemon=True,
+            )
+            thread.start()
+            try:
+                while True:
+                    item = events.get()
+                    if item is None:
+                        break
+                    yield (json.dumps(item, ensure_ascii=False) + "\n").encode("utf-8")
+            finally:
+                cancelled.set()
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @app.post(
         "/api/v1/tasks/{task_id}/revisions",
@@ -1634,13 +1970,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         task_id: UUID,
         payload: RevisionRequest,
         request: Request,
-        _: TrustedScope = Depends(scope_from_request),
         bypassed: bool = Depends(preference_session_bypassed),
     ) -> dict[str, object]:
         """Both revision paths replay what this task froze; neither reads today's preference."""
-        target = _target(payload.target, payload.instruction)
+        target = _target(payload.target)
         source_target = payload.source_target or payload.target or "douyin_video"
-        source_scope = authority.require_content_target(request, source_target)
+        source_scope = resolve_content_scope(
+            request,
+            source_target,
+            payload.publishing_identity_id,
+        )
         # A same-goal revision reads the frozen snapshot and nothing else.  A cross-goal
         # adaptation recompiles from that same task, so it is handed an explicitly
         # preference-free control input.  Declaring the temporary preference-free session here
@@ -1650,7 +1989,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if target != source_target:
                 return service.recompile_task(
                     source_scope,
-                    authority.require_content_target(request, target),
+                    resolve_content_scope(
+                        request,
+                        target,
+                        payload.publishing_identity_id,
+                    ),
                     task_id,
                     payload.instruction,
                     target,
@@ -1668,9 +2011,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version: int,
         request: Request,
         target: ContentTarget = "douyin_video",
-        _: TrustedScope = Depends(scope_from_request),
+        publishing_identity_id: UUID | None = None,
     ) -> dict[str, object]:
-        return service.fetch_version(authority.require_content_target(request, target), task_id, version)
+        return service.fetch_version(
+            resolve_content_scope(request, target, publishing_identity_id),
+            task_id,
+            version,
+        )
 
     @app.post(
         "/api/v1/content-versions/{version_id}/save",
@@ -1681,9 +2028,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version_id: UUID,
         request: Request,
         target: ContentTarget = "douyin_video",
-        _: TrustedScope = Depends(scope_from_request),
+        publishing_identity_id: UUID | None = None,
     ) -> dict[str, object]:
-        return service.save_version(authority.require_content_target(request, target), version_id)
+        return service.save_version(
+            resolve_content_scope(request, target, publishing_identity_id),
+            version_id,
+        )
 
     @app.get("/", response_class=HTMLResponse)
     def workbench(
@@ -1734,12 +2084,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
             capabilities: list[str] = []
             context: dict[str, object] | None = None
-            try:
-                content_scope = production_authority.repository.content_scope(identity)
-            except DomainError:
-                pass
-            else:
-                context = workbench_service.user_portal_context(content_scope)
+            available_identities = publishing_identities(identity)
+            if available_identities:
+                context = {
+                    "application": "tenant_user",
+                    "identity": {},
+                    "publishing_identities": available_identities,
+                }
                 capabilities.append("content")
             try:
                 display_scope = production_authority.repository.display_scope(identity)
@@ -1757,20 +2108,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         "identity": display_context["identity"],
                     }
             if context is None:
-                try:
-                    production_authority.repository.manager_scope(identity)
-                except DomainError:
-                    manager_guidance = "请由租户管理员为本人建立最小工作资格。"
-                else:
-                    manager_guidance = (
-                        "你具备租户管理资格；请使用同一用户名和密码从"
-                        "<a href='/tenant-admin/login'>租户管理员入口</a>登录，"
-                        "先确认品牌草案并建立首个发布账号。"
-                    )
                 return HTMLResponse(
-                    "<main><h1>租户用户工作台</h1><p>当前自然人尚未获授内容或陈列工作资格。</p><p>"
-                    + manager_guidance
-                    + "</p></main>"
+                    render_tenant_user_access_denied(
+                        "租户用户入口",
+                        "/login",
+                        "返回租户用户登录",
+                    ),
+                    status_code=status.HTTP_403_FORBIDDEN,
                 )
             context["capabilities"] = capabilities
             context["formal_runtime"] = True
@@ -1858,8 +2202,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version: int | None = None,
         notice: str | None = None,
         target: ContentTarget | None = None,
+        publishing_identity_id: UUID | None = None,
     ) -> Response:
         identity: TenantSession | None = None
+        identity_options: list[dict[str, object]] = []
+        selected_identity_id = publishing_identity_id
         if production_authority is not None:
             try:
                 identity = production_authority._tenant_identity(request)
@@ -1880,15 +2227,53 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     status_code=status.HTTP_403_FORBIDDEN,
                 )
             try:
-                root_scope = production_authority.repository.content_scope(identity)
-                target_options = content_targets(root_scope, request, identity)
+                identity_options = publishing_identities(identity)
+                if not identity_options:
+                    raise DomainError("当前账号还没有可使用的发布账号")
+                available_identity_ids = {UUID(str(item["id"])) for item in identity_options}
+                if selected_identity_id is None and len(identity_options) == 1:
+                    selected_identity_id = next(iter(available_identity_ids))
+                if selected_identity_id is None:
+                    context: dict[str, object] = {
+                        "application": "content",
+                        "generator_mode": current_settings.generator_mode,
+                        "identity": {},
+                        "publishing_identities": identity_options,
+                        "current_publishing_identity_id": None,
+                        "targets": [],
+                        "current_target": None,
+                        "formal_runtime": True,
+                    }
+                    return HTMLResponse(
+                        render_spa_shell(
+                            context,
+                            fallback=("<h1>内容创作</h1><p>请先选择这次要使用的发布账号。</p>"),
+                        )
+                    )
+                if selected_identity_id not in available_identity_ids:
+                    raise DomainError("当前账号没有获准操作这个发布账号")
+                root_scope = production_authority.repository.content_scope(
+                    identity,
+                    None,
+                    selected_identity_id,
+                )
+                target_options = content_targets(
+                    root_scope,
+                    request,
+                    identity,
+                    selected_identity_id,
+                )
                 if not target_options:
                     raise DomainError("当前表达身份没有可用的内容平台目标")
                 allowed_targets = {item["value"] for item in target_options}
                 resolved_target = target if target is not None else cast(ContentTarget, target_options[0]["value"])
                 if resolved_target not in allowed_targets:
                     raise DomainError("当前表达身份没有这个内容平台目标")
-                scope = production_authority.repository.content_scope(identity, resolved_target)
+                scope = production_authority.repository.content_scope(
+                    identity,
+                    resolved_target,
+                    selected_identity_id,
+                )
                 if not workbench_service.is_content_operator(scope):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
@@ -1917,8 +2302,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         else:
             scope_from_request(request)
             resolved_target = target or "douyin_video"
-            scope = authority.require_content_target(request, resolved_target)
+            scope = authority.require_content_target(
+                request,
+                resolved_target,
+                publishing_identity_id,
+            )
             target_options = content_targets(scope, request)
+            selected_identity_id = scope.account_id
+            identity_options = [
+                {
+                    "id": str(scope.account_id),
+                    "name": "当前发布账号",
+                    "profile_summary": "沿用当前账号画像",
+                    "content_role": "当前表达身份",
+                    "platform_targets": target_options,
+                }
+            ]
         fallback_extra = ""
         if task is not None and version is not None:
             try:
@@ -1935,9 +2334,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if current_settings.generator_mode == "stub":
             fallback_extra = "<p>离线确定性测试模式：此页结果不是实际模型调用。</p>" + fallback_extra
         del notice
+        assert selected_identity_id is not None
         context = workbench_service.content_context(scope, current_settings.generator_mode)
         context["targets"] = target_options
         context["current_target"] = resolved_target
+        context["publishing_identities"] = identity_options
+        context["current_publishing_identity_id"] = str(selected_identity_id)
         if current_settings.is_production:
             context["formal_runtime"] = True
         return HTMLResponse(

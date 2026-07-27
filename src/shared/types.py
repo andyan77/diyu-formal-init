@@ -55,6 +55,7 @@ class BrandContext:
     media_format: str
     production_conditions: str
     business_data_kind: str = "formal_business_data"
+    brand_reference_context: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -225,6 +226,41 @@ class RoutingInput:
     brand: BrandContext
     products: tuple[ProductFact, ...]
     prior_saved_body: str | None = None
+
+
+ConversationDisposition: TypeAlias = Literal["chat", "question", "ready"]
+ConversationRole: TypeAlias = Literal["user", "assistant"]
+
+
+@dataclass(frozen=True)
+class ConversationTurn:
+    """One bounded, user-visible turn used only to understand the current request."""
+
+    role: ConversationRole
+    content: str
+
+
+@dataclass(frozen=True)
+class ConversationInput:
+    """The semantic collaboration input before a durable content task exists."""
+
+    message: str
+    history: tuple[ConversationTurn, ...]
+    brand: BrandContext
+    products: tuple[ProductFact, ...]
+    target: ContentTarget
+    selected_direction: str = ""
+    prior_series_summary: str = ""
+
+
+@dataclass(frozen=True)
+class ConversationDecision:
+    """A model decision that either continues the conversation or starts one task."""
+
+    disposition: ConversationDisposition
+    message: str
+    brief: str = ""
+    primary_product: ContentProduct | None = None
 
 
 @dataclass(frozen=True)

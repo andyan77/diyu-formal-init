@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from src.shared.types import ContentProduct, GeneratedArtifact, GenerationInput, RoutingInput
+from src.shared.types import (
+    ContentProduct,
+    ConversationDecision,
+    ConversationInput,
+    GeneratedArtifact,
+    GenerationInput,
+    RoutingInput,
+)
 
 
 class ContentGenerator(ABC):
@@ -14,6 +21,16 @@ class ContentGenerator(ABC):
     @abstractmethod
     def route(self, request: RoutingInput) -> ContentProduct | None:
         """Return one primary product, or no task for ordinary conversation."""
+
+    def collaborate(self, request: ConversationInput) -> ConversationDecision:
+        """Continue natural collaboration or return one generation-ready brief.
+
+        Legacy test and integration generators may implement only the durable generation
+        contract. They remain usable for that path, while the UI-05 conversation endpoint
+        requires an adapter that explicitly overrides this method.
+        """
+        del request
+        raise NotImplementedError("this content generator does not support natural collaboration")
 
     @abstractmethod
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
