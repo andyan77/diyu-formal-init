@@ -1729,19 +1729,27 @@ class DeepSeekGenerator(ContentGenerator):
         core: ContentCore,
         issues: tuple[UnitIssue, ...],
     ) -> ContentCore:
-        """Compile every product scene when one scene breaks the resource set.
+        """Compile every product scene when one scene breaks trusted rails.
 
-        A holistic repair can move an unsupported prop from the rejected scene
-        into a previously accepted scene. Product-backed content already has a
-        complete closed-world production set for this call, so one resource
-        rejection makes the whole scene bundle compiler-owned. The normal
-        instruction and identity review still runs afterward.
+        A holistic repair can move an unsupported prop, an invented event or a
+        conflicting product detail from the rejected scene into a previously
+        accepted scene. Product-backed content already has a complete
+        closed-world production set for this call, so one scene rejection on
+        any of those axes makes the whole scene bundle compiler-owned. The
+        normal instruction, identity and actuality review still runs afterward.
         """
 
+        step_ids = {step.step_id for step in core.scene_steps}
         if (
             not context.product_fact_claims
             or not any(
-                issue.reason_code == "unsupported_resource"
+                issue.unit_id in step_ids
+                and issue.reason_code
+                in (
+                    "unsupported_resource",
+                    "invented_actuality",
+                    "factual_conflict",
+                )
                 for issue in issues
             )
         ):

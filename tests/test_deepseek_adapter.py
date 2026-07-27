@@ -1293,6 +1293,26 @@ def test_resource_repairs_compile_only_rejected_steps_onto_registered_rails(
     assert "模特" not in cascaded_text.action_text
     assert set(cascaded_text.resource_refs) <= set(context.resource_ids)
 
+    for reason in ("invented_actuality", "factual_conflict"):
+        cascaded_from_other_scene_axis = generator._stabilize_product_resource_cascade(
+            request,
+            context,
+            core,
+            (UnitIssue("s1", reason, "越界商品场景"),),
+        )
+        assert cascaded_from_other_scene_axis.scene_steps == (
+            product_step,
+            text_step,
+        )
+
+    claim_only_issue = generator._stabilize_product_resource_cascade(
+        request,
+        context,
+        core,
+        (UnitIssue("c1", "factual_conflict", "越界商品主张"),),
+    )
+    assert claim_only_issue is core
+
 
 def test_closed_world_rejects_unregistered_source_before_any_model_verdict(
     generation_input: GenerationInput,
