@@ -311,6 +311,15 @@ class BoundaryContext:
             for value in product.facts.values():
                 if isinstance(value, int):
                     numbers.append(value)
+                elif isinstance(value, str):
+                    numbers.extend(
+                        int(match)
+                        for match in re.findall(
+                            r"(?<!\d)(\d{1,6})\s*(?:克|元|%|厘米|cm)\b",
+                            value,
+                            re.IGNORECASE,
+                        )
+                    )
             raw_colors = product.facts.get("colors")
             if isinstance(raw_colors, list):
                 colors.extend(value for value in raw_colors if isinstance(value, str))
@@ -842,11 +851,6 @@ class DeepSeekGenerator(ContentGenerator):
                     core,
                     issues,
                     json.loads(self._json_content(str(payload["choices"][0]["message"]["content"]))),
-                )
-                repaired_core = self._stabilize_product_fact_repairs(
-                    request,
-                    repaired_core,
-                    issues,
                 )
                 repaired_core = self._stabilize_resource_repairs(
                     request,
@@ -1461,87 +1465,6 @@ class DeepSeekGenerator(ContentGenerator):
         )
         DeepSeekGenerator._assert_media_presence(request, stabilized)
         return stabilized
-
-    @staticmethod
-    def _stabilize_product_fact_repairs(
-        request: GenerationInput,
-        core: ContentCore,
-        issues: tuple[UnitIssue, ...],
-    ) -> ContentCore:
-        """Render rejected product claims from the frozen ProductFact itself.
-
-        The system may choose any supported audience-value route for a product
-        seed. When a claim on that task has already failed the fact review,
-        replacing it with another model paraphrase cannot make the model its own
-        evidence. Keep the selected route and all passing units, but compile only
-        the rejected claim from the current product snapshot.
-        """
-
-        fact_units = {
-            issue.unit_id
-            for issue in issues
-            if issue.reason_code == "factual_conflict"
-        }
-        if not fact_units or not request.products:
-            return core
-
-        products_by_source = {
-            f"source:product:{product.sku}": product
-            for product in request.products
-        }
-        changed = False
-        claims: list[ContentClaim] = []
-        for claim in core.claims:
-            if claim.claim_id not in fact_units:
-                claims.append(claim)
-                continue
-            product = next(
-                (
-                    products_by_source[source_ref]
-                    for source_ref in claim.source_refs
-                    if source_ref in products_by_source
-                ),
-                request.products[0] if len(request.products) == 1 else None,
-            )
-            if product is None:
-                claims.append(claim)
-                continue
-            source_ref = f"source:product:{product.sku}"
-            display_name = product.display_name.strip() or "当前商品"
-            natural = DeepSeekGenerator._natural_product(
-                product.sku,
-                product.display_name,
-                product.facts,
-            )
-            fact_parts = natural.split("；")[1:]
-            fact_statement = (
-                f"{display_name}当前资料可确认：" + "；".join(fact_parts) + "。"
-                if fact_parts
-                else f"{display_name}是本次已确认的商品。"
-            )
-            slot_text = {
-                "title": f"{display_name}，先看能确认的信息",
-                "natural_guide": "先把这件商品当前能确认的信息说清楚。",
-                "release_caption": "你会先看这件商品的哪一项可见信息？",
-            }
-            claims.append(
-                replace(
-                    claim,
-                    text=slot_text.get(claim.slot, fact_statement),
-                    basis="confirmed_fact",
-                    actuality="non_event",
-                    source_refs=(source_ref,),
-                )
-            )
-            changed = True
-        if not changed:
-            return core
-        return ContentCore(
-            speaker_ref=core.speaker_ref,
-            claims=tuple(claims),
-            spoken_order=core.spoken_order,
-            scene_steps=core.scene_steps,
-        )
 
     def _issue_receipts(
         self,
