@@ -1449,7 +1449,66 @@ def test_product_claim_binding_replaces_causal_copy_with_the_frozen_fact(
     assert not DeepSeekGenerator._closed_world_issues(context, normalized)
 
 
+def test_rejected_product_claim_is_bound_even_after_repair_drops_its_source(
+    generation_input: GenerationInput,
+) -> None:
+    product = ProductFact(
+        "ZX-C218",
+        {"category": "双面短外套"},
+    )
+    request = _with(
+        generation_input,
+        primary_product="product_truth",
+        products=(product,),
+    )
+    context = BoundaryContext.from_request(request)
+    claims = [
+        _claim("c1", "title", "先看登记事实"),
+        _claim(
+            "c2",
+            "natural_guide",
+            "从商品编号进入",
+            "user_premise",
+            "non_event",
+            ("source:user_request",),
+        ),
+        _claim(
+            "c3",
+            "viewing_flow",
+            "依次看登记事实和判断边界",
+            "conditional_guidance",
+            "non_event",
+        ),
+        _claim("c4", "release_caption", "你会先看什么？"),
+        _claim("c5", "product_insight", "先区分观察和推断。"),
+        _claim("c6", "tradeoff_or_limit", "不能从品类推导性能。"),
+        _claim("c7", "validity_condition", "只在登记事实范围内成立。"),
+        _claim("c8", "spoken", "双面结构一定更保暖。"),
+        _claim("c9", "spoken", "我们主张先看登记事实。"),
+    ]
+    core = _generator()._parse_core(
+        request,
+        context,
+        _video_core(claims=claims),
+    )
+
+    bound = DeepSeekGenerator._bind_rejected_product_claims(
+        request,
+        context,
+        core,
+        (UnitIssue("c8", "factual_conflict", core.claim("c8").text),),
+    )
+
+    assert bound.claim("c8").text == "当前商品已登记的品类是双面短外套。"
+    assert bound.claim("c8").basis == "confirmed_fact"
+    assert bound.claim("c8").actuality == "non_event"
+    assert bound.claim("c8").source_refs == ("source:product:ZX-C218",)
+    assert bound.claim("c9") == core.claim("c9")
+    assert not DeepSeekGenerator._closed_world_issues(context, bound)
+
+
 def test_product_truth_production_uses_only_registered_rails(
+    monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,
 ) -> None:
     product = ProductFact(
@@ -1545,6 +1604,33 @@ def test_product_truth_production_uses_only_registered_rails(
     assert "轮廓" not in product_step.action_text
     assert "结构" not in product_step.action_text
     assert product_step.production_note == "普通室内环境，单人用手机完成。"
+    assert DeepSeekGenerator._is_compiled_product_step(context, product_step)
+    assert DeepSeekGenerator._is_compiled_product_step(context, text_step)
+    assert not DeepSeekGenerator._is_compiled_product_step(
+        context,
+        replace(product_step, action_text="用手机拍摄当前商品的结构细节。"),
+    )
+
+    _install_fake(
+        monkeypatch,
+        [
+            _verdicts(
+                _video_core(claims=claims, steps=steps),
+                {
+                    "s1": ("resource_ok", "fact_ok", "instruction_ok"),
+                    "s2": ("resource_ok", "fact_ok"),
+                },
+            )
+        ],
+    )
+    judged, _, _ = _generator()._judgement_issues(
+        request,
+        context,
+        stabilized,
+    )
+    assert {(issue.unit_id, issue.reason_code) for issue in judged} == {
+        ("s1", "instruction_conflict")
+    }
 
 
 def test_closed_world_blocks_confirmed_fact_that_is_not_a_recorded_state(

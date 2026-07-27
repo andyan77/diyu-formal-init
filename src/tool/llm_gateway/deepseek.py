@@ -895,6 +895,12 @@ class DeepSeekGenerator(ContentGenerator):
                     context,
                     repaired_core,
                 )
+                repaired_core = self._bind_rejected_product_claims(
+                    request,
+                    context,
+                    repaired_core,
+                    issues,
+                )
                 repaired_core = self._stabilize_product_truth_production(
                     request,
                     context,
@@ -1318,7 +1324,23 @@ class DeepSeekGenerator(ContentGenerator):
         for unit_id in core.unit_ids:
             verdict = verdicts[unit_id]
             fragment = core.claim(unit_id).text if unit_id not in step_by_id else step_by_id[unit_id].action_text
+            compiler_owned_product_step = (
+                request.primary_product == "product_truth"
+                and unit_id in step_by_id
+                and self._is_compiled_product_step(
+                    context,
+                    step_by_id[unit_id],
+                )
+            )
             for flag, reason in reason_by_flag:
+                if compiler_owned_product_step and flag in (
+                    "resource_ok",
+                    "fact_ok",
+                ):
+                    # These two axes are already closed-world compiler
+                    # invariants for an exact generated step. Keep the model's
+                    # identity, actuality and instruction verdicts.
+                    continue
                 if not verdict[flag]:
                     issues.append(UnitIssue(unit_id, reason, fragment))
         return tuple(issues), payload, retries
@@ -1523,6 +1545,107 @@ class DeepSeekGenerator(ContentGenerator):
             spoken_order=core.spoken_order,
             scene_steps=core.scene_steps,
         )
+
+    @staticmethod
+    def _bind_rejected_product_claims(
+        request: GenerationInput,
+        context: BoundaryContext,
+        core: ContentCore,
+        issues: tuple[UnitIssue, ...],
+    ) -> ContentCore:
+        """Close rejected P2 assertions against the frozen product record.
+
+        A repair can preserve an unsafe concrete assertion while changing its
+        declared source. Only claim units already rejected for factual conflict
+        are rebound, and only to one atomic fact frozen for this call.
+        """
+
+        if request.primary_product != "product_truth":
+            return core
+        rejected = {
+            issue.unit_id
+            for issue in issues
+            if issue.reason_code == "factual_conflict"
+        }
+        if not rejected or not context.product_fact_claims:
+            return core
+
+        normalized: list[ContentClaim] = []
+        changed = False
+        for claim in core.claims:
+            if claim.claim_id not in rejected:
+                normalized.append(claim)
+                continue
+            source_ref, statement = max(
+                context.product_fact_claims,
+                key=lambda candidate: SequenceMatcher(
+                    None,
+                    claim.text.casefold(),
+                    candidate[1].casefold(),
+                    autojunk=False,
+                ).ratio(),
+            )
+            replacement = replace(
+                claim,
+                text=statement,
+                basis="confirmed_fact",
+                actuality="non_event",
+                source_refs=(source_ref,),
+            )
+            normalized.append(replacement)
+            changed = changed or replacement != claim
+        if not changed:
+            return core
+        return ContentCore(
+            speaker_ref=core.speaker_ref,
+            claims=tuple(normalized),
+            spoken_order=core.spoken_order,
+            scene_steps=core.scene_steps,
+        )
+
+    @staticmethod
+    def _is_compiled_product_step(
+        context: BoundaryContext,
+        step: SceneStep,
+    ) -> bool:
+        """Recognize only the exact P2 scene shape emitted by this compiler."""
+
+        if (
+            step.actor_refs
+            or step.sound_text
+            or step.production_note != "普通室内环境，单人用手机完成。"
+            or any(resource not in context.resource_ids for resource in step.resource_refs)
+        ):
+            return False
+        base = tuple(
+            resource
+            for resource in (_PHONE_RESOURCE_ID, _VENUE_RESOURCE_ID)
+            if resource in context.resource_ids
+        )
+        if step.action_text in (
+            "用手机拍摄已登记的当前商品，作为干净首图。",
+            "用手机拍摄已登记的当前商品，换一个中性取景。",
+        ):
+            product_resources = tuple(
+                resource
+                for resource in step.resource_refs
+                if resource.startswith("resource:product:")
+            )
+            return bool(product_resources) and step.resource_refs == (
+                *base,
+                *product_resources,
+            )
+        if step.action_text in (
+            "用手机拍摄现场手写标题字卡，作为干净首图。",
+            "用手机拍摄现场手写观点字卡，画面保持简洁。",
+        ):
+            onsite = (
+                (_ONSITE_TEXT_RESOURCE_ID,)
+                if _ONSITE_TEXT_RESOURCE_ID in context.resource_ids
+                else ()
+            )
+            return step.resource_refs == (*base, *onsite)
+        return False
 
     @staticmethod
     def _stabilize_resource_repairs(
