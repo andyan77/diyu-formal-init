@@ -726,6 +726,7 @@ class PostgresContentControlRepository(ContentControlRepository):
         ):
             cursor.execute("SELECT * FROM ops_unmet_capability_requests()")
             rows = cursor.fetchall()
+        rows.sort(key=lambda row: row["created_at"], reverse=True)
         return [
             {
                 "tenant_id": str(row["tenant_id"]),
