@@ -1,7 +1,7 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`BLOCKED`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
+- 状态：`ACTIVE`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
   未运行及未 push/CI/部署证据完整保留。
@@ -41,8 +41,13 @@
   `845f632…`；本轮未写生产业务数据。root-only 原始响应保存在
   `/var/lib/diyu-ui12-evidence/c3b3eadfb22ab21d528c42bbf58d1fd02c12456e/`
   `reviewer-v2-qualification/`，目录／文件权限为 `0700/0600`。
-- 唯一下一动作：主控裁决 Reviewer V2 严格 evidence 提取能力的后续边界；在裁决前
-  UI-12 保持 `BLOCKED`，不得按失败句补 Prompt、随机重跑、换模型或启动 successor。
+- 主控恢复裁决：上述 `BLOCKED` 事件与 raw 证据原样保留，但根因订正为普通
+  `response_format=json_object` 只约束 JSON 形态、不保证 ReviewEvidenceV2 Schema。
+  UI-12 在原里程碑内恢复 `ACTIVE`，不创建 successor；唯一实现变化是 Reviewer V2
+  改用同一 `deepseek-v4-flash` 的 `/beta` strict function transport，并把 Reviewer
+  作用域收为 writer-owned clause。Writer、intake 与其他模型调用不切换 Beta。
+- 唯一下一动作：实现并确定性验证 Reviewer V2 strict function transport；首次
+  JSON-mode 失败不得删除、默认补字段或改写为成功。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
