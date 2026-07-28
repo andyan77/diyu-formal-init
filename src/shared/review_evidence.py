@@ -437,10 +437,9 @@ def review_evidence_v2_json_schema() -> dict[str, object]:
         "type": "object",
         "properties": {
             "text": {"type": "string"},
-            "start": {"type": "integer"},
-            "end": {"type": "integer"},
+            "occurrence": {"type": "integer"},
         },
-        "required": ["text", "start", "end"],
+        "required": ["text", "occurrence"],
         "additionalProperties": False,
     }
 
@@ -570,7 +569,11 @@ def parse_review_evidence(value: object) -> ReviewEvidenceV1:
     )
 
 
-def parse_review_evidence_v2(value: object) -> ReviewEvidenceV2:
+def parse_review_evidence_v2(
+    value: object,
+    *,
+    clause_text_by_id: Mapping[str, str],
+) -> ReviewEvidenceV2:
     if not isinstance(value, Mapping) or frozenset(value) != {
         "evidence_version",
         "clauses",
@@ -604,6 +607,11 @@ def parse_review_evidence_v2(value: object) -> ReviewEvidenceV2:
     for raw in raw_clauses:
         if not isinstance(raw, Mapping) or frozenset(raw) != required:
             raise TypeError("review evidence v2 clause is invalid")
+        clause_id = _required_string(raw.get("clause_id"))
+        exact_text = _required_string(raw.get("exact_text"))
+        trusted_text = clause_text_by_id.get(clause_id)
+        if trusted_text is None or exact_text != trusted_text:
+            raise TypeError("review evidence v2 clause text is invalid")
         markers = raw.get("grammatical_marker_spans")
         if not isinstance(markers, Mapping) or frozenset(markers) != {
             "modality",
@@ -620,28 +628,53 @@ def parse_review_evidence_v2(value: object) -> ReviewEvidenceV2:
             raise TypeError("review evidence v2 clause fields are invalid")
         clauses.append(
             ClauseEvidenceV2(
-                clause_id=_required_string(raw.get("clause_id")),
-                exact_text=_required_string(raw.get("exact_text")),
-                subject_spans=_occurrence_tuple(raw.get("subject_spans")),
+                clause_id=clause_id,
+                exact_text=exact_text,
+                subject_spans=_occurrence_tuple(
+                    raw.get("subject_spans"),
+                    exact_text=trusted_text,
+                ),
                 predicate_spans=_occurrence_tuple(
-                    raw.get("predicate_spans")
+                    raw.get("predicate_spans"),
+                    exact_text=trusted_text,
                 ),
                 action_or_event_spans=_occurrence_tuple(
-                    raw.get("action_or_event_spans")
+                    raw.get("action_or_event_spans"),
+                    exact_text=trusted_text,
                 ),
                 dialogue_spans=_occurrence_tuple(
-                    raw.get("dialogue_spans")
+                    raw.get("dialogue_spans"),
+                    exact_text=trusted_text,
                 ),
-                motive_spans=_occurrence_tuple(raw.get("motive_spans")),
-                cause_spans=_occurrence_tuple(raw.get("cause_spans")),
-                result_spans=_occurrence_tuple(raw.get("result_spans")),
-                time_spans=_occurrence_tuple(raw.get("time_spans")),
+                motive_spans=_occurrence_tuple(
+                    raw.get("motive_spans"),
+                    exact_text=trusted_text,
+                ),
+                cause_spans=_occurrence_tuple(
+                    raw.get("cause_spans"),
+                    exact_text=trusted_text,
+                ),
+                result_spans=_occurrence_tuple(
+                    raw.get("result_spans"),
+                    exact_text=trusted_text,
+                ),
+                time_spans=_occurrence_tuple(
+                    raw.get("time_spans"),
+                    exact_text=trusted_text,
+                ),
                 location_spans=_occurrence_tuple(
-                    raw.get("location_spans")
+                    raw.get("location_spans"),
+                    exact_text=trusted_text,
                 ),
                 grammatical_marker_spans=GrammaticalMarkerSpans(
-                    modality=_occurrence_tuple(markers.get("modality")),
-                    aspect=_occurrence_tuple(markers.get("aspect")),
+                    modality=_occurrence_tuple(
+                        markers.get("modality"),
+                        exact_text=trusted_text,
+                    ),
+                    aspect=_occurrence_tuple(
+                        markers.get("aspect"),
+                        exact_text=trusted_text,
+                    ),
                 ),
                 implicit_subject=cast(ImplicitSubject, implicit_subject),
                 uncertain=uncertain,
@@ -1322,30 +1355,53 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     return tuple(values)
 
 
-def _occurrence_tuple(value: object) -> tuple[SpanOccurrence, ...]:
+def _occurrence_tuple(
+    value: object,
+    *,
+    exact_text: str,
+) -> tuple[SpanOccurrence, ...]:
     if not isinstance(value, list):
         raise TypeError("review evidence occurrence spans are invalid")
     spans: list[SpanOccurrence] = []
     for raw in value:
         if not isinstance(raw, Mapping) or frozenset(raw) != {
             "text",
-            "start",
-            "end",
+            "occurrence",
         }:
             raise TypeError("review evidence occurrence span is invalid")
         text = raw.get("text")
-        start = raw.get("start")
-        end = raw.get("end")
+        occurrence = raw.get("occurrence")
         if (
             not isinstance(text, str)
             or not text
-            or not isinstance(start, int)
-            or isinstance(start, bool)
-            or not isinstance(end, int)
-            or isinstance(end, bool)
+            or not isinstance(occurrence, int)
+            or isinstance(occurrence, bool)
+            or occurrence < 1
         ):
             raise TypeError("review evidence occurrence span fields are invalid")
-        spans.append(SpanOccurrence(text=text, start=start, end=end))
+        starts = _exact_match_starts(exact_text, text)
+        if occurrence > len(starts):
+            raise TypeError("review evidence occurrence cannot be resolved")
+        start = starts[occurrence - 1]
+        spans.append(
+            SpanOccurrence(
+                text=text,
+                start=start,
+                end=start + len(text),
+            )
+        )
     if len(spans) != len(set(spans)):
         raise TypeError("review evidence occurrence spans are duplicated")
     return tuple(spans)
+
+
+def _exact_match_starts(exact_text: str, fragment: str) -> tuple[int, ...]:
+    starts: list[int] = []
+    cursor = 0
+    while cursor <= len(exact_text) - len(fragment):
+        start = exact_text.find(fragment, cursor)
+        if start < 0:
+            break
+        starts.append(start)
+        cursor = start + 1
+    return tuple(starts)

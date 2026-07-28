@@ -216,6 +216,38 @@ def _manual_context(
     )
 
 
+def _raw_v2_evidence(
+    text: str,
+    *,
+    span: dict[str, object],
+    uncertain: bool = False,
+) -> dict[str, object]:
+    return {
+        "evidence_version": REVIEW_EVIDENCE_V2_VERSION,
+        "clauses": [
+            {
+                "clause_id": "unit:test:clause:1",
+                "exact_text": text,
+                "subject_spans": [],
+                "predicate_spans": [],
+                "action_or_event_spans": [span],
+                "dialogue_spans": [],
+                "motive_spans": [],
+                "cause_spans": [],
+                "result_spans": [],
+                "time_spans": [],
+                "location_spans": [],
+                "grammatical_marker_spans": {
+                    "modality": [],
+                    "aspect": [],
+                },
+                "implicit_subject": "generic",
+                "uncertain": uncertain,
+            }
+        ],
+    }
+
+
 @pytest.mark.parametrize(
     ("sdr_id", "mode", "expected_wrapper"),
     (
@@ -981,8 +1013,7 @@ def test_sdr_evidence_qualification_failures(
 
 
 def test_occurrence_aware_parser_distinguishes_repeated_text() -> None:
-    text = "先停一下，再停一下。"
-    second_start = text.rindex("停")
+    text = "她先停了一下，后来又停了一下。"
     evidence = parse_review_evidence_v2(
         {
             "evidence_version": REVIEW_EVIDENCE_V2_VERSION,
@@ -993,12 +1024,8 @@ def test_occurrence_aware_parser_distinguishes_repeated_text() -> None:
                     "subject_spans": [],
                     "predicate_spans": [],
                     "action_or_event_spans": [
-                        {"text": "停", "start": 1, "end": 2},
-                        {
-                            "text": "停",
-                            "start": second_start,
-                            "end": second_start + 1,
-                        },
+                        {"text": "停了一下", "occurrence": 1},
+                        {"text": "停了一下", "occurrence": 2},
                     ],
                     "dialogue_spans": [],
                     "motive_spans": [],
@@ -1014,12 +1041,71 @@ def test_occurrence_aware_parser_distinguishes_repeated_text() -> None:
                     "uncertain": False,
                 }
             ],
-        }
+        },
+        clause_text_by_id={"unit:test:clause:1": text},
     )
 
     assert tuple(
-        span.start for span in evidence.clauses[0].action_or_event_spans
-    ) == (1, second_start)
+        (span.start, span.end)
+        for span in evidence.clauses[0].action_or_event_spans
+    ) == ((2, 6), (10, 14))
+
+
+@pytest.mark.parametrize("occurrence", (0, -1, 3, True))
+def test_occurrence_must_select_a_positive_existing_match(
+    occurrence: int,
+) -> None:
+    text = "她先停了一下，后来又停了一下。"
+    with pytest.raises(TypeError, match="occurrence"):
+        parse_review_evidence_v2(
+            _raw_v2_evidence(
+                text,
+                span={"text": "停了一下", "occurrence": occurrence},
+            ),
+            clause_text_by_id={"unit:test:clause:1": text},
+        )
+
+
+def test_occurrence_requires_an_exact_match_without_fuzzy_fallback() -> None:
+    text = "她先停了一下，后来又停了一下。"
+    with pytest.raises(TypeError, match="cannot be resolved"):
+        parse_review_evidence_v2(
+            _raw_v2_evidence(
+                text,
+                span={"text": "停一下", "occurrence": 1},
+            ),
+            clause_text_by_id={"unit:test:clause:1": text},
+        )
+
+
+def test_uncertain_evidence_is_structurally_valid_and_not_repairable() -> None:
+    text = "婆婆尊重儿媳。"
+    contexts = _manual_context(text, "recommendation")
+    evidence = parse_review_evidence_v2(
+        _raw_v2_evidence(
+            text,
+            span={"text": "尊重", "occurrence": 1},
+            uncertain=True,
+        ),
+        clause_text_by_id={"unit:test:clause:1": text},
+    )
+
+    assert _reasons(contexts, evidence) == ("insufficient_evidence",)
+    _, kernel, _ = _frame_and_kernel()
+    with pytest.raises(
+        GenerationFailed,
+        match="Reviewer 证据不完整或事实单元不一致",
+    ):
+        DeepSeekGenerator._kernel_repair_scope(
+            kernel,
+            (
+                NarrativeIssue(
+                    "unit:body",
+                    "insufficient_evidence",
+                    text,
+                ),
+            ),
+        )
 
 
 def test_program_contract_sidecar_ignores_kernel_self_reported_type() -> None:

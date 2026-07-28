@@ -560,8 +560,7 @@ def _kernel_observations(
                     [
                         {
                             "text": clause.exact_text,
-                            "start": 0,
-                            "end": len(clause.exact_text),
+                            "occurrence": 1,
                         }
                     ]
                     if is_event
@@ -574,8 +573,7 @@ def _kernel_observations(
                     [
                         {
                             "text": clause.exact_text,
-                            "start": 0,
-                            "end": len(clause.exact_text),
+                            "occurrence": 1,
                         }
                     ]
                     if is_event
@@ -588,11 +586,7 @@ def _kernel_observations(
                         [
                             {
                                 "text": modality,
-                                "start": clause.exact_text.index(modality),
-                                "end": (
-                                    clause.exact_text.index(modality)
-                                    + len(modality)
-                                ),
+                                "occurrence": 1,
                             }
                         ]
                         if modality is not None
@@ -1123,8 +1117,9 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     reviewer_prompt = prompts[1]
     assert '"evidence_version":"review-evidence-v2"' in reviewer_prompt
     assert '"grammatical_marker_spans"' in reviewer_prompt
-    assert '"start":0' in reviewer_prompt
-    assert '"end":2' in reviewer_prompt
+    assert '"occurrence":1' in reviewer_prompt
+    assert '"start"' not in reviewer_prompt
+    assert '"end"' not in reviewer_prompt
 
 
 def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:
@@ -1240,7 +1235,7 @@ def test_ui09_reviewer_must_cover_exact_complete_units() -> None:
 
     with pytest.raises(
         GenerationFailed,
-        match="Reviewer 证据不完整或事实单元不一致",
+        match="Reviewer 证据",
     ):
         _generator().generate(request)
 
@@ -1274,7 +1269,7 @@ def test_ui10_evidence_failure_never_calls_writer_repair(
     elif mutation == "fake_span":
         clauses[-1] = dict(clauses[-1])
         clauses[-1]["predicate_spans"] = [
-            {"text": "并不存在的谓词", "start": 0, "end": 8}
+            {"text": "并不存在的谓词", "occurrence": 1}
         ]
     else:
         clauses[-1] = dict(clauses[-1])
@@ -1286,7 +1281,7 @@ def test_ui10_evidence_failure_never_calls_writer_repair(
 
     with pytest.raises(
         GenerationFailed,
-        match="Reviewer 证据不完整或事实单元不一致",
+        match="Reviewer 证据",
     ):
         _generator().generate(request)
 

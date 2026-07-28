@@ -1,7 +1,7 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`BLOCKED`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
+- 状态：`ACTIVE`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
   未运行及未 push/CI/部署证据完整保留。
@@ -62,6 +62,17 @@
 - 唯一下一动作：主控裁决“strict transport 已成立、但当前 Reviewer 不能稳定给出
   无 uncertain 且 occurrence 精确的 evidence”这一单一阻断；裁决前 UI-12 保持
   `BLOCKED`。
+- 主控后续裁决已关闭该阻断：Reviewer 改为只返回“精确原文片段＋从 1 开始的 occurrence
+  序号”，服务端在对应 clause 中枚举全部精确匹配并计算 Python Unicode offset；
+  occurrence 越界、原文不匹配或无法唯一绑定继续失败关闭。歧义样本返回
+  `uncertain=true` 是合格 evidence，最终由服务端裁为 `insufficient_evidence`，且不得
+  送 Writer 修复。
+- UI-12 在原里程碑内恢复 `ACTIVE`，不创建 UI-13。Strict function transport、
+  ADR-028、服务端四态裁决矩阵与全部事实／主体／资源／租户边界不变；不换模型、不加
+  fallback、不堆失败句 Prompt。
+- 当前唯一下一动作：仅修正 Reviewer V2 span 传输合同、服务端 occurrence→offset
+  解析和资格口径，完成确定性反证后执行一次新合同真实资格；本次裁决落盘不等于已经实现
+  或通过资格。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 

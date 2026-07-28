@@ -76,7 +76,7 @@ def _evidence_document() -> dict[str, object]:
                 "exact_text": "换位思考不等于没有边界。",
                 "subject_spans": [],
                 "predicate_spans": [
-                    {"text": "不等于", "start": 4, "end": 7}
+                    {"text": "不等于", "occurrence": 1}
                 ],
                 "action_or_event_spans": [],
                 "dialogue_spans": [],
@@ -166,6 +166,15 @@ def test_strict_schema_requires_every_nested_object_field() -> None:
         "enum": ["none", "current_speaker", "generic", "uncertain"],
     }
     assert clause_properties["uncertain"] == {"type": "boolean"}
+    predicate_spans = clause_properties["predicate_spans"]
+    assert isinstance(predicate_spans, dict)
+    span = predicate_spans["items"]
+    assert isinstance(span, dict)
+    assert span["properties"] == {
+        "text": {"type": "string"},
+        "occurrence": {"type": "integer"},
+    }
+    assert span["required"] == ["text", "occurrence"]
 
 
 def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
@@ -242,7 +251,12 @@ def test_only_one_complete_named_tool_call_is_accepted(
     reason: str,
 ) -> None:
     with pytest.raises(TypeError, match=reason):
-        DeepSeekGenerator._strict_review_evidence(payload)
+        DeepSeekGenerator._strict_review_evidence(
+            payload,
+            clause_text_by_id={
+                "unit:body:clause:1": "换位思考不等于没有边界。"
+            },
+        )
 
 
 @pytest.mark.parametrize("arguments", (None, "{"))
@@ -259,7 +273,12 @@ def test_tool_arguments_must_be_an_unmodified_json_string(
         expected_error = json.JSONDecodeError
 
     with pytest.raises(expected_error):
-        DeepSeekGenerator._strict_review_evidence(payload)
+        DeepSeekGenerator._strict_review_evidence(
+            payload,
+            clause_text_by_id={
+                "unit:body:clause:1": "换位思考不等于没有边界。"
+            },
+        )
 
 
 @pytest.mark.parametrize(
@@ -287,7 +306,29 @@ def test_strict_arguments_are_never_defaulted_or_repaired(
 
     with pytest.raises(TypeError, match="review evidence v2"):
         DeepSeekGenerator._strict_review_evidence(
-            _strict_payload(document)
+            _strict_payload(document),
+            clause_text_by_id={
+                "unit:body:clause:1": "换位思考不等于没有边界。"
+            },
+        )
+
+
+def test_old_offset_arguments_are_not_silently_repaired() -> None:
+    document = _evidence_document()
+    clauses = document["clauses"]
+    assert isinstance(clauses, list)
+    clause = clauses[0]
+    assert isinstance(clause, dict)
+    clause["predicate_spans"] = [
+        {"text": "不等于", "start": 4, "end": 7}
+    ]
+
+    with pytest.raises(TypeError, match="occurrence span"):
+        DeepSeekGenerator._strict_review_evidence(
+            _strict_payload(document),
+            clause_text_by_id={
+                "unit:body:clause:1": "换位思考不等于没有边界。"
+            },
         )
 
 
