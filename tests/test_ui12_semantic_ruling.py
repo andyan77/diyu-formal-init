@@ -222,19 +222,9 @@ def _raw_v2_evidence(
             {
                 "clause_id": "unit:test:clause:1",
                 "exact_text": text,
-                "subject_spans": [],
-                "predicate_spans": [],
-                "action_or_event_spans": [resolved_span],
-                "dialogue_spans": [],
-                "motive_spans": [],
-                "cause_spans": [],
-                "result_spans": [],
-                "time_spans": [],
-                "location_spans": [],
-                "grammatical_marker_spans": {
-                    "modality": [],
-                    "aspect": [],
-                },
+                "evidence": [
+                    {"category": "action_or_event", **resolved_span}
+                ],
                 "implicit_subject": "generic",
                 "uncertain": uncertain,
             }
@@ -1015,28 +1005,18 @@ def test_quote_parser_binds_one_exact_quote_and_computes_unicode_offset() -> Non
                 {
                     "clause_id": "unit:test:clause:1",
                     "exact_text": text,
-                    "subject_spans": [],
-                    "predicate_spans": [],
-                    "action_or_event_spans": [
+                    "evidence": [
                         {
+                            "category": "action_or_event",
                             "text": "停了一下",
                             "context_quote": "她先停了一下",
                         },
                         {
+                            "category": "action_or_event",
                             "text": "停了一下",
                             "context_quote": "后来又停了一下",
                         },
                     ],
-                    "dialogue_spans": [],
-                    "motive_spans": [],
-                    "cause_spans": [],
-                    "result_spans": [],
-                    "time_spans": [],
-                    "location_spans": [],
-                    "grammatical_marker_spans": {
-                        "modality": [],
-                        "aspect": [],
-                    },
                     "implicit_subject": "generic",
                     "uncertain": False,
                 }
@@ -1113,9 +1093,10 @@ def test_unique_context_quote_preserves_institutional_subject_binding() -> None:
     assert isinstance(clauses, list)
     clause = clauses[0]
     assert isinstance(clause, dict)
-    clause["subject_spans"] = [{"text": text, "context_quote": text}]
-    clause["predicate_spans"] = [{"text": text, "context_quote": text}]
-    clause["action_or_event_spans"] = []
+    clause["evidence"] = [
+        {"category": "subject", "text": text, "context_quote": text},
+        {"category": "predicate", "text": text, "context_quote": text},
+    ]
     evidence = parse_review_evidence_v2(
         raw,
         clause_text_by_id={"unit:test:clause:1": text},

@@ -1134,41 +1134,40 @@ unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一�
 {json.dumps(targets, ensure_ascii=False)}
 
 每个 clause_id 必须按 visible_order 恰好返回一次，exact_text 必须逐字等于对应完整 clause，
-不得截短或抄写其他 clause。每个 span 返回 text 与 context_quote：text 是与该证据直接
+不得截短或抄写其他 clause。evidence 数组只列原文中实际存在的证据；每项返回 category、
+text 与 context_quote：text 是与该证据直接
 对应的逐字原文；context_quote 必须从当前 clause 的 allowed_context_quotes 中逐字选择，
 同时也必须属于 strict schema 的 enum。候选由服务端预先按标点生成，并已在其来源 clause
 内唯一。选择包含 text 且 text 在其中只出现一次的最短 context_quote；只有当前 clause 的
 allowed_context_quotes 确实列出完整 clause 时才可以选择它。不得自行缩短、
 拼接或创造 context_quote。服务端会同时校验 context_quote 属于当前 clause 且唯一、text
-属于 context_quote 且唯一。同一 evidence 数组中的同一 text/context_quote 组合只返回一次。
+属于 context_quote 且唯一。同一 category/text/context_quote 组合只返回一次。
 只有无法可靠判断证据类别、无法形成唯一原文 quote，或 implicit_subject 确实无法确定时，
 才返回 uncertain=true；不要猜测，也不得为了避免 uncertain 而遗漏可见证据。不要计算或返回
 start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
-- subject_spans：句中明确作为陈述主体的人、代词、机构或事物；
-- predicate_spans：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；
-- action_or_event_spans：具体情境中实际发生的动作、反应或事件；抽象概念名称不是事件；
-- dialogue_spans：被说出的具体话语；
-- motive/cause/result/time/location_spans：对应动机、前因、结果、时间和地点。
-- grammatical_marker_spans.modality：原文中明确表示建议、义务、可能、条件或意愿的语法标记；
-- grammatical_marker_spans.aspect：原文中明确表示已经、完成、持续或经历事实的语法标记。
+- category=subject：句中明确作为陈述主体的人、代词、机构或事物；
+- category=predicate：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；
+- category=action_or_event：具体情境中实际发生的动作、反应或事件；抽象概念名称不是事件；
+- category=dialogue：被说出的具体话语；
+- category=motive/cause/result/time/location：对应动机、前因、结果、时间和地点；
+- category=modality：原文中明确表示建议、义务、可能、条件或意愿的语法标记；
+- category=aspect：原文中明确表示已经、完成、持续或经历事实的语法标记。
 
 implicit_subject 只选 none、current_speaker、generic、uncertain。句中有明确主体时通常为
 none；省略主体但由当前说话者承担谓语时为 current_speaker；泛指任何人时为 generic；
-无法可靠判断时为 uncertain。同一段原文确实同时构成多类证据时，可以让同一个唯一 quote
-分别出现在不同证据数组中。只有证据类别、唯一 quote 或隐含主体本身无法可靠判断时才
+无法可靠判断时为 uncertain。同一段原文确实同时构成多类证据时，可以用不同 category
+重复返回同一个唯一 quote。只有证据类别、唯一 quote 或隐含主体本身无法可靠判断时才
 uncertain=true。
 
 只返回：
 {{"evidence_version":"{REVIEW_EVIDENCE_V2_VERSION}","clauses":[{{
 "clause_id":"既定 id","exact_text":"完整 clause 原文",
-"subject_spans":[{{"text":"主体逐字原文","context_quote":"包含主体且唯一的服务端候选"}}],
-"predicate_spans":[],"action_or_event_spans":[],
-"dialogue_spans":[],"motive_spans":[],"cause_spans":[],"result_spans":[],
-"time_spans":[],"location_spans":[],
-"grammatical_marker_spans":{{"modality":[],"aspect":[]}},
+"evidence":[{{"category":"subject","text":"主体逐字原文",
+"context_quote":"包含主体且唯一的服务端候选"}}],
 "implicit_subject":"none","uncertain":false
 }}]}}
-根对象和 clause 对象不得增加、遗漏或重命名字段；所有 span 字段必须是数组且不能为 null。"""
+根对象、clause 和 evidence item 不得增加、遗漏或重命名字段；evidence 必须是数组且不能为
+null，没有证据时返回空数组。"""
 
     def _kernel_repair_prompt(
         self,

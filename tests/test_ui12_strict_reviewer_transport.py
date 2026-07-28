@@ -76,24 +76,13 @@ def _evidence_document() -> dict[str, object]:
             {
                 "clause_id": "unit:body:clause:1",
                 "exact_text": "换位思考不等于没有边界。",
-                "subject_spans": [],
-                "predicate_spans": [
+                "evidence": [
                     {
+                        "category": "predicate",
                         "text": "不等于",
                         "context_quote": "换位思考不等于没有边界。",
                     }
                 ],
-                "action_or_event_spans": [],
-                "dialogue_spans": [],
-                "motive_spans": [],
-                "cause_spans": [],
-                "result_spans": [],
-                "time_spans": [],
-                "location_spans": [],
-                "grammatical_marker_spans": {
-                    "modality": [],
-                    "aspect": [],
-                },
                 "implicit_subject": "none",
                 "uncertain": False,
             }
@@ -171,19 +160,39 @@ def test_strict_schema_requires_every_nested_object_field() -> None:
         "enum": ["none", "current_speaker", "generic", "uncertain"],
     }
     assert clause_properties["uncertain"] == {"type": "boolean"}
-    predicate_spans = clause_properties["predicate_spans"]
-    assert isinstance(predicate_spans, dict)
-    span = predicate_spans["items"]
-    assert isinstance(span, dict)
-    span_properties = span["properties"]
-    assert isinstance(span_properties, dict)
-    text_property = span_properties["text"]
+    evidence = clause_properties["evidence"]
+    assert isinstance(evidence, dict)
+    evidence_item = evidence["items"]
+    assert isinstance(evidence_item, dict)
+    evidence_properties = evidence_item["properties"]
+    assert isinstance(evidence_properties, dict)
+    assert evidence_properties["category"] == {
+        "type": "string",
+        "enum": [
+            "subject",
+            "predicate",
+            "action_or_event",
+            "dialogue",
+            "motive",
+            "cause",
+            "result",
+            "time",
+            "location",
+            "modality",
+            "aspect",
+        ],
+    }
+    text_property = evidence_properties["text"]
     assert isinstance(text_property, dict)
     assert text_property["type"] == "string"
-    context_property = span_properties["context_quote"]
+    context_property = evidence_properties["context_quote"]
     assert isinstance(context_property, dict)
     assert "occurs once" in str(context_property["description"])
-    assert span["required"] == ["text", "context_quote"]
+    assert evidence_item["required"] == [
+        "category",
+        "text",
+        "context_quote",
+    ]
 
 
 def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
@@ -231,20 +240,20 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
     assert isinstance(clause, dict)
     clause_properties = clause["properties"]
     assert isinstance(clause_properties, dict)
-    predicate_spans = clause_properties["predicate_spans"]
-    assert isinstance(predicate_spans, dict)
-    span = predicate_spans["items"]
-    assert isinstance(span, dict)
-    span_properties = span["properties"]
-    assert isinstance(span_properties, dict)
-    assert span_properties["text"] == {
+    evidence = clause_properties["evidence"]
+    assert isinstance(evidence, dict)
+    evidence_item = evidence["items"]
+    assert isinstance(evidence_item, dict)
+    evidence_properties = evidence_item["properties"]
+    assert isinstance(evidence_properties, dict)
+    assert evidence_properties["text"] == {
         "type": "string",
         "description": (
             "Exact evidence text copied from the selected context_quote; "
             "never return an address or index."
         ),
     }
-    assert span_properties["context_quote"] == {
+    assert evidence_properties["context_quote"] == {
         "type": "string",
         "description": (
             "Server-provided exact context quote that occurs once in the "
@@ -417,9 +426,15 @@ def test_old_address_arguments_are_not_silently_repaired(
     assert isinstance(clauses, list)
     clause = clauses[0]
     assert isinstance(clause, dict)
-    clause["predicate_spans"] = [legacy_span]
+    clause["evidence"] = [
+        {
+            "category": "predicate",
+            "context_quote": "换位思考不等于没有边界。",
+            **legacy_span,
+        }
+    ]
 
-    with pytest.raises(TypeError, match="quote span"):
+    with pytest.raises(TypeError, match="item"):
         DeepSeekGenerator._strict_review_evidence(
             _strict_payload(document),
             clause_text_by_id={

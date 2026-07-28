@@ -28,6 +28,19 @@ REVIEW_EVIDENCE_V2_TOOL_NAME = "submit_review_evidence_v2"
 _IMPLICIT_SUBJECTS = frozenset(
     {"none", "current_speaker", "generic", "uncertain"}
 )
+_EVIDENCE_CATEGORIES = (
+    "subject",
+    "predicate",
+    "action_or_event",
+    "dialogue",
+    "motive",
+    "cause",
+    "result",
+    "time",
+    "location",
+    "modality",
+    "aspect",
+)
 _CLAUSE_ENDINGS = frozenset("。！？；.!?;\n")
 _QUOTE_CANDIDATE_BOUNDARIES = frozenset("，,、：:；;。！？.!?\n")
 _INSTITUTIONAL_SELF_REFERENCES = frozenset(
@@ -500,41 +513,26 @@ def review_evidence_v2_json_schema(
     unique_quotes = tuple(dict.fromkeys(allowed_quotes))
     if unique_quotes:
         context_schema["enum"] = list(unique_quotes)
-    span_schema: dict[str, object] = {
+    evidence_item_schema: dict[str, object] = {
         "type": "object",
         "properties": {
+            "category": {
+                "type": "string",
+                "enum": list(_EVIDENCE_CATEGORIES),
+            },
             "text": text_schema,
             "context_quote": context_schema,
         },
-        "required": ["text", "context_quote"],
-        "additionalProperties": False,
-    }
-
-    def span_array() -> dict[str, object]:
-        return {"type": "array", "items": span_schema}
-
-    marker_schema: dict[str, object] = {
-        "type": "object",
-        "properties": {
-            "modality": span_array(),
-            "aspect": span_array(),
-        },
-        "required": ["modality", "aspect"],
+        "required": ["category", "text", "context_quote"],
         "additionalProperties": False,
     }
     clause_properties: dict[str, object] = {
         "clause_id": {"type": "string"},
         "exact_text": {"type": "string"},
-        "subject_spans": span_array(),
-        "predicate_spans": span_array(),
-        "action_or_event_spans": span_array(),
-        "dialogue_spans": span_array(),
-        "motive_spans": span_array(),
-        "cause_spans": span_array(),
-        "result_spans": span_array(),
-        "time_spans": span_array(),
-        "location_spans": span_array(),
-        "grammatical_marker_spans": marker_schema,
+        "evidence": {
+            "type": "array",
+            "items": evidence_item_schema,
+        },
         "implicit_subject": {
             "type": "string",
             "enum": [
@@ -656,16 +654,7 @@ def parse_review_evidence_v2(
         {
             "clause_id",
             "exact_text",
-            "subject_spans",
-            "predicate_spans",
-            "action_or_event_spans",
-            "dialogue_spans",
-            "motive_spans",
-            "cause_spans",
-            "result_spans",
-            "time_spans",
-            "location_spans",
-            "grammatical_marker_spans",
+            "evidence",
             "implicit_subject",
             "uncertain",
         }
@@ -679,12 +668,37 @@ def parse_review_evidence_v2(
         trusted_text = clause_text_by_id.get(clause_id)
         if trusted_text is None or exact_text != trusted_text:
             raise TypeError("review evidence v2 clause text is invalid")
-        markers = raw.get("grammatical_marker_spans")
-        if not isinstance(markers, Mapping) or frozenset(markers) != {
-            "modality",
-            "aspect",
-        }:
-            raise TypeError("review evidence v2 markers are invalid")
+        raw_evidence = raw.get("evidence")
+        if not isinstance(raw_evidence, list):
+            raise TypeError("review evidence v2 evidence is invalid")
+        grouped: dict[str, list[dict[str, object]]] = {
+            category: [] for category in _EVIDENCE_CATEGORIES
+        }
+        seen_items: set[tuple[str, str, str]] = set()
+        for raw_item in raw_evidence:
+            if not isinstance(raw_item, Mapping) or frozenset(raw_item) != {
+                "category",
+                "text",
+                "context_quote",
+            }:
+                raise TypeError("review evidence v2 item is invalid")
+            category = raw_item.get("category")
+            text = raw_item.get("text")
+            context_quote = raw_item.get("context_quote")
+            if (
+                not isinstance(category, str)
+                or category not in _EVIDENCE_CATEGORIES
+                or not isinstance(text, str)
+                or not isinstance(context_quote, str)
+            ):
+                raise TypeError("review evidence v2 item fields are invalid")
+            identity = (category, text, context_quote)
+            if identity in seen_items:
+                raise TypeError("review evidence v2 items are duplicated")
+            seen_items.add(identity)
+            grouped[category].append(
+                {"text": text, "context_quote": context_quote}
+            )
         implicit_subject = raw.get("implicit_subject")
         uncertain = raw.get("uncertain")
         if (
@@ -698,49 +712,38 @@ def parse_review_evidence_v2(
                 clause_id=clause_id,
                 exact_text=exact_text,
                 subject_spans=_quote_tuple(
-                    raw.get("subject_spans"),
-                    exact_text=trusted_text,
+                    grouped["subject"], exact_text=trusted_text
                 ),
                 predicate_spans=_quote_tuple(
-                    raw.get("predicate_spans"),
-                    exact_text=trusted_text,
+                    grouped["predicate"], exact_text=trusted_text
                 ),
                 action_or_event_spans=_quote_tuple(
-                    raw.get("action_or_event_spans"),
-                    exact_text=trusted_text,
+                    grouped["action_or_event"], exact_text=trusted_text
                 ),
                 dialogue_spans=_quote_tuple(
-                    raw.get("dialogue_spans"),
-                    exact_text=trusted_text,
+                    grouped["dialogue"], exact_text=trusted_text
                 ),
                 motive_spans=_quote_tuple(
-                    raw.get("motive_spans"),
-                    exact_text=trusted_text,
+                    grouped["motive"], exact_text=trusted_text
                 ),
                 cause_spans=_quote_tuple(
-                    raw.get("cause_spans"),
-                    exact_text=trusted_text,
+                    grouped["cause"], exact_text=trusted_text
                 ),
                 result_spans=_quote_tuple(
-                    raw.get("result_spans"),
-                    exact_text=trusted_text,
+                    grouped["result"], exact_text=trusted_text
                 ),
                 time_spans=_quote_tuple(
-                    raw.get("time_spans"),
-                    exact_text=trusted_text,
+                    grouped["time"], exact_text=trusted_text
                 ),
                 location_spans=_quote_tuple(
-                    raw.get("location_spans"),
-                    exact_text=trusted_text,
+                    grouped["location"], exact_text=trusted_text
                 ),
                 grammatical_marker_spans=GrammaticalMarkerSpans(
                     modality=_quote_tuple(
-                        markers.get("modality"),
-                        exact_text=trusted_text,
+                        grouped["modality"], exact_text=trusted_text
                     ),
                     aspect=_quote_tuple(
-                        markers.get("aspect"),
-                        exact_text=trusted_text,
+                        grouped["aspect"], exact_text=trusted_text
                     ),
                 ),
                 implicit_subject=cast(ImplicitSubject, implicit_subject),

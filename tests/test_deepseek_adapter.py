@@ -558,6 +558,30 @@ def _kernel_observations(
             and "可以" in clause.exact_text
             else None
         )
+        items: list[dict[str, str]] = []
+        if is_event:
+            items.extend(
+                (
+                    {
+                        "category": "action_or_event",
+                        "text": clause.exact_text,
+                        "context_quote": clause.exact_text,
+                    },
+                    {
+                        "category": "result",
+                        "text": clause.exact_text,
+                        "context_quote": clause.exact_text,
+                    },
+                )
+            )
+        if modality is not None:
+            items.append(
+                {
+                    "category": "modality",
+                    "text": modality,
+                    "context_quote": clause.exact_text,
+                }
+            )
         evidence.append(
             {
                 "clause_id": clause.clause_id,
@@ -568,46 +592,7 @@ def _kernel_observations(
                     if clause.unit_id in partial
                     else clause.exact_text
                 ),
-                "subject_spans": [],
-                "predicate_spans": [],
-                "action_or_event_spans": (
-                    [
-                        {
-                            "text": clause.exact_text,
-                            "context_quote": clause.exact_text,
-                        }
-                    ]
-                    if is_event
-                    else []
-                ),
-                "dialogue_spans": [],
-                "motive_spans": [],
-                "cause_spans": [],
-                "result_spans": (
-                    [
-                        {
-                            "text": clause.exact_text,
-                            "context_quote": clause.exact_text,
-                        }
-                    ]
-                    if is_event
-                    else []
-                ),
-                "time_spans": [],
-                "location_spans": [],
-                "grammatical_marker_spans": {
-                    "modality": (
-                        [
-                            {
-                                "text": modality,
-                                "context_quote": clause.exact_text,
-                            }
-                        ]
-                        if modality is not None
-                        else []
-                    ),
-                    "aspect": [],
-                },
+                "evidence": items,
                 "implicit_subject": "none",
                 "uncertain": False,
             }
@@ -1130,8 +1115,10 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert '"fact_refs"' not in writer_prompt
     reviewer_prompt = prompts[1]
     assert '"evidence_version":"review-evidence-v2"' in reviewer_prompt
-    assert '"grammatical_marker_spans"' in reviewer_prompt
-    assert '"subject_spans":[{"text":' in reviewer_prompt
+    assert '"evidence":[{"category":"subject"' in reviewer_prompt
+    assert "category=modality" in reviewer_prompt
+    assert "category=aspect" in reviewer_prompt
+    assert '"context_quote"' in reviewer_prompt
     assert '"occurrence"' not in reviewer_prompt
     assert '"start"' not in reviewer_prompt
     assert '"end"' not in reviewer_prompt
