@@ -1354,13 +1354,60 @@ def test_nonactual_claim_rejection_compiles_all_scenes_without_user_actuality(
         user_actuality_quotes=("今天真实发生了一件小事。",),
     )
     actuality_context = BoundaryContext.from_request(actuality_request)
-    unchanged = DeepSeekGenerator._stabilize_nonactual_scene_cascade(
+    actuality_stabilized = DeepSeekGenerator._stabilize_nonactual_scene_cascade(
         actuality_request,
         actuality_context,
         core,
         (UnitIssue("c8", "invented_actuality", core.claim("c8").text),),
     )
-    assert unchanged is core
+    assert actuality_stabilized is not core
+    assert all(
+        not step.actor_refs
+        for step in actuality_stabilized.scene_steps
+    )
+
+
+def test_compiled_scene_truth_axes_are_server_owned(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    request = _with(
+        generation_input,
+        user_actuality_quotes=("今天真实发生了一件小事。",),
+        products=(),
+    )
+    context = BoundaryContext.from_request(request)
+    core = _generator()._parse_core(request, context, _video_core())
+    stabilized = DeepSeekGenerator._stabilize_nonactual_scene_cascade(
+        request,
+        context,
+        core,
+        (UnitIssue("c8", "invented_actuality", core.claim("c8").text),),
+    )
+    _install_fake(
+        monkeypatch,
+        [
+            _verdicts(
+                _video_core(),
+                {
+                    step.step_id: (
+                        "actuality_ok",
+                        "resource_ok",
+                        "fact_ok",
+                    )
+                    for step in stabilized.scene_steps
+                },
+            )
+        ],
+    )
+
+    issues, _, _ = _generator()._judgement_issues(
+        request,
+        context,
+        stabilized,
+    )
+
+    assert issues == ()
 
 
 def test_closed_world_rejects_unregistered_source_before_any_model_verdict(
@@ -1733,13 +1780,65 @@ def test_rejected_experience_shell_uses_frozen_viewpoint_without_user_actuality(
         user_actuality_quotes=("今天真实发生了一件小事。",),
     )
     actuality_context = BoundaryContext.from_request(actuality_request)
-    unchanged = DeepSeekGenerator._bind_rejected_nonactual_claims(
+    bound_actuality = DeepSeekGenerator._bind_rejected_nonactual_claims(
         actuality_request,
         actuality_context,
         core,
-        (UnitIssue("c8", "invented_actuality", core.claim("c8").text),),
+        (
+            UnitIssue("c8", "invented_actuality", core.claim("c8").text),
+            UnitIssue("c9", "invented_actuality", core.claim("c9").text),
+        ),
     )
-    assert unchanged is core
+    assert bound_actuality.claim("c8").text == "今天真实发生了一件小事。"
+    assert bound_actuality.claim("c8").basis == "user_premise"
+    assert bound_actuality.claim("c8").actuality == "user_presented_actual"
+    assert bound_actuality.claim("c8").source_refs == ("source:user_actuality",)
+    assert bound_actuality.claim("c9").text == (
+        generation_input.brand.positioning + "。"
+    )
+    assert bound_actuality.claim("c9").basis == "brand_viewpoint"
+    assert bound_actuality.claim("c9").actuality == "non_event"
+    assert bound_actuality.claim("c9").source_refs == ("source:brand_baseline",)
+    assert not DeepSeekGenerator._closed_world_issues(
+        actuality_context,
+        bound_actuality,
+    )
+
+
+def test_final_actuality_claim_binds_exact_user_quote_and_keeps_identity_blocking(
+    generation_input: GenerationInput,
+) -> None:
+    quote = "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
+    request = _with(
+        generation_input,
+        user_actuality_quotes=(quote,),
+    )
+    context = BoundaryContext.from_request(request)
+    core = _generator()._parse_core(request, context, _video_core())
+
+    settled_core, remaining, settled = (
+        _generator()._settle_final_actuality_claim_repairs(
+            request,
+            context,
+            core,
+            (
+                UnitIssue("c8", "invented_actuality", core.claim("c8").text),
+                UnitIssue("c8", "untrusted_role", core.claim("c8").text),
+            ),
+        )
+    )
+
+    claim = settled_core.claim("c8")
+    assert claim.text == quote
+    assert claim.basis == "user_premise"
+    assert claim.actuality == "user_presented_actual"
+    assert claim.source_refs == ("source:user_actuality",)
+    assert {(issue.unit_id, issue.reason_code) for issue in settled} == {
+        ("c8", "invented_actuality")
+    }
+    assert {(issue.unit_id, issue.reason_code) for issue in remaining} == {
+        ("c8", "untrusted_role")
+    }
 
 
 def test_product_truth_production_uses_only_registered_rails(
@@ -1839,9 +1938,9 @@ def test_product_truth_production_uses_only_registered_rails(
     assert "轮廓" not in product_step.action_text
     assert "结构" not in product_step.action_text
     assert product_step.production_note == "普通室内环境，单人用手机完成。"
-    assert DeepSeekGenerator._is_compiled_product_step(context, product_step)
-    assert DeepSeekGenerator._is_compiled_product_step(context, text_step)
-    assert not DeepSeekGenerator._is_compiled_product_step(
+    assert DeepSeekGenerator._is_compiled_scene_step(context, product_step)
+    assert DeepSeekGenerator._is_compiled_scene_step(context, text_step)
+    assert not DeepSeekGenerator._is_compiled_scene_step(
         context,
         replace(product_step, action_text="用手机拍摄当前商品的结构细节。"),
     )

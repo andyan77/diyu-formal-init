@@ -939,6 +939,14 @@ class DeepSeekGenerator(ContentGenerator):
             final_issues, judgement_payload, judgement_retries = self._review_core(request, context, repaired_core)
             provider_payloads.append(judgement_payload)
             retries += judgement_retries
+            repaired_core, final_issues, settled_actuality_issues = (
+                self._settle_final_actuality_claim_repairs(
+                    request,
+                    context,
+                    repaired_core,
+                    final_issues,
+                )
+            )
             repaired_core, final_issues, settled_final_issues = (
                 self._settle_final_product_claim_repairs(
                     request,
@@ -954,7 +962,13 @@ class DeepSeekGenerator(ContentGenerator):
                 )
                 raise GenerationFailed("内容边界无法在一次单元修复内满足")
             receipt_issues = tuple(
-                dict.fromkeys((*issues, *settled_final_issues))
+                dict.fromkeys(
+                    (
+                        *issues,
+                        *settled_actuality_issues,
+                        *settled_final_issues,
+                    )
+                )
             )
             fact_repair_receipts = self._issue_receipts(
                 request,
@@ -1363,22 +1377,22 @@ class DeepSeekGenerator(ContentGenerator):
         for unit_id in core.unit_ids:
             verdict = verdicts[unit_id]
             fragment = core.claim(unit_id).text if unit_id not in step_by_id else step_by_id[unit_id].action_text
-            compiler_owned_product_step = (
-                bool(context.product_fact_claims)
-                and unit_id in step_by_id
-                and self._is_compiled_product_step(
+            compiler_owned_scene_step = (
+                unit_id in step_by_id
+                and self._is_compiled_scene_step(
                     context,
                     step_by_id[unit_id],
                 )
             )
             for flag, reason in reason_by_flag:
-                if compiler_owned_product_step and flag in (
+                if compiler_owned_scene_step and flag in (
+                    "actuality_ok",
                     "resource_ok",
                     "fact_ok",
                 ):
-                    # These two axes are already closed-world compiler
-                    # invariants for an exact generated step. Keep the model's
-                    # identity, actuality and instruction verdicts.
+                    # These axes are already closed-world compiler invariants
+                    # for an exact generated step. Keep the model's identity
+                    # and instruction verdicts.
                     continue
                 if not verdict[flag]:
                     issues.append(UnitIssue(unit_id, reason, fragment))
@@ -1714,6 +1728,77 @@ class DeepSeekGenerator(ContentGenerator):
             merged.setdefault((issue.unit_id, issue.reason_code), issue)
         return settled_core, tuple(merged.values()), settled
 
+    def _settle_final_actuality_claim_repairs(
+        self,
+        request: GenerationInput,
+        context: BoundaryContext,
+        core: ContentCore,
+        issues: tuple[UnitIssue, ...],
+    ) -> tuple[ContentCore, tuple[UnitIssue, ...], tuple[UnitIssue, ...]]:
+        """Close final claim actuality with an exact trusted premise."""
+
+        claim_ids = {claim.claim_id for claim in core.claims}
+        candidates = tuple(
+            issue
+            for issue in issues
+            if issue.unit_id in claim_ids
+            and issue.reason_code == "invented_actuality"
+        )
+        if not candidates:
+            return core, issues, ()
+
+        settled_core = self._bind_rejected_nonactual_claims(
+            request,
+            context,
+            core,
+            candidates,
+        )
+        brand_viewpoints = {
+            text.strip().rstrip("。") + "。"
+            for text in (
+                request.brand.positioning,
+                request.brand.decision_order,
+            )
+            if text.strip()
+        }
+
+        def is_proven(issue: UnitIssue) -> bool:
+            claim = settled_core.claim(issue.unit_id)
+            exact_actuality = (
+                context.user_actuality_source is not None
+                and claim.text in context.user_actuality_quotes
+                and claim.basis == "user_premise"
+                and claim.actuality == "user_presented_actual"
+                and claim.source_refs == (_USER_ACTUALITY_SOURCE_ID,)
+            )
+            exact_viewpoint = (
+                claim.text in brand_viewpoints
+                and claim.basis == "brand_viewpoint"
+                and claim.actuality == "non_event"
+                and claim.source_refs == (_BRAND_BASELINE_SOURCE_ID,)
+            )
+            return exact_actuality or exact_viewpoint
+
+        settled = tuple(issue for issue in candidates if is_proven(issue))
+        settled_keys = {
+            (issue.unit_id, issue.reason_code)
+            for issue in settled
+        }
+        remaining = tuple(
+            issue
+            for issue in issues
+            if (issue.unit_id, issue.reason_code) not in settled_keys
+        )
+        server_side = (
+            *self._closed_world_issues(context, settled_core),
+            *self._deterministic_unit_issues(context, settled_core),
+            *self._media_issues(request, settled_core),
+        )
+        merged: dict[tuple[str, str], UnitIssue] = {}
+        for issue in (*remaining, *server_side):
+            merged.setdefault((issue.unit_id, issue.reason_code), issue)
+        return settled_core, tuple(merged.values()), settled
+
     @staticmethod
     def _bind_rejected_nonactual_claims(
         request: GenerationInput,
@@ -1721,22 +1806,26 @@ class DeepSeekGenerator(ContentGenerator):
         core: ContentCore,
         issues: tuple[UnitIssue, ...],
     ) -> ContentCore:
-        """Replace rejected experience shells with frozen brand viewpoints.
+        """Replace rejected experience shells with a frozen trusted premise.
 
-        This fallback applies only when the user supplied no lived fact. It
-        preserves the model's slot and overall structure while preventing a
-        second paraphrase from turning a topic into an account history.
+        An explicit lived fact is rebound to the user's exact quote. Without
+        one, the claim becomes a frozen brand viewpoint. Both paths preserve
+        the model's slot while preventing paraphrase from inventing history.
         """
 
-        if context.user_actuality_source is not None:
-            return core
         rejected = {
             issue.unit_id
             for issue in issues
             if issue.reason_code == "invented_actuality"
         }
-        viewpoints = tuple(
-            dict.fromkeys(
+        brand_replacements = tuple(
+            (
+                text,
+                "brand_viewpoint",
+                "non_event",
+                (_BRAND_BASELINE_SOURCE_ID,),
+            )
+            for text in dict.fromkeys(
                 text.strip().rstrip("。") + "。"
                 for text in (
                     request.brand.positioning,
@@ -1745,7 +1834,22 @@ class DeepSeekGenerator(ContentGenerator):
                 if text.strip()
             )
         )
-        if not rejected or not viewpoints:
+        if context.user_actuality_source is not None:
+            replacements = (
+                *(
+                    (
+                        quote,
+                        "user_premise",
+                        "user_presented_actual",
+                        (_USER_ACTUALITY_SOURCE_ID,),
+                    )
+                    for quote in context.user_actuality_quotes
+                ),
+                *brand_replacements,
+            )
+        else:
+            replacements = brand_replacements
+        if not rejected or not replacements:
             return core
 
         normalized: list[ContentClaim] = []
@@ -1755,12 +1859,15 @@ class DeepSeekGenerator(ContentGenerator):
             if claim.claim_id not in rejected:
                 normalized.append(claim)
                 continue
+            text, basis, actuality, source_refs = replacements[
+                replacement_index % len(replacements)
+            ]
             replacement = replace(
                 claim,
-                text=viewpoints[replacement_index % len(viewpoints)],
-                basis="brand_viewpoint",
-                actuality="non_event",
-                source_refs=(_BRAND_BASELINE_SOURCE_ID,),
+                text=text,
+                basis=basis,
+                actuality=actuality,
+                source_refs=source_refs,
             )
             replacement_index += 1
             normalized.append(replacement)
@@ -1775,11 +1882,11 @@ class DeepSeekGenerator(ContentGenerator):
         )
 
     @staticmethod
-    def _is_compiled_product_step(
+    def _is_compiled_scene_step(
         context: BoundaryContext,
         step: SceneStep,
     ) -> bool:
-        """Recognize only the exact P2 scene shape emitted by this compiler."""
+        """Recognize only an exact non-event scene emitted by this compiler."""
 
         if (
             step.actor_refs
@@ -1825,21 +1932,17 @@ class DeepSeekGenerator(ContentGenerator):
         core: ContentCore,
         issues: tuple[UnitIssue, ...],
     ) -> ContentCore:
-        """Keep an open topic from becoming a staged account history.
+        """Keep a topic or user premise from becoming a staged history.
 
-        When the user supplied no lived fact and the complete first review
-        already found invented actuality, repairing only the rejected claim can
-        leave the same invented event in a previously accepted scene. Compile
-        the whole scene bundle onto registered non-event production resources;
-        the complete final review still checks every resulting unit.
+        When the complete first review finds invented actuality, repairing only
+        the rejected unit can leave the same invented event in a previously
+        accepted scene. Compile the whole scene bundle onto registered
+        non-event production resources; exact user facts remain in claims.
         """
 
-        if (
-            context.user_actuality_source is not None
-            or not any(
-                issue.reason_code == "invented_actuality"
-                for issue in issues
-            )
+        if not any(
+            issue.reason_code == "invented_actuality"
+            for issue in issues
         ):
             return core
         return DeepSeekGenerator._stabilize_resource_repairs(
