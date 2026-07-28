@@ -1,9 +1,12 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
-  保留；主控现已在同一 UI-12 内裁决改由服务端确定性绑定 exact quote，并采用“一战到底”
-  治理恢复施工，不创建 UI-13，也不表示问题已经解决。`UI-11` 为
+- 状态：`BLOCKED`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
+  保留；主控随后在同一 UI-12 内裁决改由服务端确定性绑定 exact quote，并采用“一战到底”
+  治理恢复施工。quote-only 责任边界、完整 G3 和 G4 已继续验证；最终 G4 证明当前
+  Reviewer 在真实成品中仍漏提关系角色和动机等裁决必需 evidence，已命中“继续只能更换
+  模型、增加第二 Reviewer、降低事实边界或建立人物／句型词表”的真正停止线。不创建
+  UI-13，也不把运行时失败关闭改写为产品成功。`UI-11` 为
   `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
@@ -124,6 +127,38 @@
 - 当前执行纪律：先离线重放现存完整 16-clause G3 raw，再实现 quote-only binder 并尽早
   运行完整 G3；只有产品责任、安全隔离、供应商或历史兼容真实边界改变才停止。所有本地
   SHA 在完整 G1—G7/H1/D1 成立前均为 WIP，不是生产候选，不 push/CI/部署。
+- quote-only 收口：Reviewer strict 输出已删除模型侧 `start/end/occurrence`，服务端只接受
+  clause 内唯一 exact quote 并计算 Python Unicode offset；零匹配、多匹配和
+  `uncertain` 均保守停止，且 `uncertain` 不进入 Writer 修复。定向 parser、binder、
+  四态裁决和 legacy 回归通过；这些提交全部是未推送 WIP，不是生产候选。
+- 完整 G3：实现 `440002d…` 的无 repository/database 纵向轮通过 strict evidence、
+  服务端裁决、DeliveryCompiler 和人工全文审阅；成品采用“抽象观察＋服务端包裹的
+  hypothesis”，未冒充用户、品牌或真实家庭经历。该证据证明 quote-only 绑定可在完整
+  成品规模工作，但不单独证明 G4 真人事实边界。
+- G4 停止线：实现 `72c1201…` 的 G4 曾机器通过，但人工阅读全文发现 Writer 增加“伴侣”
+  身份、动机和示例对白，证明 Reviewer 假阴性。执行端在同一 evidence 合同内增加通用
+  `relationship_role` 精确证据并收窄一次修复；最终实现
+  `c4b895362075309247895e49c4e29bc87d04fbc2` 的初稿、唯一修复和完整复审仍失败关闭。
+  修复稿可见文字仍增加“亲密关系”、期待／渴望等动机以及建议动作；对应 Reviewer raw
+  对 10 个 clause 返回 32 项 evidence、`uncertain=0`，却没有返回任何
+  `relationship_role`、`motive` 或 `dialogue` evidence。服务端抓住发布配文的两项问题
+  并拒绝保存，但无法仅靠缺失 evidence 稳定识别其余人工可见违规。
+- 这不是 quote binder、transport、schema、fixture 或服务端四态裁决错误；继续关闭该
+  缺口只能依赖本轮禁止的失败句／人物词表、第二 Reviewer／模型处置，或降低 G4 “不扩写
+  人物、动机、对白、原因和结果”的事实边界。故 UI-12 如实保持 `BLOCKED`。H1、D1、
+  G1/G2/G5/G6/G7、最终完整业务轮、完整工程门、两审、push、CI、备份、部署和生产写入均
+  未执行。
+- root-only G4 证据保存在
+  `/var/lib/diyu-ui12-evidence/c4b895362075309247895e49c4e29bc87d04fbc2/`
+  `g4-preflight/`，目录／文件权限为 `0700/0600 root:root`；最终 Reviewer raw 与最终
+  服务端 issues 的 SHA-256 分别为 `d9d921865080…`、`0512712ab2ab…`。原始 Prompt、
+  凭据和完整敏感正文未进入 Git。停止后只读复核生产部署仓及镜像仍为 `845f632…`，
+  schema `20260801_28`，回环／公网 readiness `200/200`，备份 timer active；本轮没有
+  生产业务写入。本机及 ECS `/tmp` 下本轮 UI-12 源码归档、隔离源码和探针脚本已精确
+  清理，`/var/lib/diyu-ui12-evidence/` 正式历史证据保留。
+- 当前唯一下一动作：主控审阅并裁决“当前单一 Reviewer 无法稳定提取 G4 所需关系角色／
+  动机 evidence”这一已经角色隔离的能力阻断；裁决前不换模型、不加第二 Reviewer、不降
+  事实边界，也不创建 UI-13。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
