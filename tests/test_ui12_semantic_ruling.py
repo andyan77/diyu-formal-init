@@ -1239,6 +1239,33 @@ def test_insufficient_evidence_is_not_writer_repairable() -> None:
         )
 
 
+def test_explicit_recommendation_in_abstract_unit_is_repairable_drift() -> None:
+    text = "人可以先停一下再回应。"
+    contexts = _manual_context(text, "abstract_observation")
+    evidence = _evidence(
+        contexts,
+        target_fragment=text,
+        action=("停一下",),
+        modality=("可以",),
+        implicit_subject="generic",
+    )
+
+    assert _reasons(contexts, evidence) == (
+        "recommendation_in_observation",
+    )
+    _, kernel, _ = _frame_and_kernel(body=text)
+    assert DeepSeekGenerator._kernel_repair_scope(
+        kernel,
+        (
+            NarrativeIssue(
+                "unit:body",
+                "recommendation_in_observation",
+                text,
+            ),
+        ),
+    ) == frozenset({"unit:body"})
+
+
 def test_sdr_matrix_has_one_direct_consumer_for_every_stable_id() -> None:
     semantic_ids = {
         f"SDR-{index:03d}" for index in range(12, 37)

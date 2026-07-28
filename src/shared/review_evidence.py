@@ -1250,7 +1250,11 @@ def _writer_clause_issue(
         if has_action:
             return NarrativeIssue(
                 context.unit_id,
-                "insufficient_evidence",
+                (
+                    "recommendation_in_observation"
+                    if has_modality
+                    else "insufficient_evidence"
+                ),
                 context.exact_text,
             )
         return None

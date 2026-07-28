@@ -288,6 +288,7 @@ def test_reviewer_requires_unique_source_quotes_without_model_addresses() -> Non
     assert "在一个可想象情境中实施的具体行为" in prompt
     assert "活动概念名称" in prompt
     assert "导航描述本身，不属于 action_or_event" in prompt
+    assert "修辞性动作或因果比喻也不属于 action_or_event" in prompt
 
 
 def test_server_quote_vocabulary_excludes_repeated_short_phrases() -> None:

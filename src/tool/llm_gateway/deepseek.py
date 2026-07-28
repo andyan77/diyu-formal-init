@@ -1155,7 +1155,8 @@ start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 
 - category=action_or_event：句子明示或隐含的参与者在一个可想象情境中实施的具体行为、
   反应、言说，或发生的具体变化与事件；无论它是已发生、假设、建议、否定、泛指或演绎，
   都只提取其语法证据，不判断现实性。静态状态、关系判断、价值评价、活动概念名称，以及
-  对“本文／阅读／观看”的导航描述本身，不属于 action_or_event；
+  对“本文／阅读／观看”的导航描述本身，不属于 action_or_event；非人抽象概念承担的
+  修辞性动作或因果比喻也不属于 action_or_event；
 - category=dialogue：直接或转述的具体话语；同时属于言说动作时还要返回 action_or_event；
 - category=motive/cause/result/time/location：对应动机、前因、结果、时间和地点，无论所在
   文字最终是否被服务端允许；
