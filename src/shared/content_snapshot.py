@@ -3,6 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from uuid import UUID
 
+from src.shared.creative_plan import (
+    CreativePlanV2,
+    creative_plan_from_document,
+)
 from src.shared.errors import DomainError
 from src.shared.narrative import NarrativeFrame, frame_from_document
 from src.shared.types import ProductFact, SeriesContext, SeriesEntry
@@ -20,13 +24,11 @@ def frozen_user_premise(snapshot: Mapping[str, object], fallback: str) -> str:
     return value if isinstance(value, str) and value else fallback
 
 
-def frozen_system_creative_plan(snapshot: Mapping[str, object]) -> str:
-    value = snapshot.get("system_creative_plan")
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        raise DomainError("内容任务冻结的系统创作规划无效")
-    return value
+def frozen_creative_plan(
+    snapshot: Mapping[str, object],
+) -> CreativePlanV2 | None:
+    value = snapshot.get("creative_plan_v2")
+    return None if value is None else creative_plan_from_document(value)
 
 
 def visible_direction(snapshot: object) -> tuple[str | None, list[str]]:

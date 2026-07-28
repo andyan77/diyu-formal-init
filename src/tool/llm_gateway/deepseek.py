@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from typing import Any, cast
 
@@ -12,7 +12,18 @@ import httpx
 
 from src.ports.content_generator import ContentGenerator
 from src.shared.content_origin import aigc_disclosure
-from src.shared.errors import GenerationFailed
+from src.shared.creative_plan import (
+    creative_plan_document,
+    creative_plan_from_document,
+    validate_creative_plan,
+)
+from src.shared.errors import DomainError, GenerationFailed
+from src.shared.factual_basis import (
+    FrozenFactRecord,
+    brand_fact_records,
+    product_fact_records,
+    registered_product_claims,
+)
 from src.shared.narrative import (
     NarrativeBlock,
     NarrativeBlockType,
@@ -125,14 +136,61 @@ class NarrativeCore:
 
 
 @dataclass(frozen=True)
+class BlockSkeleton:
+    block_id: str
+    block_type: NarrativeBlockType
+    slot: str
+    fact_refs: tuple[str, ...]
+    constraint_refs: tuple[str, ...]
+    linked_scene_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SceneSkeleton:
+    scene_id: str
+    purpose: str
+    block_refs: tuple[str, ...]
+    allowed_resource_refs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NarrativeSkeleton:
+    blocks: tuple[BlockSkeleton, ...]
+    service_actuality_blocks: tuple[NarrativeBlock, ...]
+    scenes: tuple[SceneSkeleton, ...]
+    spoken_order: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class BoundaryContext:
-    source_registry: tuple[tuple[str, str], ...]
+    fact_registry: tuple[FrozenFactRecord, ...]
+    constraint_registry: tuple[tuple[str, str], ...]
     resource_registry: tuple[tuple[str, str], ...]
     actor_registry: tuple[tuple[str, str], ...]
-    exact_product_facts: dict[str, frozenset[str]]
     product_facts_text: str
     brand_text: str
     method_text: str
+
+    @property
+    def fact_text_by_id(self) -> dict[str, str]:
+        return {
+            record.fact_id: record.exact_text
+            for record in self.fact_registry
+        }
+
+    @property
+    def brand_fact_ids(self) -> frozenset[str]:
+        return frozenset(
+            record.fact_id
+            for record in self.fact_registry
+            if record.fact_kind == "brand"
+        )
+
+    @property
+    def constraint_ids(self) -> frozenset[str]:
+        return frozenset(
+            identifier for identifier, _ in self.constraint_registry
+        )
 
     @property
     def resource_ids(self) -> frozenset[str]:
@@ -148,28 +206,53 @@ class BoundaryContext:
         request: GenerationInput,
         frame: NarrativeFrame,
     ) -> BoundaryContext:
-        exact_product_facts = {
-            f"source:product:{product.sku}": frozenset(
-                DeepSeekGenerator._registered_product_claims(product)
-            )
+        if request.creative_plan is None:
+            raise GenerationFailed("生成请求缺少冻结的 CreativePlanV2")
+        product_records = tuple(
+            record
             for product in request.products
-        }
-        product_facts_text = "\n".join(
-            f"- {source_id}：{statement}"
-            for source_id, statements in exact_product_facts.items()
-            for statement in sorted(statements)
+            for record in product_fact_records(product)
+            if record.fact_id in frame.allowed_product_fact_ids
         )
-        source_registry = (
+        brand_records = tuple(
+            record
+            for record in brand_fact_records(
+                request.brand.brand_reference_context
+            )
+            if record.fact_id in frame.allowed_brand_fact_ids
+        )
+        user_records = tuple(
+            FrozenFactRecord(
+                fact_id=fact.source_id,
+                exact_text=fact.exact_text,
+                fact_kind="user_actuality",
+            )
+            for fact in frame.user_facts
+        )
+        fact_registry = (*user_records, *product_records, *brand_records)
+        product_facts_text = "\n".join(
+            f"- {record.fact_id}：{record.exact_text}"
+            for record in product_records
+        )
+        constraint_registry = (
             ("source:brand_baseline", "当前品牌定位、判断顺序与语气"),
             ("source:role_boundary", "当前发布账号的表达身份与资格边界"),
-            ("source:organization", "当前品牌、组织与发布账号在册事实"),
+            (
+                "source:organization",
+                "当前组织与账号作用域；只限制表达资格，不证明机构立场",
+            ),
+            ("constraint:creative-plan-v2", "冻结 CreativePlanV2"),
+            ("constraint:platform-shape", "目标平台与内容形式"),
             *(
-                (fact.source_id, f"用户本轮原文：{fact.exact_text}")
-                for fact in frame.user_facts
+                (tone_id, "用户显式选择或账号合法基线语气")
+                for tone_id in request.creative_plan.tone_ids
             ),
             *(
-                (source_id, "当前冻结商品登记事实")
-                for source_id in frame.allowed_product_fact_ids
+                (
+                    (request.creative_plan.mechanism_id, "既有内容机制"),
+                )
+                if request.creative_plan.mechanism_id is not None
+                else ()
             ),
         )
         resource_registry = (
@@ -192,10 +275,11 @@ class BoundaryContext:
             ),
         )
         method_parts = [
-            (
-                "系统创作计划（只决定主题、切口、观点、结构、风格和平台组织，"
-                "不是事实来源）："
-                + request.system_creative_plan
+            "冻结 CreativePlanV2："
+            + json.dumps(
+                creative_plan_document(request.creative_plan),
+                ensure_ascii=False,
+                sort_keys=True,
             ),
             *(
                 (
@@ -256,7 +340,8 @@ class BoundaryContext:
             "门店做法或经营历史已经发生。"
         )
         return cls(
-            source_registry=source_registry,
+            fact_registry=fact_registry,
+            constraint_registry=constraint_registry,
             resource_registry=resource_registry,
             actor_registry=(
                 (
@@ -264,7 +349,6 @@ class BoundaryContext:
                     "当前创作者，仅以拍摄者／表达者身份出现，不扮演题材人物",
                 ),
             ),
-            exact_product_facts=exact_product_facts,
             product_facts_text=product_facts_text
             or "（本次没有冻结商品事实。）",
             brand_text=brand_text,
@@ -379,15 +463,12 @@ class DeepSeekGenerator(ContentGenerator):
         raw_premises = document.get("user_premises")
         raw_facts = document.get("user_fact_spans")
         raw_mode = document.get("narrative_mode")
-        raw_plan = document.get("system_creative_plan")
-        raw_value = document.get("primary_value")
+        raw_plan = document.get("creative_plan")
         if (
             not isinstance(raw_premises, list)
             or not isinstance(raw_facts, list)
             or not isinstance(raw_mode, str)
             or raw_mode not in _NARRATIVE_MODES
-            or not isinstance(raw_plan, str)
-            or not raw_plan.strip()
         ):
             raise GenerationFailed("模型协作返回格式不完整")
         premises = self._exact_string_list(raw_premises)
@@ -407,23 +488,28 @@ class DeepSeekGenerator(ContentGenerator):
             and raw_mode != request.explicit_narrative_mode
         ):
             raise GenerationFailed("模型没有遵守用户显式叙事形式")
-        mapping: dict[str, ContentProduct] = {
-            "帮助选择": "dressing_decision",
-            "解释商品": "product_truth",
-            "建立人格": "brand_life_narrative",
-            "经营关系": "local_response",
-            "视觉造型": "visual_styling_story",
-        }
-        if not isinstance(raw_value, str) or raw_value not in mapping:
-            raise GenerationFailed("模型没有形成一个受众价值")
+        try:
+            plan = creative_plan_from_document(raw_plan)
+            validate_creative_plan(
+                plan,
+                user_turns=available_user_turns,
+                allowed_tone_ids=request.allowed_tone_ids,
+                allowed_mechanism_ids=request.allowed_mechanism_ids,
+                expected_primary_value=plan.primary_value,
+                expected_platform_shape=request.platform_shape,
+            )
+        except DomainError as exc:
+            raise GenerationFailed(
+                "模型返回的 CreativePlanV2 超出冻结边界"
+            ) from exc
         return ConversationDecision(
             "ready",
             message.strip(),
             user_premises=premises,
             user_fact_spans=facts,
             narrative_mode=raw_mode,
-            system_creative_plan=raw_plan.strip(),
-            primary_product=mapping[raw_value],
+            creative_plan=plan,
+            primary_product=plan.primary_value,
             creation_proposal=creation_proposal,
             proposed_intent_span=proposed_intent_span,
         )
@@ -433,12 +519,17 @@ class DeepSeekGenerator(ContentGenerator):
         retries = 0
         provider_payloads: list[dict[str, Any]] = []
         frame = request.narrative_frame or legacy_frame(
-            tuple(f"source:product:{product.sku}" for product in request.products)
+            tuple(
+                record.fact_id
+                for product in request.products
+                for record in product_fact_records(product)
+            )
         )
         context = BoundaryContext.from_request(request, frame)
+        skeleton = self._narrative_skeleton(request, frame, context)
         writer_payload, writer_retries = self._request(
             "你是笛语类型化内容 Writer。只返回一个完整 JSON，不展示推理、规则或内部审查。",
-            self._writer_prompt(request, frame, context),
+            self._writer_prompt(request, frame, context, skeleton),
             8192,
         )
         provider_payloads.append(writer_payload)
@@ -448,6 +539,7 @@ class DeepSeekGenerator(ContentGenerator):
                 request,
                 frame,
                 context,
+                skeleton,
                 json.loads(
                     self._json_content(
                         str(writer_payload["choices"][0]["message"]["content"])
@@ -494,6 +586,7 @@ class DeepSeekGenerator(ContentGenerator):
                     request,
                     frame,
                     context,
+                    skeleton,
                     core,
                     issues,
                     json.loads(
@@ -576,114 +669,219 @@ class DeepSeekGenerator(ContentGenerator):
             base = (*base, "viewing_flow")
         return (*base, *_CONTRACT_FIELDS[product])
 
-    def _parse_core(
-        self,
+    @classmethod
+    def _narrative_skeleton(
+        cls,
         request: GenerationInput,
         frame: NarrativeFrame,
         context: BoundaryContext,
-        raw: object,
-    ) -> NarrativeCore:
-        if not isinstance(raw, dict) or raw.get("speaker_ref") != _SPEAKER_ID:
-            raise TypeError("typed core must use the registered speaker")
-        raw_blocks = raw.get("blocks")
-        raw_order = raw.get("spoken_order")
-        raw_steps = raw.get("scene_steps")
-        if (
-            not isinstance(raw_blocks, list)
-            or not raw_blocks
-            or not isinstance(raw_order, list)
-            or not raw_order
-            or not isinstance(raw_steps, list)
-            or not raw_steps
-        ):
-            raise TypeError("typed core collections are incomplete")
+    ) -> NarrativeSkeleton:
         expected_type = _MODE_BLOCK_TYPE[frame.narrative_mode]
-        singleton_slots = self._singleton_slots(
+        singleton = cls._singleton_slots(
             request.primary_product, request.media_format
         )
-        allowed_slots = {*singleton_slots, _SPOKEN_SLOT}
-        generated: list[NarrativeBlock] = []
-        for raw_block in raw_blocks:
-            if not isinstance(raw_block, dict):
-                raise TypeError("block must be an object")
-            block_type = self._required_string(raw_block.get("block_type"))
-            if block_type != expected_type:
-                raise ValueError("writer changed the frozen narrative mode")
-            slot = self._required_string(raw_block.get("slot"))
-            if slot not in allowed_slots:
-                raise ValueError("writer returned an unknown visible slot")
-            source_refs = self._string_refs(raw_block.get("source_refs"))
-            if any(
-                source_ref.startswith("source:user_actuality:")
-                for source_ref in source_refs
-            ):
-                raise ValueError("writer cannot author an actuality block")
-            generated.append(
-                NarrativeBlock(
-                    block_id=self._required_string(raw_block.get("block_id")),
-                    block_type=block_type,
-                    slot=slot,
-                    text=self._required_string(raw_block.get("text")),
-                    source_refs=source_refs,
-                    linked_scene_ids=self._string_refs(
-                        raw_block.get("linked_scene_ids")
-                    ),
+        generated_ids = {
+            slot: f"b-{slot}" for slot in (*singleton, _SPOKEN_SLOT)
+        }
+        scene_groups: list[tuple[str, str, tuple[str, ...]]] = [
+            ("s-cover", _COVER_PURPOSE, (generated_ids["title"],)),
+            (
+                "s-guide",
+                _SCENE_PURPOSE,
+                (generated_ids["natural_guide"],),
+            ),
+            (
+                "s-contract",
+                _SCENE_PURPOSE,
+                tuple(generated_ids[slot] for slot in _CONTRACT_FIELDS[
+                    request.primary_product
+                ]),
+            ),
+            ("s-spoken", _SCENE_PURPOSE, (generated_ids[_SPOKEN_SLOT],)),
+            (
+                "s-release",
+                _SCENE_PURPOSE,
+                (generated_ids["release_caption"],),
+            ),
+        ]
+        if request.media_format == "video":
+            scene_groups.append(
+                (
+                    "s-viewing",
+                    _SCENE_PURPOSE,
+                    (generated_ids["viewing_flow"],),
                 )
             )
-        actual_blocks = tuple(
+        actuality_scene_by_block: dict[str, str] = {}
+        for index, _ in enumerate(frame.user_facts, start=1):
+            block_id = f"actuality:{index}"
+            scene_id = f"s-actuality-{index}"
+            actuality_scene_by_block[block_id] = scene_id
+            scene_groups.append(
+                (scene_id, _SCENE_PURPOSE, (block_id,))
+            )
+        scene_ids_by_block = {
+            block_id: tuple(
+                scene_id
+                for scene_id, _, block_refs in scene_groups
+                if block_id in block_refs
+            )
+            for block_id in (
+                *generated_ids.values(),
+                *actuality_scene_by_block,
+            )
+        }
+        constraint_refs = tuple(
+            identifier for identifier, _ in context.constraint_registry
+        )
+        product_fact_ids = tuple(frame.allowed_product_fact_ids)
+        brand_fact_ids = tuple(frame.allowed_brand_fact_ids)
+        blocks: list[BlockSkeleton] = []
+        for slot in (*singleton, _SPOKEN_SLOT):
+            fact_refs: tuple[str, ...] = ()
+            if slot in _CONTRACT_FIELDS[request.primary_product]:
+                fact_refs = product_fact_ids
+            if slot == "brand_account_link":
+                fact_refs = (*fact_refs, *brand_fact_ids)
+            block_id = generated_ids[slot]
+            blocks.append(
+                BlockSkeleton(
+                    block_id=block_id,
+                    block_type=expected_type,
+                    slot=slot,
+                    fact_refs=tuple(dict.fromkeys(fact_refs)),
+                    constraint_refs=constraint_refs,
+                    linked_scene_ids=scene_ids_by_block[block_id],
+                )
+            )
+        service_blocks = tuple(
             NarrativeBlock(
                 block_id=f"actuality:{index}",
                 block_type="actuality_source",
                 slot=_SPOKEN_SLOT,
                 text=fact.exact_text,
-                source_refs=(fact.source_id,),
-                linked_scene_ids=(),
+                fact_refs=(fact.source_id,),
+                constraint_refs=(),
+                linked_scene_ids=(actuality_scene_by_block[f"actuality:{index}"],),
             )
             for index, fact in enumerate(frame.user_facts, start=1)
         )
-        provisional = (*actual_blocks, *generated)
+        allowed_resources = tuple(
+            identifier for identifier, _ in context.resource_registry
+        )
+        scenes = tuple(
+            SceneSkeleton(
+                scene_id=scene_id,
+                purpose=purpose,
+                block_refs=block_refs,
+                allowed_resource_refs=allowed_resources,
+            )
+            for scene_id, purpose, block_refs in scene_groups
+        )
+        return NarrativeSkeleton(
+            blocks=tuple(blocks),
+            service_actuality_blocks=service_blocks,
+            scenes=scenes,
+            spoken_order=(
+                *(block.block_id for block in service_blocks),
+                generated_ids[_SPOKEN_SLOT],
+            ),
+        )
+
+    def _parse_core(
+        self,
+        request: GenerationInput,
+        frame: NarrativeFrame,
+        context: BoundaryContext,
+        skeleton: NarrativeSkeleton,
+        raw: object,
+    ) -> NarrativeCore:
+        if not isinstance(raw, dict) or frozenset(raw) != {
+            "blocks",
+            "scenes",
+        }:
+            raise TypeError("writer core must contain only server skeleton slots")
+        raw_blocks = raw.get("blocks")
+        raw_steps = raw.get("scenes")
+        if (
+            not isinstance(raw_blocks, list)
+            or not raw_blocks
+            or not isinstance(raw_steps, list)
+            or not raw_steps
+        ):
+            raise TypeError("typed core collections are incomplete")
+        skeleton_blocks = {
+            block.block_id: block for block in skeleton.blocks
+        }
+        if {
+            value.get("block_id")
+            for value in raw_blocks
+            if isinstance(value, dict)
+        } != set(skeleton_blocks) or len(raw_blocks) != len(skeleton_blocks):
+            raise ValueError("writer block coverage drifted from server skeleton")
+        generated: list[NarrativeBlock] = []
+        for raw_block in raw_blocks:
+            if not isinstance(raw_block, dict) or frozenset(raw_block) != {
+                "block_id",
+                "text",
+            }:
+                raise TypeError("block must be an object")
+            block_id = self._required_string(raw_block.get("block_id"))
+            frozen = skeleton_blocks[block_id]
+            generated.append(
+                NarrativeBlock(
+                    block_id=block_id,
+                    block_type=frozen.block_type,
+                    slot=frozen.slot,
+                    text=self._required_string(raw_block.get("text")),
+                    fact_refs=frozen.fact_refs,
+                    constraint_refs=frozen.constraint_refs,
+                    linked_scene_ids=frozen.linked_scene_ids,
+                )
+            )
+        provisional = (*skeleton.service_actuality_blocks, *generated)
         block_ids = [block.block_id for block in provisional]
         if len(set(block_ids)) != len(block_ids):
             raise ValueError("block ids must be unique")
-        for slot in singleton_slots:
-            if sum(block.slot == slot for block in provisional) != 1:
-                raise ValueError(f"slot {slot} must appear exactly once")
-        spoken_ids = [
-            block.block_id for block in provisional if block.slot == _SPOKEN_SLOT
-        ]
-        order = [self._required_string(item) for item in raw_order]
-        if len(order) != len(spoken_ids) or set(order) != set(spoken_ids):
-            raise ValueError("spoken order must cover every spoken block")
 
+        skeleton_scenes = {
+            scene.scene_id: scene for scene in skeleton.scenes
+        }
+        if {
+            value.get("scene_id")
+            for value in raw_steps
+            if isinstance(value, dict)
+        } != set(skeleton_scenes) or len(raw_steps) != len(skeleton_scenes):
+            raise ValueError("writer scene coverage drifted from server skeleton")
         steps: list[SceneStep] = []
         for raw_step in raw_steps:
-            if not isinstance(raw_step, dict):
+            if not isinstance(raw_step, dict) or frozenset(raw_step) != {
+                "scene_id",
+                "resource_refs",
+                "action_text",
+                "sound_text",
+                "production_note",
+            }:
                 raise TypeError("scene step must be an object")
-            purpose = self._required_string(raw_step.get("purpose"))
-            if purpose not in {_COVER_PURPOSE, _SCENE_PURPOSE}:
-                raise ValueError("scene purpose is invalid")
-            block_refs = self._string_refs(raw_step.get("block_refs"))
-            if (
-                not block_refs
-                or len(block_refs) > 3
-                or any(ref not in block_ids for ref in block_refs)
-            ):
-                raise ValueError("scene must reference existing blocks")
-            actor_refs = self._string_refs(
-                raw_step.get("actor_refs") or [], allow_empty=True
-            )
+            scene_id = self._required_string(raw_step.get("scene_id"))
+            frozen_scene = skeleton_scenes[scene_id]
             resource_refs = self._string_refs(
                 raw_step.get("resource_refs") or [], allow_empty=True
             )
-            if any(ref not in context.actor_ids for ref in actor_refs):
-                raise ValueError("scene uses an unregistered actor")
-            if any(ref not in context.resource_ids for ref in resource_refs):
+            if any(
+                ref not in frozen_scene.allowed_resource_refs
+                for ref in resource_refs
+            ):
                 raise ValueError("scene uses an unregistered resource")
             steps.append(
                 SceneStep(
-                    step_id=self._required_string(raw_step.get("step_id")),
-                    purpose=purpose,
-                    actor_refs=actor_refs,
+                    step_id=scene_id,
+                    purpose=frozen_scene.purpose,
+                    actor_refs=(
+                        (_CREATOR_ACTOR_ID,)
+                        if _CREATOR_EXPRESSION_RESOURCE_ID in resource_refs
+                        else ()
+                    ),
                     resource_refs=resource_refs,
                     action_text=self._required_string(
                         raw_step.get("action_text")
@@ -694,41 +892,13 @@ class DeepSeekGenerator(ContentGenerator):
                     production_note=self._optional_string(
                         raw_step.get("production_note")
                     ),
-                    block_refs=block_refs,
+                    block_refs=frozen_scene.block_refs,
                 )
             )
-        step_ids = [step.step_id for step in steps]
-        if (
-            len(set(step_ids)) != len(step_ids)
-            or set(step_ids) & set(block_ids)
-            or sum(step.purpose == _COVER_PURPOSE for step in steps) != 1
-            or not any(step.purpose == _SCENE_PURPOSE for step in steps)
-        ):
-            raise ValueError("scene ids or purposes are incomplete")
-        linked = {
-            block_id: tuple(
-                step.step_id for step in steps if block_id in step.block_refs
-            )
-            for block_id in block_ids
-        }
-        if any(not scene_ids for scene_ids in linked.values()):
-            raise ValueError("every block must link to at least one scene")
-        blocks = tuple(
-            replace(block, linked_scene_ids=linked[block.block_id])
-            if block.block_type == "actuality_source"
-            else block
-            for block in provisional
-        )
-        if any(
-            block.block_type != "actuality_source"
-            and set(block.linked_scene_ids) != set(linked[block.block_id])
-            for block in blocks
-        ):
-            raise ValueError("block scene links must be complete")
         return NarrativeCore(
             speaker_ref=_SPEAKER_ID,
-            blocks=blocks,
-            spoken_order=tuple(order),
+            blocks=tuple(provisional),
+            spoken_order=skeleton.spoken_order,
             scene_steps=tuple(steps),
         )
 
@@ -783,7 +953,9 @@ class DeepSeekGenerator(ContentGenerator):
             },
             observations=observations,
             allowed_resource_ids=context.resource_ids,
-            exact_product_facts=context.exact_product_facts,
+            fact_text_by_id=context.fact_text_by_id,
+            brand_fact_ids=context.brand_fact_ids,
+            allowed_constraint_ids=context.constraint_ids,
         )
         return issues, payload, retries
 
@@ -792,6 +964,7 @@ class DeepSeekGenerator(ContentGenerator):
         request: GenerationInput,
         frame: NarrativeFrame,
         context: BoundaryContext,
+        skeleton: NarrativeSkeleton,
         core: NarrativeCore,
         issues: tuple[NarrativeIssue, ...],
         raw: object,
@@ -805,7 +978,7 @@ class DeepSeekGenerator(ContentGenerator):
         ):
             raise ValueError("service-authored actuality cannot be repaired")
         raw_blocks = raw.get("blocks")
-        raw_scenes = raw.get("scene_steps")
+        raw_scenes = raw.get("scenes")
         if not isinstance(raw_blocks, list) or not isinstance(raw_scenes, list):
             raise TypeError("repair collections are incomplete")
         if {
@@ -813,7 +986,7 @@ class DeepSeekGenerator(ContentGenerator):
             for value in raw_blocks
             if isinstance(value, dict)
         } != affected_blocks or {
-            value.get("step_id")
+            value.get("scene_id")
             for value in raw_scenes
             if isinstance(value, dict)
         } != affected_scenes:
@@ -824,28 +997,32 @@ class DeepSeekGenerator(ContentGenerator):
             if isinstance(value, dict)
         }
         replacement_scenes = {
-            self._required_string(value.get("step_id")): value
+            self._required_string(value.get("scene_id")): value
             for value in raw_scenes
             if isinstance(value, dict)
         }
         merged_raw = {
-            "speaker_ref": core.speaker_ref,
             "blocks": [
                 replacement_blocks.get(
-                    block.block_id, self._block_document(block)
+                    block.block_id, self._writer_block_document(block)
                 )
                 for block in core.blocks
                 if block.block_type != "actuality_source"
             ],
-            "spoken_order": list(core.spoken_order),
-            "scene_steps": [
+            "scenes": [
                 replacement_scenes.get(
-                    scene.step_id, self._scene_document(scene)
+                    scene.step_id, self._writer_scene_document(scene)
                 )
                 for scene in core.scene_steps
             ],
         }
-        return self._parse_core(request, frame, context, merged_raw)
+        return self._parse_core(
+            request,
+            frame,
+            context,
+            skeleton,
+            merged_raw,
+        )
 
     @staticmethod
     def _assert_review_can_repair(
@@ -1068,8 +1245,11 @@ class DeepSeekGenerator(ContentGenerator):
 {{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制实际使用的用户消息"],
 "user_fact_spans":["逐字截取用户明确陈述的现实片段"],"narrative_mode":
 "actuality_reflection|general_observation|hypothesis|dramatization",
-"system_creative_plan":"系统自主选择的主题、切口、观点、结构、受众回报和平台组织",
-"primary_value":"帮助选择|解释商品|建立人格|经营关系|视觉造型",
+"creative_plan":{{"plan_version":"creative-plan-v2","topic_spans":["只能逐字截取用户消息"],
+"primary_value":"dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story",
+"tone_ids":["只选允许 id"],"mechanism_id":null,"platform_shape":"{request.platform_shape}",
+"prohibited_bindings":["no_situated_event","no_institutional_assertion",
+"no_user_history_expansion","no_unregistered_resource"]}},
 "creation_proposal":true,"intent_span":"候选用户原话跨度"}}
 
 责任合同：
@@ -1089,10 +1269,13 @@ class DeepSeekGenerator(ContentGenerator):
   用 dramatization。
 - 显式模式为 dramatization 时必须使用它；没有明确演绎要求不得升级为剧情。
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
-- actuality_reflection 的计划只能围绕逐字事实形成一般观察，不能扩写事实。
+- CreativePlanV2 只能选择上述结构字段。topic_spans 必须逐字来自用户消息；禁止写人物设定、
+  事件、对白、动机、因果、品牌立场、门店事实、用户履历、标题、主张或故事梗概。
 - 商品硬事实只来自当前可用商品；没有资料不猜。
 - user_premises 必须包含本轮用户消息且只能逐字复制用户消息；普通聊天不带入。
-- system_creative_plan 不是用户、品牌或经营事实，不能预先编造具体事件。
+- tone_ids 只能从 {json.dumps(request.allowed_tone_ids, ensure_ascii=False)} 选择，至少一个。
+- mechanism_id 只能从 {json.dumps(request.allowed_mechanism_ids, ensure_ascii=False)}
+  选择或为 null；platform_shape 必须逐字为 {request.platform_shape}。
 
 当前品牌：{request.brand.brand_name}
 平台／形式：{request.brand.platform}／{request.brand.media_format}
@@ -1109,22 +1292,19 @@ class DeepSeekGenerator(ContentGenerator):
         request: GenerationInput,
         frame: NarrativeFrame,
         context: BoundaryContext,
+        skeleton: NarrativeSkeleton,
     ) -> str:
-        singleton = self._singleton_slots(
-            request.primary_product, request.media_format
-        )
-        actual_ids = [
-            f"actuality:{index}"
-            for index, _ in enumerate(frame.user_facts, start=1)
-        ]
-        example_order = ["b-spoken", *actual_ids]
         actual_text = "\n".join(
             f"- actuality:{index} = {fact.exact_text}"
             for index, fact in enumerate(frame.user_facts, start=1)
         ) or "（无服务端真人事实块）"
-        source_registry = "\n".join(
+        fact_registry = "\n".join(
+            f"- {record.fact_id}：{record.exact_text}"
+            for record in context.fact_registry
+        ) or "（没有可引用的冻结事实。）"
+        constraint_registry = "\n".join(
             f"- {identifier}：{description}"
-            for identifier, description in context.source_registry
+            for identifier, description in context.constraint_registry
         )
         resource_registry = "\n".join(
             f"- {identifier}：{description}"
@@ -1132,14 +1312,12 @@ class DeepSeekGenerator(ContentGenerator):
         )
         mode_rule = {
             "actuality_reflection": (
-                "你不能输出、改写或概括 actuality_source；只在 spoken_order 和 scene block_refs "
-                "中安排服务端保留块。其余块全为 general_observation，只写独立的一般观察；"
-                "不得补人物身份、关系、对白、动机、前因、结果、地点、持有物或习惯。"
+                "服务端已逐字冻结 actuality_source。你不能输出、改写、概括或安排该块；"
+                "只填写一般观察槽位，不能把原文扩写成新的现实细节。"
             ),
             "general_observation": (
-                "全部块为 general_observation。可以有观点、比喻、幽默和节奏；不得写任何具体人物"
-                "做了什么、说了什么、为何如此、后来怎样、身在何处或拥有什么；也不得用“比如"
-                "她／你……”制造通用名义下的微型生活事件，或暗示受众本人经历过某件事。"
+                "全部槽位都是 general_observation。可以写抽象原则、观点、比喻、幽默和节奏；"
+                "不能写 situated_event，也不能写无精确品牌事实支持的 institutional_assertion。"
             ),
             "hypothesis": (
                 "全部块为 hypothesis，最终可见文字自然保留条件和可能性，不能写成已经发生。"
@@ -1151,21 +1329,62 @@ class DeepSeekGenerator(ContentGenerator):
         }[frame.narrative_mode]
         prior = request.prior_saved_body or "（首次生成）"
         revision = request.revision_instruction or "（首次生成）"
-        expected_type = _MODE_BLOCK_TYPE[frame.narrative_mode]
         block_template = [
             {
-                "block_id": f"b-{slot}",
-                "block_type": expected_type,
-                "slot": slot,
-                "text": "填写该可见字段的完整文字",
-                "source_refs": ["填写登记来源 id"],
-                "linked_scene_ids": ["填写关联 scene id"],
+                "block_id": block.block_id,
+                "text": f"填写 {block.slot} 的完整可见文字",
             }
-            for slot in (*singleton, _SPOKEN_SLOT)
+            for block in skeleton.blocks
         ]
-        return f"""生成一个完整结构化成品。只返回 JSON。
+        scene_template = [
+            {
+                "scene_id": scene.scene_id,
+                "resource_refs": [],
+                "action_text": "填写完整可见画面与动作",
+                "sound_text": "",
+                "production_note": "",
+            }
+            for scene in skeleton.scenes
+        ]
+        frozen_skeleton = {
+            "speaker_ref": _SPEAKER_ID,
+            "blocks": [
+                {
+                    "block_id": block.block_id,
+                    "block_type": block.block_type,
+                    "slot": block.slot,
+                    "fact_refs": list(block.fact_refs),
+                    "constraint_refs": list(block.constraint_refs),
+                    "linked_scene_ids": list(block.linked_scene_ids),
+                }
+                for block in skeleton.blocks
+            ],
+            "service_actuality_blocks": [
+                self._block_document(block)
+                for block in skeleton.service_actuality_blocks
+            ],
+            "scenes": [
+                {
+                    "scene_id": scene.scene_id,
+                    "purpose": scene.purpose,
+                    "block_refs": list(scene.block_refs),
+                    "allowed_resource_refs": list(
+                        scene.allowed_resource_refs
+                    ),
+                }
+                for scene in skeleton.scenes
+            ],
+            "spoken_order": list(skeleton.spoken_order),
+        }
+        plan = (
+            creative_plan_document(request.creative_plan)
+            if request.creative_plan is not None
+            else {}
+        )
+        output_shape = {"blocks": block_template, "scenes": scene_template}
+        return f"""生成一个完整结构化成品。只返回 JSON，且只填服务端给出的文字与资源槽位。
 用户原始前提：{request.weak_seed}
-系统创作计划：{request.system_creative_plan}
+CreativePlanV2：{json.dumps(plan, ensure_ascii=False)}
 本次修改：{revision}
 旧成品（只用于修改对比，不是事实来源）：{prior}
 叙事模式：{frame.narrative_mode}
@@ -1173,47 +1392,39 @@ class DeepSeekGenerator(ContentGenerator):
 服务端真人事实块：
 {actual_text}
 
-品牌与账号：
+品牌与账号表达约束：
 {context.brand_text}
-方法边界：
+方法约束：
 {context.method_text}
-冻结商品事实（引用商品来源的块必须逐字选择其中一整句，不能改数字、SKU、颜色、材质或含义）：
-{context.product_facts_text}
-可引用事实来源：
-{source_registry}
-可用拍摄／制作资源：
+精确冻结事实（只有这些原句能证明现实事实或机构主张）：
+{fact_registry}
+表达约束（只限制怎么说，不能证明发生过什么或机构相信什么）：
+{constraint_registry}
+允许的拍摄／制作资源：
 {resource_registry}
 
 受众价值：{_PRODUCT_VALUE[request.primary_product]}
-平台／形式：{request.brand.platform}／{request.brand.media_format}
+平台／形式：{request.brand.platform}／{request.media_format}
 平台方向：{request.platform_direction.direction}
 
-输出：
-{{"speaker_ref":"{_SPEAKER_ID}",
-"blocks":{json.dumps(block_template, ensure_ascii=False)},
-"spoken_order":{json.dumps(example_order, ensure_ascii=False)},
-"scene_steps":[{{"step_id":"s1","purpose":"cover|scene","actor_refs":[],"resource_refs":["…"],
-"action_text":"…","sound_text":"…","production_note":"…","block_refs":["…"]}}]}}
+服务端冻结骨架（只读，不能在输出中重述或修改）：
+{json.dumps(frozen_skeleton, ensure_ascii=False)}
 
-上面的 blocks 是字段完整性模板，不是成稿：逐项填写文字、来源和真实关联 scene，不得删掉
-任何模板项。不得包含 actuality_source，也不得输出 actuality:* 的文本；服务端会逐字插入。
-generated block 类型必须全部是 {expected_type}。slot 必须恰好有一条：
-{", ".join(singleton)}，另有至少一条 spoken。spoken_order 必须覆盖全部 spoken 和这些服务端
-id：{", ".join(actual_ids) or "无"}。
-每个 block 都关联至少一个 scene，scene 的 block_refs 与 block.linked_scene_ids 完整互相对应；每个
-scene 最多关联三个 block，保持修复单元有界，不能用一个 scene 吞掉整篇。
-source_refs 只能使用登记来源；一般观点／假设／演绎通常引用品牌基线或角色边界，商品事实引用
-对应商品来源并逐字使用登记事实。不得引用用户现实来源承载 Writer 新写文字。
+只返回以下结构：
+{json.dumps(output_shape, ensure_ascii=False)}
 
-scene 恰好一个 cover、至少一个 scene。actor/resource 只用登记 id；现实事实来源永远不是资源。
-生活题材和真人事实不得安排家庭成员、家、厨房、门店现场、家具、照片或现场声音重演。可以按
-内容需要在创作者表达与本次原创抽象构成中自由组织，不固定手机、手写字卡或普通室内。一般
-观察／真人反思的原创抽象构成只使用色块、线条、留白、标点、文字与原创声音组织；不得把任何
-未登记实体画成看似现场证据或默认成拍摄道具。
-brand_account_link 只说明本篇从当前账号边界如何看这个问题，不得新写“品牌相信／一直坚持／
-承诺／倡导”的品牌事实。audience_return 给出可带走的判断，不得假定“你也经历过”某个事件。
-所有用户可见标题、导读、正文、口播、字幕、配文、画面、声音和制作提示都只能来自这些 block
-与 scene；不要暴露 id、类型、来源、规则或审查说明。"""
+输出必须恰好覆盖模板中的每个 block_id 与 scene_id，不能增加或删除字段、id 或条目。
+不要输出 block_type、slot、fact_refs、constraint_refs、linked_scene_ids、purpose、block_refs、
+speaker_ref 或 spoken_order；这些均由服务端冻结。
+资源只能从对应 scene 的 allowed_resource_refs 中选择。用户事实不是拍摄资源。
+fact_refs 指向精确事实；constraint_refs 只能约束语气、角色、方法和平台，不能作为事实许可证。
+general_observation 只写 abstract_principle；situated_event 不因省略人物称谓而成为抽象观点。
+institutional_assertion 必须逐字等于该块允许的精确品牌事实，否则不要写。
+confirmed_fact 必须逐字等于该块允许的精确事实，不得改写。
+hypothesis 必须在每个可见槽位保持条件语气。dramatization 必须在每个可见槽位自然表明演绎，
+且不能绑定真实用户、员工、顾客、品牌历史或未登记资源。
+所有标题、正文、口播、字幕、画面、动作、声音、制作提示和发布配文都来自这些槽位；
+不要暴露内部 id、类型、来源、约束、规则或审查说明。"""
 
     def _reviewer_prompt(
         self,
@@ -1282,16 +1493,20 @@ block 或 scene 完整可见原文的单元素数组，不得截短、拆分或�
 actions_or_events、dialogue、motives、causes、results、times、locations、possessions。
 同一跨度承载多类观察时分别列出，不能改写或概括跨度。
 
-reality_binding 只选：
+observation_type 只选：
+- abstract_principle：抽象原则、观点、价值判断或一般关系理解，不声称一件具体事情已经发生；
+- situated_event：具体或隐含人物在某个情境中的动作、对白、反应、原因或结果；即使省略人物称谓，
+  只要存在一件情境化微事件也选它；
+- institutional_assertion：品牌、公司、门店、账号或组织声称其相信、坚持、倡导、承诺、已实施
+  做法或形成历史；
 - user_actuality：逐字用户真人事实；
-- general_observation：不主张具体事件发生的一般观察、观点或比喻；
 - hypothesis：可见保留条件／可能性的推演；
 - dramatization：可见自然表明是创作演绎；
 - confirmed_fact：冻结品牌／组织／商品状态；
 - uncertain：无法确定。
-这里的 binding 判断的是文字是否主张现实，不是画面采用了什么制作形式。“抽象构图”“色块”
-“排版”本身不是 dramatization；只要没有把具体事件演成已发生事实，应按关联块的
-general_observation 或 hypothesis 判断。possessions 只提取文字主张现实人物持有、或制作确实
+这里的类型判断的是文字语义，不是画面采用了什么制作形式。“抽象构图”“色块”
+“排版”本身不是 dramatization；只要没有把具体事件演成已发生事实，应按
+abstract_principle 或 hypothesis 判断。possessions 只提取文字主张现实人物持有、或制作确实
 需要的实体物件；原创抽象构成中的线条、色块、标点、文字和明确的图形符号不是现实持有物。
 一般题材里只要出现具体人物做事、对白、动机、结果、时间地点或持有物，必须如实提取，不能因
 语气温和而归为空。演绎只有在目标自身存在自然可见提示时才填 dramatization，并把提示逐字放入
@@ -1303,7 +1518,7 @@ unregistered:加简短名称。用户事实来源不是资源。instruction_conf
 只返回：
 {{"observations":[{{"id":"…","target_kind":"block|scene","text_spans":["…"],
 "claims":[{{"category":"relationships","span":"目标内精确子串"}}],
-"reality_binding":"…","resource_refs":[],"dramatization_disclosure_spans":[],
+"observation_type":"…","resource_refs":[],"dramatization_disclosure_spans":[],
 "instruction_conflicts":[],"uncertain":false}}]}}
 
 严格类型：text_spans、resource_refs、dramatization_disclosure_spans 和
@@ -1326,12 +1541,12 @@ instruction_conflicts 必须是纯字符串 JSON 数组；claims 必须是上述
         ):
             raise GenerationFailed("服务端真人事实块无法修改")
         blocks = [
-            self._block_document(block)
+            self._writer_block_document(block)
             for block in core.blocks
             if block.block_id in affected_blocks
         ]
         scenes = [
-            self._scene_document(scene)
+            self._writer_scene_document(scene)
             for scene in core.scene_steps
             if scene.step_id in affected_scenes
         ]
@@ -1350,7 +1565,12 @@ instruction_conflicts 必须是纯字符串 JSON 数组；claims 必须是上述
 NarrativeFrame：{frame.narrative_mode}
 用户要求：{request.weak_seed}
 修改要求：{request.revision_instruction or "（首次生成）"}
-系统创作计划：{request.system_creative_plan}
+CreativePlanV2：{json.dumps(
+    creative_plan_document(request.creative_plan)
+    if request.creative_plan is not None
+    else {},
+    ensure_ascii=False,
+)}
 品牌边界：{context.brand_text}
 冻结商品事实：{context.product_facts_text}
 可用资源：{json.dumps(context.resource_registry, ensure_ascii=False)}
@@ -1358,8 +1578,8 @@ NarrativeFrame：{frame.narrative_mode}
 必须完整替换的 blocks：{json.dumps(blocks, ensure_ascii=False)}
 必须完整替换的 scenes：{json.dumps(scenes, ensure_ascii=False)}
 
-保持每个 block_id、slot、每个 step_id 和 purpose 不变。block_type 仍为
-{_MODE_BLOCK_TYPE[frame.narrative_mode]}。修复后 linked_scene_ids/block_refs 必须完整互相对应。
+保持每个 block_id 和 scene_id 不变。类型、slot、事实、约束、关联和模式均由服务端冻结，
+不得在输出中声明或修改。
 一般观察出现具体真人事件时，重建整个观察块和关联画面，不把失败句塞到别处；真人原文只由
 服务端块承担。资源越界时重建整个相关块与画面，不固定回退手机、字卡或室内。演绎必须在每个
 相关块自然可见为演绎。商品硬事实只能逐字使用冻结登记句。
@@ -1367,7 +1587,8 @@ NarrativeFrame：{frame.narrative_mode}
 只用色块、线条、留白、标点、文字与原创声音组织。账号链接不得新写品牌信念、历史或承诺。
 
 只返回：
-{{"blocks":[完整 block 对象],"scene_steps":[完整 scene 对象]}}"""
+{{"blocks":[只含 block_id 与 text 的完整对象],
+"scenes":[只含 scene_id、resource_refs、action_text、sound_text、production_note 的完整对象]}}"""
 
     @staticmethod
     def _block_document(block: NarrativeBlock) -> dict[str, object]:
@@ -1376,21 +1597,25 @@ NarrativeFrame：{frame.narrative_mode}
             "block_type": block.block_type,
             "slot": block.slot,
             "text": block.text,
-            "source_refs": list(block.source_refs),
+            "fact_refs": list(block.fact_refs),
+            "constraint_refs": list(block.constraint_refs),
             "linked_scene_ids": list(block.linked_scene_ids),
         }
 
     @staticmethod
-    def _scene_document(scene: SceneStep) -> dict[str, object]:
+    def _writer_block_document(
+        block: NarrativeBlock,
+    ) -> dict[str, object]:
+        return {"block_id": block.block_id, "text": block.text}
+
+    @staticmethod
+    def _writer_scene_document(scene: SceneStep) -> dict[str, object]:
         return {
-            "step_id": scene.step_id,
-            "purpose": scene.purpose,
-            "actor_refs": list(scene.actor_refs),
+            "scene_id": scene.step_id,
             "resource_refs": list(scene.resource_refs),
             "action_text": scene.action_text,
             "sound_text": scene.sound_text,
             "production_note": scene.production_note,
-            "block_refs": list(scene.block_refs),
         }
 
     @staticmethod
@@ -1424,62 +1649,7 @@ NarrativeFrame：{frame.narrative_mode}
     def _registered_product_claims(
         product: ProductFact,
     ) -> tuple[str, ...]:
-        subject = product.display_name or product.sku
-        facts = product.facts
-        claims: list[str] = [f"商品编号是 {product.sku}。"]
-        for key, label in (
-            ("category", "品类"),
-            ("material_or_structure", "材质或结构"),
-            ("material", "材质"),
-            ("structure", "结构"),
-            ("silhouette", "轮廓"),
-            ("observable_features", "可观察特征"),
-        ):
-            value = facts.get(key)
-            if isinstance(value, str) and value.strip():
-                claims.append(
-                    f"{subject}已登记的{label}是{value.strip().rstrip('。')}。"
-                )
-        colors = facts.get("colors")
-        if isinstance(colors, list) and colors and all(
-            isinstance(value, str) for value in colors
-        ):
-            claims.append(
-                f"{subject}已登记的颜色是{'、'.join(cast(list[str], colors))}。"
-            )
-        for key, label, unit in (
-            ("sample_weight_m_grams", "M 码当前样衣重量", "克"),
-            (
-                "comparison_single_layer_short_coat_m_grams",
-                "同季同长度单层短外套 M 码对照样衣重量",
-                "克",
-            ),
-        ):
-            value = facts.get(key)
-            if isinstance(value, int):
-                claims.append(f"{subject}已登记的{label}是 {value} {unit}。")
-        for key, yes, no in (
-            (
-                "both_sides_complete",
-                "两面均为完整外观",
-                "未登记为两面均为完整外观",
-            ),
-            (
-                "pockets_functional_both_sides",
-                "两面口袋均可正常使用",
-                "未登记为两面口袋均可正常使用",
-            ),
-        ):
-            value = facts.get(key)
-            if isinstance(value, bool):
-                claims.append(f"{subject}已登记为{yes if value else no}。")
-        boundary = facts.get("weight_boundary")
-        if isinstance(boundary, str) and boundary.strip():
-            claims.append(
-                f"{subject}的重量资料边界是：当前只知道登记样衣的重量差异，"
-                "不能据此归因结构或推断性能、价格、库存、用途和穿着结果。"
-            )
-        return tuple(dict.fromkeys(claims))
+        return registered_product_claims(product)
 
     def _request(
         self,

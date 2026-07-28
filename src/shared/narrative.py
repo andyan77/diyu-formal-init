@@ -21,9 +21,11 @@ NarrativeBlockType: TypeAlias = Literal[
     "dramatization",
 ]
 ReviewTargetKind: TypeAlias = Literal["block", "scene"]
-RealityBinding: TypeAlias = Literal[
+ObservationType: TypeAlias = Literal[
+    "abstract_principle",
+    "situated_event",
+    "institutional_assertion",
     "user_actuality",
-    "general_observation",
     "hypothesis",
     "dramatization",
     "confirmed_fact",
@@ -47,10 +49,12 @@ _BLOCK_TYPES = frozenset(
         "dramatization",
     }
 )
-_REALITY_BINDINGS = frozenset(
+_OBSERVATION_TYPES = frozenset(
     {
+        "abstract_principle",
+        "situated_event",
+        "institutional_assertion",
         "user_actuality",
-        "general_observation",
         "hypothesis",
         "dramatization",
         "confirmed_fact",
@@ -90,7 +94,8 @@ class NarrativeBlock:
     block_type: NarrativeBlockType
     slot: str
     text: str
-    source_refs: tuple[str, ...]
+    fact_refs: tuple[str, ...]
+    constraint_refs: tuple[str, ...]
     linked_scene_ids: tuple[str, ...]
 
     @property
@@ -114,7 +119,7 @@ class ReviewerObservation:
     times: tuple[str, ...]
     locations: tuple[str, ...]
     possessions: tuple[str, ...]
-    reality_binding: RealityBinding
+    observation_type: ObservationType
     resource_refs: tuple[str, ...]
     dramatization_disclosure_spans: tuple[str, ...]
     instruction_conflicts: tuple[str, ...]
@@ -189,6 +194,7 @@ def new_frame(
     mode: NarrativeMode,
     user_fact_spans: Sequence[str],
     product_fact_ids: Sequence[str],
+    brand_fact_ids: Sequence[str] = (),
 ) -> NarrativeFrame:
     facts = tuple(
         FrozenUserFact(f"source:user_actuality:{index}", text)
@@ -202,11 +208,7 @@ def new_frame(
         frame_version=FRAME_VERSION,
         narrative_mode=mode,
         user_facts=facts,
-        allowed_brand_fact_ids=(
-            "source:brand_baseline",
-            "source:role_boundary",
-            "source:organization",
-        ),
+        allowed_brand_fact_ids=tuple(dict.fromkeys(brand_fact_ids)),
         allowed_product_fact_ids=tuple(dict.fromkeys(product_fact_ids)),
     )
 
@@ -231,13 +233,13 @@ def parse_observation(value: object) -> ReviewerObservation:
         raise TypeError("reviewer observation must be an object")
     target_id = _required_string(value.get("id"))
     target_kind = _required_string(value.get("target_kind"))
-    reality_binding = _required_string(value.get("reality_binding"))
+    observation_type = _required_string(value.get("observation_type"))
     uncertain = value.get("uncertain")
     raw_claims = value.get("claims")
     if target_kind not in {"block", "scene"}:
         raise TypeError("reviewer target kind is invalid")
-    if reality_binding not in _REALITY_BINDINGS:
-        raise TypeError("reviewer reality binding is invalid")
+    if observation_type not in _OBSERVATION_TYPES:
+        raise TypeError("reviewer observation type is invalid")
     if not isinstance(uncertain, bool):
         raise TypeError("reviewer uncertainty must be boolean")
     if not isinstance(raw_claims, list):
@@ -279,7 +281,7 @@ def parse_observation(value: object) -> ReviewerObservation:
         times=tuple(grouped["times"]),
         locations=tuple(grouped["locations"]),
         possessions=tuple(grouped["possessions"]),
-        reality_binding=cast(RealityBinding, reality_binding),
+        observation_type=cast(ObservationType, observation_type),
         resource_refs=_string_tuple(value.get("resource_refs")),
         dramatization_disclosure_spans=_string_tuple(
             value.get("dramatization_disclosure_spans")
@@ -297,7 +299,9 @@ def reconcile_observations(
     scene_resource_refs: Mapping[str, tuple[str, ...]],
     observations: Sequence[ReviewerObservation],
     allowed_resource_ids: frozenset[str],
-    exact_product_facts: Mapping[str, frozenset[str]],
+    fact_text_by_id: Mapping[str, str],
+    brand_fact_ids: frozenset[str],
+    allowed_constraint_ids: frozenset[str],
 ) -> tuple[NarrativeIssue, ...]:
     """Deterministically reconcile extracted meaning with one frozen frame."""
     targets: dict[str, tuple[ReviewTargetKind, str]] = {
@@ -370,7 +374,7 @@ def reconcile_observations(
                     next(span for span in semantic_spans if span not in target_text),
                 )
             )
-        if observation.uncertain or observation.reality_binding == "uncertain":
+        if observation.uncertain or observation.observation_type == "uncertain":
             issues.append(
                 NarrativeIssue(
                     observation.target_id,
@@ -390,24 +394,53 @@ def reconcile_observations(
     for missing_id in set(targets) - set(by_id):
         issues.append(NarrativeIssue(missing_id, "review_coverage", missing_id))
 
-    facts_by_id = {fact.source_id: fact.exact_text for fact in frame.user_facts}
+    user_facts_by_id = {
+        fact.source_id: fact.exact_text for fact in frame.user_facts
+    }
+    all_fact_text = dict(fact_text_by_id)
+    all_fact_text.update(user_facts_by_id)
     for block in blocks:
         block_observation = by_id.get(block.block_id)
         if block_observation is None:
             continue
-        if not block.source_refs or any(
-            source_ref not in frame.allowed_fact_ids
-            for source_ref in block.source_refs
+        if any(
+            fact_ref not in frame.allowed_fact_ids
+            or fact_ref not in all_fact_text
+            for fact_ref in block.fact_refs
         ):
             issues.append(
-                NarrativeIssue(block.block_id, "unknown_fact_source", block.text)
+                NarrativeIssue(block.block_id, "unknown_fact_ref", block.text)
+            )
+        if any(
+            constraint_ref not in allowed_constraint_ids
+            for constraint_ref in block.constraint_refs
+        ):
+            issues.append(
+                NarrativeIssue(
+                    block.block_id,
+                    "unknown_constraint_ref",
+                    block.text,
+                )
+            )
+        if any(
+            fact_ref in allowed_constraint_ids for fact_ref in block.fact_refs
+        ):
+            issues.append(
+                NarrativeIssue(
+                    block.block_id,
+                    "constraint_used_as_fact",
+                    block.text,
+                )
             )
         if block.block_type == "actuality_source":
             if (
-                facts_by_id.get(block.source_refs[0] if block.source_refs else "")
+                user_facts_by_id.get(
+                    block.fact_refs[0] if block.fact_refs else ""
+                )
                 != block.text
-                or len(block.source_refs) != 1
-                or block_observation.reality_binding != "user_actuality"
+                or len(block.fact_refs) != 1
+                or block.constraint_refs
+                or block_observation.observation_type != "user_actuality"
             ):
                 issues.append(
                     NarrativeIssue(
@@ -417,7 +450,9 @@ def reconcile_observations(
                     )
                 )
             continue
-        if "source:user_actuality" in " ".join(block.source_refs):
+        if any(
+            fact_ref in user_facts_by_id for fact_ref in block.fact_refs
+        ):
             issues.append(
                 NarrativeIssue(
                     block.block_id,
@@ -426,70 +461,56 @@ def reconcile_observations(
                 )
             )
         if block.block_type == "general_observation":
-            product_sources = tuple(
-                source_ref
-                for source_ref in block.source_refs
-                if source_ref in frame.allowed_product_fact_ids
-            )
-            if block_observation.reality_binding == "confirmed_fact":
-                exact = frozenset(
-                    statement
-                    for source_ref in product_sources
-                    for statement in exact_product_facts.get(source_ref, frozenset())
-                )
-                if not exact or block.text not in exact:
+            if block_observation.observation_type == "confirmed_fact":
+                exact = {
+                    all_fact_text[fact_ref]
+                    for fact_ref in block.fact_refs
+                    if fact_ref in all_fact_text
+                }
+                if block.text not in exact:
                     issues.append(
                         NarrativeIssue(
                             block.block_id,
-                            "unsupported_product_fact",
+                            "unsupported_confirmed_fact",
                             block.text,
                         )
                     )
-            elif block_observation.reality_binding != "general_observation":
+            elif (
+                block_observation.observation_type
+                == "institutional_assertion"
+            ):
+                exact_brand = {
+                    all_fact_text[fact_ref]
+                    for fact_ref in block.fact_refs
+                    if fact_ref in brand_fact_ids
+                    and fact_ref in all_fact_text
+                }
+                if block.text not in exact_brand:
+                    issues.append(
+                        NarrativeIssue(
+                            block.block_id,
+                            "unsupported_institutional_assertion",
+                            block.text,
+                        )
+                    )
+            elif block_observation.observation_type == "situated_event":
                 issues.append(
                     NarrativeIssue(
                         block.block_id,
-                        "concrete_event_in_observation",
+                        "situated_event_in_observation",
                         block.text,
                     )
                 )
-            person_event = (
-                (block_observation.people or block_observation.relationships)
-                and any(
-                    (
-                        block_observation.actions_or_events,
-                        block_observation.motives,
-                        block_observation.causes,
-                        block_observation.results,
-                    )
-                )
-            )
-            concrete = (
-                block_observation.dialogue,
-                block_observation.times,
-                block_observation.locations,
-                block_observation.possessions,
-            )
-            if (
-                block_observation.reality_binding == "general_observation"
-                and (person_event or any(concrete))
-            ):
-                fragment = (
-                    block_observation.actions_or_events
-                    or block_observation.motives
-                    or block_observation.causes
-                    or block_observation.results
-                    or next(group for group in concrete if group)
-                )[0]
+            elif block_observation.observation_type != "abstract_principle":
                 issues.append(
                     NarrativeIssue(
                         block.block_id,
-                        "concrete_event_in_observation",
-                        fragment,
+                        "observation_mode_drift",
+                        block.text,
                     )
                 )
         elif block.block_type == "hypothesis":
-            if block_observation.reality_binding != "hypothesis":
+            if block_observation.observation_type != "hypothesis":
                 issues.append(
                     NarrativeIssue(
                         block.block_id,
@@ -497,22 +518,21 @@ def reconcile_observations(
                         block.text,
                     )
                 )
-        elif block.block_type == "dramatization":
-            if (
-                block_observation.reality_binding != "dramatization"
-                or not block_observation.dramatization_disclosure_spans
-                or any(
-                    span not in block.text
-                    for span in block_observation.dramatization_disclosure_spans
+        elif block.block_type == "dramatization" and (
+            block_observation.observation_type != "dramatization"
+            or not block_observation.dramatization_disclosure_spans
+            or any(
+                span not in block.text
+                for span in block_observation.dramatization_disclosure_spans
+            )
+        ):
+            issues.append(
+                NarrativeIssue(
+                    block.block_id,
+                    "dramatization_not_visible",
+                    block.text,
                 )
-            ):
-                issues.append(
-                    NarrativeIssue(
-                        block.block_id,
-                        "dramatization_not_visible",
-                        block.text,
-                    )
-                )
+            )
 
     for scene_id, declared_resources in scene_resource_refs.items():
         scene_observation = by_id.get(scene_id)
@@ -523,7 +543,7 @@ def reconcile_observations(
             for block in blocks
             if scene_id in block.linked_scene_ids
         }
-        if scene_observation.reality_binding == "user_actuality":
+        if scene_observation.observation_type == "user_actuality":
             issues.append(
                 NarrativeIssue(
                     scene_id,
@@ -535,47 +555,26 @@ def reconcile_observations(
             "actuality_reflection",
             "general_observation",
         }:
-            if scene_observation.reality_binding not in {
-                "general_observation",
+            if scene_observation.observation_type not in {
+                "abstract_principle",
                 "confirmed_fact",
             }:
+                reason = (
+                    "unsupported_institutional_assertion"
+                    if scene_observation.observation_type
+                    == "institutional_assertion"
+                    else "scene_mode_drift"
+                )
                 issues.append(
                     NarrativeIssue(
                         scene_id,
-                        "scene_mode_drift",
+                        reason,
                         scene_text[scene_id],
                     )
                 )
-            unsupported_scene_detail = (
-                scene_observation.relationships
-                or scene_observation.dialogue
-                or scene_observation.motives
-                or scene_observation.causes
-                or scene_observation.results
-                or scene_observation.times
-                or scene_observation.locations
-                or scene_observation.possessions
-            )
-            unregistered_people = (
-                scene_observation.people
-                and "resource:creator_expression"
-                not in scene_observation.resource_refs
-            )
-            if unsupported_scene_detail or unregistered_people:
-                fragment = (
-                    unsupported_scene_detail
-                    or scene_observation.people
-                )[0]
-                issues.append(
-                    NarrativeIssue(
-                        scene_id,
-                        "unregistered_scene_actuality",
-                        fragment,
-                    )
-                )
         elif frame.narrative_mode == "hypothesis":
-            if scene_observation.reality_binding not in {
-                "general_observation",
+            if scene_observation.observation_type not in {
+                "abstract_principle",
                 "hypothesis",
                 "confirmed_fact",
             }:
@@ -587,8 +586,9 @@ def reconcile_observations(
                     )
                 )
         elif (
-            scene_observation.reality_binding == "dramatization"
-            and "dramatization" not in linked_types
+            scene_observation.observation_type != "dramatization"
+            or "dramatization" not in linked_types
+            or not scene_observation.dramatization_disclosure_spans
         ):
             issues.append(
                 NarrativeIssue(

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from src.ports.content_generator import ContentGenerator
+from src.shared.creative_plan import (
+    ACCOUNT_BASELINE_TONE_ID,
+    build_creative_plan,
+    platform_shape,
+)
 from src.shared.narrative import visible_digest
 from src.shared.types import (
     ContentProduct,
@@ -83,7 +88,25 @@ class DeterministicContentGenerator(ContentGenerator):
             user_premises=(text,),
             narrative_mode=request.explicit_narrative_mode
             or "general_observation",
-            system_creative_plan="从当前可信上下文自主选择安全的一般观察、结构和平台组织。",
+            creative_plan=build_creative_plan(
+                topic_spans=(text,),
+                primary_value=product,
+                tone_ids=(
+                    request.allowed_tone_ids
+                    or (ACCOUNT_BASELINE_TONE_ID,)
+                ),
+                mechanism_id=(
+                    request.allowed_mechanism_ids[0]
+                    if request.allowed_mechanism_ids
+                    else None
+                ),
+                target_shape=(
+                    request.platform_shape
+                    or platform_shape(
+                        request.target, request.brand.media_format
+                    )
+                ),
+            ),
             primary_product=product,
             creation_proposal=True,
             proposed_intent_span=text,

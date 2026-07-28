@@ -1092,10 +1092,16 @@ def test_the_collaboration_note_never_becomes_material_the_product_talks_about(
             for product in captured[0].products
         )
     )
+    initial_context = BoundaryContext.from_request(
+        captured[0], initial_frame
+    )
     prompt = adapter._writer_prompt(
         captured[0],
         initial_frame,
-        BoundaryContext.from_request(captured[0], initial_frame),
+        initial_context,
+        adapter._narrative_skeleton(
+            captured[0], initial_frame, initial_context
+        ),
     )
     assert note in prompt
     assert "私人协作偏好说明只调整协作方式与表达取舍，成品中不得出现它的原文、转述或对它的解释" in prompt
@@ -1106,10 +1112,16 @@ def test_the_collaboration_note_never_becomes_material_the_product_talks_about(
             for product in captured[-1].products
         )
     )
+    revised_context = BoundaryContext.from_request(
+        captured[-1], revised_frame
+    )
     assert note not in adapter._writer_prompt(
         captured[-1],
         revised_frame,
-        BoundaryContext.from_request(captured[-1], revised_frame),
+        revised_context,
+        adapter._narrative_skeleton(
+            captured[-1], revised_frame, revised_context
+        ),
     )
     _clear_preference(app_database_url, USER_ID)
 

@@ -23,6 +23,10 @@ from src.infrastructure.seed_demo import (
     TENANT_ID,
     USER_ID,
 )
+from src.shared.creative_plan import (
+    ACCOUNT_BASELINE_TONE_ID,
+    build_creative_plan,
+)
 from src.shared.errors import GenerationFailed
 from src.shared.narrative import NarrativeFrame, frame_document, visible_digest
 from src.shared.types import (
@@ -41,9 +45,31 @@ _G4_FACT = "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
 _G5 = "今天不知道发什么，帮我做条小红书。"
 _G6 = "把我去年创业最困难的那个月写出来。"
 _G7 = "别讲道理，荒诞一点。"
+_BAD_PLAN = "帮我生成一篇关系文案。"
 
 _CAPTURED_FRAMES: list[NarrativeFrame] = []
+_CAPTURED_PLANS: list[object] = []
 _CALLS = {"intake": 0, "writer": 0, "reviewer": 0}
+
+
+def _plan(
+    request: ConversationInput,
+    product: str,
+) -> object:
+    return build_creative_plan(
+        topic_spans=(request.message,),
+        primary_value=cast(Any, product),
+        tone_ids=(
+            request.allowed_tone_ids
+            or (ACCOUNT_BASELINE_TONE_ID,)
+        ),
+        mechanism_id=(
+            request.allowed_mechanism_ids[0]
+            if request.allowed_mechanism_ids
+            else None
+        ),
+        target_shape=request.platform_shape,
+    )
 
 
 class _UI06LifecycleGenerator(DeterministicContentGenerator):
@@ -57,7 +83,7 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
                 "模型错误地认为可以直接创作。",
                 user_premises=(request.message,),
                 narrative_mode="general_observation",
-                system_creative_plan="错误提议",
+                creative_plan=cast(Any, _plan(request, "brand_life_narrative")),
                 primary_product="brand_life_narrative",
                 creation_proposal=True,
                 proposed_intent_span="帮我生成一篇小红书文案",
@@ -66,6 +92,18 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
             return ConversationDecision(
                 "question",
                 "那个月具体发生了哪一件最让你觉得困难的事？",
+            )
+        if request.message == _BAD_PLAN:
+            return ConversationDecision(
+                "ready",
+                "模型夹带了并不存在的情节。",
+                user_premises=(request.message,),
+                narrative_mode="general_observation",
+                creative_plan=replace(
+                    cast(Any, _plan(request, "brand_life_narrative")),
+                    topic_spans=("饭桌上一句话让两个人都沉默。",),
+                ),
+                primary_product="brand_life_narrative",
             )
         fact_spans = (_G4_FACT,) if request.message == _G4 else ()
         return ConversationDecision(
@@ -79,10 +117,16 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
                 else request.explicit_narrative_mode
                 or "general_observation"
             ),
-            system_creative_plan=(
-                "保留用户现实原话；其余内容只形成一般观察。"
-                if fact_spans
-                else "依据可信品牌上下文自主选择安全切口与完整结构。"
+            creative_plan=cast(
+                Any,
+                _plan(
+                    request,
+                    (
+                        "product_truth"
+                        if request.message == _G2
+                        else "brand_life_narrative"
+                    ),
+                ),
             ),
             primary_product=(
                 "product_truth"
@@ -98,6 +142,7 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
             raise GenerationFailed("受控失败")
         assert request.narrative_frame is not None
         _CAPTURED_FRAMES.append(request.narrative_frame)
+        _CAPTURED_PLANS.append(request.creative_plan)
         artifact = super().generate(request)
         additions = [
             fact.exact_text
@@ -243,6 +288,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _CAPTURED_FRAMES.clear()
+    _CAPTURED_PLANS.clear()
     _CALLS.update(intake=0, writer=0, reviewer=0)
     auth = ProductionAuthRepository(app_database_url)
     token = auth.create_tenant_session(
@@ -260,6 +306,16 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert g1[-1]["kind"] == "chat"
         assert _counts(app_database_url) == before_g1
         assert _CALLS == {"intake": 1, "writer": 0, "reviewer": 0}
+        time.sleep(2.05)
+
+        bad_plan_before = _counts(app_database_url)
+        bad_plan_calls = dict(_CALLS)
+        bad_plan = _events(client, _BAD_PLAN)
+        assert bad_plan[-1]["event"] == "failed"
+        assert _counts(app_database_url) == bad_plan_before
+        assert _CALLS["intake"] == bad_plan_calls["intake"] + 1
+        assert _CALLS["writer"] == bad_plan_calls["writer"]
+        assert _CALLS["reviewer"] == bad_plan_calls["reviewer"]
         time.sleep(2.05)
 
         task_ids: dict[str, UUID] = {}
@@ -306,6 +362,10 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             "source_turn": 0,
             "intent_span": "帮我发条小红书",
         }
+        plan = snapshot["creative_plan_v2"]
+        assert isinstance(plan, dict)
+        assert plan["plan_version"] == "creative-plan-v2"
+        assert "system_creative_plan" not in snapshot
 
         forbidden_frame_change = client.post(
             f"/api/v1/tasks/{g4_task_id}/revisions",
@@ -341,6 +401,8 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert "荒诞表达" in v2["body"]
         assert len(_CAPTURED_FRAMES) >= 2
         assert frame_document(_CAPTURED_FRAMES[-1]) == frame
+        assert len(_CAPTURED_PLANS) >= 5
+        assert _CAPTURED_PLANS[-1] == _CAPTURED_PLANS[2]
 
         v1 = client.get(
             f"/api/v1/tasks/{g4_task_id}/versions/1",

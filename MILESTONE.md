@@ -1,7 +1,31 @@
 # 当前里程碑
 
-- 当前里程碑：`UI-07` 自然创作提交门与叙事真实性闭环。
-- 状态：`BLOCKED`。`UI-06` 已在本次原子状态交接中置为
+- 当前里程碑：`UI-08` 创作计划、事实依据与叙事观察分离闭环。
+- 状态：`ACTIVE`。`UI-07` 已在本次原子交接中置为 `SUPERSEDED → UI-08`；这只表示
+  UI-07 的自由文本创作计划、宽泛来源、模型自建骨架和混合 Reviewer 类型由 UI-08 的四项
+  结构合同承接，不表示 UI-08 已成功。UI-07 的 Gate 成果、真实 G3 失败、`170 passed`、
+  本地提交与 `BLOCKED` 证据全部保留。
+- 当前 Git 基线：本地 `HEAD=c4f2f22dd55def8998061e977cfba2517f4935e0`，
+  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，本地领先 3 个提交且启动时
+  工作树干净；UI-07 实现提交为 `03b710a2420397ac31d8d890a4ebc762f677232b`。
+- 生产启动复核：部署仓库仍为干净的 `845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，
+  镜像 `diyu-saas:845f632…`、摘要 `sha256:1171b153cbc709a760caf4a5db1fb14fe00e0bca3ef9c7b79c85f737a3a6bdb9`，
+  schema `20260801_28`，回环 readiness `ready`、公网 `200`。UI-07 未 push、CI 或部署。
+- 当前目标：先以 `CreativePlanV2`、`fact_refs/constraint_refs`、服务端确定性 block/scene
+  骨架及 `abstract_principle/situated_event/institutional_assertion` 修复四项共享结构；
+  结构测试通过后才用当前 DeepSeek Writer 对 G3/G4/D1 各做一次无持久化原始输出预检。
+- 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
+- 当前任务包：`docs/UI-08-创作计划事实依据与叙事观察分离闭环执行包.md`
+- 剩余验收：四项结构反证、当前 Writer 三卡、条件性唯一候选 Writer 对比、Reviewer 三条
+  资格样本、完整复审、G7 不变量、最终本地门、两审、唯一 CI、同 SHA 生产验收与回退。
+- 当前边界：结构与真实模型预检全部通过前不 push、不触发 CI、不部署、不修改生产；不立即
+  换模，不补现有 Prompt，不增加第二候选、fallback、迁移或测试平台。
+- 唯一下一动作：完成四项结构合同和既有体系内的最小反证，再进入当前 Writer 单次预检。
+
+## UI-07 被 UI-08 取代结论（2026-07-28，历史完整保留）
+
+- 里程碑：`UI-07` 自然创作提交门与叙事真实性闭环。
+- 状态：`SUPERSEDED → UI-08`。此前 `BLOCKED` 事实保持。`UI-06` 已在 UI-07 启动时置为
   `SUPERSEDED → UI-07`；这只表示旧的“模型 `ready` 直接授权创建任务”路径由前置
   `CreationIntentGate` 替代，不表示 UI-07 已成功。UI-06 的真实 G1 失败、唯一生产候选、
   CI、备份、部署、回退、清理与 `BLOCKED` 证据全部原样保留。

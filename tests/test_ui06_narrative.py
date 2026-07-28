@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
@@ -9,6 +10,8 @@ from src.shared.errors import DomainError
 from src.shared.narrative import (
     FRAME_VERSION,
     NarrativeBlock,
+    NarrativeBlockType,
+    ObservationType,
     ReviewerObservation,
     frame_document,
     frame_from_document,
@@ -22,13 +25,37 @@ from src.shared.types import (
     DirectionSelection,
 )
 
+_CONSTRAINTS = frozenset(
+    {
+        "source:brand_baseline",
+        "source:role_boundary",
+        "source:organization",
+    }
+)
+_SCENE_TEXT = "抽象色块沿阅读顺序展开。"
 
-def _block_observation(
-    block: NarrativeBlock,
+
+def _block(
+    text: str,
     *,
-    binding: str = "general_observation",
-    people: tuple[str, ...] = (),
-    relationships: tuple[str, ...] = (),
+    block_type: str = "general_observation",
+    fact_refs: tuple[str, ...] = (),
+) -> NarrativeBlock:
+    return NarrativeBlock(
+        block_id="b1",
+        block_type=cast(NarrativeBlockType, block_type),
+        slot="spoken",
+        text=text,
+        fact_refs=fact_refs,
+        constraint_refs=("source:brand_baseline",),
+        linked_scene_ids=("s1",),
+    )
+
+
+def _observation(
+    block: NarrativeBlock,
+    observation_type: ObservationType = "abstract_principle",
+    *,
     actions: tuple[str, ...] = (),
     disclosure: tuple[str, ...] = (),
 ) -> ReviewerObservation:
@@ -36,8 +63,8 @@ def _block_observation(
         target_id=block.block_id,
         target_kind="block",
         text_spans=(block.text,),
-        people=people,
-        relationships=relationships,
+        people=(),
+        relationships=(),
         actions_or_events=actions,
         dialogue=(),
         motives=(),
@@ -46,7 +73,7 @@ def _block_observation(
         times=(),
         locations=(),
         possessions=(),
-        reality_binding=binding,  # type: ignore[arg-type]
+        observation_type=observation_type,
         resource_refs=(),
         dramatization_disclosure_spans=disclosure,
         instruction_conflicts=(),
@@ -55,14 +82,14 @@ def _block_observation(
 
 
 def _scene_observation(
-    text: str,
     *,
+    observation_type: ObservationType = "abstract_principle",
     resources: tuple[str, ...] = ("resource:original_composition",),
 ) -> ReviewerObservation:
     return ReviewerObservation(
         target_id="s1",
         target_kind="scene",
-        text_spans=(text,),
+        text_spans=(_SCENE_TEXT,),
         people=(),
         relationships=(),
         actions_or_events=(),
@@ -73,7 +100,7 @@ def _scene_observation(
         times=(),
         locations=(),
         possessions=(),
-        reality_binding="general_observation",
+        observation_type=observation_type,
         resource_refs=resources,
         dramatization_disclosure_spans=(),
         instruction_conflicts=(),
@@ -87,17 +114,18 @@ def _issues(
     observation: ReviewerObservation,
     *,
     scene_observation: ReviewerObservation | None = None,
+    fact_text_by_id: dict[str, str] | None = None,
+    brand_fact_ids: frozenset[str] = frozenset(),
 ) -> set[str]:
     assert not isinstance(frame, dict)
-    scene_text = "抽象色块沿阅读顺序展开。"
     issues = reconcile_observations(
         frame=frame,  # type: ignore[arg-type]
         blocks=(block,),
-        scene_text={"s1": scene_text},
+        scene_text={"s1": _SCENE_TEXT},
         scene_resource_refs={"s1": ("resource:original_composition",)},
         observations=(
             observation,
-            scene_observation or _scene_observation(scene_text),
+            scene_observation or _scene_observation(),
         ),
         allowed_resource_ids=frozenset(
             {
@@ -105,7 +133,9 @@ def _issues(
                 "resource:original_composition",
             }
         ),
-        exact_product_facts={},
+        fact_text_by_id=fact_text_by_id or {},
+        brand_fact_ids=brand_fact_ids,
+        allowed_constraint_ids=_CONSTRAINTS,
     )
     return {issue.reason for issue in issues}
 
@@ -114,7 +144,7 @@ def test_frame_v1_round_trips_and_legacy_tasks_are_conservative() -> None:
     frame = new_frame(
         "actuality_reflection",
         ("今天店里忙了一天，回家还因为谁洗碗拌了两句。",),
-        ("source:product:ZX-C218",),
+        ("fact:product:one",),
     )
     assert frame.frame_version == FRAME_VERSION
     assert frame_from_document(frame_document(frame)) == frame
@@ -124,11 +154,7 @@ def test_frame_v1_round_trips_and_legacy_tasks_are_conservative() -> None:
 
 def test_frame_rejects_actuality_without_exact_source_and_nonactual_with_source() -> None:
     actual = frame_document(
-        new_frame(
-            "actuality_reflection",
-            ("今天店里忙了一天。",),
-            (),
-        )
+        new_frame("actuality_reflection", ("今天店里忙了一天。",), ())
     )
     actual["user_facts"] = []
     with pytest.raises(DomainError, match="缺少冻结原文"):
@@ -182,41 +208,64 @@ def test_only_an_explicit_registered_story_mechanism_forces_dramatization() -> N
 
 def test_mutation_removing_dramatization_disclosure_fails() -> None:
     frame = new_frame("dramatization", (), ())
-    block = NarrativeBlock(
-        "b1",
-        "dramatization",
-        "spoken",
+    block = _block(
         "婆婆把桌上的两张牌翻了过来。",
-        ("source:brand_baseline",),
-        ("s1",),
+        block_type="dramatization",
     )
     assert "dramatization_not_visible" in _issues(
         frame,
         block,
-        _block_observation(block, binding="dramatization"),
+        _observation(block, "dramatization"),
     )
 
 
-def test_mutation_turning_general_observation_into_user_event_fails() -> None:
+def test_implicit_micro_event_fails_in_general_observation() -> None:
     frame = new_frame("general_observation", (), ())
-    block = NarrativeBlock(
-        "b1",
-        "general_observation",
-        "spoken",
-        "我婆婆每天替我带孩子。",
-        ("source:brand_baseline",),
-        ("s1",),
-    )
-    assert "concrete_event_in_observation" in _issues(
+    block = _block("饭桌上一句话让两个人都沉默。")
+    assert "situated_event_in_observation" in _issues(
         frame,
         block,
-        _block_observation(
+        _observation(
             block,
-            people=("我婆婆",),
-            relationships=("婆媳",),
-            actions=("每天替我带孩子",),
+            "situated_event",
+            actions=("饭桌上一句话让两个人都沉默",),
         ),
     )
+
+
+def test_unsupported_institutional_assertion_cannot_use_constraint_as_fact() -> None:
+    frame = new_frame("general_observation", (), ())
+    block = _block("笛语相信婆媳关系需要换位思考。")
+    assert "unsupported_institutional_assertion" in _issues(
+        frame,
+        block,
+        _observation(block, "institutional_assertion"),
+    )
+
+
+def test_exact_brand_fact_can_support_institutional_assertion() -> None:
+    text = "笛语相信婆媳关系需要换位思考。"
+    fact_id = "fact:brand:one"
+    frame = new_frame(
+        "general_observation",
+        (),
+        (),
+        (fact_id,),
+    )
+    block = _block(text, fact_refs=(fact_id,))
+    assert not _issues(
+        frame,
+        block,
+        _observation(block, "institutional_assertion"),
+        fact_text_by_id={fact_id: text},
+        brand_fact_ids=frozenset({fact_id}),
+    )
+
+
+def test_abstract_principle_is_not_misclassified_as_event() -> None:
+    frame = new_frame("general_observation", (), ())
+    block = _block("换位思考不等于没有边界。")
+    assert not _issues(frame, block, _observation(block))
 
 
 def test_mutation_using_user_actuality_as_a_filming_resource_fails() -> None:
@@ -226,50 +275,34 @@ def test_mutation_using_user_actuality_as_a_filming_resource_fails() -> None:
         (),
     )
     block = NarrativeBlock(
-        "actuality:1",
-        "actuality_source",
-        "spoken",
-        "今天店里忙了一天。",
-        ("source:user_actuality:1",),
-        ("s1",),
+        block_id="actuality:1",
+        block_type="actuality_source",
+        slot="spoken",
+        text="今天店里忙了一天。",
+        fact_refs=("source:user_actuality:1",),
+        constraint_refs=(),
+        linked_scene_ids=("s1",),
     )
     assert "unsupported_resource" in _issues(
         frame,
         block,
-        _block_observation(block, binding="user_actuality"),
+        _observation(block, "user_actuality"),
         scene_observation=_scene_observation(
-            "抽象色块沿阅读顺序展开。",
-            resources=("source:user_actuality:1",),
+            resources=("source:user_actuality:1",)
         ),
     )
 
 
-def test_scene_observation_cannot_smuggle_a_real_person_or_relationship() -> None:
-    frame = new_frame(
-        "actuality_reflection",
-        ("今天店里忙了一天。",),
-        (),
-    )
-    block = NarrativeBlock(
-        "actuality:1",
-        "actuality_source",
-        "spoken",
-        "今天店里忙了一天。",
-        ("source:user_actuality:1",),
-        ("s1",),
-    )
-    observed_scene = replace(
-        _scene_observation("抽象色块沿阅读顺序展开。"),
-        people=("丈夫",),
-        relationships=("夫妻",),
-        actions_or_events=("在厨房洗碗",),
-        resource_refs=("resource:original_composition",),
-    )
-    assert "unregistered_scene_actuality" in _issues(
+def test_scene_situated_event_is_not_hidden_by_missing_explicit_people() -> None:
+    frame = new_frame("general_observation", (), ())
+    block = _block("换位思考不等于没有边界。")
+    assert "scene_mode_drift" in _issues(
         frame,
         block,
-        _block_observation(block, binding="user_actuality"),
-        scene_observation=observed_scene,
+        _observation(block),
+        scene_observation=_scene_observation(
+            observation_type="situated_event"
+        ),
     )
 
 
@@ -280,68 +313,58 @@ def test_mutation_changing_actuality_block_fails_against_frozen_frame() -> None:
         (),
     )
     block = NarrativeBlock(
-        "actuality:1",
-        "actuality_source",
-        "spoken",
-        "今天店里忙了一天，丈夫最后把碗洗了。",
-        ("source:user_actuality:1",),
-        ("s1",),
+        block_id="actuality:1",
+        block_type="actuality_source",
+        slot="spoken",
+        text="今天店里忙了一天，丈夫最后把碗洗了。",
+        fact_refs=("source:user_actuality:1",),
+        constraint_refs=(),
+        linked_scene_ids=("s1",),
     )
     assert "actuality_changed" in _issues(
         frame,
         block,
-        _block_observation(block, binding="user_actuality"),
+        _observation(block, "user_actuality"),
     )
     changed_frame = replace(
         frame,
         user_facts=(
-            replace(
-                frame.user_facts[0],
-                exact_text="今天店里不忙。",
-            ),
+            replace(frame.user_facts[0], exact_text="今天店里不忙。"),
         ),
     )
     assert frame_document(changed_frame) != frame_document(frame)
 
 
-@pytest.mark.parametrize(
-    "mutation",
-    ("missing", "partial_span", "unknown_span"),
-)
+@pytest.mark.parametrize("mutation", ("missing", "partial_span", "unknown_span"))
 def test_mutation_sparse_or_nonexistent_reviewer_span_fails(
     mutation: str,
 ) -> None:
     frame = new_frame("general_observation", (), ())
-    block = NarrativeBlock(
-        "b1",
-        "general_observation",
-        "spoken",
-        "边界像标点，停顿不等于敌意。",
-        ("source:brand_baseline",),
-        ("s1",),
-    )
-    observation = _block_observation(block)
+    block = _block("边界像标点，停顿不等于敌意。")
+    observation = _observation(block)
     observations: tuple[ReviewerObservation, ...]
     if mutation == "missing":
-        observations = (_scene_observation("抽象色块沿阅读顺序展开。"),)
+        observations = (_scene_observation(),)
     elif mutation == "partial_span":
         observations = (
             replace(observation, text_spans=("边界像标点",)),
-            _scene_observation("抽象色块沿阅读顺序展开。"),
+            _scene_observation(),
         )
     else:
         observations = (
             replace(observation, text_spans=("不存在的跨度",)),
-            _scene_observation("抽象色块沿阅读顺序展开。"),
+            _scene_observation(),
         )
     issues = reconcile_observations(
         frame=frame,
         blocks=(block,),
-        scene_text={"s1": "抽象色块沿阅读顺序展开。"},
+        scene_text={"s1": _SCENE_TEXT},
         scene_resource_refs={"s1": ("resource:original_composition",)},
         observations=observations,
         allowed_resource_ids=frozenset({"resource:original_composition"}),
-        exact_product_facts={},
+        fact_text_by_id={},
+        brand_fact_ids=frozenset(),
+        allowed_constraint_ids=_CONSTRAINTS,
     )
     assert {"review_coverage", "missing_exact_span"} & {
         issue.reason for issue in issues

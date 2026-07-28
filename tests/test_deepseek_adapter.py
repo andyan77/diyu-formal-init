@@ -9,7 +9,13 @@ import httpx
 import pytest
 
 from src.brain.platform_directions import direction_for
+from src.shared.creative_plan import (
+    ACCOUNT_BASELINE_TONE_ID,
+    build_creative_plan,
+    creative_plan_document,
+)
 from src.shared.errors import GenerationFailed
+from src.shared.factual_basis import product_fact_records
 from src.shared.narrative import NarrativeFrame, new_frame, visible_digest
 from src.shared.types import (
     ActiveAsset,
@@ -122,7 +128,15 @@ def _request(
         products=products,
         prior_saved_body=prior_saved_body,
         narrative_frame=selected_frame,
-        system_creative_plan="用留白和轻微幽默讨论关系中的边界，不创造生活事件。",
+        creative_plan=build_creative_plan(
+            topic_spans=(
+                "帮我写条婆媳主题的小红书，别狗血，也不要把任何一方写成反派。",
+            ),
+            primary_value="brand_life_narrative",
+            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            mechanism_id=None,
+            target_shape="xiaohongshu_graphic:graphic",
+        ),
     )
 
 
@@ -141,6 +155,18 @@ def _completion(document: object, tokens: int = 0) -> FakeResponse:
     return FakeResponse(200, payload)
 
 
+def _intake_plan(message: str) -> dict[str, object]:
+    return creative_plan_document(
+        build_creative_plan(
+            topic_spans=(message,),
+            primary_value="brand_life_narrative",
+            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            mechanism_id=None,
+            target_shape="xiaohongshu_graphic:graphic",
+        )
+    )
+
+
 def _mode_text(mode: str, value: str) -> str:
     if mode == "hypothesis":
         return f"如果先停十秒，{value}也许会换一种走向。"
@@ -150,11 +176,6 @@ def _mode_text(mode: str, value: str) -> str:
 
 
 def _core(frame: NarrativeFrame) -> dict[str, object]:
-    generated_type = (
-        "general_observation"
-        if frame.narrative_mode == "actuality_reflection"
-        else frame.narrative_mode
-    )
     values = {
         "title": "关系不是评判赛",
         "natural_guide": "把不同位置放在同一张纸上看，而不是忙着判输赢。",
@@ -164,94 +185,71 @@ def _core(frame: NarrativeFrame) -> dict[str, object]:
         "brand_account_link": "这个账号愿意把复杂关系讲得不急不躁。",
         "spoken": "两种在意可以同时存在，不必把任何一方写成反派。",
     }
-    scene_for_slot = {
-        "title": "s-cover",
-        "natural_guide": "s-body",
-        "persona_observation": "s-body",
-        "spoken": "s-body",
-        "release_caption": "s-tail",
-        "audience_return": "s-tail",
-        "brand_account_link": "s-tail",
-    }
-    blocks: list[dict[str, object]] = []
-    for slot, value in values.items():
-        block_id = f"b-{slot}"
-        scene_ids = [scene_for_slot[slot]]
-        if slot == "spoken" and frame.user_facts:
-            scene_ids.append("s-fact")
-        blocks.append(
-            {
-                "block_id": block_id,
-                "block_type": generated_type,
-                "slot": slot,
-                "text": _mode_text(frame.narrative_mode, value),
-                "source_refs": ["source:brand_baseline"],
-                "linked_scene_ids": scene_ids,
-            }
-        )
-    actual_ids = [
-        f"actuality:{index}"
-        for index, _ in enumerate(frame.user_facts, start=1)
+    blocks = [
+        {
+            "block_id": f"b-{slot}",
+            "text": _mode_text(frame.narrative_mode, value),
+        }
+        for slot, value in values.items()
     ]
+    scene_prefix = (
+        "情境演绎："
+        if frame.narrative_mode == "dramatization"
+        else (
+            "如果采用这种表达，"
+            if frame.narrative_mode == "hypothesis"
+            else ""
+        )
+    )
     scenes: list[dict[str, object]] = [
         {
-            "step_id": "s-cover",
-            "purpose": "cover",
-            "actor_refs": [],
+            "scene_id": "s-cover",
             "resource_refs": ["resource:original_composition"],
-            "action_text": "两组色块保留距离，标题落在中间留白。",
+            "action_text": scene_prefix
+            + "两组色块保留距离，标题落在中间留白。",
             "sound_text": "",
             "production_note": "使用原创排版和留白。",
-            "block_refs": ["b-title"],
         },
         {
-            "step_id": "s-body",
-            "purpose": "scene",
-            "actor_refs": [],
+            "scene_id": "s-guide",
             "resource_refs": ["resource:original_composition"],
-            "action_text": "抽象标点沿阅读顺序展开，不模拟现实家庭现场。",
+            "action_text": scene_prefix + "抽象标点沿阅读顺序展开。",
             "sound_text": "仅使用不指向现实场景的原创节奏。",
             "production_note": "使用原创图形和文字层级。",
-            "block_refs": [
-                "b-natural_guide",
-                "b-persona_observation",
-                "b-spoken",
-            ],
         },
         {
-            "step_id": "s-tail",
-            "purpose": "scene",
-            "actor_refs": [],
+            "scene_id": "s-contract",
             "resource_refs": ["resource:original_composition"],
-            "action_text": "末段缩小色块并留下开放结尾。",
+            "action_text": scene_prefix + "三组标点保持各自位置。",
+            "sound_text": "",
+            "production_note": "使用原创排版建立阅读层级。",
+        },
+        {
+            "scene_id": "s-spoken",
+            "resource_refs": ["resource:original_composition"],
+            "action_text": scene_prefix + "抽象线条沿口播节奏展开。",
+            "sound_text": "使用原创节奏。",
+            "production_note": "不使用现实现场素材。",
+        },
+        {
+            "scene_id": "s-release",
+            "resource_refs": ["resource:original_composition"],
+            "action_text": scene_prefix + "末段缩小色块并留下开放结尾。",
             "sound_text": "",
             "production_note": "使用原创排版收束阅读节奏。",
-            "block_refs": [
-                "b-release_caption",
-                "b-audience_return",
-                "b-brand_account_link",
-            ],
         },
     ]
-    if actual_ids:
+    for index, _ in enumerate(frame.user_facts, start=1):
         scenes.append(
             {
-                "step_id": "s-fact",
-                "purpose": "scene",
-                "actor_refs": [],
+                "scene_id": f"s-actuality-{index}",
                 "resource_refs": ["resource:original_composition"],
                 "action_text": "原句以纯文字进入阅读顺序，不重演现实现场。",
                 "sound_text": "",
                 "production_note": "只用原创排版承载用户原句。",
-                "block_refs": ["b-spoken", *actual_ids],
             }
         )
-    return {
-        "speaker_ref": "speaker:brand_account",
-        "blocks": blocks,
-        "spoken_order": ["b-spoken", *actual_ids],
-        "scene_steps": scenes,
-    }
+    return {"blocks": blocks, "scenes": scenes}
 
 
 def _targets(
@@ -259,7 +257,7 @@ def _targets(
     frame: NarrativeFrame,
 ) -> list[tuple[str, str, str]]:
     blocks = core["blocks"]
-    scenes = core["scene_steps"]
+    scenes = core["scenes"]
     assert isinstance(blocks, list)
     assert isinstance(scenes, list)
     targets = [
@@ -282,7 +280,7 @@ def _targets(
             for key in ("action_text", "sound_text", "production_note")
             if scene.get(key)
         )
-        targets.append((str(scene["step_id"]), "scene", text))
+        targets.append((str(scene["scene_id"]), "scene", text))
     return targets
 
 
@@ -304,9 +302,17 @@ def _observations(
             target_kind == "scene"
             or frame.narrative_mode == "actuality_reflection"
         ):
-            binding = "general_observation"
+            binding = (
+                "dramatization"
+                if frame.narrative_mode == "dramatization"
+                else "abstract_principle"
+            )
         else:
-            binding = frame.narrative_mode
+            binding = (
+                "abstract_principle"
+                if frame.narrative_mode == "general_observation"
+                else frame.narrative_mode
+            )
         observation: dict[str, object] = {
             "id": target_id,
             "target_kind": target_kind,
@@ -321,7 +327,7 @@ def _observations(
             "times": [],
             "locations": [],
             "possessions": [],
-            "reality_binding": binding,
+            "observation_type": binding,
             "resource_refs": (
                 ["resource:original_composition"]
                 if target_kind == "scene"
@@ -385,8 +391,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
                     "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
                 ],
                 "narrative_mode": "actuality_reflection",
-                "system_creative_plan": "从忙乱后的微小摩擦切入，形成不归因于任何人的一般观察。",
-                "primary_value": "建立人格",
+                "creative_plan": _intake_plan(message),
             }
         )
     ]
@@ -397,6 +402,8 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
             brand=_brand(),
             products=(),
             target="xiaohongshu_graphic",
+            allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            platform_shape="xiaohongshu_graphic:graphic",
         )
     )
     assert decision.disposition == "ready"
@@ -440,8 +447,7 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
                 "user_premises": [message],
                 "user_fact_spans": facts,
                 "narrative_mode": mode,
-                "system_creative_plan": "自主选择一个安全切口和完整结构。",
-                "primary_value": "建立人格",
+                "creative_plan": _intake_plan(message),
             }
         )
     ]
@@ -455,6 +461,8 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
             explicit_narrative_mode=(
                 "dramatization" if mode == "dramatization" else None
             ),
+            allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            platform_shape="xiaohongshu_graphic:graphic",
         )
     )
     assert decision.narrative_mode == mode
@@ -495,8 +503,7 @@ def test_conversation_rejects_synthetic_or_mode_drifted_spans() -> None:
                 "user_premises": [message],
                 "user_fact_spans": ["婆婆曾经带过孩子"],
                 "narrative_mode": "actuality_reflection",
-                "system_creative_plan": "写关系。",
-                "primary_value": "建立人格",
+                "creative_plan": _intake_plan(message),
             }
         )
     ]
@@ -508,6 +515,8 @@ def test_conversation_rejects_synthetic_or_mode_drifted_spans() -> None:
                 _brand(),
                 (),
                 "xiaohongshu_graphic",
+                allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+                platform_shape="xiaohongshu_graphic:graphic",
             )
         )
 
@@ -623,6 +632,7 @@ def test_one_repair_replaces_whole_block_and_all_linked_scenes_then_rereviews() 
         frame,
         changes={
             "b-spoken": {
+                "observation_type": "situated_event",
                 "people": ["任何一方"],
                 "relationships": ["两种在意"],
                 "actions_or_events": ["写成反派"],
@@ -630,7 +640,7 @@ def test_one_repair_replaces_whole_block_and_all_linked_scenes_then_rereviews() 
         },
     )
     blocks = core["blocks"]
-    scenes = core["scene_steps"]
+    scenes = core["scenes"]
     assert isinstance(blocks, list)
     assert isinstance(scenes, list)
     repaired_block = dict(
@@ -645,7 +655,7 @@ def test_one_repair_replaces_whole_block_and_all_linked_scenes_then_rereviews() 
         next(
             scene
             for scene in scenes
-            if isinstance(scene, dict) and scene["step_id"] == "s-body"
+            if isinstance(scene, dict) and scene["scene_id"] == "s-spoken"
         )
     )
     repaired_scene["action_text"] = "两条抽象线各自展开，最后保持一段留白。"
@@ -656,8 +666,8 @@ def test_one_repair_replaces_whole_block_and_all_linked_scenes_then_rereviews() 
             for block in blocks
             if isinstance(block, dict)
         ],
-        "scene_steps": [
-            repaired_scene if scene["step_id"] == "s-body" else scene
+        "scenes": [
+            repaired_scene if scene["scene_id"] == "s-spoken" else scene
             for scene in scenes
             if isinstance(scene, dict)
         ],
@@ -668,7 +678,7 @@ def test_one_repair_replaces_whole_block_and_all_linked_scenes_then_rereviews() 
         _completion(
             {
                 "blocks": [repaired_block],
-                "scene_steps": [repaired_scene],
+                "scenes": [repaired_scene],
             }
         ),
         _completion(_observations(repaired_core, frame)),
@@ -680,7 +690,7 @@ def test_one_repair_replaces_whole_block_and_all_linked_scenes_then_rereviews() 
     assert len(prompts) == 4
     assert "必须完整替换的 blocks" in prompts[2]
     assert '"block_id": "b-spoken"' in prompts[2]
-    assert '"step_id": "s-body"' in prompts[2]
+    assert '"scene_id": "s-spoken"' in prompts[2]
     assert "最终完整可见成品" in prompts[3]
 
 
@@ -692,6 +702,7 @@ def test_second_semantic_failure_closes_without_another_repair() -> None:
         frame,
         changes={
             "b-spoken": {
+                "observation_type": "situated_event",
                 "people": ["任何一方"],
                 "relationships": ["两种在意"],
                 "actions_or_events": ["写成反派"],
@@ -699,7 +710,7 @@ def test_second_semantic_failure_closes_without_another_repair() -> None:
         },
     )
     blocks = core["blocks"]
-    scenes = core["scene_steps"]
+    scenes = core["scenes"]
     assert isinstance(blocks, list)
     assert isinstance(scenes, list)
     block = next(
@@ -710,12 +721,12 @@ def test_second_semantic_failure_closes_without_another_repair() -> None:
     scene = next(
         item
         for item in scenes
-        if isinstance(item, dict) and item["step_id"] == "s-body"
+        if isinstance(item, dict) and item["scene_id"] == "s-spoken"
     )
     FakeClient.responses = [
         _completion(core),
         _completion(bad),
-        _completion({"blocks": [block], "scene_steps": [scene]}),
+        _completion({"blocks": [block], "scenes": [scene]}),
         _completion(bad),
     ]
     with pytest.raises(
@@ -741,26 +752,21 @@ def test_product_claims_are_exact_and_never_nearest_match() -> None:
     assert "双面短外套已登记的材质是棉混纺。" in claims
     assert "双面短外套已登记的颜色是雾蓝、米白。" in claims
     assert "双面短外套已登记的M 码当前样衣重量是 620 克。" in claims
+    fact_ids = tuple(
+        record.fact_id for record in product_fact_records(product)
+    )
+    frame = new_frame("general_observation", (), fact_ids)
     context = BoundaryContext.from_request(
-        _request(
-            new_frame(
-                "general_observation",
-                (),
-                ("source:product:ZX-C218",),
-            ),
-            products=(product,),
-        ),
-        new_frame(
-            "general_observation",
-            (),
-            ("source:product:ZX-C218",),
-        ),
+        _request(frame, products=(product,)),
+        frame,
     )
     assert not hasattr(DeepSeekGenerator, "_normalize_registered_product_claims")
     assert not hasattr(DeepSeekGenerator, "_bind_rejected_product_claims")
-    assert context.exact_product_facts["source:product:ZX-C218"] == frozenset(
-        claims
-    )
+    assert {
+        record.exact_text
+        for record in context.fact_registry
+        if record.fact_kind == "product"
+    } == set(claims)
 
 
 def test_route_and_transport_only_retry_429_or_transport(
@@ -816,10 +822,14 @@ def test_writer_prompt_keeps_private_steering_out_of_fact_sources() -> None:
         collaboration_note="我平时更喜欢先说结论，再给一个具体例子。",
     )
     context = BoundaryContext.from_request(request, frame)
-    prompt = _generator()._writer_prompt(request, frame, context)
+    generator = _generator()
+    skeleton = generator._narrative_skeleton(request, frame, context)
+    prompt = generator._writer_prompt(
+        request, frame, context, skeleton
+    )
     assert request.collaboration_note in prompt
     assert "成品中不得出现它的原文、转述或对它的解释" in prompt
     assert all(
         request.collaboration_note not in description
-        for _, description in context.source_registry
+        for _, description in context.constraint_registry
     )

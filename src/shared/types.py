@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias
 from uuid import UUID
 
+from src.shared.creative_plan import CreativePlanV2
 from src.shared.narrative import NarrativeFrame, NarrativeMode
 
 ContentProduct: TypeAlias = Literal[
@@ -255,6 +256,9 @@ class ConversationInput:
     explicit_narrative_mode: NarrativeMode | None = None
     prior_series_summary: str = ""
     creation_committed: bool = False
+    allowed_tone_ids: tuple[str, ...] = ()
+    allowed_mechanism_ids: tuple[str, ...] = ()
+    platform_shape: str = ""
 
 
 @dataclass(frozen=True)
@@ -266,7 +270,7 @@ class ConversationDecision:
     user_premises: tuple[str, ...] = ()
     user_fact_spans: tuple[str, ...] = ()
     narrative_mode: NarrativeMode | None = None
-    system_creative_plan: str = ""
+    creative_plan: CreativePlanV2 | None = None
     primary_product: ContentProduct | None = None
     creation_proposal: bool = False
     proposed_intent_span: str = ""
@@ -383,7 +387,7 @@ class GenerationInput:
     collaboration_note: str = ""
     series_context: SeriesContext | None = None
     narrative_frame: NarrativeFrame | None = None
-    system_creative_plan: str = ""
+    creative_plan: CreativePlanV2 | None = None
 
 
 @dataclass(frozen=True)
