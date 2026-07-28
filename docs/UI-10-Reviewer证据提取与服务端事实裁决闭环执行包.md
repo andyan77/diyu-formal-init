@@ -1,6 +1,6 @@
 # UI-10 Reviewer 证据提取与服务端事实裁决闭环执行包
 
-- 当前状态：`ACTIVE`
+- 当前状态：`BLOCKED`
 - predecessor：`UI-09 SUPERSEDED → UI-10`
 - 启动提交：`9af478b0f79786184b2b74c2fc48bb3730439d66`
 - `origin/main`：`7aa87ab624cf3ff64f42e49f1755d66d496cac7a`
@@ -117,6 +117,91 @@ Reviewer 资格通过前不 push、CI、备份、部署或修改生产。
 
 ## 9. 未证明边界
 
-当前尚未证明 Reviewer A/B/C 新 pipeline、G3/G4/D1、完整本地与生产 G1—G7/H1/D1、
-CI、部署、回退及清理。真实员工／品牌采用、真实发布、流量、排名、爆款、GMV／销售、企业
-采用、跨真实租户市场差异、企业 SLA 和 `20/55/44` 全组合继续不在本里程碑证明范围内。
+Reviewer A/B/C 新 pipeline 已在第 11 节证明。G3 在一次允许修复后仍失败；G4、D1、完整
+本地与生产 G1—G7/H1/D1、最终前端门、两份候选审查、CI、部署和回退均未执行或未证明。
+临时 runner、源码归档与本地原始响应副本已清理，但因没有进入生产验收，不存在生产业务
+对象清理证明。真实员工／品牌采用、真实发布、流量、排名、爆款、GMV／销售、企业采用、
+跨真实租户市场差异、企业 SLA 和 `20/55/44` 全组合继续不在本里程碑证明范围内。
+
+## 10. 确定性实现与 mutation proof
+
+状态交接提交为 `ad7b41f`，实现提交为
+`ada98ff47e5655fea9e23d6e3d3fc06b00e4f566`。新共享对象
+`ReviewEvidenceV1` 只含版本、逐 clause exact evidence 与 implicit subject；服务端按可见
+顺序切分 clause，并在 evidence 完整后独立执行 frozen fact、wrapper、protected subject、
+institutional speaker、event evidence 和 constraint 闭世界对账。新路径拒绝
+`observation_type`、pass/fail、资源和修复建议字段；legacy 路径不改。
+
+正式 `_generate_kernel` 不再过滤 Frame 明确允许且能解析到精确原句的 brand fact；该事实
+由服务端 frozen unit 插入，Writer prompt 不含其原文。新任务默认 `allowed_brand_fact_ids`
+为空，避免把品牌资料长文无差别当成事实；无法解析的允许 ID 在 Writer 前失败。
+
+确定性回归为 Golden `221 passed`（含 OpenAPI），ruff 与 mypy（93 个源文件）通过。实际
+mutation proof：
+
+- 删除 protected-subject 对账后，C 消费者变红；
+- 允许旧 `observation_type` 重新进入新 evidence schema 后，C 消费者变红；
+- 删除 event evidence 对账后，B 消费者变红；
+- 放宽漏 clause 覆盖后，漏审消费者变红；
+- 再次从正式 skeleton 过滤合法 brand frozen fact 后，品牌事实合同消费者变红。
+
+每项临时 mutation 均逐项恢复；恢复后的定向测试与 lint 转绿。没有建立新测试平台。
+
+## 11. Reviewer 真实资格
+
+同一实现 SHA 使用当前 `deepseek-v4-flash`、`temperature=0`、`max_retries=0`、
+thinking disabled，在无 repository／数据库环境中先重放 UI-09 样本 C，再对 A/B/C 各
+调用一次。
+
+- UI-09 C 重放：旧 raw 自报 `abstract_principle`；其 exact evidence 中“相信”作为谓词，
+  服务端结合可信主体“笛语”仍判 `unsupported_institutional_assertion`。
+- A raw evidence：主体“换位思考”、谓词“不等于没有边界”，无 event evidence；服务端通过。
+- B raw evidence：`action_or_event_spans=["沉默"]`、
+  `location_spans=["饭桌上"]`；服务端判 `situated_event_in_observation`。
+- C raw evidence：`subject_spans=["笛语"]`、`predicate_spans=["相信"]`；服务端判
+  `unsupported_institutional_assertion`。
+
+三次 evidence 均完整、精确、无 uncertain，pipeline `3/3`；Raw evidence 标签不再是完成
+门。root-only 证据目录为
+`/var/lib/diyu-ui10-evidence/ada98ff47e5655fea9e23d6e3d3fc06b00e4f566/`，
+目录／文件 `0700/0600 root:root`，资格 summary SHA-256 为
+`b5a57f36ace71b1b893354004c61f0f377c15c886eddffec6ec76bebe59c3eb4`。
+
+## 12. G3 业务预检与停止
+
+资格通过后，同 SHA 开始 G3→G4→D1。G3 初稿一次、Reviewer 一次、允许的唯一 affected
+body unit 修复一次、完整 Reviewer 复审一次，共 4 次模型调用，全部零重试：
+
+- 初稿写入未提供的“两个……女人，因为同一个男人而成为家人”“共同生活经历”“同一个屋檐
+  下”“婆婆来帮忙带孩子”等具体家庭设定；
+- 修复把“同一个男人”改为“同一个重要的人”，但仍保留同住、育儿、带孩子、儿媳是孩子的
+  妈妈等具体设定；
+- 初审与复审均恰好覆盖 `25/25` clause，所有 exact text/span 真实存在且
+  `uncertain=false`，不是 Reviewer 漏审或证据资格失败；
+- 服务端初审与复审均产生 `situated_event_in_observation`；复审精确违规 evidence 包含
+  “成为家人”“和平共处”“来帮忙带孩子”“试图主导或改变另一方”等。
+
+唯一修复后仍失败，命中冻结停止线。G4、D1 未调用，完整 G1—G7/H1/D1、最终前端门、两份
+候选审查、push、CI、备份、部署、生产验收与回退均未开始。没有第二修复、随机重跑、Prompt
+补丁、换模或第二 Reviewer。业务 summary SHA-256 为
+`589a0d0186d4d382ff10bc376554acf0d60b902ae11e5ea6fcee86b2a27a8c56`。
+
+同一执行端人工完整阅读了 G3 初稿四个 unit、修复后的完整 body 及两轮全部 evidence；这是
+失败归因阅读，不冒充两名独立人类、完整成品审查或生产验收。生成在 Compiler 前失败，没有
+可冒充完成 V1 的成品。
+
+## 13. 阻断收口
+
+UI-10 置为 `BLOCKED`，不是 `REVIEW` 或 `CLOSED`。生产再次只读核实为干净
+`845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，运行镜像
+`sha256:1171b153cbc709a760caf4a5db1fb14fe00e0bca3ef9c7b79c85f737a3a6bdb9`，
+schema `20260801_28`，回环 readiness `ready`、公网 `200`、备份 timer `active`。
+没有创建业务 task/run/version/session 或生产备份；本地和远端 runner、源码归档及本地原始
+响应副本已精确清理，正式 root-only 证据保留。
+
+RLS、历史版本、系列、DM01、AIGC 与资产 `41/243/25/119` 的本地确定性回归通过；由于没有
+部署，只能证明生产现状未被本轮改变，不能把 UI-10 代码写成生产已证明。
+
+唯一下一动作：主控只裁决是否另开 **Writer 单角色 successor**，重构
+general-observation 的生成职责；CreationIntentGate、Reviewer evidence、服务端事实裁决和
+DeliveryCompiler 保持，不换模型、不形成 fallback。
