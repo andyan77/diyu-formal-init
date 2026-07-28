@@ -1061,7 +1061,9 @@ def _subject_binding_v2(
     ):
         return "current_institution"
     self_referenced = any(
-        subject in _INSTITUTIONAL_SELF_REFERENCES for subject in subjects
+        reference in subject
+        for subject in subjects
+        for reference in _INSTITUTIONAL_SELF_REFERENCES
     )
     if self_referenced:
         if protected_subjects.speaker_kind == "institutional_account":
@@ -1069,12 +1071,13 @@ def _subject_binding_v2(
         if protected_subjects.speaker_kind == "personal_ip_account":
             return (
                 "current_person"
-                if any(subject.startswith("我") for subject in subjects)
+                if any("我" in subject for subject in subjects)
                 else "uncertain"
             )
         return "uncertain"
     if any(
-        span == "我" or span.startswith(_CURRENT_REALITY_PREFIXES)
+        span == "我"
+        or any(prefix in span for prefix in _CURRENT_REALITY_PREFIXES)
         for span in (*subjects, *locations)
     ):
         return "current_person"

@@ -1096,6 +1096,27 @@ def test_uncertain_evidence_is_structurally_valid_and_not_repairable() -> None:
         )
 
 
+def test_unique_context_quote_preserves_institutional_subject_binding() -> None:
+    text = "我们相信边界，也坚持尊重差异。"
+    contexts = _manual_context(text, "abstract_observation")
+    raw = _raw_v2_evidence(text, span={"text": text})
+    clauses = raw["clauses"]
+    assert isinstance(clauses, list)
+    clause = clauses[0]
+    assert isinstance(clause, dict)
+    clause["subject_spans"] = [{"text": text}]
+    clause["predicate_spans"] = [{"text": text}]
+    clause["action_or_event_spans"] = []
+    evidence = parse_review_evidence_v2(
+        raw,
+        clause_text_by_id={"unit:test:clause:1": text},
+    )
+
+    assert _reasons(contexts, evidence) == (
+        "unsupported_institutional_assertion",
+    )
+
+
 def test_program_contract_sidecar_ignores_kernel_self_reported_type() -> None:
     frame, kernel, contexts = _frame_and_kernel(mode="hypothesis")
     body = kernel.unit("unit:body")

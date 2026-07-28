@@ -1118,9 +1118,11 @@ allowed_observation_types 是服务端边界：abstract_principle 可以表达�
 每个 clause_id 必须按 visible_order 恰好返回一次，exact_text 必须逐字等于对应完整 clause，
 不得截短或抄写其他 clause。每个 span 只返回 text；text 必须是当前 clause 中逐字存在且
 只出现一次的精确原文。短语在同一 clause 重复时，必须连同足够上下文返回一个只出现一次的
-更长精确 quote；无法可靠提供唯一 quote 时不要猜测任何地址或序号，返回 uncertain=true。
-此时不要把无法唯一绑定的重复短语放入 span 数组。不要计算或返回
-start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
+更长精确 quote；最稳妥的做法是直接返回该项的完整 exact_text。提交前逐项确认 quote 在
+当前 clause 恰好出现一次；同一 evidence 数组中的同一 quote 只返回一次。无法可靠判断
+证据类别时返回 uncertain=true，并且不要把无法唯一绑定的重复短语放入 span 数组。不要
+计算或返回 start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文
+确定性计算。
 - subject_spans：句中明确作为陈述主体的人、代词、机构或事物；
 - predicate_spans：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；
 - action_or_event_spans：具体情境中实际发生的动作、反应或事件；抽象概念名称不是事件；
