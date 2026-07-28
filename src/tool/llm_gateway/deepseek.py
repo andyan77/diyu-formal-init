@@ -64,6 +64,7 @@ from src.shared.review_evidence import (
     reconcile_review_evidence_v2,
     review_clauses_from_contexts,
     review_evidence_v2_json_schema,
+    unique_review_quote_candidates,
     unit_contracts_v2,
     validate_server_owned_contexts_v2,
     writer_clause_contexts_v2,
@@ -912,6 +913,9 @@ class DeepSeekGenerator(ContentGenerator):
                 review_clauses_from_contexts(writer_contexts)
             ),
             clause_count=len(writer_contexts),
+            allowed_quotes=unique_review_quote_candidates(
+                tuple(context.exact_text for context in writer_contexts)
+            ),
             timeout_seconds=self._review_timeout_seconds,
         )
         try:
@@ -1127,10 +1131,11 @@ unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一�
 {json.dumps(targets, ensure_ascii=False)}
 
 每个 clause_id 必须按 visible_order 恰好返回一次，exact_text 必须逐字等于对应完整 clause，
-不得截短或抄写其他 clause。每个 span 只返回 text，且 text 必须是当前 clause 中与该证据
-直接对应的逐字原文。每个 quote 在当前 clause 中必须恰好出现一次；短词或短语重复时，必须
-连同相邻原文扩展成可唯一定位的较长 quote，完整 clause 始终是允许的最宽上下文。不得返回
-在当前 clause 中出现零次或多次的 quote。同一 evidence 数组中的同一 quote 只返回一次。
+不得截短或抄写其他 clause。每个 span 只返回 text，且 text 必须从 strict schema
+为本批 clause 提供的 exact quote enum 中选择，并且是当前 clause 中与该证据直接对应的
+逐字原文。该 enum 由服务端预先按标点生成，候选都已在其来源 clause 内唯一；优先选择包含
+该证据的最短候选，必要时可选择完整 clause。不得自行缩短、拼接或创造候选。服务端仍会校验
+所选 quote 是否属于当前 clause 且恰好出现一次。同一 evidence 数组中的同一 quote 只返回一次。
 只有无法可靠判断证据类别、无法形成唯一原文 quote，或 implicit_subject 确实无法确定时，
 才返回 uncertain=true；不要猜测，也不得为了避免 uncertain 而遗漏可见证据。不要计算或返回
 start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
@@ -2252,7 +2257,9 @@ CreativePlanV2：{json.dumps(
         return f"{beta_url}/chat/completions"
 
     @staticmethod
-    def _strict_review_tool() -> dict[str, object]:
+    def _strict_review_tool(
+        allowed_quotes: tuple[str, ...] = (),
+    ) -> dict[str, object]:
         return {
             "type": "function",
             "function": {
@@ -2262,7 +2269,7 @@ CreativePlanV2：{json.dumps(
                     "server-provided writer clause."
                 ),
                 "strict": True,
-                "parameters": review_evidence_v2_json_schema(),
+                "parameters": review_evidence_v2_json_schema(allowed_quotes),
             },
         }
 
@@ -2321,6 +2328,7 @@ CreativePlanV2：{json.dumps(
         prompt: str,
         *,
         clause_count: int,
+        allowed_quotes: tuple[str, ...] = (),
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
         request_payload: dict[str, Any] = {
@@ -2332,7 +2340,7 @@ CreativePlanV2：{json.dumps(
             "temperature": 0.0,
             "max_tokens": self._review_max_tokens(clause_count),
             "thinking": {"type": "disabled"},
-            "tools": [self._strict_review_tool()],
+            "tools": [self._strict_review_tool(allowed_quotes)],
             "tool_choice": {
                 "type": "function",
                 "function": {"name": REVIEW_EVIDENCE_V2_TOOL_NAME},

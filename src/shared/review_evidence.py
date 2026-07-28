@@ -29,6 +29,7 @@ _IMPLICIT_SUBJECTS = frozenset(
     {"none", "current_speaker", "generic", "uncertain"}
 )
 _CLAUSE_ENDINGS = frozenset("。！？；.!?;\n")
+_QUOTE_CANDIDATE_BOUNDARIES = frozenset("，,、：:；;。！？.!?\n")
 _INSTITUTIONAL_SELF_REFERENCES = frozenset(
     {"我们", "本品牌", "本公司", "本店", "本账号", "当前表达方"}
 )
@@ -432,7 +433,29 @@ def validate_server_owned_contexts_v2(
     return tuple(dict.fromkeys(issues))
 
 
-def review_evidence_v2_json_schema() -> dict[str, object]:
+def unique_review_quote_candidates(
+    exact_texts: Sequence[str],
+) -> tuple[str, ...]:
+    """Build a small server-owned vocabulary of uniquely bindable quotes."""
+    candidates: list[str] = []
+    for exact_text in exact_texts:
+        starts = [0]
+        for index, character in enumerate(exact_text):
+            if character in _QUOTE_CANDIDATE_BOUNDARIES:
+                segment = exact_text[starts[-1] : index].strip()
+                if segment and len(_exact_match_starts(exact_text, segment)) == 1:
+                    candidates.append(segment)
+                starts.append(index + 1)
+        tail = exact_text[starts[-1] :].strip()
+        if tail and len(_exact_match_starts(exact_text, tail)) == 1:
+            candidates.append(tail)
+        candidates.append(exact_text)
+    return tuple(dict.fromkeys(candidates))
+
+
+def review_evidence_v2_json_schema(
+    allowed_quotes: Sequence[str] = (),
+) -> dict[str, object]:
     """Return the strict function schema for ReviewEvidenceV2."""
     text_schema: dict[str, object] = {
         "type": "string",
@@ -442,6 +465,9 @@ def review_evidence_v2_json_schema() -> dict[str, object]:
             "until the quote is unique; never return an address or index."
         ),
     }
+    unique_quotes = tuple(dict.fromkeys(allowed_quotes))
+    if unique_quotes:
+        text_schema["enum"] = list(unique_quotes)
     span_schema: dict[str, object] = {
         "type": "object",
         "properties": {

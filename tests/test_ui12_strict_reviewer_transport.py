@@ -15,6 +15,7 @@ from src.shared.review_evidence import (
     ClauseContextV2,
     ReviewClause,
     review_evidence_v2_json_schema,
+    unique_review_quote_candidates,
     validate_server_owned_contexts_v2,
     writer_clause_contexts_v2,
 )
@@ -187,6 +188,10 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
         "system",
         "prompt",
         clause_count=25,
+        allowed_quotes=(
+            "换位思考不等于没有边界",
+            "婆婆要尊重儿媳",
+        ),
     )
 
     assert payload == _FakeClient.response.json()
@@ -234,6 +239,10 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
             "When a short phrase repeats, include neighboring source text "
             "until the quote is unique; never return an address or index."
         ),
+        "enum": [
+            "换位思考不等于没有边界",
+            "婆婆要尊重儿媳",
+        ],
     }
 
 
@@ -260,9 +269,24 @@ def test_reviewer_requires_unique_source_quotes_without_model_addresses() -> Non
         )
     )
 
-    assert "每个 quote 在当前 clause 中必须恰好出现一次" in prompt
-    assert "连同相邻原文扩展成可唯一定位的较长 quote" in prompt
+    assert "exact quote enum 中选择" in prompt
+    assert "候选都已在其来源 clause 内唯一" in prompt
+    assert "不得自行缩短、拼接或创造候选" in prompt
     assert "不要计算或返回\nstart/end/occurrence" in prompt
+
+
+def test_server_quote_vocabulary_excludes_repeated_short_phrases() -> None:
+    text = "婆婆先停一下，婆婆再回应。"
+    candidates = unique_review_quote_candidates((text,))
+
+    assert candidates == (
+        "婆婆先停一下",
+        "婆婆再回应",
+        text,
+    )
+    assert "婆婆" not in candidates
+    for candidate in candidates:
+        assert text.count(candidate) == 1
 
 
 @pytest.mark.parametrize(
