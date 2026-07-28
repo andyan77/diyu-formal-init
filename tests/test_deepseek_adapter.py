@@ -9,11 +9,18 @@ import httpx
 import pytest
 
 from src.brain.platform_directions import direction_for
+from src.shared.creative_kernel import (
+    DRAMATIZATION_DISCLOSURE,
+    CreativeKernelV1,
+    build_kernel_skeleton,
+    parse_writer_kernel,
+)
 from src.shared.creative_plan import (
     ACCOUNT_BASELINE_TONE_ID,
     build_creative_plan,
     creative_plan_document,
 )
+from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
 from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import product_fact_records
 from src.shared.narrative import NarrativeFrame, new_frame, visible_digest
@@ -377,6 +384,121 @@ def _payload_prompts() -> list[str]:
         assert isinstance(user_message, dict)
         prompts.append(str(user_message["content"]))
     return prompts
+
+
+def _kernel_request(
+    frame: NarrativeFrame | None = None,
+    *,
+    revision_instruction: str | None = None,
+    prior_kernel: CreativeKernelV1 | None = None,
+) -> GenerationInput:
+    return replace(
+        _request(
+            frame,
+            revision_instruction=revision_instruction,
+        ),
+        delivery_compiler_version=DELIVERY_COMPILER_VERSION,
+        prior_creative_kernel=prior_kernel,
+    )
+
+
+def _kernel_writer(
+    *,
+    body: str = "换位思考不等于没有边界。",
+    title: str = "边界不是一道判决题",
+) -> dict[str, object]:
+    return {
+        "units": [
+            {"unit_id": "unit:title", "text": title},
+            {
+                "unit_id": "unit:natural-guide",
+                "text": "从不同位置看同一段关系，先保留理解的余地。",
+            },
+            {"unit_id": "unit:body", "text": body},
+            {
+                "unit_id": "unit:release-caption",
+                "text": "尊重差异，也保留自己的边界。",
+            },
+        ]
+    }
+
+
+def _parsed_kernel(
+    request: GenerationInput,
+    raw: dict[str, object],
+) -> CreativeKernelV1:
+    assert request.narrative_frame is not None
+    context = BoundaryContext.from_request(
+        request,
+        request.narrative_frame,
+    )
+    skeleton = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=tuple(
+            record
+            for record in context.fact_registry
+            if record.fact_kind != "brand"
+        ),
+        constraint_refs=tuple(
+            identifier for identifier, _ in context.constraint_registry
+        ),
+    )
+    return parse_writer_kernel(raw, skeleton)
+
+
+def _kernel_observations(
+    kernel: CreativeKernelV1,
+    *,
+    body_type: str | None = None,
+    omit: frozenset[str] = frozenset(),
+    partial: frozenset[str] = frozenset(),
+) -> dict[str, object]:
+    observations: list[dict[str, object]] = []
+    for unit in kernel.units:
+        if unit.unit_id in omit:
+            continue
+        observation_type = (
+            unit.allowed_observation_types[0]
+            if unit.purpose == "frozen_fact"
+            else (
+                body_type
+                if unit.purpose == "body" and body_type is not None
+                else unit.allowed_observation_types[0]
+            )
+        )
+        observations.append(
+            {
+                "id": unit.unit_id,
+                "target_kind": "unit",
+                "text_spans": [
+                    (
+                        unit.text[: max(1, len(unit.text) // 2)]
+                        if unit.unit_id in partial
+                        else unit.text
+                    )
+                ],
+                "claims": (
+                    [
+                        {
+                            "category": "actions_or_events",
+                            "span": unit.text,
+                        }
+                    ]
+                    if observation_type == "situated_event"
+                    else []
+                ),
+                "observation_type": observation_type,
+                "resource_refs": [],
+                "dramatization_disclosure_spans": (
+                    [DRAMATIZATION_DISCLOSURE]
+                    if observation_type == "dramatization"
+                    else []
+                ),
+                "instruction_conflicts": [],
+                "uncertain": False,
+            }
+        )
+    return {"observations": observations}
 
 
 def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
@@ -833,3 +955,218 @@ def test_writer_prompt_keeps_private_steering_out_of_fact_sources() -> None:
         request.collaboration_note not in description
         for _, description in context.constraint_registry
     )
+
+
+def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
+    request = _kernel_request()
+    raw = _kernel_writer()
+    kernel = _parsed_kernel(request, raw)
+    FakeClient.responses = [
+        _completion(raw),
+        _completion(_kernel_observations(kernel)),
+    ]
+
+    artifact = _generator().generate(request)
+
+    assert artifact.completion_snapshot_patch is not None
+    assert (
+        artifact.completion_snapshot_patch["delivery_compiler_version"]
+        == DELIVERY_COMPILER_VERSION
+    )
+    assert isinstance(artifact.production, GraphicProductionBundle)
+    assert artifact.production.full_body == kernel.unit("unit:body").text
+    prompts = _payload_prompts()
+    assert len(prompts) == 2
+    writer_prompt = prompts[0]
+    assert request.brand.brand_name not in writer_prompt
+    assert request.brand.organization_name not in writer_prompt
+    assert request.brand.account_name not in writer_prompt
+    assert request.active_domain_assets[0].body not in writer_prompt
+    assert "resource:original_composition" not in writer_prompt
+    assert '"unit_id"' in writer_prompt
+    assert '"text"' in writer_prompt
+    assert '"block_id"' not in writer_prompt
+    assert '"fact_refs"' not in writer_prompt
+
+
+def test_ui09_writer_extra_production_field_fails_before_reviewer() -> None:
+    request = _kernel_request()
+    raw = _kernel_writer()
+    units = raw["units"]
+    assert isinstance(units, list)
+    body = units[2]
+    assert isinstance(body, dict)
+    body["production_note"] = "去厨房拍摄。"
+    FakeClient.responses = [_completion(raw)]
+
+    with pytest.raises(
+        GenerationFailed,
+        match="CreativeKernelV1 Writer 返回格式不完整",
+    ):
+        _generator().generate(request)
+
+    assert len(FakeClient.requests) == 1
+
+
+@pytest.mark.parametrize("drift", ("unknown", "omitted", "duplicate"))
+def test_ui09_writer_unit_coverage_fails_closed(drift: str) -> None:
+    request = _kernel_request()
+    raw = _kernel_writer()
+    units = raw["units"]
+    assert isinstance(units, list)
+    if drift == "unknown":
+        units[0] = {"unit_id": "unit:invented", "text": "越界"}
+    elif drift == "omitted":
+        units.pop()
+    else:
+        units.append(dict(units[0]))
+    FakeClient.responses = [_completion(raw)]
+
+    with pytest.raises(
+        GenerationFailed,
+        match="CreativeKernelV1 Writer 返回格式不完整",
+    ):
+        _generator().generate(request)
+
+    assert len(FakeClient.requests) == 1
+
+
+def test_ui09_reviewer_must_cover_exact_complete_units() -> None:
+    request = _kernel_request()
+    raw = _kernel_writer()
+    kernel = _parsed_kernel(request, raw)
+    FakeClient.responses = [
+        _completion(raw),
+        _completion(
+            _kernel_observations(
+                kernel,
+                omit=frozenset({"unit:title"}),
+                partial=frozenset({"unit:body"}),
+            )
+        ),
+    ]
+
+    with pytest.raises(
+        GenerationFailed,
+        match="Reviewer 观察不完整或事实单元不一致",
+    ):
+        _generator().generate(request)
+
+    assert len(FakeClient.requests) == 2
+
+
+def test_ui09_allows_only_one_affected_unit_repair_and_full_rereview() -> None:
+    request = _kernel_request()
+    first_raw = _kernel_writer(
+        body="饭桌上一句话让两个人都沉默。",
+    )
+    first_kernel = _parsed_kernel(request, first_raw)
+    repair_raw = {
+        "units": [
+            {
+                "unit_id": "unit:body",
+                "text": "换位思考不等于没有边界。",
+            }
+        ]
+    }
+    repaired_kernel = replace(
+        first_kernel,
+        units=tuple(
+            replace(unit, text="换位思考不等于没有边界。")
+            if unit.unit_id == "unit:body"
+            else unit
+            for unit in first_kernel.units
+        ),
+    )
+    FakeClient.responses = [
+        _completion(first_raw),
+        _completion(
+            _kernel_observations(
+                first_kernel,
+                body_type="situated_event",
+            )
+        ),
+        _completion(repair_raw),
+        _completion(_kernel_observations(repaired_kernel)),
+    ]
+
+    artifact = _generator().generate(request)
+
+    assert artifact.production.full_body == "换位思考不等于没有边界。"  # type: ignore[union-attr]
+    assert len(FakeClient.requests) == 4
+    prompts = _payload_prompts()
+    assert "unit:body" in prompts[2]
+    assert "unit:title" not in prompts[2]
+    assert "逐项 unit" in prompts[3]
+
+
+def test_ui09_second_review_failure_stops_without_another_repair() -> None:
+    request = _kernel_request()
+    first_raw = _kernel_writer(
+        body="饭桌上一句话让两个人都沉默。",
+    )
+    first_kernel = _parsed_kernel(request, first_raw)
+    repair_raw = {
+        "units": [
+            {
+                "unit_id": "unit:body",
+                "text": "门关上以后，谁都没有再说话。",
+            }
+        ]
+    }
+    repaired_kernel = replace(
+        first_kernel,
+        units=tuple(
+            replace(unit, text="门关上以后，谁都没有再说话。")
+            if unit.unit_id == "unit:body"
+            else unit
+            for unit in first_kernel.units
+        ),
+    )
+    FakeClient.responses = [
+        _completion(first_raw),
+        _completion(
+            _kernel_observations(
+                first_kernel,
+                body_type="situated_event",
+            )
+        ),
+        _completion(repair_raw),
+        _completion(
+            _kernel_observations(
+                repaired_kernel,
+                body_type="situated_event",
+            )
+        ),
+    ]
+
+    with pytest.raises(
+        GenerationFailed,
+        match="无法在一次 CreativeKernel unit 修复内满足",
+    ):
+        _generator().generate(request)
+
+    assert len(FakeClient.requests) == 4
+
+
+def test_ui09_revision_requires_changed_writable_kernel() -> None:
+    first_request = _kernel_request()
+    raw = _kernel_writer()
+    kernel = _parsed_kernel(first_request, raw)
+    FakeClient.responses = [
+        _completion(raw),
+        _completion(_kernel_observations(kernel)),
+    ]
+    first = _generator().generate(first_request)
+    assert first.completion_snapshot_patch is not None
+
+    revision = _kernel_request(
+        revision_instruction="别讲道理，荒诞一点。",
+        prior_kernel=kernel,
+    )
+    FakeClient.responses = [
+        _completion(raw),
+        _completion(_kernel_observations(kernel)),
+    ]
+    with pytest.raises(GenerationFailed, match="没有实质改变"):
+        _generator().generate(revision)

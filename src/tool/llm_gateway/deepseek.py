@@ -12,10 +12,25 @@ import httpx
 
 from src.ports.content_generator import ContentGenerator
 from src.shared.content_origin import aigc_disclosure
+from src.shared.creative_kernel import (
+    CreativeKernelV1,
+    build_kernel_skeleton,
+    kernel_digest,
+    kernel_document,
+    parse_writer_kernel,
+    reconcile_kernel_observations,
+    repair_kernel_units,
+)
 from src.shared.creative_plan import (
     creative_plan_document,
     creative_plan_from_document,
     validate_creative_plan,
+)
+from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_VERSION,
+    DeliveryCompileInput,
+    assert_compiled_delivery,
+    compile_delivery,
 )
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import (
@@ -515,6 +530,177 @@ class DeepSeekGenerator(ContentGenerator):
         )
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
+        if request.delivery_compiler_version is None:
+            return self._generate_legacy(request)
+        if request.delivery_compiler_version != DELIVERY_COMPILER_VERSION:
+            raise GenerationFailed("不支持的确定性成品编译版本")
+        return self._generate_kernel(request)
+
+    def _generate_kernel(
+        self,
+        request: GenerationInput,
+    ) -> GeneratedArtifact:
+        started = time.monotonic()
+        retries = 0
+        provider_payloads: list[dict[str, Any]] = []
+        if request.narrative_frame is None or request.creative_plan is None:
+            raise GenerationFailed("CreativeKernelV1 缺少冻结计划或叙事框架")
+        frame = request.narrative_frame
+        context = BoundaryContext.from_request(request, frame)
+        skeleton = build_kernel_skeleton(
+            frame=frame,
+            fact_registry=tuple(
+                record
+                for record in context.fact_registry
+                if record.fact_kind != "brand"
+            ),
+            constraint_refs=tuple(
+                identifier for identifier, _ in context.constraint_registry
+            ),
+        )
+        writer_payload, writer_retries = self._request(
+            "你是笛语 CreativeKernelV1 Writer。只返回 unit 文字 JSON，不展示推理、规则或内部审查。",
+            self._kernel_writer_prompt(request, skeleton),
+            4096,
+        )
+        provider_payloads.append(writer_payload)
+        retries += writer_retries
+        try:
+            kernel = parse_writer_kernel(
+                json.loads(
+                    self._json_content(
+                        str(
+                            writer_payload["choices"][0]["message"][
+                                "content"
+                            ]
+                        )
+                    )
+                ),
+                skeleton,
+            )
+        except (
+            KeyError,
+            IndexError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as exc:
+            raise GenerationFailed(
+                "CreativeKernelV1 Writer 返回格式不完整"
+            ) from exc
+        issues, review_payload, review_retries = self._review_kernel(
+            request,
+            context,
+            kernel,
+        )
+        provider_payloads.append(review_payload)
+        retries += review_retries
+        receipts: tuple[FactRepairReceipt, ...] = ()
+        if issues:
+            affected = self._kernel_repair_scope(kernel, issues)
+            repair_payload, repair_retries = self._request(
+                "你是笛语 CreativeKernelV1 Writer。只返回一次受影响 unit 修复 JSON，不展示推理或审查。",
+                self._kernel_repair_prompt(
+                    request,
+                    kernel,
+                    affected,
+                    issues,
+                ),
+                4096,
+            )
+            provider_payloads.append(repair_payload)
+            retries += repair_retries
+            try:
+                repaired = repair_kernel_units(
+                    kernel=kernel,
+                    affected_unit_ids=affected,
+                    raw=json.loads(
+                        self._json_content(
+                            str(
+                                repair_payload["choices"][0]["message"][
+                                    "content"
+                                ]
+                            )
+                        )
+                    ),
+                )
+            except (
+                KeyError,
+                IndexError,
+                TypeError,
+                ValueError,
+                json.JSONDecodeError,
+            ) as exc:
+                raise GenerationFailed(
+                    "CreativeKernelV1 单元修复返回格式不完整"
+                ) from exc
+            final_issues, review_payload, review_retries = (
+                self._review_kernel(request, context, repaired)
+            )
+            provider_payloads.append(review_payload)
+            retries += review_retries
+            if final_issues:
+                raise GenerationFailed(
+                    "内容边界无法在一次 CreativeKernel unit 修复内满足"
+                )
+            receipts = self._repair_receipts(issues)
+            kernel = repaired
+        if request.revision_instruction and request.prior_creative_kernel:
+            before = tuple(
+                unit.text
+                for unit in request.prior_creative_kernel.writable_units
+            )
+            after = tuple(unit.text for unit in kernel.writable_units)
+            if before == after:
+                raise GenerationFailed("本次修改没有实质改变允许修改的创作单元")
+        reviewed_kernel_digest = kernel_digest(kernel)
+        compiled = compile_delivery(
+            DeliveryCompileInput(
+                primary_product=request.primary_product,
+                media_format=request.media_format,
+                products=request.products,
+                production_conditions=request.brand.production_conditions,
+                allowed_resource_ids=context.resource_ids,
+            ),
+            kernel,
+        )
+        assert_compiled_delivery(
+            DeliveryCompileInput(
+                primary_product=request.primary_product,
+                media_format=request.media_format,
+                products=request.products,
+                production_conditions=request.brand.production_conditions,
+                allowed_resource_ids=context.resource_ids,
+            ),
+            kernel,
+            compiled,
+        )
+        digest = visible_digest(compiled.outline, compiled.body)
+        return GeneratedArtifact(
+            outline=compiled.outline,
+            body=compiled.body,
+            model=self._model,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            retry_count=retries,
+            provider_usage=self._combined_usage(provider_payloads),
+            primary_product=request.primary_product,
+            semantic_contract=compiled.semantic_contract,
+            production=compiled.production,
+            fact_repair_receipts=receipts,
+            reviewed_digest=digest,
+            completion_snapshot_patch={
+                "creative_kernel_v1": kernel_document(kernel),
+                "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
+                "reviewed_kernel_digest": reviewed_kernel_digest,
+                "visible_provenance": {
+                    field: list(sources)
+                    for field, sources in compiled.visible_provenance.items()
+                },
+                "delivery_resource_refs": list(compiled.resource_refs),
+            },
+        )
+
+    def _generate_legacy(self, request: GenerationInput) -> GeneratedArtifact:
         started = time.monotonic()
         retries = 0
         provider_payloads: list[dict[str, Any]] = []
@@ -658,6 +844,299 @@ class DeepSeekGenerator(ContentGenerator):
             fact_repair_receipts=receipts,
             reviewed_digest=digest,
         )
+
+    def _review_kernel(
+        self,
+        request: GenerationInput,
+        context: BoundaryContext,
+        kernel: CreativeKernelV1,
+    ) -> tuple[tuple[NarrativeIssue, ...], dict[str, Any], int]:
+        payload, retries = self._request(
+            "你是独立 CreativeKernel 叙事观察器。只提取每个 unit 的实际语义，不裁决、不改写，只返回 JSON。",
+            self._kernel_reviewer_prompt(request, context, kernel),
+            4096,
+            thinking_disabled=True,
+            timeout_seconds=self._review_timeout_seconds,
+        )
+        try:
+            document = json.loads(
+                self._json_content(
+                    str(payload["choices"][0]["message"]["content"])
+                )
+            )
+            raw_observations = document["observations"]
+            if not isinstance(raw_observations, list):
+                raise TypeError
+            observations = tuple(
+                parse_observation(value) for value in raw_observations
+            )
+        except (
+            KeyError,
+            IndexError,
+            TypeError,
+            json.JSONDecodeError,
+        ) as exc:
+            raise GenerationFailed(
+                "独立 CreativeKernel Reviewer 返回格式不完整"
+            ) from exc
+        return (
+            reconcile_kernel_observations(
+                kernel=kernel,
+                observations=observations,
+                fact_text_by_id=context.fact_text_by_id,
+                allowed_constraint_ids=context.constraint_ids,
+            ),
+            payload,
+            retries,
+        )
+
+    @staticmethod
+    def _kernel_repair_scope(
+        kernel: CreativeKernelV1,
+        issues: tuple[NarrativeIssue, ...],
+    ) -> frozenset[str]:
+        nonrepairable = {
+            "review_coverage",
+            "missing_exact_span",
+            "uncertain_meaning",
+            "frozen_fact_changed",
+            "review_resource_claim",
+        }
+        if any(issue.reason in nonrepairable for issue in issues):
+            raise GenerationFailed(
+                "CreativeKernel Reviewer 观察不完整或事实单元不一致"
+            )
+        writable_ids = {
+            unit.unit_id for unit in kernel.writable_units
+        }
+        affected = frozenset(
+            issue.target_id
+            for issue in issues
+            if issue.target_id in writable_ids
+        )
+        if not affected:
+            raise GenerationFailed("CreativeKernel 缺陷不属于可写单元")
+        return affected
+
+    def _kernel_writer_prompt(
+        self,
+        request: GenerationInput,
+        skeleton: CreativeKernelV1,
+    ) -> str:
+        if request.creative_plan is None:
+            raise GenerationFailed("CreativeKernelV1 缺少 CreativePlanV2")
+        fact_units = [
+            {
+                "unit_id": unit.unit_id,
+                "text": unit.text,
+            }
+            for unit in skeleton.units
+            if not unit.writable
+        ]
+        writable = [
+            {
+                "unit_id": unit.unit_id,
+                "purpose": unit.purpose,
+                "allowed_observation_types": list(
+                    unit.allowed_observation_types
+                ),
+                "visible_order": unit.visible_order,
+            }
+            for unit in skeleton.writable_units
+        ]
+        template = {
+            "units": [
+                {
+                    "unit_id": unit.unit_id,
+                    "text": f"填写 {unit.purpose} 的完整可见文字",
+                }
+                for unit in skeleton.writable_units
+            ]
+        }
+        prior = (
+            [
+                {
+                    "unit_id": unit.unit_id,
+                    "text": unit.text,
+                }
+                for unit in request.prior_creative_kernel.writable_units
+            ]
+            if request.prior_creative_kernel is not None
+            else []
+        )
+        controls = self._deidentified_writer_controls(request)
+        return f"""完成一个可直接交付的 CreativeKernelV1。你只负责“说什么、怎样表达”，不负责
+scene、actor、resource、action、sound、production_note、发布结构或语义合同。
+
+用户 topic 精确跨度：
+{json.dumps(request.creative_plan.topic_spans, ensure_ascii=False)}
+服务端逐字事实单元（只读；不要在输出中返回、改写、概括或扩展）：
+{json.dumps(fact_units, ensure_ascii=False)}
+本篇受众价值：{_PRODUCT_VALUE[request.primary_product]}
+平台与形式：{request.target} / {request.media_format}
+去标识化表达控制：{controls}
+本次修改要求：{request.revision_instruction or "（首次生成）"}
+此前可写内核（首次生成时为空；只用于修改，不是事实来源）：
+{json.dumps(prior, ensure_ascii=False)}
+
+服务端可写 unit skeleton：
+{json.dumps(writable, ensure_ascii=False)}
+
+只返回：
+{json.dumps(template, ensure_ascii=False)}
+
+根对象只能有 units；每个 unit 只能有 unit_id、text。必须恰好一次覆盖全部既定可写 unit_id，
+不得增加、遗漏、重复或修改 id，不得输出任何制作字段、来源、事实、约束、类型或内部规则。
+title 是自然标题；natural_guide 给出清楚主线和观看回报；body 是完整核心正文；
+release_caption 是可直接使用的发布配文收束。四者不能只是提纲。
+allowed_observation_types 是服务端边界：abstract_principle 可以表达抽象判断、观点、比喻和
+幽默，但不能写具体或隐含人物发生的微事件；hypothesis 可以写推演但不要自行添加“假设”标识，
+服务端会包裹；dramatization 必须写成完整虚构情境，但不要自行添加演绎声明，服务端会为整个
+段落提供一次可见披露。
+不要把 topic 写成用户亲历；不要创造真人身份、对白、动机、原因、结果、时间、地点或共同
+家庭。不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄
+资源或制作方式。"""
+
+    def _kernel_reviewer_prompt(
+        self,
+        request: GenerationInput,
+        context: BoundaryContext,
+        kernel: CreativeKernelV1,
+    ) -> str:
+        targets = [
+            {
+                "id": unit.unit_id,
+                "target_kind": "unit",
+                "text": unit.text,
+            }
+            for unit in kernel.units
+        ]
+        facts = [
+            {
+                "fact_id": record.fact_id,
+                "exact_text": record.exact_text,
+                "fact_kind": record.fact_kind,
+            }
+            for record in context.fact_registry
+            if any(
+                record.fact_id in unit.fact_refs for unit in kernel.units
+            )
+        ]
+        return f"""独立阅读 CreativeKernelV1 的每个最终可见 unit，并提取实际语义。不要读取或
+推断制作字段；这里没有 scene 或资源。不要返回 pass/fail，不要改写。
+
+用户 topic：{json.dumps(
+    request.creative_plan.topic_spans
+    if request.creative_plan is not None
+    else (),
+    ensure_ascii=False,
+)}
+冻结事实：{json.dumps(facts, ensure_ascii=False)}
+逐项 unit：{json.dumps(targets, ensure_ascii=False)}
+
+每个 id 恰好返回一份 target_kind=unit 的观察。text_spans 必须是只含该 unit 完整原文的
+单元素数组，不得截短、概括或抄其他 unit。claims 每项只含 category 和该 unit 内真实存在的
+精确 span；category 只选 people、relationships、actions_or_events、dialogue、motives、
+causes、results、times、locations、possessions。
+
+observation_type 只选：
+- abstract_principle：抽象原则、观点、价值判断、建议或一般理解，没有一件具体事情发生；
+- situated_event：具体或隐含人物在情境中的动作、对白、反应、原因或结果，即使省略称谓；
+- institutional_assertion：品牌、公司、门店、账号或组织的信念、承诺、做法或历史；
+- user_actuality：逐字用户真人事实；
+- hypothesis：由“假设：”覆盖的条件推演；
+- dramatization：由完整可见“情境演绎（虚构角色，不对应真实人物或品牌案例）：”覆盖的虚构段；
+- confirmed_fact：逐字商品事实；
+- uncertain：无法确定。
+
+演绎时把完整服务端披露原句放入 dramatization_disclosure_spans。instruction_conflicts 只放
+与用户要求冲突且真实存在的精确跨度。任何不确定都必须 uncertain=true。
+
+只返回：
+{{"observations":[{{"id":"…","target_kind":"unit","text_spans":["完整 unit 原文"],
+"claims":[{{"category":"actions_or_events","span":"精确子串"}}],
+"observation_type":"abstract_principle|situated_event|institutional_assertion|user_actuality|hypothesis|dramatization|confirmed_fact|uncertain",
+"resource_refs":[],"dramatization_disclosure_spans":[],"instruction_conflicts":[],"uncertain":false}}]}}
+所有字段必须出现；字符串数组不能为 null；不得增加 id 或字段。"""
+
+    def _kernel_repair_prompt(
+        self,
+        request: GenerationInput,
+        kernel: CreativeKernelV1,
+        affected: frozenset[str],
+        issues: tuple[NarrativeIssue, ...],
+    ) -> str:
+        units = [
+            {
+                "unit_id": unit.unit_id,
+                "purpose": unit.purpose,
+                "allowed_observation_types": list(
+                    unit.allowed_observation_types
+                ),
+                "current_text": unit.text,
+            }
+            for unit in kernel.units
+            if unit.unit_id in affected
+        ]
+        findings = [
+            {
+                "unit_id": issue.target_id,
+                "reason": issue.reason,
+                "fragment": issue.fragment,
+            }
+            for issue in issues
+            if issue.target_id in affected
+        ]
+        return f"""只修复这一次列出的完整可写 unit。不得修改、返回或概括事实单元，不得改变
+CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit_id。
+
+用户 topic：{json.dumps(
+    request.creative_plan.topic_spans
+    if request.creative_plan is not None
+    else (),
+    ensure_ascii=False,
+)}
+本次修改要求：{request.revision_instruction or "（首次生成）"}
+受影响 unit：{json.dumps(units, ensure_ascii=False)}
+当前问题：{json.dumps(findings, ensure_ascii=False)}
+
+修复后仍只写创作文字，不得返回 scene、actor、resource、action、sound、production_note、
+来源、约束或语义合同。hypothesis/dramatization 的可见包裹由服务端加入，修复文字不得重复
+这些包裹。只返回：
+{{"units":[{{"unit_id":"只使用列出的既定 id","text":"完整替换文字"}}]}}"""
+
+    @staticmethod
+    def _deidentified_writer_controls(request: GenerationInput) -> str:
+        parts = [
+            request.brand.tone,
+            request.brand.content_role_boundary,
+            *(
+                tuple(
+                    selection.applied_label
+                    for selection in request.creative_direction.selections
+                )
+                if request.creative_direction is not None
+                else ()
+            ),
+            *(
+                (request.creative_direction.custom_text,)
+                if request.creative_direction is not None
+                and request.creative_direction.custom_text
+                else ()
+            ),
+            *((request.collaboration_note,) if request.collaboration_note else ()),
+        ]
+        value = "；".join(part.strip() for part in parts if part.strip())
+        for identifier in (
+            request.brand.brand_name,
+            request.brand.organization_name,
+            request.brand.account_name,
+            request.brand.operator_name,
+            request.brand.content_role_name,
+        ):
+            if identifier:
+                value = value.replace(identifier, "当前表达方")
+        return value[:600] or "自然、清楚、不过度下结论"
 
     @staticmethod
     def _singleton_slots(

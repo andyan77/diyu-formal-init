@@ -28,7 +28,7 @@ from src.shared.creative_plan import (
     build_creative_plan,
 )
 from src.shared.errors import GenerationFailed
-from src.shared.narrative import NarrativeFrame, frame_document, visible_digest
+from src.shared.narrative import NarrativeFrame, frame_document
 from src.shared.types import (
     ConversationDecision,
     ConversationInput,
@@ -143,22 +143,7 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
         assert request.narrative_frame is not None
         _CAPTURED_FRAMES.append(request.narrative_frame)
         _CAPTURED_PLANS.append(request.creative_plan)
-        artifact = super().generate(request)
-        additions = [
-            fact.exact_text
-            for fact in request.narrative_frame.user_facts
-            if fact.exact_text not in artifact.body
-        ]
-        if request.revision_instruction == _G7:
-            additions.append(
-                "荒诞表达：道理先去门外排队，两个标点在留白里交换座位。"
-            )
-        body = "\n\n".join((artifact.body, *additions))
-        return replace(
-            artifact,
-            body=body,
-            reviewed_digest=visible_digest(artifact.outline, body),
-        )
+        return super().generate(request)
 
 
 def _settings(database_url: str) -> Settings:
@@ -366,6 +351,12 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert isinstance(plan, dict)
         assert plan["plan_version"] == "creative-plan-v2"
         assert "system_creative_plan" not in snapshot
+        kernel_v1 = snapshot["creative_kernel_v1"]
+        assert isinstance(kernel_v1, dict)
+        assert kernel_v1["kernel_version"] == "creative-kernel-v1"
+        assert snapshot["delivery_compiler_version"] == "delivery-compiler-v1"
+        assert isinstance(snapshot["reviewed_kernel_digest"], str)
+        assert isinstance(snapshot["visible_provenance"], dict)
 
         forbidden_frame_change = client.post(
             f"/api/v1/tasks/{g4_task_id}/revisions",
@@ -398,11 +389,40 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         v2 = revision.json()
         assert v2["version"] == 2
         assert _G4_FACT in v2["body"]
-        assert "荒诞表达" in v2["body"]
+        assert "按你的修改要求改变了允许调整的表达" in v2["body"]
         assert len(_CAPTURED_FRAMES) >= 2
         assert frame_document(_CAPTURED_FRAMES[-1]) == frame
         assert len(_CAPTURED_PLANS) >= 5
         assert _CAPTURED_PLANS[-1] == _CAPTURED_PLANS[2]
+        revised_snapshot = _snapshot(app_database_url, g4_task_id)
+        assert revised_snapshot["narrative_frame"] == snapshot["narrative_frame"]
+        assert revised_snapshot["creative_plan_v2"] == snapshot["creative_plan_v2"]
+        assert (
+            revised_snapshot["creation_commitment"]
+            == snapshot["creation_commitment"]
+        )
+        assert (
+            revised_snapshot["delivery_compiler_version"]
+            == snapshot["delivery_compiler_version"]
+        )
+        revised_kernel = revised_snapshot["creative_kernel_v1"]
+        assert isinstance(revised_kernel, dict)
+        assert revised_kernel != kernel_v1
+        original_units = kernel_v1["units"]
+        revised_units = revised_kernel["units"]
+        assert isinstance(original_units, list)
+        assert isinstance(revised_units, list)
+        original_fact_units = [
+            unit
+            for unit in original_units
+            if isinstance(unit, dict) and unit.get("purpose") == "frozen_fact"
+        ]
+        revised_fact_units = [
+            unit
+            for unit in revised_units
+            if isinstance(unit, dict) and unit.get("purpose") == "frozen_fact"
+        ]
+        assert original_fact_units == revised_fact_units
 
         v1 = client.get(
             f"/api/v1/tasks/{g4_task_id}/versions/1",
@@ -415,7 +435,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         )
         assert v1.status_code == 200
         assert v1.json()["version"] == 1
-        assert "荒诞表达" not in v1.json()["body"]
+        assert "按你的修改要求改变了允许调整的表达" not in v1.json()["body"]
         current = client.get(
             f"/api/v1/tasks/{g4_task_id}/versions/2",
             params={

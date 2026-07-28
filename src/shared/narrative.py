@@ -20,7 +20,7 @@ NarrativeBlockType: TypeAlias = Literal[
     "hypothesis",
     "dramatization",
 ]
-ReviewTargetKind: TypeAlias = Literal["block", "scene"]
+ReviewTargetKind: TypeAlias = Literal["block", "scene", "unit"]
 ObservationType: TypeAlias = Literal[
     "abstract_principle",
     "situated_event",
@@ -236,7 +236,7 @@ def parse_observation(value: object) -> ReviewerObservation:
     observation_type = _required_string(value.get("observation_type"))
     uncertain = value.get("uncertain")
     raw_claims = value.get("claims")
-    if target_kind not in {"block", "scene"}:
+    if target_kind not in {"block", "scene", "unit"}:
         raise TypeError("reviewer target kind is invalid")
     if observation_type not in _OBSERVATION_TYPES:
         raise TypeError("reviewer observation type is invalid")

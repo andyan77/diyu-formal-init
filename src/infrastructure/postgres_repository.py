@@ -308,6 +308,7 @@ class PostgresContentRepository(ContentRepository):
         provider_usage: dict[str, int] | None,
         product_contract: dict[str, str],
         fact_repair_receipts: tuple[FactRepairReceipt, ...],
+        snapshot_patch: dict[str, object] | None = None,
     ) -> dict[str, object]:
         version_id = uuid4()
         with self._tx(scope) as cursor:
@@ -330,6 +331,26 @@ class PostgresContentRepository(ContentRepository):
                 ),
             )
             task = self._one(cursor, "当前作用域不能完成此生成")
+            if snapshot_patch is not None:
+                cursor.execute(
+                    """
+                    UPDATE business_tasks
+                    SET content_context_snapshot =
+                        COALESCE(content_context_snapshot, '{}'::jsonb) || %s
+                    WHERE tenant_id = %s AND id = %s AND brand_id = %s
+                      AND account_id = %s AND created_by = %s
+                    """,
+                    (
+                        Jsonb(snapshot_patch),
+                        scope.tenant_id,
+                        task_id,
+                        scope.brand_id,
+                        scope.account_id,
+                        scope.user_id,
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise DomainError("当前作用域不能更新创作内核快照")
             cursor.execute(
                 "SELECT id, current_version FROM content_items WHERE tenant_id = %s AND task_id = %s FOR UPDATE",
                 (scope.tenant_id, task_id),

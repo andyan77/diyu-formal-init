@@ -25,11 +25,14 @@ from src.brain.platform_directions import direction_for
 from src.ports.content_generator import ContentGenerator
 from src.ports.content_repository import ContentRepository
 from src.shared.content_snapshot import (
+    frozen_creative_kernel,
     frozen_creative_plan,
+    frozen_delivery_compiler_version,
     frozen_narrative_frame,
     frozen_series_context,
     frozen_user_premise,
 )
+from src.shared.creative_kernel import CreativeKernelV1
 from src.shared.creative_plan import (
     ACCOUNT_BASELINE_TONE_ID,
     CreativePlanV2,
@@ -37,6 +40,7 @@ from src.shared.creative_plan import (
     platform_shape,
     validate_creative_plan,
 )
+from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import brand_fact_records, product_fact_records
 from src.shared.narrative import (
@@ -250,6 +254,8 @@ class ContentService:
             progress,
             frozen_frame,
             plan,
+            DELIVERY_COMPILER_VERSION,
+            None,
         )
 
     def respond_to_conversation(
@@ -713,6 +719,13 @@ class ContentService:
         weak_seed = frozen_user_premise(snapshot, weak_seed)
         context = self._replayed_context(context, control, snapshot)
         creative_plan = frozen_creative_plan(snapshot)
+        delivery_compiler_version = frozen_delivery_compiler_version(snapshot)
+        prior_creative_kernel = frozen_creative_kernel(snapshot)
+        if delivery_compiler_version is not None and (
+            delivery_compiler_version != DELIVERY_COMPILER_VERSION
+            or prior_creative_kernel is None
+        ):
+            raise GenerationFailed("这条内容冻结的创作内核无法可靠读取")
         if creative_plan is None:
             frame = new_frame(
                 (
@@ -794,6 +807,8 @@ class ContentService:
             None,
             frame,
             creative_plan,
+            delivery_compiler_version,
+            prior_creative_kernel,
         )
 
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:
@@ -829,6 +844,13 @@ class ContentService:
         frame = frozen_narrative_frame(snapshot)
         source_premise = frozen_user_premise(snapshot, source.weak_seed)
         creative_plan = frozen_creative_plan(snapshot)
+        delivery_compiler_version = frozen_delivery_compiler_version(snapshot)
+        prior_creative_kernel = frozen_creative_kernel(snapshot)
+        if delivery_compiler_version is not None and (
+            delivery_compiler_version != DELIVERY_COMPILER_VERSION
+            or prior_creative_kernel is None
+        ):
+            raise GenerationFailed("源内容冻结的创作内核无法可靠读取")
         if creative_plan is None:
             frame = new_frame(
                 (
@@ -941,6 +963,7 @@ class ContentService:
                     active_revision=True,
                     creation_kind="recompile",
                 ),
+                delivery_compiler_version=delivery_compiler_version,
             ),
             None,
         )
@@ -963,6 +986,8 @@ class ContentService:
             None,
             frame,
             creative_plan,
+            delivery_compiler_version,
+            prior_creative_kernel,
         )
 
     def identity_summary(self, scope: TrustedScope, target: ContentTarget = "douyin_video") -> dict[str, str]:
@@ -1002,6 +1027,8 @@ class ContentService:
         progress: Callable[[str], None] | None = None,
         narrative_frame: NarrativeFrame | None = None,
         creative_plan: CreativePlanV2 | None = None,
+        delivery_compiler_version: str | None = None,
+        prior_creative_kernel: CreativeKernelV1 | None = None,
     ) -> dict[str, object]:
         try:
             # The run is already durable here. Keep the first generation event
@@ -1031,6 +1058,8 @@ class ContentService:
                     series_context=series_context,
                     narrative_frame=narrative_frame,
                     creative_plan=creative_plan,
+                    delivery_compiler_version=delivery_compiler_version,
+                    prior_creative_kernel=prior_creative_kernel,
                 )
             )
             if progress is not None:
@@ -1068,6 +1097,7 @@ class ContentService:
                 artifact.provider_usage,
                 {key: str(value) for key, value in vars(artifact.semantic_contract).items()},
                 artifact.fact_repair_receipts,
+                snapshot_patch=artifact.completion_snapshot_patch,
             )
         except GenerationFailed as exc:
             self._repository.fail_run(scope, task_id, run_id, str(exc))
@@ -1148,6 +1178,11 @@ class ContentService:
 
     @staticmethod
     def _production_conditions(text: str, media_format: str, previous: str | None = None) -> str:
+        if any(marker in text for marker in ("无口播", "无对白", "无解说")):
+            return (
+                "本次采用无口播、无对白、无解说的视频表达；完整已审文字使用文字卡或字幕"
+                "呈现，不要求现实环境声。"
+            )
         if "8 秒" in text or "8秒" in text:
             return "目标自然时长为 8 秒；无法同时保留原有全部认知时，只做明确标识的窄主题版，不称与原版等义。"
         if "四张" in text or "4 张" in text or "4张" in text:

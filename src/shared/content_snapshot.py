@@ -3,6 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from uuid import UUID
 
+from src.shared.creative_kernel import (
+    CreativeKernelV1,
+    kernel_from_document,
+)
 from src.shared.creative_plan import (
     CreativePlanV2,
     creative_plan_from_document,
@@ -29,6 +33,20 @@ def frozen_creative_plan(
 ) -> CreativePlanV2 | None:
     value = snapshot.get("creative_plan_v2")
     return None if value is None else creative_plan_from_document(value)
+
+
+def frozen_creative_kernel(
+    snapshot: Mapping[str, object],
+) -> CreativeKernelV1 | None:
+    value = snapshot.get("creative_kernel_v1")
+    return None if value is None else kernel_from_document(value)
+
+
+def frozen_delivery_compiler_version(
+    snapshot: Mapping[str, object],
+) -> str | None:
+    value = snapshot.get("delivery_compiler_version")
+    return value if isinstance(value, str) and value else None
 
 
 def visible_direction(snapshot: object) -> tuple[str | None, list[str]]:

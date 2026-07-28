@@ -62,6 +62,7 @@ class ContentRepository(ABC):
         provider_usage: dict[str, int] | None,
         product_contract: dict[str, str],
         fact_repair_receipts: tuple[FactRepairReceipt, ...],
+        snapshot_patch: dict[str, object] | None = None,
     ) -> dict[str, object]:
         """Atomically persist a new immutable content version and complete its run."""
 

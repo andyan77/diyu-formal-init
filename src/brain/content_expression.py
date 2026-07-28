@@ -8,6 +8,7 @@ from pathlib import Path
 
 from src.brain.creation_intent_gate import CreationCommitment, commitment_document
 from src.shared.creative_plan import CreativePlanV2, creative_plan_document
+from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
 from src.shared.errors import DomainError
 from src.shared.narrative import NarrativeFrame, frame_document
 from src.shared.types import (
@@ -449,6 +450,7 @@ def snapshot_document(
     user_premise: str = "",
     creative_plan: CreativePlanV2 | None = None,
     creation_commitment: CreationCommitment | None = None,
+    delivery_compiler_version: str | None = DELIVERY_COMPILER_VERSION,
 ) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
@@ -523,6 +525,10 @@ def snapshot_document(
             if narrative_frame is not None
             else None
         ),
+        "creative_kernel_v1": None,
+        "delivery_compiler_version": delivery_compiler_version,
+        "reviewed_kernel_digest": None,
+        "visible_provenance": None,
         "account_expression": (
             {
                 "profile_id": (

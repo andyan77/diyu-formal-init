@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias
 from uuid import UUID
 
 from src.shared.creative_plan import CreativePlanV2
 from src.shared.narrative import NarrativeFrame, NarrativeMode
+
+if TYPE_CHECKING:
+    from src.shared.creative_kernel import CreativeKernelV1
 
 ContentProduct: TypeAlias = Literal[
     "dressing_decision",
@@ -388,6 +391,8 @@ class GenerationInput:
     series_context: SeriesContext | None = None
     narrative_frame: NarrativeFrame | None = None
     creative_plan: CreativePlanV2 | None = None
+    delivery_compiler_version: str | None = None
+    prior_creative_kernel: CreativeKernelV1 | None = None
 
 
 @dataclass(frozen=True)
@@ -411,6 +416,7 @@ class GeneratedArtifact:
     production: ContentProductionBundle
     fact_repair_receipts: tuple[FactRepairReceipt, ...] = ()
     reviewed_digest: str | None = None
+    completion_snapshot_patch: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)

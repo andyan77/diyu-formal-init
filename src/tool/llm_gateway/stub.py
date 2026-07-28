@@ -1,12 +1,24 @@
 from __future__ import annotations
 
 from src.ports.content_generator import ContentGenerator
+from src.shared.creative_kernel import (
+    build_kernel_skeleton,
+    kernel_digest,
+    kernel_document,
+    parse_writer_kernel,
+)
 from src.shared.creative_plan import (
     ACCOUNT_BASELINE_TONE_ID,
     build_creative_plan,
     platform_shape,
 )
-from src.shared.narrative import visible_digest
+from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_VERSION,
+    DeliveryCompileInput,
+    compile_delivery,
+)
+from src.shared.factual_basis import FrozenFactRecord, product_fact_records
+from src.shared.narrative import legacy_frame, visible_digest
 from src.shared.types import (
     ContentProduct,
     ContentSemanticContract,
@@ -113,6 +125,102 @@ class DeterministicContentGenerator(ContentGenerator):
         )
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
+        if request.delivery_compiler_version == DELIVERY_COMPILER_VERSION:
+            return self._generate_kernel(request)
+        return self._generate_legacy(request)
+
+    def _generate_kernel(
+        self,
+        request: GenerationInput,
+    ) -> GeneratedArtifact:
+        frame = request.narrative_frame or legacy_frame(
+            tuple(
+                record.fact_id
+                for product in request.products
+                for record in product_fact_records(product)
+            )
+        )
+        facts = (
+            *(
+                FrozenFactRecord(
+                    fact.source_id,
+                    fact.exact_text,
+                    "user_actuality",
+                )
+                for fact in frame.user_facts
+            ),
+            *(
+                record
+                for product in request.products
+                for record in product_fact_records(product)
+                if record.fact_id in frame.allowed_product_fact_ids
+            ),
+        )
+        skeleton = build_kernel_skeleton(
+            frame=frame,
+            fact_registry=facts,
+            constraint_refs=("constraint:deterministic-test-stub",),
+        )
+        _, guide, spoken, _, subtitles, _ = self._parts(request)
+        if request.revision_instruction:
+            spoken += "\n\n这次按你的修改要求改变了允许调整的表达。"
+        release_caption = subtitles + _control_sections(request)
+        raw = {
+            "units": [
+                {"unit_id": "unit:title", "text": _outline(request.primary_product)},
+                {"unit_id": "unit:natural-guide", "text": guide},
+                {"unit_id": "unit:body", "text": spoken},
+                {
+                    "unit_id": "unit:release-caption",
+                    "text": release_caption,
+                },
+            ]
+        }
+        kernel = parse_writer_kernel(raw, skeleton)
+        allowed_resources = frozenset(
+            {
+                "resource:original_composition",
+                "resource:creator_expression",
+                *(
+                    f"resource:product:{product.sku}"
+                    for product in request.products
+                ),
+            }
+        )
+        compiled = compile_delivery(
+            DeliveryCompileInput(
+                primary_product=request.primary_product,
+                media_format=request.media_format,
+                products=request.products,
+                production_conditions=request.brand.production_conditions,
+                allowed_resource_ids=allowed_resources,
+            ),
+            kernel,
+        )
+        return GeneratedArtifact(
+            outline=compiled.outline,
+            body=compiled.body,
+            model=self.model_name,
+            latency_ms=0,
+            retry_count=0,
+            provider_usage=None,
+            primary_product=request.primary_product,
+            semantic_contract=compiled.semantic_contract,
+            production=compiled.production,
+            reviewed_digest=visible_digest(compiled.outline, compiled.body),
+            completion_snapshot_patch={
+                "creative_kernel_v1": kernel_document(kernel),
+                "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
+                "reviewed_kernel_digest": kernel_digest(kernel),
+                "visible_provenance": {
+                    field: list(sources)
+                    for field, sources in compiled.visible_provenance.items()
+                },
+                "delivery_resource_refs": list(compiled.resource_refs),
+            },
+        )
+
+    def _generate_legacy(self, request: GenerationInput) -> GeneratedArtifact:
         contract, guide, spoken, visuals, subtitles, sound = self._parts(request)
         production = self._production(request, contract, guide, spoken, visuals, subtitles, sound)
         revision = "\n\n这次只按你的自然修改更新了同一任务的表达。" if request.revision_instruction else ""
