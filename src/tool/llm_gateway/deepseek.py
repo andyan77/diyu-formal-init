@@ -939,13 +939,28 @@ class DeepSeekGenerator(ContentGenerator):
             final_issues, judgement_payload, judgement_retries = self._review_core(request, context, repaired_core)
             provider_payloads.append(judgement_payload)
             retries += judgement_retries
+            repaired_core, final_issues, settled_final_issues = (
+                self._settle_final_product_claim_repairs(
+                    request,
+                    context,
+                    repaired_core,
+                    final_issues,
+                )
+            )
             if final_issues:
                 _LOGGER.warning(
                     "content boundary remained unsatisfied after unit repair: %s",
                     ",".join(f"{issue.unit_id}:{issue.reason_code}" for issue in final_issues),
                 )
                 raise GenerationFailed("内容边界无法在一次单元修复内满足")
-            fact_repair_receipts = self._issue_receipts(request, core, issues)
+            receipt_issues = tuple(
+                dict.fromkeys((*issues, *settled_final_issues))
+            )
+            fact_repair_receipts = self._issue_receipts(
+                request,
+                core,
+                receipt_issues,
+            )
             core = repaired_core
         title, contract, production, body = self._compile_core(request, core)
         usage = self._combined_usage(provider_payloads)
@@ -1623,6 +1638,69 @@ class DeepSeekGenerator(ContentGenerator):
             spoken_order=core.spoken_order,
             scene_steps=core.scene_steps,
         )
+
+    def _settle_final_product_claim_repairs(
+        self,
+        request: GenerationInput,
+        context: BoundaryContext,
+        core: ContentCore,
+        issues: tuple[UnitIssue, ...],
+    ) -> tuple[ContentCore, tuple[UnitIssue, ...], tuple[UnitIssue, ...]]:
+        """Close a final product fact verdict with compiler-proven atoms.
+
+        The final judge has already approved every other axis for these units.
+        A claim-only fact verdict can therefore be replaced by an exact atomic
+        fact from this task's frozen product snapshot without another model
+        call. Identity, actuality, resource, instruction and scene verdicts
+        remain blocking. Server-side closed-world, deterministic-value and
+        media checks run again over the resulting core.
+        """
+
+        claim_ids = {claim.claim_id for claim in core.claims}
+        candidates = tuple(
+            issue
+            for issue in issues
+            if issue.unit_id in claim_ids
+            and issue.reason_code == "factual_conflict"
+        )
+        if not candidates or not context.product_fact_claims:
+            return core, issues, ()
+
+        settled_core = self._bind_rejected_product_claims(
+            context,
+            core,
+            candidates,
+        )
+        exact_product_claims = set(context.product_fact_claims)
+        settled = tuple(
+            issue
+            for issue in candidates
+            if (
+                settled_core.claim(issue.unit_id).source_refs[0],
+                settled_core.claim(issue.unit_id).text,
+            )
+            in exact_product_claims
+            and settled_core.claim(issue.unit_id).basis == "confirmed_fact"
+            and settled_core.claim(issue.unit_id).actuality == "non_event"
+        )
+        settled_keys = {
+            (issue.unit_id, issue.reason_code)
+            for issue in settled
+        }
+        remaining = tuple(
+            issue
+            for issue in issues
+            if (issue.unit_id, issue.reason_code) not in settled_keys
+        )
+        server_side = (
+            *self._closed_world_issues(context, settled_core),
+            *self._deterministic_unit_issues(context, settled_core),
+            *self._media_issues(request, settled_core),
+        )
+        merged: dict[tuple[str, str], UnitIssue] = {}
+        for issue in (*remaining, *server_side):
+            merged.setdefault((issue.unit_id, issue.reason_code), issue)
+        return settled_core, tuple(merged.values()), settled
 
     @staticmethod
     def _bind_rejected_nonactual_claims(

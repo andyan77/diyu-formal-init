@@ -1614,6 +1614,85 @@ def test_rejected_product_claim_is_bound_even_after_repair_drops_its_source(
     assert not DeepSeekGenerator._closed_world_issues(context, bound)
 
 
+def test_final_product_fact_flip_is_settled_without_another_model_call(
+    monkeypatch: pytest.MonkeyPatch,
+    generation_input: GenerationInput,
+) -> None:
+    product = ProductFact(
+        "ZX-C218",
+        {
+            "category": "双面短外套",
+            "colors": ["炭灰纯色", "深绿细格纹"],
+        },
+    )
+    request = _with(generation_input, products=(product,))
+    core = _video_core()
+    repaired_release: dict[str, object] = {
+        "claim_id": "c4",
+        "text": "你会先看哪项登记事实？",
+        "basis": "brand_viewpoint",
+        "actuality": "non_event",
+        "source_refs": ["source:brand_baseline"],
+    }
+    _install_fake(
+        monkeypatch,
+        [
+            _core_response(core),
+            _verdicts(core, {"c4": ("fact_ok",)}),
+            _repairs(repaired_release),
+            _verdicts(
+                core,
+                {
+                    "c5": ("fact_ok",),
+                    "c6": ("fact_ok",),
+                },
+            ),
+        ],
+    )
+
+    artifact = _generator().generate(request)
+
+    assert "先保留每个人舒服的选择" not in artifact.body
+    assert "如果需要正式合照" not in artifact.body
+    assert "当前商品已登记" in artifact.body
+    assert len(FakeClient.requests) == 4
+    assert {receipt.field for receipt in artifact.fact_repair_receipts} >= {
+        "choice",
+        "boundary",
+    }
+
+
+def test_final_product_settlement_does_not_hide_an_identity_failure(
+    generation_input: GenerationInput,
+) -> None:
+    product = ProductFact("ZX-C218", {"category": "双面短外套"})
+    request = _with(generation_input, products=(product,))
+    context = BoundaryContext.from_request(request)
+    core = _generator()._parse_core(request, context, _video_core())
+
+    settled_core, remaining, settled = (
+        _generator()._settle_final_product_claim_repairs(
+            request,
+            context,
+            core,
+            (
+                UnitIssue("c5", "factual_conflict", core.claim("c5").text),
+                UnitIssue("c5", "untrusted_role", core.claim("c5").text),
+            ),
+        )
+    )
+
+    assert settled_core.claim("c5").text == (
+        "当前商品已登记的品类是双面短外套。"
+    )
+    assert {(issue.unit_id, issue.reason_code) for issue in settled} == {
+        ("c5", "factual_conflict")
+    }
+    assert {(issue.unit_id, issue.reason_code) for issue in remaining} == {
+        ("c5", "untrusted_role")
+    }
+
+
 def test_rejected_experience_shell_uses_frozen_viewpoint_without_user_actuality(
     generation_input: GenerationInput,
 ) -> None:
