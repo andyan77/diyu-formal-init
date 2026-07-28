@@ -13,6 +13,7 @@ from src.shared.review_evidence import (
     REVIEW_EVIDENCE_V2_TOOL_NAME,
     REVIEW_EVIDENCE_V2_VERSION,
     ClauseContextV2,
+    ReviewClause,
     review_evidence_v2_json_schema,
     validate_server_owned_contexts_v2,
     writer_clause_contexts_v2,
@@ -243,6 +244,23 @@ def test_reviewer_token_budget_is_deterministic_and_hard_capped() -> None:
     assert generator._review_max_tokens(100) == 16384
     with pytest.raises(ValueError, match="positive"):
         generator._review_max_tokens(0)
+
+
+def test_full_clause_quote_does_not_itself_require_uncertain() -> None:
+    prompt = DeepSeekGenerator._kernel_reviewer_prompt(
+        (
+            ReviewClause(
+                unit_id="unit:body",
+                clause_id="unit:body:clause:1",
+                exact_text="婆婆停了一下，又继续说话。",
+                visible_order=1001,
+            ),
+        )
+    )
+
+    assert "完整 quote 同时含有其他文字不构成\nuncertain" in prompt
+    assert "多个证据或多重主张可以让同一完整 clause quote 分别出现在" in prompt
+    assert "只有证据类别或隐含主体本身无法可靠判断时才" in prompt
 
 
 @pytest.mark.parametrize(

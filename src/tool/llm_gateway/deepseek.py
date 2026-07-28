@@ -1120,9 +1120,12 @@ allowed_observation_types 是服务端边界：abstract_principle 可以表达�
 
 每个 clause_id 必须按 visible_order 恰好返回一次，exact_text 必须逐字等于对应完整 clause，
 不得截短或抄写其他 clause。每个 span 只返回 text，且 text 必须逐字等于当前这一项的完整
-exact_text；不要返回单个词或局部短语。strict schema 只允许服务端给出的完整 clause 原文，
-服务端还会校验 quote 是否属于当前 clause。同一 evidence 数组中的同一 quote 只返回一次。
-无法可靠判断证据类别时返回 uncertain=true，不要猜测。不要计算或返回
+exact_text；不要返回单个词或局部短语。这里的完整 clause 是证据的唯一地址：当该 clause
+确实含有某类证据时，把完整 clause 放入对应数组；完整 quote 同时含有其他文字不构成
+uncertain。strict schema 只允许服务端给出的完整 clause 原文，服务端还会校验 quote 是否属于
+当前 clause。同一 evidence 数组中的同一 quote 只返回一次。只有无法可靠判断整个 clause
+是否含有某类证据，或 implicit_subject 确实无法确定时，才返回 uncertain=true；不要猜测，
+也不得为了避免 uncertain 而遗漏可见证据。不要计算或返回
 start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
 - subject_spans：句中明确作为陈述主体的人、代词、机构或事物；
 - predicate_spans：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；
@@ -1134,8 +1137,9 @@ start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 
 
 implicit_subject 只选 none、current_speaker、generic、uncertain。句中有明确主体时通常为
 none；省略主体但由当前说话者承担谓语时为 current_speaker；泛指任何人时为 generic；
-无法可靠判断时为 uncertain。重复跨度、多重主张或证据关系无法唯一定位，以及任何字段无法
-可靠提取时，必须 uncertain=true。
+无法可靠判断时为 uncertain。多个证据或多重主张可以让同一完整 clause quote 分别出现在
+不同证据数组中；这不构成地址歧义。只有证据类别或隐含主体本身无法可靠判断时才
+uncertain=true。
 
 只返回：
 {{"evidence_version":"{REVIEW_EVIDENCE_V2_VERSION}","clauses":[{{
