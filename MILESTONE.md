@@ -1,30 +1,31 @@
 # 当前里程碑
 
-- 当前里程碑：`UI-09` 单一创作内核与确定性成品编译闭环。
-- 状态：`BLOCKED`。`UI-08` 保持 `SUPERSEDED → UI-09`；只表示
-  UI-08 中“Writer 同时生成叙事文字和制作字段”的路径由单一文字内核与确定性成品编译承接，
-  不表示 UI-08 成功。UI-08 的 `BLOCKED`、两个 Writer `0/3`、Reviewer 未验证、未
-  push/CI/部署与 root-only 证据原样保留。
-- 当前 Git 基线：启动 `HEAD=27f1e2e52c13fd83229a4a7c43da4992ae162731`，
-  实现 `HEAD=0542ec880f046204521b8446d56e34ea560990a2`，
-  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`；线性历史未改写且尚未 push。
+- 当前里程碑：`UI-10` Reviewer 证据提取与服务端事实裁决闭环。
+- 状态：`ACTIVE`。`UI-09` 为 `SUPERSEDED → UI-10`；只表示 UI-09 中“Reviewer 自报
+  observation type 直接参与安全放行”的新内核路径由证据提取与服务端事实裁决替代，不表示
+  UI-09 成功。UI-09 的 `BLOCKED`、Reviewer `2/3`、样本 C 假绿、G3/G4/D1 未运行、
+  未 push/CI/部署与 root-only 证据原样保留。
+- 当前 Git 基线：启动 `HEAD=9af478b0f79786184b2b74c2fc48bb3730439d66`，
+  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，本地线性领先 8 提交且
+  工作树启动时干净；禁止 reset、rebase、squash 或改写 UI-07—UI-09 历史。
 - 生产启动复核：部署仓库仍为干净的 `845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，
-  镜像 `diyu-saas:845f632…`、摘要 `sha256:1171b153cbc709a760caf4a5db1fb14fe00e0bca3ef9c7b79c85f737a3a6bdb9`，
+  镜像 `diyu-saas:845f632…`、摘要
+  `sha256:1171b153cbc709a760caf4a5db1fb14fe00e0bca3ef9c7b79c85f737a3a6bdb9`，
   schema `20260801_28`，回环 readiness `ready`、公网 `200`，备份 timer `active`。
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
-- 当前任务包：`docs/UI-09-单一创作内核与确定性成品编译闭环执行包.md`
-- 已完成：`CreativeKernelV1` 将 Writer 输出收窄为既定 `unit_id + text`，服务端逐字事实
-  unit 不可写；Reviewer 只审完整 unit 精确跨度；`DeliveryCompilerV1` 只使用已审文字、
-  版本化中性短语和登记资源；成功事务原子写版本与内核快照。无迁移，旧快照继续走 legacy
-  路径。ruff、mypy 与完整 Golden `199 passed`（含 OpenAPI）通过。
-- 真实阻断：同一实现 SHA 的受保护 `deepseek-v4-flash` Reviewer 资格为 `2/3`。A
-  “换位思考不等于没有边界”为 `abstract_principle`，B 饭桌微事件为 `situated_event`；
-  C “笛语相信婆媳关系需要换位思考”却被误分为 `abstract_principle`，服务端因此未能生成
-  `unsupported_institutional_assertion`。三次均 `temperature=0`、`max_retries=0`。
-- 停止边界：Reviewer 资格未达 `3/3` 后，G3/G4/D1 均未调用；没有第二修复、重跑、补
-  Prompt、再比较模型、push、CI、备份、部署或生产卡片。生产仍为上述安全版本。
-- 唯一下一动作：主控只裁决是否另开 **Reviewer 单角色 successor**；UI-09 内不补
-  Prompt、不改 Writer、不再次调用模型。
+- 当前任务包：`docs/UI-10-Reviewer证据提取与服务端事实裁决闭环执行包.md`
+- 保留能力：CreationIntentGate、CreativePlanV2、NarrativeFrame、CreativeKernelV1
+  Writer、DeliveryCompilerV1、服务端逐字事实、最多一次 unit 修复、legacy 路径、RLS、
+  DM01、AIGC 与资产 `41/243/25/119` 均不得回退。
+- 当前验收：先建立版本化 `ReviewEvidenceV1`、服务端 clause、精确 evidence 闭世界、
+  scoped protected subjects 和独立事实裁决；恢复 frame 明确允许的精确 brand frozen
+  fact 路径。确定性与 mutation 门通过后，才可重放 UI-09 样本 C 并用当前
+  `deepseek-v4-flash` 对 A/B/C 各提证一次。
+- 停止边界：Reviewer evidence 任一漏审、虚构、原文不一致、部分覆盖或 uncertain，或
+  服务端 A/B/C 裁决不是 `3/3`，立即置 `BLOCKED`；不补单句 Prompt、不换模型、不重跑、
+  不增加第二 Reviewer。Reviewer 资格通过前不 push、CI、备份、部署或修改生产。
+- 唯一下一动作：完成 UI-10 确定性 clause/evidence/事实裁决实现与现有 pytest
+  mutation proof。
 
 ## UI-07 被 UI-08 取代结论（2026-07-28，历史完整保留）
 
