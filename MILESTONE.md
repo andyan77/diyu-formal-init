@@ -5,6 +5,10 @@
   `SUPERSEDED → UI-07`；这只表示旧的“模型 `ready` 直接授权创建任务”路径由前置
   `CreationIntentGate` 替代，不表示 UI-07 已成功。UI-06 的真实 G1 失败、唯一生产候选、
   CI、备份、部署、回退、清理与 `BLOCKED` 证据全部原样保留。
+- 当前 Git 基线：本地阻断实现与证据提交
+  `03b710a2420397ac31d8d890a4ebc762f677232b`；`origin/main` 仍为启动基线
+  `7aa87ab624cf3ff64f42e49f1755d66d496cac7a`。该本地提交不是生产候选，没有 push、
+  CI 或部署。
 - 启动现场：2026-07-28（UTC）核实本地 `main`、`origin/main` 与 `HEAD` 均为
   `7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，工作树干净；相对
   `845f63291ba5060e60f87d1afa5cfc1cdb057e3b` 只有权威文档差异，运行代码树等价。
