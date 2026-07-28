@@ -138,7 +138,7 @@
 - G4 停止线：实现 `72c1201…` 的 G4 曾机器通过，但人工阅读全文发现 Writer 增加“伴侣”
   身份、动机和示例对白，证明 Reviewer 假阴性。执行端在同一 evidence 合同内增加通用
   `relationship_role` 精确证据并收窄一次修复；最终实现
-  `c4b895362075309247895e49c4e29bc87d04fbc2` 的初稿、唯一修复和完整复审仍失败关闭。
+  `c4b89534cdbe393dc30dfda858595d5d80da0b88` 的初稿、唯一修复和完整复审仍失败关闭。
   修复稿可见文字仍增加“亲密关系”、期待／渴望等动机以及建议动作；对应 Reviewer raw
   对 10 个 clause 返回 32 项 evidence、`uncertain=0`，却没有返回任何
   `relationship_role`、`motive` 或 `dialogue` evidence。服务端抓住发布配文的两项问题
@@ -152,7 +152,9 @@
   `/var/lib/diyu-ui12-evidence/c4b895362075309247895e49c4e29bc87d04fbc2/`
   `g4-preflight/`，目录／文件权限为 `0700/0600 root:root`；最终 Reviewer raw 与最终
   服务端 issues 的 SHA-256 分别为 `d9d921865080…`、`0512712ab2ab…`。原始 Prompt、
-  凭据和完整敏感正文未进入 Git。停止后只读复核生产部署仓及镜像仍为 `845f632…`，
+  凭据和完整敏感正文未进入 Git。该目录名及 `g4-failure.json.wip_sha` 是证据脚本误写的
+  同前缀完整 SHA；真实 Git 实现 SHA 为 `c4b89534cdbe393dc30dfda858595d5d80da0b88`。
+  原始证据不改名、不改写，以哈希和本条纠偏共同留痕。停止后只读复核生产部署仓及镜像仍为 `845f632…`，
   schema `20260801_28`，回环／公网 readiness `200/200`，备份 timer active；本轮没有
   生产业务写入。本机及 ECS `/tmp` 下本轮 UI-12 源码归档、隔离源码和探针脚本已精确
   清理，`/var/lib/diyu-ui12-evidence/` 正式历史证据保留。
