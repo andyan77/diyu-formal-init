@@ -1116,10 +1116,11 @@ allowed_observation_types 是服务端边界：abstract_principle 可以表达�
 {json.dumps(targets, ensure_ascii=False)}
 
 每个 clause_id 必须按 visible_order 恰好返回一次，exact_text 必须逐字等于对应完整 clause，
-不得截短或抄写其他 clause。每个 span 只返回 text、occurrence：text 必须是当前 clause
-中的精确原文；occurrence 是该 text 在 clause 内按从左到右顺序、从 1 开始的出现序号。
-相同文字重复出现时必须选择正确 occurrence。不要计算或返回 start/end，字符 offset 只由
-服务端根据可信 clause 原文确定性计算。
+不得截短或抄写其他 clause。每个 span 只返回 text；text 必须是当前 clause 中逐字存在且
+只出现一次的精确原文。短语在同一 clause 重复时，必须连同足够上下文返回一个只出现一次的
+更长精确 quote；无法可靠提供唯一 quote 时不要猜测任何地址或序号，返回 uncertain=true。
+此时不要把无法唯一绑定的重复短语放入 span 数组。不要计算或返回
+start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
 - subject_spans：句中明确作为陈述主体的人、代词、机构或事物；
 - predicate_spans：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；
 - action_or_event_spans：具体情境中实际发生的动作、反应或事件；抽象概念名称不是事件；
@@ -1136,7 +1137,7 @@ none；省略主体但由当前说话者承担谓语时为 current_speaker；泛
 只返回：
 {{"evidence_version":"{REVIEW_EVIDENCE_V2_VERSION}","clauses":[{{
 "clause_id":"既定 id","exact_text":"完整 clause 原文",
-"subject_spans":[{{"text":"原文","occurrence":1}}],
+"subject_spans":[{{"text":"clause 内唯一的精确原文"}}],
 "predicate_spans":[],"action_or_event_spans":[],
 "dialogue_spans":[],"motive_spans":[],"cause_spans":[],"result_spans":[],
 "time_spans":[],"location_spans":[],
@@ -2243,7 +2244,7 @@ CreativePlanV2：{json.dumps(
             "function": {
                 "name": REVIEW_EVIDENCE_V2_TOOL_NAME,
                 "description": (
-                    "Submit exact, occurrence-aware evidence for every "
+                    "Submit exact, uniquely bindable quote evidence for every "
                     "server-provided writer clause."
                 ),
                 "strict": True,

@@ -93,17 +93,8 @@ def _frame_and_kernel(
     return frame, kernel, contexts
 
 
-def _occurrence(
-    text: str,
-    fragment: str,
-    *,
-    occurrence: int = 1,
-) -> SpanOccurrence:
-    start = -1
-    cursor = 0
-    for _ in range(occurrence):
-        start = text.index(fragment, cursor)
-        cursor = start + len(fragment)
+def _normalized_span(text: str, fragment: str) -> SpanOccurrence:
+    start = text.index(fragment)
     return SpanOccurrence(fragment, start, start + len(fragment))
 
 
@@ -145,7 +136,7 @@ def _evidence(
             selected_clause: bool = selected,
         ) -> tuple[SpanOccurrence, ...]:
             return (
-                tuple(_occurrence(exact_text, value) for value in values)
+                tuple(_normalized_span(exact_text, value) for value in values)
                 if selected_clause
                 else ()
             )
@@ -1012,7 +1003,7 @@ def test_sdr_evidence_qualification_failures(
     assert sdr_id in _ALL_SDR_IDS
 
 
-def test_occurrence_aware_parser_distinguishes_repeated_text() -> None:
+def test_quote_parser_binds_one_exact_quote_and_computes_unicode_offset() -> None:
     text = "她先停了一下，后来又停了一下。"
     evidence = parse_review_evidence_v2(
         {
@@ -1024,8 +1015,8 @@ def test_occurrence_aware_parser_distinguishes_repeated_text() -> None:
                     "subject_spans": [],
                     "predicate_spans": [],
                     "action_or_event_spans": [
-                        {"text": "停了一下", "occurrence": 1},
-                        {"text": "停了一下", "occurrence": 2},
+                        {"text": "她先停了一下"},
+                        {"text": "后来又停了一下"},
                     ],
                     "dialogue_spans": [],
                     "motive_spans": [],
@@ -1048,31 +1039,28 @@ def test_occurrence_aware_parser_distinguishes_repeated_text() -> None:
     assert tuple(
         (span.start, span.end)
         for span in evidence.clauses[0].action_or_event_spans
-    ) == ((2, 6), (10, 14))
+    ) == ((0, 6), (7, 14))
 
 
-@pytest.mark.parametrize("occurrence", (0, -1, 3, True))
-def test_occurrence_must_select_a_positive_existing_match(
-    occurrence: int,
-) -> None:
+def test_repeated_short_quote_fails_until_context_is_unique() -> None:
     text = "她先停了一下，后来又停了一下。"
-    with pytest.raises(TypeError, match="occurrence"):
+    with pytest.raises(TypeError, match="uniquely resolved"):
         parse_review_evidence_v2(
             _raw_v2_evidence(
                 text,
-                span={"text": "停了一下", "occurrence": occurrence},
+                span={"text": "停了一下"},
             ),
             clause_text_by_id={"unit:test:clause:1": text},
         )
 
 
-def test_occurrence_requires_an_exact_match_without_fuzzy_fallback() -> None:
+def test_quote_requires_an_exact_match_without_fuzzy_fallback() -> None:
     text = "她先停了一下，后来又停了一下。"
-    with pytest.raises(TypeError, match="cannot be resolved"):
+    with pytest.raises(TypeError, match="uniquely resolved"):
         parse_review_evidence_v2(
             _raw_v2_evidence(
                 text,
-                span={"text": "停一下", "occurrence": 1},
+                span={"text": "停一下"},
             ),
             clause_text_by_id={"unit:test:clause:1": text},
         )
@@ -1084,7 +1072,7 @@ def test_uncertain_evidence_is_structurally_valid_and_not_repairable() -> None:
     evidence = parse_review_evidence_v2(
         _raw_v2_evidence(
             text,
-            span={"text": "尊重", "occurrence": 1},
+            span={"text": "尊重"},
             uncertain=True,
         ),
         clause_text_by_id={"unit:test:clause:1": text},

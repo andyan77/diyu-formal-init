@@ -76,7 +76,7 @@ def _evidence_document() -> dict[str, object]:
                 "exact_text": "换位思考不等于没有边界。",
                 "subject_spans": [],
                 "predicate_spans": [
-                    {"text": "不等于", "occurrence": 1}
+                    {"text": "不等于"}
                 ],
                 "action_or_event_spans": [],
                 "dialogue_spans": [],
@@ -170,11 +170,8 @@ def test_strict_schema_requires_every_nested_object_field() -> None:
     assert isinstance(predicate_spans, dict)
     span = predicate_spans["items"]
     assert isinstance(span, dict)
-    assert span["properties"] == {
-        "text": {"type": "string"},
-        "occurrence": {"type": "integer"},
-    }
-    assert span["required"] == ["text", "occurrence"]
+    assert span["properties"] == {"text": {"type": "string"}}
+    assert span["required"] == ["text"]
 
 
 def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
@@ -313,17 +310,24 @@ def test_strict_arguments_are_never_defaulted_or_repaired(
         )
 
 
-def test_old_offset_arguments_are_not_silently_repaired() -> None:
+@pytest.mark.parametrize(
+    "legacy_span",
+    (
+        {"text": "不等于", "start": 4, "end": 7},
+        {"text": "不等于", "occurrence": 1},
+    ),
+)
+def test_old_address_arguments_are_not_silently_repaired(
+    legacy_span: dict[str, object],
+) -> None:
     document = _evidence_document()
     clauses = document["clauses"]
     assert isinstance(clauses, list)
     clause = clauses[0]
     assert isinstance(clause, dict)
-    clause["predicate_spans"] = [
-        {"text": "不等于", "start": 4, "end": 7}
-    ]
+    clause["predicate_spans"] = [legacy_span]
 
-    with pytest.raises(TypeError, match="occurrence span"):
+    with pytest.raises(TypeError, match="quote span"):
         DeepSeekGenerator._strict_review_evidence(
             _strict_payload(document),
             clause_text_by_id={

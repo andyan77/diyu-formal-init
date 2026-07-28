@@ -560,7 +560,6 @@ def _kernel_observations(
                     [
                         {
                             "text": clause.exact_text,
-                            "occurrence": 1,
                         }
                     ]
                     if is_event
@@ -573,7 +572,6 @@ def _kernel_observations(
                     [
                         {
                             "text": clause.exact_text,
-                            "occurrence": 1,
                         }
                     ]
                     if is_event
@@ -586,7 +584,6 @@ def _kernel_observations(
                         [
                             {
                                 "text": modality,
-                                "occurrence": 1,
                             }
                         ]
                         if modality is not None
@@ -1117,7 +1114,8 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     reviewer_prompt = prompts[1]
     assert '"evidence_version":"review-evidence-v2"' in reviewer_prompt
     assert '"grammatical_marker_spans"' in reviewer_prompt
-    assert '"occurrence":1' in reviewer_prompt
+    assert '"subject_spans":[{"text":' in reviewer_prompt
+    assert '"occurrence"' not in reviewer_prompt
     assert '"start"' not in reviewer_prompt
     assert '"end"' not in reviewer_prompt
 
@@ -1269,7 +1267,7 @@ def test_ui10_evidence_failure_never_calls_writer_repair(
     elif mutation == "fake_span":
         clauses[-1] = dict(clauses[-1])
         clauses[-1]["predicate_spans"] = [
-            {"text": "并不存在的谓词", "occurrence": 1}
+            {"text": "并不存在的谓词"}
         ]
     else:
         clauses[-1] = dict(clauses[-1])

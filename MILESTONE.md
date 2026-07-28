@@ -1,7 +1,10 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`BLOCKED`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
+- 状态：`ACTIVE`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
+  保留；主控现已在同一 UI-12 内裁决改由服务端确定性绑定 exact quote，并采用“一战到底”
+  治理恢复施工，不创建 UI-13，也不表示问题已经解决。`UI-11` 为
+  `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
   未运行及未 push/CI/部署证据完整保留。
@@ -114,6 +117,13 @@
   `diyu-m5-4-backup.timer` active。
 - 当前唯一下一动作：主控审阅完整 G3 的 occurrence 失效证据并裁决当前 Reviewer 方案；
   不自动创建 UI-13，不在执行端继续重跑、换模型、加 fallback 或放宽事实边界。
+- 主控后续裁决已完成：Reviewer 不再返回 `start/end/occurrence`，只返回所属 clause
+  的 exact quote 与 evidence 类别；服务端负责 0/1/多次精确匹配、Unicode offset
+  规范化和失败关闭。transport、schema、parser、binder、fixture、oracle 与必要 Prompt
+  调整均属于 UI-12 内普通实现自由，运行时失败关闭不再等于开发立即停工。
+- 当前执行纪律：先离线重放现存完整 16-clause G3 raw，再实现 quote-only binder 并尽早
+  运行完整 G3；只有产品责任、安全隔离、供应商或历史兼容真实边界改变才停止。所有本地
+  SHA 在完整 G1—G7/H1/D1 成立前均为 WIP，不是生产候选，不 push/CI/部署。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
