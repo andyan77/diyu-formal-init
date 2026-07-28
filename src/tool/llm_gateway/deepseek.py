@@ -1208,6 +1208,9 @@ CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit
 - unsupported_actuality_binding：删除 Writer unit 中复制、概括或改写的现实事实，现实原文
   已由服务端 frozen fact 单元独立保留；
 - unsupported_institutional_assertion：删除当前机构或第一人称复数承担的观点、做法与经历；
+- unsupported_product_claim：删除 Writer unit 对商品名称、编号、属性、数字、对照、性能或
+  资料边界的复述、概括和改写；已登记商品事实由服务端 frozen fact 单元逐字保留。只改写为
+  不承载商品事实的观看引导或抽象表达；
 - unsupported_actuality_binding 出现在 hypothesis/dramatization 时，改为不绑定现实身份的
   泛指虚构角色。
 这是本成品唯一修复。若受影响 unit 的冻结 contract 是 abstract_observation，或

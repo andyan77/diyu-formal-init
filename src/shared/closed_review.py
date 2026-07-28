@@ -551,10 +551,24 @@ def _claim_inventory_issues(
             )
             continue
         if "institutional_or_product_claim" in dimensions:
+            product_operands = {
+                "product_fact",
+                "product_performance",
+            }
+            reason = (
+                "unsupported_product_claim"
+                if set(
+                    clause_claims[
+                        "institutional_or_product_claim"
+                    ].operands
+                )
+                & product_operands
+                else "unsupported_institutional_assertion"
+            )
             issues.append(
                 NarrativeIssue(
                     context.unit_id,
-                    "unsupported_institutional_assertion",
+                    reason,
                     clause_claims["institutional_or_product_claim"].exact_quote,
                 )
             )

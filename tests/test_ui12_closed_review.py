@@ -470,6 +470,28 @@ def test_audience_guidance_accepts_safe_summary_or_invitation_only() -> None:
     ) == ("statement_mode_conflict",)
 
 
+def test_product_claim_is_distinct_from_institutional_assertion() -> None:
+    text = "这件商品已登记为双面完整外观。"
+    contexts = _context(text)
+    answers = _parse(
+        contexts,
+        {
+            "subject_binding": (
+                "present",
+                text,
+                ("named_product",),
+            ),
+            "institutional_or_product_claim": (
+                "present",
+                text,
+                ("product_fact",),
+            ),
+        },
+    )
+
+    assert _reasons(contexts, answers) == ("unsupported_product_claim",)
+
+
 def test_present_to_absent_mutation_changes_server_ruling() -> None:
     text = "她说：“今天辛苦了”。"
     contexts = _context(text)

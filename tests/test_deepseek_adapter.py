@@ -516,6 +516,11 @@ def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:
                 "unsupported_actuality_expansion",
                 "另一问题片段",
             ),
+            NarrativeIssue(
+                "unit:body-opening",
+                "unsupported_product_claim",
+                "商品问题片段",
+            ),
         ),
     )
 
@@ -527,6 +532,7 @@ def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:
     assert "这是本成品唯一修复" in prompt
     assert "只写一至两句纯状态、关系或价值判断" in prompt
     assert "用户事实中没有逐字出现的亲属、伴侣、同住、员工、顾客" in prompt
+    assert "已登记商品事实由服务端 frozen fact 单元逐字保留" in prompt
 
 
 def _kernel_observations(
