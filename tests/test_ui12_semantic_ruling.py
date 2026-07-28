@@ -1266,6 +1266,21 @@ def test_explicit_recommendation_in_abstract_unit_is_repairable_drift() -> None:
     ) == frozenset({"unit:body"})
 
 
+def test_unmodalized_action_in_actuality_reflection_is_repairable_drift() -> None:
+    text = "两个人争的是被看见的期待。"
+    contexts = _manual_context(text, "actuality_reflection")
+    evidence = _evidence(
+        contexts,
+        target_fragment=text,
+        action=("争的是",),
+        implicit_subject="generic",
+    )
+
+    assert _reasons(contexts, evidence) == (
+        "situated_event_in_reflection",
+    )
+
+
 def test_sdr_matrix_has_one_direct_consumer_for_every_stable_id() -> None:
     semantic_ids = {
         f"SDR-{index:03d}" for index in range(12, 37)

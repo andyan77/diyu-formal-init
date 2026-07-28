@@ -1298,7 +1298,7 @@ def _writer_clause_issue(
         if has_action and not has_modality:
             return NarrativeIssue(
                 context.unit_id,
-                "insufficient_evidence",
+                "situated_event_in_reflection",
                 context.exact_text,
             )
         return None
