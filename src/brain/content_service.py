@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import replace
 from uuid import UUID
@@ -788,13 +789,21 @@ class ContentService:
             return "目标自然时长为 8 秒；无法同时保留原有全部认知时，只做明确标识的窄主题版，不称与原版等义。"
         if "四张" in text or "4 张" in text or "4张" in text:
             return "当前只补拍四张；图文仍须有完整正文，并由正文保留商品归因边界。"
-        if "一个人" in text or "一人" in text or "手机" in text:
-            return "一名创作者、一部手机、普通室内或门店；按当前形式完成拍摄、录音、排版或剪辑。"
+        if re.search(
+            r"(?:一个人|一人)(?:完成|制作|拍|录|剪)|(?:用|只用|只有|一部)手机(?:拍|录|制作|完成)?",
+            text,
+        ):
+            return (
+                "只使用用户本次明确点名的单人或手机制作条件；"
+                "未点名的人物、物品、场地和既有素材仍视为不可用。"
+            )
         if previous is not None:
             return previous
-        if media_format == "graphic":
-            return "一名创作者、一部手机、普通室内或门店；按当前条件补拍、选图、排版并发布图文。"
-        return "一名创作者、一部手机、普通室内或门店；按当前条件完成拍摄、录音和剪辑。"
+        return (
+            f"按当前{media_format}形式自主选择表现方式；"
+            "可使用创作者本人表达与本次原创的抽象构图、排版、文字和声音组织，"
+            "不默认任何现实人物、商品、物品、场地或既有素材存在。"
+        )
 
     @staticmethod
     def _requests_independent_result(text: str) -> bool:

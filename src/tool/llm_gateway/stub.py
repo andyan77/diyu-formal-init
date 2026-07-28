@@ -132,7 +132,10 @@ class DeterministicContentGenerator(ContentGenerator):
                     "第 3 张补足必要比较或动作；最后一张完成本篇判断。每张只承担这一项职责。"
                 ),
                 full_body="\n".join(str(value) for value in vars(contract).values()),
-                layout_and_production="按当前一人一手机条件补拍或选图；不把视频帧、台词卡或长文切片当作图片序列。",
+                layout_and_production=(
+                    "按本篇语义选择本次原创构图、排版或创作者表达；"
+                    "不把视频帧、台词卡或长文切片当作图片序列。"
+                ),
                 release_caption_and_interaction="正文已经完成当前判断；不需要额外互动时自然结束。",
             )
         silent = request.primary_product == "visual_styling_story" and any(
@@ -175,7 +178,7 @@ class DeterministicContentGenerator(ContentGenerator):
                 f"别把双面说成两件。{color_pair}都能独立出现，口袋两面都能用；M 码样衣约 {weight} 克，同季同长度单层短外套 M 码样衣约 {comparison_weight} 克。它给的是一次翻面后的不同视觉，不是多买到一件外套。",
                 "同一人先穿炭灰走过镜头，再在转身时翻到深绿细格纹；最后把样衣放在秤旁，但不把数字夸成性能结论。",
                 "双面，不等于两件。\n能确认的，和还不能下结论的，都留在镜头里。",
-                "一人一手机，保留翻面摩擦和脚步声；不补拍价格牌、库存或未经提供的材质细节。",
+                "只使用登记商品与本次原创声音节奏；不补拍价格牌、库存或未经提供的材质细节。",
             )
         if product == "brand_life_narrative":
             if request.brand.brand_name != "折线之间":
@@ -191,10 +194,10 @@ class DeterministicContentGenerator(ContentGenerator):
                     "一家人站在一起，不一定要穿成一套。有人喜欢安静一点，有人愿意多一点颜色；"
                     "彼此看得见，也各自舒服，就已经是一种自然的呼应。我们只说当前确认过的品牌立场，"
                     "不替任何一个真实家庭补写经历。",
-                    "一人一手机，用不同衣架或空白色卡表示几种独立选择；不出现具体商品、价格、库存、"
-                    "顾客或门店画面，也不把概念冒充已实拍。",
+                    "用本次原创的独立色块与留白表示几种选择；不出现具体商品、价格、库存、顾客或"
+                    "门店画面，也不把概念冒充已实拍。",
                     "一家人，可以自然呼应。\n也可以，各自成立。",
-                    "使用普通室内环境与轻微生活声；不制造儿童、身体、年龄或家庭焦虑。",
+                    "声音与节奏只服务当前观点；不制造儿童、身体、年龄或家庭焦虑。",
                 )
             actuality = "；".join(request.user_actuality_quotes or ())
             if actuality:
@@ -207,9 +210,9 @@ class DeterministicContentGenerator(ContentGenerator):
                     "从用户明确提供的小事里选择一条主线，不替任何人补写前因后果。",
                     f"{actuality} 小事没有自动站到谁的一边，也不必立刻被写成道理。"
                     "先把当时的疲惫和那一点别扭放在同一个画面里，事实停在用户说过的位置。",
-                    "一人一手机，用现场手写字卡承接节奏；不补拍家庭成员、顾客、商品或未提供的现实场景。",
+                    "用错位节拍与不对称留白承接节奏；不补拍家庭成员、顾客、商品或未提供的现实场景。",
                     "先不判输赢。\n把小事放回当时的疲惫里。",
-                    "普通室内环境与自然停顿即可；不补造对白、关系身份、争执结果或经营事实。",
+                    "用自然停顿收束；不补造对白、关系身份、争执结果或经营事实。",
                 )
             return (
                 P3SemanticContract(
@@ -221,9 +224,9 @@ class DeterministicContentGenerator(ContentGenerator):
                 "如果两个人都带着自己的疲惫走进同一件小事，分歧未必需要一个反派。"
                 "先让彼此的处境都站得住，再看那件小事为什么会突然变重；这是一种情境演绎，"
                 "不是当前账号或任何具体家庭的经历。",
-                "一人一手机，以现场手写字卡和留白完成画面；不补拍家庭成员、顾客、商品或门店事件。",
+                "以两组不对称抽象构成和留白完成画面；不补拍家庭成员、顾客、商品或门店事件。",
                 "不替谁判输赢。\n先让两边都站得住。",
-                "普通室内环境与自然停顿即可；不制造人物身份、对白、结果或现实履历。",
+                "以自然停顿完成节奏；不制造人物身份、对白、结果或现实履历。",
             )
         if product == "local_response":
             return (
@@ -236,7 +239,7 @@ class DeterministicContentGenerator(ContentGenerator):
                 "如果你走进南城店，只想先看看，也完全可以。我们不替你猜今天为什么犹豫，也不催你给理由；衣服先在这里，等你按自己的节奏靠近。",
                 "拍一只手把 ZX-C218 的炭灰面和深绿细格纹依次留在同一根挂杆上，再留出一段空镜。",
                 "想先看就先看，不用解释。",
-                "一人一手机、普通门店空间；不把这句话扩展成交易承诺、顾客画像或全国政策。",
+                "用本次原创的留白与声音组织关系；不把这句话扩展成交易承诺、顾客画像或全国政策。",
             )
         if product == "visual_styling_story":
             return (
@@ -249,7 +252,7 @@ class DeterministicContentGenerator(ContentGenerator):
                 f"人不用换。先用{colors[0] if colors else '第一面'}从门口走向镜头，走到最近处时抬手翻面；同一步继续向前，{colors[1] if len(colors) > 1 else '另一面'}接住原来的动作。不是两套造型，也不是资料朗读，是同一个人把重音换了一下。",
                 f"固定机位拍连续走动：{colors[0] if colors else '第一面'}进入、手部翻面、{colors[1] if len(colors) > 1 else '另一面'}离开。两面口袋都留一个短镜头，不增加未经提供的搭配或功能主张。",
                 f"人没换，画面换了重音。\n{colors[0] if colors else '第一面'}停一下，{colors[1] if len(colors) > 1 else '另一面'}再往前一步。",
-                "一人一部手机、普通门店空间；保留脚步声，音乐只做轻节拍，不把概念冒充已实拍或门店陈列执行。",
+                "只使用创作者、登记商品与本次原创节拍，不把概念冒充已实拍或门店陈列执行。",
             )
         if any(word in request.weak_seed for word in ("雨", "骑车", "湿")):
             choice = "把移动中的安全、耐受和到达后的可整理性放在造型完整度之前。"
@@ -265,7 +268,7 @@ class DeterministicContentGenerator(ContentGenerator):
             f"同一身衣服不必为不同场合重新证明两次自己。{choice}{boundary}{action}",
             "先拍连续走动和弯腰拿东西的自然测试，再拍一处需要调整或保留的细节。",
             "先保住分寸。\n走几步，再决定要不要改。",
-            "一人一部手机，环境声和脚步声即可；不补造商品事实或顾客身份。",
+            "用本次原创的动作节奏表达选择；不补造商品事实或顾客身份。",
         )
 
 

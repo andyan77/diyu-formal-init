@@ -39,7 +39,8 @@ _SEGMENT_LABELS = {
     "default_production_conditions": "可长期依赖的制作条件",
 }
 _DEFAULT_PRODUCTION_CONDITIONS = (
-    "一名创作者、一部手机、普通室内或门店；按当前条件完成拍摄、录音、排版或剪辑。"
+    "由系统按内容形式自主选择创作者本人表达或本次原创的抽象构图、排版、文字与声音组织；"
+    "不默认任何现实人物、商品、物品、场地或既有素材可用。"
 )
 _MAX_MATERIAL_TEXT = 4000
 _MAX_SELECTED_MATERIALS = 5

@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
 
+from src.brain.content_control_service import ContentControlService
 from src.brain.content_expression import (
     AXIS_ORDER,
     CAPABILITY_STATES,
@@ -238,6 +239,24 @@ def test_tenant_administrators_have_no_global_catalog_write_surface() -> None:
 
 
 # ---- B. account expression profile versions and permissions -----------------------------
+
+
+def test_unconfigured_expression_profile_does_not_invent_fixed_production_resources() -> None:
+    draft = ContentControlService._draft_segments(  # noqa: SLF001 - visible draft contract
+        {
+            "account_name": "测试账号",
+            "brand_name": "测试品牌",
+            "channel": "小红书",
+            "content_role_name": "品牌内容",
+            "voice_boundary": "不冒充真实事件。",
+            "audience_description": "",
+            "brand_draft": "",
+            "positioning": "",
+        }
+    )
+    default_conditions = str(draft["default_production_conditions"])
+    assert "自主选择" in default_conditions
+    assert all(item not in default_conditions for item in ("手机", "普通室内", "门店"))
 
 
 def test_profile_versions_are_immutable_and_only_the_control_organization_may_write(

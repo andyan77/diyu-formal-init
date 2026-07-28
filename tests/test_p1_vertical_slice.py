@@ -122,7 +122,11 @@ def test_natural_chat_does_not_create_task(app_database_url: str) -> None:
     assert before is not None and after is not None
     assert all(response.status_code == 200 for response in responses)
     assert all(response.json()["kind"] == "greeting" for response in responses)
-    assert all("你好" in response.json()["message"] for response in responses)
+    assert all(
+        isinstance(response.json()["message"], str)
+        and response.json()["message"].strip()
+        for response in responses
+    )
     assert before[0] == after[0]
 
 

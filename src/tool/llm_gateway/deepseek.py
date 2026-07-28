@@ -5,7 +5,6 @@ import logging
 import re
 import time
 from dataclasses import dataclass, replace
-from difflib import SequenceMatcher
 from email.utils import parsedate_to_datetime
 from typing import Any, Literal, cast
 
@@ -198,9 +197,8 @@ def _user_experience_fact_question() -> ConversationDecision:
 # of these registries; anything outside is "does not exist for this call".
 _SPEAKER_ID = "speaker:brand_account"
 _CREATOR_ACTOR_ID = "actor:creator"
-_PHONE_RESOURCE_ID = "resource:phone"
-_VENUE_RESOURCE_ID = "resource:venue"
-_ONSITE_TEXT_RESOURCE_ID = "resource:onsite_text"
+_CREATOR_EXPRESSION_RESOURCE_ID = "resource:creator_expression"
+_ORIGINAL_COMPOSITION_RESOURCE_ID = "resource:original_composition"
 _BRAND_BASELINE_SOURCE_ID = "source:brand_baseline"
 _ROLE_BOUNDARY_SOURCE_ID = "source:role_boundary"
 _ORGANIZATION_SOURCE_ID = "source:organization"
@@ -386,7 +384,7 @@ class BoundaryContext:
             if request.user_actuality_quotes:
                 direction_lines.append(
                     "本次属于严格隔离的等深模拟业务验收。边界二列出的用户原话可以作为本次内容作者"
-                    "明确提供的事实逐字使用；这只授权当前成品，不证明现实账号、操作者或门店具有相应"
+                    "明确提供的事实忠实使用或自然压缩；这只授权当前成品，不证明现实账号、操作者或门店具有相应"
                     "身份和履历，也不得写入长期画像。原话之外仍不得补造人物关系、动机、对白或结果。"
                 )
             else:
@@ -541,12 +539,16 @@ class BoundaryContext:
             ),
         )
         resources: tuple[tuple[str, str], ...] = (
-            (_PHONE_RESOURCE_ID, "一部手机（拍摄与收音）"),
             (
-                _VENUE_RESOURCE_ID,
-                "普通室内或门店环境，仅场地本身；场地内未明确提供的人物、商品、家具、合照、道具不包含在内",
+                _CREATOR_EXPRESSION_RESOURCE_ID,
+                "创作者本人可选择口播、旁白、手势、动作或不出镜表达；"
+                "这只是一种制作能力，不证明任何生活身份、经历、场地或事件",
             ),
-            (_ONSITE_TEXT_RESOURCE_ID, "创作者现场手写字卡或手机屏幕文字"),
+            (
+                _ORIGINAL_COMPOSITION_RESOURCE_ID,
+                "为本次内容新作的抽象构图、排版、留白、色块、符号、文字和声音组织；"
+                "不包含照片、人物、商品、品牌标志、外部素材或现实场景",
+            ),
             *((f"resource:product:{product.sku}", f"已确认商品样衣 {product.sku}") for product in request.products),
         )
 
@@ -853,13 +855,6 @@ class DeepSeekGenerator(ContentGenerator):
                     context,
                     json.loads(self._json_content(str(payload["choices"][0]["message"]["content"]))),
                 )
-                core = self._replace_registered_product_identifiers(request, core)
-                core = self._normalize_registered_product_claims(context, core)
-                core = self._stabilize_product_truth_production(
-                    request,
-                    context,
-                    core,
-                )
                 break
             except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 if format_attempt:
@@ -891,45 +886,6 @@ class DeepSeekGenerator(ContentGenerator):
                     issues,
                     json.loads(self._json_content(str(payload["choices"][0]["message"]["content"]))),
                 )
-                repaired_core = self._stabilize_resource_repairs(
-                    request,
-                    context,
-                    repaired_core,
-                    issues,
-                )
-                repaired_core = self._replace_registered_product_identifiers(request, repaired_core)
-                repaired_core = self._normalize_registered_product_claims(
-                    context,
-                    repaired_core,
-                )
-                repaired_core = self._bind_rejected_product_claims(
-                    context,
-                    repaired_core,
-                    issues,
-                )
-                repaired_core = self._bind_rejected_nonactual_claims(
-                    request,
-                    context,
-                    repaired_core,
-                    issues,
-                )
-                repaired_core = self._stabilize_nonactual_scene_cascade(
-                    request,
-                    context,
-                    repaired_core,
-                    issues,
-                )
-                repaired_core = self._stabilize_product_resource_cascade(
-                    request,
-                    context,
-                    repaired_core,
-                    issues,
-                )
-                repaired_core = self._stabilize_product_truth_production(
-                    request,
-                    context,
-                    repaired_core,
-                )
             except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 _LOGGER.warning(
                     "content boundary repair response rejected: %s",
@@ -939,41 +895,16 @@ class DeepSeekGenerator(ContentGenerator):
             final_issues, judgement_payload, judgement_retries = self._review_core(request, context, repaired_core)
             provider_payloads.append(judgement_payload)
             retries += judgement_retries
-            repaired_core, final_issues, settled_actuality_issues = (
-                self._settle_final_actuality_claim_repairs(
-                    request,
-                    context,
-                    repaired_core,
-                    final_issues,
-                )
-            )
-            repaired_core, final_issues, settled_final_issues = (
-                self._settle_final_product_claim_repairs(
-                    request,
-                    context,
-                    repaired_core,
-                    final_issues,
-                )
-            )
             if final_issues:
                 _LOGGER.warning(
                     "content boundary remained unsatisfied after unit repair: %s",
                     ",".join(f"{issue.unit_id}:{issue.reason_code}" for issue in final_issues),
                 )
                 raise GenerationFailed("内容边界无法在一次单元修复内满足")
-            receipt_issues = tuple(
-                dict.fromkeys(
-                    (
-                        *issues,
-                        *settled_actuality_issues,
-                        *settled_final_issues,
-                    )
-                )
-            )
             fact_repair_receipts = self._issue_receipts(
                 request,
                 core,
-                receipt_issues,
+                issues,
             )
             core = repaired_core
         title, contract, production, body = self._compile_core(request, core)
@@ -1145,52 +1076,6 @@ class DeepSeekGenerator(ContentGenerator):
         )
 
     @staticmethod
-    def _replace_registered_product_identifiers(
-        request: GenerationInput,
-        core: ContentCore,
-    ) -> ContentCore:
-        """Keep internal product identifiers out of the visible artifact.
-
-        Product source and resource references retain the frozen SKU. Only
-        user-visible prose is normalized, using the display name from the same
-        registered ProductFact snapshot rather than a model guess.
-        """
-
-        replacements = tuple(
-            sorted(
-                (
-                    (product.sku, product.display_name.strip() or "当前商品")
-                    for product in request.products
-                    if product.sku and product.sku != product.display_name.strip()
-                ),
-                key=lambda item: len(item[0]),
-                reverse=True,
-            )
-        )
-        if not replacements:
-            return core
-
-        def visible(text: str) -> str:
-            for identifier, display_name in replacements:
-                text = text.replace(identifier, display_name)
-            return text
-
-        return ContentCore(
-            speaker_ref=core.speaker_ref,
-            claims=tuple(replace(claim, text=visible(claim.text)) for claim in core.claims),
-            spoken_order=core.spoken_order,
-            scene_steps=tuple(
-                replace(
-                    step,
-                    action_text=visible(step.action_text),
-                    sound_text=visible(step.sound_text),
-                    production_note=visible(step.production_note),
-                )
-                for step in core.scene_steps
-            ),
-        )
-
-    @staticmethod
     def _assert_media_presence(request: GenerationInput, core: ContentCore) -> None:
         if request.media_format == "video":
             if not any(step.sound_text or step.production_note for step in core.scene_steps):
@@ -1239,7 +1124,6 @@ class DeepSeekGenerator(ContentGenerator):
                 context.user_actuality_source is None
                 or claim.actuality != "user_presented_actual"
                 or not has_actuality_ref
-                or claim.text not in context.user_actuality_quotes
             ):
                 issues.append(
                     UnitIssue(claim.claim_id, "invented_actuality", claim.text)
@@ -1254,9 +1138,9 @@ class DeepSeekGenerator(ContentGenerator):
                     if source_ref in product_refs
                 }
                 if (
-                    claim.basis != "confirmed_fact"
+                    not exact_product_claims
+                    or claim.basis != "confirmed_fact"
                     or claim.actuality != "non_event"
-                    or claim.text not in exact_product_claims
                 ):
                     issues.append(
                         UnitIssue(claim.claim_id, "factual_conflict", claim.text)
@@ -1285,6 +1169,12 @@ class DeepSeekGenerator(ContentGenerator):
             re.IGNORECASE,
         )
         reference_leak = re.compile(r"(?:speaker|actor|resource|source)\s*[:：]\s*[A-Za-z0-9_.:-]+", re.IGNORECASE)
+        routing_label = re.compile(
+            r"(?<![A-Za-z0-9_])(?:P[1-5]|dressing_decision|product_truth|"
+            r"brand_life_narrative|local_response|visual_styling_story)"
+            r"(?![A-Za-z0-9_])",
+            re.IGNORECASE,
+        )
         # Bare internal unit ids ("c8" / "s2") must never surface in visible
         # text.  ASCII lookarounds instead of \b: a preceding CJK character is
         # still a word character, so \b would miss "对应c8".  Lowercase-only
@@ -1301,7 +1191,13 @@ class DeepSeekGenerator(ContentGenerator):
             for identifier in context.internal_identifiers:
                 if identifier and identifier in text:
                     found.append(UnitIssue(unit_id, "factual_conflict", identifier))
-            for pattern in (internal_identifier, reference_leak, unit_id_leak, personal_identifier):
+            for pattern in (
+                internal_identifier,
+                reference_leak,
+                routing_label,
+                unit_id_leak,
+                personal_identifier,
+            ):
                 for match in pattern.finditer(text):
                     found.append(UnitIssue(unit_id, "factual_conflict", match.group(0)))
             for sku in sku_pattern.findall(text):
@@ -1377,23 +1273,7 @@ class DeepSeekGenerator(ContentGenerator):
         for unit_id in core.unit_ids:
             verdict = verdicts[unit_id]
             fragment = core.claim(unit_id).text if unit_id not in step_by_id else step_by_id[unit_id].action_text
-            compiler_owned_scene_step = (
-                unit_id in step_by_id
-                and self._is_compiled_scene_step(
-                    context,
-                    step_by_id[unit_id],
-                )
-            )
             for flag, reason in reason_by_flag:
-                if compiler_owned_scene_step and flag in (
-                    "actuality_ok",
-                    "resource_ok",
-                    "fact_ok",
-                ):
-                    # These axes are already closed-world compiler invariants
-                    # for an exact generated step. Keep the model's identity
-                    # and instruction verdicts.
-                    continue
                 if not verdict[flag]:
                     issues.append(UnitIssue(unit_id, reason, fragment))
         return tuple(issues), payload, retries
@@ -1517,589 +1397,6 @@ class DeepSeekGenerator(ContentGenerator):
         )
         self._assert_media_presence(request, repaired)
         return repaired
-
-    @staticmethod
-    def _stabilize_product_truth_production(
-        request: GenerationInput,
-        context: BoundaryContext,
-        core: ContentCore,
-    ) -> ContentCore:
-        """Keep P2 production on registered rails without authoring its copy.
-
-        Product explanation needs the model's complete viewpoint and reading
-        structure, but a scene description is not another source of product
-        facts.  Compile every P2 scene from its existing claim references onto
-        the same registered phone, venue, product and onsite-text rails used
-        for an already-rejected resource repair.
-        """
-
-        if request.primary_product != "product_truth":
-            return core
-        return DeepSeekGenerator._stabilize_resource_repairs(
-            request,
-            context,
-            core,
-            tuple(
-                UnitIssue(step.step_id, "unsupported_resource", step.action_text)
-                for step in core.scene_steps
-            ),
-        )
-
-    @staticmethod
-    def _normalize_registered_product_claims(
-        context: BoundaryContext,
-        core: ContentCore,
-    ) -> ContentCore:
-        """Bind product-sourced copy to one exact fact from the frozen record.
-
-        The model still chooses the unit's role and intended fact.  Text
-        similarity resolves that intent only among this call's registered
-        atomic statements; it can never introduce a new product assertion.
-        The normal complete judgement runs after this binding.
-        """
-
-        normalized: list[ContentClaim] = []
-        changed = False
-        for claim in core.claims:
-            product_refs = tuple(
-                ref for ref in claim.source_refs if ref.startswith("source:product:")
-            )
-            candidates = tuple(
-                (source_ref, statement)
-                for source_ref, statement in context.product_fact_claims
-                if source_ref in product_refs
-            )
-            if not candidates:
-                normalized.append(claim)
-                continue
-            source_ref, statement = max(
-                candidates,
-                key=lambda candidate: SequenceMatcher(
-                    None,
-                    claim.text.casefold(),
-                    candidate[1].casefold(),
-                    autojunk=False,
-                ).ratio(),
-            )
-            replacement = replace(
-                claim,
-                text=statement,
-                basis="confirmed_fact",
-                actuality="non_event",
-                source_refs=(source_ref,),
-            )
-            normalized.append(replacement)
-            changed = changed or replacement != claim
-        if not changed:
-            return core
-        return ContentCore(
-            speaker_ref=core.speaker_ref,
-            claims=tuple(normalized),
-            spoken_order=core.spoken_order,
-            scene_steps=core.scene_steps,
-        )
-
-    @staticmethod
-    def _bind_rejected_product_claims(
-        context: BoundaryContext,
-        core: ContentCore,
-        issues: tuple[UnitIssue, ...],
-    ) -> ContentCore:
-        """Close rejected product assertions against the frozen record.
-
-        A repair can preserve an unsafe concrete assertion while changing its
-        declared source. Only claim units already rejected for factual conflict
-        are rebound, and only to one atomic fact frozen for this call.
-        """
-
-        rejected = {
-            issue.unit_id
-            for issue in issues
-            if issue.reason_code == "factual_conflict"
-        }
-        if not rejected or not context.product_fact_claims:
-            return core
-
-        normalized: list[ContentClaim] = []
-        changed = False
-        for claim in core.claims:
-            if claim.claim_id not in rejected:
-                normalized.append(claim)
-                continue
-            source_ref, statement = max(
-                context.product_fact_claims,
-                key=lambda candidate: SequenceMatcher(
-                    None,
-                    claim.text.casefold(),
-                    candidate[1].casefold(),
-                    autojunk=False,
-                ).ratio(),
-            )
-            replacement = replace(
-                claim,
-                text=statement,
-                basis="confirmed_fact",
-                actuality="non_event",
-                source_refs=(source_ref,),
-            )
-            normalized.append(replacement)
-            changed = changed or replacement != claim
-        if not changed:
-            return core
-        return ContentCore(
-            speaker_ref=core.speaker_ref,
-            claims=tuple(normalized),
-            spoken_order=core.spoken_order,
-            scene_steps=core.scene_steps,
-        )
-
-    def _settle_final_product_claim_repairs(
-        self,
-        request: GenerationInput,
-        context: BoundaryContext,
-        core: ContentCore,
-        issues: tuple[UnitIssue, ...],
-    ) -> tuple[ContentCore, tuple[UnitIssue, ...], tuple[UnitIssue, ...]]:
-        """Close final product-claim truth verdicts with proven atoms.
-
-        The final judge has already approved every other axis for these units.
-        A claim-only fact, actuality or resource verdict can therefore be
-        replaced by an exact non-event atomic fact from this task's frozen
-        product snapshot without another model call. Identity, instruction and
-        every scene verdict remain blocking. Server-side closed-world,
-        deterministic-value and media checks run again over the resulting core.
-        """
-
-        claim_ids = {claim.claim_id for claim in core.claims}
-        candidates = tuple(
-            issue
-            for issue in issues
-            if issue.unit_id in claim_ids
-            and issue.reason_code
-            in (
-                "invented_actuality",
-                "unsupported_resource",
-                "factual_conflict",
-            )
-        )
-        if not candidates or not context.product_fact_claims:
-            return core, issues, ()
-
-        settled_core = self._bind_rejected_product_claims(
-            context,
-            core,
-            tuple(
-                UnitIssue(
-                    issue.unit_id,
-                    "factual_conflict",
-                    issue.fragment,
-                )
-                for issue in candidates
-            ),
-        )
-        exact_product_claims = set(context.product_fact_claims)
-        settled = tuple(
-            issue
-            for issue in candidates
-            if (
-                settled_core.claim(issue.unit_id).source_refs[0],
-                settled_core.claim(issue.unit_id).text,
-            )
-            in exact_product_claims
-            and settled_core.claim(issue.unit_id).basis == "confirmed_fact"
-            and settled_core.claim(issue.unit_id).actuality == "non_event"
-        )
-        settled_keys = {
-            (issue.unit_id, issue.reason_code)
-            for issue in settled
-        }
-        remaining = tuple(
-            issue
-            for issue in issues
-            if (issue.unit_id, issue.reason_code) not in settled_keys
-        )
-        server_side = (
-            *self._closed_world_issues(context, settled_core),
-            *self._deterministic_unit_issues(context, settled_core),
-            *self._media_issues(request, settled_core),
-        )
-        merged: dict[tuple[str, str], UnitIssue] = {}
-        for issue in (*remaining, *server_side):
-            merged.setdefault((issue.unit_id, issue.reason_code), issue)
-        return settled_core, tuple(merged.values()), settled
-
-    def _settle_final_actuality_claim_repairs(
-        self,
-        request: GenerationInput,
-        context: BoundaryContext,
-        core: ContentCore,
-        issues: tuple[UnitIssue, ...],
-    ) -> tuple[ContentCore, tuple[UnitIssue, ...], tuple[UnitIssue, ...]]:
-        """Close final claim actuality with an exact trusted premise."""
-
-        claim_ids = {claim.claim_id for claim in core.claims}
-        candidates = tuple(
-            issue
-            for issue in issues
-            if issue.unit_id in claim_ids
-            and issue.reason_code == "invented_actuality"
-        )
-        if not candidates:
-            return core, issues, ()
-
-        settled_core = self._bind_rejected_nonactual_claims(
-            request,
-            context,
-            core,
-            candidates,
-        )
-        brand_viewpoints = {
-            text.strip().rstrip("。") + "。"
-            for text in (
-                request.brand.positioning,
-                request.brand.decision_order,
-            )
-            if text.strip()
-        }
-
-        def is_proven(issue: UnitIssue) -> bool:
-            claim = settled_core.claim(issue.unit_id)
-            exact_actuality = (
-                context.user_actuality_source is not None
-                and claim.text in context.user_actuality_quotes
-                and claim.basis == "user_premise"
-                and claim.actuality == "user_presented_actual"
-                and claim.source_refs == (_USER_ACTUALITY_SOURCE_ID,)
-            )
-            exact_viewpoint = (
-                claim.text in brand_viewpoints
-                and claim.basis == "brand_viewpoint"
-                and claim.actuality == "non_event"
-                and claim.source_refs == (_BRAND_BASELINE_SOURCE_ID,)
-            )
-            return exact_actuality or exact_viewpoint
-
-        settled = tuple(issue for issue in candidates if is_proven(issue))
-        settled_keys = {
-            (issue.unit_id, issue.reason_code)
-            for issue in settled
-        }
-        remaining = tuple(
-            issue
-            for issue in issues
-            if (issue.unit_id, issue.reason_code) not in settled_keys
-        )
-        server_side = (
-            *self._closed_world_issues(context, settled_core),
-            *self._deterministic_unit_issues(context, settled_core),
-            *self._media_issues(request, settled_core),
-        )
-        merged: dict[tuple[str, str], UnitIssue] = {}
-        for issue in (*remaining, *server_side):
-            merged.setdefault((issue.unit_id, issue.reason_code), issue)
-        return settled_core, tuple(merged.values()), settled
-
-    @staticmethod
-    def _bind_rejected_nonactual_claims(
-        request: GenerationInput,
-        context: BoundaryContext,
-        core: ContentCore,
-        issues: tuple[UnitIssue, ...],
-    ) -> ContentCore:
-        """Replace rejected experience shells with a frozen trusted premise.
-
-        An explicit lived fact is rebound to the user's exact quote. Without
-        one, the claim becomes a frozen brand viewpoint. Both paths preserve
-        the model's slot while preventing paraphrase from inventing history.
-        """
-
-        rejected = {
-            issue.unit_id
-            for issue in issues
-            if issue.reason_code == "invented_actuality"
-        }
-        brand_replacements = tuple(
-            (
-                text,
-                "brand_viewpoint",
-                "non_event",
-                (_BRAND_BASELINE_SOURCE_ID,),
-            )
-            for text in dict.fromkeys(
-                text.strip().rstrip("。") + "。"
-                for text in (
-                    request.brand.positioning,
-                    request.brand.decision_order,
-                )
-                if text.strip()
-            )
-        )
-        if context.user_actuality_source is not None:
-            replacements = (
-                *(
-                    (
-                        quote,
-                        "user_premise",
-                        "user_presented_actual",
-                        (_USER_ACTUALITY_SOURCE_ID,),
-                    )
-                    for quote in context.user_actuality_quotes
-                ),
-                *brand_replacements,
-            )
-        else:
-            replacements = brand_replacements
-        if not rejected or not replacements:
-            return core
-
-        normalized: list[ContentClaim] = []
-        replacement_index = 0
-        changed = False
-        for claim in core.claims:
-            if claim.claim_id not in rejected:
-                normalized.append(claim)
-                continue
-            text, basis, actuality, source_refs = replacements[
-                replacement_index % len(replacements)
-            ]
-            replacement = replace(
-                claim,
-                text=text,
-                basis=basis,
-                actuality=actuality,
-                source_refs=source_refs,
-            )
-            replacement_index += 1
-            normalized.append(replacement)
-            changed = changed or replacement != claim
-        if not changed:
-            return core
-        return ContentCore(
-            speaker_ref=core.speaker_ref,
-            claims=tuple(normalized),
-            spoken_order=core.spoken_order,
-            scene_steps=core.scene_steps,
-        )
-
-    @staticmethod
-    def _is_compiled_scene_step(
-        context: BoundaryContext,
-        step: SceneStep,
-    ) -> bool:
-        """Recognize only an exact non-event scene emitted by this compiler."""
-
-        if (
-            step.actor_refs
-            or step.sound_text
-            or step.production_note != "普通室内环境，单人用手机完成。"
-            or any(resource not in context.resource_ids for resource in step.resource_refs)
-        ):
-            return False
-        base = tuple(
-            resource
-            for resource in (_PHONE_RESOURCE_ID, _VENUE_RESOURCE_ID)
-            if resource in context.resource_ids
-        )
-        if step.action_text in (
-            "用手机拍摄已登记的当前商品，作为干净首图。",
-            "用手机拍摄已登记的当前商品，换一个中性取景。",
-        ):
-            product_resources = tuple(
-                resource
-                for resource in step.resource_refs
-                if resource.startswith("resource:product:")
-            )
-            return bool(product_resources) and step.resource_refs == (
-                *base,
-                *product_resources,
-            )
-        if step.action_text in (
-            "用手机拍摄现场手写标题字卡，作为干净首图。",
-            "用手机拍摄现场手写观点字卡，画面保持简洁。",
-        ):
-            onsite = (
-                (_ONSITE_TEXT_RESOURCE_ID,)
-                if _ONSITE_TEXT_RESOURCE_ID in context.resource_ids
-                else ()
-            )
-            return step.resource_refs == (*base, *onsite)
-        return False
-
-    @staticmethod
-    def _stabilize_nonactual_scene_cascade(
-        request: GenerationInput,
-        context: BoundaryContext,
-        core: ContentCore,
-        issues: tuple[UnitIssue, ...],
-    ) -> ContentCore:
-        """Keep a topic or user premise from becoming a staged history.
-
-        When the complete first review finds invented actuality, repairing only
-        the rejected unit can leave the same invented event in a previously
-        accepted scene. Compile the whole scene bundle onto registered
-        non-event production resources; exact user facts remain in claims.
-        """
-
-        if not any(
-            issue.reason_code == "invented_actuality"
-            for issue in issues
-        ):
-            return core
-        return DeepSeekGenerator._stabilize_resource_repairs(
-            request,
-            context,
-            core,
-            tuple(
-                UnitIssue(
-                    step.step_id,
-                    "invented_actuality",
-                    step.action_text,
-                )
-                for step in core.scene_steps
-            ),
-        )
-
-    @staticmethod
-    def _stabilize_product_resource_cascade(
-        request: GenerationInput,
-        context: BoundaryContext,
-        core: ContentCore,
-        issues: tuple[UnitIssue, ...],
-    ) -> ContentCore:
-        """Compile every product scene when one scene breaks trusted rails.
-
-        A holistic repair can move an unsupported prop, an invented event or a
-        conflicting product detail from the rejected scene into a previously
-        accepted scene. Product-backed content already has a complete
-        closed-world production set for this call, so one scene rejection on
-        any of those axes makes the whole scene bundle compiler-owned. The
-        normal instruction, identity and actuality review still runs afterward.
-        """
-
-        step_ids = {step.step_id for step in core.scene_steps}
-        if (
-            not context.product_fact_claims
-            or not any(
-                issue.unit_id in step_ids
-                and issue.reason_code
-                in (
-                    "unsupported_resource",
-                    "invented_actuality",
-                    "factual_conflict",
-                )
-                for issue in issues
-            )
-        ):
-            return core
-        return DeepSeekGenerator._stabilize_resource_repairs(
-            request,
-            context,
-            core,
-            tuple(
-                UnitIssue(
-                    step.step_id,
-                    "unsupported_resource",
-                    step.action_text,
-                )
-                for step in core.scene_steps
-            ),
-        )
-
-    @staticmethod
-    def _stabilize_resource_repairs(
-        request: GenerationInput,
-        context: BoundaryContext,
-        core: ContentCore,
-        issues: tuple[UnitIssue, ...],
-    ) -> ContentCore:
-        """Compile scene actuality/resource violations onto registered rails.
-
-        A model-authored repair may remove an unknown resource id while its
-        visible action still requires an unregistered prop, or may reenact a
-        user premise with invented detail. For only those already-rejected
-        scene units, keep the associated claims and page order but compile the
-        production step from the closed-world registry. The resulting core
-        still receives the normal complete review.
-        """
-
-        resource_units = {
-            issue.unit_id
-            for issue in issues
-            if issue.reason_code in (
-                "unsupported_resource",
-                "invented_actuality",
-            )
-        }
-        if not resource_units:
-            return core
-
-        claim_by_id = {claim.claim_id: claim for claim in core.claims}
-        available = context.resource_ids
-        steps: list[SceneStep] = []
-        changed = False
-        for step in core.scene_steps:
-            if step.step_id not in resource_units:
-                steps.append(step)
-                continue
-
-            product_resources = tuple(
-                dict.fromkeys(
-                    source_ref.replace("source:product:", "resource:product:", 1)
-                    for claim_ref in step.claim_refs
-                    if (claim := claim_by_id.get(claim_ref)) is not None
-                    for source_ref in claim.source_refs
-                    if source_ref.startswith("source:product:")
-                    and source_ref.replace(
-                        "source:product:",
-                        "resource:product:",
-                        1,
-                    )
-                    in available
-                )
-            )
-            resources = tuple(
-                resource
-                for resource in (
-                    _PHONE_RESOURCE_ID,
-                    _VENUE_RESOURCE_ID,
-                    *(product_resources or (_ONSITE_TEXT_RESOURCE_ID,)),
-                )
-                if resource in available
-            )
-            if product_resources:
-                action = (
-                    "用手机拍摄已登记的当前商品，作为干净首图。"
-                    if step.purpose == _COVER_PURPOSE
-                    else "用手机拍摄已登记的当前商品，换一个中性取景。"
-                )
-            else:
-                action = (
-                    "用手机拍摄现场手写标题字卡，作为干净首图。"
-                    if step.purpose == _COVER_PURPOSE
-                    else "用手机拍摄现场手写观点字卡，画面保持简洁。"
-                )
-            steps.append(
-                replace(
-                    step,
-                    actor_refs=(),
-                    resource_refs=resources,
-                    action_text=action,
-                    sound_text="",
-                    production_note="普通室内环境，单人用手机完成。",
-                )
-            )
-            changed = True
-
-        if not changed:
-            return core
-        stabilized = ContentCore(
-            speaker_ref=core.speaker_ref,
-            claims=core.claims,
-            spoken_order=core.spoken_order,
-            scene_steps=tuple(steps),
-        )
-        DeepSeekGenerator._assert_media_presence(request, stabilized)
-        return stabilized
 
     def _issue_receipts(
         self,
@@ -2324,15 +1621,10 @@ class DeepSeekGenerator(ContentGenerator):
 
     @staticmethod
     def _visible_text(value: object) -> str:
-        """Remove only reserved routing labels before a model response reaches a user artifact."""
+        """Validate and trim reviewed text without changing its meaning."""
         if not isinstance(value, str) or not value.strip():
             raise TypeError("visible content must be a non-empty string")
-        visible = re.sub(
-            r"\b(?:P[1-5]|dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story)\b\s*[:：-]?\s*",
-            "",
-            str(value),
-            flags=re.IGNORECASE,
-        ).strip()
+        visible = value.strip()
         if not re.search(r"[\w一-鿿]", visible):
             raise TypeError("visible content must contain readable text")
         return visible
@@ -2376,14 +1668,11 @@ class DeepSeekGenerator(ContentGenerator):
                 ("声音与制作提示", legacy.sound_and_production),
             )
         del contract, synthetic_business_fixture
-        transform_sections: tuple[tuple[str, str], ...] = ()
-        if isinstance(production, VideoProductionBundle) and re.search(r"(?<!\d)8\s*秒", production.natural_duration):
-            transform_sections = (("变换边界", "这是 8 秒窄主题版，不等同于原完整版本。"),)
         return (
             "标题："
             + title
             + "\n\n"
-            + "\n\n".join(f"{heading}：{value}" for heading, value in transform_sections + sections)
+            + "\n\n".join(f"{heading}：{value}" for heading, value in sections)
         )
 
     @staticmethod
@@ -2488,8 +1777,9 @@ class DeepSeekGenerator(ContentGenerator):
         )
         product_contract = (
             "登记商品只支持这里逐项列出的商品事实；不得从品类或结构推导性能、穿着结果、适用人群、"
-            "设计动机、价格、库存或销售情况。可见成品里的 confirmed_fact 商品单元只能逐字使用下面"
-            "一条完整原子事实，不能合并、改写、类比或补充因果：\n"
+            "设计动机、价格、库存或销售情况。可见成品里的 confirmed_fact 商品单元可以自然压缩或"
+            "重组下面的登记事实，但不能改变数字、SKU、颜色、材质、价格、库存等硬事实，不能把不同"
+            "事实拼成新因果或补充登记外结论：\n"
             f"{product_claims}"
             if context.product_fact_claims
             else (
@@ -2624,8 +1914,8 @@ class DeepSeekGenerator(ContentGenerator):
                 "交付可直接拍摄、表演、录音和剪辑的完整观看链。口播必须完整自然；"
                 "字幕与自然时长将由服务端从最终口播确定性派生。声音、动作和画面只能由 scene_steps 承载，"
                 "每一步只使用登记表中的人物与资源；不能另造人物、商品、场地、道具、既有图片或事件。"
-                "没有明确提供实物时，用当前创作者面对手机口播、手势、现场手写字卡或屏幕文字承担画面，"
-                "不安排话题对象出镜。"
+                "没有明确提供实物时，可在“创作者表达”和“本次原创抽象构成”两类能力内自由选择表现方式；"
+                "不得固定回退为手机口播、手写字卡或某个室内场景，也不安排话题对象出镜。"
             )
             slot_lines = (
                 "title（1条，标题）、natural_guide（1条，自然导读）、viewing_flow（1条，完整观看链说明）、"
@@ -2644,9 +1934,10 @@ class DeepSeekGenerator(ContentGenerator):
                 "release_caption（1条，发布配文与互动）、"
                 + "、".join(f"{field}（1条，合同字段）" for field in contract_fields)
                 + "、spoken（≥1条，完整发布正文按顺序拆成的自然段落）"
-            )
+        )
         actuality_creation_rule = (
-            "本次有用户现实片段：至少一条 user_presented_actual 单元逐字保留用户提供的事实。"
+            "本次有用户现实片段：至少一条 user_presented_actual 单元忠实保留或自然概括用户提供的事实，"
+            "不得增加原话没有支持的现实细节。"
             "除此之外不得补写未提供的动机、情绪、对白、人物关系、前因、结果或习惯；想表达的理解"
             "必须另写成品牌当前观点、一般观察或可能性，不能把解释粘回现实叙事。"
             if boundary.user_actuality_source is not None
@@ -2657,14 +1948,15 @@ class DeepSeekGenerator(ContentGenerator):
             )
         )
         product_creation_rule = (
-            "商品内容逐项锚定已登记商品；confirmed_fact 商品单元必须逐字选择边界四给出的一个"
-            "完整原子事实，不能合并改写。任何性能、效果、适用人群、穿着结果、设计动机、价格、"
+            "商品内容逐项锚定已登记商品；confirmed_fact 商品单元允许忠实压缩或自然表达边界四的"
+            "登记事实，但不得改变数字、SKU、颜色、材质、价格、库存等硬事实。任何性能、效果、"
+            "适用人群、穿着结果、设计动机、价格、"
             "库存或销售说法若未登记，一律不写。画面也不得临时增加其他衣物作比较或搭配。"
             if boundary.product_fact_claims
             else (
                 "本次没有登记商品：成品不能安排或描述账号/创作者拥有、穿着、展示的具体衣物或穿搭，"
-                "不能写面料、颜色、版型、弹性、舒适度等具体商品表现。需要画面时只用当前创作者、手机、"
-                "现场手写字卡或屏幕文字表达观点。"
+                "不能写面料、颜色、版型、弹性、舒适度等具体商品表现。需要画面时只在登记的创作者表达"
+                "与本次原创抽象构成中自由组织，不固定为手机、字卡或某类场地。"
             )
         )
         return f"""为“{request.brand.account_name}”编写一个完整中文{request.brand.media_format}成品的结构化底稿 ContentCore。
@@ -2736,7 +2028,8 @@ brand_viewpoint、conditional_guidance 或只引用 source:prior_version 的句�
 brand_viewpoint 与 conditional_guidance 只承载当前立场、希望、主张和建议。该不变量同样约束
 sound_text、production_note 中引述的口播词句。
 text、action_text、sound_text、production_note 中不得出现单元编号（如 c1、s2）或任何 id 标记；
-不得使用未登记的品牌 logo、贴纸、已有照片或成品图形素材；现场手写字卡与屏幕文字可用。
+不得使用未登记的品牌 logo、贴纸、已有照片或成品图形素材；本次原创的抽象构图、排版、留白、色块、
+符号、文字和声音组织可以按成品需要使用，但不得借此暗示现实人物、物品或场景存在。
 spoken_order 把全部 slot=spoken 的 claim_id 按口播顺序排列，各出现一次。
 scene_steps 规则：purpose=cover 恰好 1 条（封面/首帧或首图），purpose=scene 至少 1 条（画面步骤/图序）；
 actor_refs/resource_refs 只能引用登记表中的 id，需要谁列谁，不需要则留空数组；action_text 为该步可直接
@@ -2849,13 +2142,13 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
   面料、颜色、版型、弹性、舒适度等具体商品表现都为 false；有登记商品时，也只能使用逐项登记事实，
   不能从品类、结构或重量推导性能、保暖/温差用途、效果、适用人群、穿着结果或设计动机；不能把已知
   重量类比成另一件未登记衣物的重量，不能把未登记比较品、搭配品或用户现有衣物写进建议或验证动作。
-  仅用手机拍摄边界六已登记的当前商品、且动作没有声称颜色、结构、轮廓、性能、用途或效果，不构成新增
-  商品事实，也不应仅因动作没有逐字复述原子事实而判 false。
+  仅使用边界六已登记的当前商品与制作能力、且动作没有声称颜色、结构、轮廓、性能、用途或效果，不构成
+  新增商品事实，也不应仅因动作没有逐字复述登记事实而判 false。
 - instruction_ok：为 false 当该单元违反用户明确的内容要求或禁止项；自然修改时，若被修改要求点名的
   表达特征仍沿用旧稿、只做无关删减、只改摘要而完整正文没有实质变化，也为 false。未被点名且不冲突的
   单元可以保留；首次生成时不要求与不存在的旧稿比较。
 不要误杀：依据品牌基线表达的一般观点与条件性建议、不带具体人物事实的抽象假设与比喻、普通视觉标题、
-当前创作者对手机口播、现有场地中的中性动作，以及对“本次话题/请求”的忠实抽象讨论，可以通过。
+当前创作者使用登记的表达能力、本次原创抽象构成，以及对“本次话题/请求”的忠实抽象讨论，可以通过。
 关键区别是“谈论某个对象”不需要该资源；“让该对象出镜、行动、发声或把事件写成已经发生”需要当前依据。
 只把整体问题归回实际参与构成问题的单元；不要误伤没有参与该问题的其他单元。
 
@@ -2920,8 +2213,9 @@ factual_conflict = 与已确认品牌、商品、资料或作用域冲突，或�
 必须真实缩短口播以适配用户指定时长，不能只改时长标签；instruction_conflict = 违反用户明确内容要求，
 或自然修改没有让被点名的表达特征在相关可见单元中发生实质变化。
 修复要求：保留原话题价值；身份或现实主张越界时改成品牌明确标示的观点、建议或条件性判断；
-制作资源越界时改用登记表中的创作者、手机、现场手写字卡和场地内中性动作；话题人物、商品、图片和
-道具只可被抽象谈论，不能出镜或当作已持有素材。修复后的 claim 需要给出正确的 basis、actuality 和
+制作资源越界时只改用登记表中的创作者表达或本次原创抽象构成，并根据当前成品重新选择具体表现；
+不得统一改成手机口播、手写字卡或某个室内场景。话题人物、商品、图片和道具只可被抽象谈论，不能
+出镜或当作已持有素材。修复后的 claim 需要给出正确的 basis、actuality 和
 source_refs（至少一个来源与 basis 匹配：brand_viewpoint ↔ brand_baseline/role_boundary/organization；
 confirmed_fact ↔ organization/product；user_premise ↔ user_request/user_actuality/prior_version；
 conditional_guidance ↔ method/brand_baseline/role_boundary）；修复后的 scene step 需要给出正确的
@@ -2933,12 +2227,13 @@ c1、s2 这类编号，必须把编号替换为对应台词原文或删去，不
 边界二为空时，不得以第一人称生活回忆、个人习惯或具体家庭/工作场景制造真实感；即使明确写成假设，
 也不能补造具体对白、人物身份与关系、个人持有物、事件过程或结果。边界二有原话时，只保留原话逐字
 支持的事实，不补动机、情绪、对白、关系、前因、结果或习惯。边界四没有登记商品时，不能补具体衣物、
-穿搭或商品表现；有商品时也只能逐项使用登记事实，画面不能增加未登记的比较品或搭配品。
+穿搭或商品表现；有商品时允许忠实压缩登记事实，但数字、SKU、颜色、材质、价格和库存等硬事实必须
+保持精确，画面不能增加未登记的比较品或搭配品。
 invented_actuality 单元在边界二为空时必须丢弃原句的经历外壳，不能近义改写或换一个假想人物继续叙事；
 直接改成“本次话题对象 + 当前一般判断”的独立命题，不写谁在何时何地做了什么，不写最近、曾经、见过、
 遇到、生活里或家里发生过什么；basis 使用 brand_viewpoint 或 conditional_guidance，actuality 必须是
-non_event，并引用对应的已登记来源。若单元引用 source:product:…，text 必须逐字选择边界四列出的一个
-完整原子事实，不得把两条事实合并，也不得增加类比、因果或用途结论。
+non_event，并引用对应的已登记来源。若单元引用 source:product:…，text 可以忠实压缩边界四的登记
+事实，但不能改变任何硬事实、把两条事实拼成新因果，或增加类比、用途与结果结论。
 本次用户要求：{request.weak_seed}
 本次自然修改：{request.revision_instruction or "（首次生成）"}
 若为自然修改，下面旧成品只用于确定哪些表达需改变，不是事实来源；instruction_conflict 单元必须真正落实

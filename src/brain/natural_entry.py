@@ -3,33 +3,9 @@ from __future__ import annotations
 import re
 
 _CONTINUATION_SIGNALS = ("接着上一条", "延续之前", "继续上一条", "沿用上一条")
-_SMALL_TALK_SIGNALS = (
-    "hello",
-    "hi",
-    "你好",
-    "您好",
-    "有点困",
-    "挺安静",
-    "聊聊",
-    "陪我聊",
-    "谢谢",
-)
-_CONTENT_INTENT_SIGNALS = (
-    "内容",
-    "口播",
-    "脚本",
-    "拍",
-    "穿",
-    "外套",
-    "商品",
-    "双面",
-    "顾客",
-    "品牌",
-    "账号",
-    "门店",
-    "家庭",
-    "孩子",
-    "妈妈",
+_EXACT_SMALL_TALK = frozenset(("hello", "hi", "你好", "您好", "谢谢", "有点困", "挺安静"))
+_EXPLICIT_CHAT_ENDING = re.compile(
+    r"(?:陪我聊(?:两句|聊)?|只想聊聊|随便聊聊|聊两句)[。.!！]?$"
 )
 _CREATION_ACTION_SIGNALS = (
     "写",
@@ -67,13 +43,16 @@ def is_natural_chat(text: str) -> bool:
     normalized = text.strip().casefold()
     return (
         bool(normalized)
-        and any(signal in normalized for signal in _SMALL_TALK_SIGNALS)
-        and not any(signal in normalized for signal in _CONTENT_INTENT_SIGNALS)
+        and (
+            normalized.rstrip("。.!！") in _EXACT_SMALL_TALK
+            or _EXPLICIT_CHAT_ENDING.search(normalized) is not None
+        )
+        and not requests_content_creation(normalized)
     )
 
 
 def natural_reply() -> str:
-    return "你好。你可以随便聊；想把一个具体观察、商品或穿衣情境做成内容时，直接告诉我。"
+    return "当然。今天先不用急着产出，想说什么就说什么。"
 
 
 def requests_content_creation(text: str) -> bool:
