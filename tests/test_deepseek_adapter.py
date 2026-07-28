@@ -361,6 +361,32 @@ def test_topic_only_life_content_forbids_invented_dialogue_and_possessions(
         assert "穿着" in prompt and "具体衣物" in prompt
 
 
+def test_user_actuality_is_a_text_source_but_never_an_implicit_scene_resource(
+    generation_input: GenerationInput,
+) -> None:
+    actuality = "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
+    request = _with(
+        generation_input,
+        weak_seed=f"{actuality}帮我发条小红书。",
+        user_actuality_quotes=(actuality,),
+        products=(),
+    )
+    context = BoundaryContext.from_request(request)
+    core = _generator()._parse_core(request, context, _video_core())
+    issue = UnitIssue("s2", "unsupported_resource", core.scene_steps[1].action_text)
+
+    prompts = (
+        DeepSeekGenerator._generation_prompt(request, context),
+        DeepSeekGenerator._judgement_prompt(request, context, core),
+        DeepSeekGenerator._unit_repair_prompt(request, context, core, (issue,)),
+    )
+
+    for prompt in prompts:
+        assert "事实来源不等于拍摄资源" in prompt
+        assert "重演" in prompt and "现场记录" in prompt
+    assert "每个实际使用它的 step 分别判 false" in prompts[1]
+
+
 def test_repair_discards_an_experience_shell_instead_of_paraphrasing_it(
     generation_input: GenerationInput,
 ) -> None:
