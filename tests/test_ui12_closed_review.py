@@ -418,6 +418,58 @@ def test_audience_question_is_not_a_recommendation() -> None:
     )
 
 
+def test_audience_guidance_accepts_safe_summary_or_invitation_only() -> None:
+    summary = "这篇从理解与边界说起。"
+    summary_contexts = _context(summary, contract="audience_guidance")
+    invitation = "不妨从彼此的付出开始看。"
+    invitation_contexts = _context(
+        invitation,
+        contract="audience_guidance",
+    )
+    actuality = "昨天我们终于理解了彼此。"
+    actuality_contexts = _context(
+        actuality,
+        contract="audience_guidance",
+    )
+
+    assert _reasons(summary_contexts, _parse(summary_contexts, {})) == ()
+    assert (
+        _reasons(
+            invitation_contexts,
+            _parse(
+                invitation_contexts,
+                {
+                    "statement_mode": (
+                        "present",
+                        invitation,
+                        ("recommendation",),
+                    )
+                },
+            ),
+        )
+        == ()
+    )
+    assert _reasons(
+        actuality_contexts,
+        _parse(
+            actuality_contexts,
+            {
+                "subject_binding": (
+                    "present",
+                    actuality,
+                    ("current_speaker",),
+                ),
+                "actual_event": ("present", actuality, ("event",)),
+                "statement_mode": (
+                    "present",
+                    actuality,
+                    ("actuality",),
+                ),
+            },
+        ),
+    ) == ("statement_mode_conflict",)
+
+
 def test_present_to_absent_mutation_changes_server_ruling() -> None:
     text = "她说：“今天辛苦了”。"
     contexts = _context(text)

@@ -134,6 +134,7 @@ TextSourceV2: TypeAlias = Literal[
 ]
 UnitContractV2: TypeAlias = Literal[
     "abstract_observation",
+    "audience_guidance",
     "recommendation",
     "hypothetical_example",
     "disclosed_dramatization",
@@ -1047,8 +1048,8 @@ def unit_contracts_v2(
 ) -> dict[str, UnitContractV2]:
     contracts: dict[str, UnitContractV2] = {
         "unit:title": "abstract_observation",
-        "unit:natural-guide": "abstract_observation",
-        "unit:release-caption": "abstract_observation",
+        "unit:natural-guide": "audience_guidance",
+        "unit:release-caption": "audience_guidance",
     }
     fact_units = tuple(
         unit for unit in kernel.units if unit.purpose == "frozen_fact"
@@ -1249,7 +1250,7 @@ def _writer_clause_issue(
         )
     )
 
-    if contract == "abstract_observation":
+    if contract in {"abstract_observation", "audience_guidance"}:
         if (
             binding == "current_person"
             and (has_action or has_reality_detail or has_result)
@@ -1274,6 +1275,8 @@ def _writer_clause_issue(
                 context.exact_text,
             )
         if has_action:
+            if contract == "audience_guidance" and has_modality:
+                return None
             return NarrativeIssue(
                 context.unit_id,
                 (

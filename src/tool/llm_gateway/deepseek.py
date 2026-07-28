@@ -1019,6 +1019,10 @@ abstract_observation / release_caption unit 完成。actuality_reflection 对应
 已由服务端 frozen fact 单元逐字插入；Writer 只能写不复述该事实的抽象关系反思，或带清楚
 建议／条件语态的泛指做法，不能复制、概括或扩写人物、动作、对白、动机、原因、结果、时间、
 地点与现实细节。
+audience_guidance 是服务端专用于 natural_guide 与 release_caption 的单值合同：可以用
+generic_observation 概括观看主线，也可以用 recommendation 作明确的观看邀请或安全的泛指
+行动建议；不得使用 actuality、hypothesis 或 dramatization，也不得借此绑定现实主体、事件、
+对白、动机、品牌／商品事实。
 不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。
 不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄资源或
 制作方式。Writer-owned clause 不得让当前表达者或第一人称复数承担谓语、做法、经历或承诺；

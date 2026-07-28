@@ -565,6 +565,7 @@ def _kernel_observations(
         if question.dimension == "statement_mode":
             mode_by_contract = {
                 "abstract_observation": "generic_observation",
+                "audience_guidance": "generic_observation",
                 "recommendation": "recommendation",
                 "hypothetical_example": "hypothesis",
                 "disclosed_dramatization": "dramatization",

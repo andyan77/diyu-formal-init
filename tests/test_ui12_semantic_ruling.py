@@ -1174,6 +1174,8 @@ def test_every_reachable_program_unit_has_one_trusted_contract() -> None:
     contracts = {
         context.unit_id: context.unit_contract for context in general
     }
+    assert contracts["unit:natural-guide"] == "audience_guidance"
+    assert contracts["unit:release-caption"] == "audience_guidance"
     assert contracts["unit:body-opening"] == "abstract_observation"
     assert contracts["unit:hypothetical-example"] == "hypothetical_example"
     assert contracts["unit:body-closing"] == "recommendation"

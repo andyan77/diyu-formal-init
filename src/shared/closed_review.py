@@ -656,6 +656,9 @@ def _contract_mode_issue(
     contract = context.unit_contract
     allowed: dict[str, frozenset[StatementMode]] = {
         "abstract_observation": frozenset({"generic_observation"}),
+        "audience_guidance": frozenset(
+            {"generic_observation", "recommendation"}
+        ),
         "recommendation": frozenset({"recommendation"}),
         "hypothetical_example": frozenset({"hypothesis"}),
         "disclosed_dramatization": frozenset({"dramatization"}),
