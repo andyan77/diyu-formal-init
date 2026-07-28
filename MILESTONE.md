@@ -1,13 +1,14 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-11` 一般情境与真人事实隔离闭环。
-- 状态：`ACTIVE`。`UI-10` 为 `SUPERSEDED → UI-11`；只表示“题材型内容只能写纯抽象
+- 状态：`BLOCKED`。`UI-10` 为 `SUPERSEDED → UI-11`；只表示“题材型内容只能写纯抽象
   观点”的单元合同由服务端叙事程序与明确假设范围取代，不表示 UI-10 成功。UI-10 的
   `BLOCKED`、Reviewer A/B/C `3/3`、G3 唯一修复后失败、G4/D1 未运行及未
   push/CI/部署证据完整保留。
 - 当前 Git 基线：启动 `HEAD=9cc96ab8e756f16add2179e0add9e51d3447445a`，
-  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，本地线性领先 11 提交且启动
-  工作树干净。归档引用
+  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，功能候选
+  `6b4a50a39669a67cb62ce7b03c50fe26e0800156`；本地历史继续线性，未 push。
+  启动工作树干净。归档引用
   `refs/tags/archive/ui-10-blocked-20260728=9cc96ab8e756f16add2179e0add9e51d3447445a`
   已创建；禁止 reset、rebase、squash 或改写 UI-07—UI-10 历史。
 - 生产启动复核：部署仓库仍为干净的 `845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，
@@ -20,14 +21,20 @@
 - 冻结能力：CreationIntentGate、CreativePlanV2、NarrativeFrame、CreativeKernelV1、
   ReviewEvidenceV1、服务端事实裁决、DeliveryCompilerV1、服务端逐字事实、最多一次
   affected-unit 修复、legacy 路径、RLS、DM01、AIGC 与资产 `41/243/25/119` 不得回退。
-- 当前验收：增加极小、版本化且归服务端所有的
-  `observation_only_v1/observation_with_hypothetical_example_v1` 叙事程序；先证明
-  hypothesis 可见范围、真实主体阻断、资源闭世界和 G7 不变量，再冻结一个 SHA，仅用当前
-  `deepseek-v4-flash` 依次执行无持久化 G3、G4、D1。
-- 停止边界：G3 最多一次受影响可写单元修复；仍存在未标识现实情境、真实主体绑定、
-  Reviewer evidence 缺口或资源污染即置 `BLOCKED`，不重跑、不改模型、不形成第二策略。
-  真实预检通过前不 push、CI、备份、部署或写生产业务数据。
-- 唯一下一动作：完成服务端叙事程序、假设范围和现有 pytest 消费者的最小纵向实现。
+- 已完成：两个封闭 program、服务端假设标识、program／事实／资源／G7 不变量与 legacy
+  兼容已进入现有测试；`make lint`、`make typecheck` 和 `make golden` 通过，Golden 为
+  `235 passed`。四项实际 mutation 均使对应消费者变红，恢复后直接回归 `82 passed`。
+- 阻断：同一冻结 SHA 的 G3 真实预检执行初稿、Reviewer、唯一 unit 修复和完整复审共四次，
+  均为 `deepseek-v4-flash`、温度 0、零重试、无 repository／数据库。Reviewer evidence
+  完整、精确且无 uncertain；服务端却把自己的“假设有这样一幕：”标识因
+  `implicit_subject=current_speaker + predicate=假设`误判为机构主张，也把泛指原则／建议
+  中的动作、原因和结果一律判成现实微事件。Writer 唯一修复返回三单元原文，复审仍有同样
+  五项 issue，命中停止线。
+- 未执行：G4、D1、完整 G1—G7/H1/D1、最终前端门、两份候选审查、push、CI、备份、部署、
+  生产验收与回退。生产未改，继续运行 `845f632…`。
+- 唯一下一动作：主控裁决一个**服务端裁决单角色 successor**，只修“服务端所有的假设标识
+  不得成为机构主张”和“泛指原则／建议不得被等同为已发生微事件”的确定性语义；不得重跑
+  UI-11 G3、改 Writer 策略、换模型或形成 fallback。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
