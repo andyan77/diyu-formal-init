@@ -10,6 +10,8 @@ import pytest
 
 from src.brain.platform_directions import direction_for
 from src.shared.creative_kernel import (
+    DRAMATIZATION_DISCLOSURE,
+    HYPOTHESIS_DISCLOSURE,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
     CreativeKernelV1,
     build_kernel_skeleton,
@@ -26,6 +28,7 @@ from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import brand_fact_records, product_fact_records
 from src.shared.narrative import NarrativeFrame, new_frame, visible_digest
 from src.shared.review_evidence import (
+    REVIEW_EVIDENCE_V2_TOOL_NAME,
     REVIEW_EVIDENCE_V2_VERSION,
     build_review_clauses,
 )
@@ -153,6 +156,12 @@ def _request(
 
 
 def _completion(document: object, tokens: int = 0) -> FakeResponse:
+    if (
+        isinstance(document, dict)
+        and document.get("evidence_version")
+        == REVIEW_EVIDENCE_V2_VERSION
+    ):
+        return _strict_tool_completion(document, tokens=tokens)
     payload: dict[str, Any] = {
         "choices": [
             {
@@ -164,6 +173,44 @@ def _completion(document: object, tokens: int = 0) -> FakeResponse:
     }
     if tokens:
         payload["usage"] = {"total_tokens": tokens}
+    return FakeResponse(200, payload)
+
+
+def _strict_tool_completion(
+    document: object,
+    *,
+    tokens: int = 0,
+    finish_reason: str = "tool_calls",
+    tool_name: str = REVIEW_EVIDENCE_V2_TOOL_NAME,
+) -> FakeResponse:
+    payload: dict[str, Any] = {
+        "choices": [
+            {
+                "finish_reason": finish_reason,
+                "message": {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call-review-v2",
+                            "type": "function",
+                            "function": {
+                                "name": tool_name,
+                                "arguments": json.dumps(
+                                    document,
+                                    ensure_ascii=False,
+                                ),
+                            },
+                        }
+                    ],
+                },
+            }
+        ]
+    }
+    if tokens:
+        payload["usage"] = {
+            "completion_tokens": tokens,
+            "total_tokens": tokens,
+        }
     return FakeResponse(200, payload)
 
 
@@ -476,6 +523,15 @@ def _kernel_observations(
 ) -> dict[str, object]:
     evidence: list[dict[str, object]] = []
     for clause in build_review_clauses(kernel):
+        if (
+            clause.unit_id.startswith("unit:frozen-fact:")
+            or clause.exact_text
+            in {
+                f"{HYPOTHESIS_DISCLOSURE}\n",
+                f"{DRAMATIZATION_DISCLOSURE}\n",
+            }
+        ):
+            continue
         if clause.unit_id in omit:
             continue
         is_event = (
@@ -1103,7 +1159,7 @@ def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:
     assert kernel.unit("unit:frozen-fact:1").fact_refs == (fact.fact_id,)
     prompts = _payload_prompts()
     assert exact_fact not in prompts[0]
-    assert exact_fact in prompts[1]
+    assert exact_fact not in prompts[1]
 
 
 def test_ui10_unresolved_brand_fact_fails_before_writer() -> None:

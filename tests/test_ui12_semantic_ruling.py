@@ -132,6 +132,8 @@ def _evidence(
 ) -> ReviewEvidenceV2:
     items: list[ClauseEvidenceV2] = []
     for context in contexts:
+        if context.text_source != "writer_unit":
+            continue
         selected = (
             target_fragment is not None
             and target_fragment in context.exact_text

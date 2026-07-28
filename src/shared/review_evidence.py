@@ -24,6 +24,7 @@ ImplicitSubject: TypeAlias = Literal[
 
 REVIEW_EVIDENCE_VERSION = "review-evidence-v1"
 REVIEW_EVIDENCE_V2_VERSION = "review-evidence-v2"
+REVIEW_EVIDENCE_V2_TOOL_NAME = "submit_review_evidence_v2"
 _IMPLICIT_SUBJECTS = frozenset(
     {"none", "current_speaker", "generic", "uncertain"}
 )
@@ -341,6 +342,166 @@ def clause_context_document(
         }
         for context in contexts
     ]
+
+
+def writer_clause_contexts_v2(
+    contexts: Sequence[ClauseContextV2],
+) -> tuple[ClauseContextV2, ...]:
+    """Return the only clauses whose semantics require model evidence."""
+    return tuple(
+        context
+        for context in contexts
+        if context.text_source == "writer_unit"
+    )
+
+
+def validate_server_owned_contexts_v2(
+    *,
+    contexts: Sequence[ClauseContextV2],
+    fact_text_by_id: Mapping[str, str],
+) -> tuple[NarrativeIssue, ...]:
+    """Validate wrappers and facts without delegating their authority."""
+    issues: list[NarrativeIssue] = []
+    fact_contexts: dict[str, list[ClauseContextV2]] = {}
+    for context in contexts:
+        if context.text_source == "writer_unit":
+            if context.fact_ref is not None:
+                issues.append(
+                    NarrativeIssue(
+                        context.unit_id,
+                        "frozen_fact_changed",
+                        context.exact_text,
+                    )
+                )
+            continue
+        if context.text_source == "server_wrapper":
+            if (
+                context.fact_ref is not None
+                or not _valid_server_wrapper(context)
+            ):
+                issues.append(
+                    NarrativeIssue(
+                        context.unit_id,
+                        "server_wrapper_drift",
+                        context.exact_text,
+                    )
+                )
+            continue
+        if (
+            context.text_source
+            not in {
+                "frozen_user_fact",
+                "frozen_brand_fact",
+                "frozen_product_fact",
+            }
+            or context.unit_contract != "frozen_fact"
+            or context.fact_ref is None
+        ):
+            issues.append(
+                NarrativeIssue(
+                    context.unit_id,
+                    "frozen_fact_changed",
+                    context.exact_text,
+                )
+            )
+            continue
+        fact_contexts.setdefault(context.unit_id, []).append(context)
+
+    for unit_id, unit_contexts in fact_contexts.items():
+        fact_refs = {context.fact_ref for context in unit_contexts}
+        fact_ref = next(iter(fact_refs)) if len(fact_refs) == 1 else None
+        exact_text = "".join(
+            context.exact_text
+            for context in sorted(
+                unit_contexts,
+                key=lambda item: item.visible_order,
+            )
+        )
+        if (
+            fact_ref is None
+            or fact_text_by_id.get(fact_ref) != exact_text
+        ):
+            issues.append(
+                NarrativeIssue(
+                    unit_id,
+                    "frozen_fact_changed",
+                    exact_text,
+                )
+            )
+    return tuple(dict.fromkeys(issues))
+
+
+def review_evidence_v2_json_schema() -> dict[str, object]:
+    """Return the strict function schema for ReviewEvidenceV2."""
+    span_schema: dict[str, object] = {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string"},
+            "start": {"type": "integer"},
+            "end": {"type": "integer"},
+        },
+        "required": ["text", "start", "end"],
+        "additionalProperties": False,
+    }
+
+    def span_array() -> dict[str, object]:
+        return {"type": "array", "items": span_schema}
+
+    marker_schema: dict[str, object] = {
+        "type": "object",
+        "properties": {
+            "modality": span_array(),
+            "aspect": span_array(),
+        },
+        "required": ["modality", "aspect"],
+        "additionalProperties": False,
+    }
+    clause_properties: dict[str, object] = {
+        "clause_id": {"type": "string"},
+        "exact_text": {"type": "string"},
+        "subject_spans": span_array(),
+        "predicate_spans": span_array(),
+        "action_or_event_spans": span_array(),
+        "dialogue_spans": span_array(),
+        "motive_spans": span_array(),
+        "cause_spans": span_array(),
+        "result_spans": span_array(),
+        "time_spans": span_array(),
+        "location_spans": span_array(),
+        "grammatical_marker_spans": marker_schema,
+        "implicit_subject": {
+            "type": "string",
+            "enum": [
+                "none",
+                "current_speaker",
+                "generic",
+                "uncertain",
+            ],
+        },
+        "uncertain": {"type": "boolean"},
+    }
+    clause_schema: dict[str, object] = {
+        "type": "object",
+        "properties": clause_properties,
+        "required": list(clause_properties),
+        "additionalProperties": False,
+    }
+    root_properties: dict[str, object] = {
+        "evidence_version": {
+            "type": "string",
+            "enum": [REVIEW_EVIDENCE_V2_VERSION],
+        },
+        "clauses": {
+            "type": "array",
+            "items": clause_schema,
+        },
+    }
+    return {
+        "type": "object",
+        "properties": root_properties,
+        "required": list(root_properties),
+        "additionalProperties": False,
+    }
 
 
 def parse_review_evidence(value: object) -> ReviewEvidenceV1:
@@ -674,10 +835,20 @@ def reconcile_review_evidence_v2(
     protected_subjects: ProtectedSubjectScopeV2,
 ) -> tuple[NarrativeIssue, ...]:
     """Apply ADR-028 without trusting model-authored semantic labels."""
-    expected = {context.clause_id: context for context in contexts}
-    issues: list[NarrativeIssue] = []
+    issues = list(
+        validate_server_owned_contexts_v2(
+            contexts=contexts,
+            fact_text_by_id=fact_text_by_id,
+        )
+    )
+    if issues:
+        return tuple(dict.fromkeys(issues))
+    writer_contexts = writer_clause_contexts_v2(contexts)
+    expected = {context.clause_id: context for context in writer_contexts}
     received: dict[str, ClauseEvidenceV2] = {}
-    expected_order = tuple(context.clause_id for context in contexts)
+    expected_order = tuple(
+        context.clause_id for context in writer_contexts
+    )
     received_order = tuple(item.clause_id for item in evidence.clauses)
     if received_order != expected_order:
         issues.append(
@@ -746,34 +917,8 @@ def reconcile_review_evidence_v2(
     if issues:
         return tuple(dict.fromkeys(issues))
 
-    for context in contexts:
+    for context in writer_contexts:
         item = received[context.clause_id]
-        if context.text_source == "server_wrapper":
-            if not _valid_server_wrapper(context):
-                issues.append(
-                    NarrativeIssue(
-                        context.unit_id,
-                        "server_wrapper_drift",
-                        context.exact_text,
-                    )
-                )
-            continue
-        if context.text_source != "writer_unit":
-            if (
-                context.unit_contract != "frozen_fact"
-                or context.fact_ref is None
-                or fact_text_by_id.get(context.fact_ref)
-                != context.exact_text
-            ):
-                issues.append(
-                    NarrativeIssue(
-                        context.unit_id,
-                        "frozen_fact_changed",
-                        context.exact_text,
-                    )
-                )
-            continue
-
         binding = _subject_binding_v2(
             context,
             item,

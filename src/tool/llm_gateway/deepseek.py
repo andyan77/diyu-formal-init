@@ -51,15 +51,20 @@ from src.shared.narrative import (
     visible_digest,
 )
 from src.shared.review_evidence import (
+    REVIEW_EVIDENCE_V2_TOOL_NAME,
     REVIEW_EVIDENCE_V2_VERSION,
     ClauseContextV2,
     ProtectedSubjectScopeV2,
     ReviewClause,
+    ReviewEvidenceV2,
     build_clause_contexts_v2,
     clause_context_document,
     parse_review_evidence_v2,
     reconcile_review_evidence_v2,
     review_clauses_from_contexts,
+    review_evidence_v2_json_schema,
+    validate_server_owned_contexts_v2,
+    writer_clause_contexts_v2,
 )
 from src.shared.types import (
     ContentProduct,
@@ -89,6 +94,9 @@ _ORIGINAL_COMPOSITION_RESOURCE_ID = "resource:original_composition"
 _SPOKEN_SLOT = "spoken"
 _COVER_PURPOSE = "cover"
 _SCENE_PURPOSE = "scene"
+_REVIEW_TOKEN_BASE = 1024
+_REVIEW_TOKEN_PER_CLAUSE = 512
+_REVIEW_TOKEN_HARD_LIMIT = 16384
 
 _CONTRACT_FIELDS: dict[ContentProduct, tuple[str, str, str]] = {
     "dressing_decision": ("choice", "boundary", "next_action"),
@@ -883,22 +891,29 @@ class DeepSeekGenerator(ContentGenerator):
             context,
             kernel,
         )
-        payload, retries = self._request(
-            "你是独立 CreativeKernel 证据提取器。只提取每个 clause 的精确文字证据，不分类、不裁决、不改写，只返回 JSON。",
+        source_issues = validate_server_owned_contexts_v2(
+            contexts=clause_contexts,
+            fact_text_by_id=context.fact_text_by_id,
+        )
+        if source_issues:
+            raise GenerationFailed(
+                "CreativeKernelV1 服务端来源合同不完整"
+            )
+        writer_contexts = writer_clause_contexts_v2(clause_contexts)
+        if not writer_contexts:
+            raise GenerationFailed(
+                "CreativeKernelV1 缺少可审查的 Writer clause"
+            )
+        payload, retries = self._request_strict_review(
+            "你是独立 CreativeKernel 证据提取器。只提取每个 clause 的精确文字证据，不分类、不裁决、不改写，只调用指定函数一次。",
             self._kernel_reviewer_prompt(
-                review_clauses_from_contexts(clause_contexts)
+                review_clauses_from_contexts(writer_contexts)
             ),
-            4096,
-            thinking_disabled=True,
+            clause_count=len(writer_contexts),
             timeout_seconds=self._review_timeout_seconds,
         )
         try:
-            document = json.loads(
-                self._json_content(
-                    str(payload["choices"][0]["message"]["content"])
-                )
-            )
-            evidence = parse_review_evidence_v2(document)
+            evidence = self._strict_review_evidence(payload)
         except (
             KeyError,
             IndexError,
@@ -2192,6 +2207,143 @@ CreativePlanV2：{json.dumps(
         product: ProductFact,
     ) -> tuple[str, ...]:
         return registered_product_claims(product)
+
+    @staticmethod
+    def _review_max_tokens(clause_count: int) -> int:
+        if clause_count < 1:
+            raise ValueError("review clause count must be positive")
+        return min(
+            _REVIEW_TOKEN_HARD_LIMIT,
+            _REVIEW_TOKEN_BASE
+            + _REVIEW_TOKEN_PER_CLAUSE * clause_count,
+        )
+
+    def _strict_review_api_url(self) -> str:
+        base_url = self._api_base_url
+        if base_url.endswith("/beta"):
+            beta_url = base_url
+        elif base_url.endswith("/v1"):
+            beta_url = f"{base_url[:-3]}/beta"
+        else:
+            beta_url = f"{base_url}/beta"
+        return f"{beta_url}/chat/completions"
+
+    @staticmethod
+    def _strict_review_tool() -> dict[str, object]:
+        return {
+            "type": "function",
+            "function": {
+                "name": REVIEW_EVIDENCE_V2_TOOL_NAME,
+                "description": (
+                    "Submit exact, occurrence-aware evidence for every "
+                    "server-provided writer clause."
+                ),
+                "strict": True,
+                "parameters": review_evidence_v2_json_schema(),
+            },
+        }
+
+    @staticmethod
+    def _strict_review_evidence(
+        payload: dict[str, Any],
+    ) -> ReviewEvidenceV2:
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or len(choices) != 1:
+            raise TypeError("strict review choice count is invalid")
+        choice = choices[0]
+        if (
+            not isinstance(choice, dict)
+            or choice.get("finish_reason") != "tool_calls"
+        ):
+            raise TypeError("strict review finish reason is invalid")
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            raise TypeError("strict review message is invalid")
+        tool_calls = message.get("tool_calls")
+        if not isinstance(tool_calls, list) or len(tool_calls) != 1:
+            raise TypeError("strict review tool call count is invalid")
+        tool_call = tool_calls[0]
+        if (
+            not isinstance(tool_call, dict)
+            or tool_call.get("type") != "function"
+        ):
+            raise TypeError("strict review tool call is invalid")
+        function = tool_call.get("function")
+        if (
+            not isinstance(function, dict)
+            or function.get("name") != REVIEW_EVIDENCE_V2_TOOL_NAME
+        ):
+            raise TypeError("strict review function name is invalid")
+        arguments = function.get("arguments")
+        if not isinstance(arguments, str):
+            raise TypeError("strict review arguments are invalid")
+        usage = payload.get("usage")
+        if isinstance(usage, dict):
+            completion_tokens = usage.get("completion_tokens")
+            if (
+                isinstance(completion_tokens, int)
+                and completion_tokens > _REVIEW_TOKEN_HARD_LIMIT
+            ):
+                raise TypeError("strict review output exceeded hard limit")
+        return parse_review_evidence_v2(json.loads(arguments))
+
+    def _request_strict_review(
+        self,
+        system: str,
+        prompt: str,
+        *,
+        clause_count: int,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        request_payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.0,
+            "max_tokens": self._review_max_tokens(clause_count),
+            "thinking": {"type": "disabled"},
+            "tools": [self._strict_review_tool()],
+            "tool_choice": {
+                "type": "function",
+                "function": {"name": REVIEW_EVIDENCE_V2_TOOL_NAME},
+            },
+        }
+        try:
+            with httpx.Client(
+                timeout=httpx.Timeout(
+                    timeout_seconds or self._timeout_seconds
+                )
+            ) as client:
+                response = client.post(
+                    self._strict_review_api_url(),
+                    headers={
+                        "Authorization": f"Bearer {self._api_key}"
+                    },
+                    json=request_payload,
+                )
+        except httpx.TransportError as exc:
+            raise GenerationFailed(
+                "Reviewer strict 模型网络请求失败"
+            ) from exc
+        if response.status_code >= 400:
+            _LOGGER.warning(
+                "strict review request rejected: status=%s",
+                response.status_code,
+            )
+            raise GenerationFailed(
+                "Reviewer strict 模型服务拒绝当前请求"
+            )
+        try:
+            result = response.json()
+        except (TypeError, ValueError) as exc:
+            raise GenerationFailed(
+                "Reviewer strict 模型返回无效"
+            ) from exc
+        if not isinstance(result, dict):
+            raise GenerationFailed("Reviewer strict 模型返回无效")
+        return result, 0
 
     def _request(
         self,
