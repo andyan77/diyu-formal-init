@@ -1,55 +1,36 @@
 # 当前里程碑
 
-- 当前里程碑：`UI-11` 一般情境与真人事实隔离闭环。
-- 状态：`BLOCKED`。`UI-10` 为 `SUPERSEDED → UI-11`；只表示“题材型内容只能写纯抽象
-  观点”的单元合同由服务端叙事程序与明确假设范围取代，不表示 UI-10 成功。UI-10 的
-  `BLOCKED`、Reviewer A/B/C `3/3`、G3 唯一修复后失败、G4/D1 未运行及未
-  push/CI/部署证据完整保留。
-- 当前 Git 基线：启动 `HEAD=9cc96ab8e756f16add2179e0add9e51d3447445a`，
-  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，功能候选
-  `6b4a50a39669a67cb62ce7b03c50fe26e0800156`；本地历史继续线性，未 push。
-  启动工作树干净。归档引用
-  `refs/tags/archive/ui-10-blocked-20260728=9cc96ab8e756f16add2179e0add9e51d3447445a`
-  已创建；禁止 reset、rebase、squash 或改写 UI-07—UI-10 历史。
-- 生产启动复核：部署仓库仍为干净的 `845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，
-  镜像 `diyu-saas:845f632…`、摘要
-  `sha256:1171b153cbc709a760caf4a5db1fb14fe00e0bca3ef9c7b79c85f737a3a6bdb9`，
-  schema `20260801_28`，真实回环 readiness `ready`、生产主机经公开 DNS/HTTPS 为
-  `200`，备份 timer `active`。本执行环境直连公网超时，未被误写为生产失败。
+- 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
+- 状态：`ACTIVE`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
+  “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
+  UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
+  未运行及未 push/CI/部署证据完整保留。
+- 当前 Git 基线：启动 `HEAD=13f7b667fe777bb3aa784618b86ed96cab4b4a59`，
+  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，本地领先 15 个线性提交且
+  规范订正前工作树干净。UI-07—UI-11 历史禁止 reset、rebase、squash、删除或改写。
+- 生产启动复核：真实部署仓 `/opt/diyu-saas/repo` 与镜像均为
+  `845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，镜像摘要
+  `sha256:1171b153cbc709a760caf4a5db1fb14fe00e0bca3ef9c7b79c85f737a3a6bdb9`；
+  应用数据库 `diyu_m5_4` 的 schema 为 `20260801_28`，容器内
+  `127.0.0.1:18000/health/ready` 与生产主机公网 HTTPS 均为 `200`，
+  `diyu-m5-4-backup.timer` 为 active。本执行环境直连公网超时未被误写为生产失败。
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
-- 当前任务包：`docs/UI-11-一般情境与真人事实隔离闭环执行包.md`
-- UI11-D1 诊断：`来源、语态、主体绑定与证据裁决收敛审计` 已在不修改运行代码、不调用
-  模型、不连接业务仓储和不触碰生产数据的边界内完成。诊断真源为
-  [`docs/UI-11-语义裁决收敛诊断.md`](docs/UI-11-语义裁决收敛诊断.md)；
-  [`ADR-待编号-来源语态主体绑定与证据裁决矩阵.md`](docs/架构决策/ADR-待编号-来源语态主体绑定与证据裁决矩阵.md)
-  与 [`docs/UI-12-候选实现范围.md`](docs/UI-12-候选实现范围.md) 均为候选／待主控裁决，
-  不表示 UI-12 已启动。诊断起点为
-  `HEAD=a24231583c8a2e12e17f0cfb2432a23c0e513563`、本地领先 14、工作树干净；
-  `origin/main` 仍为 `7aa87ab624cf3ff64f42e49f1755d66d496cac7a`。
+- 当前任务包：
+  [`docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md`](docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)。
+- 承重裁决：[ADR-028](docs/架构决策/ADR-028-来源语态主体绑定与证据裁决矩阵.md)
+  已由本次主控裁决置为 `ACCEPTED`。启动前已把 SDR-001—SDR-037 订正为 42 条无重复
+  stable ID、单值 `unit_contract` 的 SDR-001—SDR-042，并通过 diff、唯一性、单合同与
+  successor 未提前激活检查。
 - 冻结能力：CreationIntentGate、CreativePlanV2、NarrativeFrame、CreativeKernelV1、
-  ReviewEvidenceV1、服务端事实裁决、DeliveryCompilerV1、服务端逐字事实、最多一次
+  ReviewEvidenceV1 legacy、服务端事实裁决、DeliveryCompilerV1、服务端逐字事实、最多一次
   affected-unit 修复、legacy 路径、RLS、DM01、AIGC 与资产 `41/243/25/119` 不得回退。
-- 已完成：两个封闭 program、服务端假设标识、program／事实／资源／G7 不变量与 legacy
-  兼容已进入现有测试；`make lint`、`make typecheck` 和 `make golden` 通过，Golden 为
-  `235 passed`。四项实际 mutation 均使对应消费者变红，恢复后直接回归 `82 passed`。
-- 阻断：同一冻结 SHA 的 G3 真实预检执行初稿、Reviewer、唯一 unit 修复和完整复审共四次，
-  均为 `deepseek-v4-flash`、温度 0、零重试、无 repository／数据库。Reviewer evidence
-  完整、精确且无 uncertain；服务端却把自己的“假设有这样一幕：”标识因
-  `implicit_subject=current_speaker + predicate=假设`误判为机构主张，也把泛指原则／建议
-  中的动作、原因和结果一律判成现实微事件。Writer 唯一修复返回三单元原文，复审仍有同样
-  五项 issue，命中停止线。
-- 未执行：G4、D1、完整 G1—G7/H1/D1、最终前端门、两份候选审查、push、CI、备份、部署、
-  生产验收与回退。生产未改，继续运行 `845f632…`。
-- 诊断结论：20 个目标 case bundle 中，UI-08—UI-11 有 16 个 root-only raw bundle
-  （20 份 raw response）可重放；UI-07 的 4 个 bundle 没有历史 raw，其中 G1 仅有确定性
-  seam 可重放。当前 `ReviewEvidenceV1` 能证明 clause/跨度存在，不能区分建议、条件与已完成
-  事实；候选最小扩展是单一 `grammatical_marker_spans` 字段，并由服务端恢复 clause 来源、
-  unit contract 与可信主体绑定。
-- 额外相邻接缝：当前单 body program validator 把允许类型硬编码为 abstract，导致合法
-  H1/D1 结构离线即报 `kernel_program_drift`；该缺口归入同一服务端 contract 真源收敛，
-  不另开 Writer 或模型问题。
-- 唯一下一动作：主控审阅并裁决 UI11-D1 的 SDR-001—SDR-037 语义决策表。未确认前不得
-  重跑 UI-11 G3、修改运行代码、启动 UI-12、改 Writer、换模型或形成 fallback。
+- 当前实现目标：唯一 `ClauseContextV2` sidecar、occurrence-aware `ReviewEvidenceV2`、
+  ContentRole 结构化 speaker kind、按 source/contract/speaker/grammatical evidence
+  固定顺序执行的服务端四态裁决，并关闭 H1/D1 program drift。
+- 模型与生产门：离线 raw 回放、42 条矩阵、六项 mutation、Reviewer V2 资格和
+  G3/G4/H1/D1 无持久化预检全部通过前，不 push、CI、备份、部署或写生产。
+- 唯一下一动作：实现 ClauseContextV2、ReviewEvidenceV2、speaker kind 与服务端裁决，
+  先完成离线确定性门。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
