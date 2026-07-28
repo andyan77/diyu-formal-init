@@ -1,7 +1,7 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
+- 状态：`BLOCKED`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
   未运行及未 push/CI/部署证据完整保留。
@@ -24,13 +24,25 @@
 - 冻结能力：CreationIntentGate、CreativePlanV2、NarrativeFrame、CreativeKernelV1、
   ReviewEvidenceV1 legacy、服务端事实裁决、DeliveryCompilerV1、服务端逐字事实、最多一次
   affected-unit 修复、legacy 路径、RLS、DM01、AIGC 与资产 `41/243/25/119` 不得回退。
-- 当前实现目标：唯一 `ClauseContextV2` sidecar、occurrence-aware `ReviewEvidenceV2`、
-  ContentRole 结构化 speaker kind、按 source/contract/speaker/grammatical evidence
-  固定顺序执行的服务端四态裁决，并关闭 H1/D1 program drift。
-- 模型与生产门：离线 raw 回放、42 条矩阵、六项 mutation、Reviewer V2 资格和
-  G3/G4/H1/D1 无持久化预检全部通过前，不 push、CI、备份、部署或写生产。
-- 唯一下一动作：实现 ClauseContextV2、ReviewEvidenceV2、speaker kind 与服务端裁决，
-  先完成离线确定性门。
+- 本地实现：功能 SHA
+  `c3b3eadfb22ab21d528c42bbf58d1fd02c12456e` 已实现唯一 `ClauseContextV2`
+  sidecar、occurrence-aware `ReviewEvidenceV2`、ContentRole 结构化 speaker kind、
+  固定顺序四态裁决和 H1/D1 program 映射；该 SHA 只是未推送的本地实现，不是生产候选。
+- 已通过门：16 个历史 raw bundle／20 份 raw response 均完成 hash 校验与按原版本离线
+  解析；42 条 SDR 直接消费者、六项实际 mutation、`git diff --check`、lint、mypy、
+  Golden `279 passed`、OpenAPI 以及前端 lint/typecheck/interaction/build 均通过。
+- 阻断：同一 SHA、`deepseek-v4-flash`、temperature 0、零重试、thinking disabled、
+  无 repository/database 的 Reviewer V2 首批真实资格调用返回 10 个 clause，但其中
+  `q:c`、`q:recommend`、`q:hypothesis` 三项遗漏必填 `implicit_subject` 与
+  `uncertain`，并把 `aspect` 错放到 clause 根级。响应因此不能解析为
+  `ReviewEvidenceV2`；evidence 资格在服务端语义裁决前即失败关闭。
+- 停止线执行：没有重跑 Reviewer，没有调用 Writer，没有执行 G3/G4/H1/D1、本地
+  API/PostgreSQL、两份候选审查、push、CI、备份、部署或生产卡片。生产继续运行
+  `845f632…`；本轮未写生产业务数据。root-only 原始响应保存在
+  `/var/lib/diyu-ui12-evidence/c3b3eadfb22ab21d528c42bbf58d1fd02c12456e/`
+  `reviewer-v2-qualification/`，目录／文件权限为 `0700/0600`。
+- 唯一下一动作：主控裁决 Reviewer V2 严格 evidence 提取能力的后续边界；在裁决前
+  UI-12 保持 `BLOCKED`，不得按失败句补 Prompt、随机重跑、换模型或启动 successor。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
