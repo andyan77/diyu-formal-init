@@ -17,11 +17,10 @@ const harness = (globalThis as unknown as {
     }>;
     copiedTexts: string[];
     exportedBlobs: Blob[];
-    delayNextVersionLoad: () => () => void;
     window: Window & typeof globalThis;
   };
 }).__DIYU_INTERACTION__;
-const { requests, copiedTexts, exportedBlobs, delayNextVersionLoad, window } = harness;
+const { requests, copiedTexts, exportedBlobs, window } = harness;
 const document = window.document;
 
 function find(selector: string, contains: string): HTMLElement {
@@ -127,7 +126,7 @@ async function main(): Promise<void> {
   );
 
   await send("最近店里总有人只想自己看看。");
-  assert.doesNotMatch(document.body.textContent ?? "", /沉默也应该被尊重|什么时候适合主动介绍/);
+  assert.match(document.body.textContent ?? "", /沉默也应该被尊重/);
   assert.equal(document.querySelector(".creator-artifact"), null);
 
   const directionToggle = find("button", "创作方向（可选）");
@@ -139,8 +138,7 @@ async function main(): Promise<void> {
   const custom = document.querySelector(".custom-direction input") as HTMLInputElement;
   await input(custom, "想聊婆媳之间买衣服意见不一样，不要把任何一方写成反派。");
 
-  const releaseVersionLoad = delayNextVersionLoad();
-  await send("最近店里总有人只想自己看看，帮我写条小红书。");
+  await send("讲前一个，别像品牌宣言，要像店员自己的感受。");
   const streamRequest = requests
     .filter(item => item.path === "/api/v1/content/stream")
     .at(-1);
@@ -150,11 +148,7 @@ async function main(): Promise<void> {
     | Array<{ role: string; content: string }>
     | undefined;
   assert.equal(conversation?.at(-1)?.role, "assistant");
-  assert.doesNotMatch(
-    conversation?.at(-1)?.content ?? "",
-    /沉默也应该被尊重|什么时候适合主动介绍/,
-    "旧二选一追问不得恢复"
-  );
+  assert.match(conversation?.at(-1)?.content ?? "", /沉默也应该被尊重/);
   assert.match(
     String(
       (
@@ -168,28 +162,11 @@ async function main(): Promise<void> {
   );
   assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /当前版本 · V1/);
   assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /完整台词/);
-  assert.match(
-    document.body.textContent ?? "",
-    /我先从想自己看一会儿这件小事写一版/,
-    "系统自主选择方向时只显示一句自然承接并立即交付成品"
-  );
 
   const revision = document.querySelector(
     'textarea[aria-label="修改要求"]'
   ) as HTMLTextAreaElement;
   await input(revision, "判断保留，改得更像门店人物自己的感受。");
-  releaseVersionLoad();
-  await settle();
-  assert.equal(
-    revision.value,
-    "判断保留，改得更像门店人物自己的感受。",
-    "V1 出现后立即输入的修改要求不得被异步版本列表回写清空"
-  );
-  assert.equal(
-    (find(".composer-submit button", "生成 V2") as HTMLButtonElement).disabled,
-    false,
-    "V1 完成后修改入口必须进入可提交状态"
-  );
   await click(find(".composer-submit button", "生成 V2"));
   await settle();
   assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /当前版本 · V2/);

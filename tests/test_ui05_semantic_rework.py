@@ -35,14 +35,7 @@ from src.infrastructure.seed_demo import (
 )
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.errors import DomainError, GenerationFailed
-from src.shared.types import (
-    ConversationDecision,
-    ConversationInput,
-    GeneratedArtifact,
-    GenerationInput,
-    TenantManagementScope,
-    TrustedScope,
-)
+from src.shared.types import GeneratedArtifact, GenerationInput, TenantManagementScope, TrustedScope
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 from tests.conftest import BAIT_BRAND_ID, BAIT_TENANT_ID, SIBLING_BRAND_ID
 
@@ -58,50 +51,14 @@ _SIBLING_LIBRARY_ID = UUID("80500000-0000-0000-0000-000000000213")
 class _UI05Generator(DeterministicContentGenerator):
     """A deterministic seam double; no test in this module may call DeepSeek."""
 
-    def __init__(self) -> None:
-        self.generated_task_ids: list[UUID] = []
-
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
-        self.generated_task_ids.append(request.task_id)
+        if "UI05_FORCE_FAILURE" in request.weak_seed:
+            raise GenerationFailed("UI-05 controlled generation failure")
         return super().generate(request)
-
-
-class _FailingUI05Generator(_UI05Generator):
-    """Fail the one bounded request without adding a probe marker to user text."""
-
-    def generate(self, request: GenerationInput) -> GeneratedArtifact:
-        self.generated_task_ids.append(request.task_id)
-        raise GenerationFailed("UI-05 controlled generation failure")
-
-
-class _MissingFactUI05Generator(_UI05Generator):
-    """One configured seam outcome for the legitimate-fact-question API path."""
-
-    def collaborate(self, request: ConversationInput) -> ConversationDecision:
-        del request
-        return ConversationDecision(
-            "question",
-            "那个月最难的一件具体事情是什么？",
-        )
 
 
 class _RequestDisconnected(BaseException):
     """Controlled transport cancellation at a real lifecycle boundary."""
-
-
-def test_ui05_default_production_conditions_do_not_treat_a_topic_word_as_a_resource_choice() -> None:
-    product_topic = ContentService._production_conditions(  # noqa: SLF001 - generation boundary contract
-        "帮我写一篇手机新品的小红书。",
-        "graphic",
-    )
-    explicit_resource = ContentService._production_conditions(  # noqa: SLF001 - generation boundary contract
-        "这次只有手机拍摄。",
-        "video",
-    )
-
-    assert "自主选择表现方式" in product_topic
-    assert "单人或手机制作条件" not in product_topic
-    assert "单人或手机制作条件" in explicit_resource
 
 
 def _settings(database_url: str) -> Settings:
@@ -139,19 +96,11 @@ def _stub_builder(settings: Settings) -> ContentService:
 def _app(
     database_url: str,
     monkeypatch: pytest.MonkeyPatch,
-    generator: DeterministicContentGenerator | None = None,
 ) -> Any:
-    def builder(settings: Settings) -> ContentService:
-        return ContentService(
-            PostgresContentRepository(settings.app_database_url),
-            generator or _UI05Generator(),
-            build_content_control_service(settings),
-        )
-
     monkeypatch.setattr(
         app_module,
         "build_content_service",
-        cast(Callable[[Settings], ContentService], builder),
+        cast(Callable[[Settings], ContentService], _stub_builder),
     )
     return app_module.create_app(_settings(database_url))
 
@@ -184,7 +133,7 @@ def _conversation_payload(
     }
 
 
-def _task_counts(database_url: str, task_id: UUID) -> dict[str, int]:
+def _task_counts(database_url: str, marker: str) -> dict[str, int]:
     with psycopg.connect(database_url, row_factory=dict_row) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
         cursor.execute(
@@ -199,9 +148,9 @@ def _task_counts(database_url: str, task_id: UUID) -> dict[str, int]:
               ON run.tenant_id = task.tenant_id AND run.task_id = task.id
             LEFT JOIN content_versions version
               ON version.tenant_id = task.tenant_id AND version.task_id = task.id
-            WHERE task.tenant_id = %s AND task.id = %s
+            WHERE task.tenant_id = %s AND task.weak_seed LIKE %s
             """,
-            (TENANT_ID, task_id),
+            (TENANT_ID, f"%{marker}%"),
         )
         row = cursor.fetchone()
     assert row is not None
@@ -232,62 +181,46 @@ def _persistence_counts(database_url: str) -> dict[str, int]:
     return {key: int(row[key]) for key in ("tasks", "runs", "running", "failed", "versions")}
 
 
-def _task_snapshot(database_url: str, task_id: UUID) -> dict[str, object]:
-    with psycopg.connect(database_url, row_factory=dict_row) as connection, connection.cursor() as cursor:
-        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
-        cursor.execute(
-            """
-            SELECT weak_seed, product_refs, content_context_snapshot
-            FROM business_tasks
-            WHERE tenant_id = %s AND id = %s
-            """,
-            (TENANT_ID, task_id),
-        )
-        row = cursor.fetchone()
-    assert row is not None
-    snapshot = row["content_context_snapshot"]
-    assert isinstance(snapshot, dict)
-    return {
-        "weak_seed": row["weak_seed"],
-        "product_refs": row["product_refs"],
-        "snapshot": snapshot,
-    }
-
-
-def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity_with_test_double(
+def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
     app_database_url: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     token = _session_token(app_database_url, USER_ID, "tenant-user")
+    marker = uuid4().hex
     with TestClient(_app(app_database_url, monkeypatch), base_url="https://diyuai.cc") as client:
         client.cookies.set("diyu_session", token)
 
-        before_g1 = _persistence_counts(app_database_url)
-        chat = _stream_events(
-            client,
-            _conversation_payload("今天有点累，陪我聊两句。"),
-        )
+        chat = _stream_events(client, _conversation_payload(f"你好，今天有点困。{marker}"))
         assert chat[-1]["event"] == "conversation"
         assert chat[-1]["kind"] == "chat"
-        assert _persistence_counts(app_database_url) == before_g1
-
-        before_old_observation = _persistence_counts(app_database_url)
-        old_observation = _stream_events(
-            client,
-            _conversation_payload("最近店里总有人只想自己看看。"),
-        )
-        assert old_observation[-1]["event"] == "conversation"
-        assert old_observation[-1]["kind"] == "chat"
-        assert "沉默也应该被尊重" not in str(old_observation[-1]["message"])
-        assert "什么时候适合主动介绍" not in str(old_observation[-1]["message"])
-        assert _persistence_counts(app_database_url) == before_old_observation
+        assert _task_counts(app_database_url, marker)["tasks"] == 0
         time.sleep(2.05)
 
-        g2 = _stream_events(
+        question_text = f"最近店里总有人只想自己看看。{marker}"
+        question = _stream_events(client, _conversation_payload(question_text))
+        assert question[-1]["event"] == "conversation"
+        assert question[-1]["kind"] == "question"
+        assert _task_counts(app_database_url, marker)["tasks"] == 0
+        time.sleep(2.05)
+
+        ready_text = f"讲前一个，写成小红书图文，像店员自己的感受，不像品牌宣言。{marker}"
+        ready = _stream_events(
             client,
-            _conversation_payload("ZX-C218，帮我生成一篇小红书文案。"),
+            _conversation_payload(
+                ready_text,
+                conversation=[
+                    {"role": "user", "content": question_text},
+                    {
+                        "role": "assistant",
+                        "content": (
+                            "这个观察可以做成门店人物内容。你更想讲沉默也应该被尊重，还是讨论店员什么时候适合主动介绍？"
+                        ),
+                    },
+                ],
+            ),
         )
-        assert [str(item["event"]) for item in g2] == [
+        event_names = [str(item["event"]) for item in ready]
+        assert event_names == [
             "received",
             "compiling_context",
             "generating",
@@ -295,30 +228,10 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity_with_test
             "finalizing",
             "completed",
         ]
-        g2_result = cast(dict[str, object], g2[-1]["result"])
-        assert g2_result["kind"] == "content"
-        assert g2_result["version"] == 1
-        assert "标题：" in str(g2_result["body"])
-        assert "内容概要：" in str(g2_result["body"])
-        assert "图序与每张职责：" in str(g2_result["body"])
-        assert "完整发布正文：" in str(g2_result["body"])
-        assert all(
-            forbidden not in str(g2_result["body"])
-            for forbidden in ("售价", "库存充足", "防水", "设计师想")
-        )
-        g2_task_id = UUID(str(g2_result["task_id"]))
-        g2_task = _task_snapshot(app_database_url, g2_task_id)
-        g2_snapshot = cast(dict[str, object], g2_task["snapshot"])
-        assert g2_task["product_refs"] == ["ZX-C218"]
-        assert g2_snapshot["schema"] == "content-context-snapshot-v2"
-        assert g2_snapshot["user_premise"] == g2_task["weak_seed"]
-        system_plan = str(g2_snapshot["system_creative_plan"])
-        assert system_plan
-        assert system_plan not in str(g2_task["weak_seed"])
-        product_facts = cast(list[dict[str, object]], g2_snapshot["product_facts"])
-        assert product_facts[0]["sku"] == "ZX-C218"
-        assert product_facts[0]["fact_version"] == 1
-        assert _task_counts(app_database_url, g2_task_id) == {
+        completed = cast(dict[str, object], ready[-1]["result"])
+        assert completed["kind"] == "content"
+        assert completed["version"] == 1
+        assert _task_counts(app_database_url, marker) == {
             "tasks": 1,
             "running": 0,
             "failed": 0,
@@ -326,189 +239,52 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity_with_test
         }
         time.sleep(2.05)
 
-        g3 = _stream_events(
+        failed_marker = f"UI05_FORCE_FAILURE-{uuid4().hex}"
+        failed = _stream_events(
             client,
-            _conversation_payload(
-                "帮我写条婆媳主题的小红书，别狗血，也不要把任何一方写成反派。"
-            ),
+            _conversation_payload(f"请直接写一条完整内容。{failed_marker}"),
         )
-        assert g3[-1]["event"] == "completed"
-        g3_result = cast(dict[str, object], g3[-1]["result"])
-        assert g3_result["version"] == 1
-        assert all(
-            invented not in str(g3_result["body"])
-            for invented in (
-                "我婆婆",
-                "我儿媳",
-                "孩子今年",
-                "结婚以来",
-                "顾客说",
-                "“",
-                "”",
-                "手写字卡",
-                "普通室内",
-                "手机拍",
-            )
-        )
-        g3_snapshot = cast(
-            dict[str, object],
-            _task_snapshot(app_database_url, UUID(str(g3_result["task_id"])))["snapshot"],
-        )
-        assert g3_snapshot["user_actuality_quotes"] == []
-        time.sleep(2.05)
-
-        g4_message = (
-            "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
-            "帮我发条小红书。"
-        )
-        g4 = _stream_events(client, _conversation_payload(g4_message))
-        assert g4[-1]["event"] == "completed"
-        g4_result = cast(dict[str, object], g4[-1]["result"])
-        assert g4_result["version"] == 1
-        assert "今天店里忙了一天，回家还因为谁洗碗拌了两句。" in str(
-            g4_result["body"]
-        )
-        assert all(
-            invented not in str(g4_result["body"])
-            for invented in (
-                "丈夫",
-                "孩子",
-                "婆婆",
-                "最后谁洗",
-                "她说",
-                "他说",
-                "谁都不想动",
-            )
-        )
-        g4_task_id = UUID(str(g4_result["task_id"]))
-        g4_task = _task_snapshot(app_database_url, g4_task_id)
-        g4_snapshot = cast(dict[str, object], g4_task["snapshot"])
-        assert g4_snapshot["user_actuality_quotes"] == [
-            "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
-        ]
-        assert g4_snapshot["user_premise"] == g4_message
-        time.sleep(2.05)
-
-        g5 = _stream_events(
-            client,
-            _conversation_payload("今天不知道发什么，帮我做条小红书。"),
-        )
-        assert g5[-1]["event"] == "completed"
-        g5_result = cast(dict[str, object], g5[-1]["result"])
-        assert g5_result["version"] == 1
-        assert all(
-            invented not in str(g5_result["body"])
-            for invented in (
-                "真实发生",
-                "我平时上班",
-                "这件上衣",
-                "面料",
-                "弹性",
-                "直筒裤",
-            )
-        )
-        assert _task_counts(
-            app_database_url,
-            UUID(str(g5_result["task_id"])),
-        )["versions"] == 1
-
-        time.sleep(2.05)
-        revision = client.post(
-            f"/api/v1/tasks/{g4_result['task_id']}/revisions",
-            json={
-                "instruction": "别讲道理，荒诞一点。",
-                "publishing_identity_id": str(ACCOUNT_ID),
-                "target": "xiaohongshu_graphic",
-                "source_target": "xiaohongshu_graphic",
-            },
-        )
-        assert revision.status_code == 201, revision.text
-        g7_result = revision.json()
-        assert g7_result["version"] == 2
-        assert g7_result["body"] != g4_result["body"]
-        assert "今天店里忙了一天，回家还因为谁洗碗拌了两句。" in g7_result["body"]
-        assert _task_snapshot(app_database_url, g4_task_id)["snapshot"] == g4_snapshot
-        v1 = client.get(
-            f"/api/v1/tasks/{g4_result['task_id']}/versions/1",
-            params={
-                "target": "xiaohongshu_graphic",
-                "publishing_identity_id": str(ACCOUNT_ID),
-            },
-        )
-        assert v1.status_code == 200
-        assert v1.json()["version"] == 1
-        assert v1.json()["body"] == g4_result["body"]
-
-        failing_generator = _FailingUI05Generator()
-        before_failed = _persistence_counts(app_database_url)
-        with TestClient(
-            _app(app_database_url, monkeypatch, failing_generator),
-            base_url="https://diyuai.cc",
-        ) as failure_client:
-            failure_client.cookies.set("diyu_session", token)
-            failed = _stream_events(
-                failure_client,
-                _conversation_payload("请直接写一条完整小红书内容。"),
-            )
         assert failed[-1] == {
             "event": "failed",
             "message": (
                 "这次还没能整理成一份可靠的成品。你的想法仍然保留，可以直接再试一次，也可以告诉我最想保留哪部分。"
             ),
         }
-        assert len(failing_generator.generated_task_ids) == 1
-        assert _task_counts(
-            app_database_url,
-            failing_generator.generated_task_ids[0],
-        ) == {
+        assert _task_counts(app_database_url, failed_marker) == {
             "tasks": 1,
             "running": 0,
             "failed": 1,
             "versions": 0,
         }
-        after_failed = _persistence_counts(app_database_url)
-        assert after_failed == {
-            "tasks": before_failed["tasks"] + 1,
-            "runs": before_failed["runs"] + 1,
-            "running": before_failed["running"],
-            "failed": before_failed["failed"] + 1,
-            "versions": before_failed["versions"],
-        }
+        assert all("UI05_FORCE_FAILURE" not in json.dumps(item, ensure_ascii=False) for item in failed)
 
-        disconnect_generator = _UI05Generator()
-        disconnect_service = ContentService(
-            PostgresContentRepository(app_database_url),
-            disconnect_generator,
-            build_content_control_service(_settings(app_database_url)),
-        )
+        disconnected_marker = f"UI05_DISCONNECTED-{uuid4().hex}"
 
         def disconnect_at_finalizing(stage: str) -> None:
             if stage == "finalizing":
                 raise _RequestDisconnected
 
         with pytest.raises(_RequestDisconnected):
-            disconnect_service.respond_to_conversation(
+            _stub_builder(_settings(app_database_url)).respond_to_conversation(
                 TrustedScope(
                     TENANT_ID,
                     USER_ID,
                     BRAND_ID,
                     HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
                 ),
-                "请直接写一条完整图文内容。",
+                f"请直接写一条完整内容。{disconnected_marker}",
                 (),
                 "xiaohongshu_graphic",
                 progress=disconnect_at_finalizing,
             )
-        assert len(disconnect_generator.generated_task_ids) == 1
-        assert _task_counts(
-            app_database_url,
-            disconnect_generator.generated_task_ids[0],
-        ) == {
+        assert _task_counts(app_database_url, disconnected_marker) == {
             "tasks": 1,
             "running": 0,
             "failed": 1,
             "versions": 0,
         }
+
+        early_disconnect_marker = f"UI05_EARLY_DISCONNECTED-{uuid4().hex}"
 
         def disconnect_at_generating(stage: str) -> None:
             if stage == "generating":
@@ -523,7 +299,7 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity_with_test
                     BRAND_ID,
                     HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
                 ),
-                "请直接写一条完整小红书帖子。",
+                f"请直接写一条完整内容。{early_disconnect_marker}",
                 (),
                 "xiaohongshu_graphic",
                 progress=disconnect_at_generating,
@@ -536,23 +312,6 @@ def test_ui05_a_creation_responsibility_g1_to_g7_and_failure_atomicity_with_test
             "failed": before_early_disconnect["failed"] + 1,
             "versions": before_early_disconnect["versions"],
         }
-
-    before_question = _persistence_counts(app_database_url)
-    with TestClient(
-        _app(app_database_url, monkeypatch, _MissingFactUI05Generator()),
-        base_url="https://diyuai.cc",
-    ) as question_client:
-        question_client.cookies.set("diyu_session", token)
-        g6 = _stream_events(
-            question_client,
-            _conversation_payload("把我去年创业最困难的那个月写出来。"),
-        )
-    assert g6[-1] == {
-        "event": "conversation",
-        "kind": "question",
-        "message": "那个月最难的一件具体事情是什么？",
-    }
-    assert _persistence_counts(app_database_url) == before_question
 
 
 def test_ui05_b_entry_qualifications_are_mutually_exclusive_and_api_errors_stay_json(
@@ -676,10 +435,11 @@ def test_ui05_c_logical_identity_owns_targets_and_explicit_selection_is_frozen(
         assert selection_page.status_code == 200
         assert '"current_publishing_identity_id": null' in selection_page.text
 
+        marker = f"ui05-frozen-{uuid4().hex}"
         events = _stream_events(
             client,
             _conversation_payload(
-                "请写一条完整的门店观察内容。",
+                f"请写一条完整的门店观察内容。{marker}",
                 identity_id=ACCOUNT_ID,
                 target="xiaohongshu_graphic",
             ),

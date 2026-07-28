@@ -42,7 +42,6 @@ const v1 = {
   aigc_label: "AI 辅助生成",
   aigc_release_reminder: "发布前请使用平台 AI 内容声明功能。",
   target_key: "xiaohongshu_graphic",
-  conversation_message: "我先从想自己看一会儿这件小事写一版，直接给你完整成品。",
   applied_direction: ["幽默玩梗"]
 };
 const v2 = {
@@ -92,7 +91,6 @@ let revised = false;
 let currentRevision = v1;
 let revisionFailureCount = 0;
 let copyShouldFail = false;
-let nextVersionLoadGate = null;
 const requests = [];
 const copiedTexts = [];
 const exportedBlobs = [];
@@ -247,10 +245,12 @@ globalThis.fetch = async (input, init = {}) => {
     } else if (body?.message === "最近店里总有人只想自己看看。") {
       events = [
         { event: "received" },
+        { event: "compiling_context" },
         {
           event: "conversation",
-          kind: "chat",
-          message: "听起来，这种安静会让人忍不住多想一会儿。"
+          kind: "question",
+          message:
+            "这个观察可以做成门店人物内容。你更想讲“沉默也应该被尊重”，还是讨论“店员什么时候适合主动介绍”？"
         }
       ];
     } else if (
@@ -300,11 +300,6 @@ globalThis.fetch = async (input, init = {}) => {
       payload = currentRevision;
     }
   } else if (path === "/api/v1/content/tasks/t1/versions") {
-    if (nextVersionLoadGate) {
-      const gate = nextVersionLoadGate;
-      nextVersionLoadGate = null;
-      await gate.promise;
-    }
     payload = revised ? [currentRevision, v1] : [v1];
   } else if (path === "/api/v1/tasks/t1/versions/1") payload = v1;
   return {
@@ -320,14 +315,6 @@ globalThis.__DIYU_INTERACTION__ = {
   exportedBlobs,
   setCopyFailure: value => {
     copyShouldFail = value;
-  },
-  delayNextVersionLoad: () => {
-    let release;
-    const promise = new Promise(resolve => {
-      release = resolve;
-    });
-    nextVersionLoadGate = { promise };
-    return () => release();
   },
   window: dom.window
 };

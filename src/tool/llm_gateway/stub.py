@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from src.brain.natural_entry import requests_content_creation
 from src.ports.content_generator import ContentGenerator
 from src.shared.types import (
     ContentProduct,
@@ -66,21 +65,23 @@ class DeterministicContentGenerator(ContentGenerator):
         """Deterministic interaction double; production semantics stay in DeepSeek."""
         text = request.message.strip()
         normalized = text.casefold()
-        if _ordinary_chat(normalized) or not _requests_content(normalized):
+        if _ordinary_chat(normalized):
             return ConversationDecision("chat", "可以。你想随便聊聊，或把一个观察慢慢说清楚，都可以。")
+        if (
+            not request.history
+            and "只想自己看看" in text
+            and not any(marker in text for marker in ("写", "做成", "内容", "图文", "口播"))
+        ):
+            return ConversationDecision(
+                "question",
+                "这个观察可以做成门店人物内容。你更想讲沉默也应该被尊重，还是讨论店员什么时候适合主动介绍？",
+            )
         combined = "\n".join([*(turn.content for turn in request.history), text])
-        product = self.route(RoutingInput(combined, request.brand, request.products, None))
-        if product is None:
-            product = "product_truth" if request.products else "brand_life_narrative"
+        product = self.route(RoutingInput(combined, request.brand, request.products, None)) or "brand_life_narrative"
         return ConversationDecision(
             "ready",
-            f"我先按当前账号的位置选一条主线，直接整理成{request.brand.platform}{request.brand.media_format}。",
-            user_premises=(text,),
-            user_actuality_quotes=_explicit_actuality_quotes(text),
-            system_creative_plan=(
-                "从用户本轮种子中自主选择一个安全主线，完成观点、结构和平台组织；"
-                "不把题材或创作规划写成用户真实经历。"
-            ),
+            f"好，我按当前选择的{request.brand.platform}{request.brand.media_format}整理。",
+            brief=combined,
             primary_product=product,
         )
 
@@ -132,10 +133,7 @@ class DeterministicContentGenerator(ContentGenerator):
                     "第 3 张补足必要比较或动作；最后一张完成本篇判断。每张只承担这一项职责。"
                 ),
                 full_body="\n".join(str(value) for value in vars(contract).values()),
-                layout_and_production=(
-                    "按本篇语义选择本次原创构图、排版或创作者表达；"
-                    "不把视频帧、台词卡或长文切片当作图片序列。"
-                ),
+                layout_and_production="按当前一人一手机条件补拍或选图；不把视频帧、台词卡或长文切片当作图片序列。",
                 release_caption_and_interaction="正文已经完成当前判断；不需要额外互动时自然结束。",
             )
         silent = request.primary_product == "visual_styling_story" and any(
@@ -178,7 +176,7 @@ class DeterministicContentGenerator(ContentGenerator):
                 f"别把双面说成两件。{color_pair}都能独立出现，口袋两面都能用；M 码样衣约 {weight} 克，同季同长度单层短外套 M 码样衣约 {comparison_weight} 克。它给的是一次翻面后的不同视觉，不是多买到一件外套。",
                 "同一人先穿炭灰走过镜头，再在转身时翻到深绿细格纹；最后把样衣放在秤旁，但不把数字夸成性能结论。",
                 "双面，不等于两件。\n能确认的，和还不能下结论的，都留在镜头里。",
-                "只使用登记商品与本次原创声音节奏；不补拍价格牌、库存或未经提供的材质细节。",
+                "一人一手机，保留翻面摩擦和脚步声；不补拍价格牌、库存或未经提供的材质细节。",
             )
         if product == "brand_life_narrative":
             if request.brand.brand_name != "折线之间":
@@ -194,39 +192,22 @@ class DeterministicContentGenerator(ContentGenerator):
                     "一家人站在一起，不一定要穿成一套。有人喜欢安静一点，有人愿意多一点颜色；"
                     "彼此看得见，也各自舒服，就已经是一种自然的呼应。我们只说当前确认过的品牌立场，"
                     "不替任何一个真实家庭补写经历。",
-                    "用本次原创的独立色块与留白表示几种选择；不出现具体商品、价格、库存、顾客或"
-                    "门店画面，也不把概念冒充已实拍。",
+                    "一人一手机，用不同衣架或空白色卡表示几种独立选择；不出现具体商品、价格、库存、"
+                    "顾客或门店画面，也不把概念冒充已实拍。",
                     "一家人，可以自然呼应。\n也可以，各自成立。",
-                    "声音与节奏只服务当前观点；不制造儿童、身体、年龄或家庭焦虑。",
-                )
-            actuality = "；".join(request.user_actuality_quotes or ())
-            if actuality:
-                return (
-                    P3SemanticContract(
-                        f"只从用户本次明确提供的生活片段出发：{actuality}",
-                        "受众得到的是一种不急着判输赢的观看位置，也不被要求接受一个标准答案。",
-                        "当前账号只组织用户本次前提，不补写家庭身份、顾客、对白、结果或长期履历。",
-                    ),
-                    "从用户明确提供的小事里选择一条主线，不替任何人补写前因后果。",
-                    f"{actuality} 小事没有自动站到谁的一边，也不必立刻被写成道理。"
-                    "先把当时的疲惫和那一点别扭放在同一个画面里，事实停在用户说过的位置。",
-                    "用错位节拍与不对称留白承接节奏；不补拍家庭成员、顾客、商品或未提供的现实场景。",
-                    "先不判输赢。\n把小事放回当时的疲惫里。",
-                    "用自然停顿收束；不补造对白、关系身份、争执结果或经营事实。",
+                    "使用普通室内环境与轻微生活声；不制造儿童、身体、年龄或家庭焦虑。",
                 )
             return (
                 P3SemanticContract(
-                    "从开放生活题材作一般观察或条件表达，不把题材写成当前账号的真实履历。",
-                    "受众得到一个可以自行代入、但不被替写经历的观看角度。",
-                    "当前账号只表达本篇观察，不补造家庭成员、婚姻状态、创业经历、顾客或门店事实。",
+                    "南城店店长会把“我先看看”当成需要被尊重的停顿，而不是必须立刻解决的犹豫。",
+                    "受众能看见这家店怎样克制地观察和待人，而不是被要求接受一个标准答案。",
+                    "这来自南城店店长/门店经营者的合法观察位置，不冒充顾客经历或总部政策。",
                 ),
-                "把开放题材写成一般情境和观察，不冒充一段真实经历。",
-                "如果两个人都带着自己的疲惫走进同一件小事，分歧未必需要一个反派。"
-                "先让彼此的处境都站得住，再看那件小事为什么会突然变重；这是一种情境演绎，"
-                "不是当前账号或任何具体家庭的经历。",
-                "以两组不对称抽象构成和留白完成画面；不补拍家庭成员、顾客、商品或门店事件。",
-                "不替谁判输赢。\n先让两边都站得住。",
-                "以自然停顿完成节奏；不制造人物身份、对白、结果或现实履历。",
+                "从门店里三个相似的停顿，讲清账号愿意怎样把空间留给人。",
+                "今天有三位客人都说：我先看看。店长没有急着把这句话接成成交话术，只把那件 ZX-C218 挂回原位，等对方自己走近。她也会怀疑自己是不是太克制，但还是愿意把选择留在顾客手里。",
+                "一人手机拍店长整理炭灰面和深绿细格纹的两次停顿；不拍顾客正脸，不复述任何个人识别信息。",
+                "“我先看看”，可以只是看看。\n把空间留出来，也是一种服务。",
+                "门店环境声即可；这是账号的生活观察，不是店内巡检、承诺或全国服务政策。",
             )
         if product == "local_response":
             return (
@@ -239,7 +220,7 @@ class DeterministicContentGenerator(ContentGenerator):
                 "如果你走进南城店，只想先看看，也完全可以。我们不替你猜今天为什么犹豫，也不催你给理由；衣服先在这里，等你按自己的节奏靠近。",
                 "拍一只手把 ZX-C218 的炭灰面和深绿细格纹依次留在同一根挂杆上，再留出一段空镜。",
                 "想先看就先看，不用解释。",
-                "用本次原创的留白与声音组织关系；不把这句话扩展成交易承诺、顾客画像或全国政策。",
+                "一人一手机、普通门店空间；不把这句话扩展成交易承诺、顾客画像或全国政策。",
             )
         if product == "visual_styling_story":
             return (
@@ -252,7 +233,7 @@ class DeterministicContentGenerator(ContentGenerator):
                 f"人不用换。先用{colors[0] if colors else '第一面'}从门口走向镜头，走到最近处时抬手翻面；同一步继续向前，{colors[1] if len(colors) > 1 else '另一面'}接住原来的动作。不是两套造型，也不是资料朗读，是同一个人把重音换了一下。",
                 f"固定机位拍连续走动：{colors[0] if colors else '第一面'}进入、手部翻面、{colors[1] if len(colors) > 1 else '另一面'}离开。两面口袋都留一个短镜头，不增加未经提供的搭配或功能主张。",
                 f"人没换，画面换了重音。\n{colors[0] if colors else '第一面'}停一下，{colors[1] if len(colors) > 1 else '另一面'}再往前一步。",
-                "只使用创作者、登记商品与本次原创节拍，不把概念冒充已实拍或门店陈列执行。",
+                "一人一部手机、普通门店空间；保留脚步声，音乐只做轻节拍，不把概念冒充已实拍或门店陈列执行。",
             )
         if any(word in request.weak_seed for word in ("雨", "骑车", "湿")):
             choice = "把移动中的安全、耐受和到达后的可整理性放在造型完整度之前。"
@@ -268,7 +249,7 @@ class DeterministicContentGenerator(ContentGenerator):
             f"同一身衣服不必为不同场合重新证明两次自己。{choice}{boundary}{action}",
             "先拍连续走动和弯腰拿东西的自然测试，再拍一处需要调整或保留的细节。",
             "先保住分寸。\n走几步，再决定要不要改。",
-            "用本次原创的动作节奏表达选择；不补造商品事实或顾客身份。",
+            "一人一部手机，环境声和脚步声即可；不补造商品事实或顾客身份。",
         )
 
 
@@ -293,19 +274,6 @@ def _ordinary_chat(text: str) -> bool:
     return any(value in text for value in ("hello", "你好", "有点困", "挺安静", "谢谢")) and not any(
         value in text for value in ("写", "内容", "双面", "外套", "穿", "商品", "拍")
     )
-
-
-def _requests_content(text: str) -> bool:
-    """Recognize explicit production intent in the offline double, never infer it from a topic."""
-    return requests_content_creation(text)
-
-
-def _explicit_actuality_quotes(text: str) -> tuple[str, ...]:
-    """Keep a separately stated seed sentence distinct from the following production request."""
-    premise, separator, request = text.partition("。")
-    if separator and premise.strip() and _requests_content(request) and not _requests_content(premise):
-        return (premise.strip() + separator,)
-    return ()
 
 
 def _outline(product: ContentProduct) -> str:

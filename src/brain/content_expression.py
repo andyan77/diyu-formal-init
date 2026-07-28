@@ -432,7 +432,7 @@ def direction_summary(direction: CreativeDirection | None) -> str:
     return "、".join(item.applied_label for item in direction.selections)
 
 
-SNAPSHOT_SCHEMA = "content-context-snapshot-v2"
+SNAPSHOT_SCHEMA = "content-context-snapshot-v1"
 
 
 def snapshot_document(
@@ -442,9 +442,6 @@ def snapshot_document(
     series_context: SeriesContext | None = None,
     business_data_kind: str = "formal_business_data",
     brand_reference_context: tuple[str, ...] = (),
-    user_premise: str = "",
-    user_actuality_quotes: tuple[str, ...] | None = None,
-    system_creative_plan: str = "",
 ) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
@@ -503,11 +500,6 @@ def snapshot_document(
         ),
         "business_data_kind": business_data_kind,
         "brand_reference_context": list(brand_reference_context),
-        "user_premise": user_premise,
-        "user_actuality_quotes": (
-            list(user_actuality_quotes) if user_actuality_quotes is not None else None
-        ),
-        "system_creative_plan": system_creative_plan,
         "account_expression": (
             {
                 "profile_id": (

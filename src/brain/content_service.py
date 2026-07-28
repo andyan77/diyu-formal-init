@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from dataclasses import replace
 from uuid import UUID
@@ -21,12 +20,7 @@ from src.brain.p1_contract import assert_content_complete
 from src.brain.platform_directions import direction_for
 from src.ports.content_generator import ContentGenerator
 from src.ports.content_repository import ContentRepository
-from src.shared.content_snapshot import (
-    frozen_series_context,
-    frozen_system_creative_plan,
-    frozen_user_actuality_quotes,
-    frozen_user_premise,
-)
+from src.shared.content_snapshot import frozen_series_context
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.types import (
     AccountExpression,
@@ -75,8 +69,6 @@ class ContentService:
         series_position: int | None = None,
         primary_product_override: ContentProduct | None = None,
         progress: Callable[[str], None] | None = None,
-        user_actuality_quotes: tuple[str, ...] | None = None,
-        system_creative_plan: str = "",
     ) -> dict[str, object]:
         if primary_product_override is None and reuse_version_id is None and is_natural_chat(weak_seed):
             return {"kind": "greeting", "message": natural_reply()}
@@ -88,12 +80,6 @@ class ContentService:
             if reuse_version_id is None:
                 return {"kind": "greeting", "message": "还没有当前账号可继续的上一条内容。"}
         sanitized_seed = sanitize_seed(weak_seed)
-        sanitized_actualities = (
-            tuple(sanitize_seed(item) for item in user_actuality_quotes)
-            if user_actuality_quotes is not None
-            else None
-        )
-        sanitized_plan = sanitize_seed(system_creative_plan)
         direction = direction_for(target)
         production_conditions = self._production_conditions(sanitized_seed, direction.media_format)
         context = self._repository.load_brand_context(scope, direction.media_format, production_conditions)
@@ -172,9 +158,6 @@ class ContentService:
                 series_context,
                 context.business_data_kind,
                 context.brand_reference_context,
-                sanitized_seed,
-                sanitized_actualities,
-                sanitized_plan,
             ),
             series_context,
         )
@@ -195,8 +178,6 @@ class ContentService:
             control,
             series_context,
             progress,
-            sanitized_actualities,
-            sanitized_plan,
         )
 
     def respond_to_conversation(
@@ -266,24 +247,17 @@ class ContentService:
                 "kind": decision.disposition,
                 "message": decision.message,
             }
-        if (
-            decision.primary_product is None
-            or not decision.user_premises
-            or not decision.system_creative_plan
-        ):
+        if decision.primary_product is None or not decision.brief:
             raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
-        user_premise = "\n".join(decision.user_premises)
         result = self.create_from_weak_seed(
             scope,
-            user_premise,
+            decision.brief,
             target=target,
             controls=controls,
             series_id=series_id,
             series_position=series_position,
             primary_product_override=decision.primary_product,
             progress=progress,
-            user_actuality_quotes=decision.user_actuality_quotes,
-            system_creative_plan=decision.system_creative_plan,
         )
         return result | {"conversation_message": decision.message}
 
@@ -470,9 +444,6 @@ class ContentService:
         context = self._repository.load_brand_context(scope, media_format, production_conditions)
         self._assert_target_context(context, direction.platform)
         products = self._repository.load_task_product_facts(scope, task_id)
-        user_premise = frozen_user_premise(snapshot, weak_seed)
-        user_actuality_quotes = frozen_user_actuality_quotes(snapshot)
-        system_creative_plan = frozen_system_creative_plan(snapshot)
         assets = self._repository.load_active_assets(
             scope,
             primary_product,
@@ -503,7 +474,7 @@ class ContentService:
             scope,
             task_id,
             run_id,
-            user_premise,
+            weak_seed,
             primary_product,
             instruction,
             self._repository.fetch_version_body(scope, parent_version_id),
@@ -515,8 +486,6 @@ class ContentService:
             source_description,
             control,
             series_context,
-            user_actuality_quotes=user_actuality_quotes,
-            system_creative_plan=system_creative_plan,
         )
 
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:
@@ -549,9 +518,6 @@ class ContentService:
         control = self._recompile_control(control)
         context = self._replayed_context(context, control, snapshot)
         series_context = frozen_series_context(snapshot)
-        user_premise = frozen_user_premise(snapshot, source.weak_seed)
-        user_actuality_quotes = frozen_user_actuality_quotes(snapshot)
-        system_creative_plan = frozen_system_creative_plan(snapshot)
         assets = self._repository.load_active_assets(
             target_scope,
             source.primary_product,
@@ -562,7 +528,7 @@ class ContentService:
         )
         target_task_id, run_id, prior_body = self._repository.create_task_and_running_run(
             target_scope,
-            user_premise,
+            source.weak_seed,
             source.primary_product,
             source_version_id,
             self._generator.model_name,
@@ -582,9 +548,6 @@ class ContentService:
                 series_context,
                 context.business_data_kind,
                 context.brand_reference_context,
-                user_premise,
-                user_actuality_quotes,
-                system_creative_plan,
             ),
             None,
         )
@@ -592,7 +555,7 @@ class ContentService:
             target_scope,
             target_task_id,
             run_id,
-            user_premise,
+            source.weak_seed,
             source.primary_product,
             instruction,
             prior_body,
@@ -604,8 +567,6 @@ class ContentService:
             source.source_description,
             control,
             series_context,
-            user_actuality_quotes=user_actuality_quotes,
-            system_creative_plan=system_creative_plan,
         )
 
     def identity_summary(self, scope: TrustedScope, target: ContentTarget = "douyin_video") -> dict[str, str]:
@@ -643,8 +604,6 @@ class ContentService:
         control: ContentControlContext | None = None,
         series_context: SeriesContext | None = None,
         progress: Callable[[str], None] | None = None,
-        user_actuality_quotes: tuple[str, ...] | None = None,
-        system_creative_plan: str = "",
     ) -> dict[str, object]:
         try:
             # The run is already durable here. Keep the first generation event
@@ -672,8 +631,6 @@ class ContentService:
                     reference_materials=control.materials if control else (),
                     collaboration_note=control.collaboration_note if control else "",
                     series_context=series_context,
-                    user_actuality_quotes=user_actuality_quotes,
-                    system_creative_plan=system_creative_plan,
                 )
             )
             if progress is not None:
@@ -789,21 +746,13 @@ class ContentService:
             return "目标自然时长为 8 秒；无法同时保留原有全部认知时，只做明确标识的窄主题版，不称与原版等义。"
         if "四张" in text or "4 张" in text or "4张" in text:
             return "当前只补拍四张；图文仍须有完整正文，并由正文保留商品归因边界。"
-        if re.search(
-            r"(?:一个人|一人)(?:完成|制作|拍|录|剪)|(?:用|只用|只有|一部)手机(?:拍|录|制作|完成)?",
-            text,
-        ):
-            return (
-                "只使用用户本次明确点名的单人或手机制作条件；"
-                "未点名的人物、物品、场地和既有素材仍视为不可用。"
-            )
+        if "一个人" in text or "一人" in text or "手机" in text:
+            return "一名创作者、一部手机、普通室内或门店；按当前形式完成拍摄、录音、排版或剪辑。"
         if previous is not None:
             return previous
-        return (
-            f"按当前{media_format}形式自主选择表现方式；"
-            "可使用创作者本人表达与本次原创的抽象构图、排版、文字和声音组织，"
-            "不默认任何现实人物、商品、物品、场地或既有素材存在。"
-        )
+        if media_format == "graphic":
+            return "一名创作者、一部手机、普通室内或门店；按当前条件补拍、选图、排版并发布图文。"
+        return "一名创作者、一部手机、普通室内或门店；按当前条件完成拍摄、录音和剪辑。"
 
     @staticmethod
     def _requests_independent_result(text: str) -> bool:

@@ -14,10 +14,6 @@ from src.shared.errors import GenerationFailed
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
-    ContentProductionBundle,
-    ContentSemanticContract,
-    ConversationInput,
-    ConversationTurn,
     GenerationInput,
     GraphicProductionBundle,
     ProductFact,
@@ -26,9 +22,7 @@ from src.shared.types import (
 )
 from src.tool.llm_gateway.deepseek import (
     BoundaryContext,
-    ContentCore,
     DeepSeekGenerator,
-    UnitIssue,
 )
 
 
@@ -87,7 +81,7 @@ def generation_input() -> GenerationInput:
             "brand-expression-v1",
             "抖音",
             "视频",
-            "使用创作者表达与本次原创抽象构成，不默认现实物品、场地或既有素材。",
+            "一名创作者、一部手机、普通室内环境。",
         ),
         target="douyin_video",
         media_format="video",
@@ -162,7 +156,7 @@ def _video_core(
             _claim(
                 "c2", "natural_guide", "从同款是否等于家庭感进入", "user_premise", "non_event", ("source:user_request",)
             ),
-            _claim("c3", "viewing_flow", "让两组独立构成在结尾形成呼应", "conditional_guidance", "non_event"),
+            _claim("c3", "viewing_flow", "固定机位完成口播", "conditional_guidance", "non_event"),
             _claim("c4", "release_caption", "你更在意整齐，还是每个人都自在？"),
             _claim("c5", "choice", "先保留每个人舒服的选择", "conditional_guidance", "hypothetical"),
             _claim("c6", "boundary", "如果需要正式合照，再找一个自然呼应点", "conditional_guidance", "hypothetical"),
@@ -181,18 +175,18 @@ def _video_core(
             _step(
                 "s1",
                 "cover",
-                "两组不同形状围住标题“不必穿成同款”。",
+                "手写标题卡：不必穿成同款。",
                 ("c1",),
-                resource_refs=("resource:original_composition",),
+                resource_refs=("resource:onsite_text",),
             ),
             _step(
                 "s2",
                 "scene",
-                "当前创作者自然口播，两组形状各自移动后保留呼应间距。",
+                "当前创作者正对手机自然口播。",
                 ("c8", "c9"),
                 actor_refs=("actor:creator",),
-                resource_refs=("resource:creator_expression", "resource:original_composition"),
-                sound_text="当前创作者人声，结尾留半拍安静。",
+                resource_refs=("resource:phone",),
+                sound_text="手机直接收录当前创作者的人声。",
             ),
         ],
     }
@@ -224,13 +218,7 @@ def _verdicts(
     verdicts = []
     for unit_id in _unit_ids(core):
         entry: dict[str, object] = {"id": unit_id}
-        for flag in (
-            "identity_ok",
-            "actuality_ok",
-            "resource_ok",
-            "fact_ok",
-            "instruction_ok",
-        ):
+        for flag in ("identity_ok", "actuality_ok", "resource_ok", "fact_ok"):
             entry[flag] = flag not in failures.get(unit_id, ())
         verdicts.append(entry)
     return _completion(json.dumps({"verdicts": verdicts}, ensure_ascii=False))
@@ -276,7 +264,7 @@ def test_generation_prompt_separates_six_input_semantics(
     assert "不证明场地内存在家庭成员、顾客、商品、合照、家具或已执行服务" in prompt
     assert "speaker:brand_account" in prompt
     assert "actor:creator" in prompt
-    assert "resource:creator_expression" in prompt
+    assert "resource:phone" in prompt
     assert "source:user_request" in prompt
     assert "只要点名当前商品的名称、品类、颜色、结构或可观察特征" in prompt
     assert "标题、观点、比喻、幽默、节奏、完整口播和互动由你自然创作" in prompt
@@ -289,25 +277,6 @@ def test_generation_prompt_separates_six_input_semantics(
     )
     assert "B-001" not in prompt
     assert "schema_version" not in prompt
-
-
-def test_judgement_reads_the_complete_visible_candidate_before_unit_verdicts(
-    generation_input: GenerationInput,
-) -> None:
-    generator = _generator()
-    context = BoundaryContext.from_request(generation_input)
-    core = generator._parse_core(generation_input, context, _video_core())
-
-    prompt = DeepSeekGenerator._judgement_prompt(
-        generation_input,
-        context,
-        core,
-    )
-
-    assert "候选按用户阅读/制作顺序展开后的完整可见成品" in prompt
-    assert "一家人的家庭感，不一定来自穿成同款。" in prompt
-    assert "一个单元单独看似" in prompt
-    assert "不能把已知" in prompt and "重量类比" in prompt
 
 
 def test_revision_prompt_applies_the_instruction_to_every_visible_unit(
@@ -333,89 +302,6 @@ def test_revision_prompt_applies_the_instruction_to_every_visible_unit(
     assert "本次修改（当前最高优先级" in prompt
     assert "用“不要、不能、不得、只用”表达的硬边界也应静默遵守" in prompt
     assert "不得把这些后台约束逐项搬进正文、口播、字幕或制作提示" in prompt
-    assert "发生可观察的实质变化" in prompt
-    assert "不能只删一个无关短句" in prompt
-
-
-def test_topic_only_life_content_forbids_invented_dialogue_and_possessions(
-    generation_input: GenerationInput,
-) -> None:
-    request = _with(
-        generation_input,
-        weak_seed="写一条家庭关系主题的小红书。",
-        user_actuality_quotes=(),
-        products=(),
-        system_creative_plan="用一般观察选择关系里的边界感作为主线。",
-    )
-    context = BoundaryContext.from_request(request)
-
-    writer_prompt = DeepSeekGenerator._generation_prompt(request, context)
-    core = _generator()._parse_core(request, context, _video_core())
-    judge_prompt = DeepSeekGenerator._judgement_prompt(request, context, core)
-
-    for prompt in (writer_prompt, judge_prompt):
-        assert "具体对白" in prompt
-        assert "个人" in prompt and "习惯" in prompt
-        assert "即使" in prompt and ("假设" in prompt or "想象" in prompt)
-        assert "本次没有登记商品" in prompt
-        assert "穿着" in prompt and "具体衣物" in prompt
-
-
-def test_user_actuality_is_a_text_source_but_never_an_implicit_scene_resource(
-    generation_input: GenerationInput,
-) -> None:
-    actuality = "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
-    request = _with(
-        generation_input,
-        weak_seed=f"{actuality}帮我发条小红书。",
-        user_actuality_quotes=(actuality,),
-        products=(),
-    )
-    context = BoundaryContext.from_request(request)
-    core = _generator()._parse_core(request, context, _video_core())
-    issue = UnitIssue("s2", "unsupported_resource", core.scene_steps[1].action_text)
-
-    prompts = (
-        DeepSeekGenerator._generation_prompt(request, context),
-        DeepSeekGenerator._judgement_prompt(request, context, core),
-        DeepSeekGenerator._unit_repair_prompt(request, context, core, (issue,)),
-    )
-
-    for prompt in prompts:
-        assert "事实来源不等于拍摄资源" in prompt
-        assert "重演" in prompt and "现场记录" in prompt
-    assert "每个实际使用它的 step 分别判 false" in prompts[1]
-
-
-def test_repair_discards_an_experience_shell_instead_of_paraphrasing_it(
-    generation_input: GenerationInput,
-) -> None:
-    request = _with(
-        generation_input,
-        weak_seed="写一条家庭关系主题的小红书。",
-        user_actuality_quotes=(),
-        products=(),
-    )
-    context = BoundaryContext.from_request(request)
-    core = _generator()._parse_core(request, context, _video_core())
-
-    prompt = DeepSeekGenerator._unit_repair_prompt(
-        request,
-        context,
-        core,
-        (
-            UnitIssue(
-                "c8",
-                "invented_actuality",
-                "这个账号最近一直在想一段家庭关系。",
-            ),
-        ),
-    )
-
-    assert "必须丢弃原句的经历外壳" in prompt
-    assert "不能近义改写或换一个假想人物继续叙事" in prompt
-    assert "本次话题对象 + 当前一般判断" in prompt
-    assert "actuality 必须是" in prompt and "non_event" in prompt
 
 
 def test_platform_recompile_keeps_source_but_demands_target_native_change(
@@ -475,33 +361,6 @@ def test_synthetic_near_field_seed_stays_a_hypothetical_premise(
     assert "不得用第一人称" in context.task_topic_or_request
 
 
-def test_synthetic_user_actuality_is_authorized_only_for_the_current_artifact(
-    generation_input: GenerationInput,
-) -> None:
-    actuality = "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
-    request = _with(
-        generation_input,
-        weak_seed=f"{actuality}帮我发条小红书。",
-        primary_product="local_response",
-        user_actuality_quotes=(actuality,),
-        brand=replace(
-            generation_input.brand,
-            business_data_kind="synthetic_business_fixture",
-        ),
-    )
-    context = BoundaryContext.from_request(request)
-
-    assert context.user_presented_actuality == f"用户原话：{actuality}"
-    assert context.user_actuality_quotes == (actuality,)
-    assert "可以作为本次内容作者明确提供的事实忠实使用或自然压缩" in (
-        context.task_topic_or_request
-    )
-    assert "不证明现实账号、操作者或门店具有相应身份和履历" in (
-        context.task_topic_or_request
-    )
-    assert "不得写入长期画像" in context.task_topic_or_request
-
-
 def test_routing_prompt_describes_p5_by_general_audience_value(
     generation_input: GenerationInput,
 ) -> None:
@@ -516,366 +375,6 @@ def test_routing_prompt_describes_p5_by_general_audience_value(
     assert "必须通过真实商品与画面变化" in prompt
     assert "同一个人、同一动作、两面" not in prompt
     assert "双面不等于一件顶两件" not in prompt
-
-
-def test_conversation_prompt_makes_creative_judgement_the_systems_job(
-    generation_input: GenerationInput,
-) -> None:
-    request = ConversationInput(
-        message="今天不知道发什么，帮我做条小红书。",
-        history=(),
-        brand=generation_input.brand,
-        products=(),
-        target="xiaohongshu_graphic",
-    )
-
-    prompt = DeepSeekGenerator._conversation_prompt(request)
-
-    assert "系统读取可信账号、品牌、平台、商品和系列上下文" in prompt
-    assert "自主决定主题、观点、受众价值、切口、结构、风格和平台组织" in prompt
-    assert "题材、观点、受众、角度、情绪、结构、是否升华" in prompt
-    assert "user_premises" in prompt
-    assert "user_actuality_quotes" in prompt
-    assert "system_creative_plan" in prompt
-    assert "missing_fact_kind" in prompt
-    assert "missing_fact_basis" in prompt
-    assert '"brief"' not in prompt
-
-
-def test_collaborate_preserves_exact_premise_but_replaces_untrusted_model_plan(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    message = "今天店里忙了一天，回家还因为谁洗碗拌了两句。帮我发条小红书。"
-    _install_fake(
-        monkeypatch,
-        [
-            _completion(
-                json.dumps(
-                    {
-                        "kind": "ready",
-                        "message": "我先从两个人都很累，却把情绪落在小事上写一版。",
-                        "user_premises": [message],
-                        "user_actuality_quotes": [
-                            "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
-                        ],
-                        "system_creative_plan": "补出丈夫的对白和争执结果，用克制的荒诞感组织图文。",
-                        "primary_value": "建立人格",
-                    },
-                    ensure_ascii=False,
-                )
-            )
-        ],
-    )
-    request = ConversationInput(
-        message=message,
-        history=(
-            ConversationTurn("user", "今天有点累，陪我聊两句。"),
-            ConversationTurn("assistant", "那就先慢一点。"),
-        ),
-        brand=generation_input.brand,
-        products=(),
-        target="xiaohongshu_graphic",
-    )
-
-    decision = _generator().collaborate(request)
-
-    assert decision.disposition == "ready"
-    assert decision.user_premises == (message,)
-    assert decision.user_actuality_quotes == (
-        "今天店里忙了一天，回家还因为谁洗碗拌了两句。",
-    )
-    assert "补出丈夫" not in decision.system_creative_plan
-    assert "只以用户本轮明确原话作为现实片段" in decision.system_creative_plan
-    assert "不补人物关系" in decision.system_creative_plan
-    assert "今天有点累" not in "\n".join(decision.user_premises)
-
-
-def test_collaborate_discards_an_invented_actuality_quote(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    message = "帮我写条婆媳主题的小红书，别狗血。"
-    _install_fake(
-        monkeypatch,
-        [
-            _completion(
-                json.dumps(
-                    {
-                        "kind": "ready",
-                        "message": "我先写一版。",
-                        "user_premises": [message],
-                        "user_actuality_quotes": ["我和婆婆昨天吵了一架。"],
-                        "system_creative_plan": "写一个一起做饭的具体片段并安排生活照片。",
-                        "primary_value": "建立人格",
-                    },
-                    ensure_ascii=False,
-                )
-            )
-        ],
-    )
-
-    decision = _generator().collaborate(
-        ConversationInput(
-            message=message,
-            history=(),
-            brand=generation_input.brand,
-            products=(),
-            target="xiaohongshu_graphic",
-        )
-    )
-
-    assert decision.disposition == "ready"
-    assert decision.user_premises == (message,)
-    assert decision.user_actuality_quotes == ()
-    assert "我和婆婆昨天吵了一架" not in decision.system_creative_plan
-    assert "一起做饭" not in decision.system_creative_plan
-    assert "现实场景" in decision.system_creative_plan
-
-
-def test_collaborate_compiles_exact_premise_when_ready_payload_is_incomplete(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    message = "今天不知道发什么，帮我做条小红书。"
-    _install_fake(
-        monkeypatch,
-        [
-            _completion(
-                json.dumps(
-                    {
-                        "kind": "ready",
-                        "message": "我先按当前账号的位置写一版。",
-                        "user_premises": ["模型改写过的前提"],
-                        "user_actuality_quotes": ["今天发生了一件事。"],
-                    },
-                    ensure_ascii=False,
-                )
-            )
-        ],
-    )
-
-    decision = _generator().collaborate(
-        ConversationInput(
-            message=message,
-            history=(),
-            brand=generation_input.brand,
-            products=(),
-            target="xiaohongshu_graphic",
-        )
-    )
-
-    assert decision.disposition == "ready"
-    assert decision.user_premises == (message,)
-    assert decision.user_actuality_quotes == ()
-    assert decision.primary_product == "brand_life_narrative"
-    assert decision.system_creative_plan
-
-
-@pytest.mark.parametrize(
-    ("model_document", "products", "expected_product"),
-    [
-        (
-            {"kind": "chat", "message": "这个编号是想讲哪一面？"},
-            (
-                ProductFact(
-                    "ZX-C218",
-                    {"category": "双面短外套"},
-                    display_name="ZX-C218 双面短外套",
-                ),
-            ),
-            "product_truth",
-        ),
-        (
-            {
-                "kind": "question",
-                "message": "你想从什么角度写？",
-                "missing_fact_kind": "user_experience",
-                "missing_fact_basis": "婆媳主题",
-            },
-            (),
-            "brand_life_narrative",
-        ),
-    ],
-)
-def test_collaborate_does_not_return_system_owned_choices_to_the_user(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-    model_document: dict[str, object],
-    products: tuple[ProductFact, ...],
-    expected_product: str,
-) -> None:
-    message = (
-        "ZX-C218，帮我生成一篇小红书文案。"
-        if products
-        else "帮我写条婆媳主题的小红书，别狗血。"
-    )
-    _install_fake(
-        monkeypatch,
-        [_completion(json.dumps(model_document, ensure_ascii=False))],
-    )
-
-    decision = _generator().collaborate(
-        ConversationInput(
-            message=message,
-            history=(),
-            brand=generation_input.brand,
-            products=products,
-            target="xiaohongshu_graphic",
-        )
-    )
-
-    assert decision.disposition == "ready"
-    assert decision.user_premises == (message,)
-    assert decision.primary_product == expected_product
-    assert decision.system_creative_plan
-
-
-def test_collaborate_keeps_one_irreplaceable_user_fact_question(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    message = "把我去年创业最难的那个月写成视频。"
-    _install_fake(
-        monkeypatch,
-        [
-            _completion(
-                json.dumps(
-                    {
-                        "kind": "question",
-                        "message": "那个月最难的一件具体事情是什么？",
-                        "missing_fact_kind": "user_experience",
-                        "missing_fact_basis": "我去年创业最难的那个月",
-                    },
-                    ensure_ascii=False,
-                )
-            )
-        ],
-    )
-
-    decision = _generator().collaborate(
-        ConversationInput(
-            message=message,
-            history=(),
-            brand=generation_input.brand,
-            products=(),
-            target="xiaohongshu_graphic",
-        )
-    )
-
-    assert decision.disposition == "question"
-    assert decision.message == "那个月最难的一件具体事情是什么？"
-
-
-def test_collaborate_overrides_ready_for_an_unresolved_definite_user_experience(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    message = "把我去年创业最难的那个月写成视频。"
-    _install_fake(
-        monkeypatch,
-        [
-            _completion(
-                json.dumps(
-                    {
-                        "kind": "ready",
-                        "message": "我直接写一版。",
-                        "user_premises": [message],
-                        "user_actuality_quotes": [],
-                        "system_creative_plan": "把那个月写成一段创业回顾。",
-                        "primary_value": "建立人格",
-                    },
-                    ensure_ascii=False,
-                )
-            )
-        ],
-    )
-
-    decision = _generator().collaborate(
-        ConversationInput(
-            message=message,
-            history=(),
-            brand=generation_input.brand,
-            products=(),
-            target="xiaohongshu_video",
-        )
-    )
-
-    assert len(FakeClient.requests) == 1
-    assert decision.disposition == "question"
-    assert decision.message == "那段经历中，真正发生的一件具体事情是什么？"
-    assert decision.user_premises == ()
-
-
-def test_collaborate_does_not_question_a_supplied_life_fragment(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    message = "把我今天店里忙了一天、回家因为谁洗碗拌了两句写成小红书。"
-    _install_fake(
-        monkeypatch,
-        [
-            _completion(
-                json.dumps(
-                    {
-                        "kind": "ready",
-                        "message": "我直接写一版。",
-                        "user_premises": [message],
-                        "user_actuality_quotes": [
-                            "我今天店里忙了一天、回家因为谁洗碗拌了两句"
-                        ],
-                        "system_creative_plan": "从疲惫落在小事上的错位选择主线。",
-                        "primary_value": "建立人格",
-                    },
-                    ensure_ascii=False,
-                )
-            )
-        ],
-    )
-
-    decision = _generator().collaborate(
-        ConversationInput(
-            message=message,
-            history=(),
-            brand=generation_input.brand,
-            products=(),
-            target="xiaohongshu_graphic",
-        )
-    )
-
-    assert decision.disposition == "ready"
-    assert decision.user_premises == (message,)
-
-
-def test_p3_exact_actuality_and_system_plan_enter_different_fact_channels(
-    generation_input: GenerationInput,
-) -> None:
-    actuality = "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
-    request = _with(
-        generation_input,
-        weak_seed=actuality + "帮我发条小红书。",
-        primary_product="brand_life_narrative",
-        user_actuality_quotes=(actuality,),
-        system_creative_plan="从疲惫落在小事上的错位选择主线，用荒诞节奏组织。",
-    )
-
-    context = BoundaryContext.from_request(request)
-
-    assert actuality in context.user_presented_actuality
-    assert context.user_actuality_source == "source:user_actuality"
-    assert "疲惫落在小事上的错位" in context.method_guidance
-    assert "疲惫落在小事上的错位" not in context.user_presented_actuality
-    assert "source:system_creative_plan" in context.source_ids
-
-    topic_only = BoundaryContext.from_request(
-        _with(
-            request,
-            weak_seed="帮我写条婆媳主题的小红书，别狗血。",
-            user_actuality_quotes=(),
-        )
-    )
-    assert topic_only.user_presented_actuality == ""
-    assert topic_only.user_actuality_source is None
 
 
 def test_p5_prompt_keeps_product_anchor_on_registered_facts(
@@ -902,10 +401,10 @@ def test_full_pass_compiles_visible_product_from_passed_units(
     spoken = "一家人的家庭感，不一定来自穿成同款。我们更愿意先尊重每个人舒服的选择，再找一个自然的呼应点。"
     assert artifact.production.spoken_lines == spoken
     assert artifact.production.subtitles == spoken
-    assert artifact.production.cover_or_first_frame == "两组不同形状围住标题“不必穿成同款”。"
-    assert artifact.production.visual_actions == "当前创作者自然口播，两组形状各自移动后保留呼应间距。"
-    assert artifact.production.sound_and_production == "当前创作者人声，结尾留半拍安静。"
-    assert artifact.production.viewing_flow == "让两组独立构成在结尾形成呼应"
+    assert artifact.production.cover_or_first_frame == "手写标题卡：不必穿成同款。"
+    assert artifact.production.visual_actions == "当前创作者正对手机自然口播。"
+    assert artifact.production.sound_and_production == "手机直接收录当前创作者的人声。"
+    assert artifact.production.viewing_flow == "固定机位完成口播"
     assert artifact.production.natural_duration == f"约 {DeepSeekGenerator._natural_spoken_seconds(spoken)} 秒"
     assert artifact.outline == "不必穿成同款"
     assert "标题：不必穿成同款" in artifact.body
@@ -937,8 +436,6 @@ def test_judgement_uses_bounded_config_independent_of_writer(
     assert "对下面列出的每一个 id 各返回一条完整判定" in judge_prompt
     assert "identity_ok" in judge_prompt and "actuality_ok" in judge_prompt
     assert "resource_ok" in judge_prompt and "fact_ok" in judge_prompt
-    assert "instruction_ok" in judge_prompt
-    assert "候选自身填写的 basis、actuality 和 source_refs 只是待审声明" in judge_prompt
     assert "恰好覆盖上面列出的每个 id" in judge_prompt
 
 
@@ -949,10 +446,6 @@ def test_judgement_uses_bounded_config_independent_of_writer(
         lambda verdicts: [*verdicts, {**verdicts[0], "id": "unknown"}],
         lambda verdicts: [*verdicts, verdicts[0]],
         lambda verdicts: [{**verdicts[0], "identity_ok": "yes"}, *verdicts[1:]],
-        lambda verdicts: [
-            {key: value for key, value in verdicts[0].items() if key != "instruction_ok"},
-            *verdicts[1:],
-        ],
     ],
 )
 def test_incomplete_or_drifting_verdict_sets_fail_closed(
@@ -983,125 +476,39 @@ def test_legacy_sparse_violations_shape_is_no_longer_accepted(
         _generator().generate(generation_input)
 
 
-def test_resource_verdict_repairs_an_unprovisioned_scene_before_compilation(
+def test_resource_verdict_stays_a_human_review_condition(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,
 ) -> None:
     unsafe = "让一家三口穿着三套衣服在门店里走动。"
     steps = [
-        _step("s1", "cover", "手写标题卡：不必穿成同款。", ("c1",), resource_refs=("resource:original_composition",)),
+        _step("s1", "cover", "手写标题卡：不必穿成同款。", ("c1",), resource_refs=("resource:onsite_text",)),
         _step(
             "s2",
             "scene",
             unsafe,
             ("c8", "c9"),
             actor_refs=("actor:creator",),
-            resource_refs=("resource:creator_expression",),
+            resource_refs=("resource:phone",),
             sound_text="手机直接收录当前创作者的人声。",
         ),
     ]
     core = _video_core(steps=steps)
-    repaired = _step(
-        "s2",
-        "scene",
-        "两组不对称色块各自移动，最后保留一小段呼应的间距。",
-        ("c8", "c9"),
-        resource_refs=("resource:original_composition",),
-        sound_text="短促节拍随色块靠近后停住。",
-    )
     _install_fake(
         monkeypatch,
         [
             _core_response(core),
             _verdicts(core, {"s2": ("resource_ok",)}),
-            _repairs(repaired),
-            _verdicts(core),
         ],
     )
 
     artifact = _generator().generate(generation_input)
 
     assert isinstance(artifact.production, VideoProductionBundle)
-    assert artifact.production.visual_actions == "两组不对称色块各自移动，最后保留一小段呼应的间距。"
-    assert artifact.production.sound_and_production == "短促节拍随色块靠近后停住。"
-    assert unsafe not in artifact.body
-    assert {receipt.field for receipt in artifact.fact_repair_receipts} == {
-        "visual_actions"
-    }
-    assert len(FakeClient.requests) == 4
-
-
-def test_revision_verdict_repairs_unchanged_expression_and_preserves_premise(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    request = _with(
-        generation_input,
-        weak_seed="今天店里忙了一天，回家因为谁洗碗拌了两句。",
-        primary_product="brand_life_narrative",
-        user_actuality_quotes=(
-            "今天店里忙了一天，回家因为谁洗碗拌了两句。",
-        ),
-        revision_instruction="别说教，荒诞一点，事实别变。",
-        prior_saved_body=(
-            "今天店里忙了一天，回家因为谁洗碗拌了两句。"
-            "这种小摩擦很真实，大家要互相理解。"
-        ),
-    )
-    core = _video_core(
-        claims=[
-            *cast("list[dict[str, object]]", _video_core()["claims"])[:4],
-            _claim("c5", "persona_observation", "疲惫有时会落在一件小事上。"),
-            _claim("c6", "audience_return", "先看见共同的疲惫，不急着判输赢。"),
-            _claim("c7", "brand_account_link", "我们愿意保留这种不判输赢的观察。"),
-            _claim(
-                "c8",
-                "spoken",
-                "今天店里忙了一天，回家因为谁洗碗拌了两句。",
-                "user_premise",
-                "user_presented_actual",
-                ("source:user_actuality",),
-            ),
-            _claim(
-                "c9",
-                "spoken",
-                "这种小摩擦很真实，大家要互相理解。",
-            ),
-        ],
-    )
-    changed: dict[str, object] = {
-        "claim_id": "c9",
-        "text": "洗碗池像临时议会，但今晚没有议长，只有两位电量见底的代表。",
-        "basis": "conditional_guidance",
-        "actuality": "hypothetical",
-        "source_refs": ["source:brand_baseline"],
-    }
-    _install_fake(
-        monkeypatch,
-        [
-            _core_response(core),
-            _verdicts(core, {"c9": ("instruction_ok",)}),
-            _repairs(changed),
-            _verdicts(core),
-        ],
-    )
-
-    artifact = _generator().generate(request)
-
-    assert "今天店里忙了一天，回家因为谁洗碗拌了两句。" in artifact.body
-    assert "洗碗池像临时议会" in artifact.body
-    assert "大家要互相理解" not in artifact.body
-    assert {receipt.field for receipt in artifact.fact_repair_receipts} == {
-        "spoken_lines"
-    }
-    repair_json = FakeClient.requests[2]["json"]
-    assert isinstance(repair_json, dict)
-    repair_prompt = str(repair_json["messages"])
-    assert "instruction_conflict" in repair_prompt
-    assert request.revision_instruction is not None
-    assert request.prior_saved_body is not None
-    assert request.revision_instruction in repair_prompt
-    assert request.prior_saved_body in repair_prompt
+    assert artifact.production.visual_actions == unsafe
+    assert unsafe in artifact.body
+    assert artifact.fact_repair_receipts == ()
+    assert len(FakeClient.requests) == 2
 
 
 def test_shared_invariant_forbids_unsourced_history_claims_in_every_prompt(
@@ -1175,58 +582,6 @@ def test_repair_fails_closed_when_the_same_unit_still_fails(
     assert len(FakeClient.requests) == 4
 
 
-def test_compiler_receives_the_exact_core_that_passed_the_final_review(
-    monkeypatch: pytest.MonkeyPatch,
-    generation_input: GenerationInput,
-) -> None:
-    """Mutation proof: a visible rewrite after final review must break this equality."""
-    initial = _video_core()
-    repaired_unit: dict[str, object] = {
-        "claim_id": "c8",
-        "text": "家庭感不必靠穿成同款证明。",
-        "basis": "brand_viewpoint",
-        "actuality": "non_event",
-        "source_refs": ["source:brand_baseline"],
-    }
-    _install_fake(
-        monkeypatch,
-        [
-            _core_response(initial),
-            _verdicts(initial, {"c8": ("instruction_ok",)}),
-            _repairs(repaired_unit),
-            _verdicts(initial),
-        ],
-    )
-    generator = _generator()
-    reviewed_cores: list[ContentCore] = []
-    compiled_cores: list[ContentCore] = []
-    original_review = generator._review_core
-    original_compile = generator._compile_core
-
-    def capture_review(
-        request: GenerationInput,
-        context: BoundaryContext,
-        core: ContentCore,
-    ) -> tuple[tuple[UnitIssue, ...], dict[str, Any], int]:
-        reviewed_cores.append(core)
-        return original_review(request, context, core)
-
-    def capture_compile(
-        request: GenerationInput,
-        core: ContentCore,
-    ) -> tuple[str, ContentSemanticContract, ContentProductionBundle, str]:
-        compiled_cores.append(core)
-        return original_compile(request, core)
-
-    monkeypatch.setattr(generator, "_review_core", capture_review)
-    monkeypatch.setattr(generator, "_compile_core", capture_compile)
-
-    generator.generate(generation_input)
-
-    assert len(reviewed_cores) == 2
-    assert compiled_cores == [reviewed_cores[-1]]
-
-
 def test_repair_must_cover_exactly_the_violating_units(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,
@@ -1253,36 +608,69 @@ def test_repair_must_cover_exactly_the_violating_units(
         _generator().generate(generation_input)
 
 
-def test_repair_accepts_an_exact_unit_mapping_without_relaxing_the_id_set(
+def test_closed_world_rejects_unregistered_source_before_any_model_verdict(
     generation_input: GenerationInput,
 ) -> None:
-    generator = _generator()
     context = BoundaryContext.from_request(generation_input)
-    core = generator._parse_core(generation_input, context, _video_core())
-    repaired = generator._merge_repaired_units(
+    core = _generator()._parse_core(
         generation_input,
-        core,
-        (
-            UnitIssue(
-                "c8",
-                "invented_actuality",
-                "一家人的家庭感，不一定来自穿成同款。",
-            ),
+        context,
+        _video_core(
+            claims=[
+                _claim("c1", "title", "不必穿成同款"),
+                _claim("c2", "natural_guide", "从同款进入", "user_premise", "non_event", ("source:user_request",)),
+                _claim("c3", "viewing_flow", "固定机位完成口播", "conditional_guidance", "non_event"),
+                _claim("c4", "release_caption", "你更在意整齐，还是自在？"),
+                _claim("c5", "choice", "先保留舒服的选择", "conditional_guidance", "hypothetical"),
+                _claim("c6", "boundary", "需要合照时再找呼应点", "conditional_guidance", "hypothetical"),
+                _claim("c7", "next_action", "先问每个人的意愿", "conditional_guidance", "hypothetical"),
+                _claim(
+                    "c8",
+                    "spoken",
+                    "上周有位顾客带孩子来店里试穿。",
+                    "user_premise",
+                    "user_presented_actual",
+                    ("source:store_visit",),
+                ),
+                _claim("c9", "spoken", "我们更愿意先尊重每个人舒服的选择。"),
+            ]
         ),
-        {
-            "repairs": {
-                "c8": {
-                    "text": "家庭感不一定来自穿成同款。",
-                    "basis": "brand_viewpoint",
-                    "actuality": "non_event",
-                    "source_refs": ["source:brand_baseline"],
-                }
-            }
-        },
     )
 
-    assert repaired.claim("c8").text == "家庭感不一定来自穿成同款。"
-    assert repaired.claim("c9") == core.claim("c9")
+    issues = DeepSeekGenerator._closed_world_issues(context, core)
+
+    reasons = {(issue.unit_id, issue.reason_code) for issue in issues}
+    assert ("c8", "factual_conflict") in reasons
+    assert ("c8", "invented_actuality") in reasons
+
+
+def test_closed_world_blocks_viewpoint_or_guidance_marked_as_happened(
+    generation_input: GenerationInput,
+) -> None:
+    context = BoundaryContext.from_request(generation_input)
+    claims = [
+        _claim("c1", "title", "沉默也值得被尊重"),
+        _claim("c2", "natural_guide", "从安静浏览进入", "user_premise", "non_event", ("source:user_request",)),
+        _claim("c3", "viewing_flow", "固定机位完成口播", "conditional_guidance", "non_event"),
+        _claim("c4", "release_caption", "你也喜欢自己安静看看吗？"),
+        _claim("c5", "choice", "先给自己留判断空间", "conditional_guidance", "hypothetical"),
+        _claim("c6", "boundary", "需要帮助时再开口", "conditional_guidance", "hypothetical"),
+        _claim("c7", "next_action", "下次先自己看看", "conditional_guidance", "hypothetical"),
+        _claim(
+            "c8",
+            "spoken",
+            "我们的门店已经要求店员不主动打扰顾客。",
+            "brand_viewpoint",
+            "user_presented_actual",
+        ),
+        _claim("c9", "spoken", "我们主张给每个人留出安静判断的空间。"),
+    ]
+    core = _generator()._parse_core(generation_input, context, _video_core(claims=claims))
+
+    issues = DeepSeekGenerator._closed_world_issues(context, core)
+
+    assert ("c8", "invented_actuality") in {(issue.unit_id, issue.reason_code) for issue in issues}
+    assert not any(issue.unit_id == "c9" for issue in issues)
 
 
 def test_closed_world_blocks_confirmed_fact_that_is_not_a_recorded_state(
@@ -1374,74 +762,19 @@ def test_closed_world_requires_one_carrying_source_for_the_basis(
     assert ("c8", "factual_conflict") in {(issue.unit_id, issue.reason_code) for issue in issues}
 
 
-def test_closed_world_allows_faithful_user_fact_compression_for_semantic_review(
-    generation_input: GenerationInput,
-) -> None:
-    user_fact = "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
-    request = _with(
-        generation_input,
-        primary_product="brand_life_narrative",
-        user_actuality_quotes=(user_fact,),
-    )
-    claims = [
-        *cast("list[dict[str, object]]", _video_core()["claims"])[:4],
-        _claim("c5", "persona_observation", "疲惫会放大小事。"),
-        _claim("c6", "audience_return", "先看见彼此都没电。"),
-        _claim("c7", "brand_account_link", "我们愿意保留这种观察。"),
-        _claim(
-            "c8",
-            "spoken",
-            "今天店里忙完，回家又为洗碗拌了两句。",
-            "user_premise",
-            "user_presented_actual",
-            ("source:user_actuality",),
-        ),
-        _claim("c9", "spoken", "疲惫有时会把一只碗临时升格成议题。"),
-    ]
-    context = BoundaryContext.from_request(request)
-    core = _generator()._parse_core(request, context, _video_core(claims=claims))
-
-    assert DeepSeekGenerator._closed_world_issues(context, core) == ()
-
-
-def test_closed_world_sends_product_paraphrase_to_semantic_review_without_guessing(
-    generation_input: GenerationInput,
-) -> None:
-    product = ProductFact(
-        "ZX-C218",
-        {"category": "male children short-sleeve", "colors": ["亮黄色"]},
-        display_name="男童亮黄短袖",
-    )
-    request = _with(generation_input, products=(product,))
-    claims = cast("list[dict[str, object]]", _video_core()["claims"])
-    claims[7] = _claim(
-        "c8",
-        "spoken",
-        "ZX-C218 是一件亮黄色男童短袖。",
-        "confirmed_fact",
-        "non_event",
-        ("source:product:ZX-C218",),
-    )
-    context = BoundaryContext.from_request(request)
-    core = _generator()._parse_core(request, context, _video_core(claims=claims))
-
-    assert DeepSeekGenerator._closed_world_issues(context, core) == ()
-    assert DeepSeekGenerator._deterministic_unit_issues(context, core) == ()
-
-
 def test_deterministic_check_catches_unit_id_leak_in_visible_text(
     generation_input: GenerationInput,
 ) -> None:
     context = BoundaryContext.from_request(generation_input)
     steps = [
-        _step("s1", "cover", "手写标题卡。", ("c1",), resource_refs=("resource:original_composition",)),
+        _step("s1", "cover", "手写标题卡。", ("c1",), resource_refs=("resource:onsite_text",)),
         _step(
             "s2",
             "scene",
             "当前创作者正对手机自然口播。",
             ("c8", "c9"),
             actor_refs=("actor:creator",),
-            resource_refs=("resource:creator_expression",),
+            resource_refs=("resource:phone",),
             sound_text="创作者口播（对应c8）。",
         ),
     ]
@@ -1468,14 +801,14 @@ def test_pure_claim_reference_sound_text_resolves_to_spoken_lines(
     shorthand: str,
 ) -> None:
     steps = [
-        _step("s1", "cover", "手写标题卡：不必穿成同款。", ("c1",), resource_refs=("resource:original_composition",)),
+        _step("s1", "cover", "手写标题卡：不必穿成同款。", ("c1",), resource_refs=("resource:onsite_text",)),
         _step(
             "s2",
             "scene",
             "当前创作者正对手机自然口播。",
             ("c8", "c9"),
             actor_refs=("actor:creator",),
-            resource_refs=("resource:creator_expression",),
+            resource_refs=("resource:phone",),
             sound_text=shorthand,
         ),
     ]
@@ -1497,14 +830,14 @@ def test_sound_reference_outside_step_claim_refs_still_fails_closed(
 ) -> None:
     context = BoundaryContext.from_request(generation_input)
     steps = [
-        _step("s1", "cover", "手写标题卡。", ("c1",), resource_refs=("resource:original_composition",)),
+        _step("s1", "cover", "手写标题卡。", ("c1",), resource_refs=("resource:onsite_text",)),
         _step(
             "s2",
             "scene",
             "当前创作者正对手机自然口播。",
             ("c8",),
             actor_refs=("actor:creator",),
-            resource_refs=("resource:creator_expression",),
+            resource_refs=("resource:phone",),
             sound_text="创作者口播：c8、c9内容",
         ),
     ]
@@ -1520,14 +853,14 @@ def test_repaired_step_with_claim_reference_shorthand_is_also_resolved(
     generation_input: GenerationInput,
 ) -> None:
     bad_steps = [
-        _step("s1", "cover", "手写标题卡：不必穿成同款。", ("c1",), resource_refs=("resource:original_composition",)),
+        _step("s1", "cover", "手写标题卡：不必穿成同款。", ("c1",), resource_refs=("resource:onsite_text",)),
         _step(
             "s2",
             "scene",
             "当前创作者正对手机自然口播。",
             ("c8", "c9"),
             actor_refs=("actor:creator",),
-            resource_refs=("resource:creator_expression",),
+            resource_refs=("resource:phone",),
             sound_text="创作者口播（对应c8）。",
         ),
     ]
@@ -1538,7 +871,7 @@ def test_repaired_step_with_claim_reference_shorthand_is_also_resolved(
         "当前创作者正对手机自然口播。",
         ("c8", "c9"),
         actor_refs=("actor:creator",),
-        resource_refs=("resource:creator_expression",),
+        resource_refs=("resource:phone",),
         sound_text="口播：c8、c9 的内容",
     )
     _install_fake(
@@ -1560,12 +893,12 @@ def test_repaired_step_with_claim_reference_shorthand_is_also_resolved(
     assert len(FakeClient.requests) == 4
 
 
-def test_closed_world_rejects_unknown_actor_and_resource_independently(
+def test_unknown_actor_remains_an_identity_boundary_not_a_resource_gate(
     generation_input: GenerationInput,
 ) -> None:
     context = BoundaryContext.from_request(generation_input)
     steps = [
-        _step("s1", "cover", "手写标题卡。", ("c1",), resource_refs=("resource:original_composition",)),
+        _step("s1", "cover", "手写标题卡。", ("c1",), resource_refs=("resource:onsite_text",)),
         _step(
             "s2",
             "scene",
@@ -1581,7 +914,7 @@ def test_closed_world_rejects_unknown_actor_and_resource_independently(
             "当前创作者正对手机自然口播。",
             ("c9",),
             actor_refs=("actor:creator",),
-            resource_refs=("resource:creator_expression",),
+            resource_refs=("resource:phone",),
             sound_text="人声。",
         ),
     ]
@@ -1590,8 +923,7 @@ def test_closed_world_rejects_unknown_actor_and_resource_independently(
     issues = DeepSeekGenerator._closed_world_issues(context, core)
 
     assert {(issue.unit_id, issue.reason_code) for issue in issues} == {
-        ("s2", "untrusted_role"),
-        ("s2", "unsupported_resource"),
+        ("s2", "untrusted_role")
     }
 
 
@@ -1650,10 +982,6 @@ def test_deterministic_unit_checks_keep_identifiers_and_values_exact(
             "category": "double-faced short coat",
             "colors": ["炭灰面", "深绿面"],
             "sample_weight_m_grams": 960,
-            "observable_features": (
-                "当前样衣记录960克，对照样衣记录650克；"
-                "约310克差异不能全部归因于双面结构。"
-            ),
         },
     )
     request = _with(generation_input, products=(product,))
@@ -1669,8 +997,7 @@ def test_deterministic_unit_checks_keep_identifiers_and_values_exact(
         _claim(
             "c8",
             "spoken",
-            "当前商品 ZX-C218 的样衣记录为960克，对照样衣为650克；"
-            "约310克差异不能全部归因于双面结构。",
+            "当前商品 ZX-C218 的样衣记录为960克。",
             "confirmed_fact",
             "non_event",
             ("source:product:ZX-C218",),
@@ -1698,7 +1025,7 @@ def test_deterministic_unit_checks_keep_identifiers_and_values_exact(
     assert any(fragment.startswith("source:") for fragment in fragments)
 
 
-def test_reviewed_product_identifier_is_not_silently_rewritten_after_review(
+def test_registered_product_identifiers_are_replaced_only_in_visible_copy(
     generation_input: GenerationInput,
 ) -> None:
     product = ProductFact(
@@ -1725,21 +1052,22 @@ def test_reviewed_product_identifier_is_not_silently_rewritten_after_review(
         "手持 DIYU-CSPU-001 面向手机。",
         ("c1",),
         actor_refs=("actor:creator",),
-        resource_refs=("resource:product:DIYU-CSPU-001", "resource:creator_expression"),
+        resource_refs=("resource:product:DIYU-CSPU-001", "resource:phone"),
         production_note="画面字写 DIYU-CSPU-001。",
     )
-    reviewed = _generator()._parse_core(request, BoundaryContext.from_request(request), core)
-    _, _, production, body = _generator()._compile_core(request, reviewed)
-
-    assert isinstance(production, VideoProductionBundle)
-    assert "DIYU-CSPU-001" in reviewed.claim("c5").text
-    assert reviewed.claim("c5").source_refs == ("source:product:DIYU-CSPU-001",)
-    assert reviewed.scene_steps[0].resource_refs == (
-        "resource:product:DIYU-CSPU-001",
-        "resource:creator_expression",
+    normalized = DeepSeekGenerator._replace_registered_product_identifiers(
+        request,
+        _generator()._parse_core(request, BoundaryContext.from_request(request), core),
     )
-    assert "DIYU-CSPU-001" in production.cover_or_first_frame
-    assert "男童亮黄短袖（M7-2B演示商品）" not in body
+
+    assert "DIYU-CSPU-001" not in normalized.claim("c5").text
+    assert normalized.claim("c5").source_refs == ("source:product:DIYU-CSPU-001",)
+    assert normalized.scene_steps[0].resource_refs == (
+        "resource:product:DIYU-CSPU-001",
+        "resource:phone",
+    )
+    assert "男童亮黄短袖（M7-2B演示商品）" in normalized.scene_steps[0].action_text
+    assert "男童亮黄短袖（M7-2B演示商品）" in normalized.scene_steps[0].production_note
 
 
 def test_fixed_duration_repairs_the_copy_instead_of_only_the_label(
@@ -1844,7 +1172,7 @@ def test_graphic_core_compiles_reading_chain(
             "cover",
             "手写标题卡特写。",
             ("c1",),
-            resource_refs=("resource:original_composition",),
+            resource_refs=("resource:onsite_text",),
             production_note="自然光拍摄字卡。",
         ),
         _step(
@@ -1853,7 +1181,7 @@ def test_graphic_core_compiles_reading_chain(
             "创作者手持字卡示意两种选择。",
             ("c7",),
             actor_refs=("actor:creator",),
-            resource_refs=("resource:original_composition",),
+            resource_refs=("resource:onsite_text",),
             production_note="同一机位连拍。",
         ),
         _step(
@@ -1861,7 +1189,7 @@ def test_graphic_core_compiles_reading_chain(
             "scene",
             "屏幕文字总结下一步。",
             ("c8",),
-            resource_refs=("resource:original_composition",),
+            resource_refs=("resource:onsite_text",),
         ),
     ]
     core: dict[str, object] = {
@@ -1892,12 +1220,6 @@ def test_visual_only_story_derives_duration_from_scene_steps(
 ) -> None:
     product = ProductFact("ZX-C218", {"category": "double-faced short coat", "colors": ["炭灰面", "深绿面"]})
     request = _with(generation_input, primary_product="visual_styling_story", products=(product,))
-    context = BoundaryContext.from_request(request)
-    exact_anchor = next(
-        statement
-        for _, statement in context.product_fact_claims
-        if "品类" in statement
-    )
     claims = [
         _claim("c1", "title", "两面各有重音"),
         _claim("c2", "natural_guide", "从翻面进入", "user_premise", "non_event", ("source:user_request",)),
@@ -1906,7 +1228,7 @@ def test_visual_only_story_derives_duration_from_scene_steps(
         _claim(
             "c5",
             "real_product_anchor",
-            exact_anchor,
+            "当前商品 ZX-C218 两面外观完整。",
             "confirmed_fact",
             "non_event",
             ("source:product:ZX-C218",),
@@ -1923,7 +1245,7 @@ def test_visual_only_story_derives_duration_from_scene_steps(
             "创作者把外套翻面，展示深绿面。",
             ("c6",),
             actor_refs=("actor:creator",),
-            resource_refs=("resource:product:ZX-C218", "resource:creator_expression"),
+            resource_refs=("resource:product:ZX-C218", "resource:phone"),
             sound_text="环境底噪。",
         ),
         _step(
@@ -1947,7 +1269,7 @@ def test_visual_only_story_derives_duration_from_scene_steps(
     assert isinstance(artifact.production, VideoProductionBundle)
     assert artifact.production.spoken_lines == "无口播、无对白、无解说"
     assert artifact.production.natural_duration == "约 6 秒"
-    assert "双面短外套" in vars(artifact.semantic_contract)["real_product_anchor"]
+    assert "两面外观完整" in vars(artifact.semantic_contract)["real_product_anchor"]
     assert "真实商品锚点" not in artifact.body
 
 

@@ -10,7 +10,6 @@ from typing import Any, Literal, cast
 
 import httpx
 
-from src.brain.natural_entry import requests_content_creation
 from src.ports.content_generator import ContentGenerator
 from src.shared.errors import GenerationFailed
 from src.shared.types import (
@@ -28,7 +27,6 @@ from src.shared.types import (
     P3SemanticContract,
     P4SemanticContract,
     P5SemanticContract,
-    ProductFact,
     RoutingInput,
     VideoProductionBundle,
 )
@@ -81,130 +79,18 @@ _DELIVERABLE_REQUIREMENTS: dict[ContentProduct, str] = {
     ),
 }
 
-
-def _explicit_actuality_quotes(message: str) -> tuple[str, ...]:
-    """Keep only standalone user-stated reality; a mixed sentence safely stays non-factual."""
-    result: list[str] = []
-    for match in re.finditer(r"[^。！？!?]+[。！？!?]?", message):
-        sentence = match.group(0).strip()
-        if (
-            sentence
-            and not sentence.endswith(("？", "?"))
-            and not requests_content_creation(sentence)
-        ):
-            result.append(sentence)
-    return tuple(dict.fromkeys(result))
-
-
-def _fallback_ready_decision(
-    request: ConversationInput,
-    message: str = "",
-) -> ConversationDecision:
-    """Compile a safe ready decision when the model mishandles system-owned choices."""
-    user_actuality_quotes = _explicit_actuality_quotes(request.message)
-    if request.products:
-        primary_product: ContentProduct = "product_truth"
-        plan = (
-            "从当前已确认商品事实中自主选择一项最值得解释的认知边界，完成观点、结构和"
-            "平台组织；不补造性能、价格、库存、设计动机或穿着结果。"
-        )
-        handoff = "我先从这件商品当前能确认的事实里选一个最值得说清的切口，直接写一版。"
-    elif user_actuality_quotes:
-        primary_product = "brand_life_narrative"
-        plan = (
-            "只以用户本轮明确原话作为现实片段，自主选择一条值得表达的主线，完成观点、"
-            "结构、风格和平台组织；不补人物关系、动机、情绪、对白、前因、结果或长期习惯。"
-        )
-        handoff = "我先从你说过的这段小事里选一条主线，事实停在你的原话，直接写一版。"
-    else:
-        primary_product = "brand_life_narrative"
-        plan = (
-            "依据当前账号画像、内容领地和用户本轮种子自主选择一个安全主线，完成观点、"
-            "结构、风格和平台组织；题材写成一般观察、条件表达或抽象演绎，不冒充用户亲历，"
-            "不补具体对白、人物关系、事件过程、个人持有物、现实场景或结果。"
-        )
-        handoff = "我先结合这个账号的位置选一个安全主线，直接写一版。"
-    return ConversationDecision(
-        "ready",
-        message or handoff,
-        user_premises=(request.message,),
-        user_actuality_quotes=user_actuality_quotes,
-        system_creative_plan=plan,
-        primary_product=primary_product,
-    )
-
-
-def _question_has_irreplaceable_fact(
-    document: dict[str, object],
-    request: ConversationInput,
-) -> bool:
-    basis = document.get("missing_fact_basis")
-    kind = document.get("missing_fact_kind")
-    if not isinstance(basis, str) or not basis.strip():
-        return False
-    exact_basis = basis.strip()
-    available = tuple(
-        turn.content for turn in request.history if turn.role == "user"
-    ) + (request.message,)
-    if not any(exact_basis in user_turn for user_turn in available):
-        return False
-    if kind == "product_fact":
-        return not request.products and bool(
-            re.search(r"\b[A-Z0-9][A-Z0-9-]{2,}\b", exact_basis, re.IGNORECASE)
-            or "商品" in exact_basis
-        )
-    if kind == "user_experience":
-        return bool(
-            re.search(
-                r"我(?:的|去年|前年|曾经|当时|那|过去|上个月|创业|结婚|离婚)",
-                exact_basis,
-            )
-        )
-    return False
-
-
-_DEFINITE_USER_EXPERIENCE_REQUEST = re.compile(
-    r"(?:把|将)"
-    r"(?P<basis>我[^，。！？!?]{1,80}?"
-    r"(?:经历|故事|过程|那个月|那段时间|那段日子|那件事|那次|那天))"
-    r"(?=(?:写|拍|做|整理)(?:成|出|为))"
-)
-
-
-def _unresolved_definite_user_experience(
-    request: ConversationInput,
-) -> str | None:
-    """Find a factual referent, not a topic, whose event detail was never supplied."""
-    if request.history or not requests_content_creation(request.message):
-        return None
-    match = _DEFINITE_USER_EXPERIENCE_REQUEST.search(request.message)
-    if match is None:
-        return None
-    basis = match.group("basis").strip()
-    if any(basis in reference for reference in request.brand.brand_reference_context):
-        return None
-    return basis
-
-
-def _user_experience_fact_question() -> ConversationDecision:
-    return ConversationDecision(
-        "question",
-        "那段经历中，真正发生的一件具体事情是什么？",
-    )
-
-
 # Closed-world identifiers. Every reference a model may cite must appear in one
 # of these registries; anything outside is "does not exist for this call".
 _SPEAKER_ID = "speaker:brand_account"
 _CREATOR_ACTOR_ID = "actor:creator"
-_CREATOR_EXPRESSION_RESOURCE_ID = "resource:creator_expression"
-_ORIGINAL_COMPOSITION_RESOURCE_ID = "resource:original_composition"
+_PHONE_RESOURCE_ID = "resource:phone"
+_VENUE_RESOURCE_ID = "resource:venue"
+_ONSITE_TEXT_RESOURCE_ID = "resource:onsite_text"
 _BRAND_BASELINE_SOURCE_ID = "source:brand_baseline"
 _ROLE_BOUNDARY_SOURCE_ID = "source:role_boundary"
 _ORGANIZATION_SOURCE_ID = "source:organization"
 _USER_REQUEST_SOURCE_ID = "source:user_request"
 _USER_ACTUALITY_SOURCE_ID = "source:user_actuality"
-_SYSTEM_PLAN_SOURCE_ID = "source:system_creative_plan"
 _PRIOR_VERSION_SOURCE_ID = "source:prior_version"
 
 _CLAIM_BASES = ("brand_viewpoint", "user_premise", "confirmed_fact", "conditional_guidance")
@@ -229,7 +115,6 @@ ReasonCode = Literal[
     "invented_actuality",
     "unsupported_resource",
     "factual_conflict",
-    "instruction_conflict",
     "media_contract",
 ]
 
@@ -259,8 +144,6 @@ class BoundaryContext:
     premise_sources: tuple[tuple[str, str], ...]
     guidance_sources: tuple[tuple[str, str], ...]
     user_actuality_source: str | None
-    user_actuality_quotes: tuple[str, ...]
-    product_fact_claims: tuple[tuple[str, str], ...] = ()
     product_skus: tuple[str, ...] = ()
     known_numbers: tuple[int, ...] = ()
     known_colors: tuple[str, ...] = ()
@@ -313,15 +196,6 @@ class BoundaryContext:
             for value in product.facts.values():
                 if isinstance(value, int):
                     numbers.append(value)
-                elif isinstance(value, str):
-                    numbers.extend(
-                        int(match)
-                        for match in re.findall(
-                            r"(?<!\d)(\d{1,6})\s*(?:克|元|%|厘米|cm)\b",
-                            value,
-                            re.IGNORECASE,
-                        )
-                    )
             raw_colors = product.facts.get("colors")
             if isinstance(raw_colors, list):
                 colors.extend(value for value in raw_colors if isinstance(value, str))
@@ -381,17 +255,10 @@ class BoundaryContext:
             )
         is_synthetic_fixture = request.brand.business_data_kind == "synthetic_business_fixture"
         if request.primary_product == "local_response" and is_synthetic_fixture:
-            if request.user_actuality_quotes:
-                direction_lines.append(
-                    "本次属于严格隔离的等深模拟业务验收。边界二列出的用户原话可以作为本次内容作者"
-                    "明确提供的事实忠实使用或自然压缩；这只授权当前成品，不证明现实账号、操作者或门店具有相应"
-                    "身份和履历，也不得写入长期画像。原话之外仍不得补造人物关系、动机、对白或结果。"
-                )
-            else:
-                direction_lines.append(
-                    "本次近场种子属于等深模拟业务夹具，只能作为假设情境和演示脚本起点；"
-                    "不得用第一人称或现实陈述写成当前账号、操作者、门店或顾客真实发生过的经历。"
-                )
+            direction_lines.append(
+                "本次近场种子属于等深模拟业务夹具，只能作为假设情境和演示脚本起点；"
+                "不得用第一人称或现实陈述写成当前账号、操作者、门店或顾客真实发生过的经历。"
+            )
         topic_parts = [
             (
                 f"原始请求（保留未被本次修改改变的目标；冲突的创作和制作要求已被本次修改替代）：{request.weak_seed}"
@@ -405,24 +272,14 @@ class BoundaryContext:
                 f"{request.revision_instruction}"
             )
         topic = "\n".join(part for part in (*topic_parts, *direction_lines) if part)
-        if request.user_actuality_quotes is not None:
-            exact_actuality_quotes = tuple(
-                dict.fromkeys(quote.strip() for quote in request.user_actuality_quotes)
-            )
-            user_actuality = "\n".join(
-                f"用户原话：{quote}" for quote in exact_actuality_quotes
-            )
-            user_actuality_source = (
-                _USER_ACTUALITY_SOURCE_ID if exact_actuality_quotes else None
-            )
-        # Legacy direct API calls predate the separated conversation compiler.
-        # Preserve their narrow P4 contract without making every life topic a fact.
-        elif request.primary_product == "local_response" and not is_synthetic_fixture:
-            exact_actuality_quotes = (request.weak_seed,)
+        # The request contract has no separate channel for user-presented
+        # actuality.  Only a local_response request qualifies: its routing
+        # contract already requires the user to hand over a real near-field
+        # signal.  Every other seed stays a topic and proves nothing.
+        if request.primary_product == "local_response" and not is_synthetic_fixture:
             user_actuality = f"用户本次明确给出的真实近场信号（仅限本次使用）：{request.weak_seed}"
-            user_actuality_source = _USER_ACTUALITY_SOURCE_ID
+            user_actuality_source: str | None = _USER_ACTUALITY_SOURCE_ID
         else:
-            exact_actuality_quotes = ()
             user_actuality = ""
             user_actuality_source = None
 
@@ -436,17 +293,6 @@ class BoundaryContext:
                 for product in request.products
             )
             or "无已确认商品"
-        )
-        product_fact_claims = tuple(
-            (
-                f"source:product:{product.sku}",
-                statement,
-            )
-            for product in request.products
-            for statement in DeepSeekGenerator._registered_product_claims(
-                product,
-                "当前商品" if len(request.products) == 1 else f"商品 {product.sku}",
-            )
         )
         brand_reference_text = (
             "\n".join(
@@ -479,19 +325,11 @@ class BoundaryContext:
                     "除以上外：无已确认门店事实、无已执行服务、无顾客案例、无家庭事件、无既有照片或素材。",
                 )
             )
-        method_parts: list[str] = []
-        if request.system_creative_plan:
-            method_parts.append(
-                "系统为本次成品自主编译的创作规划（只决定主题、切口、观点、结构、"
-                "风格和平台组织，不是用户原话，不是现实事实，也不得反向写成账号长期立场）："
-                + request.system_creative_plan
-            )
-        method_parts.extend(asset.body for asset in request.active_domain_assets)
-        method_parts.append(
-            "系统创作规划和方法资料只提供创作与制作方法，不证明任何现实人物、"
-            "物品、场地或素材存在，也不证明任何经历或经营做法已经发生。"
-        )
-        method = "\n".join(method_parts)
+        method = (
+            ("\n".join(asset.body for asset in request.active_domain_assets) + "\n")
+            if request.active_domain_assets
+            else ""
+        ) + "方法资料只提供创作与制作方法，不证明任何现实人物、物品、场地或素材存在。"
 
         viewpoint_sources: tuple[tuple[str, str], ...] = (
             (_BRAND_BASELINE_SOURCE_ID, "品牌定位、判断顺序与语气基线"),
@@ -531,24 +369,17 @@ class BoundaryContext:
             (f"source:material:{material.asset_id}", f"用户本次明确选入的参考《{material.title}》")
             for material in request.reference_materials
         )
-        guidance_sources: tuple[tuple[str, str], ...] = (
-            *(((_SYSTEM_PLAN_SOURCE_ID, "本次系统创作规划"),) if request.system_creative_plan else ()),
-            *(
-                (f"source:method:{index}", asset.display_name)
-                for index, asset in enumerate(request.active_domain_assets, start=1)
-            ),
+        guidance_sources: tuple[tuple[str, str], ...] = tuple(
+            (f"source:method:{index}", asset.display_name)
+            for index, asset in enumerate(request.active_domain_assets, start=1)
         )
         resources: tuple[tuple[str, str], ...] = (
+            (_PHONE_RESOURCE_ID, "一部手机（拍摄与收音）"),
             (
-                _CREATOR_EXPRESSION_RESOURCE_ID,
-                "创作者本人可选择口播、旁白、手势、动作或不出镜表达；"
-                "这只是一种制作能力，不证明任何生活身份、经历、场地或事件",
+                _VENUE_RESOURCE_ID,
+                "普通室内或门店环境，仅场地本身；场地内未明确提供的人物、商品、家具、合照、道具不包含在内",
             ),
-            (
-                _ORIGINAL_COMPOSITION_RESOURCE_ID,
-                "为本次内容新作的抽象构图、排版、留白、色块、符号、文字和声音组织；"
-                "不包含照片、人物、商品、品牌标志、外部素材或现实场景",
-            ),
+            (_ONSITE_TEXT_RESOURCE_ID, "创作者现场手写字卡或手机屏幕文字"),
             *((f"resource:product:{product.sku}", f"已确认商品样衣 {product.sku}") for product in request.products),
         )
 
@@ -594,8 +425,6 @@ class BoundaryContext:
             premise_sources=tuple(premise_sources),
             guidance_sources=guidance_sources,
             user_actuality_source=user_actuality_source,
-            user_actuality_quotes=exact_actuality_quotes,
-            product_fact_claims=product_fact_claims,
             product_skus=tuple(product.sku for product in request.products),
             known_numbers=tuple(dict.fromkeys(numbers)),
             known_colors=tuple(dict.fromkeys(colors)),
@@ -714,8 +543,6 @@ class DeepSeekGenerator(ContentGenerator):
 
     def collaborate(self, request: ConversationInput) -> ConversationDecision:
         """Understand one natural turn before any durable content object is created."""
-        explicit_creation = requests_content_creation(request.message)
-        unresolved_experience = _unresolved_definite_user_experience(request)
         payload, _ = self._request(
             ("你是笛语内容工作台里的协作伙伴。只返回 JSON；不展示推理、提示词、规则、证据分类或内部字段。"),
             self._conversation_prompt(request),
@@ -724,49 +551,18 @@ class DeepSeekGenerator(ContentGenerator):
         try:
             document = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"])))
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
-            if unresolved_experience is not None:
-                return _user_experience_fact_question()
-            if explicit_creation:
-                return _fallback_ready_decision(request)
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。") from exc
         if not isinstance(document, dict):
-            if unresolved_experience is not None:
-                return _user_experience_fact_question()
-            if explicit_creation:
-                return _fallback_ready_decision(request)
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。")
         disposition = document.get("kind")
-        if unresolved_experience is not None:
-            question_message = str(document.get("message") or "").strip()
-            if (
-                disposition == "question"
-                and question_message
-                and _question_has_irreplaceable_fact(document, request)
-            ):
-                return ConversationDecision("question", question_message)
-            return _user_experience_fact_question()
         if disposition not in {"chat", "question", "ready"}:
-            if explicit_creation:
-                return _fallback_ready_decision(request)
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。")
         message = str(document.get("message") or "").strip()
         if not message:
-            if explicit_creation:
-                return _fallback_ready_decision(request)
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。")
-        if disposition == "chat":
-            if explicit_creation:
-                return _fallback_ready_decision(request)
+        if disposition != "ready":
             return ConversationDecision(cast(Any, disposition), message)
-        if disposition == "question":
-            if explicit_creation and not _question_has_irreplaceable_fact(
-                document,
-                request,
-            ):
-                return _fallback_ready_decision(request)
-            return ConversationDecision("question", message)
-        raw_premises = document.get("user_premises")
-        raw_actualities = document.get("user_actuality_quotes")
+        brief = str(document.get("brief") or "").strip()
         value = document.get("primary_value")
         mapping: dict[str, ContentProduct] = {
             "帮助选择": "dressing_decision",
@@ -775,55 +571,13 @@ class DeepSeekGenerator(ContentGenerator):
             "经营关系": "local_response",
             "视觉造型": "visual_styling_story",
         }
-        available_user_turns = tuple(
-            turn.content for turn in request.history if turn.role == "user"
-        ) + (request.message,)
-        selected_premises = (
-            tuple(
-                item.strip()
-                for item in raw_premises
-                if isinstance(item, str)
-                and item.strip()
-                and item.strip() in available_user_turns
-            )
-            if isinstance(raw_premises, list)
-            else ()
-        )
-        user_premises = tuple(
-            dict.fromkeys((*selected_premises, request.message))
-        )
-        premise_text = "\n".join(user_premises)
-        proposed_actualities = (
-            tuple(
-                item.strip()
-                for item in raw_actualities
-                if isinstance(item, str)
-                and item.strip()
-                and item.strip() in premise_text
-            )
-            if isinstance(raw_actualities, list)
-            else ()
-        )
-        user_actuality_quotes = (
-            tuple(dict.fromkeys(proposed_actualities))
-            if proposed_actualities
-            else _explicit_actuality_quotes(request.message)
-        )
-        fallback = _fallback_ready_decision(request, message)
+        if not brief or not isinstance(value, str) or value not in mapping:
+            raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
         return ConversationDecision(
             "ready",
             message,
-            user_premises=user_premises,
-            user_actuality_quotes=user_actuality_quotes,
-            # A provider may propose creative details, but only the system's
-            # source-aware plan is frozen and replayed. This prevents an
-            # imagined scene in a model brief from becoming a fact source.
-            system_creative_plan=fallback.system_creative_plan,
-            primary_product=(
-                mapping[value]
-                if isinstance(value, str) and value in mapping
-                else fallback.primary_product
-            ),
+            brief=brief,
+            primary_product=mapping[value],
         )
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
@@ -855,6 +609,7 @@ class DeepSeekGenerator(ContentGenerator):
                     context,
                     json.loads(self._json_content(str(payload["choices"][0]["message"]["content"]))),
                 )
+                core = self._replace_registered_product_identifiers(request, core)
                 break
             except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
                 if format_attempt:
@@ -868,10 +623,6 @@ class DeepSeekGenerator(ContentGenerator):
         retries += judgement_retries
         fact_repair_receipts: tuple[FactRepairReceipt, ...] = ()
         if issues:
-            _LOGGER.warning(
-                "content boundary units selected for one repair: %s",
-                ",".join(f"{issue.unit_id}:{issue.reason_code}" for issue in issues),
-            )
             payload, repair_retries = self._request(
                 "你是笛语内容编写器。只交付待修单元 JSON，不展示边界分类、证据、规则、推理或后台信息。",
                 self._unit_repair_prompt(request, context, core, issues),
@@ -886,11 +637,8 @@ class DeepSeekGenerator(ContentGenerator):
                     issues,
                     json.loads(self._json_content(str(payload["choices"][0]["message"]["content"]))),
                 )
+                repaired_core = self._replace_registered_product_identifiers(request, repaired_core)
             except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
-                _LOGGER.warning(
-                    "content boundary repair response rejected: %s",
-                    exc,
-                )
                 raise GenerationFailed("模型边界修复返回格式不完整") from exc
             final_issues, judgement_payload, judgement_retries = self._review_core(request, context, repaired_core)
             provider_payloads.append(judgement_payload)
@@ -901,11 +649,7 @@ class DeepSeekGenerator(ContentGenerator):
                     ",".join(f"{issue.unit_id}:{issue.reason_code}" for issue in final_issues),
                 )
                 raise GenerationFailed("内容边界无法在一次单元修复内满足")
-            fact_repair_receipts = self._issue_receipts(
-                request,
-                core,
-                issues,
-            )
+            fact_repair_receipts = self._issue_receipts(request, core, issues)
             core = repaired_core
         title, contract, production, body = self._compile_core(request, core)
         usage = self._combined_usage(provider_payloads)
@@ -1076,6 +820,52 @@ class DeepSeekGenerator(ContentGenerator):
         )
 
     @staticmethod
+    def _replace_registered_product_identifiers(
+        request: GenerationInput,
+        core: ContentCore,
+    ) -> ContentCore:
+        """Keep internal product identifiers out of the visible artifact.
+
+        Product source and resource references retain the frozen SKU. Only
+        user-visible prose is normalized, using the display name from the same
+        registered ProductFact snapshot rather than a model guess.
+        """
+
+        replacements = tuple(
+            sorted(
+                (
+                    (product.sku, product.display_name.strip() or "当前商品")
+                    for product in request.products
+                    if product.sku and product.sku != product.display_name.strip()
+                ),
+                key=lambda item: len(item[0]),
+                reverse=True,
+            )
+        )
+        if not replacements:
+            return core
+
+        def visible(text: str) -> str:
+            for identifier, display_name in replacements:
+                text = text.replace(identifier, display_name)
+            return text
+
+        return ContentCore(
+            speaker_ref=core.speaker_ref,
+            claims=tuple(replace(claim, text=visible(claim.text)) for claim in core.claims),
+            spoken_order=core.spoken_order,
+            scene_steps=tuple(
+                replace(
+                    step,
+                    action_text=visible(step.action_text),
+                    sound_text=visible(step.sound_text),
+                    production_note=visible(step.production_note),
+                )
+                for step in core.scene_steps
+            ),
+        )
+
+    @staticmethod
     def _assert_media_presence(request: GenerationInput, core: ContentCore) -> None:
         if request.media_format == "video":
             if not any(step.sound_text or step.production_note for step in core.scene_steps):
@@ -1098,7 +888,7 @@ class DeepSeekGenerator(ContentGenerator):
             *self._deterministic_unit_issues(context, core),
             *self._media_issues(request, core),
         )
-        judged, payload, retries = self._judgement_issues(request, context, core)
+        judged, payload, retries = self._judgement_issues(context, core)
         merged: dict[tuple[str, str], UnitIssue] = {}
         for issue in (*server_side, *judged):
             merged.setdefault((issue.unit_id, issue.reason_code), issue)
@@ -1117,34 +907,10 @@ class DeepSeekGenerator(ContentGenerator):
                 or not any(ref in allowed for ref in claim.source_refs)
             ):
                 issues.append(UnitIssue(claim.claim_id, "factual_conflict", claim.text))
-            has_actuality_ref = _USER_ACTUALITY_SOURCE_ID in claim.source_refs
-            if (
-                claim.actuality == "user_presented_actual" or has_actuality_ref
-            ) and (
-                context.user_actuality_source is None
-                or claim.actuality != "user_presented_actual"
-                or not has_actuality_ref
+            if claim.actuality == "user_presented_actual" and (
+                context.user_actuality_source is None or _USER_ACTUALITY_SOURCE_ID not in claim.source_refs
             ):
-                issues.append(
-                    UnitIssue(claim.claim_id, "invented_actuality", claim.text)
-                )
-            product_refs = tuple(
-                ref for ref in claim.source_refs if ref.startswith("source:product:")
-            )
-            if product_refs:
-                exact_product_claims = {
-                    text
-                    for source_ref, text in context.product_fact_claims
-                    if source_ref in product_refs
-                }
-                if (
-                    not exact_product_claims
-                    or claim.basis != "confirmed_fact"
-                    or claim.actuality != "non_event"
-                ):
-                    issues.append(
-                        UnitIssue(claim.claim_id, "factual_conflict", claim.text)
-                    )
+                issues.append(UnitIssue(claim.claim_id, "invented_actuality", claim.text))
             if (
                 claim.basis in ("brand_viewpoint", "conditional_guidance")
                 and claim.actuality == "user_presented_actual"
@@ -1155,11 +921,7 @@ class DeepSeekGenerator(ContentGenerator):
         for step in core.scene_steps:
             if any(ref not in context.actor_ids for ref in step.actor_refs):
                 issues.append(UnitIssue(step.step_id, "untrusted_role", step.action_text))
-            if any(ref not in context.resource_ids for ref in step.resource_refs):
-                issues.append(
-                    UnitIssue(step.step_id, "unsupported_resource", step.action_text)
-                )
-        return tuple(dict.fromkeys(issues))
+        return tuple(issues)
 
     @staticmethod
     def _deterministic_unit_issues(context: BoundaryContext, core: ContentCore) -> tuple[UnitIssue, ...]:
@@ -1169,12 +931,6 @@ class DeepSeekGenerator(ContentGenerator):
             re.IGNORECASE,
         )
         reference_leak = re.compile(r"(?:speaker|actor|resource|source)\s*[:：]\s*[A-Za-z0-9_.:-]+", re.IGNORECASE)
-        routing_label = re.compile(
-            r"(?<![A-Za-z0-9_])(?:P[1-5]|dressing_decision|product_truth|"
-            r"brand_life_narrative|local_response|visual_styling_story)"
-            r"(?![A-Za-z0-9_])",
-            re.IGNORECASE,
-        )
         # Bare internal unit ids ("c8" / "s2") must never surface in visible
         # text.  ASCII lookarounds instead of \b: a preceding CJK character is
         # still a word character, so \b would miss "对应c8".  Lowercase-only
@@ -1191,13 +947,7 @@ class DeepSeekGenerator(ContentGenerator):
             for identifier in context.internal_identifiers:
                 if identifier and identifier in text:
                     found.append(UnitIssue(unit_id, "factual_conflict", identifier))
-            for pattern in (
-                internal_identifier,
-                reference_leak,
-                routing_label,
-                unit_id_leak,
-                personal_identifier,
-            ):
+            for pattern in (internal_identifier, reference_leak, unit_id_leak, personal_identifier):
                 for match in pattern.finditer(text):
                     found.append(UnitIssue(unit_id, "factual_conflict", match.group(0)))
             for sku in sku_pattern.findall(text):
@@ -1243,16 +993,12 @@ class DeepSeekGenerator(ContentGenerator):
 
     def _judgement_issues(
         self,
-        request: GenerationInput,
         context: BoundaryContext,
         core: ContentCore,
     ) -> tuple[tuple[UnitIssue, ...], dict[str, Any], int]:
         payload, retries = self._request(
-            (
-                "你是笛语内容边界判定器。先阅读完整成品，再把整体问题归回具体单元；只返回最终 JSON，"
-                "不改写成品，不展示核对过程或推理。"
-            ),
-            self._judgement_prompt(request, context, core),
+            ("你是笛语内容边界判定器。对每个单元独立做完整判定，只返回最终 JSON；不改写成品，不展示核对过程或推理。"),
+            self._judgement_prompt(context, core),
             # Provider reasoning tokens are billed inside max_tokens; the
             # bounded budget must leave room for reasoning plus one complete
             # verdict per unit, or the verdict JSON truncates and fails closed.
@@ -1265,9 +1011,7 @@ class DeepSeekGenerator(ContentGenerator):
         reason_by_flag: tuple[tuple[str, ReasonCode], ...] = (
             ("identity_ok", "untrusted_role"),
             ("actuality_ok", "invented_actuality"),
-            ("resource_ok", "unsupported_resource"),
             ("fact_ok", "factual_conflict"),
-            ("instruction_ok", "instruction_conflict"),
         )
         step_by_id = {step.step_id: step for step in core.scene_steps}
         for unit_id in core.unit_ids:
@@ -1294,13 +1038,7 @@ class DeepSeekGenerator(ContentGenerator):
                 if not isinstance(unit_id, str) or unit_id not in expected_ids or unit_id in verdicts:
                     raise TypeError("verdict id set does not match the units under review")
                 flags: dict[str, bool] = {}
-                for flag in (
-                    "identity_ok",
-                    "actuality_ok",
-                    "resource_ok",
-                    "fact_ok",
-                    "instruction_ok",
-                ):
+                for flag in ("identity_ok", "actuality_ok", "resource_ok", "fact_ok"):
                     value = entry.get(flag)
                     if not isinstance(value, bool):
                         raise TypeError("verdict flags must be complete booleans")
@@ -1326,15 +1064,8 @@ class DeepSeekGenerator(ContentGenerator):
         if not isinstance(raw, dict):
             raise TypeError("repair must be an object")
         raw_repairs = raw.get("repairs")
-        if isinstance(raw_repairs, dict):
-            normalized_repairs: list[object] = []
-            for unit_id, value in raw_repairs.items():
-                if not isinstance(unit_id, str) or not isinstance(value, dict):
-                    raise TypeError("repairs mapping must contain unit objects")
-                normalized_repairs.append({"id": unit_id, **value})
-            raw_repairs = normalized_repairs
         if not isinstance(raw_repairs, list):
-            raise TypeError("repairs must be a list or unit mapping")
+            raise TypeError("repairs must be a list")
         requested = {issue.unit_id for issue in issues}
         claim_ids = {claim.claim_id for claim in core.claims}
         replacements_claims: dict[str, ContentClaim] = {}
@@ -1342,14 +1073,8 @@ class DeepSeekGenerator(ContentGenerator):
         for entry in raw_repairs:
             if not isinstance(entry, dict):
                 raise TypeError("repair unit must be an object")
-            generic_id = entry.get("id")
             claim_id = entry.get("claim_id")
             step_id = entry.get("step_id")
-            if isinstance(generic_id, str):
-                if generic_id in claim_ids and claim_id is None:
-                    claim_id = generic_id
-                elif generic_id not in claim_ids and step_id is None:
-                    step_id = generic_id
             if isinstance(claim_id, str) and claim_id in claim_ids:
                 if claim_id not in requested or claim_id in replacements_claims:
                     raise TypeError("repair units do not match the requested units")
@@ -1621,10 +1346,15 @@ class DeepSeekGenerator(ContentGenerator):
 
     @staticmethod
     def _visible_text(value: object) -> str:
-        """Validate and trim reviewed text without changing its meaning."""
+        """Remove only reserved routing labels before a model response reaches a user artifact."""
         if not isinstance(value, str) or not value.strip():
             raise TypeError("visible content must be a non-empty string")
-        visible = value.strip()
+        visible = re.sub(
+            r"\b(?:P[1-5]|dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story)\b\s*[:：-]?\s*",
+            "",
+            str(value),
+            flags=re.IGNORECASE,
+        ).strip()
         if not re.search(r"[\w一-鿿]", visible):
             raise TypeError("visible content must contain readable text")
         return visible
@@ -1668,11 +1398,14 @@ class DeepSeekGenerator(ContentGenerator):
                 ("声音与制作提示", legacy.sound_and_production),
             )
         del contract, synthetic_business_fixture
+        transform_sections: tuple[tuple[str, str], ...] = ()
+        if isinstance(production, VideoProductionBundle) and re.search(r"(?<!\d)8\s*秒", production.natural_duration):
+            transform_sections = (("变换边界", "这是 8 秒窄主题版，不等同于原完整版本。"),)
         return (
             "标题："
             + title
             + "\n\n"
-            + "\n\n".join(f"{heading}：{value}" for heading, value in sections)
+            + "\n\n".join(f"{heading}：{value}" for heading, value in transform_sections + sections)
         )
 
     @staticmethod
@@ -1722,28 +1455,17 @@ class DeepSeekGenerator(ContentGenerator):
         return f"""判断这一次对话应继续交流、只追问一次，还是已经可以直接创作。
 只返回以下 JSON 之一：
 {{"kind":"chat","message":"自然回复"}}
-{{"kind":"question","message":"一个不可替代的真实事实问题","missing_fact_kind":"user_experience|product_fact","missing_fact_basis":"逐字复制用户原话中明确要求依赖的真实经历或具体商品事实片段"}}
-{{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制本次任务实际使用的用户消息"],"user_actuality_quotes":["从 user_premises 逐字截取、可当作本次真实情况的片段；没有则为空数组"],"system_creative_plan":"系统自主选择的主题、切口、观点、结构、风格和平台组织","primary_value":"帮助选择|解释商品|建立人格|经营关系|视觉造型"}}
+{{"kind":"question","message":"一个最有价值的人话问题"}}
+{{"kind":"ready","message":"一句自然承接","brief":"完整而紧凑的本次创作要求","primary_value":"帮助选择|解释商品|建立人格|经营关系|视觉造型"}}
 
 规则：
-- chat：只有普通交流、抱怨、讨论，没有要求产出可发布内容时返回。自然回应，不把聊天自动变成创作素材。
-- ready：只要已有内容生产意图，即使只有一个商品编号、一句生活题材、一段流水账／抱怨／感悟，或只有“不知道发什么”的生成请求，也必须直接 ready。系统读取可信账号、品牌、平台、商品和系列上下文，自主决定主题、观点、受众价值、切口、结构、风格和平台组织，不能把这些创作判断交还用户。
-- 商品编号加生成请求已经足够 ready；有已确认商品事实时自主选择一条帮助选择、商品认知或视觉穿着主线，不询问主题、观点、结构或观看回报。
-- 开放生活题材加生成请求已经足够 ready；题材不等于用户履历。没有真实事件时写成一般观察、条件表达或明确演绎，不补造人物身份、对白、事件结果、家庭状态、创业履历、顾客案例或门店做法。
-- 生活流水账、抱怨或感悟加生成请求已经足够 ready；可以使用用户明确陈述的真实片段，系统自主选择主线，不追问创作方向。
-- 只有生成意图而没有种子时，依据当前账号画像、内容领地、品牌边界、平台和系列选择安全方向并 ready，不虚构今天真实发生过的事。
-- 开放生活题材、个人流水账和没有现实事件的安全主动选题，主要让受众认识账号如何观察、判断和待人时选择“建立人格”；只有用户给出了真实评论、门店观察或近场事件，而且主要回报是给未参与者一份关系回应时，才选择“经营关系”。
-- question 只有四项同时成立才允许：用户明确要求写一段真实经历、具体商品或其他事实承重成果；缺失内容会决定真假；可信资料没有；也不能降低具体度、使用条件表达、一般观察或安全替代继续完成。题材、观点、受众、角度、情绪、结构、是否升华、是否带商品和表现形式永远不是追问理由。
-- question 一次只问一个不可替代的真实事实，并必须用 missing_fact_kind 标出缺的是用户真实经历还是具体商品事实，用 missing_fact_basis 逐字复制用户原话里的事实承重要求；题材名、创作选择、泛指代词或系统推断不能充当依据。若同一意图此前已经问过而用户仍未提供，仍只返回一句合并后的最小事实缺口，不循环拆问，不编造完成。
-- user_premises 只能逐字复制当前消息和此前真正属于同一创作意图的用户消息，必须包含本轮消息；普通聊天不得带入。
-- user_actuality_quotes 只能逐字截取 user_premises 中用户明确作为现实陈述的片段。题材名、假设、创作要求、系统规划和一般观察不进入；无法逐字引用就留空。
-- system_creative_plan 只写系统选择的主题、一般观点、切口、结构、风格和平台组织，不得把规划写成
-  用户事实、品牌事实、门店事实或账号长期立场。规划不得先行补出具体对白、人物关系与身份、事件过程
-  与结果、个人日常习惯、未登记商品或衣物、商品性能与穿着结果；没有用户现实片段时，应明确采用一般
-  观察、条件表达或不冒充现实事件的抽象演绎。规划中的创意不是事实来源。
+- chat：普通交流、讨论或尚未提出内容成果意图。自然回答，不创建任务。
+- question：已经明确想做内容，但只缺一个会实质改变结果的信息。一次只问一个问题；已知品牌、账号、平台、形式和已有资料不得重复询问。
+- ready：一句话已足够，或此前问题已经得到足够补充；立即整理 brief，不再要求确认。
+- brief 必须保留用户原话中的人物关系、否定边界和创作要求；“婆媳、夫妻、同事、亲子”等是开放情境，不是固定风格，不得替换或丢失。
 - 当前页面明确选择的平台和形式优先，不得被自然语言静默改写。
 - 没有责任来源的商品、经历、顾客、门店做法、性能、价格和库存不得补造。
-- 只允许选择一个主要受众价值。信息不够具体时优先降低事实具体度，不追问创作选择。
+- 只允许选择一个主要受众价值；商品资料不足时，如商品事实确实承重，应在 question 中询问具体且必要的一项。
 
 当前品牌：{request.brand.brand_name}
 当前发布账号：{request.brand.account_name}
@@ -1760,33 +1482,6 @@ class DeepSeekGenerator(ContentGenerator):
 
     @staticmethod
     def _boundary_sections(context: BoundaryContext) -> str:
-        actuality_contract = (
-            "这里的原话只支持它逐字表达的事实。不能顺着常理补出人物关系、动机、情绪、对白、"
-            "事前原因、事后结果或长期习惯；创作者由此形成的理解必须明确写成当前观点、可能性或"
-            "一般观察，不能继续扩写成这段经历的现实细节。"
-            if context.user_actuality_source is not None
-            else (
-                "本次没有用户现实片段。生活、家庭、工作或情绪题材只能写成一般观察、条件表达或"
-                "不冒充现实事件的抽象演绎；即使加上“如果、假设、想象”等提示，也不能补造具体对白、"
-                "人物身份与关系、个人持有物、日常习惯、事件过程或结果。"
-            )
-        )
-        product_claims = "\n".join(
-            f"- {source_ref}：{statement}"
-            for source_ref, statement in context.product_fact_claims
-        )
-        product_contract = (
-            "登记商品只支持这里逐项列出的商品事实；不得从品类或结构推导性能、穿着结果、适用人群、"
-            "设计动机、价格、库存或销售情况。可见成品里的 confirmed_fact 商品单元可以自然压缩或"
-            "重组下面的登记事实，但不能改变数字、SKU、颜色、材质、价格、库存等硬事实，不能把不同"
-            "事实拼成新因果或补充登记外结论：\n"
-            f"{product_claims}"
-            if context.product_fact_claims
-            else (
-                "本次没有登记商品。不得写账号或创作者拥有、穿着、展示或长期使用某件衣服，也不得"
-                "给“这件衣服/这套穿搭”补充面料、颜色、版型、弹性、舒适度或其他具体商品表现。"
-            )
-        )
         registry_lines = "\n".join(
             (
                 f"可用说话人：{context.speaker_id} = 当前发布账号（唯一合法说话人）",
@@ -1811,14 +1506,12 @@ class DeepSeekGenerator(ContentGenerator):
 
 【二、用户明确提供的真实情况 user_presented_actuality】只有这里列出的内容可以当作用户提供的真实经历、事件或经营事实，仅限本次使用：
 {context.user_presented_actuality or "（本次没有。没有列出即为不存在，不得虚构。）"}
-{actuality_contract}
 
 【三、品牌观点与立场 brand_viewpoint】
 {context.brand_viewpoint}
 
 【四、已确认现实 confirmed_actuality】
 {context.confirmed_actuality}
-{product_contract}
 
 【五、方法与领域知识 method_guidance】
 {context.method_guidance}
@@ -1914,8 +1607,8 @@ class DeepSeekGenerator(ContentGenerator):
                 "交付可直接拍摄、表演、录音和剪辑的完整观看链。口播必须完整自然；"
                 "字幕与自然时长将由服务端从最终口播确定性派生。声音、动作和画面只能由 scene_steps 承载，"
                 "每一步只使用登记表中的人物与资源；不能另造人物、商品、场地、道具、既有图片或事件。"
-                "没有明确提供实物时，可在“创作者表达”和“本次原创抽象构成”两类能力内自由选择表现方式；"
-                "不得固定回退为手机口播、手写字卡或某个室内场景，也不安排话题对象出镜。"
+                "没有明确提供实物时，用当前创作者面对手机口播、手势、现场手写字卡或屏幕文字承担画面，"
+                "不安排话题对象出镜。"
             )
             slot_lines = (
                 "title（1条，标题）、natural_guide（1条，自然导读）、viewing_flow（1条，完整观看链说明）、"
@@ -1934,34 +1627,7 @@ class DeepSeekGenerator(ContentGenerator):
                 "release_caption（1条，发布配文与互动）、"
                 + "、".join(f"{field}（1条，合同字段）" for field in contract_fields)
                 + "、spoken（≥1条，完整发布正文按顺序拆成的自然段落）"
-        )
-        actuality_creation_rule = (
-            "本次有用户现实片段：至少一条 user_presented_actual 单元忠实保留或自然概括用户提供的事实，"
-            "不得增加原话没有支持的现实细节。"
-            "除此之外不得补写未提供的动机、情绪、对白、人物关系、前因、结果或习惯；想表达的理解"
-            "必须另写成品牌当前观点、一般观察或可能性，不能把解释粘回现实叙事。"
-            "事实来源不等于拍摄资源：用户允许文字使用这段事实，不等于事件中的人物、物品、店、家、"
-            "场地、照片或声音已经登记可拍；scene_steps 只能用边界六的创作者表达或本次原创抽象构成"
-            "去承接文字，不能重演、还原或伪装成这件事的现场记录。"
-            if boundary.user_actuality_source is not None
-            else (
-                "本次没有用户现实片段：不得用第一人称生活回忆、日常习惯或具体家庭/工作场景制造真实感；"
-                "也不得借“如果、假设、想象”补写具体对白、人物关系与身份、个人持有物、事件经过或结果。"
-                "完整成品应由一般观察、条件表达、抽象演绎、比喻和当前品牌观点承担。"
             )
-        )
-        product_creation_rule = (
-            "商品内容逐项锚定已登记商品；confirmed_fact 商品单元允许忠实压缩或自然表达边界四的"
-            "登记事实，但不得改变数字、SKU、颜色、材质、价格、库存等硬事实。任何性能、效果、"
-            "适用人群、穿着结果、设计动机、价格、"
-            "库存或销售说法若未登记，一律不写。画面也不得临时增加其他衣物作比较或搭配。"
-            if boundary.product_fact_claims
-            else (
-                "本次没有登记商品：成品不能安排或描述账号/创作者拥有、穿着、展示的具体衣物或穿搭，"
-                "不能写面料、颜色、版型、弹性、舒适度等具体商品表现。需要画面时只在登记的创作者表达"
-                "与本次原创抽象构成中自由组织，不固定为手机、字卡或某类场地。"
-            )
-        )
         return f"""为“{request.brand.account_name}”编写一个完整中文{request.brand.media_format}成品的结构化底稿 ContentCore。
 本次受众价值：{_PRODUCT_VALUE[request.primary_product]}；必须只兑现这一价值，不说明路由。
 本次交付门：{_DELIVERABLE_REQUIREMENTS[request.primary_product]}
@@ -1981,8 +1647,6 @@ class DeepSeekGenerator(ContentGenerator):
 修改一致性：{revision_rule}
 平台重编译：{platform_recompile_rule}
 系列承接：{series_rule}
-现实片段写作合同：{actuality_creation_rule}
-商品写作合同：{product_creation_rule}
 
 创作要求：标题、观点、比喻、幽默、节奏、完整口播和互动由你自然创作，允许口语化、停顿感和真实的不完美；
 事实与资源约束在后台静默遵守；成品优先交付受众回报，不把防错边界复述成合规说明。
@@ -1997,10 +1661,6 @@ class DeepSeekGenerator(ContentGenerator):
   “我们的导购会/不会……”这类现实描述；
 - 不得声称品牌的商品线、商品能力或“我们做某类衣服”；边界四没有已确认商品时，只能谈观点与方法；
 - 一般颜色、品类和搭配只可作为明确的假设例子被口播讨论，不能被当作现有实物安排出镜；
-- 系统创作规划只提供主题、观点、切口、结构和风格；其中若出现边界二、四没有登记的具体人物、
-  对白、事件、个人习惯、衣物、商品属性或现实场景，必须丢弃这些细节，不能写进任何可见单元；
-- 用户要求自然修改时，必须让被点名的表达特征在完整正文及相关标题、导读、互动或制作单元中
-  发生可观察的实质变化；不能只删一个无关短句、只改摘要或原样复述旧稿。未点名的用户事实不变；
 - 私人协作偏好说明只调整协作方式与表达取舍，成品中不得出现它的原文、转述或对它的解释；
 - 可用条件存在多个替代项时，采用能完成内容的最小资源组合。
 
@@ -2031,8 +1691,7 @@ brand_viewpoint、conditional_guidance 或只引用 source:prior_version 的句�
 brand_viewpoint 与 conditional_guidance 只承载当前立场、希望、主张和建议。该不变量同样约束
 sound_text、production_note 中引述的口播词句。
 text、action_text、sound_text、production_note 中不得出现单元编号（如 c1、s2）或任何 id 标记；
-不得使用未登记的品牌 logo、贴纸、已有照片或成品图形素材；本次原创的抽象构图、排版、留白、色块、
-符号、文字和声音组织可以按成品需要使用，但不得借此暗示现实人物、物品或场景存在。
+不得使用未登记的品牌 logo、贴纸、已有照片或成品图形素材；现场手写字卡与屏幕文字可用。
 spoken_order 把全部 slot=spoken 的 claim_id 按口播顺序排列，各出现一次。
 scene_steps 规则：purpose=cover 恰好 1 条（封面/首帧或首图），purpose=scene 至少 1 条（画面步骤/图序）；
 actor_refs/resource_refs 只能引用登记表中的 id，需要谁列谁，不需要则留空数组；action_text 为该步可直接
@@ -2042,11 +1701,7 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
 每个字段都必须是字符串或字符串数组，不要嵌套其他对象。"""
 
     @staticmethod
-    def _judgement_prompt(
-        request: GenerationInput,
-        context: BoundaryContext,
-        core: ContentCore,
-    ) -> str:
+    def _judgement_prompt(context: BoundaryContext, core: ContentCore) -> str:
         serialized = json.dumps(
             {
                 "speaker_ref": core.speaker_ref,
@@ -2079,27 +1734,7 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
             ensure_ascii=False,
         )
         unit_ids = ", ".join(core.unit_ids)
-        whole_candidate = "\n".join(
-            (
-                "【可见文字单元】",
-                *(f"{claim.claim_id}：{claim.text}" for claim in core.claims),
-                "【可见制作单元】",
-                *(
-                    f"{step.step_id}：{step.action_text}；{step.sound_text}；{step.production_note}"
-                    for step in core.scene_steps
-                ),
-            )
-        )
-        revision_audit = (
-            "本次是自然修改。请把下面旧成品与本次修改逐单元对照：被点名的表达特征必须在完整正文"
-            "及相关标题、导读、互动或制作单元中发生可观察的实质变化，不能只删无关短句、只改摘要"
-            "或几乎原样复制；未点名的用户事实不得改变。\n"
-            f"本次修改：{request.revision_instruction}\n"
-            f"旧成品：\n{request.prior_saved_body or '（旧成品缺失，判 instruction_ok=false）'}"
-            if request.revision_instruction
-            else "本次是首次生成；只核对用户原始请求中的明确内容要求与禁止项。"
-        )
-        return f"""只依据以下六类临时边界，对候选底稿完成整体阅读，再把结论归回每个具体单元。
+        return f"""只依据以下六类临时边界，对候选底稿的每个单元独立完成完整判定。
 边界未明确提供的事实或资源一律视为不存在，不能用常识、常见拍法或话题里出现的对象补足。
 
 {DeepSeekGenerator._boundary_sections(context)}
@@ -2107,59 +1742,30 @@ production_note 为制作提示，可留空；claim_refs 非空，指向该步�
 候选底稿 ContentCore：
 {serialized}
 
-候选按用户阅读/制作顺序展开后的完整可见成品：
-{whole_candidate}
-
-用户要求与修改核对：
-{revision_audit}
-
-采用“先把整篇读成一个成品、找出整体越界，再归回参与构成问题的单元”的方式；
-候选自身填写的 basis、actuality 和 source_refs 只是待审声明，不能代替对可见文字真实含义的判断。一个单元单独看似
-中性，但与前后单元组合后形成了未经提供的人生经历、人物关系、商品结论、场景或修改逃逸，也必须判 false。
-对下面列出的每一个 id 各返回一条完整判定，五项都必须给出 true/false：
+对下面列出的每一个 id 各返回一条完整判定，四项都必须给出 true/false：
 - identity_ok：为 false 当该单元让账号或当前创作者以第一人称、表演或叙事位置冒充边界外的自然人或岗位
   （妈妈、家长、孩子的照护者、店长、店员、顾客、研发人员等）。用户只是在话题中提到某类人，
   不构成账号具备该身份。当前创作者以拍摄者、口播者或账号运营身份自称（如“我是品牌账号运营”、
-  “这里是品牌官方账号”）不属于冒充。边界二逐字列出的用户现实原话可以作为本次内容作者提供的
-  第一人称事实使用；不能仅因技术发布账号与内容作者不是同一身份就判 false，但原话没有提供的岗位、
-  家庭关系、履历与长期身份仍为 false。
+  “这里是品牌官方账号”）不属于冒充。
 - actuality_ok：为 false 当该单元把观点、假设、话题对象或未知情况写成操作人亲历、真实案例、已经发生的
   动作/场景、门店已执行做法或普遍政策；或把品牌“认为、希望、主张、建议”写成已经发生或正在执行；
   或出现“我们见过、我们观察到、有位顾客、很多家庭”等边界二、四未提供的经历与观察；
   或在没有边界二（用户明确前提）或边界四（已确认事实）来源支撑时，声称现实品牌、账号、组织或人物
   曾经、反复或长期发生过询问、讨论、观察、经历、服务、执行或改变——无论该表述出现在 text、
   sound_text、production_note 还是其中引述的口播词句里。品牌观点只能承载当前立场、希望、主张和建议。
-  如果边界二为空，任何第一人称生活回忆、个人日常习惯、具体家庭/工作场景都为 false；给具体人物补写
-  对白、身份与关系、持有物、动机、情绪、事件过程或结果，即使前面写了“如果、假设、想象”，仍为 false。
-  如果边界二不为空，只允许原话明确支持的现实细节；顺着常理补出的动机、情绪、对白、关系、前因、
-  结果或习惯仍为 false。例如用户只说发生过一件小事，不能据此补成“两个人在家”、谁负责、以前如何、
-  事后如何、人物心里怎么想或某个家中空间。一般观点与可能性必须和现实叙事清楚分开。
-  题材本身没有现实片段时，“我最近一直在想、我见过、我们生活里”等个人持续经历或观察也为 false；
-  只能直接给出当前观点、一般观察、条件表达或明确不冒充事实的抽象演绎。
 - resource_ok：为 false 当该单元的画面、动作、声音或制作步骤实际需要边界六未登记的人物、商品、衣物、
   图片、合照、场地、家具、道具或既有素材；叠加品牌 logo、贴纸、成品图形或已有照片同样属于使用
-  未登记素材。话题对象可以被口播抽象讨论，但不能出镜、行动、发声或被当作现有素材。“事实来源不等于拍摄资源”：
-  边界二允许文字使用一段用户事实，不会自动登记事件中的人物、物品、店、家、场地、照片或
-  声音；把该事实重演、还原或伪装成现场记录时 resource_ok=false。若同一未登记资源或现实场景参与多个
-  scene step，必须把每个实际使用它的 step 分别判 false，不能只挑一个代表单元。
+  未登记素材。话题对象可以被口播抽象讨论，但不能出镜、行动、发声或被当作现有素材。
 - fact_ok：为 false 当该单元与边界三、四中的品牌、商品、资料或明确作用域冲突，或提出了边界外的具体
   商品事实、价格、参数；边界四没有相应已确认商品时，声称品牌的商品线、商品能力或“我们做某类
-  衣服”同样为 false。边界四没有登记商品时，账号/创作者拥有、穿着、展示的具体衣物或穿搭，以及
-  面料、颜色、版型、弹性、舒适度等具体商品表现都为 false；有登记商品时，也只能使用逐项登记事实，
-  不能从品类、结构或重量推导性能、保暖/温差用途、效果、适用人群、穿着结果或设计动机；不能把已知
-  重量类比成另一件未登记衣物的重量，不能把未登记比较品、搭配品或用户现有衣物写进建议或验证动作。
-  仅使用边界六已登记的当前商品与制作能力、且动作没有声称颜色、结构、轮廓、性能、用途或效果，不构成
-  新增商品事实，也不应仅因动作没有逐字复述登记事实而判 false。
-- instruction_ok：为 false 当该单元违反用户明确的内容要求或禁止项；自然修改时，若被修改要求点名的
-  表达特征仍沿用旧稿、只做无关删减、只改摘要而完整正文没有实质变化，也为 false。未被点名且不冲突的
-  单元可以保留；首次生成时不要求与不存在的旧稿比较。
-不要误杀：依据品牌基线表达的一般观点与条件性建议、不带具体人物事实的抽象假设与比喻、普通视觉标题、
-当前创作者使用登记的表达能力、本次原创抽象构成，以及对“本次话题/请求”的忠实抽象讨论，可以通过。
+  衣服”同样为 false。
+不要误杀：依据品牌基线表达的观点与条件性建议、明确标注的假设与比喻、普通视觉标题、当前创作者对手机
+口播、现有场地中的中性动作，以及对“本次话题/请求”的忠实抽象讨论，这些应当四项均为 true。
 关键区别是“谈论某个对象”不需要该资源；“让该对象出镜、行动、发声或把事件写成已经发生”需要当前依据。
-只把整体问题归回实际参与构成问题的单元；不要误伤没有参与该问题的其他单元。
+对每个单元只依据其自身文本与上述边界独立判定；不要因为其他单元存在问题而改变对本单元的判定。
 
 待判定 id：{unit_ids}
-只返回：{{"verdicts":[{{"id":"…","identity_ok":true,"actuality_ok":true,"resource_ok":true,"fact_ok":true,"instruction_ok":true}}]}}。
+只返回：{{"verdicts":[{{"id":"…","identity_ok":true,"actuality_ok":true,"resource_ok":true,"fact_ok":true}}]}}。
 verdicts 必须恰好覆盖上面列出的每个 id，一次且仅一次；不得返回解释、理由、置信度或其他字段。"""
 
     @staticmethod
@@ -2216,14 +1822,10 @@ verdicts 必须恰好覆盖上面列出的每个 id，一次且仅一次；不�
 问题含义：untrusted_role = 冒充边界外身份；invented_actuality = 把观点、假设或话题写成已发生的经历、
 案例或门店已执行做法；unsupported_resource = 使用了未登记的人物、商品、图片、场地、家具或素材；
 factual_conflict = 与已确认品牌、商品、资料或作用域冲突，或引用了不允许的来源；media_contract =
-必须真实缩短口播以适配用户指定时长，不能只改时长标签；instruction_conflict = 违反用户明确内容要求，
-或自然修改没有让被点名的表达特征在相关可见单元中发生实质变化。
+必须真实缩短口播以适配用户指定时长，不能只改时长标签。
 修复要求：保留原话题价值；身份或现实主张越界时改成品牌明确标示的观点、建议或条件性判断；
-制作资源越界时只改用登记表中的创作者表达或本次原创抽象构成，并根据当前成品重新选择具体表现；
-不得统一改成手机口播、手写字卡或某个室内场景。话题人物、商品、图片和道具只可被抽象谈论，不能
-出镜或当作已持有素材。事实来源不等于拍摄资源：即使边界二允许文字忠实使用用户事实，也不能重演、
-还原或伪装成该事件的现场记录；只可用登记的创作者表达或本次原创抽象构成承接。修复后的 claim 需要
-给出正确的 basis、actuality 和
+制作资源越界时改用登记表中的创作者、手机、现场手写字卡和场地内中性动作；话题人物、商品、图片和
+道具只可被抽象谈论，不能出镜或当作已持有素材。修复后的 claim 需要给出正确的 basis、actuality 和
 source_refs（至少一个来源与 basis 匹配：brand_viewpoint ↔ brand_baseline/role_boundary/organization；
 confirmed_fact ↔ organization/product；user_premise ↔ user_request/user_actuality/prior_version；
 conditional_guidance ↔ method/brand_baseline/role_boundary）；修复后的 scene step 需要给出正确的
@@ -2232,92 +1834,15 @@ c1、s2 这类编号，必须把编号替换为对应台词原文或删去，不
 若问题单元是没有用户明确前提或已确认事实来源、却声称现实品牌/账号/组织/人物曾经、反复或长期
 发生过询问、讨论、观察、经历、服务、执行或改变的表述：保留观点本身，删除经历外壳，或改写为
 问题、假设或条件表达；不得为其编造来源。
-边界二为空时，不得以第一人称生活回忆、个人习惯或具体家庭/工作场景制造真实感；即使明确写成假设，
-也不能补造具体对白、人物身份与关系、个人持有物、事件过程或结果。边界二有原话时，只保留原话逐字
-支持的事实，不补动机、情绪、对白、关系、前因、结果或习惯。边界四没有登记商品时，不能补具体衣物、
-穿搭或商品表现；有商品时允许忠实压缩登记事实，但数字、SKU、颜色、材质、价格和库存等硬事实必须
-保持精确，画面不能增加未登记的比较品或搭配品。
-invented_actuality 单元在边界二为空时必须丢弃原句的经历外壳，不能近义改写或换一个假想人物继续叙事；
-直接改成“本次话题对象 + 当前一般判断”的独立命题，不写谁在何时何地做了什么，不写最近、曾经、见过、
-遇到、生活里或家里发生过什么；basis 使用 brand_viewpoint 或 conditional_guidance，actuality 必须是
-non_event，并引用对应的已登记来源。若单元引用 source:product:…，text 可以忠实压缩边界四的登记
-事实，但不能改变任何硬事实、把两条事实拼成新因果，或增加类比、用途与结果结论。
-本次用户要求：{request.weak_seed}
-本次自然修改：{request.revision_instruction or "（首次生成）"}
-若为自然修改，下面旧成品只用于确定哪些表达需改变，不是事实来源；instruction_conflict 单元必须真正落实
-修改，不能仅做无关删减或几乎原样返回：
-{request.prior_saved_body or "（没有旧成品）"}
 不要输出分类、证据、审查过程或解释。
 严格只返回一个 JSON 对象：{{"repairs":[…]}}。repairs 中每个元素是完整替换单元：claim 用
 {{"claim_id":"…","text":"…","basis":"…","actuality":"…","source_refs":["…"]}}；scene step 用
 {{"step_id":"…","action_text":"…","sound_text":"…","production_note":"…","actor_refs":[],
-"resource_refs":[],"claim_refs":["…"]}}。一个单元即使有多个问题也只返回一次；repairs 必须恰好
-{len(reasons_by_unit)} 个元素，并按这里的顺序各覆盖一次：{", ".join(reasons_by_unit)}。"""
+"resource_refs":[],"claim_refs":["…"]}}。repairs 必须恰好覆盖：{", ".join(reasons_by_unit)}。"""
 
     # ------------------------------------------------------------------
     # Natural-language rendering of confirmed product facts
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _registered_product_claims(
-        product: ProductFact,
-        subject: str,
-    ) -> tuple[str, ...]:
-        """Render only atomic, citable statements from one registered record."""
-
-        facts = product.facts
-        claims: list[str] = []
-        category = DeepSeekGenerator._natural_category(facts.get("category"))
-        if category != "未提供品类":
-            claims.append(f"{subject}已登记的品类是{category}。")
-        raw_colors = facts.get("colors")
-        colors = (
-            "、".join(value for value in raw_colors if isinstance(value, str))
-            if isinstance(raw_colors, list)
-            else ""
-        )
-        if colors:
-            claims.append(f"{subject}已登记的颜色是{colors}。")
-        for key, label in (
-            ("material_or_structure", "材质或结构"),
-            ("material", "材质"),
-            ("structure", "结构"),
-            ("silhouette", "轮廓"),
-            ("observable_features", "可观察特征"),
-        ):
-            value = facts.get(key)
-            if isinstance(value, str) and value.strip():
-                normalized = value.strip().rstrip("。")
-                claims.append(f"{subject}已登记的{label}为：{normalized}。")
-        both_sides_complete = facts.get("both_sides_complete")
-        if isinstance(both_sides_complete, bool):
-            claims.append(
-                f"{subject}已登记为两面均为完整外观。"
-                if both_sides_complete
-                else f"{subject}未登记为两面均为完整外观。"
-            )
-        functional_pockets = facts.get("pockets_functional_both_sides")
-        if isinstance(functional_pockets, bool):
-            claims.append(
-                f"{subject}已登记为两面口袋均可正常使用。"
-                if functional_pockets
-                else f"{subject}未登记为两面口袋均可正常使用。"
-            )
-        weight = facts.get("sample_weight_m_grams")
-        if isinstance(weight, int):
-            claims.append(f"{subject}的 M 码当前样衣已登记为 {weight} 克。")
-        comparison = facts.get("comparison_single_layer_short_coat_m_grams")
-        if isinstance(comparison, int):
-            claims.append(
-                f"{subject}的同季同长度单层短外套 M 码对照样衣已登记为 {comparison} 克。"
-            )
-        raw_boundary = facts.get("weight_boundary")
-        if isinstance(raw_boundary, str) and raw_boundary.strip():
-            claims.append(
-                f"{subject}已登记的重量边界为："
-                f"{DeepSeekGenerator._weight_boundary(raw_boundary).rstrip('。')}。"
-            )
-        return tuple(dict.fromkeys(claims))
 
     @staticmethod
     def _natural_product(
@@ -2370,13 +1895,11 @@ non_event，并引用对应的已登记来源。若单元引用 source:product:�
         ):
             return "当前只知道这两份样衣存在重量差异；没有结构测试，现有资料无法归因。"
         if isinstance(value, str) and value.strip():
-            return "这里只能以两份样衣的已记录重量为准，不能从重量推断其他未测试性质。"
+            return "当前重量边界已登记；只能以两份样衣的已记录重量为准，不能从重量推断其他未测试性质。"
         return "当前只可确认已记录的样衣重量，不能从重量推断其他性质。"
 
     @staticmethod
     def _natural_category(value: object) -> str:
         if value == "double-faced short coat":
             return "双面短外套"
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-        return "未提供品类"
+        return "类别未提供"
