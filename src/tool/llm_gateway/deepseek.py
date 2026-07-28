@@ -18,7 +18,6 @@ from src.shared.creative_kernel import (
     kernel_digest,
     kernel_document,
     parse_writer_kernel,
-    reconcile_kernel_observations,
     repair_kernel_units,
 )
 from src.shared.creative_plan import (
@@ -49,6 +48,14 @@ from src.shared.narrative import (
     parse_observation,
     reconcile_observations,
     visible_digest,
+)
+from src.shared.review_evidence import (
+    REVIEW_EVIDENCE_VERSION,
+    ProtectedSubjectScope,
+    ReviewClause,
+    build_review_clauses,
+    parse_review_evidence,
+    reconcile_review_evidence,
 )
 from src.shared.types import (
     ContentProduct,
@@ -236,6 +243,12 @@ class BoundaryContext:
             )
             if record.fact_id in frame.allowed_brand_fact_ids
         )
+        if {
+            record.fact_id for record in product_records
+        } != set(frame.allowed_product_fact_ids) or {
+            record.fact_id for record in brand_records
+        } != set(frame.allowed_brand_fact_ids):
+            raise GenerationFailed("冻结事实标识无法解析到当前精确原句")
         user_records = tuple(
             FrozenFactRecord(
                 fact_id=fact.source_id,
@@ -549,11 +562,7 @@ class DeepSeekGenerator(ContentGenerator):
         context = BoundaryContext.from_request(request, frame)
         skeleton = build_kernel_skeleton(
             frame=frame,
-            fact_registry=tuple(
-                record
-                for record in context.fact_registry
-                if record.fact_kind != "brand"
-            ),
+            fact_registry=context.fact_registry,
             constraint_refs=tuple(
                 identifier for identifier, _ in context.constraint_registry
             ),
@@ -691,6 +700,7 @@ class DeepSeekGenerator(ContentGenerator):
             completion_snapshot_patch={
                 "creative_kernel_v1": kernel_document(kernel),
                 "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
+                "review_evidence_version": REVIEW_EVIDENCE_VERSION,
                 "reviewed_kernel_digest": reviewed_kernel_digest,
                 "visible_provenance": {
                     field: list(sources)
@@ -852,8 +862,8 @@ class DeepSeekGenerator(ContentGenerator):
         kernel: CreativeKernelV1,
     ) -> tuple[tuple[NarrativeIssue, ...], dict[str, Any], int]:
         payload, retries = self._request(
-            "你是独立 CreativeKernel 叙事观察器。只提取每个 unit 的实际语义，不裁决、不改写，只返回 JSON。",
-            self._kernel_reviewer_prompt(request, context, kernel),
+            "你是独立 CreativeKernel 证据提取器。只提取每个 clause 的精确文字证据，不分类、不裁决、不改写，只返回 JSON。",
+            self._kernel_reviewer_prompt(build_review_clauses(kernel)),
             4096,
             thinking_disabled=True,
             timeout_seconds=self._review_timeout_seconds,
@@ -864,12 +874,7 @@ class DeepSeekGenerator(ContentGenerator):
                     str(payload["choices"][0]["message"]["content"])
                 )
             )
-            raw_observations = document["observations"]
-            if not isinstance(raw_observations, list):
-                raise TypeError
-            observations = tuple(
-                parse_observation(value) for value in raw_observations
-            )
+            evidence = parse_review_evidence(document)
         except (
             KeyError,
             IndexError,
@@ -877,14 +882,30 @@ class DeepSeekGenerator(ContentGenerator):
             json.JSONDecodeError,
         ) as exc:
             raise GenerationFailed(
-                "独立 CreativeKernel Reviewer 返回格式不完整"
+                "独立 CreativeKernel Reviewer 证据格式不完整"
             ) from exc
+        review_clauses = build_review_clauses(kernel)
         return (
-            reconcile_kernel_observations(
+            reconcile_review_evidence(
                 kernel=kernel,
-                observations=observations,
+                review_clauses=review_clauses,
+                evidence=evidence,
                 fact_text_by_id=context.fact_text_by_id,
                 allowed_constraint_ids=context.constraint_ids,
+                protected_subjects=ProtectedSubjectScope(
+                    exact_names=tuple(
+                        dict.fromkeys(
+                            name
+                            for name in (
+                                request.brand.brand_name,
+                                request.brand.organization_name,
+                                request.brand.account_name,
+                            )
+                            if name
+                        )
+                    ),
+                    current_speaker_is_institutional=True,
+                ),
             ),
             payload,
             retries,
@@ -896,15 +917,14 @@ class DeepSeekGenerator(ContentGenerator):
         issues: tuple[NarrativeIssue, ...],
     ) -> frozenset[str]:
         nonrepairable = {
-            "review_coverage",
-            "missing_exact_span",
-            "uncertain_meaning",
+            "review_evidence_coverage",
+            "review_evidence_span",
+            "review_evidence_uncertain",
             "frozen_fact_changed",
-            "review_resource_claim",
         }
         if any(issue.reason in nonrepairable for issue in issues):
             raise GenerationFailed(
-                "CreativeKernel Reviewer 观察不完整或事实单元不一致"
+                "CreativeKernel Reviewer 证据不完整或事实单元不一致"
             )
         writable_ids = {
             unit.unit_id for unit in kernel.writable_units
@@ -932,6 +952,14 @@ class DeepSeekGenerator(ContentGenerator):
             }
             for unit in skeleton.units
             if not unit.writable
+            and (
+                request.narrative_frame is None
+                or not any(
+                    fact_ref
+                    in request.narrative_frame.allowed_brand_fact_ids
+                    for fact_ref in unit.fact_refs
+                )
+            )
         ]
         writable = [
             {
@@ -997,67 +1025,46 @@ allowed_observation_types 是服务端边界：abstract_principle 可以表达�
 家庭。不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄
 资源或制作方式。"""
 
+    @staticmethod
     def _kernel_reviewer_prompt(
-        self,
-        request: GenerationInput,
-        context: BoundaryContext,
-        kernel: CreativeKernelV1,
+        clauses: tuple[ReviewClause, ...],
     ) -> str:
         targets = [
             {
-                "id": unit.unit_id,
-                "target_kind": "unit",
-                "text": unit.text,
+                "unit_id": clause.unit_id,
+                "clause_id": clause.clause_id,
+                "exact_text": clause.exact_text,
+                "visible_order": clause.visible_order,
             }
-            for unit in kernel.units
+            for clause in clauses
         ]
-        facts = [
-            {
-                "fact_id": record.fact_id,
-                "exact_text": record.exact_text,
-                "fact_kind": record.fact_kind,
-            }
-            for record in context.fact_registry
-            if any(
-                record.fact_id in unit.fact_refs for unit in kernel.units
-            )
-        ]
-        return f"""独立阅读 CreativeKernelV1 的每个最终可见 unit，并提取实际语义。不要读取或
-推断制作字段；这里没有 scene 或资源。不要返回 pass/fail，不要改写。
+        return f"""逐项阅读服务端已切分的最终可见 clause，只提取原文中实际出现的精确证据。
+不要分类为抽象原则、事件、机构主张或其他类型；不要返回 pass/fail、事实依据、发布许可、
+资源、修复建议或 observation_type；不要改写、概括或补全文字。
 
-用户 topic：{json.dumps(
-    request.creative_plan.topic_spans
-    if request.creative_plan is not None
-    else (),
-    ensure_ascii=False,
-)}
-冻结事实：{json.dumps(facts, ensure_ascii=False)}
-逐项 unit：{json.dumps(targets, ensure_ascii=False)}
+服务端 clause：
+{json.dumps(targets, ensure_ascii=False)}
 
-每个 id 恰好返回一份 target_kind=unit 的观察。text_spans 必须是只含该 unit 完整原文的
-单元素数组，不得截短、概括或抄其他 unit。claims 每项只含 category 和该 unit 内真实存在的
-精确 span；category 只选 people、relationships、actions_or_events、dialogue、motives、
-causes、results、times、locations、possessions。
+每个 clause_id 必须恰好返回一次，exact_text 必须逐字等于对应完整 clause，不得截短或抄写
+其他 clause。所有 span 必须是该 exact_text 中真实存在的精确子串：
+- subject_spans：句中明确作为陈述主体的人、代词、机构或事物；
+- predicate_spans：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；
+- action_or_event_spans：具体情境中实际发生的动作、反应或事件；抽象概念名称不是事件；
+- dialogue_spans：被说出的具体话语；
+- motive/cause/result/time/location_spans：对应动机、前因、结果、时间和地点。
 
-observation_type 只选：
-- abstract_principle：抽象原则、观点、价值判断、建议或一般理解，没有一件具体事情发生；
-- situated_event：具体或隐含人物在情境中的动作、对白、反应、原因或结果，即使省略称谓；
-- institutional_assertion：品牌、公司、门店、账号或组织的信念、承诺、做法或历史；
-- user_actuality：逐字用户真人事实；
-- hypothesis：由“假设：”覆盖的条件推演；
-- dramatization：由完整可见“情境演绎（虚构角色，不对应真实人物或品牌案例）：”覆盖的虚构段；
-- confirmed_fact：逐字商品事实；
-- uncertain：无法确定。
-
-演绎时把完整服务端披露原句放入 dramatization_disclosure_spans。instruction_conflicts 只放
-与用户要求冲突且真实存在的精确跨度。任何不确定都必须 uncertain=true。
+implicit_subject 只选 none、current_speaker、generic、uncertain。句中有明确主体时通常为
+none；省略主体但由当前说话者承担谓语时为 current_speaker；泛指任何人时为 generic；
+无法可靠判断时为 uncertain。任何字段无法可靠提取都必须 uncertain=true。
 
 只返回：
-{{"observations":[{{"id":"…","target_kind":"unit","text_spans":["完整 unit 原文"],
-"claims":[{{"category":"actions_or_events","span":"精确子串"}}],
-"observation_type":"abstract_principle|situated_event|institutional_assertion|user_actuality|hypothesis|dramatization|confirmed_fact|uncertain",
-"resource_refs":[],"dramatization_disclosure_spans":[],"instruction_conflicts":[],"uncertain":false}}]}}
-所有字段必须出现；字符串数组不能为 null；不得增加 id 或字段。"""
+{{"evidence_version":"{REVIEW_EVIDENCE_VERSION}","clauses":[{{
+"clause_id":"既定 id","exact_text":"完整 clause 原文",
+"subject_spans":[],"predicate_spans":[],"action_or_event_spans":[],
+"dialogue_spans":[],"motive_spans":[],"cause_spans":[],"result_spans":[],
+"time_spans":[],"location_spans":[],"implicit_subject":"none","uncertain":false
+}}]}}
+根对象和 clause 对象不得增加、遗漏或重命名字段；所有 span 字段必须是数组且不能为 null。"""
 
     def _kernel_repair_prompt(
         self,

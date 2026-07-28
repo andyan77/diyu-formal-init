@@ -19,6 +19,7 @@ from src.shared.delivery_compiler import (
 )
 from src.shared.factual_basis import FrozenFactRecord, product_fact_records
 from src.shared.narrative import legacy_frame, visible_digest
+from src.shared.review_evidence import REVIEW_EVIDENCE_VERSION
 from src.shared.types import (
     ContentProduct,
     ContentSemanticContract,
@@ -211,6 +212,7 @@ class DeterministicContentGenerator(ContentGenerator):
             completion_snapshot_patch={
                 "creative_kernel_v1": kernel_document(kernel),
                 "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
+                "review_evidence_version": REVIEW_EVIDENCE_VERSION,
                 "reviewed_kernel_digest": kernel_digest(kernel),
                 "visible_provenance": {
                     field: list(sources)

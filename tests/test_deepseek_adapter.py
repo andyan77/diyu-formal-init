@@ -10,7 +10,6 @@ import pytest
 
 from src.brain.platform_directions import direction_for
 from src.shared.creative_kernel import (
-    DRAMATIZATION_DISCLOSURE,
     CreativeKernelV1,
     build_kernel_skeleton,
     parse_writer_kernel,
@@ -22,8 +21,12 @@ from src.shared.creative_plan import (
 )
 from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
 from src.shared.errors import GenerationFailed
-from src.shared.factual_basis import product_fact_records
+from src.shared.factual_basis import brand_fact_records, product_fact_records
 from src.shared.narrative import NarrativeFrame, new_frame, visible_digest
+from src.shared.review_evidence import (
+    REVIEW_EVIDENCE_VERSION,
+    build_review_clauses,
+)
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
@@ -434,11 +437,7 @@ def _parsed_kernel(
     )
     skeleton = build_kernel_skeleton(
         frame=request.narrative_frame,
-        fact_registry=tuple(
-            record
-            for record in context.fact_registry
-            if record.fact_kind != "brand"
-        ),
+        fact_registry=context.fact_registry,
         constraint_refs=tuple(
             identifier for identifier, _ in context.constraint_registry
         ),
@@ -453,52 +452,43 @@ def _kernel_observations(
     omit: frozenset[str] = frozenset(),
     partial: frozenset[str] = frozenset(),
 ) -> dict[str, object]:
-    observations: list[dict[str, object]] = []
-    for unit in kernel.units:
-        if unit.unit_id in omit:
+    evidence: list[dict[str, object]] = []
+    for clause in build_review_clauses(kernel):
+        if clause.unit_id in omit:
             continue
-        observation_type = (
-            unit.allowed_observation_types[0]
-            if unit.purpose == "frozen_fact"
-            else (
-                body_type
-                if unit.purpose == "body" and body_type is not None
-                else unit.allowed_observation_types[0]
-            )
+        is_event = (
+            clause.unit_id == "unit:body"
+            and body_type == "situated_event"
         )
-        observations.append(
+        evidence.append(
             {
-                "id": unit.unit_id,
-                "target_kind": "unit",
-                "text_spans": [
-                    (
-                        unit.text[: max(1, len(unit.text) // 2)]
-                        if unit.unit_id in partial
-                        else unit.text
-                    )
-                ],
-                "claims": (
-                    [
-                        {
-                            "category": "actions_or_events",
-                            "span": unit.text,
-                        }
+                "clause_id": clause.clause_id,
+                "exact_text": (
+                    clause.exact_text[
+                        : max(1, len(clause.exact_text) // 2)
                     ]
-                    if observation_type == "situated_event"
-                    else []
+                    if clause.unit_id in partial
+                    else clause.exact_text
                 ),
-                "observation_type": observation_type,
-                "resource_refs": [],
-                "dramatization_disclosure_spans": (
-                    [DRAMATIZATION_DISCLOSURE]
-                    if observation_type == "dramatization"
-                    else []
+                "subject_spans": [],
+                "predicate_spans": [],
+                "action_or_event_spans": (
+                    [clause.exact_text] if is_event else []
                 ),
-                "instruction_conflicts": [],
+                "dialogue_spans": [],
+                "motive_spans": [],
+                "cause_spans": [],
+                "result_spans": [],
+                "time_spans": [],
+                "location_spans": [],
+                "implicit_subject": "none",
                 "uncertain": False,
             }
         )
-    return {"observations": observations}
+    return {
+        "evidence_version": REVIEW_EVIDENCE_VERSION,
+        "clauses": evidence,
+    }
 
 
 def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
@@ -973,6 +963,10 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
         artifact.completion_snapshot_patch["delivery_compiler_version"]
         == DELIVERY_COMPILER_VERSION
     )
+    assert (
+        artifact.completion_snapshot_patch["review_evidence_version"]
+        == REVIEW_EVIDENCE_VERSION
+    )
     assert isinstance(artifact.production, GraphicProductionBundle)
     assert artifact.production.full_body == kernel.unit("unit:body").text
     prompts = _payload_prompts()
@@ -987,6 +981,57 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert '"text"' in writer_prompt
     assert '"block_id"' not in writer_prompt
     assert '"fact_refs"' not in writer_prompt
+
+
+def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:
+    exact_fact = "笛语确认本账号只发布人工终审后的草稿。"
+    fact = brand_fact_records((exact_fact,))[0]
+    frame = new_frame(
+        "general_observation",
+        (),
+        (),
+        (fact.fact_id,),
+    )
+    request = replace(
+        _kernel_request(frame),
+        brand=replace(
+            _brand(),
+            brand_reference_context=(exact_fact,),
+        ),
+    )
+    raw = _kernel_writer(body="这篇更想聊创作边界。")
+    kernel = _parsed_kernel(request, raw)
+    FakeClient.responses = [
+        _completion(raw),
+        _completion(_kernel_observations(kernel)),
+    ]
+
+    artifact = _generator().generate(request)
+
+    assert exact_fact in artifact.production.full_body  # type: ignore[union-attr]
+    assert kernel.unit("unit:frozen-fact:1").fact_refs == (fact.fact_id,)
+    prompts = _payload_prompts()
+    assert exact_fact not in prompts[0]
+    assert exact_fact in prompts[1]
+
+
+def test_ui10_unresolved_brand_fact_fails_before_writer() -> None:
+    request = _kernel_request(
+        new_frame(
+            "general_observation",
+            (),
+            (),
+            ("fact:brand:not-currently-resolvable",),
+        )
+    )
+
+    with pytest.raises(
+        GenerationFailed,
+        match="冻结事实标识无法解析",
+    ):
+        _generator().generate(request)
+
+    assert FakeClient.requests == []
 
 
 def test_ui09_writer_extra_production_field_fails_before_reviewer() -> None:
@@ -1048,7 +1093,51 @@ def test_ui09_reviewer_must_cover_exact_complete_units() -> None:
 
     with pytest.raises(
         GenerationFailed,
-        match="Reviewer 观察不完整或事实单元不一致",
+        match="Reviewer 证据不完整或事实单元不一致",
+    ):
+        _generator().generate(request)
+
+    assert len(FakeClient.requests) == 2
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("missing", "duplicate", "extra", "partial", "fake_span", "uncertain"),
+)
+def test_ui10_evidence_failure_never_calls_writer_repair(
+    mutation: str,
+) -> None:
+    request = _kernel_request()
+    raw = _kernel_writer()
+    kernel = _parsed_kernel(request, raw)
+    document = _kernel_observations(kernel)
+    clauses = document["clauses"]
+    assert isinstance(clauses, list)
+    if mutation == "missing":
+        clauses.pop()
+    elif mutation == "duplicate":
+        clauses.append(dict(clauses[0]))
+    elif mutation == "extra":
+        extra = dict(clauses[0])
+        extra["clause_id"] = "unit:extra:clause:1"
+        clauses.append(extra)
+    elif mutation == "partial":
+        clauses[-1] = dict(clauses[-1])
+        clauses[-1]["exact_text"] = "部分"
+    elif mutation == "fake_span":
+        clauses[-1] = dict(clauses[-1])
+        clauses[-1]["predicate_spans"] = ["并不存在的谓词"]
+    else:
+        clauses[-1] = dict(clauses[-1])
+        clauses[-1]["uncertain"] = True
+    FakeClient.responses = [
+        _completion(raw),
+        _completion(document),
+    ]
+
+    with pytest.raises(
+        GenerationFailed,
+        match="Reviewer 证据不完整或事实单元不一致",
     ):
         _generator().generate(request)
 
@@ -1097,7 +1186,7 @@ def test_ui09_allows_only_one_affected_unit_repair_and_full_rereview() -> None:
     prompts = _payload_prompts()
     assert "unit:body" in prompts[2]
     assert "unit:title" not in prompts[2]
-    assert "逐项 unit" in prompts[3]
+    assert "服务端 clause" in prompts[3]
 
 
 def test_ui09_second_review_failure_stops_without_another_repair() -> None:

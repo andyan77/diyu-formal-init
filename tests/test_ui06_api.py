@@ -339,6 +339,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
                 "exact_text": _G4_FACT,
             }
         ]
+        assert frame["allowed_brand_fact_ids"] == []
         assert snapshot["creation_commitment"] == {
             "gate_version": "creation-intent-gate-v1",
             "disposition": "committed",
@@ -355,6 +356,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert isinstance(kernel_v1, dict)
         assert kernel_v1["kernel_version"] == "creative-kernel-v1"
         assert snapshot["delivery_compiler_version"] == "delivery-compiler-v1"
+        assert snapshot["review_evidence_version"] == "review-evidence-v1"
         assert isinstance(snapshot["reviewed_kernel_digest"], str)
         assert isinstance(snapshot["visible_provenance"], dict)
 
@@ -404,6 +406,10 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert (
             revised_snapshot["delivery_compiler_version"]
             == snapshot["delivery_compiler_version"]
+        )
+        assert (
+            revised_snapshot["review_evidence_version"]
+            == snapshot["review_evidence_version"]
         )
         revised_kernel = revised_snapshot["creative_kernel_v1"]
         assert isinstance(revised_kernel, dict)

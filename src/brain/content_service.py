@@ -405,12 +405,7 @@ class ContentService:
                 for product in products
                 for record in product_fact_records(product)
             ),
-            tuple(
-                record.fact_id
-                for record in brand_fact_records(
-                    context.brand_reference_context
-                )
-            ),
+            (),
         )
         explicit_mode = self._explicit_narrative_mode(control, sanitized_message)
         if explicit_mode is not None and frame.narrative_mode != explicit_mode:
