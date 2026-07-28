@@ -617,17 +617,13 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed(
                 "CreativeKernelV1 Writer 返回格式不完整"
             ) from exc
-        issues = self._kernel_structure_issues(
-            self._kernel_clause_contexts(request, context, kernel)
+        issues, review_payload, review_retries = self._review_kernel(
+            request,
+            context,
+            kernel,
         )
-        if not issues:
-            issues, review_payload, review_retries = self._review_kernel(
-                request,
-                context,
-                kernel,
-            )
-            provider_payloads.append(review_payload)
-            retries += review_retries
+        provider_payloads.append(review_payload)
+        retries += review_retries
         receipts: tuple[FactRepairReceipt, ...] = ()
         if issues:
             affected = self._kernel_repair_scope(kernel, issues)
@@ -667,13 +663,6 @@ class DeepSeekGenerator(ContentGenerator):
                 raise GenerationFailed(
                     "CreativeKernelV1 单元修复返回格式不完整"
                 ) from exc
-            final_structure_issues = self._kernel_structure_issues(
-                self._kernel_clause_contexts(request, context, repaired)
-            )
-            if final_structure_issues:
-                raise GenerationFailed(
-                    "内容边界无法在一次 CreativeKernel unit 修复内满足"
-                )
             final_issues, review_payload, review_retries = (
                 self._review_kernel(request, context, repaired)
             )
@@ -1023,33 +1012,6 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("CreativeKernel 缺陷不属于可写单元")
         return affected
 
-    @staticmethod
-    def _kernel_structure_issues(
-        contexts: tuple[ClauseContextV2, ...],
-    ) -> tuple[NarrativeIssue, ...]:
-        recommendation_units = {
-            context.unit_id
-            for context in contexts
-            if context.unit_contract == "recommendation"
-        }
-        issues: list[NarrativeIssue] = []
-        for unit_id in recommendation_units:
-            clauses = tuple(
-                context
-                for context in contexts
-                if context.unit_id == unit_id
-                and context.text_source == "writer_unit"
-            )
-            if len(clauses) != 1:
-                issues.append(
-                    NarrativeIssue(
-                        unit_id,
-                        "recommendation_clause_contract",
-                        "|".join(clause.exact_text for clause in clauses),
-                    )
-                )
-        return tuple(issues)
-
     def _kernel_writer_prompt(
         self,
         request: GenerationInput,
@@ -1143,9 +1105,9 @@ unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一�
 服务端会包裹；hypothesis 可以使用一般虚构人物、动作和关系，但不能绑定用户、当前表达方、
 真实员工、顾客、门店或已经发生的历史。dramatization 必须写成完整虚构情境，但不要自行添加
 演绎声明，服务端会为整个段落提供一次可见披露。recommendation 必须用清楚可见的建议、
-条件或意愿语气表达可以怎样做。每个 recommendation unit 恰好写一个可独立切分的泛指建议
-clause；不得追加第二个抽象收束 clause，也不能写具体时间、地点、对白、情境例子或没有语态
-标记的裸动作。需要抽象收束时由后续 abstract_observation / release_caption unit 完成。
+条件或意愿语气表达可以怎样做。recommendation unit 中每个可独立切分的 clause 都必须有
+清楚语态，不能写具体时间、地点、对白、情境例子或没有语态标记的裸动作。抽象收束由后续
+abstract_observation / release_caption unit 完成。
 不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。
 不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄资源或
 制作方式。Writer-owned clause 不得让当前表达者或第一人称复数承担谓语、做法、经历或承诺；
@@ -1258,8 +1220,8 @@ CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit
 
 修复后仍只写创作文字，不得返回 scene、actor、resource、action、sound、production_note、
 来源、约束或语义合同。hypothesis/dramatization 的可见包裹由服务端加入，修复文字不得重复
-这些包裹。recommendation unit 必须恰好一个带显式建议、条件或意愿语态的泛指 clause，
-不得写具体时间、地点、对白、情境例子或追加抽象收束。只返回：
+这些包裹。recommendation unit 的每个 clause 都必须带显式建议、条件或意愿语态，
+不得写具体时间、地点、对白、情境例子或抽象收束。只返回：
 {{"units":[{{"unit_id":"只使用列出的既定 id","text":"完整替换文字"}}]}}"""
 
     @staticmethod

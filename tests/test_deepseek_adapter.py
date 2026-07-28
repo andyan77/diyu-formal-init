@@ -526,56 +526,14 @@ def test_kernel_writer_prompt_explains_recommendation_contract() -> None:
     )
 
     assert "recommendation 必须用清楚可见的建议、" in prompt
-    assert "每个 recommendation unit 恰好写一个可独立切分的泛指建议" in prompt
+    assert "recommendation unit 中每个可独立切分的 clause 都必须有" in prompt
     assert "不能写具体时间、地点、对白、情境例子或没有语态" in prompt
-    assert "不得追加第二个抽象收束 clause" in prompt
+    assert "抽象收束由后续" in prompt
     assert '"unit_contract": "recommendation"' in prompt
     assert '"unit_id": "unit:body-recommendation"' in prompt
     assert '"unit_contract": "abstract_observation"' in prompt
     assert "Writer-owned clause 不得让当前表达者或第一人称复数承担" in prompt
     assert "abstract_observation\n只写状态、判断、关系理解或比喻" in prompt
-
-
-def test_recommendation_clause_count_is_checked_before_reviewer() -> None:
-    request = _kernel_request()
-    kernel = _parsed_kernel(request, _kernel_writer())
-    mutated = replace(
-        kernel,
-        units=tuple(
-            replace(unit, text="可以先说清需要。关系仍然值得理解。")
-            if unit.unit_id == "unit:body-recommendation"
-            else unit
-            for unit in kernel.units
-        ),
-    )
-    assert request.narrative_frame is not None
-    context = BoundaryContext.from_request(
-        request,
-        request.narrative_frame,
-    )
-    issues = DeepSeekGenerator._kernel_structure_issues(
-        DeepSeekGenerator._kernel_clause_contexts(
-            request,
-            context,
-            mutated,
-        )
-    )
-
-    assert tuple(issue.reason for issue in issues) == (
-        "recommendation_clause_contract",
-    )
-    assert DeepSeekGenerator._kernel_repair_scope(
-        mutated,
-        issues,
-    ) == frozenset({"unit:body-recommendation"})
-    repair_prompt = _generator()._kernel_repair_prompt(
-        request,
-        mutated,
-        frozenset({"unit:body-recommendation"}),
-        issues,
-    )
-    assert '"unit_contract": "recommendation"' in repair_prompt
-    assert "recommendation unit 必须恰好一个" in repair_prompt
 
 
 def _kernel_observations(
