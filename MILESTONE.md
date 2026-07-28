@@ -1,27 +1,30 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-09` 单一创作内核与确定性成品编译闭环。
-- 状态：`ACTIVE`。`UI-08` 已在同一状态交接中置为 `SUPERSEDED → UI-09`；只表示
+- 状态：`BLOCKED`。`UI-08` 保持 `SUPERSEDED → UI-09`；只表示
   UI-08 中“Writer 同时生成叙事文字和制作字段”的路径由单一文字内核与确定性成品编译承接，
   不表示 UI-08 成功。UI-08 的 `BLOCKED`、两个 Writer `0/3`、Reviewer 未验证、未
   push/CI/部署与 root-only 证据原样保留。
 - 当前 Git 基线：启动 `HEAD=27f1e2e52c13fd83229a4a7c43da4992ae162731`，
-  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`；本地线性领先 5 个提交，
-  启动时工作树干净。
+  实现 `HEAD=0542ec880f046204521b8446d56e34ea560990a2`，
+  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`；线性历史未改写且尚未 push。
 - 生产启动复核：部署仓库仍为干净的 `845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，
   镜像 `diyu-saas:845f632…`、摘要 `sha256:1171b153cbc709a760caf4a5db1fb14fe00e0bca3ef9c7b79c85f737a3a6bdb9`，
   schema `20260801_28`，回环 readiness `ready`、公网 `200`，备份 timer `active`。
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
 - 当前任务包：`docs/UI-09-单一创作内核与确定性成品编译闭环执行包.md`
-- 当前目标：Writer 只生成服务端既定 `CreativeKernelV1` unit 文字；服务端逐字插入事实块，
-  Reviewer 只审内核，`DeliveryCompilerV1` 再以已审文字和登记资源确定性形成现有完整成品。
-- 剩余验收：内核、编译器、快照与 legacy 兼容实现；最小反证与 mutation proof；Reviewer
-  资格；当前 `deepseek-v4-flash` G3/G4/D1 单次预检；本地完整门与两审；全部成立后才可
-  push、CI、备份、部署、生产连续轮及往返回退。
-- 当前边界：结构与无持久化模型预检通过前不 push、不触发 CI、不部署、不修改生产、不创建
-  生产备份；不再调用 `deepseek-v4-pro`、第三模型或其他供应商。
-- 唯一下一动作：完成 `CreativeKernelV1` 与 `DeliveryCompilerV1` 的最小纵向结构及现有
-  pytest/Golden 反证，再进入当前 Writer 三卡单次预检。
+- 已完成：`CreativeKernelV1` 将 Writer 输出收窄为既定 `unit_id + text`，服务端逐字事实
+  unit 不可写；Reviewer 只审完整 unit 精确跨度；`DeliveryCompilerV1` 只使用已审文字、
+  版本化中性短语和登记资源；成功事务原子写版本与内核快照。无迁移，旧快照继续走 legacy
+  路径。ruff、mypy 与完整 Golden `199 passed`（含 OpenAPI）通过。
+- 真实阻断：同一实现 SHA 的受保护 `deepseek-v4-flash` Reviewer 资格为 `2/3`。A
+  “换位思考不等于没有边界”为 `abstract_principle`，B 饭桌微事件为 `situated_event`；
+  C “笛语相信婆媳关系需要换位思考”却被误分为 `abstract_principle`，服务端因此未能生成
+  `unsupported_institutional_assertion`。三次均 `temperature=0`、`max_retries=0`。
+- 停止边界：Reviewer 资格未达 `3/3` 后，G3/G4/D1 均未调用；没有第二修复、重跑、补
+  Prompt、再比较模型、push、CI、备份、部署或生产卡片。生产仍为上述安全版本。
+- 唯一下一动作：主控只裁决是否另开 **Reviewer 单角色 successor**；UI-09 内不补
+  Prompt、不改 Writer、不再次调用模型。
 
 ## UI-07 被 UI-08 取代结论（2026-07-28，历史完整保留）
 
