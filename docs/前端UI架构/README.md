@@ -7,8 +7,9 @@ UI-05 Gate A 返工候选已通过产品裁决，Gate B 正式 React/API 与 Gat
 修复完成唯一 CI、同 SHA 部署与定向生产复验。随后用户—系统创作责任合同在第二个结构候选
 的真实 DeepSeek 验收中命中停止线；UI-05 已 `SUPERSEDED → UI-06`。UI-06 的唯一生产
 候选又在 G1 把普通交流误建为内容任务，现已 `SUPERSEDED → UI-07`。UI-07 用服务端前置
-提交门替代模型 ready 的持久化授权；受保护无持久化预检在 G3 Writer 命中真实性停止线，
-当前为 `BLOCKED`：
+提交门替代模型 ready 的持久化授权，随后 `SUPERSEDED → UI-08`。UI-08 完成创作计划、
+事实／约束、服务端骨架和 Reviewer 观察类型分离，但当前与唯一候选 Writer 的三卡预检都
+失败，当前为 `BLOCKED`：
 
 - [UI-03 正式 React 产品骨架与内容主链执行包](../UI-03-正式React产品骨架与内容主链执行包.md)：
   已在不切换生产默认 UI 的边界内完成公共首页、三入口隔离壳与统一创作端，现为 `CLOSED`；
@@ -33,12 +34,18 @@ UI-05 Gate A 返工候选已通过产品裁决，Gate B 正式 React/API 与 Gat
   未执行；临时数据已精确清理，生产与远端运行树回 `845f632…` 安全内容。原 `UI06-D1`
   已被 UI-07 前置提交门裁决取代，历史原文保留；
 - [UI-07 自然创作提交门与叙事真实性闭环执行包](../UI-07-自然创作提交门与叙事真实性闭环执行包.md)：
-  当前为 `BLOCKED`。`creation-intent-gate-v1` 在任何业务写入和 Writer/Reviewer 前只接受
+  当前为 `SUPERSEDED → UI-08`，此前 `BLOCKED` 事实保留。`creation-intent-gate-v1`
+  在任何业务写入和 Writer/Reviewer 前只接受
   明确文本、主动“直接生成”或可信任务内修改；普通交流无虚假进度，模型 proposal 不授权。
   门后承接 Frame、四模式 Block、独立 Reviewer、确定性对账和一次块修复，不新增迁移或
   整体更换 DeepSeek。无持久化预检的 G1—G6/H1/D1 intake 结果成立，但 G3 Writer 仍补造
-  未提供微事件和品牌信念，唯一块修复后仍失败；未 push/CI/部署。唯一待决是只对 Writer
-  做无持久化有界模型对比；
+  未提供微事件和品牌信念，唯一块修复后仍失败；未 push/CI/部署；
+- [UI-08 创作计划、事实依据与叙事观察分离执行包](../UI-08-创作计划事实依据与叙事观察分离闭环执行包.md)：
+  当前为 `BLOCKED`。`CreativePlanV2`、fact/constraint 分离、服务端 block/scene 骨架及
+  abstract/situated/institutional 三类观察已实现，golden `173 passed`。当前
+  `deepseek-v4-flash` 与唯一候选 `deepseek-v4-pro` 在同输入、同 Prompt、同参数的
+  G3/G4/D1 单次 Writer-only 预检中均失败；未运行 Reviewer 资格、CI 或部署。唯一下一
+  裁决是是否另开 successor 重新设计 Writer 单角色策略；
 - [产品化HTML原型_UI-05](产品化HTML原型_UI-05/)：UI-05 Gate A 的管理员与租户用户两条
   独立旅程及可重放验证。它继续作为历史产品合同与产品裁决证据，不冒充正式实现；打开
   [review/index.html](产品化HTML原型_UI-05/review/index.html) 即可离线回看；
@@ -76,6 +83,6 @@ V1.0、评审意见和 PNG 预览同样只作历史参考；`prototype_verified`
   已完整收口；随后由真实使用证据触发的 UI-05 已完成 Gate A 产品裁决、Gate B 正式工程化
   和 Gate C 生产替换。UI-05 的历史关闭结论之后又出现三个直接生产 UI 缺口，现已完成极小
   前向修复；后续创作责任合同恢复命中候选 B 结构停止线并由 UI-06 取代。UI-06 唯一生产
-  候选又被真实 G1 否决，现已 `SUPERSEDED → UI-07`。UI-07 当前 `BLOCKED`：提交门反证
-  成立，但门后 G3 Writer 无持久化预检未通过。唯一下一动作是主控只裁决 Writer 角色的
-  有界模型对比。
+  候选又被真实 G1 否决，现已 `SUPERSEDED → UI-07`。UI-07 的提交门反证成立后
+  `SUPERSEDED → UI-08`；UI-08 结构成立但两个 Writer 都失败，当前 `BLOCKED`。唯一下一
+  动作是主控只裁决是否另开 successor 重新设计 Writer 单角色策略。

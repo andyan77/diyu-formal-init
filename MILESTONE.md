@@ -1,26 +1,31 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-08` 创作计划、事实依据与叙事观察分离闭环。
-- 状态：`ACTIVE`。`UI-07` 已在本次原子交接中置为 `SUPERSEDED → UI-08`；这只表示
+- 状态：`BLOCKED`。`UI-07` 已在本次原子交接中置为 `SUPERSEDED → UI-08`；这只表示
   UI-07 的自由文本创作计划、宽泛来源、模型自建骨架和混合 Reviewer 类型由 UI-08 的四项
   结构合同承接，不表示 UI-08 已成功。UI-07 的 Gate 成果、真实 G3 失败、`170 passed`、
   本地提交与 `BLOCKED` 证据全部保留。
-- 当前 Git 基线：本地 `HEAD=c4f2f22dd55def8998061e977cfba2517f4935e0`，
-  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，本地领先 3 个提交且启动时
-  工作树干净；UI-07 实现提交为 `03b710a2420397ac31d8d890a4ebc762f677232b`。
+- 当前 Git 基线：结构实现提交
+  `8c692ef8b18fa6fd5d23dad45c248a9367813fbc`，`origin/main` 仍为
+  `7aa87ab624cf3ff64f42e49f1755d66d496cac7a`；保留 UI-07 三个本地提交且未 push。
 - 生产启动复核：部署仓库仍为干净的 `845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，
   镜像 `diyu-saas:845f632…`、摘要 `sha256:1171b153cbc709a760caf4a5db1fb14fe00e0bca3ef9c7b79c85f737a3a6bdb9`，
   schema `20260801_28`，回环 readiness `ready`、公网 `200`。UI-07 未 push、CI 或部署。
-- 当前目标：先以 `CreativePlanV2`、`fact_refs/constraint_refs`、服务端确定性 block/scene
-  骨架及 `abstract_principle/situated_event/institutional_assertion` 修复四项共享结构；
-  结构测试通过后才用当前 DeepSeek Writer 对 G3/G4/D1 各做一次无持久化原始输出预检。
+- 已完成结构：`CreativePlanV2`、`fact_refs/constraint_refs`、服务端确定性 block/scene
+  骨架及 `abstract_principle/situated_event/institutional_assertion` 已进入共享合同；
+  `make golden` 为 `173 passed` 且 OpenAPI 一致，无迁移。
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
 - 当前任务包：`docs/UI-08-创作计划事实依据与叙事观察分离闭环执行包.md`
-- 剩余验收：四项结构反证、当前 Writer 三卡、条件性唯一候选 Writer 对比、Reviewer 三条
-  资格样本、完整复审、G7 不变量、最终本地门、两审、唯一 CI、同 SHA 生产验收与回退。
-- 当前边界：结构与真实模型预检全部通过前不 push、不触发 CI、不部署、不修改生产；不立即
-  换模，不补现有 Prompt，不增加第二候选、fallback、迁移或测试平台。
-- 唯一下一动作：完成四项结构合同和既有体系内的最小反证，再进入当前 Writer 单次预检。
+- 阻断证据：同实现 SHA、同 Prompt、同参数、每卡一次的无持久化 Writer-only 预检中，
+  当前 `deepseek-v4-flash` 与唯一候选 `deepseek-v4-pro` 的 G3/G4/D1 均未通过。
+  当前 Writer 补造微事件、关系动机、机构主张和未登记资源；候选 G3/D1 又因完整制作字段
+  为空无法编译，候选 G4 仍补造双方疲惫并写入无依据“笛语相信”。两者都失败的停止线成立。
+- 未执行验收：Reviewer 三条资格样本、完整 G3/G4/D1 复审、G1—G7/H1/D1 生产轮、两份
+  生产候选审查、承重 CI、部署、备份恢复和往返回退均未执行，不能拼接为通过。
+- 当前边界：不 push、不触发 CI、不部署、不修改生产；不运行 Reviewer 来掩盖 Writer 失败，
+  不增加第三模型、fallback、重跑、第二修复、固定成稿或降低事实边界。
+- 唯一下一动作：主控只裁决是否另开 successor，重新设计 **Writer 单角色** 的生成策略；
+  UI-08 内不得增加第三模型或并行 fallback。
 
 ## UI-07 被 UI-08 取代结论（2026-07-28，历史完整保留）
 
