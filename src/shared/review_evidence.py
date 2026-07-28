@@ -37,7 +37,6 @@ _INSTITUTIONAL_DESIGNATORS = frozenset(
 )
 _CURRENT_REALITY_PREFIXES = (
     "我家",
-    "我的",
     "我们家",
     "本店",
     "我们店",
@@ -240,7 +239,7 @@ def build_clause_contexts_v2(
     speaker_kind: SpeakerKind,
 ) -> tuple[ClauseContextV2, ...]:
     """Build the only trusted source/contract sidecar for a new kernel review."""
-    contracts = _unit_contracts_v2(kernel, frame)
+    contracts = unit_contracts_v2(kernel, frame)
     fact_by_id = {record.fact_id: record for record in fact_registry}
     contexts: list[ClauseContextV2] = []
     for unit in kernel.units:
@@ -977,7 +976,7 @@ def reconcile_review_evidence_v2(
     return tuple(dict.fromkeys(issues))
 
 
-def _unit_contracts_v2(
+def unit_contracts_v2(
     kernel: CreativeKernelV1,
     frame: NarrativeFrame,
 ) -> dict[str, UnitContractV2]:

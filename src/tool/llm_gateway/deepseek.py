@@ -64,6 +64,7 @@ from src.shared.review_evidence import (
     reconcile_review_evidence_v2,
     review_clauses_from_contexts,
     review_evidence_v2_json_schema,
+    unit_contracts_v2,
     validate_server_owned_contexts_v2,
     writer_clause_contexts_v2,
 )
@@ -1017,6 +1018,8 @@ class DeepSeekGenerator(ContentGenerator):
     ) -> str:
         if request.creative_plan is None:
             raise GenerationFailed("CreativeKernelV1 缺少 CreativePlanV2")
+        if request.narrative_frame is None:
+            raise GenerationFailed("CreativeKernelV1 缺少冻结叙事框架")
         fact_units = [
             {
                 "unit_id": unit.unit_id,
@@ -1033,10 +1036,15 @@ class DeepSeekGenerator(ContentGenerator):
                 )
             )
         ]
+        trusted_contracts = unit_contracts_v2(
+            skeleton,
+            request.narrative_frame,
+        )
         writable = [
             {
                 "unit_id": unit.unit_id,
                 "purpose": unit.purpose,
+                "unit_contract": trusted_contracts[unit.unit_id],
                 "allowed_observation_types": list(
                     unit.allowed_observation_types
                 ),
@@ -1089,7 +1097,9 @@ scene、actor、resource、action、sound、production_note、发布结构或语
 不得增加、遗漏、重复或修改 id，不得输出任何制作字段、来源、事实、约束、类型或内部规则。
 title 是自然标题；natural_guide 给出清楚主线和观看回报；按可见顺序排列的一个或多个 body
 单元共同组成完整核心正文；release_caption 是可直接使用的发布配文收束，不能只是提纲。
-allowed_observation_types 是服务端边界：abstract_principle 可以表达抽象判断、观点、比喻和
+unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一合同；每个以句号、
+问号、叹号或分号分隔的可见 clause 都必须遵守所在 unit 的同一个 unit_contract，不得根据
+准备填写的文字改合同。allowed_observation_types 只保留兼容信息。abstract_principle 可以表达抽象判断、观点、比喻和
 幽默，但不能写具体或隐含人物发生的微事件；hypothesis 可以写推演但不要自行添加“假设”标识，
 服务端会包裹；hypothesis 可以使用一般虚构人物、动作和关系，但不能绑定用户、当前表达方、
 真实员工、顾客、门店或已经发生的历史。dramatization 必须写成完整虚构情境，但不要自行添加

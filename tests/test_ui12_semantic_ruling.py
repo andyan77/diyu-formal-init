@@ -1117,6 +1117,35 @@ def test_unique_context_quote_preserves_institutional_subject_binding() -> None:
     )
 
 
+def test_hypothesis_full_quote_keeps_fictional_dialogue_separate_from_user() -> None:
+    text = "婆婆觉得“我帮你干活”，媳妇觉得“这是我的边界”。"
+    contexts = _manual_context(text, "hypothetical_example")
+    evidence = _evidence(
+        contexts,
+        target_fragment=text,
+        subject=(text,),
+        dialogue=(text,),
+    )
+
+    assert _reasons(contexts, evidence) == ()
+
+
+def test_hypothesis_full_quote_still_rejects_current_household_binding() -> None:
+    text = "如果我家先停一下。"
+    contexts = _manual_context(text, "hypothetical_example")
+    evidence = _evidence(
+        contexts,
+        target_fragment=text,
+        subject=(text,),
+        action=(text,),
+        modality=(text,),
+    )
+
+    assert _reasons(contexts, evidence) == (
+        "unsupported_actuality_binding",
+    )
+
+
 def test_program_contract_sidecar_ignores_kernel_self_reported_type() -> None:
     frame, kernel, contexts = _frame_and_kernel(mode="hypothesis")
     body = kernel.unit("unit:body")

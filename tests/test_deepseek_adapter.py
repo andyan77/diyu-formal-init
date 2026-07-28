@@ -523,6 +523,9 @@ def test_kernel_writer_prompt_explains_recommendation_contract() -> None:
 
     assert "recommendation 必须用清楚可见的建议、" in prompt
     assert "不能写成没有语态标记的裸动作、对白或已经发生的例子" in prompt
+    assert '"unit_contract": "recommendation"' in prompt
+    assert '"unit_id": "unit:body-closing"' in prompt
+    assert '"unit_contract": "abstract_observation"' in prompt
 
 
 def _kernel_observations(
