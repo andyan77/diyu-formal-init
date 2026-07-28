@@ -460,20 +460,27 @@ def review_evidence_v2_json_schema(
     text_schema: dict[str, object] = {
         "type": "string",
         "description": (
-            "Exact source quote occurring exactly once in this clause. "
-            "When a short phrase repeats, include neighboring source text "
-            "until the quote is unique; never return an address or index."
+            "Exact evidence text copied from the selected context_quote; "
+            "never return an address or index."
+        ),
+    }
+    context_schema: dict[str, object] = {
+        "type": "string",
+        "description": (
+            "Server-provided exact context quote that occurs once in the "
+            "source clause and contains this evidence text exactly once."
         ),
     }
     unique_quotes = tuple(dict.fromkeys(allowed_quotes))
     if unique_quotes:
-        text_schema["enum"] = list(unique_quotes)
+        context_schema["enum"] = list(unique_quotes)
     span_schema: dict[str, object] = {
         "type": "object",
         "properties": {
             "text": text_schema,
+            "context_quote": context_schema,
         },
-        "required": ["text"],
+        "required": ["text", "context_quote"],
         "additionalProperties": False,
     }
 
@@ -1401,15 +1408,25 @@ def _quote_tuple(
         raise TypeError("review evidence quote spans are invalid")
     spans: list[SpanOccurrence] = []
     for raw in value:
-        if not isinstance(raw, Mapping) or frozenset(raw) != {"text"}:
+        if not isinstance(raw, Mapping) or frozenset(raw) != {
+            "text",
+            "context_quote",
+        }:
             raise TypeError("review evidence quote span is invalid")
         text = raw.get("text")
-        if not isinstance(text, str) or not text:
+        context_quote = raw.get("context_quote")
+        if (
+            not isinstance(text, str)
+            or not text
+            or not isinstance(context_quote, str)
+            or not context_quote
+        ):
             raise TypeError("review evidence quote span fields are invalid")
-        starts = _exact_match_starts(exact_text, text)
-        if len(starts) != 1:
+        context_starts = _exact_match_starts(exact_text, context_quote)
+        focus_starts = _exact_match_starts(context_quote, text)
+        if len(context_starts) != 1 or len(focus_starts) != 1:
             raise TypeError("review evidence quote cannot be uniquely resolved")
-        start = starts[0]
+        start = context_starts[0] + focus_starts[0]
         spans.append(
             SpanOccurrence(
                 text=text,

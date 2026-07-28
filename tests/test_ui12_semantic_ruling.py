@@ -213,6 +213,9 @@ def _raw_v2_evidence(
     span: dict[str, object],
     uncertain: bool = False,
 ) -> dict[str, object]:
+    resolved_span = dict(span)
+    if frozenset(resolved_span) == {"text"}:
+        resolved_span["context_quote"] = text
     return {
         "evidence_version": REVIEW_EVIDENCE_V2_VERSION,
         "clauses": [
@@ -221,7 +224,7 @@ def _raw_v2_evidence(
                 "exact_text": text,
                 "subject_spans": [],
                 "predicate_spans": [],
-                "action_or_event_spans": [span],
+                "action_or_event_spans": [resolved_span],
                 "dialogue_spans": [],
                 "motive_spans": [],
                 "cause_spans": [],
@@ -1015,8 +1018,14 @@ def test_quote_parser_binds_one_exact_quote_and_computes_unicode_offset() -> Non
                     "subject_spans": [],
                     "predicate_spans": [],
                     "action_or_event_spans": [
-                        {"text": "她先停了一下"},
-                        {"text": "后来又停了一下"},
+                        {
+                            "text": "停了一下",
+                            "context_quote": "她先停了一下",
+                        },
+                        {
+                            "text": "停了一下",
+                            "context_quote": "后来又停了一下",
+                        },
                     ],
                     "dialogue_spans": [],
                     "motive_spans": [],
@@ -1039,7 +1048,7 @@ def test_quote_parser_binds_one_exact_quote_and_computes_unicode_offset() -> Non
     assert tuple(
         (span.start, span.end)
         for span in evidence.clauses[0].action_or_event_spans
-    ) == ((0, 6), (7, 14))
+    ) == ((2, 6), (10, 14))
 
 
 def test_repeated_short_quote_fails_until_context_is_unique() -> None:
@@ -1104,8 +1113,8 @@ def test_unique_context_quote_preserves_institutional_subject_binding() -> None:
     assert isinstance(clauses, list)
     clause = clauses[0]
     assert isinstance(clause, dict)
-    clause["subject_spans"] = [{"text": text}]
-    clause["predicate_spans"] = [{"text": text}]
+    clause["subject_spans"] = [{"text": text, "context_quote": text}]
+    clause["predicate_spans"] = [{"text": text, "context_quote": text}]
     clause["action_or_event_spans"] = []
     evidence = parse_review_evidence_v2(
         raw,

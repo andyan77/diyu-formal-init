@@ -1131,11 +1131,12 @@ unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一�
 {json.dumps(targets, ensure_ascii=False)}
 
 每个 clause_id 必须按 visible_order 恰好返回一次，exact_text 必须逐字等于对应完整 clause，
-不得截短或抄写其他 clause。每个 span 只返回 text，且 text 必须从 strict schema
-为本批 clause 提供的 exact quote enum 中选择，并且是当前 clause 中与该证据直接对应的
-逐字原文。该 enum 由服务端预先按标点生成，候选都已在其来源 clause 内唯一；优先选择包含
-该证据的最短候选，必要时可选择完整 clause。不得自行缩短、拼接或创造候选。服务端仍会校验
-所选 quote 是否属于当前 clause 且恰好出现一次。同一 evidence 数组中的同一 quote 只返回一次。
+不得截短或抄写其他 clause。每个 span 返回 text 与 context_quote：text 是与该证据直接
+对应的逐字原文；context_quote 必须从 strict schema 为本批 clause 提供的 enum 中选择。
+该 enum 由服务端预先按标点生成，候选都已在其来源 clause 内唯一。选择当前 clause 中包含
+text 且 text 在其中只出现一次的最短 context_quote，必要时可选择完整 clause。不得自行缩短、
+拼接或创造 context_quote。服务端会同时校验 context_quote 属于当前 clause 且唯一、text
+属于 context_quote 且唯一。同一 evidence 数组中的同一 text/context_quote 组合只返回一次。
 只有无法可靠判断证据类别、无法形成唯一原文 quote，或 implicit_subject 确实无法确定时，
 才返回 uncertain=true；不要猜测，也不得为了避免 uncertain 而遗漏可见证据。不要计算或返回
 start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
@@ -1156,7 +1157,7 @@ uncertain=true。
 只返回：
 {{"evidence_version":"{REVIEW_EVIDENCE_V2_VERSION}","clauses":[{{
 "clause_id":"既定 id","exact_text":"完整 clause 原文",
-"subject_spans":[{{"text":"当前 clause 中唯一可定位的主体原文"}}],
+"subject_spans":[{{"text":"主体逐字原文","context_quote":"包含主体且唯一的服务端候选"}}],
 "predicate_spans":[],"action_or_event_spans":[],
 "dialogue_spans":[],"motive_spans":[],"cause_spans":[],"result_spans":[],
 "time_spans":[],"location_spans":[],

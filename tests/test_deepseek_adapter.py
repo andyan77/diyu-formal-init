@@ -574,6 +574,7 @@ def _kernel_observations(
                     [
                         {
                             "text": clause.exact_text,
+                            "context_quote": clause.exact_text,
                         }
                     ]
                     if is_event
@@ -586,6 +587,7 @@ def _kernel_observations(
                     [
                         {
                             "text": clause.exact_text,
+                            "context_quote": clause.exact_text,
                         }
                     ]
                     if is_event
@@ -598,6 +600,7 @@ def _kernel_observations(
                         [
                             {
                                 "text": modality,
+                                "context_quote": clause.exact_text,
                             }
                         ]
                         if modality is not None

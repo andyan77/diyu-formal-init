@@ -78,7 +78,10 @@ def _evidence_document() -> dict[str, object]:
                 "exact_text": "换位思考不等于没有边界。",
                 "subject_spans": [],
                 "predicate_spans": [
-                    {"text": "不等于"}
+                    {
+                        "text": "不等于",
+                        "context_quote": "换位思考不等于没有边界。",
+                    }
                 ],
                 "action_or_event_spans": [],
                 "dialogue_spans": [],
@@ -177,8 +180,10 @@ def test_strict_schema_requires_every_nested_object_field() -> None:
     text_property = span_properties["text"]
     assert isinstance(text_property, dict)
     assert text_property["type"] == "string"
-    assert "exactly once" in str(text_property["description"])
-    assert span["required"] == ["text"]
+    context_property = span_properties["context_quote"]
+    assert isinstance(context_property, dict)
+    assert "occurs once" in str(context_property["description"])
+    assert span["required"] == ["text", "context_quote"]
 
 
 def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
@@ -235,9 +240,15 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
     assert span_properties["text"] == {
         "type": "string",
         "description": (
-            "Exact source quote occurring exactly once in this clause. "
-            "When a short phrase repeats, include neighboring source text "
-            "until the quote is unique; never return an address or index."
+            "Exact evidence text copied from the selected context_quote; "
+            "never return an address or index."
+        ),
+    }
+    assert span_properties["context_quote"] == {
+        "type": "string",
+        "description": (
+            "Server-provided exact context quote that occurs once in the "
+            "source clause and contains this evidence text exactly once."
         ),
         "enum": [
             "换位思考不等于没有边界",
@@ -269,9 +280,10 @@ def test_reviewer_requires_unique_source_quotes_without_model_addresses() -> Non
         )
     )
 
-    assert "exact quote enum 中选择" in prompt
+    assert "text 与 context_quote" in prompt
+    assert "context_quote 必须从 strict schema" in prompt
     assert "候选都已在其来源 clause 内唯一" in prompt
-    assert "不得自行缩短、拼接或创造候选" in prompt
+    assert "不得自行缩短、\n拼接或创造 context_quote" in prompt
     assert "不要计算或返回\nstart/end/occurrence" in prompt
 
 
