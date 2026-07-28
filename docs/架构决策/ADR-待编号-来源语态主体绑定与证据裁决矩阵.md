@@ -1,0 +1,189 @@
+# ADR-待编号：来源、语态、主体绑定与证据裁决矩阵
+
+- 状态：**候选／待主控裁决**
+- 日期：2026-07-28
+- 来源诊断：
+  [UI11-D1 来源、语态、主体绑定与证据裁决收敛审计](../UI-11-语义裁决收敛诊断.md)
+- 当前阻断：UI-11 `BLOCKED`
+- 本文不是已接受 ADR，不授权 UI-12 开工。
+
+## 背景
+
+UI-07—UI-10 已依次关闭模型 ready 直接写入、约束冒充事实、Writer 生成制作条件、Reviewer
+类型标签决定通过等问题。UI-11 把一般虚构情境放进服务端所有的 hypothesis program 后，
+真实 G3 仍失败：
+
+- 服务端插入的“假设有这样一幕：”被当成当前机构主张；
+- 泛指原则与建议只因 action/cause/result span 非空，被当成已发生微事件；
+- Reviewer clause 覆盖完整、跨度精确、无 uncertain。
+
+现有 `ReviewEvidenceV1` 没有来源、unit contract、subject binding，也没有情态/体貌证据。
+来源和 contract 本应由服务端掌握，不应交给 Reviewer；情态/体貌是 Reviewer 可提取的原文
+证据，但不能让 Reviewer恢复 observation type 或 pass/fail 权。
+
+## 决策候选
+
+### 1. 先来源，再语义
+
+服务端为每个可见 clause 保存只在服务端使用的 sidecar：
+
+- `text_source`：`server_wrapper`、`frozen_user_fact`、`frozen_brand_fact`、
+  `frozen_product_fact`、`writer_unit`；
+- `unit_contract`：`abstract_observation`、`recommendation`、
+  `hypothetical_example`、`disclosed_dramatization`、
+  `actuality_reflection`、`frozen_fact`；
+- `unit_id/clause_id/exact_text/visible_order`。
+
+这些值由 program、unit、Frame、fact kind 与服务端组装顺序确定；Writer 和 Reviewer 都不能
+返回或修改。相同字面只有 `server_wrapper` 来源才获得 wrapper 资格。
+
+program validator 必须消费同一份 Frame 派生 contract；不得再把
+`observation_only_v1` 的单 body 固定解释为 `abstract_principle`。H1 的 `hypothesis` 与
+D1 的 `dramatization` 都由 Frame 和 server wrapper 授权。
+
+### 2. 主体绑定归服务端
+
+服务端使用可信 scope、精确 protected names、fact_ref、speaker scope、unit contract 与
+Reviewer exact subject evidence 派生：
+
+- `none`；
+- `generic`；
+- `fictional_role`；
+- `current_person`；
+- `current_institution`；
+- `protected_exact_subject`。
+
+Reviewer 不决定主体属于谁。无法唯一绑定时返回 `insufficient_evidence`，不扩充题材、人物或
+中文失败句词表。
+
+### 3. ReviewEvidence 最小升级
+
+保留现有 subject、predicate、action/event、dialogue、motive、cause、result、time、
+location、implicit subject 与 uncertain。新版本只增加一个顶层字段：
+
+```json
+{
+  "grammatical_marker_spans": {
+    "modality": [],
+    "aspect": []
+  }
+}
+```
+
+所有成员仍须为 `exact_text` 的真实精确子串。Reviewer 只做 evidence extraction，不返回：
+
+- observation type；
+- subject binding；
+- factuality；
+- pass/fail；
+- 资源；
+- 修复建议。
+
+`ReviewEvidenceV1` 继续用于 legacy/历史证据，不批量回填或改写。
+
+### 4. 裁决顺序固定
+
+1. evidence ID、原文、顺序、跨度、uncertain；
+2. source 与 program/unit 结构；
+3. frozen fact 唯一 fact_ref 和逐字来源；
+4. protected/current/generic/fictional subject binding；
+5. unit contract；
+6. modality/aspect 与 action/dialogue/cause/result/time/location 组合；
+7. DeliveryCompiler provenance 与 resource registry。
+
+冻结事实只做结构来源核验，不因普通语义 evidence 被二次否决。server wrapper 只做结构核验，
+不成为机构主张。writer clause 出现 current institution + predicate 且无 frozen brand fact
+时拒绝。
+
+### 5. 一般表达规则
+
+- `recommendation + generic`：允许动作；出现现实时间、地点、对白、current/protected binding
+  或已完成体貌时拒绝；
+- `abstract_observation`：允许抽象 predicate 及不带具体情境的泛指 cause/result；具体
+  action 与 time/location/dialogue/aspect 组合时拒绝；
+- `hypothetical_example + server_wrapper + fictional/generic`：允许动作、关系与对白；绑定
+  current/protected subject 时拒绝；
+- `disclosed_dramatization`：只由服务端 disclosure 授权，真实主体边界不变；
+- `actuality_reflection`：现实原文只来自 frozen user fact，Writer 只能写不新增现实的反思
+  或建议；
+- 证据不足时 `insufficient_evidence`，不得送 Writer 猜测性修复。
+
+完整有效组合以诊断文档的 SDR-001—SDR-037 为规范性候选。
+
+### 6. Reviewer 证据的证明边界
+
+exact span 能证明“Reviewer 指出的文字确实存在”，不能形式证明“未返回的语义不存在”。
+因此：
+
+- clause 覆盖与 exact-text 覆盖不能冒充语义类别完整性；
+- 不新增 `complete=true` 之类自报字段；
+- 服务端只在 source/contract/binding/evidence 的正向组合足够时 allow；
+- 其余组合 fail closed，并在证据中保留 `insufficient_evidence`。
+
+### 7. 制作职责不变
+
+叙事人物、地点、道具和声音永远不自动成为制作资源。DeliveryCompiler 仍只能投影：
+
+- 已审 CreativeKernel unit；
+- 服务端中性编译短语；
+- 冻结允许资源。
+
+本 ADR 不改变 Writer 输出或 DeliveryCompiler 业务职责。
+
+## 选项比较
+
+### 选项 A：只改服务端现有 V1 组合
+
+优点：改动最少。
+
+缺点：无法稳定区分“婆婆要尊重儿媳”和“婆婆尊重了儿媳”，只能读取汉字写规则表或继续
+过拒绝。不能关闭已证明的语态缺口。
+
+结论：不推荐。
+
+### 选项 B：服务端 source/contract/binding + 最小 grammatical evidence
+
+优点：保留单一服务端裁决；精确解决已出现的 wrapper、泛指建议和完成体问题；不改变 Writer、
+模型、Compiler、数据表或外部合同；可用现存 raw 离线重放。
+
+缺点：需要 `ReviewEvidenceV2` 与兼容解析；模型 evidence extraction 仍不是形式化 NLP 证明，
+不可判定组合必须保守停止。
+
+结论：**推荐，待主控确认。**
+
+### 选项 C：让 Reviewer 恢复类型或 pass/fail
+
+优点：表面实现简单。
+
+缺点：复活 UI-09 C 的假绿根因，服务端重新失去最终裁决权。
+
+结论：拒绝。
+
+## 影响
+
+如果接受：
+
+- UI-12 只实施一个服务端纵向闭环和一个 evidence 版本扩展；
+- 旧任务、V1 evidence、legacy ReviewerObservation、数据库与 OpenAPI 不变；
+- 必须新增正负/不足三类消费者，不再只测 allow/reject；
+- Reviewer 资格失败、来源错误、frozen fact、compiler/resource 错误均不可进入 Writer 修复。
+
+如果不接受：
+
+- UI-11 继续 `BLOCKED`；
+- 不再重跑 G3，不换模型，不建设第二 Reviewer；
+- 主控需给出另一项能够区分已证明四句反例、又不依赖词表的单一裁决。
+
+## 最迟裁决点
+
+在修改 `ReviewEvidenceV1`、`ReviewClause` 或服务端 reconcile 代码之前。当前没有可与裁决无关
+而继续推进的软件施工。
+
+## 明确不做
+
+- 不改 Writer Prompt、输出或创作策略；
+- 不比较/更换模型，不加 fallback、重试层或第二 Reviewer；
+- 不加题材、人物、失败句或中文词表；
+- 不加表、迁移、工作流、DIFY、微服务、队列或审查平台；
+- 不放宽真人、品牌、商品、租户、隐私或资源边界；
+- 不把本候选状态写成已接受。

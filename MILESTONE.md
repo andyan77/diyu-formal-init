@@ -18,6 +18,14 @@
   `200`，备份 timer `active`。本执行环境直连公网超时，未被误写为生产失败。
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
 - 当前任务包：`docs/UI-11-一般情境与真人事实隔离闭环执行包.md`
+- UI11-D1 诊断：`来源、语态、主体绑定与证据裁决收敛审计` 已在不修改运行代码、不调用
+  模型、不连接业务仓储和不触碰生产数据的边界内完成。诊断真源为
+  [`docs/UI-11-语义裁决收敛诊断.md`](docs/UI-11-语义裁决收敛诊断.md)；
+  [`ADR-待编号-来源语态主体绑定与证据裁决矩阵.md`](docs/架构决策/ADR-待编号-来源语态主体绑定与证据裁决矩阵.md)
+  与 [`docs/UI-12-候选实现范围.md`](docs/UI-12-候选实现范围.md) 均为候选／待主控裁决，
+  不表示 UI-12 已启动。诊断起点为
+  `HEAD=a24231583c8a2e12e17f0cfb2432a23c0e513563`、本地领先 14、工作树干净；
+  `origin/main` 仍为 `7aa87ab624cf3ff64f42e49f1755d66d496cac7a`。
 - 冻结能力：CreationIntentGate、CreativePlanV2、NarrativeFrame、CreativeKernelV1、
   ReviewEvidenceV1、服务端事实裁决、DeliveryCompilerV1、服务端逐字事实、最多一次
   affected-unit 修复、legacy 路径、RLS、DM01、AIGC 与资产 `41/243/25/119` 不得回退。
@@ -32,9 +40,16 @@
   五项 issue，命中停止线。
 - 未执行：G4、D1、完整 G1—G7/H1/D1、最终前端门、两份候选审查、push、CI、备份、部署、
   生产验收与回退。生产未改，继续运行 `845f632…`。
-- 唯一下一动作：主控裁决一个**服务端裁决单角色 successor**，只修“服务端所有的假设标识
-  不得成为机构主张”和“泛指原则／建议不得被等同为已发生微事件”的确定性语义；不得重跑
-  UI-11 G3、改 Writer 策略、换模型或形成 fallback。
+- 诊断结论：20 个目标 case bundle 中，UI-08—UI-11 有 16 个 root-only raw bundle
+  （20 份 raw response）可重放；UI-07 的 4 个 bundle 没有历史 raw，其中 G1 仅有确定性
+  seam 可重放。当前 `ReviewEvidenceV1` 能证明 clause/跨度存在，不能区分建议、条件与已完成
+  事实；候选最小扩展是单一 `grammatical_marker_spans` 字段，并由服务端恢复 clause 来源、
+  unit contract 与可信主体绑定。
+- 额外相邻接缝：当前单 body program validator 把允许类型硬编码为 abstract，导致合法
+  H1/D1 结构离线即报 `kernel_program_drift`；该缺口归入同一服务端 contract 真源收敛，
+  不另开 Writer 或模型问题。
+- 唯一下一动作：主控审阅并裁决 UI11-D1 的 SDR-001—SDR-037 语义决策表。未确认前不得
+  重跑 UI-11 G3、修改运行代码、启动 UI-12、改 Writer、换模型或形成 fallback。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
