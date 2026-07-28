@@ -171,7 +171,12 @@ def test_strict_schema_requires_every_nested_object_field() -> None:
     assert isinstance(predicate_spans, dict)
     span = predicate_spans["items"]
     assert isinstance(span, dict)
-    assert span["properties"] == {"text": {"type": "string"}}
+    span_properties = span["properties"]
+    assert isinstance(span_properties, dict)
+    text_property = span_properties["text"]
+    assert isinstance(text_property, dict)
+    assert text_property["type"] == "string"
+    assert "exactly once" in str(text_property["description"])
     assert span["required"] == ["text"]
 
 
@@ -182,10 +187,6 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
         "system",
         "prompt",
         clause_count=25,
-        allowed_quotes=(
-            "换位思考不等于没有边界。",
-            "婆婆要尊重儿媳。",
-        ),
     )
 
     assert payload == _FakeClient.response.json()
@@ -228,10 +229,11 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
     assert isinstance(span_properties, dict)
     assert span_properties["text"] == {
         "type": "string",
-        "enum": [
-            "换位思考不等于没有边界。",
-            "婆婆要尊重儿媳。",
-        ],
+        "description": (
+            "Exact source quote occurring exactly once in this clause. "
+            "When a short phrase repeats, include neighboring source text "
+            "until the quote is unique; never return an address or index."
+        ),
     }
 
 
@@ -246,7 +248,7 @@ def test_reviewer_token_budget_is_deterministic_and_hard_capped() -> None:
         generator._review_max_tokens(0)
 
 
-def test_full_clause_quote_does_not_itself_require_uncertain() -> None:
+def test_reviewer_requires_unique_source_quotes_without_model_addresses() -> None:
     prompt = DeepSeekGenerator._kernel_reviewer_prompt(
         (
             ReviewClause(
@@ -258,9 +260,9 @@ def test_full_clause_quote_does_not_itself_require_uncertain() -> None:
         )
     )
 
-    assert "完整 quote 同时含有其他文字不构成\nuncertain" in prompt
-    assert "多个证据或多重主张可以让同一完整 clause quote 分别出现在" in prompt
-    assert "只有证据类别或隐含主体本身无法可靠判断时才" in prompt
+    assert "每个 quote 在当前 clause 中必须恰好出现一次" in prompt
+    assert "连同相邻原文扩展成可唯一定位的较长 quote" in prompt
+    assert "不要计算或返回\nstart/end/occurrence" in prompt
 
 
 @pytest.mark.parametrize(

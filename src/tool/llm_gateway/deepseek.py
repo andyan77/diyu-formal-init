@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from typing import Any, cast
@@ -912,9 +912,6 @@ class DeepSeekGenerator(ContentGenerator):
                 review_clauses_from_contexts(writer_contexts)
             ),
             clause_count=len(writer_contexts),
-            allowed_quotes=tuple(
-                context.exact_text for context in writer_contexts
-            ),
             timeout_seconds=self._review_timeout_seconds,
         )
         try:
@@ -1130,13 +1127,12 @@ unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一�
 {json.dumps(targets, ensure_ascii=False)}
 
 每个 clause_id 必须按 visible_order 恰好返回一次，exact_text 必须逐字等于对应完整 clause，
-不得截短或抄写其他 clause。每个 span 只返回 text，且 text 必须逐字等于当前这一项的完整
-exact_text；不要返回单个词或局部短语。这里的完整 clause 是证据的唯一地址：当该 clause
-确实含有某类证据时，把完整 clause 放入对应数组；完整 quote 同时含有其他文字不构成
-uncertain。strict schema 只允许服务端给出的完整 clause 原文，服务端还会校验 quote 是否属于
-当前 clause。同一 evidence 数组中的同一 quote 只返回一次。只有无法可靠判断整个 clause
-是否含有某类证据，或 implicit_subject 确实无法确定时，才返回 uncertain=true；不要猜测，
-也不得为了避免 uncertain 而遗漏可见证据。不要计算或返回
+不得截短或抄写其他 clause。每个 span 只返回 text，且 text 必须是当前 clause 中与该证据
+直接对应的逐字原文。每个 quote 在当前 clause 中必须恰好出现一次；短词或短语重复时，必须
+连同相邻原文扩展成可唯一定位的较长 quote，完整 clause 始终是允许的最宽上下文。不得返回
+在当前 clause 中出现零次或多次的 quote。同一 evidence 数组中的同一 quote 只返回一次。
+只有无法可靠判断证据类别、无法形成唯一原文 quote，或 implicit_subject 确实无法确定时，
+才返回 uncertain=true；不要猜测，也不得为了避免 uncertain 而遗漏可见证据。不要计算或返回
 start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
 - subject_spans：句中明确作为陈述主体的人、代词、机构或事物；
 - predicate_spans：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；
@@ -1148,14 +1144,14 @@ start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 
 
 implicit_subject 只选 none、current_speaker、generic、uncertain。句中有明确主体时通常为
 none；省略主体但由当前说话者承担谓语时为 current_speaker；泛指任何人时为 generic；
-无法可靠判断时为 uncertain。多个证据或多重主张可以让同一完整 clause quote 分别出现在
-不同证据数组中；这不构成地址歧义。只有证据类别或隐含主体本身无法可靠判断时才
+无法可靠判断时为 uncertain。同一段原文确实同时构成多类证据时，可以让同一个唯一 quote
+分别出现在不同证据数组中。只有证据类别、唯一 quote 或隐含主体本身无法可靠判断时才
 uncertain=true。
 
 只返回：
 {{"evidence_version":"{REVIEW_EVIDENCE_V2_VERSION}","clauses":[{{
 "clause_id":"既定 id","exact_text":"完整 clause 原文",
-"subject_spans":[{{"text":"当前项的完整 clause exact_text"}}],
+"subject_spans":[{{"text":"当前 clause 中唯一可定位的主体原文"}}],
 "predicate_spans":[],"action_or_event_spans":[],
 "dialogue_spans":[],"motive_spans":[],"cause_spans":[],"result_spans":[],
 "time_spans":[],"location_spans":[],
@@ -2256,9 +2252,7 @@ CreativePlanV2：{json.dumps(
         return f"{beta_url}/chat/completions"
 
     @staticmethod
-    def _strict_review_tool(
-        allowed_quotes: Sequence[str] = (),
-    ) -> dict[str, object]:
+    def _strict_review_tool() -> dict[str, object]:
         return {
             "type": "function",
             "function": {
@@ -2268,7 +2262,7 @@ CreativePlanV2：{json.dumps(
                     "server-provided writer clause."
                 ),
                 "strict": True,
-                "parameters": review_evidence_v2_json_schema(allowed_quotes),
+                "parameters": review_evidence_v2_json_schema(),
             },
         }
 
@@ -2327,7 +2321,6 @@ CreativePlanV2：{json.dumps(
         prompt: str,
         *,
         clause_count: int,
-        allowed_quotes: Sequence[str] = (),
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
         request_payload: dict[str, Any] = {
@@ -2339,7 +2332,7 @@ CreativePlanV2：{json.dumps(
             "temperature": 0.0,
             "max_tokens": self._review_max_tokens(clause_count),
             "thinking": {"type": "disabled"},
-            "tools": [self._strict_review_tool(allowed_quotes)],
+            "tools": [self._strict_review_tool()],
             "tool_choice": {
                 "type": "function",
                 "function": {"name": REVIEW_EVIDENCE_V2_TOOL_NAME},

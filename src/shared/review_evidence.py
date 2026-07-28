@@ -41,7 +41,9 @@ _CURRENT_REALITY_PREFIXES = (
     "本店",
     "我们店",
     "店里",
-    "真实",
+    "真实员工",
+    "真实顾客",
+    "门店历史",
     "现实中",
 )
 
@@ -430,14 +432,16 @@ def validate_server_owned_contexts_v2(
     return tuple(dict.fromkeys(issues))
 
 
-def review_evidence_v2_json_schema(
-    allowed_quotes: Sequence[str] = (),
-) -> dict[str, object]:
+def review_evidence_v2_json_schema() -> dict[str, object]:
     """Return the strict function schema for ReviewEvidenceV2."""
-    text_schema: dict[str, object] = {"type": "string"}
-    unique_quotes = tuple(dict.fromkeys(allowed_quotes))
-    if unique_quotes:
-        text_schema["enum"] = list(unique_quotes)
+    text_schema: dict[str, object] = {
+        "type": "string",
+        "description": (
+            "Exact source quote occurring exactly once in this clause. "
+            "When a short phrase repeats, include neighboring source text "
+            "until the quote is unique; never return an address or index."
+        ),
+    }
     span_schema: dict[str, object] = {
         "type": "object",
         "properties": {
