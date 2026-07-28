@@ -533,6 +533,9 @@ def test_kernel_writer_prompt_exposes_current_trusted_contracts() -> None:
     assert '"unit_contract": "abstract_observation"' in prompt
     assert "Writer-owned clause 不得让当前表达者或第一人称复数承担" in prompt
     assert "abstract_observation\n只写状态、判断、关系理解或比喻" in prompt
+    assert "actuality_reflection 对应的用户现实原文" in prompt
+    assert "Writer 只能写不复述该事实的抽象关系反思" in prompt
+    assert "不能复制、概括或扩写人物、动作、对白、动机、原因、结果" in prompt
 
 
 def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:

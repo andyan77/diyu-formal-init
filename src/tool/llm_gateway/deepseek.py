@@ -1107,7 +1107,10 @@ unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一�
 演绎声明，服务端会为整个段落提供一次可见披露。recommendation 必须用清楚可见的建议、
 条件或意愿语气表达可以怎样做。recommendation unit 中每个可独立切分的 clause 都必须有
 清楚语态，不能写具体时间、地点、对白、情境例子或没有语态标记的裸动作。抽象收束由后续
-abstract_observation / release_caption unit 完成。
+abstract_observation / release_caption unit 完成。actuality_reflection 对应的用户现实原文
+已由服务端 frozen fact 单元逐字插入；Writer 只能写不复述该事实的抽象关系反思，或带清楚
+建议／条件语态的泛指做法，不能复制、概括或扩写人物、动作、对白、动机、原因、结果、时间、
+地点与现实细节。
 不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。
 不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄资源或
 制作方式。Writer-owned clause 不得让当前表达者或第一人称复数承担谓语、做法、经历或承诺；
