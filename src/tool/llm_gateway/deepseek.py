@@ -1062,6 +1062,9 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
             "time_location_possession": ("是否绑定现实时间、地点、持有/所有关系或经营条件？纯条件语气不算现实时间。"),
             "institutional_or_product_claim": (
                 "是否形成品牌、公司、门店、账号或商品的事实、历史、做法、承诺、性能主张？"
+                "商品名称或编号作为主体只在 subject_binding 使用 named_product；本题若存在"
+                "商品事实主张必须使用 product_fact，若声称性能则使用 product_performance，"
+                "不得把其他维度的 operand 搬到本题。"
             ),
             "statement_mode": (
                 "整条 clause 的可见语态是什么？必须 present 且只选一个：actuality、"
@@ -1127,6 +1130,8 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
   subject_binding 类别存在时必须返回 status=present，再把该类别放入 operands。
 - present：quote 必须从该题 allowed_quotes 中选择且在本 clause 内唯一；operands 至少一个，
   且只能从该题 allowed_operands 选择。
+- 每题 JSON 中的 allowed_operands 是该 question_id 的封闭集合；即使同批另一题允许某个
+  operand，也不得跨 question 借用。
 - absent：quote 必须是空字符串，operands 必须是空数组。不能通过省略整个问题表达 absent。
 - uncertain：当语义关系确实无法可靠判断或无法给出唯一 quote 时使用；quote 可为空或选择
   唯一 allowed quote，operands 可为空。不要猜测，也不要把 uncertain 当 absent。

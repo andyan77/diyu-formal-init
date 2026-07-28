@@ -281,6 +281,8 @@ def test_reviewer_prompt_uses_closed_questions_without_addresses() -> None:
     assert "比喻、类比或拟人本身不构成 dramatization" in prompt
     assert "status 只回答“该维度证据是否存在／是否无法确定”" in prompt
     assert "某个\n  subject_binding 类别存在时必须返回 status=present" in prompt
+    assert "商品名称或编号作为主体只在 subject_binding 使用 named_product" in prompt
+    assert "不得跨 question 借用" in prompt
     assert "不要返回 start、end、occurrence" in prompt
 
 
