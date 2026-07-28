@@ -20,20 +20,8 @@ from src.brain.p1_contract import assert_content_complete
 from src.brain.platform_directions import direction_for
 from src.ports.content_generator import ContentGenerator
 from src.ports.content_repository import ContentRepository
-from src.shared.content_snapshot import (
-    frozen_narrative_frame,
-    frozen_series_context,
-    frozen_system_creative_plan,
-    frozen_user_premise,
-)
+from src.shared.content_snapshot import frozen_series_context
 from src.shared.errors import DomainError, GenerationFailed
-from src.shared.narrative import (
-    NarrativeFrame,
-    NarrativeMode,
-    legacy_frame,
-    new_frame,
-    visible_digest,
-)
 from src.shared.types import (
     AccountExpression,
     ActiveAsset,
@@ -81,8 +69,6 @@ class ContentService:
         series_position: int | None = None,
         primary_product_override: ContentProduct | None = None,
         progress: Callable[[str], None] | None = None,
-        narrative_frame: NarrativeFrame | None = None,
-        system_creative_plan: str = "",
     ) -> dict[str, object]:
         if primary_product_override is None and reuse_version_id is None and is_natural_chat(weak_seed):
             return {"kind": "greeting", "message": natural_reply()}
@@ -149,9 +135,6 @@ class ContentService:
         assets = self._repository.load_active_assets(
             scope, primary_product, sanitized_seed, products, target, is_recompile
         )
-        frozen_frame = narrative_frame or legacy_frame(
-            tuple(f"source:product:{product.sku}" for product in products)
-        )
         control = self._control_context(scope, context, controls, sanitized_seed)
         task_id, run_id, prior_body = self._repository.create_task_and_running_run(
             scope,
@@ -175,9 +158,6 @@ class ContentService:
                 series_context,
                 context.business_data_kind,
                 context.brand_reference_context,
-                frozen_frame,
-                sanitized_seed,
-                system_creative_plan,
             ),
             series_context,
         )
@@ -198,8 +178,6 @@ class ContentService:
             control,
             series_context,
             progress,
-            frozen_frame,
-            system_creative_plan,
         )
 
     def respond_to_conversation(
@@ -261,7 +239,6 @@ class ContentService:
                 products=products,
                 target=target,
                 selected_direction=selected_direction,
-                explicit_narrative_mode=self._explicit_narrative_mode(control),
                 prior_series_summary=series_summary,
             )
         )
@@ -270,60 +247,19 @@ class ContentService:
                 "kind": decision.disposition,
                 "message": decision.message,
             }
-        if (
-            decision.primary_product is None
-            or decision.narrative_mode is None
-            or not decision.user_premises
-            or not decision.system_creative_plan
-        ):
+        if decision.primary_product is None or not decision.brief:
             raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
-        available_user_turns = tuple(
-            turn.content for turn in sanitized_history if turn.role == "user"
-        ) + (sanitized_message,)
-        if (
-            sanitized_message not in decision.user_premises
-            or any(premise not in available_user_turns for premise in decision.user_premises)
-        ):
-            raise GenerationFailed("模型没有可靠保留用户原话")
-        premise = "\n".join(decision.user_premises)
-        if any(not fact or fact not in premise for fact in decision.user_fact_spans):
-            raise GenerationFailed("模型返回的用户事实跨度不存在")
-        frame = new_frame(
-            decision.narrative_mode,
-            tuple(dict.fromkeys(decision.user_fact_spans)),
-            tuple(f"source:product:{product.sku}" for product in products),
-        )
-        explicit_mode = self._explicit_narrative_mode(control)
-        if explicit_mode is not None and frame.narrative_mode != explicit_mode:
-            raise GenerationFailed("叙事模式与用户显式形式选择不一致")
         result = self.create_from_weak_seed(
             scope,
-            premise,
+            decision.brief,
             target=target,
             controls=controls,
             series_id=series_id,
             series_position=series_position,
             primary_product_override=decision.primary_product,
             progress=progress,
-            narrative_frame=frame,
-            system_creative_plan=decision.system_creative_plan,
         )
         return result | {"conversation_message": decision.message}
-
-    @staticmethod
-    def _explicit_narrative_mode(
-        control: ContentControlContext,
-    ) -> NarrativeMode | None:
-        if control.direction is None:
-            return None
-        if any(
-            item.axis == "mechanism"
-            and item.stable_id == "CAT-GENRE-DRAMA-04"
-            and item.origin == "explicit"
-            for item in control.direction.selections
-        ):
-            return "dramatization"
-        return None
 
     def _control_context(
         self,
@@ -518,11 +454,6 @@ class ContentService:
         )
         control = self._replayed_control(scope, snapshot)
         series_context = frozen_series_context(snapshot)
-        frame = frozen_narrative_frame(snapshot) or legacy_frame(
-            tuple(f"source:product:{product.sku}" for product in products)
-        )
-        system_creative_plan = frozen_system_creative_plan(snapshot)
-        weak_seed = frozen_user_premise(snapshot, weak_seed)
         context = self._replayed_context(context, control, snapshot)
         run_id, parent_version_id, weak_seed, primary_product = self._repository.revise_task(
             scope,
@@ -555,9 +486,6 @@ class ContentService:
             source_description,
             control,
             series_context,
-            None,
-            frame,
-            system_creative_plan,
         )
 
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:
@@ -590,11 +518,6 @@ class ContentService:
         control = self._recompile_control(control)
         context = self._replayed_context(context, control, snapshot)
         series_context = frozen_series_context(snapshot)
-        frame = frozen_narrative_frame(snapshot) or legacy_frame(
-            tuple(f"source:product:{product.sku}" for product in source.products)
-        )
-        system_creative_plan = frozen_system_creative_plan(snapshot)
-        source_premise = frozen_user_premise(snapshot, source.weak_seed)
         assets = self._repository.load_active_assets(
             target_scope,
             source.primary_product,
@@ -605,7 +528,7 @@ class ContentService:
         )
         target_task_id, run_id, prior_body = self._repository.create_task_and_running_run(
             target_scope,
-            source_premise,
+            source.weak_seed,
             source.primary_product,
             source_version_id,
             self._generator.model_name,
@@ -625,9 +548,6 @@ class ContentService:
                 series_context,
                 context.business_data_kind,
                 context.brand_reference_context,
-                frame,
-                source_premise,
-                system_creative_plan,
             ),
             None,
         )
@@ -635,7 +555,7 @@ class ContentService:
             target_scope,
             target_task_id,
             run_id,
-            source_premise,
+            source.weak_seed,
             source.primary_product,
             instruction,
             prior_body,
@@ -647,9 +567,6 @@ class ContentService:
             source.source_description,
             control,
             series_context,
-            None,
-            frame,
-            system_creative_plan,
         )
 
     def identity_summary(self, scope: TrustedScope, target: ContentTarget = "douyin_video") -> dict[str, str]:
@@ -687,8 +604,6 @@ class ContentService:
         control: ContentControlContext | None = None,
         series_context: SeriesContext | None = None,
         progress: Callable[[str], None] | None = None,
-        narrative_frame: NarrativeFrame | None = None,
-        system_creative_plan: str = "",
     ) -> dict[str, object]:
         try:
             # The run is already durable here. Keep the first generation event
@@ -716,18 +631,10 @@ class ContentService:
                     reference_materials=control.materials if control else (),
                     collaboration_note=control.collaboration_note if control else "",
                     series_context=series_context,
-                    narrative_frame=narrative_frame,
-                    system_creative_plan=system_creative_plan,
                 )
             )
             if progress is not None:
                 progress("validating")
-            if (
-                narrative_frame is not None
-                and artifact.reviewed_digest
-                != visible_digest(artifact.outline, artifact.body)
-            ):
-                raise GenerationFailed("最终成品与被审查内容不一致")
             assert_content_complete(artifact)
         except GenerationFailed as exc:
             self._repository.fail_run(scope, task_id, run_id, str(exc))
@@ -840,17 +747,12 @@ class ContentService:
         if "四张" in text or "4 张" in text or "4张" in text:
             return "当前只补拍四张；图文仍须有完整正文，并由正文保留商品归因边界。"
         if "一个人" in text or "一人" in text or "手机" in text:
-            return (
-                "只登记创作者本人表达与本次原创抽象构成为通用能力；用户明确点名的一人或手机"
-                "要求只约束本次制作，不证明任何现实人物、场地、道具或素材存在。"
-            )
+            return "一名创作者、一部手机、普通室内或门店；按当前形式完成拍摄、录音、排版或剪辑。"
         if previous is not None:
             return previous
-        del media_format
-        return (
-            "系统按内容形式自主选择创作者本人表达或本次原创抽象构图、排版、文字与声音组织；"
-            "不默认任何现实人物、商品、物品、场地或既有素材可用。"
-        )
+        if media_format == "graphic":
+            return "一名创作者、一部手机、普通室内或门店；按当前条件补拍、选图、排版并发布图文。"
+        return "一名创作者、一部手机、普通室内或门店；按当前条件完成拍摄、录音和剪辑。"
 
     @staticmethod
     def _requests_independent_result(text: str) -> bool:
