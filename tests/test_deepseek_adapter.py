@@ -470,10 +470,6 @@ def _kernel_writer(
                 "text": "一方先停一下，另一方也不必马上给出答案。",
             },
             {
-                "unit_id": "unit:body-recommendation",
-                "text": "可以先说清需要，也为彼此留出回应的空间。",
-            },
-            {
                 "unit_id": "unit:body-closing",
                 "text": "理解可以靠近，边界也仍然成立。",
             },
@@ -518,7 +514,7 @@ def _parsed_kernel(
     return parse_writer_kernel(raw, skeleton)
 
 
-def test_kernel_writer_prompt_explains_recommendation_contract() -> None:
+def test_kernel_writer_prompt_exposes_current_trusted_contracts() -> None:
     request = _kernel_request()
     prompt = _generator()._kernel_writer_prompt(
         request,
@@ -528,9 +524,7 @@ def test_kernel_writer_prompt_explains_recommendation_contract() -> None:
     assert "recommendation 必须用清楚可见的建议、" in prompt
     assert "recommendation unit 中每个可独立切分的 clause 都必须有" in prompt
     assert "不能写具体时间、地点、对白、情境例子或没有语态" in prompt
-    assert "抽象收束由后续" in prompt
-    assert '"unit_contract": "recommendation"' in prompt
-    assert '"unit_id": "unit:body-recommendation"' in prompt
+    assert '"unit_id": "unit:body-closing"' in prompt
     assert '"unit_contract": "abstract_observation"' in prompt
     assert "Writer-owned clause 不得让当前表达者或第一人称复数承担" in prompt
     assert "abstract_observation\n只写状态、判断、关系理解或比喻" in prompt
@@ -560,12 +554,6 @@ def _kernel_observations(
             clause.unit_id == "unit:body-opening"
             and body_type == "situated_event"
         )
-        modality = (
-            "可以"
-            if clause.unit_id == "unit:body-recommendation"
-            and "可以" in clause.exact_text
-            else None
-        )
         items: list[dict[str, str]] = []
         if is_event:
             items.extend(
@@ -579,13 +567,6 @@ def _kernel_observations(
                         "text": clause.exact_text,
                     },
                 )
-            )
-        if modality is not None:
-            items.append(
-                {
-                    "category": "modality",
-                    "text": modality,
-                }
             )
         evidence.append(
             {

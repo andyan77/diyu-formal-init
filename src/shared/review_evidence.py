@@ -1071,7 +1071,6 @@ def unit_contracts_v2(
             {
                 "unit:body-opening": "abstract_observation",
                 "unit:hypothetical-example": "hypothetical_example",
-                "unit:body-recommendation": "recommendation",
                 "unit:body-closing": "abstract_observation",
             }
         )
@@ -1322,13 +1321,6 @@ def _kernel_program_issues(
             "unit:hypothetical-example": ("hypothesis",),
             "unit:body-closing": ("abstract_principle",),
         }
-        if (
-            kernel.program_id
-            == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
-        ):
-            expected["unit:body-recommendation"] = (
-                "abstract_principle",
-            )
     else:
         expected = {"unit:body": ("abstract_principle",)}
     body_units = {

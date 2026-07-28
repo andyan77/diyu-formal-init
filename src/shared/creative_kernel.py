@@ -197,12 +197,7 @@ def build_kernel_skeleton(
                     text="",
                 ),
                 CreativeKernelUnit(
-                    unit_id=(
-                        "unit:body-recommendation"
-                        if program_id
-                        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
-                        else "unit:body-closing"
-                    ),
+                    unit_id="unit:body-closing",
                     purpose="body",
                     allowed_observation_types=("abstract_principle",),
                     fact_refs=(),
@@ -212,24 +207,7 @@ def build_kernel_skeleton(
                 ),
             )
         )
-        if (
-            program_id
-            == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
-        ):
-            units.append(
-                CreativeKernelUnit(
-                    unit_id="unit:body-closing",
-                    purpose="body",
-                    allowed_observation_types=("abstract_principle",),
-                    fact_refs=(),
-                    constraint_refs=constraints,
-                    visible_order=120,
-                    text="",
-                )
-            )
-            release_order = 130
-        else:
-            release_order = 120
+        release_order = 120
     else:
         units.append(
             CreativeKernelUnit(

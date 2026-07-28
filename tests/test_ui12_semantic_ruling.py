@@ -79,7 +79,6 @@ def _frame_and_kernel(
             "unit:body": body,
             "unit:body-opening": body,
             "unit:hypothetical-example": body,
-            "unit:body-recommendation": "彼此可以先停一下。",
             "unit:body-closing": "彼此可以先停一下。",
             "unit:release-caption": "理解彼此，也保留自己。",
         }[unit.unit_id]
@@ -1183,8 +1182,8 @@ def test_every_reachable_program_unit_has_one_trusted_contract() -> None:
     current_contracts = {
         context.unit_id: context.unit_contract for context in current
     }
-    assert current_contracts["unit:body-recommendation"] == "recommendation"
     assert current_contracts["unit:body-closing"] == "abstract_observation"
+    assert "unit:body-recommendation" not in current_contracts
 
     for mode, expected in (
         ("general_observation", "abstract_observation"),
