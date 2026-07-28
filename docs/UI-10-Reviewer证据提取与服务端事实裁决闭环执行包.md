@@ -1,6 +1,6 @@
 # UI-10 Reviewer 证据提取与服务端事实裁决闭环执行包
 
-- 当前状态：`BLOCKED`
+- 当前状态：`SUPERSEDED → UI-11`（此前 `BLOCKED` 事实保持；不表示 UI-10 成功）
 - predecessor：`UI-09 SUPERSEDED → UI-10`
 - 启动提交：`9af478b0f79786184b2b74c2fc48bb3730439d66`
 - `origin/main`：`7aa87ab624cf3ff64f42e49f1755d66d496cac7a`
@@ -205,3 +205,11 @@ RLS、历史版本、系列、DM01、AIGC 与资产 `41/243/25/119` 的本地确
 唯一下一动作：主控只裁决是否另开 **Writer 单角色 successor**，重构
 general-observation 的生成职责；CreationIntentGate、Reviewer evidence、服务端事实裁决和
 DeliveryCompiler 保持，不换模型、不形成 fallback。
+
+## 14. UI-11 取代说明
+
+主控随后裁决 UI-10 的服务端 Reviewer evidence 与事实裁决成果继续保留，但否决
+“general-observation 可写单元只能容纳纯抽象观点”的产品合同。UI-11 以服务端所有、明确
+可见的假设范围承载一般创作情境，同时继续隔离真人现实事实、机构事实与制作资源。UI-10
+据此为 `SUPERSEDED → UI-11`；本执行包中的 Reviewer `3/3`、G3 一次修复后失败和未
+push/CI/部署历史均保持原样。

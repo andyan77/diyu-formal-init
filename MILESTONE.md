@@ -1,48 +1,45 @@
 # 当前里程碑
 
-- 当前里程碑：`UI-10` Reviewer 证据提取与服务端事实裁决闭环。
-- 状态：`BLOCKED`。`UI-09` 为 `SUPERSEDED → UI-10`；只表示 UI-09 中“Reviewer 自报
-  observation type 直接参与安全放行”的新内核路径由证据提取与服务端事实裁决替代，不表示
-  UI-09 成功。UI-09 的 `BLOCKED`、Reviewer `2/3`、样本 C 假绿、G3/G4/D1 未运行、
-  未 push/CI/部署与 root-only 证据原样保留。
-- 当前 Git 基线：启动 `HEAD=9af478b0f79786184b2b74c2fc48bb3730439d66`，
-  状态交接 `ad7b41f`，实现
-  `ada98ff47e5655fea9e23d6e3d3fc06b00e4f566`；
-  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，线性历史未改写且尚未
-  push。
+- 当前里程碑：`UI-11` 一般情境与真人事实隔离闭环。
+- 状态：`ACTIVE`。`UI-10` 为 `SUPERSEDED → UI-11`；只表示“题材型内容只能写纯抽象
+  观点”的单元合同由服务端叙事程序与明确假设范围取代，不表示 UI-10 成功。UI-10 的
+  `BLOCKED`、Reviewer A/B/C `3/3`、G3 唯一修复后失败、G4/D1 未运行及未
+  push/CI/部署证据完整保留。
+- 当前 Git 基线：启动 `HEAD=9cc96ab8e756f16add2179e0add9e51d3447445a`，
+  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，本地线性领先 11 提交且启动
+  工作树干净。归档引用
+  `refs/tags/archive/ui-10-blocked-20260728=9cc96ab8e756f16add2179e0add9e51d3447445a`
+  已创建；禁止 reset、rebase、squash 或改写 UI-07—UI-10 历史。
 - 生产启动复核：部署仓库仍为干净的 `845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，
   镜像 `diyu-saas:845f632…`、摘要
   `sha256:1171b153cbc709a760caf4a5db1fb14fe00e0bca3ef9c7b79c85f737a3a6bdb9`，
-  schema `20260801_28`，回环 readiness `ready`、公网 `200`，备份 timer `active`。
+  schema `20260801_28`，真实回环 readiness `ready`、生产主机经公开 DNS/HTTPS 为
+  `200`，备份 timer `active`。本执行环境直连公网超时，未被误写为生产失败。
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
-- 当前任务包：`docs/UI-10-Reviewer证据提取与服务端事实裁决闭环执行包.md`
-- 保留能力：CreationIntentGate、CreativePlanV2、NarrativeFrame、CreativeKernelV1
-  Writer、DeliveryCompilerV1、服务端逐字事实、最多一次 unit 修复、legacy 路径、RLS、
-  DM01、AIGC 与资产 `41/243/25/119` 均不得回退。
-- 已完成：版本化 `ReviewEvidenceV1`、服务端 clause、精确 evidence 闭世界、scoped
-  protected subjects 和独立事实裁决已接入 CreativeKernel 新路径；旧
-  `ReviewerObservation` 只留在 legacy。frame 明确允许的精确 brand fact 可进入服务端
-  frozen unit，新任务默认不把整份品牌资料加入 Frame，Writer 看不到 brand fact。完整
-  Golden `221 passed`（含 OpenAPI）、ruff、mypy 通过；五项 mutation proof 均实际变红后
-  恢复转绿。
-- Reviewer 资格：同实现 SHA、`deepseek-v4-flash`、温度 0、零重试、thinking disabled
-  的 A/B/C pipeline 为 `3/3`。UI-09 样本 C 原始响应虽自报
-  `abstract_principle`，重放后服务端仍判
-  `unsupported_institutional_assertion`。root-only 摘要 SHA-256 为
-  `b5a57f36ace71b1b893354004c61f0f377c15c886eddffec6ec76bebe59c3eb4`。
-- 真实阻断：随后同 SHA 的无持久化 G3 初稿写入未提供的“同一个男人”“共同生活”“同一个
-  屋檐”“带孩子”等家庭设定；唯一一次 body unit 修复后仍保留“婆婆来帮忙带孩子”“儿媳
-  是孩子的妈妈”等具体事件。两轮 Reviewer 均为完整 `25/25` clause、精确跨度且无
-  uncertain，服务端复审仍有 `situated_event_in_observation`，生成按“一次修复后仍失败”
-  停止。G4、D1 与完整 G1—G7/H1/D1 没有开始。
-- 停止后纪律：没有第二修复、重跑、Prompt 补丁、换模、第二 Reviewer、push、CI、备份、
-  部署或生产业务验收。生产再次只读核实仍为上述安全 HEAD／镜像，schema
-  `20260801_28`、回环 `ready`、公网 `200`、备份 timer `active`。业务预检摘要
-  SHA-256 为
-  `589a0d0186d4d382ff10bc376554acf0d60b902ae11e5ea6fcee86b2a27a8c56`。
-- 唯一下一动作：主控只裁决是否另开 **Writer 单角色 successor**，重构
-  general-observation 的生成职责；CreationIntentGate、Reviewer evidence、服务端裁决与
-  DeliveryCompiler 保持，不换模型、不形成 fallback。
+- 当前任务包：`docs/UI-11-一般情境与真人事实隔离闭环执行包.md`
+- 冻结能力：CreationIntentGate、CreativePlanV2、NarrativeFrame、CreativeKernelV1、
+  ReviewEvidenceV1、服务端事实裁决、DeliveryCompilerV1、服务端逐字事实、最多一次
+  affected-unit 修复、legacy 路径、RLS、DM01、AIGC 与资产 `41/243/25/119` 不得回退。
+- 当前验收：增加极小、版本化且归服务端所有的
+  `observation_only_v1/observation_with_hypothetical_example_v1` 叙事程序；先证明
+  hypothesis 可见范围、真实主体阻断、资源闭世界和 G7 不变量，再冻结一个 SHA，仅用当前
+  `deepseek-v4-flash` 依次执行无持久化 G3、G4、D1。
+- 停止边界：G3 最多一次受影响可写单元修复；仍存在未标识现实情境、真实主体绑定、
+  Reviewer evidence 缺口或资源污染即置 `BLOCKED`，不重跑、不改模型、不形成第二策略。
+  真实预检通过前不 push、CI、备份、部署或写生产业务数据。
+- 唯一下一动作：完成服务端叙事程序、假设范围和现有 pytest 消费者的最小纵向实现。
+
+## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
+
+- UI-10 状态：`SUPERSEDED → UI-11`，此前 `BLOCKED` 事实保持。
+- UI-10 已证明 Reviewer 新路径只提逐 clause exact evidence，服务端独立裁决
+  protected subject、institutional assertion、situated event 和 frozen fact；真实
+  Reviewer A/B/C pipeline 为 `3/3`。
+- UI-10 同 SHA G3 初稿和唯一 body 修复均在 abstract-only 合同下产生具体家庭情境；
+  Reviewer 两轮均完整覆盖 `25/25` clause、跨度精确且无 uncertain，服务端正确拒绝。
+  G4、D1、完整验收、push、CI、备份和部署均未执行。
+- 历史实现 `ada98ff47e5655fea9e23d6e3d3fc06b00e4f566`、收口
+  `9cc96ab8e756f16add2179e0add9e51d3447445a` 及 root-only 证据不改写、不删除。
 
 ## UI-07 被 UI-08 取代结论（2026-07-28，历史完整保留）
 
