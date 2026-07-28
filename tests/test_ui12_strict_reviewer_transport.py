@@ -293,6 +293,10 @@ def test_reviewer_requires_unique_source_quotes_without_model_addresses() -> Non
     assert "category=relationship_role" in prompt
     assert "泛指“人／双方／彼此／对方”" in prompt
     assert "即使位于抽象建议或引号中" in prompt
+    assert "嵌在关系判断或价值判断中的泛指活动" in prompt
+    assert "只提取把主张锚定到具体日期、时段、先后阶段" in prompt
+    assert "泛指条件范围不是现实时间锚点" in prompt
+    assert "必须返回 modality，不要返回 time" in prompt
 
 
 def test_server_quote_vocabulary_excludes_repeated_short_phrases() -> None:

@@ -1161,14 +1161,17 @@ start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 
   反应、言说，或发生的具体变化与事件；无论它是已发生、假设、建议、否定、泛指或演绎，
   都只提取其语法证据，不判断现实性。静态状态、关系判断、价值评价、活动概念名称，以及
   对“本文／阅读／观看”的导航描述本身，不属于 action_or_event；非人抽象概念承担的
-  修辞性动作或因果比喻也不属于 action_or_event；
+  修辞性动作或因果比喻也不属于 action_or_event；嵌在关系判断或价值判断中的泛指活动
+  只作为概念条件时，也不属于 action_or_event；
 - category=dialogue：任何直接、转述或作为示例给出的具体话语，即使位于抽象建议或引号中；
   同时属于言说动作时还要返回 action_or_event；
 - category=motive：原文用愿望、需要、期待、意图、害怕或类似心理缘由解释行为或关系时的
   精确证据，即使表达是泛指或抽象；
-- category=cause/result/time/location：对应前因、结果、时间和地点，无论所在文字最终是否
-  被服务端允许；
-- category=modality：原文中明确表示建议、义务、可能、条件或意愿的语法标记；
+- category=cause/result/location：对应前因、结果和地点，无论所在文字最终是否被服务端允许；
+- category=time：只提取把主张锚定到具体日期、时段、先后阶段或一次既成情境的时间证据；
+  表示“在某种一般状态／条件下”的泛指条件范围不是现实时间锚点，应归入 modality；
+- category=modality：原文中明确表示建议、义务、可能、条件或意愿的语法标记；泛指条件
+  从句即使形式上含时间表达，也必须返回 modality，不要返回 time；
 - category=aspect：原文中明确表示已经、完成、持续或经历事实的语法标记。
 
 implicit_subject 只选 none、current_speaker、generic、uncertain。句中有明确主体时通常为
