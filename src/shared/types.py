@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias
 from uuid import UUID
 
+from src.shared.narrative import NarrativeFrame, NarrativeMode
+
 ContentProduct: TypeAlias = Literal[
     "dressing_decision",
     "product_truth",
@@ -250,6 +252,7 @@ class ConversationInput:
     products: tuple[ProductFact, ...]
     target: ContentTarget
     selected_direction: str = ""
+    explicit_narrative_mode: NarrativeMode | None = None
     prior_series_summary: str = ""
 
 
@@ -259,7 +262,10 @@ class ConversationDecision:
 
     disposition: ConversationDisposition
     message: str
-    brief: str = ""
+    user_premises: tuple[str, ...] = ()
+    user_fact_spans: tuple[str, ...] = ()
+    narrative_mode: NarrativeMode | None = None
+    system_creative_plan: str = ""
     primary_product: ContentProduct | None = None
 
 
@@ -373,6 +379,8 @@ class GenerationInput:
     reference_materials: tuple[ReferenceMaterial, ...] = ()
     collaboration_note: str = ""
     series_context: SeriesContext | None = None
+    narrative_frame: NarrativeFrame | None = None
+    system_creative_plan: str = ""
 
 
 @dataclass(frozen=True)
@@ -395,6 +403,7 @@ class GeneratedArtifact:
     semantic_contract: ContentSemanticContract
     production: ContentProductionBundle
     fact_repair_receipts: tuple[FactRepairReceipt, ...] = ()
+    reviewed_digest: str | None = None
 
 
 @dataclass(frozen=True)

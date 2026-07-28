@@ -17,10 +17,19 @@ const harness = (globalThis as unknown as {
     }>;
     copiedTexts: string[];
     exportedBlobs: Blob[];
+    deferNextVersionLoad: () => void;
+    releaseDeferredVersionLoad: () => void;
     window: Window & typeof globalThis;
   };
 }).__DIYU_INTERACTION__;
-const { requests, copiedTexts, exportedBlobs, window } = harness;
+const {
+  requests,
+  copiedTexts,
+  exportedBlobs,
+  deferNextVersionLoad,
+  releaseDeferredVersionLoad,
+  window
+} = harness;
 const document = window.document;
 
 function find(selector: string, contains: string): HTMLElement {
@@ -138,6 +147,7 @@ async function main(): Promise<void> {
   const custom = document.querySelector(".custom-direction input") as HTMLInputElement;
   await input(custom, "想聊婆媳之间买衣服意见不一样，不要把任何一方写成反派。");
 
+  deferNextVersionLoad();
   await send("讲前一个，别像品牌宣言，要像店员自己的感受。");
   const streamRequest = requests
     .filter(item => item.path === "/api/v1/content/stream")
@@ -166,6 +176,14 @@ async function main(): Promise<void> {
   const revision = document.querySelector(
     'textarea[aria-label="修改要求"]'
   ) as HTMLTextAreaElement;
+  await input(revision, "别讲道理，荒诞一点。");
+  releaseDeferredVersionLoad();
+  await settle();
+  assert.equal(
+    revision.value,
+    "别讲道理，荒诞一点。",
+    "V1 显示后立即输入的修改要求不能被异步版本加载清空"
+  );
   await input(revision, "判断保留，改得更像门店人物自己的感受。");
   await click(find(".composer-submit button", "生成 V2"));
   await settle();

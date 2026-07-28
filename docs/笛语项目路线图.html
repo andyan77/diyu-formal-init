@@ -9,7 +9,8 @@
 <body>
   <h1>笛语 · 当前路线图</h1>
   <p>本页是 Markdown 路线图的派生展示，不构成第二套裁决。权威版本见 <a href="笛语第一阶段总体技术架构与路线图映射基线.md">第一阶段总体技术架构与路线图映射基线</a>。</p>
-  <article><h2 class="now">UI-05 · BLOCKED · 租户管理与创作体验语义重构</h2><p>UI-04 保持 CLOSED；Gate A/B/C、主控关闭和三项生产 UI 极小返工记录均保留为历史。本轮以 <code>505b90e…</code> 为原始起点、<code>c41f1af…</code> 为恢复起点，完整保留此前 25 个逐次 push 前向提交及期间连续部署证据。候选 A <code>8d591fac…</code> 删除级联修复结构，候选 B <code>f0261e74…</code> 只补共享的事实来源／拍摄资源边界；最终 CI <code>30322971553</code> success 和同 SHA 部署成立，但真实 DeepSeek G4 一次修复后仍为同类 <code>invented_actuality</code>，人工 G3 正文又发现“婆婆带孩子”等未提供情境，G7 因无 V1 未成立。已命中候选 B 停止线，没有候选 C。数据库未 downgrade，生产已回到最后一份有文档证明健康的 <code>845f632…</code>，公网与回环 ready；合成探针材料已清理。资产激活增量仍为 0，41/243/25/119 不变。唯一下一动作是主控对结构停止线作独立架构裁决；不启动新里程碑。</p></article>
+  <article><h2 class="done">UI-05 · SUPERSEDED → UI-06 · 租户管理与创作体验语义重构</h2><p>UI-04 保持 CLOSED；Gate A/B/C、主控关闭和三项生产 UI 极小返工记录均保留为历史。本轮 25 个逐次 push、候选 A/B、真实 G3 人工假绿、G4 同类失败及 G7 未成立全部保留，不形成候选 C，也不改写为通过。数据库未 downgrade，生产回到最后一份有文档证明健康的 <code>845f632…</code>。</p></article>
+  <article><h2 class="now">UI-06 · ACTIVE · 自然创作与叙事真实性闭环</h2><p>17 路径安全恢复提交 <code>dc86b952…</code> 与恢复基线 CI <code>30325920857</code> success 已完成且未部署。本地候选使用 <code>NarrativeFrame v1</code>、四类类型化块、独立 Reviewer 观察和服务端确定性对账；Reviewer 协议缺失直接失败，内容问题最多一次、每 scene 最多三个 block 的完整修复。无迁移、第二模型或新平台。唯一功能候选 CI 和同 SHA 生产 G1—G7/H1/D1 尚未完成；资产 41/243、目录 25/119、激活增量 0。</p></article>
   <article><h2 class="done">M3-1—M5-K · 已关闭</h2><p>已形成内容、陈列、三平台文字成品、正式 React 工作壳、知识运行治理与最小远程 CI 的合成软件闭环。</p></article>
   <article><h2 class="done">M5-4 · CLOSED · 共享 ECS SaaS 上线</h2><p>独立 SaaS 已在 diyuai.cc 健康运行；正式认证、PostgreSQL 强制 RLS、独立对象存储、真实 DeepSeek、备份与回退边界成立。正式 P2 连续复验 2/2、错误事实反证 1/1、AIGC 标识 3/3，必要回归、两份有界审查和主控终审通过。</p></article>
   <article><h2 class="done">M6-1 · CLOSED · 真实品牌最低资料入驻</h2><p>笛语服饰已作为独立真实租户进入同一共享平台；品牌方本人完成一次性激活、品牌表达 V1、首个发布账号、独立 ContentRole 和本人操作资格，真实非商品 P3 带 AIGC 披露且无合成租户串味。商品与真实挂杆仍未激活，只限制商品承重内容和 DM01。</p></article>

@@ -932,11 +932,13 @@ export default function CreatorApp({
         if (streamEvent.event === "completed") {
           setCurrent(streamEvent.result);
           setViewed(streamEvent.result);
+          // Clear only the request that just completed. Once the artifact is visible,
+          // a person may immediately type the next instruction while history loads.
+          setSeed("");
           await loadVersions(streamEvent.result);
           appendAssistant(
             "第一版已经整理好。你可以直接阅读，也可以继续告诉我哪里要变。"
           );
-          setSeed("");
           setDirectionsOpen(false);
           setMobileView("artifact");
           setLastFailedAttempt(null);
@@ -992,6 +994,9 @@ export default function CreatorApp({
           })
         }
       );
+      // Clear the submitted instruction before any asynchronous version-history
+      // refresh. A newer instruction typed after V2 appears must remain untouched.
+      setSeed("");
       if (!("task_id" in payload)) {
         appendAssistant(payload.message);
       } else {
@@ -1003,7 +1008,6 @@ export default function CreatorApp({
         );
         setMobileView("artifact");
       }
-      setSeed("");
       setDirectionsOpen(false);
       setLastFailedAttempt(null);
     } catch {
