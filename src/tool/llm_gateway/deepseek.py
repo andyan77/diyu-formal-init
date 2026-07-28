@@ -1041,8 +1041,12 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
         descriptions = {
             "subject_binding": (
                 "这条主张是否绑定当前说话者/用户、受保护主体、泛指角色、虚构角色或其他具体人物/机构/商品？"
-                "判断主张实际指向，不只看语法主语；若它概括或解释冻结用户事实，属于 current_user；"
-                "只有当前账号／表达方自己承担主张时才属于 current_speaker。"
+                "判断 clause 自身主张实际指向，不只看语法主语：只有 clause 以第一人称、当前指代"
+                "或省略但可唯一回指冻结事件的主体，断言当前用户的关系、经历、心理或因果时才是"
+                " current_user；仅仅与冻结事实题材相同、用于其后的反思，不能据此绑定 current_user。"
+                "明确泛称、一般条件或倾向且没有回指当前个案时属于 generic；两种读法都成立时必须"
+                " uncertain。只有当前账号／表达方自己承担主张时才属于 current_speaker；"
+                "“这篇内容／这个角度”作为被介绍的内容对象，不是 current_speaker。"
             ),
             "relationship_claim": (
                 "是否建立亲属、伴侣、家庭、同住、同事、员工、顾客或其他具体社会关系？"
@@ -1064,7 +1068,8 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 "generic_observation、recommendation、hypothesis、dramatization；无法可靠"
                 "唯一判断时 status=uncertain。recommendation 必须是在建议、请求或指示某人"
                 "采取行动；只向受众征询观点、经验或选择而不指示其行动的互动问句属于"
-                "generic_observation。"
+                "generic_observation。比喻、类比或拟人本身不构成 dramatization；只有文字实际"
+                "铺陈虚构角色与情境动作时才是 dramatization。"
             ),
             "disclosure": (
                 "这条 writer 文字是否逃逸或抵触服务端给定的 hypothesis/dramatization 范围，"
@@ -1128,6 +1133,8 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 - quote 地址由服务端计算；不要返回 start、end、occurrence 或任何数字地址。
 - 同一 clause 的十个问题彼此独立。即使某个表达看起来合法，也必须如实回答关系、对白、
   动机、因果等问题；合法性由服务端组合判断。
+- 每个 clause 只按自身文字、明确的服务端 scope 和必要的冻结事实回指判断，不得因为同批
+  其他 clause 的写法改变其主体或语态答案；题材相似不是现实主体绑定。
 
 只调用指定函数并返回：
 {{"evidence_version":"{CLOSED_REVIEW_VERSION}","answers":[{{

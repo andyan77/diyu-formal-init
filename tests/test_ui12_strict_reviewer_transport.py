@@ -275,6 +275,10 @@ def test_reviewer_prompt_uses_closed_questions_without_addresses() -> None:
     assert "motive_or_mental_state" in prompt
     assert "statement_mode" in prompt
     assert "只向受众征询观点、经验或选择" in prompt
+    assert "题材相同、用于其后的反思" in prompt
+    assert "这篇内容／这个角度" in prompt
+    assert "题材相似不是现实主体绑定" in prompt
+    assert "比喻、类比或拟人本身不构成 dramatization" in prompt
     assert "不要返回 start、end、occurrence" in prompt
 
 
