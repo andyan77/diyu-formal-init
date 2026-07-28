@@ -1058,7 +1058,9 @@ abstract_observation / release_caption unit 完成。actuality_reflection 对应
             "statement_mode": (
                 "整条 clause 的可见语态是什么？必须 present 且只选一个：actuality、"
                 "generic_observation、recommendation、hypothesis、dramatization；无法可靠"
-                "唯一判断时 status=uncertain。"
+                "唯一判断时 status=uncertain。recommendation 必须是在建议、请求或指示某人"
+                "采取行动；只向受众征询观点、经验或选择而不指示其行动的互动问句属于"
+                "generic_observation。"
             ),
             "disclosure": (
                 "这条 writer 文字是否逃逸或抵触服务端给定的 hypothesis/dramatization 范围，"

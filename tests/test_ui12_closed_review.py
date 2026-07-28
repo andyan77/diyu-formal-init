@@ -370,6 +370,54 @@ def test_recommendation_and_hypothesis_keep_creative_freedom() -> None:
     assert _reasons(hypothesis_contexts, hypothesis_answers) == ()
 
 
+def test_audience_question_is_not_a_recommendation() -> None:
+    text = "你们如何看待彼此付出的平衡？"
+    contexts = _context(
+        text,
+        contract="abstract_observation",
+    )
+    generic = _parse(
+        contexts,
+        {
+            "subject_binding": (
+                "present",
+                text,
+                ("generic",),
+            ),
+            "relationship_claim": (
+                "present",
+                text,
+                ("other_social_relation",),
+            ),
+        },
+    )
+    mislabeled = _parse(
+        contexts,
+        {
+            "subject_binding": (
+                "present",
+                text,
+                ("generic",),
+            ),
+            "relationship_claim": (
+                "present",
+                text,
+                ("other_social_relation",),
+            ),
+            "statement_mode": (
+                "present",
+                text,
+                ("recommendation",),
+            ),
+        },
+    )
+
+    assert _reasons(contexts, generic) == ()
+    assert _reasons(contexts, mislabeled) == (
+        "recommendation_in_observation",
+    )
+
+
 def test_present_to_absent_mutation_changes_server_ruling() -> None:
     text = "她说：“今天辛苦了”。"
     contexts = _context(text)

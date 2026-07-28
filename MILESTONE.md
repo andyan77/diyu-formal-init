@@ -183,6 +183,14 @@
   relationship/motive/dialogue 全部漏提的事实被保留，闭合回答不再允许用“没有返回”
   冒充 absent。主链定向回归、strict transport、legacy SDR 与相邻 UI-09—UI-12 消费者
   已通过；这些仍是未调用新模型的 WIP 证据，不表示 G4 成立。
+- 首次闭合合同真实 G4：本机供应商连接在任何响应前超时，确认是 WSL 出网不可达；随后
+  用固定 SHA 在无数据库临时容器执行。探针首次把历史稳定的无句末标点 fact span 与 P4
+  错当成 P3/带标点而拒绝，归为 oracle 缺陷并复用已哈希 intake raw。有效链完成初稿、
+  两批审查、唯一修复和完整复审；Reviewer 已逐题提取关系、动机、对白与当前用户绑定，
+  服务端正确拒绝初稿。修复稿唯一剩余 issue 是把“仅向受众征询观点”的互动问句误标为
+  recommendation；明确“建议须指示行动，纯受众问句为 generic observation”后，原 raw
+  离线裁决转绿。该项是 statement-mode 合同歧义，不是失败句、人物词表或事实边界放宽；
+  新实现 SHA 尚待一次完整 G4。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 

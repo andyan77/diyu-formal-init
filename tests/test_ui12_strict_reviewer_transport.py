@@ -274,6 +274,7 @@ def test_reviewer_prompt_uses_closed_questions_without_addresses() -> None:
     assert "relationship_claim" in prompt
     assert "motive_or_mental_state" in prompt
     assert "statement_mode" in prompt
+    assert "只向受众征询观点、经验或选择" in prompt
     assert "不要返回 start、end、occurrence" in prompt
 
 
