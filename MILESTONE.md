@@ -1,7 +1,7 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
+- 状态：`BLOCKED`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
   未运行及未 push/CI/部署证据完整保留。
@@ -46,8 +46,22 @@
   UI-12 在原里程碑内恢复 `ACTIVE`，不创建 successor；唯一实现变化是 Reviewer V2
   改用同一 `deepseek-v4-flash` 的 `/beta` strict function transport，并把 Reviewer
   作用域收为 writer-owned clause。Writer、intake 与其他模型调用不切换 Beta。
-- 唯一下一动作：实现并确定性验证 Reviewer V2 strict function transport；首次
-  JSON-mode 失败不得删除、默认补字段或改写为成功。
+- Strict transport 实现 SHA
+  `b1deb3c98889f33902e765a1ab37ffb7614d0bd5` 已通过 schema、单一 tool call、
+  writer-only 作用域、容量、旧 raw 拒绝及 SDR 不回退等确定性门；`make lint`、
+  `make typecheck`、Golden `294 passed` 与 OpenAPI 同步。
+- 第二次真实资格第一包只调用一次：API 接受 `/beta` strict schema，返回
+  `finish_reason=tool_calls`、恰好一个正确 function，9/9 clause 且 arguments 可由严格
+  parser 解析，故 transport 资格通过。但歧义句“婆婆尊重儿媳。”返回
+  `uncertain=true`，重复 occurrence 的第二个“停了一下”返回错误 offset
+  `9:13`（真实位置 `10:14`）；服务端分别保守为 `insufficient_evidence` 与
+  `review_evidence_span`，整包 Reviewer evidence 资格失败。
+- 停止线执行：第二包、Writer、G3/G4/H1/D1、正式 API/PostgreSQL、push、CI、备份、
+  部署和生产验收均未执行；没有重跑、补默认值、清洗 offset、改 Prompt、fallback、
+  换模型或启动 UI-13。生产保持 `845f632…`。
+- 唯一下一动作：主控裁决“strict transport 已成立、但当前 Reviewer 不能稳定给出
+  无 uncertain 且 occurrence 精确的 evidence”这一单一阻断；裁决前 UI-12 保持
+  `BLOCKED`。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
