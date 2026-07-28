@@ -279,6 +279,8 @@ def test_reviewer_prompt_uses_closed_questions_without_addresses() -> None:
     assert "这篇内容／这个角度" in prompt
     assert "题材相似不是现实主体绑定" in prompt
     assert "比喻、类比或拟人本身不构成 dramatization" in prompt
+    assert "status 只回答“该维度证据是否存在／是否无法确定”" in prompt
+    assert "某个\n  subject_binding 类别存在时必须返回 status=present" in prompt
     assert "不要返回 start、end、occurrence" in prompt
 
 

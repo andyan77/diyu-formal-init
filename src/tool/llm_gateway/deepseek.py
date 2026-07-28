@@ -1122,6 +1122,9 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 严格规则：
 - 必须按给定顺序一题不少地回答全部 question_id；不得重复、增加或改名。
 - status 只能是 present、absent、uncertain。
+- status 只回答“该维度证据是否存在／是否无法确定”，绝不承载主体、关系或语态类别；
+  `generic`、`current_user`、`recommendation` 等类别只能放在 operands。某个
+  subject_binding 类别存在时必须返回 status=present，再把该类别放入 operands。
 - present：quote 必须从该题 allowed_quotes 中选择且在本 clause 内唯一；operands 至少一个，
   且只能从该题 allowed_operands 选择。
 - absent：quote 必须是空字符串，operands 必须是空数组。不能通过省略整个问题表达 absent。
