@@ -325,7 +325,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert isinstance(g3_kernel, dict)
         assert (
             g3_kernel["program_id"]
-            == "observation_with_hypothetical_example_v1"
+            == "observation_with_hypothetical_example_v2"
         )
 
         g6_before = _counts(app_database_url)

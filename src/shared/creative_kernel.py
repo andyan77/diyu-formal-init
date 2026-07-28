@@ -25,6 +25,7 @@ KernelPurpose: TypeAlias = Literal[
 KernelProgramId: TypeAlias = Literal[
     "observation_only_v1",
     "observation_with_hypothetical_example_v1",
+    "observation_with_hypothetical_example_v2",
 ]
 
 KERNEL_VERSION = "creative-kernel-v1"
@@ -34,10 +35,14 @@ OBSERVATION_ONLY_PROGRAM: KernelProgramId = "observation_only_v1"
 OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM: KernelProgramId = (
     "observation_with_hypothetical_example_v1"
 )
+OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2: KernelProgramId = (
+    "observation_with_hypothetical_example_v2"
+)
 _PROGRAM_IDS = frozenset(
     {
         OBSERVATION_ONLY_PROGRAM,
         OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
+        OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
     }
 )
 _PURPOSES = frozenset(
@@ -104,7 +109,11 @@ def build_kernel_skeleton(
 ) -> CreativeKernelV1:
     """Build the one small server-owned writing skeleton for a new artifact."""
     if (
-        program_id == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
+        program_id
+        in {
+            OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
+            OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
+        }
         and frame.narrative_mode != "general_observation"
     ):
         raise ValueError(
@@ -163,7 +172,10 @@ def build_kernel_skeleton(
                 text=record.exact_text,
             )
         )
-    if program_id == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM:
+    if program_id in {
+        OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
+        OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
+    }:
         units.extend(
             (
                 CreativeKernelUnit(
@@ -185,7 +197,12 @@ def build_kernel_skeleton(
                     text="",
                 ),
                 CreativeKernelUnit(
-                    unit_id="unit:body-closing",
+                    unit_id=(
+                        "unit:body-recommendation"
+                        if program_id
+                        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
+                        else "unit:body-closing"
+                    ),
                     purpose="body",
                     allowed_observation_types=("abstract_principle",),
                     fact_refs=(),
@@ -195,7 +212,24 @@ def build_kernel_skeleton(
                 ),
             )
         )
-        release_order = 120
+        if (
+            program_id
+            == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
+        ):
+            units.append(
+                CreativeKernelUnit(
+                    unit_id="unit:body-closing",
+                    purpose="body",
+                    allowed_observation_types=("abstract_principle",),
+                    fact_refs=(),
+                    constraint_refs=constraints,
+                    visible_order=120,
+                    text="",
+                )
+            )
+            release_order = 130
+        else:
+            release_order = 120
     else:
         units.append(
             CreativeKernelUnit(
@@ -245,7 +279,7 @@ def select_kernel_program(
         frame.narrative_mode == "general_observation"
         and not frame.allowed_fact_ids
     ):
-        return OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
+        return OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
     return OBSERVATION_ONLY_PROGRAM
 
 

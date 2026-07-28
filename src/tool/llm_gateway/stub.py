@@ -179,6 +179,7 @@ class DeterministicContentGenerator(ContentGenerator):
             "unit:hypothetical-example": (
                 "一方先停一下，另一方也不必马上给出答案。"
             ),
+            "unit:body-recommendation": "可以先说清需要，也为彼此留出回应的空间。",
             "unit:body-closing": "理解可以靠近，边界也仍然成立。",
             "unit:release-caption": release_caption,
         }

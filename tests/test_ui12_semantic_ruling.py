@@ -47,6 +47,7 @@ def _frame_and_kernel(
     program_id: Literal[
         "observation_only_v1",
         "observation_with_hypothetical_example_v1",
+        "observation_with_hypothetical_example_v2",
     ] = OBSERVATION_ONLY_PROGRAM,
     body: str = "换位思考不等于没有边界。",
     facts: tuple[FrozenFactRecord, ...] = (),
@@ -78,6 +79,7 @@ def _frame_and_kernel(
             "unit:body": body,
             "unit:body-opening": body,
             "unit:hypothetical-example": body,
+            "unit:body-recommendation": "彼此可以先停一下。",
             "unit:body-closing": "彼此可以先停一下。",
             "unit:release-caption": "理解彼此，也保留自己。",
         }[unit.unit_id]
@@ -1174,6 +1176,15 @@ def test_every_reachable_program_unit_has_one_trusted_contract() -> None:
     assert contracts["unit:body-opening"] == "abstract_observation"
     assert contracts["unit:hypothetical-example"] == "hypothetical_example"
     assert contracts["unit:body-closing"] == "recommendation"
+
+    _, _, current = _frame_and_kernel(
+        program_id="observation_with_hypothetical_example_v2",
+    )
+    current_contracts = {
+        context.unit_id: context.unit_contract for context in current
+    }
+    assert current_contracts["unit:body-recommendation"] == "recommendation"
+    assert current_contracts["unit:body-closing"] == "abstract_observation"
 
     for mode, expected in (
         ("general_observation", "abstract_observation"),

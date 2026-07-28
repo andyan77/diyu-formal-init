@@ -9,6 +9,7 @@ from src.shared.creative_kernel import (
     HYPOTHESIS_DISCLOSURE,
     OBSERVATION_ONLY_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
+    OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
     CreativeKernelV1,
 )
 from src.shared.factual_basis import FrozenFactRecord
@@ -1060,6 +1061,20 @@ def unit_contracts_v2(
                 "unit:body-closing": "recommendation",
             }
         )
+    elif (
+        kernel.program_id
+        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
+    ):
+        if frame.narrative_mode != "general_observation" or fact_units:
+            raise ValueError("hypothetical example program drifted from frame")
+        contracts.update(
+            {
+                "unit:body-opening": "abstract_observation",
+                "unit:hypothetical-example": "hypothetical_example",
+                "unit:body-recommendation": "recommendation",
+                "unit:body-closing": "abstract_observation",
+            }
+        )
     elif kernel.program_id == OBSERVATION_ONLY_PROGRAM:
         body_contract: UnitContractV2
         if frame.narrative_mode == "actuality_reflection":
@@ -1297,13 +1312,23 @@ def _kernel_program_issues(
 ) -> tuple[NarrativeIssue, ...]:
     if (
         kernel.program_id
-        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
+        in {
+            OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
+            OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
+        }
     ):
         expected = {
             "unit:body-opening": ("abstract_principle",),
             "unit:hypothetical-example": ("hypothesis",),
             "unit:body-closing": ("abstract_principle",),
         }
+        if (
+            kernel.program_id
+            == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
+        ):
+            expected["unit:body-recommendation"] = (
+                "abstract_principle",
+            )
     else:
         expected = {"unit:body": ("abstract_principle",)}
     body_units = {

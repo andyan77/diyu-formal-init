@@ -12,7 +12,7 @@ from src.brain.platform_directions import direction_for
 from src.shared.creative_kernel import (
     DRAMATIZATION_DISCLOSURE,
     HYPOTHESIS_DISCLOSURE,
-    OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
+    OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
     CreativeKernelV1,
     build_kernel_skeleton,
     parse_writer_kernel,
@@ -470,6 +470,10 @@ def _kernel_writer(
                 "text": "一方先停一下，另一方也不必马上给出答案。",
             },
             {
+                "unit_id": "unit:body-recommendation",
+                "text": "可以先说清需要，也为彼此留出回应的空间。",
+            },
+            {
                 "unit_id": "unit:body-closing",
                 "text": "理解可以靠近，边界也仍然成立。",
             },
@@ -526,7 +530,7 @@ def test_kernel_writer_prompt_explains_recommendation_contract() -> None:
     assert "不能写具体时间、地点、对白、情境例子或没有语态" in prompt
     assert "不得追加第二个抽象收束 clause" in prompt
     assert '"unit_contract": "recommendation"' in prompt
-    assert '"unit_id": "unit:body-closing"' in prompt
+    assert '"unit_id": "unit:body-recommendation"' in prompt
     assert '"unit_contract": "abstract_observation"' in prompt
     assert "Writer-owned clause 不得让当前表达者或第一人称复数承担" in prompt
     assert "abstract_observation\n只写状态、判断、关系理解或比喻" in prompt
@@ -539,7 +543,7 @@ def test_recommendation_clause_count_is_checked_before_reviewer() -> None:
         kernel,
         units=tuple(
             replace(unit, text="可以先说清需要。关系仍然值得理解。")
-            if unit.unit_id == "unit:body-closing"
+            if unit.unit_id == "unit:body-recommendation"
             else unit
             for unit in kernel.units
         ),
@@ -563,11 +567,11 @@ def test_recommendation_clause_count_is_checked_before_reviewer() -> None:
     assert DeepSeekGenerator._kernel_repair_scope(
         mutated,
         issues,
-    ) == frozenset({"unit:body-closing"})
+    ) == frozenset({"unit:body-recommendation"})
     repair_prompt = _generator()._kernel_repair_prompt(
         request,
         mutated,
-        frozenset({"unit:body-closing"}),
+        frozenset({"unit:body-recommendation"}),
         issues,
     )
     assert '"unit_contract": "recommendation"' in repair_prompt
@@ -600,7 +604,7 @@ def _kernel_observations(
         )
         modality = (
             "可以"
-            if clause.unit_id == "unit:body-closing"
+            if clause.unit_id == "unit:body-recommendation"
             and "可以" in clause.exact_text
             else None
         )
@@ -1138,7 +1142,7 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert isinstance(kernel_snapshot, dict)
     assert (
         kernel_snapshot["program_id"]
-        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
+        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
     )
     assert isinstance(artifact.production, GraphicProductionBundle)
     assert artifact.production.full_body == "\n\n".join(

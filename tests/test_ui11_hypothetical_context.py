@@ -9,6 +9,7 @@ from src.shared.creative_kernel import (
     KERNEL_VERSION,
     OBSERVATION_ONLY_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
+    OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
     CreativeKernelV1,
     build_kernel_skeleton,
     kernel_digest,
@@ -188,7 +189,7 @@ def test_server_selects_one_bounded_program_from_frozen_context() -> None:
     general = new_frame("general_observation", (), ())
     assert (
         select_kernel_program(frame=general)
-        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
+        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
     )
 
     actuality = new_frame("actuality_reflection", ("今天很忙。",), ())
