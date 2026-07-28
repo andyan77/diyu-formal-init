@@ -177,6 +177,12 @@
 - 当前执行纪律：先离线重放现存完整 G4 初稿、修复稿、Reviewer raw 与 service issues，
   直接形成当前 G4 消费的闭合问题夹具；确定性门通过后直接运行完整无持久化 G4。完整
   G1—G7/H1/D1 成立前均为 WIP，不 push、CI、备份、部署或写生产。
+- 闭合合同首轮确定性结果：当前 G4 初稿 `13` 个 writer clause 被展开为 `130` 个固定
+  问题，唯一修复稿 `10` 个 writer clause 被展开为 `100` 个固定问题；人工冻结回答经
+  服务端派生 Claim Inventory 后，两稿均稳定拒绝。最终旧 raw 中
+  relationship/motive/dialogue 全部漏提的事实被保留，闭合回答不再允许用“没有返回”
+  冒充 absent。主链定向回归、strict transport、legacy SDR 与相邻 UI-09—UI-12 消费者
+  已通过；这些仍是未调用新模型的 WIP 证据，不表示 G4 成立。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 

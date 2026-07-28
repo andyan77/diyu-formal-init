@@ -4,7 +4,6 @@ import json
 import logging
 import re
 import time
-from collections.abc import Mapping
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from typing import Any, cast
@@ -12,6 +11,19 @@ from typing import Any, cast
 import httpx
 
 from src.ports.content_generator import ContentGenerator
+from src.shared.closed_review import (
+    CLOSED_REVIEW_TOOL_NAME,
+    CLOSED_REVIEW_VERSION,
+    ClaimInventoryItem,
+    ClosedReviewAnswer,
+    ClosedReviewAnswers,
+    ClosedReviewQuestion,
+    build_closed_review_questions,
+    claim_inventory_document,
+    closed_review_json_schema,
+    parse_closed_review_answers,
+    reconcile_closed_review_answers,
+)
 from src.shared.content_origin import aigc_disclosure
 from src.shared.creative_kernel import (
     CreativeKernelV1,
@@ -52,19 +64,10 @@ from src.shared.narrative import (
     visible_digest,
 )
 from src.shared.review_evidence import (
-    REVIEW_EVIDENCE_V2_TOOL_NAME,
-    REVIEW_EVIDENCE_V2_VERSION,
     ClauseContextV2,
     ProtectedSubjectScopeV2,
-    ReviewClause,
-    ReviewEvidenceV2,
     build_clause_contexts_v2,
     clause_context_document,
-    parse_review_evidence_v2,
-    reconcile_review_evidence_v2,
-    review_clauses_from_contexts,
-    review_evidence_v2_json_schema,
-    unique_review_quote_candidates,
     unit_contracts_v2,
     validate_server_owned_contexts_v2,
     writer_clause_contexts_v2,
@@ -98,8 +101,9 @@ _SPOKEN_SLOT = "spoken"
 _COVER_PURPOSE = "cover"
 _SCENE_PURPOSE = "scene"
 _REVIEW_TOKEN_BASE = 1024
-_REVIEW_TOKEN_PER_CLAUSE = 512
+_REVIEW_TOKEN_PER_QUESTION = 160
 _REVIEW_TOKEN_HARD_LIMIT = 16384
+_CLOSED_REVIEW_BATCH_CLAUSES = 8
 
 _CONTRACT_FIELDS: dict[ContentProduct, tuple[str, str, str]] = {
     "dressing_decision": ("choice", "boundary", "next_action"),
@@ -167,9 +171,7 @@ class NarrativeCore:
 
     @property
     def target_ids(self) -> tuple[str, ...]:
-        return tuple(block.block_id for block in self.blocks) + tuple(
-            scene.step_id for scene in self.scene_steps
-        )
+        return tuple(block.block_id for block in self.blocks) + tuple(scene.step_id for scene in self.scene_steps)
 
 
 @dataclass(frozen=True)
@@ -210,24 +212,15 @@ class BoundaryContext:
 
     @property
     def fact_text_by_id(self) -> dict[str, str]:
-        return {
-            record.fact_id: record.exact_text
-            for record in self.fact_registry
-        }
+        return {record.fact_id: record.exact_text for record in self.fact_registry}
 
     @property
     def brand_fact_ids(self) -> frozenset[str]:
-        return frozenset(
-            record.fact_id
-            for record in self.fact_registry
-            if record.fact_kind == "brand"
-        )
+        return frozenset(record.fact_id for record in self.fact_registry if record.fact_kind == "brand")
 
     @property
     def constraint_ids(self) -> frozenset[str]:
-        return frozenset(
-            identifier for identifier, _ in self.constraint_registry
-        )
+        return frozenset(identifier for identifier, _ in self.constraint_registry)
 
     @property
     def resource_ids(self) -> frozenset[str]:
@@ -253,14 +246,10 @@ class BoundaryContext:
         )
         brand_records = tuple(
             record
-            for record in brand_fact_records(
-                request.brand.brand_reference_context
-            )
+            for record in brand_fact_records(request.brand.brand_reference_context)
             if record.fact_id in frame.allowed_brand_fact_ids
         )
-        if {
-            record.fact_id for record in product_records
-        } != set(frame.allowed_product_fact_ids) or {
+        if {record.fact_id for record in product_records} != set(frame.allowed_product_fact_ids) or {
             record.fact_id for record in brand_records
         } != set(frame.allowed_brand_fact_ids):
             raise GenerationFailed("冻结事实标识无法解析到当前精确原句")
@@ -273,10 +262,7 @@ class BoundaryContext:
             for fact in frame.user_facts
         )
         fact_registry = (*user_records, *product_records, *brand_records)
-        product_facts_text = "\n".join(
-            f"- {record.fact_id}：{record.exact_text}"
-            for record in product_records
-        )
+        product_facts_text = "\n".join(f"- {record.fact_id}：{record.exact_text}" for record in product_records)
         constraint_registry = (
             ("source:brand_baseline", "当前品牌定位、判断顺序与语气"),
             ("source:role_boundary", "当前发布账号的表达身份与资格边界"),
@@ -286,14 +272,9 @@ class BoundaryContext:
             ),
             ("constraint:creative-plan-v2", "冻结 CreativePlanV2"),
             ("constraint:platform-shape", "目标平台与内容形式"),
+            *((tone_id, "用户显式选择或账号合法基线语气") for tone_id in request.creative_plan.tone_ids),
             *(
-                (tone_id, "用户显式选择或账号合法基线语气")
-                for tone_id in request.creative_plan.tone_ids
-            ),
-            *(
-                (
-                    (request.creative_plan.mechanism_id, "既有内容机制"),
-                )
+                ((request.creative_plan.mechanism_id, "既有内容机制"),)
                 if request.creative_plan.mechanism_id is not None
                 else ()
             ),
@@ -301,8 +282,7 @@ class BoundaryContext:
         resource_registry = (
             (
                 _CREATOR_EXPRESSION_RESOURCE_ID,
-                "创作者本人可选择口播、旁白、手势或不出镜表达；"
-                "不证明其具有题材中的家庭、职业或经历身份",
+                "创作者本人可选择口播、旁白、手势或不出镜表达；不证明其具有题材中的家庭、职业或经历身份",
             ),
             (
                 _ORIGINAL_COMPOSITION_RESOURCE_ID,
@@ -335,26 +315,19 @@ class BoundaryContext:
                     ),
                     (
                         "用户本次自然补充的创作控制（只调整表达方法，成品不得讨论这段"
-                        "控制说明本身）："
-                        + request.creative_direction.custom_text
+                        "控制说明本身）：" + request.creative_direction.custom_text
                     ),
                 )
                 if request.creative_direction is not None
                 else ()
             ),
             *(
-                (
-                    "本次选用的参考材料（只作为表达参考，不证明现实对象或事件存在）："
-                    + material.text_body
-                )
+                ("本次选用的参考材料（只作为表达参考，不证明现实对象或事件存在）：" + material.text_body)
                 for material in request.reference_materials
                 if material.text_body
             ),
             *(
-                (
-                    "本次参考材料使用说明（只调整创作方法，不是成品素材）："
-                    + material.reference_note
-                )
+                ("本次参考材料使用说明（只调整创作方法，不是成品素材）：" + material.reference_note)
                 for material in request.reference_materials
                 if material.reference_note
             ),
@@ -362,17 +335,13 @@ class BoundaryContext:
                 (
                     (
                         "私人协作偏好说明只调整协作方式与表达取舍，成品中不得出现它的"
-                        "原文、转述或对它的解释："
-                        + request.collaboration_note
+                        "原文、转述或对它的解释：" + request.collaboration_note
                     ),
                 )
                 if request.collaboration_note
                 else ()
             ),
-            *(
-                "方法资料（不证明现实对象存在）：" + asset.body
-                for asset in request.active_domain_assets
-            ),
+            *("方法资料（不证明现实对象存在）：" + asset.body for asset in request.active_domain_assets),
         ]
         brand_text = (
             f"品牌：{request.brand.brand_name}；组织：{request.brand.organization_name}；"
@@ -392,8 +361,7 @@ class BoundaryContext:
                     "当前创作者，仅以拍摄者／表达者身份出现，不扮演题材人物",
                 ),
             ),
-            product_facts_text=product_facts_text
-            or "（本次没有冻结商品事实。）",
+            product_facts_text=product_facts_text or "（本次没有冻结商品事实。）",
             brand_text=brand_text,
             method_text="\n".join(part for part in method_parts if part),
         )
@@ -428,11 +396,7 @@ class DeepSeekGenerator(ContentGenerator):
             700,
         )
         try:
-            document = json.loads(
-                self._json_content(
-                    str(payload["choices"][0]["message"]["content"])
-                )
-            )
+            document = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"])))
             value = document.get("primary_value")
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise GenerationFailed("模型路由返回格式不完整") from exc
@@ -455,28 +419,18 @@ class DeepSeekGenerator(ContentGenerator):
             1800,
         )
         try:
-            document = json.loads(
-                self._json_content(
-                    str(payload["choices"][0]["message"]["content"])
-                )
-            )
+            document = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"])))
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。") from exc
         if not isinstance(document, dict):
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。")
         kind = document.get("kind")
         message = document.get("message")
-        if kind not in {"chat", "question", "ready"} or not isinstance(
-            message, str
-        ) or not message.strip():
+        if kind not in {"chat", "question", "ready"} or not isinstance(message, str) or not message.strip():
             raise GenerationFailed("这次还没能可靠理解你的意思，请继续补充一句。")
         creation_proposal = bool(document.get("creation_proposal", kind == "ready"))
         raw_intent_span = document.get("intent_span")
-        proposed_intent_span = (
-            raw_intent_span.strip()
-            if isinstance(raw_intent_span, str)
-            else ""
-        )
+        proposed_intent_span = raw_intent_span.strip() if isinstance(raw_intent_span, str) else ""
         if kind == "chat":
             return ConversationDecision(
                 "chat",
@@ -484,17 +438,15 @@ class DeepSeekGenerator(ContentGenerator):
                 creation_proposal=creation_proposal,
                 proposed_intent_span=proposed_intent_span,
             )
-        available_user_turns = tuple(
-            turn.content for turn in request.history if turn.role == "user"
-        ) + (request.message,)
+        available_user_turns = tuple(turn.content for turn in request.history if turn.role == "user") + (
+            request.message,
+        )
         if kind == "question":
             missing_span = document.get("missing_fact_span")
             if (
                 not isinstance(missing_span, str)
                 or not missing_span
-                or not any(
-                    missing_span in user_turn for user_turn in available_user_turns
-                )
+                or not any(missing_span in user_turn for user_turn in available_user_turns)
             ):
                 raise GenerationFailed("模型追问没有绑定用户的不可替代事实")
             return ConversationDecision(
@@ -516,20 +468,14 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("模型协作返回格式不完整")
         premises = self._exact_string_list(raw_premises)
         facts = self._exact_string_list(raw_facts)
-        if (
-            request.message not in premises
-            or any(premise not in available_user_turns for premise in premises)
-        ):
+        if request.message not in premises or any(premise not in available_user_turns for premise in premises):
             raise GenerationFailed("模型没有逐字保留本次用户前提")
         premise_text = "\n".join(premises)
         if any(fact not in premise_text for fact in facts):
             raise GenerationFailed("模型返回的用户事实跨度不存在")
         if (raw_mode == "actuality_reflection") != bool(facts):
             raise GenerationFailed("模型叙事模式与用户事实跨度不一致")
-        if (
-            request.explicit_narrative_mode is not None
-            and raw_mode != request.explicit_narrative_mode
-        ):
+        if request.explicit_narrative_mode is not None and raw_mode != request.explicit_narrative_mode:
             raise GenerationFailed("模型没有遵守用户显式叙事形式")
         try:
             plan = creative_plan_from_document(raw_plan)
@@ -542,9 +488,7 @@ class DeepSeekGenerator(ContentGenerator):
                 expected_platform_shape=request.platform_shape,
             )
         except DomainError as exc:
-            raise GenerationFailed(
-                "模型返回的 CreativePlanV2 超出冻结边界"
-            ) from exc
+            raise GenerationFailed("模型返回的 CreativePlanV2 超出冻结边界") from exc
         return ConversationDecision(
             "ready",
             message.strip(),
@@ -582,9 +526,7 @@ class DeepSeekGenerator(ContentGenerator):
         skeleton = build_kernel_skeleton(
             frame=frame,
             fact_registry=context.fact_registry,
-            constraint_refs=tuple(
-                identifier for identifier, _ in context.constraint_registry
-            ),
+            constraint_refs=tuple(identifier for identifier, _ in context.constraint_registry),
             program_id=program_id,
         )
         writer_payload, writer_retries = self._request(
@@ -596,15 +538,7 @@ class DeepSeekGenerator(ContentGenerator):
         retries += writer_retries
         try:
             kernel = parse_writer_kernel(
-                json.loads(
-                    self._json_content(
-                        str(
-                            writer_payload["choices"][0]["message"][
-                                "content"
-                            ]
-                        )
-                    )
-                ),
+                json.loads(self._json_content(str(writer_payload["choices"][0]["message"]["content"]))),
                 skeleton,
             )
         except (
@@ -614,10 +548,13 @@ class DeepSeekGenerator(ContentGenerator):
             ValueError,
             json.JSONDecodeError,
         ) as exc:
-            raise GenerationFailed(
-                "CreativeKernelV1 Writer 返回格式不完整"
-            ) from exc
-        issues, review_payload, review_retries = self._review_kernel(
+            raise GenerationFailed("CreativeKernelV1 Writer 返回格式不完整") from exc
+        (
+            issues,
+            claim_inventory,
+            review_payload,
+            review_retries,
+        ) = self._review_kernel(
             request,
             context,
             kernel,
@@ -643,15 +580,7 @@ class DeepSeekGenerator(ContentGenerator):
                 repaired = repair_kernel_units(
                     kernel=kernel,
                     affected_unit_ids=affected,
-                    raw=json.loads(
-                        self._json_content(
-                            str(
-                                repair_payload["choices"][0]["message"][
-                                    "content"
-                                ]
-                            )
-                        )
-                    ),
+                    raw=json.loads(self._json_content(str(repair_payload["choices"][0]["message"]["content"]))),
                 )
             except (
                 KeyError,
@@ -660,25 +589,22 @@ class DeepSeekGenerator(ContentGenerator):
                 ValueError,
                 json.JSONDecodeError,
             ) as exc:
-                raise GenerationFailed(
-                    "CreativeKernelV1 单元修复返回格式不完整"
-                ) from exc
-            final_issues, review_payload, review_retries = (
-                self._review_kernel(request, context, repaired)
-            )
+                raise GenerationFailed("CreativeKernelV1 单元修复返回格式不完整") from exc
+            (
+                final_issues,
+                final_claim_inventory,
+                review_payload,
+                review_retries,
+            ) = self._review_kernel(request, context, repaired)
             provider_payloads.append(review_payload)
             retries += review_retries
             if final_issues:
-                raise GenerationFailed(
-                    "内容边界无法在一次 CreativeKernel unit 修复内满足"
-                )
+                raise GenerationFailed("内容边界无法在一次 CreativeKernel unit 修复内满足")
             receipts = self._repair_receipts(issues)
             kernel = repaired
+            claim_inventory = final_claim_inventory
         if request.revision_instruction and request.prior_creative_kernel:
-            before = tuple(
-                unit.text
-                for unit in request.prior_creative_kernel.writable_units
-            )
+            before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
             after = tuple(unit.text for unit in kernel.writable_units)
             if before == after:
                 raise GenerationFailed("本次修改没有实质改变允许修改的创作单元")
@@ -724,16 +650,13 @@ class DeepSeekGenerator(ContentGenerator):
             reviewed_digest=digest,
             completion_snapshot_patch={
                 "creative_kernel_v1": kernel_document(kernel),
-                "clause_context_v2": clause_context_document(
-                    clause_contexts
-                ),
+                "clause_context_v2": clause_context_document(clause_contexts),
                 "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
-                "review_evidence_version": REVIEW_EVIDENCE_V2_VERSION,
+                "review_evidence_version": CLOSED_REVIEW_VERSION,
+                "closed_review_contract": "closed-review-questions-v1",
+                "claim_inventory_v1": claim_inventory_document(claim_inventory),
                 "reviewed_kernel_digest": reviewed_kernel_digest,
-                "visible_provenance": {
-                    field: list(sources)
-                    for field, sources in compiled.visible_provenance.items()
-                },
+                "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
                 "delivery_resource_refs": list(compiled.resource_refs),
             },
         )
@@ -743,11 +666,7 @@ class DeepSeekGenerator(ContentGenerator):
         retries = 0
         provider_payloads: list[dict[str, Any]] = []
         frame = request.narrative_frame or legacy_frame(
-            tuple(
-                record.fact_id
-                for product in request.products
-                for record in product_fact_records(product)
-            )
+            tuple(record.fact_id for product in request.products for record in product_fact_records(product))
         )
         context = BoundaryContext.from_request(request, frame)
         skeleton = self._narrative_skeleton(request, frame, context)
@@ -764,11 +683,7 @@ class DeepSeekGenerator(ContentGenerator):
                 frame,
                 context,
                 skeleton,
-                json.loads(
-                    self._json_content(
-                        str(writer_payload["choices"][0]["message"]["content"])
-                    )
-                ),
+                json.loads(self._json_content(str(writer_payload["choices"][0]["message"]["content"]))),
             )
         except (
             KeyError,
@@ -794,9 +709,7 @@ class DeepSeekGenerator(ContentGenerator):
             self._assert_review_can_repair(core, issues)
             _LOGGER.warning(
                 "narrative blocks selected for one repair: %s",
-                ",".join(
-                    f"{issue.target_id}:{issue.reason}" for issue in issues
-                ),
+                ",".join(f"{issue.target_id}:{issue.reason}" for issue in issues),
             )
             repair_payload, repair_retries = self._request(
                 "你是笛语类型化内容 Writer。只返回一次完整块级修复 JSON，不展示推理或审查。",
@@ -813,15 +726,7 @@ class DeepSeekGenerator(ContentGenerator):
                     skeleton,
                     core,
                     issues,
-                    json.loads(
-                        self._json_content(
-                            str(
-                                repair_payload["choices"][0]["message"][
-                                    "content"
-                                ]
-                            )
-                        )
-                    ),
+                    json.loads(self._json_content(str(repair_payload["choices"][0]["message"]["content"]))),
                 )
             except (
                 KeyError,
@@ -831,27 +736,20 @@ class DeepSeekGenerator(ContentGenerator):
                 json.JSONDecodeError,
             ) as exc:
                 raise GenerationFailed("模型块级修复返回格式不完整") from exc
-            title, contract, production, body = self._compile_core(
-                request, repaired
-            )
-            final_issues, review_payload, review_retries = (
-                self._review_candidate(
-                    request,
-                    frame,
-                    context,
-                    repaired,
-                    body,
-                )
+            title, contract, production, body = self._compile_core(request, repaired)
+            final_issues, review_payload, review_retries = self._review_candidate(
+                request,
+                frame,
+                context,
+                repaired,
+                body,
             )
             provider_payloads.append(review_payload)
             retries += review_retries
             if final_issues:
                 _LOGGER.warning(
                     "narrative repair remained invalid: %s",
-                    ",".join(
-                        f"{issue.target_id}:{issue.reason}"
-                        for issue in final_issues
-                    ),
+                    ",".join(f"{issue.target_id}:{issue.reason}" for issue in final_issues),
                 )
                 raise GenerationFailed("内容边界无法在一次叙事块修复内满足")
             receipts = self._repair_receipts(issues)
@@ -861,12 +759,8 @@ class DeepSeekGenerator(ContentGenerator):
             prior_without_facts = request.prior_saved_body
             for fact in frame.user_facts:
                 without_facts = without_facts.replace(fact.exact_text, "")
-                prior_without_facts = prior_without_facts.replace(
-                    fact.exact_text, ""
-                )
-            if self._semantic_text(without_facts) == self._semantic_text(
-                prior_without_facts
-            ):
+                prior_without_facts = prior_without_facts.replace(fact.exact_text, "")
+            if self._semantic_text(without_facts) == self._semantic_text(prior_without_facts):
                 raise GenerationFailed("本次修改没有实质改变允许修改的表达块")
         digest = visible_digest(title, body)
         return GeneratedArtifact(
@@ -888,7 +782,12 @@ class DeepSeekGenerator(ContentGenerator):
         request: GenerationInput,
         context: BoundaryContext,
         kernel: CreativeKernelV1,
-    ) -> tuple[tuple[NarrativeIssue, ...], dict[str, Any], int]:
+    ) -> tuple[
+        tuple[NarrativeIssue, ...],
+        tuple[ClaimInventoryItem, ...],
+        dict[str, Any],
+        int,
+    ]:
         clause_contexts = self._kernel_clause_contexts(
             request,
             context,
@@ -899,49 +798,26 @@ class DeepSeekGenerator(ContentGenerator):
             fact_text_by_id=context.fact_text_by_id,
         )
         if source_issues:
-            raise GenerationFailed(
-                "CreativeKernelV1 服务端来源合同不完整"
-            )
+            raise GenerationFailed("CreativeKernelV1 服务端来源合同不完整")
         writer_contexts = writer_clause_contexts_v2(clause_contexts)
         if not writer_contexts:
-            raise GenerationFailed(
-                "CreativeKernelV1 缺少可审查的 Writer clause"
-            )
-        payload, retries = self._request_strict_review(
-            "你是独立 CreativeKernel 证据提取器。只按既定语法证据类别穷尽提取每个 clause 的精确文字证据，不判断事实性、合同、允许性或通过失败，不改写，只调用指定函数一次。",
-            self._kernel_reviewer_prompt(
-                review_clauses_from_contexts(writer_contexts)
-            ),
-            clause_count=len(writer_contexts),
-            allowed_quotes=unique_review_quote_candidates(
-                tuple(context.exact_text for context in writer_contexts)
-            ),
-            timeout_seconds=self._review_timeout_seconds,
-        )
-        try:
-            evidence = self._strict_review_evidence(
-                payload,
-                clause_text_by_id={
-                    item.clause_id: item.exact_text
-                    for item in writer_contexts
-                },
-            )
-        except (
-            KeyError,
-            IndexError,
-            TypeError,
-            json.JSONDecodeError,
-        ) as exc:
-            raise GenerationFailed(
-                "独立 CreativeKernel Reviewer 证据格式不完整"
-            ) from exc
-        return (
-            reconcile_review_evidence_v2(
-                contexts=clause_contexts,
-                evidence=evidence,
-                fact_text_by_id=context.fact_text_by_id,
-                protected_subjects=ProtectedSubjectScopeV2(
-                    exact_names=tuple(
+            raise GenerationFailed("CreativeKernelV1 缺少可审查的 Writer clause")
+        questions = build_closed_review_questions(clause_contexts)
+        payloads: list[dict[str, Any]] = []
+        all_answers: list[ClosedReviewAnswer] = []
+        retries = 0
+        for batch in self._closed_review_batches(questions):
+            payload, batch_retries = self._request_strict_review(
+                "你是独立 CreativeKernel 风险问题回答器。只回答服务端给出的闭合问题，不决定事实许可或通过失败，不改写文字，只调用指定函数一次。",
+                self._kernel_reviewer_prompt(
+                    questions=batch,
+                    contexts=writer_contexts,
+                    actuality_facts=tuple(
+                        (fact_id, fact_text)
+                        for fact_id, fact_text in (context.fact_text_by_id.items())
+                        if fact_id.startswith("source:user_actuality:")
+                    ),
+                    protected_subjects=tuple(
                         dict.fromkeys(
                             name
                             for name in (
@@ -952,10 +828,54 @@ class DeepSeekGenerator(ContentGenerator):
                             if name
                         )
                     ),
-                    speaker_kind=request.brand.speaker_kind,
+                ),
+                question_count=len(batch),
+                questions=batch,
+                timeout_seconds=self._review_timeout_seconds,
+            )
+            payloads.append(payload)
+            retries += batch_retries
+            try:
+                batch_answers = self._strict_review_answers(
+                    payload,
+                    questions=batch,
+                )
+            except (
+                KeyError,
+                IndexError,
+                TypeError,
+                json.JSONDecodeError,
+            ) as exc:
+                raise GenerationFailed("独立 CreativeKernel Reviewer 闭合证据不完整") from exc
+            all_answers.extend(batch_answers.answers)
+        protected_subjects = ProtectedSubjectScopeV2(
+            exact_names=tuple(
+                dict.fromkeys(
+                    name
+                    for name in (
+                        request.brand.brand_name,
+                        request.brand.organization_name,
+                        request.brand.account_name,
+                    )
+                    if name
                 ),
             ),
-            payload,
+            speaker_kind=request.brand.speaker_kind,
+        )
+        result = reconcile_closed_review_answers(
+            contexts=clause_contexts,
+            questions=questions,
+            answers=ClosedReviewAnswers(
+                evidence_version=CLOSED_REVIEW_VERSION,
+                answers=tuple(all_answers),
+            ),
+            fact_text_by_id=context.fact_text_by_id,
+            protected_subjects=protected_subjects,
+        )
+        return (
+            result.issues,
+            result.claims,
+            self._review_payload_envelope(payloads),
             retries,
         )
 
@@ -976,9 +896,7 @@ class DeepSeekGenerator(ContentGenerator):
                 speaker_kind=request.brand.speaker_kind,
             )
         except ValueError as exc:
-            raise GenerationFailed(
-                "CreativeKernelV1 服务端 clause 合同不完整"
-            ) from exc
+            raise GenerationFailed("CreativeKernelV1 服务端 clause 合同不完整") from exc
 
     @staticmethod
     def _kernel_repair_scope(
@@ -989,6 +907,10 @@ class DeepSeekGenerator(ContentGenerator):
             "review_evidence_coverage",
             "review_evidence_span",
             "review_evidence_uncertain",
+            "review_question_coverage",
+            "review_answer_coverage",
+            "review_answer_quote",
+            "claim_inventory_drift",
             "insufficient_evidence",
             "frozen_fact_changed",
             "server_wrapper_drift",
@@ -997,17 +919,9 @@ class DeepSeekGenerator(ContentGenerator):
             "kernel_program_drift",
         }
         if any(issue.reason in nonrepairable for issue in issues):
-            raise GenerationFailed(
-                "CreativeKernel Reviewer 证据不完整或事实单元不一致"
-            )
-        writable_ids = {
-            unit.unit_id for unit in kernel.writable_units
-        }
-        affected = frozenset(
-            issue.target_id
-            for issue in issues
-            if issue.target_id in writable_ids
-        )
+            raise GenerationFailed("CreativeKernel Reviewer 证据不完整或事实单元不一致")
+        writable_ids = {unit.unit_id for unit in kernel.writable_units}
+        affected = frozenset(issue.target_id for issue in issues if issue.target_id in writable_ids)
         if not affected:
             raise GenerationFailed("CreativeKernel 缺陷不属于可写单元")
         return affected
@@ -1030,11 +944,7 @@ class DeepSeekGenerator(ContentGenerator):
             if not unit.writable
             and (
                 request.narrative_frame is None
-                or not any(
-                    fact_ref
-                    in request.narrative_frame.allowed_brand_fact_ids
-                    for fact_ref in unit.fact_refs
-                )
+                or not any(fact_ref in request.narrative_frame.allowed_brand_fact_ids for fact_ref in unit.fact_refs)
             )
         ]
         trusted_contracts = unit_contracts_v2(
@@ -1046,9 +956,7 @@ class DeepSeekGenerator(ContentGenerator):
                 "unit_id": unit.unit_id,
                 "purpose": unit.purpose,
                 "unit_contract": trusted_contracts[unit.unit_id],
-                "allowed_observation_types": list(
-                    unit.allowed_observation_types
-                ),
+                "allowed_observation_types": list(unit.allowed_observation_types),
                 "visible_order": unit.visible_order,
             }
             for unit in skeleton.writable_units
@@ -1119,75 +1027,108 @@ abstract_observation / release_caption unit 完成。actuality_reflection 对应
 
     @staticmethod
     def _kernel_reviewer_prompt(
-        clauses: tuple[ReviewClause, ...],
+        *,
+        questions: tuple[ClosedReviewQuestion, ...],
+        contexts: tuple[ClauseContextV2, ...],
+        actuality_facts: tuple[tuple[str, str], ...],
+        protected_subjects: tuple[str, ...],
     ) -> str:
-        targets = [
-            {
-                "unit_id": clause.unit_id,
-                "clause_id": clause.clause_id,
-                "exact_text": clause.exact_text,
-                "visible_order": clause.visible_order,
-                "allowed_quotes": list(
-                    unique_review_quote_candidates((clause.exact_text,))
-                ),
-            }
-            for clause in clauses
-        ]
-        return f"""逐项阅读服务端已切分的最终可见 clause，只提取原文中实际出现的精确证据。
-不要分类为抽象原则、事件、机构主张或其他类型；不要返回 pass/fail、事实依据、发布许可、
-资源、修复建议或 observation_type；不要改写、概括或补全文字。
+        context_by_clause = {context.clause_id: context for context in contexts}
+        descriptions = {
+            "subject_binding": (
+                "这条主张是否绑定当前说话者/用户、受保护主体、泛指角色、虚构角色或其他具体人物/机构/商品？"
+                "判断主张实际指向，不只看语法主语；若它概括或解释冻结用户事实，属于 current_user；"
+                "只有当前账号／表达方自己承担主张时才属于 current_speaker。"
+            ),
+            "relationship_claim": (
+                "是否建立亲属、伴侣、家庭、同住、同事、员工、顾客或其他具体社会关系？"
+                "“亲密关系”也属于关系主张；纯粹的‘人与人’等无具体关系可 absent。"
+            ),
+            "actual_event": (
+                "是否声称动作、反应、事件或状态在现实中已经发生、正在发生或确实存在？"
+                "泛指观察、建议、明确条件推演和披露演绎中的动作不算 actuality，应 absent。"
+            ),
+            "dialogue_attribution": ("是否出现直接对白、转述或作为例子给出的具体话语？"),
+            "motive_or_mental_state": ("是否推断愿望、期待、害怕、需要、意图、信念、情绪或其他心理原因？"),
+            "cause_or_result": ("是否建立前因、结果或因果联系？泛指因果也要 present，最终是否允许由服务端决定。"),
+            "time_location_possession": ("是否绑定现实时间、地点、持有/所有关系或经营条件？纯条件语气不算现实时间。"),
+            "institutional_or_product_claim": (
+                "是否形成品牌、公司、门店、账号或商品的事实、历史、做法、承诺、性能主张？"
+            ),
+            "statement_mode": (
+                "整条 clause 的可见语态是什么？必须 present 且只选一个：actuality、"
+                "generic_observation、recommendation、hypothesis、dramatization；无法可靠"
+                "唯一判断时 status=uncertain。"
+            ),
+            "disclosure": (
+                "这条 writer 文字是否逃逸或抵触服务端给定的 hypothesis/dramatization 范围，"
+                "或在需要披露时转而声称现实？只有存在冲突才 present；无冲突 absent。"
+            ),
+        }
+        grouped: list[dict[str, object]] = []
+        clause_ids = tuple(dict.fromkeys(question.clause_id for question in questions))
+        for clause_id in clause_ids:
+            context = context_by_clause[clause_id]
+            clause_questions = tuple(question for question in questions if question.clause_id == clause_id)
+            server_scope = (
+                "hypothesis"
+                if context.unit_contract == "hypothetical_example"
+                else "dramatization"
+                if context.unit_contract == "disclosed_dramatization"
+                else "none"
+            )
+            grouped.append(
+                {
+                    "clause_id": clause_id,
+                    "exact_text": context.exact_text,
+                    "visible_order": context.visible_order,
+                    "server_scope": server_scope,
+                    "questions": [
+                        {
+                            "question_id": question.question_id,
+                            "dimension": question.dimension,
+                            "question": descriptions[question.dimension],
+                            "allowed_quotes": list(question.allowed_quotes),
+                            "allowed_operands": list(question.allowed_operands),
+                        }
+                        for question in clause_questions
+                    ],
+                }
+            )
+        return f"""逐条阅读服务端 writer-owned clause，并对服务端给出的每个固定风险问题恰好
+回答一次。你只回答“文字里有没有该风险主张、原文证据在哪里、属于哪个允许 operand”；
+不要决定事实许可、source_ref、unit contract、通过/失败、修复或制作资源。
 
-服务端 clause：
-{json.dumps(targets, ensure_ascii=False)}
+冻结用户现实事实仅用于判断 writer 文字是否在绑定、概括或扩展当前用户现实，不是 Writer
+事实许可证：
+{json.dumps(actuality_facts, ensure_ascii=False)}
+受保护的当前品牌／组织／账号精确名：
+{json.dumps(protected_subjects, ensure_ascii=False)}
 
-每个 clause_id 必须按 visible_order 恰好返回一次，exact_text 必须逐字等于对应完整 clause，
-不得截短或抄写其他 clause。evidence 数组只列原文中实际存在的证据；每项只返回 category
-与 text。text 必须从当前 clause 的 allowed_quotes 中逐字选择，同时也必须属于 strict
-schema 的 enum。候选由服务端预先按标点生成，并已在其来源 clause 内唯一。选择包含该证据
-的最短 quote；只有当前 clause 的 allowed_quotes 确实列出完整 clause 时才可以选择它。
-不得自行缩短、拼接或创造 quote。服务端会校验 text 属于当前 clause 且唯一。同一
-category/text 组合只返回一次。各 category 不是互斥分类：同一 quote 同时包含谓语、
-动作、对白或其他证据时，必须分别以对应 category 返回；不得因为它看起来抽象、假设、建议、
-演绎、真实或合法而省略某类证据。你不判断这些文字是否实际发生，服务端会结合来源和合同裁决。
-只有无法可靠判断证据类别、无法形成唯一原文 quote，或 implicit_subject 确实无法确定时，
-才返回 uncertain=true；不要猜测，也不得为了避免 uncertain 而遗漏可见证据。不要计算或返回
-start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
-- category=subject：句中明确承担状态、判断或动作的人、代词、机构、角色或事物；
-- category=relationship_role：原文明确出现的亲属、伴侣、同住关系、同事、员工、顾客或其他
-  社会关系角色称谓；泛指“人／双方／彼此／对方”和抽象概念不属于 relationship_role；
-- category=predicate：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；若其中确有
-  下述具体行为或事件，还必须独立返回 action_or_event；
-- category=action_or_event：句子明示或隐含的参与者在一个可想象情境中实施的具体行为、
-  反应、言说，或发生的具体变化与事件；无论它是已发生、假设、建议、否定、泛指或演绎，
-  都只提取其语法证据，不判断现实性。静态状态、关系判断、价值评价、活动概念名称，以及
-  对“本文／阅读／观看”的导航描述本身，不属于 action_or_event；非人抽象概念承担的
-  修辞性动作或因果比喻也不属于 action_or_event；嵌在关系判断或价值判断中的泛指活动
-  只作为概念条件时，也不属于 action_or_event；
-- category=dialogue：任何直接、转述或作为示例给出的具体话语，即使位于抽象建议或引号中；
-  同时属于言说动作时还要返回 action_or_event；
-- category=motive：原文用愿望、需要、期待、意图、害怕或类似心理缘由解释行为或关系时的
-  精确证据，即使表达是泛指或抽象；
-- category=cause/result/location：对应前因、结果和地点，无论所在文字最终是否被服务端允许；
-- category=time：只提取把主张锚定到具体日期、时段、先后阶段或一次既成情境的时间证据；
-  表示“在某种一般状态／条件下”的泛指条件范围不是现实时间锚点，应归入 modality；
-- category=modality：原文中明确表示建议、义务、可能、条件或意愿的语法标记；泛指条件
-  从句即使形式上含时间表达，也必须返回 modality，不要返回 time；
-- category=aspect：原文中明确表示已经、完成、持续或经历事实的语法标记。
+闭合问题：
+{json.dumps(grouped, ensure_ascii=False)}
 
-implicit_subject 只选 none、current_speaker、generic、uncertain。句中有明确主体时通常为
-none；省略主体但由当前说话者承担谓语时为 current_speaker；泛指任何人时为 generic；
-无法可靠判断时为 uncertain。同一段原文确实同时构成多类证据时，可以用不同 category
-重复返回同一个唯一 quote。只有证据类别、唯一 quote 或隐含主体本身无法可靠判断时才
-uncertain=true。
+严格规则：
+- 必须按给定顺序一题不少地回答全部 question_id；不得重复、增加或改名。
+- status 只能是 present、absent、uncertain。
+- present：quote 必须从该题 allowed_quotes 中选择且在本 clause 内唯一；operands 至少一个，
+  且只能从该题 allowed_operands 选择。
+- absent：quote 必须是空字符串，operands 必须是空数组。不能通过省略整个问题表达 absent。
+- uncertain：当语义关系确实无法可靠判断或无法给出唯一 quote 时使用；quote 可为空或选择
+  唯一 allowed quote，operands 可为空。不要猜测，也不要把 uncertain 当 absent。
+- statement_mode 必须 present 且只有一个 operand；无法唯一判断时必须 uncertain。
+- server_scope 只说明服务端已有的可见范围，不是让你决定许可；disclosure 题只报告 writer
+  clause 是否与该范围冲突。
+- quote 地址由服务端计算；不要返回 start、end、occurrence 或任何数字地址。
+- 同一 clause 的十个问题彼此独立。即使某个表达看起来合法，也必须如实回答关系、对白、
+  动机、因果等问题；合法性由服务端组合判断。
 
-只返回：
-{{"evidence_version":"{REVIEW_EVIDENCE_V2_VERSION}","clauses":[{{
-"clause_id":"既定 id","exact_text":"完整 clause 原文",
-"evidence":[{{"category":"subject","text":"包含主体且唯一的服务端候选"}}],
-"implicit_subject":"none","uncertain":false
+只调用指定函数并返回：
+{{"evidence_version":"{CLOSED_REVIEW_VERSION}","answers":[{{
+"question_id":"既定 id","status":"present","quote":"既定唯一 quote",
+"operands":["该题允许 operand"]
 }}]}}
-根对象、clause 和 evidence item 不得增加、遗漏或重命名字段；evidence 必须是数组且不能为
-null，没有证据时返回空数组。"""
+根对象和 answer 不得增加、遗漏或重命名字段。"""
 
     def _kernel_repair_prompt(
         self,
@@ -1207,9 +1148,7 @@ null，没有证据时返回空数组。"""
                 "unit_id": unit.unit_id,
                 "purpose": unit.purpose,
                 "unit_contract": trusted_contracts[unit.unit_id],
-                "allowed_observation_types": list(
-                    unit.allowed_observation_types
-                ),
+                "allowed_observation_types": list(unit.allowed_observation_types),
                 "current_text": unit.text,
             }
             for unit in kernel.units
@@ -1227,12 +1166,12 @@ null，没有证据时返回空数组。"""
         return f"""只修复这一次列出的完整可写 unit。不得修改、返回或概括事实单元，不得改变
 CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit_id。
 
-用户 topic：{json.dumps(
-    request.creative_plan.topic_spans
-    if request.creative_plan is not None
-    else (),
-    ensure_ascii=False,
-)}
+用户 topic：{
+            json.dumps(
+                request.creative_plan.topic_spans if request.creative_plan is not None else (),
+                ensure_ascii=False,
+            )
+        }
 本次修改要求：{request.revision_instruction or "（首次生成）"}
 受影响 unit：{json.dumps(units, ensure_ascii=False)}
 当前问题：{json.dumps(findings, ensure_ascii=False)}
@@ -1265,17 +1204,13 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
             request.brand.tone,
             request.brand.content_role_boundary,
             *(
-                tuple(
-                    selection.applied_label
-                    for selection in request.creative_direction.selections
-                )
+                tuple(selection.applied_label for selection in request.creative_direction.selections)
                 if request.creative_direction is not None
                 else ()
             ),
             *(
                 (request.creative_direction.custom_text,)
-                if request.creative_direction is not None
-                and request.creative_direction.custom_text
+                if request.creative_direction is not None and request.creative_direction.custom_text
                 else ()
             ),
             *((request.collaboration_note,) if request.collaboration_note else ()),
@@ -1310,12 +1245,8 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         context: BoundaryContext,
     ) -> NarrativeSkeleton:
         expected_type = _MODE_BLOCK_TYPE[frame.narrative_mode]
-        singleton = cls._singleton_slots(
-            request.primary_product, request.media_format
-        )
-        generated_ids = {
-            slot: f"b-{slot}" for slot in (*singleton, _SPOKEN_SLOT)
-        }
+        singleton = cls._singleton_slots(request.primary_product, request.media_format)
+        generated_ids = {slot: f"b-{slot}" for slot in (*singleton, _SPOKEN_SLOT)}
         scene_groups: list[tuple[str, str, tuple[str, ...]]] = [
             ("s-cover", _COVER_PURPOSE, (generated_ids["title"],)),
             (
@@ -1326,9 +1257,7 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
             (
                 "s-contract",
                 _SCENE_PURPOSE,
-                tuple(generated_ids[slot] for slot in _CONTRACT_FIELDS[
-                    request.primary_product
-                ]),
+                tuple(generated_ids[slot] for slot in _CONTRACT_FIELDS[request.primary_product]),
             ),
             ("s-spoken", _SCENE_PURPOSE, (generated_ids[_SPOKEN_SLOT],)),
             (
@@ -1350,23 +1279,15 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
             block_id = f"actuality:{index}"
             scene_id = f"s-actuality-{index}"
             actuality_scene_by_block[block_id] = scene_id
-            scene_groups.append(
-                (scene_id, _SCENE_PURPOSE, (block_id,))
-            )
+            scene_groups.append((scene_id, _SCENE_PURPOSE, (block_id,)))
         scene_ids_by_block = {
-            block_id: tuple(
-                scene_id
-                for scene_id, _, block_refs in scene_groups
-                if block_id in block_refs
-            )
+            block_id: tuple(scene_id for scene_id, _, block_refs in scene_groups if block_id in block_refs)
             for block_id in (
                 *generated_ids.values(),
                 *actuality_scene_by_block,
             )
         }
-        constraint_refs = tuple(
-            identifier for identifier, _ in context.constraint_registry
-        )
+        constraint_refs = tuple(identifier for identifier, _ in context.constraint_registry)
         product_fact_ids = tuple(frame.allowed_product_fact_ids)
         brand_fact_ids = tuple(frame.allowed_brand_fact_ids)
         blocks: list[BlockSkeleton] = []
@@ -1399,9 +1320,7 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
             )
             for index, fact in enumerate(frame.user_facts, start=1)
         )
-        allowed_resources = tuple(
-            identifier for identifier, _ in context.resource_registry
-        )
+        allowed_resources = tuple(identifier for identifier, _ in context.resource_registry)
         scenes = tuple(
             SceneSkeleton(
                 scene_id=scene_id,
@@ -1436,21 +1355,12 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
             raise TypeError("writer core must contain only server skeleton slots")
         raw_blocks = raw.get("blocks")
         raw_steps = raw.get("scenes")
-        if (
-            not isinstance(raw_blocks, list)
-            or not raw_blocks
-            or not isinstance(raw_steps, list)
-            or not raw_steps
-        ):
+        if not isinstance(raw_blocks, list) or not raw_blocks or not isinstance(raw_steps, list) or not raw_steps:
             raise TypeError("typed core collections are incomplete")
-        skeleton_blocks = {
-            block.block_id: block for block in skeleton.blocks
-        }
-        if {
-            value.get("block_id")
-            for value in raw_blocks
-            if isinstance(value, dict)
-        } != set(skeleton_blocks) or len(raw_blocks) != len(skeleton_blocks):
+        skeleton_blocks = {block.block_id: block for block in skeleton.blocks}
+        if {value.get("block_id") for value in raw_blocks if isinstance(value, dict)} != set(skeleton_blocks) or len(
+            raw_blocks
+        ) != len(skeleton_blocks):
             raise ValueError("writer block coverage drifted from server skeleton")
         generated: list[NarrativeBlock] = []
         for raw_block in raw_blocks:
@@ -1477,14 +1387,10 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         if len(set(block_ids)) != len(block_ids):
             raise ValueError("block ids must be unique")
 
-        skeleton_scenes = {
-            scene.scene_id: scene for scene in skeleton.scenes
-        }
-        if {
-            value.get("scene_id")
-            for value in raw_steps
-            if isinstance(value, dict)
-        } != set(skeleton_scenes) or len(raw_steps) != len(skeleton_scenes):
+        skeleton_scenes = {scene.scene_id: scene for scene in skeleton.scenes}
+        if {value.get("scene_id") for value in raw_steps if isinstance(value, dict)} != set(skeleton_scenes) or len(
+            raw_steps
+        ) != len(skeleton_scenes):
             raise ValueError("writer scene coverage drifted from server skeleton")
         steps: list[SceneStep] = []
         for raw_step in raw_steps:
@@ -1498,33 +1404,18 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
                 raise TypeError("scene step must be an object")
             scene_id = self._required_string(raw_step.get("scene_id"))
             frozen_scene = skeleton_scenes[scene_id]
-            resource_refs = self._string_refs(
-                raw_step.get("resource_refs") or [], allow_empty=True
-            )
-            if any(
-                ref not in frozen_scene.allowed_resource_refs
-                for ref in resource_refs
-            ):
+            resource_refs = self._string_refs(raw_step.get("resource_refs") or [], allow_empty=True)
+            if any(ref not in frozen_scene.allowed_resource_refs for ref in resource_refs):
                 raise ValueError("scene uses an unregistered resource")
             steps.append(
                 SceneStep(
                     step_id=scene_id,
                     purpose=frozen_scene.purpose,
-                    actor_refs=(
-                        (_CREATOR_ACTOR_ID,)
-                        if _CREATOR_EXPRESSION_RESOURCE_ID in resource_refs
-                        else ()
-                    ),
+                    actor_refs=((_CREATOR_ACTOR_ID,) if _CREATOR_EXPRESSION_RESOURCE_ID in resource_refs else ()),
                     resource_refs=resource_refs,
-                    action_text=self._required_string(
-                        raw_step.get("action_text")
-                    ),
-                    sound_text=self._optional_string(
-                        raw_step.get("sound_text")
-                    ),
-                    production_note=self._optional_string(
-                        raw_step.get("production_note")
-                    ),
+                    action_text=self._required_string(raw_step.get("action_text")),
+                    sound_text=self._optional_string(raw_step.get("sound_text")),
+                    production_note=self._optional_string(raw_step.get("production_note")),
                     block_refs=frozen_scene.block_refs,
                 )
             )
@@ -1544,8 +1435,7 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         body: str,
     ) -> tuple[tuple[NarrativeIssue, ...], dict[str, Any], int]:
         payload, retries = self._request(
-            "你是独立叙事观察器。只从最终可见成品提取观察，不裁决通过，不改写成品，"
-            "不展示推理，只返回一个完整 JSON。",
+            "你是独立叙事观察器。只从最终可见成品提取观察，不裁决通过，不改写成品，不展示推理，只返回一个完整 JSON。",
             self._reviewer_prompt(request, frame, context, core, body),
             8192,
             # The production-compatible JSON contract is the authority here;
@@ -1555,17 +1445,11 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
             timeout_seconds=self._review_timeout_seconds,
         )
         try:
-            document = json.loads(
-                self._json_content(
-                    str(payload["choices"][0]["message"]["content"])
-                )
-            )
+            document = json.loads(self._json_content(str(payload["choices"][0]["message"]["content"])))
             raw_observations = document["observations"]
             if not isinstance(raw_observations, list):
                 raise TypeError
-            observations = tuple(
-                parse_observation(value) for value in raw_observations
-            )
+            observations = tuple(parse_observation(value) for value in raw_observations)
         except (
             KeyError,
             IndexError,
@@ -1573,17 +1457,12 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
             json.JSONDecodeError,
         ) as exc:
             raise GenerationFailed("独立 Reviewer 返回格式不完整") from exc
-        scene_text = {
-            step.step_id: self._scene_visible_text(step)
-            for step in core.scene_steps
-        }
+        scene_text = {step.step_id: self._scene_visible_text(step) for step in core.scene_steps}
         issues = reconcile_observations(
             frame=frame,
             blocks=core.blocks,
             scene_text=scene_text,
-            scene_resource_refs={
-                step.step_id: step.resource_refs for step in core.scene_steps
-            },
+            scene_resource_refs={step.step_id: step.resource_refs for step in core.scene_steps},
             observations=observations,
             allowed_resource_ids=context.resource_ids,
             fact_text_by_id=context.fact_text_by_id,
@@ -1605,48 +1484,30 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         if not isinstance(raw, dict):
             raise TypeError("repair must be an object")
         affected_blocks, affected_scenes = self._repair_scope(core, issues)
-        if any(
-            core.block(block_id).block_type == "actuality_source"
-            for block_id in affected_blocks
-        ):
+        if any(core.block(block_id).block_type == "actuality_source" for block_id in affected_blocks):
             raise ValueError("service-authored actuality cannot be repaired")
         raw_blocks = raw.get("blocks")
         raw_scenes = raw.get("scenes")
         if not isinstance(raw_blocks, list) or not isinstance(raw_scenes, list):
             raise TypeError("repair collections are incomplete")
-        if {
-            value.get("block_id")
-            for value in raw_blocks
-            if isinstance(value, dict)
-        } != affected_blocks or {
-            value.get("scene_id")
-            for value in raw_scenes
-            if isinstance(value, dict)
+        if {value.get("block_id") for value in raw_blocks if isinstance(value, dict)} != affected_blocks or {
+            value.get("scene_id") for value in raw_scenes if isinstance(value, dict)
         } != affected_scenes:
             raise ValueError("repair scope drifted")
         replacement_blocks = {
-            self._required_string(value.get("block_id")): value
-            for value in raw_blocks
-            if isinstance(value, dict)
+            self._required_string(value.get("block_id")): value for value in raw_blocks if isinstance(value, dict)
         }
         replacement_scenes = {
-            self._required_string(value.get("scene_id")): value
-            for value in raw_scenes
-            if isinstance(value, dict)
+            self._required_string(value.get("scene_id")): value for value in raw_scenes if isinstance(value, dict)
         }
         merged_raw = {
             "blocks": [
-                replacement_blocks.get(
-                    block.block_id, self._writer_block_document(block)
-                )
+                replacement_blocks.get(block.block_id, self._writer_block_document(block))
                 for block in core.blocks
                 if block.block_type != "actuality_source"
             ],
             "scenes": [
-                replacement_scenes.get(
-                    scene.step_id, self._writer_scene_document(scene)
-                )
-                for scene in core.scene_steps
+                replacement_scenes.get(scene.step_id, self._writer_scene_document(scene)) for scene in core.scene_steps
             ],
         }
         return self._parse_core(
@@ -1668,16 +1529,8 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
             "uncertain_meaning",
             "actuality_changed",
         }
-        actuality_ids = {
-            block.block_id
-            for block in core.blocks
-            if block.block_type == "actuality_source"
-        }
-        if any(
-            issue.reason in nonrepairable_reasons
-            or issue.target_id in actuality_ids
-            for issue in issues
-        ):
+        actuality_ids = {block.block_id for block in core.blocks if block.block_type == "actuality_source"}
+        if any(issue.reason in nonrepairable_reasons or issue.target_id in actuality_ids for issue in issues):
             raise GenerationFailed("独立 Reviewer 观察不完整或真人事实块不一致")
 
     @staticmethod
@@ -1685,26 +1538,12 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         core: NarrativeCore,
         issues: tuple[NarrativeIssue, ...],
     ) -> tuple[set[str], set[str]]:
-        block_ids = {
-            block.block_id
-            for block in core.blocks
-            if block.block_type != "actuality_source"
-        }
-        affected_blocks = {
-            issue.target_id for issue in issues if issue.target_id in block_ids
-        }
-        failed_scenes = {
-            issue.target_id
-            for issue in issues
-            if issue.target_id not in block_ids
-        }
+        block_ids = {block.block_id for block in core.blocks if block.block_type != "actuality_source"}
+        affected_blocks = {issue.target_id for issue in issues if issue.target_id in block_ids}
+        failed_scenes = {issue.target_id for issue in issues if issue.target_id not in block_ids}
         for scene in core.scene_steps:
             if scene.step_id in failed_scenes:
-                affected_blocks.update(
-                    block_id
-                    for block_id in scene.block_refs
-                    if block_id in block_ids
-                )
+                affected_blocks.update(block_id for block_id in scene.block_refs if block_id in block_ids)
         affected_scenes = {
             scene.step_id
             for scene in core.scene_steps
@@ -1722,56 +1561,31 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         ContentProductionBundle,
         str,
     ]:
-        slot_text = {
-            block.slot: block.text
-            for block in core.blocks
-            if block.slot != _SPOKEN_SLOT
-        }
+        slot_text = {block.slot: block.text for block in core.blocks if block.slot != _SPOKEN_SLOT}
         title = self._visible_text(slot_text["title"])
         contract = self._contract(request.primary_product, slot_text)
-        spoken = self._visible_text(
-            "\n\n".join(core.block(block_id).text for block_id in core.spoken_order)
-        )
-        cover = next(
-            step
-            for step in core.scene_steps
-            if step.purpose == _COVER_PURPOSE
-        )
-        scenes = tuple(
-            step
-            for step in core.scene_steps
-            if step.purpose == _SCENE_PURPOSE
-        )
+        spoken = self._visible_text("\n\n".join(core.block(block_id).text for block_id in core.spoken_order))
+        cover = next(step for step in core.scene_steps if step.purpose == _COVER_PURPOSE)
+        scenes = tuple(step for step in core.scene_steps if step.purpose == _SCENE_PURPOSE)
         sounds = "\n".join(
-            text
-            for step in core.scene_steps
-            for text in (step.sound_text, step.production_note)
-            if text
+            text for step in core.scene_steps for text in (step.sound_text, step.production_note) if text
         )
         production: ContentProductionBundle
         if request.media_format == "video":
-            fixed_seconds = self._fixed_duration_seconds(
-                request.brand.production_conditions
-            )
+            fixed_seconds = self._fixed_duration_seconds(request.brand.production_conditions)
             duration = (
-                f"{fixed_seconds} 秒"
-                if fixed_seconds is not None
-                else f"约 {self._natural_spoken_seconds(spoken)} 秒"
+                f"{fixed_seconds} 秒" if fixed_seconds is not None else f"约 {self._natural_spoken_seconds(spoken)} 秒"
             )
             production = VideoProductionBundle(
                 natural_guide=self._visible_text(slot_text["natural_guide"]),
                 spoken_lines=spoken,
-                visual_actions=self._visible_text(
-                    "\n".join(step.action_text for step in scenes)
-                ),
+                visual_actions=self._visible_text("\n".join(step.action_text for step in scenes)),
                 subtitles=spoken,
                 sound_and_production=self._visible_text(sounds),
                 cover_or_first_frame=self._visible_text(cover.action_text),
                 viewing_flow=self._visible_text(slot_text["viewing_flow"]),
                 natural_duration=duration,
-                release_caption_and_interaction=self._visible_text(
-                    slot_text["release_caption"]
-                ),
+                release_caption_and_interaction=self._visible_text(slot_text["release_caption"]),
             )
         else:
             image_steps = (cover, *scenes)
@@ -1780,36 +1594,24 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
                 hero_image=self._visible_text(cover.action_text),
                 image_sequence=self._visible_text(
                     "\n".join(
-                        ("首图：" if index == 1 else f"第{index}张：")
-                        + step.action_text
+                        ("首图：" if index == 1 else f"第{index}张：") + step.action_text
                         for index, step in enumerate(image_steps, start=1)
                     )
                 ),
                 full_body=spoken,
                 layout_and_production=self._visible_text(
-                    "\n".join(
-                        step.production_note
-                        for step in core.scene_steps
-                        if step.production_note
-                    )
+                    "\n".join(step.production_note for step in core.scene_steps if step.production_note)
                 ),
-                release_caption_and_interaction=self._visible_text(
-                    slot_text["release_caption"]
-                ),
+                release_caption_and_interaction=self._visible_text(slot_text["release_caption"]),
             )
-        return title, contract, production, self._visible_body(
-            title, production
-        )
+        return title, contract, production, self._visible_body(title, production)
 
     @staticmethod
     def _contract(
         product: ContentProduct,
         slot_text: dict[str, str],
     ) -> ContentSemanticContract:
-        values = tuple(
-            DeepSeekGenerator._visible_text(slot_text[field])
-            for field in _CONTRACT_FIELDS[product]
-        )
+        values = tuple(DeepSeekGenerator._visible_text(slot_text[field]) for field in _CONTRACT_FIELDS[product])
         if product == "dressing_decision":
             return P1SemanticContract(*values)
         if product == "product_truth":
@@ -1846,9 +1648,7 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
                 ("拍摄/排版提示", production.layout_and_production),
                 ("发布配文与互动", production.release_caption_and_interaction),
             )
-        return "标题：" + title + "\n\n" + "\n\n".join(
-            f"{heading}：{value}" for heading, value in sections
-        )
+        return "标题：" + title + "\n\n" + "\n\n".join(f"{heading}：{value}" for heading, value in sections)
 
     @staticmethod
     def _routing_prompt(request: RoutingInput) -> str:
@@ -1864,10 +1664,12 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 
     @staticmethod
     def _conversation_prompt(request: ConversationInput) -> str:
-        history = "\n".join(
-            ("用户" if turn.role == "user" else "笛语") + "：" + turn.content
-            for turn in request.history[-8:]
-        ) or "（无）"
+        history = (
+            "\n".join(
+                ("用户" if turn.role == "user" else "笛语") + "：" + turn.content for turn in request.history[-8:]
+            )
+            or "（无）"
+        )
         products = "、".join(product.sku for product in request.products) or "无"
         forced = request.explicit_narrative_mode or "无显式模式"
         return f"""编译本轮创作条件。服务端已经独立判断是否存在创作承诺；你只能提议，不能授权
@@ -1927,21 +1729,21 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         context: BoundaryContext,
         skeleton: NarrativeSkeleton,
     ) -> str:
-        actual_text = "\n".join(
-            f"- actuality:{index} = {fact.exact_text}"
-            for index, fact in enumerate(frame.user_facts, start=1)
-        ) or "（无服务端真人事实块）"
-        fact_registry = "\n".join(
-            f"- {record.fact_id}：{record.exact_text}"
-            for record in context.fact_registry
-        ) or "（没有可引用的冻结事实。）"
+        actual_text = (
+            "\n".join(
+                f"- actuality:{index} = {fact.exact_text}" for index, fact in enumerate(frame.user_facts, start=1)
+            )
+            or "（无服务端真人事实块）"
+        )
+        fact_registry = (
+            "\n".join(f"- {record.fact_id}：{record.exact_text}" for record in context.fact_registry)
+            or "（没有可引用的冻结事实。）"
+        )
         constraint_registry = "\n".join(
-            f"- {identifier}：{description}"
-            for identifier, description in context.constraint_registry
+            f"- {identifier}：{description}" for identifier, description in context.constraint_registry
         )
         resource_registry = "\n".join(
-            f"- {identifier}：{description}"
-            for identifier, description in context.resource_registry
+            f"- {identifier}：{description}" for identifier, description in context.resource_registry
         )
         mode_rule = {
             "actuality_reflection": (
@@ -1952,9 +1754,7 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
                 "全部槽位都是 general_observation。可以写抽象原则、观点、比喻、幽默和节奏；"
                 "不能写 situated_event，也不能写无精确品牌事实支持的 institutional_assertion。"
             ),
-            "hypothesis": (
-                "全部块为 hypothesis，最终可见文字自然保留条件和可能性，不能写成已经发生。"
-            ),
+            "hypothesis": ("全部块为 hypothesis，最终可见文字自然保留条件和可能性，不能写成已经发生。"),
             "dramatization": (
                 "全部块为 dramatization。可以创造角色和情节，但每个独立可见块都要自然显出这是"
                 "情境演绎，不能绑定用户、真实员工、顾客、品牌案例或门店现场。"
@@ -1992,28 +1792,19 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
                 }
                 for block in skeleton.blocks
             ],
-            "service_actuality_blocks": [
-                self._block_document(block)
-                for block in skeleton.service_actuality_blocks
-            ],
+            "service_actuality_blocks": [self._block_document(block) for block in skeleton.service_actuality_blocks],
             "scenes": [
                 {
                     "scene_id": scene.scene_id,
                     "purpose": scene.purpose,
                     "block_refs": list(scene.block_refs),
-                    "allowed_resource_refs": list(
-                        scene.allowed_resource_refs
-                    ),
+                    "allowed_resource_refs": list(scene.allowed_resource_refs),
                 }
                 for scene in skeleton.scenes
             ],
             "spoken_order": list(skeleton.spoken_order),
         }
-        plan = (
-            creative_plan_document(request.creative_plan)
-            if request.creative_plan is not None
-            else {}
-        )
+        plan = creative_plan_document(request.creative_plan) if request.creative_plan is not None else {}
         output_shape = {"blocks": block_template, "scenes": scene_template}
         return f"""生成一个完整结构化成品。只返回 JSON，且只填服务端给出的文字与资源槽位。
 用户原始前提：{request.weak_seed}
@@ -2067,10 +1858,7 @@ hypothesis 必须在每个可见槽位保持条件语气。dramatization 必须�
         core: NarrativeCore,
         body: str,
     ) -> str:
-        targets = [
-            {"id": block.block_id, "target_kind": "block", "text": block.text}
-            for block in core.blocks
-        ] + [
+        targets = [{"id": block.block_id, "target_kind": "block", "text": block.text} for block in core.blocks] + [
             {
                 "id": scene.step_id,
                 "target_kind": "scene",
@@ -2081,25 +1869,15 @@ hypothesis 必须在每个可见槽位保持条件语气。dramatization 必须�
         frame_input = {
             "frame_version": frame.frame_version,
             "narrative_mode": frame.narrative_mode,
-            "user_facts": [
-                {"source_id": fact.source_id, "exact_text": fact.exact_text}
-                for fact in frame.user_facts
-            ],
+            "user_facts": [{"source_id": fact.source_id, "exact_text": fact.exact_text} for fact in frame.user_facts],
             "allowed_brand_fact_ids": list(frame.allowed_brand_fact_ids),
-            "allowed_product_fact_ids": list(
-                frame.allowed_product_fact_ids
-            ),
+            "allowed_product_fact_ids": list(frame.allowed_product_fact_ids),
         }
         resources = [
-            {"id": identifier, "description": description}
-            for identifier, description in context.resource_registry
+            {"id": identifier, "description": description} for identifier, description in context.resource_registry
         ]
         aigc_label, aigc_reminder = aigc_disclosure(self._model)
-        aigc_visible = (
-            f"{aigc_label}；{aigc_reminder}"
-            if aigc_label and aigc_reminder
-            else "（无 AIGC 展示字段）"
-        )
+        aigc_visible = f"{aigc_label}；{aigc_reminder}" if aigc_label and aigc_reminder else "（无 AIGC 展示字段）"
         return f"""独立阅读最终完整可见成品，然后对每个 block 和 scene 逐一提取实际语义。
 这里不提供 Writer 的任何事实自报或事实标签；只读实际可见文本。不要返回 pass/fail 布尔裁决。
 
@@ -2168,21 +1946,10 @@ instruction_conflicts 必须是纯字符串 JSON 数组；claims 必须是上述
         issues: tuple[NarrativeIssue, ...],
     ) -> str:
         affected_blocks, affected_scenes = self._repair_scope(core, issues)
-        if any(
-            core.block(block_id).block_type == "actuality_source"
-            for block_id in affected_blocks
-        ):
+        if any(core.block(block_id).block_type == "actuality_source" for block_id in affected_blocks):
             raise GenerationFailed("服务端真人事实块无法修改")
-        blocks = [
-            self._writer_block_document(block)
-            for block in core.blocks
-            if block.block_id in affected_blocks
-        ]
-        scenes = [
-            self._writer_scene_document(scene)
-            for scene in core.scene_steps
-            if scene.step_id in affected_scenes
-        ]
+        blocks = [self._writer_block_document(block) for block in core.blocks if block.block_id in affected_blocks]
+        scenes = [self._writer_scene_document(scene) for scene in core.scene_steps if scene.step_id in affected_scenes]
         findings = [
             {
                 "id": issue.target_id,
@@ -2198,12 +1965,12 @@ instruction_conflicts 必须是纯字符串 JSON 数组；claims 必须是上述
 NarrativeFrame：{frame.narrative_mode}
 用户要求：{request.weak_seed}
 修改要求：{request.revision_instruction or "（首次生成）"}
-CreativePlanV2：{json.dumps(
-    creative_plan_document(request.creative_plan)
-    if request.creative_plan is not None
-    else {},
-    ensure_ascii=False,
-)}
+CreativePlanV2：{
+            json.dumps(
+                creative_plan_document(request.creative_plan) if request.creative_plan is not None else {},
+                ensure_ascii=False,
+            )
+        }
 品牌边界：{context.brand_text}
 冻结商品事实：{context.product_facts_text}
 可用资源：{json.dumps(context.resource_registry, ensure_ascii=False)}
@@ -2285,13 +2052,12 @@ CreativePlanV2：{json.dumps(
         return registered_product_claims(product)
 
     @staticmethod
-    def _review_max_tokens(clause_count: int) -> int:
-        if clause_count < 1:
-            raise ValueError("review clause count must be positive")
+    def _review_max_tokens(question_count: int) -> int:
+        if question_count < 1:
+            raise ValueError("review question count must be positive")
         return min(
             _REVIEW_TOKEN_HARD_LIMIT,
-            _REVIEW_TOKEN_BASE
-            + _REVIEW_TOKEN_PER_CLAUSE * clause_count,
+            _REVIEW_TOKEN_BASE + _REVIEW_TOKEN_PER_QUESTION * question_count,
         )
 
     def _strict_review_api_url(self) -> str:
@@ -2306,35 +2072,31 @@ CreativePlanV2：{json.dumps(
 
     @staticmethod
     def _strict_review_tool(
-        allowed_quotes: tuple[str, ...] = (),
+        questions: tuple[ClosedReviewQuestion, ...],
     ) -> dict[str, object]:
         return {
             "type": "function",
             "function": {
-                "name": REVIEW_EVIDENCE_V2_TOOL_NAME,
+                "name": CLOSED_REVIEW_TOOL_NAME,
                 "description": (
-                    "Submit exact, uniquely bindable quote evidence for every "
-                    "server-provided writer clause."
+                    "Answer every server-provided closed review question with an exact quote and bounded operands."
                 ),
                 "strict": True,
-                "parameters": review_evidence_v2_json_schema(allowed_quotes),
+                "parameters": closed_review_json_schema(questions),
             },
         }
 
     @staticmethod
-    def _strict_review_evidence(
+    def _strict_review_answers(
         payload: dict[str, Any],
         *,
-        clause_text_by_id: Mapping[str, str],
-    ) -> ReviewEvidenceV2:
+        questions: tuple[ClosedReviewQuestion, ...],
+    ) -> ClosedReviewAnswers:
         choices = payload.get("choices")
         if not isinstance(choices, list) or len(choices) != 1:
             raise TypeError("strict review choice count is invalid")
         choice = choices[0]
-        if (
-            not isinstance(choice, dict)
-            or choice.get("finish_reason") != "tool_calls"
-        ):
+        if not isinstance(choice, dict) or choice.get("finish_reason") != "tool_calls":
             raise TypeError("strict review finish reason is invalid")
         message = choice.get("message")
         if not isinstance(message, dict):
@@ -2343,16 +2105,10 @@ CreativePlanV2：{json.dumps(
         if not isinstance(tool_calls, list) or len(tool_calls) != 1:
             raise TypeError("strict review tool call count is invalid")
         tool_call = tool_calls[0]
-        if (
-            not isinstance(tool_call, dict)
-            or tool_call.get("type") != "function"
-        ):
+        if not isinstance(tool_call, dict) or tool_call.get("type") != "function":
             raise TypeError("strict review tool call is invalid")
         function = tool_call.get("function")
-        if (
-            not isinstance(function, dict)
-            or function.get("name") != REVIEW_EVIDENCE_V2_TOOL_NAME
-        ):
+        if not isinstance(function, dict) or function.get("name") != CLOSED_REVIEW_TOOL_NAME:
             raise TypeError("strict review function name is invalid")
         arguments = function.get("arguments")
         if not isinstance(arguments, str):
@@ -2360,14 +2116,11 @@ CreativePlanV2：{json.dumps(
         usage = payload.get("usage")
         if isinstance(usage, dict):
             completion_tokens = usage.get("completion_tokens")
-            if (
-                isinstance(completion_tokens, int)
-                and completion_tokens > _REVIEW_TOKEN_HARD_LIMIT
-            ):
+            if isinstance(completion_tokens, int) and completion_tokens > _REVIEW_TOKEN_HARD_LIMIT:
                 raise TypeError("strict review output exceeded hard limit")
-        return parse_review_evidence_v2(
+        return parse_closed_review_answers(
             json.loads(arguments),
-            clause_text_by_id=clause_text_by_id,
+            questions=questions,
         )
 
     def _request_strict_review(
@@ -2375,8 +2128,8 @@ CreativePlanV2：{json.dumps(
         system: str,
         prompt: str,
         *,
-        clause_count: int,
-        allowed_quotes: tuple[str, ...] = (),
+        question_count: int,
+        questions: tuple[ClosedReviewQuestion, ...],
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
         request_payload: dict[str, Any] = {
@@ -2386,48 +2139,62 @@ CreativePlanV2：{json.dumps(
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.0,
-            "max_tokens": self._review_max_tokens(clause_count),
+            "max_tokens": self._review_max_tokens(question_count),
             "thinking": {"type": "disabled"},
-            "tools": [self._strict_review_tool(allowed_quotes)],
+            "tools": [self._strict_review_tool(questions)],
             "tool_choice": {
                 "type": "function",
-                "function": {"name": REVIEW_EVIDENCE_V2_TOOL_NAME},
+                "function": {"name": CLOSED_REVIEW_TOOL_NAME},
             },
         }
         try:
-            with httpx.Client(
-                timeout=httpx.Timeout(
-                    timeout_seconds or self._timeout_seconds
-                )
-            ) as client:
+            with httpx.Client(timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds)) as client:
                 response = client.post(
                     self._strict_review_api_url(),
-                    headers={
-                        "Authorization": f"Bearer {self._api_key}"
-                    },
+                    headers={"Authorization": f"Bearer {self._api_key}"},
                     json=request_payload,
                 )
         except httpx.TransportError as exc:
-            raise GenerationFailed(
-                "Reviewer strict 模型网络请求失败"
-            ) from exc
+            raise GenerationFailed("Reviewer strict 模型网络请求失败") from exc
         if response.status_code >= 400:
             _LOGGER.warning(
                 "strict review request rejected: status=%s",
                 response.status_code,
             )
-            raise GenerationFailed(
-                "Reviewer strict 模型服务拒绝当前请求"
-            )
+            raise GenerationFailed("Reviewer strict 模型服务拒绝当前请求")
         try:
             result = response.json()
         except (TypeError, ValueError) as exc:
-            raise GenerationFailed(
-                "Reviewer strict 模型返回无效"
-            ) from exc
+            raise GenerationFailed("Reviewer strict 模型返回无效") from exc
         if not isinstance(result, dict):
             raise GenerationFailed("Reviewer strict 模型返回无效")
         return result, 0
+
+    @staticmethod
+    def _closed_review_batches(
+        questions: tuple[ClosedReviewQuestion, ...],
+    ) -> tuple[tuple[ClosedReviewQuestion, ...], ...]:
+        clause_ids = tuple(dict.fromkeys(question.clause_id for question in questions))
+        if not clause_ids:
+            raise ValueError("closed review questions cannot be empty")
+        batches: list[tuple[ClosedReviewQuestion, ...]] = []
+        for start in range(0, len(clause_ids), _CLOSED_REVIEW_BATCH_CLAUSES):
+            selected = frozenset(clause_ids[start : start + _CLOSED_REVIEW_BATCH_CLAUSES])
+            batch = tuple(question for question in questions if question.clause_id in selected)
+            if not batch:
+                raise ValueError("closed review batch cannot be empty")
+            batches.append(batch)
+        return tuple(batches)
+
+    @classmethod
+    def _review_payload_envelope(
+        cls,
+        payloads: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return {
+            "closed_review_batches": payloads,
+            "usage": cls._combined_usage(payloads),
+        }
 
     def _request(
         self,
@@ -2451,9 +2218,7 @@ CreativePlanV2：{json.dumps(
         }
         if thinking_disabled:
             request_payload["thinking"] = {"type": "disabled"}
-        with httpx.Client(
-            timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds)
-        ) as client:
+        with httpx.Client(timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds)) as client:
             while True:
                 try:
                     response = client.post(
@@ -2466,10 +2231,7 @@ CreativePlanV2：{json.dumps(
                         if not isinstance(result, dict):
                             raise GenerationFailed("模型返回无效")
                         return result, retries
-                    if (
-                        response.status_code != 429
-                        and not 500 <= response.status_code < 600
-                    ):
+                    if response.status_code != 429 and not 500 <= response.status_code < 600:
                         error_code = ""
                         error_category = "unavailable"
                         try:
@@ -2492,10 +2254,7 @@ CreativePlanV2：{json.dumps(
                                             ("content_filter", ("sensitive", "content filter")),
                                             ("parameter", ("parameter", "invalid value")),
                                         ):
-                                            if any(
-                                                marker in lowered_message
-                                                for marker in markers
-                                            ):
+                                            if any(marker in lowered_message for marker in markers):
                                                 error_category = category
                                                 break
                         except (TypeError, ValueError):
@@ -2509,9 +2268,7 @@ CreativePlanV2：{json.dumps(
                         raise GenerationFailed("模型服务拒绝当前请求")
                     if retries >= self._max_retries:
                         raise GenerationFailed("模型服务暂时不可用")
-                    delay = self._retry_delay(
-                        response.headers.get("Retry-After"), retries
-                    )
+                    delay = self._retry_delay(response.headers.get("Retry-After"), retries)
                 except httpx.TransportError as exc:
                     if retries >= self._max_retries:
                         raise GenerationFailed("模型网络请求失败") from exc
@@ -2544,8 +2301,7 @@ CreativePlanV2：{json.dumps(
                         8.0,
                         max(
                             0.0,
-                            parsedate_to_datetime(retry_after).timestamp()
-                            - time.time(),
+                            parsedate_to_datetime(retry_after).timestamp() - time.time(),
                         ),
                     )
                 except (TypeError, ValueError):
@@ -2586,9 +2342,7 @@ CreativePlanV2：{json.dumps(
         *,
         allow_empty: bool = False,
     ) -> tuple[str, ...]:
-        if not isinstance(value, list) or any(
-            not isinstance(item, str) or not item.strip() for item in value
-        ):
+        if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
             if allow_empty and value == []:
                 return ()
             raise TypeError("references must be a string list")

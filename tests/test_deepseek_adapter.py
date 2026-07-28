@@ -9,9 +9,12 @@ import httpx
 import pytest
 
 from src.brain.platform_directions import direction_for
+from src.shared.closed_review import (
+    CLOSED_REVIEW_TOOL_NAME,
+    CLOSED_REVIEW_VERSION,
+    build_closed_review_questions,
+)
 from src.shared.creative_kernel import (
-    DRAMATIZATION_DISCLOSURE,
-    HYPOTHESIS_DISCLOSURE,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
     CreativeKernelV1,
     build_kernel_skeleton,
@@ -33,9 +36,8 @@ from src.shared.narrative import (
     visible_digest,
 )
 from src.shared.review_evidence import (
-    REVIEW_EVIDENCE_V2_TOOL_NAME,
     REVIEW_EVIDENCE_V2_VERSION,
-    build_review_clauses,
+    build_clause_contexts_v2,
 )
 from src.shared.types import (
     ActiveAsset,
@@ -149,9 +151,7 @@ def _request(
         prior_saved_body=prior_saved_body,
         narrative_frame=selected_frame,
         creative_plan=build_creative_plan(
-            topic_spans=(
-                "帮我写条婆媳主题的小红书，别狗血，也不要把任何一方写成反派。",
-            ),
+            topic_spans=("帮我写条婆媳主题的小红书，别狗血，也不要把任何一方写成反派。",),
             primary_value="brand_life_narrative",
             tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
             mechanism_id=None,
@@ -161,11 +161,7 @@ def _request(
 
 
 def _completion(document: object, tokens: int = 0) -> FakeResponse:
-    if (
-        isinstance(document, dict)
-        and document.get("evidence_version")
-        == REVIEW_EVIDENCE_V2_VERSION
-    ):
+    if isinstance(document, dict) and document.get("evidence_version") == REVIEW_EVIDENCE_V2_VERSION:
         return _strict_tool_completion(document, tokens=tokens)
     payload: dict[str, Any] = {
         "choices": [
@@ -186,7 +182,7 @@ def _strict_tool_completion(
     *,
     tokens: int = 0,
     finish_reason: str = "tool_calls",
-    tool_name: str = REVIEW_EVIDENCE_V2_TOOL_NAME,
+    tool_name: str = CLOSED_REVIEW_TOOL_NAME,
 ) -> FakeResponse:
     payload: dict[str, Any] = {
         "choices": [
@@ -259,18 +255,13 @@ def _core(frame: NarrativeFrame) -> dict[str, object]:
     scene_prefix = (
         "情境演绎："
         if frame.narrative_mode == "dramatization"
-        else (
-            "如果采用这种表达，"
-            if frame.narrative_mode == "hypothesis"
-            else ""
-        )
+        else ("如果采用这种表达，" if frame.narrative_mode == "hypothesis" else "")
     )
     scenes: list[dict[str, object]] = [
         {
             "scene_id": "s-cover",
             "resource_refs": ["resource:original_composition"],
-            "action_text": scene_prefix
-            + "两组色块保留距离，标题落在中间留白。",
+            "action_text": scene_prefix + "两组色块保留距离，标题落在中间留白。",
             "sound_text": "",
             "production_note": "使用原创排版和留白。",
         },
@@ -324,11 +315,7 @@ def _targets(
     scenes = core["scenes"]
     assert isinstance(blocks, list)
     assert isinstance(scenes, list)
-    targets = [
-        (str(block["block_id"]), "block", str(block["text"]))
-        for block in blocks
-        if isinstance(block, dict)
-    ]
+    targets = [(str(block["block_id"]), "block", str(block["text"])) for block in blocks if isinstance(block, dict)]
     targets.extend(
         (
             f"actuality:{index}",
@@ -339,11 +326,7 @@ def _targets(
     )
     for scene in scenes:
         assert isinstance(scene, dict)
-        text = "\n".join(
-            str(scene[key])
-            for key in ("action_text", "sound_text", "production_note")
-            if scene.get(key)
-        )
+        text = "\n".join(str(scene[key]) for key in ("action_text", "sound_text", "production_note") if scene.get(key))
         targets.append((str(scene["scene_id"]), "scene", text))
     return targets
 
@@ -362,21 +345,10 @@ def _observations(
             continue
         if target_id.startswith("actuality:"):
             binding = "user_actuality"
-        elif (
-            target_kind == "scene"
-            or frame.narrative_mode == "actuality_reflection"
-        ):
-            binding = (
-                "dramatization"
-                if frame.narrative_mode == "dramatization"
-                else "abstract_principle"
-            )
+        elif target_kind == "scene" or frame.narrative_mode == "actuality_reflection":
+            binding = "dramatization" if frame.narrative_mode == "dramatization" else "abstract_principle"
         else:
-            binding = (
-                "abstract_principle"
-                if frame.narrative_mode == "general_observation"
-                else frame.narrative_mode
-            )
+            binding = "abstract_principle" if frame.narrative_mode == "general_observation" else frame.narrative_mode
         observation: dict[str, object] = {
             "id": target_id,
             "target_kind": target_kind,
@@ -392,16 +364,8 @@ def _observations(
             "locations": [],
             "possessions": [],
             "observation_type": binding,
-            "resource_refs": (
-                ["resource:original_composition"]
-                if target_kind == "scene"
-                else []
-            ),
-            "dramatization_disclosure_spans": (
-                ["情境演绎"]
-                if binding == "dramatization"
-                else []
-            ),
+            "resource_refs": (["resource:original_composition"] if target_kind == "scene" else []),
+            "dramatization_disclosure_spans": (["情境演绎"] if binding == "dramatization" else []),
             "instruction_conflicts": [],
             "uncertain": False,
         }
@@ -421,10 +385,7 @@ def _observations(
         ):
             values = observation.pop(category)
             assert isinstance(values, list)
-            claims.extend(
-                {"category": category, "span": str(value)}
-                for value in values
-            )
+            claims.extend({"category": category, "span": str(value)} for value in values)
         observation["claims"] = claims
         observations.append(observation)
     return {"observations": observations}
@@ -508,9 +469,7 @@ def _parsed_kernel(
     skeleton = build_kernel_skeleton(
         frame=request.narrative_frame,
         fact_registry=context.fact_registry,
-        constraint_refs=tuple(
-            identifier for identifier, _ in context.constraint_registry
-        ),
+        constraint_refs=tuple(identifier for identifier, _ in context.constraint_registry),
         program_id=select_kernel_program(
             frame=request.narrative_frame,
             prior_kernel=request.prior_creative_kernel,
@@ -573,59 +532,68 @@ def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:
 def _kernel_observations(
     kernel: CreativeKernelV1,
     *,
+    request: GenerationInput | None = None,
     body_type: str | None = None,
     omit: frozenset[str] = frozenset(),
     partial: frozenset[str] = frozenset(),
 ) -> dict[str, object]:
-    evidence: list[dict[str, object]] = []
-    for clause in build_review_clauses(kernel):
-        if (
-            clause.unit_id.startswith("unit:frozen-fact:")
-            or clause.exact_text
-            in {
-                f"{HYPOTHESIS_DISCLOSURE}\n",
-                f"{DRAMATIZATION_DISCLOSURE}\n",
-            }
-        ):
-            continue
-        if clause.unit_id in omit:
+    active_request = request or _kernel_request()
+    assert active_request.narrative_frame is not None
+    context = BoundaryContext.from_request(
+        active_request,
+        active_request.narrative_frame,
+    )
+    clause_contexts = build_clause_contexts_v2(
+        kernel=kernel,
+        frame=active_request.narrative_frame,
+        fact_registry=context.fact_registry,
+        allowed_constraint_ids=context.constraint_ids,
+        speaker_kind=active_request.brand.speaker_kind,
+    )
+    questions = build_closed_review_questions(clause_contexts)
+    contexts_by_clause = {clause_context.clause_id: clause_context for clause_context in clause_contexts}
+    answers: list[dict[str, object]] = []
+    for question in questions:
+        clause_context = contexts_by_clause[question.clause_id]
+        if clause_context.unit_id in omit:
             continue
         is_event = (
-            clause.unit_id == "unit:body-opening"
+            clause_context.unit_id == "unit:body-opening"
             and body_type == "situated_event"
+            and question.dimension == "actual_event"
         )
-        items: list[dict[str, str]] = []
-        if is_event:
-            items.extend(
-                (
-                    {
-                        "category": "action_or_event",
-                        "text": clause.exact_text,
-                    },
-                    {
-                        "category": "result",
-                        "text": clause.exact_text,
-                    },
-                )
-            )
-        evidence.append(
+        if question.dimension == "statement_mode":
+            mode_by_contract = {
+                "abstract_observation": "generic_observation",
+                "recommendation": "recommendation",
+                "hypothetical_example": "hypothesis",
+                "disclosed_dramatization": "dramatization",
+                "actuality_reflection": "generic_observation",
+            }
+            status = "present"
+            quote = question.exact_text
+            operands = [mode_by_contract[clause_context.unit_contract]]
+        elif is_event:
+            status = "present"
+            quote = question.exact_text
+            operands = ["event"]
+        else:
+            status = "absent"
+            quote = ""
+            operands = []
+        if clause_context.unit_id in partial and question.dimension == "statement_mode":
+            quote = question.exact_text[: max(1, len(question.exact_text) // 2)]
+        answers.append(
             {
-                "clause_id": clause.clause_id,
-                "exact_text": (
-                    clause.exact_text[
-                        : max(1, len(clause.exact_text) // 2)
-                    ]
-                    if clause.unit_id in partial
-                    else clause.exact_text
-                ),
-                "evidence": items,
-                "implicit_subject": "none",
-                "uncertain": False,
+                "question_id": question.question_id,
+                "status": status,
+                "quote": quote,
+                "operands": operands,
             }
         )
     return {
-        "evidence_version": REVIEW_EVIDENCE_V2_VERSION,
-        "clauses": evidence,
+        "evidence_version": CLOSED_REVIEW_VERSION,
+        "answers": answers,
     }
 
 
@@ -637,9 +605,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
                 "kind": "ready",
                 "message": "好，我保留这段原话，其他由我来完成。",
                 "user_premises": [message],
-                "user_fact_spans": [
-                    "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
-                ],
+                "user_fact_spans": ["今天店里忙了一天，回家还因为谁洗碗拌了两句。"],
                 "narrative_mode": "actuality_reflection",
                 "creative_plan": _intake_plan(message),
             }
@@ -658,9 +624,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
     )
     assert decision.disposition == "ready"
     assert decision.user_premises == (message,)
-    assert decision.user_fact_spans == (
-        "今天店里忙了一天，回家还因为谁洗碗拌了两句。",
-    )
+    assert decision.user_fact_spans == ("今天店里忙了一天，回家还因为谁洗碗拌了两句。",)
     assert decision.narrative_mode == "actuality_reflection"
 
 
@@ -708,9 +672,7 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
             _brand(),
             (),
             "xiaohongshu_graphic",
-            explicit_narrative_mode=(
-                "dramatization" if mode == "dramatization" else None
-            ),
+            explicit_narrative_mode=("dramatization" if mode == "dramatization" else None),
             allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
             platform_shape="xiaohongshu_graphic:graphic",
         )
@@ -810,11 +772,7 @@ def test_full_candidate_is_independently_reviewed_and_digest_locked(
 ) -> None:
     frame = new_frame(
         mode,  # type: ignore[arg-type]
-        (
-            ("今天店里忙了一天，回家还因为谁洗碗拌了两句。",)
-            if mode == "actuality_reflection"
-            else ()
-        ),
+        (("今天店里忙了一天，回家还因为谁洗碗拌了两句。",) if mode == "actuality_reflection" else ()),
         (),
     )
     request = _request(frame)
@@ -825,9 +783,7 @@ def test_full_candidate_is_independently_reviewed_and_digest_locked(
     ]
     artifact = _generator().generate(request)
     assert isinstance(artifact.production, GraphicProductionBundle)
-    assert artifact.reviewed_digest == visible_digest(
-        artifact.outline, artifact.body
-    )
+    assert artifact.reviewed_digest == visible_digest(artifact.outline, artifact.body)
     for fact in frame.user_facts:
         assert fact.exact_text in artifact.body
     assert artifact.provider_usage == {"total_tokens": 150}
@@ -894,32 +850,20 @@ def test_one_repair_replaces_whole_block_and_all_linked_scenes_then_rereviews() 
     assert isinstance(blocks, list)
     assert isinstance(scenes, list)
     repaired_block = dict(
-        next(
-            block
-            for block in blocks
-            if isinstance(block, dict) and block["block_id"] == "b-spoken"
-        )
+        next(block for block in blocks if isinstance(block, dict) and block["block_id"] == "b-spoken")
     )
     repaired_block["text"] = "边界不是结论，它只是让两种在意都有位置。"
     repaired_scene = dict(
-        next(
-            scene
-            for scene in scenes
-            if isinstance(scene, dict) and scene["scene_id"] == "s-spoken"
-        )
+        next(scene for scene in scenes if isinstance(scene, dict) and scene["scene_id"] == "s-spoken")
     )
     repaired_scene["action_text"] = "两条抽象线各自展开，最后保持一段留白。"
     repaired_core = {
         **core,
         "blocks": [
-            repaired_block if block["block_id"] == "b-spoken" else block
-            for block in blocks
-            if isinstance(block, dict)
+            repaired_block if block["block_id"] == "b-spoken" else block for block in blocks if isinstance(block, dict)
         ],
         "scenes": [
-            repaired_scene if scene["scene_id"] == "s-spoken" else scene
-            for scene in scenes
-            if isinstance(scene, dict)
+            repaired_scene if scene["scene_id"] == "s-spoken" else scene for scene in scenes if isinstance(scene, dict)
         ],
     }
     FakeClient.responses = [
@@ -963,16 +907,8 @@ def test_second_semantic_failure_closes_without_another_repair() -> None:
     scenes = core["scenes"]
     assert isinstance(blocks, list)
     assert isinstance(scenes, list)
-    block = next(
-        item
-        for item in blocks
-        if isinstance(item, dict) and item["block_id"] == "b-spoken"
-    )
-    scene = next(
-        item
-        for item in scenes
-        if isinstance(item, dict) and item["scene_id"] == "s-spoken"
-    )
+    block = next(item for item in blocks if isinstance(item, dict) and item["block_id"] == "b-spoken")
+    scene = next(item for item in scenes if isinstance(item, dict) and item["scene_id"] == "s-spoken")
     FakeClient.responses = [
         _completion(core),
         _completion(bad),
@@ -1002,9 +938,7 @@ def test_product_claims_are_exact_and_never_nearest_match() -> None:
     assert "双面短外套已登记的材质是棉混纺。" in claims
     assert "双面短外套已登记的颜色是雾蓝、米白。" in claims
     assert "双面短外套已登记的M 码当前样衣重量是 620 克。" in claims
-    fact_ids = tuple(
-        record.fact_id for record in product_fact_records(product)
-    )
+    fact_ids = tuple(record.fact_id for record in product_fact_records(product))
     frame = new_frame("general_observation", (), fact_ids)
     context = BoundaryContext.from_request(
         _request(frame, products=(product,)),
@@ -1012,11 +946,7 @@ def test_product_claims_are_exact_and_never_nearest_match() -> None:
     )
     assert not hasattr(DeepSeekGenerator, "_normalize_registered_product_claims")
     assert not hasattr(DeepSeekGenerator, "_bind_rejected_product_claims")
-    assert {
-        record.exact_text
-        for record in context.fact_registry
-        if record.fact_kind == "product"
-    } == set(claims)
+    assert {record.exact_text for record in context.fact_registry if record.fact_kind == "product"} == set(claims)
 
 
 def test_route_and_transport_only_retry_429_or_transport(
@@ -1074,15 +1004,10 @@ def test_writer_prompt_keeps_private_steering_out_of_fact_sources() -> None:
     context = BoundaryContext.from_request(request, frame)
     generator = _generator()
     skeleton = generator._narrative_skeleton(request, frame, context)
-    prompt = generator._writer_prompt(
-        request, frame, context, skeleton
-    )
+    prompt = generator._writer_prompt(request, frame, context, skeleton)
     assert request.collaboration_note in prompt
     assert "成品中不得出现它的原文、转述或对它的解释" in prompt
-    assert all(
-        request.collaboration_note not in description
-        for _, description in context.constraint_registry
-    )
+    assert all(request.collaboration_note not in description for _, description in context.constraint_registry)
 
 
 def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
@@ -1091,26 +1016,18 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     kernel = _parsed_kernel(request, raw)
     FakeClient.responses = [
         _completion(raw),
-        _completion(_kernel_observations(kernel)),
+        _completion(_kernel_observations(kernel, request=request)),
     ]
 
     artifact = _generator().generate(request)
 
     assert artifact.completion_snapshot_patch is not None
-    assert (
-        artifact.completion_snapshot_patch["delivery_compiler_version"]
-        == DELIVERY_COMPILER_VERSION
-    )
-    assert (
-        artifact.completion_snapshot_patch["review_evidence_version"]
-        == REVIEW_EVIDENCE_V2_VERSION
-    )
-    kernel_snapshot = artifact.completion_snapshot_patch[
-        "creative_kernel_v1"
-    ]
-    clause_context = artifact.completion_snapshot_patch[
-        "clause_context_v2"
-    ]
+    assert artifact.completion_snapshot_patch["delivery_compiler_version"] == DELIVERY_COMPILER_VERSION
+    assert artifact.completion_snapshot_patch["review_evidence_version"] == REVIEW_EVIDENCE_V2_VERSION
+    assert artifact.completion_snapshot_patch["closed_review_contract"] == "closed-review-questions-v1"
+    assert isinstance(artifact.completion_snapshot_patch["claim_inventory_v1"], list)
+    kernel_snapshot = artifact.completion_snapshot_patch["creative_kernel_v1"]
+    clause_context = artifact.completion_snapshot_patch["clause_context_v2"]
     assert isinstance(clause_context, list)
     assert any(
         isinstance(item, dict)
@@ -1119,14 +1036,9 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
         for item in clause_context
     )
     assert isinstance(kernel_snapshot, dict)
-    assert (
-        kernel_snapshot["program_id"]
-        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
-    )
+    assert kernel_snapshot["program_id"] == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
     assert isinstance(artifact.production, GraphicProductionBundle)
-    assert artifact.production.full_body == "\n\n".join(
-        unit.text for unit in kernel.units if unit.purpose == "body"
-    )
+    assert artifact.production.full_body == "\n\n".join(unit.text for unit in kernel.units if unit.purpose == "body")
     prompts = _payload_prompts()
     assert len(prompts) == 2
     writer_prompt = prompts[0]
@@ -1141,11 +1053,13 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert '"fact_refs"' not in writer_prompt
     reviewer_prompt = prompts[1]
     assert '"evidence_version":"review-evidence-v2"' in reviewer_prompt
-    assert '"evidence":[{"category":"subject"' in reviewer_prompt
-    assert "category=modality" in reviewer_prompt
-    assert "category=aspect" in reviewer_prompt
+    assert "每个固定风险问题恰好" in reviewer_prompt
+    assert '"question_id"' in reviewer_prompt
+    assert '"status":"present"' in reviewer_prompt
+    assert "motive_or_mental_state" in reviewer_prompt
+    assert "statement_mode" in reviewer_prompt
     assert '"allowed_quotes"' in reviewer_prompt
-    assert '"context_quote"' not in reviewer_prompt
+    assert "不能通过省略整个问题表达 absent" in reviewer_prompt
     assert '"occurrence"' not in reviewer_prompt
     assert '"start"' not in reviewer_prompt
     assert '"end"' not in reviewer_prompt
@@ -1174,7 +1088,7 @@ def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:
     kernel = _parsed_kernel(request, raw)
     FakeClient.responses = [
         _completion(raw),
-        _completion(_kernel_observations(kernel)),
+        _completion(_kernel_observations(kernel, request=request)),
     ]
 
     artifact = _generator().generate(request)
@@ -1264,7 +1178,7 @@ def test_ui09_reviewer_must_cover_exact_complete_units() -> None:
 
     with pytest.raises(
         GenerationFailed,
-        match="Reviewer 证据",
+        match="Reviewer 闭合证据",
     ):
         _generator().generate(request)
 
@@ -1282,27 +1196,27 @@ def test_ui10_evidence_failure_never_calls_writer_repair(
     raw = _kernel_writer()
     kernel = _parsed_kernel(request, raw)
     document = _kernel_observations(kernel)
-    clauses = document["clauses"]
-    assert isinstance(clauses, list)
+    answers = document["answers"]
+    assert isinstance(answers, list)
     if mutation == "missing":
-        clauses.pop()
+        answers.pop()
     elif mutation == "duplicate":
-        clauses.append(dict(clauses[0]))
+        answers.append(dict(answers[0]))
     elif mutation == "extra":
-        extra = dict(clauses[0])
-        extra["clause_id"] = "unit:extra:clause:1"
-        clauses.append(extra)
+        extra = dict(answers[0])
+        extra["question_id"] = "unit:extra:clause:1:risk:subject_binding"
+        answers.append(extra)
     elif mutation == "partial":
-        clauses[-1] = dict(clauses[-1])
-        clauses[-1]["exact_text"] = "部分"
+        answers[-2] = dict(answers[-2])
+        answers[-2]["quote"] = "部分"
     elif mutation == "fake_span":
-        clauses[-1] = dict(clauses[-1])
-        clauses[-1]["predicate_spans"] = [
-            {"text": "并不存在的谓词"}
-        ]
+        answers[-2] = dict(answers[-2])
+        answers[-2]["quote"] = "并不存在的谓词"
     else:
-        clauses[-1] = dict(clauses[-1])
-        clauses[-1]["uncertain"] = True
+        answers[-2] = dict(answers[-2])
+        answers[-2]["status"] = "uncertain"
+        answers[-2]["quote"] = ""
+        answers[-2]["operands"] = []
     FakeClient.responses = [
         _completion(raw),
         _completion(document),
@@ -1310,7 +1224,7 @@ def test_ui10_evidence_failure_never_calls_writer_repair(
 
     with pytest.raises(
         GenerationFailed,
-        match="Reviewer 证据",
+        match="Reviewer 闭合证据|Reviewer 证据",
     ):
         _generator().generate(request)
 
@@ -1334,9 +1248,7 @@ def test_ui09_allows_only_one_affected_unit_repair_and_full_rereview() -> None:
     repaired_kernel = replace(
         first_kernel,
         units=tuple(
-            replace(unit, text="换位思考不等于没有边界。")
-            if unit.unit_id == "unit:body-opening"
-            else unit
+            replace(unit, text="换位思考不等于没有边界。") if unit.unit_id == "unit:body-opening" else unit
             for unit in first_kernel.units
         ),
     )
@@ -1359,7 +1271,7 @@ def test_ui09_allows_only_one_affected_unit_repair_and_full_rereview() -> None:
     prompts = _payload_prompts()
     assert "unit:body-opening" in prompts[2]
     assert "unit:title" not in prompts[2]
-    assert "服务端 clause" in prompts[3]
+    assert "服务端 writer-owned clause" in prompts[3]
 
 
 def test_ui09_second_review_failure_stops_without_another_repair() -> None:
@@ -1379,9 +1291,7 @@ def test_ui09_second_review_failure_stops_without_another_repair() -> None:
     repaired_kernel = replace(
         first_kernel,
         units=tuple(
-            replace(unit, text="门关上以后，谁都没有再说话。")
-            if unit.unit_id == "unit:body-opening"
-            else unit
+            replace(unit, text="门关上以后，谁都没有再说话。") if unit.unit_id == "unit:body-opening" else unit
             for unit in first_kernel.units
         ),
     )
