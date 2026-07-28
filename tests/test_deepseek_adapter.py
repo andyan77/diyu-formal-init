@@ -528,6 +528,50 @@ def test_kernel_writer_prompt_explains_recommendation_contract() -> None:
     assert '"unit_contract": "recommendation"' in prompt
     assert '"unit_id": "unit:body-closing"' in prompt
     assert '"unit_contract": "abstract_observation"' in prompt
+    assert "Writer-owned clause 不得让当前表达者或第一人称复数承担" in prompt
+    assert "abstract_observation\n只写状态、判断、关系理解或比喻" in prompt
+
+
+def test_recommendation_clause_count_is_checked_before_reviewer() -> None:
+    request = _kernel_request()
+    kernel = _parsed_kernel(request, _kernel_writer())
+    mutated = replace(
+        kernel,
+        units=tuple(
+            replace(unit, text="可以先说清需要。关系仍然值得理解。")
+            if unit.unit_id == "unit:body-closing"
+            else unit
+            for unit in kernel.units
+        ),
+    )
+    assert request.narrative_frame is not None
+    context = BoundaryContext.from_request(
+        request,
+        request.narrative_frame,
+    )
+    issues = DeepSeekGenerator._kernel_structure_issues(
+        DeepSeekGenerator._kernel_clause_contexts(
+            request,
+            context,
+            mutated,
+        )
+    )
+
+    assert tuple(issue.reason for issue in issues) == (
+        "recommendation_clause_contract",
+    )
+    assert DeepSeekGenerator._kernel_repair_scope(
+        mutated,
+        issues,
+    ) == frozenset({"unit:body-closing"})
+    repair_prompt = _generator()._kernel_repair_prompt(
+        request,
+        mutated,
+        frozenset({"unit:body-closing"}),
+        issues,
+    )
+    assert '"unit_contract": "recommendation"' in repair_prompt
+    assert "recommendation unit 必须恰好一个" in repair_prompt
 
 
 def _kernel_observations(

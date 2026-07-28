@@ -617,13 +617,17 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed(
                 "CreativeKernelV1 Writer 返回格式不完整"
             ) from exc
-        issues, review_payload, review_retries = self._review_kernel(
-            request,
-            context,
-            kernel,
+        issues = self._kernel_structure_issues(
+            self._kernel_clause_contexts(request, context, kernel)
         )
-        provider_payloads.append(review_payload)
-        retries += review_retries
+        if not issues:
+            issues, review_payload, review_retries = self._review_kernel(
+                request,
+                context,
+                kernel,
+            )
+            provider_payloads.append(review_payload)
+            retries += review_retries
         receipts: tuple[FactRepairReceipt, ...] = ()
         if issues:
             affected = self._kernel_repair_scope(kernel, issues)
@@ -663,6 +667,13 @@ class DeepSeekGenerator(ContentGenerator):
                 raise GenerationFailed(
                     "CreativeKernelV1 单元修复返回格式不完整"
                 ) from exc
+            final_structure_issues = self._kernel_structure_issues(
+                self._kernel_clause_contexts(request, context, repaired)
+            )
+            if final_structure_issues:
+                raise GenerationFailed(
+                    "内容边界无法在一次 CreativeKernel unit 修复内满足"
+                )
             final_issues, review_payload, review_retries = (
                 self._review_kernel(request, context, repaired)
             )
@@ -1012,6 +1023,33 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("CreativeKernel 缺陷不属于可写单元")
         return affected
 
+    @staticmethod
+    def _kernel_structure_issues(
+        contexts: tuple[ClauseContextV2, ...],
+    ) -> tuple[NarrativeIssue, ...]:
+        recommendation_units = {
+            context.unit_id
+            for context in contexts
+            if context.unit_contract == "recommendation"
+        }
+        issues: list[NarrativeIssue] = []
+        for unit_id in recommendation_units:
+            clauses = tuple(
+                context
+                for context in contexts
+                if context.unit_id == unit_id
+                and context.text_source == "writer_unit"
+            )
+            if len(clauses) != 1:
+                issues.append(
+                    NarrativeIssue(
+                        unit_id,
+                        "recommendation_clause_contract",
+                        "|".join(clause.exact_text for clause in clauses),
+                    )
+                )
+        return tuple(issues)
+
     def _kernel_writer_prompt(
         self,
         request: GenerationInput,
@@ -1110,7 +1148,9 @@ clause；不得追加第二个抽象收束 clause，也不能写具体时间、�
 标记的裸动作。需要抽象收束时由后续 abstract_observation / release_caption unit 完成。
 不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。
 不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄资源或
-制作方式。"""
+制作方式。Writer-owned clause 不得让当前表达者或第一人称复数承担谓语、做法、经历或承诺；
+介绍本文时使用中性的“这篇内容／这个角度”，不能用机构性“我们”。abstract_observation
+只写状态、判断、关系理解或比喻，不给泛指人物安排动作、对白或建议。"""
 
     @staticmethod
     def _kernel_reviewer_prompt(
@@ -1175,10 +1215,17 @@ null，没有证据时返回空数组。"""
         affected: frozenset[str],
         issues: tuple[NarrativeIssue, ...],
     ) -> str:
+        if request.narrative_frame is None:
+            raise GenerationFailed("CreativeKernelV1 缺少冻结叙事框架")
+        trusted_contracts = unit_contracts_v2(
+            kernel,
+            request.narrative_frame,
+        )
         units = [
             {
                 "unit_id": unit.unit_id,
                 "purpose": unit.purpose,
+                "unit_contract": trusted_contracts[unit.unit_id],
                 "allowed_observation_types": list(
                     unit.allowed_observation_types
                 ),
@@ -1211,7 +1258,8 @@ CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit
 
 修复后仍只写创作文字，不得返回 scene、actor、resource、action、sound、production_note、
 来源、约束或语义合同。hypothesis/dramatization 的可见包裹由服务端加入，修复文字不得重复
-这些包裹。只返回：
+这些包裹。recommendation unit 必须恰好一个带显式建议、条件或意愿语态的泛指 clause，
+不得写具体时间、地点、对白、情境例子或追加抽象收束。只返回：
 {{"units":[{{"unit_id":"只使用列出的既定 id","text":"完整替换文字"}}]}}"""
 
     @staticmethod
