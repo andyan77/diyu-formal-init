@@ -169,6 +169,7 @@ def test_strict_schema_requires_every_nested_object_field() -> None:
         "type": "string",
         "enum": [
             "subject",
+            "relationship_role",
             "predicate",
             "action_or_event",
             "dialogue",
@@ -289,6 +290,9 @@ def test_reviewer_requires_unique_source_quotes_without_model_addresses() -> Non
     assert "活动概念名称" in prompt
     assert "导航描述本身，不属于 action_or_event" in prompt
     assert "修辞性动作或因果比喻也不属于 action_or_event" in prompt
+    assert "category=relationship_role" in prompt
+    assert "泛指“人／双方／彼此／对方”" in prompt
+    assert "即使位于抽象建议或引号中" in prompt
 
 
 def test_server_quote_vocabulary_excludes_repeated_short_phrases() -> None:

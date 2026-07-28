@@ -104,6 +104,7 @@ def _evidence(
     *,
     target_fragment: str | None = None,
     subject: tuple[str, ...] = (),
+    relationship_role: tuple[str, ...] = (),
     predicate: tuple[str, ...] = (),
     action: tuple[str, ...] = (),
     dialogue: tuple[str, ...] = (),
@@ -161,6 +162,7 @@ def _evidence(
                 ),
                 implicit_subject=implicit_subject if selected else "none",
                 uncertain=uncertain if selected else False,
+                relationship_role_spans=spans(relationship_role),
             )
         )
     return ReviewEvidenceV2(REVIEW_EVIDENCE_V2_VERSION, tuple(items))
@@ -1274,6 +1276,64 @@ def test_unmodalized_action_in_actuality_reflection_is_repairable_drift() -> Non
         target_fragment=text,
         action=("争的是",),
         implicit_subject="generic",
+    )
+
+    assert _reasons(contexts, evidence) == (
+        "situated_event_in_reflection",
+    )
+
+
+def test_actuality_reflection_rejects_unfrozen_relationship_role() -> None:
+    fact = FrozenFactRecord(
+        "source:user_actuality:1",
+        "今天店里忙了一天，回家还因为谁洗碗拌了两句",
+        "user_actuality",
+    )
+    text = "伴侣之间的摩擦需要边界。"
+    _, _, contexts = _frame_and_kernel(
+        mode="actuality_reflection",
+        body=text,
+        facts=(fact,),
+    )
+    evidence = _evidence(
+        contexts,
+        target_fragment=text,
+        relationship_role=("伴侣",),
+    )
+
+    assert _reasons(contexts, evidence, facts=(fact,)) == (
+        "unsupported_actuality_expansion",
+    )
+
+
+def test_actuality_reflection_allows_role_already_present_in_frozen_fact() -> None:
+    fact = FrozenFactRecord(
+        "source:user_actuality:1",
+        "伴侣因为洗碗拌了两句",
+        "user_actuality",
+    )
+    text = "伴侣关系也需要边界。"
+    _, _, contexts = _frame_and_kernel(
+        mode="actuality_reflection",
+        body=text,
+        facts=(fact,),
+    )
+    evidence = _evidence(
+        contexts,
+        target_fragment=text,
+        relationship_role=("伴侣",),
+    )
+
+    assert _reasons(contexts, evidence, facts=(fact,)) == ()
+
+
+def test_actuality_reflection_rejects_added_motive_evidence() -> None:
+    text = "摩擦背后是渴望被看见。"
+    contexts = _manual_context(text, "actuality_reflection")
+    evidence = _evidence(
+        contexts,
+        target_fragment=text,
+        motive=("渴望被看见",),
     )
 
     assert _reasons(contexts, evidence) == (

@@ -31,6 +31,7 @@ _IMPLICIT_SUBJECTS = frozenset(
 )
 _EVIDENCE_CATEGORIES = (
     "subject",
+    "relationship_role",
     "predicate",
     "action_or_event",
     "dialogue",
@@ -191,11 +192,13 @@ class ClauseEvidenceV2:
     grammatical_marker_spans: GrammaticalMarkerSpans
     implicit_subject: ImplicitSubject
     uncertain: bool
+    relationship_role_spans: tuple[SpanOccurrence, ...] = ()
 
     @property
     def all_spans(self) -> tuple[SpanOccurrence, ...]:
         return (
             *self.subject_spans,
+            *self.relationship_role_spans,
             *self.predicate_spans,
             *self.action_or_event_spans,
             *self.dialogue_spans,
@@ -736,6 +739,9 @@ def parse_review_evidence_v2(
                 ),
                 implicit_subject=cast(ImplicitSubject, implicit_subject),
                 uncertain=uncertain,
+                relationship_role_spans=_quote_tuple(
+                    grouped["relationship_role"], exact_text=trusted_text
+                ),
             )
         )
     return ReviewEvidenceV2(
@@ -1024,7 +1030,12 @@ def reconcile_review_evidence_v2(
                 )
             )
             continue
-        issue = _writer_clause_issue(context, item, binding)
+        issue = _writer_clause_issue(
+            context,
+            item,
+            binding,
+            fact_text_by_id,
+        )
         if issue is not None:
             issues.append(issue)
     return tuple(dict.fromkeys(issues))
@@ -1182,7 +1193,22 @@ def _writer_clause_issue(
     context: ClauseContextV2,
     evidence: ClauseEvidenceV2,
     binding: SubjectBindingV2,
+    fact_text_by_id: Mapping[str, str],
 ) -> NarrativeIssue | None:
+    actuality_facts = tuple(
+        text
+        for fact_id, text in fact_text_by_id.items()
+        if fact_id.startswith("source:user_actuality:")
+    )
+    if actuality_facts and any(
+        not any(span.text in fact for fact in actuality_facts)
+        for span in evidence.relationship_role_spans
+    ):
+        return NarrativeIssue(
+            context.unit_id,
+            "unsupported_actuality_expansion",
+            context.exact_text,
+        )
     if (
         binding in {"current_institution", "protected_exact_subject"}
         and evidence.predicate_spans
@@ -1260,7 +1286,13 @@ def _writer_clause_issue(
         return None
 
     if contract == "recommendation":
-        if has_aspect or has_time or has_location or has_dialogue:
+        if (
+            has_aspect
+            or has_time
+            or has_location
+            or has_dialogue
+            or bool(evidence.motive_spans)
+        ):
             return NarrativeIssue(
                 context.unit_id,
                 "situated_event_in_recommendation",
@@ -1289,7 +1321,13 @@ def _writer_clause_issue(
                 "unsupported_actuality_expansion",
                 context.exact_text,
             )
-        if has_aspect or has_time or has_location or has_dialogue:
+        if (
+            has_aspect
+            or has_time
+            or has_location
+            or has_dialogue
+            or bool(evidence.motive_spans)
+        ):
             return NarrativeIssue(
                 context.unit_id,
                 "situated_event_in_reflection",

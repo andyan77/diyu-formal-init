@@ -1153,6 +1153,8 @@ category/text 组合只返回一次。各 category 不是互斥分类：同一 q
 才返回 uncertain=true；不要猜测，也不得为了避免 uncertain 而遗漏可见证据。不要计算或返回
 start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
 - category=subject：句中明确承担状态、判断或动作的人、代词、机构、角色或事物；
+- category=relationship_role：原文明确出现的亲属、伴侣、同住关系、同事、员工、顾客或其他
+  社会关系角色称谓；泛指“人／双方／彼此／对方”和抽象概念不属于 relationship_role；
 - category=predicate：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；若其中确有
   下述具体行为或事件，还必须独立返回 action_or_event；
 - category=action_or_event：句子明示或隐含的参与者在一个可想象情境中实施的具体行为、
@@ -1160,9 +1162,12 @@ start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 
   都只提取其语法证据，不判断现实性。静态状态、关系判断、价值评价、活动概念名称，以及
   对“本文／阅读／观看”的导航描述本身，不属于 action_or_event；非人抽象概念承担的
   修辞性动作或因果比喻也不属于 action_or_event；
-- category=dialogue：直接或转述的具体话语；同时属于言说动作时还要返回 action_or_event；
-- category=motive/cause/result/time/location：对应动机、前因、结果、时间和地点，无论所在
-  文字最终是否被服务端允许；
+- category=dialogue：任何直接、转述或作为示例给出的具体话语，即使位于抽象建议或引号中；
+  同时属于言说动作时还要返回 action_or_event；
+- category=motive：原文用愿望、需要、期待、意图、害怕或类似心理缘由解释行为或关系时的
+  精确证据，即使表达是泛指或抽象；
+- category=cause/result/time/location：对应前因、结果、时间和地点，无论所在文字最终是否
+  被服务端允许；
 - category=modality：原文中明确表示建议、义务、可能、条件或意愿的语法标记；
 - category=aspect：原文中明确表示已经、完成、持续或经历事实的语法标记。
 
