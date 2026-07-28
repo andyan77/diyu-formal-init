@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from typing import Any, cast
@@ -911,6 +911,9 @@ class DeepSeekGenerator(ContentGenerator):
                 review_clauses_from_contexts(writer_contexts)
             ),
             clause_count=len(writer_contexts),
+            allowed_quotes=tuple(
+                context.exact_text for context in writer_contexts
+            ),
             timeout_seconds=self._review_timeout_seconds,
         )
         try:
@@ -1116,13 +1119,11 @@ allowed_observation_types 是服务端边界：abstract_principle 可以表达�
 {json.dumps(targets, ensure_ascii=False)}
 
 每个 clause_id 必须按 visible_order 恰好返回一次，exact_text 必须逐字等于对应完整 clause，
-不得截短或抄写其他 clause。每个 span 只返回 text；text 必须是当前 clause 中逐字存在且
-只出现一次的精确原文。短语在同一 clause 重复时，必须连同足够上下文返回一个只出现一次的
-更长精确 quote；最稳妥的做法是直接返回该项的完整 exact_text。提交前逐项确认 quote 在
-当前 clause 恰好出现一次；同一 evidence 数组中的同一 quote 只返回一次。无法可靠判断
-证据类别时返回 uncertain=true，并且不要把无法唯一绑定的重复短语放入 span 数组。不要
-计算或返回 start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文
-确定性计算。
+不得截短或抄写其他 clause。每个 span 只返回 text，且 text 必须逐字等于当前这一项的完整
+exact_text；不要返回单个词或局部短语。strict schema 只允许服务端给出的完整 clause 原文，
+服务端还会校验 quote 是否属于当前 clause。同一 evidence 数组中的同一 quote 只返回一次。
+无法可靠判断证据类别时返回 uncertain=true，不要猜测。不要计算或返回
+start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
 - subject_spans：句中明确作为陈述主体的人、代词、机构或事物；
 - predicate_spans：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；
 - action_or_event_spans：具体情境中实际发生的动作、反应或事件；抽象概念名称不是事件；
@@ -1139,7 +1140,7 @@ none；省略主体但由当前说话者承担谓语时为 current_speaker；泛
 只返回：
 {{"evidence_version":"{REVIEW_EVIDENCE_V2_VERSION}","clauses":[{{
 "clause_id":"既定 id","exact_text":"完整 clause 原文",
-"subject_spans":[{{"text":"clause 内唯一的精确原文"}}],
+"subject_spans":[{{"text":"当前项的完整 clause exact_text"}}],
 "predicate_spans":[],"action_or_event_spans":[],
 "dialogue_spans":[],"motive_spans":[],"cause_spans":[],"result_spans":[],
 "time_spans":[],"location_spans":[],
@@ -2240,7 +2241,9 @@ CreativePlanV2：{json.dumps(
         return f"{beta_url}/chat/completions"
 
     @staticmethod
-    def _strict_review_tool() -> dict[str, object]:
+    def _strict_review_tool(
+        allowed_quotes: Sequence[str] = (),
+    ) -> dict[str, object]:
         return {
             "type": "function",
             "function": {
@@ -2250,7 +2253,7 @@ CreativePlanV2：{json.dumps(
                     "server-provided writer clause."
                 ),
                 "strict": True,
-                "parameters": review_evidence_v2_json_schema(),
+                "parameters": review_evidence_v2_json_schema(allowed_quotes),
             },
         }
 
@@ -2309,6 +2312,7 @@ CreativePlanV2：{json.dumps(
         prompt: str,
         *,
         clause_count: int,
+        allowed_quotes: Sequence[str] = (),
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
         request_payload: dict[str, Any] = {
@@ -2320,7 +2324,7 @@ CreativePlanV2：{json.dumps(
             "temperature": 0.0,
             "max_tokens": self._review_max_tokens(clause_count),
             "thinking": {"type": "disabled"},
-            "tools": [self._strict_review_tool()],
+            "tools": [self._strict_review_tool(allowed_quotes)],
             "tool_choice": {
                 "type": "function",
                 "function": {"name": REVIEW_EVIDENCE_V2_TOOL_NAME},

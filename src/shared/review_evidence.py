@@ -431,12 +431,18 @@ def validate_server_owned_contexts_v2(
     return tuple(dict.fromkeys(issues))
 
 
-def review_evidence_v2_json_schema() -> dict[str, object]:
+def review_evidence_v2_json_schema(
+    allowed_quotes: Sequence[str] = (),
+) -> dict[str, object]:
     """Return the strict function schema for ReviewEvidenceV2."""
+    text_schema: dict[str, object] = {"type": "string"}
+    unique_quotes = tuple(dict.fromkeys(allowed_quotes))
+    if unique_quotes:
+        text_schema["enum"] = list(unique_quotes)
     span_schema: dict[str, object] = {
         "type": "object",
         "properties": {
-            "text": {"type": "string"},
+            "text": text_schema,
         },
         "required": ["text"],
         "additionalProperties": False,

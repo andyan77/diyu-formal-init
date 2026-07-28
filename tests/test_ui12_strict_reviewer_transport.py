@@ -181,6 +181,10 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
         "system",
         "prompt",
         clause_count=25,
+        allowed_quotes=(
+            "换位思考不等于没有边界。",
+            "婆婆要尊重儿媳。",
+        ),
     )
 
     assert payload == _FakeClient.response.json()
@@ -205,6 +209,29 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
     assert function["name"] == REVIEW_EVIDENCE_V2_TOOL_NAME
     assert function["strict"] is True
     _assert_strict_objects(function["parameters"])
+    parameters = function["parameters"]
+    assert isinstance(parameters, dict)
+    root_properties = parameters["properties"]
+    assert isinstance(root_properties, dict)
+    clauses = root_properties["clauses"]
+    assert isinstance(clauses, dict)
+    clause = clauses["items"]
+    assert isinstance(clause, dict)
+    clause_properties = clause["properties"]
+    assert isinstance(clause_properties, dict)
+    predicate_spans = clause_properties["predicate_spans"]
+    assert isinstance(predicate_spans, dict)
+    span = predicate_spans["items"]
+    assert isinstance(span, dict)
+    span_properties = span["properties"]
+    assert isinstance(span_properties, dict)
+    assert span_properties["text"] == {
+        "type": "string",
+        "enum": [
+            "换位思考不等于没有边界。",
+            "婆婆要尊重儿媳。",
+        ],
+    }
 
 
 def test_reviewer_token_budget_is_deterministic_and_hard_capped() -> None:
