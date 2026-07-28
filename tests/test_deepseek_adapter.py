@@ -565,12 +565,10 @@ def _kernel_observations(
                     {
                         "category": "action_or_event",
                         "text": clause.exact_text,
-                        "context_quote": clause.exact_text,
                     },
                     {
                         "category": "result",
                         "text": clause.exact_text,
-                        "context_quote": clause.exact_text,
                     },
                 )
             )
@@ -579,7 +577,6 @@ def _kernel_observations(
                 {
                     "category": "modality",
                     "text": modality,
-                    "context_quote": clause.exact_text,
                 }
             )
         evidence.append(
@@ -1118,7 +1115,8 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert '"evidence":[{"category":"subject"' in reviewer_prompt
     assert "category=modality" in reviewer_prompt
     assert "category=aspect" in reviewer_prompt
-    assert '"context_quote"' in reviewer_prompt
+    assert '"allowed_quotes"' in reviewer_prompt
+    assert '"context_quote"' not in reviewer_prompt
     assert '"occurrence"' not in reviewer_prompt
     assert '"start"' not in reviewer_prompt
     assert '"end"' not in reviewer_prompt

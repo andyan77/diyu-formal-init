@@ -214,8 +214,6 @@ def _raw_v2_evidence(
     uncertain: bool = False,
 ) -> dict[str, object]:
     resolved_span = dict(span)
-    if frozenset(resolved_span) == {"text"}:
-        resolved_span["context_quote"] = text
     return {
         "evidence_version": REVIEW_EVIDENCE_V2_VERSION,
         "clauses": [
@@ -1008,13 +1006,11 @@ def test_quote_parser_binds_one_exact_quote_and_computes_unicode_offset() -> Non
                     "evidence": [
                         {
                             "category": "action_or_event",
-                            "text": "停了一下",
-                            "context_quote": "她先停了一下",
+                            "text": "她先停了一下",
                         },
                         {
                             "category": "action_or_event",
-                            "text": "停了一下",
-                            "context_quote": "后来又停了一下",
+                            "text": "后来又停了一下",
                         },
                     ],
                     "implicit_subject": "generic",
@@ -1028,7 +1024,7 @@ def test_quote_parser_binds_one_exact_quote_and_computes_unicode_offset() -> Non
     assert tuple(
         (span.start, span.end)
         for span in evidence.clauses[0].action_or_event_spans
-    ) == ((2, 6), (10, 14))
+    ) == ((0, 6), (7, 14))
 
 
 def test_repeated_short_quote_fails_until_context_is_unique() -> None:
@@ -1094,8 +1090,8 @@ def test_unique_context_quote_preserves_institutional_subject_binding() -> None:
     clause = clauses[0]
     assert isinstance(clause, dict)
     clause["evidence"] = [
-        {"category": "subject", "text": text, "context_quote": text},
-        {"category": "predicate", "text": text, "context_quote": text},
+        {"category": "subject", "text": text},
+        {"category": "predicate", "text": text},
     ]
     evidence = parse_review_evidence_v2(
         raw,

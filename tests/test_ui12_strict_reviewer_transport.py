@@ -80,7 +80,6 @@ def _evidence_document() -> dict[str, object]:
                     {
                         "category": "predicate",
                         "text": "不等于",
-                        "context_quote": "换位思考不等于没有边界。",
                     }
                 ],
                 "implicit_subject": "none",
@@ -185,14 +184,8 @@ def test_strict_schema_requires_every_nested_object_field() -> None:
     text_property = evidence_properties["text"]
     assert isinstance(text_property, dict)
     assert text_property["type"] == "string"
-    context_property = evidence_properties["context_quote"]
-    assert isinstance(context_property, dict)
-    assert "occurs once" in str(context_property["description"])
-    assert evidence_item["required"] == [
-        "category",
-        "text",
-        "context_quote",
-    ]
+    assert "occurs once" in str(text_property["description"])
+    assert evidence_item["required"] == ["category", "text"]
 
 
 def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
@@ -249,15 +242,8 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
     assert evidence_properties["text"] == {
         "type": "string",
         "description": (
-            "Exact evidence text copied from the selected context_quote; "
-            "never return an address or index."
-        ),
-    }
-    assert evidence_properties["context_quote"] == {
-        "type": "string",
-        "description": (
-            "Server-provided exact context quote that occurs once in the "
-            "source clause and contains this evidence text exactly once."
+            "Server-provided exact evidence quote that occurs once in its "
+            "source clause; never return an address or index."
         ),
         "enum": [
             "换位思考不等于没有边界",
@@ -289,11 +275,11 @@ def test_reviewer_requires_unique_source_quotes_without_model_addresses() -> Non
         )
     )
 
-    assert "text 与 context_quote" in prompt
-    assert "context_quote 必须从当前 clause 的 allowed_context_quotes" in prompt
-    assert "并已在其来源 clause\n内唯一" in prompt
-    assert "不得自行缩短、\n拼接或创造 context_quote" in prompt
-    assert '"allowed_context_quotes": ["婆婆停了一下，", "又继续说话。"]' in prompt
+    assert "每项只返回 category\n与 text" in prompt
+    assert "text 必须从当前 clause 的 allowed_quotes" in prompt
+    assert "并已在其来源 clause 内唯一" in prompt
+    assert "不得自行缩短、拼接或创造 quote" in prompt
+    assert '"allowed_quotes": ["婆婆停了一下，", "又继续说话。"]' in prompt
     assert "不要计算或返回\nstart/end/occurrence" in prompt
 
 
@@ -429,7 +415,6 @@ def test_old_address_arguments_are_not_silently_repaired(
     clause["evidence"] = [
         {
             "category": "predicate",
-            "context_quote": "换位思考不等于没有边界。",
             **legacy_span,
         }
     ]

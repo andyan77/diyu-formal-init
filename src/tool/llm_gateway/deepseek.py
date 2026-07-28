@@ -1120,7 +1120,7 @@ unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一�
                 "clause_id": clause.clause_id,
                 "exact_text": clause.exact_text,
                 "visible_order": clause.visible_order,
-                "allowed_context_quotes": list(
+                "allowed_quotes": list(
                     unique_review_quote_candidates((clause.exact_text,))
                 ),
             }
@@ -1134,14 +1134,12 @@ unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一�
 {json.dumps(targets, ensure_ascii=False)}
 
 每个 clause_id 必须按 visible_order 恰好返回一次，exact_text 必须逐字等于对应完整 clause，
-不得截短或抄写其他 clause。evidence 数组只列原文中实际存在的证据；每项返回 category、
-text 与 context_quote：text 是与该证据直接
-对应的逐字原文；context_quote 必须从当前 clause 的 allowed_context_quotes 中逐字选择，
-同时也必须属于 strict schema 的 enum。候选由服务端预先按标点生成，并已在其来源 clause
-内唯一。选择包含 text 且 text 在其中只出现一次的最短 context_quote；只有当前 clause 的
-allowed_context_quotes 确实列出完整 clause 时才可以选择它。不得自行缩短、
-拼接或创造 context_quote。服务端会同时校验 context_quote 属于当前 clause 且唯一、text
-属于 context_quote 且唯一。同一 category/text/context_quote 组合只返回一次。
+不得截短或抄写其他 clause。evidence 数组只列原文中实际存在的证据；每项只返回 category
+与 text。text 必须从当前 clause 的 allowed_quotes 中逐字选择，同时也必须属于 strict
+schema 的 enum。候选由服务端预先按标点生成，并已在其来源 clause 内唯一。选择包含该证据
+的最短 quote；只有当前 clause 的 allowed_quotes 确实列出完整 clause 时才可以选择它。
+不得自行缩短、拼接或创造 quote。服务端会校验 text 属于当前 clause 且唯一。同一
+category/text 组合只返回一次。
 只有无法可靠判断证据类别、无法形成唯一原文 quote，或 implicit_subject 确实无法确定时，
 才返回 uncertain=true；不要猜测，也不得为了避免 uncertain 而遗漏可见证据。不要计算或返回
 start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
@@ -1162,8 +1160,7 @@ uncertain=true。
 只返回：
 {{"evidence_version":"{REVIEW_EVIDENCE_V2_VERSION}","clauses":[{{
 "clause_id":"既定 id","exact_text":"完整 clause 原文",
-"evidence":[{{"category":"subject","text":"主体逐字原文",
-"context_quote":"包含主体且唯一的服务端候选"}}],
+"evidence":[{{"category":"subject","text":"包含主体且唯一的服务端候选"}}],
 "implicit_subject":"none","uncertain":false
 }}]}}
 根对象、clause 和 evidence item 不得增加、遗漏或重命名字段；evidence 必须是数组且不能为

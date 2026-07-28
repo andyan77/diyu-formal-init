@@ -499,20 +499,13 @@ def review_evidence_v2_json_schema(
     text_schema: dict[str, object] = {
         "type": "string",
         "description": (
-            "Exact evidence text copied from the selected context_quote; "
-            "never return an address or index."
-        ),
-    }
-    context_schema: dict[str, object] = {
-        "type": "string",
-        "description": (
-            "Server-provided exact context quote that occurs once in the "
-            "source clause and contains this evidence text exactly once."
+            "Server-provided exact evidence quote that occurs once in its "
+            "source clause; never return an address or index."
         ),
     }
     unique_quotes = tuple(dict.fromkeys(allowed_quotes))
     if unique_quotes:
-        context_schema["enum"] = list(unique_quotes)
+        text_schema["enum"] = list(unique_quotes)
     evidence_item_schema: dict[str, object] = {
         "type": "object",
         "properties": {
@@ -521,9 +514,8 @@ def review_evidence_v2_json_schema(
                 "enum": list(_EVIDENCE_CATEGORIES),
             },
             "text": text_schema,
-            "context_quote": context_schema,
         },
-        "required": ["category", "text", "context_quote"],
+        "required": ["category", "text"],
         "additionalProperties": False,
     }
     clause_properties: dict[str, object] = {
@@ -674,31 +666,26 @@ def parse_review_evidence_v2(
         grouped: dict[str, list[dict[str, object]]] = {
             category: [] for category in _EVIDENCE_CATEGORIES
         }
-        seen_items: set[tuple[str, str, str]] = set()
+        seen_items: set[tuple[str, str]] = set()
         for raw_item in raw_evidence:
             if not isinstance(raw_item, Mapping) or frozenset(raw_item) != {
                 "category",
                 "text",
-                "context_quote",
             }:
                 raise TypeError("review evidence v2 item is invalid")
             category = raw_item.get("category")
             text = raw_item.get("text")
-            context_quote = raw_item.get("context_quote")
             if (
                 not isinstance(category, str)
                 or category not in _EVIDENCE_CATEGORIES
                 or not isinstance(text, str)
-                or not isinstance(context_quote, str)
             ):
                 raise TypeError("review evidence v2 item fields are invalid")
-            identity = (category, text, context_quote)
+            identity = (category, text)
             if identity in seen_items:
                 raise TypeError("review evidence v2 items are duplicated")
             seen_items.add(identity)
-            grouped[category].append(
-                {"text": text, "context_quote": context_quote}
-            )
+            grouped[category].append({"text": text})
         implicit_subject = raw.get("implicit_subject")
         uncertain = raw.get("uncertain")
         if (
@@ -1437,25 +1424,15 @@ def _quote_tuple(
         raise TypeError("review evidence quote spans are invalid")
     spans: list[SpanOccurrence] = []
     for raw in value:
-        if not isinstance(raw, Mapping) or frozenset(raw) != {
-            "text",
-            "context_quote",
-        }:
+        if not isinstance(raw, Mapping) or frozenset(raw) != {"text"}:
             raise TypeError("review evidence quote span is invalid")
         text = raw.get("text")
-        context_quote = raw.get("context_quote")
-        if (
-            not isinstance(text, str)
-            or not text
-            or not isinstance(context_quote, str)
-            or not context_quote
-        ):
+        if not isinstance(text, str) or not text:
             raise TypeError("review evidence quote span fields are invalid")
-        context_starts = _exact_match_starts(exact_text, context_quote)
-        focus_starts = _exact_match_starts(context_quote, text)
-        if len(context_starts) != 1 or len(focus_starts) != 1:
+        starts = _exact_match_starts(exact_text, text)
+        if len(starts) != 1:
             raise TypeError("review evidence quote cannot be uniquely resolved")
-        start = context_starts[0] + focus_starts[0]
+        start = starts[0]
         spans.append(
             SpanOccurrence(
                 text=text,
