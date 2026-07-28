@@ -497,6 +497,45 @@ def test_kernel_writer_prompt_exposes_current_trusted_contracts() -> None:
     assert "不能复制、概括或扩写人物、动作、对白、动机、原因、结果" in prompt
 
 
+def test_kernel_writer_prompt_hides_server_owned_product_facts() -> None:
+    product = ProductFact(
+        sku="ZX-C218",
+        display_name="双面短外套",
+        facts={
+            "material": "棉混纺",
+            "sample_weight_m_grams": 620,
+        },
+    )
+    fact_ids = tuple(
+        record.fact_id for record in product_fact_records(product)
+    )
+    frame = new_frame("general_observation", (), fact_ids)
+    request = replace(
+        _kernel_request(frame),
+        products=(product,),
+    )
+    context = BoundaryContext.from_request(request, frame)
+    skeleton = build_kernel_skeleton(
+        frame=frame,
+        fact_registry=context.fact_registry,
+        constraint_refs=context.constraint_ids,
+        program_id=select_kernel_program(
+            frame=frame,
+            prior_kernel=None,
+        ),
+    )
+
+    prompt = _generator()._kernel_writer_prompt(request, skeleton)
+
+    assert "双面短外套已登记的材质是棉混纺。" not in prompt
+    assert "双面短外套已登记的M 码当前样衣重量是 620 克。" not in prompt
+    assert any(
+        unit.purpose == "frozen_fact"
+        and unit.text == "双面短外套已登记的材质是棉混纺。"
+        for unit in skeleton.units
+    )
+
+
 def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:
     request = _kernel_request()
     kernel = _parsed_kernel(request, _kernel_writer())

@@ -944,7 +944,14 @@ class DeepSeekGenerator(ContentGenerator):
             if not unit.writable
             and (
                 request.narrative_frame is None
-                or not any(fact_ref in request.narrative_frame.allowed_brand_fact_ids for fact_ref in unit.fact_refs)
+                or not any(
+                    fact_ref
+                    in {
+                        *request.narrative_frame.allowed_brand_fact_ids,
+                        *request.narrative_frame.allowed_product_fact_ids,
+                    }
+                    for fact_ref in unit.fact_refs
+                )
             )
         ]
         trusted_contracts = unit_contracts_v2(
