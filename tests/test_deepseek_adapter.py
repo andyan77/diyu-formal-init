@@ -26,7 +26,12 @@ from src.shared.creative_plan import (
 from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
 from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import brand_fact_records, product_fact_records
-from src.shared.narrative import NarrativeFrame, new_frame, visible_digest
+from src.shared.narrative import (
+    NarrativeFrame,
+    NarrativeIssue,
+    new_frame,
+    visible_digest,
+)
 from src.shared.review_evidence import (
     REVIEW_EVIDENCE_V2_TOOL_NAME,
     REVIEW_EVIDENCE_V2_VERSION,
@@ -528,6 +533,35 @@ def test_kernel_writer_prompt_exposes_current_trusted_contracts() -> None:
     assert '"unit_contract": "abstract_observation"' in prompt
     assert "Writer-owned clause 不得让当前表达者或第一人称复数承担" in prompt
     assert "abstract_observation\n只写状态、判断、关系理解或比喻" in prompt
+
+
+def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:
+    request = _kernel_request()
+    kernel = _parsed_kernel(request, _kernel_writer())
+    affected = frozenset({"unit:body-opening"})
+    prompt = _generator()._kernel_repair_prompt(
+        request,
+        kernel,
+        affected,
+        (
+            NarrativeIssue(
+                "unit:body-opening",
+                "situated_event_in_observation",
+                "问题片段",
+            ),
+            NarrativeIssue(
+                "unit:body-opening",
+                "unsupported_actuality_expansion",
+                "另一问题片段",
+            ),
+        ),
+    )
+
+    assert "把完整 unit 重写为其冻结" in prompt
+    assert "只对服务端已经逐字插入的\n  事实作抽象反思" in prompt
+    assert "现实原文\n  已由服务端 frozen fact 单元独立保留" in prompt
+    assert "每个返回 unit 的文字都必须与 current_text 实质不同" in prompt
+    assert "不得原样返回、只换标点或把问题句移动到另一个 unit" in prompt
 
 
 def _kernel_observations(

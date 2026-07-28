@@ -445,6 +445,24 @@ def test_actuality_fact_and_program_survive_revision_invariants() -> None:
     )
 
 
+def test_affected_unit_repair_must_change_its_complete_text() -> None:
+    original = _kernel()
+
+    with pytest.raises(ValueError, match="did not change every affected"):
+        repair_kernel_units(
+            kernel=original,
+            affected_unit_ids=frozenset({"unit:body"}),
+            raw={
+                "units": [
+                    {
+                        "unit_id": "unit:body",
+                        "text": original.unit("unit:body").text,
+                    }
+                ]
+            },
+        )
+
+
 def test_legacy_kernel_document_remains_readable_and_recompilable() -> None:
     kernel = _kernel()
     legacy_document = kernel_document(kernel)

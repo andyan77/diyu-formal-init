@@ -331,6 +331,11 @@ def repair_kernel_units(
     )
     repaired = parse_writer_kernel(raw, repair_skeleton)
     replacements = {unit.unit_id: unit for unit in repaired.units}
+    if any(
+        replacements[unit_id].text == kernel.unit(unit_id).text
+        for unit_id in affected_unit_ids
+    ):
+        raise ValueError("repair did not change every affected unit")
     return CreativeKernelV1(
         kernel_version=KERNEL_VERSION,
         units=tuple(

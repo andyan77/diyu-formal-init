@@ -1229,7 +1229,18 @@ CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit
 修复后仍只写创作文字，不得返回 scene、actor、resource、action、sound、production_note、
 来源、约束或语义合同。hypothesis/dramatization 的可见包裹由服务端加入，修复文字不得重复
 这些包裹。recommendation unit 的每个 clause 都必须带显式建议、条件或意愿语态，
-不得写具体时间、地点、对白、情境例子或抽象收束。只返回：
+不得写具体时间、地点、对白、情境例子或抽象收束。按以下稳定含义修复全部 findings：
+- situated_event_in_observation / recommendation_in_observation：把完整 unit 重写为其冻结
+  contract 允许的抽象状态、关系判断或观看回报，不保留、换写或搬运具体情境与建议；
+- situated_event_in_reflection / unsupported_actuality_expansion：只对服务端已经逐字插入的
+  事实作抽象反思，不复述或扩写人物、动作、对白、动机、原因、结果、时间或地点；
+- unsupported_actuality_binding：删除 Writer unit 中复制、概括或改写的现实事实，现实原文
+  已由服务端 frozen fact 单元独立保留；
+- unsupported_institutional_assertion：删除当前机构或第一人称复数承担的观点、做法与经历；
+- unsupported_actuality_binding 出现在 hypothesis/dramatization 时，改为不绑定现实身份的
+  泛指虚构角色。
+每个返回 unit 的文字都必须与 current_text 实质不同，并同时消除该 unit 的全部 findings；
+不得原样返回、只换标点或把问题句移动到另一个 unit。只返回：
 {{"units":[{{"unit_id":"只使用列出的既定 id","text":"完整替换文字"}}]}}"""
 
     @staticmethod
