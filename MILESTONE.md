@@ -1,12 +1,13 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`BLOCKED`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
+- 状态：`ACTIVE`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
   保留；主控随后在同一 UI-12 内裁决改由服务端确定性绑定 exact quote，并采用“一战到底”
   治理恢复施工。quote-only 责任边界、完整 G3 和 G4 已继续验证；最终 G4 证明当前
-  Reviewer 在真实成品中仍漏提关系角色和动机等裁决必需 evidence，已命中“继续只能更换
-  模型、增加第二 Reviewer、降低事实边界或建立人物／句型词表”的真正停止线。不创建
-  UI-13，也不把运行时失败关闭改写为产品成功。`UI-11` 为
+  Reviewer 在开放式 evidence 枚举下漏提关系角色和动机等裁决必需 evidence。主控现已把
+  缺口订正为同一 UI-12 内的普通责任合同问题：服务端为每个 writer clause 生成闭合风险
+  问题集，Reviewer 逐题回答，服务端派生 Claim Inventory 并唯一裁决。既有失败保持，
+  恢复 `ACTIVE` 不表示问题已解决。不创建 UI-13。`UI-11` 为
   `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
@@ -164,6 +165,18 @@
 - 当前唯一下一动作：主控审阅并裁决“当前单一 Reviewer 无法稳定提取 G4 所需关系角色／
   动机 evidence”这一已经角色隔离的能力阻断；裁决前不换模型、不加第二 Reviewer、不降
   事实边界，也不创建 UI-13。
+- 后续主控裁决：上述阻断不是单 Reviewer 能力结论，而是开放式 evidence 枚举无法证明
+  “未返回的风险不存在”。UI-12 在原里程碑内恢复 `ACTIVE`，用服务端闭合问题集取代自由
+  类别枚举；Reviewer 对每个 `question_id` 恰好回答 `present/absent/uncertain`，服务端
+  验证全集与唯一 quote 后派生 Claim Inventory，再执行 ADR-028 唯一裁决。不得继续添加
+  evidence 类别、失败句或人物词表。
+- 当前 Git 现场：状态启动 `HEAD=0bed884d92e34fa7a63b01d5896cce33a1e44abf`，
+  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，本地领先 54 个线性提交；工作树已有
+  用户的项目记忆增量，已完整保护。生产只读复核仍为部署仓／镜像 `845f632…`、schema
+  `20260801_28`、回环／公网 readiness `200/200`、备份 timer active。
+- 当前执行纪律：先离线重放现存完整 G4 初稿、修复稿、Reviewer raw 与 service issues，
+  直接形成当前 G4 消费的闭合问题夹具；确定性门通过后直接运行完整无持久化 G4。完整
+  G1—G7/H1/D1 成立前均为 WIP，不 push、CI、备份、部署或写生产。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
