@@ -281,6 +281,10 @@ def test_reviewer_requires_unique_source_quotes_without_model_addresses() -> Non
     assert "不得自行缩短、拼接或创造 quote" in prompt
     assert '"allowed_quotes": ["婆婆停了一下，", "又继续说话。"]' in prompt
     assert "不要计算或返回\nstart/end/occurrence" in prompt
+    assert "各 category 不是互斥分类" in prompt
+    assert "无论它是已发生、假设、建议、否定、泛指或演绎" in prompt
+    assert "还必须独立返回 action_or_event" in prompt
+    assert "不判断现实性" in prompt
 
 
 def test_server_quote_vocabulary_excludes_repeated_short_phrases() -> None:

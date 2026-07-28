@@ -908,7 +908,7 @@ class DeepSeekGenerator(ContentGenerator):
                 "CreativeKernelV1 缺少可审查的 Writer clause"
             )
         payload, retries = self._request_strict_review(
-            "你是独立 CreativeKernel 证据提取器。只提取每个 clause 的精确文字证据，不分类、不裁决、不改写，只调用指定函数一次。",
+            "你是独立 CreativeKernel 证据提取器。只按既定语法证据类别穷尽提取每个 clause 的精确文字证据，不判断事实性、合同、允许性或通过失败，不改写，只调用指定函数一次。",
             self._kernel_reviewer_prompt(
                 review_clauses_from_contexts(writer_contexts)
             ),
@@ -1143,15 +1143,20 @@ abstract_observation / release_caption unit 完成。
 schema 的 enum。候选由服务端预先按标点生成，并已在其来源 clause 内唯一。选择包含该证据
 的最短 quote；只有当前 clause 的 allowed_quotes 确实列出完整 clause 时才可以选择它。
 不得自行缩短、拼接或创造 quote。服务端会校验 text 属于当前 clause 且唯一。同一
-category/text 组合只返回一次。
+category/text 组合只返回一次。各 category 不是互斥分类：同一 quote 同时包含谓语、
+动作、对白或其他证据时，必须分别以对应 category 返回；不得因为它看起来抽象、假设、建议、
+演绎、真实或合法而省略某类证据。你不判断这些文字是否实际发生，服务端会结合来源和合同裁决。
 只有无法可靠判断证据类别、无法形成唯一原文 quote，或 implicit_subject 确实无法确定时，
 才返回 uncertain=true；不要猜测，也不得为了避免 uncertain 而遗漏可见证据。不要计算或返回
 start/end/occurrence，字符 offset 与唯一绑定只由服务端根据可信 clause 原文确定性计算。
-- category=subject：句中明确作为陈述主体的人、代词、机构或事物；
-- category=predicate：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；
-- category=action_or_event：具体情境中实际发生的动作、反应或事件；抽象概念名称不是事件；
-- category=dialogue：被说出的具体话语；
-- category=motive/cause/result/time/location：对应动机、前因、结果、时间和地点；
+- category=subject：句中明确承担状态、判断或动作的人、代词、机构、角色或事物；
+- category=predicate：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；谓语含动作时
+  还必须独立返回 action_or_event；
+- category=action_or_event：参与者实施的动作、反应、言说、状态变化或句中描述的事件；
+  无论它是已发生、假设、建议、否定、泛指或演绎，都只提取其语法证据，不判断现实性；
+- category=dialogue：直接或转述的具体话语；同时属于言说动作时还要返回 action_or_event；
+- category=motive/cause/result/time/location：对应动机、前因、结果、时间和地点，无论所在
+  文字最终是否被服务端允许；
 - category=modality：原文中明确表示建议、义务、可能、条件或意愿的语法标记；
 - category=aspect：原文中明确表示已经、完成、持续或经历事实的语法标记。
 
