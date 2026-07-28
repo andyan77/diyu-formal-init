@@ -439,17 +439,43 @@ def unique_review_quote_candidates(
     """Build a small server-owned vocabulary of uniquely bindable quotes."""
     candidates: list[str] = []
     for exact_text in exact_texts:
-        starts = [0]
+        chunks: list[str] = []
+        start = 0
         for index, character in enumerate(exact_text):
             if character in _QUOTE_CANDIDATE_BOUNDARIES:
-                segment = exact_text[starts[-1] : index].strip()
-                if segment and len(_exact_match_starts(exact_text, segment)) == 1:
-                    candidates.append(segment)
-                starts.append(index + 1)
-        tail = exact_text[starts[-1] :].strip()
-        if tail and len(_exact_match_starts(exact_text, tail)) == 1:
-            candidates.append(tail)
-        candidates.append(exact_text)
+                chunk = exact_text[start : index + 1]
+                if chunk.strip():
+                    chunks.append(chunk)
+                start = index + 1
+        tail = exact_text[start:]
+        if tail.strip():
+            chunks.append(tail)
+        if not chunks:
+            chunks.append(exact_text)
+        for index, chunk in enumerate(chunks):
+            if len(_exact_match_starts(exact_text, chunk)) == 1:
+                candidates.append(chunk)
+                continue
+            resolved: str | None = None
+            for width in range(2, len(chunks) + 1):
+                windows = (
+                    "".join(chunks[window_start : window_start + width])
+                    for window_start in range(
+                        max(0, index - width + 1),
+                        min(index, len(chunks) - width) + 1,
+                    )
+                )
+                resolved = next(
+                    (
+                        window
+                        for window in windows
+                        if len(_exact_match_starts(exact_text, window)) == 1
+                    ),
+                    None,
+                )
+                if resolved is not None:
+                    break
+            candidates.append(resolved or exact_text)
     return tuple(dict.fromkeys(candidates))
 
 

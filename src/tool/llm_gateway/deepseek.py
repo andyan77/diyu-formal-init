@@ -1134,7 +1134,8 @@ unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一�
 不得截短或抄写其他 clause。每个 span 返回 text 与 context_quote：text 是与该证据直接
 对应的逐字原文；context_quote 必须从 strict schema 为本批 clause 提供的 enum 中选择。
 该 enum 由服务端预先按标点生成，候选都已在其来源 clause 内唯一。选择当前 clause 中包含
-text 且 text 在其中只出现一次的最短 context_quote，必要时可选择完整 clause。不得自行缩短、
+text 且 text 在其中只出现一次的最短 context_quote；只有 schema 确实提供完整 clause 时才
+可以选择它。不得自行缩短、
 拼接或创造 context_quote。服务端会同时校验 context_quote 属于当前 clause 且唯一、text
 属于 context_quote 且唯一。同一 evidence 数组中的同一 text/context_quote 组合只返回一次。
 只有无法可靠判断证据类别、无法形成唯一原文 quote，或 implicit_subject 确实无法确定时，

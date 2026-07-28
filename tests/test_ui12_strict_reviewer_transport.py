@@ -292,13 +292,21 @@ def test_server_quote_vocabulary_excludes_repeated_short_phrases() -> None:
     candidates = unique_review_quote_candidates((text,))
 
     assert candidates == (
-        "婆婆先停一下",
-        "婆婆再回应",
-        text,
+        "婆婆先停一下，",
+        "婆婆再回应。",
     )
     assert "婆婆" not in candidates
     for candidate in candidates:
         assert text.count(candidate) == 1
+
+
+def test_server_quote_vocabulary_expands_only_repeated_chunks() -> None:
+    text = "先说，先说。"
+
+    assert unique_review_quote_candidates((text,)) == (
+        "先说，",
+        "先说。",
+    )
 
 
 @pytest.mark.parametrize(
