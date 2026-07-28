@@ -281,9 +281,10 @@ def test_reviewer_requires_unique_source_quotes_without_model_addresses() -> Non
     )
 
     assert "text 与 context_quote" in prompt
-    assert "context_quote 必须从 strict schema" in prompt
-    assert "候选都已在其来源 clause 内唯一" in prompt
+    assert "context_quote 必须从当前 clause 的 allowed_context_quotes" in prompt
+    assert "并已在其来源 clause\n内唯一" in prompt
     assert "不得自行缩短、\n拼接或创造 context_quote" in prompt
+    assert '"allowed_context_quotes": ["婆婆停了一下，", "又继续说话。"]' in prompt
     assert "不要计算或返回\nstart/end/occurrence" in prompt
 
 
