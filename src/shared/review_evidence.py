@@ -7,6 +7,7 @@ from typing import Literal, TypeAlias, cast
 from src.shared.creative_kernel import (
     DRAMATIZATION_DISCLOSURE,
     HYPOTHESIS_DISCLOSURE,
+    OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
     CreativeKernelV1,
 )
 from src.shared.narrative import NarrativeIssue
@@ -28,6 +29,16 @@ _INSTITUTIONAL_SELF_REFERENCES = frozenset(
 )
 _INSTITUTIONAL_DESIGNATORS = frozenset(
     {"品牌", "公司", "门店", "账号", "组织", "企业", "集团"}
+)
+_CURRENT_REALITY_PREFIXES = (
+    "我家",
+    "我的",
+    "我们家",
+    "本店",
+    "我们店",
+    "店里",
+    "真实",
+    "现实中",
 )
 
 
@@ -184,6 +195,7 @@ def reconcile_review_evidence(
     protected_subjects: ProtectedSubjectScope,
 ) -> tuple[NarrativeIssue, ...]:
     issues: list[NarrativeIssue] = []
+    issues.extend(_kernel_program_issues(kernel))
     expected = {clause.clause_id: clause for clause in review_clauses}
     units = {unit.unit_id: unit for unit in kernel.units}
     received: dict[str, ClauseEvidence] = {}
@@ -322,6 +334,18 @@ def reconcile_review_evidence(
                 )
                 continue
             if (
+                unit.allowed_observation_types == ("hypothesis",)
+                and _has_unsupported_actuality_binding(item)
+            ):
+                issues.append(
+                    NarrativeIssue(
+                        unit.unit_id,
+                        "unsupported_actuality_binding",
+                        item.exact_text,
+                    )
+                )
+                continue
+            if (
                 unit.allowed_observation_types == ("abstract_principle",)
                 and item.event_spans
             ):
@@ -333,6 +357,40 @@ def reconcile_review_evidence(
                     )
                 )
     return tuple(dict.fromkeys(issues))
+
+
+def _kernel_program_issues(
+    kernel: CreativeKernelV1,
+) -> tuple[NarrativeIssue, ...]:
+    if (
+        kernel.program_id
+        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
+    ):
+        expected = {
+            "unit:body-opening": ("abstract_principle",),
+            "unit:hypothetical-example": ("hypothesis",),
+            "unit:body-closing": ("abstract_principle",),
+        }
+    else:
+        expected = {"unit:body": ("abstract_principle",)}
+    body_units = {
+        unit.unit_id: unit
+        for unit in kernel.units
+        if unit.purpose == "body"
+    }
+    if set(body_units) != set(expected) or any(
+        body_units[unit_id].allowed_observation_types != allowed
+        for unit_id, allowed in expected.items()
+        if unit_id in body_units
+    ):
+        return (
+            NarrativeIssue(
+                "creative-kernel",
+                "kernel_program_drift",
+                kernel.program_id,
+            ),
+        )
+    return ()
 
 
 def _split_visible_text(text: str) -> tuple[str, ...]:
@@ -384,6 +442,26 @@ def _has_unsupported_institutional_assertion(
     return (
         protected_subjects.current_speaker_is_institutional
         and evidence.implicit_subject == "current_speaker"
+    )
+
+
+def _has_unsupported_actuality_binding(
+    evidence: ClauseEvidence,
+) -> bool:
+    """Reject deictic bindings while allowing generic fictional subjects.
+
+    This is a small grammatical class, not a topic/person blacklist: first
+    person possession, the current store, and explicitly real-world subjects
+    bind a hypothetical clause to current actuality.
+    """
+    scoped_spans = (
+        *evidence.subject_spans,
+        *evidence.location_spans,
+    )
+    return any(
+        span == "我"
+        or span.startswith(_CURRENT_REALITY_PREFIXES)
+        for span in scoped_spans
     )
 
 

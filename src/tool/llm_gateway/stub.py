@@ -6,6 +6,7 @@ from src.shared.creative_kernel import (
     kernel_digest,
     kernel_document,
     parse_writer_kernel,
+    select_kernel_program,
 )
 from src.shared.creative_plan import (
     ACCOUNT_BASELINE_TONE_ID,
@@ -161,20 +162,33 @@ class DeterministicContentGenerator(ContentGenerator):
             frame=frame,
             fact_registry=facts,
             constraint_refs=("constraint:deterministic-test-stub",),
+            program_id=select_kernel_program(
+                frame=frame,
+                prior_kernel=request.prior_creative_kernel,
+            ),
         )
         _, guide, spoken, _, subtitles, _ = self._parts(request)
         if request.revision_instruction:
             spoken += "\n\n这次按你的修改要求改变了允许调整的表达。"
         release_caption = subtitles + _control_sections(request)
+        text_by_id = {
+            "unit:title": _outline(request.primary_product),
+            "unit:natural-guide": guide,
+            "unit:body": spoken,
+            "unit:body-opening": spoken,
+            "unit:hypothetical-example": (
+                "一方先停一下，另一方也不必马上给出答案。"
+            ),
+            "unit:body-closing": "理解可以靠近，边界也仍然成立。",
+            "unit:release-caption": release_caption,
+        }
         raw = {
             "units": [
-                {"unit_id": "unit:title", "text": _outline(request.primary_product)},
-                {"unit_id": "unit:natural-guide", "text": guide},
-                {"unit_id": "unit:body", "text": spoken},
                 {
-                    "unit_id": "unit:release-caption",
-                    "text": release_caption,
-                },
+                    "unit_id": unit.unit_id,
+                    "text": text_by_id[unit.unit_id],
+                }
+                for unit in skeleton.writable_units
             ]
         }
         kernel = parse_writer_kernel(raw, skeleton)

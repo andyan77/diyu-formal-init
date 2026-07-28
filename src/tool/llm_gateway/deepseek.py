@@ -19,6 +19,7 @@ from src.shared.creative_kernel import (
     kernel_document,
     parse_writer_kernel,
     repair_kernel_units,
+    select_kernel_program,
 )
 from src.shared.creative_plan import (
     creative_plan_document,
@@ -560,12 +561,17 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("CreativeKernelV1 缺少冻结计划或叙事框架")
         frame = request.narrative_frame
         context = BoundaryContext.from_request(request, frame)
+        program_id = select_kernel_program(
+            frame=frame,
+            prior_kernel=request.prior_creative_kernel,
+        )
         skeleton = build_kernel_skeleton(
             frame=frame,
             fact_registry=context.fact_registry,
             constraint_refs=tuple(
                 identifier for identifier, _ in context.constraint_registry
             ),
+            program_id=program_id,
         )
         writer_payload, writer_retries = self._request(
             "你是笛语 CreativeKernelV1 Writer。只返回 unit 文字 JSON，不展示推理、规则或内部审查。",
@@ -921,6 +927,9 @@ class DeepSeekGenerator(ContentGenerator):
             "review_evidence_span",
             "review_evidence_uncertain",
             "frozen_fact_changed",
+            "hypothesis_not_visible",
+            "dramatization_not_visible",
+            "kernel_program_drift",
         }
         if any(issue.reason in nonrepairable for issue in issues):
             raise GenerationFailed(
@@ -1015,15 +1024,16 @@ scene、actor、resource、action、sound、production_note、发布结构或语
 
 根对象只能有 units；每个 unit 只能有 unit_id、text。必须恰好一次覆盖全部既定可写 unit_id，
 不得增加、遗漏、重复或修改 id，不得输出任何制作字段、来源、事实、约束、类型或内部规则。
-title 是自然标题；natural_guide 给出清楚主线和观看回报；body 是完整核心正文；
-release_caption 是可直接使用的发布配文收束。四者不能只是提纲。
+title 是自然标题；natural_guide 给出清楚主线和观看回报；按可见顺序排列的一个或多个 body
+单元共同组成完整核心正文；release_caption 是可直接使用的发布配文收束，不能只是提纲。
 allowed_observation_types 是服务端边界：abstract_principle 可以表达抽象判断、观点、比喻和
 幽默，但不能写具体或隐含人物发生的微事件；hypothesis 可以写推演但不要自行添加“假设”标识，
-服务端会包裹；dramatization 必须写成完整虚构情境，但不要自行添加演绎声明，服务端会为整个
-段落提供一次可见披露。
-不要把 topic 写成用户亲历；不要创造真人身份、对白、动机、原因、结果、时间、地点或共同
-家庭。不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄
-资源或制作方式。"""
+服务端会包裹；hypothesis 可以使用一般虚构人物、动作和关系，但不能绑定用户、当前表达方、
+真实员工、顾客、门店或已经发生的历史。dramatization 必须写成完整虚构情境，但不要自行添加
+演绎声明，服务端会为整个段落提供一次可见披露。
+不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。
+不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄资源或
+制作方式。"""
 
     @staticmethod
     def _kernel_reviewer_prompt(

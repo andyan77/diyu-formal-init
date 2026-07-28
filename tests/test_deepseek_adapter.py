@@ -10,9 +10,11 @@ import pytest
 
 from src.brain.platform_directions import direction_for
 from src.shared.creative_kernel import (
+    OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
     CreativeKernelV1,
     build_kernel_skeleton,
     parse_writer_kernel,
+    select_kernel_program,
 )
 from src.shared.creative_plan import (
     ACCOUNT_BASELINE_TONE_ID,
@@ -409,7 +411,23 @@ def _kernel_writer(
     *,
     body: str = "换位思考不等于没有边界。",
     title: str = "边界不是一道判决题",
+    observation_only: bool = False,
 ) -> dict[str, object]:
+    body_units = (
+        [{"unit_id": "unit:body", "text": body}]
+        if observation_only
+        else [
+            {"unit_id": "unit:body-opening", "text": body},
+            {
+                "unit_id": "unit:hypothetical-example",
+                "text": "一方先停一下，另一方也不必马上给出答案。",
+            },
+            {
+                "unit_id": "unit:body-closing",
+                "text": "理解可以靠近，边界也仍然成立。",
+            },
+        ]
+    )
     return {
         "units": [
             {"unit_id": "unit:title", "text": title},
@@ -417,7 +435,7 @@ def _kernel_writer(
                 "unit_id": "unit:natural-guide",
                 "text": "从不同位置看同一段关系，先保留理解的余地。",
             },
-            {"unit_id": "unit:body", "text": body},
+            *body_units,
             {
                 "unit_id": "unit:release-caption",
                 "text": "尊重差异，也保留自己的边界。",
@@ -441,6 +459,10 @@ def _parsed_kernel(
         constraint_refs=tuple(
             identifier for identifier, _ in context.constraint_registry
         ),
+        program_id=select_kernel_program(
+            frame=request.narrative_frame,
+            prior_kernel=request.prior_creative_kernel,
+        ),
     )
     return parse_writer_kernel(raw, skeleton)
 
@@ -457,7 +479,7 @@ def _kernel_observations(
         if clause.unit_id in omit:
             continue
         is_event = (
-            clause.unit_id == "unit:body"
+            clause.unit_id == "unit:body-opening"
             and body_type == "situated_event"
         )
         evidence.append(
@@ -967,8 +989,18 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
         artifact.completion_snapshot_patch["review_evidence_version"]
         == REVIEW_EVIDENCE_VERSION
     )
+    kernel_snapshot = artifact.completion_snapshot_patch[
+        "creative_kernel_v1"
+    ]
+    assert isinstance(kernel_snapshot, dict)
+    assert (
+        kernel_snapshot["program_id"]
+        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
+    )
     assert isinstance(artifact.production, GraphicProductionBundle)
-    assert artifact.production.full_body == kernel.unit("unit:body").text
+    assert artifact.production.full_body == "\n\n".join(
+        unit.text for unit in kernel.units if unit.purpose == "body"
+    )
     prompts = _payload_prompts()
     assert len(prompts) == 2
     writer_prompt = prompts[0]
@@ -999,7 +1031,10 @@ def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:
             brand_reference_context=(exact_fact,),
         ),
     )
-    raw = _kernel_writer(body="这篇更想聊创作边界。")
+    raw = _kernel_writer(
+        body="这篇更想聊创作边界。",
+        observation_only=True,
+    )
     kernel = _parsed_kernel(request, raw)
     FakeClient.responses = [
         _completion(raw),
@@ -1086,7 +1121,7 @@ def test_ui09_reviewer_must_cover_exact_complete_units() -> None:
             _kernel_observations(
                 kernel,
                 omit=frozenset({"unit:title"}),
-                partial=frozenset({"unit:body"}),
+                partial=frozenset({"unit:body-opening"}),
             )
         ),
     ]
@@ -1153,7 +1188,7 @@ def test_ui09_allows_only_one_affected_unit_repair_and_full_rereview() -> None:
     repair_raw = {
         "units": [
             {
-                "unit_id": "unit:body",
+                "unit_id": "unit:body-opening",
                 "text": "换位思考不等于没有边界。",
             }
         ]
@@ -1162,7 +1197,7 @@ def test_ui09_allows_only_one_affected_unit_repair_and_full_rereview() -> None:
         first_kernel,
         units=tuple(
             replace(unit, text="换位思考不等于没有边界。")
-            if unit.unit_id == "unit:body"
+            if unit.unit_id == "unit:body-opening"
             else unit
             for unit in first_kernel.units
         ),
@@ -1181,10 +1216,10 @@ def test_ui09_allows_only_one_affected_unit_repair_and_full_rereview() -> None:
 
     artifact = _generator().generate(request)
 
-    assert artifact.production.full_body == "换位思考不等于没有边界。"  # type: ignore[union-attr]
+    assert "换位思考不等于没有边界。" in artifact.production.full_body  # type: ignore[union-attr]
     assert len(FakeClient.requests) == 4
     prompts = _payload_prompts()
-    assert "unit:body" in prompts[2]
+    assert "unit:body-opening" in prompts[2]
     assert "unit:title" not in prompts[2]
     assert "服务端 clause" in prompts[3]
 
@@ -1198,7 +1233,7 @@ def test_ui09_second_review_failure_stops_without_another_repair() -> None:
     repair_raw = {
         "units": [
             {
-                "unit_id": "unit:body",
+                "unit_id": "unit:body-opening",
                 "text": "门关上以后，谁都没有再说话。",
             }
         ]
@@ -1207,7 +1242,7 @@ def test_ui09_second_review_failure_stops_without_another_repair() -> None:
         first_kernel,
         units=tuple(
             replace(unit, text="门关上以后，谁都没有再说话。")
-            if unit.unit_id == "unit:body"
+            if unit.unit_id == "unit:body-opening"
             else unit
             for unit in first_kernel.units
         ),

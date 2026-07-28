@@ -320,6 +320,13 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
                 g4_body = str(result["body"])
             time.sleep(2.05)
         assert _G4_FACT in g4_body
+        g3_snapshot = _snapshot(app_database_url, task_ids["G3"])
+        g3_kernel = g3_snapshot["creative_kernel_v1"]
+        assert isinstance(g3_kernel, dict)
+        assert (
+            g3_kernel["program_id"]
+            == "observation_with_hypothetical_example_v1"
+        )
 
         g6_before = _counts(app_database_url)
         g6 = _events(client, _G6)
@@ -355,6 +362,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         kernel_v1 = snapshot["creative_kernel_v1"]
         assert isinstance(kernel_v1, dict)
         assert kernel_v1["kernel_version"] == "creative-kernel-v1"
+        assert kernel_v1["program_id"] == "observation_only_v1"
         assert snapshot["delivery_compiler_version"] == "delivery-compiler-v1"
         assert snapshot["review_evidence_version"] == "review-evidence-v1"
         assert isinstance(snapshot["reviewed_kernel_digest"], str)
@@ -414,6 +422,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         revised_kernel = revised_snapshot["creative_kernel_v1"]
         assert isinstance(revised_kernel, dict)
         assert revised_kernel != kernel_v1
+        assert revised_kernel["program_id"] == kernel_v1["program_id"]
         original_units = kernel_v1["units"]
         revised_units = revised_kernel["units"]
         assert isinstance(original_units, list)

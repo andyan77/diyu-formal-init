@@ -115,22 +115,34 @@ def _compile_delivery(
     request: DeliveryCompileInput,
     kernel: CreativeKernelV1,
 ) -> CompiledDelivery:
-    by_purpose = {
+    singleton_by_purpose = {
         unit.purpose: unit
         for unit in kernel.units
-        if unit.purpose != "frozen_fact"
+        if unit.purpose in {"title", "natural_guide", "release_caption"}
     }
-    required = {"title", "natural_guide", "body", "release_caption"}
-    if set(by_purpose) != required:
+    body_units = tuple(
+        unit for unit in kernel.units if unit.purpose == "body"
+    )
+    required = {"title", "natural_guide", "release_caption"}
+    if set(singleton_by_purpose) != required or not body_units:
         raise GenerationFailed("创作内核缺少完整可见单元")
-    title = by_purpose["title"].text
-    guide = by_purpose["natural_guide"].text
-    release = by_purpose["release_caption"].text
+    if any(
+        sum(unit.purpose == purpose for unit in kernel.units) != 1
+        for purpose in required
+    ):
+        raise GenerationFailed("创作内核单值可见单元重复")
+    title = singleton_by_purpose["title"].text
+    guide = singleton_by_purpose["natural_guide"].text
+    release = singleton_by_purpose["release_caption"].text
     fact_units = tuple(
         unit for unit in kernel.units if unit.purpose == "frozen_fact"
     )
-    creative_body = by_purpose["body"].text
-    spoken_parts = (*fact_units, by_purpose["body"])
+    creative_body = "\n\n".join(unit.text for unit in body_units)
+    spoken_parts = tuple(
+        unit
+        for unit in kernel.units
+        if unit.purpose in {"frozen_fact", "body"}
+    )
     spoken = "\n\n".join(unit.text for unit in spoken_parts)
     contract = _contract(
         request.primary_product,
@@ -163,10 +175,12 @@ def _compile_delivery(
     )
     spoken_sources = tuple(unit.unit_id for unit in spoken_parts)
     provenance: dict[str, tuple[str, ...]] = {
-        "outline": (by_purpose["title"].unit_id,),
-        "natural_guide": (by_purpose["natural_guide"].unit_id,),
+        "outline": (singleton_by_purpose["title"].unit_id,),
+        "natural_guide": (
+            singleton_by_purpose["natural_guide"].unit_id,
+        ),
         "release_caption_and_interaction": (
-            by_purpose["release_caption"].unit_id,
+            singleton_by_purpose["release_caption"].unit_id,
         ),
     }
     production: ContentProductionBundle
@@ -204,7 +218,10 @@ def _compile_delivery(
         )
         action_phrase = (
             "phrase:video-drama"
-            if creative_body.startswith(DRAMATIZATION_DISCLOSURE)
+            if any(
+                unit.text.startswith(DRAMATIZATION_DISCLOSURE)
+                for unit in body_units
+            )
             else (
                 "phrase:video-product-action"
                 if product_resources

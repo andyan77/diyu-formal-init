@@ -22,10 +22,24 @@ KernelPurpose: TypeAlias = Literal[
     "body",
     "release_caption",
 ]
+KernelProgramId: TypeAlias = Literal[
+    "observation_only_v1",
+    "observation_with_hypothetical_example_v1",
+]
 
 KERNEL_VERSION = "creative-kernel-v1"
 DRAMATIZATION_DISCLOSURE = "情境演绎（虚构角色，不对应真实人物或品牌案例）："
-HYPOTHESIS_DISCLOSURE = "假设："
+HYPOTHESIS_DISCLOSURE = "假设有这样一幕："
+OBSERVATION_ONLY_PROGRAM: KernelProgramId = "observation_only_v1"
+OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM: KernelProgramId = (
+    "observation_with_hypothetical_example_v1"
+)
+_PROGRAM_IDS = frozenset(
+    {
+        OBSERVATION_ONLY_PROGRAM,
+        OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
+    }
+)
 _PURPOSES = frozenset(
     {
         "title",
@@ -68,6 +82,7 @@ class CreativeKernelUnit:
 class CreativeKernelV1:
     kernel_version: str
     units: tuple[CreativeKernelUnit, ...]
+    program_id: KernelProgramId = OBSERVATION_ONLY_PROGRAM
 
     @property
     def writable_units(self) -> tuple[CreativeKernelUnit, ...]:
@@ -85,8 +100,16 @@ def build_kernel_skeleton(
     frame: NarrativeFrame,
     fact_registry: Sequence[FrozenFactRecord],
     constraint_refs: Sequence[str],
+    program_id: KernelProgramId = OBSERVATION_ONLY_PROGRAM,
 ) -> CreativeKernelV1:
     """Build the one small server-owned writing skeleton for a new artifact."""
+    if (
+        program_id == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
+        and frame.narrative_mode != "general_observation"
+    ):
+        raise ValueError(
+            "hypothetical example program requires general observation"
+        )
     body_types: tuple[ObservationType, ...]
     if frame.narrative_mode == "hypothesis":
         body_types = ("hypothesis",)
@@ -140,8 +163,41 @@ def build_kernel_skeleton(
                 text=record.exact_text,
             )
         )
-    units.extend(
-        (
+    if program_id == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM:
+        units.extend(
+            (
+                CreativeKernelUnit(
+                    unit_id="unit:body-opening",
+                    purpose="body",
+                    allowed_observation_types=("abstract_principle",),
+                    fact_refs=(),
+                    constraint_refs=constraints,
+                    visible_order=90,
+                    text="",
+                ),
+                CreativeKernelUnit(
+                    unit_id="unit:hypothetical-example",
+                    purpose="body",
+                    allowed_observation_types=("hypothesis",),
+                    fact_refs=(),
+                    constraint_refs=constraints,
+                    visible_order=100,
+                    text="",
+                ),
+                CreativeKernelUnit(
+                    unit_id="unit:body-closing",
+                    purpose="body",
+                    allowed_observation_types=("abstract_principle",),
+                    fact_refs=(),
+                    constraint_refs=constraints,
+                    visible_order=110,
+                    text="",
+                ),
+            )
+        )
+        release_order = 120
+    else:
+        units.append(
             CreativeKernelUnit(
                 unit_id="unit:body",
                 purpose="body",
@@ -150,22 +206,47 @@ def build_kernel_skeleton(
                 constraint_refs=constraints,
                 visible_order=100,
                 text="",
-            ),
-            CreativeKernelUnit(
-                unit_id="unit:release-caption",
-                purpose="release_caption",
-                allowed_observation_types=("abstract_principle",),
-                fact_refs=(),
-                constraint_refs=constraints,
-                visible_order=110,
-                text="",
-            ),
+            )
+        )
+        release_order = 110
+    units.append(
+        CreativeKernelUnit(
+            unit_id="unit:release-caption",
+            purpose="release_caption",
+            allowed_observation_types=("abstract_principle",),
+            fact_refs=(),
+            constraint_refs=constraints,
+            visible_order=release_order,
+            text="",
         )
     )
     return CreativeKernelV1(
         kernel_version=KERNEL_VERSION,
         units=tuple(sorted(units, key=lambda unit: unit.visible_order)),
+        program_id=program_id,
     )
+
+
+def select_kernel_program(
+    *,
+    frame: NarrativeFrame,
+    prior_kernel: CreativeKernelV1 | None = None,
+) -> KernelProgramId:
+    """Choose one bounded program from trusted frozen context.
+
+    Revisions and recompiles retain their original program.  A new general
+    observation without any frozen actuality, product or brand fact receives
+    one explicitly scoped hypothetical example; fact-bearing and explicitly
+    hypothetical/dramatized work keeps the existing single-body program.
+    """
+    if prior_kernel is not None:
+        return prior_kernel.program_id
+    if (
+        frame.narrative_mode == "general_observation"
+        and not frame.allowed_fact_ids
+    ):
+        return OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
+    return OBSERVATION_ONLY_PROGRAM
 
 
 def parse_writer_kernel(
@@ -210,6 +291,7 @@ def parse_writer_kernel(
             replacements.get(unit.unit_id, unit)
             for unit in skeleton.units
         ),
+        program_id=skeleton.program_id,
     )
 
 
@@ -233,6 +315,7 @@ def repair_kernel_units(
             for unit in kernel.units
             if unit.unit_id in affected_unit_ids
         ),
+        program_id=kernel.program_id,
     )
     repaired = parse_writer_kernel(raw, repair_skeleton)
     replacements = {unit.unit_id: unit for unit in repaired.units}
@@ -241,12 +324,14 @@ def repair_kernel_units(
         units=tuple(
             replacements.get(unit.unit_id, unit) for unit in kernel.units
         ),
+        program_id=kernel.program_id,
     )
 
 
 def kernel_document(kernel: CreativeKernelV1) -> dict[str, object]:
     return {
         "kernel_version": kernel.kernel_version,
+        "program_id": kernel.program_id,
         "units": [
             {
                 "unit_id": unit.unit_id,
@@ -265,15 +350,16 @@ def kernel_document(kernel: CreativeKernelV1) -> dict[str, object]:
 
 
 def kernel_from_document(value: object) -> CreativeKernelV1:
-    if not isinstance(value, Mapping) or frozenset(value) != {
-        "kernel_version",
-        "units",
+    if not isinstance(value, Mapping) or frozenset(value) not in {
+        frozenset({"kernel_version", "units"}),
+        frozenset({"kernel_version", "program_id", "units"}),
     }:
         raise DomainError("冻结创作内核结构无效")
     raw_units = value.get("units")
+    raw_program = value.get("program_id", OBSERVATION_ONLY_PROGRAM)
     if value.get("kernel_version") != KERNEL_VERSION or not isinstance(
         raw_units, list
-    ):
+    ) or not isinstance(raw_program, str) or raw_program not in _PROGRAM_IDS:
         raise DomainError("冻结创作内核版本无效")
     units: list[CreativeKernelUnit] = []
     for raw in raw_units:
@@ -320,7 +406,11 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
         or orders != sorted(orders)
     ):
         raise DomainError("冻结创作内核顺序或标识无效")
-    return CreativeKernelV1(KERNEL_VERSION, tuple(units))
+    return CreativeKernelV1(
+        KERNEL_VERSION,
+        tuple(units),
+        raw_program,
+    )
 
 
 def kernel_digest(kernel: CreativeKernelV1) -> str:
