@@ -1,13 +1,19 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
+- 状态：`BLOCKED`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
   保留；主控随后在同一 UI-12 内裁决改由服务端确定性绑定 exact quote，并采用“一战到底”
   治理恢复施工。quote-only 责任边界、完整 G3 和 G4 已继续验证；最终 G4 证明当前
   Reviewer 在开放式 evidence 枚举下漏提关系角色和动机等裁决必需 evidence。主控现已把
   缺口订正为同一 UI-12 内的普通责任合同问题：服务端为每个 writer clause 生成闭合风险
   问题集，Reviewer 逐题回答，服务端派生 Claim Inventory 并唯一裁决。既有失败保持，
-  恢复 `ACTIVE` 不表示问题已解决。不创建 UI-13。`UI-11` 为
+  恢复 `ACTIVE` 不表示问题已解决。闭合问题集随后关闭了 G4 的 Reviewer 漏审，并在
+  WIP `0eca737…` 形成事实安全的完整 G4；最终 WIP `d4d2818…` 的 G2 证明商品内容的
+  生成职责仍不闭合：商品事实暴露给 Writer 时会被 Writer 复述为未授权 claim，完全隐藏
+  后 Writer 又把未知 SKU 猜成电子产品并补造规格、性能与适用性。Reviewer／服务端均已
+  正确拒绝，唯一修复后仍失败，未进入 DeliveryCompiler 或版本保存。继续需要改变
+  “商品事实仅由服务端插入、Writer 不读取、Compiler 不新增语义”三者之一，已超出本轮
+  冻结架构；因此 UI-12 按真正停止线置为 `BLOCKED`，不创建 UI-13。`UI-11` 为
   `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
@@ -191,6 +197,31 @@
   recommendation；明确“建议须指示行动，纯受众问句为 generic observation”后，原 raw
   离线裁决转绿。该项是 statement-mode 合同歧义，不是失败句、人物词表或事实边界放宽；
   新实现 SHA 尚待一次完整 G4。
+- 闭合合同真实 G4 已在 WIP `0eca737fc7d8da76a47f57f9596ae2becc57540c`
+  重新完成：Gate 与 intake 合法，服务端逐字事实保持，初稿经一次允许的 affected-unit
+  修复后完整复审通过，reviewed digest 为
+  `cce8ce…`，visible SHA 为 `3525eb…`。人工阅读全文确认未补丈夫身份、具体对白、
+  谁洗、动机、结果或现场重演，制作只使用文字卡与排版。root-only 证据位于
+  `/var/lib/diyu-ui12-evidence/0eca737fc7d8da76a47f57f9596ae2becc57540c/`
+  `g4-closed-preflight/`。该 SHA 是 WIP，不冒充最终同 SHA 业务轮。
+- 随后 G2 在 WIP `0eca737…`、`914b1d7…`、`a10e600…` 与最终
+  `d4d2818d23b453d6798ab7a60709d2df28610113` 逐层排除了 answer operand、
+  issue 分类与事实暴露接缝。最终轮已不向 Writer 暴露商品 frozen fact，Writer 仍把
+  `ZX-C218` 猜成电子产品并补造电源、接口、驱动、兼容性、规格、性能和适用性；Reviewer
+  闭合回答与服务端 Claim Inventory 将其全部判为 `unsupported_product_claim`，唯一
+  修复后仍失败。调用链共 6 次 provider 调用，未编译、未保存版本，证据目录为
+  `/var/lib/diyu-ui12-evidence/d4d2818d23b453d6798ab7a60709d2df28610113/`
+  `g2-preflight/`，失败摘要 SHA-256 为
+  `ed913c70f2cc69c3f7913adbfd31f39d5f21484c199ac289d68e96bd7b63dee5`。
+- 该结果证明闭合 Reviewer／服务端裁决按设计失败关闭，也证明当前冻结职责无法同时做到
+  “Writer 不读取商品事实”“Compiler 不新增语义”与“只凭 SKU 交付有商品价值的完整
+  V1”。继续补 Prompt、问题类别或失败句不能解决；固定成稿、模型替换与扩大 Compiler／
+  Writer 商品事实权限均未获本轮授权。G1 仅在 WIP `0eca737…` 验证为 `0/0/0`；
+  最终同 SHA 的 G1—G7/H1/D1、完整工程门、两审、push、CI、备份和部署均未执行。
+  生产继续运行 `845f632…`。
+- 当前唯一下一动作：主控裁决商品成品中“由谁把服务端冻结商品事实编译成可审创作文字”
+  这一单一职责边界；在不降低事实边界的前提下，选择服务端确定性商品表达编译，或授权
+  Writer 只读消费精确商品事实的最小新合同。UI-12 在裁决前保持 `BLOCKED`。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
