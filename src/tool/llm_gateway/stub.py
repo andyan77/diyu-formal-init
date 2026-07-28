@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.ports.content_generator import ContentGenerator
+from src.shared.narrative import visible_digest
 from src.shared.types import (
     ContentProduct,
     ContentSemanticContract,
@@ -67,22 +68,25 @@ class DeterministicContentGenerator(ContentGenerator):
         normalized = text.casefold()
         if _ordinary_chat(normalized):
             return ConversationDecision("chat", "可以。你想随便聊聊，或把一个观察慢慢说清楚，都可以。")
-        if (
-            not request.history
-            and "只想自己看看" in text
-            and not any(marker in text for marker in ("写", "做成", "内容", "图文", "口播"))
-        ):
+        if "去年创业最困难的那个月" in text:
             return ConversationDecision(
                 "question",
-                "这个观察可以做成门店人物内容。你更想讲沉默也应该被尊重，还是讨论店员什么时候适合主动介绍？",
+                "那个最困难的月里，哪一件真实发生的事最能代表当时的困难？",
+                creation_proposal=True,
+                proposed_intent_span=text,
             )
         combined = "\n".join([*(turn.content for turn in request.history), text])
         product = self.route(RoutingInput(combined, request.brand, request.products, None)) or "brand_life_narrative"
         return ConversationDecision(
             "ready",
             f"好，我按当前选择的{request.brand.platform}{request.brand.media_format}整理。",
-            brief=combined,
+            user_premises=(text,),
+            narrative_mode=request.explicit_narrative_mode
+            or "general_observation",
+            system_creative_plan="从当前可信上下文自主选择安全的一般观察、结构和平台组织。",
             primary_product=product,
+            creation_proposal=True,
+            proposed_intent_span=text,
         )
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
@@ -98,8 +102,9 @@ class DeterministicContentGenerator(ContentGenerator):
             + revision
             + _control_sections(request)
         )
+        outline = _outline(request.primary_product)
         return GeneratedArtifact(
-            outline=_outline(request.primary_product),
+            outline=outline,
             body=body,
             model=self.model_name,
             latency_ms=0,
@@ -108,6 +113,7 @@ class DeterministicContentGenerator(ContentGenerator):
             primary_product=request.primary_product,
             semantic_contract=contract,
             production=production,
+            reviewed_digest=visible_digest(outline, body),
         )
 
     @staticmethod

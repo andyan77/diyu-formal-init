@@ -1877,7 +1877,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         def worker() -> None:
             try:
-                emit("received")
                 if requests_display_merchandising(payload.message):
                     events.put(
                         {
@@ -1912,6 +1911,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         payload.series_id,
                         payload.series_position,
                         emit,
+                        payload.direct_generate,
                     )
                 if result.get("kind") == "content":
                     events.put({"event": "completed", "result": result})
@@ -1921,6 +1921,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             "event": "conversation",
                             "kind": result.get("kind", "chat"),
                             "message": result.get("message", ""),
+                            "direct_generation_available": bool(
+                                result.get("direct_generation_available", False)
+                            ),
                         }
                     )
             except HTTPException as exc:

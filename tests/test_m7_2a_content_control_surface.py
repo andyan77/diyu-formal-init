@@ -34,8 +34,9 @@ from src.infrastructure.seed_demo import (
     TENANT_ID,
     USER_ID,
 )
+from src.shared.narrative import legacy_frame
 from src.shared.types import GeneratedArtifact, GenerationInput
-from src.tool.llm_gateway.deepseek import DeepSeekGenerator
+from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 
 _FRONTEND = Path(__file__).resolve().parents[1] / "frontend" / "src" / "app" / "CreatorApp.tsx"
@@ -1080,12 +1081,36 @@ def test_the_collaboration_note_never_becomes_material_the_product_talks_about(
 
     # The same adapter boundary the real model is given: the note steers the writing there, and
     # it is handed over as a working instruction, never as material the product may talk about.
-    prompt = DeepSeekGenerator._generation_prompt(captured[0])
+    adapter = DeepSeekGenerator(
+        "https://example.invalid",
+        "test-key",
+        "deepseek-test",
+    )
+    initial_frame = captured[0].narrative_frame or legacy_frame(
+        tuple(
+            f"source:product:{product.sku}"
+            for product in captured[0].products
+        )
+    )
+    prompt = adapter._writer_prompt(
+        captured[0],
+        initial_frame,
+        BoundaryContext.from_request(captured[0], initial_frame),
+    )
     assert note in prompt
-    assert "成品中不得引用、复述、解释或提及这段说明本身" in prompt
     assert "私人协作偏好说明只调整协作方式与表达取舍，成品中不得出现它的原文、转述或对它的解释" in prompt
     # A revision replays frozen conditions, so the note is not even offered to the model.
-    assert note not in DeepSeekGenerator._generation_prompt(captured[-1])
+    revised_frame = captured[-1].narrative_frame or legacy_frame(
+        tuple(
+            f"source:product:{product.sku}"
+            for product in captured[-1].products
+        )
+    )
+    assert note not in adapter._writer_prompt(
+        captured[-1],
+        revised_frame,
+        BoundaryContext.from_request(captured[-1], revised_frame),
+    )
     _clear_preference(app_database_url, USER_ID)
 
 

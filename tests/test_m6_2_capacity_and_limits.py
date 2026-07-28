@@ -483,6 +483,8 @@ def test_backup_restore_scripts_use_snapshot_manifest_and_a_real_application_rol
     assert "manifest.json" in backup
     assert '"complete_content_chains"' in backup
     assert 'sha256sum "$snapshot/manifest.json"' in backup
+    assert "umask 077" in backup
+    assert backup.index("umask 077") < backup.index('install -d -m 700 "$snapshot/objects"')
     assert '"41"' not in restore
     assert "NOBYPASSRLS" in restore
     assert "complete_content_chain_count < 1" in restore

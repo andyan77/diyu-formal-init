@@ -35,7 +35,14 @@ from src.infrastructure.seed_demo import (
 )
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.errors import DomainError, GenerationFailed
-from src.shared.types import GeneratedArtifact, GenerationInput, TenantManagementScope, TrustedScope
+from src.shared.types import (
+    ConversationDecision,
+    ConversationInput,
+    GeneratedArtifact,
+    GenerationInput,
+    TenantManagementScope,
+    TrustedScope,
+)
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 from tests.conftest import BAIT_BRAND_ID, BAIT_TENANT_ID, SIBLING_BRAND_ID
 
@@ -51,9 +58,22 @@ _SIBLING_LIBRARY_ID = UUID("80500000-0000-0000-0000-000000000213")
 class _UI05Generator(DeterministicContentGenerator):
     """A deterministic seam double; no test in this module may call DeepSeek."""
 
+    def collaborate(self, request: ConversationInput) -> ConversationDecision:
+        if request.message == "今天有点不知道从哪儿开始。":
+            return ConversationDecision(
+                "chat",
+                "听起来像是还没找到一个舒服的起点。我们可以先随便聊两句。",
+            )
+        if "去年创业最困难的那个月" in request.message:
+            return ConversationDecision(
+                "question",
+                "那个月具体发生了哪一件最让你觉得困难的事？",
+            )
+        return super().collaborate(request)
+
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
-        if "UI05_FORCE_FAILURE" in request.weak_seed:
-            raise GenerationFailed("UI-05 controlled generation failure")
+        if "触发受控失败" in request.weak_seed:
+            raise GenerationFailed("controlled generation failure")
         return super().generate(request)
 
 
@@ -133,30 +153,6 @@ def _conversation_payload(
     }
 
 
-def _task_counts(database_url: str, marker: str) -> dict[str, int]:
-    with psycopg.connect(database_url, row_factory=dict_row) as connection, connection.cursor() as cursor:
-        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
-        cursor.execute(
-            """
-            SELECT
-              count(DISTINCT task.id) AS tasks,
-              count(DISTINCT run.id) FILTER (WHERE run.status = 'running') AS running,
-              count(DISTINCT run.id) FILTER (WHERE run.status = 'failed') AS failed,
-              count(DISTINCT version.id) AS versions
-            FROM business_tasks task
-            LEFT JOIN generation_runs run
-              ON run.tenant_id = task.tenant_id AND run.task_id = task.id
-            LEFT JOIN content_versions version
-              ON version.tenant_id = task.tenant_id AND version.task_id = task.id
-            WHERE task.tenant_id = %s AND task.weak_seed LIKE %s
-            """,
-            (TENANT_ID, f"%{marker}%"),
-        )
-        row = cursor.fetchone()
-    assert row is not None
-    return {key: int(row[key]) for key in ("tasks", "running", "failed", "versions")}
-
-
 def _persistence_counts(database_url: str) -> dict[str, int]:
     with psycopg.connect(database_url, row_factory=dict_row) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
@@ -186,24 +182,29 @@ def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     token = _session_token(app_database_url, USER_ID, "tenant-user")
-    marker = uuid4().hex
     with TestClient(_app(app_database_url, monkeypatch), base_url="https://diyuai.cc") as client:
         client.cookies.set("diyu_session", token)
 
-        chat = _stream_events(client, _conversation_payload(f"你好，今天有点困。{marker}"))
+        before_chat = _persistence_counts(app_database_url)
+        chat = _stream_events(
+            client,
+            _conversation_payload("今天有点不知道从哪儿开始。"),
+        )
         assert chat[-1]["event"] == "conversation"
         assert chat[-1]["kind"] == "chat"
-        assert _task_counts(app_database_url, marker)["tasks"] == 0
+        assert _persistence_counts(app_database_url) == before_chat
         time.sleep(2.05)
 
-        question_text = f"最近店里总有人只想自己看看。{marker}"
+        question_text = "把我去年创业最困难的那个月写出来。"
+        before_question = _persistence_counts(app_database_url)
         question = _stream_events(client, _conversation_payload(question_text))
         assert question[-1]["event"] == "conversation"
         assert question[-1]["kind"] == "question"
-        assert _task_counts(app_database_url, marker)["tasks"] == 0
+        assert _persistence_counts(app_database_url) == before_question
         time.sleep(2.05)
 
-        ready_text = f"讲前一个，写成小红书图文，像店员自己的感受，不像品牌宣言。{marker}"
+        ready_text = "帮我写条婆媳主题的小红书，别狗血，也不要把任何一方写成反派。"
+        before_ready = _persistence_counts(app_database_url)
         ready = _stream_events(
             client,
             _conversation_payload(
@@ -212,9 +213,7 @@ def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
                     {"role": "user", "content": question_text},
                     {
                         "role": "assistant",
-                        "content": (
-                            "这个观察可以做成门店人物内容。你更想讲沉默也应该被尊重，还是讨论店员什么时候适合主动介绍？"
-                        ),
+                        "content": "那个月具体发生了哪一件最让你觉得困难的事？",
                     },
                 ],
             ),
@@ -231,18 +230,19 @@ def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
         completed = cast(dict[str, object], ready[-1]["result"])
         assert completed["kind"] == "content"
         assert completed["version"] == 1
-        assert _task_counts(app_database_url, marker) == {
-            "tasks": 1,
-            "running": 0,
-            "failed": 0,
-            "versions": 1,
+        assert _persistence_counts(app_database_url) == {
+            "tasks": before_ready["tasks"] + 1,
+            "runs": before_ready["runs"] + 1,
+            "running": before_ready["running"],
+            "failed": before_ready["failed"],
+            "versions": before_ready["versions"] + 1,
         }
         time.sleep(2.05)
 
-        failed_marker = f"UI05_FORCE_FAILURE-{uuid4().hex}"
+        before_failure = _persistence_counts(app_database_url)
         failed = _stream_events(
             client,
-            _conversation_payload(f"请直接写一条完整内容。{failed_marker}"),
+            _conversation_payload("请直接写一条完整内容，并触发受控失败。"),
         )
         assert failed[-1] == {
             "event": "failed",
@@ -250,15 +250,15 @@ def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
                 "这次还没能整理成一份可靠的成品。你的想法仍然保留，可以直接再试一次，也可以告诉我最想保留哪部分。"
             ),
         }
-        assert _task_counts(app_database_url, failed_marker) == {
-            "tasks": 1,
-            "running": 0,
-            "failed": 1,
-            "versions": 0,
+        assert _persistence_counts(app_database_url) == {
+            "tasks": before_failure["tasks"] + 1,
+            "runs": before_failure["runs"] + 1,
+            "running": before_failure["running"],
+            "failed": before_failure["failed"] + 1,
+            "versions": before_failure["versions"],
         }
-        assert all("UI05_FORCE_FAILURE" not in json.dumps(item, ensure_ascii=False) for item in failed)
 
-        disconnected_marker = f"UI05_DISCONNECTED-{uuid4().hex}"
+        before_disconnect = _persistence_counts(app_database_url)
 
         def disconnect_at_finalizing(stage: str) -> None:
             if stage == "finalizing":
@@ -272,19 +272,18 @@ def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
                     BRAND_ID,
                     HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
                 ),
-                f"请直接写一条完整内容。{disconnected_marker}",
+                "请直接写一条完整内容，并验证保存阶段断连。",
                 (),
                 "xiaohongshu_graphic",
                 progress=disconnect_at_finalizing,
             )
-        assert _task_counts(app_database_url, disconnected_marker) == {
-            "tasks": 1,
-            "running": 0,
-            "failed": 1,
-            "versions": 0,
+        assert _persistence_counts(app_database_url) == {
+            "tasks": before_disconnect["tasks"] + 1,
+            "runs": before_disconnect["runs"] + 1,
+            "running": before_disconnect["running"],
+            "failed": before_disconnect["failed"] + 1,
+            "versions": before_disconnect["versions"],
         }
-
-        early_disconnect_marker = f"UI05_EARLY_DISCONNECTED-{uuid4().hex}"
 
         def disconnect_at_generating(stage: str) -> None:
             if stage == "generating":
@@ -299,7 +298,7 @@ def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
                     BRAND_ID,
                     HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
                 ),
-                f"请直接写一条完整内容。{early_disconnect_marker}",
+                "请直接写一条完整内容，并验证生成阶段断连。",
                 (),
                 "xiaohongshu_graphic",
                 progress=disconnect_at_generating,

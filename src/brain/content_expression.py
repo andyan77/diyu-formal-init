@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+from src.brain.creation_intent_gate import CreationCommitment, commitment_document
 from src.shared.errors import DomainError
+from src.shared.narrative import NarrativeFrame, frame_document
 from src.shared.types import (
     ContentControlContext,
     CreativeDirection,
@@ -442,6 +444,10 @@ def snapshot_document(
     series_context: SeriesContext | None = None,
     business_data_kind: str = "formal_business_data",
     brand_reference_context: tuple[str, ...] = (),
+    narrative_frame: NarrativeFrame | None = None,
+    user_premise: str = "",
+    system_creative_plan: str = "",
+    creation_commitment: CreationCommitment | None = None,
 ) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
@@ -500,6 +506,18 @@ def snapshot_document(
         ),
         "business_data_kind": business_data_kind,
         "brand_reference_context": list(brand_reference_context),
+        "user_premise": user_premise,
+        "system_creative_plan": system_creative_plan,
+        "creation_commitment": (
+            commitment_document(creation_commitment)
+            if creation_commitment is not None
+            else None
+        ),
+        "narrative_frame": (
+            frame_document(narrative_frame)
+            if narrative_frame is not None
+            else None
+        ),
         "account_expression": (
             {
                 "profile_id": (

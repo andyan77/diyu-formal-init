@@ -562,6 +562,11 @@
               }
             ]
           },
+          "direct_generate": {
+            "default": false,
+            "title": "Direct Generate",
+            "type": "boolean"
+          },
           "material_ids": {
             "items": {
               "format": "uuid",

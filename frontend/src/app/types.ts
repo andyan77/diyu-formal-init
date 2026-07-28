@@ -151,6 +151,7 @@ export type ContentStreamEvent =
       kind: "chat" | "question";
       message: string;
       conversation_id?: string | null;
+      direct_generation_available?: boolean;
     }
   | {
       event: "target_conflict";

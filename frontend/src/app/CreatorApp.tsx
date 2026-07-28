@@ -679,6 +679,9 @@ export default function CreatorApp({
     label: string;
     instruction: string;
   } | null>(null);
+  const [directGenerationOffer, setDirectGenerationOffer] = useState<string | null>(
+    null
+  );
   const [generationFailed, setGenerationFailed] = useState(false);
   const [lastFailedAttempt, setLastFailedAttempt] =
     useState<FailedAttempt | null>(null);
@@ -764,6 +767,7 @@ export default function CreatorApp({
     setDirectionsOpen(false);
     setStages([]);
     setTargetConflict(null);
+    setDirectGenerationOffer(null);
     setGenerationFailed(false);
     setLastFailedAttempt(null);
   };
@@ -857,7 +861,8 @@ export default function CreatorApp({
   const runCreationStream = async (
     instruction: string,
     appendUser: boolean,
-    targetConflictResolution?: "keep_selected"
+    targetConflictResolution?: "keep_selected",
+    directGenerate = false
   ): Promise<void> => {
     if (pending) return;
     const priorMessages =
@@ -878,6 +883,7 @@ export default function CreatorApp({
     setGenerationFailed(false);
     setLastFailedAttempt(null);
     setTargetConflict(null);
+    setDirectGenerationOffer(null);
     setStages([]);
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -892,6 +898,7 @@ export default function CreatorApp({
           publishing_identity_id: currentPublishingIdentityId,
           target: currentTarget,
           target_conflict_resolution: targetConflictResolution,
+          direct_generate: directGenerate,
           creative_direction: {
             catalog_version: catalog?.catalog_version ?? null,
             selections,
@@ -913,7 +920,10 @@ export default function CreatorApp({
         }
         if (streamEvent.event === "conversation") {
           appendAssistant(streamEvent.message);
-          setSeed("");
+          setSeed(value => (value.trim() === instruction ? "" : value));
+          setDirectGenerationOffer(
+            streamEvent.direct_generation_available ? instruction : null
+          );
           setDirectionsOpen(false);
           setLastFailedAttempt(null);
           terminal = true;
@@ -932,11 +942,14 @@ export default function CreatorApp({
         if (streamEvent.event === "completed") {
           setCurrent(streamEvent.result);
           setViewed(streamEvent.result);
+          // Clear only the request that just completed. Once the artifact is visible,
+          // a person may immediately type the next instruction while history loads.
+          setSeed(value => (value.trim() === instruction ? "" : value));
+          setDirectGenerationOffer(null);
           await loadVersions(streamEvent.result);
           appendAssistant(
             "第一版已经整理好。你可以直接阅读，也可以继续告诉我哪里要变。"
           );
-          setSeed("");
           setDirectionsOpen(false);
           setMobileView("artifact");
           setLastFailedAttempt(null);
@@ -992,6 +1005,9 @@ export default function CreatorApp({
           })
         }
       );
+      // Clear the submitted instruction before any asynchronous version-history
+      // refresh. A newer instruction typed after V2 appears must remain untouched.
+      setSeed(value => (value.trim() === instruction ? "" : value));
       if (!("task_id" in payload)) {
         appendAssistant(payload.message);
       } else {
@@ -1003,7 +1019,6 @@ export default function CreatorApp({
         );
         setMobileView("artifact");
       }
-      setSeed("");
       setDirectionsOpen(false);
       setLastFailedAttempt(null);
     } catch {
@@ -1290,6 +1305,26 @@ export default function CreatorApp({
                   切换到{targetConflict.label}
                 </button>
               </div>
+            </div>
+          )}
+          {directGenerationOffer && !targetConflict && !generationFailed && (
+            <div className="direct-generation-offer" role="status">
+              <p>如果你是想把刚才这段直接做成完整内容，可以从这里继续。</p>
+              <button
+                type="button"
+                className="primary"
+                disabled={pending}
+                onClick={() =>
+                  void runCreationStream(
+                    directGenerationOffer,
+                    false,
+                    undefined,
+                    true
+                  )
+                }
+              >
+                直接生成
+              </button>
             </div>
           )}
           {generationFailed && (

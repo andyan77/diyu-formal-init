@@ -17,10 +17,19 @@ const harness = (globalThis as unknown as {
     }>;
     copiedTexts: string[];
     exportedBlobs: Blob[];
+    deferNextVersionLoad: () => void;
+    releaseDeferredVersionLoad: () => void;
     window: Window & typeof globalThis;
   };
 }).__DIYU_INTERACTION__;
-const { requests, copiedTexts, exportedBlobs, window } = harness;
+const {
+  requests,
+  copiedTexts,
+  exportedBlobs,
+  deferNextVersionLoad,
+  releaseDeferredVersionLoad,
+  window
+} = harness;
 const document = window.document;
 
 function find(selector: string, contains: string): HTMLElement {
@@ -126,8 +135,10 @@ async function main(): Promise<void> {
   );
 
   await send("最近店里总有人只想自己看看。");
-  assert.match(document.body.textContent ?? "", /沉默也应该被尊重/);
+  assert.match(document.body.textContent ?? "", /可以把它直接做成一篇完整内容/);
   assert.equal(document.querySelector(".creator-artifact"), null);
+  assert.equal(document.querySelector(".generation-progress"), null);
+  assert.ok(find(".direct-generation-offer button", "直接生成"));
 
   const directionToggle = find("button", "创作方向（可选）");
   assert.equal(directionToggle.getAttribute("aria-expanded"), "false");
@@ -138,17 +149,24 @@ async function main(): Promise<void> {
   const custom = document.querySelector(".custom-direction input") as HTMLInputElement;
   await input(custom, "想聊婆媳之间买衣服意见不一样，不要把任何一方写成反派。");
 
-  await send("讲前一个，别像品牌宣言，要像店员自己的感受。");
+  deferNextVersionLoad();
+  await click(find(".direct-generation-offer button", "直接生成"));
+  await settle();
   const streamRequest = requests
     .filter(item => item.path === "/api/v1/content/stream")
     .at(-1);
   assert.equal(streamRequest?.body?.publishing_identity_id, "identity-hq");
   assert.equal(streamRequest?.body?.target, "xiaohongshu_graphic");
+  assert.equal(
+    streamRequest?.body?.direct_generate,
+    true,
+    "轻量动作只把原输入作为一次明确生成请求提交"
+  );
   const conversation = streamRequest?.body?.conversation as
     | Array<{ role: string; content: string }>
     | undefined;
   assert.equal(conversation?.at(-1)?.role, "assistant");
-  assert.match(conversation?.at(-1)?.content ?? "", /沉默也应该被尊重/);
+  assert.match(conversation?.at(-1)?.content ?? "", /直接做成一篇完整内容/);
   assert.match(
     String(
       (
@@ -166,6 +184,14 @@ async function main(): Promise<void> {
   const revision = document.querySelector(
     'textarea[aria-label="修改要求"]'
   ) as HTMLTextAreaElement;
+  await input(revision, "别讲道理，荒诞一点。");
+  releaseDeferredVersionLoad();
+  await settle();
+  assert.equal(
+    revision.value,
+    "别讲道理，荒诞一点。",
+    "V1 显示后立即输入的修改要求不能被异步版本加载清空"
+  );
   await input(revision, "判断保留，改得更像门店人物自己的感受。");
   await click(find(".composer-submit button", "生成 V2"));
   await settle();

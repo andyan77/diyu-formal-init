@@ -1958,7 +1958,8 @@ a {
 }
 
 .target-conflict p,
-.generation-failure p {
+.generation-failure p,
+.direct-generation-offer p {
   margin: 0;
   line-height: 1.65;
 }
@@ -1969,6 +1970,22 @@ a {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 13px;
+}
+
+.direct-generation-offer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 8px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--stone-100);
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.direct-generation-offer .primary {
+  flex: 0 0 auto;
 }
 
 .target-conflict > div > button:not(.primary),
@@ -2046,6 +2063,11 @@ a {
 
   .target-conflict > div,
   .generation-failure > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .direct-generation-offer {
     align-items: stretch;
     flex-direction: column;
   }

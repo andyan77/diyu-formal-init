@@ -91,6 +91,8 @@ let revised = false;
 let currentRevision = v1;
 let revisionFailureCount = 0;
 let copyShouldFail = false;
+let deferVersionLoad = false;
+let releaseVersionLoad = null;
 const requests = [];
 const copiedTexts = [];
 const exportedBlobs = [];
@@ -239,18 +241,19 @@ globalThis.fetch = async (input, init = {}) => {
     let events;
     if (body?.message === "你好") {
       events = [
-        { event: "received" },
         { event: "conversation", kind: "chat", message: "你好。今天想聊点什么？" }
       ];
-    } else if (body?.message === "最近店里总有人只想自己看看。") {
+    } else if (
+      body?.message === "最近店里总有人只想自己看看。" &&
+      body?.direct_generate !== true
+    ) {
       events = [
-        { event: "received" },
-        { event: "compiling_context" },
         {
           event: "conversation",
-          kind: "question",
+          kind: "chat",
           message:
-            "这个观察可以做成门店人物内容。你更想讲“沉默也应该被尊重”，还是讨论“店员什么时候适合主动介绍”？"
+            "这个观察可以慢慢聊；如果你想，也可以把它直接做成一篇完整内容。",
+          direct_generation_available: true
         }
       ];
     } else if (
@@ -300,6 +303,13 @@ globalThis.fetch = async (input, init = {}) => {
       payload = currentRevision;
     }
   } else if (path === "/api/v1/content/tasks/t1/versions") {
+    if (deferVersionLoad) {
+      await new Promise(resolve => {
+        releaseVersionLoad = resolve;
+      });
+      deferVersionLoad = false;
+      releaseVersionLoad = null;
+    }
     payload = revised ? [currentRevision, v1] : [v1];
   } else if (path === "/api/v1/tasks/t1/versions/1") payload = v1;
   return {
@@ -315,6 +325,12 @@ globalThis.__DIYU_INTERACTION__ = {
   exportedBlobs,
   setCopyFailure: value => {
     copyShouldFail = value;
+  },
+  deferNextVersionLoad: () => {
+    deferVersionLoad = true;
+  },
+  releaseDeferredVersionLoad: () => {
+    releaseVersionLoad?.();
   },
   window: dom.window
 };

@@ -11,6 +11,9 @@ if [[ $(id -u) -ne 0 ]]; then
   echo "This script must run as root on the ECS host." >&2
   exit 1
 fi
+# Every redirected dump, manifest, checksum and mirrored object is private at
+# creation time; no later chmod window is permitted.
+umask 077
 if [[ -e "$snapshot" ]]; then
   echo "Backup destination already exists." >&2
   exit 1

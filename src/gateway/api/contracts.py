@@ -59,6 +59,7 @@ class CreateConversationRequest(BaseModel):
     series_id: UUID | None = None
     series_position: int | None = Field(default=None, ge=1, le=999)
     target_conflict_resolution: Literal["keep_selected", "switch"] | None = None
+    direct_generate: bool = False
 
 
 class RevisionRequest(BaseModel):
