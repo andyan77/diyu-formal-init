@@ -73,6 +73,17 @@
 - 当前唯一下一动作：仅修正 Reviewer V2 span 传输合同、服务端 occurrence→offset
   解析和资格口径，完成确定性反证后执行一次新合同真实资格；本次裁决落盘不等于已经实现
   或通过资格。
+- 首次新合同真实资格在实现 SHA `1da4811d059b8865f1ffc0673702a169d5f2d986`
+  上完成一次调用：strict tool、6/6 clause、text+occurrence、重复片段第 1/2 次、
+  服务端 offset `2:6/10:14` 及全部服务端 SDR 裁决均成立。唯一失败是资格脚本要求
+  “婆婆尊重儿媳。”必须同时返回 `uncertain=true`；raw 实际完整提取主体、谓词及
+  modality/aspect 缺席，服务端已正确得到 `insufficient_evidence`。
+- 该失败归类为 oracle 把“证据关系歧义”和“合同证据不足”混同：裸建议／事实歧义由服务端
+  单值 recommendation contract 与正向 grammatical evidence 裁决，不得要求 Reviewer
+  重新判断 factuality。保留首次 raw；资格夹具改为真实存在指代关系歧义的 clause，
+  不改 Reviewer Prompt、模型或服务端合同。
+- 当前唯一下一动作：在仅订正资格 oracle 的新 SHA 上执行一次新合同资格；这不是随机重跑
+  同一未变实现。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
