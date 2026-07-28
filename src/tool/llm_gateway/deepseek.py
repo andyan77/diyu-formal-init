@@ -1646,14 +1646,14 @@ class DeepSeekGenerator(ContentGenerator):
         core: ContentCore,
         issues: tuple[UnitIssue, ...],
     ) -> tuple[ContentCore, tuple[UnitIssue, ...], tuple[UnitIssue, ...]]:
-        """Close a final product fact verdict with compiler-proven atoms.
+        """Close final product-claim truth verdicts with proven atoms.
 
         The final judge has already approved every other axis for these units.
-        A claim-only fact verdict can therefore be replaced by an exact atomic
-        fact from this task's frozen product snapshot without another model
-        call. Identity, actuality, resource, instruction and scene verdicts
-        remain blocking. Server-side closed-world, deterministic-value and
-        media checks run again over the resulting core.
+        A claim-only fact, actuality or resource verdict can therefore be
+        replaced by an exact non-event atomic fact from this task's frozen
+        product snapshot without another model call. Identity, instruction and
+        every scene verdict remain blocking. Server-side closed-world,
+        deterministic-value and media checks run again over the resulting core.
         """
 
         claim_ids = {claim.claim_id for claim in core.claims}
@@ -1661,7 +1661,12 @@ class DeepSeekGenerator(ContentGenerator):
             issue
             for issue in issues
             if issue.unit_id in claim_ids
-            and issue.reason_code == "factual_conflict"
+            and issue.reason_code
+            in (
+                "invented_actuality",
+                "unsupported_resource",
+                "factual_conflict",
+            )
         )
         if not candidates or not context.product_fact_claims:
             return core, issues, ()
@@ -1669,7 +1674,14 @@ class DeepSeekGenerator(ContentGenerator):
         settled_core = self._bind_rejected_product_claims(
             context,
             core,
-            candidates,
+            tuple(
+                UnitIssue(
+                    issue.unit_id,
+                    "factual_conflict",
+                    issue.fragment,
+                )
+                for issue in candidates
+            ),
         )
         exact_product_claims = set(context.product_fact_claims)
         settled = tuple(

@@ -1614,7 +1614,7 @@ def test_rejected_product_claim_is_bound_even_after_repair_drops_its_source(
     assert not DeepSeekGenerator._closed_world_issues(context, bound)
 
 
-def test_final_product_fact_flip_is_settled_without_another_model_call(
+def test_final_product_claim_axis_flip_is_settled_without_another_model_call(
     monkeypatch: pytest.MonkeyPatch,
     generation_input: GenerationInput,
 ) -> None:
@@ -1643,8 +1643,8 @@ def test_final_product_fact_flip_is_settled_without_another_model_call(
             _verdicts(
                 core,
                 {
-                    "c5": ("fact_ok",),
-                    "c6": ("fact_ok",),
+                    "c5": ("actuality_ok",),
+                    "c6": ("resource_ok",),
                 },
             ),
         ],
