@@ -1,7 +1,7 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
+- 状态：`BLOCKED`。`UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
   未运行及未 push/CI/部署证据完整保留。
@@ -82,8 +82,38 @@
   单值 recommendation contract 与正向 grammatical evidence 裁决，不得要求 Reviewer
   重新判断 factuality。保留首次 raw；资格夹具改为真实存在指代关系歧义的 clause，
   不改 Reviewer Prompt、模型或服务端合同。
-- 当前唯一下一动作：在仅订正资格 oracle 的新 SHA 上执行一次新合同资格；这不是随机重跑
-  同一未变实现。
+- 订正 oracle 后的新合同资格在文档 SHA
+  `91be39cc5b8e993d790e9e59c59b0eb3e7d49d1c` 上一次通过：strict function、
+  6/6 clause、真实指代歧义 `uncertain=true`、重复片段 occurrence `1/2`、服务端
+  offset `2:6/10:14` 和全部冻结 SDR 裁决成立。raw SHA 为
+  `03e9e1f2f3be1582f91468659c3e51987cca2a1ae3cc8c205d91a6d788cf82c5`，
+  arguments SHA 为
+  `4a646289d6b9a468e614daa5ff538f32eee9b73d1d2cd9b02fa4fc513d2d2b09`；
+  重试为 0。由此证明 strict transport、小包 evidence 与服务端 occurrence→offset
+  职责成立，但不冒充完整成品规模资格。
+- 随后按最便宜纵向门执行冻结 G3。第一次调用已经到达 Reviewer 后的服务端失败关闭，但
+  临时证据脚本只在成功末尾落 raw，未能保留失败响应；这是证据采集脚本缺陷，不作为产品
+  结论。脚本改为每次响应立即 root-only 留存后，仅复验受影响 G3。
+- G3 复验的 intake、Writer 与 strict Reviewer 各调用一次；Reviewer 返回
+  `finish_reason=tool_calls`、唯一正确 function 和 16/16 clause，但 12 个 span 的
+  occurrence 越界：对应 text 在各自 clause 只出现 1 次，却被返回 occurrence 2 或 3。
+  服务端严格 parser 以 `review evidence occurrence cannot be resolved` 失败关闭，
+  没有默认第一次、清洗、Writer 修复或 DeliveryCompiler/版本写入。Reviewer raw 封装
+  SHA 为
+  `598a879585a9f2837b7d22be7259417112b1d515bffd096ddf5e01681f0e9423`，
+  诊断 SHA 为
+  `c050013e3d7ba0453e78d715b84ba5533572b2f0f438873ab3465b828591af0e`，
+  root-only 保存在
+  `/var/lib/diyu-ui12-evidence/91be39cc5b8e993d790e9e59c59b0eb3e7d49d1c/g3-sentinel/`
+  且权限为 `0700/0600 root:root`。
+- 这已命中本轮明定停止线“Reviewer 在 text+occurrence 新合同下仍无法选择正确
+  occurrence”。UI-12 置为 `BLOCKED`；G4/H1/D1、其余 G 卡、完整工程门、两审、push、
+  CI、备份、部署和生产写入均未执行。生产继续运行 `845f632…` 安全版本。
+- 停止后只读复核生产部署仓仍为 `845f632…`，镜像 ID 仍为
+  `sha256:1171b153…`，schema `20260801_28`，回环／公网 readiness `200/200`，
+  `diyu-m5-4-backup.timer` active。
+- 当前唯一下一动作：主控审阅完整 G3 的 occurrence 失效证据并裁决当前 Reviewer 方案；
+  不自动创建 UI-13，不在执行端继续重跑、换模型、加 fallback 或放宽事实边界。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
