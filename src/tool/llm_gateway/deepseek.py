@@ -1247,6 +1247,11 @@ CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit
 - unsupported_institutional_assertion：删除当前机构或第一人称复数承担的观点、做法与经历；
 - unsupported_actuality_binding 出现在 hypothesis/dramatization 时，改为不绑定现实身份的
   泛指虚构角色。
+这是本成品唯一修复。若受影响 unit 的冻结 contract 是 abstract_observation，或
+actuality_reflection 已因现实扩写／具体情境失败，本次不要再选择边界较宽的建议或示例路径：
+只写一至两句纯状态、关系或价值判断，不写任何人物／关系角色、动作、建议、条件、对白、动机、
+原因、结果、时间或地点。用户事实中没有逐字出现的亲属、伴侣、同住、员工、顾客等关系角色，
+不得在任何受影响 unit 中新增；泛称也不得被用来暗示具体身份或共同家庭。
 每个返回 unit 的文字都必须与 current_text 实质不同，并同时消除该 unit 的全部 findings；
 不得原样返回、只换标点或把问题句移动到另一个 unit。只返回：
 {{"units":[{{"unit_id":"只使用列出的既定 id","text":"完整替换文字"}}]}}"""

@@ -565,6 +565,9 @@ def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:
     assert "现实原文\n  已由服务端 frozen fact 单元独立保留" in prompt
     assert "每个返回 unit 的文字都必须与 current_text 实质不同" in prompt
     assert "不得原样返回、只换标点或把问题句移动到另一个 unit" in prompt
+    assert "这是本成品唯一修复" in prompt
+    assert "只写一至两句纯状态、关系或价值判断" in prompt
+    assert "用户事实中没有逐字出现的亲属、伴侣、同住、员工、顾客" in prompt
 
 
 def _kernel_observations(
