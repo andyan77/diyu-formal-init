@@ -1105,7 +1105,9 @@ unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一�
 服务端会包裹；hypothesis 可以使用一般虚构人物、动作和关系，但不能绑定用户、当前表达方、
 真实员工、顾客、门店或已经发生的历史。dramatization 必须写成完整虚构情境，但不要自行添加
 演绎声明，服务端会为整个段落提供一次可见披露。recommendation 必须用清楚可见的建议、
-条件或意愿语气表达可以怎样做，不能写成没有语态标记的裸动作、对白或已经发生的例子。
+条件或意愿语气表达可以怎样做。每个 recommendation unit 恰好写一个可独立切分的泛指建议
+clause；不得追加第二个抽象收束 clause，也不能写具体时间、地点、对白、情境例子或没有语态
+标记的裸动作。需要抽象收束时由后续 abstract_observation / release_caption unit 完成。
 不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。
 不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄资源或
 制作方式。"""
