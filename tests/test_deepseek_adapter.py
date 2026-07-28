@@ -514,6 +514,17 @@ def _parsed_kernel(
     return parse_writer_kernel(raw, skeleton)
 
 
+def test_kernel_writer_prompt_explains_recommendation_contract() -> None:
+    request = _kernel_request()
+    prompt = _generator()._kernel_writer_prompt(
+        request,
+        _parsed_kernel(request, _kernel_writer()),
+    )
+
+    assert "recommendation 必须用清楚可见的建议、" in prompt
+    assert "不能写成没有语态标记的裸动作、对白或已经发生的例子" in prompt
+
+
 def _kernel_observations(
     kernel: CreativeKernelV1,
     *,
