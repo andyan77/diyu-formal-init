@@ -14,7 +14,12 @@ from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.content_presentation import project_content_body
 from src.shared.content_snapshot import visible_direction
 from src.shared.errors import DomainError
-from src.shared.types import DisplayScope, TenantManagementScope, TrustedScope
+from src.shared.types import (
+    DisplayScope,
+    SpeakerKind,
+    TenantManagementScope,
+    TrustedScope,
+)
 
 
 class PostgresWorkbenchRepository(WorkbenchRepository):
@@ -266,6 +271,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                        control_organization.id AS control_organization_id,
                        control_organization.name AS control_organization,
                        role.name AS content_role, role.voice_boundary,
+                       role.speaker_kind,
                        profile.id AS profile_id, profile.version AS profile_version,
                        profile.identity_position, profile.authority_boundary,
                        profile.audience_relationship, profile.content_territories,
@@ -378,6 +384,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     "content_role": {
                         "name": str(row["content_role"]),
                         "authority_boundary": str(row["voice_boundary"]),
+                        "speaker_kind": str(row["speaker_kind"]),
                     },
                     "profile": profile,
                     "operators": (row["operators"] if isinstance(row["operators"], list) else []),
@@ -1589,6 +1596,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         operator_can_maintain_expression_profile: bool = False,
         business_data_kind: str = "formal_business_data",
         initial_profile: dict[str, str] | None = None,
+        speaker_kind: SpeakerKind = "unknown",
     ) -> dict[str, object]:
         account_id = uuid4()
         content_role_id = uuid4()
@@ -1631,7 +1639,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT account.id, account.channel, role.name AS content_role,
-                       role.voice_boundary, account.control_organization_id,
+                       role.voice_boundary, role.speaker_kind,
+                       account.control_organization_id,
                        account.business_data_kind,
                        profile.identity_position,
                        profile.authority_boundary,
@@ -1681,6 +1690,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     str(existing["channel"]) != channel
                     or str(existing["content_role"]) != content_role_name
                     or str(existing["voice_boundary"]) != voice_boundary
+                    or str(existing["speaker_kind"]) != speaker_kind
                     or not bool(existing["has_operator"])
                     or bool(existing["operator_can_maintain"]) != operator_can_maintain_expression_profile
                     or str(existing["business_data_kind"]) != business_data_kind
@@ -1706,6 +1716,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     "name": name,
                     "channel": channel,
                     "content_role": content_role_name,
+                    "speaker_kind": speaker_kind,
                     "voice_boundary": voice_boundary,
                     "operator_id": str(operator_id),
                     "shared_password": False,
@@ -1733,13 +1744,16 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 ),
             )
             cursor.execute(
-                "INSERT INTO content_roles (id, tenant_id, brand_id, name, voice_boundary) VALUES (%s, %s, %s, %s, %s)",
+                "INSERT INTO content_roles "
+                "(id, tenant_id, brand_id, name, voice_boundary, speaker_kind) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
                 (
                     content_role_id,
                     scope.tenant_id,
                     scope.brand_id,
                     content_role_name,
                     voice_boundary,
+                    speaker_kind,
                 ),
             )
             cursor.execute(
@@ -1802,9 +1816,59 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "name": name,
             "channel": channel,
             "content_role": content_role_name,
+            "speaker_kind": speaker_kind,
             "voice_boundary": voice_boundary,
             "operator_id": str(operator_id),
             "shared_password": False,
+        }
+
+    def update_publishing_speaker_kind(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        speaker_kind: SpeakerKind,
+    ) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                UPDATE content_roles AS role
+                   SET speaker_kind = %s
+                  FROM account_content_roles AS account_role
+                  JOIN content_accounts AS account
+                    ON account.tenant_id = account_role.tenant_id
+                   AND account.id = account_role.account_id
+                 WHERE role.tenant_id = %s
+                   AND role.brand_id = %s
+                   AND role.id = account_role.content_role_id
+                   AND account.id = %s
+                   AND account.brand_id = %s
+                   AND account.carrier_of_account_id IS NULL
+                   AND account.enabled = true
+                RETURNING role.name, role.speaker_kind
+                """,
+                (
+                    speaker_kind,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    account_id,
+                    scope.brand_id,
+                ),
+            )
+            role = self._one(
+                cursor,
+                "只能声明当前租户、品牌下可用逻辑发布账号的说话者类型。",
+            )
+            self._event(
+                cursor,
+                scope,
+                "publishing_account.speaker_kind_updated",
+                "content_account",
+                account_id,
+            )
+        return {
+            "account_id": str(account_id),
+            "content_role": str(role["name"]),
+            "speaker_kind": str(role["speaker_kind"]),
         }
 
     def create_platform_carrier(

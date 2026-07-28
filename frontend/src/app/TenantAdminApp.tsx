@@ -50,6 +50,7 @@ type ProfileSegments = {
   content_territories: string;
   default_production_conditions: string;
 };
+type SpeakerKind = "institutional_account" | "personal_ip_account" | "unknown";
 
 type PublishingAccount = {
   id: string;
@@ -59,7 +60,11 @@ type PublishingAccount = {
     name: string;
     source: string;
   } | null;
-  content_role: { name: string; authority_boundary: string };
+  content_role: {
+    name: string;
+    authority_boundary: string;
+    speaker_kind: SpeakerKind;
+  };
   profile: {
     id: string;
     version: number;
@@ -1289,6 +1294,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
   const [createForm, setCreateForm] = useState({
     name: "",
     role: "",
+    speakerKind: "institutional_account" as SpeakerKind,
     organizationId: "",
     operatorId: "",
     target: "douyin_video" as Target,
@@ -1345,6 +1351,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
           target: createForm.target,
           channel: targetLabels[createForm.target].replace(/图文|视频/g, ""),
           content_role_name: createForm.role,
+          speaker_kind: createForm.speakerKind,
           initial_profile: createForm.profile,
           operator_id: createForm.operatorId,
           control_organization_id: createForm.organizationId,
@@ -1375,6 +1382,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
             setCreateForm({
               name: "",
               role: "",
+              speakerKind: "institutional_account",
               organizationId: "",
               operatorId: "",
               target: "douyin_video",
@@ -1397,10 +1405,40 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                   <h2>{account.name}</h2>
                   <p>
                     {account.content_role.name} ·{" "}
+                    {account.content_role.speaker_kind === "personal_ip_account"
+                      ? "个人 IP"
+                      : account.content_role.speaker_kind === "institutional_account"
+                        ? "机构账号"
+                        : "说话者类型待声明"}{" "}
+                    ·{" "}
                     {account.control_organization?.name ?? "尚未声明负责团队"}
                   </p>
                 </div>
                 <div className="account-actions">
+                  <label>
+                    表达主体
+                    <select
+                      aria-label={`${account.name}表达主体`}
+                      disabled={saving}
+                      value={account.content_role.speaker_kind}
+                      onChange={event => {
+                        const speakerKind = event.target.value as SpeakerKind;
+                        void run(async () => {
+                          await api(
+                            `/api/v1/tenant-management/publishing-accounts/${account.id}/speaker-kind`,
+                            {
+                              method: "PATCH",
+                              body: JSON.stringify({ speaker_kind: speakerKind })
+                            }
+                          );
+                        }, "账号表达主体已更新；新任务会冻结这项结构化边界。");
+                      }}
+                    >
+                      <option value="unknown">待声明</option>
+                      <option value="institutional_account">机构账号</option>
+                      <option value="personal_ip_account">个人 IP</option>
+                    </select>
+                  </label>
                   <button
                     type="button"
                     className="text-action"
@@ -1456,6 +1494,21 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                 value={createForm.role}
                 onChange={event => setCreateForm({ ...createForm, role: event.target.value })}
               />
+            </label>
+            <label>
+              当前账号以谁的身份表达
+              <select
+                value={createForm.speakerKind}
+                onChange={event =>
+                  setCreateForm({
+                    ...createForm,
+                    speakerKind: event.target.value as SpeakerKind
+                  })
+                }
+              >
+                <option value="institutional_account">品牌、公司或门店等机构</option>
+                <option value="personal_ip_account">明确的个人 IP</option>
+              </select>
             </label>
             <label>
               负责团队

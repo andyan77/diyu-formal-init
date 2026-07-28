@@ -288,8 +288,11 @@ def seed_demo() -> None:
         )
         cursor.execute(
             """
-                INSERT INTO content_roles (id, tenant_id, brand_id, name, voice_boundary)
-                VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING
+                INSERT INTO content_roles
+                    (id, tenant_id, brand_id, name, voice_boundary, speaker_kind)
+                VALUES (%s, %s, %s, %s, %s, 'institutional_account')
+                ON CONFLICT (id) DO UPDATE
+                SET speaker_kind = EXCLUDED.speaker_kind
                 """,
             (
                 ROLE_ID,
@@ -337,7 +340,11 @@ def seed_demo() -> None:
             ),
         )
         cursor.execute(
-            "INSERT INTO content_roles (id,tenant_id,brand_id,name,voice_boundary) VALUES (%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+            "INSERT INTO content_roles "
+            "(id,tenant_id,brand_id,name,voice_boundary,speaker_kind) "
+            "VALUES (%s,%s,%s,%s,%s,'institutional_account') "
+            "ON CONFLICT (id) DO UPDATE "
+            "SET speaker_kind = EXCLUDED.speaker_kind",
             (
                 STORE_CONTENT_ROLE_ID,
                 TENANT_ID,

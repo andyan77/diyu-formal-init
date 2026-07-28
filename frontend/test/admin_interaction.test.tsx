@@ -242,12 +242,13 @@ async function main(): Promise<void> {
     document.querySelectorAll(".tenant-drawer select")
   ) as HTMLSelectElement[];
   assert.deepEqual(
-    Array.from(accountSelects[0].options).map(option => option.textContent),
+    Array.from(accountSelects[1].options).map(option => option.textContent),
     ["请选择公司级组织", "笛语服饰管理组织"],
     "租户管理员创建并初始化画像时只能选择明确公司级负责团队"
   );
-  await select(accountSelects[0], "11111111-1111-4111-8111-111111111111");
-  await select(accountSelects[1], "22222222-2222-4222-8222-222222222222");
+  await select(accountSelects[0], "institutional_account");
+  await select(accountSelects[1], "11111111-1111-4111-8111-111111111111");
+  await select(accountSelects[2], "22222222-2222-4222-8222-222222222222");
   const profileValues = [
     "以总部品牌内容运营身份出现",
     "代表已确认品牌立场，不代替门店陈述经历",
@@ -270,6 +271,7 @@ async function main(): Promise<void> {
       item.method === "POST"
   );
   assert.equal(accountCreate?.body?.content_role_name, "品牌官方");
+  assert.equal(accountCreate?.body?.speaker_kind, "institutional_account");
   assert.equal("voice_boundary" in (accountCreate?.body ?? {}), false);
   assert.deepEqual(accountCreate?.body?.initial_profile, {
     identity_position: profileValues[0],
@@ -278,6 +280,19 @@ async function main(): Promise<void> {
     content_territories: profileValues[3],
     default_production_conditions: profileValues[4]
   });
+  const speakerSelect = document.querySelector(
+    'select[aria-label="总部品牌内容运营表达主体"]'
+  ) as HTMLSelectElement | null;
+  assert.ok(speakerSelect, "发布账号必须显示结构化表达主体声明");
+  await select(speakerSelect, "personal_ip_account");
+  await settle();
+  const speakerUpdate = requests.find(
+    item =>
+      item.path.endsWith(
+        "/publishing-accounts/33333333-3333-4333-8333-333333333333/speaker-kind"
+      ) && item.method === "PATCH"
+  );
+  assert.equal(speakerUpdate?.body?.speaker_kind, "personal_ip_account");
 
   await click(find(".tenant-nav button", "团队使用"));
   await settle();

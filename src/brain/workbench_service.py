@@ -9,7 +9,12 @@ from src.brain.onboarding_prefill import product_prefills
 from src.ports.material_object_store import MaterialObjectStore
 from src.ports.workbench_repository import WorkbenchRepository
 from src.shared.errors import DomainError
-from src.shared.types import DisplayScope, TenantManagementScope, TrustedScope
+from src.shared.types import (
+    DisplayScope,
+    SpeakerKind,
+    TenantManagementScope,
+    TrustedScope,
+)
 
 _MAX_MEDIA_BYTES = 50 * 1024 * 1024
 
@@ -348,6 +353,7 @@ class WorkbenchService:
         operator_can_maintain_expression_profile: bool = False,
         as_synthetic_business_fixture: bool = False,
         initial_profile: dict[str, str] | None = None,
+        speaker_kind: SpeakerKind = "unknown",
     ) -> dict[str, object]:
         normalized_profile = (
             {key: value.strip() for key, value in initial_profile.items()} if initial_profile is not None else None
@@ -393,6 +399,19 @@ class WorkbenchService:
             operator_can_maintain_expression_profile,
             ("synthetic_business_fixture" if as_synthetic_business_fixture else "formal_business_data"),
             normalized_profile,
+            speaker_kind,
+        )
+
+    def update_publishing_speaker_kind(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        speaker_kind: SpeakerKind,
+    ) -> dict[str, object]:
+        return self._repository.update_publishing_speaker_kind(
+            scope,
+            account_id,
+            speaker_kind,
         )
 
     def create_platform_carrier(

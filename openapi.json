@@ -838,6 +838,16 @@
             "title": "Operator Id",
             "type": "string"
           },
+          "speaker_kind": {
+            "default": "unknown",
+            "enum": [
+              "institutional_account",
+              "personal_ip_account",
+              "unknown"
+            ],
+            "title": "Speaker Kind",
+            "type": "string"
+          },
           "voice_boundary": {
             "anyOf": [
               {
@@ -1615,6 +1625,25 @@
           "status"
         ],
         "title": "UnmetCapabilityResponseRequest",
+        "type": "object"
+      },
+      "UpdatePublishingSpeakerKindRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "speaker_kind": {
+            "enum": [
+              "institutional_account",
+              "personal_ip_account",
+              "unknown"
+            ],
+            "title": "Speaker Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker_kind"
+        ],
+        "title": "UpdatePublishingSpeakerKindRequest",
         "type": "object"
       },
       "UpdateTenantUserGrantsRequest": {
@@ -4725,6 +4754,62 @@
           }
         ],
         "summary": "Save Management Account Expression Profile"
+      }
+    },
+    "/api/v1/tenant-management/publishing-accounts/{account_id}/speaker-kind": {
+      "patch": {
+        "operationId": "update_publishing_speaker_kind_api_v1_tenant_management_publishing_accounts__account_id__speaker_kind_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePublishingSpeakerKindRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Publishing Speaker Kind Api V1 Tenant Management Publishing Accounts  Account Id  Speaker Kind Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Update Publishing Speaker Kind"
       }
     },
     "/api/v1/tenant-management/team-usage": {

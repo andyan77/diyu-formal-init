@@ -274,6 +274,11 @@ class CreatePublishingAccountRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     channel: Literal["抖音", "小红书", "微信视频号"]
     content_role_name: str = Field(min_length=1, max_length=80)
+    speaker_kind: Literal[
+        "institutional_account",
+        "personal_ip_account",
+        "unknown",
+    ] = "unknown"
     operator_id: UUID
     # Legacy API callers may still send the internal boundary alone.  The product UI sends
     # one complete account profile instead, and its authority segment becomes this short
@@ -285,6 +290,16 @@ class CreatePublishingAccountRequest(BaseModel):
     control_organization_id: UUID | None = None
     operator_can_maintain_expression_profile: bool = False
     as_synthetic_business_fixture: bool = False
+
+
+class UpdatePublishingSpeakerKindRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    speaker_kind: Literal[
+        "institutional_account",
+        "personal_ip_account",
+        "unknown",
+    ]
 
 
 class CreatePlatformCarrierRequest(BaseModel):

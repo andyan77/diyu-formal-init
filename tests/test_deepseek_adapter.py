@@ -26,7 +26,7 @@ from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import brand_fact_records, product_fact_records
 from src.shared.narrative import NarrativeFrame, new_frame, visible_digest
 from src.shared.review_evidence import (
-    REVIEW_EVIDENCE_VERSION,
+    REVIEW_EVIDENCE_V2_VERSION,
     build_review_clauses,
 )
 from src.shared.types import (
@@ -482,6 +482,12 @@ def _kernel_observations(
             clause.unit_id == "unit:body-opening"
             and body_type == "situated_event"
         )
+        modality = (
+            "可以"
+            if clause.unit_id == "unit:body-closing"
+            and "可以" in clause.exact_text
+            else None
+        )
         evidence.append(
             {
                 "clause_id": clause.clause_id,
@@ -495,20 +501,55 @@ def _kernel_observations(
                 "subject_spans": [],
                 "predicate_spans": [],
                 "action_or_event_spans": (
-                    [clause.exact_text] if is_event else []
+                    [
+                        {
+                            "text": clause.exact_text,
+                            "start": 0,
+                            "end": len(clause.exact_text),
+                        }
+                    ]
+                    if is_event
+                    else []
                 ),
                 "dialogue_spans": [],
                 "motive_spans": [],
                 "cause_spans": [],
-                "result_spans": [],
+                "result_spans": (
+                    [
+                        {
+                            "text": clause.exact_text,
+                            "start": 0,
+                            "end": len(clause.exact_text),
+                        }
+                    ]
+                    if is_event
+                    else []
+                ),
                 "time_spans": [],
                 "location_spans": [],
+                "grammatical_marker_spans": {
+                    "modality": (
+                        [
+                            {
+                                "text": modality,
+                                "start": clause.exact_text.index(modality),
+                                "end": (
+                                    clause.exact_text.index(modality)
+                                    + len(modality)
+                                ),
+                            }
+                        ]
+                        if modality is not None
+                        else []
+                    ),
+                    "aspect": [],
+                },
                 "implicit_subject": "none",
                 "uncertain": False,
             }
         )
     return {
-        "evidence_version": REVIEW_EVIDENCE_VERSION,
+        "evidence_version": REVIEW_EVIDENCE_V2_VERSION,
         "clauses": evidence,
     }
 
@@ -987,11 +1028,21 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     )
     assert (
         artifact.completion_snapshot_patch["review_evidence_version"]
-        == REVIEW_EVIDENCE_VERSION
+        == REVIEW_EVIDENCE_V2_VERSION
     )
     kernel_snapshot = artifact.completion_snapshot_patch[
         "creative_kernel_v1"
     ]
+    clause_context = artifact.completion_snapshot_patch[
+        "clause_context_v2"
+    ]
+    assert isinstance(clause_context, list)
+    assert any(
+        isinstance(item, dict)
+        and item["text_source"] == "server_wrapper"
+        and item["unit_contract"] == "hypothetical_example"
+        for item in clause_context
+    )
     assert isinstance(kernel_snapshot, dict)
     assert (
         kernel_snapshot["program_id"]
@@ -1013,6 +1064,11 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert '"text"' in writer_prompt
     assert '"block_id"' not in writer_prompt
     assert '"fact_refs"' not in writer_prompt
+    reviewer_prompt = prompts[1]
+    assert '"evidence_version":"review-evidence-v2"' in reviewer_prompt
+    assert '"grammatical_marker_spans"' in reviewer_prompt
+    assert '"start":0' in reviewer_prompt
+    assert '"end":2' in reviewer_prompt
 
 
 def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:
@@ -1161,7 +1217,9 @@ def test_ui10_evidence_failure_never_calls_writer_repair(
         clauses[-1]["exact_text"] = "部分"
     elif mutation == "fake_span":
         clauses[-1] = dict(clauses[-1])
-        clauses[-1]["predicate_spans"] = ["并不存在的谓词"]
+        clauses[-1]["predicate_spans"] = [
+            {"text": "并不存在的谓词", "start": 0, "end": 8}
+        ]
     else:
         clauses[-1] = dict(clauses[-1])
         clauses[-1]["uncertain"] = True

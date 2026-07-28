@@ -241,6 +241,7 @@ def _ensure_account(
                 "name": name,
                 "channel": "抖音",
                 "content_role_name": role,
+                "speaker_kind": "institutional_account",
                 "voice_boundary": boundary,
                 "operator_id": operator_id,
                 "control_organization_id": control_organization_id,

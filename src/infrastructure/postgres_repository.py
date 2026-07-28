@@ -27,6 +27,7 @@ from src.shared.types import (
     RecompileSource,
     SeriesContext,
     SeriesEntry,
+    SpeakerKind,
     TrustedScope,
 )
 
@@ -67,7 +68,8 @@ class PostgresContentRepository(ContentRepository):
                 SELECT b.name AS brand_name, b.positioning, b.decision_order, b.tone,
                        root_account.name AS account_name,
                        u.display_name AS operator_name, o.name AS organization_name,
-                       cr.name AS content_role_name, cr.voice_boundary, ba.description AS audience_description,
+                       cr.name AS content_role_name, cr.voice_boundary,
+                       cr.speaker_kind, ba.description AS audience_description,
                        b.strategy_version, target_account.channel, root_account.business_data_kind,
                        root_account.control_organization_id
                 FROM brands b
@@ -160,6 +162,7 @@ class PostgresContentRepository(ContentRepository):
             production_conditions=production_conditions,
             business_data_kind=str(row["business_data_kind"]),
             brand_reference_context=brand_reference_context,
+            speaker_kind=cast(SpeakerKind, str(row["speaker_kind"])),
         )
 
     def create_task_and_running_run(
@@ -1197,6 +1200,7 @@ class PostgresContentRepository(ContentRepository):
             "brand_strategy_version": context.strategy_version,
             "publishing_account": context.account_name,
             "content_role": context.content_role_name,
+            "speaker_kind": context.speaker_kind,
             "business_data_kind": context.business_data_kind,
             "brand_reference_context": list(context.brand_reference_context),
             "product_refs": [

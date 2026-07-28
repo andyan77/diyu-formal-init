@@ -293,7 +293,8 @@ globalThis.fetch = async (input, init = {}) => {
         },
         content_role: {
           name: body.content_role_name,
-          authority_boundary: body.initial_profile.authority_boundary
+          authority_boundary: body.initial_profile.authority_boundary,
+          speaker_kind: body.speaker_kind
         },
         profile: {
           id: "profile-fixture",
@@ -313,6 +314,22 @@ globalThis.fetch = async (input, init = {}) => {
       }
     ];
     value = accounts[0];
+  } else if (
+    path.endsWith("/speaker-kind") &&
+    path.startsWith("/api/v1/tenant-management/publishing-accounts/") &&
+    method === "PATCH"
+  ) {
+    accounts = accounts.map(account => ({
+      ...account,
+      content_role: {
+        ...account.content_role,
+        speaker_kind: body.speaker_kind
+      }
+    }));
+    value = {
+      account_id: accounts[0]?.id,
+      speaker_kind: body.speaker_kind
+    };
   } else if (
     path === "/api/v1/tenant-management/brand-products" &&
     method === "PUT"

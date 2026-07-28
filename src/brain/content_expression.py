@@ -498,6 +498,7 @@ def snapshot_document(
         "translation_notice": direction.translation_notice if direction else None,
         "content_role": content_role,
         "content_role_boundary": control.content_role_boundary,
+        "speaker_kind": control.speaker_kind,
         "legacy_content_role": False,
         "account_expression_profile_id": (
             str(control.account_expression.profile_id)

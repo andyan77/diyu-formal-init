@@ -25,6 +25,11 @@ ContentTarget: TypeAlias = Literal[
     "xiaohongshu_graphic",
     "wechat_channels_video",
 ]
+SpeakerKind: TypeAlias = Literal[
+    "institutional_account",
+    "personal_ip_account",
+    "unknown",
+]
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,7 @@ class BrandContext:
     production_conditions: str
     business_data_kind: str = "formal_business_data"
     brand_reference_context: tuple[str, ...] = ()
+    speaker_kind: SpeakerKind = "unknown"
 
 
 @dataclass(frozen=True)
@@ -364,6 +370,7 @@ class ContentControlContext:
     # The expression identity this run really spoke from, frozen with the task.
     content_role: str = ""
     content_role_boundary: str = ""
+    speaker_kind: SpeakerKind = "unknown"
     # The acting person's own soft collaboration input.  It reaches the generator and stays out
     # of the tenant-visible task snapshot and the ordinary run receipt.
     collaboration_note: str = ""

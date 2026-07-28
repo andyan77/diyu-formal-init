@@ -355,6 +355,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             "source_turn": 0,
             "intent_span": "帮我发条小红书",
         }
+        assert snapshot["speaker_kind"] == "institutional_account"
         plan = snapshot["creative_plan_v2"]
         assert isinstance(plan, dict)
         assert plan["plan_version"] == "creative-plan-v2"
@@ -364,7 +365,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert kernel_v1["kernel_version"] == "creative-kernel-v1"
         assert kernel_v1["program_id"] == "observation_only_v1"
         assert snapshot["delivery_compiler_version"] == "delivery-compiler-v1"
-        assert snapshot["review_evidence_version"] == "review-evidence-v1"
+        assert snapshot["review_evidence_version"] == "review-evidence-v2"
         assert isinstance(snapshot["reviewed_kernel_digest"], str)
         assert isinstance(snapshot["visible_provenance"], dict)
 
@@ -419,6 +420,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             revised_snapshot["review_evidence_version"]
             == snapshot["review_evidence_version"]
         )
+        assert revised_snapshot["speaker_kind"] == snapshot["speaker_kind"]
         revised_kernel = revised_snapshot["creative_kernel_v1"]
         assert isinstance(revised_kernel, dict)
         assert revised_kernel != kernel_v1

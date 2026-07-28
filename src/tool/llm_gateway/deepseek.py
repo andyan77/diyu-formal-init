@@ -51,12 +51,15 @@ from src.shared.narrative import (
     visible_digest,
 )
 from src.shared.review_evidence import (
-    REVIEW_EVIDENCE_VERSION,
-    ProtectedSubjectScope,
+    REVIEW_EVIDENCE_V2_VERSION,
+    ClauseContextV2,
+    ProtectedSubjectScopeV2,
     ReviewClause,
-    build_review_clauses,
-    parse_review_evidence,
-    reconcile_review_evidence,
+    build_clause_contexts_v2,
+    clause_context_document,
+    parse_review_evidence_v2,
+    reconcile_review_evidence_v2,
+    review_clauses_from_contexts,
 )
 from src.shared.types import (
     ContentProduct,
@@ -669,6 +672,11 @@ class DeepSeekGenerator(ContentGenerator):
             if before == after:
                 raise GenerationFailed("本次修改没有实质改变允许修改的创作单元")
         reviewed_kernel_digest = kernel_digest(kernel)
+        clause_contexts = self._kernel_clause_contexts(
+            request,
+            context,
+            kernel,
+        )
         compiled = compile_delivery(
             DeliveryCompileInput(
                 primary_product=request.primary_product,
@@ -705,8 +713,11 @@ class DeepSeekGenerator(ContentGenerator):
             reviewed_digest=digest,
             completion_snapshot_patch={
                 "creative_kernel_v1": kernel_document(kernel),
+                "clause_context_v2": clause_context_document(
+                    clause_contexts
+                ),
                 "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
-                "review_evidence_version": REVIEW_EVIDENCE_VERSION,
+                "review_evidence_version": REVIEW_EVIDENCE_V2_VERSION,
                 "reviewed_kernel_digest": reviewed_kernel_digest,
                 "visible_provenance": {
                     field: list(sources)
@@ -867,9 +878,16 @@ class DeepSeekGenerator(ContentGenerator):
         context: BoundaryContext,
         kernel: CreativeKernelV1,
     ) -> tuple[tuple[NarrativeIssue, ...], dict[str, Any], int]:
+        clause_contexts = self._kernel_clause_contexts(
+            request,
+            context,
+            kernel,
+        )
         payload, retries = self._request(
             "你是独立 CreativeKernel 证据提取器。只提取每个 clause 的精确文字证据，不分类、不裁决、不改写，只返回 JSON。",
-            self._kernel_reviewer_prompt(build_review_clauses(kernel)),
+            self._kernel_reviewer_prompt(
+                review_clauses_from_contexts(clause_contexts)
+            ),
             4096,
             thinking_disabled=True,
             timeout_seconds=self._review_timeout_seconds,
@@ -880,7 +898,7 @@ class DeepSeekGenerator(ContentGenerator):
                     str(payload["choices"][0]["message"]["content"])
                 )
             )
-            evidence = parse_review_evidence(document)
+            evidence = parse_review_evidence_v2(document)
         except (
             KeyError,
             IndexError,
@@ -890,15 +908,12 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed(
                 "独立 CreativeKernel Reviewer 证据格式不完整"
             ) from exc
-        review_clauses = build_review_clauses(kernel)
         return (
-            reconcile_review_evidence(
-                kernel=kernel,
-                review_clauses=review_clauses,
+            reconcile_review_evidence_v2(
+                contexts=clause_contexts,
                 evidence=evidence,
                 fact_text_by_id=context.fact_text_by_id,
-                allowed_constraint_ids=context.constraint_ids,
-                protected_subjects=ProtectedSubjectScope(
+                protected_subjects=ProtectedSubjectScopeV2(
                     exact_names=tuple(
                         dict.fromkeys(
                             name
@@ -910,12 +925,33 @@ class DeepSeekGenerator(ContentGenerator):
                             if name
                         )
                     ),
-                    current_speaker_is_institutional=True,
+                    speaker_kind=request.brand.speaker_kind,
                 ),
             ),
             payload,
             retries,
         )
+
+    @staticmethod
+    def _kernel_clause_contexts(
+        request: GenerationInput,
+        context: BoundaryContext,
+        kernel: CreativeKernelV1,
+    ) -> tuple[ClauseContextV2, ...]:
+        if request.narrative_frame is None:
+            raise GenerationFailed("CreativeKernelV1 缺少冻结叙事框架")
+        try:
+            return build_clause_contexts_v2(
+                kernel=kernel,
+                frame=request.narrative_frame,
+                fact_registry=context.fact_registry,
+                allowed_constraint_ids=context.constraint_ids,
+                speaker_kind=request.brand.speaker_kind,
+            )
+        except ValueError as exc:
+            raise GenerationFailed(
+                "CreativeKernelV1 服务端 clause 合同不完整"
+            ) from exc
 
     @staticmethod
     def _kernel_repair_scope(
@@ -926,7 +962,9 @@ class DeepSeekGenerator(ContentGenerator):
             "review_evidence_coverage",
             "review_evidence_span",
             "review_evidence_uncertain",
+            "insufficient_evidence",
             "frozen_fact_changed",
+            "server_wrapper_drift",
             "hypothesis_not_visible",
             "dramatization_not_visible",
             "kernel_program_drift",
@@ -1055,24 +1093,32 @@ allowed_observation_types 是服务端边界：abstract_principle 可以表达�
 服务端 clause：
 {json.dumps(targets, ensure_ascii=False)}
 
-每个 clause_id 必须恰好返回一次，exact_text 必须逐字等于对应完整 clause，不得截短或抄写
-其他 clause。所有 span 必须是该 exact_text 中真实存在的精确子串：
+每个 clause_id 必须按 visible_order 恰好返回一次，exact_text 必须逐字等于对应完整 clause，
+不得截短或抄写其他 clause。每个 span 都必须返回 text、start、end；start/end 使用 Python
+Unicode 字符位置的左闭右开索引，且 exact_text[start:end] 必须逐字等于 text。相同文字重复
+出现时必须用不同的 start/end 指向具体 occurrence，不能只返回无法定位的字符串。
 - subject_spans：句中明确作为陈述主体的人、代词、机构或事物；
 - predicate_spans：赋予主体状态、判断、信念、承诺、做法或动作的谓语原文；
 - action_or_event_spans：具体情境中实际发生的动作、反应或事件；抽象概念名称不是事件；
 - dialogue_spans：被说出的具体话语；
 - motive/cause/result/time/location_spans：对应动机、前因、结果、时间和地点。
+- grammatical_marker_spans.modality：原文中明确表示建议、义务、可能、条件或意愿的语法标记；
+- grammatical_marker_spans.aspect：原文中明确表示已经、完成、持续或经历事实的语法标记。
 
 implicit_subject 只选 none、current_speaker、generic、uncertain。句中有明确主体时通常为
 none；省略主体但由当前说话者承担谓语时为 current_speaker；泛指任何人时为 generic；
-无法可靠判断时为 uncertain。任何字段无法可靠提取都必须 uncertain=true。
+无法可靠判断时为 uncertain。重复跨度、多重主张或证据关系无法唯一定位，以及任何字段无法
+可靠提取时，必须 uncertain=true。
 
 只返回：
-{{"evidence_version":"{REVIEW_EVIDENCE_VERSION}","clauses":[{{
+{{"evidence_version":"{REVIEW_EVIDENCE_V2_VERSION}","clauses":[{{
 "clause_id":"既定 id","exact_text":"完整 clause 原文",
-"subject_spans":[],"predicate_spans":[],"action_or_event_spans":[],
+"subject_spans":[{{"text":"原文","start":0,"end":2}}],
+"predicate_spans":[],"action_or_event_spans":[],
 "dialogue_spans":[],"motive_spans":[],"cause_spans":[],"result_spans":[],
-"time_spans":[],"location_spans":[],"implicit_subject":"none","uncertain":false
+"time_spans":[],"location_spans":[],
+"grammatical_marker_spans":{{"modality":[],"aspect":[]}},
+"implicit_subject":"none","uncertain":false
 }}]}}
 根对象和 clause 对象不得增加、遗漏或重命名字段；所有 span 字段必须是数组且不能为 null。"""
 

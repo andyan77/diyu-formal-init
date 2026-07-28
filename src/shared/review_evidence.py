@@ -7,10 +7,13 @@ from typing import Literal, TypeAlias, cast
 from src.shared.creative_kernel import (
     DRAMATIZATION_DISCLOSURE,
     HYPOTHESIS_DISCLOSURE,
+    OBSERVATION_ONLY_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
     CreativeKernelV1,
 )
-from src.shared.narrative import NarrativeIssue
+from src.shared.factual_basis import FrozenFactRecord
+from src.shared.narrative import NarrativeFrame, NarrativeIssue
+from src.shared.types import SpeakerKind
 
 ImplicitSubject: TypeAlias = Literal[
     "none",
@@ -20,6 +23,7 @@ ImplicitSubject: TypeAlias = Literal[
 ]
 
 REVIEW_EVIDENCE_VERSION = "review-evidence-v1"
+REVIEW_EVIDENCE_V2_VERSION = "review-evidence-v2"
 _IMPLICIT_SUBJECTS = frozenset(
     {"none", "current_speaker", "generic", "uncertain"}
 )
@@ -103,6 +107,113 @@ class ProtectedSubjectScope:
     current_speaker_is_institutional: bool
 
 
+TextSourceV2: TypeAlias = Literal[
+    "server_wrapper",
+    "frozen_user_fact",
+    "frozen_brand_fact",
+    "frozen_product_fact",
+    "writer_unit",
+]
+UnitContractV2: TypeAlias = Literal[
+    "abstract_observation",
+    "recommendation",
+    "hypothetical_example",
+    "disclosed_dramatization",
+    "actuality_reflection",
+    "frozen_fact",
+]
+SubjectBindingV2: TypeAlias = Literal[
+    "none",
+    "generic",
+    "fictional_role",
+    "current_person",
+    "current_institution",
+    "protected_exact_subject",
+    "uncertain",
+]
+
+
+@dataclass(frozen=True)
+class ClauseContextV2:
+    clause_id: str
+    unit_id: str
+    exact_text: str
+    visible_order: int
+    text_source: TextSourceV2
+    unit_contract: UnitContractV2
+    speaker_kind: SpeakerKind
+    fact_ref: str | None = None
+
+
+@dataclass(frozen=True)
+class SpanOccurrence:
+    text: str
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
+class GrammaticalMarkerSpans:
+    modality: tuple[SpanOccurrence, ...]
+    aspect: tuple[SpanOccurrence, ...]
+
+
+@dataclass(frozen=True)
+class ClauseEvidenceV2:
+    clause_id: str
+    exact_text: str
+    subject_spans: tuple[SpanOccurrence, ...]
+    predicate_spans: tuple[SpanOccurrence, ...]
+    action_or_event_spans: tuple[SpanOccurrence, ...]
+    dialogue_spans: tuple[SpanOccurrence, ...]
+    motive_spans: tuple[SpanOccurrence, ...]
+    cause_spans: tuple[SpanOccurrence, ...]
+    result_spans: tuple[SpanOccurrence, ...]
+    time_spans: tuple[SpanOccurrence, ...]
+    location_spans: tuple[SpanOccurrence, ...]
+    grammatical_marker_spans: GrammaticalMarkerSpans
+    implicit_subject: ImplicitSubject
+    uncertain: bool
+
+    @property
+    def all_spans(self) -> tuple[SpanOccurrence, ...]:
+        return (
+            *self.subject_spans,
+            *self.predicate_spans,
+            *self.action_or_event_spans,
+            *self.dialogue_spans,
+            *self.motive_spans,
+            *self.cause_spans,
+            *self.result_spans,
+            *self.time_spans,
+            *self.location_spans,
+            *self.grammatical_marker_spans.modality,
+            *self.grammatical_marker_spans.aspect,
+        )
+
+    @property
+    def event_spans(self) -> tuple[SpanOccurrence, ...]:
+        return (
+            *self.action_or_event_spans,
+            *self.dialogue_spans,
+            *self.motive_spans,
+            *self.cause_spans,
+            *self.result_spans,
+        )
+
+
+@dataclass(frozen=True)
+class ReviewEvidenceV2:
+    evidence_version: str
+    clauses: tuple[ClauseEvidenceV2, ...]
+
+
+@dataclass(frozen=True)
+class ProtectedSubjectScopeV2:
+    exact_names: tuple[str, ...]
+    speaker_kind: SpeakerKind
+
+
 def build_review_clauses(kernel: CreativeKernelV1) -> tuple[ReviewClause, ...]:
     clauses: list[ReviewClause] = []
     for unit in kernel.units:
@@ -117,6 +228,119 @@ def build_review_clauses(kernel: CreativeKernelV1) -> tuple[ReviewClause, ...]:
                 )
             )
     return tuple(clauses)
+
+
+def build_clause_contexts_v2(
+    *,
+    kernel: CreativeKernelV1,
+    frame: NarrativeFrame,
+    fact_registry: Sequence[FrozenFactRecord],
+    allowed_constraint_ids: frozenset[str],
+    speaker_kind: SpeakerKind,
+) -> tuple[ClauseContextV2, ...]:
+    """Build the only trusted source/contract sidecar for a new kernel review."""
+    contracts = _unit_contracts_v2(kernel, frame)
+    fact_by_id = {record.fact_id: record for record in fact_registry}
+    contexts: list[ClauseContextV2] = []
+    for unit in kernel.units:
+        contract = contracts[unit.unit_id]
+        if any(
+            ref not in allowed_constraint_ids for ref in unit.constraint_refs
+        ):
+            raise ValueError("kernel unit constraint source drifted")
+        parts = _split_visible_text(unit.text)
+        fact_ref: str | None = None
+        fact_source: TextSourceV2 | None = None
+        if contract == "frozen_fact":
+            if len(unit.fact_refs) != 1 or unit.constraint_refs:
+                raise ValueError("frozen fact unit structure drifted")
+            fact_ref = unit.fact_refs[0]
+            record = fact_by_id.get(fact_ref)
+            if record is None or unit.text != record.exact_text:
+                raise ValueError("frozen fact unit source drifted")
+            if record.fact_kind == "user_actuality":
+                fact_source = "frozen_user_fact"
+            elif record.fact_kind == "brand":
+                fact_source = "frozen_brand_fact"
+            else:
+                fact_source = "frozen_product_fact"
+        elif unit.fact_refs:
+            raise ValueError("writer-owned unit cannot carry fact refs")
+
+        wrapper: str | None = None
+        if contract == "hypothetical_example":
+            wrapper = f"{HYPOTHESIS_DISCLOSURE}\n"
+        elif contract == "disclosed_dramatization":
+            wrapper = f"{DRAMATIZATION_DISCLOSURE}\n"
+        if wrapper is not None and (not parts or parts[0] != wrapper):
+            raise ValueError("server wrapper structure drifted")
+
+        for index, exact_text in enumerate(parts, start=1):
+            if fact_source is not None:
+                source = fact_source
+            elif wrapper is not None and index == 1:
+                source = "server_wrapper"
+            else:
+                source = "writer_unit"
+            if (
+                source == "writer_unit"
+                and exact_text.strip()
+                in {HYPOTHESIS_DISCLOSURE, DRAMATIZATION_DISCLOSURE}
+            ):
+                raise ValueError("writer forged a server wrapper")
+            contexts.append(
+                ClauseContextV2(
+                    clause_id=f"{unit.unit_id}:clause:{index}",
+                    unit_id=unit.unit_id,
+                    exact_text=exact_text,
+                    visible_order=unit.visible_order * 1000 + index,
+                    text_source=source,
+                    unit_contract=contract,
+                    speaker_kind=speaker_kind,
+                    fact_ref=fact_ref,
+                )
+            )
+    identifiers = [context.clause_id for context in contexts]
+    orders = [context.visible_order for context in contexts]
+    if (
+        len(identifiers) != len(set(identifiers))
+        or len(orders) != len(set(orders))
+        or orders != sorted(orders)
+    ):
+        raise ValueError("clause context coverage or order drifted")
+    return tuple(contexts)
+
+
+def review_clauses_from_contexts(
+    contexts: Sequence[ClauseContextV2],
+) -> tuple[ReviewClause, ...]:
+    return tuple(
+        ReviewClause(
+            unit_id=context.unit_id,
+            clause_id=context.clause_id,
+            exact_text=context.exact_text,
+            visible_order=context.visible_order,
+        )
+        for context in contexts
+    )
+
+
+def clause_context_document(
+    contexts: Sequence[ClauseContextV2],
+) -> list[dict[str, object]]:
+    return [
+        {
+            "clause_id": context.clause_id,
+            "unit_id": context.unit_id,
+            "exact_text": context.exact_text,
+            "visible_order": context.visible_order,
+            "text_source": context.text_source,
+            "unit_contract": context.unit_contract,
+            "speaker_kind": context.speaker_kind,
+            "fact_ref": context.fact_ref,
+        }
+        for context in contexts
+    ]
 
 
 def parse_review_evidence(value: object) -> ReviewEvidenceV1:
@@ -181,6 +405,89 @@ def parse_review_evidence(value: object) -> ReviewEvidenceV1:
         )
     return ReviewEvidenceV1(
         evidence_version=REVIEW_EVIDENCE_VERSION,
+        clauses=tuple(clauses),
+    )
+
+
+def parse_review_evidence_v2(value: object) -> ReviewEvidenceV2:
+    if not isinstance(value, Mapping) or frozenset(value) != {
+        "evidence_version",
+        "clauses",
+    }:
+        raise TypeError("review evidence v2 root is invalid")
+    raw_clauses = value.get("clauses")
+    if (
+        value.get("evidence_version") != REVIEW_EVIDENCE_V2_VERSION
+        or not isinstance(raw_clauses, list)
+    ):
+        raise TypeError("review evidence v2 version is invalid")
+    required = frozenset(
+        {
+            "clause_id",
+            "exact_text",
+            "subject_spans",
+            "predicate_spans",
+            "action_or_event_spans",
+            "dialogue_spans",
+            "motive_spans",
+            "cause_spans",
+            "result_spans",
+            "time_spans",
+            "location_spans",
+            "grammatical_marker_spans",
+            "implicit_subject",
+            "uncertain",
+        }
+    )
+    clauses: list[ClauseEvidenceV2] = []
+    for raw in raw_clauses:
+        if not isinstance(raw, Mapping) or frozenset(raw) != required:
+            raise TypeError("review evidence v2 clause is invalid")
+        markers = raw.get("grammatical_marker_spans")
+        if not isinstance(markers, Mapping) or frozenset(markers) != {
+            "modality",
+            "aspect",
+        }:
+            raise TypeError("review evidence v2 markers are invalid")
+        implicit_subject = raw.get("implicit_subject")
+        uncertain = raw.get("uncertain")
+        if (
+            not isinstance(implicit_subject, str)
+            or implicit_subject not in _IMPLICIT_SUBJECTS
+            or not isinstance(uncertain, bool)
+        ):
+            raise TypeError("review evidence v2 clause fields are invalid")
+        clauses.append(
+            ClauseEvidenceV2(
+                clause_id=_required_string(raw.get("clause_id")),
+                exact_text=_required_string(raw.get("exact_text")),
+                subject_spans=_occurrence_tuple(raw.get("subject_spans")),
+                predicate_spans=_occurrence_tuple(
+                    raw.get("predicate_spans")
+                ),
+                action_or_event_spans=_occurrence_tuple(
+                    raw.get("action_or_event_spans")
+                ),
+                dialogue_spans=_occurrence_tuple(
+                    raw.get("dialogue_spans")
+                ),
+                motive_spans=_occurrence_tuple(raw.get("motive_spans")),
+                cause_spans=_occurrence_tuple(raw.get("cause_spans")),
+                result_spans=_occurrence_tuple(raw.get("result_spans")),
+                time_spans=_occurrence_tuple(raw.get("time_spans")),
+                location_spans=_occurrence_tuple(
+                    raw.get("location_spans")
+                ),
+                grammatical_marker_spans=GrammaticalMarkerSpans(
+                    modality=_occurrence_tuple(markers.get("modality")),
+                    aspect=_occurrence_tuple(markers.get("aspect")),
+                ),
+                implicit_subject=cast(ImplicitSubject, implicit_subject),
+                uncertain=uncertain,
+            )
+        )
+    return ReviewEvidenceV2(
+        evidence_version=REVIEW_EVIDENCE_V2_VERSION,
         clauses=tuple(clauses),
     )
 
@@ -359,6 +666,394 @@ def reconcile_review_evidence(
     return tuple(dict.fromkeys(issues))
 
 
+def reconcile_review_evidence_v2(
+    *,
+    contexts: Sequence[ClauseContextV2],
+    evidence: ReviewEvidenceV2,
+    fact_text_by_id: Mapping[str, str],
+    protected_subjects: ProtectedSubjectScopeV2,
+) -> tuple[NarrativeIssue, ...]:
+    """Apply ADR-028 without trusting model-authored semantic labels."""
+    expected = {context.clause_id: context for context in contexts}
+    issues: list[NarrativeIssue] = []
+    received: dict[str, ClauseEvidenceV2] = {}
+    expected_order = tuple(context.clause_id for context in contexts)
+    received_order = tuple(item.clause_id for item in evidence.clauses)
+    if received_order != expected_order:
+        issues.append(
+            NarrativeIssue(
+                "review-evidence",
+                "review_evidence_coverage",
+                "clause_order_or_coverage",
+            )
+        )
+    for item in evidence.clauses:
+        context = expected.get(item.clause_id)
+        if context is None or item.clause_id in received:
+            issues.append(
+                NarrativeIssue(
+                    item.clause_id,
+                    "review_evidence_coverage",
+                    item.clause_id,
+                )
+            )
+            continue
+        received[item.clause_id] = item
+        if item.exact_text != context.exact_text:
+            issues.append(
+                NarrativeIssue(
+                    context.unit_id,
+                    "review_evidence_coverage",
+                    item.exact_text,
+                )
+            )
+            continue
+        invalid = next(
+            (
+                span
+                for span in item.all_spans
+                if span.start < 0
+                or span.end <= span.start
+                or span.end > len(context.exact_text)
+                or context.exact_text[span.start : span.end] != span.text
+            ),
+            None,
+        )
+        if invalid is not None:
+            issues.append(
+                NarrativeIssue(
+                    context.unit_id,
+                    "review_evidence_span",
+                    invalid.text,
+                )
+            )
+        if item.uncertain or item.implicit_subject == "uncertain":
+            issues.append(
+                NarrativeIssue(
+                    context.unit_id,
+                    "insufficient_evidence",
+                    context.exact_text,
+                )
+            )
+    for missing_id in set(expected) - set(received):
+        issues.append(
+            NarrativeIssue(
+                expected[missing_id].unit_id,
+                "review_evidence_coverage",
+                missing_id,
+            )
+        )
+    if issues:
+        return tuple(dict.fromkeys(issues))
+
+    for context in contexts:
+        item = received[context.clause_id]
+        if context.text_source == "server_wrapper":
+            if not _valid_server_wrapper(context):
+                issues.append(
+                    NarrativeIssue(
+                        context.unit_id,
+                        "server_wrapper_drift",
+                        context.exact_text,
+                    )
+                )
+            continue
+        if context.text_source != "writer_unit":
+            if (
+                context.unit_contract != "frozen_fact"
+                or context.fact_ref is None
+                or fact_text_by_id.get(context.fact_ref)
+                != context.exact_text
+            ):
+                issues.append(
+                    NarrativeIssue(
+                        context.unit_id,
+                        "frozen_fact_changed",
+                        context.exact_text,
+                    )
+                )
+            continue
+
+        binding = _subject_binding_v2(
+            context,
+            item,
+            protected_subjects,
+        )
+        if binding == "uncertain":
+            issues.append(
+                NarrativeIssue(
+                    context.unit_id,
+                    "insufficient_evidence",
+                    context.exact_text,
+                )
+            )
+            continue
+        issue = _writer_clause_issue(context, item, binding)
+        if issue is not None:
+            issues.append(issue)
+    return tuple(dict.fromkeys(issues))
+
+
+def _unit_contracts_v2(
+    kernel: CreativeKernelV1,
+    frame: NarrativeFrame,
+) -> dict[str, UnitContractV2]:
+    contracts: dict[str, UnitContractV2] = {
+        "unit:title": "abstract_observation",
+        "unit:natural-guide": "abstract_observation",
+        "unit:release-caption": "abstract_observation",
+    }
+    fact_units = tuple(
+        unit for unit in kernel.units if unit.purpose == "frozen_fact"
+    )
+    for index, unit in enumerate(fact_units, start=1):
+        if unit.unit_id != f"unit:frozen-fact:{index}":
+            raise ValueError("frozen fact unit mapping is incomplete")
+        contracts[unit.unit_id] = "frozen_fact"
+    if {
+        ref for unit in fact_units for ref in unit.fact_refs
+    } != set(frame.allowed_fact_ids):
+        raise ValueError("frozen fact unit mapping drifted from frame")
+
+    if kernel.program_id == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM:
+        if frame.narrative_mode != "general_observation" or fact_units:
+            raise ValueError("hypothetical example program drifted from frame")
+        contracts.update(
+            {
+                "unit:body-opening": "abstract_observation",
+                "unit:hypothetical-example": "hypothetical_example",
+                "unit:body-closing": "recommendation",
+            }
+        )
+    elif kernel.program_id == OBSERVATION_ONLY_PROGRAM:
+        body_contract: UnitContractV2
+        if frame.narrative_mode == "actuality_reflection":
+            body_contract = "actuality_reflection"
+        elif frame.narrative_mode == "hypothesis":
+            body_contract = "hypothetical_example"
+        elif frame.narrative_mode == "dramatization":
+            body_contract = "disclosed_dramatization"
+        else:
+            body_contract = "abstract_observation"
+        contracts["unit:body"] = body_contract
+    else:
+        raise ValueError("kernel program has no trusted contract mapping")
+
+    units = {unit.unit_id: unit for unit in kernel.units}
+    if set(units) != set(contracts):
+        raise ValueError("kernel unit has no trusted contract mapping")
+    expected_purpose = {
+        "unit:title": "title",
+        "unit:natural-guide": "natural_guide",
+        "unit:release-caption": "release_caption",
+    }
+    for unit_id, unit in units.items():
+        purpose = expected_purpose.get(
+            unit_id,
+            "frozen_fact" if unit_id.startswith("unit:frozen-fact:") else "body",
+        )
+        if unit.purpose != purpose:
+            raise ValueError("kernel unit purpose drifted from trusted mapping")
+    return contracts
+
+
+def _valid_server_wrapper(context: ClauseContextV2) -> bool:
+    expected = (
+        f"{HYPOTHESIS_DISCLOSURE}\n"
+        if context.unit_contract == "hypothetical_example"
+        else f"{DRAMATIZATION_DISCLOSURE}\n"
+        if context.unit_contract == "disclosed_dramatization"
+        else ""
+    )
+    return bool(expected) and context.exact_text == expected
+
+
+def _subject_binding_v2(
+    context: ClauseContextV2,
+    evidence: ClauseEvidenceV2,
+    protected_subjects: ProtectedSubjectScopeV2,
+) -> SubjectBindingV2:
+    exact_names = tuple(name for name in protected_subjects.exact_names if name)
+    if any(name in context.exact_text for name in exact_names):
+        return "protected_exact_subject"
+    subjects = tuple(span.text for span in evidence.subject_spans)
+    locations = tuple(span.text for span in evidence.location_spans)
+    if any(
+        any(designator in subject for designator in _INSTITUTIONAL_DESIGNATORS)
+        for subject in subjects
+    ):
+        return "current_institution"
+    self_referenced = any(
+        subject in _INSTITUTIONAL_SELF_REFERENCES for subject in subjects
+    )
+    if self_referenced:
+        if protected_subjects.speaker_kind == "institutional_account":
+            return "current_institution"
+        if protected_subjects.speaker_kind == "personal_ip_account":
+            return (
+                "current_person"
+                if any(subject.startswith("我") for subject in subjects)
+                else "uncertain"
+            )
+        return "uncertain"
+    if any(
+        span == "我" or span.startswith(_CURRENT_REALITY_PREFIXES)
+        for span in (*subjects, *locations)
+    ):
+        return "current_person"
+    if evidence.implicit_subject == "current_speaker":
+        if protected_subjects.speaker_kind == "institutional_account":
+            return "current_institution"
+        if protected_subjects.speaker_kind == "personal_ip_account":
+            return "current_person"
+        return "uncertain"
+    if evidence.implicit_subject == "generic":
+        return (
+            "fictional_role"
+            if context.unit_contract
+            in {"hypothetical_example", "disclosed_dramatization"}
+            else "generic"
+        )
+    if subjects:
+        if evidence.action_or_event_spans:
+            return "fictional_role"
+        return (
+            "fictional_role"
+            if context.unit_contract
+            in {"hypothetical_example", "disclosed_dramatization"}
+            else "generic"
+        )
+    return "none"
+
+
+def _writer_clause_issue(
+    context: ClauseContextV2,
+    evidence: ClauseEvidenceV2,
+    binding: SubjectBindingV2,
+) -> NarrativeIssue | None:
+    if (
+        binding in {"current_institution", "protected_exact_subject"}
+        and evidence.predicate_spans
+    ):
+        return NarrativeIssue(
+            context.unit_id,
+            "unsupported_institutional_assertion",
+            context.exact_text,
+        )
+    contract = context.unit_contract
+    if contract in {"hypothetical_example", "disclosed_dramatization"}:
+        if binding in {
+            "current_person",
+            "current_institution",
+            "protected_exact_subject",
+        }:
+            return NarrativeIssue(
+                context.unit_id,
+                "unsupported_actuality_binding",
+                context.exact_text,
+            )
+        return None
+
+    has_action = bool(evidence.action_or_event_spans)
+    has_dialogue = bool(evidence.dialogue_spans)
+    has_time = bool(evidence.time_spans)
+    has_location = bool(evidence.location_spans)
+    has_aspect = bool(evidence.grammatical_marker_spans.aspect)
+    has_modality = bool(evidence.grammatical_marker_spans.modality)
+    has_result = bool(evidence.result_spans)
+    has_reality_detail = any(
+        (
+            has_dialogue,
+            bool(evidence.motive_spans),
+            has_time,
+            has_location,
+            has_aspect,
+        )
+    )
+
+    if contract == "abstract_observation":
+        if (
+            binding == "current_person"
+            and (has_action or has_reality_detail or has_result)
+        ):
+            return NarrativeIssue(
+                context.unit_id,
+                "unsupported_actuality_binding",
+                context.exact_text,
+            )
+        if binding == "fictional_role" and has_action:
+            return NarrativeIssue(
+                context.unit_id,
+                "situated_event_in_observation",
+                context.exact_text,
+            )
+        if has_dialogue or (
+            has_action and (has_result or has_time or has_location or has_aspect)
+        ) or ((has_time or has_location or has_aspect) and evidence.predicate_spans):
+            return NarrativeIssue(
+                context.unit_id,
+                "situated_event_in_observation",
+                context.exact_text,
+            )
+        if has_action:
+            return NarrativeIssue(
+                context.unit_id,
+                "insufficient_evidence",
+                context.exact_text,
+            )
+        return None
+
+    if contract == "recommendation":
+        if has_aspect or has_time or has_location or has_dialogue:
+            return NarrativeIssue(
+                context.unit_id,
+                "situated_event_in_recommendation",
+                context.exact_text,
+            )
+        if not has_modality:
+            return NarrativeIssue(
+                context.unit_id,
+                "insufficient_evidence",
+                context.exact_text,
+            )
+        return None
+
+    if contract == "actuality_reflection":
+        if (
+            binding == "current_person"
+            and (
+                has_action
+                or has_reality_detail
+                or has_result
+                or bool(evidence.cause_spans)
+            )
+        ):
+            return NarrativeIssue(
+                context.unit_id,
+                "unsupported_actuality_expansion",
+                context.exact_text,
+            )
+        if has_aspect or has_time or has_location or has_dialogue:
+            return NarrativeIssue(
+                context.unit_id,
+                "situated_event_in_reflection",
+                context.exact_text,
+            )
+        if has_action and not has_modality:
+            return NarrativeIssue(
+                context.unit_id,
+                "insufficient_evidence",
+                context.exact_text,
+            )
+        return None
+
+    return NarrativeIssue(
+        context.unit_id,
+        "kernel_program_drift",
+        context.exact_text,
+    )
+
+
 def _kernel_program_issues(
     kernel: CreativeKernelV1,
 ) -> tuple[NarrativeIssue, ...]:
@@ -480,3 +1175,32 @@ def _string_tuple(value: object) -> tuple[str, ...]:
     if len(values) != len(set(values)):
         raise TypeError("review evidence spans are duplicated")
     return tuple(values)
+
+
+def _occurrence_tuple(value: object) -> tuple[SpanOccurrence, ...]:
+    if not isinstance(value, list):
+        raise TypeError("review evidence occurrence spans are invalid")
+    spans: list[SpanOccurrence] = []
+    for raw in value:
+        if not isinstance(raw, Mapping) or frozenset(raw) != {
+            "text",
+            "start",
+            "end",
+        }:
+            raise TypeError("review evidence occurrence span is invalid")
+        text = raw.get("text")
+        start = raw.get("start")
+        end = raw.get("end")
+        if (
+            not isinstance(text, str)
+            or not text
+            or not isinstance(start, int)
+            or isinstance(start, bool)
+            or not isinstance(end, int)
+            or isinstance(end, bool)
+        ):
+            raise TypeError("review evidence occurrence span fields are invalid")
+        spans.append(SpanOccurrence(text=text, start=start, end=end))
+    if len(spans) != len(set(spans)):
+        raise TypeError("review evidence occurrence spans are duplicated")
+    return tuple(spans)

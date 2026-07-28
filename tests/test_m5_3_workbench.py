@@ -135,12 +135,31 @@ def test_manager_creates_distinct_account_role_and_grants_registered_operator_on
             "name": account_name,
             "channel": "小红书",
             "content_role": role_name,
+            "speaker_kind": "unknown",
             "voice_boundary": "只在该专题账号已确认的商品事实和内容范围内表达。",
             "operator_id": external_operator["id"],
             "shared_password": False,
         }
         accounts = manager.get("/api/v1/tenant-management/publishing-accounts").json()
         assert any(account["id"] == created.json()["id"] for account in accounts)
+        declared = manager.patch(
+            f"/api/v1/tenant-management/publishing-accounts/{created.json()['id']}/speaker-kind",
+            json={"speaker_kind": "personal_ip_account"},
+        )
+        assert declared.status_code == 200
+        assert declared.json()["speaker_kind"] == "personal_ip_account"
+        refreshed = manager.get(
+            "/api/v1/tenant-management/publishing-accounts"
+        ).json()
+        declared_account = next(
+            account
+            for account in refreshed
+            if account["id"] == created.json()["id"]
+        )
+        assert (
+            declared_account["content_role"]["speaker_kind"]
+            == "personal_ip_account"
+        )
         operators = manager.get("/api/v1/tenant-management/operators").json()
         assigned = next(item for item in operators if item["id"] == external_operator["id"])
         assert account_name in assigned["publishing_accounts"]
@@ -158,6 +177,11 @@ def test_manager_creates_distinct_account_role_and_grants_registered_operator_on
             },
         )
         assert denied.status_code == 403
+        denied_declaration = content_user.patch(
+            f"/api/v1/tenant-management/publishing-accounts/{created.json()['id']}/speaker-kind",
+            json={"speaker_kind": "institutional_account"},
+        )
+        assert denied_declaration.status_code == 403
 
 
 def test_each_user_can_only_update_one_default_persona_record() -> None:

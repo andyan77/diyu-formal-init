@@ -80,6 +80,7 @@ from src.gateway.api.contracts import (
     SavedVersionResponse,
     UnmetCapabilityRequest,
     UnmetCapabilityResponseRequest,
+    UpdatePublishingSpeakerKindRequest,
     UpdateTenantUserGrantsRequest,
 )
 from src.gateway.api.html import (
@@ -1176,6 +1177,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if payload.initial_profile is not None
                 else None
             ),
+            payload.speaker_kind,
+        )
+
+    @app.patch(
+        "/api/v1/tenant-management/publishing-accounts/{account_id}/speaker-kind",
+        responses=business_failures,
+    )
+    def update_publishing_speaker_kind(
+        account_id: UUID,
+        payload: UpdatePublishingSpeakerKindRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.update_publishing_speaker_kind(
+            scope,
+            account_id,
+            payload.speaker_kind,
         )
 
     @app.post(

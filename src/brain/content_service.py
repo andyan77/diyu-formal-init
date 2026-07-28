@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
+from typing import cast
 from uuid import UUID
 
 from src.brain.content_control_service import (
@@ -67,6 +68,7 @@ from src.shared.types import (
     RequestedControls,
     RoutingInput,
     SeriesContext,
+    SpeakerKind,
     TrustedScope,
 )
 
@@ -535,6 +537,7 @@ class ContentService:
                 preference_version=None,
                 content_role=context.content_role_name,
                 content_role_boundary=context.content_role_boundary,
+                speaker_kind=context.speaker_kind,
             )
         requested = controls or RequestedControls()
         boundary_text = " ".join(
@@ -565,6 +568,7 @@ class ContentService:
             preference_version=preference_version,
             content_role=context.content_role_name,
             content_role_boundary=context.content_role_boundary,
+            speaker_kind=context.speaker_kind,
             collaboration_note=collaboration_note,
         )
 
@@ -612,6 +616,7 @@ class ContentService:
         preference_version = snapshot.get("private_preference_version")
         frozen_role = snapshot.get("content_role")
         frozen_boundary = snapshot.get("content_role_boundary")
+        frozen_speaker_kind = snapshot.get("speaker_kind")
         return ContentControlContext(
             catalog_version=str(catalog_version) if isinstance(catalog_version, str) else None,
             direction=direction_from_snapshot(snapshot),
@@ -621,6 +626,19 @@ class ContentService:
             preference_version=(preference_version if isinstance(preference_version, int) else None),
             content_role=str(frozen_role) if isinstance(frozen_role, str) else "",
             content_role_boundary=(str(frozen_boundary) if isinstance(frozen_boundary, str) else ""),
+            speaker_kind=cast(
+                SpeakerKind,
+                (
+                    frozen_speaker_kind
+                    if frozen_speaker_kind
+                in {
+                    "institutional_account",
+                    "personal_ip_account",
+                    "unknown",
+                }
+                    else "unknown"
+                ),
+            ),
             # A revision replays conditions; it never reads today's private preference.
             collaboration_note="",
         )
@@ -650,6 +668,7 @@ class ContentService:
             content_role_name=control.content_role,
             content_role_boundary=control.content_role_boundary or context.content_role_boundary,
             brand_reference_context=frozen_references,
+            speaker_kind=control.speaker_kind,
         )
 
     @staticmethod

@@ -3,7 +3,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from src.shared.types import DisplayScope, TenantManagementScope, TrustedScope
+from src.shared.types import (
+    DisplayScope,
+    SpeakerKind,
+    TenantManagementScope,
+    TrustedScope,
+)
 
 
 class WorkbenchRepository(ABC):
@@ -124,6 +129,15 @@ class WorkbenchRepository(ABC):
         operator_can_maintain_expression_profile: bool = False,
         business_data_kind: str = "formal_business_data",
         initial_profile: dict[str, str] | None = None,
+        speaker_kind: SpeakerKind = "unknown",
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def update_publishing_speaker_kind(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        speaker_kind: SpeakerKind,
     ) -> dict[str, object]: ...
 
     @abstractmethod
