@@ -930,18 +930,21 @@ export default function CreatorApp({
           continue;
         }
         if (streamEvent.event === "completed") {
+          // Clear the submitted seed before the artifact becomes editable. Otherwise a user can
+          // start typing the next instruction while version history is loading and have that new
+          // text erased when this handler resumes after the await.
+          setSeed("");
+          setDirectionsOpen(false);
           setCurrent(streamEvent.result);
           setViewed(streamEvent.result);
-          await loadVersions(streamEvent.result);
           appendAssistant(
             streamEvent.result.conversation_message?.trim() ||
               "第一版已经整理好。你可以直接阅读，也可以继续告诉我哪里要变。"
           );
-          setSeed("");
-          setDirectionsOpen(false);
           setMobileView("artifact");
           setLastFailedAttempt(null);
           terminal = true;
+          await loadVersions(streamEvent.result);
           continue;
         }
         if (streamEvent.event === "failed") {
@@ -994,8 +997,14 @@ export default function CreatorApp({
         }
       );
       if (!("task_id" in payload)) {
+        setSeed("");
+        setDirectionsOpen(false);
         appendAssistant(payload.message);
       } else {
+        // Do not clear after loadVersions: the new artifact is already visible at that point and
+        // the user may have begun the next natural-language revision.
+        setSeed("");
+        setDirectionsOpen(false);
         setCurrent(payload);
         setViewed(payload);
         await loadVersions(payload);
@@ -1004,8 +1013,6 @@ export default function CreatorApp({
         );
         setMobileView("artifact");
       }
-      setSeed("");
-      setDirectionsOpen(false);
       setLastFailedAttempt(null);
     } catch {
       setGenerationFailed(true);

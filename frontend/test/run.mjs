@@ -92,6 +92,7 @@ let revised = false;
 let currentRevision = v1;
 let revisionFailureCount = 0;
 let copyShouldFail = false;
+let nextVersionLoadGate = null;
 const requests = [];
 const copiedTexts = [];
 const exportedBlobs = [];
@@ -299,6 +300,11 @@ globalThis.fetch = async (input, init = {}) => {
       payload = currentRevision;
     }
   } else if (path === "/api/v1/content/tasks/t1/versions") {
+    if (nextVersionLoadGate) {
+      const gate = nextVersionLoadGate;
+      nextVersionLoadGate = null;
+      await gate.promise;
+    }
     payload = revised ? [currentRevision, v1] : [v1];
   } else if (path === "/api/v1/tasks/t1/versions/1") payload = v1;
   return {
@@ -314,6 +320,14 @@ globalThis.__DIYU_INTERACTION__ = {
   exportedBlobs,
   setCopyFailure: value => {
     copyShouldFail = value;
+  },
+  delayNextVersionLoad: () => {
+    let release;
+    const promise = new Promise(resolve => {
+      release = resolve;
+    });
+    nextVersionLoadGate = { promise };
+    return () => release();
   },
   window: dom.window
 };
