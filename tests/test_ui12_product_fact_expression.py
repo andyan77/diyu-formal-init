@@ -364,6 +364,11 @@ def test_selected_fact_units_are_renumbered_into_the_trusted_contract_sidecar() 
         context.text_source == "frozen_product_fact"
         for context in contexts
     ) == len(fact_units)
+    assert {
+        context.unit_contract
+        for context in contexts
+        if context.unit_id == "unit:body"
+    } == {"audience_guidance"}
 
 
 def test_claim_refs_never_license_attributes_performance_or_design_motive() -> None:

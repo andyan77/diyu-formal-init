@@ -1111,6 +1111,12 @@ def unit_contracts_v2(
             body_contract = "hypothetical_example"
         elif frame.narrative_mode == "dramatization":
             body_contract = "disclosed_dramatization"
+        elif any(
+            ref in frame.allowed_product_fact_ids
+            for unit in fact_units
+            for ref in unit.fact_refs
+        ):
+            body_contract = "audience_guidance"
         else:
             body_contract = "abstract_observation"
         contracts["unit:body"] = body_contract
