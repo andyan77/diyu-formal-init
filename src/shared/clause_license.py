@@ -88,6 +88,9 @@ _REASON_CODES = frozenset(
         "insufficient_evidence",
     }
 )
+_QUOTE_BOUNDARIES = frozenset(
+    "，,、：:；;。！？.!?\n\""
+)
 
 
 @dataclass(frozen=True)
@@ -399,7 +402,9 @@ def reconcile_clause_license_reviews_v1(
             continue
         if review.verdict == "supported":
             continue
-        if len(_exact_match_starts(context.exact_text, review.unsupported_quote)) != 1:
+        if review.unsupported_quote not in unsupported_quote_candidates_v1(
+            context.exact_text
+        ):
             issues.append(
                 NarrativeIssue(
                     context.unit_id,
@@ -416,6 +421,31 @@ def reconcile_clause_license_reviews_v1(
             )
         )
     return ClauseLicenseResultV1(tuple(dict.fromkeys(issues)))
+
+
+def unsupported_quote_candidates_v1(exact_text: str) -> tuple[str, ...]:
+    """Return small, quote-safe exact substrings with unique clause identity."""
+    candidates: list[str] = []
+    start = 0
+    for index, character in enumerate(exact_text):
+        if character not in _QUOTE_BOUNDARIES:
+            continue
+        candidate = exact_text[start:index].strip()
+        if (
+            len(candidate) >= 2
+            and '"' not in candidate
+            and len(_exact_match_starts(exact_text, candidate)) == 1
+        ):
+            candidates.append(candidate)
+        start = index + 1
+    tail = exact_text[start:].strip()
+    if (
+        len(tail) >= 2
+        and '"' not in tail
+        and len(_exact_match_starts(exact_text, tail)) == 1
+    ):
+        candidates.append(tail)
+    return tuple(dict.fromkeys(candidates))
 
 
 def clause_license_document(

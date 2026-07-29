@@ -26,7 +26,7 @@
       },
       "license_verdict": "unsupported",
       "reason_code": "specific_social_relation_to_actuality",
-      "unsupported_quote": "这段关系"
+      "unsupported_quote": "两个人都在努力维持这段关系"
     },
     {
       "sample_id": "current-user-motive",
@@ -53,7 +53,7 @@
       },
       "license_verdict": "unsupported",
       "reason_code": "specific_social_relation_to_actuality",
-      "unsupported_quote": "一对伴侣"
+      "unsupported_quote": "一对伴侣都很疲惫"
     },
     {
       "sample_id": "specific-family",
@@ -67,7 +67,7 @@
       },
       "license_verdict": "unsupported",
       "reason_code": "specific_social_relation_to_actuality",
-      "unsupported_quote": "这个家"
+      "unsupported_quote": "这个家需要两个人共同维护"
     },
     {
       "sample_id": "generic-motive-cause",

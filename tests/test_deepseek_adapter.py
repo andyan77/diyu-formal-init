@@ -14,6 +14,7 @@ from src.shared.clause_license import (
     CLAUSE_LICENSE_TOOL_NAME,
     build_unit_clause_license_policies_v1,
     materialize_clause_licenses_v1,
+    unsupported_quote_candidates_v1,
 )
 from src.shared.closed_review import (
     CLOSED_REVIEW_TOOL_NAME,
@@ -978,13 +979,14 @@ def _kernel_license_reviews(
         if context_item.unit_id in omit:
             continue
         is_event = context_item.unit_id == "unit:body-opening" and body_type == "situated_event"
+        quote_candidates = unsupported_quote_candidates_v1(context_item.exact_text)
         reviews.append(
             {
                 "clause_id": license_.clause_id,
                 "license_id": license_.license_id,
                 "verdict": ("unsupported" if is_event else "supported"),
                 "reason_code": ("actual_event_or_result" if is_event else "supported_by_license"),
-                "unsupported_quote": (context_item.exact_text if is_event else ""),
+                "unsupported_quote": (quote_candidates[0] if is_event else ""),
             }
         )
     return {
@@ -1467,7 +1469,8 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert '"exact_text"' in reviewer_prompt
     assert "不决定事实许可、最终通过／失败" in reviewer_prompt
     assert "不要返回 offset、occurrence、全文风险枚举" in reviewer_prompt
-    assert "ASCII 双引号，必须按 JSON 字符串规则" in reviewer_prompt
+    assert "unsupported_quote_candidates 原样选择" in reviewer_prompt
+    assert "不得自行截取、拼接、改写" in reviewer_prompt
     assert '"occurrence"' not in reviewer_prompt
     assert '"start"' not in reviewer_prompt
     assert '"end"' not in reviewer_prompt

@@ -17,6 +17,7 @@ from src.shared.clause_license import (
     materialize_clause_licenses_v1,
     parse_clause_license_reviews_v1,
     reconcile_clause_license_reviews_v1,
+    unsupported_quote_candidates_v1,
 )
 from src.shared.narrative import FRAME_VERSION, FrozenUserFact, NarrativeFrame
 from src.shared.review_evidence import ClauseContextV2, UnitContractV2
@@ -203,7 +204,7 @@ def test_clause_and_license_coverage_and_quote_binding_fail_closed() -> None:
         contexts=contexts,
         verdict="unsupported",
         reason_code="specific_social_relation_to_actuality",
-        quote="一对伴侣",
+        quote="一对伴侣都很疲惫",
         policies=policies,
     )
     assert reconcile_clause_license_reviews_v1(
@@ -274,6 +275,16 @@ def test_uncertain_is_nonrepairable_insufficient_evidence() -> None:
             fact_text_by_id={_FACT_ID: _FACT_TEXT},
         ).issues
     } == {"insufficient_evidence"}
+
+
+def test_server_supplies_only_unique_quote_safe_candidates() -> None:
+    text = '把"谁洗碗"换成"今天辛苦了，我来洗"，关系会柔软很多。'
+    candidates = unsupported_quote_candidates_v1(text)
+
+    assert candidates
+    assert "关系会柔软很多" in candidates
+    assert all('"' not in candidate for candidate in candidates)
+    assert all(text.count(candidate) == 1 for candidate in candidates)
 
 
 def test_license_policy_mutations_change_rulings() -> None:
