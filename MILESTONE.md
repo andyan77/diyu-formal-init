@@ -1,7 +1,7 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
+- 状态：`BLOCKED`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
   保留；主控随后在同一 UI-12 内裁决改由服务端确定性绑定 exact quote，并采用“一战到底”
   治理恢复施工。quote-only 责任边界、完整 G3 和 G4 已继续验证；最终 G4 证明当前
   Reviewer 在开放式 evidence 枚举下漏提关系角色和动机等裁决必需 evidence。主控现已把
@@ -271,6 +271,20 @@
 - 当前唯一下一动作：先冻结与 Prompt 分离的 Reviewer 资格集，完成 Writer／Reviewer
   独立模型配置和留痕，再对 `deepseek-v4-pro` 执行无仓储、零重试的 Reviewer-only
   资格门。资格通过前不调用 Writer、不 push、CI、备份或部署。
+- Reviewer-only 资格集随后在实现 `2a41fde69db6f615cd9728d5e4439434b5b5b815`
+  上通过：strict function transport、问题全集、合法近邻、硬正例、真实歧义与跨 bundle
+  一致性均成立；旧 `e213cc6…` G4/G7 假绿也在不调用 Writer 的情况下被 pro 正确拒绝。
+- 同一实现的新鲜无持久化 G4 随后命中本次明确停止线。Reviewer 对包含“两个人”的
+  writer clause 将 `relationship_claim` 回答为 `absent` 且非 uncertain，形成清楚的
+  语义假阴性；唯一 affected-unit 修复又生成“一对伴侣”，最终 Reviewer 正确提取后由
+  服务端失败关闭。未进入 DeliveryCompiler，未生成版本或业务写入。
+- 该结果不是配置、transport、Schema、parser、quote binder、fixture、oracle 或服务端
+  覆盖缺陷。继续只能依赖失败句 Prompt／中文关系词表、第二 Reviewer、投票、fallback、
+  更换单一 Reviewer 能力方案或降低事实边界；前四项被禁止，后两项需要新的主控裁决。
+  UI-12 因此重新置为 `BLOCKED`，不创建 UI-13。G7、最终同 SHA G1—G7/H1/D1、完整工程
+  门、push、CI、备份和部署均未执行；生产继续运行 `845f632…`。
+- 当前唯一下一动作：主控裁决是否授权新的单一 Reviewer 语义能力方案；不得在当前
+  `deepseek-v4-pro` 候选上随机重跑或回退 flash。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
