@@ -1474,6 +1474,9 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert '"occurrence"' not in reviewer_prompt
     assert '"start"' not in reviewer_prompt
     assert '"end"' not in reviewer_prompt
+    assert "ProductFactPacket" in reviewer_prompt
+    assert "只能由服务端 ImmutableFactBlock" in reviewer_prompt
+    assert "性能、功效、用途／穿着结果、设计动机、价格、库存、比较结论或实际体验" in reviewer_prompt
 
 
 def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:

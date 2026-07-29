@@ -933,6 +933,7 @@ class DeepSeekGenerator(ContentGenerator):
                             if name
                         )
                     ),
+                    product_fact_packet=context.product_fact_packet,
                 ),
                 license_count=len(batch),
                 licenses=batch,
@@ -963,6 +964,7 @@ class DeepSeekGenerator(ContentGenerator):
             licenses=licenses,
             reviews=reviews,
             fact_text_by_id=context.fact_text_by_id,
+            product_fact_packet=context.product_fact_packet,
         )
         return (
             result.issues,
@@ -1257,6 +1259,7 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
         contexts: tuple[ClauseContextV2, ...],
         actuality_facts: tuple[tuple[str, str], ...],
         protected_subjects: tuple[str, ...],
+        product_fact_packet: ProductFactPacket,
     ) -> str:
         context_by_clause = {context.clause_id: context for context in contexts}
         clauses = [
@@ -1283,6 +1286,8 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 {json.dumps(actuality_facts, ensure_ascii=False)}
 受保护的当前品牌／组织／账号精确名：
 {json.dumps(protected_subjects, ensure_ascii=False)}
+服务端只读 ProductFactPacket（只用于识别商品越界，不能许可 Writer 复述或推导）：
+{json.dumps(product_fact_packet_document(product_fact_packet), ensure_ascii=False)}
 
 待核对 clause 与许可：
 {json.dumps(clauses, ensure_ascii=False)}
@@ -1297,6 +1302,11 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
    specific_social_relation_to_actuality 时必须 unsupported。
 4. 检查当前真人／机构、现实对白、已发生事件或结果、机构／商品事实；命中相应
    prohibited_bindings 且没有精确 allowed_fact_refs 时必须 unsupported。
+   ProductFactPacket 中的硬属性、数字和 canonical_text 只能由服务端 ImmutableFactBlock
+   原样插入；writer-owned clause 即使准确复述也必须 unsupported_product_fact。根据 Packet
+   推导性能、功效、用途／穿着结果、设计动机、价格、库存、比较结论或实际体验，同样必须
+   unsupported_product_fact。资料来源或制作资源被当成商品事实时必须
+   source_or_resource_as_fact。Packet 只帮助识别边界，不使 claim_refs 或相近表述获得许可。
 5. supported 只表示整条 clause 的全部可见含义均满足同一许可；只要一个含义越界就不能用
    其他泛指或建议含义抵消。
 

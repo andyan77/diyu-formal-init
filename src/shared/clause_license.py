@@ -4,6 +4,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeAlias, cast
 
+from src.shared.factual_basis import (
+    ProductFactPacket,
+    product_fact_literal_spans,
+)
 from src.shared.narrative import NarrativeFrame, NarrativeIssue
 from src.shared.review_evidence import (
     ClauseContextV2,
@@ -327,6 +331,7 @@ def reconcile_clause_license_reviews_v1(
     licenses: Sequence[ClauseLicenseV1],
     reviews: ClauseLicenseReviewsV1,
     fact_text_by_id: Mapping[str, str],
+    product_fact_packet: ProductFactPacket | None = None,
 ) -> ClauseLicenseResultV1:
     source_issues = validate_server_owned_contexts_v2(
         contexts=contexts,
@@ -391,6 +396,32 @@ def reconcile_clause_license_reviews_v1(
                 )
             )
             continue
+        if product_fact_packet is not None:
+            if any(
+                fact_ref not in product_fact_packet.fact_ids
+                for fact_ref in context.claim_refs
+            ):
+                issues.append(
+                    NarrativeIssue(
+                        context.unit_id,
+                        "unsupported_product_claim",
+                        context.exact_text,
+                    )
+                )
+                continue
+            literal_spans = product_fact_literal_spans(
+                product_fact_packet,
+                context.exact_text,
+            )
+            if literal_spans:
+                issues.append(
+                    NarrativeIssue(
+                        context.unit_id,
+                        "product_fact_must_use_immutable_block",
+                        literal_spans[0],
+                    )
+                )
+                continue
         if review.verdict == "uncertain":
             issues.append(
                 NarrativeIssue(

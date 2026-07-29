@@ -19,8 +19,10 @@ from src.shared.clause_license import (
     reconcile_clause_license_reviews_v1,
     unsupported_quote_candidates_v1,
 )
+from src.shared.factual_basis import build_product_fact_packet
 from src.shared.narrative import FRAME_VERSION, FrozenUserFact, NarrativeFrame
 from src.shared.review_evidence import ClauseContextV2, UnitContractV2
+from src.shared.types import ProductFact
 
 _FIXTURE = Path("tests/fixtures/ui12_clause_license_pairs_v1.json")
 _FACT_ID = "source:user_actuality:pair"
@@ -275,6 +277,89 @@ def test_uncertain_is_nonrepairable_insufficient_evidence() -> None:
             fact_text_by_id={_FACT_ID: _FACT_TEXT},
         ).issues
     } == {"insufficient_evidence"}
+
+
+def test_product_literals_fail_even_when_reviewer_reports_supported() -> None:
+    packet = build_product_fact_packet(
+        (
+            ProductFact(
+                sku="ZX-C218",
+                display_name="双面短外套",
+                facts={
+                    "entity_kind": "apparel_product",
+                    "sample_weight_m_grams": 960,
+                },
+            ),
+        )
+    )
+    contexts = _contexts("M码样衣重量约960克，属于中等偏轻的短外套。")
+    policies = _policy()
+    licenses = materialize_clause_licenses_v1(
+        contexts=contexts,
+        policies=policies,
+    )
+    _, reviews = _review(
+        contexts=contexts,
+        verdict="supported",
+        reason_code="supported_by_license",
+        quote="",
+        policies=policies,
+    )
+
+    assert {
+        issue.reason
+        for issue in reconcile_clause_license_reviews_v1(
+            contexts=contexts,
+            policies=policies,
+            licenses=licenses,
+            reviews=reviews,
+            fact_text_by_id={_FACT_ID: _FACT_TEXT},
+            product_fact_packet=packet,
+        ).issues
+    } == {"product_fact_must_use_immutable_block"}
+
+
+def test_product_claim_refs_never_bypass_packet_scope() -> None:
+    packet = build_product_fact_packet(
+        (
+            ProductFact(
+                sku="ZX-C218",
+                display_name="双面短外套",
+                facts={"entity_kind": "apparel_product"},
+            ),
+        )
+    )
+    contexts = (
+        *_contexts("先看已知内容，再保留自己的选择。")[:1],
+        replace(
+            _contexts("先看已知内容，再保留自己的选择。")[1],
+            claim_refs=("fact:product:unrelated",),
+        ),
+    )
+    policies = _policy()
+    licenses = materialize_clause_licenses_v1(
+        contexts=contexts,
+        policies=policies,
+    )
+    _, reviews = _review(
+        contexts=contexts,
+        verdict="supported",
+        reason_code="supported_by_license",
+        quote="",
+        policies=policies,
+    )
+
+    assert {
+        issue.reason
+        for issue in reconcile_clause_license_reviews_v1(
+            contexts=contexts,
+            policies=policies,
+            licenses=licenses,
+            reviews=reviews,
+            fact_text_by_id={_FACT_ID: _FACT_TEXT},
+            product_fact_packet=packet,
+        ).issues
+    } == {"unsupported_product_claim"}
 
 
 def test_server_supplies_only_unique_quote_safe_candidates() -> None:
