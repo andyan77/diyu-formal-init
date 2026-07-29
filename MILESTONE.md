@@ -1,7 +1,7 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`BLOCKED`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
+- 状态：`ACTIVE`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
   保留；主控随后在同一 UI-12 内裁决改由服务端确定性绑定 exact quote，并采用“一战到底”
   治理恢复施工。quote-only 责任边界、完整 G3 和 G4 已继续验证；最终 G4 证明当前
   Reviewer 在开放式 evidence 枚举下漏提关系角色和动机等裁决必需 evidence。主控现已把
@@ -222,6 +222,18 @@
 - 当前唯一下一动作：主控裁决商品成品中“由谁把服务端冻结商品事实编译成可审创作文字”
   这一单一职责边界；在不降低事实边界的前提下，选择服务端确定性商品表达编译，或授权
   Writer 只读消费精确商品事实的最小新合同。UI-12 在裁决前保持 `BLOCKED`。
+- 主控现已解除上述阻断并恢复 UI-12 `ACTIVE`：采用单一职责模型
+  `ProductFactPacket → ImmutableFactBlock → Writer 引用＋创意文字 → Closed Reviewer／
+  服务端裁决 → DeliveryCompiler`。服务端拥有商品事实真值并原样渲染硬事实；Writer
+  只读理解精确商品、可选择既有事实块 ID 与顺序，但不得创建、改写或复述硬事实；
+  `claim_refs` 只作追溯线索，不自动授权。Reviewer 审查创意文字新增的商品属性、性能、
+  结果、动机、价格、库存、比较与实际体验，服务端继续唯一裁决。历史 `BLOCKED` 与 G2
+  原始证据完整保留；恢复施工不表示 G2 或 UI-12 已通过，不创建 UI-13。
+- 当前 Git 基线为状态提交 `cd444856e1ab8642b3f4f5b4b4d2ed77884d1e96`，
+  代码 WIP `d4d2818d23b453d6798ab7a60709d2df28610113`，
+  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，本地领先 64 个线性
+  提交且工作树干净。当前唯一下一动作是实现上述最小事实包／事实块纵向链，先用历史
+  G2 raw 反证，再运行一次新实现真实 G2；完整业务轮成立前不 push、CI、备份或部署。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
