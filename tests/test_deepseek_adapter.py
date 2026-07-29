@@ -497,6 +497,46 @@ def test_kernel_writer_prompt_exposes_current_trusted_contracts() -> None:
     assert "不能复制、概括或扩写人物、动作、对白、动机、原因、结果" in prompt
 
 
+def test_kernel_reviewer_prompt_binds_recombined_frozen_event_details() -> None:
+    frame = new_frame(
+        "actuality_reflection",
+        ("今天店里忙了一天，回家还因为谁洗碗拌了两句。",),
+        (),
+    )
+    request = _kernel_request(frame)
+    context = BoundaryContext.from_request(request, frame)
+    kernel = _parsed_kernel(
+        request,
+        _kernel_writer(observation_only=True),
+    )
+    contexts = build_clause_contexts_v2(
+        kernel=kernel,
+        frame=frame,
+        fact_registry=context.fact_registry,
+        allowed_constraint_ids=context.constraint_ids,
+        speaker_kind=request.brand.speaker_kind,
+    )
+    writer_contexts = tuple(
+        item for item in contexts if item.text_source == "writer_unit"
+    )
+    questions = build_closed_review_questions(writer_contexts)
+
+    prompt = _generator()._kernel_reviewer_prompt(
+        questions=questions,
+        contexts=writer_contexts,
+        actuality_facts=tuple(
+            (item.fact_id, item.exact_text)
+            for item in context.fact_registry
+            if item.fact_kind == "user_actuality"
+        ),
+        protected_subjects=(),
+    )
+
+    assert "把同一条冻结事实中的多个具体细节重新组合成" in prompt
+    assert "即使没有第一人称，也属于 current_user" in prompt
+    assert "重新组合其具体细节" in prompt
+
+
 def test_kernel_writer_prompt_exposes_read_only_product_packet_but_not_fact_authorship() -> None:
     product = ProductFact(
         sku="ZX-C218",
@@ -595,6 +635,63 @@ def test_kernel_repair_prompt_never_exposes_service_disclosure_as_writer_text() 
     )
     assert '"current_text": "假设有这样一幕：' not in prompt
     assert "修复文字不得重复\n这些包裹" in prompt
+
+
+def test_actuality_revision_repair_replays_reviewed_unit_not_failed_draft() -> None:
+    frame = new_frame(
+        "actuality_reflection",
+        ("今天店里忙了一天，回家还因为谁洗碗拌了两句。",),
+        (),
+    )
+    first_request = _kernel_request(frame)
+    prior = _parsed_kernel(
+        first_request,
+        _kernel_writer(
+            body="疲惫会放大小事，理解不必变成一场输赢。",
+            observation_only=True,
+        ),
+    )
+    revision = _kernel_request(
+        frame,
+        revision_instruction="别讲道理，荒诞一点。",
+        prior_kernel=prior,
+    )
+    failed = replace(
+        prior,
+        units=tuple(
+            replace(
+                unit,
+                text="疲惫的碰撞在厨房里发酵，洗碗池成了无声的战场。",
+            )
+            if unit.unit_id == "unit:body"
+            else unit
+            for unit in prior.units
+        ),
+    )
+
+    prompt = _generator()._kernel_repair_prompt(
+        revision,
+        failed,
+        frozenset({"unit:body"}),
+        (
+            NarrativeIssue(
+                "unit:body",
+                "statement_mode_conflict",
+                "疲惫的碰撞在厨房里发酵，洗碗池成了无声的战场。",
+            ),
+        ),
+    )
+
+    assert "prior_reviewed_text" in prompt
+    assert "疲惫会放大小事，理解不必变成一场输赢。" in prompt
+    assert "疲惫的碰撞在厨房里发酵" not in prompt
+    assert "洗碗池" not in prompt
+    assert "今天店里忙了一天" not in prompt
+    assert "本次表达要求：别讲道理，荒诞一点。" in prompt
+    assert (
+        "不得写动作、对白、心理、动机、因果、结果、时间、地点、物件"
+        in prompt
+    )
 
 
 def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:

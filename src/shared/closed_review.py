@@ -684,6 +684,18 @@ def _claim_inventory_issues(
         if compatibility_issue is not None:
             issues.append(compatibility_issue)
             continue
+        if (
+            context.unit_contract == "actuality_reflection"
+            and binding == "current_person"
+        ):
+            issues.append(
+                NarrativeIssue(
+                    context.unit_id,
+                    "unsupported_actuality_binding",
+                    mode_claim.exact_quote,
+                )
+            )
+            continue
         event_claim = clause_claims.get("actual_event")
         event_operands = (
             set(event_claim.operands)

@@ -1234,7 +1234,9 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 "这条主张是否绑定当前说话者/用户、受保护主体、泛指角色、虚构角色或其他具体人物/机构/商品？"
                 "判断 clause 自身主张实际指向，不只看语法主语：只有 clause 以第一人称、当前指代"
                 "或省略但可唯一回指冻结事件的主体，断言当前用户的关系、经历、心理或因果时才是"
-                " current_user；仅仅与冻结事实题材相同、用于其后的反思，不能据此绑定 current_user。"
+                " current_user；如果标题、导读或正文把同一条冻结事实中的多个具体细节重新组合成"
+                "一件事件，即使没有第一人称，也属于 current_user。仅仅与冻结事实题材相同、没有"
+                "重新组合其具体细节、用于其后的泛指反思，不能据此绑定 current_user。"
                 "面向不特定受众的第二人称阅读邀请、选择建议或内容观看回报属于 generic；只有文字"
                 "断言当前用户已经具有某段具体关系、经历、心理或事件时才是 current_user。"
                 "明确泛称、一般条件或倾向且没有回指当前个案时属于 generic；两种读法都成立时必须"
@@ -1408,6 +1410,19 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 platform=request.target,
                 media_format=request.media_format,
             )
+        if (
+            request.revision_instruction
+            and request.prior_creative_kernel is not None
+            and request.narrative_frame.narrative_mode
+            == "actuality_reflection"
+            and not product_contract
+        ):
+            return self._actuality_revision_repair_prompt(
+                request=request,
+                affected=affected,
+                issues=issues,
+                trusted_contracts=trusted_contracts,
+            )
         units: list[dict[str, object]] = []
         for unit in kernel.units:
             if unit.unit_id not in affected:
@@ -1509,6 +1524,76 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 不得原样返回、只换标点或把问题句移动到另一个 unit。只返回：
 {json.dumps(result_template, ensure_ascii=False)}
 {claim_rule}"""
+
+    @staticmethod
+    def _actuality_revision_repair_prompt(
+        *,
+        request: GenerationInput,
+        affected: frozenset[str],
+        issues: tuple[NarrativeIssue, ...],
+        trusted_contracts: Mapping[str, UnitContractV2],
+    ) -> str:
+        prior = request.prior_creative_kernel
+        if (
+            prior is None
+            or request.revision_instruction is None
+            or request.narrative_frame is None
+            or request.narrative_frame.narrative_mode
+            != "actuality_reflection"
+        ):
+            raise GenerationFailed("真人事实修改修复缺少已审内核")
+        prior_by_id = {
+            unit.unit_id: unit
+            for unit in prior.writable_units
+        }
+        if any(unit_id not in prior_by_id for unit_id in affected):
+            raise GenerationFailed("真人事实修改修复无法回放已审单元")
+        units = [
+            {
+                "unit_id": unit_id,
+                "purpose": prior_by_id[unit_id].purpose,
+                "unit_contract": trusted_contracts[unit_id],
+                "prior_reviewed_text": prior_by_id[unit_id].text,
+                "issue_reasons": sorted(
+                    {
+                        issue.reason
+                        for issue in issues
+                        if issue.target_id == unit_id
+                    }
+                ),
+            }
+            for unit_id in sorted(affected)
+        ]
+        template = {
+            "units": [
+                {
+                    "unit_id": unit["unit_id"],
+                    "text": "完整替换文字",
+                }
+                for unit in units
+            ]
+        }
+        return f"""这是一次真人事实内容的唯一受影响单元修复。服务端已经逐字保留用户现实
+原文；你看不到本次违规草稿，也不得复述、概括或扩写现实原文。只从上一个已审通过的创意
+单元出发，按用户本次表达要求改写。
+
+本次表达要求：{request.revision_instruction}
+受影响单元及上一个已审版本：
+{json.dumps(units, ensure_ascii=False)}
+
+必须恰好一次返回全部列出的 unit_id，且只能返回 unit_id、text。不得返回事实单元、
+claim_refs、scene、actor、resource、action、sound、production_note、来源、约束或合同。
+每个 text 必须与 prior_reviewed_text 实质不同，同时遵守服务端给定的 unit_contract：
+- actuality_reflection：只写一至两句抽象关系判断、价值判断或不落到现实场景的比喻；不得
+  安排人物或关系角色，不得写动作、对白、心理、动机、因果、结果、时间、地点、物件或生活
+  场景，也不得复述真人事实。
+- audience_guidance：只写中性的观看主线、阅读邀请或带清楚语态的泛指建议；不得绑定当前
+  用户、机构或现实事件。
+- abstract_observation：只写抽象状态、关系理解或价值判断，不写人物微事件或建议。
+- recommendation：每个 clause 都用清楚建议、条件或意愿语态，不写已经发生的事件。
+
+不要使用违规草稿的替换词继续同一场景，也不要把问题内容移动到另一个 unit。只返回：
+{json.dumps(template, ensure_ascii=False)}"""
 
     @staticmethod
     def _product_fact_repair_prompt(

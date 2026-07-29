@@ -353,6 +353,25 @@ def test_actuality_cannot_escape_by_claiming_generic_mode() -> None:
     assert _reasons(contexts, answers) == ("unsupported_actuality_binding",)
 
 
+def test_actuality_current_person_binding_is_rejected_without_extra_risk_labels() -> None:
+    text = "忙了一天，回家却因为洗碗拌嘴？"
+    contexts = _context(text)
+    answers = _parse(
+        contexts,
+        {
+            "subject_binding": (
+                "present",
+                text,
+                ("current_user",),
+            ),
+        },
+    )
+
+    assert _reasons(contexts, answers) == (
+        "unsupported_actuality_binding",
+    )
+
+
 def test_generic_motive_observation_is_allowed() -> None:
     text = "很多争执背后，可能有被看见的需要。"
     contexts = _context(text)
