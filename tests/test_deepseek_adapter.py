@@ -646,7 +646,7 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert "ZX-C218" not in prompt
     assert "双面短外套" not in prompt
     assert "棉混纺" not in prompt
-    assert '"apparel_product"' in prompt
+    assert '"apparel_product"' not in prompt
     assert violating_text not in prompt
     assert '"current_text"' not in prompt
     assert '"claim_refs": []' in prompt
@@ -658,6 +658,8 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert "不得因为 purpose 或写作习惯换成建议、假设、演绎" in prompt
     assert "只谈读者如何看、如何选、如何保留判断" in prompt
     assert "不得输出“抽象原则”等内部合同语言" in prompt
+    assert "不得成为创意文字的主语、宾语或指代对象" in prompt
+    assert "所有文字必须在不知道底层对象名称、类别和任何属性时仍然成立" in prompt
 
 
 def _kernel_observations(

@@ -1371,12 +1371,6 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 kernel=kernel,
                 affected=affected,
                 trusted_contracts=trusted_contracts,
-                entity_kinds=tuple(
-                    dict.fromkeys(
-                        item.entity_kind
-                        for item in product_packet.facts
-                    )
-                ),
             )
         units = [
             {
@@ -1466,7 +1460,6 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         kernel: CreativeKernelV1,
         affected: frozenset[str],
         trusted_contracts: Mapping[str, UnitContractV2],
-        entity_kinds: tuple[str, ...],
     ) -> str:
         expression_rules: dict[UnitContractV2, str] = {
             "abstract_observation": (
@@ -1522,18 +1515,17 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 受影响创意 unit：
 {json.dumps(units, ensure_ascii=False)}
 
-可信领域类型（只用于选择受众语境，不得输出、翻译或扩写为具体事实）：
-{json.dumps(entity_kinds, ensure_ascii=False)}
-
 这是面向最终读者的创意表达层，不是资料说明、方法论讲解或内部审查说明。每个 clause 的
 判断对象只能是泛指读者如何看、如何选、如何保留自己的判断，或本篇能带来的阅读价值；
 不得对底层对象、其所属品类、设计、结构、属性、用途、效果、形成原因或现实体验作任何
-主张。不得输出“抽象原则”等内部合同语言，不写举例对白、引号口号或虚构场景。每个 unit
-必须逐条服从其唯一
+主张。底层对象、其类别以及“它／这件对象”不得成为创意文字的主语、宾语或指代对象。
+title 只写读者将获得的选择或判断价值；natural_guide 只写阅读这篇内容能帮助读者怎样
+看清选择；body 只写读者怎样使用前面已经原样展示的信息作自己的判断；release_caption
+只作面向读者的自然收束。所有文字必须在不知道底层对象名称、类别和任何属性时仍然成立。
+不得输出“抽象原则”等内部合同语言，不写举例对白、引号口号或虚构场景。每个 unit 必须
+逐条服从其唯一
 unit_contract 和 required_expression，不得因为 purpose 或写作习惯换成建议、假设、演绎
-或现实语态。title 写自然标题；natural_guide 写清观看回报；body 写具有主线且符合本 unit
-合同的表达；release_caption 写可直接使用的收束。不得虚构人物、事件、对白、机构立场或
-第一人称经历。
+或现实语态。不得虚构人物、事件、对白、机构立场或第一人称经历。
 
 必须恰好覆盖列出的 unit_id，每个 unit 只能有 unit_id、text、claim_refs，claim_refs 必须
 是空数组。不得增加、遗漏、重复或改名。这是唯一修复，只返回：
