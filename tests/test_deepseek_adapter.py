@@ -688,10 +688,8 @@ def test_actuality_revision_repair_replays_reviewed_unit_not_failed_draft() -> N
     assert "洗碗池" not in prompt
     assert "今天店里忙了一天" not in prompt
     assert "本次表达要求：别讲道理，荒诞一点。" in prompt
-    assert (
-        "不得写动作、对白、心理、动机、因果、结果、时间、地点、物件"
-        in prompt
-    )
+    assert "可以写明确泛指\n  的原因、需要、建议或条件" in prompt
+    assert "不得把它们绑定为当前用户、当前机构或冻结事实已经发生" in prompt
 
 
 def test_first_actuality_repair_does_not_replay_fact_or_failed_draft() -> None:
@@ -730,6 +728,8 @@ def test_first_actuality_repair_does_not_replay_fact_or_failed_draft() -> None:
     assert '"prior_reviewed_text":' not in prompt
     assert '"unit_id": "unit:title"' in prompt
     assert "不得绑定当前\n  用户、机构、现实事件或任何具体关系身份" in prompt
+    assert "body 用三至五个短 clause" in prompt
+    assert "不能只写\n一句安全口号" in prompt
 
 
 def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:

@@ -1625,12 +1625,17 @@ claim_refs、scene、actor、resource、action、sound、production_note、来�
 有 prior_reviewed_text 时，新 text 必须与它实质不同。所有 text 都必须遵守服务端给定的
 unit_contract：
 - actuality_reflection：只写一至两句抽象关系判断、价值判断或不落到现实场景的比喻；不得
-  安排人物或关系角色，不得写动作、对白、心理、动机、因果、结果、时间、地点、物件或生活
-  场景，也不得复述真人事实。
+  复述真人事实、安排已发生事件、现实对白、具体时间地点或任何具体关系身份。可以写明确泛指
+  的原因、需要、建议或条件，但不得把它们绑定为当前用户、当前机构或冻结事实已经发生的
+  心理、因果与结果。
 - audience_guidance：只写中性的观看主线、阅读邀请或带清楚语态的泛指建议；不得绑定当前
   用户、机构、现实事件或任何具体关系身份。
 - abstract_observation：只写抽象状态、关系理解或价值判断，不写人物微事件或建议。
 - recommendation：每个 clause 都用清楚建议、条件或意愿语态，不写已经发生的事件。
+
+同时保持完整平台成品职责：title 是自然、有张力但不改写事实的标题；natural_guide 用一句
+话说明观看回报；body 用三至五个短 clause 形成一条有推进的泛指观察与可选建议，不能只写
+一句安全口号；release_caption 用一至两句自然收束或互动邀请。各 unit 不得重复同一句意思。
 
 不要使用违规草稿的替换词继续同一场景，也不要把问题内容移动到另一个 unit。只返回：
 {json.dumps(template, ensure_ascii=False)}"""
