@@ -170,7 +170,7 @@ def test_frame_rejects_actuality_without_exact_source_and_nonactual_with_source(
         frame_from_document(nonactual)
 
 
-def test_only_an_explicit_registered_story_mechanism_forces_dramatization() -> None:
+def test_explicit_story_form_control_forces_dramatization() -> None:
     selection = DirectionSelection(
         axis="mechanism",
         stable_id="CAT-GENRE-DRAMA-04",
@@ -196,6 +196,20 @@ def test_only_an_explicit_registered_story_mechanism_forces_dramatization() -> N
         preference_version=None,
     )
     assert ContentService._explicit_narrative_mode(control) == "dramatization"
+    assert (
+        ContentService._explicit_narrative_mode(
+            replace(control, direction=None),
+            "把婆媳关系写成一段明确的情境演绎，不绑定真实人物。",
+        )
+        == "dramatization"
+    )
+    assert (
+        ContentService._explicit_narrative_mode(
+            replace(control, direction=None),
+            "帮我写条婆媳主题的小红书，不要写成短剧。",
+        )
+        is None
+    )
     defaulted = replace(
         control,
         direction=replace(

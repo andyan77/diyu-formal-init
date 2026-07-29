@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import replace
 from typing import cast
@@ -78,6 +79,20 @@ from src.shared.types import (
 _NO_FROZEN_CONTEXT = "这条历史内容没有保留完整的创作条件，请按当前输入新建一条。"
 _MISSING_FROZEN_MATERIAL = "这条内容当时用到的参考素材已经不可用，请按当前输入新建一条。"
 _MISSING_FROZEN_PROFILE = "这条内容当时用到的账号表达画像已经读不到了，请按当前输入新建一条。"
+_EXPLICIT_DRAMATIZATION_CONTROL = re.compile(
+    r"(?:写|做|创作|生成|改编|整理)(?:成|为)?"
+    r"[^，,。！？!?\n]{0,48}?"
+    r"(?:情境演绎|情景演绎|情景剧|短剧|小剧场)"
+)
+_NEGATED_CONTROL_SUFFIXES = ("不要", "别", "不想", "不用", "无需", "避免")
+
+
+def _requests_explicit_dramatization(natural_text: str) -> bool:
+    for match in _EXPLICIT_DRAMATIZATION_CONTROL.finditer(natural_text):
+        prefix = natural_text[max(0, match.start() - 4) : match.start()]
+        if not prefix.endswith(_NEGATED_CONTROL_SUFFIXES):
+            return True
+    return False
 
 
 class ContentService:
@@ -404,6 +419,8 @@ class ContentService:
     ) -> NarrativeMode | None:
         if natural_text.lstrip().startswith(("如果", "假如", "假设")):
             return "hypothesis"
+        if _requests_explicit_dramatization(natural_text):
+            return "dramatization"
         if control.direction is None:
             return None
         if any(
