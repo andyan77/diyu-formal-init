@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from src.ports.content_generator import ContentGenerator
 from src.shared.creative_kernel import (
     MAX_PRODUCT_FACT_BLOCKS,
@@ -29,6 +31,7 @@ from src.shared.factual_basis import (
     immutable_product_fact_blocks,
     product_fact_packet_document,
     product_fact_records,
+    select_product_fact_block_ids,
 )
 from src.shared.narrative import legacy_frame, visible_digest
 from src.shared.types import (
@@ -180,6 +183,32 @@ class DeterministicContentGenerator(ContentGenerator):
             allowed_fact_ids=frame.allowed_product_fact_ids,
         )
         fact_blocks = immutable_product_fact_blocks(product_packet)
+        required_fact_block_ids: tuple[str, ...] | None = None
+        if request.prior_creative_kernel is not None:
+            required_fact_block_ids = (
+                request.prior_creative_kernel.selected_fact_block_ids
+                or tuple(
+                    block.fact_block_id
+                    for block in fact_blocks
+                    if any(
+                        unit.purpose == "frozen_fact"
+                        and unit.fact_refs == (block.fact_id,)
+                        for unit in request.prior_creative_kernel.units
+                    )
+                )
+            )
+        selected_fact_block_ids = (
+            required_fact_block_ids
+            or select_product_fact_block_ids(
+                product_packet,
+                limit=MAX_PRODUCT_FACT_BLOCKS,
+            )
+        )
+        if fact_blocks:
+            skeleton = replace(
+                skeleton,
+                selected_fact_block_ids=selected_fact_block_ids,
+            )
         compiler_texts = compiler_owned_unit_texts(request.primary_product)
         text_by_id = {
             "unit:title": _outline(request.primary_product),
@@ -196,26 +225,11 @@ class DeterministicContentGenerator(ContentGenerator):
                 {
                     "unit_id": unit.unit_id,
                     "text": text_by_id[unit.unit_id],
-                    **({"claim_refs": []} if fact_blocks else {}),
                 }
                 for unit in skeleton.writable_units
                 if unit.unit_id not in compiler_texts
             ]
         }
-        required_fact_block_ids: tuple[str, ...] | None = None
-        if request.prior_creative_kernel is not None:
-            required_fact_block_ids = request.prior_creative_kernel.selected_fact_block_ids or tuple(
-                block.fact_block_id
-                for block in fact_blocks
-                if any(
-                    unit.purpose == "frozen_fact" and unit.fact_refs == (block.fact_id,)
-                    for unit in request.prior_creative_kernel.units
-                )
-            )
-        if fact_blocks:
-            raw["fact_block_refs"] = list(
-                required_fact_block_ids or tuple(block.fact_block_id for block in fact_blocks[:MAX_PRODUCT_FACT_BLOCKS])
-            )
         kernel = parse_writer_kernel(
             raw,
             skeleton,

@@ -41,7 +41,12 @@ from src.shared.creative_plan import (
 )
 from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
 from src.shared.errors import GenerationFailed
-from src.shared.factual_basis import brand_fact_records, product_fact_records
+from src.shared.factual_basis import (
+    brand_fact_records,
+    build_product_fact_packet,
+    product_fact_records,
+    select_product_fact_block_ids,
+)
 from src.shared.narrative import (
     NarrativeFrame,
     NarrativeIssue,
@@ -603,7 +608,7 @@ def test_kernel_reviewer_prompt_binds_recombined_frozen_event_details() -> None:
     assert "重新组合其具体细节" in prompt
 
 
-def test_kernel_writer_prompt_exposes_read_only_product_packet_but_not_fact_authorship() -> None:
+def test_kernel_writer_prompt_hides_product_facts_and_fact_authorship() -> None:
     product = ProductFact(
         sku="ZX-C218",
         display_name="双面短外套",
@@ -629,18 +634,30 @@ def test_kernel_writer_prompt_exposes_read_only_product_packet_but_not_fact_auth
             prior_kernel=None,
         ),
     )
+    packet = build_product_fact_packet(
+        (product,),
+        allowed_fact_ids=frame.allowed_product_fact_ids,
+    )
+    skeleton = replace(
+        skeleton,
+        selected_fact_block_ids=select_product_fact_block_ids(
+            packet,
+            limit=3,
+        ),
+    )
 
     prompt = _generator()._kernel_writer_prompt(request, skeleton)
 
-    assert "双面短外套的材质是棉混纺。" in prompt
-    assert "双面短外套的M 码当前样衣重量是 620 克。" in prompt
-    assert "ProductFactPacket" in prompt
-    assert "ImmutableFactBlock" in prompt
-    assert "只能引用 fact_block_id；正文由服务端原样插入" in prompt
-    assert "claim_refs 只是\n审查线索" in prompt
-    assert "不能把硬属性、数字或 canonical_text" in prompt
-    assert "首次最多选择 3 个" in prompt
-    assert '"entity_kind": "apparel_product"' in prompt
+    assert "双面短外套" not in prompt
+    assert "棉混纺" not in prompt
+    assert "620" not in prompt
+    assert "ZX-C218" not in prompt
+    assert "selected_fact_block_count" in prompt
+    assert "不授权 Writer 选择或引用事实" in prompt
+    assert "事实块已经由服务端选择" in prompt
+    assert "根对象必须恰好只有 units" in prompt
+    assert '"claim_refs"' not in prompt
+    assert "禁止返回 fact_block_refs、claim_refs" in prompt
     assert any(unit.purpose == "frozen_fact" and unit.text == "双面短外套的材质是棉混纺。" for unit in skeleton.units)
 
 
@@ -1517,8 +1534,8 @@ def test_dual_track_writer_receives_only_deidentified_preassigned_units() -> Non
     assert '"track": "creative_expression"' in writer_prompt
     assert '"mode": "hypothesis"' in writer_prompt
     assert "Reviewer" not in writer_prompt
-    assert "ProductFactPacket" in writer_prompt
-    assert "商品硬事实正文由服务端" in writer_prompt
+    assert "服务端商品事实选择状态" in writer_prompt
+    assert "正文始终由服务端原样插入" in writer_prompt
     assert "unit:natural-guide" not in writer_prompt
     assert "unit:release-caption" not in writer_prompt
     assert "reviewer_model" not in artifact.completion_snapshot_patch

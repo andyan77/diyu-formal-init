@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from email.utils import parsedate_to_datetime
 from typing import Any, cast
 
@@ -72,9 +72,11 @@ from src.shared.factual_basis import (
     build_product_fact_packet,
     immutable_fact_blocks_document,
     immutable_product_fact_blocks,
+    product_fact_literal_spans,
     product_fact_packet_document,
     product_fact_records,
     registered_product_claims,
+    select_product_fact_block_ids,
 )
 from src.shared.narrative import (
     NarrativeBlock,
@@ -567,6 +569,26 @@ class DeepSeekGenerator(ContentGenerator):
             skeleton,
             request.prior_creative_kernel,
         )
+        required_fact_block_ids = (
+            self._prior_fact_block_ids(
+                request.prior_creative_kernel,
+                context.product_fact_blocks,
+            )
+            if request.prior_creative_kernel is not None
+            else None
+        )
+        selected_fact_block_ids = (
+            required_fact_block_ids
+            or select_product_fact_block_ids(
+                context.product_fact_packet,
+                limit=MAX_PRODUCT_FACT_BLOCKS,
+            )
+        )
+        if context.product_fact_blocks:
+            skeleton = replace(
+                skeleton,
+                selected_fact_block_ids=selected_fact_block_ids,
+            )
         compiler_texts = compiler_owned_unit_texts(request.primary_product)
         writer_payload, writer_retries = self._request(
             "你是笛语 CreativeKernel Writer。只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。",
@@ -585,14 +607,7 @@ class DeepSeekGenerator(ContentGenerator):
                 skeleton,
                 fact_blocks=context.product_fact_blocks,
                 allowed_claim_ids=context.product_fact_packet.fact_ids,
-                required_fact_block_ids=(
-                    self._prior_fact_block_ids(
-                        request.prior_creative_kernel,
-                        context.product_fact_blocks,
-                    )
-                    if request.prior_creative_kernel is not None
-                    else None
-                ),
+                required_fact_block_ids=required_fact_block_ids,
                 compiler_owned_text_by_id=compiler_texts,
             )
             self._validate_product_fact_selection(
@@ -1017,7 +1032,7 @@ class DeepSeekGenerator(ContentGenerator):
                 is not None
             ):
                 continue
-            if any(item.canonical_text in unit.text for item in packet.facts):
+            if product_fact_literal_spans(packet, unit.text):
                 raise ValueError("writer repeated an immutable product fact")
 
     def _kernel_writer_prompt(
@@ -1055,6 +1070,9 @@ class DeepSeekGenerator(ContentGenerator):
         )
         packet_document = product_fact_packet_document(product_fact_packet)
         fact_blocks = immutable_product_fact_blocks(product_fact_packet)
+        server_selected_product_facts = bool(
+            fact_blocks and skeleton.selected_fact_block_ids
+        )
         resolved_compiler_texts = dict(compiler_texts or compiler_owned_unit_texts(request.primary_product))
         writer_units = tuple(unit for unit in skeleton.writable_units if unit.unit_id not in resolved_compiler_texts)
         writable = [
@@ -1073,12 +1091,16 @@ class DeepSeekGenerator(ContentGenerator):
                 {
                     "unit_id": unit.unit_id,
                     "text": f"填写 {unit.purpose} 的完整可见文字",
-                    **({"claim_refs": []} if fact_blocks else {}),
+                    **(
+                        {"claim_refs": []}
+                        if fact_blocks and not server_selected_product_facts
+                        else {}
+                    ),
                 }
                 for unit in writer_units
             ]
         }
-        if fact_blocks:
+        if fact_blocks and not server_selected_product_facts:
             blocks_by_fact_id = {block.fact_id: block for block in fact_blocks}
             example_fact_ids = (
                 *(item.fact_id for item in product_fact_packet.facts if item.fact_key == "display_name"),
@@ -1102,27 +1124,57 @@ class DeepSeekGenerator(ContentGenerator):
         )
         controls = self._deidentified_writer_controls(request)
         product_creative_rule = (
-            f"""本篇含服务端事实块。创意文字必须让这些事实成为一篇可直接发布的
-平台内容，而不是登记清单、事实审计、写作方法说明或泛化资料页。title 应短而自然，
-直接建立读者选择时的关注点或张力，不介绍“本文会提供什么”；body 在事实块之后提供具体
-但不新增商品事实的选择视角。title 与 body 要围绕同一条主线，各自承担不同作用。底层对象、其类别和
-“它／这件对象”不能成为创意文字中的事实主张对象；商品特异性由最多
-{MAX_PRODUCT_FACT_BLOCKS} 个事实块提供。"""
+            """本篇的可信商品事实块已经由服务端选择并将在编译时原样插入；你看不到也
+不能选择、引用、复述或推导这些事实。title 与 body 只负责一个不指向当前具体商品的
+选购观察：帮助读者区分“已经确认的信息”和“仍需本人判断的选择”，不得出现 SKU、商品名、
+品类、颜色、数字、结构、性能、用途、效果、价格、库存、设计动机、比较结论、手感或实际
+体验。title 应短而自然，body 提供独立观看价值；不能写成事实审计、资料说明或免责声明。"""
             if fact_blocks
             else ""
+        )
+        topic_projection: object = (
+            ["如何在已确认信息与个人选择之间保留判断"]
+            if server_selected_product_facts
+            else request.creative_plan.topic_spans
+        )
+        packet_projection: object = (
+            {
+                "service_selected": True,
+                "selected_fact_block_count": len(
+                    skeleton.selected_fact_block_ids
+                ),
+            }
+            if server_selected_product_facts
+            else packet_document
+        )
+        blocks_projection: object = (
+            []
+            if server_selected_product_facts
+            else immutable_fact_blocks_document(fact_blocks)
+        )
+        output_contract = (
+            """根对象必须恰好只有 units；每个 unit 必须恰好只有 unit_id、text。商品事实块
+已由服务端冻结，禁止返回 fact_block_refs、claim_refs 或任何商品事实正文。"""
+            if server_selected_product_facts
+            else f"""没有 ProductFactPacket 时，根对象只能有 units，每个 unit 只能有
+unit_id、text。有商品 Packet 的旧证据回放中，根对象必须恰好有 fact_block_refs、units；
+每个 unit 必须恰好有 unit_id、text、claim_refs。fact_block_refs 只能选择服务端候选 ID
+并用数组顺序表达最终事实块顺序；首次至少选择商品名称身份块和一个与本篇切口直接相关的
+事实块，最多选择 {MAX_PRODUCT_FACT_BLOCKS} 个。claim_refs 只是审查线索，只能引用本次
+Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creative text。"""
         )
         return f"""完成一个可直接交付的 CreativeKernel。你只负责“说什么、怎样表达”，不负责
 scene、actor、resource、action、sound、production_note、发布结构、自然导读、发布配文
 或语义合同；自然导读和发布配文由 DeliveryCompiler 使用版本化中性短语生成。
 
 用户 topic 精确跨度：
-{json.dumps(request.creative_plan.topic_spans, ensure_ascii=False)}
+{json.dumps(topic_projection, ensure_ascii=False)}
 服务端逐字事实单元（只读；不要在输出中返回、改写、概括或扩展）：
 {json.dumps(fact_units, ensure_ascii=False)}
-本次只读 ProductFactPacket（决定“知道什么”；不能把来源、约束或资源当事实）：
-{json.dumps(packet_document, ensure_ascii=False)}
-服务端 ImmutableFactBlock 候选（只能引用 fact_block_id；正文由服务端原样插入）：
-{json.dumps(immutable_fact_blocks_document(fact_blocks), ensure_ascii=False)}
+服务端商品事实选择状态（不包含事实正文，也不授权 Writer 选择或引用事实）：
+{json.dumps(packet_projection, ensure_ascii=False)}
+旧证据兼容用 ImmutableFactBlock 候选（新双轨主链为空；正文始终由服务端原样插入）：
+{json.dumps(blocks_projection, ensure_ascii=False)}
 本篇受众价值：{_PRODUCT_VALUE[request.primary_product]}
 平台与形式：{request.target} / {request.media_format}
 去标识化表达控制：{controls}
@@ -1143,18 +1195,9 @@ topic_spans 是用户原话证据，可能同时包含创作命令、控制要�
 只返回：
 {json.dumps(template, ensure_ascii=False)}
 
-没有 ProductFactPacket 时，根对象只能有 units，每个 unit 只能有 unit_id、text。有商品
-Packet 时，根对象必须恰好有 fact_block_refs、units；每个 unit 必须恰好有
-unit_id、text、claim_refs。必须恰好一次覆盖全部既定可写 unit_id，不得增加、遗漏、重复
-或修改 id，不得输出任何制作字段、来源、事实正文、约束、类型或内部规则。
-fact_block_refs 只能选择服务端候选 ID 并用数组顺序表达最终事实块顺序；首次商品内容至少
-选择商品名称身份块和一个与本篇切口直接相关的事实块。修改既有内容时必须原样返回此前已选
-fact_block_refs，不能增删、换序或更换事实。首次最多选择 {MAX_PRODUCT_FACT_BLOCKS} 个
-事实块，避免把完整 Packet 机械堆成资料清单；按本篇主线优先顺序选择。claim_refs 只是
-审查线索，只能引用本次 Packet 的 fact_id，用于说明该 creative unit 的创作切口参考了
-哪些事实；不能把硬属性、数字或 canonical_text
-写进 creative text，也不能从结构事实推断性能、功效、用途、价格、库存、设计动机、比较
-结论、普遍穿着结果或实际体验。商品硬事实正文由服务端按 fact_block_refs 原样插入。
+{output_contract}
+必须恰好一次覆盖全部既定可写 unit_id，不得增加、遗漏、重复或修改 id，不得输出任何制作
+字段、来源、事实正文、约束、类型或内部规则。商品硬事实正文始终由服务端原样插入。
 title 是自然标题；按可见顺序排列的一个或多个 body 单元共同组成完整核心正文。
 track 与 mode 是服务端在写作前冻结的唯一表达轨；你不能返回、改变或根据准备填写的文字
 重新解释它们。general_observation 可以表达一般判断、观点、比喻和幽默，但不是当前用户、

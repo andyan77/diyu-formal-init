@@ -142,6 +142,42 @@ def immutable_product_fact_blocks(
     )
 
 
+def select_product_fact_block_ids(
+    packet: ProductFactPacket,
+    *,
+    limit: int,
+) -> tuple[str, ...]:
+    """Select a small, stable fact set without delegating fact authorship to Writer."""
+    if limit < 1:
+        raise ValueError("product fact block limit must be positive")
+    blocks_by_fact_id = {
+        block.fact_id: block for block in immutable_product_fact_blocks(packet)
+    }
+    identity = tuple(
+        item
+        for item in packet.facts
+        if item.fact_key == "display_name"
+    )
+    if not identity:
+        identity = tuple(
+            item
+            for item in packet.facts
+            if item.fact_key == "sku"
+        )
+    substantive = tuple(
+        item
+        for item in packet.facts
+        if item.fact_key not in {"sku", "display_name"}
+    )
+    selected = tuple(
+        dict.fromkeys(
+            item.fact_id
+            for item in (*identity, *substantive)
+        )
+    )[:limit]
+    return tuple(blocks_by_fact_id[fact_id].fact_block_id for fact_id in selected)
+
+
 def product_fact_packet_document(
     packet: ProductFactPacket,
 ) -> dict[str, object]:

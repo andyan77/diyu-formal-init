@@ -29,6 +29,7 @@ from src.shared.factual_basis import (
     build_product_fact_packet,
     immutable_product_fact_blocks,
     product_fact_records,
+    select_product_fact_block_ids,
 )
 from src.shared.narrative import new_frame
 from src.shared.review_evidence import (
@@ -307,6 +308,58 @@ def test_writer_can_only_select_existing_blocks_and_packet_claim_refs() -> None:
                 ],
             },
             skeleton,
+            fact_blocks=blocks,
+            allowed_claim_ids=packet.fact_ids,
+        )
+
+
+def test_new_dual_track_server_selects_facts_before_writer() -> None:
+    _, packet, skeleton = _product_contract()
+    blocks = immutable_product_fact_blocks(packet)
+    selected = select_product_fact_block_ids(packet, limit=3)
+    frozen = replace(
+        skeleton,
+        selected_fact_block_ids=selected,
+    )
+    raw_units = [
+        {
+            "unit_id": unit.unit_id,
+            "text": "先把已经确认的信息和自己的选择分开。",
+        }
+        for unit in frozen.writable_units
+    ]
+
+    parsed = parse_writer_kernel(
+        {"units": raw_units},
+        frozen,
+        fact_blocks=blocks,
+        allowed_claim_ids=packet.fact_ids,
+    )
+
+    assert parsed.selected_fact_block_ids == selected
+    assert len(selected) == 3
+    with pytest.raises(TypeError, match="outside the kernel contract"):
+        parse_writer_kernel(
+            {
+                "fact_block_refs": list(selected),
+                "units": raw_units,
+            },
+            frozen,
+            fact_blocks=blocks,
+            allowed_claim_ids=packet.fact_ids,
+        )
+    with pytest.raises(TypeError, match="only unit_id and text"):
+        parse_writer_kernel(
+            {
+                "units": [
+                    {
+                        **unit,
+                        "claim_refs": [packet.facts[0].fact_id],
+                    }
+                    for unit in raw_units
+                ],
+            },
+            frozen,
             fact_blocks=blocks,
             allowed_claim_ids=packet.fact_ids,
         )

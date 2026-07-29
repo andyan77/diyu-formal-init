@@ -492,11 +492,18 @@ def parse_writer_kernel(
     compiler_owned_text_by_id: Mapping[str, str] | None = None,
 ) -> CreativeKernelV1:
     product_contract = bool(fact_blocks)
-    expected_root = frozenset({"units", "fact_block_refs"}) if product_contract else frozenset({"units"})
+    server_selected_product_facts = product_contract and bool(
+        skeleton.selected_fact_block_ids
+    )
+    expected_root = (
+        frozenset({"units", "fact_block_refs"})
+        if product_contract and not server_selected_product_facts
+        else frozenset({"units"})
+    )
     if not isinstance(raw, Mapping) or frozenset(raw) != expected_root:
         raise TypeError("writer returned fields outside the kernel contract")
     selected_fact_block_ids = skeleton.selected_fact_block_ids
-    if product_contract:
+    if product_contract and not server_selected_product_facts:
         raw_block_refs = raw.get("fact_block_refs")
         if not isinstance(raw_block_refs, list) or not raw_block_refs:
             raise TypeError("writer must select immutable fact blocks")
@@ -510,6 +517,15 @@ def parse_writer_kernel(
         available_block_ids = {block.fact_block_id for block in fact_blocks}
         if any(block_id not in available_block_ids for block_id in selected_fact_block_ids):
             raise ValueError("writer invented an immutable fact block")
+        if required_fact_block_ids is not None and selected_fact_block_ids != required_fact_block_ids:
+            raise ValueError("revision changed immutable fact blocks")
+    elif product_contract:
+        available_block_ids = {block.fact_block_id for block in fact_blocks}
+        if (
+            len(selected_fact_block_ids) > MAX_PRODUCT_FACT_BLOCKS
+            or any(block_id not in available_block_ids for block_id in selected_fact_block_ids)
+        ):
+            raise ValueError("service-selected immutable fact blocks are invalid")
         if required_fact_block_ids is not None and selected_fact_block_ids != required_fact_block_ids:
             raise ValueError("revision changed immutable fact blocks")
     raw_units = raw.get("units")
@@ -544,14 +560,15 @@ def parse_writer_kernel(
     }
     unit_fields = (
         frozenset({"unit_id", "text", "claim_refs"})
-        if product_contract or require_claim_refs
+        if (product_contract and not server_selected_product_facts) or require_claim_refs
         else frozenset({"unit_id", "text"})
     )
     for raw_unit in raw_units:
         if not isinstance(raw_unit, Mapping) or frozenset(raw_unit) != unit_fields:
             message = (
                 "writer creative unit fields are invalid"
-                if product_contract or require_claim_refs
+                if (product_contract and not server_selected_product_facts)
+                or require_claim_refs
                 else "writer units may contain only unit_id and text"
             )
             raise TypeError(message)
