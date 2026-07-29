@@ -183,6 +183,7 @@ class PostgresContentRepository(ContentRepository):
         control: ContentControlContext | None = None,
         snapshot: dict[str, object] | None = None,
         series_context: SeriesContext | None = None,
+        reviewer_model: str | None = None,
     ) -> tuple[UUID, UUID, str | None]:
         task_id, run_id = uuid4(), uuid4()
         with self._tx(scope) as cursor:
@@ -285,6 +286,10 @@ class PostgresContentRepository(ContentRepository):
                             control,
                             series_context,
                         )
+                        | {
+                            "writer_model": model,
+                            "reviewer_model": reviewer_model or model,
+                        }
                     ),
                 ),
             )
@@ -308,7 +313,7 @@ class PostgresContentRepository(ContentRepository):
         model: str,
         latency_ms: int,
         retry_count: int,
-        provider_usage: dict[str, int] | None,
+        provider_usage: dict[str, int | str] | None,
         product_contract: dict[str, str],
         fact_repair_receipts: tuple[FactRepairReceipt, ...],
         snapshot_patch: dict[str, object] | None = None,
@@ -498,6 +503,7 @@ class PostgresContentRepository(ContentRepository):
         control: ContentControlContext | None = None,
         series_context: SeriesContext | None = None,
         source_description: str | None = None,
+        reviewer_model: str | None = None,
     ) -> tuple[UUID, UUID, str, ContentProduct]:
         run_id = uuid4()
         with self._tx(scope) as cursor:
@@ -543,6 +549,10 @@ class PostgresContentRepository(ContentRepository):
                             control,
                             series_context,
                         )
+                        | {
+                            "writer_model": model,
+                            "reviewer_model": reviewer_model or model,
+                        }
                     ),
                 ),
             )

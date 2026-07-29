@@ -417,7 +417,7 @@ class GeneratedArtifact:
     model: str
     latency_ms: int
     retry_count: int
-    provider_usage: dict[str, int] | None
+    provider_usage: dict[str, int | str] | None
     primary_product: ContentProduct
     semantic_contract: ContentSemanticContract
     production: ContentProductionBundle

@@ -33,6 +33,7 @@ class Settings:
     deepseek_api_base_url: str | None
     deepseek_api_key: SecretStr | None
     deepseek_model: str | None
+    deepseek_reviewer_model: str | None
     material_storage_root: str
     s3_endpoint_url: str | None
     s3_bucket: str | None
@@ -76,6 +77,7 @@ class Settings:
             "DEEPSEEK_API_BASE_URL": "deepseek_api_base_url",
             "DEEPSEEK_API_KEY": "deepseek_api_key",
             "DEEPSEEK_MODEL": "deepseek_model",
+            "DEEPSEEK_REVIEWER_MODEL": "deepseek_reviewer_model",
             "DIYU_MATERIAL_STORAGE_ROOT": "material_storage_root",
             "DIYU_S3_ENDPOINT_URL": "s3_endpoint_url",
             "DIYU_S3_BUCKET": "s3_bucket",
@@ -178,6 +180,7 @@ class Settings:
             deepseek_api_base_url=read("DEEPSEEK_API_BASE_URL"),
             deepseek_api_key=SecretStr(api_key) if api_key else None,
             deepseek_model=read("DEEPSEEK_MODEL"),
+            deepseek_reviewer_model=read("DEEPSEEK_REVIEWER_MODEL"),
             material_storage_root=str(read("DIYU_MATERIAL_STORAGE_ROOT", "var/materials-test")),
             s3_endpoint_url=read("DIYU_S3_ENDPOINT_URL"),
             s3_bucket=read("DIYU_S3_BUCKET"),
@@ -199,6 +202,8 @@ class Settings:
             )
         ):
             raise RuntimeError("deepseek 模式必须配置 API 地址、密钥和已核验模型")
+        if configured.is_production and configured.generator_mode == "deepseek" and not configured.deepseek_reviewer_model:
+            raise RuntimeError("production deepseek 模式必须显式配置 Reviewer 模型")
         if not 1 <= configured.login_rate_limit_per_minute <= 60:
             raise RuntimeError("登录限流配置超出安全范围")
         if not 1 <= configured.model_global_concurrency <= 20 or not 1 <= configured.model_tenant_concurrency <= 10:

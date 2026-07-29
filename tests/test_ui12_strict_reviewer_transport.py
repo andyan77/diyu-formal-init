@@ -74,6 +74,7 @@ def _generator(
         base_url,
         "test-key",
         "deepseek-v4-flash",
+        reviewer_model="deepseek-v4-pro",
         max_retries=9,
     )
 
@@ -227,6 +228,7 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
     assert url == "https://example.invalid/beta/chat/completions"
     body = request["json"]
     assert isinstance(body, dict)
+    assert body["model"] == "deepseek-v4-pro"
     assert body["temperature"] == 0.0
     assert body["max_tokens"] == 2624
     assert body["thinking"] == {"type": "disabled"}
@@ -242,6 +244,34 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
     assert function["name"] == CLOSED_REVIEW_TOOL_NAME
     assert function["strict"] is True
     _assert_strict_objects(function["parameters"])
+
+
+def test_writer_and_reviewer_model_routes_are_independent() -> None:
+    questions = _questions()
+    _FakeClient.response = _FakeResponse({"choices": []})
+    generator = _generator()
+
+    generator._request("system", "prompt", 100)
+
+    _, writer_request = _FakeClient.requests[-1]
+    writer_body = writer_request["json"]
+    assert isinstance(writer_body, dict)
+    assert writer_body["model"] == "deepseek-v4-flash"
+
+    _FakeClient.response = _FakeResponse(_strict_payload())
+    generator._request_strict_review(
+        "system",
+        "prompt",
+        question_count=len(questions),
+        questions=questions,
+    )
+
+    _, reviewer_request = _FakeClient.requests[-1]
+    reviewer_body = reviewer_request["json"]
+    assert isinstance(reviewer_body, dict)
+    assert reviewer_body["model"] == "deepseek-v4-pro"
+    assert generator.model_name == "deepseek-v4-flash"
+    assert generator.reviewer_model_name == "deepseek-v4-pro"
 
 
 def test_reviewer_token_budget_is_deterministic_and_hard_capped() -> None:
@@ -273,7 +303,7 @@ def test_reviewer_prompt_uses_closed_questions_without_addresses() -> None:
     assert "motive_or_mental_state" in prompt
     assert "statement_mode" in prompt
     assert "只向受众征询观点、经验或选择" in prompt
-    assert "题材相同、用于其后的反思" in prompt
+    assert "用于其后的泛指反思" in prompt
     assert "这篇内容／这个角度" in prompt
     assert "题材相似不是现实主体绑定" in prompt
     assert "比喻、类比或拟人本身不构成 dramatization" in prompt

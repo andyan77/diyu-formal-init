@@ -52,6 +52,7 @@ def _production_settings(database_url: str) -> Settings:
             "DEEPSEEK_API_BASE_URL": "https://example.invalid",
             "DEEPSEEK_API_KEY": "not-a-real-key",
             "DEEPSEEK_MODEL": "deepseek-v4-flash",
+            "DEEPSEEK_REVIEWER_MODEL": "deepseek-v4-pro",
             "DIYU_S3_ENDPOINT_URL": "http://127.0.0.1:9000",
             "DIYU_S3_BUCKET": "diyu-test",
             "DIYU_S3_ACCESS_KEY_ID": "test-access-key",

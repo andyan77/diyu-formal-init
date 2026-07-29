@@ -67,6 +67,7 @@ def build_content_service(settings: Settings) -> ContentService:
             api_base_url=settings.deepseek_api_base_url,
             api_key=settings.deepseek_api_key.get_secret_value(),
             model=settings.deepseek_model,
+            reviewer_model=settings.deepseek_reviewer_model,
             timeout_seconds=settings.model_timeout_seconds,
             max_retries=settings.model_max_retries,
         )

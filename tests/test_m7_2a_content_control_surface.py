@@ -1045,6 +1045,8 @@ def test_the_collaboration_note_reaches_generation_and_no_tenant_record(
     # It steered the work, and it stayed out of every tenant-visible record.
     assert note not in json.dumps(snapshot, ensure_ascii=False)
     assert note not in json.dumps(receipt, ensure_ascii=False)
+    assert receipt["writer_model"] == "deterministic-content-test-stub"
+    assert receipt["reviewer_model"] == "deterministic-content-test-stub"
     assert note not in str(created["body"])
     assert snapshot["private_preference_mode"] == "applied"
     _clear_preference(app_database_url, USER_ID)

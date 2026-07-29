@@ -45,6 +45,7 @@ class ContentRepository(ABC):
         control: ContentControlContext | None = None,
         snapshot: dict[str, object] | None = None,
         series_context: SeriesContext | None = None,
+        reviewer_model: str | None = None,
     ) -> tuple[UUID, UUID, str | None]:
         """Create a task, freeze its content context and open an auditable running run."""
 
@@ -59,7 +60,7 @@ class ContentRepository(ABC):
         model: str,
         latency_ms: int,
         retry_count: int,
-        provider_usage: dict[str, int] | None,
+        provider_usage: dict[str, int | str] | None,
         product_contract: dict[str, str],
         fact_repair_receipts: tuple[FactRepairReceipt, ...],
         snapshot_patch: dict[str, object] | None = None,
@@ -86,6 +87,7 @@ class ContentRepository(ABC):
         control: ContentControlContext | None = None,
         series_context: SeriesContext | None = None,
         source_description: str | None = None,
+        reviewer_model: str | None = None,
     ) -> tuple[UUID, UUID, str, ContentProduct]:
         """Create the next auditable run for a revision request."""
 

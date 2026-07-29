@@ -32,6 +32,7 @@ from src.shared.factual_basis import brand_fact_records, product_fact_records
 from src.shared.narrative import (
     NarrativeFrame,
     NarrativeIssue,
+    NarrativeMode,
     new_frame,
     visible_digest,
 )
@@ -1012,7 +1013,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
 )
 def test_conversation_intake_accepts_the_three_nonactual_modes(
     message: str,
-    mode: str,
+    mode: NarrativeMode,
     facts: list[str],
 ) -> None:
     FakeClient.responses = [
@@ -1038,7 +1039,7 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
                 mode
                 if mode in {"hypothesis", "dramatization"}
                 else None
-            ),  # type: ignore[arg-type]
+            ),
             allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
             platform_shape="xiaohongshu_graphic:graphic",
         )
@@ -1152,7 +1153,10 @@ def test_full_candidate_is_independently_reviewed_and_digest_locked(
     assert artifact.reviewed_digest == visible_digest(artifact.outline, artifact.body)
     for fact in frame.user_facts:
         assert fact.exact_text in artifact.body
-    assert artifact.provider_usage == {"total_tokens": 150}
+    assert artifact.provider_usage is not None
+    assert artifact.provider_usage["total_tokens"] == 150
+    assert artifact.provider_usage["writer_model"] == "deepseek-test"
+    assert artifact.provider_usage["reviewer_model"] == "deepseek-test"
     prompts = _payload_prompts()
     assert len(prompts) == 2
     assert "最终完整可见成品" in prompts[1]
@@ -1391,6 +1395,8 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert artifact.completion_snapshot_patch["delivery_compiler_version"] == DELIVERY_COMPILER_VERSION
     assert artifact.completion_snapshot_patch["review_evidence_version"] == REVIEW_EVIDENCE_V2_VERSION
     assert artifact.completion_snapshot_patch["closed_review_contract"] == "closed-review-questions-v1"
+    assert artifact.completion_snapshot_patch["writer_model"] == "deepseek-test"
+    assert artifact.completion_snapshot_patch["reviewer_model"] == "deepseek-test"
     assert isinstance(artifact.completion_snapshot_patch["claim_inventory_v1"], list)
     kernel_snapshot = artifact.completion_snapshot_patch["creative_kernel_v1"]
     clause_context = artifact.completion_snapshot_patch["clause_context_v2"]

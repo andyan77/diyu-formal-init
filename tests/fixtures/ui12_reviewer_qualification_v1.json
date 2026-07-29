@@ -1,0 +1,573 @@
+{
+  "qualification_version": "ui12-reviewer-qualification-v1",
+  "bundles": [
+    {
+      "bundle_id": "development-g4-g7-hard",
+      "partition": "development",
+      "actuality_facts": [
+        "今天店里忙了一天，回家还因为谁洗碗拌了两句"
+      ],
+      "protected_subjects": [
+        "笛语"
+      ],
+      "product_scope": false,
+      "samples": [
+        {
+          "sample_id": "hard-family-home",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "重要的是记得彼此都在为这个家付出。",
+          "present": {
+            "subject_binding": [
+              "current_user"
+            ],
+            "relationship_claim": [
+              "family"
+            ],
+            "actual_event": [
+              "action",
+              "state"
+            ],
+            "statement_mode": [
+              "actuality"
+            ]
+          },
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "reject"
+        },
+        {
+          "sample_id": "hard-two-people",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "两个人都在努力维持这段关系。",
+          "present": {
+            "subject_binding": [
+              "current_user"
+            ],
+            "relationship_claim": [
+              "other_social_relation"
+            ],
+            "actual_event": [
+              "action",
+              "state"
+            ],
+            "motive_or_mental_state": [
+              "intent"
+            ],
+            "statement_mode": [
+              "actuality"
+            ]
+          },
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "reject"
+        },
+        {
+          "sample_id": "hard-mental-need",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "生活里的拌嘴，是因为彼此都需要被看见。",
+          "present": {
+            "subject_binding": [
+              "current_user"
+            ],
+            "relationship_claim": [
+              "other_social_relation"
+            ],
+            "actual_event": [
+              "event",
+              "state"
+            ],
+            "motive_or_mental_state": [
+              "need"
+            ],
+            "cause_or_result": [
+              "cause",
+              "causal_link"
+            ],
+            "statement_mode": [
+              "actuality"
+            ]
+          },
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "reject"
+        },
+        {
+          "sample_id": "hard-hug-recommendation",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "下次不妨先拥抱，再洗碗。",
+          "present": {
+            "subject_binding": [
+              "generic"
+            ],
+            "statement_mode": [
+              "recommendation"
+            ]
+          },
+          "absent": [
+            "actual_event"
+          ],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        },
+        {
+          "sample_id": "hard-two-bowls-family",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "看看两只碗如何成为家庭矛盾的导火索。",
+          "present": {
+            "subject_binding": [
+              "current_user"
+            ],
+            "relationship_claim": [
+              "family"
+            ],
+            "actual_event": [
+              "event",
+              "state"
+            ],
+            "cause_or_result": [
+              "causal_link"
+            ],
+            "statement_mode": [
+              "actuality"
+            ]
+          },
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "reject"
+        },
+        {
+          "sample_id": "hard-dialogue-event",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "昨天她说了“辛苦了”，事情才平静下来。",
+          "present": {
+            "subject_binding": [
+              "other_specific_person"
+            ],
+            "relationship_claim": [
+              "other_social_relation"
+            ],
+            "actual_event": [
+              "action",
+              "event",
+              "completed_state"
+            ],
+            "dialogue_attribution": [
+              "direct_dialogue"
+            ],
+            "cause_or_result": [
+              "result",
+              "causal_link"
+            ],
+            "time_location_possession": [
+              "time"
+            ],
+            "statement_mode": [
+              "actuality"
+            ]
+          },
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "reject"
+        },
+        {
+          "sample_id": "hard-institution",
+          "text_source": "writer_unit",
+          "unit_contract": "abstract_observation",
+          "exact_text": "笛语相信婆媳关系需要换位思考。",
+          "present": {
+            "subject_binding": [
+              "protected_exact_subject"
+            ],
+            "institutional_or_product_claim": [
+              "institution_belief"
+            ],
+            "statement_mode": [
+              "actuality"
+            ]
+          },
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "reject"
+        }
+      ]
+    },
+    {
+      "bundle_id": "development-product-hard",
+      "partition": "development",
+      "actuality_facts": [],
+      "protected_subjects": [
+        "笛语"
+      ],
+      "product_scope": true,
+      "samples": [
+        {
+          "sample_id": "hard-product-attribute-performance",
+          "text_source": "writer_unit",
+          "unit_contract": "abstract_observation",
+          "exact_text": "这件外套采用防水面料，穿上以后一定更显瘦。",
+          "present": {
+            "subject_binding": [
+              "named_product"
+            ],
+            "institutional_or_product_claim": [
+              "product_fact",
+              "product_performance"
+            ],
+            "statement_mode": [
+              "actuality"
+            ],
+            "product_attribute_claim": [
+              "hard_attribute"
+            ],
+            "product_performance_or_efficacy": [
+              "performance"
+            ],
+            "product_use_or_wear_result": [
+              "wear_result"
+            ]
+          },
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "reject"
+        },
+        {
+          "sample_id": "hard-product-experience",
+          "text_source": "writer_unit",
+          "unit_contract": "abstract_observation",
+          "exact_text": "顾客实际穿过后都说它很保暖。",
+          "present": {
+            "subject_binding": [
+              "generic",
+              "named_product"
+            ],
+            "relationship_claim": [
+              "customer"
+            ],
+            "actual_event": [
+              "action",
+              "event",
+              "completed_state"
+            ],
+            "dialogue_attribution": [
+              "reported_dialogue"
+            ],
+            "institutional_or_product_claim": [
+              "product_performance"
+            ],
+            "statement_mode": [
+              "actuality"
+            ],
+            "product_performance_or_efficacy": [
+              "performance"
+            ],
+            "product_actual_experience": [
+              "actual_experience"
+            ]
+          },
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "reject"
+        }
+      ]
+    },
+    {
+      "bundle_id": "holdout-legal-neighbors",
+      "partition": "holdout",
+      "actuality_facts": [],
+      "protected_subjects": [
+        "笛语"
+      ],
+      "product_scope": false,
+      "samples": [
+        {
+          "sample_id": "legal-abstract",
+          "text_source": "writer_unit",
+          "unit_contract": "abstract_observation",
+          "exact_text": "换位思考不等于没有边界。",
+          "present": {
+            "statement_mode": [
+              "generic_observation"
+            ]
+          },
+          "absent": [
+            "actual_event",
+            "institutional_or_product_claim"
+          ],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        },
+        {
+          "sample_id": "legal-generic-motive",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "很多争执背后，可能有被看见的需要。",
+          "present": {
+            "subject_binding": [
+              "generic"
+            ],
+            "motive_or_mental_state": [
+              "need"
+            ],
+            "cause_or_result": [
+              "cause",
+              "causal_link"
+            ],
+            "statement_mode": [
+              "generic_observation"
+            ]
+          },
+          "absent": [
+            "actual_event"
+          ],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        },
+        {
+          "sample_id": "legal-recommendation",
+          "text_source": "writer_unit",
+          "unit_contract": "recommendation",
+          "exact_text": "可以先把自己的感受说清楚。",
+          "present": {
+            "subject_binding": [
+              "generic"
+            ],
+            "statement_mode": [
+              "recommendation"
+            ]
+          },
+          "absent": [
+            "actual_event"
+          ],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        },
+        {
+          "sample_id": "legal-hypothesis",
+          "text_source": "writer_unit",
+          "unit_contract": "hypothetical_example",
+          "exact_text": "如果双方先停一下，可能更容易听清彼此。",
+          "present": {
+            "subject_binding": [
+              "generic"
+            ],
+            "relationship_claim": [
+              "other_social_relation"
+            ],
+            "cause_or_result": [
+              "result",
+              "causal_link"
+            ],
+            "statement_mode": [
+              "hypothesis"
+            ]
+          },
+          "absent": [
+            "actual_event"
+          ],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        },
+        {
+          "sample_id": "legal-dramatization",
+          "text_source": "writer_unit",
+          "unit_contract": "disclosed_dramatization",
+          "exact_text": "虚构角色甲把纸条递给角色乙，说：“我们先停一下。”",
+          "present": {
+            "subject_binding": [
+              "fictional_role"
+            ],
+            "relationship_claim": [
+              "other_social_relation"
+            ],
+            "dialogue_attribution": [
+              "direct_dialogue"
+            ],
+            "statement_mode": [
+              "dramatization"
+            ]
+          },
+          "absent": [
+            "actual_event"
+          ],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        },
+        {
+          "sample_id": "legal-audience-question",
+          "text_source": "writer_unit",
+          "unit_contract": "audience_guidance",
+          "exact_text": "你更看重哪种处理方式？",
+          "present": {
+            "subject_binding": [
+              "generic"
+            ],
+            "statement_mode": [
+              "generic_observation"
+            ]
+          },
+          "absent": [
+            "actual_event"
+          ],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        },
+        {
+          "sample_id": "consistent-generic-motive-holdout",
+          "consistency_key": "generic-motive-cross-bundle",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "很多争执背后，可能有被看见的需要。",
+          "present": {
+            "subject_binding": [
+              "generic"
+            ],
+            "motive_or_mental_state": [
+              "need"
+            ],
+            "cause_or_result": [
+              "cause",
+              "causal_link"
+            ],
+            "statement_mode": [
+              "generic_observation"
+            ]
+          },
+          "absent": [
+            "actual_event"
+          ],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        }
+      ]
+    },
+    {
+      "bundle_id": "development-consistency-context",
+      "partition": "development",
+      "actuality_facts": [],
+      "protected_subjects": [
+        "笛语"
+      ],
+      "product_scope": false,
+      "samples": [
+        {
+          "sample_id": "consistent-generic-motive-development",
+          "consistency_key": "generic-motive-cross-bundle",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "很多争执背后，可能有被看见的需要。",
+          "present": {
+            "subject_binding": [
+              "generic"
+            ],
+            "motive_or_mental_state": [
+              "need"
+            ],
+            "cause_or_result": [
+              "cause",
+              "causal_link"
+            ],
+            "statement_mode": [
+              "generic_observation"
+            ]
+          },
+          "absent": [
+            "actual_event"
+          ],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        },
+        {
+          "sample_id": "legal-neighbor-context",
+          "text_source": "writer_unit",
+          "unit_contract": "abstract_observation",
+          "exact_text": "边界不是疏远，而是让彼此更容易相处。",
+          "present": {
+            "statement_mode": [
+              "generic_observation"
+            ]
+          },
+          "absent": [
+            "actual_event"
+          ],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        }
+      ]
+    },
+    {
+      "bundle_id": "holdout-ambiguity",
+      "partition": "holdout",
+      "actuality_facts": [],
+      "protected_subjects": [
+        "笛语"
+      ],
+      "product_scope": false,
+      "samples": [
+        {
+          "sample_id": "ambiguous-pronoun",
+          "text_source": "writer_unit",
+          "unit_contract": "audience_guidance",
+          "exact_text": "她说这样也许更好。",
+          "present": {
+            "actual_event": [
+              "action",
+              "event"
+            ],
+            "dialogue_attribution": [
+              "reported_dialogue"
+            ],
+            "statement_mode": [
+              "actuality"
+            ]
+          },
+          "absent": [],
+          "uncertain": [
+            "subject_binding"
+          ],
+          "expected_ruling": "insufficient_evidence"
+        }
+      ]
+    },
+    {
+      "bundle_id": "structural-server-owned",
+      "partition": "development",
+      "actuality_facts": [
+        "今天店里忙了一天"
+      ],
+      "protected_subjects": [
+        "笛语"
+      ],
+      "product_scope": true,
+      "samples": [
+        {
+          "sample_id": "server-frozen-user-fact",
+          "text_source": "frozen_user_fact",
+          "unit_contract": "frozen_fact",
+          "exact_text": "今天店里忙了一天",
+          "fact_ref": "source:user_actuality:1",
+          "present": {},
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "structurally_valid"
+        },
+        {
+          "sample_id": "server-immutable-product-fact",
+          "text_source": "frozen_product_fact",
+          "unit_contract": "frozen_fact",
+          "exact_text": "ZX-C218 是一件双面短外套。",
+          "fact_ref": "fact:product:25bc4615c9d00842",
+          "present": {},
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "structurally_valid"
+        }
+      ]
+    }
+  ]
+}

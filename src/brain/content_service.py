@@ -236,6 +236,7 @@ class ContentService:
                 commitment,
             ),
             series_context,
+            reviewer_model=self._generator.reviewer_model_name,
         )
         return self._generate_and_persist(
             scope,
@@ -801,6 +802,7 @@ class ContentService:
             control,
             series_context,
             source_description,
+            reviewer_model=self._generator.reviewer_model_name,
         )
         return self._generate_and_persist(
             scope,
@@ -980,6 +982,7 @@ class ContentService:
                 delivery_compiler_version=delivery_compiler_version,
             ),
             None,
+            reviewer_model=self._generator.reviewer_model_name,
         )
         return self._generate_and_persist(
             target_scope,

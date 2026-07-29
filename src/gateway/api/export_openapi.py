@@ -28,6 +28,7 @@ def _contract_settings(runtime_mode: str) -> Settings:
                 "DEEPSEEK_API_BASE_URL": "https://example.invalid",
                 "DEEPSEEK_API_KEY": "openapi-contract-placeholder",
                 "DEEPSEEK_MODEL": "deepseek-v4-flash",
+                "DEEPSEEK_REVIEWER_MODEL": "deepseek-v4-pro",
                 "DIYU_S3_ENDPOINT_URL": "http://127.0.0.1:9000",
                 "DIYU_S3_BUCKET": "diyu-contract",
                 "DIYU_S3_ACCESS_KEY_ID": "openapi-contract-placeholder",

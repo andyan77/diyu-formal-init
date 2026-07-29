@@ -85,6 +85,7 @@ DIYU_SESSION_SECRET=${session_secret}
 DIYU_GENERATOR_MODE=deepseek
 DEEPSEEK_API_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_REVIEWER_MODEL=deepseek-v4-pro
 DIYU_S3_ENDPOINT_URL=http://127.0.0.1:9000
 DIYU_S3_BUCKET=${bucket_name}
 DIYU_S3_ACCESS_KEY_ID=${s3_access_key}

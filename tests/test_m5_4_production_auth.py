@@ -28,12 +28,33 @@ def _settings(database_url: str) -> Settings:
             "DEEPSEEK_API_BASE_URL": "https://example.invalid",
             "DEEPSEEK_API_KEY": "not-a-real-key",
             "DEEPSEEK_MODEL": "deepseek-v4-flash",
+            "DEEPSEEK_REVIEWER_MODEL": "deepseek-v4-pro",
             "DIYU_S3_ENDPOINT_URL": "http://127.0.0.1:9000",
             "DIYU_S3_BUCKET": "diyu-test",
             "DIYU_S3_ACCESS_KEY_ID": "test-access-key",
             "DIYU_S3_SECRET_ACCESS_KEY": "test-secret-key",
         }
     )
+
+
+def test_production_requires_an_explicit_reviewer_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DEEPSEEK_REVIEWER_MODEL", raising=False)
+    with pytest.raises(RuntimeError, match="Reviewer"):
+        Settings.model_validate(
+            {
+                "DIYU_RUNTIME_MODE": "production",
+                "DIYU_APP_DATABASE_URL": "postgresql://example.invalid/diyu",
+                "DIYU_SESSION_SECRET": "production-test-session-secret",
+                "DIYU_GENERATOR_MODE": "deepseek",
+                "DEEPSEEK_API_BASE_URL": "https://example.invalid",
+                "DEEPSEEK_API_KEY": "not-a-real-key",
+                "DEEPSEEK_MODEL": "deepseek-v4-flash",
+                "DIYU_S3_ENDPOINT_URL": "http://127.0.0.1:9000",
+                "DIYU_S3_BUCKET": "diyu-test",
+                "DIYU_S3_ACCESS_KEY_ID": "test-access-key",
+                "DIYU_S3_SECRET_ACCESS_KEY": "test-secret-key",
+            }
+        )
 
 
 def _clear_auth_state(migrator_database_url: str) -> None:

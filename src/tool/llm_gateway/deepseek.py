@@ -395,12 +395,14 @@ class DeepSeekGenerator(ContentGenerator):
         api_base_url: str,
         api_key: str,
         model: str,
+        reviewer_model: str | None = None,
         timeout_seconds: float = 30.0,
         max_retries: int = 2,
     ) -> None:
         self._api_base_url = api_base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
+        self._reviewer_model = reviewer_model or model
         self._timeout_seconds = timeout_seconds
         self._max_retries = max_retries
         self._review_timeout_seconds = max(timeout_seconds, 60.0)
@@ -408,6 +410,10 @@ class DeepSeekGenerator(ContentGenerator):
     @property
     def model_name(self) -> str:
         return self._model
+
+    @property
+    def reviewer_model_name(self) -> str:
+        return self._reviewer_model
 
     def route(self, request: RoutingInput) -> ContentProduct | None:
         payload, _ = self._request(
@@ -685,7 +691,7 @@ class DeepSeekGenerator(ContentGenerator):
             model=self._model,
             latency_ms=int((time.monotonic() - started) * 1000),
             retry_count=retries,
-            provider_usage=self._combined_usage(provider_payloads),
+            provider_usage=self._provider_usage_receipt(provider_payloads),
             primary_product=request.primary_product,
             semantic_contract=compiled.semantic_contract,
             production=compiled.production,
@@ -697,6 +703,8 @@ class DeepSeekGenerator(ContentGenerator):
                 "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
                 "review_evidence_version": CLOSED_REVIEW_VERSION,
                 "closed_review_contract": "closed-review-questions-v1",
+                "writer_model": self._model,
+                "reviewer_model": self._reviewer_model,
                 "claim_inventory_v1": claim_inventory_document(claim_inventory),
                 "reviewed_kernel_digest": reviewed_kernel_digest,
                 "reviewed_creative_digest": reviewed_creative_digest,
@@ -834,7 +842,7 @@ class DeepSeekGenerator(ContentGenerator):
             model=self._model,
             latency_ms=int((time.monotonic() - started) * 1000),
             retry_count=retries,
-            provider_usage=self._combined_usage(provider_payloads),
+            provider_usage=self._provider_usage_receipt(provider_payloads),
             primary_product=request.primary_product,
             semantic_contract=contract,
             production=production,
@@ -2660,7 +2668,7 @@ CreativePlanV2：{
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
         request_payload: dict[str, Any] = {
-            "model": self._model,
+            "model": self._reviewer_model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
@@ -2713,14 +2721,14 @@ CreativePlanV2：{
             batches.append(batch)
         return tuple(batches)
 
-    @classmethod
     def _review_payload_envelope(
-        cls,
+        self,
         payloads: list[dict[str, Any]],
     ) -> dict[str, Any]:
         return {
             "closed_review_batches": payloads,
-            "usage": cls._combined_usage(payloads),
+            "reviewer_model": self._reviewer_model,
+            "usage": self._combined_usage(payloads),
         }
 
     def _request(
@@ -2816,6 +2824,30 @@ CreativePlanV2：{
                 if isinstance(value, int):
                     totals[str(key)] = totals.get(str(key), 0) + value
         return totals or None
+
+    def _provider_usage_receipt(
+        self,
+        payloads: list[dict[str, Any]],
+    ) -> dict[str, int | str]:
+        writer_payloads = [
+            payload for payload in payloads if not isinstance(payload.get("closed_review_batches"), list)
+        ]
+        reviewer_payloads = [
+            batch
+            for payload in payloads
+            if isinstance(payload.get("closed_review_batches"), list)
+            for batch in cast(list[dict[str, Any]], payload["closed_review_batches"])
+        ]
+        combined = self._combined_usage(payloads) or {}
+        receipt: dict[str, int | str] = {
+            **combined,
+            "writer_model": self._model,
+            "reviewer_model": self._reviewer_model,
+        }
+        for role, role_payloads in (("writer", writer_payloads), ("reviewer", reviewer_payloads)):
+            for key, value in (self._combined_usage(role_payloads) or {}).items():
+                receipt[f"{role}_{key}"] = value
+        return receipt
 
     @staticmethod
     def _retry_delay(retry_after: str | None, retries: int) -> float:

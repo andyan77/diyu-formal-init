@@ -55,6 +55,10 @@ class DeterministicContentGenerator(ContentGenerator):
     def model_name(self) -> str:
         return "deterministic-content-test-stub"
 
+    @property
+    def reviewer_model_name(self) -> str:
+        return self.model_name
+
     def route(self, request: RoutingInput) -> ContentProduct | None:
         text = request.weak_seed.casefold()
         if _ordinary_chat(text):

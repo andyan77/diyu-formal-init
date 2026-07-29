@@ -407,7 +407,7 @@ def test_actuality_generic_relationship_role_cannot_expand_the_frozen_event() ->
         contract="audience_guidance",
         with_actuality_fact=True,
     )
-    relationship = {
+    relationship: dict[str, tuple[str, str, tuple[str, ...]]] = {
         "subject_binding": (
             "present",
             text,
