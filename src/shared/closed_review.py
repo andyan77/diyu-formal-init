@@ -474,7 +474,13 @@ def materialize_claim_inventory(
         mode_answer = dimensions["statement_mode"]
         if mode_answer.status != "present" or len(mode_answer.operands) != 1:
             raise ValueError("claim inventory statement mode drifted")
-        mode = cast(StatementMode, mode_answer.operands[0])
+        mode = (
+            "hypothesis"
+            if context.unit_contract == "hypothetical_example"
+            else "dramatization"
+            if context.unit_contract == "disclosed_dramatization"
+            else cast(StatementMode, mode_answer.operands[0])
+        )
         if mode not in _STATEMENT_MODES:
             raise ValueError("claim inventory statement mode is invalid")
         binding = _binding_from_answer(

@@ -476,6 +476,73 @@ def test_recommendation_and_hypothesis_keep_creative_freedom() -> None:
     assert _reasons(hypothesis_contexts, hypothesis_answers) == ()
 
 
+def test_server_scoped_hypothesis_does_not_trust_reviewer_mode_label() -> None:
+    text = "深夜动态往往透露着未被言说的情绪。"
+    contexts = _context(
+        text,
+        contract="hypothetical_example",
+    )
+    answers = _parse(
+        contexts,
+        {
+            "subject_binding": (
+                "present",
+                text,
+                ("generic",),
+            ),
+            "motive_or_mental_state": (
+                "present",
+                text,
+                ("emotion",),
+            ),
+            "statement_mode": (
+                "present",
+                text,
+                ("generic_observation",),
+            ),
+        },
+    )
+
+    assert _reasons(contexts, answers) == ()
+
+
+def test_server_scoped_hypothesis_still_rejects_current_person_binding() -> None:
+    text = "我家昨天也发生了这件事。"
+    contexts = _context(
+        text,
+        contract="hypothetical_example",
+    )
+    answers = _parse(
+        contexts,
+        {
+            "subject_binding": (
+                "present",
+                text,
+                ("current_user",),
+            ),
+            "actual_event": (
+                "present",
+                text,
+                ("event",),
+            ),
+            "time_location_possession": (
+                "present",
+                text,
+                ("time", "possession"),
+            ),
+            "statement_mode": (
+                "present",
+                text,
+                ("generic_observation",),
+            ),
+        },
+    )
+
+    assert _reasons(contexts, answers) == (
+        "unsupported_actuality_binding",
+    )
+
+
 def test_audience_question_is_not_a_recommendation() -> None:
     text = "你们如何看待彼此付出的平衡？"
     contexts = _context(
