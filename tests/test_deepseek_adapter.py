@@ -572,6 +572,31 @@ def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:
     assert "用户事实中没有逐字出现的亲属、伴侣、同住、员工、顾客" in prompt
 
 
+def test_kernel_repair_prompt_never_exposes_service_disclosure_as_writer_text() -> None:
+    request = _kernel_request()
+    kernel = _parsed_kernel(request, _kernel_writer())
+
+    prompt = _generator()._kernel_repair_prompt(
+        request,
+        kernel,
+        frozenset({"unit:hypothetical-example"}),
+        (
+            NarrativeIssue(
+                "unit:hypothetical-example",
+                "unsupported_actuality_binding",
+                "问题片段",
+            ),
+        ),
+    )
+
+    assert (
+        '"current_text": "一方先停一下，另一方也不必马上给出答案。"'
+        in prompt
+    )
+    assert '"current_text": "假设有这样一幕：' not in prompt
+    assert "修复文字不得重复\n这些包裹" in prompt
+
+
 def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     product = ProductFact(
         sku="ZX-C218",

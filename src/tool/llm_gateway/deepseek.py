@@ -27,6 +27,8 @@ from src.shared.closed_review import (
 )
 from src.shared.content_origin import aigc_disclosure
 from src.shared.creative_kernel import (
+    DRAMATIZATION_DISCLOSURE,
+    HYPOTHESIS_DISCLOSURE,
     MAX_PRODUCT_FACT_BLOCKS,
     CreativeKernelV1,
     build_kernel_skeleton,
@@ -1404,18 +1406,38 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 platform=request.target,
                 media_format=request.media_format,
             )
-        units = [
-            {
-                "unit_id": unit.unit_id,
-                "purpose": unit.purpose,
-                "unit_contract": trusted_contracts[unit.unit_id],
-                "allowed_observation_types": list(unit.allowed_observation_types),
-                "claim_refs": list(unit.claim_refs),
-                "current_text": unit.text,
-            }
-            for unit in kernel.units
-            if unit.unit_id in affected
-        ]
+        units: list[dict[str, object]] = []
+        for unit in kernel.units:
+            if unit.unit_id not in affected:
+                continue
+            contract = trusted_contracts[unit.unit_id]
+            current_text = unit.text
+            disclosure = (
+                HYPOTHESIS_DISCLOSURE
+                if contract == "hypothetical_example"
+                else DRAMATIZATION_DISCLOSURE
+                if contract == "disclosed_dramatization"
+                else None
+            )
+            if disclosure is not None:
+                prefix = f"{disclosure}\n"
+                if not current_text.startswith(prefix):
+                    raise GenerationFailed(
+                        "CreativeKernelV1 服务端披露结构漂移"
+                    )
+                current_text = current_text[len(prefix) :]
+            units.append(
+                {
+                    "unit_id": unit.unit_id,
+                    "purpose": unit.purpose,
+                    "unit_contract": contract,
+                    "allowed_observation_types": list(
+                        unit.allowed_observation_types
+                    ),
+                    "claim_refs": list(unit.claim_refs),
+                    "current_text": current_text,
+                }
+            )
         findings = [
             {
                 "unit_id": issue.target_id,
