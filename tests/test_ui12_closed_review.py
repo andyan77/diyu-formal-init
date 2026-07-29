@@ -484,12 +484,17 @@ def test_audience_question_is_not_a_recommendation() -> None:
     )
 
 
-def test_audience_guidance_accepts_safe_summary_or_invitation_only() -> None:
+def test_audience_guidance_accepts_safe_summary_invitation_or_condition() -> None:
     summary = "这篇从理解与边界说起。"
     summary_contexts = _context(summary, contract="audience_guidance")
     invitation = "不妨从彼此的付出开始看。"
     invitation_contexts = _context(
         invitation,
+        contract="audience_guidance",
+    )
+    condition = "如果你也常常没有灵感，这篇会提供一个观察角度。"
+    condition_contexts = _context(
+        condition,
         contract="audience_guidance",
     )
     actuality = "昨天我们终于理解了彼此。"
@@ -510,6 +515,27 @@ def test_audience_guidance_accepts_safe_summary_or_invitation_only() -> None:
                         invitation,
                         ("recommendation",),
                     )
+                },
+            ),
+        )
+        == ()
+    )
+    assert (
+        _reasons(
+            condition_contexts,
+            _parse(
+                condition_contexts,
+                {
+                    "subject_binding": (
+                        "present",
+                        condition,
+                        ("generic",),
+                    ),
+                    "statement_mode": (
+                        "present",
+                        condition,
+                        ("hypothesis",),
+                    ),
                 },
             ),
         )
