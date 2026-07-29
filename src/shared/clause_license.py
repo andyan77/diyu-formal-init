@@ -117,6 +117,44 @@ _BINDING_CHECK_STATUSES: tuple[BindingCheckStatusV1, ...] = (
     "present",
     "uncertain",
 )
+_PROHIBITED_BINDING_QUESTIONS: dict[
+    ProhibitedBindingV1,
+    str,
+] = {
+    "current_person": (
+        "这条文字是否把新增关系、经历、动作、心理、因果或结果绑定为当前用户或当前真人的现实？"
+    ),
+    "current_institution": (
+        "这条文字是否让当前品牌、组织、门店或账号承担观点、做法、经历、承诺或历史？"
+    ),
+    "protected_exact_subject": (
+        "这条文字是否直接或指代性地绑定服务端保护的精确主体？"
+    ),
+    "specific_social_relation_to_actuality": (
+        "这条文字是否把亲属、伴侣、家庭、同住、同事、员工、顾客或其他具体社会关系"
+        "实例化为当前现实或未披露的具体处境？"
+    ),
+    "unfrozen_dialogue": (
+        "这条文字是否新增任何直接对白、转述、具体说法或言语归属？"
+    ),
+    "actual_event_or_result": (
+        "这条文字是否让人物做事、反应、产生心理或动机、形成事件链或得到结果，"
+        "而不只是非情境化比喻、一般判断或清楚建议？"
+    ),
+    "unsupported_institution_fact": (
+        "这条文字是否新增机构事实、经营做法、历史、信念或承诺且没有精确事实来源？"
+    ),
+    "unsupported_product_fact": (
+        "这条文字是否新增、复述或推导商品属性、数字、性能、用途、效果、价格、库存、"
+        "设计动机、比较或实际体验？"
+    ),
+    "source_or_resource_as_fact": (
+        "这条文字是否把资料来源、表达约束或制作资源当成现实或商品事实许可证？"
+    ),
+    "discourse_contract_drift": (
+        "这条文字的实际语态是否超出服务端允许的表达类型或服务端披露范围？"
+    ),
+}
 _QUOTE_BOUNDARIES = frozenset('，,、：:；;。！？.!?\n"')
 
 
@@ -213,6 +251,13 @@ def build_unit_clause_license_policies_v1(
     if len(identifiers) != len(set(identifiers)):
         raise ValueError("unit clause license policies are duplicated")
     return tuple(policies)
+
+
+def prohibited_binding_question_v1(
+    binding_id: ProhibitedBindingV1,
+) -> str:
+    """Return the stable closed question carried by one binding ID."""
+    return _PROHIBITED_BINDING_QUESTIONS[binding_id]
 
 
 def materialize_clause_licenses_v1(

@@ -14,6 +14,7 @@ from src.shared.clause_license import (
     CLAUSE_LICENSE_TOOL_NAME,
     build_unit_clause_license_policies_v1,
     materialize_clause_licenses_v1,
+    prohibited_binding_question_v1,
     unsupported_quote_candidates_v1,
 )
 from src.shared.closed_review import (
@@ -1429,6 +1430,7 @@ def test_writer_prompt_keeps_private_steering_out_of_fact_sources() -> None:
 
 def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     request = _kernel_request()
+    assert request.narrative_frame is not None
     raw = _kernel_writer()
     kernel = _parsed_kernel(request, raw)
     FakeClient.responses = [
@@ -1478,6 +1480,7 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     reviewer_prompt = prompts[1]
     assert "ClauseLicenseV1" in reviewer_prompt
     assert '"license_id"' in reviewer_prompt
+    assert '"prohibited_binding_checks"' in reviewer_prompt
     assert "unsupported_quote" in reviewer_prompt
     assert "泛指人数本身不是具体社会关系" in reviewer_prompt
     assert "specific_social_relation" in reviewer_prompt
@@ -1500,6 +1503,20 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert "ProductFactPacket" in reviewer_prompt
     assert "只能由服务端 ImmutableFactBlock" in reviewer_prompt
     assert "性能、功效、用途／穿着结果、设计动机、价格、库存、比较结论或实际体验" in reviewer_prompt
+    assert all(
+        prohibited_binding_question_v1(binding) in reviewer_prompt
+        for binding in {
+            binding
+            for policy in build_unit_clause_license_policies_v1(
+                frame=request.narrative_frame,
+                unit_contracts=unit_contracts_v2(
+                    kernel,
+                    request.narrative_frame,
+                ),
+            )
+            for binding in policy.prohibited_bindings
+        }
+    )
     compiler_contexts = [
         item
         for item in clause_context

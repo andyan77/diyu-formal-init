@@ -17,6 +17,7 @@ from src.shared.clause_license import (
     clause_license_review_json_schema,
     materialize_clause_licenses_v1,
     parse_clause_license_reviews_v1,
+    prohibited_binding_question_v1,
     reconcile_clause_license_reviews_v1,
     unsupported_quote_candidates_v1,
 )
@@ -82,6 +83,30 @@ def _policy(
         frame=_frame(),
         unit_contracts={"unit:body": contract},
     )
+
+
+def test_every_prohibited_binding_has_one_stable_generic_question() -> None:
+    bindings = tuple(
+        dict.fromkeys(
+            binding
+            for policy in _policy()
+            for binding in policy.prohibited_bindings
+        )
+    )
+    questions = tuple(
+        prohibited_binding_question_v1(binding)
+        for binding in bindings
+    )
+
+    assert len(bindings) == 10
+    assert len(questions) == len(set(questions))
+    assert all(question.endswith("？") for question in questions)
+    assert not {
+        "机器人",
+        "厨房",
+        "洗碗",
+        "婆媳",
+    }.intersection("".join(questions))
 
 
 def _review(

@@ -26,6 +26,7 @@ from src.shared.clause_license import (
     clause_license_review_json_schema,
     materialize_clause_licenses_v1,
     parse_clause_license_reviews_v1,
+    prohibited_binding_question_v1,
     reconcile_clause_license_reviews_v1,
     unsupported_quote_candidates_v1,
 )
@@ -1326,7 +1327,17 @@ release_caption 不属于 Writer 输出，也不进入 Reviewer 的 writer-owned
                 "subject_scope": license_.subject_scope,
                 "allowed_expression_types": list(license_.allowed_expression_types),
                 "allowed_fact_refs": list(license_.allowed_fact_refs),
-                "prohibited_bindings": list(license_.prohibited_bindings),
+                "prohibited_binding_checks": [
+                    {
+                        "binding_id": binding,
+                        "question": (
+                            prohibited_binding_question_v1(
+                                binding
+                            )
+                        ),
+                    }
+                    for binding in license_.prohibited_bindings
+                ],
                 "unsupported_quote_candidates": list(
                     unsupported_quote_candidates_v1(context_by_clause[license_.clause_id].exact_text)
                 ),
@@ -1348,7 +1359,7 @@ release_caption 不属于 Writer 输出，也不进入 Reviewer 的 writer-owned
 
 逐 clause 使用同一套稳定核对顺序：
 1. 先读取 discourse_contract、subject_scope、allowed_expression_types、allowed_fact_refs
-   和 prohibited_bindings；不得
+   和 prohibited_binding_checks；每个 check 都是当前 clause 必须独立回答的闭合问题，不得
    因为文字和 topic／冻结事实谈的是相近生活主题，就推定新增含义已获事实许可。
 2. subject_scope=generic_only 时，只允许不指向当前真人或受保护主体的泛指人数、普遍心理
    观察、一般因果、关系题材讨论和清楚建议；具体社会关系身份不是泛指人数。只讨论“婆媳
@@ -1357,20 +1368,22 @@ release_caption 不属于 Writer 输出，也不进入 Reviewer 的 writer-owned
    其他具体关系处境。
 3. 检查整条 clause 是否建立亲属、伴侣、家庭、同住、同事、员工、顾客或文字明确建立的
    其他社会关系；文字把该关系绑定为当前真人／现实个案，或在 abstract／audience_guidance
-   clause 中把一组泛指人物实例化为具有具体关系处境，且 prohibited_bindings 包含
+   clause 中把一组泛指人物实例化为具有具体关系处境，且 prohibited_binding_checks 包含
    specific_social_relation_to_actuality 时必须 unsupported。一般关系题材与抽象关系理解，
    以及 generic_or_fictional / fictional_only scope 内被服务端包裹的虚构关系可以受许可。
 4. 检查当前真人／机构、现实对白、已发生事件或结果、机构／商品事实；命中相应
-   prohibited_bindings 且没有精确 allowed_fact_refs 时必须 unsupported。
+   prohibited_binding_checks 且没有精确 allowed_fact_refs 时必须 unsupported。
    ProductFactPacket 中的硬属性、数字和 canonical_text 只能由服务端 ImmutableFactBlock
    原样插入；writer-owned clause 即使准确复述也必须 unsupported_product_fact。根据 Packet
    推导性能、功效、用途／穿着结果、设计动机、价格、库存、比较结论或实际体验，同样必须
    unsupported_product_fact。资料来源或制作资源被当成商品事实时必须
    source_or_resource_as_fact。Packet 只帮助识别边界，不使 claim_refs 或相近表述获得许可。
-5. 为每个 prohibited_bindings ID 恰好返回一个 binding_check，不得遗漏、重复、增加或改名：
-   absent 表示该绑定不存在，present 表示存在，uncertain 表示无法确定。supported 只在
-   expression_type 属于 allowed_expression_types 且全部 binding_check=absent 时成立；
-   只要一个含义越界就不能用其他泛指或建议含义抵消。
+5. 按 prohibited_binding_checks 的给定顺序逐项阅读 question，并为每个 binding_id
+   恰好返回一个 binding_check，不得遗漏、重复、增加或改名：absent 表示该问题所述绑定
+   不存在，present 表示存在，uncertain 表示无法确定。不能用对其他问题的回答代替当前
+   question。服务端只在 expression_type 属于 allowed_expression_types 且全部
+   binding_check=absent 时派生 supported；只要一个含义越界就不能用其他泛指或建议含义
+   抵消。
 
 稳定语义边界：
 - generic_observation 可以创造不绑定当前真人或受保护主体的一般观察、观点、比喻、泛指心理
@@ -1398,13 +1411,13 @@ release_caption 不属于 Writer 输出，也不进入 Reviewer 的 writer-owned
   verdict 或 reason_code，最终状态完全由服务端从这份证明派生。
 - expression_type 必须从给定枚举选择；全部 binding_check=absent 时必须属于本条
   allowed_expression_types。
-- 每条都返回 binding_checks，且必须对本条 prohibited_bindings 中的每个 binding_id
+- 每条都返回 binding_checks，且必须对本条 prohibited_binding_checks 中的每个 binding_id
   恰好返回一次 status；顺序不构成语义，服务端会按 ID 规范化。
 - 全部 absent：整条 clause 的全部可见含义均在许可证内，unsupported_quote 为空字符串。
 - 至少一个 present：至少一个含义越界；unsupported_quote 必须逐字来自当前 clause、
   至少两个字符且在该 clause 中只出现一次。优先从 unsupported_quote_candidates 选择；
   只有候选过长时才可返回同一 clause 内更短但仍唯一的精确片段。不得拼接、改写或返回含
-  ASCII 双引号的片段。所有实际命中的 prohibited_bindings 都必须为 present；
+  ASCII 双引号的片段。所有实际命中的 prohibited_binding_checks 都必须为 present；
   其他能够确定不存在的检查返回 absent。
 - 确实无法判断主体绑定或许可支持：至少一个对应 binding_check=uncertain，
   unsupported_quote 为空字符串，且不得同时返回 present。若没有候选能准确指向越界含义，
