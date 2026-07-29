@@ -374,23 +374,30 @@ def test_actuality_cannot_escape_by_claiming_generic_mode() -> None:
     assert _reasons(contexts, answers) == ("unsupported_actuality_binding",)
 
 
-def test_actuality_current_person_binding_is_rejected_without_extra_risk_labels() -> None:
-    text = "忙了一天，回家却因为洗碗拌嘴？"
-    contexts = _context(text, with_actuality_fact=True)
+def test_actuality_personal_ip_current_cta_is_allowed_without_fact_risks() -> None:
+    text = "关注我，一起保留更轻松的观察角度。"
+    contexts = _context(
+        text,
+        contract="audience_guidance",
+        with_actuality_fact=True,
+    )
     answers = _parse(
         contexts,
         {
             "subject_binding": (
                 "present",
                 text,
-                ("current_user",),
+                ("current_speaker",),
+            ),
+            "statement_mode": (
+                "present",
+                text,
+                ("recommendation",),
             ),
         },
     )
 
-    assert _reasons(contexts, answers) == (
-        "unsupported_actuality_binding",
-    )
+    assert _reasons(contexts, answers) == ()
 
 
 def test_actuality_generic_relationship_role_cannot_expand_the_frozen_event() -> None:

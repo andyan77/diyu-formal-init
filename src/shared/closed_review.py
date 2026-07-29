@@ -690,18 +690,6 @@ def _claim_inventory_issues(
             continue
         if (
             actuality_scope
-            and binding == "current_person"
-        ):
-            issues.append(
-                NarrativeIssue(
-                    context.unit_id,
-                    "unsupported_actuality_binding",
-                    mode_claim.exact_quote,
-                )
-            )
-            continue
-        if (
-            actuality_scope
             and "relationship_claim" in dimensions
         ):
             issues.append(
