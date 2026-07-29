@@ -502,6 +502,7 @@ def test_kernel_writer_prompt_exposes_read_only_product_packet_but_not_fact_auth
         sku="ZX-C218",
         display_name="双面短外套",
         facts={
+            "entity_kind": "apparel_product",
             "material": "棉混纺",
             "sample_weight_m_grams": 620,
         },
@@ -530,8 +531,10 @@ def test_kernel_writer_prompt_exposes_read_only_product_packet_but_not_fact_auth
     assert "ProductFactPacket" in prompt
     assert "ImmutableFactBlock" in prompt
     assert "只能引用 fact_block_id；正文由服务端原样插入" in prompt
-    assert "claim_refs 只是审查线索" in prompt
+    assert "claim_refs 只是\n审查线索" in prompt
     assert "不能把硬属性、数字或 canonical_text" in prompt
+    assert "首次最多选择 3 个" in prompt
+    assert '"entity_kind": "apparel_product"' in prompt
     assert any(
         unit.purpose == "frozen_fact" and unit.text == "双面短外套已登记的材质是棉混纺。" for unit in skeleton.units
     )
@@ -643,6 +646,7 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert "ZX-C218" not in prompt
     assert "双面短外套" not in prompt
     assert "棉混纺" not in prompt
+    assert '"apparel_product"' in prompt
     assert violating_text not in prompt
     assert '"current_text"' not in prompt
     assert '"claim_refs": []' in prompt
@@ -650,7 +654,7 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert "判断对象只能是\n泛指读者的选择过程" in prompt
     assert "claim_refs 必须\n是空数组" in prompt
     assert '"unit_contract": "audience_guidance"' in prompt
-    assert "只写本篇给不特定读者的观看回报或阅读邀请" in prompt
+    assert "只写与本篇已知内容配套的不特定读者观看回报" in prompt
     assert "不得因为 purpose 或写作习惯换成建议、假设、演绎" in prompt
 
 

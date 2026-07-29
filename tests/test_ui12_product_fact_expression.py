@@ -63,6 +63,7 @@ def _product() -> ProductFact:
         sku="ZX-C218",
         display_name="双面短外套",
         facts={
+            "entity_kind": "apparel_product",
             "category": "double-faced short coat",
             "colors": ["炭灰纯色", "深绿细格纹"],
             "both_sides_complete": True,
@@ -220,7 +221,9 @@ def test_packet_exposes_trusted_identity_category_and_stable_digest() -> None:
         "category",
     }
     assert {item.display_name for item in packet.facts} == {"双面短外套"}
-    assert {item.entity_kind for item in packet.facts} == {"catalog_product"}
+    assert {item.entity_kind for item in packet.facts} == {
+        "apparel_product"
+    }
     assert any(
         item.fact_key == "category" and item.structured_value == "double-faced short coat" for item in packet.facts
     )
@@ -246,6 +249,19 @@ def test_writer_can_only_select_existing_blocks_and_packet_claim_refs() -> None:
         parse_writer_kernel(
             {
                 "fact_block_refs": ["fact-block:product:forged"],
+                "units": base_units,
+            },
+            skeleton,
+            fact_blocks=blocks,
+            allowed_claim_ids=packet.fact_ids,
+        )
+    with pytest.raises(ValueError, match="too many"):
+        parse_writer_kernel(
+            {
+                "fact_block_refs": [
+                    block.fact_block_id
+                    for block in blocks[:4]
+                ],
                 "units": base_units,
             },
             skeleton,

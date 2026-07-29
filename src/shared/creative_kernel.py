@@ -29,6 +29,7 @@ KernelProgramId: TypeAlias = Literal[
 ]
 
 KERNEL_VERSION = "creative-kernel-v1"
+MAX_PRODUCT_FACT_BLOCKS = 3
 DRAMATIZATION_DISCLOSURE = "情境演绎（虚构角色，不对应真实人物或品牌案例）："
 HYPOTHESIS_DISCLOSURE = "假设有这样一幕："
 OBSERVATION_ONLY_PROGRAM: KernelProgramId = "observation_only_v1"
@@ -273,6 +274,8 @@ def parse_writer_kernel(
         ):
             raise ValueError("writer fact block refs are invalid")
         selected_fact_block_ids = tuple(cast(list[str], raw_block_refs))
+        if len(selected_fact_block_ids) > MAX_PRODUCT_FACT_BLOCKS:
+            raise ValueError("writer selected too many immutable fact blocks")
         available_block_ids = {block.fact_block_id for block in fact_blocks}
         if any(block_id not in available_block_ids for block_id in selected_fact_block_ids):
             raise ValueError("writer invented an immutable fact block")

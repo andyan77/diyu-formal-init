@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.ports.content_generator import ContentGenerator
 from src.shared.creative_kernel import (
+    MAX_PRODUCT_FACT_BLOCKS,
     build_kernel_skeleton,
     creative_units_digest,
     kernel_digest,
@@ -186,8 +187,6 @@ class DeterministicContentGenerator(ContentGenerator):
                 for unit in skeleton.writable_units
             ]
         }
-        if fact_blocks:
-            raw["fact_block_refs"] = [block.fact_block_id for block in fact_blocks]
         required_fact_block_ids: tuple[str, ...] | None = None
         if request.prior_creative_kernel is not None:
             required_fact_block_ids = request.prior_creative_kernel.selected_fact_block_ids or tuple(
@@ -196,6 +195,16 @@ class DeterministicContentGenerator(ContentGenerator):
                 if any(
                     unit.purpose == "frozen_fact" and unit.fact_refs == (block.fact_id,)
                     for unit in request.prior_creative_kernel.units
+                )
+            )
+        if fact_blocks:
+            raw["fact_block_refs"] = list(
+                required_fact_block_ids
+                or tuple(
+                    block.fact_block_id
+                    for block in fact_blocks[
+                        :MAX_PRODUCT_FACT_BLOCKS
+                    ]
                 )
             )
         kernel = parse_writer_kernel(

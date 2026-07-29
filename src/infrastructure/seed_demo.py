@@ -201,6 +201,7 @@ def seed_demo() -> None:
         for sku, facts in {
             "ZX-C218": {
                 "name": "双面短外套",
+                "entity_kind": "apparel_product",
                 "category": "double-faced short coat",
                 "colors": ["炭灰纯色", "深绿细格纹"],
                 "display_family": "upper",
@@ -213,30 +214,35 @@ def seed_demo() -> None:
             },
             "ZX-S104": {
                 "name": "暖白衬衫",
+                "entity_kind": "apparel_product",
                 "category": "warm white shirt",
                 "display_family": "upper",
                 "is_long": False,
             },
             "ZX-K126": {
                 "name": "燕麦薄针织",
+                "entity_kind": "apparel_product",
                 "category": "oat thin knit",
                 "display_family": "upper",
                 "is_long": False,
             },
             "ZX-P211": {
                 "name": "炭灰直筒裤",
+                "entity_kind": "apparel_product",
                 "category": "charcoal straight trousers",
                 "display_family": "lower",
                 "is_long": False,
             },
             "ZX-V113": {
                 "name": "炭灰短马甲",
+                "entity_kind": "apparel_product",
                 "category": "charcoal short vest",
                 "display_family": "upper",
                 "is_long": False,
             },
             "ZX-Q117": {
                 "name": "深橄榄半裙",
+                "entity_kind": "apparel_product",
                 "category": "deep olive skirt",
                 "display_family": "lower",
                 "is_long": False,

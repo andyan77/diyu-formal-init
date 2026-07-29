@@ -27,6 +27,7 @@ from src.shared.closed_review import (
 )
 from src.shared.content_origin import aigc_disclosure
 from src.shared.creative_kernel import (
+    MAX_PRODUCT_FACT_BLOCKS,
     CreativeKernelV1,
     build_kernel_skeleton,
     creative_units_digest,
@@ -1096,7 +1097,28 @@ class DeepSeekGenerator(ContentGenerator):
             ]
         }
         if fact_blocks:
-            template["fact_block_refs"] = [block.fact_block_id for block in fact_blocks[:3]]
+            blocks_by_fact_id = {
+                block.fact_id: block
+                for block in fact_blocks
+            }
+            example_fact_ids = (
+                *(
+                    item.fact_id
+                    for item in product_fact_packet.facts
+                    if item.fact_key == "display_name"
+                ),
+                *(
+                    item.fact_id
+                    for item in product_fact_packet.facts
+                    if item.fact_key not in {"sku", "display_name"}
+                ),
+            )
+            template["fact_block_refs"] = [
+                blocks_by_fact_id[fact_id].fact_block_id
+                for fact_id in example_fact_ids[
+                    :MAX_PRODUCT_FACT_BLOCKS
+                ]
+            ]
         prior = (
             [
                 {
@@ -1140,8 +1162,10 @@ unit_id、text、claim_refs。必须恰好一次覆盖全部既定可写 unit_id
 或修改 id，不得输出任何制作字段、来源、事实正文、约束、类型或内部规则。
 fact_block_refs 只能选择服务端候选 ID 并用数组顺序表达最终事实块顺序；首次商品内容至少
 选择商品名称身份块和一个与本篇切口直接相关的事实块。修改既有内容时必须原样返回此前已选
-fact_block_refs，不能增删、换序或更换事实。claim_refs 只是审查线索，只能引用本次
-Packet 的 fact_id，用于说明该 creative unit 的创作切口参考了哪些事实；不能把硬属性、数字或 canonical_text
+fact_block_refs，不能增删、换序或更换事实。首次最多选择 {MAX_PRODUCT_FACT_BLOCKS} 个
+事实块，避免把完整 Packet 机械堆成资料清单；按本篇主线优先顺序选择。claim_refs 只是
+审查线索，只能引用本次 Packet 的 fact_id，用于说明该 creative unit 的创作切口参考了
+哪些事实；不能把硬属性、数字或 canonical_text
 写进 creative text，也不能从结构事实推断性能、功效、用途、价格、库存、设计动机、比较
 结论、普遍穿着结果或实际体验。商品硬事实正文由服务端按 fact_block_refs 原样插入。
 title 是自然标题；natural_guide 给出清楚主线和观看回报；按可见顺序排列的一个或多个 body
@@ -1333,11 +1357,26 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
             and issue.reason in product_issue_reasons
             for issue in issues
         )
+        product_contract = bool(request.products)
+        product_packet = build_product_fact_packet(
+            request.products,
+            allowed_fact_ids=(
+                request.narrative_frame.allowed_product_fact_ids
+                if request.narrative_frame is not None
+                else None
+            ),
+        )
         if product_fact_repair:
             return self._product_fact_repair_prompt(
                 kernel=kernel,
                 affected=affected,
                 trusted_contracts=trusted_contracts,
+                entity_kinds=tuple(
+                    dict.fromkeys(
+                        item.entity_kind
+                        for item in product_packet.facts
+                    )
+                ),
             )
         units = [
             {
@@ -1360,13 +1399,6 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
             for issue in issues
             if issue.target_id in affected
         ]
-        product_contract = bool(request.products)
-        product_packet = build_product_fact_packet(
-            request.products,
-            allowed_fact_ids=(
-                request.narrative_frame.allowed_product_fact_ids if request.narrative_frame is not None else None
-            ),
-        )
         result_template: dict[str, object] = {
             "units": [
                 {
@@ -1434,6 +1466,7 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         kernel: CreativeKernelV1,
         affected: frozenset[str],
         trusted_contracts: Mapping[str, UnitContractV2],
+        entity_kinds: tuple[str, ...],
     ) -> str:
         expression_rules: dict[UnitContractV2, str] = {
             "abstract_observation": (
@@ -1441,7 +1474,8 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
                 "每个 clause 都必须是 generic_observation"
             ),
             "audience_guidance": (
-                "只写本篇给不特定读者的观看回报或阅读邀请；不得断言读者已经发生现实事件"
+                "只写与本篇已知内容配套的不特定读者观看回报、选择视角或阅读邀请；"
+                "不得断言读者已经发生现实事件"
             ),
             "recommendation": (
                 "只写带清楚建议语态的泛指做法；不得写已经发生的事件"
@@ -1487,6 +1521,9 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 
 受影响创意 unit：
 {json.dumps(units, ensure_ascii=False)}
+
+可信领域类型（只用于选择受众语境，不得输出、翻译或扩写为具体事实）：
+{json.dumps(entity_kinds, ensure_ascii=False)}
 
 这是面向最终读者的创意表达层，不是资料说明或内部审查说明。每个 clause 的判断对象只能是
 泛指读者的选择过程、理解方法、信息解读原则或本篇的阅读价值；不得对底层对象、其设计、
