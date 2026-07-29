@@ -9,9 +9,14 @@ import httpx
 import pytest
 
 from src.brain.platform_directions import direction_for
+from src.ports.reviewer_provider import (
+    ReviewerProvider,
+    ReviewerProviderResult,
+)
 from src.shared.clause_license import (
     CLAUSE_LICENSE_REVIEW_VERSION,
     CLAUSE_LICENSE_TOOL_NAME,
+    ClauseLicenseV1,
     build_unit_clause_license_policies_v1,
     materialize_clause_licenses_v1,
     prohibited_binding_question_v1,
@@ -97,6 +102,60 @@ class FakeClient:
         return self.responses.pop(0)
 
 
+class FakeReviewerProvider(ReviewerProvider):
+    @property
+    def provider_name(self) -> str:
+        return "test"
+
+    @property
+    def model_name(self) -> str:
+        return "deepseek-test"
+
+    def review(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        licenses: tuple[ClauseLicenseV1, ...],
+        timeout_seconds: float,
+    ) -> ReviewerProviderResult:
+        del timeout_seconds
+        response = FakeClient.responses.pop(0)
+        FakeClient.requests.append(
+            {
+                "json": {
+                    "model": self.model_name,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                }
+            }
+        )
+        if response.status_code >= 400:
+            raise GenerationFailed("Reviewer 模型服务拒绝当前请求")
+        payload = response.json()
+        try:
+            reviews = DeepSeekGenerator._strict_license_review_answers(
+                payload,
+                licenses=licenses,
+            )
+        except (
+            KeyError,
+            IndexError,
+            TypeError,
+            json.JSONDecodeError,
+        ) as exc:
+            raise GenerationFailed(
+                "Reviewer 许可证据不完整"
+            ) from exc
+        return ReviewerProviderResult(
+            reviews=reviews,
+            raw_payload=payload,
+            retry_count=0,
+        )
+
+
 @pytest.fixture(autouse=True)
 def _fake_client(monkeypatch: pytest.MonkeyPatch) -> None:
     FakeClient.responses = []
@@ -109,6 +168,7 @@ def _generator(*, max_retries: int = 0) -> DeepSeekGenerator:
         "https://example.invalid",
         "test-key",
         "deepseek-test",
+        reviewer_provider=FakeReviewerProvider(),
         max_retries=max_retries,
     )
 

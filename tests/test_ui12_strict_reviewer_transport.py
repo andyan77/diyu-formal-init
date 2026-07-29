@@ -31,6 +31,7 @@ from src.shared.review_evidence import (
     writer_clause_contexts_v2,
 )
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
+from src.tool.llm_gateway.qwen_reviewer import QwenReviewerProvider
 
 
 class _FakeResponse:
@@ -82,7 +83,11 @@ def _generator(
         base_url,
         "test-key",
         "deepseek-v4-flash",
-        reviewer_model="deepseek-v4-pro",
+        reviewer_provider=QwenReviewerProvider(
+            api_base_url="https://qwen.example.invalid",
+            api_key="test-qwen-key",
+            model="deepseek-v4-pro",
+        ),
         max_retries=9,
     )
 

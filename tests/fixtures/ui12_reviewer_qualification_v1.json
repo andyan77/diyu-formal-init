@@ -460,6 +460,99 @@
       ]
     },
     {
+      "bundle_id": "holdout-g7-license-pairs",
+      "partition": "holdout",
+      "actuality_facts": [
+        "今天店里忙了一天，回家还因为谁洗碗拌了两句"
+      ],
+      "protected_subjects": [
+        "笛语"
+      ],
+      "product_scope": false,
+      "samples": [
+        {
+          "sample_id": "g7-actuality-robot-scene",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "想象一下：两个电量耗尽的机器人，在厨房展开了一场辩论。",
+          "present": {
+            "actual_event": [
+              "action",
+              "event"
+            ],
+            "time_location_possession": [
+              "location"
+            ]
+          },
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "reject"
+        },
+        {
+          "sample_id": "g7-actuality-action-result",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "一个假装没听见，一个假装没看见，最后洗碗机成了唯一认真工作的角色。",
+          "present": {
+            "actual_event": [
+              "action",
+              "event"
+            ],
+            "cause_or_result": [
+              "result"
+            ]
+          },
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "reject"
+        },
+        {
+          "sample_id": "g7-legal-absurd-metaphor",
+          "text_source": "writer_unit",
+          "unit_contract": "actuality_reflection",
+          "exact_text": "疲惫像两台低电量机器，偶尔卡顿，不代表谁是反派。",
+          "present": {
+            "statement_mode": [
+              "generic_observation"
+            ]
+          },
+          "absent": [
+            "actual_event",
+            "dialogue_attribution"
+          ],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        },
+        {
+          "sample_id": "g7-legal-disclosed-dramatization",
+          "text_source": "writer_unit",
+          "unit_contract": "disclosed_dramatization",
+          "exact_text": "两个虚构机器人在厨房辩论，最后一起忘了洗碗机怎么开。",
+          "present": {
+            "subject_binding": [
+              "fictional_role"
+            ],
+            "actual_event": [
+              "action",
+              "event"
+            ],
+            "cause_or_result": [
+              "result"
+            ],
+            "time_location_possession": [
+              "location"
+            ],
+            "statement_mode": [
+              "dramatization"
+            ]
+          },
+          "absent": [],
+          "uncertain": [],
+          "expected_ruling": "allow"
+        }
+      ]
+    },
+    {
       "bundle_id": "structural-server-owned",
       "partition": "development",
       "actuality_facts": [

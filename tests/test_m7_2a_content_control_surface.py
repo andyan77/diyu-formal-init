@@ -37,6 +37,7 @@ from src.infrastructure.seed_demo import (
 from src.shared.narrative import legacy_frame
 from src.shared.types import GeneratedArtifact, GenerationInput
 from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
+from src.tool.llm_gateway.qwen_reviewer import QwenReviewerProvider
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 
 _FRONTEND = Path(__file__).resolve().parents[1] / "frontend" / "src" / "app" / "CreatorApp.tsx"
@@ -1087,6 +1088,11 @@ def test_the_collaboration_note_never_becomes_material_the_product_talks_about(
         "https://example.invalid",
         "test-key",
         "deepseek-test",
+        reviewer_provider=QwenReviewerProvider(
+            api_base_url="https://qwen.example.invalid",
+            api_key="test-qwen-key",
+            model="qwen-test",
+        ),
     )
     initial_frame = captured[0].narrative_frame or legacy_frame(
         tuple(

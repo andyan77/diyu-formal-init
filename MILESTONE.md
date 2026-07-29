@@ -1,9 +1,17 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`BLOCKED`。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13；此前
+- 状态：`ACTIVE`。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13；此前
   occurrence、开放 evidence、商品事实职责、Reviewer-only 模型、oracle drift、parser
   与一次 repair 的失败及前向订正均完整保留。
+- 主控最新裁决：`deepseek-v4-pro` 的 Reviewer 资格因已保存 G7 清楚语义假阴性正式
+  否决，不再改 Prompt 或复验；OpenAI 仅可用于开发辅助，因中国境内生产运维边界不得进入
+  运行主链。现授权唯一境内 Reviewer 候选
+  `qwen3.7-max-2026-05-20`，DeepSeek Flash 继续承担 intake／Writer。
+- 当前 WIP 正以薄 `ReviewerProvider` 将 ClauseLicense 正式主链切到千问北京兼容
+  Responses Function Calling。模型只返回完整许可证证明，严格 parser 和服务端矩阵继续
+  唯一裁决；无第二 Reviewer、投票、fallback、随机重跑或事实边界放宽。候选必须先通过
+  固定资格集，当前尚未成为生产候选。
 - `55cc9b0…` 已把高风险 `natural-guide/release-caption` 移交
   DeliveryCompiler 确定性生成；`31fb7f4…` 已删除 Reviewer 自报 verdict/reason，
   服务端只从 expression type 与完整 prohibited-binding proof 派生裁决。该轮 fresh G7
@@ -50,9 +58,8 @@
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
 - 当前任务包：
   [`docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md`](docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)。
-- 当前唯一下一动作：主控只裁决 Reviewer 单角色能力边界——是否授权替换当前 Pro
-  Reviewer 或采用另一种有明确成本与安全边界的单一审查能力；不授权第二 Reviewer、
-  投票、fallback、随机重跑或事实边界放宽。
+- 当前唯一下一动作：完成千问单 Reviewer 适配的确定性门并执行一次哈希冻结资格集；资格
+  全绿后才允许 fresh G7 和其余同 SHA 收口。
 - 承重裁决：[ADR-028](docs/架构决策/ADR-028-来源语态主体绑定与证据裁决矩阵.md)
   已由本次主控裁决置为 `ACCEPTED`。启动前已把 SDR-001—SDR-037 订正为 42 条无重复
   stable ID、单值 `unit_contract` 的 SDR-001—SDR-042，并通过 diff、唯一性、单合同与

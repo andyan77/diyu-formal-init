@@ -28,7 +28,9 @@ def _settings(database_url: str) -> Settings:
             "DEEPSEEK_API_BASE_URL": "https://example.invalid",
             "DEEPSEEK_API_KEY": "not-a-real-key",
             "DEEPSEEK_MODEL": "deepseek-v4-flash",
-            "DEEPSEEK_REVIEWER_MODEL": "deepseek-v4-pro",
+            "QWEN_REVIEWER_API_BASE_URL": "https://qwen.example.invalid",
+            "DASHSCOPE_API_KEY": "not-a-real-qwen-key",
+            "QWEN_REVIEWER_MODEL": "qwen3.7-max-2026-05-20",
             "DIYU_S3_ENDPOINT_URL": "http://127.0.0.1:9000",
             "DIYU_S3_BUCKET": "diyu-test",
             "DIYU_S3_ACCESS_KEY_ID": "test-access-key",
@@ -38,7 +40,9 @@ def _settings(database_url: str) -> Settings:
 
 
 def test_production_requires_an_explicit_reviewer_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("DEEPSEEK_REVIEWER_MODEL", raising=False)
+    monkeypatch.delenv("QWEN_REVIEWER_API_BASE_URL", raising=False)
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    monkeypatch.delenv("QWEN_REVIEWER_MODEL", raising=False)
     with pytest.raises(RuntimeError, match="Reviewer"):
         Settings.model_validate(
             {

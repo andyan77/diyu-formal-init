@@ -12,6 +12,7 @@ from typing import Any, cast
 import httpx
 
 from src.ports.content_generator import ContentGenerator
+from src.ports.reviewer_provider import ReviewerProvider
 from src.shared.clause_license import (
     CLAUSE_LICENSE_REVIEW_VERSION,
     CLAUSE_LICENSE_TOOL_NAME,
@@ -410,14 +411,15 @@ class DeepSeekGenerator(ContentGenerator):
         api_base_url: str,
         api_key: str,
         model: str,
-        reviewer_model: str | None = None,
+        reviewer_provider: ReviewerProvider,
         timeout_seconds: float = 30.0,
         max_retries: int = 2,
     ) -> None:
         self._api_base_url = api_base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
-        self._reviewer_model = reviewer_model or model
+        self._reviewer_provider = reviewer_provider
+        self._reviewer_model = reviewer_provider.model_name
         self._timeout_seconds = timeout_seconds
         self._max_retries = max_retries
         self._review_timeout_seconds = max(timeout_seconds, 60.0)
@@ -930,10 +932,13 @@ class DeepSeekGenerator(ContentGenerator):
         all_reviews: list[ClauseLicenseReviewV1] = []
         retries = 0
         for batch in self._clause_license_batches(licenses):
-            payload, batch_retries = self._request_strict_license_review(
-                "你是独立 CreativeKernel clause 许可证支持核对器。只核对文字是否完全符合服务端既定许可，"
-                "不决定事实许可、通过失败、保存、重试、修复或制作资源，只调用指定函数一次。",
-                self._kernel_license_reviewer_prompt(
+            provider_result = self._reviewer_provider.review(
+                system_prompt=(
+                    "你是独立 CreativeKernel clause 许可证支持核对器。只核对文字是否完全符合"
+                    "服务端既定许可，不决定事实许可、通过失败、保存、重试、修复或制作资源，"
+                    "只调用指定函数一次。"
+                ),
+                user_prompt=self._kernel_license_reviewer_prompt(
                     licenses=batch,
                     contexts=writer_contexts,
                     actuality_facts=tuple(
@@ -954,25 +959,14 @@ class DeepSeekGenerator(ContentGenerator):
                     ),
                     product_fact_packet=context.product_fact_packet,
                 ),
-                license_count=len(batch),
                 licenses=batch,
                 timeout_seconds=self._review_timeout_seconds,
             )
-            payloads.append(payload)
-            retries += batch_retries
-            try:
-                batch_reviews = self._strict_license_review_answers(
-                    payload,
-                    licenses=batch,
-                )
-            except (
-                KeyError,
-                IndexError,
-                TypeError,
-                json.JSONDecodeError,
-            ) as exc:
-                raise GenerationFailed("独立 CreativeKernel Reviewer 许可证据不完整") from exc
-            all_reviews.extend(batch_reviews.reviews)
+            payloads.append(
+                cast(dict[str, Any], provider_result.raw_payload)
+            )
+            retries += provider_result.retry_count
+            all_reviews.extend(provider_result.reviews.reviews)
         reviews = ClauseLicenseReviewsV1(
             review_version=CLAUSE_LICENSE_REVIEW_VERSION,
             reviews=tuple(all_reviews),
@@ -2996,6 +2990,7 @@ CreativePlanV2：{
         return {
             "clause_license_review_batches": payloads,
             "reviewer_model": self._reviewer_model,
+            "reviewer_provider": self._reviewer_provider.provider_name,
             "usage": self._combined_usage(payloads),
         }
 
@@ -3098,19 +3093,31 @@ CreativePlanV2：{
         payloads: list[dict[str, Any]],
     ) -> dict[str, int | str]:
         writer_payloads = [
-            payload for payload in payloads if not isinstance(payload.get("closed_review_batches"), list)
+            payload
+            for payload in payloads
+            if not isinstance(
+                payload.get("clause_license_review_batches"),
+                list,
+            )
         ]
         reviewer_payloads = [
             batch
             for payload in payloads
-            if isinstance(payload.get("closed_review_batches"), list)
-            for batch in cast(list[dict[str, Any]], payload["closed_review_batches"])
+            if isinstance(
+                payload.get("clause_license_review_batches"),
+                list,
+            )
+            for batch in cast(
+                list[dict[str, Any]],
+                payload["clause_license_review_batches"],
+            )
         ]
         combined = self._combined_usage(payloads) or {}
         receipt: dict[str, int | str] = {
             **combined,
             "writer_model": self._model,
             "reviewer_model": self._reviewer_model,
+            "reviewer_provider": self._reviewer_provider.provider_name,
         }
         for role, role_payloads in (("writer", writer_payloads), ("reviewer", reviewer_payloads)):
             for key, value in (self._combined_usage(role_payloads) or {}).items():

@@ -16,7 +16,6 @@ from src.shared.closed_review import (
     ClosedReviewAnswer,
     ClosedReviewAnswers,
     ClosedReviewQuestion,
-    ReviewDimension,
     build_closed_review_questions,
     reconcile_closed_review_answers,
 )
@@ -31,6 +30,7 @@ from src.shared.review_evidence import (
 )
 from src.shared.types import ProductFact
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
+from src.tool.llm_gateway.qwen_reviewer import QwenReviewerProvider
 
 _DEFAULT_FIXTURE = Path("tests/fixtures/ui12_reviewer_qualification_v1.json")
 _REVIEWER_MODEL = "deepseek-v4-pro"
@@ -358,7 +358,11 @@ def main() -> int:
         api_base_url=api_base_url or "https://replay.invalid",
         api_key=api_key or "replay-only",
         model=_WRITER_MODEL,
-        reviewer_model=_REVIEWER_MODEL,
+        reviewer_provider=QwenReviewerProvider(
+            api_base_url="https://legacy-reviewer.invalid",
+            api_key="legacy-reviewer-identity-only",
+            model=_REVIEWER_MODEL,
+        ),
         max_retries=0,
     )
     qualification_started = time.monotonic()

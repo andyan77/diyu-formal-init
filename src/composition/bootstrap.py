@@ -15,6 +15,7 @@ from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.ports.content_generator import ContentGenerator
 from src.ports.material_object_store import MaterialObjectStore
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
+from src.tool.llm_gateway.qwen_reviewer import QwenReviewerProvider
 from src.tool.llm_gateway.stub import DeterministicP1Generator
 
 
@@ -61,13 +62,23 @@ def build_content_service(settings: Settings) -> ContentService:
             settings.deepseek_api_base_url is None
             or settings.deepseek_api_key is None
             or settings.deepseek_model is None
+            or settings.qwen_reviewer_api_base_url is None
+            or settings.qwen_reviewer_api_key is None
+            or settings.qwen_reviewer_model is None
         ):
-            raise RuntimeError("DeepSeek 配置不完整")
+            raise RuntimeError(
+                "DeepSeek Writer 或 Qwen Reviewer 配置不完整"
+            )
+        reviewer_provider = QwenReviewerProvider(
+            api_base_url=settings.qwen_reviewer_api_base_url,
+            api_key=settings.qwen_reviewer_api_key.get_secret_value(),
+            model=settings.qwen_reviewer_model,
+        )
         generator = DeepSeekGenerator(
             api_base_url=settings.deepseek_api_base_url,
             api_key=settings.deepseek_api_key.get_secret_value(),
             model=settings.deepseek_model,
-            reviewer_model=settings.deepseek_reviewer_model,
+            reviewer_provider=reviewer_provider,
             timeout_seconds=settings.model_timeout_seconds,
             max_retries=settings.model_max_retries,
         )
