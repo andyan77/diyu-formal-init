@@ -1,17 +1,24 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE`。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13；此前
+- 状态：`BLOCKED`。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13；此前
   occurrence、开放 evidence、商品事实职责、Reviewer-only 模型、oracle drift、parser
   与一次 repair 的失败及前向订正均完整保留。
 - 主控最新裁决：`deepseek-v4-pro` 的 Reviewer 资格因已保存 G7 清楚语义假阴性正式
   否决，不再改 Prompt 或复验；OpenAI 仅可用于开发辅助，因中国境内生产运维边界不得进入
   运行主链。现授权唯一境内 Reviewer 候选
   `qwen3.7-max-2026-05-20`，DeepSeek Flash 继续承担 intake／Writer。
-- 当前 WIP 正以薄 `ReviewerProvider` 将 ClauseLicense 正式主链切到千问北京兼容
-  Responses Function Calling。模型只返回完整许可证证明，严格 parser 和服务端矩阵继续
-  唯一裁决；无第二 Reviewer、投票、fallback、随机重跑或事实边界放宽。候选必须先通过
-  固定资格集，当前尚未成为生产候选。
+- 薄 `ReviewerProvider` 已在 WIP `2d49303513a7eb9d7afe94a695f8f0d3aa0d2744`
+  将 ClauseLicense 正式主链切到千问北京兼容 Responses Function Calling。千问思考模式
+  不支持强制 `tool_choice=required`，故采用单工具 `auto`，但严格 parser 仍要求响应中
+  恰好一个正确 function call；无 function call、额外输出、缺字段或坏证明均失败关闭，
+  没有 JSON fallback。
+- 同一 WIP 的固定资格集已按 bundle 各调用一次，无重试。商品硬事实、合法近邻和跨包
+  一致性通过；但千问把“这个家”“这段关系”“家庭矛盾”三个清楚的现实／关系负例判为
+  许可内，把真正歧义判成明确拒绝而非 `uncertain`，G7 成对包还返回了正式 parser
+  禁止的额外 message。fixture、quote、clause/license ID、服务端 expected ruling 与
+  原始 function arguments 已完成只读对账，确定为唯一候选的语义与传输资格失败，不是
+  服务端 oracle 假阴性。
 - `55cc9b0…` 已把高风险 `natural-guide/release-caption` 移交
   DeliveryCompiler 确定性生成；`31fb7f4…` 已删除 Reviewer 自报 verdict/reason，
   服务端只从 expression type 与完整 prohibited-binding proof 派生裁决。该轮 fresh G7
@@ -34,7 +41,7 @@
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
   未运行及未 push/CI/部署证据完整保留。
 - 当前 Git 基线：最新 WIP
-  `775ac424233614a5adcc9aa424c679dee04be5c7`，`origin/main` 仍为
+  `2d49303513a7eb9d7afe94a695f8f0d3aa0d2744`，`origin/main` 仍为
   `7aa87ab624cf3ff64f42e49f1755d66d496cac7a`；`docs/项目记忆.md` 的用户既有修改继续
   受保护且未混入 UI-12 提交。UI-07—UI-12 历史禁止 reset、rebase、squash、删除或改写。
 - 生产启动复核：真实部署仓 `/opt/diyu-saas/repo` 与镜像均为
@@ -43,23 +50,20 @@
   应用数据库 `diyu_m5_4` 的 schema 为 `20260801_28`，容器内
   `127.0.0.1:18000/health/ready` 与生产主机公网 HTTPS 均为 `200`，
   `diyu-m5-4-backup.timer` 为 active。本执行环境直连公网超时未被误写为生产失败。
-- 最新 root-only 证据位于
-  `/var/lib/diyu-ui12-evidence/775ac424233614a5adcc9aa424c679dee04be5c7/fresh-g7/`，
-  目录／文件权限为 `0700/0600`。Writer raw SHA-256 为
-  `0ab763385c1c57362394b6160394de4ca42b27508389f7b1643bc3d61e0d35ab`，
-  Reviewer raw SHA-256 为
-  `3a49f9a14425825049ea9ce172822c3fadf119b12b4dcda5f42e1bf138cea1d4`，
-  artifact／summary SHA-256 分别为
-  `156bb72dadb16a58a41a4e8bb3dc12b7a1a921430c1c07be9612d924501b6cd1`、
-  `7e683329eaabc63002b198c45fab750da0bb29205e6e305c25db67c212e0ca2f`。
-  隔离容器、源码投影和临时凭据环境已删除，只保留正式 evidence。
-- 因 G7 未成立，冻结的其余卡片不升级为最终同 SHA 业务轮；Golden、完整前后端门、两份
+- 最新受控证据位于
+  `/home/faye/.local/state/diyu-ui12-evidence/2d49303513a7eb9d7afe94a695f8f0d3aa0d2744/qwen-reviewer-qualification/`，
+  目录／文件权限为 `0700/0600`；六个 Reviewer bundle 各有唯一 raw，服务端结构包调用
+  次数为 0，summary SHA-256 为
+  `0eba66e1e75632e56498000d41d5eb13205ff991356f01f77f938ab0c1df16c5`。
+  凭据未写入证据或 Git；本地 `.env` 为 Git ignore 且权限 `0600`。
+- 因 Reviewer 候选资格未成立，fresh G7 与冻结的其余卡片不升级为最终同 SHA 业务轮；
+  Golden、完整前后端门、两份
   候选审查、push、CI、备份和部署均未继续。生产应用、数据库与健康镜像从未切换。
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
 - 当前任务包：
   [`docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md`](docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)。
-- 当前唯一下一动作：完成千问单 Reviewer 适配的确定性门并执行一次哈希冻结资格集；资格
-  全绿后才允许 fresh G7 和其余同 SHA 收口。
+- 当前唯一下一动作：主控裁决产品风险合同或改为确定性受限表达；当前授权下不得继续补
+  Prompt、改资格题、调用第三个 Reviewer、增加第二 Reviewer／fallback，或降低事实边界。
 - 承重裁决：[ADR-028](docs/架构决策/ADR-028-来源语态主体绑定与证据裁决矩阵.md)
   已由本次主控裁决置为 `ACCEPTED`。启动前已把 SDR-001—SDR-037 订正为 42 条无重复
   stable ID、单值 `unit_contract` 的 SDR-001—SDR-042，并通过 diff、唯一性、单合同与
