@@ -1267,6 +1267,9 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert '"exact_text"' in reviewer_prompt
     assert '"allowed_quotes"' not in reviewer_prompt
     assert "可以跨越 clause\n  内部标点" in reviewer_prompt
+    assert "最短唯一连续片段" in reviewer_prompt
+    assert "绝不能把中文弯引号改成 JSON" in reviewer_prompt
+    assert "U+0022" in reviewer_prompt
     assert "不能通过省略整个问题表达 absent" in reviewer_prompt
     assert "面向不特定受众的第二人称阅读邀请" in reviewer_prompt
     assert "文章向不特定读者提供观看回报" in reviewer_prompt

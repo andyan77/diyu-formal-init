@@ -871,7 +871,8 @@ class DeepSeekGenerator(ContentGenerator):
         retries = 0
         for batch in self._closed_review_batches(questions):
             payload, batch_retries = self._request_strict_review(
-                "你是独立 CreativeKernel 风险问题回答器。只回答服务端给出的闭合问题，不决定事实许可或通过失败，不改写文字，只调用指定函数一次。",
+                "你是独立 CreativeKernel 风险问题回答器。只回答服务端给出的闭合问题，不决定事实许可或通过失败，"
+                "不改写文字或规范化任何 Unicode 标点，只调用指定函数一次。",
                 self._kernel_reviewer_prompt(
                     questions=batch,
                     contexts=writer_contexts,
@@ -1337,6 +1338,9 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 - present：quote 必须是本 clause 内连续、逐字、只出现一次的精确片段；可以跨越 clause
   内部标点，但不得删字、改字、拼接不连续片段或引用其他 clause。operands 至少一个，且只能
   从该题 allowed_operands 选择。quote 的精确匹配与唯一绑定由服务端执行。
+- quote 应选择能够证明当前问题的最短唯一连续片段；除非标点本身就是证据，不要把装饰性引号
+  包进 quote。必须逐字符复制 clause 中的 Unicode 标点，绝不能把中文弯引号改成 JSON
+  定界用的半角双引号 U+0022。服务端输入不会在 clause 正文中使用 U+0022。
 - 每题 JSON 中的 allowed_operands 是该 question_id 的封闭集合；即使同批另一题允许某个
   operand，也不得跨 question 借用。
 - absent：quote 必须是空字符串，operands 必须是空数组。不能通过省略整个问题表达 absent。
