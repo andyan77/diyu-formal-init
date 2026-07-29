@@ -202,7 +202,7 @@ def test_clause_and_license_coverage_and_quote_binding_fail_closed() -> None:
     _, reviews = _review(
         contexts=contexts,
         verdict="unsupported",
-        reason_code="specific_social_relation",
+        reason_code="specific_social_relation_to_actuality",
         quote="一对伴侣",
         policies=policies,
     )
@@ -236,7 +236,7 @@ def test_clause_and_license_coverage_and_quote_binding_fail_closed() -> None:
                 clause_id=duplicated_licenses[0].clause_id,
                 license_id=duplicated_licenses[0].license_id,
                 verdict="unsupported",
-                reason_code="specific_social_relation",
+                reason_code="specific_social_relation_to_actuality",
                 unsupported_quote="一对伴侣",
             ),
         ),
@@ -316,7 +316,7 @@ def test_license_policy_mutations_change_rulings() -> None:
     _, rejected = _review(
         contexts=current_contexts,
         verdict="unsupported",
-        reason_code="current_person_binding",
+        reason_code="current_person",
         quote="我们两个人其实都渴望被看见",
         policies=policies,
     )

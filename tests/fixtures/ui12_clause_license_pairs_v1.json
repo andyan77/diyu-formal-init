@@ -25,7 +25,7 @@
         "statement_mode": ["generic_observation"]
       },
       "license_verdict": "unsupported",
-      "reason_code": "specific_social_relation",
+      "reason_code": "specific_social_relation_to_actuality",
       "unsupported_quote": "这段关系"
     },
     {
@@ -39,7 +39,7 @@
         "statement_mode": ["actuality"]
       },
       "license_verdict": "unsupported",
-      "reason_code": "current_person_binding",
+      "reason_code": "current_person",
       "unsupported_quote": "我们两个人其实都渴望被看见"
     },
     {
@@ -52,7 +52,7 @@
         "statement_mode": ["generic_observation"]
       },
       "license_verdict": "unsupported",
-      "reason_code": "specific_social_relation",
+      "reason_code": "specific_social_relation_to_actuality",
       "unsupported_quote": "一对伴侣"
     },
     {
@@ -66,7 +66,7 @@
         "statement_mode": ["generic_observation"]
       },
       "license_verdict": "unsupported",
-      "reason_code": "specific_social_relation",
+      "reason_code": "specific_social_relation_to_actuality",
       "unsupported_quote": "这个家"
     },
     {

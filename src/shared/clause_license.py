@@ -41,16 +41,16 @@ LicenseVerdictV1: TypeAlias = Literal[
 ]
 LicenseReasonCodeV1: TypeAlias = Literal[
     "supported_by_license",
-    "current_person_binding",
-    "current_institution_binding",
-    "protected_subject_binding",
-    "specific_social_relation",
+    "current_person",
+    "current_institution",
+    "protected_exact_subject",
+    "specific_social_relation_to_actuality",
     "unfrozen_dialogue",
     "actual_event_or_result",
     "unsupported_institution_fact",
     "unsupported_product_fact",
     "source_or_resource_as_fact",
-    "discourse_contract_conflict",
+    "discourse_contract_drift",
     "insufficient_evidence",
 ]
 
@@ -75,16 +75,16 @@ _ABSTRACT_PROHIBITED_BINDINGS: tuple[ProhibitedBindingV1, ...] = (
 _REASON_CODES = frozenset(
     {
         "supported_by_license",
-        "current_person_binding",
-        "current_institution_binding",
-        "protected_subject_binding",
-        "specific_social_relation",
+        "current_person",
+        "current_institution",
+        "protected_exact_subject",
+        "specific_social_relation_to_actuality",
         "unfrozen_dialogue",
         "actual_event_or_result",
         "unsupported_institution_fact",
         "unsupported_product_fact",
         "source_or_resource_as_fact",
-        "discourse_contract_conflict",
+        "discourse_contract_drift",
         "insufficient_evidence",
     }
 )
@@ -456,11 +456,11 @@ def clause_license_review_document(
 
 
 def _issue_reason(reason_code: LicenseReasonCodeV1) -> str:
-    if reason_code == "current_person_binding":
+    if reason_code == "current_person":
         return "unsupported_actuality_binding"
     if reason_code in {
-        "current_institution_binding",
-        "protected_subject_binding",
+        "current_institution",
+        "protected_exact_subject",
         "unsupported_institution_fact",
     }:
         return "unsupported_institutional_assertion"
@@ -468,7 +468,7 @@ def _issue_reason(reason_code: LicenseReasonCodeV1) -> str:
         return "unsupported_product_claim"
     if reason_code == "source_or_resource_as_fact":
         return "unsupported_product_inference"
-    if reason_code == "discourse_contract_conflict":
+    if reason_code == "discourse_contract_drift":
         return "statement_mode_conflict"
     return "unsupported_actuality_expansion"
 
