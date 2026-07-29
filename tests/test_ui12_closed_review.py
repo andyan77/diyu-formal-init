@@ -372,6 +372,30 @@ def test_actuality_current_person_binding_is_rejected_without_extra_risk_labels(
     )
 
 
+def test_actuality_generic_relationship_role_cannot_expand_the_frozen_event() -> None:
+    text = "洗碗这件小事，藏着多少夫妻的默契。"
+    contexts = _context(text)
+    relationship = {
+        "subject_binding": (
+            "present",
+            text,
+            ("generic",),
+        ),
+        "relationship_claim": (
+            "present",
+            text,
+            ("partner",),
+        ),
+    }
+    answers = _parse(contexts, relationship)
+
+    assert _reasons(contexts, answers) == (
+        "unsupported_actuality_expansion",
+    )
+    observation = _context(text, contract="abstract_observation")
+    assert _reasons(observation, _parse(observation, relationship)) == ()
+
+
 def test_generic_motive_observation_is_allowed() -> None:
     text = "很多争执背后，可能有被看见的需要。"
     contexts = _context(text)

@@ -696,6 +696,18 @@ def _claim_inventory_issues(
                 )
             )
             continue
+        if (
+            context.unit_contract == "actuality_reflection"
+            and "relationship_claim" in dimensions
+        ):
+            issues.append(
+                NarrativeIssue(
+                    context.unit_id,
+                    "unsupported_actuality_expansion",
+                    clause_claims["relationship_claim"].exact_quote,
+                )
+            )
+            continue
         event_claim = clause_claims.get("actual_event")
         event_operands = (
             set(event_claim.operands)
