@@ -1,9 +1,14 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`BLOCKED`。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13；此前
+- 状态：`ACTIVE`。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13；此前
   occurrence、开放 evidence、商品事实职责、Reviewer-only 模型、oracle drift、parser
   与一次 repair 的失败及前向订正均完整保留。
+- 主控已正式取代“单一概率 Reviewer 承担零漏判生产授权”路线，采用服务端预分配的
+  `trusted_fact + creative_expression` 双轨合同。Reviewer 退出新任务生产放行；历史
+  DeepSeek／千问 raw、人工否决和 `BLOCKED` 事件继续保留。当前归档引用
+  `archive/ui12-blocked-before-dual-track-20260729` 固定指向
+  `8f5b3e52ff7f83494555b80ad511790514d21c45`。
 - 主控最新裁决：`deepseek-v4-pro` 的 Reviewer 资格因已保存 G7 清楚语义假阴性正式
   否决，不再改 Prompt 或复验；OpenAI 仅可用于开发辅助，因中国境内生产运维边界不得进入
   运行主链。现授权唯一境内 Reviewer 候选
@@ -62,8 +67,8 @@
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
 - 当前任务包：
   [`docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md`](docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)。
-- 当前唯一下一动作：主控裁决产品风险合同或改为确定性受限表达；当前授权下不得继续补
-  Prompt、改资格题、调用第三个 Reviewer、增加第二 Reviewer／fallback，或降低事实边界。
+- 当前唯一下一动作：在现有 CreativeKernel／DeliveryCompiler／快照主线上实现服务端
+  预分配完整表达轨，先用历史 raw 离线回放，再尽早完成同 SHA G3／G4／G7。
 - 承重裁决：[ADR-028](docs/架构决策/ADR-028-来源语态主体绑定与证据裁决矩阵.md)
   已由本次主控裁决置为 `ACCEPTED`。启动前已把 SDR-001—SDR-037 订正为 42 条无重复
   stable ID、单值 `unit_contract` 的 SDR-001—SDR-042，并通过 diff、唯一性、单合同与
