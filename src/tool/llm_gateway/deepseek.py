@@ -87,6 +87,7 @@ from src.shared.narrative import (
     legacy_frame,
     parse_observation,
     reconcile_observations,
+    user_fact_candidates,
     visible_digest,
 )
 from src.shared.review_evidence import (
@@ -493,17 +494,22 @@ class DeepSeekGenerator(ContentGenerator):
                 proposed_intent_span=proposed_intent_span,
             )
         raw_premises = document.get("user_premises")
-        raw_facts = document.get("user_fact_spans")
+        raw_fact_ids = document.get("user_fact_sentence_ids")
         raw_plan = document.get("creative_plan")
-        if not isinstance(raw_premises, list) or not isinstance(raw_facts, list):
+        if not isinstance(raw_premises, list) or not isinstance(raw_fact_ids, list):
             raise GenerationFailed("模型协作返回格式不完整")
         premises = self._exact_string_list(raw_premises)
-        facts = self._exact_string_list(raw_facts)
         if request.message not in premises or any(premise not in available_user_turns for premise in premises):
             raise GenerationFailed("模型没有逐字保留本次用户前提")
+        candidates = request.user_fact_candidates or user_fact_candidates(available_user_turns)
+        candidate_by_id = {candidate.source_id: candidate.exact_text for candidate in candidates}
+        fact_source_ids = self._exact_string_list(raw_fact_ids)
+        if any(source_id not in candidate_by_id for source_id in fact_source_ids):
+            raise GenerationFailed("模型返回的用户事实句标识不存在")
+        facts = tuple(candidate_by_id[source_id] for source_id in fact_source_ids)
         premise_text = "\n".join(premises)
         if any(fact not in premise_text for fact in facts):
-            raise GenerationFailed("模型返回的用户事实跨度不存在")
+            raise GenerationFailed("模型选择的用户事实句不属于实际使用前提")
         explicit_mode = request.explicit_narrative_mode
         if explicit_mode is not None:
             if (explicit_mode == "actuality_reflection") != bool(facts):
@@ -528,6 +534,7 @@ class DeepSeekGenerator(ContentGenerator):
             message.strip(),
             user_premises=premises,
             user_fact_spans=facts,
+            user_fact_source_ids=fact_source_ids,
             narrative_mode=narrative_mode,
             creative_plan=plan,
             primary_product=plan.primary_value,
@@ -2275,13 +2282,21 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
         products = "、".join(product.sku for product in request.products) or "无"
         forced = request.explicit_narrative_mode or "无显式模式"
+        available_user_turns = tuple(turn.content for turn in request.history if turn.role == "user") + (
+            request.message,
+        )
+        candidates = request.user_fact_candidates or user_fact_candidates(available_user_turns)
+        candidate_document = [
+            {"sentence_id": candidate.source_id, "exact_text": candidate.exact_text}
+            for candidate in candidates
+        ]
         return f"""编译本轮创作条件。服务端已经独立判断是否存在创作承诺；你只能提议，不能授权
 创建任务。只返回以下一种 JSON：
 {{"kind":"chat","message":"自然回复","creation_proposal":false,"intent_span":""}}
 {{"kind":"question","message":"一个具体事实问题","missing_fact_span":"逐字复制用户明确要求依赖的真实经历片段",
 "creation_proposal":true,"intent_span":"候选用户原话跨度"}}
 {{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制实际使用的用户消息"],
-"user_fact_spans":["逐字截取用户明确陈述的现实片段"],
+"user_fact_sentence_ids":["只能选择服务端候选 sentence_id，不能返回或裁剪事实正文"],
 "creative_plan":{{"plan_version":"creative-plan-v2","topic_spans":["只能逐字截取用户消息"],
 "primary_value":"dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story",
 "tone_ids":["只选允许 id"],"mechanism_id":null,"platform_shape":"{request.platform_shape}",
@@ -2299,11 +2314,11 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 - 只有用户明确要写某段真人既成经历且缺少会决定真假的不可替代事实，才 question；只问一个。
 - “某段时间／某件事”的指称和“最困难、最难忘、最重要”等主观评价只说明用户想写哪段经历，
   本身不是可逐字插入的现实事件。若没有至少一个可观察的动作、事件、对白或结果，必须
-  question；不得把时间标签或评价词填进 user_fact_spans 后直接创作。
+  question；不得把时间标签或评价词对应的 sentence_id 当作事实后直接创作。
 - 只给题材且没有现实片段用 general_observation；给出真人生活／工作片段用
-  actuality_reflection，并把现实片段从用户消息逐字截取，保留标点，不概括；明确条件推演
-  与明确故事／短剧／情境演绎不属于现实事实，user_fact_spans 必须为空。narrative_mode 由
-  服务端根据显式形式与事实跨度派生，你不得返回或选择该字段。
+  actuality_reflection，并只选择完整服务端事实句 ID，不得裁剪、概括或改写；明确条件推演
+  与明确故事／短剧／情境演绎不属于现实事实，user_fact_sentence_ids 必须为空。narrative_mode 由
+  服务端根据显式形式与完整事实句选择派生，你不得返回或选择该字段。
 - 显式模式为 dramatization 时必须使用它；没有明确演绎要求不得升级为剧情。
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
 - CreativePlanV2 只能选择上述结构字段。topic_spans 必须逐字来自用户消息；禁止写人物设定、
@@ -2326,6 +2341,8 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 系列：{request.prior_series_summary or "无"}
 此前交流：
 {history}
+服务端事实句候选（只能按 sentence_id 选择，exact_text 只读）：
+{json.dumps(candidate_document, ensure_ascii=False)}
 用户本轮：{request.message}"""
 
     def _writer_prompt(

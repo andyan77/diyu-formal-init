@@ -47,8 +47,22 @@ UnitTextSource: TypeAlias = Literal[
 LEGACY_KERNEL_VERSION = "creative-kernel-v1"
 KERNEL_VERSION = "creative-kernel-v2"
 MAX_PRODUCT_FACT_BLOCKS = 3
-DRAMATIZATION_DISCLOSURE = "情境演绎（虚构角色，不对应真实人物或品牌案例）："
+DRAMATIZATION_DISCLOSURE = "以下是情景演绎，不对应真实人物或经历："
 HYPOTHESIS_DISCLOSURE = "假设有这样一幕："
+RESERVED_VISIBLE_SCOPE_PREFIXES = (
+    "真实原话｜",
+    "已确认品牌信息｜",
+    "已确认商品信息｜",
+    "一般观察（不对应未提供的真实经历）｜",
+    "可信事实＋",
+    "你提到：",
+    "已确认的品牌信息：",
+    "已确认的商品信息：",
+    "换个角度看：",
+    "不妨试试：",
+    HYPOTHESIS_DISCLOSURE,
+    DRAMATIZATION_DISCLOSURE,
+)
 OBSERVATION_ONLY_PROGRAM: KernelProgramId = "observation_only_v1"
 OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM: KernelProgramId = "observation_with_hypothetical_example_v1"
 OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2: KernelProgramId = "observation_with_hypothetical_example_v2"
@@ -995,7 +1009,25 @@ def _requests_local_dramatization(instruction: str | None) -> bool:
     """
     if not instruction:
         return False
-    return any(marker in instruction for marker in ("荒诞", "戏剧", "小情景", "情景演绎", "小剧场"))
+    markers = ("荒诞", "戏剧", "小情景", "情景演绎", "小剧场")
+    negations = ("不要", "别", "不想", "不用", "无需", "避免", "取消", "去掉", "不再")
+    clauses: list[str] = []
+    start = 0
+    for index, character in enumerate(instruction):
+        if character not in "，,。！？!?\n；;":
+            continue
+        clauses.append(instruction[start:index])
+        start = index + 1
+    clauses.append(instruction[start:])
+    for clause in clauses:
+        for marker in markers:
+            position = clause.find(marker)
+            while position >= 0:
+                prefix = clause[max(0, position - 6) : position]
+                if not any(negation in prefix for negation in negations):
+                    return True
+                position = clause.find(marker, position + len(marker))
+    return False
 
 
 def _unit_track_contract(
@@ -1062,6 +1094,14 @@ def _normalize_writer_visible_text(text: str) -> str:
     into curly quotes avoids delegating JSON escaping to Reviewer output while
     preserving the visible words. An unmatched quote fails closed.
     """
+    if any(
+        line.lstrip().startswith(prefix)
+        for line in text.splitlines()
+        for prefix in RESERVED_VISIBLE_SCOPE_PREFIXES
+    ):
+        raise ValueError(
+            "writer forged a server wrapper by impersonating a server-owned scope label"
+        )
     quote_count = text.count('"')
     if quote_count == 0:
         return text

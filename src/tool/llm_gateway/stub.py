@@ -279,6 +279,7 @@ class DeterministicContentGenerator(ContentGenerator):
                 "expression_plan_version": "expression-plan-v1",
                 "expression_plan_digest": kernel_digest(kernel),
                 "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
+                "writer_model": self.model_name,
                 "version_authorization": "deterministic-dual-track-v1",
                 "claim_inventory_v1": [],
                 "reviewed_kernel_digest": kernel_digest(kernel),

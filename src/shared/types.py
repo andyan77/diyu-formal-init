@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Literal, TypeAlias
 from uuid import UUID
 
 from src.shared.creative_plan import CreativePlanV2
-from src.shared.narrative import NarrativeFrame, NarrativeMode
+from src.shared.narrative import NarrativeFrame, NarrativeMode, UserFactCandidate
 
 if TYPE_CHECKING:
     from src.shared.creative_kernel import CreativeKernelV1
@@ -268,6 +268,7 @@ class ConversationInput:
     allowed_tone_ids: tuple[str, ...] = ()
     allowed_mechanism_ids: tuple[str, ...] = ()
     platform_shape: str = ""
+    user_fact_candidates: tuple[UserFactCandidate, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -278,6 +279,7 @@ class ConversationDecision:
     message: str
     user_premises: tuple[str, ...] = ()
     user_fact_spans: tuple[str, ...] = ()
+    user_fact_source_ids: tuple[str, ...] = ()
     narrative_mode: NarrativeMode | None = None
     creative_plan: CreativePlanV2 | None = None
     primary_product: ContentProduct | None = None

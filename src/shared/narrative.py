@@ -70,6 +70,14 @@ class FrozenUserFact:
 
 
 @dataclass(frozen=True)
+class UserFactCandidate:
+    """One server-segmented clause that intake may select only by stable ID."""
+
+    source_id: str
+    exact_text: str
+
+
+@dataclass(frozen=True)
 class NarrativeFrame:
     frame_version: str
     narrative_mode: NarrativeMode
@@ -195,11 +203,26 @@ def new_frame(
     user_fact_spans: Sequence[str],
     product_fact_ids: Sequence[str],
     brand_fact_ids: Sequence[str] = (),
+    *,
+    user_fact_source_ids: Sequence[str] = (),
 ) -> NarrativeFrame:
+    if user_fact_source_ids and len(user_fact_source_ids) != len(user_fact_spans):
+        raise DomainError("真人事实来源与原文数量不一致")
     facts = tuple(
-        FrozenUserFact(f"source:user_actuality:{index}", text)
+        FrozenUserFact(
+            (
+                user_fact_source_ids[index - 1]
+                if user_fact_source_ids
+                else f"source:user_actuality:{index}"
+            ),
+            text,
+        )
         for index, text in enumerate(user_fact_spans, start=1)
     )
+    if any(not fact.source_id.startswith("source:user_actuality:") for fact in facts):
+        raise DomainError("真人事实来源标识无效")
+    if len({fact.source_id for fact in facts}) != len(facts):
+        raise DomainError("真人事实来源标识重复")
     if mode == "actuality_reflection" and not facts:
         raise DomainError("真人事实反思缺少用户原文")
     if mode != "actuality_reflection" and facts:
@@ -211,6 +234,44 @@ def new_frame(
         allowed_brand_fact_ids=tuple(dict.fromkeys(brand_fact_ids)),
         allowed_product_fact_ids=tuple(dict.fromkeys(product_fact_ids)),
     )
+
+
+def user_fact_candidates(user_turns: Sequence[str]) -> tuple[UserFactCandidate, ...]:
+    """Segment exact user clauses before intake so a model cannot reverse meaning by slicing text."""
+
+    endings = frozenset("。！？!?；;\n")
+    candidates: list[UserFactCandidate] = []
+    for turn_index, turn in enumerate(user_turns, start=1):
+        buffer: list[str] = []
+        clause_index = 0
+        for index, character in enumerate(turn):
+            buffer.append(character)
+            next_character = turn[index + 1] if index + 1 < len(turn) else ""
+            if character not in endings or next_character in endings:
+                continue
+            exact_text = "".join(buffer).strip()
+            buffer = []
+            if not exact_text:
+                continue
+            clause_index += 1
+            digest = hashlib.sha256(exact_text.encode("utf-8")).hexdigest()[:12]
+            candidates.append(
+                UserFactCandidate(
+                    f"source:user_actuality:turn-{turn_index}:clause-{clause_index}:{digest}",
+                    exact_text,
+                )
+            )
+        exact_text = "".join(buffer).strip()
+        if exact_text:
+            clause_index += 1
+            digest = hashlib.sha256(exact_text.encode("utf-8")).hexdigest()[:12]
+            candidates.append(
+                UserFactCandidate(
+                    f"source:user_actuality:turn-{turn_index}:clause-{clause_index}:{digest}",
+                    exact_text,
+                )
+            )
+    return tuple(candidates)
 
 
 def legacy_frame(product_fact_ids: Sequence[str] = ()) -> NarrativeFrame:

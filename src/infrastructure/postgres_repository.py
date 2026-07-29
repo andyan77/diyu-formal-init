@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from typing import cast
 from uuid import UUID, uuid4
@@ -14,6 +14,7 @@ from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.content_presentation import project_content_body
 from src.shared.content_snapshot import frozen_product_facts, visible_direction
 from src.shared.errors import DomainError
+from src.shared.narrative import visible_digest
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
@@ -33,6 +34,60 @@ from src.shared.types import (
 
 
 class PostgresContentRepository(ContentRepository):
+    _DUAL_TRACK_COMPLETION_KEYS = frozenset(
+        {
+            "creative_kernel_v2",
+            "expression_plan_version",
+            "expression_plan_digest",
+            "delivery_compiler_version",
+            "writer_model",
+            "version_authorization",
+            "claim_inventory_v1",
+            "reviewed_kernel_digest",
+            "reviewed_creative_digest",
+            "product_fact_packet",
+            "immutable_product_fact_blocks",
+            "used_product_fact_ids",
+            "used_product_fact_block_ids",
+            "product_fact_renderer_version",
+            "visible_provenance",
+            "delivery_resource_refs",
+        }
+    )
+    _REVISION_IMMUTABLE_SNAPSHOT_KEYS = frozenset(
+        {
+            "creation_commitment",
+            "creative_plan_v2",
+            "narrative_frame",
+            "delivery_compiler_version",
+            "product_fact_packet",
+            "immutable_product_fact_blocks",
+            "used_product_fact_ids",
+            "used_product_fact_block_ids",
+            "product_fact_renderer_version",
+            "delivery_resource_refs",
+        }
+    )
+    _VERSION_AUDIT_KEYS = (
+        "creation_commitment",
+        "creative_plan_v2",
+        "narrative_frame",
+        "creative_kernel_v2",
+        "expression_plan_version",
+        "expression_plan_digest",
+        "delivery_compiler_version",
+        "version_authorization",
+        "reviewed_kernel_digest",
+        "reviewed_creative_digest",
+        "product_fact_packet",
+        "immutable_product_fact_blocks",
+        "used_product_fact_ids",
+        "used_product_fact_block_ids",
+        "product_fact_renderer_version",
+        "visible_provenance",
+        "delivery_resource_refs",
+    )
+
     def __init__(
         self,
         database_url: str,
@@ -58,6 +113,47 @@ class PostgresContentRepository(ContentRepository):
         if row is None:
             raise DomainError(message)
         return row
+
+    @classmethod
+    def _validated_completion_snapshot(
+        cls,
+        current: object,
+        patch: Mapping[str, object],
+    ) -> dict[str, object]:
+        if not isinstance(current, dict):
+            raise DomainError("新内容缺少可审计的任务快照")
+        if frozenset(patch) != cls._DUAL_TRACK_COMPLETION_KEYS:
+            raise DomainError("创作内核快照补丁字段不完整或越界")
+        if patch.get("version_authorization") != "deterministic-dual-track-v1":
+            raise DomainError("内容版本缺少确定性双轨授权")
+        for key in cls._REVISION_IMMUTABLE_SNAPSHOT_KEYS:
+            current_value = current.get(key)
+            if current_value is not None and key in patch and patch[key] != current_value:
+                raise DomainError(f"内容修订不能改变冻结字段：{key}")
+        return current | dict(patch)
+
+    @classmethod
+    def _version_audit_snapshot(
+        cls,
+        task_snapshot: object,
+        artifact_digest: str,
+    ) -> dict[str, object]:
+        if not isinstance(task_snapshot, dict):
+            return {}
+        if task_snapshot.get("version_authorization") != "deterministic-dual-track-v1":
+            return {}
+        audit = {
+            "audit_version": "content-version-audit-v1",
+            "artifact_digest": artifact_digest,
+            **{key: task_snapshot.get(key) for key in cls._VERSION_AUDIT_KEYS},
+        }
+        if (
+            not isinstance(audit["creative_kernel_v2"], dict)
+            or not isinstance(audit["narrative_frame"], dict)
+            or not isinstance(audit["visible_provenance"], dict)
+        ):
+            raise DomainError("内容版本审计快照不完整")
+        return audit
 
     def load_brand_context(
         self, scope: TrustedScope, media_format: MediaFormat, production_conditions: str
@@ -325,7 +421,8 @@ class PostgresContentRepository(ContentRepository):
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT t.id, t.series_id, t.series_position FROM business_tasks t
+                SELECT t.id, t.series_id, t.series_position, t.content_context_snapshot
+                FROM business_tasks t
                 JOIN generation_runs r ON r.task_id = t.id AND r.tenant_id = t.tenant_id
                 WHERE t.tenant_id = %s AND t.id = %s AND t.brand_id = %s
                   AND t.account_id = %s AND t.created_by = %s
@@ -342,17 +439,21 @@ class PostgresContentRepository(ContentRepository):
                 ),
             )
             task = self._one(cursor, "当前作用域不能完成此生成")
+            merged_snapshot = task["content_context_snapshot"]
             if snapshot_patch is not None:
+                merged_snapshot = self._validated_completion_snapshot(
+                    merged_snapshot,
+                    snapshot_patch,
+                )
                 cursor.execute(
                     """
                     UPDATE business_tasks
-                    SET content_context_snapshot =
-                        COALESCE(content_context_snapshot, '{}'::jsonb) || %s
+                    SET content_context_snapshot = %s
                     WHERE tenant_id = %s AND id = %s AND brand_id = %s
                       AND account_id = %s AND created_by = %s
                     """,
                     (
-                        Jsonb(snapshot_patch),
+                        Jsonb(merged_snapshot),
                         scope.tenant_id,
                         task_id,
                         scope.brand_id,
@@ -402,11 +503,17 @@ class PostgresContentRepository(ContentRepository):
             )
             if cursor.rowcount != 1:
                 raise DomainError("生成运行不存在或已结束")
+            artifact_digest = visible_digest(outline, body)
+            version_audit_snapshot = self._version_audit_snapshot(
+                merged_snapshot,
+                artifact_digest,
+            )
             cursor.execute(
                 """
                 INSERT INTO content_versions
-                    (id, tenant_id, item_id, task_id, run_id, version_number, outline, body, product_contract, created_by)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (id, tenant_id, item_id, task_id, run_id, version_number, outline, body,
+                     product_contract, artifact_digest, version_audit_snapshot, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     version_id,
@@ -418,6 +525,8 @@ class PostgresContentRepository(ContentRepository):
                     outline,
                     body,
                     Jsonb(product_contract),
+                    artifact_digest,
+                    Jsonb(version_audit_snapshot),
                     scope.user_id,
                 ),
             )

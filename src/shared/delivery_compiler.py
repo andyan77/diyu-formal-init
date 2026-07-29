@@ -6,6 +6,7 @@ from typing import Literal, TypeAlias
 
 from src.shared.creative_kernel import (
     DRAMATIZATION_DISCLOSURE,
+    HYPOTHESIS_DISCLOSURE,
     CreativeKernelUnit,
     CreativeKernelV1,
     UnitMode,
@@ -56,6 +57,24 @@ _PHRASES: dict[str, str] = {
     "phrase:video-drama": ("演绎段使用文字对话卡或创作者一人分段旁白；不表示第二演员或家庭现场存在。"),
     "phrase:video-sound": "不要求环境声；可静音或使用创作者本人旁白，不模拟未登记现场声音。",
     "phrase:video-silent": "无口播、无对白、无解说；完整已审文字由文字卡和字幕承担。",
+    "phrase:scope-user-fact": "你提到：",
+    "phrase:scope-brand-fact": "已确认的品牌信息：",
+    "phrase:scope-product-fact": "已确认的商品信息：",
+    "phrase:scope-general": "换个角度看：",
+    "phrase:scope-recommendation": "不妨试试：",
+    "phrase:scope-hypothesis": HYPOTHESIS_DISCLOSURE,
+    "phrase:scope-dramatization": DRAMATIZATION_DISCLOSURE,
+    "phrase:title-general": "一种生活观察：",
+    "phrase:title-user-fact": "从你提供的片段出发：",
+    "phrase:title-confirmed-fact": "从已确认的信息出发：",
+    "phrase:title-hypothesis": "假设一下：",
+    "phrase:title-dramatization": "情景演绎：",
+    "phrase:artifact-general": "下面是一种生活观察，不对应未提供的真实经历。",
+    "phrase:artifact-user-fact": "以下内容从你提供的真实片段出发，延伸为生活观察。",
+    "phrase:artifact-confirmed-fact": "以下表达从已确认的信息出发，不增加新的现实主张。",
+    "phrase:artifact-hypothesis": "下面的片段是假设，不代表真实发生。",
+    "phrase:artifact-dramatization": "以下内容包含情景演绎，不对应真实人物或经历。",
+    "phrase:artifact-user-fact-drama": "以下内容从你提供的真实片段出发，其中小剧场为情景演绎。",
 }
 
 
@@ -207,15 +226,15 @@ def _compile_delivery(
         raise GenerationFailed("创作内核缺少完整可见单元")
     if any(sum(unit.purpose == purpose for unit in kernel.units) != 1 for purpose in required):
         raise GenerationFailed("创作内核单值可见单元重复")
-    title = _scoped_title(
+    title, title_scope_source = _scoped_title(
         singleton_by_purpose["title"].text,
         kernel,
     )
     expected_compiler_texts = compiler_owned_unit_texts(request.primary_product)
     raw_guide = expected_compiler_texts["unit:natural-guide"]
     raw_release = expected_compiler_texts["unit:release-caption"]
-    guide = _scoped_compiler_text(raw_guide, kernel)
-    release = _scoped_compiler_text(raw_release, kernel)
+    guide, artifact_scope_source = _scoped_compiler_text(raw_guide, kernel)
+    release, release_scope_source = _scoped_compiler_text(raw_release, kernel)
     guide_source = compiler_owned_unit_source(
         "unit:natural-guide",
         raw_guide,
@@ -253,11 +272,15 @@ def _compile_delivery(
             )
         )
     )
-    spoken_sources = tuple(unit.unit_id for unit in spoken_parts)
+    spoken_sources = tuple(
+        source
+        for unit in spoken_parts
+        for source in (unit.unit_id, _visible_unit_scope_source(unit))
+    )
     provenance: dict[str, tuple[str, ...]] = {
-        "outline": (singleton_by_purpose["title"].unit_id,),
-        "natural_guide": (guide_source,),
-        "release_caption_and_interaction": (release_source,),
+        "outline": (singleton_by_purpose["title"].unit_id, title_scope_source),
+        "natural_guide": (guide_source, artifact_scope_source),
+        "release_caption_and_interaction": (release_source, release_scope_source),
     }
     production: ContentProductionBundle
     if request.media_format == "graphic":
@@ -331,55 +354,79 @@ def _compile_delivery(
 
 
 def _visible_unit(unit: CreativeKernelUnit) -> str:
+    source = _visible_unit_scope_source(unit)
+    prefix = _PHRASES[source]
+    if source == "phrase:scope-user-fact":
+        return f"{prefix}“{unit.text}”"
+    return f"{prefix}{unit.text}"
+
+
+def _visible_unit_scope_source(unit: CreativeKernelUnit) -> str:
     if unit.track == "trusted_fact":
         if unit.allowed_observation_types == ("user_actuality",):
-            label = "真实原话"
-        elif unit.allowed_observation_types == ("institutional_assertion",):
-            label = "已确认品牌信息"
-        else:
-            label = "已确认商品信息"
-        return f"{label}｜{unit.text}"
-    label_by_mode: dict[UnitMode, str] = {
+            return "phrase:scope-user-fact"
+        if unit.allowed_observation_types == ("institutional_assertion",):
+            return "phrase:scope-brand-fact"
+        return "phrase:scope-product-fact"
+    source_by_mode: dict[UnitMode, str] = {
         "trusted_fact": "",
-        "general_observation": "一般观察（不对应未提供的真实经历）",
-        "recommendation": "可以尝试",
-        "hypothesis": "假设情境",
-        "disclosed_dramatization": (DRAMATIZATION_DISCLOSURE.removesuffix("：")),
+        "general_observation": "phrase:scope-general",
+        "recommendation": "phrase:scope-recommendation",
+        "hypothesis": "phrase:scope-hypothesis",
+        "disclosed_dramatization": "phrase:scope-dramatization",
     }
-    label = label_by_mode[unit.mode]
-    if not label:
+    source = source_by_mode[unit.mode]
+    if not source:
         raise GenerationFailed("创作表达轨缺少可见范围")
-    return f"{label}｜{unit.text}"
+    return source
 
 
-def _scope_summary(kernel: CreativeKernelV1) -> str:
-    modes = {
+def _artifact_scope_source(kernel: CreativeKernelV1) -> str:
+    body_modes = {
         unit.mode
         for unit in kernel.units
-        if unit.track == "creative_expression" and unit.purpose not in {"natural_guide", "release_caption"}
+        if unit.purpose == "body" and unit.track == "creative_expression"
     }
-    labels: list[str] = []
-    if any(unit.track == "trusted_fact" for unit in kernel.units):
-        labels.append("可信事实")
-    for mode, label in (
-        ("general_observation", "一般观察"),
-        ("recommendation", "建议"),
-        ("hypothesis", "假设情境"),
-        ("disclosed_dramatization", "情景演绎"),
-    ):
-        if mode in modes:
-            labels.append(label)
-    if not labels:
-        raise GenerationFailed("成品缺少可见表达范围")
-    return "＋".join(labels)
+    has_user_fact = any(
+        unit.track == "trusted_fact" and unit.allowed_observation_types == ("user_actuality",)
+        for unit in kernel.units
+    )
+    has_confirmed_fact = any(
+        unit.track == "trusted_fact" and unit.allowed_observation_types != ("user_actuality",)
+        for unit in kernel.units
+    )
+    if "disclosed_dramatization" in body_modes:
+        return "phrase:artifact-user-fact-drama" if has_user_fact else "phrase:artifact-dramatization"
+    if "hypothesis" in body_modes:
+        return "phrase:artifact-hypothesis"
+    if has_user_fact:
+        return "phrase:artifact-user-fact"
+    if has_confirmed_fact:
+        return "phrase:artifact-confirmed-fact"
+    return "phrase:artifact-general"
 
 
-def _scoped_title(text: str, kernel: CreativeKernelV1) -> str:
-    return f"{_scope_summary(kernel)}｜{text}"
+def _title_scope_source(kernel: CreativeKernelV1) -> str:
+    artifact_source = _artifact_scope_source(kernel)
+    if artifact_source in {"phrase:artifact-dramatization", "phrase:artifact-user-fact-drama"}:
+        return "phrase:title-dramatization"
+    if artifact_source == "phrase:artifact-hypothesis":
+        return "phrase:title-hypothesis"
+    if artifact_source == "phrase:artifact-user-fact":
+        return "phrase:title-user-fact"
+    if artifact_source == "phrase:artifact-confirmed-fact":
+        return "phrase:title-confirmed-fact"
+    return "phrase:title-general"
 
 
-def _scoped_compiler_text(text: str, kernel: CreativeKernelV1) -> str:
-    return f"{_scope_summary(kernel)}｜{text}"
+def _scoped_title(text: str, kernel: CreativeKernelV1) -> tuple[str, str]:
+    source = _title_scope_source(kernel)
+    return f"{_PHRASES[source]}{text}", source
+
+
+def _scoped_compiler_text(text: str, kernel: CreativeKernelV1) -> tuple[str, str]:
+    source = _artifact_scope_source(kernel)
+    return f"{_PHRASES[source]}{text}", source
 
 
 def _contract(

@@ -53,6 +53,7 @@ from src.shared.narrative import (
     NarrativeMode,
     legacy_frame,
     new_frame,
+    user_fact_candidates,
     visible_digest,
 )
 from src.shared.types import (
@@ -333,6 +334,10 @@ class ContentService:
                 f"系列《{series.title}》第 {series.target_position} 个位置；"
                 f"已有 {len(series.prior_entries)} 条必要前情。"
             )
+        available_user_turns = tuple(turn.content for turn in sanitized_history if turn.role == "user") + (
+            sanitized_message,
+        )
+        fact_candidates = user_fact_candidates(available_user_turns)
         decision: ConversationDecision = self._generator.collaborate(
             ConversationInput(
                 message=sanitized_message,
@@ -350,6 +355,7 @@ class ContentService:
                 allowed_tone_ids=self._allowed_tone_ids(control),
                 allowed_mechanism_ids=self._allowed_mechanism_ids(control),
                 platform_shape=platform_shape(target, direction.media_format),
+                user_fact_candidates=fact_candidates,
             )
         )
         if not commitment.committed:
@@ -370,16 +376,24 @@ class ContentService:
             or decision.creative_plan is None
         ):
             raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
-        available_user_turns = tuple(turn.content for turn in sanitized_history if turn.role == "user") + (
-            sanitized_message,
-        )
         if sanitized_message not in decision.user_premises or any(
             premise not in available_user_turns for premise in decision.user_premises
         ):
             raise GenerationFailed("模型没有可靠保留用户原话")
+        candidate_by_id = {candidate.source_id: candidate.exact_text for candidate in fact_candidates}
+        if (
+            len(decision.user_fact_source_ids) != len(decision.user_fact_spans)
+            or any(
+                candidate_by_id.get(source_id) != exact_text
+                for source_id, exact_text in zip(
+                    decision.user_fact_source_ids,
+                    decision.user_fact_spans,
+                    strict=True,
+                )
+            )
+        ):
+            raise GenerationFailed("模型返回的用户事实句标识不存在或原文漂移")
         premise = "\n".join(decision.user_premises)
-        if any(not fact or fact not in premise for fact in decision.user_fact_spans):
-            raise GenerationFailed("模型返回的用户事实跨度不存在")
         self._validate_plan(
             decision.creative_plan,
             available_user_turns,
@@ -390,9 +404,10 @@ class ContentService:
         )
         frame = new_frame(
             decision.narrative_mode,
-            tuple(dict.fromkeys(decision.user_fact_spans)),
+            decision.user_fact_spans,
             tuple(record.fact_id for product in products for record in product_fact_records(product)),
             (),
+            user_fact_source_ids=decision.user_fact_source_ids,
         )
         explicit_mode = self._explicit_narrative_mode(control, sanitized_message)
         if explicit_mode is not None and frame.narrative_mode != explicit_mode:

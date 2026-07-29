@@ -28,7 +28,7 @@ from src.shared.creative_plan import (
     build_creative_plan,
 )
 from src.shared.errors import GenerationFailed
-from src.shared.narrative import NarrativeFrame, frame_document
+from src.shared.narrative import NarrativeFrame, frame_document, visible_digest
 from src.shared.types import (
     ConversationDecision,
     ConversationInput,
@@ -46,6 +46,7 @@ _G5 = "今天不知道发什么，帮我做条小红书。"
 _G6 = "把我去年创业最困难的那个月写出来。"
 _G7 = "别讲道理，荒诞一点。"
 _BAD_PLAN = "帮我生成一篇关系文案。"
+_MALICIOUS_FACT_SLICE = "我没有和婆婆吵架。帮我发条小红书。"
 
 _CAPTURED_FRAMES: list[NarrativeFrame] = []
 _CAPTURED_PLANS: list[object] = []
@@ -98,12 +99,29 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
                 ),
                 primary_product="brand_life_narrative",
             )
-        fact_spans = (_G4_FACT,) if request.message == _G4 else ()
+        if request.message == _MALICIOUS_FACT_SLICE:
+            return ConversationDecision(
+                "ready",
+                "模型试图截断否定语义。",
+                user_premises=(request.message,),
+                user_fact_spans=("和婆婆吵架。",),
+                user_fact_source_ids=(request.user_fact_candidates[0].source_id,),
+                narrative_mode="actuality_reflection",
+                creative_plan=cast(Any, _plan(request, "brand_life_narrative")),
+                primary_product="brand_life_narrative",
+            )
+        selected_facts = tuple(
+            candidate
+            for candidate in request.user_fact_candidates
+            if candidate.exact_text == _G4_FACT
+        )
+        fact_spans = tuple(candidate.exact_text for candidate in selected_facts)
         return ConversationDecision(
             "ready",
             "可以，我直接完成。",
             user_premises=(request.message,),
             user_fact_spans=fact_spans,
+            user_fact_source_ids=tuple(candidate.source_id for candidate in selected_facts),
             narrative_mode=(
                 "actuality_reflection" if fact_spans else request.explicit_narrative_mode or "general_observation"
             ),
@@ -243,6 +261,28 @@ def _snapshot(database_url: str, task_id: UUID) -> dict[str, object]:
     return cast(dict[str, object], snapshot)
 
 
+def _version_audits(database_url: str, task_id: UUID) -> list[dict[str, object]]:
+    with (
+        psycopg.connect(database_url, row_factory=dict_row) as connection,
+        connection.cursor() as cursor,
+    ):
+        cursor.execute(
+            "SELECT set_config('app.tenant_id', %s, true)",
+            (str(TENANT_ID),),
+        )
+        cursor.execute(
+            """
+            SELECT id, version_number, outline, body, artifact_digest, version_audit_snapshot
+              FROM content_versions
+             WHERE tenant_id = %s AND task_id = %s
+             ORDER BY version_number
+            """,
+            (TENANT_ID, task_id),
+        )
+        rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
 def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
     app_database_url: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -274,6 +314,16 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert _CALLS["intake"] == bad_plan_calls["intake"] + 1
         assert _CALLS["writer"] == bad_plan_calls["writer"]
         assert _CALLS["reviewer"] == bad_plan_calls["reviewer"]
+        time.sleep(2.05)
+
+        malicious_fact_before = _counts(app_database_url)
+        malicious_fact_calls = dict(_CALLS)
+        malicious_fact = _events(client, _MALICIOUS_FACT_SLICE)
+        assert malicious_fact[-1]["event"] == "failed"
+        assert _counts(app_database_url) == malicious_fact_before
+        assert _CALLS["intake"] == malicious_fact_calls["intake"] + 1
+        assert _CALLS["writer"] == malicious_fact_calls["writer"]
+        assert _CALLS["reviewer"] == malicious_fact_calls["reviewer"]
         time.sleep(2.05)
 
         task_ids: dict[str, UUID] = {}
@@ -310,12 +360,12 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert isinstance(frame, dict)
         assert frame["frame_version"] == "narrative-frame-v1"
         assert frame["narrative_mode"] == "actuality_reflection"
-        assert frame["user_facts"] == [
-            {
-                "source_id": "source:user_actuality:1",
-                "exact_text": _G4_FACT,
-            }
-        ]
+        assert isinstance(frame["user_facts"], list)
+        assert len(frame["user_facts"]) == 1
+        assert frame["user_facts"][0]["exact_text"] == _G4_FACT
+        assert str(frame["user_facts"][0]["source_id"]).startswith(
+            "source:user_actuality:turn-1:clause-1:"
+        )
         assert frame["allowed_brand_fact_ids"] == []
         assert snapshot["creation_commitment"] == {
             "gate_version": "creation-intent-gate-v1",
@@ -367,7 +417,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         v2 = revision.json()
         assert v2["version"] == 2
         assert _G4_FACT in v2["body"]
-        assert "情境演绎（虚构角色，不对应真实人物或品牌案例）｜" in v2["body"]
+        assert "以下是情景演绎，不对应真实人物或经历：" in v2["body"]
         assert len(_CAPTURED_FRAMES) >= 2
         assert frame_document(_CAPTURED_FRAMES[-1]) == frame
         assert len(_CAPTURED_PLANS) >= 5
@@ -404,7 +454,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         )
         assert v1.status_code == 200
         assert v1.json()["version"] == 1
-        assert "情境演绎（虚构角色，不对应真实人物或品牌案例）｜" not in v1.json()["body"]
+        assert "以下是情景演绎，不对应真实人物或经历：" not in v1.json()["body"]
         current = client.get(
             f"/api/v1/tasks/{g4_task_id}/versions/2",
             params={
@@ -414,6 +464,41 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         )
         assert current.status_code == 200
         assert current.json()["version"] == 2
+        audits = _version_audits(app_database_url, g4_task_id)
+        assert [audit["version_number"] for audit in audits] == [1, 2]
+        for audit in audits:
+            version_audit = audit["version_audit_snapshot"]
+            assert isinstance(version_audit, dict)
+            assert version_audit["audit_version"] == "content-version-audit-v1"
+            assert version_audit["artifact_digest"] == audit["artifact_digest"]
+            assert audit["artifact_digest"] == visible_digest(
+                str(audit["outline"]),
+                str(audit["body"]),
+            )
+            assert version_audit["narrative_frame"] == snapshot["narrative_frame"]
+            assert version_audit["creative_plan_v2"] == snapshot["creative_plan_v2"]
+            assert version_audit["delivery_compiler_version"] == snapshot["delivery_compiler_version"]
+        v1_audit = cast(dict[str, object], audits[0]["version_audit_snapshot"])
+        v2_audit = cast(dict[str, object], audits[1]["version_audit_snapshot"])
+        assert v1_audit["creative_kernel_v2"] == kernel_v1
+        assert v2_audit["creative_kernel_v2"] == revised_kernel
+        assert (
+            v1_audit["narrative_frame"]
+            == v2_audit["narrative_frame"]
+        )
+        with (
+            psycopg.connect(app_database_url) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute(
+                "SELECT set_config('app.tenant_id', %s, true)",
+                (str(TENANT_ID),),
+            )
+            with pytest.raises(psycopg.errors.RaiseException):
+                cursor.execute(
+                    "UPDATE content_versions SET artifact_digest = %s WHERE tenant_id = %s AND id = %s",
+                    ("0" * 64, TENANT_ID, audits[0]["id"]),
+                )
 
         time.sleep(2.05)
         failure_before = _counts(app_database_url)

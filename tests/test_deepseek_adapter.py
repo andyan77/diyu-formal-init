@@ -52,6 +52,7 @@ from src.shared.narrative import (
     NarrativeIssue,
     NarrativeMode,
     new_frame,
+    user_fact_candidates,
     visible_digest,
 )
 from src.shared.review_evidence import (
@@ -1090,7 +1091,13 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
         platform_shape="xiaohongshu_graphic:graphic",
     )
     prompt = _generator()._conversation_prompt(request)
-    assert "narrative_mode 由\n  服务端根据显式形式与事实跨度派生" in prompt
+    candidates = user_fact_candidates((message,))
+    fact_candidate = next(
+        candidate
+        for candidate in candidates
+        if candidate.exact_text == "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
+    )
+    assert "narrative_mode 由\n  服务端根据显式形式与完整事实句选择派生" in prompt
     assert "你不得返回或选择该字段" in prompt
     assert "primary_value 是本篇给受众的主要回报，不是 narrative_mode" in prompt
     assert "没有选题但要求生成”\n  通常选 brand_life_narrative" in prompt
@@ -1100,7 +1107,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
                 "kind": "ready",
                 "message": "好，我保留这段原话，其他由我来完成。",
                 "user_premises": [message],
-                "user_fact_spans": ["今天店里忙了一天，回家还因为谁洗碗拌了两句。"],
+                "user_fact_sentence_ids": [fact_candidate.source_id],
                 "narrative_mode": "general_observation",
                 "creative_plan": _intake_plan(message),
             }
@@ -1110,7 +1117,68 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
     assert decision.disposition == "ready"
     assert decision.user_premises == (message,)
     assert decision.user_fact_spans == ("今天店里忙了一天，回家还因为谁洗碗拌了两句。",)
+    assert decision.user_fact_source_ids == (fact_candidate.source_id,)
     assert decision.narrative_mode == "actuality_reflection"
+
+
+def test_conversation_intake_freezes_the_whole_negated_sentence() -> None:
+    message = "我没有和婆婆吵架。帮我写条小红书。"
+    candidates = user_fact_candidates((message,))
+    negated = next(candidate for candidate in candidates if candidate.exact_text == "我没有和婆婆吵架。")
+    request = ConversationInput(
+        message=message,
+        history=(),
+        brand=_brand(),
+        products=(),
+        target="xiaohongshu_graphic",
+        allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        platform_shape="xiaohongshu_graphic:graphic",
+        user_fact_candidates=candidates,
+    )
+    FakeClient.responses = [
+        _completion(
+            {
+                "kind": "ready",
+                "message": "好，我会保留完整原话。",
+                "user_premises": [message],
+                "user_fact_sentence_ids": [negated.source_id],
+                "creative_plan": _intake_plan(message),
+            }
+        )
+    ]
+
+    decision = _generator().collaborate(request)
+
+    assert decision.user_fact_spans == ("我没有和婆婆吵架。",)
+    assert decision.user_fact_source_ids == (negated.source_id,)
+
+
+def test_conversation_intake_rejects_model_selected_fact_substrings() -> None:
+    message = "我没有和婆婆吵架。帮我写条小红书。"
+    FakeClient.responses = [
+        _completion(
+            {
+                "kind": "ready",
+                "message": "开始。",
+                "user_premises": [message],
+                "user_fact_spans": ["和婆婆吵架"],
+                "creative_plan": _intake_plan(message),
+            }
+        )
+    ]
+
+    with pytest.raises(GenerationFailed, match="格式不完整"):
+        _generator().collaborate(
+            ConversationInput(
+                message=message,
+                history=(),
+                brand=_brand(),
+                products=(),
+                target="xiaohongshu_graphic",
+                allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+                platform_shape="xiaohongshu_graphic:graphic",
+            )
+        )
 
 
 @pytest.mark.parametrize(
@@ -1144,7 +1212,7 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
                 "kind": "ready",
                 "message": "可以，直接开始。",
                 "user_premises": [message],
-                "user_fact_spans": facts,
+                "user_fact_sentence_ids": facts,
                 "narrative_mode": mode,
                 "creative_plan": _intake_plan(message),
             }
@@ -1198,13 +1266,13 @@ def test_conversation_rejects_synthetic_or_mode_drifted_spans() -> None:
                 "kind": "ready",
                 "message": "开始。",
                 "user_premises": [message],
-                "user_fact_spans": ["婆婆曾经带过孩子"],
+                "user_fact_sentence_ids": ["source:user_actuality:invented"],
                 "narrative_mode": "actuality_reflection",
                 "creative_plan": _intake_plan(message),
             }
         )
     ]
-    with pytest.raises(GenerationFailed, match="事实跨度不存在"):
+    with pytest.raises(GenerationFailed, match="事实句标识不存在"):
         _generator().collaborate(
             ConversationInput(
                 message,
@@ -1515,7 +1583,7 @@ def test_dual_track_writer_receives_only_deidentified_preassigned_units() -> Non
     assert isinstance(kernel_snapshot, dict)
     assert kernel_snapshot["program_id"] == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
     assert isinstance(artifact.production, GraphicProductionBundle)
-    assert "假设情境｜" in artifact.production.full_body
+    assert "假设有这样一幕：" in artifact.production.full_body
     prompts = _payload_prompts()
     assert len(prompts) == 1
     writer_prompt = prompts[0]
@@ -1719,7 +1787,7 @@ def test_general_writer_text_is_compiled_inside_a_visible_non_fact_scope() -> No
     artifact = _generator().generate(request)
 
     assert isinstance(artifact.production, GraphicProductionBundle)
-    assert "一般观察（不对应未提供的真实经历）｜饭桌上" in (artifact.production.full_body)
+    assert "换个角度看：饭桌上" in artifact.production.full_body
     assert len(FakeClient.requests) == 1
 
 

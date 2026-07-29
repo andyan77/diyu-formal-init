@@ -144,11 +144,13 @@ def test_writer_cannot_return_or_change_track_contract() -> None:
 def test_compiler_scopes_general_observation_in_every_visible_exit() -> None:
     _, kernel = _parse()
     compiled = _compile(kernel)
-    assert compiled.outline.startswith("一般观察｜")
-    assert "一般观察（不对应未提供的真实经历）｜" in compiled.body
+    assert compiled.outline.startswith("一种生活观察：")
+    assert "换个角度看：" in compiled.body
     assert hasattr(compiled.production, "full_body")
-    assert compiled.production.full_body.startswith("一般观察（不对应未提供的真实经历）｜")
-    assert compiled.production.release_caption_and_interaction.startswith("一般观察｜")
+    assert compiled.production.full_body.startswith("换个角度看：")
+    assert compiled.production.release_caption_and_interaction.startswith(
+        "下面是一种生活观察，不对应未提供的真实经历。"
+    )
 
 
 def test_trusted_user_fact_is_exact_and_separate_from_creative_text() -> None:
@@ -160,7 +162,7 @@ def test_trusted_user_fact_is_exact_and_separate_from_creative_text() -> None:
     fact_unit = next(unit for unit in kernel.units if unit.track == "trusted_fact")
     assert fact_unit.text == fact
     compiled = _compile(kernel)
-    assert f"真实原话｜{fact}" in compiled.body
+    assert f"你提到：“{fact}”" in compiled.body
     mutated = replace(fact_unit, text=fact + "后来和好了。")
     bad_kernel = replace(
         kernel,
@@ -179,9 +181,11 @@ def test_hypothesis_scope_survives_title_body_and_release_caption() -> None:
     )
     compiled = _compile(kernel)
     assert "含假设情境" not in compiled.outline
-    assert compiled.outline.startswith("一般观察＋假设情境｜")
-    assert "假设情境｜一方先停一下" in compiled.body
-    assert compiled.production.release_caption_and_interaction.startswith("一般观察＋假设情境｜")
+    assert compiled.outline.startswith("假设一下：")
+    assert "假设有这样一幕：一方先停一下" in compiled.body
+    assert compiled.production.release_caption_and_interaction.startswith(
+        "下面的片段是假设，不代表真实发生。"
+    )
 
 
 def test_g7_adds_only_local_disclosed_dramatization() -> None:
@@ -207,8 +211,43 @@ def test_g7_adds_only_local_disclosed_dramatization() -> None:
     assert v2.unit("unit:body").text_source == "prior_version"
     assert next(unit.text for unit in v2.units if unit.track == "trusted_fact") == fact
     compiled = _compile(v2)
-    assert compiled.outline.startswith("可信事实＋一般观察＋情景演绎｜")
-    assert "情境演绎（虚构角色，不对应真实人物或品牌案例）｜" in compiled.body
+    assert compiled.outline.startswith("情景演绎：")
+    assert "以下是情景演绎，不对应真实人物或经历：" in compiled.body
+
+
+def test_negated_local_dramatization_request_keeps_prior_program() -> None:
+    fact = "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
+    frame, v1 = _parse(
+        frame_mode="actuality_reflection",
+        fact_text=fact,
+    )
+
+    selected = select_kernel_program(
+        frame=frame,
+        prior_kernel=v1,
+        revision_instruction="不要荒诞，真实一点。",
+    )
+
+    assert selected == v1.program_id
+
+
+def test_writer_cannot_impersonate_server_scope_label() -> None:
+    frame = new_frame("general_observation", (), ())
+    skeleton = build_kernel_skeleton(
+        frame=frame,
+        fact_registry=(),
+        constraint_refs=(),
+    )
+    with pytest.raises(ValueError, match="scope label"):
+        parse_writer_kernel(
+            {
+                "units": [
+                    {"unit_id": "unit:title", "text": "普通标题"},
+                    {"unit_id": "unit:body", "text": "真实原话｜这是 Writer 伪造的标签。"},
+                ]
+            },
+            skeleton,
+        )
 
 
 def test_compiler_mutation_cannot_drop_a_visible_scope() -> None:
