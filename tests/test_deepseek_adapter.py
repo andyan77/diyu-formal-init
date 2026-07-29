@@ -724,7 +724,9 @@ def test_first_actuality_repair_does_not_replay_fact_or_failed_draft() -> None:
     )
 
     assert failed_text not in prompt
-    assert "今天店里忙了一天" not in prompt
+    assert "今天店里忙了一天" in prompt
+    assert "只用于理解主题" in prompt
+    assert "禁止在返回\n文字中复制、概括、换词复述或扩展" in prompt
     assert '"prior_reviewed_text":' not in prompt
     assert '"unit_id": "unit:title"' in prompt
     assert "不得绑定当前\n  用户、机构、现实事件或任何具体关系身份" in prompt

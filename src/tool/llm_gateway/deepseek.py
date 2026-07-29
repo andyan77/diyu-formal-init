@@ -1586,6 +1586,17 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
             request.revision_instruction
             or "保持服务端真人事实原文不变，补齐可直接发布的抽象观看主线"
         )
+        read_only_facts = (
+            []
+            if prior is not None
+            else [
+                {
+                    "source_id": fact.source_id,
+                    "exact_text": fact.exact_text,
+                }
+                for fact in request.narrative_frame.user_facts
+            ]
+        )
         template = {
             "units": [
                 {
@@ -1600,6 +1611,9 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 单元出发，按用户本次表达要求改写。
 
 本次表达要求：{expression_request}
+首次修复的服务端逐字事实投影（只用于理解主题；事实正文由服务端另行插入，禁止在返回
+文字中复制、概括、换词复述或扩展）：
+{json.dumps(read_only_facts, ensure_ascii=False)}
 受影响单元及可用的上一个已审版本：
 {json.dumps(units, ensure_ascii=False)}
 
