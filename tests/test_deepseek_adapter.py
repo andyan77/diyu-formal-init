@@ -1467,6 +1467,7 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert '"exact_text"' in reviewer_prompt
     assert "不决定事实许可、最终通过／失败" in reviewer_prompt
     assert "不要返回 offset、occurrence、全文风险枚举" in reviewer_prompt
+    assert "ASCII 双引号，必须按 JSON 字符串规则" in reviewer_prompt
     assert '"occurrence"' not in reviewer_prompt
     assert '"start"' not in reviewer_prompt
     assert '"end"' not in reviewer_prompt

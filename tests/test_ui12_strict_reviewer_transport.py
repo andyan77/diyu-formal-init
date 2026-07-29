@@ -341,6 +341,25 @@ def test_runtime_license_review_rejects_old_closed_question_tool() -> None:
         )
 
 
+def test_runtime_license_review_never_repairs_invalid_json_arguments() -> None:
+    licenses = _licenses()
+    payload = _strict_payload(
+        _license_review_document(),
+        tool_name=CLAUSE_LICENSE_TOOL_NAME,
+    )
+    function = payload["choices"][0]["message"]["tool_calls"][0]["function"]
+    function["arguments"] = (
+        '{"review_version":"clause-license-review-v1",'
+        '"reviews":[{"unsupported_quote":"他说"辛苦了""}]}'
+    )
+
+    with pytest.raises(json.JSONDecodeError):
+        DeepSeekGenerator._strict_license_review_answers(
+            payload,
+            licenses=licenses,
+        )
+
+
 def test_writer_and_reviewer_model_routes_are_independent() -> None:
     questions = _questions()
     _FakeClient.response = _FakeResponse({"choices": []})

@@ -1318,7 +1318,9 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
   unsupported_quote 为空字符串。清楚样本不得用 uncertain 逃避。
 
 不要返回 offset、occurrence、全文风险枚举、事实许可、pass/fail 或修复建议。只调用指定
-函数并返回 review_version={CLAUSE_LICENSE_REVIEW_VERSION}。"""
+函数并返回 review_version={CLAUSE_LICENSE_REVIEW_VERSION}。tool arguments 必须是合法
+JSON；unsupported_quote 原文若包含 ASCII 双引号，必须按 JSON 字符串规则写成反斜杠转义的
+引号，解析后的字符串仍须与 clause 原文逐字一致。"""
 
     @staticmethod
     def _kernel_reviewer_prompt(
