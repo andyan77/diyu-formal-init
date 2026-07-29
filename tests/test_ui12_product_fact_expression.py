@@ -338,6 +338,16 @@ def test_new_dual_track_server_selects_facts_before_writer() -> None:
 
     assert parsed.selected_fact_block_ids == selected
     assert len(selected) == 3
+    selected_fact_ids = {
+        block.fact_id
+        for block in blocks
+        if block.fact_block_id in selected
+    }
+    assert {
+        item.fact_key
+        for item in packet.facts
+        if item.fact_id in selected_fact_ids
+    } == {"display_name", "colors", "both_sides_complete"}
     with pytest.raises(TypeError, match="outside the kernel contract"):
         parse_writer_kernel(
             {

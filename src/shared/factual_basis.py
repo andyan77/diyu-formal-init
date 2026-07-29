@@ -166,8 +166,17 @@ def select_product_fact_block_ids(
         )
     substantive = tuple(
         item
+        for priority in (
+            "appearance",
+            "construction",
+            "category",
+            "measurement",
+            "boundary",
+            "structure",
+        )
         for item in packet.facts
         if item.fact_key not in {"sku", "display_name"}
+        and priority in item.allowed_claim_categories
     )
     selected = tuple(
         dict.fromkeys(
