@@ -9,44 +9,24 @@
   DeepSeek／千问 raw、人工否决和 `BLOCKED` 事件继续保留。当前归档引用
   `archive/ui12-blocked-before-dual-track-20260729` 固定指向
   `8f5b3e52ff7f83494555b80ad511790514d21c45`。
-- 主控最新裁决：`deepseek-v4-pro` 的 Reviewer 资格因已保存 G7 清楚语义假阴性正式
-  否决，不再改 Prompt 或复验；OpenAI 仅可用于开发辅助，因中国境内生产运维边界不得进入
-  运行主链。现授权唯一境内 Reviewer 候选
-  `qwen3.7-max-2026-05-20`，DeepSeek Flash 继续承担 intake／Writer。
-- 薄 `ReviewerProvider` 已在 WIP `2d49303513a7eb9d7afe94a695f8f0d3aa0d2744`
-  将 ClauseLicense 正式主链切到千问北京兼容 Responses Function Calling。千问思考模式
-  不支持强制 `tool_choice=required`，故采用单工具 `auto`，但严格 parser 仍要求响应中
-  恰好一个正确 function call；无 function call、额外输出、缺字段或坏证明均失败关闭，
-  没有 JSON fallback。
-- 同一 WIP 的固定资格集已按 bundle 各调用一次，无重试。商品硬事实、合法近邻和跨包
-  一致性通过；但千问把“这个家”“这段关系”“家庭矛盾”三个清楚的现实／关系负例判为
-  许可内，把真正歧义判成明确拒绝而非 `uncertain`，G7 成对包还返回了正式 parser
-  禁止的额外 message。fixture、quote、clause/license ID、服务端 expected ruling 与
-  原始 function arguments 已完成只读对账，确定为唯一候选的语义与传输资格失败，不是
-  服务端 oracle 假阴性。
-- `55cc9b0…` 已把高风险 `natural-guide/release-caption` 移交
-  DeliveryCompiler 确定性生成；`31fb7f4…` 已删除 Reviewer 自报 verdict/reason，
-  服务端只从 expression type 与完整 prohibited-binding proof 派生裁决。该轮 fresh G7
-  虽机器通过，人工全文仍发现新增人物动作、动机和结果，证明 Reviewer 对完整 binding ID
-  集合机械返回全部 `absent`。
-- WIP `775ac424233614a5adcc9aa424c679dee04be5c7` 进一步把每个 prohibited binding
-  变成 clause-local 的稳定闭合问题，不包含机器人、厨房、洗碗或其他失败句词表；定向
-  pytest、Ruff、mypy 与 mutation 直接消费者通过。新 SHA 的唯一 fresh G7 使用一次
-  Flash Writer 和一次 Pro Reviewer，无 repair，机器链仍通过。
-- 人工全文复核否决该机器结果：正文新增“石头剪刀布／猜拳收场”、输赢双方洗碗／念叨／
-  假装没听见等具体事件、动作、言语归属与结果；Pro Reviewer 对 5 个 writer clause 的
-  全部禁止绑定仍返回 `absent`、`uncertain` 为空。实际 prompt 已逐项携带
-  `actual_event_or_result` 等明确问题，tool call、ID、覆盖、quote/parser 与服务端派生
-  均无错位，因此这是当前唯一 Reviewer 对清楚许可证问题的真实语义假阴性，不是可继续用
-  parser、schema、fixture 或服务端小修关闭的接缝。
-- 继续只能更换／增加 Reviewer、增加运行时审查调用，或建立中文情境语义规则；前两项未
-  获授权，后一项会退化为题材／句型黑名单或第二套语义裁决器。因此 UI-12 命中真实停止线。
+- 历史 Reviewer 路线已完成否决：`deepseek-v4-pro` 与千问候选都在清楚负例上产生
+  安全关键假阴性，OpenAI 又不满足中国境内生产运行边界。它们的 raw、人工否决与
+  `BLOCKED` 记录完整保留，但新任务生产主链不再调用 Reviewer；千问适配器、配置、资格
+  runner 与无正式消费者的测试已由普通前向提交移除。
+- 当前实现由服务端在 Writer 前冻结 `creative-kernel-v2`：每个最终可见单元只有
+  `trusted_fact` 或 `creative_expression` 一条轨道，后者只允许
+  `general_observation`、`recommendation`、`hypothesis`、
+  `disclosed_dramatization`。Writer 只能填写既定可写 unit；`delivery-compiler-v2`
+  原样插入事实、添加自然可见范围并验证所有出口、来源与制作资源。
+- G7 的新合同已经落地：整体 Frame 仍为 `actuality_reflection`，V1 真人事实及原反思
+  冻结不变；用户明确要求荒诞／小情景时，服务端可新增一个局部、完整披露的
+  `disclosed_dramatization`，且不能反向污染现实事实或资源。
 - `UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
   未运行及未 push/CI/部署证据完整保留。
-- 当前 Git 基线：最新 WIP
-  `2d49303513a7eb9d7afe94a695f8f0d3aa0d2744`，`origin/main` 仍为
+- 当前 Git 基线：最终运行代码 WIP
+  `3518fdacd21b37f9a0a76b8027bbec6ab659475a`，`origin/main` 仍为
   `7aa87ab624cf3ff64f42e49f1755d66d496cac7a`；`docs/项目记忆.md` 的用户既有修改继续
   受保护且未混入 UI-12 提交。UI-07—UI-12 历史禁止 reset、rebase、squash、删除或改写。
 - 生产启动复核：真实部署仓 `/opt/diyu-saas/repo` 与镜像均为
@@ -55,20 +35,24 @@
   应用数据库 `diyu_m5_4` 的 schema 为 `20260801_28`，容器内
   `127.0.0.1:18000/health/ready` 与生产主机公网 HTTPS 均为 `200`，
   `diyu-m5-4-backup.timer` 为 active。本执行环境直连公网超时未被误写为生产失败。
-- 最新受控证据位于
-  `/home/faye/.local/state/diyu-ui12-evidence/2d49303513a7eb9d7afe94a695f8f0d3aa0d2744/qwen-reviewer-qualification/`，
-  目录／文件权限为 `0700/0600`；六个 Reviewer bundle 各有唯一 raw，服务端结构包调用
-  次数为 0，summary SHA-256 为
-  `0eba66e1e75632e56498000d41d5eb13205ff991356f01f77f938ab0c1df16c5`。
-  凭据未写入证据或 Git；本地 `.env` 为 Git ignore 且权限 `0600`。
-- 因 Reviewer 候选资格未成立，fresh G7 与冻结的其余卡片不升级为最终同 SHA 业务轮；
-  Golden、完整前后端门、两份
-  候选审查、push、CI、备份和部署均未继续。生产应用、数据库与健康镜像从未切换。
+- 无持久化业务轮在运行合同 SHA
+  `189e80cac2820e459aa444d75619c85bb7f643d2` 完成；G1/G6 为 `0/0/0`，
+  G2/G3/G4/G5/G7/H1/D1 均形成完整成品，人工逐篇全文审阅通过。随后在最终代码 WIP
+  `3518fda…` 的无网络容器中重新解析全部 kernel 并重跑 DeliveryCompiler，七个成品的
+  标题、正文、语义合同、来源、资源与 digest 均无漂移；provider/Reviewer 调用为 0。
+- 最终代码重放证据位于
+  `/var/lib/diyu-ui12-evidence/3518fdacd21b37f9a0a76b8027bbec6ab659475a/final-runtime-replay/`，
+  目录／文件权限为 `0700/0600`，summary SHA-256 为
+  `4ca9feef0d20461d0063f3bbd9e7cf0ffc1e18e9fe09d12a2badb9d9af3acb5f`。
+  凭据未进入证据或 Git，临时容器、源码投影与脚本已经删除。
+- 最终本地工程门已通过：Ruff、mypy、Golden `379 passed`、OpenAPI，以及前端
+  lint/typecheck/interaction/build 全部绿色；完整工程门之后的代码变化仅为产品事实职责
+  注释订正。两份有界候选审查与最终 push/CI/部署仍待本轮收口，生产尚未切换。
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
 - 当前任务包：
   [`docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md`](docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)。
-- 当前唯一下一动作：在现有 CreativeKernel／DeliveryCompiler／快照主线上实现服务端
-  预分配完整表达轨，先用历史 raw 离线回放，再尽早完成同 SHA G3／G4／G7。
+- 当前唯一下一动作：完成权威文档与两份有界审查，冻结唯一生产候选后执行一次 push、
+  唯一承重 CI、备份、部署与同 SHA 生产验收。
 - 承重裁决：[ADR-028](docs/架构决策/ADR-028-来源语态主体绑定与证据裁决矩阵.md)
   已由本次主控裁决置为 `ACCEPTED`。启动前已把 SDR-001—SDR-037 订正为 42 条无重复
   stable ID、单值 `unit_contract` 的 SDR-001—SDR-042，并通过 diff、唯一性、单合同与

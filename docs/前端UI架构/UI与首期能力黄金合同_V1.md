@@ -5,10 +5,11 @@
 > UI-05 由创始人真实使用后的新产品语义证据触发；Gate A 产品裁决、Gate B 正式工程化和
 > Gate C 生产替换均已完成。2026-07-27（UTC）的主控 `CLOSED` 结论保留为历史；关闭后新增
 > 的三个生产 UI 缺口已以前向修复完成唯一 CI、同 SHA 部署和定向生产复验。后续用户—系统
-> 创作责任合同的第二个结构候选命中真实停止线，UI-05 已 `SUPERSEDED → UI-06`；UI-06
-> 唯一生产候选又在真实 G1 误建内容任务，现已 `SUPERSEDED → UI-07`。UI-07 以服务端
-> `CreationIntentGate` 替代模型 ready 的持久化授权；无持久化预检的门后 G3 Writer 仍
-> 违反真实性边界，当前为 `BLOCKED`。
+> 创作责任合同的第二个结构候选命中真实停止线，UI-05 已 `SUPERSEDED → UI-06`；UI-06—
+> UI-11 的结构成果和失败历史经线性 successor 链由 UI-12 承接。UI-12 当前采用服务端
+> Writer 前预分配的可信事实轨与四类创作表达轨，Compiler 保持所有独立传播出口的自然
+> 范围，概率 Reviewer 退出生产保存授权；本地业务轮与正式工程门已成立，状态为
+> `ACTIVE`，尚未完成唯一 CI 与生产替换。
 > 本文仍不是自动化测试平台，也不修改数据库或权限。UI-02 静态原型只证明旅程和状态设计
 > 可浏览；UI-04 的生产证据不等于真实员工采用或市场结果。
 
@@ -226,7 +227,9 @@ UI-02 不建立自动化。UI-03 自动化内容主链直接承重的
 | `UI-05` | `SUPERSEDED → UI-06`；`UI05-G01—G10` 的 Gate A/B/C 与关闭后三项 UI 极小返工继续作为历史合同；创作责任合同候选 B 的真实 G4 同类失败与人工 G3 假绿保持失败历史 | 不激活新资产，不重跑 Gate C，不形成候选 C，不把失败改写为 successor 成功 |
 | `UI-06` | `SUPERSEDED → UI-07`；此前 BLOCKED 证据完整保留：Frame、四类块、独立 Reviewer、一次块修复及 mutation 本地成立，但唯一候选真实 G1 误建任务并失败，已清理回退 | 不形成 UI-06 第二候选，不拼接历史未执行项；原 `UI06-D1` 被 UI-07 前置提交门裁决取代但原文保留 |
 | `UI-07` | `SUPERSEDED → UI-08`；提交门正反证、普通交流无进度与可选“直接生成”已成立；此前 G3 Writer 补造现实微事件且唯一块修复后仍失败 | Gate 成果与失败历史保留，不形成 UI-07 第二候选 |
-| `UI-08` | `BLOCKED`；计划、fact/constraint、服务端骨架与三类观察结构成立，golden `173 passed`；当前与唯一候选 Writer 的 G3/G4/D1 均失败 | 不运行 Reviewer 掩盖 Writer 失败，不增加第三模型，不 push/CI/部署；只等待是否另开 Writer 单角色 successor 的裁决 |
+| `UI-08` | `SUPERSEDED → UI-09`；计划、fact/constraint、服务端骨架与三类观察结构成立，golden `173 passed`；当前与唯一候选 Writer 的 G3/G4/D1 均失败 | 不改写失败，不把后继进展冒充 UI-08 成功 |
+| `UI-09—UI-11` | 均已 `SUPERSEDED` 并由下一项承接；CreativeKernel、确定性 Compiler、Reviewer evidence 与服务端 program 的成果和各自 BLOCKED 证据保留 | 不恢复后置概率模型的生产放行，不删除历史 raw |
+| `UI-12` | `ACTIVE`；服务端在 Writer 前冻结 `trusted_fact + creative_expression`，Compiler 原样插入事实并维持一般观察、建议、假设或演绎范围；业务轮与本地工程门成立 | 唯一 CI 与生产替换完成以前不写成 REVIEW，不以测试替代全文成品审阅 |
 
 一个合同只有在其实际消费者进入相应工程里程碑时才自动化。静态原型、文档行数或候选资产数量
 均不能代替正式产品行为、生产隔离或真实租户采用。
@@ -344,3 +347,21 @@ UI-06 确定性合同要求：`NarrativeFrame` 冻结模式与事实来源；Wri
 由服务端逐字插入；独立 Reviewer 覆盖最终可见字段并返回真实精确跨度，服务端做 block/scene
 完整覆盖、事实、模式、资源和 digest 对账。最多一次完整块级修复；G7 不得改变 Commitment、
 Frame、真人事实块或来源。
+
+## 12. UI-12 可信事实轨与创作表达轨合同
+
+UI-07 的前置提交门继续有效；UI-12 只收敛门后的生成与交付责任：
+
+1. 服务端在 Writer 调用前为每个可见 unit 冻结唯一轨道、模式、来源、顺序、可见范围与
+   允许资源；
+2. `trusted_fact` 只能由服务端逐字插入，`creative_expression` 只允许一般观察、建议、
+   显著假设或显著演绎；
+3. Writer 只能返回既定可写 unit ID 与文字，不得新建 unit、修改事实、选择轨道或输出
+   Compiler 辅助字段；
+4. Compiler 必须在标题、正文、字幕、配文与平台改编中保持范围，任何独立出口脱标均失败；
+5. G7 保持整体 `actuality_reflection`、真人事实与原反思不变，可以新增一个服务端所有、
+   完整披露的局部演绎；
+6. 新任务保存不调用 Reviewer；历史 evidence 仅供旧快照兼容与离线回放。
+
+前端只显示自然的“一般观察”“如果”“情境演绎”等用户可理解范围，不显示 track、mode、
+unit、Reviewer 或内部许可证。任何异步生成或版本切换仍不得覆盖用户刚输入的新内容。

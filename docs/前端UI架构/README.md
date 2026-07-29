@@ -4,12 +4,11 @@
 并保持 `CLOSED`；创始人真实使用后出现的产品语义新证据由 successor UI-05 单独承接。
 UI-05 Gate A 返工候选已通过产品裁决，Gate B 正式 React/API 与 Gate C 生产替换已经完成。
 2026-07-27（UTC）的主控关闭结论保留为历史；关闭后新发现的三个生产 UI 缺口已经以前向
-修复完成唯一 CI、同 SHA 部署与定向生产复验。随后用户—系统创作责任合同在第二个结构候选
-的真实 DeepSeek 验收中命中停止线；UI-05 已 `SUPERSEDED → UI-06`。UI-06 的唯一生产
-候选又在 G1 把普通交流误建为内容任务，现已 `SUPERSEDED → UI-07`。UI-07 用服务端前置
-提交门替代模型 ready 的持久化授权，随后 `SUPERSEDED → UI-08`。UI-08 完成创作计划、
-事实／约束、服务端骨架和 Reviewer 观察类型分离，但当前与唯一候选 Writer 的三卡预检都
-失败，当前为 `BLOCKED`：
+修复完成唯一 CI、同 SHA 部署与定向生产复验。随后 UI-05—UI-11 的创作真实性探索及失败
+历史完整保留并由 UI-12 承接。UI-12 已把新任务主链收敛为服务端 Writer 前预分配
+`trusted_fact + creative_expression`，Compiler 对事实和创作范围作确定性投影，概率
+Reviewer 退出保存授权。当前为 `ACTIVE`：本地业务轮和前后端门成立，唯一 CI 与生产替换
+尚待完成。
 
 - [UI-03 正式 React 产品骨架与内容主链执行包](../UI-03-正式React产品骨架与内容主链执行包.md)：
   已在不切换生产默认 UI 的边界内完成公共首页、三入口隔离壳与统一创作端，现为 `CLOSED`；
@@ -41,11 +40,15 @@ UI-05 Gate A 返工候选已通过产品裁决，Gate B 正式 React/API 与 Gat
   整体更换 DeepSeek。无持久化预检的 G1—G6/H1/D1 intake 结果成立，但 G3 Writer 仍补造
   未提供微事件和品牌信念，唯一块修复后仍失败；未 push/CI/部署；
 - [UI-08 创作计划、事实依据与叙事观察分离执行包](../UI-08-创作计划事实依据与叙事观察分离闭环执行包.md)：
-  当前为 `BLOCKED`。`CreativePlanV2`、fact/constraint 分离、服务端 block/scene 骨架及
+  当前为 `SUPERSEDED → UI-09`。`CreativePlanV2`、fact/constraint 分离、服务端 block/scene 骨架及
   abstract/situated/institutional 三类观察已实现，golden `173 passed`。当前
   `deepseek-v4-flash` 与唯一候选 `deepseek-v4-pro` 在同输入、同 Prompt、同参数的
-  G3/G4/D1 单次 Writer-only 预检中均失败；未运行 Reviewer 资格、CI 或部署。唯一下一
-  裁决是是否另开 successor 重新设计 Writer 单角色策略；
+  G3/G4/D1 单次 Writer-only 预检中均失败；未运行 Reviewer 资格、CI 或部署，失败历史
+  不改写为成功；
+- [UI-12 来源、语态、主体绑定与服务端证据裁决执行包](../UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)：
+  当前为 `ACTIVE`。新任务由服务端预分配可信事实与四类创作表达单元，Writer 只能填写
+  既定创意 unit，Compiler 负责逐字事实、自然范围和全部平台出口；Reviewer 不再参与版本
+  放行。运行合同业务轮、最终代码隔离重放与前后端本地门成立，尚待唯一 CI 和生产替换；
 - [产品化HTML原型_UI-05](产品化HTML原型_UI-05/)：UI-05 Gate A 的管理员与租户用户两条
   独立旅程及可重放验证。它继续作为历史产品合同与产品裁决证据，不冒充正式实现；打开
   [review/index.html](产品化HTML原型_UI-05/review/index.html) 即可离线回看；
@@ -83,6 +86,6 @@ V1.0、评审意见和 PNG 预览同样只作历史参考；`prototype_verified`
   已完整收口；随后由真实使用证据触发的 UI-05 已完成 Gate A 产品裁决、Gate B 正式工程化
   和 Gate C 生产替换。UI-05 的历史关闭结论之后又出现三个直接生产 UI 缺口，现已完成极小
   前向修复；后续创作责任合同恢复命中候选 B 结构停止线并由 UI-06 取代。UI-06 唯一生产
-  候选又被真实 G1 否决，现已 `SUPERSEDED → UI-07`。UI-07 的提交门反证成立后
-  `SUPERSEDED → UI-08`；UI-08 结构成立但两个 Writer 都失败，当前 `BLOCKED`。唯一下一
-  动作是主控只裁决是否另开 successor 重新设计 Writer 单角色策略。
+  候选又被真实 G1 否决，现已 `SUPERSEDED → UI-07`。UI-07—UI-11 的结构成果与失败
+  均由 UI-12 承接；UI-12 当前用前置双轨与确定性 Compiler 取代概率 Reviewer 的生产
+  放行，状态为 `ACTIVE`，唯一下一动作是完成唯一 CI 与生产替换后进入 REVIEW。
