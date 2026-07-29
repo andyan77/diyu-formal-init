@@ -1318,14 +1318,32 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
             kernel,
             request.narrative_frame,
         )
+        product_issue_reasons = {
+            "unsupported_product_claim",
+            "product_fact_must_use_immutable_block",
+            "unsupported_product_inference",
+        }
+        product_fact_repair = any(
+            issue.target_id in affected
+            and issue.reason in product_issue_reasons
+            for issue in issues
+        )
         units = [
             {
                 "unit_id": unit.unit_id,
                 "purpose": unit.purpose,
                 "unit_contract": trusted_contracts[unit.unit_id],
                 "allowed_observation_types": list(unit.allowed_observation_types),
-                "claim_refs": list(unit.claim_refs),
-                "current_text": unit.text,
+                "claim_refs": (
+                    []
+                    if product_fact_repair
+                    else list(unit.claim_refs)
+                ),
+                **(
+                    {}
+                    if product_fact_repair
+                    else {"current_text": unit.text}
+                ),
             }
             for unit in kernel.units
             if unit.unit_id in affected
@@ -1334,7 +1352,12 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
             {
                 "unit_id": issue.target_id,
                 "reason": issue.reason,
-                "fragment": issue.fragment,
+                **(
+                    {}
+                    if product_fact_repair
+                    and issue.reason in product_issue_reasons
+                    else {"fragment": issue.fragment}
+                ),
             }
             for issue in issues
             if issue.target_id in affected
@@ -1355,18 +1378,38 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 }
             ]
         }
-        return f"""只修复这一次列出的完整可写 unit。不得修改、返回或概括事实单元，不得改变
-CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit_id。
-
-用户 topic：{
-            json.dumps(
+        topic_line = (
+            "商品事实越界修复时不再向 Writer 回放用户中的商品标识、违规原文或商品事实；"
+            "这些内容已经由服务端不可变事实块承载。"
+            if product_fact_repair
+            else "用户 topic："
+            + json.dumps(
                 request.creative_plan.topic_spans if request.creative_plan is not None else (),
                 ensure_ascii=False,
             )
-        }
+        )
+        packet_line = (
+            "本次商品事实引用由服务端继续冻结；返回的 claim_refs 必须为空数组。"
+            if product_fact_repair
+            else "本次只读 ProductFactPacket 的 fact_id：\n"
+            + json.dumps(list(product_packet.fact_ids), ensure_ascii=False)
+        )
+        claim_rule = (
+            "本次是商品事实越界修复，每个返回 unit 的 claim_refs 必须是空数组。"
+            if product_fact_repair
+            else (
+                "有 ProductFactPacket 时，每个返回 unit 必须保留 claim_refs 字段且只引用"
+                "上述 fact_id；claim_refs 只是审查线索，不构成商品事实许可。"
+                if product_contract
+                else "没有 ProductFactPacket 时不得返回 claim_refs。"
+            )
+        )
+        return f"""只修复这一次列出的完整可写 unit。不得修改、返回或概括事实单元，不得改变
+CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit_id。
+
+{topic_line}
 本次修改要求：{request.revision_instruction or "（首次生成）"}
-本次只读 ProductFactPacket 的 fact_id：
-{json.dumps(list(product_packet.fact_ids), ensure_ascii=False)}
+{packet_line}
 既有 fact_block_refs 已由服务端冻结，修复不得返回、增删、换序或替换。
 受影响 unit：{json.dumps(units, ensure_ascii=False)}
 当前问题：{json.dumps(findings, ensure_ascii=False)}
@@ -1386,7 +1429,9 @@ CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit
   unsupported_product_inference：删除 Writer unit 对商品名称、编号、硬属性、数字、性能、
   功效、用途、穿着结果、价格、库存、比较、设计动机或实际体验的复述、概括、推断和改写；
   已登记商品事实由服务端 frozen fact 单元逐字保留，并由 ImmutableFactBlock 原样插入。
-  只改写为不承载商品硬事实的观看引导、选择边界或抽象表达；
+  重新从对应 unit 的表达职责出发写面向受众的标题、观看回报、抽象视角或选择建议；这些
+  创意文字即使脱离所有商品标识与硬事实也必须独立成立。不得把内部资料边界、审查规则或
+  “哪些信息可以确认”写成面向用户的内容主题；
 - unsupported_actuality_binding 出现在 hypothesis/dramatization 时，改为不绑定现实身份的
   泛指虚构角色。
 这是本成品唯一修复。若受影响 unit 的冻结 contract 是 abstract_observation，或
@@ -1397,8 +1442,7 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 每个返回 unit 的文字都必须与 current_text 实质不同，并同时消除该 unit 的全部 findings；
 不得原样返回、只换标点或把问题句移动到另一个 unit。只返回：
 {json.dumps(result_template, ensure_ascii=False)}
-有 ProductFactPacket 时，每个返回 unit 必须保留 claim_refs 字段且只引用上述 fact_id；
-claim_refs 只是审查线索，不构成商品事实许可。没有 ProductFactPacket 时不得返回 claim_refs。"""
+{claim_rule}"""
 
     @staticmethod
     def _deidentified_writer_controls(request: GenerationInput) -> str:

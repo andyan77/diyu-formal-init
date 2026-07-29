@@ -575,6 +575,87 @@ def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:
     assert "已登记商品事实由服务端 frozen fact 单元逐字保留" in prompt
 
 
+def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
+    product = ProductFact(
+        sku="ZX-C218",
+        display_name="双面短外套",
+        facts={
+            "entity_kind": "apparel_product",
+            "category": "短外套",
+            "material": "棉混纺",
+        },
+    )
+    records = product_fact_records(product)
+    frame = new_frame(
+        "general_observation",
+        (),
+        tuple(record.fact_id for record in records),
+    )
+    request = replace(
+        _kernel_request(frame),
+        products=(product,),
+    )
+    context = BoundaryContext.from_request(request, frame)
+    skeleton = build_kernel_skeleton(
+        frame=frame,
+        fact_registry=context.fact_registry,
+        constraint_refs=tuple(context.constraint_ids),
+        program_id=select_kernel_program(
+            frame=frame,
+            prior_kernel=None,
+        ),
+    )
+    selected = tuple(
+        block.fact_block_id
+        for block in context.product_fact_blocks[:2]
+    )
+    violating_text = "双面短外套已登记的材质是棉混纺。"
+    kernel = parse_writer_kernel(
+        {
+            "fact_block_refs": list(selected),
+            "units": [
+                {
+                    "unit_id": unit.unit_id,
+                    "text": (
+                        violating_text
+                        if unit.unit_id == "unit:body"
+                        else "先看清楚，再保留选择。"
+                    ),
+                    "claim_refs": [
+                        context.product_fact_blocks[0].fact_id
+                    ],
+                }
+                for unit in skeleton.writable_units
+            ],
+        },
+        skeleton,
+        fact_blocks=context.product_fact_blocks,
+        allowed_claim_ids=context.product_fact_packet.fact_ids,
+    )
+
+    prompt = _generator()._kernel_repair_prompt(
+        request,
+        kernel,
+        frozenset({"unit:body"}),
+        (
+            NarrativeIssue(
+                "unit:body",
+                "product_fact_must_use_immutable_block",
+                violating_text,
+            ),
+        ),
+    )
+
+    assert "ZX-C218" not in prompt
+    assert "双面短外套" not in prompt
+    assert "棉混纺" not in prompt
+    assert violating_text not in prompt
+    assert '"current_text"' not in prompt
+    assert '"claim_refs": []' in prompt
+    assert "返回的 claim_refs 必须为空数组" in prompt
+    assert "不得把内部资料边界、审查规则" in prompt
+
+
 def _kernel_observations(
     kernel: CreativeKernelV1,
     *,
