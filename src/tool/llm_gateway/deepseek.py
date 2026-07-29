@@ -985,6 +985,16 @@ class DeepSeekGenerator(ContentGenerator):
         if any(issue.reason in nonrepairable for issue in issues):
             raise GenerationFailed("CreativeKernel Reviewer 证据不完整或事实单元不一致")
         writable_ids = {unit.unit_id for unit in kernel.writable_units}
+        product_fact_ownership_issues = {
+            "unsupported_product_claim",
+            "product_fact_must_use_immutable_block",
+            "unsupported_product_inference",
+        }
+        if any(
+            issue.reason in product_fact_ownership_issues
+            for issue in issues
+        ):
+            return frozenset(writable_ids)
         affected = frozenset(issue.target_id for issue in issues if issue.target_id in writable_ids)
         if not affected:
             raise GenerationFailed("CreativeKernel 缺陷不属于可写单元")

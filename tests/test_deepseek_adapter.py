@@ -668,6 +668,72 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert "真实、克制、有依据" in prompt
 
 
+def test_product_fact_ownership_repair_rewrites_one_coherent_creative_set() -> None:
+    product = ProductFact(
+        sku="ZX-C218",
+        display_name="双面短外套",
+        facts={
+            "entity_kind": "apparel_product",
+            "colors": ["炭灰纯色", "深绿细格纹"],
+        },
+    )
+    fact_ids = tuple(
+        record.fact_id
+        for record in product_fact_records(product)
+    )
+    frame = new_frame("general_observation", (), fact_ids)
+    request = replace(
+        _kernel_request(frame),
+        products=(product,),
+    )
+    context = BoundaryContext.from_request(request, frame)
+    skeleton = build_kernel_skeleton(
+        frame=frame,
+        fact_registry=context.fact_registry,
+        constraint_refs=tuple(context.constraint_ids),
+        program_id=select_kernel_program(
+            frame=frame,
+            prior_kernel=None,
+        ),
+    )
+    selected = tuple(
+        block.fact_block_id
+        for block in context.product_fact_blocks[:2]
+    )
+    kernel = parse_writer_kernel(
+        {
+            "fact_block_refs": list(selected),
+            "units": [
+                {
+                    "unit_id": unit.unit_id,
+                    "text": "先看清楚，再保留选择。",
+                    "claim_refs": [],
+                }
+                for unit in skeleton.writable_units
+            ],
+        },
+        skeleton,
+        fact_blocks=context.product_fact_blocks,
+        allowed_claim_ids=context.product_fact_packet.fact_ids,
+    )
+
+    affected = _generator()._kernel_repair_scope(
+        kernel,
+        (
+            NarrativeIssue(
+                "unit:body",
+                "unsupported_product_inference",
+                "越界片段",
+            ),
+        ),
+    )
+
+    assert affected == frozenset(
+        unit.unit_id
+        for unit in kernel.writable_units
+    )
+
+
 def _kernel_observations(
     kernel: CreativeKernelV1,
     *,
