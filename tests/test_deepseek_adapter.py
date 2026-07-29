@@ -661,7 +661,11 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert "不得成为创意文字的主语、宾语或指代对象" in prompt
     assert "所有文字必须在不知道底层对象名称、类别" in prompt
     assert "和任何属性时仍然成立" in prompt
-    assert "release_caption 应留下可直接回应的选择问题" in prompt
+    assert "使用自然第二人称直接和受众说话" in prompt
+    assert "body 用二至四个短 clause" in prompt
+    assert "release_caption 留下一个可以直接回答" in prompt
+    assert "xiaohongshu_graphic / graphic" in prompt
+    assert "真实、克制、有依据" in prompt
 
 
 def _kernel_observations(

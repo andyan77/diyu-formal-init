@@ -1385,6 +1385,11 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 kernel=kernel,
                 affected=affected,
                 trusted_contracts=trusted_contracts,
+                expression_controls=self._deidentified_writer_controls(
+                    request
+                ),
+                platform=request.target,
+                media_format=request.media_format,
             )
         units = [
             {
@@ -1474,6 +1479,9 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         kernel: CreativeKernelV1,
         affected: frozenset[str],
         trusted_contracts: Mapping[str, UnitContractV2],
+        expression_controls: str,
+        platform: str,
+        media_format: str,
     ) -> str:
         expression_rules: dict[UnitContractV2, str] = {
             "abstract_observation": (
@@ -1529,16 +1537,19 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 受影响创意 unit：
 {json.dumps(units, ensure_ascii=False)}
 
+平台与形式：{platform} / {media_format}
+去标识化表达控制：{expression_controls}
+
 这是面向最终读者的创意表达层，不是资料说明、方法论讲解或内部审查说明。每个 clause 的
 判断对象只能是泛指读者如何看、如何选、如何保留自己的判断，或本篇能带来的阅读价值；
 不得对底层对象、其所属品类、设计、结构、属性、用途、效果、形成原因或现实体验作任何
 主张。底层对象、其类别以及“它／这件对象”不得成为创意文字的主语、宾语或指代对象。
-title 只写读者将获得的选择或判断价值；natural_guide 只写阅读这篇内容能帮助读者怎样
-看清选择；body 只写读者怎样使用前面已经原样展示的信息作自己的判断；release_caption
-只作面向读者的自然互动收束。四个 unit 必须围绕同一条具体的选择主线、各自承担不同
-作用，不能重复解释文章、方法或“读者会更好地判断”。title 应短而自然，不介绍文章；
-release_caption 应留下可直接回应的选择问题。所有文字必须在不知道底层对象名称、类别
-和任何属性时仍然成立。
+使用自然第二人称直接和受众说话，不把“读者”“文章”“本文”或阅读学习过程当作表达
+对象。title 用简短、有张力的选择问题或判断冲突吸引受众；natural_guide 用一句自然的话
+把受众带到同一选择主线；body 用二至四个短 clause 依次帮助受众确定优先项、排除无关
+干扰并保留自己的判断；release_caption 留下一个可以直接回答、且没有预设答案的选择
+问题。四个 unit 必须围绕同一条具体主线、各自承担不同作用，不能重复解释文章、方法或
+承诺受众会变得更明智。所有文字必须在不知道底层对象名称、类别和任何属性时仍然成立。
 不得输出“抽象原则”等内部合同语言，不写举例对白、引号口号或虚构场景。每个 unit 必须
 逐条服从其唯一
 unit_contract 和 required_expression，不得因为 purpose 或写作习惯换成建议、假设、演绎
