@@ -1522,6 +1522,9 @@ def test_dual_track_writer_receives_only_deidentified_preassigned_units() -> Non
     assert request.brand.brand_name not in writer_prompt
     assert request.brand.organization_name not in writer_prompt
     assert request.brand.account_name not in writer_prompt
+    assert request.brand.positioning in writer_prompt
+    assert request.brand.decision_order in writer_prompt
+    assert request.brand.audience_description in writer_prompt
     assert request.active_domain_assets[0].body not in writer_prompt
     assert "resource:original_composition" not in writer_prompt
     assert '"unit_id"' in writer_prompt

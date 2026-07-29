@@ -1791,6 +1791,9 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
     @staticmethod
     def _deidentified_writer_controls(request: GenerationInput) -> str:
         parts = [
+            request.brand.positioning,
+            request.brand.decision_order,
+            request.brand.audience_description,
             request.brand.tone,
             request.brand.content_role_boundary,
             *(
