@@ -32,8 +32,9 @@ def _context(
     *,
     contract: str = "actuality_reflection",
     clause_id: str = "unit:body:clause:1",
+    with_actuality_fact: bool = False,
 ) -> tuple[ClauseContextV2, ...]:
-    return (
+    writer = (
         ClauseContextV2(
             clause_id=clause_id,
             unit_id="unit:body",
@@ -43,6 +44,21 @@ def _context(
             unit_contract=contract,  # type: ignore[arg-type]
             speaker_kind="personal_ip_account",
         ),
+    )
+    if not with_actuality_fact:
+        return writer
+    return (
+        ClauseContextV2(
+            clause_id="unit:frozen-fact:1:clause:1",
+            unit_id="unit:frozen-fact:1",
+            exact_text="今天店里忙了一天，回家还因为谁洗碗拌了两句",
+            visible_order=1,
+            text_source="frozen_user_fact",
+            unit_contract="frozen_fact",
+            speaker_kind="personal_ip_account",
+            fact_ref="source:user_actuality:1",
+        ),
+        *writer,
     )
 
 
@@ -98,13 +114,18 @@ def _reasons(
     answers: ClosedReviewAnswers,
 ) -> tuple[str, ...]:
     questions = build_closed_review_questions(contexts)
+    facts = {
+        context.fact_ref: context.exact_text
+        for context in contexts
+        if context.fact_ref is not None
+    }
     return tuple(
         issue.reason
         for issue in reconcile_closed_review_answers(
             contexts=contexts,
             questions=questions,
             answers=answers,
-            fact_text_by_id={},
+            fact_text_by_id=facts,
             protected_subjects=_SCOPE,
         ).issues
     )
@@ -355,7 +376,7 @@ def test_actuality_cannot_escape_by_claiming_generic_mode() -> None:
 
 def test_actuality_current_person_binding_is_rejected_without_extra_risk_labels() -> None:
     text = "忙了一天，回家却因为洗碗拌嘴？"
-    contexts = _context(text)
+    contexts = _context(text, with_actuality_fact=True)
     answers = _parse(
         contexts,
         {
@@ -374,7 +395,11 @@ def test_actuality_current_person_binding_is_rejected_without_extra_risk_labels(
 
 def test_actuality_generic_relationship_role_cannot_expand_the_frozen_event() -> None:
     text = "洗碗这件小事，藏着多少夫妻的默契。"
-    contexts = _context(text)
+    contexts = _context(
+        text,
+        contract="audience_guidance",
+        with_actuality_fact=True,
+    )
     relationship = {
         "subject_binding": (
             "present",

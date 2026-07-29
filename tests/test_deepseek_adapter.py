@@ -694,6 +694,42 @@ def test_actuality_revision_repair_replays_reviewed_unit_not_failed_draft() -> N
     )
 
 
+def test_first_actuality_repair_does_not_replay_fact_or_failed_draft() -> None:
+    frame = new_frame(
+        "actuality_reflection",
+        ("今天店里忙了一天，回家还因为谁洗碗拌了两句。",),
+        (),
+    )
+    request = _kernel_request(frame)
+    failed_text = "洗碗这件小事，藏着多少夫妻的默契。"
+    failed = _parsed_kernel(
+        request,
+        _kernel_writer(
+            title=failed_text,
+            observation_only=True,
+        ),
+    )
+
+    prompt = _generator()._kernel_repair_prompt(
+        request,
+        failed,
+        frozenset({"unit:title"}),
+        (
+            NarrativeIssue(
+                "unit:title",
+                "unsupported_actuality_expansion",
+                failed_text,
+            ),
+        ),
+    )
+
+    assert failed_text not in prompt
+    assert "今天店里忙了一天" not in prompt
+    assert '"prior_reviewed_text":' not in prompt
+    assert '"unit_id": "unit:title"' in prompt
+    assert "不得绑定当前\n  用户、机构、现实事件或任何具体关系身份" in prompt
+
+
 def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     product = ProductFact(
         sku="ZX-C218",

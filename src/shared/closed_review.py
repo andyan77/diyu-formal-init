@@ -577,6 +577,10 @@ def _claim_inventory_issues(
     for claim in claims:
         claims_by_clause.setdefault(claim.clause_id, {})[claim.claim_kind] = claim
     issues: list[NarrativeIssue] = []
+    actuality_scope = any(
+        context.text_source == "frozen_user_fact"
+        for context in contexts
+    )
     for context in writer_clause_contexts_v2(contexts):
         clause_claims = claims_by_clause.get(context.clause_id, {})
         mode_claim = clause_claims.get("statement_mode")
@@ -685,7 +689,7 @@ def _claim_inventory_issues(
             issues.append(compatibility_issue)
             continue
         if (
-            context.unit_contract == "actuality_reflection"
+            actuality_scope
             and binding == "current_person"
         ):
             issues.append(
@@ -697,7 +701,7 @@ def _claim_inventory_issues(
             )
             continue
         if (
-            context.unit_contract == "actuality_reflection"
+            actuality_scope
             and "relationship_claim" in dimensions
         ):
             issues.append(

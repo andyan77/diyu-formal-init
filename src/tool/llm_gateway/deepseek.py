@@ -1411,13 +1411,11 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 media_format=request.media_format,
             )
         if (
-            request.revision_instruction
-            and request.prior_creative_kernel is not None
-            and request.narrative_frame.narrative_mode
+            request.narrative_frame.narrative_mode
             == "actuality_reflection"
             and not product_contract
         ):
-            return self._actuality_revision_repair_prompt(
+            return self._actuality_repair_prompt(
                 request=request,
                 affected=affected,
                 issues=issues,
@@ -1526,7 +1524,7 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 {claim_rule}"""
 
     @staticmethod
-    def _actuality_revision_repair_prompt(
+    def _actuality_repair_prompt(
         *,
         request: GenerationInput,
         affected: frozenset[str],
@@ -1535,25 +1533,45 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
     ) -> str:
         prior = request.prior_creative_kernel
         if (
-            prior is None
-            or request.revision_instruction is None
-            or request.narrative_frame is None
+            request.narrative_frame is None
             or request.narrative_frame.narrative_mode
             != "actuality_reflection"
         ):
-            raise GenerationFailed("真人事实修改修复缺少已审内核")
+            raise GenerationFailed("真人事实内容修复缺少冻结叙事作用域")
         prior_by_id = {
             unit.unit_id: unit
-            for unit in prior.writable_units
+            for unit in (prior.writable_units if prior is not None else ())
         }
-        if any(unit_id not in prior_by_id for unit_id in affected):
+        if prior is not None and any(
+            unit_id not in prior_by_id for unit_id in affected
+        ):
             raise GenerationFailed("真人事实修改修复无法回放已审单元")
         units = [
             {
                 "unit_id": unit_id,
-                "purpose": prior_by_id[unit_id].purpose,
+                "purpose": (
+                    prior_by_id[unit_id].purpose
+                    if unit_id in prior_by_id
+                    else (
+                        "title"
+                        if unit_id == "unit:title"
+                        else "natural_guide"
+                        if unit_id == "unit:natural-guide"
+                        else "release_caption"
+                        if unit_id == "unit:release-caption"
+                        else "body"
+                    )
+                ),
                 "unit_contract": trusted_contracts[unit_id],
-                "prior_reviewed_text": prior_by_id[unit_id].text,
+                **(
+                    {
+                        "prior_reviewed_text": (
+                            prior_by_id[unit_id].text
+                        )
+                    }
+                    if unit_id in prior_by_id
+                    else {}
+                ),
                 "issue_reasons": sorted(
                     {
                         issue.reason
@@ -1564,6 +1582,10 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
             }
             for unit_id in sorted(affected)
         ]
+        expression_request = (
+            request.revision_instruction
+            or "保持服务端真人事实原文不变，补齐可直接发布的抽象观看主线"
+        )
         template = {
             "units": [
                 {
@@ -1577,18 +1599,19 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 原文；你看不到本次违规草稿，也不得复述、概括或扩写现实原文。只从上一个已审通过的创意
 单元出发，按用户本次表达要求改写。
 
-本次表达要求：{request.revision_instruction}
-受影响单元及上一个已审版本：
+本次表达要求：{expression_request}
+受影响单元及可用的上一个已审版本：
 {json.dumps(units, ensure_ascii=False)}
 
 必须恰好一次返回全部列出的 unit_id，且只能返回 unit_id、text。不得返回事实单元、
 claim_refs、scene、actor、resource、action、sound、production_note、来源、约束或合同。
-每个 text 必须与 prior_reviewed_text 实质不同，同时遵守服务端给定的 unit_contract：
+有 prior_reviewed_text 时，新 text 必须与它实质不同。所有 text 都必须遵守服务端给定的
+unit_contract：
 - actuality_reflection：只写一至两句抽象关系判断、价值判断或不落到现实场景的比喻；不得
   安排人物或关系角色，不得写动作、对白、心理、动机、因果、结果、时间、地点、物件或生活
   场景，也不得复述真人事实。
 - audience_guidance：只写中性的观看主线、阅读邀请或带清楚语态的泛指建议；不得绑定当前
-  用户、机构或现实事件。
+  用户、机构、现实事件或任何具体关系身份。
 - abstract_observation：只写抽象状态、关系理解或价值判断，不写人物微事件或建议。
 - recommendation：每个 clause 都用清楚建议、条件或意愿语态，不写已经发生的事件。
 
