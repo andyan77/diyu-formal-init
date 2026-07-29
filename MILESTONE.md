@@ -1,7 +1,8 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`REVIEW`。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13；此前
+- 状态：`ACTIVE · 定向返工`。主控终审为 `FAIL_WITH_BOUNDED_REWORK`，不是重新
+  `BLOCKED`；UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13。此前
   occurrence、开放 evidence、商品事实职责、Reviewer-only 模型、oracle drift、parser
   与一次 repair 的失败及前向订正均完整保留。
 - 主控已正式取代“单一概率 Reviewer 承担零漏判生产授权”路线，采用服务端预分配的
@@ -25,16 +26,16 @@
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
   未运行及未 push/CI/部署证据完整保留。
-- 最终运行、CI 与部署代码 SHA 为
+- 上一轮运行、CI 与部署代码 SHA 为
   `b6180b093c1af5198edd396937e4b2d7700546d5`；实现历史已普通前向推送，
-  `origin/main` 与生产部署仓均曾精确核对为该 SHA。`docs/项目记忆.md` 的用户既有修改
+  `origin/main` 曾精确核对为该 SHA。主控终审指出事实冻结、修订不可变性、否定语义和
+  披露防伪仍有直接代码缺口，该 SHA 不再作为最终生产候选。`docs/项目记忆.md` 的用户既有修改
   已单独保存在 `9bb9872…`，没有被覆盖或混入运行实现。UI-07—UI-12 历史禁止 reset、
   rebase、squash、删除或改写。
-- 最终生产镜像为
-  `diyu-saas:b6180b093c1af5198edd396937e4b2d7700546d5`，往返回退后的当前镜像 ID 为
-  `sha256:a6a504ccf0a5cc83619c47f145ce6f96b8f28b107b1cfc747f73cc48282ed7d7`；
-  schema 为 expand-only `20260802_29`。回环／公网 readiness、`/status`、公共入口、
-  租户用户、品牌管理和运维入口均为 `200`，`diyu-m5-4-backup.timer` active。
+- 生产已先行回退到已验证安全镜像
+  `diyu-saas:845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，不 downgrade 数据库；
+  schema 保持 expand-only `20260802_29`，回环／公网 readiness 为 `200/200`。
+  本次回退只退出尚未封死的 UI-12 新自然创作路径，不改写上一轮 CI、备份、验收或回退证据。
 - 无持久化业务轮在运行合同 SHA
   `189e80cac2820e459aa444d75619c85bb7f643d2` 完成；G1/G6 为 `0/0/0`，
   G2/G3/G4/G5/G7/H1/D1 均形成完整成品，人工逐篇全文审阅通过。随后在最终代码 WIP
@@ -72,7 +73,9 @@
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
 - 当前任务包：
   [`docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md`](docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)。
-- 当前唯一下一动作：主控独立终审 UI-12；不得自行 `CLOSED` 或启动 UI-13。
+- 当前唯一下一动作：在 UI-12 内一次性完成整句／稳定句 ID 的服务端事实冻结、仓储层
+  不可变字段校验、每版本独立审计快照、否定语义、保留标签防伪和自然化披露，再执行同 SHA
+  业务轮、工程门、唯一 CI 与生产终验；不得启动 UI-13。
 - 承重裁决：[ADR-028](docs/架构决策/ADR-028-来源语态主体绑定与证据裁决矩阵.md)
   已由本次主控裁决置为 `ACCEPTED`。启动前已把 SDR-001—SDR-037 订正为 42 条无重复
   stable ID、单值 `unit_contract` 的 SDR-001—SDR-042，并通过 diff、唯一性、单合同与
