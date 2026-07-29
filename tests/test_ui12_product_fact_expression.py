@@ -32,6 +32,7 @@ from src.shared.narrative import new_frame
 from src.shared.review_evidence import (
     ClauseContextV2,
     ProtectedSubjectScopeV2,
+    build_clause_contexts_v2,
 )
 from src.shared.types import GraphicProductionBundle, ProductFact
 
@@ -331,6 +332,38 @@ def test_compiler_inserts_selected_blocks_exactly_and_rejects_mutation() -> None
             replace(request, immutable_fact_blocks=mutated),
             kernel,
         )
+
+
+def test_selected_fact_units_are_renumbered_into_the_trusted_contract_sidecar() -> None:
+    product, _, _ = _product_contract()
+    kernel, _ = _parsed_product_kernel()
+    records = product_fact_records(product)
+    frame = new_frame(
+        "general_observation",
+        (),
+        tuple(record.fact_id for record in records),
+    )
+    fact_units = tuple(
+        unit for unit in kernel.units if unit.purpose == "frozen_fact"
+    )
+
+    assert tuple(unit.unit_id for unit in fact_units) == tuple(
+        f"unit:frozen-fact:{index}"
+        for index in range(1, len(fact_units) + 1)
+    )
+    contexts = build_clause_contexts_v2(
+        kernel=kernel,
+        frame=frame,
+        fact_registry=records,
+        allowed_constraint_ids=frozenset(
+            {"constraint:account-tone"}
+        ),
+        speaker_kind="institutional_account",
+    )
+    assert sum(
+        context.text_source == "frozen_product_fact"
+        for context in contexts
+    ) == len(fact_units)
 
 
 def test_claim_refs_never_license_attributes_performance_or_design_motive() -> None:

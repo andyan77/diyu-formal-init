@@ -1067,9 +1067,17 @@ def unit_contracts_v2(
         if unit.unit_id != f"unit:frozen-fact:{index}":
             raise ValueError("frozen fact unit mapping is incomplete")
         contracts[unit.unit_id] = "frozen_fact"
-    if {
+    visible_fact_refs = {
         ref for unit in fact_units for ref in unit.fact_refs
-    } != set(frame.allowed_fact_ids):
+    }
+    required_fact_refs = {
+        *(fact.source_id for fact in frame.user_facts),
+        *frame.allowed_brand_fact_ids,
+    }
+    if (
+        not required_fact_refs <= visible_fact_refs
+        or not visible_fact_refs <= frame.allowed_fact_ids
+    ):
         raise ValueError("frozen fact unit mapping drifted from frame")
 
     if kernel.program_id == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM:

@@ -335,7 +335,11 @@ def parse_writer_kernel(
             if unit.purpose == "frozen_fact" and (len(unit.fact_refs) != 1 or unit.fact_refs[0] not in product_fact_ids)
         )
         reordered_facts = tuple(
-            replace(unit, visible_order=30 + index)
+            replace(
+                unit,
+                unit_id=f"unit:frozen-fact:{index}",
+                visible_order=30 + index,
+            )
             for index, unit in enumerate(
                 (*other_fact_units, *selected_product_units),
                 start=1,
