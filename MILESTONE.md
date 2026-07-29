@@ -1,7 +1,7 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`BLOCKED`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
+- 状态：`ACTIVE`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
   保留；主控随后在同一 UI-12 内裁决改由服务端确定性绑定 exact quote，并采用“一战到底”
   治理恢复施工。quote-only 责任边界、完整 G3 和 G4 已继续验证；最终 G4 证明当前
   Reviewer 在开放式 evidence 枚举下漏提关系角色和动机等裁决必需 evidence。主控现已把
@@ -285,6 +285,18 @@
   门、push、CI、备份和部署均未执行；生产继续运行 `845f632…`。
 - 当前唯一下一动作：主控裁决是否授权新的单一 Reviewer 语义能力方案；不得在当前
   `deepseek-v4-pro` 候选上随机重跑或回退 flash。
+- 主控已用前向裁决订正上述最新停止线：正式 `relationship_claim` 只包含亲属、伴侣、
+  家庭、同住、同事、员工、顾客或明确其他社会关系；“两个人／人与人／一些人”等泛指
+  人数本身不是关系主张，也不新增 people_count 维度。因此 pro 对“两个疲惫的人”的
+  relationship absent 与正式合同一致，先前把它当硬正例属于 qualification oracle drift，
+  不是 Reviewer 假阴性。旧 `BLOCKED`、raw 与责任隔离摘要均保留，不回写。
+- UI-12 在同一里程碑内恢复 `ACTIVE`，pro 继续为唯一 Reviewer，flash 继续承担 intake／
+  Writer。服务端将从既有 ClauseContext、unit contract 与 Claim Inventory 派生最小
+  `ClauseLicenseV1` 正向许可；真正的 G4 失败重新归因于唯一 affected-unit repair 仍生成
+  未经授权的具体关系身份。不得新增第三模型、第二 Reviewer、投票、fallback、中文关系
+  词表或固定成稿。
+- 当前唯一下一动作：订正成对 oracle 与旧 raw 离线回放，证明具体关系／current-user
+  绑定仍拒绝、泛指心理与建议仍允许，再修复共享 affected-unit repair 合同。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
