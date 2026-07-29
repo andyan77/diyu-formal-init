@@ -149,6 +149,7 @@ def test_strict_schema_closes_question_ids_and_all_object_fields() -> None:
         "type": "string",
         "enum": [question.question_id for question in questions],
     }
+    assert answer_properties["quote"] == {"type": "string"}
 
 
 @pytest.mark.parametrize("mutation", ("missing", "duplicate", "extra"))
@@ -202,6 +203,55 @@ def test_answer_quote_contract_fails_closed(mutation: str) -> None:
 
     with pytest.raises(TypeError, match="answer"):
         parse_closed_review_answers(raw, questions=questions)
+
+
+def test_present_quote_can_span_punctuation_when_exact_and_unique() -> None:
+    text = "当双方都疲惫时，需要的不是争论对错，而是一个暂停，一份体谅。"
+    contexts = _context(text)
+    questions = build_closed_review_questions(contexts)
+    raw = _raw_answers(
+        contexts,
+        overrides={
+            "motive_or_mental_state": (
+                "present",
+                "需要的不是争论对错，而是一个暂停，一份体谅。",
+                ("need",),
+            )
+        },
+    )
+
+    answers = parse_closed_review_answers(
+        raw,
+        questions=questions,
+    )
+
+    motive = next(
+        answer
+        for answer in answers.answers
+        if answer.question_id.endswith(":motive_or_mental_state")
+    )
+    assert motive.quote == "需要的不是争论对错，而是一个暂停，一份体谅。"
+
+
+def test_present_quote_still_fails_when_the_exact_text_is_repeated() -> None:
+    contexts = _context("停一下，再停一下。")
+    questions = build_closed_review_questions(contexts)
+    raw = _raw_answers(
+        contexts,
+        overrides={
+            "actual_event": (
+                "present",
+                "停一下",
+                ("action",),
+            )
+        },
+    )
+
+    with pytest.raises(TypeError, match="present answer"):
+        parse_closed_review_answers(
+            raw,
+            questions=questions,
+        )
 
 
 def test_uncertain_is_insufficient_and_never_materialized() -> None:

@@ -242,14 +242,6 @@ def closed_review_json_schema(
     questions: Sequence[ClosedReviewQuestion],
 ) -> dict[str, object]:
     question_ids = tuple(question.question_id for question in questions)
-    quotes = tuple(
-        dict.fromkeys(
-            (
-                "",
-                *(quote for question in questions for quote in question.allowed_quotes),
-            )
-        )
-    )
     operands = tuple(dict.fromkeys(operand for question in questions for operand in question.allowed_operands))
     answer_properties: dict[str, object] = {
         "question_id": {
@@ -262,7 +254,6 @@ def closed_review_json_schema(
         },
         "quote": {
             "type": "string",
-            "enum": list(quotes),
         },
         "operands": {
             "type": "array",
@@ -341,14 +332,13 @@ def parse_closed_review_answers(
             if (
                 not quote
                 or not operands
-                or quote not in question.allowed_quotes
                 or not _quote_is_unique(question.exact_text, quote)
             ):
                 raise TypeError("closed review present answer is invalid")
         elif status == "absent":
             if quote or operands:
                 raise TypeError("closed review absent answer is invalid")
-        elif quote and (quote not in question.allowed_quotes or not _quote_is_unique(question.exact_text, quote)):
+        elif quote and not _quote_is_unique(question.exact_text, quote):
             raise TypeError("closed review uncertain quote is invalid")
         if question.dimension == "statement_mode" and (
             status == "absent" or (status == "present" and len(operands) != 1)

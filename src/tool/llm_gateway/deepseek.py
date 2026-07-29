@@ -1309,7 +1309,6 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                             "question_id": question.question_id,
                             "dimension": question.dimension,
                             "question": descriptions[question.dimension],
-                            "allowed_quotes": list(question.allowed_quotes),
                             "allowed_operands": list(question.allowed_operands),
                         }
                         for question in clause_questions
@@ -1335,13 +1334,14 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 - status 只回答“该维度证据是否存在／是否无法确定”，绝不承载主体、关系或语态类别；
   `generic`、`current_user`、`recommendation` 等类别只能放在 operands。某个
   subject_binding 类别存在时必须返回 status=present，再把该类别放入 operands。
-- present：quote 必须从该题 allowed_quotes 中选择且在本 clause 内唯一；operands 至少一个，
-  且只能从该题 allowed_operands 选择。
+- present：quote 必须是本 clause 内连续、逐字、只出现一次的精确片段；可以跨越 clause
+  内部标点，但不得删字、改字、拼接不连续片段或引用其他 clause。operands 至少一个，且只能
+  从该题 allowed_operands 选择。quote 的精确匹配与唯一绑定由服务端执行。
 - 每题 JSON 中的 allowed_operands 是该 question_id 的封闭集合；即使同批另一题允许某个
   operand，也不得跨 question 借用。
 - absent：quote 必须是空字符串，operands 必须是空数组。不能通过省略整个问题表达 absent。
-- uncertain：当语义关系确实无法可靠判断或无法给出唯一 quote 时使用；quote 可为空或选择
-  唯一 allowed quote，operands 可为空。不要猜测，也不要把 uncertain 当 absent。
+- uncertain：当语义关系确实无法可靠判断或无法给出唯一 quote 时使用；quote 可为空或返回
+  本 clause 内唯一的精确相关片段，operands 可为空。不要猜测，也不要把 uncertain 当 absent。
 - statement_mode 必须 present 且只有一个 operand；无法唯一判断时必须 uncertain。
 - server_scope 只说明服务端已有的可见范围，不是让你决定许可；disclosure 题只报告 writer
   clause 是否与该范围冲突。
