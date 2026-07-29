@@ -1466,6 +1466,8 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert "specific_social_relation" in reviewer_prompt
     assert "相近生活主题，就推定新增含义已获事实许可" in reviewer_prompt
     assert "只要一个含义越界就不能用" in reviewer_prompt
+    assert "提到一种\n   关系类别本身也不等于" in reviewer_prompt
+    assert "不得返回本条许可证\n  prohibited_bindings 中不存在" in reviewer_prompt
     assert '"exact_text"' in reviewer_prompt
     assert "不决定事实许可、最终通过／失败" in reviewer_prompt
     assert "不要返回 offset、occurrence、全文风险枚举" in reviewer_prompt

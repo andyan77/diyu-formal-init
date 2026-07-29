@@ -256,6 +256,48 @@ def test_clause_and_license_coverage_and_quote_binding_fail_closed() -> None:
     } == {"license_review_quote"}
 
 
+def test_reviewer_cannot_invent_a_prohibition_outside_the_clause_license() -> None:
+    frame = replace(
+        _frame(),
+        narrative_mode="general_observation",
+        user_facts=(),
+    )
+    contexts = _contexts(
+        "婆媳关系也可以只作为一种一般关系题材。",
+        contract="abstract_observation",
+    )[1:]
+    policies = build_unit_clause_license_policies_v1(
+        frame=frame,
+        unit_contracts={"unit:body": "abstract_observation"},
+    )
+    licenses = materialize_clause_licenses_v1(
+        contexts=contexts,
+        policies=policies,
+    )
+
+    with pytest.raises(
+        TypeError,
+        match="unsupported clause license review is invalid",
+    ):
+        parse_clause_license_reviews_v1(
+            {
+                "review_version": CLAUSE_LICENSE_REVIEW_VERSION,
+                "reviews": [
+                    {
+                        "clause_id": licenses[0].clause_id,
+                        "license_id": licenses[0].license_id,
+                        "verdict": "unsupported",
+                        "reason_code": (
+                            "specific_social_relation_to_actuality"
+                        ),
+                        "unsupported_quote": "婆媳关系",
+                    }
+                ],
+            },
+            licenses=licenses,
+        )
+
+
 def test_uncertain_is_nonrepairable_insufficient_evidence() -> None:
     contexts = _contexts("她说这样也许更好。")
     policies = _policy()

@@ -303,7 +303,9 @@ def parse_clause_license_reviews_v1(
         if verdict == "uncertain" and (reason_code != "insufficient_evidence" or unsupported_quote):
             raise TypeError("uncertain clause license review is invalid")
         if verdict == "unsupported" and (
-            reason_code in {"supported_by_license", "insufficient_evidence"} or not unsupported_quote
+            reason_code in {"supported_by_license", "insufficient_evidence"}
+            or reason_code not in license_.prohibited_bindings
+            or not unsupported_quote
         ):
             raise TypeError("unsupported clause license review is invalid")
         received_ids.append(clause_id)

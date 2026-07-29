@@ -1296,10 +1296,13 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 1. 先读取 discourse_contract、subject_scope、allowed_fact_refs 和 prohibited_bindings；不得
    因为文字和 topic／冻结事实谈的是相近生活主题，就推定新增含义已获事实许可。
 2. subject_scope=generic_only 时，只允许不指向当前真人或受保护主体的泛指人数、普遍心理
-   观察、一般因果和清楚建议；具体社会关系身份不是泛指人数。
+   观察、一般因果、关系题材讨论和清楚建议；具体社会关系身份不是泛指人数，但提到一种
+   关系类别本身也不等于把该关系绑定为当前真人已经具有的事实。
 3. 检查整条 clause 是否建立亲属、伴侣、家庭、同住、同事、员工、顾客或文字明确建立的
-   其他社会关系；命中且 prohibited_bindings 包含
-   specific_social_relation_to_actuality 时必须 unsupported。
+   其他社会关系；只有文字把该关系绑定为当前真人／现实个案，且 prohibited_bindings 包含
+   specific_social_relation_to_actuality 时才必须 unsupported。一般题材、泛指关系理解，
+   以及 generic_or_fictional / fictional_only scope 内被服务端包裹的虚构关系，不属于
+   specific_social_relation_to_actuality。
 4. 检查当前真人／机构、现实对白、已发生事件或结果、机构／商品事实；命中相应
    prohibited_bindings 且没有精确 allowed_fact_refs 时必须 unsupported。
    ProductFactPacket 中的硬属性、数字和 canonical_text 只能由服务端 ImmutableFactBlock
@@ -1317,7 +1320,9 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 - hypothetical_example 和 disclosed_dramatization 只在服务端既定 scope 内成立，不能绑定
   当前用户、品牌、员工、顾客、门店历史或商品事实。
 - specific_social_relation 只指亲属、伴侣、家庭、同住、同事、员工、顾客或文字明确建立
-  的其他社会关系。若许可禁止该绑定，不能把一种具体关系换成另一种。
+  的其他社会关系被主张为当前现实身份。若许可禁止该现实绑定，不能把一种具体关系换成
+  另一种；若 clause 只讨论一种关系题材或处于服务端许可的 fictional scope，不得仅因出现
+  关系类别就拒绝。
 - current person／institution、受保护主体、现实对白、已发生事件或结果、机构和商品事实，
   没有 allowed_fact_refs 时均不受许可支持。
 - frozen fact、服务端 wrapper 和商品 ImmutableFactBlock 不在本次 writer-owned 输入中，
@@ -1331,7 +1336,8 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 - unsupported：至少一个含义越界；reason_code 从给定封闭枚举选择，unsupported_quote 必须
   从该 clause 的 unsupported_quote_candidates 原样选择一个；不得自行截取、拼接、改写或
   返回含 ASCII 双引号的片段。reason_code 必须直接复用本条许可里实际命中的
-  prohibited_bindings ID，不得改写为近义标识。若没有候选能准确指向越界含义，返回
+  prohibited_bindings ID，不得改写为近义标识，也不得返回本条许可证
+  prohibited_bindings 中不存在的 reason_code。若没有候选能准确指向越界含义，返回
   uncertain。
 - uncertain：确实无法判断主体绑定或许可支持；reason_code= insufficient_evidence，
   unsupported_quote 为空字符串。清楚样本不得用 uncertain 逃避。
