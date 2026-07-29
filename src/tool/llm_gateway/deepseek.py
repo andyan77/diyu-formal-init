@@ -2304,6 +2304,10 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
 - CreativePlanV2 只能选择上述结构字段。topic_spans 必须逐字来自用户消息；禁止写人物设定、
   事件、对白、动机、因果、品牌立场、门店事实、用户履历、标题、主张或故事梗概。
+- primary_value 是本篇给受众的主要回报，不是 narrative_mode，也不能填写
+  general_observation／actuality_reflection／hypothesis／dramatization。只有商品请求选
+  product_truth 或其他确有商品前提的商品价值；开放题材、生活种子和“没有选题但要求生成”
+  通常选 brand_life_narrative，由系统自主形成安全主线和账号观看回报。
 - 商品硬事实只来自当前可用商品；没有资料不猜。
 - user_premises 必须包含本轮用户消息且只能逐字复制用户消息；普通聊天不带入。
 - tone_ids 只能从 {json.dumps(request.allowed_tone_ids, ensure_ascii=False)} 选择，至少一个。

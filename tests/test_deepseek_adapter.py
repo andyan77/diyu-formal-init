@@ -1009,6 +1009,8 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
     prompt = _generator()._conversation_prompt(request)
     assert "narrative_mode 由\n  服务端根据显式形式与事实跨度派生" in prompt
     assert "你不得返回或选择该字段" in prompt
+    assert "primary_value 是本篇给受众的主要回报，不是 narrative_mode" in prompt
+    assert "没有选题但要求生成”\n  通常选 brand_life_narrative" in prompt
     FakeClient.responses = [
         _completion(
             {
