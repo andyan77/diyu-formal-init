@@ -21,7 +21,7 @@ ProductClaimCategory: TypeAlias = Literal[
 ]
 
 PRODUCT_FACT_PACKET_VERSION = "product-fact-packet-v1"
-PRODUCT_FACT_RENDERER_VERSION = "immutable-product-fact-renderer-v1"
+PRODUCT_FACT_RENDERER_VERSION = "immutable-product-fact-renderer-v2"
 _PROHIBITED_PRODUCT_INFERENCES = (
     "performance",
     "efficacy",
@@ -223,7 +223,7 @@ def _product_packet_items(
         (
             "sku",
             product.sku,
-            f"商品编号是 {product.sku}。",
+            f"这件商品的型号是 {product.sku}。",
             ("identity",),
         )
     ]
@@ -232,7 +232,7 @@ def _product_packet_items(
             (
                 "display_name",
                 product.display_name,
-                f"商品 {product.sku} 已登记的名称是“{product.display_name}”。",
+                f"{product.sku} 是一件{product.display_name}。",
                 ("identity",),
             )
         )
@@ -257,7 +257,7 @@ def _product_packet_items(
                 (
                     key,
                     value.strip(),
-                    (f"{subject}已登记的{label}是{value.strip().rstrip('。')}。"),
+                    (f"{subject}的{label}是{value.strip().rstrip('。')}。"),
                     (category,),
                 )
             )
@@ -268,7 +268,7 @@ def _product_packet_items(
             (
                 "colors",
                 color_values,
-                f"{subject}已登记的颜色是{'、'.join(color_values)}。",
+                f"{subject}有{'、'.join(color_values)}这些已确认颜色。",
                 ("appearance",),
             )
         )
@@ -286,20 +286,20 @@ def _product_packet_items(
                 (
                     key,
                     value,
-                    f"{subject}已登记的{label}是 {value} {unit}。",
+                    f"{subject}的{label}是 {value} {unit}。",
                     ("measurement",),
                 )
             )
     for key, yes, no in (
         (
             "both_sides_complete",
-            "两面均为完整外观",
-            "未登记为两面均为完整外观",
+            "两面都以完整外观呈现",
+            "现有资料未确认两面均为完整外观",
         ),
         (
             "pockets_functional_both_sides",
-            "两面口袋均可正常使用",
-            "未登记为两面口袋均可正常使用",
+            "两面的口袋都可正常使用",
+            "现有资料未确认两面的口袋均可正常使用",
         ),
     ):
         value = facts.get(key)
@@ -308,7 +308,7 @@ def _product_packet_items(
                 (
                     key,
                     value,
-                    f"{subject}已登记为{yes if value else no}。",
+                    f"{subject}{yes if value else no}。",
                     ("construction",),
                 )
             )
@@ -319,7 +319,7 @@ def _product_packet_items(
                 "weight_boundary",
                 boundary.strip(),
                 (
-                    f"{subject}的重量资料边界是：当前只知道登记样衣的重量差异，"
+                    f"关于{subject}的重量，目前只能确认两件登记样衣的差异，"
                     "不能据此归因结构或推断性能、价格、库存、用途和穿着结果。"
                 ),
                 ("boundary",),

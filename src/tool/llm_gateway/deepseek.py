@@ -1132,6 +1132,18 @@ class DeepSeekGenerator(ContentGenerator):
             else []
         )
         controls = self._deidentified_writer_controls(request)
+        product_creative_rule = (
+            f"""本篇含服务端事实块。创意文字必须让这些事实成为一篇可直接发布的
+平台内容，而不是登记清单、事实审计、写作方法说明或泛化资料页。title 应短而自然，
+直接建立读者选择时的关注点或张力，不介绍“本文会提供什么”；natural_guide 用一句话
+说明把所选事实放在一起看对选择有什么价值；body 在事实块之后提供具体但不新增商品
+事实的选择视角；release_caption 用自然互动或选择问题收束。四个 unit 要围绕同一条
+主线，各自承担不同作用，不得用四种说法重复“读者会更好地判断”。底层对象、其类别和
+“它／这件对象”不能成为创意文字中的事实主张对象；商品特异性由最多
+{MAX_PRODUCT_FACT_BLOCKS} 个事实块提供。"""
+            if fact_blocks
+            else ""
+        )
         return f"""完成一个可直接交付的 CreativeKernelV1。你只负责“说什么、怎样表达”，不负责
 scene、actor、resource、action、sound、production_note、发布结构或语义合同。
 
@@ -1152,6 +1164,8 @@ scene、actor、resource、action、sound、production_note、发布结构或语
 
 服务端可写 unit skeleton：
 {json.dumps(writable, ensure_ascii=False)}
+
+{product_creative_rule}
 
 只返回：
 {json.dumps(template, ensure_ascii=False)}
@@ -1521,7 +1535,10 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 主张。底层对象、其类别以及“它／这件对象”不得成为创意文字的主语、宾语或指代对象。
 title 只写读者将获得的选择或判断价值；natural_guide 只写阅读这篇内容能帮助读者怎样
 看清选择；body 只写读者怎样使用前面已经原样展示的信息作自己的判断；release_caption
-只作面向读者的自然收束。所有文字必须在不知道底层对象名称、类别和任何属性时仍然成立。
+只作面向读者的自然互动收束。四个 unit 必须围绕同一条具体的选择主线、各自承担不同
+作用，不能重复解释文章、方法或“读者会更好地判断”。title 应短而自然，不介绍文章；
+release_caption 应留下可直接回应的选择问题。所有文字必须在不知道底层对象名称、类别
+和任何属性时仍然成立。
 不得输出“抽象原则”等内部合同语言，不写举例对白、引号口号或虚构场景。每个 unit 必须
 逐条服从其唯一
 unit_contract 和 required_expression，不得因为 purpose 或写作习惯换成建议、假设、演绎

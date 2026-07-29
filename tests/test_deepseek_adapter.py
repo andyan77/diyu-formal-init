@@ -526,8 +526,8 @@ def test_kernel_writer_prompt_exposes_read_only_product_packet_but_not_fact_auth
 
     prompt = _generator()._kernel_writer_prompt(request, skeleton)
 
-    assert "双面短外套已登记的材质是棉混纺。" in prompt
-    assert "双面短外套已登记的M 码当前样衣重量是 620 克。" in prompt
+    assert "双面短外套的材质是棉混纺。" in prompt
+    assert "双面短外套的M 码当前样衣重量是 620 克。" in prompt
     assert "ProductFactPacket" in prompt
     assert "ImmutableFactBlock" in prompt
     assert "只能引用 fact_block_id；正文由服务端原样插入" in prompt
@@ -536,7 +536,7 @@ def test_kernel_writer_prompt_exposes_read_only_product_packet_but_not_fact_auth
     assert "首次最多选择 3 个" in prompt
     assert '"entity_kind": "apparel_product"' in prompt
     assert any(
-        unit.purpose == "frozen_fact" and unit.text == "双面短外套已登记的材质是棉混纺。" for unit in skeleton.units
+        unit.purpose == "frozen_fact" and unit.text == "双面短外套的材质是棉混纺。" for unit in skeleton.units
     )
 
 
@@ -606,7 +606,7 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
         block.fact_block_id
         for block in context.product_fact_blocks[:2]
     )
-    violating_text = "双面短外套已登记的材质是棉混纺。"
+    violating_text = "双面短外套的材质是棉混纺。"
     kernel = parse_writer_kernel(
         {
             "fact_block_refs": list(selected),
@@ -659,7 +659,9 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert "只谈读者如何看、如何选、如何保留判断" in prompt
     assert "不得输出“抽象原则”等内部合同语言" in prompt
     assert "不得成为创意文字的主语、宾语或指代对象" in prompt
-    assert "所有文字必须在不知道底层对象名称、类别和任何属性时仍然成立" in prompt
+    assert "所有文字必须在不知道底层对象名称、类别" in prompt
+    assert "和任何属性时仍然成立" in prompt
+    assert "release_caption 应留下可直接回应的选择问题" in prompt
 
 
 def _kernel_observations(
@@ -1068,10 +1070,10 @@ def test_product_claims_are_exact_and_never_nearest_match() -> None:
         },
     )
     claims = DeepSeekGenerator._registered_product_claims(product)
-    assert "商品编号是 ZX-C218。" in claims
-    assert "双面短外套已登记的材质是棉混纺。" in claims
-    assert "双面短外套已登记的颜色是雾蓝、米白。" in claims
-    assert "双面短外套已登记的M 码当前样衣重量是 620 克。" in claims
+    assert "这件商品的型号是 ZX-C218。" in claims
+    assert "双面短外套的材质是棉混纺。" in claims
+    assert "双面短外套有雾蓝、米白这些已确认颜色。" in claims
+    assert "双面短外套的M 码当前样衣重量是 620 克。" in claims
     fact_ids = tuple(record.fact_id for record in product_fact_records(product))
     frame = new_frame("general_observation", (), fact_ids)
     context = BoundaryContext.from_request(

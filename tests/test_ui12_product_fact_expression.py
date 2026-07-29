@@ -23,6 +23,7 @@ from src.shared.delivery_compiler import (
 )
 from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import (
+    PRODUCT_FACT_RENDERER_VERSION,
     ProductFactPacket,
     build_product_fact_packet,
     immutable_product_fact_blocks,
@@ -231,6 +232,22 @@ def test_packet_exposes_trusted_identity_category_and_stable_digest() -> None:
         "performance" in item.prohibited_inferences and "design_motive" in item.prohibited_inferences
         for item in packet.facts
     )
+    blocks = immutable_product_fact_blocks(packet)
+    assert PRODUCT_FACT_RENDERER_VERSION == "immutable-product-fact-renderer-v2"
+    assert {
+        block.canonical_text
+        for block in blocks
+        if next(
+            item.fact_key
+            for item in packet.facts
+            if item.fact_id == block.fact_id
+        )
+        in {"display_name", "colors", "both_sides_complete"}
+    } == {
+        "ZX-C218 是一件双面短外套。",
+        "双面短外套有炭灰纯色、深绿细格纹这些已确认颜色。",
+        "双面短外套两面都以完整外观呈现。",
+    }
 
 
 def test_writer_can_only_select_existing_blocks_and_packet_claim_refs() -> None:
