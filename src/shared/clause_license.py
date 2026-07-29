@@ -258,10 +258,6 @@ def clause_license_review_json_schema(
     review_properties: dict[str, object] = {
         "clause_id": {"type": "string", "enum": list(clause_ids)},
         "license_id": {"type": "string", "enum": list(license_ids)},
-        "verdict": {
-            "type": "string",
-            "enum": ["supported", "unsupported", "uncertain"],
-        },
         "expression_type": {
             "type": "string",
             "enum": list(_EXPRESSION_TYPES),
@@ -283,10 +279,6 @@ def clause_license_review_json_schema(
                 "required": ["binding_id", "status"],
                 "additionalProperties": False,
             },
-        },
-        "reason_code": {
-            "type": "string",
-            "enum": sorted(_REASON_CODES),
         },
         "unsupported_quote": {"type": "string"},
     }
@@ -332,7 +324,17 @@ def parse_clause_license_reviews_v1(
     reviews: list[ClauseLicenseReviewV1] = []
     received_ids: list[str] = []
     for raw in raw_reviews:
-        if not isinstance(raw, Mapping) or frozenset(raw) != {
+        if not isinstance(raw, Mapping):
+            raise TypeError("clause license review is invalid")
+        raw_fields = frozenset(raw)
+        proof_fields = {
+            "clause_id",
+            "license_id",
+            "expression_type",
+            "binding_checks",
+            "unsupported_quote",
+        }
+        legacy_fields = {
             "clause_id",
             "license_id",
             "verdict",
@@ -340,24 +342,24 @@ def parse_clause_license_reviews_v1(
             "binding_checks",
             "reason_code",
             "unsupported_quote",
+        }
+        if raw_fields not in {
+            frozenset(proof_fields),
+            frozenset(legacy_fields),
         }:
             raise TypeError("clause license review is invalid")
         clause_id = _required_string(raw.get("clause_id"))
         license_id = _required_string(raw.get("license_id"))
-        verdict = raw.get("verdict")
         expression_type = raw.get("expression_type")
         raw_binding_checks = raw.get("binding_checks")
-        reason_code = raw.get("reason_code")
         unsupported_quote = raw.get("unsupported_quote")
         license_ = expected.get(clause_id)
         if (
             license_ is None
             or clause_id in received_ids
             or license_id != license_.license_id
-            or verdict not in {"supported", "unsupported", "uncertain"}
             or expression_type not in _EXPRESSION_TYPES
             or not isinstance(raw_binding_checks, list)
-            or reason_code not in _REASON_CODES
             or not isinstance(unsupported_quote, str)
         ):
             raise TypeError("clause license review fields are invalid")
@@ -367,6 +369,33 @@ def parse_clause_license_reviews_v1(
         )
         statuses = tuple(check.status for check in binding_checks)
         present_bindings = {check.binding_id for check in binding_checks if check.status == "present"}
+        if raw_fields == frozenset(legacy_fields):
+            verdict = raw.get("verdict")
+            reason_code = raw.get("reason_code")
+            if (
+                verdict not in {
+                    "supported",
+                    "unsupported",
+                    "uncertain",
+                }
+                or reason_code not in _REASON_CODES
+            ):
+                raise TypeError(
+                    "clause license review fields are invalid"
+                )
+        elif "uncertain" in statuses:
+            verdict = "uncertain"
+            reason_code = "insufficient_evidence"
+        elif present_bindings:
+            verdict = "unsupported"
+            reason_code = next(
+                binding
+                for binding in license_.prohibited_bindings
+                if binding in present_bindings
+            )
+        else:
+            verdict = "supported"
+            reason_code = "supported_by_license"
         if verdict == "supported" and (
             reason_code != "supported_by_license"
             or unsupported_quote
@@ -528,7 +557,16 @@ def reconcile_clause_license_reviews_v1(
         present_checks = tuple(check for check in review.binding_checks if check.status == "present")
         if not present_checks:
             continue
-        if review.unsupported_quote not in unsupported_quote_candidates_v1(context.exact_text):
+        if (
+            len(review.unsupported_quote.strip()) < 2
+            or len(
+                _exact_match_starts(
+                    context.exact_text,
+                    review.unsupported_quote,
+                )
+            )
+            != 1
+        ):
             issues.append(
                 NarrativeIssue(
                     context.unit_id,

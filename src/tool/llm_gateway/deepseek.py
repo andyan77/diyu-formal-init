@@ -1394,21 +1394,21 @@ release_caption 不属于 Writer 输出，也不进入 Reviewer 的 writer-owned
   新增或推断关系身份、对白、动机、原因、结果或其他现实细节。
 
 每个 clause 恰好返回一次，顺序、clause_id 与 license_id 必须完全一致：
-- 每条都返回 expression_type，必须从给定枚举选择；supported 时必须属于本条
+- 每条只返回 expression_type、完整 binding_checks 和 unsupported_quote；不要再返回
+  verdict 或 reason_code，最终状态完全由服务端从这份证明派生。
+- expression_type 必须从给定枚举选择；全部 binding_check=absent 时必须属于本条
   allowed_expression_types。
 - 每条都返回 binding_checks，且必须对本条 prohibited_bindings 中的每个 binding_id
   恰好返回一次 status；顺序不构成语义，服务端会按 ID 规范化。
-- supported：整条 clause 的全部可见含义均在许可证内，全部 binding_check=absent；
-  reason_code=supported_by_license，unsupported_quote 为空字符串。
-- unsupported：至少一个含义越界；reason_code 从给定封闭枚举选择，unsupported_quote 必须
-  从该 clause 的 unsupported_quote_candidates 原样选择一个；不得自行截取、拼接、改写或
-  返回含 ASCII 双引号的片段。reason_code 必须直接复用本条许可里实际命中的
-  prohibited_bindings ID，对应 binding_check 必须为 present；其他能够确定不存在的检查
-  返回 absent。不得改写为近义标识，也不得返回本条许可证 prohibited_bindings 中不存在的
-  reason_code。若没有候选能准确指向越界含义，返回 uncertain。
-- uncertain：确实无法判断主体绑定或许可支持；reason_code= insufficient_evidence，
-  unsupported_quote 为空字符串，至少一个对应 binding_check=uncertain，且不得同时返回
-  present。清楚样本不得用 uncertain 逃避。
+- 全部 absent：整条 clause 的全部可见含义均在许可证内，unsupported_quote 为空字符串。
+- 至少一个 present：至少一个含义越界；unsupported_quote 必须逐字来自当前 clause、
+  至少两个字符且在该 clause 中只出现一次。优先从 unsupported_quote_candidates 选择；
+  只有候选过长时才可返回同一 clause 内更短但仍唯一的精确片段。不得拼接、改写或返回含
+  ASCII 双引号的片段。所有实际命中的 prohibited_bindings 都必须为 present；
+  其他能够确定不存在的检查返回 absent。
+- 确实无法判断主体绑定或许可支持：至少一个对应 binding_check=uncertain，
+  unsupported_quote 为空字符串，且不得同时返回 present。若没有候选能准确指向越界含义，
+  也返回 uncertain；清楚样本不得用 uncertain 逃避。
 
 不要返回 offset、occurrence、全文风险枚举、事实许可、pass/fail 或修复建议。只调用指定
 函数并返回 review_version={CLAUSE_LICENSE_REVIEW_VERSION}。tool arguments 必须是合法

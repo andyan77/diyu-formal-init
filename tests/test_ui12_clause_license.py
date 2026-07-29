@@ -232,6 +232,23 @@ def test_clause_and_license_coverage_and_quote_binding_fail_closed() -> None:
         reviews=reviews,
         fact_text_by_id={_FACT_ID: _FACT_TEXT},
     ).issues
+    shorter_unique_quote = replace(
+        reviews.reviews[0],
+        unsupported_quote="伴侣",
+    )
+    assert {
+        issue.reason
+        for issue in reconcile_clause_license_reviews_v1(
+            contexts=contexts,
+            policies=policies,
+            licenses=licenses,
+            reviews=replace(
+                reviews,
+                reviews=(shorter_unique_quote,),
+            ),
+            fact_text_by_id={_FACT_ID: _FACT_TEXT},
+        ).issues
+    } == {"unsupported_actuality_expansion"}
     forged_quote = replace(reviews.reviews[0], unsupported_quote="不存在")
     assert {
         issue.reason
@@ -656,6 +673,8 @@ def test_strict_schema_is_closed_and_requires_every_field() -> None:
     assert item["additionalProperties"] is False
     item_properties = cast(dict[str, Any], item["properties"])
     assert set(item["required"]) == set(item_properties)
+    assert "verdict" not in item_properties
+    assert "reason_code" not in item_properties
     binding_checks = cast(
         dict[str, Any],
         item_properties["binding_checks"],
@@ -663,6 +682,51 @@ def test_strict_schema_is_closed_and_requires_every_field() -> None:
     binding_item = cast(dict[str, Any], binding_checks["items"])
     assert binding_item["additionalProperties"] is False
     assert set(binding_item["required"]) == {"binding_id", "status"}
+
+
+def test_proof_only_transport_derives_verdict_on_the_server() -> None:
+    contexts = _contexts("一对伴侣都很疲惫。")
+    policies = _policy()
+    licenses = materialize_clause_licenses_v1(
+        contexts=contexts,
+        policies=policies,
+    )
+    license_ = licenses[0]
+    quote = unsupported_quote_candidates_v1(
+        contexts[-1].exact_text
+    )[0]
+    parsed = parse_clause_license_reviews_v1(
+        {
+            "review_version": CLAUSE_LICENSE_REVIEW_VERSION,
+            "reviews": [
+                {
+                    "clause_id": license_.clause_id,
+                    "license_id": license_.license_id,
+                    "expression_type": "generic_observation",
+                    "binding_checks": [
+                        {
+                            "binding_id": binding,
+                            "status": (
+                                "present"
+                                if binding
+                                == "specific_social_relation_to_actuality"
+                                else "absent"
+                            ),
+                        }
+                        for binding in license_.prohibited_bindings
+                    ],
+                    "unsupported_quote": quote,
+                }
+            ],
+        },
+        licenses=licenses,
+    )
+
+    assert parsed.reviews[0].verdict == "unsupported"
+    assert (
+        parsed.reviews[0].reason_code
+        == "specific_social_relation_to_actuality"
+    )
 
 
 def test_old_g7_naked_supported_cannot_bypass_license_proof() -> None:
@@ -681,6 +745,43 @@ def test_old_g7_naked_supported_cannot_bypass_license_proof() -> None:
                         "clause_id": licenses[0].clause_id,
                         "license_id": licenses[0].license_id,
                         "verdict": "supported",
+                        "reason_code": "supported_by_license",
+                        "unsupported_quote": "",
+                    }
+                ],
+            },
+            licenses=licenses,
+        )
+
+
+def test_legacy_contradictory_verdict_is_not_normalized() -> None:
+    contexts = _contexts("换位思考不等于没有边界。")
+    licenses = materialize_clause_licenses_v1(
+        contexts=contexts,
+        policies=_policy(),
+    )
+    license_ = licenses[0]
+
+    with pytest.raises(
+        TypeError,
+        match="unsupported clause license review is invalid",
+    ):
+        parse_clause_license_reviews_v1(
+            {
+                "review_version": CLAUSE_LICENSE_REVIEW_VERSION,
+                "reviews": [
+                    {
+                        "clause_id": license_.clause_id,
+                        "license_id": license_.license_id,
+                        "verdict": "unsupported",
+                        "expression_type": "generic_observation",
+                        "binding_checks": [
+                            {
+                                "binding_id": binding,
+                                "status": "absent",
+                            }
+                            for binding in license_.prohibited_bindings
+                        ],
                         "reason_code": "supported_by_license",
                         "unsupported_quote": "",
                     }
