@@ -537,12 +537,13 @@ def reconcile_clause_license_reviews_v1(
                 )
             )
             continue
-        issues.append(
+        issues.extend(
             NarrativeIssue(
                 context.unit_id,
-                _issue_reason(present_checks[0].binding_id),
+                _issue_reason(check.binding_id),
                 review.unsupported_quote,
             )
+            for check in present_checks
         )
     return ClauseLicenseResultV1(tuple(dict.fromkeys(issues)))
 
@@ -673,9 +674,10 @@ def _parse_binding_checks(
                 status=cast(BindingCheckStatusV1, status),
             )
         )
-    if tuple(check.binding_id for check in checks) != license_.prohibited_bindings:
+    check_by_binding = {check.binding_id: check for check in checks}
+    if len(check_by_binding) != len(checks) or frozenset(check_by_binding) != frozenset(license_.prohibited_bindings):
         raise TypeError("prohibited binding check coverage is invalid")
-    return tuple(checks)
+    return tuple(check_by_binding[binding] for binding in license_.prohibited_bindings)
 
 
 def _license_proof_issue(

@@ -1347,8 +1347,8 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 每个 clause 恰好返回一次，顺序、clause_id 与 license_id 必须完全一致：
 - 每条都返回 expression_type，必须从给定枚举选择；supported 时必须属于本条
   allowed_expression_types。
-- 每条都返回 binding_checks，且必须按本条 prohibited_bindings 的原顺序逐项返回
-  binding_id 与 status。
+- 每条都返回 binding_checks，且必须对本条 prohibited_bindings 中的每个 binding_id
+  恰好返回一次 status；顺序不构成语义，服务端会按 ID 规范化。
 - supported：整条 clause 的全部可见含义均在许可证内，全部 binding_check=absent；
   reason_code=supported_by_license，unsupported_quote 为空字符串。
 - unsupported：至少一个含义越界；reason_code 从给定封闭枚举选择，unsupported_quote 必须
