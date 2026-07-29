@@ -173,6 +173,42 @@ def test_writer_unit_ids_are_a_closed_world(drift: str) -> None:
         parse_writer_kernel(raw, skeleton)
 
 
+def test_writer_straight_quotes_are_normalized_before_review() -> None:
+    skeleton = build_kernel_skeleton(
+        frame=new_frame("general_observation", (), ()),
+        fact_registry=(),
+        constraint_refs=(),
+    )
+
+    kernel = parse_writer_kernel(
+        _raw_units(
+            title='最怕的不是吵架，而是这种"客气"',
+        ),
+        skeleton,
+    )
+
+    assert (
+        kernel.unit("unit:title").text
+        == "最怕的不是吵架，而是这种“客气”"
+    )
+
+
+def test_writer_unmatched_straight_quote_fails_closed() -> None:
+    skeleton = build_kernel_skeleton(
+        frame=new_frame("general_observation", (), ()),
+        fact_registry=(),
+        constraint_refs=(),
+    )
+
+    with pytest.raises(ValueError, match="unmatched double quote"):
+        parse_writer_kernel(
+            _raw_units(
+                title='最怕的不是吵架，而是这种"客气',
+            ),
+            skeleton,
+        )
+
+
 def test_service_fact_unit_is_exact_and_writer_cannot_return_it() -> None:
     fact = FrozenFactRecord(
         "source:user_actuality:1",

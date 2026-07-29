@@ -314,7 +314,9 @@ def parse_writer_kernel(
             expected[unit_id],
             text=_service_wrap(
                 expected[unit_id],
-                _required_string(raw_unit.get("text")),
+                _normalize_writer_visible_text(
+                    _required_string(raw_unit.get("text"))
+                ),
             ),
             claim_refs=claim_refs,
         )
@@ -679,6 +681,30 @@ def _service_wrap(unit: CreativeKernelUnit, text: str) -> str:
             raise ValueError("writer cannot author the service disclosure")
         return f"{HYPOTHESIS_DISCLOSURE}\n{text}"
     return text
+
+
+def _normalize_writer_visible_text(text: str) -> str:
+    """Normalize neutral typography before review and visible digesting.
+
+    Frozen facts never pass through this function. Paired ASCII double quotes
+    are presentation punctuation in Writer-owned Chinese copy; turning them
+    into curly quotes avoids delegating JSON escaping to Reviewer output while
+    preserving the visible words. An unmatched quote fails closed.
+    """
+    quote_count = text.count('"')
+    if quote_count == 0:
+        return text
+    if quote_count % 2:
+        raise ValueError("writer visible text has unmatched double quote")
+    result: list[str] = []
+    opening = True
+    for character in text:
+        if character != '"':
+            result.append(character)
+            continue
+        result.append("“" if opening else "”")
+        opening = not opening
+    return "".join(result)
 
 
 def _required_string(value: object) -> str:
