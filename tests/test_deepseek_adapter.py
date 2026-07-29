@@ -985,6 +985,18 @@ def _kernel_license_reviews(
                 "clause_id": license_.clause_id,
                 "license_id": license_.license_id,
                 "verdict": ("unsupported" if is_event else "supported"),
+                "expression_type": (
+                    "generic_observation"
+                    if "generic_observation" in license_.allowed_expression_types
+                    else license_.allowed_expression_types[0]
+                ),
+                "binding_checks": [
+                    {
+                        "binding_id": binding,
+                        "status": ("present" if is_event and binding == "actual_event_or_result" else "absent"),
+                    }
+                    for binding in license_.prohibited_bindings
+                ],
                 "reason_code": ("actual_event_or_result" if is_event else "supported_by_license"),
                 "unsupported_quote": (quote_candidates[0] if is_event else ""),
             }
@@ -1469,7 +1481,9 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert "相近生活主题，就推定新增含义已获事实许可" in reviewer_prompt
     assert "只要一个含义越界就不能用" in reviewer_prompt
     assert "只讨论“婆媳\n   关系／家庭关系”等关系类别" in reviewer_prompt
-    assert "不得返回本条许可证\n  prohibited_bindings 中不存在" in reviewer_prompt
+    assert "不得遗漏、重复、增加或改名" in reviewer_prompt
+    assert "全部 binding_check=absent" in reviewer_prompt
+    assert "non_situated_metaphor" in reviewer_prompt
     assert "实例化一组人物的同住、亲属身份" in reviewer_prompt
     assert '"exact_text"' in reviewer_prompt
     assert "不决定事实许可、最终通过／失败" in reviewer_prompt
@@ -1653,10 +1667,18 @@ def test_ui10_evidence_failure_never_calls_writer_repair(
         reviews[-2]["verdict"] = "unsupported"
         reviews[-2]["reason_code"] = "actual_event_or_result"
         reviews[-2]["unsupported_quote"] = "并不存在的谓词"
+        checks = [dict(check) for check in reviews[-2]["binding_checks"]]
+        for check in checks:
+            if check["binding_id"] == "actual_event_or_result":
+                check["status"] = "present"
+        reviews[-2]["binding_checks"] = checks
     else:
         reviews[-2] = dict(reviews[-2])
         reviews[-2]["verdict"] = "uncertain"
         reviews[-2]["reason_code"] = "insufficient_evidence"
+        checks = [dict(check) for check in reviews[-2]["binding_checks"]]
+        checks[0]["status"] = "uncertain"
+        reviews[-2]["binding_checks"] = checks
     FakeClient.responses = [
         _completion(raw),
         _completion(document),

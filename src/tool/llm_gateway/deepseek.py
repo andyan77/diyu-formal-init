@@ -125,6 +125,7 @@ _COVER_PURPOSE = "cover"
 _SCENE_PURPOSE = "scene"
 _REVIEW_TOKEN_BASE = 1024
 _REVIEW_TOKEN_PER_QUESTION = 160
+_LICENSE_REVIEW_TOKEN_PER_CLAUSE = 640
 _REVIEW_TOKEN_HARD_LIMIT = 16384
 _CLOSED_REVIEW_BATCH_CLAUSES = 8
 
@@ -1274,12 +1275,11 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 "exact_text": context_by_clause[license_.clause_id].exact_text,
                 "discourse_contract": license_.discourse_contract,
                 "subject_scope": license_.subject_scope,
+                "allowed_expression_types": list(license_.allowed_expression_types),
                 "allowed_fact_refs": list(license_.allowed_fact_refs),
                 "prohibited_bindings": list(license_.prohibited_bindings),
                 "unsupported_quote_candidates": list(
-                    unsupported_quote_candidates_v1(
-                        context_by_clause[license_.clause_id].exact_text
-                    )
+                    unsupported_quote_candidates_v1(context_by_clause[license_.clause_id].exact_text)
                 ),
             }
             for license_ in licenses
@@ -1298,7 +1298,8 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 {json.dumps(clauses, ensure_ascii=False)}
 
 逐 clause 使用同一套稳定核对顺序：
-1. 先读取 discourse_contract、subject_scope、allowed_fact_refs 和 prohibited_bindings；不得
+1. 先读取 discourse_contract、subject_scope、allowed_expression_types、allowed_fact_refs
+   和 prohibited_bindings；不得
    因为文字和 topic／冻结事实谈的是相近生活主题，就推定新增含义已获事实许可。
 2. subject_scope=generic_only 时，只允许不指向当前真人或受保护主体的泛指人数、普遍心理
    观察、一般因果、关系题材讨论和清楚建议；具体社会关系身份不是泛指人数。只讨论“婆媳
@@ -1317,13 +1318,18 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
    推导性能、功效、用途／穿着结果、设计动机、价格、库存、比较结论或实际体验，同样必须
    unsupported_product_fact。资料来源或制作资源被当成商品事实时必须
    source_or_resource_as_fact。Packet 只帮助识别边界，不使 claim_refs 或相近表述获得许可。
-5. supported 只表示整条 clause 的全部可见含义均满足同一许可；只要一个含义越界就不能用
-   其他泛指或建议含义抵消。
+5. 为每个 prohibited_bindings ID 恰好返回一个 binding_check，不得遗漏、重复、增加或改名：
+   absent 表示该绑定不存在，present 表示存在，uncertain 表示无法确定。supported 只在
+   expression_type 属于 allowed_expression_types 且全部 binding_check=absent 时成立；
+   只要一个含义越界就不能用其他泛指或建议含义抵消。
 
 稳定语义边界：
 - generic_observation 可以创造不绑定当前真人或受保护主体的一般观察、观点、比喻、泛指心理
   需要和一般因果；“两个人／人与人／一些人”等泛指人数本身不是具体社会关系。
 - recommendation 可以提出清楚的泛指建议，但不得把建议写成当前真人已经做过的事。
+- non_situated_metaphor 可以使用夸张、反差、幽默和荒诞比喻，但不能出现人物对白、具体
+  场景／地点、人物动作链或事件结果。写了“想象一下”不等于获得服务端 hypothesis 或
+  dramatization 许可。
 - hypothetical_example 和 disclosed_dramatization 只在服务端既定 scope 内成立，不能绑定
   当前用户、品牌、员工、顾客、门店历史或商品事实。
 - specific_social_relation 只指亲属、伴侣、家庭、同住、同事、员工、顾客或文字明确建立
@@ -1339,16 +1345,21 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
   新增或推断关系身份、对白、动机、原因、结果或其他现实细节。
 
 每个 clause 恰好返回一次，顺序、clause_id 与 license_id 必须完全一致：
-- supported：整条 clause 的全部可见含义均在许可证内；reason_code= supported_by_license，
-  unsupported_quote 为空字符串。
+- 每条都返回 expression_type，必须从给定枚举选择；supported 时必须属于本条
+  allowed_expression_types。
+- 每条都返回 binding_checks，且必须按本条 prohibited_bindings 的原顺序逐项返回
+  binding_id 与 status。
+- supported：整条 clause 的全部可见含义均在许可证内，全部 binding_check=absent；
+  reason_code=supported_by_license，unsupported_quote 为空字符串。
 - unsupported：至少一个含义越界；reason_code 从给定封闭枚举选择，unsupported_quote 必须
   从该 clause 的 unsupported_quote_candidates 原样选择一个；不得自行截取、拼接、改写或
   返回含 ASCII 双引号的片段。reason_code 必须直接复用本条许可里实际命中的
-  prohibited_bindings ID，不得改写为近义标识，也不得返回本条许可证
-  prohibited_bindings 中不存在的 reason_code。若没有候选能准确指向越界含义，返回
-  uncertain。
+  prohibited_bindings ID，对应 binding_check 必须为 present；其他能够确定不存在的检查
+  返回 absent。不得改写为近义标识，也不得返回本条许可证 prohibited_bindings 中不存在的
+  reason_code。若没有候选能准确指向越界含义，返回 uncertain。
 - uncertain：确实无法判断主体绑定或许可支持；reason_code= insufficient_evidence，
-  unsupported_quote 为空字符串。清楚样本不得用 uncertain 逃避。
+  unsupported_quote 为空字符串，至少一个对应 binding_check=uncertain，且不得同时返回
+  present。清楚样本不得用 uncertain 逃避。
 
 不要返回 offset、occurrence、全文风险枚举、事实许可、pass/fail 或修复建议。只调用指定
 函数并返回 review_version={CLAUSE_LICENSE_REVIEW_VERSION}。tool arguments 必须是合法
@@ -2670,6 +2681,15 @@ CreativePlanV2：{
             _REVIEW_TOKEN_BASE + _REVIEW_TOKEN_PER_QUESTION * question_count,
         )
 
+    @staticmethod
+    def _license_review_max_tokens(clause_count: int) -> int:
+        if clause_count < 1:
+            raise ValueError("review clause count must be positive")
+        return min(
+            _REVIEW_TOKEN_HARD_LIMIT,
+            _REVIEW_TOKEN_BASE + _LICENSE_REVIEW_TOKEN_PER_CLAUSE * clause_count,
+        )
+
     def _strict_review_api_url(self) -> str:
         base_url = self._api_base_url
         if base_url.endswith("/beta"):
@@ -2749,7 +2769,7 @@ CreativePlanV2：{
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.0,
-            "max_tokens": self._review_max_tokens(license_count),
+            "max_tokens": self._license_review_max_tokens(license_count),
             "thinking": {"type": "disabled"},
             "tools": [self._strict_license_review_tool(licenses)],
             "tool_choice": {

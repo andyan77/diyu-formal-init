@@ -11,6 +11,7 @@ from src.shared.clause_license import (
     CLAUSE_LICENSE_REVIEW_VERSION,
     ClauseLicenseReviewsV1,
     ClauseLicenseReviewV1,
+    ProhibitedBindingCheckV1,
     UnitClauseLicensePolicyV1,
     build_unit_clause_license_policies_v1,
     clause_license_review_json_schema,
@@ -90,6 +91,7 @@ def _review(
     reason_code: str,
     quote: str,
     policies: tuple[UnitClauseLicensePolicyV1, ...] | None = None,
+    expression_type: str | None = None,
 ) -> tuple[
     tuple[UnitClauseLicensePolicyV1, ...],
     ClauseLicenseReviewsV1,
@@ -107,6 +109,20 @@ def _review(
                     "clause_id": licenses[0].clause_id,
                     "license_id": licenses[0].license_id,
                     "verdict": verdict,
+                    "expression_type": (expression_type or licenses[0].allowed_expression_types[0]),
+                    "binding_checks": [
+                        {
+                            "binding_id": binding,
+                            "status": (
+                                "present"
+                                if verdict == "unsupported" and binding == reason_code
+                                else "uncertain"
+                                if verdict == "uncertain" and binding == licenses[0].prohibited_bindings[0]
+                                else "absent"
+                            ),
+                        }
+                        for binding in licenses[0].prohibited_bindings
+                    ],
                     "reason_code": reason_code,
                     "unsupported_quote": quote,
                 }
@@ -239,6 +255,14 @@ def test_clause_and_license_coverage_and_quote_binding_fail_closed() -> None:
                 clause_id=duplicated_licenses[0].clause_id,
                 license_id=duplicated_licenses[0].license_id,
                 verdict="unsupported",
+                expression_type=(duplicated_licenses[0].allowed_expression_types[0]),
+                binding_checks=tuple(
+                    ProhibitedBindingCheckV1(
+                        binding_id=binding,
+                        status=("present" if binding == "specific_social_relation_to_actuality" else "absent"),
+                    )
+                    for binding in (duplicated_licenses[0].prohibited_bindings)
+                ),
                 reason_code="specific_social_relation_to_actuality",
                 unsupported_quote="一对伴侣",
             ),
@@ -287,9 +311,15 @@ def test_reviewer_cannot_invent_a_prohibition_outside_the_clause_license() -> No
                         "clause_id": licenses[0].clause_id,
                         "license_id": licenses[0].license_id,
                         "verdict": "unsupported",
-                        "reason_code": (
-                            "specific_social_relation_to_actuality"
-                        ),
+                        "expression_type": "hypothetical_expression",
+                        "binding_checks": [
+                            {
+                                "binding_id": binding,
+                                "status": "absent",
+                            }
+                            for binding in licenses[0].prohibited_bindings
+                        ],
+                        "reason_code": ("specific_social_relation_to_actuality"),
                         "unsupported_quote": "一位儿媳可以先表达自己的想法",
                     }
                 ],
@@ -314,15 +344,9 @@ def test_general_topic_is_allowed_but_unwrapped_relation_situation_is_not() -> N
     )
     policy_by_unit = {policy.unit_id: policy for policy in policies}
 
-    assert "specific_social_relation_to_actuality" in (
-        policy_by_unit["unit:topic"].prohibited_bindings
-    )
-    assert "specific_social_relation_to_actuality" in (
-        policy_by_unit["unit:situation"].prohibited_bindings
-    )
-    assert "specific_social_relation_to_actuality" not in (
-        policy_by_unit["unit:hypothesis"].prohibited_bindings
-    )
+    assert "specific_social_relation_to_actuality" in (policy_by_unit["unit:topic"].prohibited_bindings)
+    assert "specific_social_relation_to_actuality" in (policy_by_unit["unit:situation"].prohibited_bindings)
+    assert "specific_social_relation_to_actuality" not in (policy_by_unit["unit:hypothesis"].prohibited_bindings)
 
     topic_context = replace(
         _contexts("婆媳关系也需要边界。")[1],
@@ -342,6 +366,14 @@ def test_general_topic_is_allowed_but_unwrapped_relation_situation_is_not() -> N
                     "clause_id": topic_licenses[0].clause_id,
                     "license_id": topic_licenses[0].license_id,
                     "verdict": "supported",
+                    "expression_type": "generic_observation",
+                    "binding_checks": [
+                        {
+                            "binding_id": binding,
+                            "status": "absent",
+                        }
+                        for binding in topic_licenses[0].prohibited_bindings
+                    ],
                     "reason_code": "supported_by_license",
                     "unsupported_quote": "",
                 }
@@ -349,13 +381,16 @@ def test_general_topic_is_allowed_but_unwrapped_relation_situation_is_not() -> N
         },
         licenses=topic_licenses,
     )
-    assert reconcile_clause_license_reviews_v1(
-        contexts=(topic_context,),
-        policies=(policy_by_unit["unit:topic"],),
-        licenses=topic_licenses,
-        reviews=topic_reviews,
-        fact_text_by_id={},
-    ).issues == ()
+    assert (
+        reconcile_clause_license_reviews_v1(
+            contexts=(topic_context,),
+            policies=(policy_by_unit["unit:topic"],),
+            licenses=topic_licenses,
+            reviews=topic_reviews,
+            fact_text_by_id={},
+        ).issues
+        == ()
+    )
 
     situation_context = replace(
         _contexts("两个人明明住在一起，心却隔着墙。")[1],
@@ -375,9 +410,15 @@ def test_general_topic_is_allowed_but_unwrapped_relation_situation_is_not() -> N
                     "clause_id": situation_licenses[0].clause_id,
                     "license_id": situation_licenses[0].license_id,
                     "verdict": "unsupported",
-                    "reason_code": (
-                        "specific_social_relation_to_actuality"
-                    ),
+                    "expression_type": "generic_observation",
+                    "binding_checks": [
+                        {
+                            "binding_id": binding,
+                            "status": ("present" if binding == "specific_social_relation_to_actuality" else "absent"),
+                        }
+                        for binding in (situation_licenses[0].prohibited_bindings)
+                    ],
+                    "reason_code": ("specific_social_relation_to_actuality"),
                     "unsupported_quote": "两个人明明住在一起",
                 }
             ],
@@ -615,3 +656,217 @@ def test_strict_schema_is_closed_and_requires_every_field() -> None:
     assert item["additionalProperties"] is False
     item_properties = cast(dict[str, Any], item["properties"])
     assert set(item["required"]) == set(item_properties)
+    binding_checks = cast(
+        dict[str, Any],
+        item_properties["binding_checks"],
+    )
+    binding_item = cast(dict[str, Any], binding_checks["items"])
+    assert binding_item["additionalProperties"] is False
+    assert set(binding_item["required"]) == {"binding_id", "status"}
+
+
+def test_old_g7_naked_supported_cannot_bypass_license_proof() -> None:
+    contexts = _contexts("想象一下：两个电量耗尽的机器人，在厨房展开了一场辩论。")
+    licenses = materialize_clause_licenses_v1(
+        contexts=contexts,
+        policies=_policy(),
+    )
+
+    with pytest.raises(TypeError, match="clause license review is invalid"):
+        parse_clause_license_reviews_v1(
+            {
+                "review_version": CLAUSE_LICENSE_REVIEW_VERSION,
+                "reviews": [
+                    {
+                        "clause_id": licenses[0].clause_id,
+                        "license_id": licenses[0].license_id,
+                        "verdict": "supported",
+                        "reason_code": "supported_by_license",
+                        "unsupported_quote": "",
+                    }
+                ],
+            },
+            licenses=licenses,
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("missing", "duplicate", "extra", "reordered"),
+)
+def test_prohibited_binding_proof_requires_exact_coverage(
+    mutation: str,
+) -> None:
+    contexts = _contexts("疲惫像两颗没电的星球。")
+    licenses = materialize_clause_licenses_v1(
+        contexts=contexts,
+        policies=_policy(),
+    )
+    checks = [{"binding_id": binding, "status": "absent"} for binding in licenses[0].prohibited_bindings]
+    if mutation == "missing":
+        checks.pop()
+    elif mutation == "duplicate":
+        checks[-1] = dict(checks[0])
+    elif mutation == "extra":
+        checks.append(dict(checks[0]))
+    else:
+        checks[0], checks[1] = checks[1], checks[0]
+
+    with pytest.raises(
+        TypeError,
+        match="prohibited binding check coverage is invalid",
+    ):
+        parse_clause_license_reviews_v1(
+            {
+                "review_version": CLAUSE_LICENSE_REVIEW_VERSION,
+                "reviews": [
+                    {
+                        "clause_id": licenses[0].clause_id,
+                        "license_id": licenses[0].license_id,
+                        "verdict": "supported",
+                        "expression_type": "non_situated_metaphor",
+                        "binding_checks": checks,
+                        "reason_code": "supported_by_license",
+                        "unsupported_quote": "",
+                    }
+                ],
+            },
+            licenses=licenses,
+        )
+
+
+def test_actuality_scene_metaphor_and_disclosed_dramatization_are_paired() -> None:
+    scene = "两个机器人在厨房辩论，最后都忘了洗碗机怎么开。"
+    actuality_contexts = _contexts(scene)
+    actuality_policies = _policy()
+    actuality_licenses = materialize_clause_licenses_v1(
+        contexts=actuality_contexts,
+        policies=actuality_policies,
+    )
+    _, scene_reviews = _review(
+        contexts=actuality_contexts,
+        verdict="unsupported",
+        expression_type="dramatized_expression",
+        reason_code="actual_event_or_result",
+        quote="最后都忘了洗碗机怎么开",
+        policies=actuality_policies,
+    )
+    scene_result = reconcile_clause_license_reviews_v1(
+        contexts=actuality_contexts,
+        policies=actuality_policies,
+        licenses=actuality_licenses,
+        reviews=scene_reviews,
+        fact_text_by_id={_FACT_ID: _FACT_TEXT},
+    )
+    assert {issue.reason for issue in scene_result.issues} == {"unsupported_actuality_expansion"}
+
+    metaphor_contexts = _contexts("疲惫像两颗没电的星球，连沉默都在打哈欠。")
+    metaphor_policies = _policy()
+    metaphor_licenses = materialize_clause_licenses_v1(
+        contexts=metaphor_contexts,
+        policies=metaphor_policies,
+    )
+    _, metaphor_reviews = _review(
+        contexts=metaphor_contexts,
+        verdict="supported",
+        expression_type="non_situated_metaphor",
+        reason_code="supported_by_license",
+        quote="",
+        policies=metaphor_policies,
+    )
+    assert (
+        reconcile_clause_license_reviews_v1(
+            contexts=metaphor_contexts,
+            policies=metaphor_policies,
+            licenses=metaphor_licenses,
+            reviews=metaphor_reviews,
+            fact_text_by_id={_FACT_ID: _FACT_TEXT},
+        ).issues
+        == ()
+    )
+
+    dramatization_frame = replace(
+        _frame(),
+        narrative_mode="dramatization",
+        user_facts=(),
+    )
+    dramatization_context = replace(
+        actuality_contexts[-1],
+        unit_contract="disclosed_dramatization",
+    )
+    dramatization_policies = build_unit_clause_license_policies_v1(
+        frame=dramatization_frame,
+        unit_contracts={dramatization_context.unit_id: "disclosed_dramatization"},
+    )
+    dramatization_licenses = materialize_clause_licenses_v1(
+        contexts=(dramatization_context,),
+        policies=dramatization_policies,
+    )
+    _, dramatization_reviews = _review(
+        contexts=(dramatization_context,),
+        verdict="supported",
+        expression_type="dramatized_expression",
+        reason_code="supported_by_license",
+        quote="",
+        policies=dramatization_policies,
+    )
+    assert (
+        reconcile_clause_license_reviews_v1(
+            contexts=(dramatization_context,),
+            policies=dramatization_policies,
+            licenses=dramatization_licenses,
+            reviews=dramatization_reviews,
+            fact_text_by_id={},
+        ).issues
+        == ()
+    )
+
+
+def test_present_uncertain_and_expression_drift_fail_closed() -> None:
+    contexts = _contexts("疲惫像两颗没电的星球。")
+    policies = _policy()
+    licenses = materialize_clause_licenses_v1(
+        contexts=contexts,
+        policies=policies,
+    )
+    _, supported = _review(
+        contexts=contexts,
+        verdict="supported",
+        expression_type="non_situated_metaphor",
+        reason_code="supported_by_license",
+        quote="",
+        policies=policies,
+    )
+    drifted = replace(
+        supported.reviews[0],
+        expression_type="dramatized_expression",
+    )
+    assert {
+        issue.reason
+        for issue in reconcile_clause_license_reviews_v1(
+            contexts=contexts,
+            policies=policies,
+            licenses=licenses,
+            reviews=replace(supported, reviews=(drifted,)),
+            fact_text_by_id={_FACT_ID: _FACT_TEXT},
+        ).issues
+    } == {"license_review_proof"}
+
+    _, uncertain = _review(
+        contexts=contexts,
+        verdict="uncertain",
+        expression_type="non_situated_metaphor",
+        reason_code="insufficient_evidence",
+        quote="",
+        policies=policies,
+    )
+    assert {
+        issue.reason
+        for issue in reconcile_clause_license_reviews_v1(
+            contexts=contexts,
+            policies=policies,
+            licenses=licenses,
+            reviews=uncertain,
+            fact_text_by_id={_FACT_ID: _FACT_TEXT},
+        ).issues
+    } == {"insufficient_evidence"}

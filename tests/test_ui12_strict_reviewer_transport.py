@@ -116,6 +116,11 @@ def _licenses() -> tuple[ClauseLicenseV1, ...]:
                 unit_id=context.unit_id,
                 discourse_contract=context.unit_contract,
                 subject_scope="generic_only",
+                allowed_expression_types=(
+                    "generic_observation",
+                    "recommendation",
+                    "non_situated_metaphor",
+                ),
                 allowed_fact_refs=(),
                 prohibited_bindings=(
                     "current_person",
@@ -136,6 +141,14 @@ def _license_review_document() -> dict[str, object]:
                 "clause_id": license_.clause_id,
                 "license_id": license_.license_id,
                 "verdict": "supported",
+                "expression_type": "generic_observation",
+                "binding_checks": [
+                    {
+                        "binding_id": binding,
+                        "status": "absent",
+                    }
+                    for binding in license_.prohibited_bindings
+                ],
                 "reason_code": "supported_by_license",
                 "unsupported_quote": "",
             }
@@ -349,8 +362,7 @@ def test_runtime_license_review_never_repairs_invalid_json_arguments() -> None:
     )
     function = payload["choices"][0]["message"]["tool_calls"][0]["function"]
     function["arguments"] = (
-        '{"review_version":"clause-license-review-v1",'
-        '"reviews":[{"unsupported_quote":"他说"辛苦了""}]}'
+        '{"review_version":"clause-license-review-v1","reviews":[{"unsupported_quote":"他说"辛苦了""}]}'
     )
 
     with pytest.raises(json.JSONDecodeError):
@@ -397,6 +409,11 @@ def test_reviewer_token_budget_is_deterministic_and_hard_capped() -> None:
     assert generator._review_max_tokens(100) == 16384
     with pytest.raises(ValueError, match="positive"):
         generator._review_max_tokens(0)
+    assert generator._license_review_max_tokens(1) == 1664
+    assert generator._license_review_max_tokens(8) == 6144
+    assert generator._license_review_max_tokens(24) == 16384
+    with pytest.raises(ValueError, match="positive"):
+        generator._license_review_max_tokens(0)
 
 
 def test_reviewer_prompt_uses_closed_questions_without_addresses() -> None:

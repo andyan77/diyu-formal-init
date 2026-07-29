@@ -6,6 +6,7 @@ from src.shared.clause_license import (
     CLAUSE_LICENSE_VERSION,
     ClauseLicenseReviewsV1,
     ClauseLicenseReviewV1,
+    ProhibitedBindingCheckV1,
     build_unit_clause_license_policies_v1,
     clause_license_document,
     clause_license_review_document,
@@ -248,6 +249,14 @@ class DeterministicContentGenerator(ContentGenerator):
                     clause_id=license_.clause_id,
                     license_id=license_.license_id,
                     verdict="supported",
+                    expression_type=license_.allowed_expression_types[0],
+                    binding_checks=tuple(
+                        ProhibitedBindingCheckV1(
+                            binding_id=binding,
+                            status="absent",
+                        )
+                        for binding in license_.prohibited_bindings
+                    ),
                     reason_code="supported_by_license",
                     unsupported_quote="",
                 )
