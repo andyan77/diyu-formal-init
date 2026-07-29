@@ -84,8 +84,12 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
             )
         if request.message == _G6:
             return ConversationDecision(
-                "question",
-                "那个月具体发生了哪一件最让你觉得困难的事？",
+                "ready",
+                "模型错误地认为可以直接泛化这段个人经历。",
+                user_premises=(request.message,),
+                narrative_mode="general_observation",
+                creative_plan=cast(Any, _plan(request, "brand_life_narrative")),
+                primary_product="brand_life_narrative",
             )
         if request.message == _BAD_PLAN:
             return ConversationDecision(

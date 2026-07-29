@@ -60,7 +60,7 @@ _PHRASES: dict[str, str] = {
     "phrase:scope-user-fact": "你提到：",
     "phrase:scope-brand-fact": "已确认的品牌信息：",
     "phrase:scope-product-fact": "已确认的商品信息：",
-    "phrase:scope-general": "换个角度看：",
+    "phrase:scope-general": "下面是创作性的生活观察，不对应真实人物或经历：",
     "phrase:scope-recommendation": "不妨试试：",
     "phrase:scope-hypothesis": HYPOTHESIS_DISCLOSURE,
     "phrase:scope-dramatization": DRAMATIZATION_DISCLOSURE,
@@ -69,12 +69,18 @@ _PHRASES: dict[str, str] = {
     "phrase:title-confirmed-fact": "从已确认的信息出发：",
     "phrase:title-hypothesis": "假设一下：",
     "phrase:title-dramatization": "情景演绎：",
-    "phrase:artifact-general": "下面是一种生活观察，不对应未提供的真实经历。",
-    "phrase:artifact-user-fact": "以下内容从你提供的真实片段出发，延伸为生活观察。",
-    "phrase:artifact-confirmed-fact": "以下表达从已确认的信息出发，不增加新的现实主张。",
+    "phrase:artifact-general": "以下是围绕这个主题的创作表达，不对应真实人物或经历。",
+    "phrase:artifact-user-fact": (
+        "以下内容保留你提供的真实片段；其余为创作性观察，不补充现实细节。"
+    ),
+    "phrase:artifact-confirmed-fact": (
+        "以下只引用已确认的信息；其余为一般观察，不增加新的现实主张。"
+    ),
     "phrase:artifact-hypothesis": "下面的片段是假设，不代表真实发生。",
     "phrase:artifact-dramatization": "以下内容包含情景演绎，不对应真实人物或经历。",
-    "phrase:artifact-user-fact-drama": "以下内容从你提供的真实片段出发，其中小剧场为情景演绎。",
+    "phrase:artifact-user-fact-drama": (
+        "以下内容保留你提供的真实片段；小剧场为情景演绎，不对应现实经历。"
+    ),
 }
 
 

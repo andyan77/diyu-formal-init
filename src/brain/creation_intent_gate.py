@@ -30,6 +30,10 @@ _BA_CONSTRUCTION = re.compile(
     rf"^把[^。！？!?\n]{{1,64}}?(?:写出来|写成[^。！？!?\n]{{0,24}}?{_DELIVERABLE}|"
     rf"整理成[^。！？!?\n]{{0,24}}?{_DELIVERABLE}|改写成[^。！？!?\n]{{0,24}}?{_DELIVERABLE})"
 )
+_MISSING_ACTUALITY_BA = re.compile(
+    r"^把\s*(?:我(?:们)?(?:的)?|这段(?:经历|日子|过程)|那段(?:经历|日子|过程)|"
+    r"这件事|那件事|刚才(?:说|提)的|上面(?:说|提)的)"
+)
 _CLAUSE = re.compile(r"[^，,。！？!?\n]+")
 
 
@@ -118,6 +122,16 @@ def explicit_intent_span(text: str) -> str | None:
             if span and span in text:
                 return span
     return None
+
+
+def requires_indispensable_user_fact(intent_span: str) -> bool:
+    """Recognize an unresolved first-person or anaphoric actuality directive.
+
+    This small grammatical guard contains no topic, relationship, emotion, or
+    historical failure vocabulary.  The directive identifies what the user
+    wants produced, but does not prove what happened.
+    """
+    return _MISSING_ACTUALITY_BA.match(intent_span.strip()) is not None
 
 
 def commitment_document(commitment: CreationCommitment) -> dict[str, object]:

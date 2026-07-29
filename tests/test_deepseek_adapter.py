@@ -1787,7 +1787,10 @@ def test_general_writer_text_is_compiled_inside_a_visible_non_fact_scope() -> No
     artifact = _generator().generate(request)
 
     assert isinstance(artifact.production, GraphicProductionBundle)
-    assert "换个角度看：饭桌上" in artifact.production.full_body
+    assert (
+        "下面是创作性的生活观察，不对应真实人物或经历：饭桌上"
+        in artifact.production.full_body
+    )
     assert len(FakeClient.requests) == 1
 
 

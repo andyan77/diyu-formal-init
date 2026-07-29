@@ -15,6 +15,7 @@ from src.brain.content_expression import direction_from_snapshot, snapshot_docum
 from src.brain.creation_intent_gate import (
     CreationCommitment,
     evaluate_creation_intent,
+    requires_indispensable_user_fact,
 )
 from src.brain.natural_entry import (
     is_natural_chat,
@@ -368,6 +369,15 @@ class ContentService:
             return {
                 "kind": decision.disposition,
                 "message": decision.message,
+            }
+        if (
+            not decision.user_fact_source_ids
+            and not products
+            and requires_indispensable_user_fact(commitment.intent_span)
+        ):
+            return {
+                "kind": "question",
+                "message": "这段真实经历里，哪一件具体发生的事是必须保留的？",
             }
         if (
             decision.primary_product is None

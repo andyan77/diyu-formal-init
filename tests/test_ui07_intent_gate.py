@@ -6,6 +6,7 @@ from src.brain.creation_intent_gate import (
     GATE_VERSION,
     evaluate_creation_intent,
     explicit_intent_span,
+    requires_indispensable_user_fact,
 )
 
 
@@ -64,6 +65,35 @@ def test_creation_gate_rejects_state_observation_and_model_like_claims(
 
     assert not commitment.committed
     assert commitment.intent_span == ""
+
+
+@pytest.mark.parametrize(
+    "text",
+    (
+        "把我上次真正崩溃的那一天写出来",
+        "把我们的那段创业经历写出来",
+        "把这段经历写成一篇小红书文案",
+        "把刚才提的写成一篇文章",
+    ),
+)
+def test_unresolved_personal_actuality_directive_requires_one_fact(text: str) -> None:
+    span = explicit_intent_span(text)
+    assert span is not None
+    assert requires_indispensable_user_fact(span)
+
+
+@pytest.mark.parametrize(
+    "text",
+    (
+        "帮我写条婆媳主题的小红书",
+        "今天不知道发什么，帮我做条小红书",
+        "把婆媳关系写成一篇小红书文案",
+    ),
+)
+def test_topic_or_open_creation_does_not_require_personal_fact(text: str) -> None:
+    span = explicit_intent_span(text)
+    assert span is not None
+    assert not requires_indispensable_user_fact(span)
 
 
 def test_explicit_ui_and_active_revision_are_bounded_authorities() -> None:

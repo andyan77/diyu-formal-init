@@ -145,11 +145,13 @@ def test_compiler_scopes_general_observation_in_every_visible_exit() -> None:
     _, kernel = _parse()
     compiled = _compile(kernel)
     assert compiled.outline.startswith("一种生活观察：")
-    assert "换个角度看：" in compiled.body
+    assert "下面是创作性的生活观察，不对应真实人物或经历：" in compiled.body
     assert hasattr(compiled.production, "full_body")
-    assert compiled.production.full_body.startswith("换个角度看：")
+    assert compiled.production.full_body.startswith(
+        "下面是创作性的生活观察，不对应真实人物或经历："
+    )
     assert compiled.production.release_caption_and_interaction.startswith(
-        "下面是一种生活观察，不对应未提供的真实经历。"
+        "以下是围绕这个主题的创作表达，不对应真实人物或经历。"
     )
 
 

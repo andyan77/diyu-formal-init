@@ -58,7 +58,7 @@ RESERVED_VISIBLE_SCOPE_PREFIXES = (
     "你提到：",
     "已确认的品牌信息：",
     "已确认的商品信息：",
-    "换个角度看：",
+    "下面是创作性的生活观察，不对应真实人物或经历：",
     "不妨试试：",
     HYPOTHESIS_DISCLOSURE,
     DRAMATIZATION_DISCLOSURE,
