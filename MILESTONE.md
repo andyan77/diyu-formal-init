@@ -1,42 +1,58 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
-  保留；主控随后在同一 UI-12 内裁决改由服务端确定性绑定 exact quote，并采用“一战到底”
-  治理恢复施工。quote-only 责任边界、完整 G3 和 G4 已继续验证；最终 G4 证明当前
-  Reviewer 在开放式 evidence 枚举下漏提关系角色和动机等裁决必需 evidence。主控现已把
-  缺口曾订正为同一 UI-12 内的普通责任合同问题：服务端为每个 writer clause 生成闭合风险
-  问题集，Reviewer 逐题回答，服务端派生 Claim Inventory 并唯一裁决。既有失败保持，
-  恢复 `ACTIVE` 不表示问题已解决。闭合问题集随后曾在
-  WIP `0eca737…` 形成事实安全的完整 G4；最终 WIP `d4d2818…` 的 G2 证明商品内容的
-  生成职责仍不闭合：商品事实暴露给 Writer 时会被 Writer 复述为未授权 claim，完全隐藏
-  后 Writer 又把未知 SKU 猜成电子产品并补造规格、性能与适用性。Reviewer／服务端均已
-  正确拒绝，唯一修复后仍失败，未进入 DeliveryCompiler 或版本保存。继续需要改变
-  “商品事实仅由服务端插入、Writer 不读取、Compiler 不新增语义”三者之一，已超出本轮
-  冻结架构。主控已用 ProductFactPacket／ImmutableFactBlock 裁决解除该商品职责阻断，
-  后续 WIP 也完成了 G2 与多张业务卡；但实现 `e213cc6…` 的最终 G4→G7 无持久化轮出现
-  人工假绿：同一发布配文的同一 `motive_or_mental_state` 问题在 G4 回答为空、在 G7
-  回答 `desire/emotion`，而明确含“家庭矛盾”的 clause 对
-  `relationship_claim` 仍回答为空。问题全集、quote、parser 与服务端覆盖均成立，故这
-  是当前单 Reviewer 在闭合、无歧义问题上的不稳定语义回答，不是可继续靠服务端小修、
-  fixture 或 Prompt 失败句补丁关闭的接缝。继续只能处置 Reviewer 能力或降低事实边界，
-  均超出本轮冻结授权；因此 UI-12 按真正停止线置为 `BLOCKED`，不创建 UI-13。`UI-11` 为
-  `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
+- 状态：`BLOCKED`。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13；此前
+  occurrence、开放 evidence、商品事实职责、Reviewer-only 模型、oracle drift、parser
+  与一次 repair 的失败及前向订正均完整保留。
+- `55cc9b0…` 已把高风险 `natural-guide/release-caption` 移交
+  DeliveryCompiler 确定性生成；`31fb7f4…` 已删除 Reviewer 自报 verdict/reason，
+  服务端只从 expression type 与完整 prohibited-binding proof 派生裁决。该轮 fresh G7
+  虽机器通过，人工全文仍发现新增人物动作、动机和结果，证明 Reviewer 对完整 binding ID
+  集合机械返回全部 `absent`。
+- WIP `775ac424233614a5adcc9aa424c679dee04be5c7` 进一步把每个 prohibited binding
+  变成 clause-local 的稳定闭合问题，不包含机器人、厨房、洗碗或其他失败句词表；定向
+  pytest、Ruff、mypy 与 mutation 直接消费者通过。新 SHA 的唯一 fresh G7 使用一次
+  Flash Writer 和一次 Pro Reviewer，无 repair，机器链仍通过。
+- 人工全文复核否决该机器结果：正文新增“石头剪刀布／猜拳收场”、输赢双方洗碗／念叨／
+  假装没听见等具体事件、动作、言语归属与结果；Pro Reviewer 对 5 个 writer clause 的
+  全部禁止绑定仍返回 `absent`、`uncertain` 为空。实际 prompt 已逐项携带
+  `actual_event_or_result` 等明确问题，tool call、ID、覆盖、quote/parser 与服务端派生
+  均无错位，因此这是当前唯一 Reviewer 对清楚许可证问题的真实语义假阴性，不是可继续用
+  parser、schema、fixture 或服务端小修关闭的接缝。
+- 继续只能更换／增加 Reviewer、增加运行时审查调用，或建立中文情境语义规则；前两项未
+  获授权，后一项会退化为题材／句型黑名单或第二套语义裁决器。因此 UI-12 命中真实停止线。
+- `UI-11` 为 `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
   未运行及未 push/CI/部署证据完整保留。
-- 当前 Git 基线：启动 `HEAD=13f7b667fe777bb3aa784618b86ed96cab4b4a59`，
-  `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，本地领先 15 个线性提交且
-  规范订正前工作树干净。UI-07—UI-11 历史禁止 reset、rebase、squash、删除或改写。
+- 当前 Git 基线：最新 WIP
+  `775ac424233614a5adcc9aa424c679dee04be5c7`，`origin/main` 仍为
+  `7aa87ab624cf3ff64f42e49f1755d66d496cac7a`；`docs/项目记忆.md` 的用户既有修改继续
+  受保护且未混入 UI-12 提交。UI-07—UI-12 历史禁止 reset、rebase、squash、删除或改写。
 - 生产启动复核：真实部署仓 `/opt/diyu-saas/repo` 与镜像均为
   `845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，镜像摘要
   `sha256:1171b153cbc709a760caf4a5db1fb14fe00e0bca3ef9c7b79c85f737a3a6bdb9`；
   应用数据库 `diyu_m5_4` 的 schema 为 `20260801_28`，容器内
   `127.0.0.1:18000/health/ready` 与生产主机公网 HTTPS 均为 `200`，
   `diyu-m5-4-backup.timer` 为 active。本执行环境直连公网超时未被误写为生产失败。
+- 最新 root-only 证据位于
+  `/var/lib/diyu-ui12-evidence/775ac424233614a5adcc9aa424c679dee04be5c7/fresh-g7/`，
+  目录／文件权限为 `0700/0600`。Writer raw SHA-256 为
+  `0ab763385c1c57362394b6160394de4ca42b27508389f7b1643bc3d61e0d35ab`，
+  Reviewer raw SHA-256 为
+  `3a49f9a14425825049ea9ce172822c3fadf119b12b4dcda5f42e1bf138cea1d4`，
+  artifact／summary SHA-256 分别为
+  `156bb72dadb16a58a41a4e8bb3dc12b7a1a921430c1c07be9612d924501b6cd1`、
+  `7e683329eaabc63002b198c45fab750da0bb29205e6e305c25db67c212e0ca2f`。
+  隔离容器、源码投影和临时凭据环境已删除，只保留正式 evidence。
+- 因 G7 未成立，冻结的其余卡片不升级为最终同 SHA 业务轮；Golden、完整前后端门、两份
+  候选审查、push、CI、备份和部署均未继续。生产应用、数据库与健康镜像从未切换。
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
 - 当前任务包：
   [`docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md`](docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)。
+- 当前唯一下一动作：主控只裁决 Reviewer 单角色能力边界——是否授权替换当前 Pro
+  Reviewer 或采用另一种有明确成本与安全边界的单一审查能力；不授权第二 Reviewer、
+  投票、fallback、随机重跑或事实边界放宽。
 - 承重裁决：[ADR-028](docs/架构决策/ADR-028-来源语态主体绑定与证据裁决矩阵.md)
   已由本次主控裁决置为 `ACCEPTED`。启动前已把 SDR-001—SDR-037 订正为 42 条无重复
   stable ID、单值 `unit_contract` 的 SDR-001—SDR-042，并通过 diff、唯一性、单合同与
