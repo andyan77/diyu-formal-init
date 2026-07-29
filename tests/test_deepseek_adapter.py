@@ -556,11 +556,6 @@ def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:
                 "unsupported_actuality_expansion",
                 "另一问题片段",
             ),
-            NarrativeIssue(
-                "unit:body-opening",
-                "unsupported_product_claim",
-                "商品问题片段",
-            ),
         ),
     )
 
@@ -572,7 +567,6 @@ def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:
     assert "这是本成品唯一修复" in prompt
     assert "只写一至两句纯状态、关系或价值判断" in prompt
     assert "用户事实中没有逐字出现的亲属、伴侣、同住、员工、顾客" in prompt
-    assert "已登记商品事实由服务端 frozen fact 单元逐字保留" in prompt
 
 
 def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
@@ -652,8 +646,9 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert violating_text not in prompt
     assert '"current_text"' not in prompt
     assert '"claim_refs": []' in prompt
-    assert "返回的 claim_refs 必须为空数组" in prompt
-    assert "不得把内部资料边界、审查规则" in prompt
+    assert "你看不到、也不需要复述、解释或推断这些事实" in prompt
+    assert "判断对象只能是\n泛指读者的选择过程" in prompt
+    assert "claim_refs 必须\n是空数组" in prompt
 
 
 def _kernel_observations(
@@ -1188,6 +1183,8 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert "statement_mode" in reviewer_prompt
     assert '"allowed_quotes"' in reviewer_prompt
     assert "不能通过省略整个问题表达 absent" in reviewer_prompt
+    assert "面向不特定受众的第二人称阅读邀请" in reviewer_prompt
+    assert "文章向不特定读者提供观看回报" in reviewer_prompt
     assert '"occurrence"' not in reviewer_prompt
     assert '"start"' not in reviewer_prompt
     assert '"end"' not in reviewer_prompt

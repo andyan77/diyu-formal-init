@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from typing import Any, cast
@@ -73,6 +74,7 @@ from src.shared.narrative import (
 from src.shared.review_evidence import (
     ClauseContextV2,
     ProtectedSubjectScopeV2,
+    UnitContractV2,
     build_clause_contexts_v2,
     clause_context_document,
     unit_contracts_v2,
@@ -1182,6 +1184,8 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 "判断 clause 自身主张实际指向，不只看语法主语：只有 clause 以第一人称、当前指代"
                 "或省略但可唯一回指冻结事件的主体，断言当前用户的关系、经历、心理或因果时才是"
                 " current_user；仅仅与冻结事实题材相同、用于其后的反思，不能据此绑定 current_user。"
+                "面向不特定受众的第二人称阅读邀请、选择建议或内容观看回报属于 generic；只有文字"
+                "断言当前用户已经具有某段具体关系、经历、心理或事件时才是 current_user。"
                 "明确泛称、一般条件或倾向且没有回指当前个案时属于 generic；两种读法都成立时必须"
                 " uncertain。只有当前账号／表达方自己承担主张时才属于 current_speaker；"
                 "“这篇内容／这个角度”作为被介绍的内容对象，不是 current_speaker。"
@@ -1193,6 +1197,7 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
             "actual_event": (
                 "是否声称动作、反应、事件或状态在现实中已经发生、正在发生或确实存在？"
                 "泛指观察、建议、明确条件推演和披露演绎中的动作不算 actuality，应 absent。"
+                "文章向不特定读者提供观看回报、理解路径或选择建议，也不是已经发生的现实事件。"
             ),
             "dialogue_attribution": ("是否出现直接对白、转述或作为例子给出的具体话语？"),
             "motive_or_mental_state": ("是否推断愿望、期待、害怕、需要、意图、信念、情绪或其他心理原因？"),
@@ -1328,22 +1333,20 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
             and issue.reason in product_issue_reasons
             for issue in issues
         )
+        if product_fact_repair:
+            return self._product_fact_repair_prompt(
+                kernel=kernel,
+                affected=affected,
+                trusted_contracts=trusted_contracts,
+            )
         units = [
             {
                 "unit_id": unit.unit_id,
                 "purpose": unit.purpose,
                 "unit_contract": trusted_contracts[unit.unit_id],
                 "allowed_observation_types": list(unit.allowed_observation_types),
-                "claim_refs": (
-                    []
-                    if product_fact_repair
-                    else list(unit.claim_refs)
-                ),
-                **(
-                    {}
-                    if product_fact_repair
-                    else {"current_text": unit.text}
-                ),
+                "claim_refs": list(unit.claim_refs),
+                "current_text": unit.text,
             }
             for unit in kernel.units
             if unit.unit_id in affected
@@ -1352,12 +1355,7 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
             {
                 "unit_id": issue.target_id,
                 "reason": issue.reason,
-                **(
-                    {}
-                    if product_fact_repair
-                    and issue.reason in product_issue_reasons
-                    else {"fragment": issue.fragment}
-                ),
+                "fragment": issue.fragment,
             }
             for issue in issues
             if issue.target_id in affected
@@ -1378,38 +1376,24 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 }
             ]
         }
-        topic_line = (
-            "商品事实越界修复时不再向 Writer 回放用户中的商品标识、违规原文或商品事实；"
-            "这些内容已经由服务端不可变事实块承载。"
-            if product_fact_repair
-            else "用户 topic："
-            + json.dumps(
-                request.creative_plan.topic_spans if request.creative_plan is not None else (),
-                ensure_ascii=False,
-            )
-        )
-        packet_line = (
-            "本次商品事实引用由服务端继续冻结；返回的 claim_refs 必须为空数组。"
-            if product_fact_repair
-            else "本次只读 ProductFactPacket 的 fact_id：\n"
-            + json.dumps(list(product_packet.fact_ids), ensure_ascii=False)
-        )
         claim_rule = (
-            "本次是商品事实越界修复，每个返回 unit 的 claim_refs 必须是空数组。"
-            if product_fact_repair
-            else (
-                "有 ProductFactPacket 时，每个返回 unit 必须保留 claim_refs 字段且只引用"
-                "上述 fact_id；claim_refs 只是审查线索，不构成商品事实许可。"
-                if product_contract
-                else "没有 ProductFactPacket 时不得返回 claim_refs。"
-            )
+            "有 ProductFactPacket 时，每个返回 unit 必须保留 claim_refs 字段且只引用"
+            "上述 fact_id；claim_refs 只是审查线索，不构成商品事实许可。"
+            if product_contract
+            else "没有 ProductFactPacket 时不得返回 claim_refs。"
         )
         return f"""只修复这一次列出的完整可写 unit。不得修改、返回或概括事实单元，不得改变
 CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit_id。
 
-{topic_line}
+用户 topic：{
+            json.dumps(
+                request.creative_plan.topic_spans if request.creative_plan is not None else (),
+                ensure_ascii=False,
+            )
+        }
 本次修改要求：{request.revision_instruction or "（首次生成）"}
-{packet_line}
+本次只读 ProductFactPacket 的 fact_id：
+{json.dumps(list(product_packet.fact_ids), ensure_ascii=False)}
 既有 fact_block_refs 已由服务端冻结，修复不得返回、增删、换序或替换。
 受影响 unit：{json.dumps(units, ensure_ascii=False)}
 当前问题：{json.dumps(findings, ensure_ascii=False)}
@@ -1443,6 +1427,51 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 不得原样返回、只换标点或把问题句移动到另一个 unit。只返回：
 {json.dumps(result_template, ensure_ascii=False)}
 {claim_rule}"""
+
+    @staticmethod
+    def _product_fact_repair_prompt(
+        *,
+        kernel: CreativeKernelV1,
+        affected: frozenset[str],
+        trusted_contracts: Mapping[str, UnitContractV2],
+    ) -> str:
+        units = [
+            {
+                "unit_id": unit.unit_id,
+                "purpose": unit.purpose,
+                "unit_contract": trusted_contracts[unit.unit_id],
+                "allowed_observation_types": list(
+                    unit.allowed_observation_types
+                ),
+            }
+            for unit in kernel.units
+            if unit.unit_id in affected
+        ]
+        template = {
+            "units": [
+                {
+                    "unit_id": unit["unit_id"],
+                    "text": "完整替换文字",
+                    "claim_refs": [],
+                }
+                for unit in units
+            ]
+        }
+        return f"""只重写服务端列出的受影响创意 unit。相关事实正文已经由服务端不可变单元
+独立插入；你看不到、也不需要复述、解释或推断这些事实。不要返回事实单元或事实块引用。
+
+受影响创意 unit：
+{json.dumps(units, ensure_ascii=False)}
+
+这是面向最终读者的创意表达层，不是资料说明或内部审查说明。每个 clause 的判断对象只能是
+泛指读者的选择过程、理解方法、信息解读原则或本篇的阅读价值；不得对底层对象、其设计、
+结构、属性、用途、效果、形成原因或现实体验作任何主张。title 写自然标题；natural_guide
+写清观看回报；body 写具有主线的抽象视角或清楚建议；release_caption 写可直接使用的收束。
+不得虚构人物、事件、对白、机构立场或第一人称经历。
+
+必须恰好覆盖列出的 unit_id，每个 unit 只能有 unit_id、text、claim_refs，claim_refs 必须
+是空数组。不得增加、遗漏、重复或改名。这是唯一修复，只返回：
+{json.dumps(template, ensure_ascii=False)}"""
 
     @staticmethod
     def _deidentified_writer_controls(request: GenerationInput) -> str:
