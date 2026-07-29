@@ -28,6 +28,7 @@ from src.shared.content_origin import aigc_disclosure
 from src.shared.creative_kernel import (
     CreativeKernelV1,
     build_kernel_skeleton,
+    creative_units_digest,
     kernel_digest,
     kernel_document,
     parse_writer_kernel,
@@ -48,7 +49,13 @@ from src.shared.delivery_compiler import (
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import (
     FrozenFactRecord,
+    ImmutableFactBlock,
+    ProductFactPacket,
     brand_fact_records,
+    build_product_fact_packet,
+    immutable_fact_blocks_document,
+    immutable_product_fact_blocks,
+    product_fact_packet_document,
     product_fact_records,
     registered_product_claims,
 )
@@ -203,6 +210,8 @@ class NarrativeSkeleton:
 @dataclass(frozen=True)
 class BoundaryContext:
     fact_registry: tuple[FrozenFactRecord, ...]
+    product_fact_packet: ProductFactPacket
+    product_fact_blocks: tuple[ImmutableFactBlock, ...]
     constraint_registry: tuple[tuple[str, str], ...]
     resource_registry: tuple[tuple[str, str], ...]
     actor_registry: tuple[tuple[str, str], ...]
@@ -244,6 +253,11 @@ class BoundaryContext:
             for record in product_fact_records(product)
             if record.fact_id in frame.allowed_product_fact_ids
         )
+        product_fact_packet = build_product_fact_packet(
+            request.products,
+            allowed_fact_ids=frame.allowed_product_fact_ids,
+        )
+        product_fact_blocks = immutable_product_fact_blocks(product_fact_packet)
         brand_records = tuple(
             record
             for record in brand_fact_records(request.brand.brand_reference_context)
@@ -353,6 +367,8 @@ class BoundaryContext:
         )
         return cls(
             fact_registry=fact_registry,
+            product_fact_packet=product_fact_packet,
+            product_fact_blocks=product_fact_blocks,
             constraint_registry=constraint_registry,
             resource_registry=resource_registry,
             actor_registry=(
@@ -540,6 +556,21 @@ class DeepSeekGenerator(ContentGenerator):
             kernel = parse_writer_kernel(
                 json.loads(self._json_content(str(writer_payload["choices"][0]["message"]["content"]))),
                 skeleton,
+                fact_blocks=context.product_fact_blocks,
+                allowed_claim_ids=context.product_fact_packet.fact_ids,
+                required_fact_block_ids=(
+                    self._prior_fact_block_ids(
+                        request.prior_creative_kernel,
+                        context.product_fact_blocks,
+                    )
+                    if request.prior_creative_kernel is not None
+                    else None
+                ),
+            )
+            self._validate_product_fact_selection(
+                request,
+                context,
+                kernel,
             )
         except (
             KeyError,
@@ -581,6 +612,7 @@ class DeepSeekGenerator(ContentGenerator):
                     kernel=kernel,
                     affected_unit_ids=affected,
                     raw=json.loads(self._json_content(str(repair_payload["choices"][0]["message"]["content"]))),
+                    allowed_claim_ids=context.product_fact_packet.fact_ids,
                 )
             except (
                 KeyError,
@@ -609,6 +641,7 @@ class DeepSeekGenerator(ContentGenerator):
             if before == after:
                 raise GenerationFailed("本次修改没有实质改变允许修改的创作单元")
         reviewed_kernel_digest = kernel_digest(kernel)
+        reviewed_creative_digest = creative_units_digest(kernel)
         clause_contexts = self._kernel_clause_contexts(
             request,
             context,
@@ -621,6 +654,7 @@ class DeepSeekGenerator(ContentGenerator):
                 products=request.products,
                 production_conditions=request.brand.production_conditions,
                 allowed_resource_ids=context.resource_ids,
+                immutable_fact_blocks=context.product_fact_blocks,
             ),
             kernel,
         )
@@ -631,6 +665,7 @@ class DeepSeekGenerator(ContentGenerator):
                 products=request.products,
                 production_conditions=request.brand.production_conditions,
                 allowed_resource_ids=context.resource_ids,
+                immutable_fact_blocks=context.product_fact_blocks,
             ),
             kernel,
             compiled,
@@ -656,6 +691,28 @@ class DeepSeekGenerator(ContentGenerator):
                 "closed_review_contract": "closed-review-questions-v1",
                 "claim_inventory_v1": claim_inventory_document(claim_inventory),
                 "reviewed_kernel_digest": reviewed_kernel_digest,
+                "reviewed_creative_digest": reviewed_creative_digest,
+                "product_fact_packet": product_fact_packet_document(context.product_fact_packet),
+                "immutable_product_fact_blocks": (
+                    immutable_fact_blocks_document(
+                        tuple(
+                            block
+                            for block_id in kernel.selected_fact_block_ids
+                            for block in context.product_fact_blocks
+                            if block.fact_block_id == block_id
+                        )
+                    )
+                ),
+                "used_product_fact_ids": [
+                    block.fact_id
+                    for block_id in kernel.selected_fact_block_ids
+                    for block in context.product_fact_blocks
+                    if block.fact_block_id == block_id
+                ],
+                "used_product_fact_block_ids": list(kernel.selected_fact_block_ids),
+                "product_fact_renderer_version": (
+                    context.product_fact_blocks[0].renderer_version if context.product_fact_blocks else None
+                ),
                 "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
                 "delivery_resource_refs": list(compiled.resource_refs),
             },
@@ -802,7 +859,10 @@ class DeepSeekGenerator(ContentGenerator):
         writer_contexts = writer_clause_contexts_v2(clause_contexts)
         if not writer_contexts:
             raise GenerationFailed("CreativeKernelV1 缺少可审查的 Writer clause")
-        questions = build_closed_review_questions(clause_contexts)
+        questions = build_closed_review_questions(
+            clause_contexts,
+            product_fact_packet=context.product_fact_packet,
+        )
         payloads: list[dict[str, Any]] = []
         all_answers: list[ClosedReviewAnswer] = []
         retries = 0
@@ -871,6 +931,7 @@ class DeepSeekGenerator(ContentGenerator):
             ),
             fact_text_by_id=context.fact_text_by_id,
             protected_subjects=protected_subjects,
+            product_fact_packet=context.product_fact_packet,
         )
         return (
             result.issues,
@@ -926,6 +987,53 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("CreativeKernel 缺陷不属于可写单元")
         return affected
 
+    @staticmethod
+    def _prior_fact_block_ids(
+        prior_kernel: CreativeKernelV1,
+        fact_blocks: tuple[ImmutableFactBlock, ...],
+    ) -> tuple[str, ...]:
+        available = {block.fact_id: block.fact_block_id for block in fact_blocks}
+        inferred = tuple(
+            available[unit.fact_refs[0]]
+            for unit in prior_kernel.units
+            if unit.purpose == "frozen_fact" and len(unit.fact_refs) == 1 and unit.fact_refs[0] in available
+        )
+        selected = prior_kernel.selected_fact_block_ids or inferred
+        if any(block_id not in {block.fact_block_id for block in fact_blocks} for block_id in selected):
+            raise GenerationFailed("历史商品事实块无法在当前 Packet 重放")
+        return selected
+
+    @staticmethod
+    def _validate_product_fact_selection(
+        request: GenerationInput,
+        context: BoundaryContext,
+        kernel: CreativeKernelV1,
+    ) -> None:
+        packet = context.product_fact_packet
+        if not packet.facts:
+            if kernel.selected_fact_block_ids:
+                raise ValueError("non-product kernel selected product facts")
+            return
+        block_by_id = {block.fact_block_id: block for block in context.product_fact_blocks}
+        selected_fact_ids = {block_by_id[block_id].fact_id for block_id in kernel.selected_fact_block_ids}
+        display_name_ids = {item.fact_id for item in packet.facts if item.fact_key == "display_name"}
+        if (
+            request.primary_product in {"product_truth", "visual_styling_story"}
+            and display_name_ids
+            and not selected_fact_ids & display_name_ids
+        ):
+            raise ValueError("product content omitted identity fact block")
+        substantive_ids = {item.fact_id for item in packet.facts if item.fact_key not in {"sku", "display_name"}}
+        if (
+            request.primary_product in {"product_truth", "visual_styling_story"}
+            and substantive_ids
+            and not selected_fact_ids & substantive_ids
+        ):
+            raise ValueError("product content omitted substantive fact block")
+        for unit in kernel.writable_units:
+            if any(item.canonical_text in unit.text for item in packet.facts):
+                raise ValueError("writer repeated an immutable product fact")
+
     def _kernel_writer_prompt(
         self,
         request: GenerationInput,
@@ -954,6 +1062,12 @@ class DeepSeekGenerator(ContentGenerator):
                 )
             )
         ]
+        product_fact_packet = build_product_fact_packet(
+            request.products,
+            allowed_fact_ids=(request.narrative_frame.allowed_product_fact_ids),
+        )
+        packet_document = product_fact_packet_document(product_fact_packet)
+        fact_blocks = immutable_product_fact_blocks(product_fact_packet)
         trusted_contracts = unit_contracts_v2(
             skeleton,
             request.narrative_frame,
@@ -965,23 +1079,28 @@ class DeepSeekGenerator(ContentGenerator):
                 "unit_contract": trusted_contracts[unit.unit_id],
                 "allowed_observation_types": list(unit.allowed_observation_types),
                 "visible_order": unit.visible_order,
+                "claim_refs": list(unit.claim_refs),
             }
             for unit in skeleton.writable_units
         ]
-        template = {
+        template: dict[str, object] = {
             "units": [
                 {
                     "unit_id": unit.unit_id,
                     "text": f"填写 {unit.purpose} 的完整可见文字",
+                    **({"claim_refs": []} if fact_blocks else {}),
                 }
                 for unit in skeleton.writable_units
             ]
         }
+        if fact_blocks:
+            template["fact_block_refs"] = [block.fact_block_id for block in fact_blocks[:3]]
         prior = (
             [
                 {
                     "unit_id": unit.unit_id,
                     "text": unit.text,
+                    "claim_refs": list(unit.claim_refs),
                 }
                 for unit in request.prior_creative_kernel.writable_units
             ]
@@ -996,6 +1115,10 @@ scene、actor、resource、action、sound、production_note、发布结构或语
 {json.dumps(request.creative_plan.topic_spans, ensure_ascii=False)}
 服务端逐字事实单元（只读；不要在输出中返回、改写、概括或扩展）：
 {json.dumps(fact_units, ensure_ascii=False)}
+本次只读 ProductFactPacket（决定“知道什么”；不能把来源、约束或资源当事实）：
+{json.dumps(packet_document, ensure_ascii=False)}
+服务端 ImmutableFactBlock 候选（只能引用 fact_block_id；正文由服务端原样插入）：
+{json.dumps(immutable_fact_blocks_document(fact_blocks), ensure_ascii=False)}
 本篇受众价值：{_PRODUCT_VALUE[request.primary_product]}
 平台与形式：{request.target} / {request.media_format}
 去标识化表达控制：{controls}
@@ -1009,8 +1132,16 @@ scene、actor、resource、action、sound、production_note、发布结构或语
 只返回：
 {json.dumps(template, ensure_ascii=False)}
 
-根对象只能有 units；每个 unit 只能有 unit_id、text。必须恰好一次覆盖全部既定可写 unit_id，
-不得增加、遗漏、重复或修改 id，不得输出任何制作字段、来源、事实、约束、类型或内部规则。
+没有 ProductFactPacket 时，根对象只能有 units，每个 unit 只能有 unit_id、text。有商品
+Packet 时，根对象必须恰好有 fact_block_refs、units；每个 unit 必须恰好有
+unit_id、text、claim_refs。必须恰好一次覆盖全部既定可写 unit_id，不得增加、遗漏、重复
+或修改 id，不得输出任何制作字段、来源、事实正文、约束、类型或内部规则。
+fact_block_refs 只能选择服务端候选 ID 并用数组顺序表达最终事实块顺序；首次商品内容至少
+选择商品名称身份块和一个与本篇切口直接相关的事实块。修改既有内容时必须原样返回此前已选
+fact_block_refs，不能增删、换序或更换事实。claim_refs 只是审查线索，只能引用本次
+Packet 的 fact_id，用于说明该 creative unit 的创作切口参考了哪些事实；不能把硬属性、数字或 canonical_text
+写进 creative text，也不能从结构事实推断性能、功效、用途、价格、库存、设计动机、比较
+结论、普遍穿着结果或实际体验。商品硬事实正文由服务端按 fact_block_refs 原样插入。
 title 是自然标题；natural_guide 给出清楚主线和观看回报；按可见顺序排列的一个或多个 body
 单元共同组成完整核心正文；release_caption 是可直接使用的发布配文收束，不能只是提纲。
 unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一合同；每个以句号、
@@ -1085,6 +1216,22 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 "这条 writer 文字是否逃逸或抵触服务端给定的 hypothesis/dramatization 范围，"
                 "或在需要披露时转而声称现实？只有存在冲突才 present；无冲突 absent。"
             ),
+            "product_attribute_claim": (
+                "这条 creative clause 是否重新陈述、改写或新增商品名称、品类、材质、结构、"
+                "轮廓、颜色、可观察特征、重量、数字或其他硬属性？商品硬事实即使正确也只能"
+                "由服务端 ImmutableFactBlock 承载；creative clause 出现即 present。"
+            ),
+            "product_performance_or_efficacy": (
+                "是否新增商品性能、功效、耐用性、兼容性、保护性、舒适性或其他能力结论？"
+            ),
+            "product_use_or_wear_result": ("是否声称商品会产生具体使用、穿着、上身、显瘦、保暖、场景适用或普遍结果？"),
+            "product_design_motive": ("是否推断商品为什么这样设计、设计者意图或结构形成原因？"),
+            "product_price_or_inventory": ("是否新增或暗示商品价格、折扣、库存、稀缺性、在售状态或供应情况？"),
+            "product_comparison_conclusion": ("是否给出商品优于、替代、等同、性价比更高或基于对照数据得出的比较结论？"),
+            "product_actual_experience": ("是否冒充用户、顾客、员工或当前表达方已经使用、穿着、购买或验证过该商品？"),
+            "source_or_resource_as_fact": (
+                "是否把资料来源、品牌表达约束、拍摄样衣、制作资源或参考材料本身当成商品事实许可证？"
+            ),
         }
         grouped: list[dict[str, object]] = []
         clause_ids = tuple(dict.fromkeys(question.clause_id for question in questions))
@@ -1146,7 +1293,7 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 - server_scope 只说明服务端已有的可见范围，不是让你决定许可；disclosure 题只报告 writer
   clause 是否与该范围冲突。
 - quote 地址由服务端计算；不要返回 start、end、occurrence 或任何数字地址。
-- 同一 clause 的十个问题彼此独立。即使某个表达看起来合法，也必须如实回答关系、对白、
+- 同一 clause 的全部问题彼此独立。即使某个表达看起来合法，也必须如实回答关系、对白、
   动机、因果等问题；合法性由服务端组合判断。
 - 每个 clause 只按自身文字、明确的服务端 scope 和必要的冻结事实回指判断，不得因为同批
   其他 clause 的写法改变其主体或语态答案；题材相似不是现实主体绑定。
@@ -1177,6 +1324,7 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 "purpose": unit.purpose,
                 "unit_contract": trusted_contracts[unit.unit_id],
                 "allowed_observation_types": list(unit.allowed_observation_types),
+                "claim_refs": list(unit.claim_refs),
                 "current_text": unit.text,
             }
             for unit in kernel.units
@@ -1191,6 +1339,22 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
             for issue in issues
             if issue.target_id in affected
         ]
+        product_contract = bool(request.products)
+        product_packet = build_product_fact_packet(
+            request.products,
+            allowed_fact_ids=(
+                request.narrative_frame.allowed_product_fact_ids if request.narrative_frame is not None else None
+            ),
+        )
+        result_template: dict[str, object] = {
+            "units": [
+                {
+                    "unit_id": "只使用列出的既定 id",
+                    "text": "完整替换文字",
+                    **({"claim_refs": ["只引用本次 Packet 的 fact_id"]} if product_contract else {}),
+                }
+            ]
+        }
         return f"""只修复这一次列出的完整可写 unit。不得修改、返回或概括事实单元，不得改变
 CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit_id。
 
@@ -1201,6 +1365,9 @@ CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit
             )
         }
 本次修改要求：{request.revision_instruction or "（首次生成）"}
+本次只读 ProductFactPacket 的 fact_id：
+{json.dumps(list(product_packet.fact_ids), ensure_ascii=False)}
+既有 fact_block_refs 已由服务端冻结，修复不得返回、增删、换序或替换。
 受影响 unit：{json.dumps(units, ensure_ascii=False)}
 当前问题：{json.dumps(findings, ensure_ascii=False)}
 
@@ -1215,9 +1382,11 @@ CreativePlanV2、NarrativeFrame、资源集合、compiler version 或任何 unit
 - unsupported_actuality_binding：删除 Writer unit 中复制、概括或改写的现实事实，现实原文
   已由服务端 frozen fact 单元独立保留；
 - unsupported_institutional_assertion：删除当前机构或第一人称复数承担的观点、做法与经历；
-- unsupported_product_claim：删除 Writer unit 对商品名称、编号、属性、数字、对照、性能或
-  资料边界的复述、概括和改写；已登记商品事实由服务端 frozen fact 单元逐字保留。只改写为
-  不承载商品事实的观看引导或抽象表达；
+- unsupported_product_claim / product_fact_must_use_immutable_block /
+  unsupported_product_inference：删除 Writer unit 对商品名称、编号、硬属性、数字、性能、
+  功效、用途、穿着结果、价格、库存、比较、设计动机或实际体验的复述、概括、推断和改写；
+  已登记商品事实由服务端 frozen fact 单元逐字保留，并由 ImmutableFactBlock 原样插入。
+  只改写为不承载商品硬事实的观看引导、选择边界或抽象表达；
 - unsupported_actuality_binding 出现在 hypothesis/dramatization 时，改为不绑定现实身份的
   泛指虚构角色。
 这是本成品唯一修复。若受影响 unit 的冻结 contract 是 abstract_observation，或
@@ -1227,7 +1396,9 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 不得在任何受影响 unit 中新增；泛称也不得被用来暗示具体身份或共同家庭。
 每个返回 unit 的文字都必须与 current_text 实质不同，并同时消除该 unit 的全部 findings；
 不得原样返回、只换标点或把问题句移动到另一个 unit。只返回：
-{{"units":[{{"unit_id":"只使用列出的既定 id","text":"完整替换文字"}}]}}"""
+{json.dumps(result_template, ensure_ascii=False)}
+有 ProductFactPacket 时，每个返回 unit 必须保留 claim_refs 字段且只引用上述 fact_id；
+claim_refs 只是审查线索，不构成商品事实许可。没有 ProductFactPacket 时不得返回 claim_refs。"""
 
     @staticmethod
     def _deidentified_writer_controls(request: GenerationInput) -> str:

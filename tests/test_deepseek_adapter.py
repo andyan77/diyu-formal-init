@@ -497,7 +497,7 @@ def test_kernel_writer_prompt_exposes_current_trusted_contracts() -> None:
     assert "不能复制、概括或扩写人物、动作、对白、动机、原因、结果" in prompt
 
 
-def test_kernel_writer_prompt_hides_server_owned_product_facts() -> None:
+def test_kernel_writer_prompt_exposes_read_only_product_packet_but_not_fact_authorship() -> None:
     product = ProductFact(
         sku="ZX-C218",
         display_name="双面短外套",
@@ -506,9 +506,7 @@ def test_kernel_writer_prompt_hides_server_owned_product_facts() -> None:
             "sample_weight_m_grams": 620,
         },
     )
-    fact_ids = tuple(
-        record.fact_id for record in product_fact_records(product)
-    )
+    fact_ids = tuple(record.fact_id for record in product_fact_records(product))
     frame = new_frame("general_observation", (), fact_ids)
     request = replace(
         _kernel_request(frame),
@@ -518,7 +516,7 @@ def test_kernel_writer_prompt_hides_server_owned_product_facts() -> None:
     skeleton = build_kernel_skeleton(
         frame=frame,
         fact_registry=context.fact_registry,
-        constraint_refs=context.constraint_ids,
+        constraint_refs=tuple(context.constraint_ids),
         program_id=select_kernel_program(
             frame=frame,
             prior_kernel=None,
@@ -527,12 +525,15 @@ def test_kernel_writer_prompt_hides_server_owned_product_facts() -> None:
 
     prompt = _generator()._kernel_writer_prompt(request, skeleton)
 
-    assert "双面短外套已登记的材质是棉混纺。" not in prompt
-    assert "双面短外套已登记的M 码当前样衣重量是 620 克。" not in prompt
+    assert "双面短外套已登记的材质是棉混纺。" in prompt
+    assert "双面短外套已登记的M 码当前样衣重量是 620 克。" in prompt
+    assert "ProductFactPacket" in prompt
+    assert "ImmutableFactBlock" in prompt
+    assert "只能引用 fact_block_id；正文由服务端原样插入" in prompt
+    assert "claim_refs 只是审查线索" in prompt
+    assert "不能把硬属性、数字或 canonical_text" in prompt
     assert any(
-        unit.purpose == "frozen_fact"
-        and unit.text == "双面短外套已登记的材质是棉混纺。"
-        for unit in skeleton.units
+        unit.purpose == "frozen_fact" and unit.text == "双面短外套已登记的材质是棉混纺。" for unit in skeleton.units
     )
 
 

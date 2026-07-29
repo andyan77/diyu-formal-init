@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.ports.content_generator import ContentGenerator
 from src.shared.creative_kernel import (
     build_kernel_skeleton,
+    creative_units_digest,
     kernel_digest,
     kernel_document,
     parse_writer_kernel,
@@ -18,7 +19,14 @@ from src.shared.delivery_compiler import (
     DeliveryCompileInput,
     compile_delivery,
 )
-from src.shared.factual_basis import FrozenFactRecord, product_fact_records
+from src.shared.factual_basis import (
+    FrozenFactRecord,
+    build_product_fact_packet,
+    immutable_fact_blocks_document,
+    immutable_product_fact_blocks,
+    product_fact_packet_document,
+    product_fact_records,
+)
 from src.shared.narrative import legacy_frame, visible_digest
 from src.shared.review_evidence import REVIEW_EVIDENCE_V2_VERSION
 from src.shared.types import (
@@ -100,26 +108,13 @@ class DeterministicContentGenerator(ContentGenerator):
             "ready",
             f"好，我按当前选择的{request.brand.platform}{request.brand.media_format}整理。",
             user_premises=(text,),
-            narrative_mode=request.explicit_narrative_mode
-            or "general_observation",
+            narrative_mode=request.explicit_narrative_mode or "general_observation",
             creative_plan=build_creative_plan(
                 topic_spans=(text,),
                 primary_value=product,
-                tone_ids=(
-                    request.allowed_tone_ids
-                    or (ACCOUNT_BASELINE_TONE_ID,)
-                ),
-                mechanism_id=(
-                    request.allowed_mechanism_ids[0]
-                    if request.allowed_mechanism_ids
-                    else None
-                ),
-                target_shape=(
-                    request.platform_shape
-                    or platform_shape(
-                        request.target, request.brand.media_format
-                    )
-                ),
+                tone_ids=(request.allowed_tone_ids or (ACCOUNT_BASELINE_TONE_ID,)),
+                mechanism_id=(request.allowed_mechanism_ids[0] if request.allowed_mechanism_ids else None),
+                target_shape=(request.platform_shape or platform_shape(request.target, request.brand.media_format)),
             ),
             primary_product=product,
             creation_proposal=True,
@@ -136,11 +131,7 @@ class DeterministicContentGenerator(ContentGenerator):
         request: GenerationInput,
     ) -> GeneratedArtifact:
         frame = request.narrative_frame or legacy_frame(
-            tuple(
-                record.fact_id
-                for product in request.products
-                for record in product_fact_records(product)
-            )
+            tuple(record.fact_id for product in request.products for record in product_fact_records(product))
         )
         facts = (
             *(
@@ -171,35 +162,54 @@ class DeterministicContentGenerator(ContentGenerator):
         if request.revision_instruction:
             spoken += "\n\n这次按你的修改要求改变了允许调整的表达。"
         release_caption = subtitles + _control_sections(request)
+        product_packet = build_product_fact_packet(
+            request.products,
+            allowed_fact_ids=frame.allowed_product_fact_ids,
+        )
+        fact_blocks = immutable_product_fact_blocks(product_packet)
         text_by_id = {
             "unit:title": _outline(request.primary_product),
             "unit:natural-guide": guide,
             "unit:body": spoken,
             "unit:body-opening": spoken,
-            "unit:hypothetical-example": (
-                "一方先停一下，另一方也不必马上给出答案。"
-            ),
+            "unit:hypothetical-example": ("一方先停一下，另一方也不必马上给出答案。"),
             "unit:body-closing": "理解可以靠近，边界也仍然成立。",
             "unit:release-caption": release_caption,
         }
-        raw = {
+        raw: dict[str, object] = {
             "units": [
                 {
                     "unit_id": unit.unit_id,
                     "text": text_by_id[unit.unit_id],
+                    **({"claim_refs": []} if fact_blocks else {}),
                 }
                 for unit in skeleton.writable_units
             ]
         }
-        kernel = parse_writer_kernel(raw, skeleton)
+        if fact_blocks:
+            raw["fact_block_refs"] = [block.fact_block_id for block in fact_blocks]
+        required_fact_block_ids: tuple[str, ...] | None = None
+        if request.prior_creative_kernel is not None:
+            required_fact_block_ids = request.prior_creative_kernel.selected_fact_block_ids or tuple(
+                block.fact_block_id
+                for block in fact_blocks
+                if any(
+                    unit.purpose == "frozen_fact" and unit.fact_refs == (block.fact_id,)
+                    for unit in request.prior_creative_kernel.units
+                )
+            )
+        kernel = parse_writer_kernel(
+            raw,
+            skeleton,
+            fact_blocks=fact_blocks,
+            allowed_claim_ids=product_packet.fact_ids,
+            required_fact_block_ids=required_fact_block_ids,
+        )
         allowed_resources = frozenset(
             {
                 "resource:original_composition",
                 "resource:creator_expression",
-                *(
-                    f"resource:product:{product.sku}"
-                    for product in request.products
-                ),
+                *(f"resource:product:{product.sku}" for product in request.products),
             }
         )
         compiled = compile_delivery(
@@ -209,8 +219,15 @@ class DeterministicContentGenerator(ContentGenerator):
                 products=request.products,
                 production_conditions=request.brand.production_conditions,
                 allowed_resource_ids=allowed_resources,
+                immutable_fact_blocks=fact_blocks,
             ),
             kernel,
+        )
+        selected_blocks = tuple(
+            block
+            for block_id in kernel.selected_fact_block_ids
+            for block in fact_blocks
+            if block.fact_block_id == block_id
         )
         return GeneratedArtifact(
             outline=compiled.outline,
@@ -228,10 +245,13 @@ class DeterministicContentGenerator(ContentGenerator):
                 "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
                 "review_evidence_version": REVIEW_EVIDENCE_V2_VERSION,
                 "reviewed_kernel_digest": kernel_digest(kernel),
-                "visible_provenance": {
-                    field: list(sources)
-                    for field, sources in compiled.visible_provenance.items()
-                },
+                "reviewed_creative_digest": creative_units_digest(kernel),
+                "product_fact_packet": product_fact_packet_document(product_packet),
+                "immutable_product_fact_blocks": (immutable_fact_blocks_document(selected_blocks)),
+                "used_product_fact_ids": [block.fact_id for block in selected_blocks],
+                "used_product_fact_block_ids": list(kernel.selected_fact_block_ids),
+                "product_fact_renderer_version": (fact_blocks[0].renderer_version if fact_blocks else None),
+                "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
                 "delivery_resource_refs": list(compiled.resource_refs),
             },
         )

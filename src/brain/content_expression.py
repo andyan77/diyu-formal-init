@@ -10,6 +10,10 @@ from src.brain.creation_intent_gate import CreationCommitment, commitment_docume
 from src.shared.creative_plan import CreativePlanV2, creative_plan_document
 from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
 from src.shared.errors import DomainError
+from src.shared.factual_basis import (
+    build_product_fact_packet,
+    product_fact_packet_document,
+)
 from src.shared.narrative import NarrativeFrame, frame_document
 from src.shared.types import (
     ContentControlContext,
@@ -461,6 +465,10 @@ def snapshot_document(
     snapshot lives in a tenant-scoped row.
     """
     direction = control.direction
+    product_fact_packet = build_product_fact_packet(
+        products,
+        allowed_fact_ids=(narrative_frame.allowed_product_fact_ids if narrative_frame is not None else None),
+    )
     return {
         "schema": SNAPSHOT_SCHEMA,
         "catalog_version": control.catalog_version,
@@ -511,21 +519,9 @@ def snapshot_document(
         "business_data_kind": business_data_kind,
         "brand_reference_context": list(brand_reference_context),
         "user_premise": user_premise,
-        "creative_plan_v2": (
-            creative_plan_document(creative_plan)
-            if creative_plan is not None
-            else None
-        ),
-        "creation_commitment": (
-            commitment_document(creation_commitment)
-            if creation_commitment is not None
-            else None
-        ),
-        "narrative_frame": (
-            frame_document(narrative_frame)
-            if narrative_frame is not None
-            else None
-        ),
+        "creative_plan_v2": (creative_plan_document(creative_plan) if creative_plan is not None else None),
+        "creation_commitment": (commitment_document(creation_commitment) if creation_commitment is not None else None),
+        "narrative_frame": (frame_document(narrative_frame) if narrative_frame is not None else None),
         "creative_kernel_v1": None,
         "delivery_compiler_version": delivery_compiler_version,
         "reviewed_kernel_digest": None,
@@ -562,6 +558,12 @@ def snapshot_document(
             }
             for item in products
         ],
+        "product_fact_packet": product_fact_packet_document(product_fact_packet),
+        "immutable_product_fact_blocks": None,
+        "used_product_fact_ids": None,
+        "used_product_fact_block_ids": None,
+        "product_fact_renderer_version": None,
+        "reviewed_creative_digest": None,
         "series_context": (
             {
                 "series_id": str(series_context.series_id),

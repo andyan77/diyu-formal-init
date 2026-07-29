@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeAlias, cast
 
+from src.shared.factual_basis import ProductFactPacket
 from src.shared.narrative import NarrativeIssue
 from src.shared.review_evidence import (
     ClauseContextV2,
@@ -28,6 +29,14 @@ ReviewDimension: TypeAlias = Literal[
     "institutional_or_product_claim",
     "statement_mode",
     "disclosure",
+    "product_attribute_claim",
+    "product_performance_or_efficacy",
+    "product_use_or_wear_result",
+    "product_design_motive",
+    "product_price_or_inventory",
+    "product_comparison_conclusion",
+    "product_actual_experience",
+    "source_or_resource_as_fact",
 ]
 StatementMode: TypeAlias = Literal[
     "actuality",
@@ -48,6 +57,16 @@ CLOSED_REVIEW_DIMENSIONS: tuple[ReviewDimension, ...] = (
     "institutional_or_product_claim",
     "statement_mode",
     "disclosure",
+)
+PRODUCT_REVIEW_DIMENSIONS: tuple[ReviewDimension, ...] = (
+    "product_attribute_claim",
+    "product_performance_or_efficacy",
+    "product_use_or_wear_result",
+    "product_design_motive",
+    "product_price_or_inventory",
+    "product_comparison_conclusion",
+    "product_actual_experience",
+    "source_or_resource_as_fact",
 )
 
 _ANSWER_STATUSES = frozenset({"present", "absent", "uncertain"})
@@ -119,6 +138,26 @@ _ALLOWED_OPERANDS: dict[ReviewDimension, tuple[str, ...]] = {
         "hypothesis_scope_conflict",
         "dramatization_scope_conflict",
     ),
+    "product_attribute_claim": (
+        "hard_attribute",
+        "numeric_attribute",
+    ),
+    "product_performance_or_efficacy": (
+        "performance",
+        "efficacy",
+    ),
+    "product_use_or_wear_result": (
+        "use_result",
+        "wear_result",
+    ),
+    "product_design_motive": ("design_motive",),
+    "product_price_or_inventory": ("price", "inventory"),
+    "product_comparison_conclusion": ("comparison_conclusion",),
+    "product_actual_experience": ("actual_experience",),
+    "source_or_resource_as_fact": (
+        "source_as_fact",
+        "resource_as_fact",
+    ),
 }
 
 
@@ -167,11 +206,18 @@ class ClosedReviewResult:
 
 def build_closed_review_questions(
     contexts: Sequence[ClauseContextV2],
+    *,
+    product_fact_packet: ProductFactPacket | None = None,
 ) -> tuple[ClosedReviewQuestion, ...]:
+    dimensions = (
+        (*CLOSED_REVIEW_DIMENSIONS, *PRODUCT_REVIEW_DIMENSIONS)
+        if product_fact_packet is not None and product_fact_packet.facts
+        else CLOSED_REVIEW_DIMENSIONS
+    )
     questions: list[ClosedReviewQuestion] = []
     for context in writer_clause_contexts_v2(contexts):
         quotes = _unique_quote_candidates(context.exact_text)
-        for dimension in CLOSED_REVIEW_DIMENSIONS:
+        for dimension in dimensions:
             questions.append(
                 ClosedReviewQuestion(
                     question_id=(f"{context.clause_id}:risk:{dimension}"),
@@ -329,6 +375,7 @@ def reconcile_closed_review_answers(
     answers: ClosedReviewAnswers,
     fact_text_by_id: Mapping[str, str],
     protected_subjects: ProtectedSubjectScopeV2,
+    product_fact_packet: ProductFactPacket | None = None,
 ) -> ClosedReviewResult:
     source_issues = validate_server_owned_contexts_v2(
         contexts=contexts,
@@ -336,7 +383,10 @@ def reconcile_closed_review_answers(
     )
     if source_issues:
         return ClosedReviewResult(source_issues, ())
-    expected_questions = build_closed_review_questions(contexts)
+    expected_questions = build_closed_review_questions(
+        contexts,
+        product_fact_packet=product_fact_packet,
+    )
     if tuple(questions) != expected_questions:
         return ClosedReviewResult(
             (
@@ -402,7 +452,11 @@ def reconcile_closed_review_answers(
     )
     if inventory_issues:
         return ClosedReviewResult(inventory_issues, ())
-    issues = _claim_inventory_issues(contexts, claims)
+    issues = _claim_inventory_issues(
+        contexts,
+        claims,
+        product_fact_packet,
+    )
     return ClosedReviewResult(tuple(dict.fromkeys(issues)), claims)
 
 
@@ -425,7 +479,8 @@ def materialize_claim_inventory(
     claims: list[ClaimInventoryItem] = []
     for clause_id, dimensions in answers_by_clause.items():
         context = contexts_by_clause.get(clause_id)
-        if context is None or set(dimensions) != set(CLOSED_REVIEW_DIMENSIONS):
+        expected_dimensions = {question.dimension for question in questions if question.clause_id == clause_id}
+        if context is None or set(dimensions) != expected_dimensions:
             raise ValueError("claim inventory clause coverage drifted")
         mode_answer = dimensions["statement_mode"]
         if mode_answer.status != "present" or len(mode_answer.operands) != 1:
@@ -438,7 +493,7 @@ def materialize_claim_inventory(
             context,
             protected_subjects,
         )
-        for dimension in CLOSED_REVIEW_DIMENSIONS:
+        for dimension in tuple(question.dimension for question in questions if question.clause_id == clause_id):
             answer = dimensions[dimension]
             if answer.status != "present":
                 continue
@@ -521,6 +576,7 @@ def validate_claim_inventory(
 def _claim_inventory_issues(
     contexts: Sequence[ClauseContextV2],
     claims: Sequence[ClaimInventoryItem],
+    product_fact_packet: ProductFactPacket | None,
 ) -> list[NarrativeIssue]:
     claims_by_clause: dict[str, dict[ReviewDimension, ClaimInventoryItem]] = {}
     for claim in claims:
@@ -541,6 +597,34 @@ def _claim_inventory_issues(
         mode = mode_claim.statement_mode
         binding = mode_claim.subject_binding
         dimensions = frozenset(clause_claims)
+        packet_fact_ids = product_fact_packet.fact_ids if product_fact_packet is not None else frozenset()
+        if any(ref not in packet_fact_ids for ref in context.claim_refs):
+            issues.append(
+                NarrativeIssue(
+                    context.unit_id,
+                    "unsupported_product_claim",
+                    context.exact_text,
+                )
+            )
+            continue
+        product_risk = next(
+            (dimension for dimension in PRODUCT_REVIEW_DIMENSIONS if dimension in dimensions),
+            None,
+        )
+        if product_risk is not None:
+            reason = (
+                "product_fact_must_use_immutable_block"
+                if product_risk == "product_attribute_claim"
+                else "unsupported_product_inference"
+            )
+            issues.append(
+                NarrativeIssue(
+                    context.unit_id,
+                    reason,
+                    clause_claims[product_risk].exact_quote,
+                )
+            )
+            continue
         if "disclosure" in dimensions:
             issues.append(
                 NarrativeIssue(
@@ -557,12 +641,7 @@ def _claim_inventory_issues(
             }
             reason = (
                 "unsupported_product_claim"
-                if set(
-                    clause_claims[
-                        "institutional_or_product_claim"
-                    ].operands
-                )
-                & product_operands
+                if set(clause_claims["institutional_or_product_claim"].operands) & product_operands
                 else "unsupported_institutional_assertion"
             )
             issues.append(
@@ -611,7 +690,10 @@ def _claim_inventory_issues(
         }:
             risk = next(
                 dimension
-                for dimension in CLOSED_REVIEW_DIMENSIONS
+                for dimension in (
+                    *CLOSED_REVIEW_DIMENSIONS,
+                    *PRODUCT_REVIEW_DIMENSIONS,
+                )
                 if dimension in dimensions and dimension not in {"subject_binding", "statement_mode"}
             )
             issues.append(
@@ -631,7 +713,10 @@ def _claim_inventory_issues(
         }:
             risk = next(
                 dimension
-                for dimension in CLOSED_REVIEW_DIMENSIONS
+                for dimension in (
+                    *CLOSED_REVIEW_DIMENSIONS,
+                    *PRODUCT_REVIEW_DIMENSIONS,
+                )
                 if dimension in dimensions and dimension not in {"subject_binding", "statement_mode"}
             )
             issues.append(
@@ -670,9 +755,7 @@ def _contract_mode_issue(
     contract = context.unit_contract
     allowed: dict[str, frozenset[StatementMode]] = {
         "abstract_observation": frozenset({"generic_observation"}),
-        "audience_guidance": frozenset(
-            {"generic_observation", "recommendation"}
-        ),
+        "audience_guidance": frozenset({"generic_observation", "recommendation"}),
         "recommendation": frozenset({"recommendation"}),
         "hypothetical_example": frozenset({"hypothesis"}),
         "disclosed_dramatization": frozenset({"dramatization"}),

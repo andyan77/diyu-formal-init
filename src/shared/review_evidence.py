@@ -162,6 +162,7 @@ class ClauseContextV2:
     unit_contract: UnitContractV2
     speaker_kind: SpeakerKind
     fact_ref: str | None = None
+    claim_refs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -287,6 +288,8 @@ def build_clause_contexts_v2(
                 fact_source = "frozen_product_fact"
         elif unit.fact_refs:
             raise ValueError("writer-owned unit cannot carry fact refs")
+        if contract == "frozen_fact" and unit.claim_refs:
+            raise ValueError("frozen fact unit cannot carry claim refs")
 
         wrapper: str | None = None
         if contract == "hypothetical_example":
@@ -319,6 +322,11 @@ def build_clause_contexts_v2(
                     unit_contract=contract,
                     speaker_kind=speaker_kind,
                     fact_ref=fact_ref,
+                    claim_refs=(
+                        unit.claim_refs
+                        if source == "writer_unit"
+                        else ()
+                    ),
                 )
             )
     identifiers = [context.clause_id for context in contexts]
@@ -359,6 +367,7 @@ def clause_context_document(
             "unit_contract": context.unit_contract,
             "speaker_kind": context.speaker_kind,
             "fact_ref": context.fact_ref,
+            "claim_refs": list(context.claim_refs),
         }
         for context in contexts
     ]

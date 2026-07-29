@@ -10,6 +10,7 @@ from src.shared.creative_kernel import (
     CreativeKernelV1,
 )
 from src.shared.errors import GenerationFailed
+from src.shared.factual_basis import ImmutableFactBlock
 from src.shared.types import (
     ContentProduct,
     ContentProductionBundle,
@@ -63,6 +64,7 @@ class DeliveryCompileInput:
     products: tuple[ProductFact, ...]
     production_conditions: str
     allowed_resource_ids: frozenset[str]
+    immutable_fact_blocks: tuple[ImmutableFactBlock, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -89,6 +91,7 @@ def assert_compiled_delivery(
     kernel: CreativeKernelV1,
     compiled: CompiledDelivery,
 ) -> None:
+    _assert_immutable_fact_blocks(request, kernel)
     expected = _compile_delivery(request, kernel)
     if compiled != expected:
         raise GenerationFailed("确定性成品编译结果包含未审文字或结构漂移")
@@ -109,6 +112,48 @@ def assert_compiled_delivery(
         for source in sources
     ):
         raise GenerationFailed("确定性成品编译包含未知可见来源")
+
+
+def _assert_immutable_fact_blocks(
+    request: DeliveryCompileInput,
+    kernel: CreativeKernelV1,
+) -> None:
+    block_by_id = {
+        block.fact_block_id: block
+        for block in request.immutable_fact_blocks
+    }
+    if any(
+        block_id not in block_by_id
+        for block_id in kernel.selected_fact_block_ids
+    ):
+        raise GenerationFailed("确定性成品编译无法解析商品事实块")
+    selected = tuple(
+        block_by_id[block_id]
+        for block_id in kernel.selected_fact_block_ids
+    )
+    unit_by_fact_id = {
+        unit.fact_refs[0]: unit
+        for unit in kernel.units
+        if unit.purpose == "frozen_fact"
+        and len(unit.fact_refs) == 1
+    }
+    for block in selected:
+        unit = unit_by_fact_id.get(block.fact_id)
+        if unit is None or unit.text != block.canonical_text:
+            raise GenerationFailed("确定性成品编译发现商品事实块漂移")
+    selected_fact_ids = {block.fact_id for block in selected}
+    available_fact_ids = {
+        block.fact_id for block in request.immutable_fact_blocks
+    }
+    visible_product_fact_ids = {
+        unit.fact_refs[0]
+        for unit in kernel.units
+        if unit.purpose == "frozen_fact"
+        and len(unit.fact_refs) == 1
+        and unit.fact_refs[0] in available_fact_ids
+    }
+    if visible_product_fact_ids != selected_fact_ids:
+        raise GenerationFailed("确定性成品编译商品事实块覆盖漂移")
 
 
 def _compile_delivery(
