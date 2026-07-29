@@ -872,7 +872,7 @@ class DeepSeekGenerator(ContentGenerator):
         for batch in self._closed_review_batches(questions):
             payload, batch_retries = self._request_strict_review(
                 "你是独立 CreativeKernel 风险问题回答器。只回答服务端给出的闭合问题，不决定事实许可或通过失败，"
-                "不改写文字或规范化任何 Unicode 标点，只调用指定函数一次。",
+                "不回传或改写正文，只调用指定函数一次。",
                 self._kernel_reviewer_prompt(
                     questions=batch,
                     contexts=writer_contexts,
@@ -1317,7 +1317,7 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 }
             )
         return f"""逐条阅读服务端 writer-owned clause，并对服务端给出的每个固定风险问题恰好
-回答一次。你只回答“文字里有没有该风险主张、原文证据在哪里、属于哪个允许 operand”；
+回答一次。你只回答“文字里有没有该风险主张、证据是否覆盖本 clause、属于哪个允许 operand”；
 不要决定事实许可、source_ref、unit contract、通过/失败、修复或制作资源。
 
 冻结用户现实事实仅用于判断 writer 文字是否在绑定、概括或扩展当前用户现实，不是 Writer
@@ -1335,21 +1335,20 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 - status 只回答“该维度证据是否存在／是否无法确定”，绝不承载主体、关系或语态类别；
   `generic`、`current_user`、`recommendation` 等类别只能放在 operands。某个
   subject_binding 类别存在时必须返回 status=present，再把该类别放入 operands。
-- present：quote 必须是本 clause 内连续、逐字、只出现一次的精确片段；可以跨越 clause
-  内部标点，但不得删字、改字、拼接不连续片段或引用其他 clause。operands 至少一个，且只能
-  从该题 allowed_operands 选择。quote 的精确匹配与唯一绑定由服务端执行。
-- quote 应选择能够证明当前问题的最短唯一连续片段；除非标点本身就是证据，不要把装饰性引号
-  包进 quote。必须逐字符复制 clause 中的 Unicode 标点，绝不能把中文弯引号改成 JSON
-  定界用的半角双引号 U+0022。服务端输入不会在 clause 正文中使用 U+0022。
+- present：evidence_scope 必须是 entire_clause；operands 至少一个，且只能从该题
+  allowed_operands 选择。该 question 已由服务端唯一绑定到可信 clause，完整 clause 原文、
+  Unicode offset 与审计 quote 都由服务端从 ClauseContext 确定性生成；不要回传正文片段。
 - 每题 JSON 中的 allowed_operands 是该 question_id 的封闭集合；即使同批另一题允许某个
   operand，也不得跨 question 借用。
-- absent：quote 必须是空字符串，operands 必须是空数组。不能通过省略整个问题表达 absent。
-- uncertain：当语义关系确实无法可靠判断或无法给出唯一 quote 时使用；quote 可为空或返回
-  本 clause 内唯一的精确相关片段，operands 可为空。不要猜测，也不要把 uncertain 当 absent。
+- absent：evidence_scope 必须是 none，operands 必须是空数组。不能通过省略整个问题表达
+  absent。
+- uncertain：当语义关系确实无法可靠判断时使用；evidence_scope 可以是 entire_clause 或
+  none，operands 可为空。不要猜测，也不要把 uncertain 当 absent。
 - statement_mode 必须 present 且只有一个 operand；无法唯一判断时必须 uncertain。
 - server_scope 只说明服务端已有的可见范围，不是让你决定许可；disclosure 题只报告 writer
   clause 是否与该范围冲突。
-- quote 地址由服务端计算；不要返回 start、end、occurrence 或任何数字地址。
+- 正文和证据地址均由服务端持有；不要返回 quote、start、end、occurrence 或任何正文副本／
+  数字地址。
 - 同一 clause 的全部问题彼此独立。即使某个表达看起来合法，也必须如实回答关系、对白、
   动机、因果等问题；合法性由服务端组合判断。
 - 每个 clause 只按自身文字、明确的服务端 scope 和必要的冻结事实回指判断，不得因为同批
@@ -1357,7 +1356,7 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 
 只调用指定函数并返回：
 {{"evidence_version":"{CLOSED_REVIEW_VERSION}","answers":[{{
-"question_id":"既定 id","status":"present","quote":"既定唯一 quote",
+"question_id":"既定 id","status":"present","evidence_scope":"entire_clause",
 "operands":["该题允许 operand"]
 }}]}}
 根对象和 answer 不得增加、遗漏或重命名字段。"""
@@ -2454,7 +2453,7 @@ CreativePlanV2：{
             "function": {
                 "name": CLOSED_REVIEW_TOOL_NAME,
                 "description": (
-                    "Answer every server-provided closed review question with an exact quote and bounded operands."
+                    "Answer every server-provided closed review question with a clause scope and bounded operands."
                 ),
                 "strict": True,
                 "parameters": closed_review_json_schema(questions),

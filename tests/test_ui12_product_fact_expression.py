@@ -171,7 +171,7 @@ def _product_review_result(
     for question in questions:
         if question.dimension == "statement_mode":
             status = "present"
-            quote = text
+            evidence_scope = "entire_clause"
             operands = ["generic_observation"]
         elif (
             risk_dimension is not None
@@ -179,17 +179,17 @@ def _product_review_result(
         ):
             assert risk_operand is not None
             status = "present"
-            quote = text
+            evidence_scope = "entire_clause"
             operands = [risk_operand]
         else:
             status = "absent"
-            quote = ""
+            evidence_scope = "none"
             operands = []
         raw_answers.append(
             {
                 "question_id": question.question_id,
                 "status": status,
-                "quote": quote,
+                "evidence_scope": evidence_scope,
                 "operands": operands,
             }
         )

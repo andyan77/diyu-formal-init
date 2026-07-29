@@ -777,23 +777,23 @@ def _kernel_observations(
                 "actuality_reflection": "generic_observation",
             }
             status = "present"
-            quote = question.exact_text
+            evidence_scope = "entire_clause"
             operands = [mode_by_contract[clause_context.unit_contract]]
         elif is_event:
             status = "present"
-            quote = question.exact_text
+            evidence_scope = "entire_clause"
             operands = ["event"]
         else:
             status = "absent"
-            quote = ""
+            evidence_scope = "none"
             operands = []
         if clause_context.unit_id in partial and question.dimension == "statement_mode":
-            quote = question.exact_text[: max(1, len(question.exact_text) // 2)]
+            evidence_scope = "partial"
         answers.append(
             {
                 "question_id": question.question_id,
                 "status": status,
-                "quote": quote,
+                "evidence_scope": evidence_scope,
                 "operands": operands,
             }
         )
@@ -1266,11 +1266,10 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert "statement_mode" in reviewer_prompt
     assert '"exact_text"' in reviewer_prompt
     assert '"allowed_quotes"' not in reviewer_prompt
-    assert "可以跨越 clause\n  内部标点" in reviewer_prompt
-    assert "最短唯一连续片段" in reviewer_prompt
-    assert "绝不能把中文弯引号改成 JSON" in reviewer_prompt
-    assert "U+0022" in reviewer_prompt
-    assert "不能通过省略整个问题表达 absent" in reviewer_prompt
+    assert '"evidence_scope":"entire_clause"' in reviewer_prompt
+    assert "不要返回 quote、start、end、occurrence" in reviewer_prompt
+    assert "审计 quote 都由服务端" in reviewer_prompt
+    assert "不能通过省略整个问题表达" in reviewer_prompt
     assert "面向不特定受众的第二人称阅读邀请" in reviewer_prompt
     assert "文章向不特定读者提供观看回报" in reviewer_prompt
     assert '"occurrence"' not in reviewer_prompt
@@ -1400,7 +1399,14 @@ def test_ui09_reviewer_must_cover_exact_complete_units() -> None:
 
 @pytest.mark.parametrize(
     "mutation",
-    ("missing", "duplicate", "extra", "partial", "fake_span", "uncertain"),
+    (
+        "missing",
+        "duplicate",
+        "extra",
+        "partial_scope",
+        "unexpected_quote",
+        "uncertain",
+    ),
 )
 def test_ui10_evidence_failure_never_calls_writer_repair(
     mutation: str,
@@ -1419,16 +1425,16 @@ def test_ui10_evidence_failure_never_calls_writer_repair(
         extra = dict(answers[0])
         extra["question_id"] = "unit:extra:clause:1:risk:subject_binding"
         answers.append(extra)
-    elif mutation == "partial":
+    elif mutation == "partial_scope":
         answers[-2] = dict(answers[-2])
-        answers[-2]["quote"] = "部分"
-    elif mutation == "fake_span":
+        answers[-2]["evidence_scope"] = "partial"
+    elif mutation == "unexpected_quote":
         answers[-2] = dict(answers[-2])
         answers[-2]["quote"] = "并不存在的谓词"
     else:
         answers[-2] = dict(answers[-2])
         answers[-2]["status"] = "uncertain"
-        answers[-2]["quote"] = ""
+        answers[-2]["evidence_scope"] = "none"
         answers[-2]["operands"] = []
     FakeClient.responses = [
         _completion(raw),

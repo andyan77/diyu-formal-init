@@ -59,7 +59,7 @@ def _raw_answers(
     changed = overrides or {}
     answers: list[dict[str, object]] = []
     for question in questions:
-        status, quote, operands = changed.get(
+        status, _legacy_quote, operands = changed.get(
             question.dimension,
             (
                 "present",
@@ -73,7 +73,11 @@ def _raw_answers(
             {
                 "question_id": question.question_id,
                 "status": status,
-                "quote": quote,
+                "evidence_scope": (
+                    "entire_clause"
+                    if status in {"present", "uncertain"}
+                    else "none"
+                ),
                 "operands": list(operands),
             }
         )
@@ -149,7 +153,11 @@ def test_strict_schema_closes_question_ids_and_all_object_fields() -> None:
         "type": "string",
         "enum": [question.question_id for question in questions],
     }
-    assert answer_properties["quote"] == {"type": "string"}
+    assert answer_properties["evidence_scope"] == {
+        "type": "string",
+        "enum": ["entire_clause", "none"],
+    }
+    assert "quote" not in answer_properties
 
 
 @pytest.mark.parametrize("mutation", ("missing", "duplicate", "extra"))
@@ -174,9 +182,9 @@ def test_question_answer_coverage_fails_closed(mutation: str) -> None:
 
 @pytest.mark.parametrize(
     "mutation",
-    ("present_without_quote", "absent_with_quote", "fake_quote"),
+    ("present_without_scope", "absent_with_scope", "unknown_scope"),
 )
-def test_answer_quote_contract_fails_closed(mutation: str) -> None:
+def test_answer_clause_scope_contract_fails_closed(mutation: str) -> None:
     contexts = _context("换位思考不等于没有边界。")
     questions = build_closed_review_questions(contexts)
     raw = _raw_answers(
@@ -194,18 +202,18 @@ def test_answer_quote_contract_fails_closed(mutation: str) -> None:
     target = next(
         item for item in answers if isinstance(item, dict) and str(item["question_id"]).endswith(":relationship_claim")
     )
-    if mutation == "present_without_quote":
-        target["quote"] = ""
-    elif mutation == "absent_with_quote":
+    if mutation == "present_without_scope":
+        target["evidence_scope"] = "none"
+    elif mutation == "absent_with_scope":
         target["status"] = "absent"
     else:
-        target["quote"] = "不存在的文字"
+        target["evidence_scope"] = "partial"
 
     with pytest.raises(TypeError, match="answer"):
         parse_closed_review_answers(raw, questions=questions)
 
 
-def test_present_quote_can_span_punctuation_when_exact_and_unique() -> None:
+def test_present_answer_materializes_the_trusted_full_clause() -> None:
     text = "当双方都疲惫时，需要的不是争论对错，而是一个暂停，一份体谅。"
     contexts = _context(text)
     questions = build_closed_review_questions(contexts)
@@ -230,10 +238,11 @@ def test_present_quote_can_span_punctuation_when_exact_and_unique() -> None:
         for answer in answers.answers
         if answer.question_id.endswith(":motive_or_mental_state")
     )
-    assert motive.quote == "需要的不是争论对错，而是一个暂停，一份体谅。"
+    assert motive.evidence_scope == "entire_clause"
+    assert motive.quote == text
 
 
-def test_present_quote_still_fails_when_the_exact_text_is_repeated() -> None:
+def test_full_clause_scope_does_not_delegate_repeated_text_addressing() -> None:
     contexts = _context("停一下，再停一下。")
     questions = build_closed_review_questions(contexts)
     raw = _raw_answers(
@@ -247,11 +256,18 @@ def test_present_quote_still_fails_when_the_exact_text_is_repeated() -> None:
         },
     )
 
-    with pytest.raises(TypeError, match="present answer"):
-        parse_closed_review_answers(
-            raw,
-            questions=questions,
-        )
+    answers = parse_closed_review_answers(
+        raw,
+        questions=questions,
+    )
+
+    event = next(
+        answer
+        for answer in answers.answers
+        if answer.question_id.endswith(":actual_event")
+    )
+    assert event.evidence_scope == "entire_clause"
+    assert event.quote == contexts[0].exact_text
 
 
 def test_uncertain_is_insufficient_and_never_materialized() -> None:

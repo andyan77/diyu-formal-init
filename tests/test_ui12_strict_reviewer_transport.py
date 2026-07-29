@@ -108,7 +108,11 @@ def _answer_document(
             {
                 "question_id": question.question_id,
                 "status": ("present" if question.dimension == "statement_mode" else "absent"),
-                "quote": (question.exact_text if question.dimension == "statement_mode" else ""),
+                "evidence_scope": (
+                    "entire_clause"
+                    if question.dimension == "statement_mode"
+                    else "none"
+                ),
                 "operands": (["generic_observation"] if question.dimension == "statement_mode" else []),
             }
             for question in active
@@ -199,7 +203,7 @@ def test_strict_schema_requires_closed_answer_fields() -> None:
     assert list(answer_properties) == [
         "question_id",
         "status",
-        "quote",
+        "evidence_scope",
         "operands",
     ]
     assert {"start", "end", "occurrence"}.isdisjoint(
@@ -268,7 +272,7 @@ def test_reviewer_prompt_uses_closed_questions_without_addresses() -> None:
     )
 
     assert "每个固定风险问题恰好" in prompt
-    assert "不能通过省略整个问题表达 absent" in prompt
+    assert "不能通过省略整个问题表达" in prompt
     assert "不要把 uncertain 当 absent" in prompt
     assert "subject_binding" in prompt
     assert "relationship_claim" in prompt
@@ -283,7 +287,9 @@ def test_reviewer_prompt_uses_closed_questions_without_addresses() -> None:
     assert "某个\n  subject_binding 类别存在时必须返回 status=present" in prompt
     assert "商品名称或编号作为主体只在 subject_binding 使用 named_product" in prompt
     assert "不得跨 question 借用" in prompt
-    assert "不要返回 start、end、occurrence" in prompt
+    assert "不要返回 quote、start、end、occurrence" in prompt
+    assert '"evidence_scope":"entire_clause"' in prompt
+    assert "审计 quote 都由服务端" in prompt
 
 
 def test_closed_questions_batch_by_whole_clauses() -> None:

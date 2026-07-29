@@ -21,6 +21,7 @@ CLOSED_REVIEW_VERSION = "review-evidence-v2"
 CLOSED_REVIEW_TOOL_NAME = "submit_review_evidence_v2"
 
 AnswerStatus: TypeAlias = Literal["present", "absent", "uncertain"]
+EvidenceScope: TypeAlias = Literal["entire_clause", "none"]
 ReviewDimension: TypeAlias = Literal[
     "subject_binding",
     "relationship_claim",
@@ -179,6 +180,7 @@ class ClosedReviewQuestion:
 class ClosedReviewAnswer:
     question_id: str
     status: AnswerStatus
+    evidence_scope: EvidenceScope
     quote: str
     operands: tuple[str, ...]
 
@@ -252,8 +254,9 @@ def closed_review_json_schema(
             "type": "string",
             "enum": ["present", "absent", "uncertain"],
         },
-        "quote": {
+        "evidence_scope": {
             "type": "string",
+            "enum": ["entire_clause", "none"],
         },
         "operands": {
             "type": "array",
@@ -306,7 +309,7 @@ def parse_closed_review_answers(
         if not isinstance(raw, Mapping) or frozenset(raw) != {
             "question_id",
             "status",
-            "quote",
+            "evidence_scope",
             "operands",
         }:
             raise TypeError("closed review answer is invalid")
@@ -315,12 +318,12 @@ def parse_closed_review_answers(
         if question is None or question_id in received_ids:
             raise TypeError("closed review answer coverage is invalid")
         status = raw.get("status")
-        quote = raw.get("quote")
+        evidence_scope = raw.get("evidence_scope")
         raw_operands = raw.get("operands")
         if (
             not isinstance(status, str)
             or status not in _ANSWER_STATUSES
-            or not isinstance(quote, str)
+            or evidence_scope not in {"entire_clause", "none"}
             or not isinstance(raw_operands, list)
             or any(not isinstance(item, str) for item in raw_operands)
         ):
@@ -330,26 +333,31 @@ def parse_closed_review_answers(
             raise TypeError("closed review answer operands are invalid")
         if status == "present":
             if (
-                not quote
+                evidence_scope != "entire_clause"
                 or not operands
-                or not _quote_is_unique(question.exact_text, quote)
             ):
                 raise TypeError("closed review present answer is invalid")
         elif status == "absent":
-            if quote or operands:
+            if evidence_scope != "none" or operands:
                 raise TypeError("closed review absent answer is invalid")
-        elif quote and not _quote_is_unique(question.exact_text, quote):
-            raise TypeError("closed review uncertain quote is invalid")
+        elif evidence_scope not in {"entire_clause", "none"}:
+            raise TypeError("closed review uncertain evidence scope is invalid")
         if question.dimension == "statement_mode" and (
             status == "absent" or (status == "present" and len(operands) != 1)
         ):
             raise TypeError("closed review statement mode is invalid")
+        normalized_scope = cast(EvidenceScope, evidence_scope)
         received_ids.append(question_id)
         parsed.append(
             ClosedReviewAnswer(
                 question_id=question_id,
                 status=cast(AnswerStatus, status),
-                quote=quote,
+                evidence_scope=normalized_scope,
+                quote=(
+                    question.exact_text
+                    if normalized_scope == "entire_clause"
+                    else ""
+                ),
                 operands=operands,
             )
         )
