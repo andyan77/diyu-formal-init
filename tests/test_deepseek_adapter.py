@@ -651,11 +651,13 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert '"current_text"' not in prompt
     assert '"claim_refs": []' in prompt
     assert "你看不到、也不需要复述、解释或推断这些事实" in prompt
-    assert "判断对象只能是\n泛指读者的选择过程" in prompt
+    assert "判断对象只能是泛指读者如何看、如何选、如何保留自己的判断" in prompt
     assert "claim_refs 必须\n是空数组" in prompt
     assert '"unit_contract": "audience_guidance"' in prompt
-    assert "只写与本篇已知内容配套的不特定读者观看回报" in prompt
+    assert "只写一至两句与已插入事实配套的观看回报" in prompt
     assert "不得因为 purpose 或写作习惯换成建议、假设、演绎" in prompt
+    assert "只谈读者如何看、如何选、如何保留判断" in prompt
+    assert "不得输出“抽象原则”等内部合同语言" in prompt
 
 
 def _kernel_observations(
