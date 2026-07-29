@@ -37,7 +37,6 @@ from src.infrastructure.seed_demo import (
 from src.shared.narrative import legacy_frame
 from src.shared.types import GeneratedArtifact, GenerationInput
 from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
-from src.tool.llm_gateway.qwen_reviewer import QwenReviewerProvider
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 
 _FRONTEND = Path(__file__).resolve().parents[1] / "frontend" / "src" / "app" / "CreatorApp.tsx"
@@ -1047,7 +1046,8 @@ def test_the_collaboration_note_reaches_generation_and_no_tenant_record(
     assert note not in json.dumps(snapshot, ensure_ascii=False)
     assert note not in json.dumps(receipt, ensure_ascii=False)
     assert receipt["writer_model"] == "deterministic-content-test-stub"
-    assert receipt["reviewer_model"] == "deterministic-content-test-stub"
+    assert receipt["version_authorization"] == ("deterministic-dual-track-v1")
+    assert "reviewer_model" not in receipt
     assert note not in str(created["body"])
     assert snapshot["private_preference_mode"] == "applied"
     _clear_preference(app_database_url, USER_ID)
@@ -1088,48 +1088,29 @@ def test_the_collaboration_note_never_becomes_material_the_product_talks_about(
         "https://example.invalid",
         "test-key",
         "deepseek-test",
-        reviewer_provider=QwenReviewerProvider(
-            api_base_url="https://qwen.example.invalid",
-            api_key="test-qwen-key",
-            model="qwen-test",
-        ),
     )
     initial_frame = captured[0].narrative_frame or legacy_frame(
-        tuple(
-            f"source:product:{product.sku}"
-            for product in captured[0].products
-        )
+        tuple(f"source:product:{product.sku}" for product in captured[0].products)
     )
-    initial_context = BoundaryContext.from_request(
-        captured[0], initial_frame
-    )
+    initial_context = BoundaryContext.from_request(captured[0], initial_frame)
     prompt = adapter._writer_prompt(
         captured[0],
         initial_frame,
         initial_context,
-        adapter._narrative_skeleton(
-            captured[0], initial_frame, initial_context
-        ),
+        adapter._narrative_skeleton(captured[0], initial_frame, initial_context),
     )
     assert note in prompt
     assert "私人协作偏好说明只调整协作方式与表达取舍，成品中不得出现它的原文、转述或对它的解释" in prompt
     # A revision replays frozen conditions, so the note is not even offered to the model.
     revised_frame = captured[-1].narrative_frame or legacy_frame(
-        tuple(
-            f"source:product:{product.sku}"
-            for product in captured[-1].products
-        )
+        tuple(f"source:product:{product.sku}" for product in captured[-1].products)
     )
-    revised_context = BoundaryContext.from_request(
-        captured[-1], revised_frame
-    )
+    revised_context = BoundaryContext.from_request(captured[-1], revised_frame)
     assert note not in adapter._writer_prompt(
         captured[-1],
         revised_frame,
         revised_context,
-        adapter._narrative_skeleton(
-            captured[-1], revised_frame, revised_context
-        ),
+        adapter._narrative_skeleton(captured[-1], revised_frame, revised_context),
     )
     _clear_preference(app_database_url, USER_ID)
 

@@ -48,10 +48,6 @@ class CapturingGenerator(ContentGenerator):
     def model_name(self) -> str:
         return self._delegate.model_name
 
-    @property
-    def reviewer_model_name(self) -> str:
-        return self._delegate.reviewer_model_name
-
     def route(self, request: RoutingInput) -> ContentProduct | None:
         return self._delegate.route(request)
 

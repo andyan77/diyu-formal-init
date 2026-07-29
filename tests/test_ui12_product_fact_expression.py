@@ -171,10 +171,7 @@ def _product_review_result(
     for question in questions:
         if question.dimension == "statement_mode":
             operands = ["generic_observation"]
-        elif (
-            risk_dimension is not None
-            and question.dimension == risk_dimension
-        ):
+        elif risk_dimension is not None and question.dimension == risk_dimension:
             assert risk_operand is not None
             operands = [risk_operand]
         else:
@@ -215,9 +212,7 @@ def test_packet_exposes_trusted_identity_category_and_stable_digest() -> None:
         "category",
     }
     assert {item.display_name for item in packet.facts} == {"双面短外套"}
-    assert {item.entity_kind for item in packet.facts} == {
-        "apparel_product"
-    }
+    assert {item.entity_kind for item in packet.facts} == {"apparel_product"}
     assert any(
         item.fact_key == "category" and item.structured_value == "double-faced short coat" for item in packet.facts
     )
@@ -230,11 +225,7 @@ def test_packet_exposes_trusted_identity_category_and_stable_digest() -> None:
     assert {
         block.canonical_text
         for block in blocks
-        if next(
-            item.fact_key
-            for item in packet.facts
-            if item.fact_id == block.fact_id
-        )
+        if next(item.fact_key for item in packet.facts if item.fact_id == block.fact_id)
         in {"display_name", "colors", "both_sides_complete"}
     } == {
         "ZX-C218 是一件双面短外套。",
@@ -268,10 +259,7 @@ def test_writer_can_only_select_existing_blocks_and_packet_claim_refs() -> None:
     with pytest.raises(ValueError, match="too many"):
         parse_writer_kernel(
             {
-                "fact_block_refs": [
-                    block.fact_block_id
-                    for block in blocks[:4]
-                ],
+                "fact_block_refs": [block.fact_block_id for block in blocks[:4]],
                 "units": base_units,
             },
             skeleton,
@@ -338,6 +326,7 @@ def test_compiler_inserts_selected_blocks_exactly_and_rejects_mutation() -> None
             }
         ),
         immutable_fact_blocks=blocks,
+        trusted_fact_texts=tuple((record.fact_id, record.exact_text) for record in product_fact_records(product)),
     )
 
     compiled = compile_delivery(request, kernel)
@@ -373,32 +362,20 @@ def test_selected_fact_units_are_renumbered_into_the_trusted_contract_sidecar() 
         (),
         tuple(record.fact_id for record in records),
     )
-    fact_units = tuple(
-        unit for unit in kernel.units if unit.purpose == "frozen_fact"
-    )
+    fact_units = tuple(unit for unit in kernel.units if unit.purpose == "frozen_fact")
 
     assert tuple(unit.unit_id for unit in fact_units) == tuple(
-        f"unit:frozen-fact:{index}"
-        for index in range(1, len(fact_units) + 1)
+        f"unit:frozen-fact:{index}" for index in range(1, len(fact_units) + 1)
     )
     contexts = build_clause_contexts_v2(
         kernel=kernel,
         frame=frame,
         fact_registry=records,
-        allowed_constraint_ids=frozenset(
-            {"constraint:account-tone"}
-        ),
+        allowed_constraint_ids=frozenset({"constraint:account-tone"}),
         speaker_kind="institutional_account",
     )
-    assert sum(
-        context.text_source == "frozen_product_fact"
-        for context in contexts
-    ) == len(fact_units)
-    assert {
-        context.unit_contract
-        for context in contexts
-        if context.unit_id == "unit:body"
-    } == {"audience_guidance"}
+    assert sum(context.text_source == "frozen_product_fact" for context in contexts) == len(fact_units)
+    assert {context.unit_contract for context in contexts if context.unit_id == "unit:body"} == {"audience_guidance"}
 
 
 def test_writer_clause_context_excludes_paragraph_separator_whitespace() -> None:
@@ -427,16 +404,10 @@ def test_writer_clause_context_excludes_paragraph_separator_whitespace() -> None
         kernel=kernel,
         frame=frame,
         fact_registry=records,
-        allowed_constraint_ids=frozenset(
-            {"constraint:account-tone"}
-        ),
+        allowed_constraint_ids=frozenset({"constraint:account-tone"}),
         speaker_kind="institutional_account",
     )
-    body = tuple(
-        context.exact_text
-        for context in contexts
-        if context.unit_id == "unit:body"
-    )
+    body = tuple(context.exact_text for context in contexts if context.unit_id == "unit:body")
 
     assert body == ("第一句。", "第二句。")
     assert all(text == text.strip() for text in body)
@@ -476,12 +447,15 @@ def test_exact_packet_literal_fails_even_when_reviewer_omits_product_risk() -> N
         risk_operand=None,
         claim_refs=(fact_id,),
     ) == ("product_fact_must_use_immutable_block",)
-    assert _product_review_result(
-        text="先看已知内容，再保留自己的选择。",
-        risk_dimension=None,
-        risk_operand=None,
-        claim_refs=(),
-    ) == ()
+    assert (
+        _product_review_result(
+            text="先看已知内容，再保留自己的选择。",
+            risk_dimension=None,
+            risk_operand=None,
+            claim_refs=(),
+        )
+        == ()
+    )
 
 
 @pytest.mark.parametrize(

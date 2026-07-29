@@ -18,11 +18,6 @@ class ContentGenerator(ABC):
     def model_name(self) -> str:
         """The provider-verified model identifier recorded for each run."""
 
-    @property
-    @abstractmethod
-    def reviewer_model_name(self) -> str:
-        """The independently configured Reviewer model recorded for each run."""
-
     @abstractmethod
     def route(self, request: RoutingInput) -> ContentProduct | None:
         """Return one primary product, or no task for ordinary conversation."""

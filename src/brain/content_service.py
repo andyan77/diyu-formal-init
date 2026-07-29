@@ -41,7 +41,10 @@ from src.shared.creative_plan import (
     platform_shape,
     validate_creative_plan,
 )
-from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
+from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_VERSION,
+    SUPPORTED_DELIVERY_COMPILER_VERSIONS,
+)
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import brand_fact_records, product_fact_records
 from src.shared.narrative import (
@@ -115,9 +118,7 @@ class ContentService:
             (weak_seed,),
             explicit_ui=explicit_ui,
             creation_kind=(
-                "continuation"
-                if reuse_version_id is not None or requests_continuation(weak_seed)
-                else "new_content"
+                "continuation" if reuse_version_id is not None or requests_continuation(weak_seed) else "new_content"
             ),
         )
         if not commitment.committed:
@@ -202,11 +203,7 @@ class ContentService:
             direction.media_format,
         )
         frozen_frame = narrative_frame or legacy_frame(
-            tuple(
-                record.fact_id
-                for product in products
-                for record in product_fact_records(product)
-            )
+            tuple(record.fact_id for product in products for record in product_fact_records(product))
         )
         task_id, run_id, prior_body = self._repository.create_task_and_running_run(
             scope,
@@ -236,7 +233,6 @@ class ContentService:
                 commitment,
             ),
             series_context,
-            reviewer_model=self._generator.reviewer_model_name,
         )
         return self._generate_and_persist(
             scope,
@@ -275,35 +271,22 @@ class ContentService:
     ) -> dict[str, object]:
         """Collaborate without persistence until one request is genuinely generation-ready."""
         raw_history = tuple(history[-8:])
-        if (
-            raw_history
-            and raw_history[-1].role == "user"
-            and raw_history[-1].content == message
-        ):
+        if raw_history and raw_history[-1].role == "user" and raw_history[-1].content == message:
             raw_history = raw_history[:-1]
-        raw_user_turns = tuple(
-            turn.content for turn in raw_history if turn.role == "user"
-        ) + (message,)
+        raw_user_turns = tuple(turn.content for turn in raw_history if turn.role == "user") + (message,)
         commitment = evaluate_creation_intent(
             raw_user_turns,
             explicit_ui=direct_generate,
         )
         sanitized_message = sanitize_seed(message)
-        sanitized_history = tuple(
-            ConversationTurn(turn.role, sanitize_seed(turn.content))
-            for turn in raw_history
-        )
+        sanitized_history = tuple(ConversationTurn(turn.role, sanitize_seed(turn.content)) for turn in raw_history)
         if (
             sanitized_history
             and sanitized_history[-1].role == "user"
             and sanitized_history[-1].content == sanitized_message
         ):
             sanitized_history = sanitized_history[:-1]
-        if (
-            not commitment.committed
-            and not sanitized_history
-            and is_natural_chat(sanitized_message)
-        ):
+        if not commitment.committed and not sanitized_history and is_natural_chat(sanitized_message):
             return {"kind": "chat", "message": natural_reply()}
         if commitment.committed and progress is not None:
             progress("received")
@@ -351,23 +334,14 @@ class ContentService:
                 creation_committed=commitment.committed,
                 allowed_tone_ids=self._allowed_tone_ids(control),
                 allowed_mechanism_ids=self._allowed_mechanism_ids(control),
-                platform_shape=platform_shape(
-                    target, direction.media_format
-                ),
+                platform_shape=platform_shape(target, direction.media_format),
             )
         )
         if not commitment.committed:
             return {
                 "kind": "chat",
-                "message": (
-                    decision.message
-                    if decision.disposition == "chat"
-                    else natural_reply()
-                ),
-                "direct_generation_available": bool(
-                    decision.creation_proposal
-                    or decision.disposition == "ready"
-                ),
+                "message": (decision.message if decision.disposition == "chat" else natural_reply()),
+                "direct_generation_available": bool(decision.creation_proposal or decision.disposition == "ready"),
             }
         if decision.disposition != "ready":
             return {
@@ -381,12 +355,11 @@ class ContentService:
             or decision.creative_plan is None
         ):
             raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
-        available_user_turns = tuple(
-            turn.content for turn in sanitized_history if turn.role == "user"
-        ) + (sanitized_message,)
-        if (
-            sanitized_message not in decision.user_premises
-            or any(premise not in available_user_turns for premise in decision.user_premises)
+        available_user_turns = tuple(turn.content for turn in sanitized_history if turn.role == "user") + (
+            sanitized_message,
+        )
+        if sanitized_message not in decision.user_premises or any(
+            premise not in available_user_turns for premise in decision.user_premises
         ):
             raise GenerationFailed("模型没有可靠保留用户原话")
         premise = "\n".join(decision.user_premises)
@@ -403,11 +376,7 @@ class ContentService:
         frame = new_frame(
             decision.narrative_mode,
             tuple(dict.fromkeys(decision.user_fact_spans)),
-            tuple(
-                record.fact_id
-                for product in products
-                for record in product_fact_records(product)
-            ),
+            tuple(record.fact_id for product in products for record in product_fact_records(product)),
             (),
         )
         explicit_mode = self._explicit_narrative_mode(control, sanitized_message)
@@ -438,9 +407,7 @@ class ContentService:
         if control.direction is None:
             return None
         if any(
-            item.axis == "mechanism"
-            and item.stable_id == "CAT-GENRE-DRAMA-04"
-            and item.origin == "explicit"
+            item.axis == "mechanism" and item.stable_id == "CAT-GENRE-DRAMA-04" and item.origin == "explicit"
             for item in control.direction.selections
         ):
             return "dramatization"
@@ -451,28 +418,18 @@ class ContentService:
         control: ContentControlContext,
     ) -> tuple[str, ...]:
         selected = (
-            tuple(
-                item.stable_id
-                for item in control.direction.selections
-                if item.axis == "style"
-            )
+            tuple(item.stable_id for item in control.direction.selections if item.axis == "style")
             if control.direction is not None
             else ()
         )
-        return tuple(
-            dict.fromkeys((ACCOUNT_BASELINE_TONE_ID, *selected))
-        )
+        return tuple(dict.fromkeys((ACCOUNT_BASELINE_TONE_ID, *selected)))
 
     @staticmethod
     def _allowed_mechanism_ids(
         control: ContentControlContext,
     ) -> tuple[str, ...]:
         return (
-            tuple(
-                item.stable_id
-                for item in control.direction.selections
-                if item.axis == "mechanism"
-            )
+            tuple(item.stable_id for item in control.direction.selections if item.axis == "mechanism")
             if control.direction is not None
             else ()
         )
@@ -488,11 +445,7 @@ class ContentService:
     ) -> CreativePlanV2:
         tone_ids = cls._allowed_tone_ids(control)
         mechanisms = cls._allowed_mechanism_ids(control)
-        selected_styles = tuple(
-            identifier
-            for identifier in tone_ids
-            if identifier != ACCOUNT_BASELINE_TONE_ID
-        )
+        selected_styles = tuple(identifier for identifier in tone_ids if identifier != ACCOUNT_BASELINE_TONE_ID)
         return build_creative_plan(
             topic_spans=(premise,),
             primary_value=primary_product,
@@ -632,11 +585,11 @@ class ContentService:
                 (
                     frozen_speaker_kind
                     if frozen_speaker_kind
-                in {
-                    "institutional_account",
-                    "personal_ip_account",
-                    "unknown",
-                }
+                    in {
+                        "institutional_account",
+                        "personal_ip_account",
+                        "unknown",
+                    }
                     else "unknown"
                 ),
             ),
@@ -737,33 +690,15 @@ class ContentService:
         delivery_compiler_version = frozen_delivery_compiler_version(snapshot)
         prior_creative_kernel = frozen_creative_kernel(snapshot)
         if delivery_compiler_version is not None and (
-            delivery_compiler_version != DELIVERY_COMPILER_VERSION
-            or prior_creative_kernel is None
+            delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
             raise GenerationFailed("这条内容冻结的创作内核无法可靠读取")
         if creative_plan is None:
             frame = new_frame(
-                (
-                    frame.narrative_mode
-                    if frame is not None
-                    else "general_observation"
-                ),
-                (
-                    tuple(fact.exact_text for fact in frame.user_facts)
-                    if frame is not None
-                    else ()
-                ),
-                tuple(
-                    record.fact_id
-                    for product in products
-                    for record in product_fact_records(product)
-                ),
-                tuple(
-                    record.fact_id
-                    for record in brand_fact_records(
-                        context.brand_reference_context
-                    )
-                ),
+                (frame.narrative_mode if frame is not None else "general_observation"),
+                (tuple(fact.exact_text for fact in frame.user_facts) if frame is not None else ()),
+                tuple(record.fact_id for product in products for record in product_fact_records(product)),
+                tuple(record.fact_id for record in brand_fact_records(context.brand_reference_context)),
             )
             creative_plan = self._default_creative_plan(
                 weak_seed,
@@ -774,12 +709,9 @@ class ContentService:
             )
         elif frame is None:
             frame = legacy_frame(
-                tuple(
-                    record.fact_id
-                    for product in products
-                    for record in product_fact_records(product)
-                )
+                tuple(record.fact_id for product in products for record in product_fact_records(product))
             )
+        delivery_compiler_version = DELIVERY_COMPILER_VERSION
         self._validate_plan(
             creative_plan,
             (weak_seed,),
@@ -802,7 +734,6 @@ class ContentService:
             control,
             series_context,
             source_description,
-            reviewer_model=self._generator.reviewer_model_name,
         )
         return self._generate_and_persist(
             scope,
@@ -863,33 +794,15 @@ class ContentService:
         delivery_compiler_version = frozen_delivery_compiler_version(snapshot)
         prior_creative_kernel = frozen_creative_kernel(snapshot)
         if delivery_compiler_version is not None and (
-            delivery_compiler_version != DELIVERY_COMPILER_VERSION
-            or prior_creative_kernel is None
+            delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
             raise GenerationFailed("源内容冻结的创作内核无法可靠读取")
         if creative_plan is None:
             frame = new_frame(
-                (
-                    frame.narrative_mode
-                    if frame is not None
-                    else "general_observation"
-                ),
-                (
-                    tuple(fact.exact_text for fact in frame.user_facts)
-                    if frame is not None
-                    else ()
-                ),
-                tuple(
-                    record.fact_id
-                    for product in source.products
-                    for record in product_fact_records(product)
-                ),
-                tuple(
-                    record.fact_id
-                    for record in brand_fact_records(
-                        context.brand_reference_context
-                    )
-                ),
+                (frame.narrative_mode if frame is not None else "general_observation"),
+                (tuple(fact.exact_text for fact in frame.user_facts) if frame is not None else ()),
+                tuple(record.fact_id for product in source.products for record in product_fact_records(product)),
+                tuple(record.fact_id for record in brand_fact_records(context.brand_reference_context)),
             )
             creative_plan = self._default_creative_plan(
                 source_premise,
@@ -900,39 +813,24 @@ class ContentService:
             )
         else:
             allowed_tones = self._allowed_tone_ids(control)
-            selected_tones = tuple(
-                identifier
-                for identifier in allowed_tones
-                if identifier != ACCOUNT_BASELINE_TONE_ID
-            )
+            selected_tones = tuple(identifier for identifier in allowed_tones if identifier != ACCOUNT_BASELINE_TONE_ID)
             allowed_mechanisms = self._allowed_mechanism_ids(control)
             creative_plan = build_creative_plan(
                 topic_spans=creative_plan.topic_spans,
                 primary_value=creative_plan.primary_value,
-                tone_ids=selected_tones
-                or (ACCOUNT_BASELINE_TONE_ID,),
+                tone_ids=selected_tones or (ACCOUNT_BASELINE_TONE_ID,),
                 mechanism_id=(
                     creative_plan.mechanism_id
-                    if creative_plan.mechanism_id
-                    in allowed_mechanisms
-                    else (
-                        allowed_mechanisms[0]
-                        if allowed_mechanisms
-                        else None
-                    )
+                    if creative_plan.mechanism_id in allowed_mechanisms
+                    else (allowed_mechanisms[0] if allowed_mechanisms else None)
                 ),
-                target_shape=platform_shape(
-                    target, direction.media_format
-                ),
+                target_shape=platform_shape(target, direction.media_format),
             )
             if frame is None:
                 frame = legacy_frame(
-                    tuple(
-                        record.fact_id
-                        for product in source.products
-                        for record in product_fact_records(product)
-                    )
+                    tuple(record.fact_id for product in source.products for record in product_fact_records(product))
                 )
+        delivery_compiler_version = DELIVERY_COMPILER_VERSION
         self._validate_plan(
             creative_plan,
             (source_premise,),
@@ -982,7 +880,6 @@ class ContentService:
                 delivery_compiler_version=delivery_compiler_version,
             ),
             None,
-            reviewer_model=self._generator.reviewer_model_name,
         )
         return self._generate_and_persist(
             target_scope,
@@ -1081,10 +978,8 @@ class ContentService:
             )
             if progress is not None:
                 progress("validating")
-            if (
-                narrative_frame is not None
-                and artifact.reviewed_digest
-                != visible_digest(artifact.outline, artifact.body)
+            if narrative_frame is not None and artifact.reviewed_digest != visible_digest(
+                artifact.outline, artifact.body
             ):
                 raise GenerationFailed("最终成品与被审查内容不一致")
             assert_content_complete(artifact)
@@ -1196,10 +1091,7 @@ class ContentService:
     @staticmethod
     def _production_conditions(text: str, media_format: str, previous: str | None = None) -> str:
         if any(marker in text for marker in ("无口播", "无对白", "无解说")):
-            return (
-                "本次采用无口播、无对白、无解说的视频表达；完整已审文字使用文字卡或字幕"
-                "呈现，不要求现实环境声。"
-            )
+            return "本次采用无口播、无对白、无解说的视频表达；完整已审文字使用文字卡或字幕呈现，不要求现实环境声。"
         if "8 秒" in text or "8秒" in text:
             return "目标自然时长为 8 秒；无法同时保留原有全部认知时，只做明确标识的窄主题版，不称与原版等义。"
         if "四张" in text or "4 张" in text or "4张" in text:

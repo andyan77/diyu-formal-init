@@ -10,6 +10,7 @@ from src.shared.creative_kernel import (
     HYPOTHESIS_DISCLOSURE,
     OBSERVATION_ONLY_PROGRAM,
     CreativeKernelV1,
+    KernelProgramId,
     build_kernel_skeleton,
     parse_writer_kernel,
 )
@@ -44,26 +45,14 @@ def _frame_and_kernel(
         "hypothesis",
         "dramatization",
     ] = "general_observation",
-    program_id: Literal[
-        "observation_only_v1",
-        "observation_with_hypothetical_example_v1",
-        "observation_with_hypothetical_example_v2",
-    ] = OBSERVATION_ONLY_PROGRAM,
+    program_id: KernelProgramId = OBSERVATION_ONLY_PROGRAM,
     body: str = "换位思考不等于没有边界。",
     facts: tuple[FrozenFactRecord, ...] = (),
     speaker_kind: SpeakerKind = "institutional_account",
 ) -> tuple[NarrativeFrame, CreativeKernelV1, tuple[ClauseContextV2, ...]]:
-    user_facts = tuple(
-        record.exact_text
-        for record in facts
-        if record.fact_kind == "user_actuality"
-    )
-    brand_ids = tuple(
-        record.fact_id for record in facts if record.fact_kind == "brand"
-    )
-    product_ids = tuple(
-        record.fact_id for record in facts if record.fact_kind == "product"
-    )
+    user_facts = tuple(record.exact_text for record in facts if record.fact_kind == "user_actuality")
+    brand_ids = tuple(record.fact_id for record in facts if record.fact_kind == "brand")
+    product_ids = tuple(record.fact_id for record in facts if record.fact_kind == "product")
     frame = new_frame(mode, user_facts, product_ids, brand_ids)
     skeleton = build_kernel_skeleton(
         frame=frame,
@@ -127,21 +116,14 @@ def _evidence(
     for context in contexts:
         if context.text_source != "writer_unit":
             continue
-        selected = (
-            target_fragment is not None
-            and target_fragment in context.exact_text
-        )
+        selected = target_fragment is not None and target_fragment in context.exact_text
 
         def spans(
             values: tuple[str, ...],
             exact_text: str = context.exact_text,
             selected_clause: bool = selected,
         ) -> tuple[SpanOccurrence, ...]:
-            return (
-                tuple(_normalized_span(exact_text, value) for value in values)
-                if selected_clause
-                else ()
-            )
+            return tuple(_normalized_span(exact_text, value) for value in values) if selected_clause else ()
 
         items.append(
             ClauseEvidenceV2(
@@ -180,9 +162,7 @@ def _reasons(
         for issue in reconcile_review_evidence_v2(
             contexts=contexts,
             evidence=evidence,
-            fact_text_by_id={
-                record.fact_id: record.exact_text for record in facts
-            },
+            fact_text_by_id={record.fact_id: record.exact_text for record in facts},
             protected_subjects=ProtectedSubjectScopeV2(
                 exact_names=("笛语", "笛语服饰", "品牌官方账号"),
                 speaker_kind=speaker_kind,
@@ -223,9 +203,7 @@ def _raw_v2_evidence(
             {
                 "clause_id": "unit:test:clause:1",
                 "exact_text": text,
-                "evidence": [
-                    {"category": "action_or_event", **resolved_span}
-                ],
+                "evidence": [{"category": "action_or_event", **resolved_span}],
                 "implicit_subject": "generic",
                 "uncertain": uncertain,
             }
@@ -246,11 +224,7 @@ def test_server_wrapper_source_precedes_model_semantics(
     expected_wrapper: str,
 ) -> None:
     _, _, contexts = _frame_and_kernel(mode=mode)
-    wrapper = next(
-        context
-        for context in contexts
-        if context.text_source == "server_wrapper"
-    )
+    wrapper = next(context for context in contexts if context.text_source == "server_wrapper")
     evidence = _evidence(
         contexts,
         target_fragment=expected_wrapper,
@@ -288,28 +262,15 @@ def test_writer_cannot_forge_server_wrapper(
         ("SDR-006", "dramatization"),
     ),
 )
-def test_missing_server_wrapper_fails_closed(
+def test_v2_server_wrapper_is_derived_from_frozen_mode(
     sdr_id: str,
     mode: Literal["hypothesis", "dramatization"],
 ) -> None:
-    frame, kernel, _ = _frame_and_kernel(mode=mode)
-    mutated = replace(
-        kernel,
-        units=tuple(
-            replace(unit, text=unit.text.split("\n", 1)[-1])
-            if unit.unit_id == "unit:body"
-            else unit
-            for unit in kernel.units
-        ),
+    _, _, contexts = _frame_and_kernel(mode=mode)
+    expected = HYPOTHESIS_DISCLOSURE if mode == "hypothesis" else DRAMATIZATION_DISCLOSURE
+    assert any(
+        context.text_source == "server_wrapper" and context.exact_text == f"{expected}\n" for context in contexts
     )
-    with pytest.raises(ValueError, match="server wrapper structure drifted"):
-        build_clause_contexts_v2(
-            kernel=mutated,
-            frame=frame,
-            fact_registry=(),
-            allowed_constraint_ids=_CONSTRAINTS,
-            speaker_kind="institutional_account",
-        )
     assert sdr_id in _ALL_SDR_IDS
 
 
@@ -347,9 +308,7 @@ def test_frozen_fact_source_is_structural_not_model_semantic(
     fact: FrozenFactRecord,
 ) -> None:
     mode: Literal["actuality_reflection", "general_observation"] = (
-        "actuality_reflection"
-        if fact.fact_kind == "user_actuality"
-        else "general_observation"
+        "actuality_reflection" if fact.fact_kind == "user_actuality" else "general_observation"
     )
     _, _, contexts = _frame_and_kernel(mode=mode, facts=(fact,))
     evidence = _evidence(
@@ -378,10 +337,7 @@ def test_frozen_fact_and_writer_fact_bindings_fail_closed() -> None:
     fact_changed = replace(
         kernel,
         units=tuple(
-            replace(unit, text="今天店里特别忙。")
-            if unit.purpose == "frozen_fact"
-            else unit
-            for unit in kernel.units
+            replace(unit, text="今天店里特别忙。") if unit.purpose == "frozen_fact" else unit for unit in kernel.units
         ),
     )
     with pytest.raises(ValueError, match="fact unit source drifted"):
@@ -396,10 +352,7 @@ def test_frozen_fact_and_writer_fact_bindings_fail_closed() -> None:
     writer_bound = replace(
         kernel,
         units=tuple(
-            replace(unit, fact_refs=(fact.fact_id,))
-            if unit.unit_id == "unit:body"
-            else unit
-            for unit in kernel.units
+            replace(unit, fact_refs=(fact.fact_id,)) if unit.unit_id == "unit:body" else unit for unit in kernel.units
         ),
     )
     with pytest.raises(ValueError, match="writer-owned unit"):
@@ -953,11 +906,14 @@ def test_sdr_writer_semantic_matrix(
         implicit_subject=implicit,
     )
 
-    assert _reasons(
-        contexts,
-        evidence,
-        speaker_kind=speaker_kind,
-    ) == expected
+    assert (
+        _reasons(
+            contexts,
+            evidence,
+            speaker_kind=speaker_kind,
+        )
+        == expected
+    )
     assert sdr_id in _ALL_SDR_IDS
 
 
@@ -1024,10 +980,7 @@ def test_quote_parser_binds_one_exact_quote_and_computes_unicode_offset() -> Non
         clause_text_by_id={"unit:test:clause:1": text},
     )
 
-    assert tuple(
-        (span.start, span.end)
-        for span in evidence.clauses[0].action_or_event_spans
-    ) == ((0, 6), (7, 14))
+    assert tuple((span.start, span.end) for span in evidence.clauses[0].action_or_event_spans) == ((0, 6), (7, 14))
 
 
 def test_repeated_short_quote_fails_until_context_is_unique() -> None:
@@ -1101,9 +1054,7 @@ def test_unique_context_quote_preserves_institutional_subject_binding() -> None:
         clause_text_by_id={"unit:test:clause:1": text},
     )
 
-    assert _reasons(contexts, evidence) == (
-        "unsupported_institutional_assertion",
-    )
+    assert _reasons(contexts, evidence) == ("unsupported_institutional_assertion",)
 
 
 def test_hypothesis_full_quote_keeps_fictional_dialogue_separate_from_user() -> None:
@@ -1130,9 +1081,7 @@ def test_hypothesis_full_quote_still_rejects_current_household_binding() -> None
         modality=(text,),
     )
 
-    assert _reasons(contexts, evidence) == (
-        "unsupported_actuality_binding",
-    )
+    assert _reasons(contexts, evidence) == ("unsupported_actuality_binding",)
 
 
 def test_program_contract_sidecar_ignores_kernel_self_reported_type() -> None:
@@ -1141,9 +1090,7 @@ def test_program_contract_sidecar_ignores_kernel_self_reported_type() -> None:
     mutated = replace(
         kernel,
         units=tuple(
-            replace(unit, allowed_observation_types=("abstract_principle",))
-            if unit.unit_id == body.unit_id
-            else unit
+            replace(unit, allowed_observation_types=("abstract_principle",)) if unit.unit_id == body.unit_id else unit
             for unit in kernel.units
         ),
     )
@@ -1155,25 +1102,15 @@ def test_program_contract_sidecar_ignores_kernel_self_reported_type() -> None:
         speaker_kind="institutional_account",
     )
 
-    assert {
-        context.unit_contract
-        for context in contexts
-        if context.unit_id == "unit:body"
-    } == {"hypothetical_example"}
-    assert {
-        context.unit_contract
-        for context in rebuilt
-        if context.unit_id == "unit:body"
-    } == {"hypothetical_example"}
+    assert {context.unit_contract for context in contexts if context.unit_id == "unit:body"} == {"hypothetical_example"}
+    assert {context.unit_contract for context in rebuilt if context.unit_id == "unit:body"} == {"hypothetical_example"}
 
 
 def test_every_reachable_program_unit_has_one_trusted_contract() -> None:
     _, _, general = _frame_and_kernel(
         program_id="observation_with_hypothetical_example_v1",
     )
-    contracts = {
-        context.unit_id: context.unit_contract for context in general
-    }
+    contracts = {context.unit_id: context.unit_contract for context in general}
     assert contracts["unit:title"] == "audience_guidance"
     assert contracts["unit:natural-guide"] == "audience_guidance"
     assert contracts["unit:release-caption"] == "audience_guidance"
@@ -1184,9 +1121,7 @@ def test_every_reachable_program_unit_has_one_trusted_contract() -> None:
     _, _, current = _frame_and_kernel(
         program_id="observation_with_hypothetical_example_v2",
     )
-    current_contracts = {
-        context.unit_id: context.unit_contract for context in current
-    }
+    current_contracts = {context.unit_id: context.unit_contract for context in current}
     assert current_contracts["unit:title"] == "audience_guidance"
     assert current_contracts["unit:body-closing"] == "audience_guidance"
     assert "unit:body-recommendation" not in current_contracts
@@ -1197,11 +1132,7 @@ def test_every_reachable_program_unit_has_one_trusted_contract() -> None:
         ("dramatization", "disclosed_dramatization"),
     ):
         _, _, contexts = _frame_and_kernel(mode=mode)  # type: ignore[arg-type]
-        assert {
-            context.unit_contract
-            for context in contexts
-            if context.unit_id == "unit:body"
-        } == {expected}
+        assert {context.unit_contract for context in contexts if context.unit_id == "unit:body"} == {expected}
 
 
 def test_unknown_program_or_unit_mapping_fails_closed() -> None:
@@ -1256,9 +1187,7 @@ def test_explicit_recommendation_in_abstract_unit_is_repairable_drift() -> None:
         implicit_subject="generic",
     )
 
-    assert _reasons(contexts, evidence) == (
-        "recommendation_in_observation",
-    )
+    assert _reasons(contexts, evidence) == ("recommendation_in_observation",)
     _, kernel, _ = _frame_and_kernel(body=text)
     assert DeepSeekGenerator._kernel_repair_scope(
         kernel,
@@ -1282,9 +1211,7 @@ def test_unmodalized_action_in_actuality_reflection_is_repairable_drift() -> Non
         implicit_subject="generic",
     )
 
-    assert _reasons(contexts, evidence) == (
-        "situated_event_in_reflection",
-    )
+    assert _reasons(contexts, evidence) == ("situated_event_in_reflection",)
 
 
 def test_actuality_reflection_rejects_unfrozen_relationship_role() -> None:
@@ -1305,9 +1232,7 @@ def test_actuality_reflection_rejects_unfrozen_relationship_role() -> None:
         relationship_role=("伴侣",),
     )
 
-    assert _reasons(contexts, evidence, facts=(fact,)) == (
-        "unsupported_actuality_expansion",
-    )
+    assert _reasons(contexts, evidence, facts=(fact,)) == ("unsupported_actuality_expansion",)
 
 
 def test_actuality_reflection_allows_role_already_present_in_frozen_fact() -> None:
@@ -1340,19 +1265,13 @@ def test_actuality_reflection_rejects_added_motive_evidence() -> None:
         motive=("渴望被看见",),
     )
 
-    assert _reasons(contexts, evidence) == (
-        "situated_event_in_reflection",
-    )
+    assert _reasons(contexts, evidence) == ("situated_event_in_reflection",)
 
 
 def test_sdr_matrix_has_one_direct_consumer_for_every_stable_id() -> None:
-    semantic_ids = {
-        f"SDR-{index:03d}" for index in range(12, 37)
-    }
+    semantic_ids = {f"SDR-{index:03d}" for index in range(12, 37)}
     source_ids = {f"SDR-{index:03d}" for index in range(1, 12)}
     evidence_ids = {"SDR-037", "SDR-038", "SDR-039"}
     compiler_ids = {"SDR-040", "SDR-041", "SDR-042"}
 
-    assert source_ids | semantic_ids | evidence_ids | compiler_ids == (
-        _ALL_SDR_IDS
-    )
+    assert source_ids | semantic_ids | evidence_ids | compiler_ids == (_ALL_SDR_IDS)

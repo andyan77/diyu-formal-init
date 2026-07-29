@@ -27,20 +27,32 @@ KernelProgramId: TypeAlias = Literal[
     "observation_only_v1",
     "observation_with_hypothetical_example_v1",
     "observation_with_hypothetical_example_v2",
+    "actuality_with_disclosed_dramatization_v1",
+]
+UnitTrack: TypeAlias = Literal["trusted_fact", "creative_expression"]
+UnitMode: TypeAlias = Literal[
+    "trusted_fact",
+    "general_observation",
+    "recommendation",
+    "hypothesis",
+    "disclosed_dramatization",
 ]
 
-KERNEL_VERSION = "creative-kernel-v1"
+LEGACY_KERNEL_VERSION = "creative-kernel-v1"
+KERNEL_VERSION = "creative-kernel-v2"
 MAX_PRODUCT_FACT_BLOCKS = 3
 DRAMATIZATION_DISCLOSURE = "情境演绎（虚构角色，不对应真实人物或品牌案例）："
 HYPOTHESIS_DISCLOSURE = "假设有这样一幕："
 OBSERVATION_ONLY_PROGRAM: KernelProgramId = "observation_only_v1"
 OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM: KernelProgramId = "observation_with_hypothetical_example_v1"
 OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2: KernelProgramId = "observation_with_hypothetical_example_v2"
+ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM: KernelProgramId = "actuality_with_disclosed_dramatization_v1"
 _PROGRAM_IDS = frozenset(
     {
         OBSERVATION_ONLY_PROGRAM,
         OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
         OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
+        ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM,
     }
 )
 _PURPOSES = frozenset(
@@ -127,10 +139,7 @@ def compiler_owned_unit_texts(
 ) -> dict[str, str]:
     """Return versioned neutral fields owned by DeliveryCompiler."""
     return {
-        unit_id: text_and_source[0]
-        for unit_id, text_and_source in _COMPILER_OWNED_UNIT_TEXTS[
-            primary_product
-        ].items()
+        unit_id: text_and_source[0] for unit_id, text_and_source in _COMPILER_OWNED_UNIT_TEXTS[primary_product].items()
     }
 
 
@@ -160,6 +169,10 @@ class CreativeKernelUnit:
     visible_order: int
     text: str
     claim_refs: tuple[str, ...] = ()
+    track: UnitTrack = "creative_expression"
+    mode: UnitMode = "general_observation"
+    scope_id: str = "scope:general-observation-v1"
+    allowed_resource_ids: tuple[str, ...] = ()
 
     @property
     def writable(self) -> bool:
@@ -190,6 +203,7 @@ def build_kernel_skeleton(
     fact_registry: Sequence[FrozenFactRecord],
     constraint_refs: Sequence[str],
     program_id: KernelProgramId = OBSERVATION_ONLY_PROGRAM,
+    allowed_resource_ids: Sequence[str] = (),
 ) -> CreativeKernelV1:
     """Build the one small server-owned writing skeleton for a new artifact."""
     if (
@@ -201,6 +215,8 @@ def build_kernel_skeleton(
         and frame.narrative_mode != "general_observation"
     ):
         raise ValueError("hypothetical example program requires general observation")
+    if program_id == ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM and frame.narrative_mode != "actuality_reflection":
+        raise ValueError("local dramatization program requires actuality reflection")
     body_types: tuple[ObservationType, ...]
     if frame.narrative_mode == "hypothesis":
         body_types = ("hypothesis",)
@@ -209,6 +225,7 @@ def build_kernel_skeleton(
     else:
         body_types = ("abstract_principle",)
     constraints = tuple(dict.fromkeys(constraint_refs))
+    resources = tuple(dict.fromkeys(allowed_resource_ids))
     units: list[CreativeKernelUnit] = [
         CreativeKernelUnit(
             unit_id="unit:title",
@@ -218,6 +235,10 @@ def build_kernel_skeleton(
             constraint_refs=constraints,
             visible_order=10,
             text="",
+            track="creative_expression",
+            mode="general_observation",
+            scope_id="scope:general-observation-v1",
+            allowed_resource_ids=resources,
         ),
         CreativeKernelUnit(
             unit_id="unit:natural-guide",
@@ -227,6 +248,10 @@ def build_kernel_skeleton(
             constraint_refs=constraints,
             visible_order=20,
             text="",
+            track="creative_expression",
+            mode="general_observation",
+            scope_id="scope:general-observation-v1",
+            allowed_resource_ids=resources,
         ),
     ]
     allowed_fact_ids = frame.allowed_fact_ids
@@ -248,6 +273,9 @@ def build_kernel_skeleton(
                 constraint_refs=(),
                 visible_order=30 + index,
                 text=record.exact_text,
+                track="trusted_fact",
+                mode="trusted_fact",
+                scope_id=f"scope:trusted-{record.fact_kind}-v1",
             )
         )
     if program_id in {
@@ -264,6 +292,10 @@ def build_kernel_skeleton(
                     constraint_refs=constraints,
                     visible_order=90,
                     text="",
+                    track="creative_expression",
+                    mode="general_observation",
+                    scope_id="scope:general-observation-v1",
+                    allowed_resource_ids=resources,
                 ),
                 CreativeKernelUnit(
                     unit_id="unit:hypothetical-example",
@@ -273,6 +305,10 @@ def build_kernel_skeleton(
                     constraint_refs=constraints,
                     visible_order=100,
                     text="",
+                    track="creative_expression",
+                    mode="hypothesis",
+                    scope_id="scope:hypothesis-v1",
+                    allowed_resource_ids=resources,
                 ),
                 CreativeKernelUnit(
                     unit_id="unit:body-closing",
@@ -282,11 +318,58 @@ def build_kernel_skeleton(
                     constraint_refs=constraints,
                     visible_order=110,
                     text="",
+                    track="creative_expression",
+                    mode="general_observation",
+                    scope_id="scope:general-observation-v1",
+                    allowed_resource_ids=resources,
+                ),
+            )
+        )
+        release_order = 120
+    elif program_id == ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM:
+        units.extend(
+            (
+                CreativeKernelUnit(
+                    unit_id="unit:body",
+                    purpose="body",
+                    allowed_observation_types=("abstract_principle",),
+                    fact_refs=(),
+                    constraint_refs=constraints,
+                    visible_order=100,
+                    text="",
+                    track="creative_expression",
+                    mode="general_observation",
+                    scope_id="scope:general-observation-v1",
+                    allowed_resource_ids=resources,
+                ),
+                CreativeKernelUnit(
+                    unit_id="unit:local-dramatization",
+                    purpose="body",
+                    allowed_observation_types=("dramatization",),
+                    fact_refs=(),
+                    constraint_refs=constraints,
+                    visible_order=110,
+                    text="",
+                    track="creative_expression",
+                    mode="disclosed_dramatization",
+                    scope_id="scope:disclosed-dramatization-v1",
+                    allowed_resource_ids=resources,
                 ),
             )
         )
         release_order = 120
     else:
+        body_mode: UnitMode
+        body_scope: str
+        if frame.narrative_mode == "hypothesis":
+            body_mode = "hypothesis"
+            body_scope = "scope:hypothesis-v1"
+        elif frame.narrative_mode == "dramatization":
+            body_mode = "disclosed_dramatization"
+            body_scope = "scope:disclosed-dramatization-v1"
+        else:
+            body_mode = "general_observation"
+            body_scope = "scope:general-observation-v1"
         units.append(
             CreativeKernelUnit(
                 unit_id="unit:body",
@@ -296,6 +379,10 @@ def build_kernel_skeleton(
                 constraint_refs=constraints,
                 visible_order=100,
                 text="",
+                track="creative_expression",
+                mode=body_mode,
+                scope_id=body_scope,
+                allowed_resource_ids=resources,
             )
         )
         release_order = 110
@@ -308,6 +395,10 @@ def build_kernel_skeleton(
             constraint_refs=constraints,
             visible_order=release_order,
             text="",
+            track="creative_expression",
+            mode="general_observation",
+            scope_id="scope:general-observation-v1",
+            allowed_resource_ids=resources,
         )
     )
     return CreativeKernelV1(
@@ -321,6 +412,7 @@ def select_kernel_program(
     *,
     frame: NarrativeFrame,
     prior_kernel: CreativeKernelV1 | None = None,
+    revision_instruction: str | None = None,
 ) -> KernelProgramId:
     """Choose one bounded program from trusted frozen context.
 
@@ -329,6 +421,12 @@ def select_kernel_program(
     one explicitly scoped hypothetical example; fact-bearing and explicitly
     hypothetical/dramatized work keeps the existing single-body program.
     """
+    if (
+        prior_kernel is not None
+        and frame.narrative_mode == "actuality_reflection"
+        and _requests_local_dramatization(revision_instruction)
+    ):
+        return ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM
     if prior_kernel is not None:
         return prior_kernel.program_id
     if frame.narrative_mode == "general_observation" and not frame.allowed_fact_ids:
@@ -371,31 +469,20 @@ def parse_writer_kernel(
     if not isinstance(raw_units, list) or not raw_units:
         raise TypeError("writer units are incomplete")
     compiler_texts = dict(compiler_owned_text_by_id or {})
-    writable_by_id = {
-        unit.unit_id: unit for unit in skeleton.writable_units
-    }
-    if (
-        any(
-            unit_id not in writable_by_id
-            or writable_by_id[unit_id].purpose
-            not in {"natural_guide", "release_caption"}
-            or not isinstance(text, str)
-            or not text.strip()
-            or compiler_owned_unit_source(unit_id, text) is None
-            for unit_id, text in compiler_texts.items()
-        )
-        or set(compiler_texts)
-        not in (
-            set(),
-            {"unit:natural-guide", "unit:release-caption"},
-        )
+    writable_by_id = {unit.unit_id: unit for unit in skeleton.writable_units}
+    if any(
+        unit_id not in writable_by_id
+        or writable_by_id[unit_id].purpose not in {"natural_guide", "release_caption"}
+        or not isinstance(text, str)
+        or not text.strip()
+        or compiler_owned_unit_source(unit_id, text) is None
+        for unit_id, text in compiler_texts.items()
+    ) or set(compiler_texts) not in (
+        set(),
+        {"unit:natural-guide", "unit:release-caption"},
     ):
         raise ValueError("compiler-owned unit contract is invalid")
-    expected = {
-        unit_id: unit
-        for unit_id, unit in writable_by_id.items()
-        if unit_id not in compiler_texts
-    }
+    expected = {unit_id: unit for unit_id, unit in writable_by_id.items() if unit_id not in compiler_texts}
     returned_ids = [value.get("unit_id") for value in raw_units if isinstance(value, Mapping)]
     if (
         len(returned_ids) != len(raw_units)
@@ -404,8 +491,7 @@ def parse_writer_kernel(
     ):
         raise ValueError("writer unit coverage drifted from server skeleton")
     replacements: dict[str, CreativeKernelUnit] = {
-        unit_id: replace(writable_by_id[unit_id], text=text)
-        for unit_id, text in compiler_texts.items()
+        unit_id: replace(writable_by_id[unit_id], text=text) for unit_id, text in compiler_texts.items()
     }
     unit_fields = (
         frozenset({"unit_id", "text", "claim_refs"})
@@ -426,12 +512,7 @@ def parse_writer_kernel(
             raise ValueError("writer claim ref is outside ProductFactPacket")
         replacements[unit_id] = replace(
             expected[unit_id],
-            text=_service_wrap(
-                expected[unit_id],
-                _normalize_writer_visible_text(
-                    _required_string(raw_unit.get("text"))
-                ),
-            ),
+            text=_normalize_writer_visible_text(_required_string(raw_unit.get("text"))),
             claim_refs=claim_refs,
         )
     units = tuple(replacements.get(unit.unit_id, unit) for unit in skeleton.units)
@@ -525,6 +606,10 @@ def kernel_document(kernel: CreativeKernelV1) -> dict[str, object]:
                 "visible_order": unit.visible_order,
                 "text": unit.text,
                 "claim_refs": list(unit.claim_refs),
+                "track": unit.track,
+                "mode": unit.mode,
+                "scope_id": unit.scope_id,
+                "allowed_resource_ids": list(unit.allowed_resource_ids),
             }
             for unit in kernel.units
         ],
@@ -556,7 +641,7 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
     raw_program = value.get("program_id", OBSERVATION_ONLY_PROGRAM)
     selected_fact_block_ids = _string_tuple(value.get("selected_fact_block_ids", []))
     if (
-        value.get("kernel_version") != KERNEL_VERSION
+        value.get("kernel_version") not in {LEGACY_KERNEL_VERSION, KERNEL_VERSION}
         or not isinstance(raw_units, list)
         or not isinstance(raw_program, str)
         or raw_program not in _PROGRAM_IDS
@@ -588,6 +673,22 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
                     "claim_refs",
                 }
             ),
+            frozenset(
+                {
+                    "unit_id",
+                    "purpose",
+                    "allowed_observation_types",
+                    "fact_refs",
+                    "constraint_refs",
+                    "visible_order",
+                    "text",
+                    "claim_refs",
+                    "track",
+                    "mode",
+                    "scope_id",
+                    "allowed_resource_ids",
+                }
+            ),
         }:
             raise DomainError("冻结创作内核单元无效")
         purpose = raw.get("purpose")
@@ -601,6 +702,11 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
             or not isinstance(order, int)
         ):
             raise DomainError("冻结创作内核单元字段无效")
+        track, mode, scope_id = _unit_track_contract(
+            purpose=cast(KernelPurpose, purpose),
+            allowed=cast(tuple[ObservationType, ...], allowed),
+            raw=raw,
+        )
         units.append(
             CreativeKernelUnit(
                 unit_id=_required_string(raw.get("unit_id")),
@@ -611,6 +717,10 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
                 visible_order=order,
                 text=_required_string(raw.get("text")),
                 claim_refs=_string_tuple(raw.get("claim_refs", [])),
+                track=track,
+                mode=mode,
+                scope_id=scope_id,
+                allowed_resource_ids=_string_tuple(raw.get("allowed_resource_ids", [])),
             )
         )
     identifiers = [unit.unit_id for unit in units]
@@ -623,7 +733,7 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
     ):
         raise DomainError("冻结创作内核顺序或标识无效")
     return CreativeKernelV1(
-        KERNEL_VERSION,
+        str(value.get("kernel_version")),
         tuple(units),
         raw_program,
         selected_fact_block_ids,
@@ -786,16 +896,41 @@ def reconcile_kernel_observations(
     return tuple(dict.fromkeys(issues))
 
 
-def _service_wrap(unit: CreativeKernelUnit, text: str) -> str:
-    if unit.allowed_observation_types == ("dramatization",):
-        if text.startswith(DRAMATIZATION_DISCLOSURE):
-            raise ValueError("writer cannot author the service disclosure")
-        return f"{DRAMATIZATION_DISCLOSURE}\n{text}"
-    if unit.allowed_observation_types == ("hypothesis",):
-        if text.startswith(HYPOTHESIS_DISCLOSURE):
-            raise ValueError("writer cannot author the service disclosure")
-        return f"{HYPOTHESIS_DISCLOSURE}\n{text}"
-    return text
+def _requests_local_dramatization(instruction: str | None) -> bool:
+    """Recognize the user's positive request for a visibly disclosed local scene.
+
+    This is a bounded product-control grammar, not a list of unsafe topics or
+    model-output patches.
+    """
+    if not instruction:
+        return False
+    return any(marker in instruction for marker in ("荒诞", "戏剧", "小情景", "情景演绎", "小剧场"))
+
+
+def _unit_track_contract(
+    *,
+    purpose: KernelPurpose,
+    allowed: tuple[ObservationType, ...],
+    raw: Mapping[str, object],
+) -> tuple[UnitTrack, UnitMode, str]:
+    if purpose == "frozen_fact":
+        expected = ("trusted_fact", "trusted_fact")
+        default_scope = "scope:trusted-fact-v1"
+    elif allowed == ("hypothesis",):
+        expected = ("creative_expression", "hypothesis")
+        default_scope = "scope:hypothesis-v1"
+    elif allowed == ("dramatization",):
+        expected = ("creative_expression", "disclosed_dramatization")
+        default_scope = "scope:disclosed-dramatization-v1"
+    else:
+        expected = ("creative_expression", "general_observation")
+        default_scope = "scope:general-observation-v1"
+    raw_track = raw.get("track", expected[0])
+    raw_mode = raw.get("mode", expected[1])
+    raw_scope = raw.get("scope_id", default_scope)
+    if raw_track != expected[0] or raw_mode != expected[1] or not isinstance(raw_scope, str) or not raw_scope:
+        raise DomainError("冻结创作内核表达轨无效")
+    return cast(UnitTrack, raw_track), cast(UnitMode, raw_mode), raw_scope
 
 
 def _normalize_writer_visible_text(text: str) -> str:

@@ -39,26 +39,29 @@ def _settings(database_url: str) -> Settings:
     )
 
 
-def test_production_requires_an_explicit_reviewer_model(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_production_requires_writer_but_no_reviewer_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("QWEN_REVIEWER_API_BASE_URL", raising=False)
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
     monkeypatch.delenv("QWEN_REVIEWER_MODEL", raising=False)
-    with pytest.raises(RuntimeError, match="Reviewer"):
-        Settings.model_validate(
-            {
-                "DIYU_RUNTIME_MODE": "production",
-                "DIYU_APP_DATABASE_URL": "postgresql://example.invalid/diyu",
-                "DIYU_SESSION_SECRET": "production-test-session-secret",
-                "DIYU_GENERATOR_MODE": "deepseek",
-                "DEEPSEEK_API_BASE_URL": "https://example.invalid",
-                "DEEPSEEK_API_KEY": "not-a-real-key",
-                "DEEPSEEK_MODEL": "deepseek-v4-flash",
-                "DIYU_S3_ENDPOINT_URL": "http://127.0.0.1:9000",
-                "DIYU_S3_BUCKET": "diyu-test",
-                "DIYU_S3_ACCESS_KEY_ID": "test-access-key",
-                "DIYU_S3_SECRET_ACCESS_KEY": "test-secret-key",
-            }
-        )
+    configured = Settings.model_validate(
+        {
+            "DIYU_RUNTIME_MODE": "production",
+            "DIYU_APP_DATABASE_URL": "postgresql://example.invalid/diyu",
+            "DIYU_SESSION_SECRET": "production-test-session-secret",
+            "DIYU_GENERATOR_MODE": "deepseek",
+            "DEEPSEEK_API_BASE_URL": "https://example.invalid",
+            "DEEPSEEK_API_KEY": "not-a-real-key",
+            "DEEPSEEK_MODEL": "deepseek-v4-flash",
+            "DIYU_S3_ENDPOINT_URL": "http://127.0.0.1:9000",
+            "DIYU_S3_BUCKET": "diyu-test",
+            "DIYU_S3_ACCESS_KEY_ID": "test-access-key",
+            "DIYU_S3_SECRET_ACCESS_KEY": "test-secret-key",
+        }
+    )
+    assert configured.deepseek_model == "deepseek-v4-flash"
+    assert not hasattr(configured, "qwen_reviewer_model")
 
 
 def _clear_auth_state(migrator_database_url: str) -> None:

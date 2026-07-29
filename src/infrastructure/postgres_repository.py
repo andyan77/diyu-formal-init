@@ -288,7 +288,10 @@ class PostgresContentRepository(ContentRepository):
                         )
                         | {
                             "writer_model": model,
-                            "reviewer_model": reviewer_model or model,
+                            "version_authorization": (
+                                "external-reviewer" if reviewer_model else "deterministic-dual-track-v1"
+                            ),
+                            **({"reviewer_model": reviewer_model} if reviewer_model else {}),
                         }
                     ),
                 ),
@@ -551,7 +554,10 @@ class PostgresContentRepository(ContentRepository):
                         )
                         | {
                             "writer_model": model,
-                            "reviewer_model": reviewer_model or model,
+                            "version_authorization": (
+                                "external-reviewer" if reviewer_model else "deterministic-dual-track-v1"
+                            ),
+                            **({"reviewer_model": reviewer_model} if reviewer_model else {}),
                         }
                     ),
                 ),

@@ -8,6 +8,7 @@ from src.shared.creative_kernel import (
     DRAMATIZATION_DISCLOSURE,
     CreativeKernelUnit,
     CreativeKernelV1,
+    UnitMode,
     compiler_owned_unit_source,
     compiler_owned_unit_texts,
 )
@@ -29,7 +30,9 @@ from src.shared.types import (
 
 DeliveryMedia: TypeAlias = Literal["video", "graphic"]
 
-DELIVERY_COMPILER_VERSION = "delivery-compiler-v1"
+LEGACY_DELIVERY_COMPILER_VERSION = "delivery-compiler-v1"
+DELIVERY_COMPILER_VERSION = "delivery-compiler-v2"
+SUPPORTED_DELIVERY_COMPILER_VERSIONS = frozenset({LEGACY_DELIVERY_COMPILER_VERSION, DELIVERY_COMPILER_VERSION})
 ORIGINAL_COMPOSITION_RESOURCE_ID = "resource:original_composition"
 CREATOR_EXPRESSION_RESOURCE_ID = "resource:creator_expression"
 _PHRASES: dict[str, str] = {
@@ -39,21 +42,18 @@ _PHRASES: dict[str, str] = {
     "phrase:graphic-hero": "使用原创标题文字卡与留白排版，不调用现实人物、场地或道具。",
     "phrase:graphic-product-hero": "使用已登记商品近景与标题排版，不增加未登记道具。",
     "phrase:graphic-sequence": (
-        "第 1 张为标题文字卡；中间页按内核可见顺序排入正文与事实原句；"
-        "末页使用发布配文收束。"
+        "第 1 张为保留表达范围的标题文字卡；中间页按冻结顺序排入已标识的创作表达与事实原句；末页使用发布配文收束。"
     ),
     "phrase:graphic-sequence-four": (
-        "只补拍四张：第 1 张为标题文字卡；第 2、3 张按内核可见顺序排入正文与"
-        "事实原句；第 4 张使用发布配文收束。"
+        "只补拍四张：第 1 张为保留表达范围的标题文字卡；第 2、3 张按冻结顺序"
+        "排入已标识的创作表达与事实原句；第 4 张使用发布配文收束。"
     ),
     "phrase:graphic-layout": "使用原创文字卡、基础排版和留白；只可加入本次冻结的已登记素材。",
-    "phrase:video-cover": "以原创标题文字卡作为封面或首帧，不要求现实场地或道具。",
-    "phrase:video-flow": "标题文字卡进入正文旁白或文字卡，按内核顺序展开，再由发布配文自然收束。",
-    "phrase:video-action": "用原创文字卡按内核顺序切换，不重演用户现实，也不增加人物、场地或道具。",
-    "phrase:video-product-action": "只使用已登记商品近景与原创文字卡按内核顺序切换，不增加人物、场地或道具。",
-    "phrase:video-drama": (
-        "演绎段使用文字对话卡或创作者一人分段旁白；不表示第二演员或家庭现场存在。"
-    ),
+    "phrase:video-cover": "以保留表达范围的原创标题文字卡作为封面或首帧，不要求现实场地或道具。",
+    "phrase:video-flow": "标题文字卡进入已标识的正文旁白或文字卡，按冻结顺序展开，再由发布配文自然收束。",
+    "phrase:video-action": "用原创文字卡按冻结顺序切换，不重演用户现实，也不增加人物、场地或道具。",
+    "phrase:video-product-action": "只使用已登记商品近景与原创文字卡按冻结顺序切换，不增加人物、场地或道具。",
+    "phrase:video-drama": ("演绎段使用文字对话卡或创作者一人分段旁白；不表示第二演员或家庭现场存在。"),
     "phrase:video-sound": "不要求环境声；可静音或使用创作者本人旁白，不模拟未登记现场声音。",
     "phrase:video-silent": "无口播、无对白、无解说；完整已审文字由文字卡和字幕承担。",
 }
@@ -67,6 +67,7 @@ class DeliveryCompileInput:
     production_conditions: str
     allowed_resource_ids: frozenset[str]
     immutable_fact_blocks: tuple[ImmutableFactBlock, ...] = ()
+    trusted_fact_texts: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -94,22 +95,18 @@ def assert_compiled_delivery(
     compiled: CompiledDelivery,
 ) -> None:
     _assert_immutable_fact_blocks(request, kernel)
+    _assert_expression_plan(request, kernel)
     expected = _compile_delivery(request, kernel)
     if compiled != expected:
         raise GenerationFailed("确定性成品编译结果包含未审文字或结构漂移")
-    if any(
-        resource not in request.allowed_resource_ids
-        for resource in compiled.resource_refs
-    ):
+    if any(resource not in request.allowed_resource_ids for resource in compiled.resource_refs):
         raise GenerationFailed("确定性成品编译使用了未登记资源")
     allowed_sources = {
         *(unit.unit_id for unit in kernel.units),
         *_PHRASES,
         *(
             source
-            for unit_id, text in compiler_owned_unit_texts(
-                request.primary_product
-            ).items()
+            for unit_id, text in compiler_owned_unit_texts(request.primary_product).items()
             if (
                 source := compiler_owned_unit_source(
                     unit_id,
@@ -121,11 +118,7 @@ def assert_compiled_delivery(
         "compiler:duration",
         "compiler:visible-body",
     }
-    if any(
-        source not in allowed_sources
-        for sources in compiled.visible_provenance.values()
-        for source in sources
-    ):
+    if any(source not in allowed_sources for sources in compiled.visible_provenance.values() for source in sources):
         raise GenerationFailed("确定性成品编译包含未知可见来源")
 
 
@@ -133,42 +126,66 @@ def _assert_immutable_fact_blocks(
     request: DeliveryCompileInput,
     kernel: CreativeKernelV1,
 ) -> None:
-    block_by_id = {
-        block.fact_block_id: block
-        for block in request.immutable_fact_blocks
-    }
-    if any(
-        block_id not in block_by_id
-        for block_id in kernel.selected_fact_block_ids
-    ):
+    block_by_id = {block.fact_block_id: block for block in request.immutable_fact_blocks}
+    if any(block_id not in block_by_id for block_id in kernel.selected_fact_block_ids):
         raise GenerationFailed("确定性成品编译无法解析商品事实块")
-    selected = tuple(
-        block_by_id[block_id]
-        for block_id in kernel.selected_fact_block_ids
-    )
+    selected = tuple(block_by_id[block_id] for block_id in kernel.selected_fact_block_ids)
     unit_by_fact_id = {
-        unit.fact_refs[0]: unit
-        for unit in kernel.units
-        if unit.purpose == "frozen_fact"
-        and len(unit.fact_refs) == 1
+        unit.fact_refs[0]: unit for unit in kernel.units if unit.purpose == "frozen_fact" and len(unit.fact_refs) == 1
     }
     for block in selected:
         unit = unit_by_fact_id.get(block.fact_id)
         if unit is None or unit.text != block.canonical_text:
             raise GenerationFailed("确定性成品编译发现商品事实块漂移")
     selected_fact_ids = {block.fact_id for block in selected}
-    available_fact_ids = {
-        block.fact_id for block in request.immutable_fact_blocks
-    }
+    available_fact_ids = {block.fact_id for block in request.immutable_fact_blocks}
     visible_product_fact_ids = {
         unit.fact_refs[0]
         for unit in kernel.units
-        if unit.purpose == "frozen_fact"
-        and len(unit.fact_refs) == 1
-        and unit.fact_refs[0] in available_fact_ids
+        if unit.purpose == "frozen_fact" and len(unit.fact_refs) == 1 and unit.fact_refs[0] in available_fact_ids
     }
     if visible_product_fact_ids != selected_fact_ids:
         raise GenerationFailed("确定性成品编译商品事实块覆盖漂移")
+
+
+def _assert_expression_plan(
+    request: DeliveryCompileInput,
+    kernel: CreativeKernelV1,
+) -> None:
+    unit_ids = [unit.unit_id for unit in kernel.units]
+    orders = [unit.visible_order for unit in kernel.units]
+    if len(unit_ids) != len(set(unit_ids)) or len(orders) != len(set(orders)) or orders != sorted(orders):
+        raise GenerationFailed("确定性成品编译发现表达计划标识或顺序漂移")
+    fact_text_by_id = dict(request.trusted_fact_texts)
+    if len(fact_text_by_id) != len(request.trusted_fact_texts):
+        raise GenerationFailed("可信事实轨来源重复")
+    for unit in kernel.units:
+        if unit.track == "trusted_fact":
+            if (
+                unit.purpose != "frozen_fact"
+                or unit.mode != "trusted_fact"
+                or len(unit.fact_refs) != 1
+                or unit.constraint_refs
+                or unit.allowed_resource_ids
+                or fact_text_by_id.get(unit.fact_refs[0]) != unit.text
+            ):
+                raise GenerationFailed("可信事实轨结构漂移")
+            continue
+        if (
+            unit.track != "creative_expression"
+            or unit.purpose == "frozen_fact"
+            or unit.fact_refs
+            or not unit.scope_id
+            or any(resource_id not in request.allowed_resource_ids for resource_id in unit.allowed_resource_ids)
+        ):
+            raise GenerationFailed("创作表达轨结构漂移")
+        if unit.mode not in {
+            "general_observation",
+            "recommendation",
+            "hypothesis",
+            "disclosed_dramatization",
+        }:
+            raise GenerationFailed("创作表达轨语态无效")
 
 
 def _compile_delivery(
@@ -176,47 +193,37 @@ def _compile_delivery(
     kernel: CreativeKernelV1,
 ) -> CompiledDelivery:
     singleton_by_purpose = {
-        unit.purpose: unit
-        for unit in kernel.units
-        if unit.purpose in {"title", "natural_guide", "release_caption"}
+        unit.purpose: unit for unit in kernel.units if unit.purpose in {"title", "natural_guide", "release_caption"}
     }
-    body_units = tuple(
-        unit for unit in kernel.units if unit.purpose == "body"
-    )
+    body_units = tuple(unit for unit in kernel.units if unit.purpose == "body")
     required = {"title", "natural_guide", "release_caption"}
     if set(singleton_by_purpose) != required or not body_units:
         raise GenerationFailed("创作内核缺少完整可见单元")
-    if any(
-        sum(unit.purpose == purpose for unit in kernel.units) != 1
-        for purpose in required
-    ):
+    if any(sum(unit.purpose == purpose for unit in kernel.units) != 1 for purpose in required):
         raise GenerationFailed("创作内核单值可见单元重复")
-    title = singleton_by_purpose["title"].text
-    expected_compiler_texts = compiler_owned_unit_texts(
-        request.primary_product
+    title = _scoped_title(
+        singleton_by_purpose["title"].text,
+        kernel,
     )
-    guide = expected_compiler_texts["unit:natural-guide"]
-    release = expected_compiler_texts["unit:release-caption"]
+    expected_compiler_texts = compiler_owned_unit_texts(request.primary_product)
+    raw_guide = expected_compiler_texts["unit:natural-guide"]
+    raw_release = expected_compiler_texts["unit:release-caption"]
+    guide = _scoped_compiler_text(raw_guide, kernel)
+    release = _scoped_compiler_text(raw_release, kernel)
     guide_source = compiler_owned_unit_source(
         "unit:natural-guide",
-        guide,
+        raw_guide,
     )
     release_source = compiler_owned_unit_source(
         "unit:release-caption",
-        release,
+        raw_release,
     )
     if guide_source is None or release_source is None:
         raise GenerationFailed("确定性成品编译中性字段来源无效")
-    fact_units = tuple(
-        unit for unit in kernel.units if unit.purpose == "frozen_fact"
-    )
-    creative_body = "\n\n".join(unit.text for unit in body_units)
-    spoken_parts = tuple(
-        unit
-        for unit in kernel.units
-        if unit.purpose in {"frozen_fact", "body"}
-    )
-    spoken = "\n\n".join(unit.text for unit in spoken_parts)
+    fact_units = tuple(unit for unit in kernel.units if unit.purpose == "frozen_fact")
+    creative_body = "\n\n".join(_visible_unit(unit) for unit in body_units)
+    spoken_parts = tuple(unit for unit in kernel.units if unit.purpose in {"frozen_fact", "body"})
+    spoken = "\n\n".join(_visible_unit(unit) for unit in spoken_parts)
     contract = _contract(
         request.primary_product,
         guide,
@@ -227,8 +234,7 @@ def _compile_delivery(
     product_resources = tuple(
         f"resource:product:{product.sku}"
         for product in request.products
-        if f"resource:product:{product.sku}"
-        in request.allowed_resource_ids
+        if f"resource:product:{product.sku}" in request.allowed_resource_ids
     )
     base_resources = (ORIGINAL_COMPOSITION_RESOURCE_ID,)
     if ORIGINAL_COMPOSITION_RESOURCE_ID not in request.allowed_resource_ids:
@@ -237,12 +243,7 @@ def _compile_delivery(
         dict.fromkeys(
             (
                 *base_resources,
-                *(
-                    product_resources
-                    if request.primary_product
-                    in {"product_truth", "visual_styling_story"}
-                    else ()
-                ),
+                *(product_resources if request.primary_product in {"product_truth", "visual_styling_story"} else ()),
             )
         )
     )
@@ -254,15 +255,9 @@ def _compile_delivery(
     }
     production: ContentProductionBundle
     if request.media_format == "graphic":
-        hero_id = (
-            "phrase:graphic-product-hero"
-            if product_resources
-            else "phrase:graphic-hero"
-        )
+        hero_id = "phrase:graphic-product-hero" if product_resources else "phrase:graphic-hero"
         sequence_id = (
-            "phrase:graphic-sequence-four"
-            if "四张" in request.production_conditions
-            else "phrase:graphic-sequence"
+            "phrase:graphic-sequence-four" if "四张" in request.production_conditions else "phrase:graphic-sequence"
         )
         production = GraphicProductionBundle(
             natural_guide=guide,
@@ -281,36 +276,18 @@ def _compile_delivery(
             }
         )
     else:
-        silent = all(
-            marker in request.production_conditions
-            for marker in ("无口播", "无对白", "无解说")
-        )
+        silent = all(marker in request.production_conditions for marker in ("无口播", "无对白", "无解说"))
         action_phrase = (
             "phrase:video-drama"
-            if any(
-                unit.text.startswith(DRAMATIZATION_DISCLOSURE)
-                for unit in body_units
-            )
-            else (
-                "phrase:video-product-action"
-                if product_resources
-                else "phrase:video-action"
-            )
+            if any(unit.mode == "disclosed_dramatization" for unit in body_units)
+            else ("phrase:video-product-action" if product_resources else "phrase:video-action")
         )
-        if (
-            not silent
-            and CREATOR_EXPRESSION_RESOURCE_ID
-            in request.allowed_resource_ids
-        ):
-            resource_refs = tuple(
-                dict.fromkeys((*resource_refs, CREATOR_EXPRESSION_RESOURCE_ID))
-            )
+        if not silent and CREATOR_EXPRESSION_RESOURCE_ID in request.allowed_resource_ids:
+            resource_refs = tuple(dict.fromkeys((*resource_refs, CREATOR_EXPRESSION_RESOURCE_ID)))
         duration = _duration(spoken, request.production_conditions)
         production = VideoProductionBundle(
             natural_guide=guide,
-            spoken_lines=(
-                _PHRASES["phrase:video-silent"] if silent else spoken
-            ),
+            spoken_lines=(_PHRASES["phrase:video-silent"] if silent else spoken),
             visual_actions=_PHRASES[action_phrase],
             subtitles=spoken,
             sound_and_production=_PHRASES["phrase:video-sound"],
@@ -335,11 +312,7 @@ def _compile_delivery(
     body = _visible_body(title, production)
     provenance["body"] = (
         "compiler:visible-body",
-        *tuple(
-            source
-            for sources in provenance.values()
-            for source in sources
-        ),
+        *tuple(source for sources in provenance.values() for source in sources),
     )
     return CompiledDelivery(
         outline=title,
@@ -351,6 +324,58 @@ def _compile_delivery(
     )
 
 
+def _visible_unit(unit: CreativeKernelUnit) -> str:
+    if unit.track == "trusted_fact":
+        if unit.allowed_observation_types == ("user_actuality",):
+            label = "真实原话"
+        elif unit.allowed_observation_types == ("institutional_assertion",):
+            label = "已确认品牌信息"
+        else:
+            label = "已确认商品信息"
+        return f"{label}｜{unit.text}"
+    label_by_mode: dict[UnitMode, str] = {
+        "trusted_fact": "",
+        "general_observation": "一般观察（不对应未提供的真实经历）",
+        "recommendation": "可以尝试",
+        "hypothesis": "假设情境",
+        "disclosed_dramatization": (DRAMATIZATION_DISCLOSURE.removesuffix("：")),
+    }
+    label = label_by_mode[unit.mode]
+    if not label:
+        raise GenerationFailed("创作表达轨缺少可见范围")
+    return f"{label}｜{unit.text}"
+
+
+def _scope_summary(kernel: CreativeKernelV1) -> str:
+    modes = {
+        unit.mode
+        for unit in kernel.units
+        if unit.track == "creative_expression" and unit.purpose not in {"natural_guide", "release_caption"}
+    }
+    labels: list[str] = []
+    if any(unit.track == "trusted_fact" for unit in kernel.units):
+        labels.append("可信事实")
+    for mode, label in (
+        ("general_observation", "一般观察"),
+        ("recommendation", "建议"),
+        ("hypothesis", "假设情境"),
+        ("disclosed_dramatization", "情景演绎"),
+    ):
+        if mode in modes:
+            labels.append(label)
+    if not labels:
+        raise GenerationFailed("成品缺少可见表达范围")
+    return "＋".join(labels)
+
+
+def _scoped_title(text: str, kernel: CreativeKernelV1) -> str:
+    return f"{_scope_summary(kernel)}｜{text}"
+
+
+def _scoped_compiler_text(text: str, kernel: CreativeKernelV1) -> str:
+    return f"{_scope_summary(kernel)}｜{text}"
+
+
 def _contract(
     product: ContentProduct,
     guide: str,
@@ -358,9 +383,7 @@ def _contract(
     release: str,
     facts: tuple[CreativeKernelUnit, ...],
 ) -> ContentSemanticContract:
-    fact_text = "\n".join(
-        unit.text for unit in facts
-    ) or _PHRASES["phrase:fact-boundary"]
+    fact_text = "\n".join(unit.text for unit in facts) or _PHRASES["phrase:fact-boundary"]
     if product == "dressing_decision":
         return P1SemanticContract(body, _PHRASES["phrase:fact-boundary"], release)
     if product == "product_truth":
@@ -411,6 +434,4 @@ def _visible_body(
             ("拍摄/排版提示", production.layout_and_production),
             ("发布配文与互动", production.release_caption_and_interaction),
         )
-    return "标题：" + title + "\n\n" + "\n\n".join(
-        f"{heading}：{value}" for heading, value in sections
-    )
+    return "标题：" + title + "\n\n" + "\n\n".join(f"{heading}：{value}" for heading, value in sections)

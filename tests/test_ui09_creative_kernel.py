@@ -53,11 +53,7 @@ def _kernel(
 ) -> CreativeKernelV1:
     frame = new_frame(
         mode,  # type: ignore[arg-type]
-        (
-            tuple(record.exact_text for record in facts)
-            if mode == "actuality_reflection"
-            else ()
-        ),
+        (tuple(record.exact_text for record in facts) if mode == "actuality_reflection" else ()),
         (),
     )
     skeleton = build_kernel_skeleton(
@@ -109,22 +105,18 @@ def _complete_observations(
         observation_type = (
             "user_actuality"
             if unit.purpose == "frozen_fact"
-            else body_type if unit.purpose == "body" else "abstract_principle"
+            else body_type
+            if unit.purpose == "body"
+            else "abstract_principle"
         )
-        disclosure = (
-            (DRAMATIZATION_DISCLOSURE,)
-            if observation_type == "dramatization"
-            else ()
-        )
+        disclosure = (DRAMATIZATION_DISCLOSURE,) if observation_type == "dramatization" else ()
         observations.append(
             _observation(
                 unit_id=unit.unit_id,
                 text=unit.text,
                 observation_type=observation_type,
                 disclosure=disclosure,
-                event_spans=(
-                    body_event_spans if unit.purpose == "body" else ()
-                ),
+                event_spans=(body_event_spans if unit.purpose == "body" else ()),
             )
         )
     return tuple(observations)
@@ -188,10 +180,7 @@ def test_writer_straight_quotes_are_normalized_before_review() -> None:
         skeleton,
     )
 
-    assert (
-        kernel.unit("unit:title").text
-        == "最怕的不是吵架，而是这种“客气”"
-    )
+    assert kernel.unit("unit:title").text == "最怕的不是吵架，而是这种“客气”"
 
 
 def test_writer_unmatched_straight_quote_fails_closed() -> None:
@@ -255,9 +244,7 @@ def test_mutation_of_a_service_fact_is_detected_by_reconciliation() -> None:
     mutated = replace(
         original,
         units=tuple(
-            replace(unit, text="丈夫最后把碗洗了。")
-            if unit.purpose == "frozen_fact"
-            else unit
+            replace(unit, text="丈夫最后把碗洗了。") if unit.purpose == "frozen_fact" else unit
             for unit in original.units
         ),
     )
@@ -283,11 +270,7 @@ def test_micro_event_fails_but_abstract_principle_passes() -> None:
         fact_text_by_id={},
         allowed_constraint_ids=frozenset({"source:brand_baseline"}),
     )
-    assert any(
-        issue.target_id == "unit:body"
-        and issue.reason == "unit_observation_drift"
-        for issue in micro_issues
-    )
+    assert any(issue.target_id == "unit:body" and issue.reason == "unit_observation_drift" for issue in micro_issues)
 
     abstract = _kernel(body="换位思考不等于没有边界。")
     assert (
@@ -334,9 +317,7 @@ def test_unfounded_institutional_assertion_fails() -> None:
         allowed_constraint_ids=frozenset({"source:brand_baseline"}),
     )
     assert any(
-        issue.target_id == "unit:body"
-        and issue.reason == "unsupported_institutional_assertion"
-        for issue in issues
+        issue.target_id == "unit:body" and issue.reason == "unsupported_institutional_assertion" for issue in issues
     )
 
 
@@ -345,34 +326,19 @@ def test_dramatization_requires_the_server_disclosure() -> None:
         mode="dramatization",
         body="甲说先停一下，乙把原本的话换了一种说法。",
     )
-    assert kernel.unit("unit:body").text.startswith(DRAMATIZATION_DISCLOSURE)
-    observations = _complete_observations(
+    assert kernel.unit("unit:body").mode == "disclosed_dramatization"
+    assert not kernel.unit("unit:body").text.startswith(DRAMATIZATION_DISCLOSURE)
+    compiled = compile_delivery(
+        DeliveryCompileInput(
+            primary_product="brand_life_narrative",
+            media_format="graphic",
+            products=(),
+            production_conditions="原创文字卡。",
+            allowed_resource_ids=frozenset({ORIGINAL_COMPOSITION_RESOURCE_ID}),
+        ),
         kernel,
-        body_type="dramatization",
     )
-    assert (
-        reconcile_kernel_observations(
-            kernel=kernel,
-            observations=observations,
-            fact_text_by_id={},
-            allowed_constraint_ids=frozenset({"source:brand_baseline"}),
-        )
-        == ()
-    )
-
-    without_disclosure = tuple(
-        replace(observation, dramatization_disclosure_spans=())
-        if observation.target_id == "unit:body"
-        else observation
-        for observation in observations
-    )
-    issues = reconcile_kernel_observations(
-        kernel=kernel,
-        observations=without_disclosure,
-        fact_text_by_id={},
-        allowed_constraint_ids=frozenset({"source:brand_baseline"}),
-    )
-    assert any(issue.reason == "dramatization_not_visible" for issue in issues)
+    assert DRAMATIZATION_DISCLOSURE.removesuffix("：") in compiled.body
 
 
 def test_delivery_compiler_rejects_unreviewed_text_and_resources() -> None:
@@ -382,36 +348,16 @@ def test_delivery_compiler_rejects_unreviewed_text_and_resources() -> None:
         media_format="graphic",
         products=(),
         production_conditions="原创文字卡。",
-        allowed_resource_ids=frozenset(
-            {ORIGINAL_COMPOSITION_RESOURCE_ID}
-        ),
+        allowed_resource_ids=frozenset({ORIGINAL_COMPOSITION_RESOURCE_ID}),
     )
     compiled = compile_delivery(request, kernel)
-    compiler_texts = compiler_owned_unit_texts(
-        "brand_life_narrative"
-    )
-    assert (
-        compiled.production.natural_guide
-        == compiler_texts["unit:natural-guide"]
-    )
-    assert (
-        compiled.production.release_caption_and_interaction
-        == compiler_texts["unit:release-caption"]
-    )
-    assert (
-        kernel.unit("unit:natural-guide").text
-        not in compiled.body
-    )
-    assert (
-        kernel.unit("unit:release-caption").text
-        not in compiled.body
-    )
-    assert compiled.visible_provenance["natural_guide"][0].startswith(
-        "phrase:compiler-guide-"
-    )
-    assert compiled.visible_provenance[
-        "release_caption_and_interaction"
-    ][0].startswith("phrase:compiler-release-")
+    compiler_texts = compiler_owned_unit_texts("brand_life_narrative")
+    assert compiled.production.natural_guide.endswith(compiler_texts["unit:natural-guide"])
+    assert compiled.production.release_caption_and_interaction.endswith(compiler_texts["unit:release-caption"])
+    assert kernel.unit("unit:natural-guide").text not in compiled.body
+    assert kernel.unit("unit:release-caption").text not in compiled.body
+    assert compiled.visible_provenance["natural_guide"][0].startswith("phrase:compiler-guide-")
+    assert compiled.visible_provenance["release_caption_and_interaction"][0].startswith("phrase:compiler-release-")
 
     with pytest.raises(GenerationFailed, match="未审文字或结构漂移"):
         assert_compiled_delivery(
@@ -445,9 +391,8 @@ def test_user_fact_never_becomes_a_production_resource() -> None:
         media_format="graphic",
         products=(),
         production_conditions="原创文字卡。",
-        allowed_resource_ids=frozenset(
-            {ORIGINAL_COMPOSITION_RESOURCE_ID}
-        ),
+        allowed_resource_ids=frozenset({ORIGINAL_COMPOSITION_RESOURCE_ID}),
+        trusted_fact_texts=((fact.fact_id, fact.exact_text),),
     )
     compiled = compile_delivery(request, kernel)
 

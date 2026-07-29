@@ -177,10 +177,6 @@ class FailingGenerator:
     def model_name(self) -> str:
         return "deterministic-failure"
 
-    @property
-    def reviewer_model_name(self) -> str:
-        return self.model_name
-
     def route(self, request: object) -> str:
         return "dressing_decision"
 

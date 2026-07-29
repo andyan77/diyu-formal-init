@@ -38,7 +38,10 @@ def frozen_creative_plan(
 def frozen_creative_kernel(
     snapshot: Mapping[str, object],
 ) -> CreativeKernelV1 | None:
-    value = snapshot.get("creative_kernel_v1")
+    value = snapshot.get(
+        "creative_kernel_v2",
+        snapshot.get("creative_kernel_v1"),
+    )
     return None if value is None else kernel_from_document(value)
 
 
@@ -61,11 +64,7 @@ def visible_direction(snapshot: object) -> tuple[str | None, list[str]]:
     notice = snapshot.get("translation_notice")
     applied = snapshot.get("applied_direction")
     labels = (
-        [
-            str(item["applied_label"])
-            for item in applied
-            if isinstance(item, dict) and item.get("applied_label")
-        ]
+        [str(item["applied_label"]) for item in applied if isinstance(item, dict) and item.get("applied_label")]
         if isinstance(applied, list)
         else []
     )
@@ -136,9 +135,7 @@ def frozen_series_context(snapshot: Mapping[str, object]) -> SeriesContext | Non
             premise=str(raw_context["premise"]),
             target_position=int(str(raw_context["target_position"])),
             prior_entries=tuple(entries),
-            user_asserted_published_continuity=bool(
-                raw_context.get("user_asserted_published_continuity", False)
-            ),
+            user_asserted_published_continuity=bool(raw_context.get("user_asserted_published_continuity", False)),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise DomainError("内容任务冻结的系列前情无效") from exc

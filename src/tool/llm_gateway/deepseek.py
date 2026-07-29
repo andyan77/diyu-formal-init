@@ -16,14 +16,10 @@ from src.ports.reviewer_provider import ReviewerProvider
 from src.shared.clause_license import (
     CLAUSE_LICENSE_REVIEW_VERSION,
     CLAUSE_LICENSE_TOOL_NAME,
-    CLAUSE_LICENSE_VERSION,
     ClauseLicenseReviewsV1,
     ClauseLicenseReviewV1,
     ClauseLicenseV1,
     UnitClauseLicensePolicyV1,
-    build_unit_clause_license_policies_v1,
-    clause_license_document,
-    clause_license_review_document,
     clause_license_review_json_schema,
     materialize_clause_licenses_v1,
     parse_clause_license_reviews_v1,
@@ -43,6 +39,7 @@ from src.shared.content_origin import aigc_disclosure
 from src.shared.creative_kernel import (
     DRAMATIZATION_DISCLOSURE,
     HYPOTHESIS_DISCLOSURE,
+    KERNEL_VERSION,
     MAX_PRODUCT_FACT_BLOCKS,
     CreativeKernelV1,
     build_kernel_skeleton,
@@ -52,7 +49,6 @@ from src.shared.creative_kernel import (
     kernel_digest,
     kernel_document,
     parse_writer_kernel,
-    repair_kernel_units,
     select_kernel_program,
 )
 from src.shared.creative_plan import (
@@ -94,7 +90,6 @@ from src.shared.review_evidence import (
     ClauseContextV2,
     UnitContractV2,
     build_clause_contexts_v2,
-    clause_context_document,
     unit_contracts_v2,
     validate_server_owned_contexts_v2,
     writer_clause_contexts_v2,
@@ -404,14 +399,14 @@ class BoundaryContext:
 
 
 class DeepSeekGenerator(ContentGenerator):
-    """One provider: intake, typed writer, independent extractor, one block repair."""
+    """DeepSeek intake and typed Writer for the server-owned dual-track runtime."""
 
     def __init__(
         self,
         api_base_url: str,
         api_key: str,
         model: str,
-        reviewer_provider: ReviewerProvider,
+        reviewer_provider: ReviewerProvider | None = None,
         timeout_seconds: float = 30.0,
         max_retries: int = 2,
     ) -> None:
@@ -419,7 +414,7 @@ class DeepSeekGenerator(ContentGenerator):
         self._api_key = api_key
         self._model = model
         self._reviewer_provider = reviewer_provider
-        self._reviewer_model = reviewer_provider.model_name
+        self._reviewer_model = reviewer_provider.model_name if reviewer_provider is not None else None
         self._timeout_seconds = timeout_seconds
         self._max_retries = max_retries
         self._review_timeout_seconds = max(timeout_seconds, 60.0)
@@ -427,10 +422,6 @@ class DeepSeekGenerator(ContentGenerator):
     @property
     def model_name(self) -> str:
         return self._model
-
-    @property
-    def reviewer_model_name(self) -> str:
-        return self._reviewer_model
 
     def route(self, request: RoutingInput) -> ContentProduct | None:
         payload, _ = self._request(
@@ -543,7 +534,7 @@ class DeepSeekGenerator(ContentGenerator):
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
         if request.delivery_compiler_version is None:
-            return self._generate_legacy(request)
+            raise GenerationFailed("新内容生成缺少确定性成品编译合同")
         if request.delivery_compiler_version != DELIVERY_COMPILER_VERSION:
             raise GenerationFailed("不支持的确定性成品编译版本")
         return self._generate_kernel(request)
@@ -562,36 +553,21 @@ class DeepSeekGenerator(ContentGenerator):
         program_id = select_kernel_program(
             frame=frame,
             prior_kernel=request.prior_creative_kernel,
+            revision_instruction=request.revision_instruction,
         )
         skeleton = build_kernel_skeleton(
             frame=frame,
             fact_registry=context.fact_registry,
             constraint_refs=tuple(identifier for identifier, _ in context.constraint_registry),
             program_id=program_id,
+            allowed_resource_ids=tuple(sorted(context.resource_ids)),
         )
-        compiler_texts = compiler_owned_unit_texts(
-            request.primary_product
-        )
-        trusted_contracts = unit_contracts_v2(skeleton, frame)
-        writer_unit_ids = {
-            unit.unit_id
-            for unit in skeleton.writable_units
-            if unit.unit_id not in compiler_texts
-        }
-        license_policies = build_unit_clause_license_policies_v1(
-            frame=frame,
-            unit_contracts={
-                unit_id: contract
-                for unit_id, contract in trusted_contracts.items()
-                if unit_id in writer_unit_ids
-            },
-        )
+        compiler_texts = compiler_owned_unit_texts(request.primary_product)
         writer_payload, writer_retries = self._request(
-            "你是笛语 CreativeKernelV1 Writer。只返回 unit 文字 JSON，不展示推理、规则或内部审查。",
+            "你是笛语 CreativeKernel Writer。只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。",
             self._kernel_writer_prompt(
                 request,
                 skeleton,
-                license_policies,
                 compiler_texts,
             ),
             4096,
@@ -627,70 +603,7 @@ class DeepSeekGenerator(ContentGenerator):
             json.JSONDecodeError,
         ) as exc:
             raise GenerationFailed("CreativeKernelV1 Writer 返回格式不完整") from exc
-        (
-            issues,
-            clause_licenses,
-            license_reviews,
-            review_payload,
-            review_retries,
-        ) = self._review_kernel(
-            request,
-            context,
-            kernel,
-            license_policies,
-        )
-        provider_payloads.append(review_payload)
-        retries += review_retries
         receipts: tuple[FactRepairReceipt, ...] = ()
-        if issues:
-            affected = self._kernel_repair_scope(kernel, issues)
-            repair_payload, repair_retries = self._request(
-                "你是笛语 CreativeKernelV1 Writer。只返回一次受影响 unit 修复 JSON，不展示推理或审查。",
-                self._kernel_repair_prompt(
-                    request,
-                    kernel,
-                    affected,
-                    issues,
-                ),
-                4096,
-            )
-            provider_payloads.append(repair_payload)
-            retries += repair_retries
-            try:
-                repaired = repair_kernel_units(
-                    kernel=kernel,
-                    affected_unit_ids=affected,
-                    raw=json.loads(self._json_content(str(repair_payload["choices"][0]["message"]["content"]))),
-                    allowed_claim_ids=context.product_fact_packet.fact_ids,
-                )
-            except (
-                KeyError,
-                IndexError,
-                TypeError,
-                ValueError,
-                json.JSONDecodeError,
-            ) as exc:
-                raise GenerationFailed("CreativeKernelV1 单元修复返回格式不完整") from exc
-            (
-                final_issues,
-                final_clause_licenses,
-                final_license_reviews,
-                review_payload,
-                review_retries,
-            ) = self._review_kernel(
-                request,
-                context,
-                repaired,
-                license_policies,
-            )
-            provider_payloads.append(review_payload)
-            retries += review_retries
-            if final_issues:
-                raise GenerationFailed("内容边界无法在一次 CreativeKernel unit 修复内满足")
-            receipts = self._repair_receipts(issues)
-            kernel = repaired
-            clause_licenses = final_clause_licenses
-            license_reviews = final_license_reviews
         if request.revision_instruction and request.prior_creative_kernel:
             before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
             after = tuple(unit.text for unit in kernel.writable_units)
@@ -698,11 +611,6 @@ class DeepSeekGenerator(ContentGenerator):
                 raise GenerationFailed("本次修改没有实质改变允许修改的创作单元")
         reviewed_kernel_digest = kernel_digest(kernel)
         reviewed_creative_digest = creative_units_digest(kernel)
-        clause_contexts = self._kernel_clause_contexts(
-            request,
-            context,
-            kernel,
-        )
         compiled = compile_delivery(
             DeliveryCompileInput(
                 primary_product=request.primary_product,
@@ -711,6 +619,7 @@ class DeepSeekGenerator(ContentGenerator):
                 production_conditions=request.brand.production_conditions,
                 allowed_resource_ids=context.resource_ids,
                 immutable_fact_blocks=context.product_fact_blocks,
+                trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
             ),
             kernel,
         )
@@ -722,6 +631,7 @@ class DeepSeekGenerator(ContentGenerator):
                 production_conditions=request.brand.production_conditions,
                 allowed_resource_ids=context.resource_ids,
                 immutable_fact_blocks=context.product_fact_blocks,
+                trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
             ),
             kernel,
             compiled,
@@ -740,15 +650,12 @@ class DeepSeekGenerator(ContentGenerator):
             fact_repair_receipts=receipts,
             reviewed_digest=digest,
             completion_snapshot_patch={
-                "creative_kernel_v1": kernel_document(kernel),
-                "clause_context_v2": clause_context_document(clause_contexts),
-                "clause_license_v1": clause_license_document(clause_licenses),
-                "clause_license_review_v1": clause_license_review_document(license_reviews),
+                "creative_kernel_v2": kernel_document(kernel),
+                "expression_plan_version": "expression-plan-v1",
+                "expression_plan_digest": reviewed_kernel_digest,
                 "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
-                "review_evidence_version": CLAUSE_LICENSE_REVIEW_VERSION,
-                "closed_review_contract": CLAUSE_LICENSE_VERSION,
                 "writer_model": self._model,
-                "reviewer_model": self._reviewer_model,
+                "version_authorization": "deterministic-dual-track-v1",
                 "claim_inventory_v1": [],
                 "reviewed_kernel_digest": reviewed_kernel_digest,
                 "reviewed_creative_digest": reviewed_creative_digest,
@@ -932,7 +839,10 @@ class DeepSeekGenerator(ContentGenerator):
         all_reviews: list[ClauseLicenseReviewV1] = []
         retries = 0
         for batch in self._clause_license_batches(licenses):
-            provider_result = self._reviewer_provider.review(
+            reviewer_provider = self._reviewer_provider
+            if reviewer_provider is None:
+                raise GenerationFailed("历史 Reviewer 回放路径没有配置审查提供方")
+            provider_result = reviewer_provider.review(
                 system_prompt=(
                     "你是独立 CreativeKernel clause 许可证支持核对器。只核对文字是否完全符合"
                     "服务端既定许可，不决定事实许可、通过失败、保存、重试、修复或制作资源，"
@@ -962,9 +872,7 @@ class DeepSeekGenerator(ContentGenerator):
                 licenses=batch,
                 timeout_seconds=self._review_timeout_seconds,
             )
-            payloads.append(
-                cast(dict[str, Any], provider_result.raw_payload)
-            )
+            payloads.append(cast(dict[str, Any], provider_result.raw_payload))
             retries += provider_result.retry_count
             all_reviews.extend(provider_result.reviews.reviews)
         reviews = ClauseLicenseReviewsV1(
@@ -1111,7 +1019,6 @@ class DeepSeekGenerator(ContentGenerator):
         self,
         request: GenerationInput,
         skeleton: CreativeKernelV1,
-        license_policies: tuple[UnitClauseLicensePolicyV1, ...] | None = None,
         compiler_texts: Mapping[str, str] | None = None,
     ) -> str:
         if request.creative_plan is None:
@@ -1143,53 +1050,16 @@ class DeepSeekGenerator(ContentGenerator):
         )
         packet_document = product_fact_packet_document(product_fact_packet)
         fact_blocks = immutable_product_fact_blocks(product_fact_packet)
-        trusted_contracts = unit_contracts_v2(
-            skeleton,
-            request.narrative_frame,
-        )
-        resolved_compiler_texts = dict(
-            compiler_texts
-            or compiler_owned_unit_texts(request.primary_product)
-        )
-        writer_units = tuple(
-            unit
-            for unit in skeleton.writable_units
-            if unit.unit_id not in resolved_compiler_texts
-        )
-        writer_unit_ids = {
-            unit.unit_id for unit in writer_units
-        }
-        resolved_policies = (
-            license_policies
-            if license_policies is not None
-            else build_unit_clause_license_policies_v1(
-                frame=request.narrative_frame,
-                unit_contracts={
-                    unit_id: contract
-                    for unit_id, contract in trusted_contracts.items()
-                    if unit_id in writer_unit_ids
-                },
-            )
-        )
-        policy_by_unit = {policy.unit_id: policy for policy in resolved_policies}
-        if (
-            len(policy_by_unit) != len(resolved_policies)
-            or set(policy_by_unit)
-            != {unit.unit_id for unit in writer_units}
-        ):
-            raise GenerationFailed("CreativeKernelV1 服务端 unit 许可不完整")
+        resolved_compiler_texts = dict(compiler_texts or compiler_owned_unit_texts(request.primary_product))
+        writer_units = tuple(unit for unit in skeleton.writable_units if unit.unit_id not in resolved_compiler_texts)
         writable = [
             {
                 "unit_id": unit.unit_id,
                 "purpose": unit.purpose,
-                "unit_contract": trusted_contracts[unit.unit_id],
-                "license_id_prefix": f"license:{unit.unit_id}:",
-                "subject_scope": policy_by_unit[unit.unit_id].subject_scope,
-                "allowed_fact_refs": list(policy_by_unit[unit.unit_id].allowed_fact_refs),
-                "prohibited_bindings": list(policy_by_unit[unit.unit_id].prohibited_bindings),
-                "allowed_observation_types": list(unit.allowed_observation_types),
+                "track": unit.track,
+                "mode": unit.mode,
+                "scope_id": unit.scope_id,
                 "visible_order": unit.visible_order,
-                "claim_refs": list(unit.claim_refs),
             }
             for unit in writer_units
         ]
@@ -1236,7 +1106,7 @@ class DeepSeekGenerator(ContentGenerator):
             if fact_blocks
             else ""
         )
-        return f"""完成一个可直接交付的 CreativeKernelV1。你只负责“说什么、怎样表达”，不负责
+        return f"""完成一个可直接交付的 CreativeKernel。你只负责“说什么、怎样表达”，不负责
 scene、actor、resource、action、sound、production_note、发布结构、自然导读、发布配文
 或语义合同；自然导读和发布配文由 DeliveryCompiler 使用版本化中性短语生成。
 
@@ -1281,21 +1151,18 @@ fact_block_refs，不能增删、换序或更换事实。首次最多选择 {MAX
 写进 creative text，也不能从结构事实推断性能、功效、用途、价格、库存、设计动机、比较
 结论、普遍穿着结果或实际体验。商品硬事实正文由服务端按 fact_block_refs 原样插入。
 title 是自然标题；按可见顺序排列的一个或多个 body 单元共同组成完整核心正文。
-unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一合同；每个以句号、
-问号、叹号或分号分隔的可见 clause 都必须遵守所在 unit 的同一个 unit_contract，不得根据
-准备填写的文字改合同。allowed_observation_types 只保留兼容信息。abstract_principle 可以表达抽象判断、观点、比喻和
-幽默，但不能写具体或隐含人物发生的微事件；hypothesis 可以写推演但不要自行添加“假设”标识，
-服务端会包裹；hypothesis 可以使用一般虚构人物、动作和关系，但不能绑定用户、当前表达方、
-真实员工、顾客、门店或已经发生的历史。dramatization 必须写成完整虚构情境，但不要自行添加
-演绎声明，服务端会为整个段落提供一次可见披露。recommendation 必须用清楚可见的建议、
-条件或意愿语气表达可以怎样做。recommendation unit 中每个可独立切分的 clause 都必须有
-清楚语态，不能写具体时间、地点、对白、情境例子或没有语态标记的裸动作。抽象收束由后续
-abstract_observation / release_caption unit 完成。actuality_reflection 对应的用户现实原文
+track 与 mode 是服务端在写作前冻结的唯一表达轨；你不能返回、改变或根据准备填写的文字
+重新解释它们。general_observation 可以表达一般判断、观点、比喻和幽默，但不是当前用户、
+品牌、员工、顾客或门店的事实。hypothesis 可以写推演但不要自行添加“假设”标识，Compiler
+会为整个单元及独立传播出口保留范围；它不能绑定真实用户、员工、顾客、门店或已经发生的
+历史。disclosed_dramatization 必须写成完整虚构情境，但不要自行添加演绎声明，Compiler
+会提供不可编辑的可见范围。recommendation 必须写清楚这是可以怎样做的建议，不得伪装成
+已执行做法。actuality_reflection 对应的用户现实原文
 已由服务端 frozen fact 单元逐字插入；Writer 只能写不复述该事实的抽象关系反思，或带清楚
 建议／条件语态的泛指做法，不能复制、概括或扩写人物、动作、对白、动机、原因、结果、时间、
 地点与现实细节。
-audience_guidance 仍用于 title 等服务端分配单元；由 Compiler 生成的 natural_guide 与
-release_caption 不属于 Writer 输出，也不进入 Reviewer 的 writer-owned clause。
+title 也属于服务端预分配的 creative_expression，Compiler 会为标题添加与整篇一致的自然
+范围。由 Compiler 生成的 natural_guide 与 release_caption 不属于 Writer 输出。
 不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。
 不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄资源或
 制作方式。Writer-owned clause 不得让当前表达者或第一人称复数承担谓语、做法、经历或承诺；
@@ -1324,11 +1191,7 @@ release_caption 不属于 Writer 输出，也不进入 Reviewer 的 writer-owned
                 "prohibited_binding_checks": [
                     {
                         "binding_id": binding,
-                        "question": (
-                            prohibited_binding_question_v1(
-                                binding
-                            )
-                        ),
+                        "question": (prohibited_binding_question_v1(binding)),
                     }
                     for binding in license_.prohibited_bindings
                 ],
@@ -1627,9 +1490,10 @@ JSON。"""
             )
             if disclosure is not None:
                 prefix = f"{disclosure}\n"
-                if not current_text.startswith(prefix):
+                if kernel.kernel_version != KERNEL_VERSION and not current_text.startswith(prefix):
                     raise GenerationFailed("CreativeKernelV1 服务端披露结构漂移")
-                current_text = current_text[len(prefix) :]
+                if current_text.startswith(prefix):
+                    current_text = current_text[len(prefix) :]
             units.append(
                 {
                     "unit_id": unit.unit_id,
@@ -2987,6 +2851,8 @@ CreativePlanV2：{
         self,
         payloads: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        if self._reviewer_provider is None:
+            raise GenerationFailed("历史 Reviewer 回放路径没有配置审查提供方")
         return {
             "clause_license_review_batches": payloads,
             "reviewer_model": self._reviewer_model,
@@ -3092,6 +2958,12 @@ CreativePlanV2：{
         self,
         payloads: list[dict[str, Any]],
     ) -> dict[str, int | str]:
+        if self._reviewer_provider is None:
+            return {
+                **(self._combined_usage(payloads) or {}),
+                "writer_model": self._model,
+                "version_authorization": "deterministic-dual-track-v1",
+            }
         writer_payloads = [
             payload
             for payload in payloads
@@ -3116,7 +2988,7 @@ CreativePlanV2：{
         receipt: dict[str, int | str] = {
             **combined,
             "writer_model": self._model,
-            "reviewer_model": self._reviewer_model,
+            "reviewer_model": self._reviewer_model or "",
             "reviewer_provider": self._reviewer_provider.provider_name,
         }
         for role, role_payloads in (("writer", writer_payloads), ("reviewer", reviewer_payloads)):

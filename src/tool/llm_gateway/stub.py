@@ -1,17 +1,6 @@
 from __future__ import annotations
 
 from src.ports.content_generator import ContentGenerator
-from src.shared.clause_license import (
-    CLAUSE_LICENSE_REVIEW_VERSION,
-    CLAUSE_LICENSE_VERSION,
-    ClauseLicenseReviewsV1,
-    ClauseLicenseReviewV1,
-    ProhibitedBindingCheckV1,
-    build_unit_clause_license_policies_v1,
-    clause_license_document,
-    clause_license_review_document,
-    materialize_clause_licenses_v1,
-)
 from src.shared.creative_kernel import (
     MAX_PRODUCT_FACT_BLOCKS,
     build_kernel_skeleton,
@@ -41,11 +30,6 @@ from src.shared.factual_basis import (
     product_fact_records,
 )
 from src.shared.narrative import legacy_frame, visible_digest
-from src.shared.review_evidence import (
-    build_clause_contexts_v2,
-    clause_context_document,
-    unit_contracts_v2,
-)
 from src.shared.types import (
     ContentProduct,
     ContentSemanticContract,
@@ -70,10 +54,6 @@ class DeterministicContentGenerator(ContentGenerator):
     @property
     def model_name(self) -> str:
         return "deterministic-content-test-stub"
-
-    @property
-    def reviewer_model_name(self) -> str:
-        return self.model_name
 
     def route(self, request: RoutingInput) -> ContentProduct | None:
         text = request.weak_seed.casefold()
@@ -177,9 +157,16 @@ class DeterministicContentGenerator(ContentGenerator):
             program_id=select_kernel_program(
                 frame=frame,
                 prior_kernel=request.prior_creative_kernel,
+                revision_instruction=request.revision_instruction,
+            ),
+            allowed_resource_ids=(
+                "resource:original_composition",
+                "resource:creator_expression",
+                *(f"resource:product:{product.sku}" for product in request.products),
             ),
         )
         _, guide, spoken, _, subtitles, _ = self._parts(request)
+        spoken = spoken + "\n\n" + subtitles + _control_sections(request)
         if request.revision_instruction:
             spoken += "\n\n这次按你的修改要求改变了允许调整的表达。"
         release_caption = subtitles + _control_sections(request)
@@ -188,9 +175,7 @@ class DeterministicContentGenerator(ContentGenerator):
             allowed_fact_ids=frame.allowed_product_fact_ids,
         )
         fact_blocks = immutable_product_fact_blocks(product_packet)
-        compiler_texts = compiler_owned_unit_texts(
-            request.primary_product
-        )
+        compiler_texts = compiler_owned_unit_texts(request.primary_product)
         text_by_id = {
             "unit:title": _outline(request.primary_product),
             "unit:natural-guide": guide,
@@ -198,6 +183,7 @@ class DeterministicContentGenerator(ContentGenerator):
             "unit:body-opening": spoken,
             "unit:hypothetical-example": ("一方先停一下，另一方也不必马上给出答案。"),
             "unit:body-closing": "理解可以靠近，边界也仍然成立。",
+            "unit:local-dramatization": ("两台只会夸张播报情绪的家务机器人，为一只碗举行了一场毫无胜负的辩论赛。"),
             "unit:release-caption": release_caption,
         }
         raw: dict[str, object] = {
@@ -233,49 +219,6 @@ class DeterministicContentGenerator(ContentGenerator):
             required_fact_block_ids=required_fact_block_ids,
             compiler_owned_text_by_id=compiler_texts,
         )
-        clause_contexts = build_clause_contexts_v2(
-            kernel=kernel,
-            frame=frame,
-            fact_registry=facts,
-            allowed_constraint_ids=frozenset({"constraint:deterministic-test-stub"}),
-            speaker_kind=request.brand.speaker_kind,
-        )
-        license_policies = build_unit_clause_license_policies_v1(
-            frame=frame,
-            unit_contracts={
-                unit_id: contract
-                for unit_id, contract in unit_contracts_v2(
-                    skeleton,
-                    frame,
-                ).items()
-                if unit_id not in compiler_texts
-            },
-        )
-        clause_licenses = materialize_clause_licenses_v1(
-            contexts=clause_contexts,
-            policies=license_policies,
-        )
-        license_reviews = ClauseLicenseReviewsV1(
-            review_version=CLAUSE_LICENSE_REVIEW_VERSION,
-            reviews=tuple(
-                ClauseLicenseReviewV1(
-                    clause_id=license_.clause_id,
-                    license_id=license_.license_id,
-                    verdict="supported",
-                    expression_type=license_.allowed_expression_types[0],
-                    binding_checks=tuple(
-                        ProhibitedBindingCheckV1(
-                            binding_id=binding,
-                            status="absent",
-                        )
-                        for binding in license_.prohibited_bindings
-                    ),
-                    reason_code="supported_by_license",
-                    unsupported_quote="",
-                )
-                for license_ in clause_licenses
-            ),
-        )
         allowed_resources = frozenset(
             {
                 "resource:original_composition",
@@ -291,6 +234,7 @@ class DeterministicContentGenerator(ContentGenerator):
                 production_conditions=request.brand.production_conditions,
                 allowed_resource_ids=allowed_resources,
                 immutable_fact_blocks=fact_blocks,
+                trusted_fact_texts=tuple((fact.fact_id, fact.exact_text) for fact in facts),
             ),
             kernel,
         )
@@ -312,13 +256,11 @@ class DeterministicContentGenerator(ContentGenerator):
             production=compiled.production,
             reviewed_digest=visible_digest(compiled.outline, compiled.body),
             completion_snapshot_patch={
-                "creative_kernel_v1": kernel_document(kernel),
-                "clause_context_v2": clause_context_document(clause_contexts),
-                "clause_license_v1": clause_license_document(clause_licenses),
-                "clause_license_review_v1": (clause_license_review_document(license_reviews)),
+                "creative_kernel_v2": kernel_document(kernel),
+                "expression_plan_version": "expression-plan-v1",
+                "expression_plan_digest": kernel_digest(kernel),
                 "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
-                "review_evidence_version": (CLAUSE_LICENSE_REVIEW_VERSION),
-                "closed_review_contract": CLAUSE_LICENSE_VERSION,
+                "version_authorization": "deterministic-dual-track-v1",
                 "claim_inventory_v1": [],
                 "reviewed_kernel_digest": kernel_digest(kernel),
                 "reviewed_creative_digest": creative_units_digest(kernel),

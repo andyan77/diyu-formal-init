@@ -119,7 +119,6 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
         _CALLS["writer"] += 1
-        _CALLS["reviewer"] += 1
         if "验证一次失败原子性" in request.weak_seed:
             raise GenerationFailed("受控失败")
         assert request.narrative_frame is not None
@@ -295,7 +294,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             time.sleep(2.05)
         assert _G4_FACT in g4_body
         g3_snapshot = _snapshot(app_database_url, task_ids["G3"])
-        g3_kernel = g3_snapshot["creative_kernel_v1"]
+        g3_kernel = g3_snapshot["creative_kernel_v2"]
         assert isinstance(g3_kernel, dict)
         assert g3_kernel["program_id"] == "observation_with_hypothetical_example_v2"
 
@@ -331,12 +330,13 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert isinstance(plan, dict)
         assert plan["plan_version"] == "creative-plan-v2"
         assert "system_creative_plan" not in snapshot
-        kernel_v1 = snapshot["creative_kernel_v1"]
+        kernel_v1 = snapshot["creative_kernel_v2"]
         assert isinstance(kernel_v1, dict)
-        assert kernel_v1["kernel_version"] == "creative-kernel-v1"
+        assert kernel_v1["kernel_version"] == "creative-kernel-v2"
         assert kernel_v1["program_id"] == "observation_only_v1"
-        assert snapshot["delivery_compiler_version"] == "delivery-compiler-v1"
-        assert snapshot["review_evidence_version"] == "clause-license-review-v1"
+        assert snapshot["delivery_compiler_version"] == "delivery-compiler-v2"
+        assert snapshot["version_authorization"] == "deterministic-dual-track-v1"
+        assert "review_evidence_version" not in snapshot
         assert isinstance(snapshot["reviewed_kernel_digest"], str)
         assert isinstance(snapshot["visible_provenance"], dict)
 
@@ -377,12 +377,12 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert revised_snapshot["creative_plan_v2"] == snapshot["creative_plan_v2"]
         assert revised_snapshot["creation_commitment"] == snapshot["creation_commitment"]
         assert revised_snapshot["delivery_compiler_version"] == snapshot["delivery_compiler_version"]
-        assert revised_snapshot["review_evidence_version"] == snapshot["review_evidence_version"]
+        assert revised_snapshot["version_authorization"] == snapshot["version_authorization"]
         assert revised_snapshot["speaker_kind"] == snapshot["speaker_kind"]
-        revised_kernel = revised_snapshot["creative_kernel_v1"]
+        revised_kernel = revised_snapshot["creative_kernel_v2"]
         assert isinstance(revised_kernel, dict)
         assert revised_kernel != kernel_v1
-        assert revised_kernel["program_id"] == kernel_v1["program_id"]
+        assert revised_kernel["program_id"] == "actuality_with_disclosed_dramatization_v1"
         original_units = kernel_v1["units"]
         revised_units = revised_kernel["units"]
         assert isinstance(original_units, list)
@@ -427,3 +427,4 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             "failed": failure_before["failed"] + 1,
             "versions": failure_before["versions"],
         }
+        assert _CALLS["reviewer"] == 0

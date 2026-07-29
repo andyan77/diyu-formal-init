@@ -25,6 +25,7 @@ from src.shared.delivery_compiler import (
     DeliveryCompileInput,
     compile_delivery,
 )
+from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import FrozenFactRecord
 from src.shared.narrative import new_frame
 from src.shared.review_evidence import (
@@ -59,8 +60,7 @@ def _raw_units(
                 "text": "理解不要求任何一方放弃自己的边界。",
             },
         ]
-        if program_id
-        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
+        if program_id == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
         else [{"unit_id": "unit:body", "text": body}]
     )
     return {
@@ -152,9 +152,7 @@ def _evidence(
                 location_spans=tuple(
                     changes.get("location_spans", ())  # type: ignore[arg-type]
                 ),
-                implicit_subject=str(
-                    changes.get("implicit_subject", "none")
-                ),  # type: ignore[arg-type]
+                implicit_subject=str(changes.get("implicit_subject", "none")),  # type: ignore[arg-type]
                 uncertain=False,
             )
         )
@@ -173,9 +171,7 @@ def _reasons(
             kernel=kernel,
             review_clauses=build_review_clauses(kernel),
             evidence=evidence,
-            fact_text_by_id={
-                record.fact_id: record.exact_text for record in facts
-            },
+            fact_text_by_id={record.fact_id: record.exact_text for record in facts},
             allowed_constraint_ids=frozenset({"source:brand_baseline"}),
             protected_subjects=ProtectedSubjectScope(
                 exact_names=("笛语", "笛语服饰"),
@@ -187,20 +183,12 @@ def _reasons(
 
 def test_server_selects_one_bounded_program_from_frozen_context() -> None:
     general = new_frame("general_observation", (), ())
-    assert (
-        select_kernel_program(frame=general)
-        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
-    )
+    assert select_kernel_program(frame=general) == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
 
     actuality = new_frame("actuality_reflection", ("今天很忙。",), ())
-    assert (
-        select_kernel_program(frame=actuality)
-        == OBSERVATION_ONLY_PROGRAM
-    )
+    assert select_kernel_program(frame=actuality) == OBSERVATION_ONLY_PROGRAM
 
-    prior_kernel = _kernel(
-        program_id=OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
-    )
+    prior_kernel = _kernel(program_id=OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM)
     fact_bearing_general = new_frame(
         "general_observation",
         (),
@@ -218,9 +206,7 @@ def test_server_selects_one_bounded_program_from_frozen_context() -> None:
 
 def test_program_id_must_match_service_owned_unit_shape() -> None:
     kernel = replace(
-        _kernel(
-            program_id=OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
-        ),
+        _kernel(program_id=OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM),
         program_id=OBSERVATION_ONLY_PROGRAM,
     )
 
@@ -256,7 +242,8 @@ def test_same_micro_event_passes_inside_server_scoped_hypothesis() -> None:
         program_id=OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
     )
     unit = kernel.unit("unit:hypothetical-example")
-    assert unit.text.startswith(HYPOTHESIS_DISCLOSURE)
+    assert unit.mode == "hypothesis"
+    assert not unit.text.startswith(HYPOTHESIS_DISCLOSURE)
     evidence = _evidence(
         kernel,
         changes_by_fragment={
@@ -281,9 +268,7 @@ def test_deleting_server_hypothesis_scope_fails() -> None:
         units=tuple(
             replace(
                 unit,
-                text=unit.text.removeprefix(
-                    f"{HYPOTHESIS_DISCLOSURE}\n"
-                ),
+                scope_id="",
             )
             if unit.unit_id == "unit:hypothetical-example"
             else unit
@@ -291,18 +276,17 @@ def test_deleting_server_hypothesis_scope_fails() -> None:
         ),
     )
 
-    assert "hypothesis_not_visible" in _reasons(
-        mutated,
-        _evidence(
+    with pytest.raises(GenerationFailed, match="表达轨"):
+        compile_delivery(
+            DeliveryCompileInput(
+                primary_product="brand_life_narrative",
+                media_format="graphic",
+                products=(),
+                production_conditions="原创文字卡。",
+                allowed_resource_ids=frozenset({ORIGINAL_COMPOSITION_RESOURCE_ID}),
+            ),
             mutated,
-            changes_by_fragment={
-                "饭桌上": {
-                    "action_or_event_spans": ("一句话",),
-                    "result_spans": ("两个人都沉默",),
-                }
-            },
-        ),
-    )
+        )
 
 
 @pytest.mark.parametrize(
@@ -356,11 +340,7 @@ def test_hypothesis_cannot_bind_current_reality(
                 else ("沉默",)
                 if "沉默" in text
                 else ("说",),
-                "action_or_event_spans": ("沉默",)
-                if "沉默" in text
-                else ("说",)
-                if "说" in text
-                else (),
+                "action_or_event_spans": ("沉默",) if "沉默" in text else ("说",) if "说" in text else (),
                 "implicit_subject": "none",
             }
         },
@@ -379,18 +359,13 @@ def test_hypothetical_people_never_become_production_resources() -> None:
             media_format="video",
             products=(),
             production_conditions="仅使用文字卡和旁白。",
-            allowed_resource_ids=frozenset(
-                {ORIGINAL_COMPOSITION_RESOURCE_ID}
-            ),
+            allowed_resource_ids=frozenset({ORIGINAL_COMPOSITION_RESOURCE_ID}),
         ),
         kernel,
     )
 
     assert compiled.resource_refs == (ORIGINAL_COMPOSITION_RESOURCE_ID,)
-    assert all(
-        "hypothetical" not in resource
-        for resource in compiled.resource_refs
-    )
+    assert all("hypothetical" not in resource for resource in compiled.resource_refs)
     assert "文字卡" in compiled.production.visual_actions  # type: ignore[union-attr]
 
 
@@ -415,26 +390,24 @@ def test_actuality_fact_and_program_survive_revision_invariants() -> None:
     )
 
     assert revised.program_id == original.program_id
+    assert revised.unit("unit:frozen-fact:1") == original.unit("unit:frozen-fact:1")
     assert (
-        revised.unit("unit:frozen-fact:1")
-        == original.unit("unit:frozen-fact:1")
+        select_kernel_program(
+            frame=new_frame(
+                "actuality_reflection",
+                (fact.exact_text,),
+                (),
+            ),
+            prior_kernel=original,
+        )
+        == original.program_id
     )
-    assert select_kernel_program(
-        frame=new_frame(
-            "actuality_reflection",
-            (fact.exact_text,),
-            (),
-        ),
-        prior_kernel=original,
-    ) == original.program_id
-    assert DELIVERY_COMPILER_VERSION == "delivery-compiler-v1"
+    assert DELIVERY_COMPILER_VERSION == "delivery-compiler-v2"
 
     mutated = replace(
         original,
         units=tuple(
-            replace(unit, text="今天发生了很多事。")
-            if unit.purpose == "frozen_fact"
-            else unit
+            replace(unit, text="今天发生了很多事。") if unit.purpose == "frozen_fact" else unit
             for unit in original.units
         ),
     )
@@ -479,9 +452,7 @@ def test_legacy_kernel_document_remains_readable_and_recompilable() -> None:
             media_format="graphic",
             products=(),
             production_conditions="原创文字卡。",
-            allowed_resource_ids=frozenset(
-                {ORIGINAL_COMPOSITION_RESOURCE_ID}
-            ),
+            allowed_resource_ids=frozenset({ORIGINAL_COMPOSITION_RESOURCE_ID}),
         ),
         restored,
     )
@@ -503,14 +474,9 @@ def test_different_topic_changes_hypothetical_kernel_content() -> None:
             frame=new_frame("general_observation", (), ()),
             fact_registry=(),
             constraint_refs=("source:brand_baseline",),
-            program_id=(
-                OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM
-            ),
+            program_id=(OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM),
         ),
     )
 
     assert kernel_digest(relationship) != kernel_digest(commute)
-    assert (
-        relationship.unit("unit:hypothetical-example").text
-        != commute.unit("unit:hypothetical-example").text
-    )
+    assert relationship.unit("unit:hypothetical-example").text != commute.unit("unit:hypothetical-example").text

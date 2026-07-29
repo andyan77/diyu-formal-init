@@ -19,7 +19,6 @@ from src.shared.clause_license import (
     ClauseLicenseV1,
     build_unit_clause_license_policies_v1,
     materialize_clause_licenses_v1,
-    prohibited_binding_question_v1,
     unsupported_quote_candidates_v1,
 )
 from src.shared.closed_review import (
@@ -31,7 +30,6 @@ from src.shared.creative_kernel import (
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
     CreativeKernelV1,
     build_kernel_skeleton,
-    compiler_owned_unit_source,
     compiler_owned_unit_texts,
     parse_writer_kernel,
     select_kernel_program,
@@ -146,9 +144,7 @@ class FakeReviewerProvider(ReviewerProvider):
             TypeError,
             json.JSONDecodeError,
         ) as exc:
-            raise GenerationFailed(
-                "Reviewer 许可证据不完整"
-            ) from exc
+            raise GenerationFailed("Reviewer 许可证据不完整") from exc
         return ReviewerProviderResult(
             reviews=reviews,
             raw_payload=payload,
@@ -549,9 +545,7 @@ def _parsed_kernel(
     return parse_writer_kernel(
         raw,
         skeleton,
-        compiler_owned_text_by_id=compiler_owned_unit_texts(
-            request.primary_product
-        ),
+        compiler_owned_text_by_id=compiler_owned_unit_texts(request.primary_product),
     )
 
 
@@ -562,11 +556,10 @@ def test_kernel_writer_prompt_exposes_current_trusted_contracts() -> None:
         _parsed_kernel(request, _kernel_writer()),
     )
 
-    assert "recommendation 必须用清楚可见的建议、" in prompt
-    assert "recommendation unit 中每个可独立切分的 clause 都必须有" in prompt
-    assert "不能写具体时间、地点、对白、情境例子或没有语态" in prompt
+    assert "recommendation 必须写清楚这是可以怎样做的建议" in prompt
     assert '"unit_id": "unit:body-closing"' in prompt
-    assert '"unit_contract": "abstract_observation"' in prompt
+    assert '"track": "creative_expression"' in prompt
+    assert '"mode": "general_observation"' in prompt
     assert "Writer-owned clause 不得让当前表达者或第一人称复数承担" in prompt
     assert "abstract_observation\n只写状态、判断、关系理解或比喻" in prompt
     assert "actuality_reflection 对应的用户现实原文" in prompt
@@ -1230,7 +1223,7 @@ def test_writer_cannot_author_or_modify_service_actuality() -> None:
     )
     FakeClient.responses = [_completion(core)]
     with pytest.raises(GenerationFailed, match="类型化成品不完整"):
-        _generator().generate(request)
+        _generator()._generate_legacy(request)
 
 
 @pytest.mark.parametrize(
@@ -1256,7 +1249,7 @@ def test_full_candidate_is_independently_reviewed_and_digest_locked(
         _completion(core, 100),
         _completion(_observations(core, frame), 50),
     ]
-    artifact = _generator().generate(request)
+    artifact = _generator()._generate_legacy(request)
     assert isinstance(artifact.production, GraphicProductionBundle)
     assert artifact.reviewed_digest == visible_digest(artifact.outline, artifact.body)
     for fact in frame.user_facts:
@@ -1287,7 +1280,7 @@ def test_reviewer_must_cover_every_target_with_an_existing_span() -> None:
         _completion(bad),
     ]
     with pytest.raises(GenerationFailed, match="Reviewer 观察不完整"):
-        _generator().generate(_request(frame))
+        _generator()._generate_legacy(_request(frame))
     assert len(FakeClient.requests) == 2
 
 
@@ -1304,7 +1297,7 @@ def test_reviewer_cannot_claim_coverage_with_only_a_partial_target_span() -> Non
         _completion(partial),
     ]
     with pytest.raises(GenerationFailed, match="Reviewer 观察不完整"):
-        _generator().generate(_request(frame))
+        _generator()._generate_legacy(_request(frame))
     assert len(FakeClient.requests) == 2
 
 
@@ -1355,7 +1348,7 @@ def test_one_repair_replaces_whole_block_and_all_linked_scenes_then_rereviews() 
         ),
         _completion(_observations(repaired_core, frame)),
     ]
-    artifact = _generator().generate(_request(frame))
+    artifact = _generator()._generate_legacy(_request(frame))
     assert repaired_block["text"] in artifact.body
     assert len(artifact.fact_repair_receipts) == 1
     prompts = _payload_prompts()
@@ -1397,7 +1390,7 @@ def test_second_semantic_failure_closes_without_another_repair() -> None:
         GenerationFailed,
         match="无法在一次叙事块修复内满足",
     ):
-        _generator().generate(_request(frame))
+        _generator()._generate_legacy(_request(frame))
     assert len(FakeClient.requests) == 4
 
 
@@ -1458,13 +1451,13 @@ def test_revision_must_change_allowed_expression_not_actuality() -> None:
         _completion(core),
         _completion(_observations(core, frame)),
     ]
-    first = _generator().generate(first_request)
+    first = _generator()._generate_legacy(first_request)
     FakeClient.responses = [
         _completion(core),
         _completion(_observations(core, frame)),
     ]
     with pytest.raises(GenerationFailed, match="没有实质改变"):
-        _generator().generate(
+        _generator()._generate_legacy(
             replace(
                 first_request,
                 revision_instruction="别讲道理，荒诞一点。",
@@ -1488,40 +1481,26 @@ def test_writer_prompt_keeps_private_steering_out_of_fact_sources() -> None:
     assert all(request.collaboration_note not in description for _, description in context.constraint_registry)
 
 
-def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
+def test_dual_track_writer_receives_only_deidentified_preassigned_units() -> None:
     request = _kernel_request()
     assert request.narrative_frame is not None
     raw = _kernel_writer()
-    kernel = _parsed_kernel(request, raw)
-    FakeClient.responses = [
-        _completion(raw),
-        _completion(_kernel_license_reviews(kernel, request=request)),
-    ]
+    FakeClient.responses = [_completion(raw)]
 
     artifact = _generator().generate(request)
 
     assert artifact.completion_snapshot_patch is not None
     assert artifact.completion_snapshot_patch["delivery_compiler_version"] == DELIVERY_COMPILER_VERSION
-    assert artifact.completion_snapshot_patch["review_evidence_version"] == CLAUSE_LICENSE_REVIEW_VERSION
-    assert artifact.completion_snapshot_patch["closed_review_contract"] == "clause-license-v1"
     assert artifact.completion_snapshot_patch["writer_model"] == "deepseek-test"
-    assert artifact.completion_snapshot_patch["reviewer_model"] == "deepseek-test"
+    assert artifact.completion_snapshot_patch["version_authorization"] == ("deterministic-dual-track-v1")
     assert isinstance(artifact.completion_snapshot_patch["claim_inventory_v1"], list)
-    kernel_snapshot = artifact.completion_snapshot_patch["creative_kernel_v1"]
-    clause_context = artifact.completion_snapshot_patch["clause_context_v2"]
-    assert isinstance(clause_context, list)
-    assert any(
-        isinstance(item, dict)
-        and item["text_source"] == "server_wrapper"
-        and item["unit_contract"] == "hypothetical_example"
-        for item in clause_context
-    )
+    kernel_snapshot = artifact.completion_snapshot_patch["creative_kernel_v2"]
     assert isinstance(kernel_snapshot, dict)
     assert kernel_snapshot["program_id"] == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
     assert isinstance(artifact.production, GraphicProductionBundle)
-    assert artifact.production.full_body == "\n\n".join(unit.text for unit in kernel.units if unit.purpose == "body")
+    assert "假设情境｜" in artifact.production.full_body
     prompts = _payload_prompts()
-    assert len(prompts) == 2
+    assert len(prompts) == 1
     writer_prompt = prompts[0]
     assert request.brand.brand_name not in writer_prompt
     assert request.brand.organization_name not in writer_prompt
@@ -1535,67 +1514,14 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert "自然导读和发布配文由 DeliveryCompiler" in writer_prompt
     assert '"block_id"' not in writer_prompt
     assert '"fact_refs"' not in writer_prompt
-    assert '"subject_scope"' in writer_prompt
-    assert '"prohibited_bindings"' in writer_prompt
-    reviewer_prompt = prompts[1]
-    assert "ClauseLicenseV1" in reviewer_prompt
-    assert '"license_id"' in reviewer_prompt
-    assert '"prohibited_binding_checks"' in reviewer_prompt
-    assert "unsupported_quote" in reviewer_prompt
-    assert "泛指人数本身不是具体社会关系" in reviewer_prompt
-    assert "specific_social_relation" in reviewer_prompt
-    assert "相近生活主题，就推定新增含义已获事实许可" in reviewer_prompt
-    assert "只要一个含义越界就不能用" in reviewer_prompt
-    assert "只讨论“婆媳\n   关系／家庭关系”等关系类别" in reviewer_prompt
-    assert "不得遗漏、重复、增加或改名" in reviewer_prompt
-    assert "全部 binding_check=absent" in reviewer_prompt
-    assert "non_situated_metaphor" in reviewer_prompt
-    assert "实例化一组人物的同住、亲属身份" in reviewer_prompt
-    assert '"exact_text"' in reviewer_prompt
-    assert "不决定事实许可、最终通过／失败" in reviewer_prompt
-    assert "不要返回 offset、occurrence、全文风险枚举" in reviewer_prompt
-    assert "优先从 unsupported_quote_candidates 选择" in reviewer_prompt
-    assert "至少两个字符且在该 clause 中只出现一次" in reviewer_prompt
-    assert "不得拼接、改写" in reviewer_prompt
-    assert '"occurrence"' not in reviewer_prompt
-    assert '"start"' not in reviewer_prompt
-    assert '"end"' not in reviewer_prompt
-    assert "ProductFactPacket" in reviewer_prompt
-    assert "只能由服务端 ImmutableFactBlock" in reviewer_prompt
-    assert "性能、功效、用途／穿着结果、设计动机、价格、库存、比较结论或实际体验" in reviewer_prompt
-    assert all(
-        prohibited_binding_question_v1(binding) in reviewer_prompt
-        for binding in {
-            binding
-            for policy in build_unit_clause_license_policies_v1(
-                frame=request.narrative_frame,
-                unit_contracts=unit_contracts_v2(
-                    kernel,
-                    request.narrative_frame,
-                ),
-            )
-            for binding in policy.prohibited_bindings
-        }
-    )
-    compiler_contexts = [
-        item
-        for item in clause_context
-        if isinstance(item, dict)
-        and item["text_source"] == "server_compiler"
-    ]
-    assert {
-        item["unit_id"] for item in compiler_contexts
-    } == {"unit:natural-guide", "unit:release-caption"}
-    assert all(
-        compiler_owned_unit_source(
-            str(item["unit_id"]),
-            str(item["exact_text"]),
-        )
-        is not None
-        for item in compiler_contexts
-    )
-    assert "unit:natural-guide" not in reviewer_prompt
-    assert "unit:release-caption" not in reviewer_prompt
+    assert '"track": "creative_expression"' in writer_prompt
+    assert '"mode": "hypothesis"' in writer_prompt
+    assert "Reviewer" not in writer_prompt
+    assert "ProductFactPacket" in writer_prompt
+    assert "商品硬事实正文由服务端" in writer_prompt
+    assert "unit:natural-guide" not in writer_prompt
+    assert "unit:release-caption" not in writer_prompt
+    assert "reviewer_model" not in artifact.completion_snapshot_patch
 
 
 def test_ui12_writer_cannot_return_compiler_owned_visible_fields() -> None:
@@ -1654,10 +1580,7 @@ def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:
         observation_only=True,
     )
     kernel = _parsed_kernel(request, raw)
-    FakeClient.responses = [
-        _completion(raw),
-        _completion(_kernel_license_reviews(kernel, request=request)),
-    ]
+    FakeClient.responses = [_completion(raw)]
 
     artifact = _generator().generate(request)
 
@@ -1665,7 +1588,7 @@ def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:
     assert kernel.unit("unit:frozen-fact:1").fact_refs == (fact.fact_id,)
     prompts = _payload_prompts()
     assert exact_fact not in prompts[0]
-    assert exact_fact not in prompts[1]
+    assert len(prompts) == 1
 
 
 def test_ui10_unresolved_brand_fact_fails_before_writer() -> None:
@@ -1693,10 +1616,7 @@ def test_ui09_writer_extra_production_field_fails_before_reviewer() -> None:
     units = raw["units"]
     assert isinstance(units, list)
     body = next(
-        unit
-        for unit in units
-        if isinstance(unit, dict)
-        and str(unit.get("unit_id", "")).startswith("unit:body")
+        unit for unit in units if isinstance(unit, dict) and str(unit.get("unit_id", "")).startswith("unit:body")
     )
     assert isinstance(body, dict)
     body["production_note"] = "去厨房拍摄。"
@@ -1734,200 +1654,49 @@ def test_ui09_writer_unit_coverage_fails_closed(drift: str) -> None:
     assert len(FakeClient.requests) == 1
 
 
-def test_ui09_reviewer_must_cover_exact_complete_units() -> None:
+def test_new_kernel_runtime_does_not_consume_external_reviewer_payload() -> None:
     request = _kernel_request()
     raw = _kernel_writer()
-    kernel = _parsed_kernel(request, raw)
     FakeClient.responses = [
         _completion(raw),
-        _completion(
-            _kernel_license_reviews(
-                kernel,
-                omit=frozenset({"unit:title"}),
-            )
-        ),
-    ]
-
-    with pytest.raises(
-        GenerationFailed,
-        match="Reviewer 许可证据",
-    ):
-        _generator().generate(request)
-
-    assert len(FakeClient.requests) == 2
-
-
-@pytest.mark.parametrize(
-    "mutation",
-    (
-        "missing",
-        "duplicate",
-        "extra",
-        "partial_scope",
-        "unexpected_quote",
-        "uncertain",
-    ),
-)
-def test_ui10_evidence_failure_never_calls_writer_repair(
-    mutation: str,
-) -> None:
-    request = _kernel_request()
-    raw = _kernel_writer()
-    kernel = _parsed_kernel(request, raw)
-    document = _kernel_license_reviews(kernel)
-    reviews = document["reviews"]
-    assert isinstance(reviews, list)
-    if mutation == "missing":
-        reviews.pop()
-    elif mutation == "duplicate":
-        reviews.append(dict(reviews[0]))
-    elif mutation == "extra":
-        extra = dict(reviews[0])
-        extra["clause_id"] = "unit:extra:clause:1"
-        extra["license_id"] = "license:unit:extra:clause:1"
-        reviews.append(extra)
-    elif mutation == "partial_scope":
-        reviews[-2] = dict(reviews[-2])
-        reviews[-2].pop("unsupported_quote")
-    elif mutation == "unexpected_quote":
-        reviews[-2] = dict(reviews[-2])
-        reviews[-2]["verdict"] = "unsupported"
-        reviews[-2]["reason_code"] = "actual_event_or_result"
-        reviews[-2]["unsupported_quote"] = "并不存在的谓词"
-        checks = [dict(check) for check in reviews[-2]["binding_checks"]]
-        for check in checks:
-            if check["binding_id"] == "actual_event_or_result":
-                check["status"] = "present"
-        reviews[-2]["binding_checks"] = checks
-    else:
-        reviews[-2] = dict(reviews[-2])
-        reviews[-2]["verdict"] = "uncertain"
-        reviews[-2]["reason_code"] = "insufficient_evidence"
-        checks = [dict(check) for check in reviews[-2]["binding_checks"]]
-        checks[0]["status"] = "uncertain"
-        reviews[-2]["binding_checks"] = checks
-    FakeClient.responses = [
-        _completion(raw),
-        _completion(document),
-    ]
-
-    with pytest.raises(
-        GenerationFailed,
-        match="Reviewer 许可证据|Reviewer 证据",
-    ):
-        _generator().generate(request)
-
-    assert len(FakeClient.requests) == 2
-
-
-def test_ui09_allows_only_one_affected_unit_repair_and_full_rereview() -> None:
-    request = _kernel_request()
-    first_raw = _kernel_writer(
-        body="饭桌上一句话让两个人都沉默。",
-    )
-    first_kernel = _parsed_kernel(request, first_raw)
-    repair_raw = {
-        "units": [
-            {
-                "unit_id": "unit:body-opening",
-                "text": "换位思考不等于没有边界。",
-            }
-        ]
-    }
-    repaired_kernel = replace(
-        first_kernel,
-        units=tuple(
-            replace(unit, text="换位思考不等于没有边界。") if unit.unit_id == "unit:body-opening" else unit
-            for unit in first_kernel.units
-        ),
-    )
-    FakeClient.responses = [
-        _completion(first_raw),
-        _completion(
-            _kernel_license_reviews(
-                first_kernel,
-                body_type="situated_event",
-            )
-        ),
-        _completion(repair_raw),
-        _completion(_kernel_license_reviews(repaired_kernel)),
+        FakeResponse(500, {"error": "must remain unused"}),
     ]
 
     artifact = _generator().generate(request)
 
-    assert "换位思考不等于没有边界。" in artifact.production.full_body  # type: ignore[union-attr]
-    assert len(FakeClient.requests) == 4
-    prompts = _payload_prompts()
-    assert "unit:body-opening" in prompts[2]
-    assert "unit:title" not in prompts[2]
-    assert "ClauseLicenseV1" in prompts[3]
+    assert len(FakeClient.requests) == 1
+    assert len(FakeClient.responses) == 1
+    assert artifact.completion_snapshot_patch is not None
+    assert artifact.completion_snapshot_patch["version_authorization"] == ("deterministic-dual-track-v1")
+    assert "reviewer_model" not in artifact.completion_snapshot_patch
 
 
-def test_ui09_second_review_failure_stops_without_another_repair() -> None:
+def test_general_writer_text_is_compiled_inside_a_visible_non_fact_scope() -> None:
     request = _kernel_request()
-    first_raw = _kernel_writer(
+    raw = _kernel_writer(
         body="饭桌上一句话让两个人都沉默。",
     )
-    first_kernel = _parsed_kernel(request, first_raw)
-    repair_raw = {
-        "units": [
-            {
-                "unit_id": "unit:body-opening",
-                "text": "门关上以后，谁都没有再说话。",
-            }
-        ]
-    }
-    repaired_kernel = replace(
-        first_kernel,
-        units=tuple(
-            replace(unit, text="门关上以后，谁都没有再说话。") if unit.unit_id == "unit:body-opening" else unit
-            for unit in first_kernel.units
-        ),
-    )
-    FakeClient.responses = [
-        _completion(first_raw),
-        _completion(
-            _kernel_license_reviews(
-                first_kernel,
-                body_type="situated_event",
-            )
-        ),
-        _completion(repair_raw),
-        _completion(
-            _kernel_license_reviews(
-                repaired_kernel,
-                body_type="situated_event",
-            )
-        ),
-    ]
+    FakeClient.responses = [_completion(raw)]
 
-    with pytest.raises(
-        GenerationFailed,
-        match="无法在一次 CreativeKernel unit 修复内满足",
-    ):
-        _generator().generate(request)
+    artifact = _generator().generate(request)
 
-    assert len(FakeClient.requests) == 4
+    assert isinstance(artifact.production, GraphicProductionBundle)
+    assert "一般观察（不对应未提供的真实经历）｜饭桌上" in (artifact.production.full_body)
+    assert len(FakeClient.requests) == 1
 
 
-def test_ui09_revision_requires_changed_writable_kernel() -> None:
+def test_revision_without_a_new_local_program_requires_changed_text() -> None:
     first_request = _kernel_request()
     raw = _kernel_writer()
     kernel = _parsed_kernel(first_request, raw)
-    FakeClient.responses = [
-        _completion(raw),
-        _completion(_kernel_license_reviews(kernel)),
-    ]
+    FakeClient.responses = [_completion(raw)]
     first = _generator().generate(first_request)
     assert first.completion_snapshot_patch is not None
 
     revision = _kernel_request(
-        revision_instruction="别讲道理，荒诞一点。",
+        revision_instruction="第二段短一点。",
         prior_kernel=kernel,
     )
-    FakeClient.responses = [
-        _completion(raw),
-        _completion(_kernel_license_reviews(kernel)),
-    ]
+    FakeClient.responses = [_completion(raw)]
     with pytest.raises(GenerationFailed, match="没有实质改变"):
         _generator().generate(revision)

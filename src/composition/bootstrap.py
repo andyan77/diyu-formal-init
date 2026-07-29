@@ -15,7 +15,6 @@ from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.ports.content_generator import ContentGenerator
 from src.ports.material_object_store import MaterialObjectStore
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
-from src.tool.llm_gateway.qwen_reviewer import QwenReviewerProvider
 from src.tool.llm_gateway.stub import DeterministicP1Generator
 
 
@@ -28,13 +27,7 @@ def _object_store(settings: Settings) -> MaterialObjectStore:
     access_key_id = settings.s3_access_key_id
     secret_access_key = settings.s3_secret_access_key
     region = settings.s3_region
-    if (
-        endpoint_url is None
-        or bucket is None
-        or access_key_id is None
-        or secret_access_key is None
-        or region is None
-    ):
+    if endpoint_url is None or bucket is None or access_key_id is None or secret_access_key is None or region is None:
         raise RuntimeError("production 对象存储配置不完整")
     return S3ObjectStore(
         endpoint_url,
@@ -62,23 +55,12 @@ def build_content_service(settings: Settings) -> ContentService:
             settings.deepseek_api_base_url is None
             or settings.deepseek_api_key is None
             or settings.deepseek_model is None
-            or settings.qwen_reviewer_api_base_url is None
-            or settings.qwen_reviewer_api_key is None
-            or settings.qwen_reviewer_model is None
         ):
-            raise RuntimeError(
-                "DeepSeek Writer 或 Qwen Reviewer 配置不完整"
-            )
-        reviewer_provider = QwenReviewerProvider(
-            api_base_url=settings.qwen_reviewer_api_base_url,
-            api_key=settings.qwen_reviewer_api_key.get_secret_value(),
-            model=settings.qwen_reviewer_model,
-        )
+            raise RuntimeError("DeepSeek Writer 配置不完整")
         generator = DeepSeekGenerator(
             api_base_url=settings.deepseek_api_base_url,
             api_key=settings.deepseek_api_key.get_secret_value(),
             model=settings.deepseek_model,
-            reviewer_provider=reviewer_provider,
             timeout_seconds=settings.model_timeout_seconds,
             max_retries=settings.model_max_retries,
         )

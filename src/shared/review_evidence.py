@@ -5,8 +5,10 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias, cast
 
 from src.shared.creative_kernel import (
+    ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM,
     DRAMATIZATION_DISCLOSURE,
     HYPOTHESIS_DISCLOSURE,
+    KERNEL_VERSION,
     OBSERVATION_ONLY_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
@@ -27,9 +29,7 @@ ImplicitSubject: TypeAlias = Literal[
 REVIEW_EVIDENCE_VERSION = "review-evidence-v1"
 REVIEW_EVIDENCE_V2_VERSION = "review-evidence-v2"
 REVIEW_EVIDENCE_V2_TOOL_NAME = "submit_review_evidence_v2"
-_IMPLICIT_SUBJECTS = frozenset(
-    {"none", "current_speaker", "generic", "uncertain"}
-)
+_IMPLICIT_SUBJECTS = frozenset({"none", "current_speaker", "generic", "uncertain"})
 _EVIDENCE_CATEGORIES = (
     "subject",
     "relationship_role",
@@ -46,12 +46,8 @@ _EVIDENCE_CATEGORIES = (
 )
 _CLAUSE_ENDINGS = frozenset("。！？；.!?;\n")
 _QUOTE_CANDIDATE_BOUNDARIES = frozenset("，,、：:；;。！？.!?\n")
-_INSTITUTIONAL_SELF_REFERENCES = frozenset(
-    {"我们", "本品牌", "本公司", "本店", "本账号", "当前表达方"}
-)
-_INSTITUTIONAL_DESIGNATORS = frozenset(
-    {"品牌", "公司", "门店", "账号", "组织", "企业", "集团"}
-)
+_INSTITUTIONAL_SELF_REFERENCES = frozenset({"我们", "本品牌", "本公司", "本店", "本账号", "当前表达方"})
+_INSTITUTIONAL_DESIGNATORS = frozenset({"品牌", "公司", "门店", "账号", "组织", "企业", "集团"})
 _CURRENT_REALITY_PREFIXES = (
     "我家",
     "我们家",
@@ -268,9 +264,7 @@ def build_clause_contexts_v2(
     contexts: list[ClauseContextV2] = []
     for unit in kernel.units:
         contract = contracts[unit.unit_id]
-        if any(
-            ref not in allowed_constraint_ids for ref in unit.constraint_refs
-        ):
+        if any(ref not in allowed_constraint_ids for ref in unit.constraint_refs):
             raise ValueError("kernel unit constraint source drifted")
         parts = _split_visible_text(unit.text)
         fact_ref: str | None = None
@@ -302,8 +296,11 @@ def build_clause_contexts_v2(
             wrapper = f"{HYPOTHESIS_DISCLOSURE}\n"
         elif contract == "disclosed_dramatization":
             wrapper = f"{DRAMATIZATION_DISCLOSURE}\n"
-        if wrapper is not None and (not parts or parts[0] != wrapper):
-            raise ValueError("server wrapper structure drifted")
+        if wrapper is not None:
+            if kernel.kernel_version == KERNEL_VERSION:
+                parts = (wrapper, *parts)
+            elif not parts or parts[0] != wrapper:
+                raise ValueError("server wrapper structure drifted")
 
         for index, exact_text in enumerate(parts, start=1):
             source: TextSourceV2
@@ -315,18 +312,10 @@ def build_clause_contexts_v2(
                 source = "server_wrapper"
             else:
                 source = "writer_unit"
-            context_text = (
-                exact_text.strip()
-                if source == "writer_unit"
-                else exact_text
-            )
+            context_text = exact_text.strip() if source == "writer_unit" else exact_text
             if not context_text:
                 raise ValueError("writer clause cannot be only whitespace")
-            if (
-                source == "writer_unit"
-                and context_text
-                in {HYPOTHESIS_DISCLOSURE, DRAMATIZATION_DISCLOSURE}
-            ):
+            if source == "writer_unit" and context_text in {HYPOTHESIS_DISCLOSURE, DRAMATIZATION_DISCLOSURE}:
                 raise ValueError("writer forged a server wrapper")
             contexts.append(
                 ClauseContextV2(
@@ -338,20 +327,12 @@ def build_clause_contexts_v2(
                     unit_contract=contract,
                     speaker_kind=speaker_kind,
                     fact_ref=fact_ref,
-                    claim_refs=(
-                        unit.claim_refs
-                        if source == "writer_unit"
-                        else ()
-                    ),
+                    claim_refs=(unit.claim_refs if source == "writer_unit" else ()),
                 )
             )
     identifiers = [context.clause_id for context in contexts]
     orders = [context.visible_order for context in contexts]
-    if (
-        len(identifiers) != len(set(identifiers))
-        or len(orders) != len(set(orders))
-        or orders != sorted(orders)
-    ):
+    if len(identifiers) != len(set(identifiers)) or len(orders) != len(set(orders)) or orders != sorted(orders):
         raise ValueError("clause context coverage or order drifted")
     return tuple(contexts)
 
@@ -393,11 +374,7 @@ def writer_clause_contexts_v2(
     contexts: Sequence[ClauseContextV2],
 ) -> tuple[ClauseContextV2, ...]:
     """Return the only clauses whose semantics require model evidence."""
-    return tuple(
-        context
-        for context in contexts
-        if context.text_source == "writer_unit"
-    )
+    return tuple(context for context in contexts if context.text_source == "writer_unit")
 
 
 def validate_server_owned_contexts_v2(
@@ -438,10 +415,7 @@ def validate_server_owned_contexts_v2(
                 )
             continue
         if context.text_source == "server_wrapper":
-            if (
-                context.fact_ref is not None
-                or not _valid_server_wrapper(context)
-            ):
+            if context.fact_ref is not None or not _valid_server_wrapper(context):
                 issues.append(
                     NarrativeIssue(
                         context.unit_id,
@@ -480,10 +454,7 @@ def validate_server_owned_contexts_v2(
                 key=lambda item: item.visible_order,
             )
         )
-        if (
-            fact_ref is None
-            or fact_text_by_id.get(fact_ref) != exact_text
-        ):
+        if fact_ref is None or fact_text_by_id.get(fact_ref) != exact_text:
             issues.append(
                 NarrativeIssue(
                     unit_id,
@@ -527,11 +498,7 @@ def unique_review_quote_candidates(
                     )
                 )
                 resolved = next(
-                    (
-                        window
-                        for window in windows
-                        if len(_exact_match_starts(exact_text, window)) == 1
-                    ),
+                    (window for window in windows if len(_exact_match_starts(exact_text, window)) == 1),
                     None,
                 )
                 if resolved is not None:
@@ -615,10 +582,7 @@ def parse_review_evidence(value: object) -> ReviewEvidenceV1:
     }:
         raise TypeError("review evidence root is invalid")
     raw_clauses = value.get("clauses")
-    if (
-        value.get("evidence_version") != REVIEW_EVIDENCE_VERSION
-        or not isinstance(raw_clauses, list)
-    ):
+    if value.get("evidence_version") != REVIEW_EVIDENCE_VERSION or not isinstance(raw_clauses, list):
         raise TypeError("review evidence version is invalid")
     clauses: list[ClauseEvidence] = []
     required = frozenset(
@@ -655,9 +619,7 @@ def parse_review_evidence(value: object) -> ReviewEvidenceV1:
                 exact_text=_required_string(raw.get("exact_text")),
                 subject_spans=_string_tuple(raw.get("subject_spans")),
                 predicate_spans=_string_tuple(raw.get("predicate_spans")),
-                action_or_event_spans=_string_tuple(
-                    raw.get("action_or_event_spans")
-                ),
+                action_or_event_spans=_string_tuple(raw.get("action_or_event_spans")),
                 dialogue_spans=_string_tuple(raw.get("dialogue_spans")),
                 motive_spans=_string_tuple(raw.get("motive_spans")),
                 cause_spans=_string_tuple(raw.get("cause_spans")),
@@ -685,10 +647,7 @@ def parse_review_evidence_v2(
     }:
         raise TypeError("review evidence v2 root is invalid")
     raw_clauses = value.get("clauses")
-    if (
-        value.get("evidence_version") != REVIEW_EVIDENCE_V2_VERSION
-        or not isinstance(raw_clauses, list)
-    ):
+    if value.get("evidence_version") != REVIEW_EVIDENCE_V2_VERSION or not isinstance(raw_clauses, list):
         raise TypeError("review evidence v2 version is invalid")
     required = frozenset(
         {
@@ -711,9 +670,7 @@ def parse_review_evidence_v2(
         raw_evidence = raw.get("evidence")
         if not isinstance(raw_evidence, list):
             raise TypeError("review evidence v2 evidence is invalid")
-        grouped: dict[str, list[dict[str, object]]] = {
-            category: [] for category in _EVIDENCE_CATEGORIES
-        }
+        grouped: dict[str, list[dict[str, object]]] = {category: [] for category in _EVIDENCE_CATEGORIES}
         seen_items: set[tuple[str, str]] = set()
         for raw_item in raw_evidence:
             if not isinstance(raw_item, Mapping) or frozenset(raw_item) != {
@@ -723,11 +680,7 @@ def parse_review_evidence_v2(
                 raise TypeError("review evidence v2 item is invalid")
             category = raw_item.get("category")
             text = raw_item.get("text")
-            if (
-                not isinstance(category, str)
-                or category not in _EVIDENCE_CATEGORIES
-                or not isinstance(text, str)
-            ):
+            if not isinstance(category, str) or category not in _EVIDENCE_CATEGORIES or not isinstance(text, str):
                 raise TypeError("review evidence v2 item fields are invalid")
             identity = (category, text)
             if identity in seen_items:
@@ -746,46 +699,22 @@ def parse_review_evidence_v2(
             ClauseEvidenceV2(
                 clause_id=clause_id,
                 exact_text=exact_text,
-                subject_spans=_quote_tuple(
-                    grouped["subject"], exact_text=trusted_text
-                ),
-                predicate_spans=_quote_tuple(
-                    grouped["predicate"], exact_text=trusted_text
-                ),
-                action_or_event_spans=_quote_tuple(
-                    grouped["action_or_event"], exact_text=trusted_text
-                ),
-                dialogue_spans=_quote_tuple(
-                    grouped["dialogue"], exact_text=trusted_text
-                ),
-                motive_spans=_quote_tuple(
-                    grouped["motive"], exact_text=trusted_text
-                ),
-                cause_spans=_quote_tuple(
-                    grouped["cause"], exact_text=trusted_text
-                ),
-                result_spans=_quote_tuple(
-                    grouped["result"], exact_text=trusted_text
-                ),
-                time_spans=_quote_tuple(
-                    grouped["time"], exact_text=trusted_text
-                ),
-                location_spans=_quote_tuple(
-                    grouped["location"], exact_text=trusted_text
-                ),
+                subject_spans=_quote_tuple(grouped["subject"], exact_text=trusted_text),
+                predicate_spans=_quote_tuple(grouped["predicate"], exact_text=trusted_text),
+                action_or_event_spans=_quote_tuple(grouped["action_or_event"], exact_text=trusted_text),
+                dialogue_spans=_quote_tuple(grouped["dialogue"], exact_text=trusted_text),
+                motive_spans=_quote_tuple(grouped["motive"], exact_text=trusted_text),
+                cause_spans=_quote_tuple(grouped["cause"], exact_text=trusted_text),
+                result_spans=_quote_tuple(grouped["result"], exact_text=trusted_text),
+                time_spans=_quote_tuple(grouped["time"], exact_text=trusted_text),
+                location_spans=_quote_tuple(grouped["location"], exact_text=trusted_text),
                 grammatical_marker_spans=GrammaticalMarkerSpans(
-                    modality=_quote_tuple(
-                        grouped["modality"], exact_text=trusted_text
-                    ),
-                    aspect=_quote_tuple(
-                        grouped["aspect"], exact_text=trusted_text
-                    ),
+                    modality=_quote_tuple(grouped["modality"], exact_text=trusted_text),
+                    aspect=_quote_tuple(grouped["aspect"], exact_text=trusted_text),
                 ),
                 implicit_subject=cast(ImplicitSubject, implicit_subject),
                 uncertain=uncertain,
-                relationship_role_spans=_quote_tuple(
-                    grouped["relationship_role"], exact_text=trusted_text
-                ),
+                relationship_role_spans=_quote_tuple(grouped["relationship_role"], exact_text=trusted_text),
             )
         )
     return ReviewEvidenceV2(
@@ -865,16 +794,8 @@ def reconcile_review_evidence(
 
     for unit in kernel.units:
         if unit.purpose == "frozen_fact":
-            exact = {
-                fact_text_by_id[ref]
-                for ref in unit.fact_refs
-                if ref in fact_text_by_id
-            }
-            if (
-                len(unit.fact_refs) != 1
-                or unit.text not in exact
-                or unit.constraint_refs
-            ):
+            exact = {fact_text_by_id[ref] for ref in unit.fact_refs if ref in fact_text_by_id}
+            if len(unit.fact_refs) != 1 or unit.text not in exact or unit.constraint_refs:
                 issues.append(
                     NarrativeIssue(
                         unit.unit_id,
@@ -890,9 +811,7 @@ def reconcile_review_evidence(
                     unit.text,
                 )
             )
-        if any(
-            ref not in allowed_constraint_ids for ref in unit.constraint_refs
-        ):
+        if any(ref not in allowed_constraint_ids for ref in unit.constraint_refs):
             issues.append(
                 NarrativeIssue(
                     unit.unit_id,
@@ -900,8 +819,10 @@ def reconcile_review_evidence(
                     unit.text,
                 )
             )
-        if unit.allowed_observation_types == ("dramatization",) and not (
-            unit.text.startswith(DRAMATIZATION_DISCLOSURE)
+        if (
+            kernel.kernel_version != KERNEL_VERSION
+            and unit.allowed_observation_types == ("dramatization",)
+            and not unit.text.startswith(DRAMATIZATION_DISCLOSURE)
         ):
             issues.append(
                 NarrativeIssue(
@@ -910,8 +831,10 @@ def reconcile_review_evidence(
                     unit.text,
                 )
             )
-        if unit.allowed_observation_types == ("hypothesis",) and not (
-            unit.text.startswith(HYPOTHESIS_DISCLOSURE)
+        if (
+            kernel.kernel_version != KERNEL_VERSION
+            and unit.allowed_observation_types == ("hypothesis",)
+            and not unit.text.startswith(HYPOTHESIS_DISCLOSURE)
         ):
             issues.append(
                 NarrativeIssue(
@@ -921,9 +844,7 @@ def reconcile_review_evidence(
                 )
             )
 
-    by_unit: dict[str, list[ClauseEvidence]] = {
-        unit_id: [] for unit_id in units
-    }
+    by_unit: dict[str, list[ClauseEvidence]] = {unit_id: [] for unit_id in units}
     for clause_id, item in received.items():
         by_unit[expected[clause_id].unit_id].append(item)
     for unit in kernel.units:
@@ -942,10 +863,7 @@ def reconcile_review_evidence(
                     )
                 )
                 continue
-            if (
-                unit.allowed_observation_types == ("hypothesis",)
-                and _has_unsupported_actuality_binding(item)
-            ):
+            if unit.allowed_observation_types == ("hypothesis",) and _has_unsupported_actuality_binding(item):
                 issues.append(
                     NarrativeIssue(
                         unit.unit_id,
@@ -954,10 +872,7 @@ def reconcile_review_evidence(
                     )
                 )
                 continue
-            if (
-                unit.allowed_observation_types == ("abstract_principle",)
-                and item.event_spans
-            ):
+            if unit.allowed_observation_types == ("abstract_principle",) and item.event_spans:
                 issues.append(
                     NarrativeIssue(
                         unit.unit_id,
@@ -987,9 +902,7 @@ def reconcile_review_evidence_v2(
     writer_contexts = writer_clause_contexts_v2(contexts)
     expected = {context.clause_id: context for context in writer_contexts}
     received: dict[str, ClauseEvidenceV2] = {}
-    expected_order = tuple(
-        context.clause_id for context in writer_contexts
-    )
+    expected_order = tuple(context.clause_id for context in writer_contexts)
     received_order = tuple(item.clause_id for item in evidence.clauses)
     if received_order != expected_order:
         issues.append(
@@ -1094,24 +1007,17 @@ def unit_contracts_v2(
         "unit:natural-guide": "audience_guidance",
         "unit:release-caption": "audience_guidance",
     }
-    fact_units = tuple(
-        unit for unit in kernel.units if unit.purpose == "frozen_fact"
-    )
+    fact_units = tuple(unit for unit in kernel.units if unit.purpose == "frozen_fact")
     for index, unit in enumerate(fact_units, start=1):
         if unit.unit_id != f"unit:frozen-fact:{index}":
             raise ValueError("frozen fact unit mapping is incomplete")
         contracts[unit.unit_id] = "frozen_fact"
-    visible_fact_refs = {
-        ref for unit in fact_units for ref in unit.fact_refs
-    }
+    visible_fact_refs = {ref for unit in fact_units for ref in unit.fact_refs}
     required_fact_refs = {
         *(fact.source_id for fact in frame.user_facts),
         *frame.allowed_brand_fact_ids,
     }
-    if (
-        not required_fact_refs <= visible_fact_refs
-        or not visible_fact_refs <= frame.allowed_fact_ids
-    ):
+    if not required_fact_refs <= visible_fact_refs or not visible_fact_refs <= frame.allowed_fact_ids:
         raise ValueError("frozen fact unit mapping drifted from frame")
 
     if kernel.program_id == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM:
@@ -1124,10 +1030,7 @@ def unit_contracts_v2(
                 "unit:body-closing": "recommendation",
             }
         )
-    elif (
-        kernel.program_id
-        == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
-    ):
+    elif kernel.program_id == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2:
         if frame.narrative_mode != "general_observation" or fact_units:
             raise ValueError("hypothetical example program drifted from frame")
         contracts.update(
@@ -1145,15 +1048,20 @@ def unit_contracts_v2(
             body_contract = "hypothetical_example"
         elif frame.narrative_mode == "dramatization":
             body_contract = "disclosed_dramatization"
-        elif any(
-            ref in frame.allowed_product_fact_ids
-            for unit in fact_units
-            for ref in unit.fact_refs
-        ):
+        elif any(ref in frame.allowed_product_fact_ids for unit in fact_units for ref in unit.fact_refs):
             body_contract = "audience_guidance"
         else:
             body_contract = "abstract_observation"
         contracts["unit:body"] = body_contract
+    elif kernel.program_id == ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM:
+        if frame.narrative_mode != "actuality_reflection":
+            raise ValueError("local dramatization program drifted from frame")
+        contracts.update(
+            {
+                "unit:body": "actuality_reflection",
+                "unit:local-dramatization": "disclosed_dramatization",
+            }
+        )
     else:
         raise ValueError("kernel program has no trusted contract mapping")
 
@@ -1196,30 +1104,17 @@ def _subject_binding_v2(
         return "protected_exact_subject"
     subjects = tuple(span.text for span in evidence.subject_spans)
     locations = tuple(span.text for span in evidence.location_spans)
-    if any(
-        any(designator in subject for designator in _INSTITUTIONAL_DESIGNATORS)
-        for subject in subjects
-    ):
+    if any(any(designator in subject for designator in _INSTITUTIONAL_DESIGNATORS) for subject in subjects):
         return "current_institution"
-    self_referenced = any(
-        reference in subject
-        for subject in subjects
-        for reference in _INSTITUTIONAL_SELF_REFERENCES
-    )
+    self_referenced = any(reference in subject for subject in subjects for reference in _INSTITUTIONAL_SELF_REFERENCES)
     if self_referenced:
         if protected_subjects.speaker_kind == "institutional_account":
             return "current_institution"
         if protected_subjects.speaker_kind == "personal_ip_account":
-            return (
-                "current_person"
-                if any("我" in subject for subject in subjects)
-                else "uncertain"
-            )
+            return "current_person" if any("我" in subject for subject in subjects) else "uncertain"
         return "uncertain"
     if any(
-        span == "我"
-        or any(prefix in span for prefix in _CURRENT_REALITY_PREFIXES)
-        for span in (*subjects, *locations)
+        span == "我" or any(prefix in span for prefix in _CURRENT_REALITY_PREFIXES) for span in (*subjects, *locations)
     ):
         return "current_person"
     if evidence.implicit_subject == "current_speaker":
@@ -1231,8 +1126,7 @@ def _subject_binding_v2(
     if evidence.implicit_subject == "generic":
         return (
             "fictional_role"
-            if context.unit_contract
-            in {"hypothetical_example", "disclosed_dramatization"}
+            if context.unit_contract in {"hypothetical_example", "disclosed_dramatization"}
             else "generic"
         )
     if subjects:
@@ -1240,8 +1134,7 @@ def _subject_binding_v2(
             return "fictional_role"
         return (
             "fictional_role"
-            if context.unit_contract
-            in {"hypothetical_example", "disclosed_dramatization"}
+            if context.unit_contract in {"hypothetical_example", "disclosed_dramatization"}
             else "generic"
         )
     return "none"
@@ -1254,23 +1147,17 @@ def _writer_clause_issue(
     fact_text_by_id: Mapping[str, str],
 ) -> NarrativeIssue | None:
     actuality_facts = tuple(
-        text
-        for fact_id, text in fact_text_by_id.items()
-        if fact_id.startswith("source:user_actuality:")
+        text for fact_id, text in fact_text_by_id.items() if fact_id.startswith("source:user_actuality:")
     )
     if actuality_facts and any(
-        not any(span.text in fact for fact in actuality_facts)
-        for span in evidence.relationship_role_spans
+        not any(span.text in fact for fact in actuality_facts) for span in evidence.relationship_role_spans
     ):
         return NarrativeIssue(
             context.unit_id,
             "unsupported_actuality_expansion",
             context.exact_text,
         )
-    if (
-        binding in {"current_institution", "protected_exact_subject"}
-        and evidence.predicate_spans
-    ):
+    if binding in {"current_institution", "protected_exact_subject"} and evidence.predicate_spans:
         return NarrativeIssue(
             context.unit_id,
             "unsupported_institutional_assertion",
@@ -1308,10 +1195,7 @@ def _writer_clause_issue(
     )
 
     if contract in {"abstract_observation", "audience_guidance"}:
-        if (
-            binding == "current_person"
-            and (has_action or has_reality_detail or has_result)
-        ):
+        if binding == "current_person" and (has_action or has_reality_detail or has_result):
             return NarrativeIssue(
                 context.unit_id,
                 "unsupported_actuality_binding",
@@ -1323,9 +1207,11 @@ def _writer_clause_issue(
                 "situated_event_in_observation",
                 context.exact_text,
             )
-        if has_dialogue or (
-            has_action and (has_result or has_time or has_location or has_aspect)
-        ) or ((has_time or has_location or has_aspect) and evidence.predicate_spans):
+        if (
+            has_dialogue
+            or (has_action and (has_result or has_time or has_location or has_aspect))
+            or ((has_time or has_location or has_aspect) and evidence.predicate_spans)
+        ):
             return NarrativeIssue(
                 context.unit_id,
                 "situated_event_in_observation",
@@ -1336,23 +1222,13 @@ def _writer_clause_issue(
                 return None
             return NarrativeIssue(
                 context.unit_id,
-                (
-                    "recommendation_in_observation"
-                    if has_modality
-                    else "insufficient_evidence"
-                ),
+                ("recommendation_in_observation" if has_modality else "insufficient_evidence"),
                 context.exact_text,
             )
         return None
 
     if contract == "recommendation":
-        if (
-            has_aspect
-            or has_time
-            or has_location
-            or has_dialogue
-            or bool(evidence.motive_spans)
-        ):
+        if has_aspect or has_time or has_location or has_dialogue or bool(evidence.motive_spans):
             return NarrativeIssue(
                 context.unit_id,
                 "situated_event_in_recommendation",
@@ -1367,27 +1243,15 @@ def _writer_clause_issue(
         return None
 
     if contract == "actuality_reflection":
-        if (
-            binding == "current_person"
-            and (
-                has_action
-                or has_reality_detail
-                or has_result
-                or bool(evidence.cause_spans)
-            )
+        if binding == "current_person" and (
+            has_action or has_reality_detail or has_result or bool(evidence.cause_spans)
         ):
             return NarrativeIssue(
                 context.unit_id,
                 "unsupported_actuality_expansion",
                 context.exact_text,
             )
-        if (
-            has_aspect
-            or has_time
-            or has_location
-            or has_dialogue
-            or bool(evidence.motive_spans)
-        ):
+        if has_aspect or has_time or has_location or has_dialogue or bool(evidence.motive_spans):
             return NarrativeIssue(
                 context.unit_id,
                 "situated_event_in_reflection",
@@ -1411,13 +1275,10 @@ def _writer_clause_issue(
 def _kernel_program_issues(
     kernel: CreativeKernelV1,
 ) -> tuple[NarrativeIssue, ...]:
-    if (
-        kernel.program_id
-        in {
-            OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
-            OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
-        }
-    ):
+    if kernel.program_id in {
+        OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
+        OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
+    }:
         expected = {
             "unit:body-opening": ("abstract_principle",),
             "unit:hypothetical-example": ("hypothesis",),
@@ -1425,11 +1286,7 @@ def _kernel_program_issues(
         }
     else:
         expected = {"unit:body": ("abstract_principle",)}
-    body_units = {
-        unit.unit_id: unit
-        for unit in kernel.units
-        if unit.purpose == "body"
-    }
+    body_units = {unit.unit_id: unit for unit in kernel.units if unit.purpose == "body"}
     if set(body_units) != set(expected) or any(
         body_units[unit_id].allowed_observation_types != allowed
         for unit_id, allowed in expected.items()
@@ -1453,10 +1310,7 @@ def _split_visible_text(text: str) -> tuple[str, ...]:
     for index, character in enumerate(text):
         if character in _CLAUSE_ENDINGS:
             part = text[start : index + 1]
-            if any(
-                value not in _CLAUSE_ENDINGS and not value.isspace()
-                for value in part
-            ):
+            if any(value not in _CLAUSE_ENDINGS and not value.isspace() for value in part):
                 parts.append(part)
             elif parts:
                 parts[-1] += part
@@ -1476,25 +1330,17 @@ def _has_unsupported_institutional_assertion(
 ) -> bool:
     if not evidence.predicate_spans:
         return False
-    exact_subjects = {
-        name for name in protected_subjects.exact_names if name
-    }
+    exact_subjects = {name for name in protected_subjects.exact_names if name}
     if any(name in evidence.exact_text for name in exact_subjects):
         return True
     if any(
         subject in exact_subjects
         or subject in _INSTITUTIONAL_SELF_REFERENCES
-        or any(
-            designator in subject
-            for designator in _INSTITUTIONAL_DESIGNATORS
-        )
+        or any(designator in subject for designator in _INSTITUTIONAL_DESIGNATORS)
         for subject in evidence.subject_spans
     ):
         return True
-    return (
-        protected_subjects.current_speaker_is_institutional
-        and evidence.implicit_subject == "current_speaker"
-    )
+    return protected_subjects.current_speaker_is_institutional and evidence.implicit_subject == "current_speaker"
 
 
 def _has_unsupported_actuality_binding(
@@ -1510,11 +1356,7 @@ def _has_unsupported_actuality_binding(
         *evidence.subject_spans,
         *evidence.location_spans,
     )
-    return any(
-        span == "我"
-        or span.startswith(_CURRENT_REALITY_PREFIXES)
-        for span in scoped_spans
-    )
+    return any(span == "我" or span.startswith(_CURRENT_REALITY_PREFIXES) for span in scoped_spans)
 
 
 def _required_string(value: object) -> str:
@@ -1524,9 +1366,7 @@ def _required_string(value: object) -> str:
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:
-    if not isinstance(value, list) or any(
-        not isinstance(item, str) or not item for item in value
-    ):
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
         raise TypeError("review evidence spans are invalid")
     values = cast(list[str], value)
     if len(values) != len(set(values)):
