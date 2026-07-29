@@ -479,6 +479,8 @@ def materialize_claim_inventory(
             if context.unit_contract == "hypothetical_example"
             else "dramatization"
             if context.unit_contract == "disclosed_dramatization"
+            else "generic_observation"
+            if context.unit_contract == "audience_guidance"
             else cast(StatementMode, mode_answer.operands[0])
         )
         if mode not in _STATEMENT_MODES:

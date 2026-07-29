@@ -741,7 +741,32 @@ def test_audience_guidance_accepts_safe_summary_invitation_or_condition() -> Non
                 ),
             },
         ),
-    ) == ("statement_mode_conflict",)
+    ) == ("situated_event_in_observation",)
+
+
+def test_audience_guidance_uses_closed_risks_not_reviewer_mode_flip() -> None:
+    metaphor = "洗碗大战：一场关于尊严的荒诞剧。"
+    contexts = _context(
+        metaphor,
+        contract="audience_guidance",
+    )
+    mislabeled = _parse(
+        contexts,
+        {
+            "subject_binding": (
+                "present",
+                metaphor,
+                ("generic",),
+            ),
+            "statement_mode": (
+                "present",
+                metaphor,
+                ("dramatization",),
+            ),
+        },
+    )
+
+    assert _reasons(contexts, mislabeled) == ()
 
 
 def test_product_claim_is_distinct_from_institutional_assertion() -> None:
