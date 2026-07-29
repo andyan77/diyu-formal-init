@@ -1,6 +1,16 @@
 from __future__ import annotations
 
 from src.ports.content_generator import ContentGenerator
+from src.shared.clause_license import (
+    CLAUSE_LICENSE_REVIEW_VERSION,
+    CLAUSE_LICENSE_VERSION,
+    ClauseLicenseReviewsV1,
+    ClauseLicenseReviewV1,
+    build_unit_clause_license_policies_v1,
+    clause_license_document,
+    clause_license_review_document,
+    materialize_clause_licenses_v1,
+)
 from src.shared.creative_kernel import (
     MAX_PRODUCT_FACT_BLOCKS,
     build_kernel_skeleton,
@@ -29,7 +39,11 @@ from src.shared.factual_basis import (
     product_fact_records,
 )
 from src.shared.narrative import legacy_frame, visible_digest
-from src.shared.review_evidence import REVIEW_EVIDENCE_V2_VERSION
+from src.shared.review_evidence import (
+    build_clause_contexts_v2,
+    clause_context_document,
+    unit_contracts_v2,
+)
 from src.shared.types import (
     ContentProduct,
     ContentSemanticContract,
@@ -203,13 +217,7 @@ class DeterministicContentGenerator(ContentGenerator):
             )
         if fact_blocks:
             raw["fact_block_refs"] = list(
-                required_fact_block_ids
-                or tuple(
-                    block.fact_block_id
-                    for block in fact_blocks[
-                        :MAX_PRODUCT_FACT_BLOCKS
-                    ]
-                )
+                required_fact_block_ids or tuple(block.fact_block_id for block in fact_blocks[:MAX_PRODUCT_FACT_BLOCKS])
             )
         kernel = parse_writer_kernel(
             raw,
@@ -217,6 +225,34 @@ class DeterministicContentGenerator(ContentGenerator):
             fact_blocks=fact_blocks,
             allowed_claim_ids=product_packet.fact_ids,
             required_fact_block_ids=required_fact_block_ids,
+        )
+        clause_contexts = build_clause_contexts_v2(
+            kernel=kernel,
+            frame=frame,
+            fact_registry=facts,
+            allowed_constraint_ids=frozenset({"constraint:deterministic-test-stub"}),
+            speaker_kind=request.brand.speaker_kind,
+        )
+        license_policies = build_unit_clause_license_policies_v1(
+            frame=frame,
+            unit_contracts=unit_contracts_v2(skeleton, frame),
+        )
+        clause_licenses = materialize_clause_licenses_v1(
+            contexts=clause_contexts,
+            policies=license_policies,
+        )
+        license_reviews = ClauseLicenseReviewsV1(
+            review_version=CLAUSE_LICENSE_REVIEW_VERSION,
+            reviews=tuple(
+                ClauseLicenseReviewV1(
+                    clause_id=license_.clause_id,
+                    license_id=license_.license_id,
+                    verdict="supported",
+                    reason_code="supported_by_license",
+                    unsupported_quote="",
+                )
+                for license_ in clause_licenses
+            ),
         )
         allowed_resources = frozenset(
             {
@@ -255,8 +291,13 @@ class DeterministicContentGenerator(ContentGenerator):
             reviewed_digest=visible_digest(compiled.outline, compiled.body),
             completion_snapshot_patch={
                 "creative_kernel_v1": kernel_document(kernel),
+                "clause_context_v2": clause_context_document(clause_contexts),
+                "clause_license_v1": clause_license_document(clause_licenses),
+                "clause_license_review_v1": (clause_license_review_document(license_reviews)),
                 "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
-                "review_evidence_version": REVIEW_EVIDENCE_V2_VERSION,
+                "review_evidence_version": (CLAUSE_LICENSE_REVIEW_VERSION),
+                "closed_review_contract": CLAUSE_LICENSE_VERSION,
+                "claim_inventory_v1": [],
                 "reviewed_kernel_digest": kernel_digest(kernel),
                 "reviewed_creative_digest": creative_units_digest(kernel),
                 "product_fact_packet": product_fact_packet_document(product_packet),

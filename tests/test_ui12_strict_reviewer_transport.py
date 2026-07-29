@@ -7,6 +7,14 @@ from typing import Any
 import httpx
 import pytest
 
+from src.shared.clause_license import (
+    CLAUSE_LICENSE_REVIEW_VERSION,
+    CLAUSE_LICENSE_TOOL_NAME,
+    ClauseLicenseV1,
+    UnitClauseLicensePolicyV1,
+    clause_license_review_json_schema,
+    materialize_clause_licenses_v1,
+)
 from src.shared.closed_review import (
     CLOSED_REVIEW_DIMENSIONS,
     CLOSED_REVIEW_TOOL_NAME,
@@ -97,6 +105,42 @@ def _questions(
     text: str = "换位思考不等于没有边界。",
 ) -> tuple[ClosedReviewQuestion, ...]:
     return build_closed_review_questions((_writer_context(text),))
+
+
+def _licenses() -> tuple[ClauseLicenseV1, ...]:
+    context = _writer_context()
+    return materialize_clause_licenses_v1(
+        contexts=(context,),
+        policies=(
+            UnitClauseLicensePolicyV1(
+                unit_id=context.unit_id,
+                discourse_contract=context.unit_contract,
+                subject_scope="generic_only",
+                allowed_fact_refs=(),
+                prohibited_bindings=(
+                    "current_person",
+                    "current_institution",
+                    "protected_exact_subject",
+                ),
+            ),
+        ),
+    )
+
+
+def _license_review_document() -> dict[str, object]:
+    license_ = _licenses()[0]
+    return {
+        "review_version": CLAUSE_LICENSE_REVIEW_VERSION,
+        "reviews": [
+            {
+                "clause_id": license_.clause_id,
+                "license_id": license_.license_id,
+                "verdict": "supported",
+                "reason_code": "supported_by_license",
+                "unsupported_quote": "",
+            }
+        ],
+    }
 
 
 def _answer_document(
@@ -201,9 +245,7 @@ def test_strict_schema_requires_closed_answer_fields() -> None:
         "uncertain",
         "operands",
     ]
-    assert {"start", "end", "occurrence"}.isdisjoint(
-        _schema_property_names(schema)
-    )
+    assert {"start", "end", "occurrence"}.isdisjoint(_schema_property_names(schema))
     assert answer_properties["question_id"] == {
         "type": "string",
         "enum": [question.question_id for question in questions],
@@ -244,6 +286,59 @@ def test_reviewer_uses_only_beta_strict_tool_without_json_fallback() -> None:
     assert function["name"] == CLOSED_REVIEW_TOOL_NAME
     assert function["strict"] is True
     _assert_strict_objects(function["parameters"])
+
+
+def test_runtime_license_review_uses_only_beta_strict_tool() -> None:
+    licenses = _licenses()
+    _FakeClient.response = _FakeResponse(
+        _strict_payload(
+            _license_review_document(),
+            tool_name=CLAUSE_LICENSE_TOOL_NAME,
+        )
+    )
+
+    payload, retries = _generator("https://example.invalid/v1")._request_strict_license_review(
+        "system",
+        "prompt",
+        license_count=len(licenses),
+        licenses=licenses,
+    )
+
+    assert payload == _FakeClient.response.json()
+    assert retries == 0
+    assert len(_FakeClient.requests) == 1
+    url, request = _FakeClient.requests[0]
+    assert url == "https://example.invalid/beta/chat/completions"
+    body = request["json"]
+    assert isinstance(body, dict)
+    assert body["model"] == "deepseek-v4-pro"
+    assert body["temperature"] == 0.0
+    assert body["thinking"] == {"type": "disabled"}
+    assert "response_format" not in body
+    assert body["tool_choice"] == {
+        "type": "function",
+        "function": {"name": CLAUSE_LICENSE_TOOL_NAME},
+    }
+    tools = body["tools"]
+    assert isinstance(tools, list)
+    function = tools[0]["function"]
+    assert function["strict"] is True
+    assert function["parameters"] == clause_license_review_json_schema(licenses)
+    _assert_strict_objects(function["parameters"])
+
+
+def test_runtime_license_review_rejects_old_closed_question_tool() -> None:
+    licenses = _licenses()
+    payload = _strict_payload(
+        _license_review_document(),
+        tool_name=CLOSED_REVIEW_TOOL_NAME,
+    )
+
+    with pytest.raises(TypeError, match="function name"):
+        DeepSeekGenerator._strict_license_review_answers(
+            payload,
+            licenses=licenses,
+        )
 
 
 def test_writer_and_reviewer_model_routes_are_independent() -> None:

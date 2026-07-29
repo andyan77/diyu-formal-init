@@ -1,0 +1,111 @@
+{
+  "fixture_version": "ui12-clause-license-pairs-v1",
+  "samples": [
+    {
+      "sample_id": "generic-people-motive",
+      "exact_text": "两个疲惫的人都渴望被理解。",
+      "unit_contract": "actuality_reflection",
+      "closed_evidence": {
+        "subject_binding": ["generic"],
+        "relationship_claim": [],
+        "motive_or_mental_state": ["desire"],
+        "statement_mode": ["generic_observation"]
+      },
+      "license_verdict": "supported",
+      "reason_code": "supported_by_license",
+      "unsupported_quote": ""
+    },
+    {
+      "sample_id": "specific-other-social-relation",
+      "exact_text": "两个人都在努力维持这段关系。",
+      "unit_contract": "actuality_reflection",
+      "closed_evidence": {
+        "subject_binding": ["generic"],
+        "relationship_claim": ["other_social_relation"],
+        "statement_mode": ["generic_observation"]
+      },
+      "license_verdict": "unsupported",
+      "reason_code": "specific_social_relation",
+      "unsupported_quote": "这段关系"
+    },
+    {
+      "sample_id": "current-user-motive",
+      "exact_text": "我们两个人其实都渴望被看见。",
+      "unit_contract": "actuality_reflection",
+      "closed_evidence": {
+        "subject_binding": ["current_user"],
+        "relationship_claim": [],
+        "motive_or_mental_state": ["desire"],
+        "statement_mode": ["actuality"]
+      },
+      "license_verdict": "unsupported",
+      "reason_code": "current_person_binding",
+      "unsupported_quote": "我们两个人其实都渴望被看见"
+    },
+    {
+      "sample_id": "specific-partner",
+      "exact_text": "一对伴侣都很疲惫。",
+      "unit_contract": "actuality_reflection",
+      "closed_evidence": {
+        "subject_binding": ["generic"],
+        "relationship_claim": ["partner"],
+        "statement_mode": ["generic_observation"]
+      },
+      "license_verdict": "unsupported",
+      "reason_code": "specific_social_relation",
+      "unsupported_quote": "一对伴侣"
+    },
+    {
+      "sample_id": "specific-family",
+      "exact_text": "这个家需要两个人共同维护。",
+      "unit_contract": "actuality_reflection",
+      "closed_evidence": {
+        "subject_binding": ["generic"],
+        "relationship_claim": ["family"],
+        "motive_or_mental_state": ["need"],
+        "statement_mode": ["generic_observation"]
+      },
+      "license_verdict": "unsupported",
+      "reason_code": "specific_social_relation",
+      "unsupported_quote": "这个家"
+    },
+    {
+      "sample_id": "generic-motive-cause",
+      "exact_text": "很多争执背后，可能有被看见的需要。",
+      "unit_contract": "actuality_reflection",
+      "closed_evidence": {
+        "subject_binding": ["generic"],
+        "relationship_claim": [],
+        "motive_or_mental_state": ["need"],
+        "cause_or_result": ["cause", "causal_link"],
+        "statement_mode": ["generic_observation"]
+      },
+      "license_verdict": "supported",
+      "reason_code": "supported_by_license",
+      "unsupported_quote": ""
+    },
+    {
+      "sample_id": "generic-recommendation",
+      "exact_text": "下次不妨先停一下再回应。",
+      "unit_contract": "recommendation",
+      "closed_evidence": {
+        "subject_binding": ["generic"],
+        "relationship_claim": [],
+        "statement_mode": ["recommendation"]
+      },
+      "license_verdict": "supported",
+      "reason_code": "supported_by_license",
+      "unsupported_quote": ""
+    },
+    {
+      "sample_id": "frozen-user-fact",
+      "exact_text": "今天店里忙了一天，回家还因为谁洗碗拌了两句。",
+      "unit_contract": "frozen_fact",
+      "fact_ref": "source:user_actuality:pair",
+      "closed_evidence": {},
+      "license_verdict": "structurally_valid",
+      "reason_code": "server_owned",
+      "unsupported_quote": ""
+    }
+  ]
+}

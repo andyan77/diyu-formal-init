@@ -12,18 +12,29 @@ from typing import Any, cast
 import httpx
 
 from src.ports.content_generator import ContentGenerator
+from src.shared.clause_license import (
+    CLAUSE_LICENSE_REVIEW_VERSION,
+    CLAUSE_LICENSE_TOOL_NAME,
+    CLAUSE_LICENSE_VERSION,
+    ClauseLicenseReviewsV1,
+    ClauseLicenseReviewV1,
+    ClauseLicenseV1,
+    UnitClauseLicensePolicyV1,
+    build_unit_clause_license_policies_v1,
+    clause_license_document,
+    clause_license_review_document,
+    clause_license_review_json_schema,
+    materialize_clause_licenses_v1,
+    parse_clause_license_reviews_v1,
+    reconcile_clause_license_reviews_v1,
+)
 from src.shared.closed_review import (
     CLOSED_REVIEW_TOOL_NAME,
     CLOSED_REVIEW_VERSION,
-    ClaimInventoryItem,
-    ClosedReviewAnswer,
     ClosedReviewAnswers,
     ClosedReviewQuestion,
-    build_closed_review_questions,
-    claim_inventory_document,
     closed_review_json_schema,
     parse_closed_review_answers,
-    reconcile_closed_review_answers,
 )
 from src.shared.content_origin import aigc_disclosure
 from src.shared.creative_kernel import (
@@ -76,7 +87,6 @@ from src.shared.narrative import (
 )
 from src.shared.review_evidence import (
     ClauseContextV2,
-    ProtectedSubjectScopeV2,
     UnitContractV2,
     build_clause_contexts_v2,
     clause_context_document,
@@ -484,10 +494,7 @@ class DeepSeekGenerator(ContentGenerator):
         raw_premises = document.get("user_premises")
         raw_facts = document.get("user_fact_spans")
         raw_plan = document.get("creative_plan")
-        if (
-            not isinstance(raw_premises, list)
-            or not isinstance(raw_facts, list)
-        ):
+        if not isinstance(raw_premises, list) or not isinstance(raw_facts, list):
             raise GenerationFailed("模型协作返回格式不完整")
         premises = self._exact_string_list(raw_premises)
         facts = self._exact_string_list(raw_facts)
@@ -502,11 +509,7 @@ class DeepSeekGenerator(ContentGenerator):
                 raise GenerationFailed("用户显式叙事形式与事实跨度不一致")
             narrative_mode = explicit_mode
         else:
-            narrative_mode = (
-                "actuality_reflection"
-                if facts
-                else "general_observation"
-            )
+            narrative_mode = "actuality_reflection" if facts else "general_observation"
         try:
             plan = creative_plan_from_document(raw_plan)
             validate_creative_plan(
@@ -559,9 +562,17 @@ class DeepSeekGenerator(ContentGenerator):
             constraint_refs=tuple(identifier for identifier, _ in context.constraint_registry),
             program_id=program_id,
         )
+        license_policies = build_unit_clause_license_policies_v1(
+            frame=frame,
+            unit_contracts=unit_contracts_v2(skeleton, frame),
+        )
         writer_payload, writer_retries = self._request(
             "你是笛语 CreativeKernelV1 Writer。只返回 unit 文字 JSON，不展示推理、规则或内部审查。",
-            self._kernel_writer_prompt(request, skeleton),
+            self._kernel_writer_prompt(
+                request,
+                skeleton,
+                license_policies,
+            ),
             4096,
         )
         provider_payloads.append(writer_payload)
@@ -596,13 +607,15 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("CreativeKernelV1 Writer 返回格式不完整") from exc
         (
             issues,
-            claim_inventory,
+            clause_licenses,
+            license_reviews,
             review_payload,
             review_retries,
         ) = self._review_kernel(
             request,
             context,
             kernel,
+            license_policies,
         )
         provider_payloads.append(review_payload)
         retries += review_retries
@@ -638,17 +651,24 @@ class DeepSeekGenerator(ContentGenerator):
                 raise GenerationFailed("CreativeKernelV1 单元修复返回格式不完整") from exc
             (
                 final_issues,
-                final_claim_inventory,
+                final_clause_licenses,
+                final_license_reviews,
                 review_payload,
                 review_retries,
-            ) = self._review_kernel(request, context, repaired)
+            ) = self._review_kernel(
+                request,
+                context,
+                repaired,
+                license_policies,
+            )
             provider_payloads.append(review_payload)
             retries += review_retries
             if final_issues:
                 raise GenerationFailed("内容边界无法在一次 CreativeKernel unit 修复内满足")
             receipts = self._repair_receipts(issues)
             kernel = repaired
-            claim_inventory = final_claim_inventory
+            clause_licenses = final_clause_licenses
+            license_reviews = final_license_reviews
         if request.revision_instruction and request.prior_creative_kernel:
             before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
             after = tuple(unit.text for unit in kernel.writable_units)
@@ -700,12 +720,14 @@ class DeepSeekGenerator(ContentGenerator):
             completion_snapshot_patch={
                 "creative_kernel_v1": kernel_document(kernel),
                 "clause_context_v2": clause_context_document(clause_contexts),
+                "clause_license_v1": clause_license_document(clause_licenses),
+                "clause_license_review_v1": clause_license_review_document(license_reviews),
                 "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
-                "review_evidence_version": CLOSED_REVIEW_VERSION,
-                "closed_review_contract": "closed-review-questions-v1",
+                "review_evidence_version": CLAUSE_LICENSE_REVIEW_VERSION,
+                "closed_review_contract": CLAUSE_LICENSE_VERSION,
                 "writer_model": self._model,
                 "reviewer_model": self._reviewer_model,
-                "claim_inventory_v1": claim_inventory_document(claim_inventory),
+                "claim_inventory_v1": [],
                 "reviewed_kernel_digest": reviewed_kernel_digest,
                 "reviewed_creative_digest": reviewed_creative_digest,
                 "product_fact_packet": product_fact_packet_document(context.product_fact_packet),
@@ -855,9 +877,11 @@ class DeepSeekGenerator(ContentGenerator):
         request: GenerationInput,
         context: BoundaryContext,
         kernel: CreativeKernelV1,
+        license_policies: tuple[UnitClauseLicensePolicyV1, ...],
     ) -> tuple[
         tuple[NarrativeIssue, ...],
-        tuple[ClaimInventoryItem, ...],
+        tuple[ClauseLicenseV1, ...],
+        ClauseLicenseReviewsV1,
         dict[str, Any],
         int,
     ]:
@@ -875,19 +899,22 @@ class DeepSeekGenerator(ContentGenerator):
         writer_contexts = writer_clause_contexts_v2(clause_contexts)
         if not writer_contexts:
             raise GenerationFailed("CreativeKernelV1 缺少可审查的 Writer clause")
-        questions = build_closed_review_questions(
-            clause_contexts,
-            product_fact_packet=context.product_fact_packet,
-        )
+        try:
+            licenses = materialize_clause_licenses_v1(
+                contexts=clause_contexts,
+                policies=license_policies,
+            )
+        except ValueError as exc:
+            raise GenerationFailed("CreativeKernelV1 服务端 clause 许可不完整") from exc
         payloads: list[dict[str, Any]] = []
-        all_answers: list[ClosedReviewAnswer] = []
+        all_reviews: list[ClauseLicenseReviewV1] = []
         retries = 0
-        for batch in self._closed_review_batches(questions):
-            payload, batch_retries = self._request_strict_review(
-                "你是独立 CreativeKernel 风险问题回答器。只回答服务端给出的闭合问题，不决定事实许可或通过失败，"
-                "不回传或改写正文，只调用指定函数一次。",
-                self._kernel_reviewer_prompt(
-                    questions=batch,
+        for batch in self._clause_license_batches(licenses):
+            payload, batch_retries = self._request_strict_license_review(
+                "你是独立 CreativeKernel clause 许可证支持核对器。只核对文字是否完全符合服务端既定许可，"
+                "不决定事实许可、通过失败、保存、重试、修复或制作资源，只调用指定函数一次。",
+                self._kernel_license_reviewer_prompt(
+                    licenses=batch,
                     contexts=writer_contexts,
                     actuality_facts=tuple(
                         (fact_id, fact_text)
@@ -906,16 +933,16 @@ class DeepSeekGenerator(ContentGenerator):
                         )
                     ),
                 ),
-                question_count=len(batch),
-                questions=batch,
+                license_count=len(batch),
+                licenses=batch,
                 timeout_seconds=self._review_timeout_seconds,
             )
             payloads.append(payload)
             retries += batch_retries
             try:
-                batch_answers = self._strict_review_answers(
+                batch_reviews = self._strict_license_review_answers(
                     payload,
-                    questions=batch,
+                    licenses=batch,
                 )
             except (
                 KeyError,
@@ -923,36 +950,23 @@ class DeepSeekGenerator(ContentGenerator):
                 TypeError,
                 json.JSONDecodeError,
             ) as exc:
-                raise GenerationFailed("独立 CreativeKernel Reviewer 闭合证据不完整") from exc
-            all_answers.extend(batch_answers.answers)
-        protected_subjects = ProtectedSubjectScopeV2(
-            exact_names=tuple(
-                dict.fromkeys(
-                    name
-                    for name in (
-                        request.brand.brand_name,
-                        request.brand.organization_name,
-                        request.brand.account_name,
-                    )
-                    if name
-                ),
-            ),
-            speaker_kind=request.brand.speaker_kind,
+                raise GenerationFailed("独立 CreativeKernel Reviewer 许可证据不完整") from exc
+            all_reviews.extend(batch_reviews.reviews)
+        reviews = ClauseLicenseReviewsV1(
+            review_version=CLAUSE_LICENSE_REVIEW_VERSION,
+            reviews=tuple(all_reviews),
         )
-        result = reconcile_closed_review_answers(
+        result = reconcile_clause_license_reviews_v1(
             contexts=clause_contexts,
-            questions=questions,
-            answers=ClosedReviewAnswers(
-                evidence_version=CLOSED_REVIEW_VERSION,
-                answers=tuple(all_answers),
-            ),
+            policies=license_policies,
+            licenses=licenses,
+            reviews=reviews,
             fact_text_by_id=context.fact_text_by_id,
-            protected_subjects=protected_subjects,
-            product_fact_packet=context.product_fact_packet,
         )
         return (
             result.issues,
-            result.claims,
+            licenses,
+            reviews,
             self._review_payload_envelope(payloads),
             retries,
         )
@@ -989,6 +1003,9 @@ class DeepSeekGenerator(ContentGenerator):
             "review_answer_coverage",
             "review_answer_quote",
             "claim_inventory_drift",
+            "license_assignment_drift",
+            "license_review_coverage",
+            "license_review_quote",
             "insufficient_evidence",
             "frozen_fact_changed",
             "server_wrapper_drift",
@@ -1004,10 +1021,7 @@ class DeepSeekGenerator(ContentGenerator):
             "product_fact_must_use_immutable_block",
             "unsupported_product_inference",
         }
-        if any(
-            issue.reason in product_fact_ownership_issues
-            for issue in issues
-        ):
+        if any(issue.reason in product_fact_ownership_issues for issue in issues):
             return frozenset(writable_ids)
         affected = frozenset(issue.target_id for issue in issues if issue.target_id in writable_ids)
         if not affected:
@@ -1065,6 +1079,7 @@ class DeepSeekGenerator(ContentGenerator):
         self,
         request: GenerationInput,
         skeleton: CreativeKernelV1,
+        license_policies: tuple[UnitClauseLicensePolicyV1, ...] | None = None,
     ) -> str:
         if request.creative_plan is None:
             raise GenerationFailed("CreativeKernelV1 缺少 CreativePlanV2")
@@ -1099,11 +1114,28 @@ class DeepSeekGenerator(ContentGenerator):
             skeleton,
             request.narrative_frame,
         )
+        resolved_policies = (
+            license_policies
+            if license_policies is not None
+            else build_unit_clause_license_policies_v1(
+                frame=request.narrative_frame,
+                unit_contracts=trusted_contracts,
+            )
+        )
+        policy_by_unit = {policy.unit_id: policy for policy in resolved_policies}
+        if len(policy_by_unit) != len(resolved_policies) or set(policy_by_unit) != {
+            unit.unit_id for unit in skeleton.writable_units
+        }:
+            raise GenerationFailed("CreativeKernelV1 服务端 unit 许可不完整")
         writable = [
             {
                 "unit_id": unit.unit_id,
                 "purpose": unit.purpose,
                 "unit_contract": trusted_contracts[unit.unit_id],
+                "license_id_prefix": f"license:{unit.unit_id}:",
+                "subject_scope": policy_by_unit[unit.unit_id].subject_scope,
+                "allowed_fact_refs": list(policy_by_unit[unit.unit_id].allowed_fact_refs),
+                "prohibited_bindings": list(policy_by_unit[unit.unit_id].prohibited_bindings),
                 "allowed_observation_types": list(unit.allowed_observation_types),
                 "visible_order": unit.visible_order,
                 "claim_refs": list(unit.claim_refs),
@@ -1121,27 +1153,13 @@ class DeepSeekGenerator(ContentGenerator):
             ]
         }
         if fact_blocks:
-            blocks_by_fact_id = {
-                block.fact_id: block
-                for block in fact_blocks
-            }
+            blocks_by_fact_id = {block.fact_id: block for block in fact_blocks}
             example_fact_ids = (
-                *(
-                    item.fact_id
-                    for item in product_fact_packet.facts
-                    if item.fact_key == "display_name"
-                ),
-                *(
-                    item.fact_id
-                    for item in product_fact_packet.facts
-                    if item.fact_key not in {"sku", "display_name"}
-                ),
+                *(item.fact_id for item in product_fact_packet.facts if item.fact_key == "display_name"),
+                *(item.fact_id for item in product_fact_packet.facts if item.fact_key not in {"sku", "display_name"}),
             )
             template["fact_block_refs"] = [
-                blocks_by_fact_id[fact_id].fact_block_id
-                for fact_id in example_fact_ids[
-                    :MAX_PRODUCT_FACT_BLOCKS
-                ]
+                blocks_by_fact_id[fact_id].fact_block_id for fact_id in example_fact_ids[:MAX_PRODUCT_FACT_BLOCKS]
             ]
         prior = (
             [
@@ -1230,6 +1248,62 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 制作方式。Writer-owned clause 不得让当前表达者或第一人称复数承担谓语、做法、经历或承诺；
 介绍本文时使用中性的“这篇内容／这个角度”，不能用机构性“我们”。abstract_observation
 只写状态、判断、关系理解或比喻，不给泛指人物安排动作、对白或建议。"""
+
+    @staticmethod
+    def _kernel_license_reviewer_prompt(
+        *,
+        licenses: tuple[ClauseLicenseV1, ...],
+        contexts: tuple[ClauseContextV2, ...],
+        actuality_facts: tuple[tuple[str, str], ...],
+        protected_subjects: tuple[str, ...],
+    ) -> str:
+        context_by_clause = {context.clause_id: context for context in contexts}
+        clauses = [
+            {
+                "clause_id": license_.clause_id,
+                "license_id": license_.license_id,
+                "exact_text": context_by_clause[license_.clause_id].exact_text,
+                "discourse_contract": license_.discourse_contract,
+                "subject_scope": license_.subject_scope,
+                "allowed_fact_refs": list(license_.allowed_fact_refs),
+                "prohibited_bindings": list(license_.prohibited_bindings),
+            }
+            for license_ in licenses
+        ]
+        return f"""逐条核对 writer-owned clause 是否完整受到服务端唯一 ClauseLicenseV1 支持。
+你只提许可证支持证据，不决定事实许可、最终通过／失败、保存、持久化、重试、修复或资源。
+
+冻结用户现实事实仅用于识别当前真人绑定，不是 Writer 改写许可证：
+{json.dumps(actuality_facts, ensure_ascii=False)}
+受保护的当前品牌／组织／账号精确名：
+{json.dumps(protected_subjects, ensure_ascii=False)}
+
+待核对 clause 与许可：
+{json.dumps(clauses, ensure_ascii=False)}
+
+稳定语义：
+- generic_observation 可以创造不绑定当前真人或受保护主体的一般观察、观点、比喻、泛指心理
+  需要和一般因果；“两个人／人与人／一些人”等泛指人数本身不是具体社会关系。
+- recommendation 可以提出清楚的泛指建议，但不得把建议写成当前真人已经做过的事。
+- hypothetical_example 和 disclosed_dramatization 只在服务端既定 scope 内成立，不能绑定
+  当前用户、品牌、员工、顾客、门店历史或商品事实。
+- specific_social_relation 只指亲属、伴侣、家庭、同住、同事、员工、顾客或文字明确建立
+  的其他社会关系。若许可禁止该绑定，不能把一种具体关系换成另一种。
+- current person／institution、受保护主体、现实对白、已发生事件或结果、机构和商品事实，
+  没有 allowed_fact_refs 时均不受许可支持。
+- frozen fact、服务端 wrapper 和商品 ImmutableFactBlock 不在本次 writer-owned 输入中，
+  不能把资料来源、表达约束或制作资源当事实许可证。
+
+每个 clause 恰好返回一次，顺序、clause_id 与 license_id 必须完全一致：
+- supported：整条 clause 的全部可见含义均在许可证内；reason_code= supported_by_license，
+  unsupported_quote 为空字符串。
+- unsupported：至少一个含义越界；reason_code 从给定封闭枚举选择，unsupported_quote 必须
+  是该 clause 中能唯一定位问题的精确原文。短语重复时选择包含足够上下文的更长原文。
+- uncertain：确实无法判断主体绑定或许可支持；reason_code= insufficient_evidence，
+  unsupported_quote 为空字符串。清楚样本不得用 uncertain 逃避。
+
+不要返回 offset、occurrence、全文风险枚举、事实许可、pass/fail 或修复建议。只调用指定
+函数并返回 review_version={CLAUSE_LICENSE_REVIEW_VERSION}。"""
 
     @staticmethod
     def _kernel_reviewer_prompt(
@@ -1397,17 +1471,13 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
             "unsupported_product_inference",
         }
         product_fact_repair = any(
-            issue.target_id in affected
-            and issue.reason in product_issue_reasons
-            for issue in issues
+            issue.target_id in affected and issue.reason in product_issue_reasons for issue in issues
         )
         product_contract = bool(request.products)
         product_packet = build_product_fact_packet(
             request.products,
             allowed_fact_ids=(
-                request.narrative_frame.allowed_product_fact_ids
-                if request.narrative_frame is not None
-                else None
+                request.narrative_frame.allowed_product_fact_ids if request.narrative_frame is not None else None
             ),
         )
         if product_fact_repair:
@@ -1415,17 +1485,11 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 kernel=kernel,
                 affected=affected,
                 trusted_contracts=trusted_contracts,
-                expression_controls=self._deidentified_writer_controls(
-                    request
-                ),
+                expression_controls=self._deidentified_writer_controls(request),
                 platform=request.target,
                 media_format=request.media_format,
             )
-        if (
-            request.narrative_frame.narrative_mode
-            == "actuality_reflection"
-            and not product_contract
-        ):
+        if request.narrative_frame.narrative_mode == "actuality_reflection" and not product_contract:
             return self._actuality_repair_prompt(
                 request=request,
                 affected=affected,
@@ -1448,18 +1512,14 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
             if disclosure is not None:
                 prefix = f"{disclosure}\n"
                 if not current_text.startswith(prefix):
-                    raise GenerationFailed(
-                        "CreativeKernelV1 服务端披露结构漂移"
-                    )
+                    raise GenerationFailed("CreativeKernelV1 服务端披露结构漂移")
                 current_text = current_text[len(prefix) :]
             units.append(
                 {
                     "unit_id": unit.unit_id,
                     "purpose": unit.purpose,
                     "unit_contract": contract,
-                    "allowed_observation_types": list(
-                        unit.allowed_observation_types
-                    ),
+                    "allowed_observation_types": list(unit.allowed_observation_types),
                     "claim_refs": list(unit.claim_refs),
                     "current_text": current_text,
                 }
@@ -1543,19 +1603,10 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         trusted_contracts: Mapping[str, UnitContractV2],
     ) -> str:
         prior = request.prior_creative_kernel
-        if (
-            request.narrative_frame is None
-            or request.narrative_frame.narrative_mode
-            != "actuality_reflection"
-        ):
+        if request.narrative_frame is None or request.narrative_frame.narrative_mode != "actuality_reflection":
             raise GenerationFailed("真人事实内容修复缺少冻结叙事作用域")
-        prior_by_id = {
-            unit.unit_id: unit
-            for unit in (prior.writable_units if prior is not None else ())
-        }
-        if prior is not None and any(
-            unit_id not in prior_by_id for unit_id in affected
-        ):
+        prior_by_id = {unit.unit_id: unit for unit in (prior.writable_units if prior is not None else ())}
+        if prior is not None and any(unit_id not in prior_by_id for unit_id in affected):
             raise GenerationFailed("真人事实修改修复无法回放已审单元")
         units = [
             {
@@ -1574,29 +1625,12 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
                     )
                 ),
                 "unit_contract": trusted_contracts[unit_id],
-                **(
-                    {
-                        "prior_reviewed_text": (
-                            prior_by_id[unit_id].text
-                        )
-                    }
-                    if unit_id in prior_by_id
-                    else {}
-                ),
-                "issue_reasons": sorted(
-                    {
-                        issue.reason
-                        for issue in issues
-                        if issue.target_id == unit_id
-                    }
-                ),
+                **({"prior_reviewed_text": (prior_by_id[unit_id].text)} if unit_id in prior_by_id else {}),
+                "issue_reasons": sorted({issue.reason for issue in issues if issue.target_id == unit_id}),
             }
             for unit_id in sorted(affected)
         ]
-        expression_request = (
-            request.revision_instruction
-            or "保持服务端真人事实原文不变，补齐可直接发布的抽象观看主线"
-        )
+        expression_request = request.revision_instruction or "保持服务端真人事实原文不变，补齐可直接发布的抽象观看主线"
         read_only_facts = (
             []
             if prior is not None
@@ -1667,18 +1701,10 @@ unit_contract：
                 "只写一至两句与已插入事实配套的观看回报、选择视角或阅读邀请；"
                 "只谈读者如何看、如何选、如何保留判断，不评价底层对象或所属品类"
             ),
-            "recommendation": (
-                "只写带清楚建议语态的泛指做法；不得写已经发生的事件"
-            ),
-            "hypothetical_example": (
-                "只写服务端假设范围内的条件推演；不得绑定任何现实主体"
-            ),
-            "disclosed_dramatization": (
-                "只写服务端演绎范围内的虚构表达；不得绑定任何现实主体"
-            ),
-            "actuality_reflection": (
-                "只写不复述或扩展现实原文的泛指反思；不得增加现实主体、事件或心理"
-            ),
+            "recommendation": ("只写带清楚建议语态的泛指做法；不得写已经发生的事件"),
+            "hypothetical_example": ("只写服务端假设范围内的条件推演；不得绑定任何现实主体"),
+            "disclosed_dramatization": ("只写服务端演绎范围内的虚构表达；不得绑定任何现实主体"),
+            "actuality_reflection": ("只写不复述或扩展现实原文的泛指反思；不得增加现实主体、事件或心理"),
             "frozen_fact": "不可写；事实单元不应进入修复范围",
         }
         units = [
@@ -1686,12 +1712,8 @@ unit_contract：
                 "unit_id": unit.unit_id,
                 "purpose": unit.purpose,
                 "unit_contract": trusted_contracts[unit.unit_id],
-                "required_expression": expression_rules[
-                    trusted_contracts[unit.unit_id]
-                ],
-                "allowed_observation_types": list(
-                    unit.allowed_observation_types
-                ),
+                "required_expression": expression_rules[trusted_contracts[unit.unit_id]],
+                "allowed_observation_types": list(unit.allowed_observation_types),
             }
             for unit in kernel.units
             if unit.unit_id in affected
@@ -2606,6 +2628,106 @@ CreativePlanV2：{
         return f"{beta_url}/chat/completions"
 
     @staticmethod
+    def _strict_license_review_tool(
+        licenses: tuple[ClauseLicenseV1, ...],
+    ) -> dict[str, object]:
+        return {
+            "type": "function",
+            "function": {
+                "name": CLAUSE_LICENSE_TOOL_NAME,
+                "description": (
+                    "Check whether every writer clause is fully supported by its server-assigned ClauseLicenseV1."
+                ),
+                "strict": True,
+                "parameters": clause_license_review_json_schema(licenses),
+            },
+        }
+
+    @staticmethod
+    def _strict_license_review_answers(
+        payload: dict[str, Any],
+        *,
+        licenses: tuple[ClauseLicenseV1, ...],
+    ) -> ClauseLicenseReviewsV1:
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or len(choices) != 1:
+            raise TypeError("strict license review choice count is invalid")
+        choice = choices[0]
+        if not isinstance(choice, dict) or choice.get("finish_reason") != "tool_calls":
+            raise TypeError("strict license review finish reason is invalid")
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            raise TypeError("strict license review message is invalid")
+        tool_calls = message.get("tool_calls")
+        if not isinstance(tool_calls, list) or len(tool_calls) != 1:
+            raise TypeError("strict license review tool call count is invalid")
+        tool_call = tool_calls[0]
+        if not isinstance(tool_call, dict) or tool_call.get("type") != "function":
+            raise TypeError("strict license review tool call is invalid")
+        function = tool_call.get("function")
+        if not isinstance(function, dict) or function.get("name") != CLAUSE_LICENSE_TOOL_NAME:
+            raise TypeError("strict license review function name is invalid")
+        arguments = function.get("arguments")
+        if not isinstance(arguments, str):
+            raise TypeError("strict license review arguments are invalid")
+        usage = payload.get("usage")
+        if isinstance(usage, dict):
+            completion_tokens = usage.get("completion_tokens")
+            if isinstance(completion_tokens, int) and completion_tokens > _REVIEW_TOKEN_HARD_LIMIT:
+                raise TypeError("strict license review output exceeded hard limit")
+        return parse_clause_license_reviews_v1(
+            json.loads(arguments),
+            licenses=licenses,
+        )
+
+    def _request_strict_license_review(
+        self,
+        system: str,
+        prompt: str,
+        *,
+        license_count: int,
+        licenses: tuple[ClauseLicenseV1, ...],
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        request_payload: dict[str, Any] = {
+            "model": self._reviewer_model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.0,
+            "max_tokens": self._review_max_tokens(license_count),
+            "thinking": {"type": "disabled"},
+            "tools": [self._strict_license_review_tool(licenses)],
+            "tool_choice": {
+                "type": "function",
+                "function": {"name": CLAUSE_LICENSE_TOOL_NAME},
+            },
+        }
+        try:
+            with httpx.Client(timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds)) as client:
+                response = client.post(
+                    self._strict_review_api_url(),
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                    json=request_payload,
+                )
+        except httpx.TransportError as exc:
+            raise GenerationFailed("Reviewer strict 模型网络请求失败") from exc
+        if response.status_code >= 400:
+            _LOGGER.warning(
+                "strict license review request rejected: status=%s",
+                response.status_code,
+            )
+            raise GenerationFailed("Reviewer strict 模型服务拒绝当前请求")
+        try:
+            result = response.json()
+        except (TypeError, ValueError) as exc:
+            raise GenerationFailed("Reviewer strict 模型返回无效") from exc
+        if not isinstance(result, dict):
+            raise GenerationFailed("Reviewer strict 模型返回无效")
+        return result, 0
+
+    @staticmethod
     def _strict_review_tool(
         questions: tuple[ClosedReviewQuestion, ...],
     ) -> dict[str, object]:
@@ -2721,12 +2843,23 @@ CreativePlanV2：{
             batches.append(batch)
         return tuple(batches)
 
+    @staticmethod
+    def _clause_license_batches(
+        licenses: tuple[ClauseLicenseV1, ...],
+    ) -> tuple[tuple[ClauseLicenseV1, ...], ...]:
+        if not licenses:
+            raise ValueError("clause licenses cannot be empty")
+        return tuple(
+            licenses[start : start + _CLOSED_REVIEW_BATCH_CLAUSES]
+            for start in range(0, len(licenses), _CLOSED_REVIEW_BATCH_CLAUSES)
+        )
+
     def _review_payload_envelope(
         self,
         payloads: list[dict[str, Any]],
     ) -> dict[str, Any]:
         return {
-            "closed_review_batches": payloads,
+            "clause_license_review_batches": payloads,
             "reviewer_model": self._reviewer_model,
             "usage": self._combined_usage(payloads),
         }

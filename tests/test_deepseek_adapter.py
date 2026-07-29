@@ -9,6 +9,12 @@ import httpx
 import pytest
 
 from src.brain.platform_directions import direction_for
+from src.shared.clause_license import (
+    CLAUSE_LICENSE_REVIEW_VERSION,
+    CLAUSE_LICENSE_TOOL_NAME,
+    build_unit_clause_license_policies_v1,
+    materialize_clause_licenses_v1,
+)
 from src.shared.closed_review import (
     CLOSED_REVIEW_TOOL_NAME,
     CLOSED_REVIEW_VERSION,
@@ -39,6 +45,7 @@ from src.shared.narrative import (
 from src.shared.review_evidence import (
     REVIEW_EVIDENCE_V2_VERSION,
     build_clause_contexts_v2,
+    unit_contracts_v2,
 )
 from src.shared.types import (
     ActiveAsset,
@@ -162,8 +169,15 @@ def _request(
 
 
 def _completion(document: object, tokens: int = 0) -> FakeResponse:
-    if isinstance(document, dict) and document.get("evidence_version") == REVIEW_EVIDENCE_V2_VERSION:
-        return _strict_tool_completion(document, tokens=tokens)
+    if isinstance(document, dict):
+        if document.get("evidence_version") == REVIEW_EVIDENCE_V2_VERSION:
+            return _strict_tool_completion(document, tokens=tokens)
+        if document.get("review_version") == CLAUSE_LICENSE_REVIEW_VERSION:
+            return _strict_tool_completion(
+                document,
+                tokens=tokens,
+                tool_name=CLAUSE_LICENSE_TOOL_NAME,
+            )
     payload: dict[str, Any] = {
         "choices": [
             {
@@ -517,18 +531,14 @@ def test_kernel_reviewer_prompt_binds_recombined_frozen_event_details() -> None:
         allowed_constraint_ids=context.constraint_ids,
         speaker_kind=request.brand.speaker_kind,
     )
-    writer_contexts = tuple(
-        item for item in contexts if item.text_source == "writer_unit"
-    )
+    writer_contexts = tuple(item for item in contexts if item.text_source == "writer_unit")
     questions = build_closed_review_questions(writer_contexts)
 
     prompt = _generator()._kernel_reviewer_prompt(
         questions=questions,
         contexts=writer_contexts,
         actuality_facts=tuple(
-            (item.fact_id, item.exact_text)
-            for item in context.fact_registry
-            if item.fact_kind == "user_actuality"
+            (item.fact_id, item.exact_text) for item in context.fact_registry if item.fact_kind == "user_actuality"
         ),
         protected_subjects=(),
     )
@@ -576,9 +586,7 @@ def test_kernel_writer_prompt_exposes_read_only_product_packet_but_not_fact_auth
     assert "不能把硬属性、数字或 canonical_text" in prompt
     assert "首次最多选择 3 个" in prompt
     assert '"entity_kind": "apparel_product"' in prompt
-    assert any(
-        unit.purpose == "frozen_fact" and unit.text == "双面短外套的材质是棉混纺。" for unit in skeleton.units
-    )
+    assert any(unit.purpose == "frozen_fact" and unit.text == "双面短外套的材质是棉混纺。" for unit in skeleton.units)
 
 
 def test_kernel_repair_prompt_explains_stable_issue_responsibilities() -> None:
@@ -630,10 +638,7 @@ def test_kernel_repair_prompt_never_exposes_service_disclosure_as_writer_text() 
         ),
     )
 
-    assert (
-        '"current_text": "一方先停一下，另一方也不必马上给出答案。"'
-        in prompt
-    )
+    assert '"current_text": "一方先停一下，另一方也不必马上给出答案。"' in prompt
     assert '"current_text": "假设有这样一幕：' not in prompt
     assert "修复文字不得重复\n这些包裹" in prompt
 
@@ -763,10 +768,7 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
             prior_kernel=None,
         ),
     )
-    selected = tuple(
-        block.fact_block_id
-        for block in context.product_fact_blocks[:2]
-    )
+    selected = tuple(block.fact_block_id for block in context.product_fact_blocks[:2])
     violating_text = "双面短外套的材质是棉混纺。"
     kernel = parse_writer_kernel(
         {
@@ -774,14 +776,8 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
             "units": [
                 {
                     "unit_id": unit.unit_id,
-                    "text": (
-                        violating_text
-                        if unit.unit_id == "unit:body"
-                        else "先看清楚，再保留选择。"
-                    ),
-                    "claim_refs": [
-                        context.product_fact_blocks[0].fact_id
-                    ],
+                    "text": (violating_text if unit.unit_id == "unit:body" else "先看清楚，再保留选择。"),
+                    "claim_refs": [context.product_fact_blocks[0].fact_id],
                 }
                 for unit in skeleton.writable_units
             ],
@@ -838,10 +834,7 @@ def test_product_fact_ownership_repair_rewrites_one_coherent_creative_set() -> N
             "colors": ["炭灰纯色", "深绿细格纹"],
         },
     )
-    fact_ids = tuple(
-        record.fact_id
-        for record in product_fact_records(product)
-    )
+    fact_ids = tuple(record.fact_id for record in product_fact_records(product))
     frame = new_frame("general_observation", (), fact_ids)
     request = replace(
         _kernel_request(frame),
@@ -857,10 +850,7 @@ def test_product_fact_ownership_repair_rewrites_one_coherent_creative_set() -> N
             prior_kernel=None,
         ),
     )
-    selected = tuple(
-        block.fact_block_id
-        for block in context.product_fact_blocks[:2]
-    )
+    selected = tuple(block.fact_block_id for block in context.product_fact_blocks[:2])
     kernel = parse_writer_kernel(
         {
             "fact_block_refs": list(selected),
@@ -889,10 +879,7 @@ def test_product_fact_ownership_repair_rewrites_one_coherent_creative_set() -> N
         ),
     )
 
-    assert affected == frozenset(
-        unit.unit_id
-        for unit in kernel.writable_units
-    )
+    assert affected == frozenset(unit.unit_id for unit in kernel.writable_units)
 
 
 def _kernel_observations(
@@ -955,6 +942,54 @@ def _kernel_observations(
     return {
         "evidence_version": CLOSED_REVIEW_VERSION,
         "answers": answers,
+    }
+
+
+def _kernel_license_reviews(
+    kernel: CreativeKernelV1,
+    *,
+    request: GenerationInput | None = None,
+    body_type: str | None = None,
+    omit: frozenset[str] = frozenset(),
+) -> dict[str, object]:
+    active_request = request or _kernel_request()
+    assert active_request.narrative_frame is not None
+    frame = active_request.narrative_frame
+    context = BoundaryContext.from_request(active_request, frame)
+    clause_contexts = build_clause_contexts_v2(
+        kernel=kernel,
+        frame=frame,
+        fact_registry=context.fact_registry,
+        allowed_constraint_ids=context.constraint_ids,
+        speaker_kind=active_request.brand.speaker_kind,
+    )
+    policies = build_unit_clause_license_policies_v1(
+        frame=frame,
+        unit_contracts=unit_contracts_v2(kernel, frame),
+    )
+    licenses = materialize_clause_licenses_v1(
+        contexts=clause_contexts,
+        policies=policies,
+    )
+    context_by_clause = {item.clause_id: item for item in clause_contexts}
+    reviews: list[dict[str, object]] = []
+    for license_ in licenses:
+        context_item = context_by_clause[license_.clause_id]
+        if context_item.unit_id in omit:
+            continue
+        is_event = context_item.unit_id == "unit:body-opening" and body_type == "situated_event"
+        reviews.append(
+            {
+                "clause_id": license_.clause_id,
+                "license_id": license_.license_id,
+                "verdict": ("unsupported" if is_event else "supported"),
+                "reason_code": ("actual_event_or_result" if is_event else "supported_by_license"),
+                "unsupported_quote": (context_item.exact_text if is_event else ""),
+            }
+        )
+    return {
+        "review_version": CLAUSE_LICENSE_REVIEW_VERSION,
+        "reviews": reviews,
     }
 
 
@@ -1035,11 +1070,7 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
             _brand(),
             (),
             "xiaohongshu_graphic",
-            explicit_narrative_mode=(
-                mode
-                if mode in {"hypothesis", "dramatization"}
-                else None
-            ),
+            explicit_narrative_mode=(mode if mode in {"hypothesis", "dramatization"} else None),
             allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
             platform_shape="xiaohongshu_graphic:graphic",
         )
@@ -1386,15 +1417,15 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     kernel = _parsed_kernel(request, raw)
     FakeClient.responses = [
         _completion(raw),
-        _completion(_kernel_observations(kernel, request=request)),
+        _completion(_kernel_license_reviews(kernel, request=request)),
     ]
 
     artifact = _generator().generate(request)
 
     assert artifact.completion_snapshot_patch is not None
     assert artifact.completion_snapshot_patch["delivery_compiler_version"] == DELIVERY_COMPILER_VERSION
-    assert artifact.completion_snapshot_patch["review_evidence_version"] == REVIEW_EVIDENCE_V2_VERSION
-    assert artifact.completion_snapshot_patch["closed_review_contract"] == "closed-review-questions-v1"
+    assert artifact.completion_snapshot_patch["review_evidence_version"] == CLAUSE_LICENSE_REVIEW_VERSION
+    assert artifact.completion_snapshot_patch["closed_review_contract"] == "clause-license-v1"
     assert artifact.completion_snapshot_patch["writer_model"] == "deepseek-test"
     assert artifact.completion_snapshot_patch["reviewer_model"] == "deepseek-test"
     assert isinstance(artifact.completion_snapshot_patch["claim_inventory_v1"], list)
@@ -1423,21 +1454,17 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert '"text"' in writer_prompt
     assert '"block_id"' not in writer_prompt
     assert '"fact_refs"' not in writer_prompt
+    assert '"subject_scope"' in writer_prompt
+    assert '"prohibited_bindings"' in writer_prompt
     reviewer_prompt = prompts[1]
-    assert '"evidence_version":"review-evidence-v2"' in reviewer_prompt
-    assert "每个固定风险问题恰好" in reviewer_prompt
-    assert '"question_id"' in reviewer_prompt
-    assert '"uncertain":false' in reviewer_prompt
-    assert "motive_or_mental_state" in reviewer_prompt
-    assert "statement_mode" in reviewer_prompt
+    assert "ClauseLicenseV1" in reviewer_prompt
+    assert '"license_id"' in reviewer_prompt
+    assert "unsupported_quote" in reviewer_prompt
+    assert "泛指人数本身不是具体社会关系" in reviewer_prompt
+    assert "specific_social_relation" in reviewer_prompt
     assert '"exact_text"' in reviewer_prompt
-    assert '"allowed_quotes"' not in reviewer_prompt
-    assert "状态与 evidence_scope 均由服务端" in reviewer_prompt
-    assert "不要返回 quote、start、end、occurrence" in reviewer_prompt
-    assert "Unicode offset 与审计 quote 都由" in reviewer_prompt
-    assert "不能通过省略整个问题表达" in reviewer_prompt
-    assert "面向不特定受众的第二人称阅读邀请" in reviewer_prompt
-    assert "文章向不特定读者提供观看回报" in reviewer_prompt
+    assert "不决定事实许可、最终通过／失败" in reviewer_prompt
+    assert "不要返回 offset、occurrence、全文风险枚举" in reviewer_prompt
     assert '"occurrence"' not in reviewer_prompt
     assert '"start"' not in reviewer_prompt
     assert '"end"' not in reviewer_prompt
@@ -1466,7 +1493,7 @@ def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:
     kernel = _parsed_kernel(request, raw)
     FakeClient.responses = [
         _completion(raw),
-        _completion(_kernel_observations(kernel, request=request)),
+        _completion(_kernel_license_reviews(kernel, request=request)),
     ]
 
     artifact = _generator().generate(request)
@@ -1546,17 +1573,16 @@ def test_ui09_reviewer_must_cover_exact_complete_units() -> None:
     FakeClient.responses = [
         _completion(raw),
         _completion(
-            _kernel_observations(
+            _kernel_license_reviews(
                 kernel,
                 omit=frozenset({"unit:title"}),
-                partial=frozenset({"unit:body-opening"}),
             )
         ),
     ]
 
     with pytest.raises(
         GenerationFailed,
-        match="Reviewer 闭合证据",
+        match="Reviewer 许可证据",
     ):
         _generator().generate(request)
 
@@ -1580,27 +1606,30 @@ def test_ui10_evidence_failure_never_calls_writer_repair(
     request = _kernel_request()
     raw = _kernel_writer()
     kernel = _parsed_kernel(request, raw)
-    document = _kernel_observations(kernel)
-    answers = document["answers"]
-    assert isinstance(answers, list)
+    document = _kernel_license_reviews(kernel)
+    reviews = document["reviews"]
+    assert isinstance(reviews, list)
     if mutation == "missing":
-        answers.pop()
+        reviews.pop()
     elif mutation == "duplicate":
-        answers.append(dict(answers[0]))
+        reviews.append(dict(reviews[0]))
     elif mutation == "extra":
-        extra = dict(answers[0])
-        extra["question_id"] = "unit:extra:clause:1:risk:subject_binding"
-        answers.append(extra)
+        extra = dict(reviews[0])
+        extra["clause_id"] = "unit:extra:clause:1"
+        extra["license_id"] = "license:unit:extra:clause:1"
+        reviews.append(extra)
     elif mutation == "partial_scope":
-        answers[-2] = dict(answers[-2])
-        answers[-2]["uncertain"] = "false"
+        reviews[-2] = dict(reviews[-2])
+        reviews[-2].pop("unsupported_quote")
     elif mutation == "unexpected_quote":
-        answers[-2] = dict(answers[-2])
-        answers[-2]["quote"] = "并不存在的谓词"
+        reviews[-2] = dict(reviews[-2])
+        reviews[-2]["verdict"] = "unsupported"
+        reviews[-2]["reason_code"] = "actual_event_or_result"
+        reviews[-2]["unsupported_quote"] = "并不存在的谓词"
     else:
-        answers[-2] = dict(answers[-2])
-        answers[-2]["uncertain"] = True
-        answers[-2]["operands"] = []
+        reviews[-2] = dict(reviews[-2])
+        reviews[-2]["verdict"] = "uncertain"
+        reviews[-2]["reason_code"] = "insufficient_evidence"
     FakeClient.responses = [
         _completion(raw),
         _completion(document),
@@ -1608,7 +1637,7 @@ def test_ui10_evidence_failure_never_calls_writer_repair(
 
     with pytest.raises(
         GenerationFailed,
-        match="Reviewer 闭合证据|Reviewer 证据",
+        match="Reviewer 许可证据|Reviewer 证据",
     ):
         _generator().generate(request)
 
@@ -1639,13 +1668,13 @@ def test_ui09_allows_only_one_affected_unit_repair_and_full_rereview() -> None:
     FakeClient.responses = [
         _completion(first_raw),
         _completion(
-            _kernel_observations(
+            _kernel_license_reviews(
                 first_kernel,
                 body_type="situated_event",
             )
         ),
         _completion(repair_raw),
-        _completion(_kernel_observations(repaired_kernel)),
+        _completion(_kernel_license_reviews(repaired_kernel)),
     ]
 
     artifact = _generator().generate(request)
@@ -1655,7 +1684,7 @@ def test_ui09_allows_only_one_affected_unit_repair_and_full_rereview() -> None:
     prompts = _payload_prompts()
     assert "unit:body-opening" in prompts[2]
     assert "unit:title" not in prompts[2]
-    assert "服务端 writer-owned clause" in prompts[3]
+    assert "ClauseLicenseV1" in prompts[3]
 
 
 def test_ui09_second_review_failure_stops_without_another_repair() -> None:
@@ -1682,14 +1711,14 @@ def test_ui09_second_review_failure_stops_without_another_repair() -> None:
     FakeClient.responses = [
         _completion(first_raw),
         _completion(
-            _kernel_observations(
+            _kernel_license_reviews(
                 first_kernel,
                 body_type="situated_event",
             )
         ),
         _completion(repair_raw),
         _completion(
-            _kernel_observations(
+            _kernel_license_reviews(
                 repaired_kernel,
                 body_type="situated_event",
             )
@@ -1711,7 +1740,7 @@ def test_ui09_revision_requires_changed_writable_kernel() -> None:
     kernel = _parsed_kernel(first_request, raw)
     FakeClient.responses = [
         _completion(raw),
-        _completion(_kernel_observations(kernel)),
+        _completion(_kernel_license_reviews(kernel)),
     ]
     first = _generator().generate(first_request)
     assert first.completion_snapshot_patch is not None
@@ -1722,7 +1751,7 @@ def test_ui09_revision_requires_changed_writable_kernel() -> None:
     )
     FakeClient.responses = [
         _completion(raw),
-        _completion(_kernel_observations(kernel)),
+        _completion(_kernel_license_reviews(kernel)),
     ]
     with pytest.raises(GenerationFailed, match="没有实质改变"):
         _generator().generate(revision)

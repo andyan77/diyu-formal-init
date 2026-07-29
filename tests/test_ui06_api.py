@@ -59,15 +59,8 @@ def _plan(
     return build_creative_plan(
         topic_spans=(request.message,),
         primary_value=cast(Any, product),
-        tone_ids=(
-            request.allowed_tone_ids
-            or (ACCOUNT_BASELINE_TONE_ID,)
-        ),
-        mechanism_id=(
-            request.allowed_mechanism_ids[0]
-            if request.allowed_mechanism_ids
-            else None
-        ),
+        tone_ids=(request.allowed_tone_ids or (ACCOUNT_BASELINE_TONE_ID,)),
+        mechanism_id=(request.allowed_mechanism_ids[0] if request.allowed_mechanism_ids else None),
         target_shape=request.platform_shape,
     )
 
@@ -112,27 +105,16 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
             user_premises=(request.message,),
             user_fact_spans=fact_spans,
             narrative_mode=(
-                "actuality_reflection"
-                if fact_spans
-                else request.explicit_narrative_mode
-                or "general_observation"
+                "actuality_reflection" if fact_spans else request.explicit_narrative_mode or "general_observation"
             ),
             creative_plan=cast(
                 Any,
                 _plan(
                     request,
-                    (
-                        "product_truth"
-                        if request.message == _G2
-                        else "brand_life_narrative"
-                    ),
+                    ("product_truth" if request.message == _G2 else "brand_life_narrative"),
                 ),
             ),
-            primary_product=(
-                "product_truth"
-                if request.message == _G2
-                else "brand_life_narrative"
-            ),
+            primary_product=("product_truth" if request.message == _G2 else "brand_life_narrative"),
         )
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
@@ -197,19 +179,13 @@ def _events(
         json={
             "message": message,
             "conversation": [],
-            "publishing_identity_id": str(
-                ACCOUNT_ID
-            ),
+            "publishing_identity_id": str(ACCOUNT_ID),
             "target": "xiaohongshu_graphic",
             "material_ids": [],
         },
     )
     assert response.status_code == 200, response.text
-    return [
-        json.loads(line)
-        for line in response.text.splitlines()
-        if line.strip()
-    ]
+    return [json.loads(line) for line in response.text.splitlines() if line.strip()]
 
 
 def _counts(database_url: str) -> dict[str, int]:
@@ -239,10 +215,7 @@ def _counts(database_url: str) -> dict[str, int]:
         )
         row = cursor.fetchone()
     assert row is not None
-    return {
-        key: int(row[key])
-        for key in ("tasks", "runs", "running", "failed", "versions")
-    }
+    return {key: int(row[key]) for key in ("tasks", "runs", "running", "failed", "versions")}
 
 
 def _snapshot(database_url: str, task_id: UUID) -> dict[str, object]:
@@ -277,9 +250,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
     _CAPTURED_PLANS.clear()
     _CALLS.update(intake=0, writer=0, reviewer=0)
     auth = ProductionAuthRepository(app_database_url)
-    token = auth.create_tenant_session(
-        TenantSession(TENANT_ID, USER_ID, "tenant-user")
-    )
+    token = auth.create_tenant_session(TenantSession(TENANT_ID, USER_ID, "tenant-user"))
     with TestClient(
         _app(app_database_url, monkeypatch),
         base_url="https://diyuai.cc",
@@ -324,10 +295,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         g3_snapshot = _snapshot(app_database_url, task_ids["G3"])
         g3_kernel = g3_snapshot["creative_kernel_v1"]
         assert isinstance(g3_kernel, dict)
-        assert (
-            g3_kernel["program_id"]
-            == "observation_with_hypothetical_example_v2"
-        )
+        assert g3_kernel["program_id"] == "observation_with_hypothetical_example_v2"
 
         g6_before = _counts(app_database_url)
         g6 = _events(client, _G6)
@@ -366,7 +334,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert kernel_v1["kernel_version"] == "creative-kernel-v1"
         assert kernel_v1["program_id"] == "observation_only_v1"
         assert snapshot["delivery_compiler_version"] == "delivery-compiler-v1"
-        assert snapshot["review_evidence_version"] == "review-evidence-v2"
+        assert snapshot["review_evidence_version"] == "clause-license-review-v1"
         assert isinstance(snapshot["reviewed_kernel_digest"], str)
         assert isinstance(snapshot["visible_provenance"], dict)
 
@@ -374,9 +342,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             f"/api/v1/tasks/{g4_task_id}/revisions",
             json={
                 "instruction": _G7,
-                "publishing_identity_id": str(
-                    ACCOUNT_ID
-                ),
+                "publishing_identity_id": str(ACCOUNT_ID),
                 "target": "xiaohongshu_graphic",
                 "source_target": "xiaohongshu_graphic",
                 "narrative_frame": {
@@ -390,9 +356,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             f"/api/v1/tasks/{g4_task_id}/revisions",
             json={
                 "instruction": _G7,
-                "publishing_identity_id": str(
-                    ACCOUNT_ID
-                ),
+                "publishing_identity_id": str(ACCOUNT_ID),
                 "target": "xiaohongshu_graphic",
                 "source_target": "xiaohongshu_graphic",
             },
@@ -409,18 +373,9 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         revised_snapshot = _snapshot(app_database_url, g4_task_id)
         assert revised_snapshot["narrative_frame"] == snapshot["narrative_frame"]
         assert revised_snapshot["creative_plan_v2"] == snapshot["creative_plan_v2"]
-        assert (
-            revised_snapshot["creation_commitment"]
-            == snapshot["creation_commitment"]
-        )
-        assert (
-            revised_snapshot["delivery_compiler_version"]
-            == snapshot["delivery_compiler_version"]
-        )
-        assert (
-            revised_snapshot["review_evidence_version"]
-            == snapshot["review_evidence_version"]
-        )
+        assert revised_snapshot["creation_commitment"] == snapshot["creation_commitment"]
+        assert revised_snapshot["delivery_compiler_version"] == snapshot["delivery_compiler_version"]
+        assert revised_snapshot["review_evidence_version"] == snapshot["review_evidence_version"]
         assert revised_snapshot["speaker_kind"] == snapshot["speaker_kind"]
         revised_kernel = revised_snapshot["creative_kernel_v1"]
         assert isinstance(revised_kernel, dict)
@@ -431,14 +386,10 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert isinstance(original_units, list)
         assert isinstance(revised_units, list)
         original_fact_units = [
-            unit
-            for unit in original_units
-            if isinstance(unit, dict) and unit.get("purpose") == "frozen_fact"
+            unit for unit in original_units if isinstance(unit, dict) and unit.get("purpose") == "frozen_fact"
         ]
         revised_fact_units = [
-            unit
-            for unit in revised_units
-            if isinstance(unit, dict) and unit.get("purpose") == "frozen_fact"
+            unit for unit in revised_units if isinstance(unit, dict) and unit.get("purpose") == "frozen_fact"
         ]
         assert original_fact_units == revised_fact_units
 
@@ -446,9 +397,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             f"/api/v1/tasks/{g4_task_id}/versions/1",
             params={
                 "target": "xiaohongshu_graphic",
-                "publishing_identity_id": str(
-                    ACCOUNT_ID
-                ),
+                "publishing_identity_id": str(ACCOUNT_ID),
             },
         )
         assert v1.status_code == 200
@@ -458,9 +407,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             f"/api/v1/tasks/{g4_task_id}/versions/2",
             params={
                 "target": "xiaohongshu_graphic",
-                "publishing_identity_id": str(
-                    ACCOUNT_ID
-                ),
+                "publishing_identity_id": str(ACCOUNT_ID),
             },
         )
         assert current.status_code == 200
