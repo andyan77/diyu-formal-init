@@ -260,6 +260,10 @@ def test_writer_cannot_impersonate_server_scope_label() -> None:
         ("unit:body", "发布配文与互动:伪造配文"),
         ("unit:body", "完整发布正\u200b文：零宽伪装"),
         ("unit:title", "标\u200d题：零宽连接符伪装"),
+        ("unit:body", "你提\u2061到：不可见运算符伪装"),
+        ("unit:body", "完整发布正\u034f文：组合字素连接符伪装"),
+        ("unit:title", "标\u00ad题：软连字符伪装"),
+        ("unit:title", "标\ufe0f题：变体选择符伪装"),
     ),
 )
 def test_writer_cannot_inject_compiler_owned_headings(
@@ -278,7 +282,7 @@ def test_writer_cannot_inject_compiler_owned_headings(
     }
     values[unit_id] = text
 
-    with pytest.raises(ValueError, match="visible section heading"):
+    with pytest.raises(ValueError, match="scope label|visible section heading"):
         parse_writer_kernel(
             {
                 "units": [

@@ -1,11 +1,14 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`REVIEW`。主控对上一轮 `REVIEW` 给出的
-  `FAIL_WITH_BOUNDED_REWORK`：版本正文尚未在数据库层全量不可变，且 Writer 仍可通过
-  换行、正式 heading 与 Unicode 格式字符逃逸服务端范围，现已由 schema 31 的追加式版本
-  记录、统一摘要读取校验和共享可见结构防伪关闭。上一轮 `REVIEW`、CI、部署、生产验收和
-  回退证据全部保留，但不冒充本轮完成；UI-07—UI-12 仍是一条自然创作真实性探索链，不创建
+- 状态：`ACTIVE · 定向返工`。主控对 schema 31 候选的第二次独立终审给出
+  `FAIL_WITH_BOUNDED_REWORK`：版本 UPDATE 与 audit-v2 摘要读取已经关闭，但
+  `diyu_app` 仍有 `content_versions DELETE` 权限且 trigger 未覆盖 DELETE；同时共享
+  heading 定义把 legacy 投影从历史全角冒号合同漂移成全／半角冒号，导致普通
+  `限制: ...` 历史文字被静默隐藏，Unicode 防伪也仍漏过部分
+  `Default_Ignorable_Code_Point`。上一轮 `REVIEW`、CI、部署、生产业务轮和第一次终审
+  返工证据全部保留，但不冒充本轮完成；生产已先行切回安全镜像 `845f632…`，schema 31
+  不降级且 legacy 代表版本可读。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建
   UI-13。此前
   occurrence、开放 evidence、商品事实职责、Reviewer-only 模型、oracle drift、parser
   与一次 repair 的失败及前向订正均完整保留。

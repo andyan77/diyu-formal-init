@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unicodedata
 
-# Compiler-owned labels are one shared source for legacy projection and Writer
-# anti-spoofing. A label is reserved only when it appears as a top-level heading
-# followed by a full-width or ASCII colon.
+# Compiler-owned heading names are shared. Their parsing rules are not: legacy
+# projection recognizes only the historical full-width colon, while Writer
+# anti-spoofing reserves both full-width and ASCII forms.
 INTERNAL_VISIBLE_HEADINGS = frozenset(
     {
         "当前选择",
@@ -70,15 +70,29 @@ SERVER_VISIBLE_SCOPE_PREFIXES = (
     "以下是情景演绎，不对应真实人物或经历：",
 )
 
-_ZERO_WIDTH_FORMAT_CHARACTERS = frozenset(
-    {
-        "\u180e",  # Mongolian vowel separator
-        "\u200b",  # zero width space
-        "\u200c",  # zero width non-joiner
-        "\u200d",  # zero width joiner (kept in the returned text)
-        "\u2060",  # word joiner
-        "\ufeff",  # zero width no-break space
-    }
+# Unicode Default_Ignorable_Code_Point as defined by DerivedCoreProperties.
+# The security view removes these code points only for reserved-label matching;
+# Writer-visible text is never rewritten. Including the complete property closes
+# format, variation-selector and combining-grapheme-joiner evasions without
+# turning this module into a general Unicode confusables system.
+_DEFAULT_IGNORABLE_RANGES = (
+    (0x00AD, 0x00AD),
+    (0x034F, 0x034F),
+    (0x061C, 0x061C),
+    (0x115F, 0x1160),
+    (0x17B4, 0x17B5),
+    (0x180B, 0x180F),
+    (0x200B, 0x200F),
+    (0x202A, 0x202E),
+    (0x2060, 0x206F),
+    (0x3164, 0x3164),
+    (0xFE00, 0xFE0F),
+    (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0),
+    (0xFFF0, 0xFFF8),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0000, 0xE0FFF),
 )
 _BIDIRECTIONAL_CONTROL_CHARACTERS = frozenset(
     {
@@ -98,9 +112,16 @@ _BIDIRECTIONAL_CONTROL_CHARACTERS = frozenset(
 )
 
 
+def _is_default_ignorable(character: str) -> bool:
+    codepoint = ord(character)
+    return unicodedata.category(character) == "Cf" or any(
+        start <= codepoint <= end for start, end in _DEFAULT_IGNORABLE_RANGES
+    )
+
+
 def _security_match_view(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value)
-    return "".join(character for character in normalized if character not in _ZERO_WIDTH_FORMAT_CHARACTERS)
+    return "".join(character for character in normalized if not _is_default_ignorable(character))
 
 
 _NORMALIZED_SCOPE_PREFIXES = tuple(_security_match_view(prefix) for prefix in SERVER_VISIBLE_SCOPE_PREFIXES)

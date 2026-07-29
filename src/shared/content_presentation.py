@@ -8,7 +8,7 @@ from src.shared.visible_structure import (
 )
 
 _SECTION = re.compile(
-    r"(?m)^(?P<heading>" + "|".join(re.escape(heading) for heading in LEGACY_PROJECTED_HEADINGS) + r")[：:]"
+    r"(?m)^(?P<heading>" + "|".join(re.escape(heading) for heading in LEGACY_PROJECTED_HEADINGS) + r")："
 )
 
 

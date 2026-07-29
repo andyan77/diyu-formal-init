@@ -123,6 +123,21 @@ def test_legacy_version_without_audit_keeps_legacy_projection() -> None:
     assert content.body == "内容概要：旧导读\n\n完整发布正文：旧正文"
 
 
+def test_legacy_version_keeps_ascii_colon_heading_like_text_verbatim() -> None:
+    body = "开头\n限制: 不要改写这一句\n标题: 旧内容中的普通一句\n结尾"
+
+    content = validate_version_content(
+        {
+            "outline": "旧标题",
+            "body": body,
+            "artifact_digest": None,
+            "version_audit_snapshot": {},
+        }
+    )
+
+    assert content.body == body
+
+
 def test_audit_v1_keeps_legacy_projection_after_digest_validation() -> None:
     outline = "旧审计标题"
     body = "自然导读：旧导读\n\n完整发布正文：旧正文"
@@ -142,6 +157,27 @@ def test_audit_v1_keeps_legacy_projection_after_digest_validation() -> None:
 
     assert content.audit_version == AUDIT_VERSION_V1
     assert content.body == "内容概要：旧导读\n\n完整发布正文：旧正文"
+
+
+def test_audit_v1_validates_digest_before_preserving_ascii_colon_text() -> None:
+    outline = "旧审计标题"
+    body = "开头\n完整发布正文: 普通历史文字\n结尾"
+    digest = visible_digest(outline, body)
+
+    content = validate_version_content(
+        {
+            "outline": outline,
+            "body": body,
+            "artifact_digest": digest,
+            "version_audit_snapshot": {
+                "audit_version": AUDIT_VERSION_V1,
+                "artifact_digest": digest,
+            },
+        }
+    )
+
+    assert content.audit_version == AUDIT_VERSION_V1
+    assert content.body == body
 
 
 def test_audit_v2_returns_exact_compiled_visible_body_without_reparse() -> None:

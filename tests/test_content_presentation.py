@@ -27,3 +27,21 @@ def test_user_projection_removes_compiler_scaffold_and_keeps_complete_artifact()
     assert "发布配文与互动：" in visible
     for internal in ("商品新增理解", "限制：", "成立边界", "账号观察", "画面成立条件"):
         assert internal not in visible
+
+
+def test_legacy_projection_does_not_reinterpret_ascii_colon_text() -> None:
+    stored = "开头\n限制: 不要改写这一句\n结尾"
+
+    assert project_content_body(stored) == stored
+
+
+def test_legacy_projection_keeps_ascii_heading_like_lines_verbatim() -> None:
+    stored = "标题: 旧内容中的普通一句\n完整发布正文: 普通历史文字"
+
+    assert project_content_body(stored) == stored
+
+
+def test_legacy_projection_retains_historical_full_width_colon_behavior() -> None:
+    stored = "自然导读：旧导读\n\n完整发布正文：旧正文"
+
+    assert project_content_body(stored) == "内容概要：旧导读\n\n完整发布正文：旧正文"

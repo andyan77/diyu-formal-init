@@ -289,6 +289,48 @@ def _version_audits(database_url: str, task_id: UUID) -> list[dict[str, object]]
     return [dict(row) for row in rows]
 
 
+def _force_version_body_for_integrity_test(
+    database_url: str,
+    version_id: object,
+    body: str,
+) -> None:
+    """Mutate one test row while guaranteeing the append-only trigger is restored."""
+
+    with (
+        psycopg.connect(database_url) as connection,
+        connection.cursor() as cursor,
+    ):
+        cursor.execute(
+            "SELECT set_config('app.tenant_id', %s, true)",
+            (str(TENANT_ID),),
+        )
+        trigger_disabled = False
+        try:
+            cursor.execute(
+                "ALTER TABLE content_versions DISABLE TRIGGER content_versions_append_only"
+            )
+            trigger_disabled = True
+            with connection.transaction():
+                cursor.execute(
+                    "UPDATE content_versions SET body = %s WHERE tenant_id = %s AND id = %s",
+                    (body, TENANT_ID, version_id),
+                )
+        finally:
+            if trigger_disabled:
+                cursor.execute(
+                    "ALTER TABLE content_versions ENABLE TRIGGER content_versions_append_only"
+                )
+        cursor.execute(
+            """
+            SELECT trigger_record.tgenabled
+              FROM pg_trigger trigger_record
+             WHERE trigger_record.tgrelid = 'content_versions'::regclass
+               AND trigger_record.tgname = 'content_versions_append_only'
+            """
+        )
+        assert cursor.fetchone() == ("O",)
+
+
 def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
     app_database_url: str,
     migrator_database_url: str,
@@ -566,12 +608,11 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             task_row = cursor.fetchone()
             assert task_row is not None
             task_account_id = UUID(str(task_row["account_id"]))
-            cursor.execute("ALTER TABLE content_versions DISABLE TRIGGER content_versions_append_only")
-            cursor.execute(
-                "UPDATE content_versions SET body = %s WHERE tenant_id = %s AND id = %s",
-                ("人为构造的摘要不一致正文", TENANT_ID, audits[0]["id"]),
-            )
-            cursor.execute("ALTER TABLE content_versions ENABLE TRIGGER content_versions_append_only")
+        _force_version_body_for_integrity_test(
+            migrator_database_url,
+            audits[0]["id"],
+            "人为构造的摘要不一致正文",
+        )
         try:
             repository = PostgresContentRepository(app_database_url)
             with pytest.raises(DomainError, match="完整性校验失败"):
@@ -581,20 +622,11 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
                     1,
                 )
         finally:
-            with (
-                psycopg.connect(migrator_database_url) as connection,
-                connection.cursor() as cursor,
-            ):
-                cursor.execute(
-                    "SELECT set_config('app.tenant_id', %s, true)",
-                    (str(TENANT_ID),),
-                )
-                cursor.execute("ALTER TABLE content_versions DISABLE TRIGGER content_versions_append_only")
-                cursor.execute(
-                    "UPDATE content_versions SET body = %s WHERE tenant_id = %s AND id = %s",
-                    (original_body, TENANT_ID, audits[0]["id"]),
-                )
-                cursor.execute("ALTER TABLE content_versions ENABLE TRIGGER content_versions_append_only")
+            _force_version_body_for_integrity_test(
+                migrator_database_url,
+                audits[0]["id"],
+                original_body,
+            )
 
         time.sleep(2.05)
         failure_before = _counts(app_database_url)

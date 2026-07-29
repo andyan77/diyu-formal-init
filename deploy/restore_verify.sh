@@ -54,7 +54,7 @@ docker exec "$postgres_name" psql -U "$restore_admin" -d diyu_m5_4 -v ON_ERROR_S
    GRANT CONNECT ON DATABASE diyu_m5_4 TO diyu_app;
    GRANT USAGE ON SCHEMA public TO diyu_app;
    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO diyu_app;
-   REVOKE UPDATE ON content_versions FROM diyu_app;
+   REVOKE UPDATE, DELETE ON content_versions FROM diyu_app;
    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO diyu_app;
    GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO diyu_app;" >/dev/null
 
