@@ -1281,7 +1281,20 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 待核对 clause 与许可：
 {json.dumps(clauses, ensure_ascii=False)}
 
-稳定语义：
+逐 clause 使用同一套稳定核对顺序：
+1. 先读取 discourse_contract、subject_scope、allowed_fact_refs 和 prohibited_bindings；不得
+   因为文字和 topic／冻结事实谈的是相近生活主题，就推定新增含义已获事实许可。
+2. subject_scope=generic_only 时，只允许不指向当前真人或受保护主体的泛指人数、普遍心理
+   观察、一般因果和清楚建议；具体社会关系身份不是泛指人数。
+3. 检查整条 clause 是否建立亲属、伴侣、家庭、同住、同事、员工、顾客或文字明确建立的
+   其他社会关系；命中且 prohibited_bindings 包含
+   specific_social_relation_to_actuality 时必须 unsupported。
+4. 检查当前真人／机构、现实对白、已发生事件或结果、机构／商品事实；命中相应
+   prohibited_bindings 且没有精确 allowed_fact_refs 时必须 unsupported。
+5. supported 只表示整条 clause 的全部可见含义均满足同一许可；只要一个含义越界就不能用
+   其他泛指或建议含义抵消。
+
+稳定语义边界：
 - generic_observation 可以创造不绑定当前真人或受保护主体的一般观察、观点、比喻、泛指心理
   需要和一般因果；“两个人／人与人／一些人”等泛指人数本身不是具体社会关系。
 - recommendation 可以提出清楚的泛指建议，但不得把建议写成当前真人已经做过的事。
@@ -1292,7 +1305,9 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 - current person／institution、受保护主体、现实对白、已发生事件或结果、机构和商品事实，
   没有 allowed_fact_refs 时均不受许可支持。
 - frozen fact、服务端 wrapper 和商品 ImmutableFactBlock 不在本次 writer-owned 输入中，
-  不能把资料来源、表达约束或制作资源当事实许可证。
+  不能把资料来源、表达约束或制作资源当事实许可证。上方冻结用户事实仅用于判断文字是否
+  把新增含义绑定当前现实；除非 allowed_fact_refs 精确列出 fact_id，否则它不支持 Writer
+  新增或推断关系身份、对白、动机、原因、结果或其他现实细节。
 
 每个 clause 恰好返回一次，顺序、clause_id 与 license_id 必须完全一致：
 - supported：整条 clause 的全部可见含义均在许可证内；reason_code= supported_by_license，
