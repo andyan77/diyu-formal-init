@@ -1579,6 +1579,24 @@ def test_writer_owns_audience_topic_when_user_has_not_supplied_one() -> None:
     assert "不得把“如何找选题、如何发内容、缺少\n灵感”本身写成" in prompt
 
 
+def test_dramatization_writer_receives_a_complete_scene_requirement() -> None:
+    frame = new_frame("dramatization", (), ())
+    request = _kernel_request(frame)
+    skeleton = build_kernel_skeleton(
+        frame=frame,
+        fact_registry=(),
+        constraint_refs=(),
+        program_id=select_kernel_program(frame=frame),
+        allowed_resource_ids=("resource:original_composition",),
+    )
+
+    prompt = _generator()._kernel_writer_prompt(request, skeleton)
+
+    assert '"mode": "disclosed_dramatization"' in prompt
+    assert "包含场景推进、角色行动或对白以及可见收束" in prompt
+    assert "不能写成观点文章" in prompt
+
+
 def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:
     exact_fact = "笛语确认本账号只发布人工终审后的草稿。"
     fact = brand_fact_records((exact_fact,))[0]

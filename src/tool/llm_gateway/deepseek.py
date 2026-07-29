@@ -1083,6 +1083,15 @@ class DeepSeekGenerator(ContentGenerator):
                 "mode": unit.mode,
                 "scope_id": unit.scope_id,
                 "visible_order": unit.visible_order,
+                "expression_requirement": (
+                    "写成完整虚构情境，包含场景推进、角色行动或对白以及可见收束；不能写成观点文章。"
+                    if unit.mode == "disclosed_dramatization"
+                    else "写成带条件语气的推演片段，不能写成已经发生。"
+                    if unit.mode == "hypothesis"
+                    else "写成不绑定当前真人、品牌或门店经历的一般观察。"
+                    if unit.mode == "general_observation"
+                    else "写成明确建议，不能写成已经执行过的做法。"
+                ),
             }
             for unit in writer_units
         ]
