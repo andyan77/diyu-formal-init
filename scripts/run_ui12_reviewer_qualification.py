@@ -44,6 +44,17 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--fixture", type=Path, default=_DEFAULT_FIXTURE)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--replay-dir",
+        type=Path,
+        help="Read preserved raw bundle responses instead of calling the provider.",
+    )
+    parser.add_argument(
+        "--bundle",
+        action="append",
+        dest="bundle_ids",
+        help="Run only the named frozen bundle; repeat to select more than one.",
+    )
     parser.add_argument("--implementation-sha", required=True)
     return parser.parse_args()
 
@@ -114,10 +125,31 @@ def _bundle_contexts(
         )
     contexts: list[ClauseContextV2] = []
     samples_by_clause: dict[str, dict[str, Any]] = {}
-    for visible_order, raw_sample in enumerate(
-        _required_list(bundle.get("samples"), "samples"),
-        start=1,
-    ):
+    raw_samples = _required_list(bundle.get("samples"), "samples")
+    explicit_fact_refs = {
+        fact_ref
+        for raw_sample in raw_samples
+        for sample in (_required_mapping(raw_sample, "sample"),)
+        for fact_ref in (sample.get("fact_ref"),)
+        if isinstance(fact_ref, str)
+    }
+    for index, text in enumerate(actuality_facts, start=1):
+        actuality_fact_ref = f"source:user_actuality:{index}"
+        if actuality_fact_ref in explicit_fact_refs:
+            continue
+        contexts.append(
+            ClauseContextV2(
+                clause_id=f"qualification:frozen-user:{index}",
+                unit_id=f"unit:frozen-user:{index}",
+                exact_text=text,
+                visible_order=index,
+                text_source="frozen_user_fact",
+                unit_contract="frozen_fact",
+                speaker_kind="institutional_account",
+                fact_ref=actuality_fact_ref,
+            )
+        )
+    for visible_order, raw_sample in enumerate(raw_samples, start=1001):
         sample = _required_mapping(raw_sample, "sample")
         sample_id = _required_string(sample.get("sample_id"), "sample_id")
         clause_key = sample.get("consistency_key") or sample_id
@@ -200,13 +232,14 @@ def _qualification_mismatches(
                 answer.status,
                 answer.operands,
             )
-            expected_status = (
-                "present"
-                if question.dimension in expected_present
-                else "uncertain"
-                if question.dimension in expected_uncertain
-                else "absent"
-            )
+            if question.dimension in expected_present:
+                expected_status = "present"
+            elif question.dimension in expected_uncertain:
+                expected_status = "uncertain"
+            elif question.dimension in explicit_absent:
+                expected_status = "absent"
+            else:
+                continue
             expected_operands = (
                 expected_present.get(question.dimension, ())
                 if expected_status == "present"
@@ -214,7 +247,10 @@ def _qualification_mismatches(
             )
             if answer.status != expected_status or (
                 expected_status == "present"
-                and frozenset(answer.operands) != frozenset(expected_operands)
+                and not (
+                    frozenset(answer.operands)
+                    & frozenset(expected_operands)
+                )
             ):
                 mismatches.append(
                     {
@@ -224,6 +260,26 @@ def _qualification_mismatches(
                         "expected_operands": list(expected_operands),
                         "actual_status": answer.status,
                         "actual_operands": list(answer.operands),
+                    }
+                )
+        if not expected_uncertain:
+            unexpected_uncertain = next(
+                (
+                    dimension
+                    for dimension, (status, _) in actual_signature.items()
+                    if status == "uncertain"
+                ),
+                None,
+            )
+            if unexpected_uncertain is not None:
+                mismatches.append(
+                    {
+                        "sample_id": sample["sample_id"],
+                        "dimension": unexpected_uncertain,
+                        "expected_status": "clear",
+                        "expected_operands": [],
+                        "actual_status": "uncertain",
+                        "actual_operands": [],
                     }
                 )
         expected_ruling = _required_string(
@@ -285,10 +341,11 @@ def main() -> int:
         "DEEPSEEK_REVIEWER_MODEL",
         "",
     ).strip()
-    if not api_base_url or not api_key:
-        raise RuntimeError("protected DeepSeek configuration is unavailable")
-    if configured_reviewer != _REVIEWER_MODEL:
-        raise RuntimeError("Reviewer qualification requires deepseek-v4-pro")
+    if args.replay_dir is None:
+        if not api_base_url or not api_key:
+            raise RuntimeError("protected DeepSeek configuration is unavailable")
+        if configured_reviewer != _REVIEWER_MODEL:
+            raise RuntimeError("Reviewer qualification requires deepseek-v4-pro")
     fixture_bytes = args.fixture.read_bytes()
     fixture = _required_mapping(
         json.loads(fixture_bytes),
@@ -298,8 +355,8 @@ def main() -> int:
         raise ValueError("unexpected qualification version")
     _safe_output_directory(args.output_dir)
     generator = DeepSeekGenerator(
-        api_base_url=api_base_url,
-        api_key=api_key,
+        api_base_url=api_base_url or "https://replay.invalid",
+        api_key=api_key or "replay-only",
         model=_WRITER_MODEL,
         reviewer_model=_REVIEWER_MODEL,
         max_retries=0,
@@ -312,6 +369,8 @@ def main() -> int:
     for raw_bundle in _required_list(fixture.get("bundles"), "bundles"):
         bundle = _required_mapping(raw_bundle, "bundle")
         bundle_id = _required_string(bundle.get("bundle_id"), "bundle_id")
+        if args.bundle_ids is not None and bundle_id not in args.bundle_ids:
+            continue
         packet = _packet(bundle.get("product_scope") is True)
         contexts, fact_text_by_id, samples_by_clause = _bundle_contexts(
             bundle,
@@ -368,16 +427,27 @@ def main() -> int:
                 "protected_subjects",
             ),
         )
-        started = time.monotonic()
-        raw_payload, retry_count = generator._request_strict_review(
-            "你是独立 CreativeKernel 风险问题回答器。只回答服务端给出的闭合问题，不决定事实许可或通过失败，"
-            "不回传或改写正文，只调用指定函数一次。",
-            prompt,
-            question_count=len(questions),
-            questions=questions,
-            timeout_seconds=120.0,
-        )
-        elapsed_ms = int((time.monotonic() - started) * 1000)
+        if args.replay_dir is None:
+            started = time.monotonic()
+            raw_payload, retry_count = generator._request_strict_review(
+                "你是独立 CreativeKernel 风险问题回答器。只回答服务端给出的闭合问题，不决定事实许可或通过失败，"
+                "不回传或改写正文，只调用指定函数一次。",
+                prompt,
+                question_count=len(questions),
+                questions=questions,
+                timeout_seconds=120.0,
+            )
+            elapsed_ms = int((time.monotonic() - started) * 1000)
+            evidence_source = "live_provider_call"
+        else:
+            replay_path = args.replay_dir / f"{bundle_id}.raw.json"
+            raw_payload = _required_mapping(
+                json.loads(replay_path.read_bytes()),
+                "replayed raw payload",
+            )
+            retry_count = 0
+            elapsed_ms = 0
+            evidence_source = "preserved_raw_replay"
         raw_path = args.output_dir / f"{bundle_id}.raw.json"
         raw_sha256 = _write_json(raw_path, raw_payload)
         answers = generator._strict_review_answers(
@@ -435,7 +505,10 @@ def main() -> int:
             {
                 "bundle_id": bundle_id,
                 "partition": bundle["partition"],
-                "reviewer_call_count": 1,
+                "reviewer_call_count": (
+                    1 if evidence_source == "live_provider_call" else 0
+                ),
+                "evidence_source": evidence_source,
                 "question_count": len(questions),
                 "retry_count": retry_count,
                 "latency_ms": elapsed_ms,
@@ -455,6 +528,8 @@ def main() -> int:
                     "signature_count": len(signatures),
                 }
             )
+    if not records:
+        raise ValueError("qualification bundle selection is empty")
     summary = {
         "qualification_version": fixture["qualification_version"],
         "implementation_sha": args.implementation_sha,

@@ -57,6 +57,22 @@ def _expected_answers(
         sample = samples_by_clause[question.clause_id]
         present = _expected_present(sample)
         uncertain = frozenset(cast(list[str], sample["uncertain"]))
+        if (
+            question.dimension == "statement_mode"
+            and "statement_mode" not in present
+            and "statement_mode" not in uncertain
+        ):
+            mode_by_contract = {
+                "abstract_observation": "generic_observation",
+                "audience_guidance": "generic_observation",
+                "recommendation": "recommendation",
+                "hypothetical_example": "hypothesis",
+                "disclosed_dramatization": "dramatization",
+                "actuality_reflection": "generic_observation",
+            }
+            present["statement_mode"] = (
+                mode_by_contract[cast(str, sample["unit_contract"])],
+            )
         status: AnswerStatus = (
             "present"
             if question.dimension in present
