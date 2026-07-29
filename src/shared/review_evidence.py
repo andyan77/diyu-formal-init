@@ -306,9 +306,16 @@ def build_clause_contexts_v2(
                 source = "server_wrapper"
             else:
                 source = "writer_unit"
+            context_text = (
+                exact_text.strip()
+                if source == "writer_unit"
+                else exact_text
+            )
+            if not context_text:
+                raise ValueError("writer clause cannot be only whitespace")
             if (
                 source == "writer_unit"
-                and exact_text.strip()
+                and context_text
                 in {HYPOTHESIS_DISCLOSURE, DRAMATIZATION_DISCLOSURE}
             ):
                 raise ValueError("writer forged a server wrapper")
@@ -316,7 +323,7 @@ def build_clause_contexts_v2(
                 ClauseContextV2(
                     clause_id=f"{unit.unit_id}:clause:{index}",
                     unit_id=unit.unit_id,
-                    exact_text=exact_text,
+                    exact_text=context_text,
                     visible_order=unit.visible_order * 1000 + index,
                     text_source=source,
                     unit_contract=contract,

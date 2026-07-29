@@ -371,6 +371,47 @@ def test_selected_fact_units_are_renumbered_into_the_trusted_contract_sidecar() 
     } == {"audience_guidance"}
 
 
+def test_writer_clause_context_excludes_paragraph_separator_whitespace() -> None:
+    product, _, _ = _product_contract()
+    kernel, _ = _parsed_product_kernel()
+    kernel = replace(
+        kernel,
+        units=tuple(
+            replace(
+                unit,
+                text="第一句。\n\n第二句。",
+            )
+            if unit.unit_id == "unit:body"
+            else unit
+            for unit in kernel.units
+        ),
+    )
+    records = product_fact_records(product)
+    frame = new_frame(
+        "general_observation",
+        (),
+        tuple(record.fact_id for record in records),
+    )
+
+    contexts = build_clause_contexts_v2(
+        kernel=kernel,
+        frame=frame,
+        fact_registry=records,
+        allowed_constraint_ids=frozenset(
+            {"constraint:account-tone"}
+        ),
+        speaker_kind="institutional_account",
+    )
+    body = tuple(
+        context.exact_text
+        for context in contexts
+        if context.unit_id == "unit:body"
+    )
+
+    assert body == ("第一句。", "第二句。")
+    assert all(text == text.strip() for text in body)
+
+
 def test_claim_refs_never_license_attributes_performance_or_design_motive() -> None:
     _, packet, _ = _product_contract()
     structural_fact = next(item.fact_id for item in packet.facts if item.fact_key == "category")
