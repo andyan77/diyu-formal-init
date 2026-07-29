@@ -1468,8 +1468,9 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert "specific_social_relation" in reviewer_prompt
     assert "相近生活主题，就推定新增含义已获事实许可" in reviewer_prompt
     assert "只要一个含义越界就不能用" in reviewer_prompt
-    assert "提到一种\n   关系类别本身也不等于" in reviewer_prompt
+    assert "只讨论“婆媳\n   关系／家庭关系”等关系类别" in reviewer_prompt
     assert "不得返回本条许可证\n  prohibited_bindings 中不存在" in reviewer_prompt
+    assert "实例化一组人物的同住、亲属身份" in reviewer_prompt
     assert '"exact_text"' in reviewer_prompt
     assert "不决定事实许可、最终通过／失败" in reviewer_prompt
     assert "不要返回 offset、occurrence、全文风险枚举" in reviewer_prompt
@@ -1481,6 +1482,19 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert "ProductFactPacket" in reviewer_prompt
     assert "只能由服务端 ImmutableFactBlock" in reviewer_prompt
     assert "性能、功效、用途／穿着结果、设计动机、价格、库存、比较结论或实际体验" in reviewer_prompt
+
+
+def test_writer_owns_audience_topic_when_user_has_not_supplied_one() -> None:
+    request = _kernel_request()
+    prompt = _generator()._kernel_writer_prompt(
+        request,
+        _parsed_kernel(request, _kernel_writer()),
+    )
+
+    assert "topic_spans 是用户原话证据" in prompt
+    assert "若其中没有面向受众的实际题材" in prompt
+    assert "自主选择一个安全、可直接发布的生活观察主线" in prompt
+    assert "不得把“如何找选题、如何发内容、缺少\n灵感”本身写成" in prompt
 
 
 def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:

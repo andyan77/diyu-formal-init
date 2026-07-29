@@ -1212,6 +1212,11 @@ scene、actor、resource、action、sound、production_note、发布结构或语
 
 {product_creative_rule}
 
+topic_spans 是用户原话证据，可能同时包含创作命令、控制要求或“尚未想到题材”的状态，不等于
+必须逐字充当成品题目。若其中没有面向受众的实际题材，系统应根据本篇受众价值、账号边界与
+平台自主选择一个安全、可直接发布的生活观察主线；不得把“如何找选题、如何发内容、缺少
+灵感”本身写成面向受众的元内容，也不得要求用户补交观点或结构。
+
 只返回：
 {json.dumps(template, ensure_ascii=False)}
 
@@ -1296,13 +1301,15 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 1. 先读取 discourse_contract、subject_scope、allowed_fact_refs 和 prohibited_bindings；不得
    因为文字和 topic／冻结事实谈的是相近生活主题，就推定新增含义已获事实许可。
 2. subject_scope=generic_only 时，只允许不指向当前真人或受保护主体的泛指人数、普遍心理
-   观察、一般因果、关系题材讨论和清楚建议；具体社会关系身份不是泛指人数，但提到一种
-   关系类别本身也不等于把该关系绑定为当前真人已经具有的事实。
+   观察、一般因果、关系题材讨论和清楚建议；具体社会关系身份不是泛指人数。只讨论“婆媳
+   关系／家庭关系”等关系类别或抽象关系理解可以受 generic 许可，但不能在没有服务端
+   hypothesis／dramatization scope 时实例化一组人物的同住、亲属身份、现实对白、动作或
+   其他具体关系处境。
 3. 检查整条 clause 是否建立亲属、伴侣、家庭、同住、同事、员工、顾客或文字明确建立的
-   其他社会关系；只有文字把该关系绑定为当前真人／现实个案，且 prohibited_bindings 包含
-   specific_social_relation_to_actuality 时才必须 unsupported。一般题材、泛指关系理解，
-   以及 generic_or_fictional / fictional_only scope 内被服务端包裹的虚构关系，不属于
-   specific_social_relation_to_actuality。
+   其他社会关系；文字把该关系绑定为当前真人／现实个案，或在 abstract／audience_guidance
+   clause 中把一组泛指人物实例化为具有具体关系处境，且 prohibited_bindings 包含
+   specific_social_relation_to_actuality 时必须 unsupported。一般关系题材与抽象关系理解，
+   以及 generic_or_fictional / fictional_only scope 内被服务端包裹的虚构关系可以受许可。
 4. 检查当前真人／机构、现实对白、已发生事件或结果、机构／商品事实；命中相应
    prohibited_bindings 且没有精确 allowed_fact_refs 时必须 unsupported。
    ProductFactPacket 中的硬属性、数字和 canonical_text 只能由服务端 ImmutableFactBlock
@@ -1320,9 +1327,10 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 - hypothetical_example 和 disclosed_dramatization 只在服务端既定 scope 内成立，不能绑定
   当前用户、品牌、员工、顾客、门店历史或商品事实。
 - specific_social_relation 只指亲属、伴侣、家庭、同住、同事、员工、顾客或文字明确建立
-  的其他社会关系被主张为当前现实身份。若许可禁止该现实绑定，不能把一种具体关系换成
-  另一种；若 clause 只讨论一种关系题材或处于服务端许可的 fictional scope，不得仅因出现
-  关系类别就拒绝。
+  的其他社会关系被主张为当前现实身份，或在未披露的 abstract／audience_guidance 中被
+  实例化成具体关系处境。若许可禁止该绑定，不能把一种具体关系换成另一种；若 clause 只
+  讨论一种关系题材、抽象关系理解，或处于服务端许可的 fictional scope，不得仅因出现关系
+  类别就拒绝。
 - current person／institution、受保护主体、现实对白、已发生事件或结果、机构和商品事实，
   没有 allowed_fact_refs 时均不受许可支持。
 - frozen fact、服务端 wrapper 和商品 ImmutableFactBlock 不在本次 writer-owned 输入中，

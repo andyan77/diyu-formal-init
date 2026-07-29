@@ -263,12 +263,12 @@ def test_reviewer_cannot_invent_a_prohibition_outside_the_clause_license() -> No
         user_facts=(),
     )
     contexts = _contexts(
-        "婆媳关系也可以只作为一种一般关系题材。",
-        contract="abstract_observation",
+        "一位儿媳可以先表达自己的想法。",
+        contract="hypothetical_example",
     )[1:]
     policies = build_unit_clause_license_policies_v1(
         frame=frame,
-        unit_contracts={"unit:body": "abstract_observation"},
+        unit_contracts={"unit:body": "hypothetical_example"},
     )
     licenses = materialize_clause_licenses_v1(
         contexts=contexts,
@@ -290,12 +290,110 @@ def test_reviewer_cannot_invent_a_prohibition_outside_the_clause_license() -> No
                         "reason_code": (
                             "specific_social_relation_to_actuality"
                         ),
-                        "unsupported_quote": "婆媳关系",
+                        "unsupported_quote": "一位儿媳可以先表达自己的想法",
                     }
                 ],
             },
             licenses=licenses,
         )
+
+
+def test_general_topic_is_allowed_but_unwrapped_relation_situation_is_not() -> None:
+    frame = replace(
+        _frame(),
+        narrative_mode="general_observation",
+        user_facts=(),
+    )
+    policies = build_unit_clause_license_policies_v1(
+        frame=frame,
+        unit_contracts={
+            "unit:topic": "abstract_observation",
+            "unit:situation": "audience_guidance",
+            "unit:hypothesis": "hypothetical_example",
+        },
+    )
+    policy_by_unit = {policy.unit_id: policy for policy in policies}
+
+    assert "specific_social_relation_to_actuality" in (
+        policy_by_unit["unit:topic"].prohibited_bindings
+    )
+    assert "specific_social_relation_to_actuality" in (
+        policy_by_unit["unit:situation"].prohibited_bindings
+    )
+    assert "specific_social_relation_to_actuality" not in (
+        policy_by_unit["unit:hypothesis"].prohibited_bindings
+    )
+
+    topic_context = replace(
+        _contexts("婆媳关系也需要边界。")[1],
+        unit_id="unit:topic",
+        clause_id="unit:topic:clause:1",
+        unit_contract="abstract_observation",
+    )
+    topic_licenses = materialize_clause_licenses_v1(
+        contexts=(topic_context,),
+        policies=(policy_by_unit["unit:topic"],),
+    )
+    topic_reviews = parse_clause_license_reviews_v1(
+        {
+            "review_version": CLAUSE_LICENSE_REVIEW_VERSION,
+            "reviews": [
+                {
+                    "clause_id": topic_licenses[0].clause_id,
+                    "license_id": topic_licenses[0].license_id,
+                    "verdict": "supported",
+                    "reason_code": "supported_by_license",
+                    "unsupported_quote": "",
+                }
+            ],
+        },
+        licenses=topic_licenses,
+    )
+    assert reconcile_clause_license_reviews_v1(
+        contexts=(topic_context,),
+        policies=(policy_by_unit["unit:topic"],),
+        licenses=topic_licenses,
+        reviews=topic_reviews,
+        fact_text_by_id={},
+    ).issues == ()
+
+    situation_context = replace(
+        _contexts("两个人明明住在一起，心却隔着墙。")[1],
+        unit_id="unit:situation",
+        clause_id="unit:situation:clause:1",
+        unit_contract="audience_guidance",
+    )
+    situation_licenses = materialize_clause_licenses_v1(
+        contexts=(situation_context,),
+        policies=(policy_by_unit["unit:situation"],),
+    )
+    situation_reviews = parse_clause_license_reviews_v1(
+        {
+            "review_version": CLAUSE_LICENSE_REVIEW_VERSION,
+            "reviews": [
+                {
+                    "clause_id": situation_licenses[0].clause_id,
+                    "license_id": situation_licenses[0].license_id,
+                    "verdict": "unsupported",
+                    "reason_code": (
+                        "specific_social_relation_to_actuality"
+                    ),
+                    "unsupported_quote": "两个人明明住在一起",
+                }
+            ],
+        },
+        licenses=situation_licenses,
+    )
+    assert {
+        issue.reason
+        for issue in reconcile_clause_license_reviews_v1(
+            contexts=(situation_context,),
+            policies=(policy_by_unit["unit:situation"],),
+            licenses=situation_licenses,
+            reviews=situation_reviews,
+            fact_text_by_id={},
+        ).issues
+    } == {"unsupported_actuality_expansion"}
 
 
 def test_uncertain_is_nonrepairable_insufficient_evidence() -> None:

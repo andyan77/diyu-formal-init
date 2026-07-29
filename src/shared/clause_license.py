@@ -73,6 +73,7 @@ _ACTUALITY_PROHIBITED_BINDINGS: tuple[ProhibitedBindingV1, ...] = (
     "actual_event_or_result",
 )
 _ABSTRACT_PROHIBITED_BINDINGS: tuple[ProhibitedBindingV1, ...] = (
+    "specific_social_relation_to_actuality",
     "unfrozen_dialogue",
     "actual_event_or_result",
 )
