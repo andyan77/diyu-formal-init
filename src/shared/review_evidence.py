@@ -1063,7 +1063,7 @@ def unit_contracts_v2(
     frame: NarrativeFrame,
 ) -> dict[str, UnitContractV2]:
     contracts: dict[str, UnitContractV2] = {
-        "unit:title": "abstract_observation",
+        "unit:title": "audience_guidance",
         "unit:natural-guide": "audience_guidance",
         "unit:release-caption": "audience_guidance",
     }
@@ -1107,7 +1107,7 @@ def unit_contracts_v2(
             {
                 "unit:body-opening": "abstract_observation",
                 "unit:hypothetical-example": "hypothetical_example",
-                "unit:body-closing": "abstract_observation",
+                "unit:body-closing": "audience_guidance",
             }
         )
     elif kernel.program_id == OBSERVATION_ONLY_PROGRAM:

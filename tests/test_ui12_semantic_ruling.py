@@ -1174,6 +1174,7 @@ def test_every_reachable_program_unit_has_one_trusted_contract() -> None:
     contracts = {
         context.unit_id: context.unit_contract for context in general
     }
+    assert contracts["unit:title"] == "audience_guidance"
     assert contracts["unit:natural-guide"] == "audience_guidance"
     assert contracts["unit:release-caption"] == "audience_guidance"
     assert contracts["unit:body-opening"] == "abstract_observation"
@@ -1186,7 +1187,8 @@ def test_every_reachable_program_unit_has_one_trusted_contract() -> None:
     current_contracts = {
         context.unit_id: context.unit_contract for context in current
     }
-    assert current_contracts["unit:body-closing"] == "abstract_observation"
+    assert current_contracts["unit:title"] == "audience_guidance"
+    assert current_contracts["unit:body-closing"] == "audience_guidance"
     assert "unit:body-recommendation" not in current_contracts
 
     for mode, expected in (
