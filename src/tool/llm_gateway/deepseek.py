@@ -153,7 +153,6 @@ _MODE_BLOCK_TYPE: dict[NarrativeMode, NarrativeBlockType] = {
     "hypothesis": "hypothesis",
     "dramatization": "dramatization",
 }
-_NARRATIVE_MODES = frozenset(_MODE_BLOCK_TYPE)
 
 
 @dataclass(frozen=True)
@@ -478,13 +477,10 @@ class DeepSeekGenerator(ContentGenerator):
             )
         raw_premises = document.get("user_premises")
         raw_facts = document.get("user_fact_spans")
-        raw_mode = document.get("narrative_mode")
         raw_plan = document.get("creative_plan")
         if (
             not isinstance(raw_premises, list)
             or not isinstance(raw_facts, list)
-            or not isinstance(raw_mode, str)
-            or raw_mode not in _NARRATIVE_MODES
         ):
             raise GenerationFailed("模型协作返回格式不完整")
         premises = self._exact_string_list(raw_premises)
@@ -494,10 +490,17 @@ class DeepSeekGenerator(ContentGenerator):
         premise_text = "\n".join(premises)
         if any(fact not in premise_text for fact in facts):
             raise GenerationFailed("模型返回的用户事实跨度不存在")
-        if (raw_mode == "actuality_reflection") != bool(facts):
-            raise GenerationFailed("模型叙事模式与用户事实跨度不一致")
-        if request.explicit_narrative_mode is not None and raw_mode != request.explicit_narrative_mode:
-            raise GenerationFailed("模型没有遵守用户显式叙事形式")
+        explicit_mode = request.explicit_narrative_mode
+        if explicit_mode is not None:
+            if (explicit_mode == "actuality_reflection") != bool(facts):
+                raise GenerationFailed("用户显式叙事形式与事实跨度不一致")
+            narrative_mode = explicit_mode
+        else:
+            narrative_mode = (
+                "actuality_reflection"
+                if facts
+                else "general_observation"
+            )
         try:
             plan = creative_plan_from_document(raw_plan)
             validate_creative_plan(
@@ -515,7 +518,7 @@ class DeepSeekGenerator(ContentGenerator):
             message.strip(),
             user_premises=premises,
             user_fact_spans=facts,
-            narrative_mode=raw_mode,
+            narrative_mode=narrative_mode,
             creative_plan=plan,
             primary_product=plan.primary_value,
             creation_proposal=creation_proposal,
@@ -2198,8 +2201,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 {{"kind":"question","message":"一个具体事实问题","missing_fact_span":"逐字复制用户明确要求依赖的真实经历片段",
 "creation_proposal":true,"intent_span":"候选用户原话跨度"}}
 {{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制实际使用的用户消息"],
-"user_fact_spans":["逐字截取用户明确陈述的现实片段"],"narrative_mode":
-"actuality_reflection|general_observation|hypothesis|dramatization",
+"user_fact_spans":["逐字截取用户明确陈述的现实片段"],
 "creative_plan":{{"plan_version":"creative-plan-v2","topic_spans":["只能逐字截取用户消息"],
 "primary_value":"dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story",
 "tone_ids":["只选允许 id"],"mechanism_id":null,"platform_shape":"{request.platform_shape}",
@@ -2219,12 +2221,9 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   本身不是可逐字插入的现实事件。若没有至少一个可观察的动作、事件、对白或结果，必须
   question；不得把时间标签或评价词填进 user_fact_spans 后直接创作。
 - 只给题材且没有现实片段用 general_observation；给出真人生活／工作片段用
-  actuality_reflection，并把现实片段从用户消息逐字截取，保留标点，不概括；明确条件推演用
-  hypothesis，即使用户把它称为“想法”也不能降成一般观察；明确要求故事、短剧或情境演绎才
-  用 dramatization。
-- 输出前必须自检一个双向不变量：user_fact_spans 非空当且仅当 narrative_mode 是
-  actuality_reflection；general_observation、hypothesis、dramatization 的 user_fact_spans
-  必须为空。不得同时返回现实事实跨度和非 actuality 模式。
+  actuality_reflection，并把现实片段从用户消息逐字截取，保留标点，不概括；明确条件推演
+  与明确故事／短剧／情境演绎不属于现实事实，user_fact_spans 必须为空。narrative_mode 由
+  服务端根据显式形式与事实跨度派生，你不得返回或选择该字段。
 - 显式模式为 dramatization 时必须使用它；没有明确演绎要求不得升级为剧情。
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
 - CreativePlanV2 只能选择上述结构字段。topic_spans 必须逐字来自用户消息；禁止写人物设定、

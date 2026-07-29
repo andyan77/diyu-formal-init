@@ -204,6 +204,14 @@ def test_only_an_explicit_registered_story_mechanism_forces_dramatization() -> N
         ),
     )
     assert ContentService._explicit_narrative_mode(defaulted) is None
+    no_direction = replace(control, direction=None)
+    assert (
+        ContentService._explicit_narrative_mode(
+            no_direction,
+            "如果两个人都先停十秒再回应，把这个想法写成小红书。",
+        )
+        == "hypothesis"
+    )
 
 
 def test_mutation_removing_dramatization_disclosure_fails() -> None:

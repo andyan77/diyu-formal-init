@@ -432,6 +432,8 @@ class ContentService:
         control: ContentControlContext,
         natural_text: str = "",
     ) -> NarrativeMode | None:
+        if natural_text.lstrip().startswith(("如果", "假如", "假设")):
+            return "hypothesis"
         if control.direction is None:
             return None
         if any(
@@ -441,8 +443,6 @@ class ContentService:
             for item in control.direction.selections
         ):
             return "dramatization"
-        if natural_text.lstrip().startswith(("如果", "假如", "假设")):
-            return "hypothesis"
         return None
 
     @staticmethod

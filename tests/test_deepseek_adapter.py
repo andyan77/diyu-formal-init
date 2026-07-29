@@ -969,8 +969,8 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
         platform_shape="xiaohongshu_graphic:graphic",
     )
     prompt = _generator()._conversation_prompt(request)
-    assert "user_fact_spans 非空当且仅当 narrative_mode 是" in prompt
-    assert "不得同时返回现实事实跨度和非 actuality 模式" in prompt
+    assert "narrative_mode 由\n  服务端根据显式形式与事实跨度派生" in prompt
+    assert "你不得返回或选择该字段" in prompt
     FakeClient.responses = [
         _completion(
             {
@@ -978,7 +978,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
                 "message": "好，我保留这段原话，其他由我来完成。",
                 "user_premises": [message],
                 "user_fact_spans": ["今天店里忙了一天，回家还因为谁洗碗拌了两句。"],
-                "narrative_mode": "actuality_reflection",
+                "narrative_mode": "general_observation",
                 "creative_plan": _intake_plan(message),
             }
         )
@@ -1034,7 +1034,11 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
             _brand(),
             (),
             "xiaohongshu_graphic",
-            explicit_narrative_mode=("dramatization" if mode == "dramatization" else None),
+            explicit_narrative_mode=(
+                mode
+                if mode in {"hypothesis", "dramatization"}
+                else None
+            ),  # type: ignore[arg-type]
             allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
             platform_shape="xiaohongshu_graphic:graphic",
         )
