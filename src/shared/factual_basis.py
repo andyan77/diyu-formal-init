@@ -218,8 +218,9 @@ def product_fact_literal_spans(
 ) -> tuple[str, ...]:
     """Return exact trusted fact atoms copied into writer-owned text.
 
-    These are current-packet values, not a language keyword list.  Boolean
-    facts have no stable literal form and remain the Reviewer's responsibility.
+    These are current-packet values, not a language keyword list. Boolean
+    facts have no stable literal form, stay hidden from Writer and remain
+    server-owned immutable fact blocks.
     """
     atoms: list[str] = []
     for item in packet.facts:
