@@ -44,6 +44,8 @@ from src.shared.creative_kernel import (
     MAX_PRODUCT_FACT_BLOCKS,
     CreativeKernelV1,
     build_kernel_skeleton,
+    compiler_owned_unit_source,
+    compiler_owned_unit_texts,
     creative_units_digest,
     kernel_digest,
     kernel_document,
@@ -564,9 +566,22 @@ class DeepSeekGenerator(ContentGenerator):
             constraint_refs=tuple(identifier for identifier, _ in context.constraint_registry),
             program_id=program_id,
         )
+        compiler_texts = compiler_owned_unit_texts(
+            request.primary_product
+        )
+        trusted_contracts = unit_contracts_v2(skeleton, frame)
+        writer_unit_ids = {
+            unit.unit_id
+            for unit in skeleton.writable_units
+            if unit.unit_id not in compiler_texts
+        }
         license_policies = build_unit_clause_license_policies_v1(
             frame=frame,
-            unit_contracts=unit_contracts_v2(skeleton, frame),
+            unit_contracts={
+                unit_id: contract
+                for unit_id, contract in trusted_contracts.items()
+                if unit_id in writer_unit_ids
+            },
         )
         writer_payload, writer_retries = self._request(
             "你是笛语 CreativeKernelV1 Writer。只返回 unit 文字 JSON，不展示推理、规则或内部审查。",
@@ -574,6 +589,7 @@ class DeepSeekGenerator(ContentGenerator):
                 request,
                 skeleton,
                 license_policies,
+                compiler_texts,
             ),
             4096,
         )
@@ -593,6 +609,7 @@ class DeepSeekGenerator(ContentGenerator):
                     if request.prior_creative_kernel is not None
                     else None
                 ),
+                compiler_owned_text_by_id=compiler_texts,
             )
             self._validate_product_fact_selection(
                 request,
@@ -1019,7 +1036,15 @@ class DeepSeekGenerator(ContentGenerator):
         }
         if any(issue.reason in nonrepairable for issue in issues):
             raise GenerationFailed("CreativeKernel Reviewer 证据不完整或事实单元不一致")
-        writable_ids = {unit.unit_id for unit in kernel.writable_units}
+        writable_ids = {
+            unit.unit_id
+            for unit in kernel.writable_units
+            if compiler_owned_unit_source(
+                unit.unit_id,
+                unit.text,
+            )
+            is None
+        }
         product_fact_ownership_issues = {
             "unsupported_product_claim",
             "product_fact_must_use_immutable_block",
@@ -1076,6 +1101,14 @@ class DeepSeekGenerator(ContentGenerator):
         ):
             raise ValueError("product content omitted substantive fact block")
         for unit in kernel.writable_units:
+            if (
+                compiler_owned_unit_source(
+                    unit.unit_id,
+                    unit.text,
+                )
+                is not None
+            ):
+                continue
             if any(item.canonical_text in unit.text for item in packet.facts):
                 raise ValueError("writer repeated an immutable product fact")
 
@@ -1084,6 +1117,7 @@ class DeepSeekGenerator(ContentGenerator):
         request: GenerationInput,
         skeleton: CreativeKernelV1,
         license_policies: tuple[UnitClauseLicensePolicyV1, ...] | None = None,
+        compiler_texts: Mapping[str, str] | None = None,
     ) -> str:
         if request.creative_plan is None:
             raise GenerationFailed("CreativeKernelV1 缺少 CreativePlanV2")
@@ -1118,18 +1152,36 @@ class DeepSeekGenerator(ContentGenerator):
             skeleton,
             request.narrative_frame,
         )
+        resolved_compiler_texts = dict(
+            compiler_texts
+            or compiler_owned_unit_texts(request.primary_product)
+        )
+        writer_units = tuple(
+            unit
+            for unit in skeleton.writable_units
+            if unit.unit_id not in resolved_compiler_texts
+        )
+        writer_unit_ids = {
+            unit.unit_id for unit in writer_units
+        }
         resolved_policies = (
             license_policies
             if license_policies is not None
             else build_unit_clause_license_policies_v1(
                 frame=request.narrative_frame,
-                unit_contracts=trusted_contracts,
+                unit_contracts={
+                    unit_id: contract
+                    for unit_id, contract in trusted_contracts.items()
+                    if unit_id in writer_unit_ids
+                },
             )
         )
         policy_by_unit = {policy.unit_id: policy for policy in resolved_policies}
-        if len(policy_by_unit) != len(resolved_policies) or set(policy_by_unit) != {
-            unit.unit_id for unit in skeleton.writable_units
-        }:
+        if (
+            len(policy_by_unit) != len(resolved_policies)
+            or set(policy_by_unit)
+            != {unit.unit_id for unit in writer_units}
+        ):
             raise GenerationFailed("CreativeKernelV1 服务端 unit 许可不完整")
         writable = [
             {
@@ -1144,7 +1196,7 @@ class DeepSeekGenerator(ContentGenerator):
                 "visible_order": unit.visible_order,
                 "claim_refs": list(unit.claim_refs),
             }
-            for unit in skeleton.writable_units
+            for unit in writer_units
         ]
         template: dict[str, object] = {
             "units": [
@@ -1153,7 +1205,7 @@ class DeepSeekGenerator(ContentGenerator):
                     "text": f"填写 {unit.purpose} 的完整可见文字",
                     **({"claim_refs": []} if fact_blocks else {}),
                 }
-                for unit in skeleton.writable_units
+                for unit in writer_units
             ]
         }
         if fact_blocks:
@@ -1173,6 +1225,7 @@ class DeepSeekGenerator(ContentGenerator):
                     "claim_refs": list(unit.claim_refs),
                 }
                 for unit in request.prior_creative_kernel.writable_units
+                if unit.unit_id not in resolved_compiler_texts
             ]
             if request.prior_creative_kernel is not None
             else []
@@ -1181,17 +1234,16 @@ class DeepSeekGenerator(ContentGenerator):
         product_creative_rule = (
             f"""本篇含服务端事实块。创意文字必须让这些事实成为一篇可直接发布的
 平台内容，而不是登记清单、事实审计、写作方法说明或泛化资料页。title 应短而自然，
-直接建立读者选择时的关注点或张力，不介绍“本文会提供什么”；natural_guide 用一句话
-说明把所选事实放在一起看对选择有什么价值；body 在事实块之后提供具体但不新增商品
-事实的选择视角；release_caption 用自然互动或选择问题收束。四个 unit 要围绕同一条
-主线，各自承担不同作用，不得用四种说法重复“读者会更好地判断”。底层对象、其类别和
+直接建立读者选择时的关注点或张力，不介绍“本文会提供什么”；body 在事实块之后提供具体
+但不新增商品事实的选择视角。title 与 body 要围绕同一条主线，各自承担不同作用。底层对象、其类别和
 “它／这件对象”不能成为创意文字中的事实主张对象；商品特异性由最多
 {MAX_PRODUCT_FACT_BLOCKS} 个事实块提供。"""
             if fact_blocks
             else ""
         )
         return f"""完成一个可直接交付的 CreativeKernelV1。你只负责“说什么、怎样表达”，不负责
-scene、actor、resource、action、sound、production_note、发布结构或语义合同。
+scene、actor、resource、action、sound、production_note、发布结构、自然导读、发布配文
+或语义合同；自然导读和发布配文由 DeliveryCompiler 使用版本化中性短语生成。
 
 用户 topic 精确跨度：
 {json.dumps(request.creative_plan.topic_spans, ensure_ascii=False)}
@@ -1233,8 +1285,7 @@ fact_block_refs，不能增删、换序或更换事实。首次最多选择 {MAX
 哪些事实；不能把硬属性、数字或 canonical_text
 写进 creative text，也不能从结构事实推断性能、功效、用途、价格、库存、设计动机、比较
 结论、普遍穿着结果或实际体验。商品硬事实正文由服务端按 fact_block_refs 原样插入。
-title 是自然标题；natural_guide 给出清楚主线和观看回报；按可见顺序排列的一个或多个 body
-单元共同组成完整核心正文；release_caption 是可直接使用的发布配文收束，不能只是提纲。
+title 是自然标题；按可见顺序排列的一个或多个 body 单元共同组成完整核心正文。
 unit_contract 是服务端按 Frame、program 和 unit skeleton 冻结的唯一合同；每个以句号、
 问号、叹号或分号分隔的可见 clause 都必须遵守所在 unit 的同一个 unit_contract，不得根据
 准备填写的文字改合同。allowed_observation_types 只保留兼容信息。abstract_principle 可以表达抽象判断、观点、比喻和
@@ -1248,10 +1299,8 @@ abstract_observation / release_caption unit 完成。actuality_reflection 对应
 已由服务端 frozen fact 单元逐字插入；Writer 只能写不复述该事实的抽象关系反思，或带清楚
 建议／条件语态的泛指做法，不能复制、概括或扩写人物、动作、对白、动机、原因、结果、时间、
 地点与现实细节。
-audience_guidance 是服务端专用于 natural_guide 与 release_caption 的单值合同：可以用
-generic_observation 概括观看主线，也可以用 recommendation 作明确的观看邀请或安全的泛指
-行动建议；不得使用 actuality、hypothesis 或 dramatization，也不得借此绑定现实主体、事件、
-对白、动机、品牌／商品事实。
+audience_guidance 仍用于 title 等服务端分配单元；由 Compiler 生成的 natural_guide 与
+release_caption 不属于 Writer 输出，也不进入 Reviewer 的 writer-owned clause。
 不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。
 不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄资源或
 制作方式。Writer-owned clause 不得让当前表达者或第一人称复数承担谓语、做法、经历或承诺；

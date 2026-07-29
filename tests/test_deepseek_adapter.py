@@ -25,6 +25,8 @@ from src.shared.creative_kernel import (
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
     CreativeKernelV1,
     build_kernel_skeleton,
+    compiler_owned_unit_source,
+    compiler_owned_unit_texts,
     parse_writer_kernel,
     select_kernel_program,
 )
@@ -460,15 +462,7 @@ def _kernel_writer(
     return {
         "units": [
             {"unit_id": "unit:title", "text": title},
-            {
-                "unit_id": "unit:natural-guide",
-                "text": "从不同位置看同一段关系，先保留理解的余地。",
-            },
             *body_units,
-            {
-                "unit_id": "unit:release-caption",
-                "text": "尊重差异，也保留自己的边界。",
-            },
         ]
     }
 
@@ -491,7 +485,13 @@ def _parsed_kernel(
             prior_kernel=request.prior_creative_kernel,
         ),
     )
-    return parse_writer_kernel(raw, skeleton)
+    return parse_writer_kernel(
+        raw,
+        skeleton,
+        compiler_owned_text_by_id=compiler_owned_unit_texts(
+            request.primary_product
+        ),
+    )
 
 
 def test_kernel_writer_prompt_exposes_current_trusted_contracts() -> None:
@@ -1468,6 +1468,9 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert "resource:original_composition" not in writer_prompt
     assert '"unit_id"' in writer_prompt
     assert '"text"' in writer_prompt
+    assert '"unit_id": "unit:natural-guide"' not in writer_prompt
+    assert '"unit_id": "unit:release-caption"' not in writer_prompt
+    assert "自然导读和发布配文由 DeliveryCompiler" in writer_prompt
     assert '"block_id"' not in writer_prompt
     assert '"fact_refs"' not in writer_prompt
     assert '"subject_scope"' in writer_prompt
@@ -1496,6 +1499,47 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert "ProductFactPacket" in reviewer_prompt
     assert "只能由服务端 ImmutableFactBlock" in reviewer_prompt
     assert "性能、功效、用途／穿着结果、设计动机、价格、库存、比较结论或实际体验" in reviewer_prompt
+    compiler_contexts = [
+        item
+        for item in clause_context
+        if isinstance(item, dict)
+        and item["text_source"] == "server_compiler"
+    ]
+    assert {
+        item["unit_id"] for item in compiler_contexts
+    } == {"unit:natural-guide", "unit:release-caption"}
+    assert all(
+        compiler_owned_unit_source(
+            str(item["unit_id"]),
+            str(item["exact_text"]),
+        )
+        is not None
+        for item in compiler_contexts
+    )
+    assert "unit:natural-guide" not in reviewer_prompt
+    assert "unit:release-caption" not in reviewer_prompt
+
+
+def test_ui12_writer_cannot_return_compiler_owned_visible_fields() -> None:
+    request = _kernel_request()
+    raw = _kernel_writer()
+    units = raw["units"]
+    assert isinstance(units, list)
+    units.append(
+        {
+            "unit_id": "unit:release-caption",
+            "text": "把问题场景带进评论区。",
+        }
+    )
+    FakeClient.responses = [_completion(raw)]
+
+    with pytest.raises(
+        GenerationFailed,
+        match="CreativeKernelV1 Writer 返回格式不完整",
+    ):
+        _generator().generate(request)
+
+    assert len(FakeClient.requests) == 1
 
 
 def test_writer_owns_audience_topic_when_user_has_not_supplied_one() -> None:
@@ -1570,7 +1614,12 @@ def test_ui09_writer_extra_production_field_fails_before_reviewer() -> None:
     raw = _kernel_writer()
     units = raw["units"]
     assert isinstance(units, list)
-    body = units[2]
+    body = next(
+        unit
+        for unit in units
+        if isinstance(unit, dict)
+        and str(unit.get("unit_id", "")).startswith("unit:body")
+    )
     assert isinstance(body, dict)
     body["production_note"] = "去厨房拍摄。"
     FakeClient.responses = [_completion(raw)]

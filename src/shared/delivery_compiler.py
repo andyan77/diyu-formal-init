@@ -8,6 +8,8 @@ from src.shared.creative_kernel import (
     DRAMATIZATION_DISCLOSURE,
     CreativeKernelUnit,
     CreativeKernelV1,
+    compiler_owned_unit_source,
+    compiler_owned_unit_texts,
 )
 from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import ImmutableFactBlock
@@ -103,6 +105,19 @@ def assert_compiled_delivery(
     allowed_sources = {
         *(unit.unit_id for unit in kernel.units),
         *_PHRASES,
+        *(
+            source
+            for unit_id, text in compiler_owned_unit_texts(
+                request.primary_product
+            ).items()
+            if (
+                source := compiler_owned_unit_source(
+                    unit_id,
+                    text,
+                )
+            )
+            is not None
+        ),
         "compiler:duration",
         "compiler:visible-body",
     }
@@ -177,8 +192,21 @@ def _compile_delivery(
     ):
         raise GenerationFailed("创作内核单值可见单元重复")
     title = singleton_by_purpose["title"].text
-    guide = singleton_by_purpose["natural_guide"].text
-    release = singleton_by_purpose["release_caption"].text
+    expected_compiler_texts = compiler_owned_unit_texts(
+        request.primary_product
+    )
+    guide = expected_compiler_texts["unit:natural-guide"]
+    release = expected_compiler_texts["unit:release-caption"]
+    guide_source = compiler_owned_unit_source(
+        "unit:natural-guide",
+        guide,
+    )
+    release_source = compiler_owned_unit_source(
+        "unit:release-caption",
+        release,
+    )
+    if guide_source is None or release_source is None:
+        raise GenerationFailed("确定性成品编译中性字段来源无效")
     fact_units = tuple(
         unit for unit in kernel.units if unit.purpose == "frozen_fact"
     )
@@ -221,12 +249,8 @@ def _compile_delivery(
     spoken_sources = tuple(unit.unit_id for unit in spoken_parts)
     provenance: dict[str, tuple[str, ...]] = {
         "outline": (singleton_by_purpose["title"].unit_id,),
-        "natural_guide": (
-            singleton_by_purpose["natural_guide"].unit_id,
-        ),
-        "release_caption_and_interaction": (
-            singleton_by_purpose["release_caption"].unit_id,
-        ),
+        "natural_guide": (guide_source,),
+        "release_caption_and_interaction": (release_source,),
     }
     production: ContentProductionBundle
     if request.media_format == "graphic":

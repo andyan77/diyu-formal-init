@@ -15,6 +15,7 @@ from src.shared.clause_license import (
 from src.shared.creative_kernel import (
     MAX_PRODUCT_FACT_BLOCKS,
     build_kernel_skeleton,
+    compiler_owned_unit_texts,
     creative_units_digest,
     kernel_digest,
     kernel_document,
@@ -187,6 +188,9 @@ class DeterministicContentGenerator(ContentGenerator):
             allowed_fact_ids=frame.allowed_product_fact_ids,
         )
         fact_blocks = immutable_product_fact_blocks(product_packet)
+        compiler_texts = compiler_owned_unit_texts(
+            request.primary_product
+        )
         text_by_id = {
             "unit:title": _outline(request.primary_product),
             "unit:natural-guide": guide,
@@ -204,6 +208,7 @@ class DeterministicContentGenerator(ContentGenerator):
                     **({"claim_refs": []} if fact_blocks else {}),
                 }
                 for unit in skeleton.writable_units
+                if unit.unit_id not in compiler_texts
             ]
         }
         required_fact_block_ids: tuple[str, ...] | None = None
@@ -226,6 +231,7 @@ class DeterministicContentGenerator(ContentGenerator):
             fact_blocks=fact_blocks,
             allowed_claim_ids=product_packet.fact_ids,
             required_fact_block_ids=required_fact_block_ids,
+            compiler_owned_text_by_id=compiler_texts,
         )
         clause_contexts = build_clause_contexts_v2(
             kernel=kernel,
@@ -236,7 +242,14 @@ class DeterministicContentGenerator(ContentGenerator):
         )
         license_policies = build_unit_clause_license_policies_v1(
             frame=frame,
-            unit_contracts=unit_contracts_v2(skeleton, frame),
+            unit_contracts={
+                unit_id: contract
+                for unit_id, contract in unit_contracts_v2(
+                    skeleton,
+                    frame,
+                ).items()
+                if unit_id not in compiler_texts
+            },
         )
         clause_licenses = materialize_clause_licenses_v1(
             contexts=clause_contexts,

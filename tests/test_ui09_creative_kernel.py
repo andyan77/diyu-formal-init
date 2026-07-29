@@ -8,6 +8,7 @@ from src.shared.creative_kernel import (
     DRAMATIZATION_DISCLOSURE,
     CreativeKernelV1,
     build_kernel_skeleton,
+    compiler_owned_unit_texts,
     kernel_digest,
     parse_writer_kernel,
     reconcile_kernel_observations,
@@ -386,6 +387,31 @@ def test_delivery_compiler_rejects_unreviewed_text_and_resources() -> None:
         ),
     )
     compiled = compile_delivery(request, kernel)
+    compiler_texts = compiler_owned_unit_texts(
+        "brand_life_narrative"
+    )
+    assert (
+        compiled.production.natural_guide
+        == compiler_texts["unit:natural-guide"]
+    )
+    assert (
+        compiled.production.release_caption_and_interaction
+        == compiler_texts["unit:release-caption"]
+    )
+    assert (
+        kernel.unit("unit:natural-guide").text
+        not in compiled.body
+    )
+    assert (
+        kernel.unit("unit:release-caption").text
+        not in compiled.body
+    )
+    assert compiled.visible_provenance["natural_guide"][0].startswith(
+        "phrase:compiler-guide-"
+    )
+    assert compiled.visible_provenance[
+        "release_caption_and_interaction"
+    ][0].startswith("phrase:compiler-release-")
 
     with pytest.raises(GenerationFailed, match="未审文字或结构漂移"):
         assert_compiled_delivery(

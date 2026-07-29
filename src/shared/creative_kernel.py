@@ -14,6 +14,7 @@ from src.shared.narrative import (
     ObservationType,
     ReviewerObservation,
 )
+from src.shared.types import ContentProduct
 
 KernelPurpose: TypeAlias = Literal[
     "title",
@@ -63,6 +64,90 @@ _OBSERVATION_TYPES = frozenset(
         "uncertain",
     }
 )
+COMPILER_GUIDANCE_VERSION = "compiler-guidance-v1"
+_COMPILER_OWNED_UNIT_TEXTS: dict[
+    ContentProduct,
+    dict[str, tuple[str, str]],
+] = {
+    "dressing_decision": {
+        "unit:natural-guide": (
+            "从自己的优先项出发，看看这次选择真正需要保留什么。",
+            "phrase:compiler-guide-dressing-v1",
+        ),
+        "unit:release-caption": (
+            "这次选择里，你最看重什么？",
+            "phrase:compiler-release-dressing-v1",
+        ),
+    },
+    "product_truth": {
+        "unit:natural-guide": (
+            "先看已经确认的信息，再保留自己的判断。",
+            "phrase:compiler-guide-product-v1",
+        ),
+        "unit:release-caption": (
+            "这些已知信息里，你最看重哪一项？",
+            "phrase:compiler-release-product-v1",
+        ),
+    },
+    "brand_life_narrative": {
+        "unit:natural-guide": (
+            "沿着正文主线，看看这次表达想保留什么。",
+            "phrase:compiler-guide-narrative-v1",
+        ),
+        "unit:release-caption": (
+            "你更愿意带走哪一种理解？",
+            "phrase:compiler-release-narrative-v1",
+        ),
+    },
+    "local_response": {
+        "unit:natural-guide": (
+            "沿着正文主线，看看这次回应的重点。",
+            "phrase:compiler-guide-response-v1",
+        ),
+        "unit:release-caption": (
+            "你更认同哪一种回应方式？",
+            "phrase:compiler-release-response-v1",
+        ),
+    },
+    "visual_styling_story": {
+        "unit:natural-guide": (
+            "先看已经确认的内容，再保留自己的搭配判断。",
+            "phrase:compiler-guide-styling-v1",
+        ),
+        "unit:release-caption": (
+            "你更看重哪一种呈现重点？",
+            "phrase:compiler-release-styling-v1",
+        ),
+    },
+}
+
+
+def compiler_owned_unit_texts(
+    primary_product: ContentProduct,
+) -> dict[str, str]:
+    """Return versioned neutral fields owned by DeliveryCompiler."""
+    return {
+        unit_id: text_and_source[0]
+        for unit_id, text_and_source in _COMPILER_OWNED_UNIT_TEXTS[
+            primary_product
+        ].items()
+    }
+
+
+def compiler_owned_unit_source(
+    unit_id: str,
+    text: str,
+) -> str | None:
+    """Resolve an exact compiler phrase without trusting model authorship."""
+    matches = {
+        text_and_source[1]
+        for values in _COMPILER_OWNED_UNIT_TEXTS.values()
+        for candidate_id, text_and_source in values.items()
+        if candidate_id == unit_id and text_and_source[0] == text
+    }
+    if len(matches) != 1:
+        return None
+    return next(iter(matches))
 
 
 @dataclass(frozen=True)
@@ -259,6 +344,7 @@ def parse_writer_kernel(
     allowed_claim_ids: frozenset[str] = frozenset(),
     require_claim_refs: bool = False,
     required_fact_block_ids: tuple[str, ...] | None = None,
+    compiler_owned_text_by_id: Mapping[str, str] | None = None,
 ) -> CreativeKernelV1:
     product_contract = bool(fact_blocks)
     expected_root = frozenset({"units", "fact_block_refs"}) if product_contract else frozenset({"units"})
@@ -284,7 +370,32 @@ def parse_writer_kernel(
     raw_units = raw.get("units")
     if not isinstance(raw_units, list) or not raw_units:
         raise TypeError("writer units are incomplete")
-    expected = {unit.unit_id: unit for unit in skeleton.writable_units}
+    compiler_texts = dict(compiler_owned_text_by_id or {})
+    writable_by_id = {
+        unit.unit_id: unit for unit in skeleton.writable_units
+    }
+    if (
+        any(
+            unit_id not in writable_by_id
+            or writable_by_id[unit_id].purpose
+            not in {"natural_guide", "release_caption"}
+            or not isinstance(text, str)
+            or not text.strip()
+            or compiler_owned_unit_source(unit_id, text) is None
+            for unit_id, text in compiler_texts.items()
+        )
+        or set(compiler_texts)
+        not in (
+            set(),
+            {"unit:natural-guide", "unit:release-caption"},
+        )
+    ):
+        raise ValueError("compiler-owned unit contract is invalid")
+    expected = {
+        unit_id: unit
+        for unit_id, unit in writable_by_id.items()
+        if unit_id not in compiler_texts
+    }
     returned_ids = [value.get("unit_id") for value in raw_units if isinstance(value, Mapping)]
     if (
         len(returned_ids) != len(raw_units)
@@ -292,7 +403,10 @@ def parse_writer_kernel(
         or set(returned_ids) != set(expected)
     ):
         raise ValueError("writer unit coverage drifted from server skeleton")
-    replacements: dict[str, CreativeKernelUnit] = {}
+    replacements: dict[str, CreativeKernelUnit] = {
+        unit_id: replace(writable_by_id[unit_id], text=text)
+        for unit_id, text in compiler_texts.items()
+    }
     unit_fields = (
         frozenset({"unit_id", "text", "claim_refs"})
         if product_contract or require_claim_refs
@@ -535,6 +649,7 @@ def creative_units_digest(kernel: CreativeKernelV1) -> str:
                 "claim_refs": list(unit.claim_refs),
             }
             for unit in kernel.writable_units
+            if compiler_owned_unit_source(unit.unit_id, unit.text) is None
         ],
         ensure_ascii=False,
         separators=(",", ":"),

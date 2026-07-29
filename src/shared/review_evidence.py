@@ -11,6 +11,7 @@ from src.shared.creative_kernel import (
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
     CreativeKernelV1,
+    compiler_owned_unit_source,
 )
 from src.shared.factual_basis import FrozenFactRecord
 from src.shared.narrative import NarrativeFrame, NarrativeIssue
@@ -126,6 +127,7 @@ class ProtectedSubjectScope:
 
 
 TextSourceV2: TypeAlias = Literal[
+    "server_compiler",
     "server_wrapper",
     "frozen_user_fact",
     "frozen_brand_fact",
@@ -291,6 +293,10 @@ def build_clause_contexts_v2(
         if contract == "frozen_fact" and unit.claim_refs:
             raise ValueError("frozen fact unit cannot carry claim refs")
 
+        compiler_source = compiler_owned_unit_source(
+            unit.unit_id,
+            unit.text,
+        )
         wrapper: str | None = None
         if contract == "hypothetical_example":
             wrapper = f"{HYPOTHESIS_DISCLOSURE}\n"
@@ -300,7 +306,10 @@ def build_clause_contexts_v2(
             raise ValueError("server wrapper structure drifted")
 
         for index, exact_text in enumerate(parts, start=1):
-            if fact_source is not None:
+            source: TextSourceV2
+            if compiler_source is not None:
+                source = "server_compiler"
+            elif fact_source is not None:
                 source = fact_source
             elif wrapper is not None and index == 1:
                 source = "server_wrapper"
@@ -406,6 +415,24 @@ def validate_server_owned_contexts_v2(
                     NarrativeIssue(
                         context.unit_id,
                         "frozen_fact_changed",
+                        context.exact_text,
+                    )
+                )
+            continue
+        if context.text_source == "server_compiler":
+            if (
+                context.fact_ref is not None
+                or context.claim_refs
+                or compiler_owned_unit_source(
+                    context.unit_id,
+                    context.exact_text,
+                )
+                is None
+            ):
+                issues.append(
+                    NarrativeIssue(
+                        context.unit_id,
+                        "server_compiler_drift",
                         context.exact_text,
                     )
                 )
