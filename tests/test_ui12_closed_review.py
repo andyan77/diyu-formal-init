@@ -375,6 +375,52 @@ def test_generic_motive_observation_is_allowed() -> None:
     assert _reasons(contexts, answers) == ()
 
 
+def test_generic_state_is_not_mistaken_for_a_completed_event() -> None:
+    text = "健康的关系允许分歧存在。"
+    contexts = _context(text)
+    answers = _parse(
+        contexts,
+        {
+            "subject_binding": (
+                "present",
+                text,
+                ("generic",),
+            ),
+            "actual_event": (
+                "present",
+                text,
+                ("state",),
+            ),
+        },
+    )
+
+    assert _reasons(contexts, answers) == ()
+
+
+def test_generic_action_still_fails_as_an_undisclosed_event() -> None:
+    text = "饭桌上一句话让两个人都沉默。"
+    contexts = _context(text)
+    answers = _parse(
+        contexts,
+        {
+            "subject_binding": (
+                "present",
+                text,
+                ("generic",),
+            ),
+            "actual_event": (
+                "present",
+                text,
+                ("action", "event"),
+            ),
+        },
+    )
+
+    assert _reasons(contexts, answers) == (
+        "situated_event_in_observation",
+    )
+
+
 def test_recommendation_and_hypothesis_keep_creative_freedom() -> None:
     recommendation = "双方可以先说一句辛苦了。"
     recommendation_contexts = _context(recommendation)

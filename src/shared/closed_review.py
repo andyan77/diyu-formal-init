@@ -678,12 +678,31 @@ def _claim_inventory_issues(
         if compatibility_issue is not None:
             issues.append(compatibility_issue)
             continue
-        if "actual_event" in dimensions:
+        event_claim = clause_claims.get("actual_event")
+        event_operands = (
+            set(event_claim.operands)
+            if event_claim is not None
+            else set()
+        )
+        if event_claim is not None and (
+            mode == "actuality"
+            or (
+                mode == "generic_observation"
+                and bool(
+                    event_operands
+                    & {"action", "event", "reaction"}
+                )
+            )
+        ):
             issues.append(
                 NarrativeIssue(
                     context.unit_id,
-                    "unsupported_actuality_expansion",
-                    clause_claims["actual_event"].exact_quote,
+                    (
+                        "situated_event_in_observation"
+                        if mode == "generic_observation"
+                        else "unsupported_actuality_expansion"
+                    ),
+                    event_claim.exact_quote,
                 )
             )
             continue
