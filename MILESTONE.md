@@ -1,11 +1,12 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE · 定向返工`。主控对上一轮 `REVIEW` 给出新的
+- 状态：`REVIEW`。主控对上一轮 `REVIEW` 给出的
   `FAIL_WITH_BOUNDED_REWORK`：版本正文尚未在数据库层全量不可变，且 Writer 仍可通过
-  换行、正式 heading 与 Unicode 格式字符逃逸服务端范围。上一轮 `REVIEW`、CI、部署、
-  生产验收和回退证据全部保留，但不构成本轮完成；UI-07—UI-12 仍是一条自然创作真实性
-  探索链，不创建 UI-13。此前
+  换行、正式 heading 与 Unicode 格式字符逃逸服务端范围，现已由 schema 31 的追加式版本
+  记录、统一摘要读取校验和共享可见结构防伪关闭。上一轮 `REVIEW`、CI、部署、生产验收和
+  回退证据全部保留，但不冒充本轮完成；UI-07—UI-12 仍是一条自然创作真实性探索链，不创建
+  UI-13。此前
   occurrence、开放 evidence、商品事实职责、Reviewer-only 模型、oracle drift、parser
   与一次 repair 的失败及前向订正均完整保留。
 - 主控已正式取代“单一概率 Reviewer 承担零漏判生产授权”路线，采用服务端预分配的
@@ -45,15 +46,32 @@
   保留可见结构定义，关闭 Writer 对范围标签、正式 heading、零宽与双向控制字符的伪造，
   且 `delivery-compiler-v2` 成品不再经过 legacy 自由文本重解析。完成前不 push、不触发
   CI、不部署新候选。
-- 本地返工已形成待 CI 的单一候选：schema head `20260804_31` 使
+- 本轮最终运行实现 `15a6f1fd57dd46d16baadd0730cc255da9c6d5e2` 已形成并部署：
+  schema head `20260804_31` 使
   `content_versions` 的任意 UPDATE 由 trigger 失败关闭，并撤销 `diyu_app` 的 UPDATE
   权限；`content-version-audit-v2` 绑定 compiler-v2 最终可见 outline/body，所有正文
   返回、历史、复制、导出、修订父版与平台改编源均消费同一摘要校验器。Writer 标题及全部
   可写单元使用共享保留结构定义进行 NFKC／零宽防伪并拒绝双向控制字符，原始正常中文与
   emoji 不被改写。旧 raw 反证、数据库 UPDATE、摘要不一致和两项 mutation proof 均已
   转绿；本地 PostgreSQL 纵向与 Golden/OpenAPI `406 passed`、Ruff、mypy、前端
-  lint/typecheck/interaction/build 全绿。生产仍为 `845f632…` 与 schema 30；在最终
-  push、CI、schema 31 部署和同 SHA 生产终验完成前，状态保持 `ACTIVE · 定向返工`。
+  lint/typecheck/interaction/build 全绿。唯一承重 CI `30478106189` 对应该 SHA 且
+  全绿；生产部署仓和镜像均为该 SHA，schema 31，公网／回环 readiness 为 `200/200`。
+- 生产同一运行 SHA 的 G1—G7/H1/D1 已连续执行一次：G1/G6 为 `0/0/0`，其余卡片形成
+  完整 V1 或 G7 V2，Reviewer 调用为 0；人工阅读全文确认正式 heading 各仅一处且没有
+  零宽／双向字符逃逸。G2 只使用三个 ImmutableFactBlock；G4 原话逐字保持；G7 的
+  V1/V2 各有独立 audit-v2 摘要，冻结 Frame、Plan、事实、来源、商品事实包和 compiler
+  不变，V1→V2→V1 可读。失败原子性为 task +1、failed run +1、version +0、running +0。
+  验收数据、两个会话及一次限流事件已精确清理，计数恢复 `78/80/32`。
+- 新鲜备份
+  `/var/backups/diyu-m5-4/20260729T181029Z-ui12-rework-predeploy` 创建时目录／文件为
+  `0700/0600`，checksum、隔离恢复、RLS、应用 readiness 与对象恢复均通过。旧安全镜像
+  `845f632…` 已在 schema 31 上读取 legacy 版本、AIGC 字段且错误租户为 0 行，随后切回
+  最终候选；首次回退因执行 shell 的 `umask 077` 泄漏到 Git checkout 而短暂 502，保留
+  原始失败证据，改用代码构建 `umask 022` 后同一路径通过。
+- 部署后只读普查覆盖 2 个租户作用域：legacy 307、审计版本 0、部分审计 0、摘要不一致
+  0；没有改写历史正文。`diyu_app` 的版本 UPDATE 权限为 false，append-only trigger
+  恰好 1 个，运行资产 41，候选／目录真源继续为 `243/25/119`，激活增量 0。生产证据位于
+  `/var/lib/diyu-ui12-evidence/15a6f1fd57dd46d16baadd0730cc255da9c6d5e2/`。
 - 定向返工运行代码
   `c0dfb9459f9cffcb0958348d3f43c55f55f3bb26` 收敛：服务端只向 intake 暴露带稳定
   `source_id` 的完整用户事实句，模型无法返回任意事实子串；首人称／指代式真实经历请求在
@@ -128,7 +146,7 @@
   [`docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md`](docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)。
 - 产品语义与工程安全两份有界审查均为 `PASS`；运行 SHA、唯一 CI、生产部署、备份、
   验收、清理与回退证明均已成立。UI-12 进入 `REVIEW`，不得自行 `CLOSED`；唯一下一动作
-  是主控独立终审 UI-12。
+  是主控重新独立终审 UI-12。
 - 承重裁决：[ADR-028](docs/架构决策/ADR-028-来源语态主体绑定与证据裁决矩阵.md)
   已由本次主控裁决置为 `ACCEPTED`。启动前已把 SDR-001—SDR-037 订正为 42 条无重复
   stable ID、单值 `unit_contract` 的 SDR-001—SDR-042，并通过 diff、唯一性、单合同与

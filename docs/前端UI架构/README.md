@@ -7,11 +7,11 @@ UI-05 Gate A 返工候选已通过产品裁决，Gate B 正式 React/API 与 Gat
 修复完成唯一 CI、同 SHA 部署与定向生产复验。随后 UI-05—UI-11 的创作真实性探索及失败
 历史完整保留并由 UI-12 承接。UI-12 已把新任务主链收敛为服务端 Writer 前预分配
 `trusted_fact + creative_expression`，Compiler 对事实和创作范围作确定性投影，概率
-Reviewer 退出保存授权。主控第二次终审发现版本载荷仍可 UPDATE、Writer 仍可注入正式
-heading，UI-12 现为 `ACTIVE · 定向返工`；生产已回退 `845f632…`、schema 30。本地
-schema 31 候选已用数据库权限＋trigger 关闭任意版本 UPDATE，以统一摘要校验覆盖历史、
-复制和导出，并用共享 Unicode 防伪关闭 Writer 顶层结构注入；Golden/OpenAPI
-`406 passed` 与前端四门已通过。最终 CI、schema 31 部署和生产复验尚未完成。
+Reviewer 退出保存授权。主控第二次终审发现的版本载荷 UPDATE 与 Writer 正式 heading
+注入现已由 schema 31 的数据库权限＋trigger、统一最终可见摘要校验和共享 Unicode 防伪
+关闭。最终 `15a6f1f…` 的 Golden/OpenAPI `406 passed`、前端四门、唯一 CI
+`30478106189`、同 SHA 生产业务轮、备份恢复及旧镜像不降级回退均通过；UI-12 现为
+`REVIEW`。
 
 - [UI-03 正式 React 产品骨架与内容主链执行包](../UI-03-正式React产品骨架与内容主链执行包.md)：
   已在不切换生产默认 UI 的边界内完成公共首页、三入口隔离壳与统一创作端，现为 `CLOSED`；
@@ -49,10 +49,10 @@ schema 31 候选已用数据库权限＋trigger 关闭任意版本 UPDATE，以�
   G3/G4/D1 单次 Writer-only 预检中均失败；未运行 Reviewer 资格、CI 或部署，失败历史
   不改写为成功；
 - [UI-12 来源、语态、主体绑定与服务端证据裁决执行包](../UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)：
-  当前为 `ACTIVE · 定向返工`。新任务由服务端预分配可信事实与四类创作表达单元，Writer 只能填写
+  当前为 `REVIEW`。新任务由服务端预分配可信事实与四类创作表达单元，Writer 只能填写
   既定创意 unit，Compiler 负责逐字事实、自然范围和全部平台出口；Reviewer 不再参与版本
-  放行。旧 `c0dfb94…` 的生产证据保留但被主控退回；本地 schema 31 候选已经关闭版本
-  UPDATE、摘要读取和 Writer heading 注入，尚待最终 CI 与生产同 SHA 复验；
+  放行。旧 `c0dfb94…` 的生产证据保留但被主控退回；最终 schema 31 实现已经关闭版本
+  UPDATE、摘要读取和 Writer heading 注入，并完成最终 CI 与生产同 SHA 复验；
 - [产品化HTML原型_UI-05](产品化HTML原型_UI-05/)：UI-05 Gate A 的管理员与租户用户两条
   独立旅程及可重放验证。它继续作为历史产品合同与产品裁决证据，不冒充正式实现；打开
   [review/index.html](产品化HTML原型_UI-05/review/index.html) 即可离线回看；
@@ -92,4 +92,4 @@ V1.0、评审意见和 PNG 预览同样只作历史参考；`prototype_verified`
   前向修复；后续创作责任合同恢复命中候选 B 结构停止线并由 UI-06 取代。UI-06 唯一生产
   候选又被真实 G1 否决，现已 `SUPERSEDED → UI-07`。UI-07—UI-11 的结构成果与失败
   均由 UI-12 承接；UI-12 当前用前置双轨与确定性 Compiler 取代概率 Reviewer 的生产
-  放行，状态为 `ACTIVE · 定向返工`；当前下一门是唯一候选 CI 与生产复验。
+  放行，状态为 `REVIEW`；唯一下一动作是主控重新独立终审。
