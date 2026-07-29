@@ -792,6 +792,7 @@ def _kernel_observations(
             and body_type == "situated_event"
             and question.dimension == "actual_event"
         )
+        uncertain: object = False
         if question.dimension == "statement_mode":
             mode_by_contract = {
                 "abstract_observation": "generic_observation",
@@ -801,24 +802,17 @@ def _kernel_observations(
                 "disclosed_dramatization": "dramatization",
                 "actuality_reflection": "generic_observation",
             }
-            status = "present"
-            evidence_scope = "entire_clause"
             operands = [mode_by_contract[clause_context.unit_contract]]
         elif is_event:
-            status = "present"
-            evidence_scope = "entire_clause"
             operands = ["event"]
         else:
-            status = "absent"
-            evidence_scope = "none"
             operands = []
         if clause_context.unit_id in partial and question.dimension == "statement_mode":
-            evidence_scope = "partial"
+            uncertain = "false"
         answers.append(
             {
                 "question_id": question.question_id,
-                "status": status,
-                "evidence_scope": evidence_scope,
+                "uncertain": uncertain,
                 "operands": operands,
             }
         )
@@ -1286,14 +1280,14 @@ def test_ui09_writer_receives_only_deidentified_kernel_inputs() -> None:
     assert '"evidence_version":"review-evidence-v2"' in reviewer_prompt
     assert "每个固定风险问题恰好" in reviewer_prompt
     assert '"question_id"' in reviewer_prompt
-    assert '"status":"present"' in reviewer_prompt
+    assert '"uncertain":false' in reviewer_prompt
     assert "motive_or_mental_state" in reviewer_prompt
     assert "statement_mode" in reviewer_prompt
     assert '"exact_text"' in reviewer_prompt
     assert '"allowed_quotes"' not in reviewer_prompt
-    assert '"evidence_scope":"entire_clause"' in reviewer_prompt
+    assert "状态与 evidence_scope 均由服务端" in reviewer_prompt
     assert "不要返回 quote、start、end、occurrence" in reviewer_prompt
-    assert "审计 quote 都由服务端" in reviewer_prompt
+    assert "Unicode offset 与审计 quote 都由" in reviewer_prompt
     assert "不能通过省略整个问题表达" in reviewer_prompt
     assert "面向不特定受众的第二人称阅读邀请" in reviewer_prompt
     assert "文章向不特定读者提供观看回报" in reviewer_prompt
@@ -1452,14 +1446,13 @@ def test_ui10_evidence_failure_never_calls_writer_repair(
         answers.append(extra)
     elif mutation == "partial_scope":
         answers[-2] = dict(answers[-2])
-        answers[-2]["evidence_scope"] = "partial"
+        answers[-2]["uncertain"] = "false"
     elif mutation == "unexpected_quote":
         answers[-2] = dict(answers[-2])
         answers[-2]["quote"] = "并不存在的谓词"
     else:
         answers[-2] = dict(answers[-2])
-        answers[-2]["status"] = "uncertain"
-        answers[-2]["evidence_scope"] = "none"
+        answers[-2]["uncertain"] = True
         answers[-2]["operands"] = []
     FakeClient.responses = [
         _completion(raw),

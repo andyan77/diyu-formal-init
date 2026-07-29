@@ -72,12 +72,7 @@ def _raw_answers(
         answers.append(
             {
                 "question_id": question.question_id,
-                "status": status,
-                "evidence_scope": (
-                    "entire_clause"
-                    if status in {"present", "uncertain"}
-                    else "none"
-                ),
+                "uncertain": status == "uncertain",
                 "operands": list(operands),
             }
         )
@@ -153,10 +148,9 @@ def test_strict_schema_closes_question_ids_and_all_object_fields() -> None:
         "type": "string",
         "enum": [question.question_id for question in questions],
     }
-    assert answer_properties["evidence_scope"] == {
-        "type": "string",
-        "enum": ["entire_clause", "none"],
-    }
+    assert answer_properties["uncertain"] == {"type": "boolean"}
+    assert "status" not in answer_properties
+    assert "evidence_scope" not in answer_properties
     assert "quote" not in answer_properties
 
 
@@ -182,9 +176,9 @@ def test_question_answer_coverage_fails_closed(mutation: str) -> None:
 
 @pytest.mark.parametrize(
     "mutation",
-    ("present_without_scope", "absent_with_scope", "unknown_scope"),
+    ("missing_uncertain", "non_boolean_uncertain", "legacy_status"),
 )
-def test_answer_clause_scope_contract_fails_closed(mutation: str) -> None:
+def test_answer_transport_contract_fails_closed(mutation: str) -> None:
     contexts = _context("换位思考不等于没有边界。")
     questions = build_closed_review_questions(contexts)
     raw = _raw_answers(
@@ -202,12 +196,12 @@ def test_answer_clause_scope_contract_fails_closed(mutation: str) -> None:
     target = next(
         item for item in answers if isinstance(item, dict) and str(item["question_id"]).endswith(":relationship_claim")
     )
-    if mutation == "present_without_scope":
-        target["evidence_scope"] = "none"
-    elif mutation == "absent_with_scope":
-        target["status"] = "absent"
+    if mutation == "missing_uncertain":
+        target.pop("uncertain")
+    elif mutation == "non_boolean_uncertain":
+        target["uncertain"] = "false"
     else:
-        target["evidence_scope"] = "partial"
+        target["status"] = "present"
 
     with pytest.raises(TypeError, match="answer"):
         parse_closed_review_answers(raw, questions=questions)

@@ -170,26 +170,19 @@ def _product_review_result(
     raw_answers: list[dict[str, object]] = []
     for question in questions:
         if question.dimension == "statement_mode":
-            status = "present"
-            evidence_scope = "entire_clause"
             operands = ["generic_observation"]
         elif (
             risk_dimension is not None
             and question.dimension == risk_dimension
         ):
             assert risk_operand is not None
-            status = "present"
-            evidence_scope = "entire_clause"
             operands = [risk_operand]
         else:
-            status = "absent"
-            evidence_scope = "none"
             operands = []
         raw_answers.append(
             {
                 "question_id": question.question_id,
-                "status": status,
-                "evidence_scope": evidence_scope,
+                "uncertain": False,
                 "operands": operands,
             }
         )

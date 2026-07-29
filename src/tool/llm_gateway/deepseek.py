@@ -1261,9 +1261,9 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
                 "不得把其他维度的 operand 搬到本题。"
             ),
             "statement_mode": (
-                "整条 clause 的可见语态是什么？必须 present 且只选一个：actuality、"
+                "整条 clause 的可见语态是什么？uncertain=false 时必须只选一个：actuality、"
                 "generic_observation、recommendation、hypothesis、dramatization；无法可靠"
-                "唯一判断时 status=uncertain。recommendation 必须是在建议、请求或指示某人"
+                "唯一判断时 uncertain=true。recommendation 必须是在建议、请求或指示某人"
                 "采取行动；只向受众征询观点、经验或选择而不指示其行动的互动问句属于"
                 "generic_observation。比喻、类比或拟人本身不构成 dramatization；只有文字实际"
                 "铺陈虚构角色与情境动作时才是 dramatization。"
@@ -1333,20 +1333,22 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 
 严格规则：
 - 必须按给定顺序一题不少地回答全部 question_id；不得重复、增加或改名。
-- status 只能是 present、absent、uncertain。
-- status 只回答“该维度证据是否存在／是否无法确定”，绝不承载主体、关系或语态类别；
-  `generic`、`current_user`、`recommendation` 等类别只能放在 operands。某个
-  subject_binding 类别存在时必须返回 status=present，再把该类别放入 operands。
-- present：evidence_scope 必须是 entire_clause；operands 至少一个，且只能从该题
-  allowed_operands 选择。该 question 已由服务端唯一绑定到可信 clause，完整 clause 原文、
-  Unicode offset 与审计 quote 都由服务端从 ClauseContext 确定性生成；不要回传正文片段。
+- 每题只返回 uncertain 和 operands；present／absent 状态与 evidence_scope 均由服务端
+  确定性派生，不得返回这些字段。uncertain=false 且 operands 非空表示 present；
+  uncertain=false 且 operands 为空表示 absent；uncertain=true 表示确实无法可靠判断。
+- `generic`、`current_user`、`recommendation` 等类别只能放在 operands。某个
+  subject_binding 类别存在时必须把该类别放入 operands。
+- present 语义下 operands 至少一个，且只能从该题 allowed_operands 选择。该 question
+  已由服务端唯一绑定到可信 clause，完整 clause 原文、Unicode offset 与审计 quote 都由
+  服务端从 ClauseContext 确定性生成；不要回传正文片段。
 - 每题 JSON 中的 allowed_operands 是该 question_id 的封闭集合；即使同批另一题允许某个
   operand，也不得跨 question 借用。
-- absent：evidence_scope 必须是 none，operands 必须是空数组。不能通过省略整个问题表达
+- absent 语义下 uncertain=false、operands 必须是空数组。不能通过省略整个问题表达
   absent。
-- uncertain：当语义关系确实无法可靠判断时使用；evidence_scope 可以是 entire_clause 或
-  none，operands 可为空。不要猜测，也不要把 uncertain 当 absent。
-- statement_mode 必须 present 且只有一个 operand；无法唯一判断时必须 uncertain。
+- uncertain=true 时 operands 可为空或只包含该题允许的相关类别。不要猜测，也不要把
+  uncertain 当 absent。
+- statement_mode 在 uncertain=false 时必须恰好有一个 operand；无法唯一判断时必须
+  uncertain=true。
 - server_scope 只说明服务端已有的可见范围，不是让你决定许可；disclosure 题只报告 writer
   clause 是否与该范围冲突。
 - 正文和证据地址均由服务端持有；不要返回 quote、start、end、occurrence 或任何正文副本／
@@ -1358,7 +1360,7 @@ generic_observation 概括观看主线，也可以用 recommendation 作明确�
 
 只调用指定函数并返回：
 {{"evidence_version":"{CLOSED_REVIEW_VERSION}","answers":[{{
-"question_id":"既定 id","status":"present","evidence_scope":"entire_clause",
+"question_id":"既定 id","uncertain":false,
 "operands":["该题允许 operand"]
 }}]}}
 根对象和 answer 不得增加、遗漏或重命名字段。"""

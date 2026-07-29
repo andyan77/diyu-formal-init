@@ -107,12 +107,7 @@ def _answer_document(
         "answers": [
             {
                 "question_id": question.question_id,
-                "status": ("present" if question.dimension == "statement_mode" else "absent"),
-                "evidence_scope": (
-                    "entire_clause"
-                    if question.dimension == "statement_mode"
-                    else "none"
-                ),
+                "uncertain": False,
                 "operands": (["generic_observation"] if question.dimension == "statement_mode" else []),
             }
             for question in active
@@ -202,8 +197,7 @@ def test_strict_schema_requires_closed_answer_fields() -> None:
     assert isinstance(answer_properties, dict)
     assert list(answer_properties) == [
         "question_id",
-        "status",
-        "evidence_scope",
+        "uncertain",
         "operands",
     ]
     assert {"start", "end", "occurrence"}.isdisjoint(
@@ -273,7 +267,7 @@ def test_reviewer_prompt_uses_closed_questions_without_addresses() -> None:
 
     assert "每个固定风险问题恰好" in prompt
     assert "不能通过省略整个问题表达" in prompt
-    assert "不要把 uncertain 当 absent" in prompt
+    assert "uncertain 当 absent" in prompt
     assert "subject_binding" in prompt
     assert "relationship_claim" in prompt
     assert "motive_or_mental_state" in prompt
@@ -283,13 +277,13 @@ def test_reviewer_prompt_uses_closed_questions_without_addresses() -> None:
     assert "这篇内容／这个角度" in prompt
     assert "题材相似不是现实主体绑定" in prompt
     assert "比喻、类比或拟人本身不构成 dramatization" in prompt
-    assert "status 只回答“该维度证据是否存在／是否无法确定”" in prompt
-    assert "某个\n  subject_binding 类别存在时必须返回 status=present" in prompt
+    assert "每题只返回 uncertain 和 operands" in prompt
+    assert "某个\n  subject_binding 类别存在时必须把该类别放入 operands" in prompt
     assert "商品名称或编号作为主体只在 subject_binding 使用 named_product" in prompt
     assert "不得跨 question 借用" in prompt
     assert "不要返回 quote、start、end、occurrence" in prompt
-    assert '"evidence_scope":"entire_clause"' in prompt
-    assert "审计 quote 都由服务端" in prompt
+    assert '"uncertain":false' in prompt
+    assert "Unicode offset 与审计 quote 都由" in prompt
 
 
 def test_closed_questions_batch_by_whole_clauses() -> None:
@@ -369,6 +363,25 @@ def test_tool_arguments_must_be_an_unmodified_json_string(
         )
 
 
+def test_server_derives_present_status_from_closed_operands() -> None:
+    questions = _questions()
+    document = _answer_document(questions)
+    answers = document["answers"]
+    assert isinstance(answers, list)
+    subject = answers[0]
+    assert isinstance(subject, dict)
+    subject["operands"] = ["generic"]
+
+    parsed = DeepSeekGenerator._strict_review_answers(
+        _strict_payload(document),
+        questions=questions,
+    )
+
+    assert parsed.answers[0].status == "present"
+    assert parsed.answers[0].evidence_scope == "entire_clause"
+    assert parsed.answers[0].quote == questions[0].exact_text
+
+
 @pytest.mark.parametrize(
     "mutation",
     ("missing_answer", "missing_field", "extra", "null", "wrong_order"),
@@ -384,7 +397,7 @@ def test_strict_arguments_are_never_defaulted_or_repaired(
     elif mutation == "missing_field":
         answer = answers[0]
         assert isinstance(answer, dict)
-        answer.pop("status")
+        answer.pop("uncertain")
     elif mutation == "extra":
         answer = answers[0]
         assert isinstance(answer, dict)
@@ -392,7 +405,7 @@ def test_strict_arguments_are_never_defaulted_or_repaired(
     elif mutation == "null":
         answer = answers[0]
         assert isinstance(answer, dict)
-        answer["status"] = None
+        answer["uncertain"] = None
     else:
         answers[0], answers[1] = answers[1], answers[0]
 
