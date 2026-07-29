@@ -18,6 +18,7 @@ from scripts.run_ui12_reviewer_qualification import (
     _required_string,
     _string_tuple,
 )
+from src.ports.reviewer_provider import ReviewerProviderFailure
 from src.shared.clause_license import (
     ClauseLicenseReviewV1,
     UnitClauseLicensePolicyV1,
@@ -259,16 +260,48 @@ def main() -> int:
             product_fact_packet=packet,
         )
         bundle_started = time.monotonic()
-        provider_result = provider.review(
-            system_prompt=(
-                "你是独立 CreativeKernel clause 许可证支持核对器。"
-                "只核对文字是否完全符合服务端既定许可，不决定事实许可、"
-                "通过失败、保存、重试、修复或制作资源，只调用指定函数一次。"
-            ),
-            user_prompt=prompt,
-            licenses=licenses,
-            timeout_seconds=300.0,
-        )
+        try:
+            provider_result = provider.review(
+                system_prompt=(
+                    "你是独立 CreativeKernel clause 许可证支持核对器。"
+                    "只核对文字是否完全符合服务端既定许可，不决定事实许可、"
+                    "通过失败、保存、重试、修复或制作资源，只调用指定函数一次。"
+                ),
+                user_prompt=prompt,
+                licenses=licenses,
+                timeout_seconds=300.0,
+            )
+        except ReviewerProviderFailure as exc:
+            if exc.raw_payload is None:
+                raise
+            raw_sha256 = _write_json(
+                args.output_dir / f"{bundle_id}.raw.json",
+                exc.raw_payload,
+            )
+            mismatch = {
+                "bundle_id": bundle_id,
+                "reason": "provider_response_invalid",
+            }
+            mismatches.append(mismatch)
+            records.append(
+                {
+                    "bundle_id": bundle_id,
+                    "partition": bundle["partition"],
+                    "reviewer_call_count": 1,
+                    "clause_count": len(licenses),
+                    "retry_count": 0,
+                    "latency_ms": int(
+                        (time.monotonic() - bundle_started) * 1000
+                    ),
+                    "prompt_sha256": hashlib.sha256(
+                        prompt.encode()
+                    ).hexdigest(),
+                    "raw_sha256": raw_sha256,
+                    "usage": {},
+                    "result": "fail",
+                }
+            )
+            continue
         raw_path = args.output_dir / f"{bundle_id}.raw.json"
         raw_sha256 = _write_json(
             raw_path,

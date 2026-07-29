@@ -8,6 +8,7 @@ import httpx
 
 from src.ports.reviewer_provider import (
     ReviewerProvider,
+    ReviewerProviderFailure,
     ReviewerProviderResult,
 )
 from src.shared.clause_license import (
@@ -86,19 +87,36 @@ class QwenReviewerProvider(ReviewerProvider):
                     json=request_payload,
                 )
         except httpx.TransportError as exc:
-            raise GenerationFailed("Reviewer 模型网络请求失败") from exc
+            raise ReviewerProviderFailure(
+                "Reviewer 模型网络请求失败"
+            ) from exc
         if response.status_code >= 400:
             _LOGGER.warning(
                 "Qwen Reviewer request rejected: status=%s",
                 response.status_code,
             )
-            raise GenerationFailed("Reviewer 模型服务拒绝当前请求")
+            error_payload: dict[str, object] | None = None
+            try:
+                raw_error_payload = response.json()
+                if isinstance(raw_error_payload, dict):
+                    error_payload = cast(
+                        dict[str, object],
+                        raw_error_payload,
+                    )
+            except (TypeError, ValueError):
+                pass
+            raise ReviewerProviderFailure(
+                "Reviewer 模型服务拒绝当前请求",
+                raw_payload=error_payload,
+            )
         try:
             payload = response.json()
         except (TypeError, ValueError) as exc:
-            raise GenerationFailed("Reviewer 模型返回无效") from exc
+            raise ReviewerProviderFailure(
+                "Reviewer 模型返回无效"
+            ) from exc
         if not isinstance(payload, dict):
-            raise GenerationFailed("Reviewer 模型返回无效")
+            raise ReviewerProviderFailure("Reviewer 模型返回无效")
         try:
             reviews = self._parse_response(
                 cast(dict[str, object], payload),
@@ -110,7 +128,10 @@ class QwenReviewerProvider(ReviewerProvider):
             ValueError,
             json.JSONDecodeError,
         ) as exc:
-            raise GenerationFailed("Reviewer 许可证据不完整") from exc
+            raise ReviewerProviderFailure(
+                "Reviewer 许可证据不完整",
+                raw_payload=cast(dict[str, object], payload),
+            ) from exc
         return ReviewerProviderResult(
             reviews=reviews,
             raw_payload=cast(dict[str, object], payload),

@@ -7,6 +7,20 @@ from src.shared.clause_license import (
     ClauseLicenseReviewsV1,
     ClauseLicenseV1,
 )
+from src.shared.errors import GenerationFailed
+
+
+class ReviewerProviderFailure(GenerationFailed):
+    """Fail closed while retaining an optional provider response for audit."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        raw_payload: dict[str, object] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.raw_payload = raw_payload
 
 
 @dataclass(frozen=True)
