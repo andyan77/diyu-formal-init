@@ -959,6 +959,18 @@ def _kernel_observations(
 
 def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
     message = "今天店里忙了一天，回家还因为谁洗碗拌了两句。帮我发条小红书。"
+    request = ConversationInput(
+        message=message,
+        history=(),
+        brand=_brand(),
+        products=(),
+        target="xiaohongshu_graphic",
+        allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        platform_shape="xiaohongshu_graphic:graphic",
+    )
+    prompt = _generator()._conversation_prompt(request)
+    assert "user_fact_spans 非空当且仅当 narrative_mode 是" in prompt
+    assert "不得同时返回现实事实跨度和非 actuality 模式" in prompt
     FakeClient.responses = [
         _completion(
             {
@@ -971,17 +983,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
             }
         )
     ]
-    decision = _generator().collaborate(
-        ConversationInput(
-            message=message,
-            history=(),
-            brand=_brand(),
-            products=(),
-            target="xiaohongshu_graphic",
-            allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
-            platform_shape="xiaohongshu_graphic:graphic",
-        )
-    )
+    decision = _generator().collaborate(request)
     assert decision.disposition == "ready"
     assert decision.user_premises == (message,)
     assert decision.user_fact_spans == ("今天店里忙了一天，回家还因为谁洗碗拌了两句。",)

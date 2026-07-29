@@ -2222,6 +2222,9 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   actuality_reflection，并把现实片段从用户消息逐字截取，保留标点，不概括；明确条件推演用
   hypothesis，即使用户把它称为“想法”也不能降成一般观察；明确要求故事、短剧或情境演绎才
   用 dramatization。
+- 输出前必须自检一个双向不变量：user_fact_spans 非空当且仅当 narrative_mode 是
+  actuality_reflection；general_observation、hypothesis、dramatization 的 user_fact_spans
+  必须为空。不得同时返回现实事实跨度和非 actuality 模式。
 - 显式模式为 dramatization 时必须使用它；没有明确演绎要求不得升级为剧情。
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
 - CreativePlanV2 只能选择上述结构字段。topic_spans 必须逐字来自用户消息；禁止写人物设定、
