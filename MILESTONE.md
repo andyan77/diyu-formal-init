@@ -1,19 +1,26 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
+- 状态：`BLOCKED`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
   保留；主控随后在同一 UI-12 内裁决改由服务端确定性绑定 exact quote，并采用“一战到底”
   治理恢复施工。quote-only 责任边界、完整 G3 和 G4 已继续验证；最终 G4 证明当前
   Reviewer 在开放式 evidence 枚举下漏提关系角色和动机等裁决必需 evidence。主控现已把
-  缺口订正为同一 UI-12 内的普通责任合同问题：服务端为每个 writer clause 生成闭合风险
+  缺口曾订正为同一 UI-12 内的普通责任合同问题：服务端为每个 writer clause 生成闭合风险
   问题集，Reviewer 逐题回答，服务端派生 Claim Inventory 并唯一裁决。既有失败保持，
-  恢复 `ACTIVE` 不表示问题已解决。闭合问题集随后关闭了 G4 的 Reviewer 漏审，并在
+  恢复 `ACTIVE` 不表示问题已解决。闭合问题集随后曾在
   WIP `0eca737…` 形成事实安全的完整 G4；最终 WIP `d4d2818…` 的 G2 证明商品内容的
   生成职责仍不闭合：商品事实暴露给 Writer 时会被 Writer 复述为未授权 claim，完全隐藏
   后 Writer 又把未知 SKU 猜成电子产品并补造规格、性能与适用性。Reviewer／服务端均已
   正确拒绝，唯一修复后仍失败，未进入 DeliveryCompiler 或版本保存。继续需要改变
   “商品事实仅由服务端插入、Writer 不读取、Compiler 不新增语义”三者之一，已超出本轮
-  冻结架构；因此 UI-12 按真正停止线置为 `BLOCKED`，不创建 UI-13。`UI-11` 为
+  冻结架构。主控已用 ProductFactPacket／ImmutableFactBlock 裁决解除该商品职责阻断，
+  后续 WIP 也完成了 G2 与多张业务卡；但实现 `e213cc6…` 的最终 G4→G7 无持久化轮出现
+  人工假绿：同一发布配文的同一 `motive_or_mental_state` 问题在 G4 回答为空、在 G7
+  回答 `desire/emotion`，而明确含“家庭矛盾”的 clause 对
+  `relationship_claim` 仍回答为空。问题全集、quote、parser 与服务端覆盖均成立，故这
+  是当前单 Reviewer 在闭合、无歧义问题上的不稳定语义回答，不是可继续靠服务端小修、
+  fixture 或 Prompt 失败句补丁关闭的接缝。继续只能处置 Reviewer 能力或降低事实边界，
+  均超出本轮冻结授权；因此 UI-12 按真正停止线置为 `BLOCKED`，不创建 UI-13。`UI-11` 为
   `SUPERSEDED → UI-12`；只表示 UI-11 的粗粒度
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
@@ -234,6 +241,29 @@
   `origin/main=7aa87ab624cf3ff64f42e49f1755d66d496cac7a`，本地领先 64 个线性
   提交且工作树干净。当前唯一下一动作是实现上述最小事实包／事实块纵向链，先用历史
   G2 raw 反证，再运行一次新实现真实 G2；完整业务轮成立前不 push、CI、备份或部署。
+
+- 商品责任裁决后的本地 WIP 已继续收敛到
+  `e213cc6c771960ee0896a277599dfcf3fc30f3da`，并执行同一 SHA 的无持久化
+  G4→G7 纵向轮。机器链将 G4、G7 都判为通过，Frame／Plan／program／事实／来源／
+  compiler version 不变量也成立；但人工阅读全文否决该结果。G4 创意文字新增“这个家、
+  两个人、被看见、拥抱”等未冻结关系／心理／动作，G7 又新增“两只碗、家庭矛盾”等
+  现实细节。
+- 最终 G4 Reviewer raw
+  `12fec18004747ff20fd3f1f7bd8cf751985923be7c212a61801ebdad1505317d`
+  与 G7 Reviewer raw
+  `a23f3cc7b92706a4994659f242a189e4b4d1ff7008b3672f127eac9c1a7c19eb`
+  证明同一发布配文、同一 question ID 的心理 evidence 在两轮分别为空与
+  `desire/emotion`；G7 明确含“家庭矛盾”的 natural guide 对
+  `relationship_claim` 仍返回空且 `uncertain=false`。闭合问题 Prompt 已明确家庭属于
+  关系主张，问题全集也完整，因此 fixture、oracle、transport、quote binder 和服务端
+  收答覆盖均已排除。
+- 该假绿意味着最终同 SHA G1—G7/H1/D1 未成立；未形成生产候选，未 push、CI、备份、
+  部署或写生产。只读复核生产部署仓／镜像仍为 `845f632…`，镜像 ID
+  `sha256:1171b153…`，schema `20260801_28`，回环／公网 readiness `200/200`，
+  `diyu-m5-4-backup.timer` active。
+- 当前唯一下一动作：主控只裁决 Reviewer 单角色能力边界；在不降低真人事实边界的前提
+  下决定是否授权更换 Reviewer 模型或增加独立语义审查能力。执行端不通过失败句、
+  人物词表、默认放行或随机重跑继续。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
