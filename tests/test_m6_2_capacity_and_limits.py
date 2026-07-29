@@ -487,7 +487,13 @@ def test_backup_restore_scripts_use_snapshot_manifest_and_a_real_application_rol
     assert '"complete_content_chains"' in backup
     assert 'sha256sum "$snapshot/manifest.json"' in backup
     assert "umask 077" in backup
-    assert backup.index("umask 077") < backup.index('install -d -m 700 "$snapshot/objects"')
+    host_umask = backup.index("umask 077")
+    snapshot_directory = backup.index('install -d -m 700 "$snapshot"')
+    object_directory = backup.index('install -d -m 700 "$snapshot/objects"')
+    container_umask = backup.index("  umask 077", object_directory)
+    object_mirror = backup.index('mc mirror --overwrite "current-project/$bucket" /backup')
+    assert host_umask < snapshot_directory < object_directory
+    assert object_directory < container_umask < object_mirror
     assert '"41"' not in restore
     assert "NOBYPASSRLS" in restore
     assert "complete_content_chain_count < 1" in restore

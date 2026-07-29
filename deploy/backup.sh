@@ -19,6 +19,7 @@ if [[ -e "$snapshot" ]]; then
   exit 1
 fi
 
+install -d -m 700 "$snapshot"
 install -d -m 700 "$snapshot/objects"
 # shellcheck disable=SC1091
 set -a
@@ -29,6 +30,7 @@ docker exec "$postgres_container" sh -lc \
   'pg_dump -U "$POSTGRES_USER" -d diyu_m5_4 --format=custom --no-owner --no-acl' >"$snapshot/database.dump"
 
 if ! docker run --rm -i --network host -v "$snapshot/objects:/backup" --entrypoint /bin/sh "$minio_image" -ec '
+  umask 077
   IFS= read -r endpoint
   IFS= read -r access_key
   IFS= read -r secret_key
