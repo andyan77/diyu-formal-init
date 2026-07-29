@@ -1,7 +1,7 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE`。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13；此前
+- 状态：`REVIEW`。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13；此前
   occurrence、开放 evidence、商品事实职责、Reviewer-only 模型、oracle drift、parser
   与一次 repair 的失败及前向订正均完整保留。
 - 主控已正式取代“单一概率 Reviewer 承担零漏判生产授权”路线，采用服务端预分配的
@@ -25,16 +25,16 @@
   “abstract 里任一 action/cause/result 即现实事件”裁决被单一 clause 权限链取代，不表示
   UI-11 成功。UI-11 的 `BLOCKED`、G3 初稿和唯一修复失败、Reviewer evidence、G4/D1
   未运行及未 push/CI/部署证据完整保留。
-- 当前 Git 基线：最终运行代码 WIP
-  `3518fdacd21b37f9a0a76b8027bbec6ab659475a`，`origin/main` 仍为
-  `7aa87ab624cf3ff64f42e49f1755d66d496cac7a`；`docs/项目记忆.md` 的用户既有修改继续
-  受保护且未混入 UI-12 提交。UI-07—UI-12 历史禁止 reset、rebase、squash、删除或改写。
-- 生产启动复核：真实部署仓 `/opt/diyu-saas/repo` 与镜像均为
-  `845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，镜像摘要
-  `sha256:1171b153cbc709a760caf4a5db1fb14fe00e0bca3ef9c7b79c85f737a3a6bdb9`；
-  应用数据库 `diyu_m5_4` 的 schema 为 `20260801_28`，容器内
-  `127.0.0.1:18000/health/ready` 与生产主机公网 HTTPS 均为 `200`，
-  `diyu-m5-4-backup.timer` 为 active。本执行环境直连公网超时未被误写为生产失败。
+- 最终运行、CI 与部署代码 SHA 为
+  `b6180b093c1af5198edd396937e4b2d7700546d5`；实现历史已普通前向推送，
+  `origin/main` 与生产部署仓均曾精确核对为该 SHA。`docs/项目记忆.md` 的用户既有修改
+  已单独保存在 `9bb9872…`，没有被覆盖或混入运行实现。UI-07—UI-12 历史禁止 reset、
+  rebase、squash、删除或改写。
+- 最终生产镜像为
+  `diyu-saas:b6180b093c1af5198edd396937e4b2d7700546d5`，往返回退后的当前镜像 ID 为
+  `sha256:a6a504ccf0a5cc83619c47f145ce6f96b8f28b107b1cfc747f73cc48282ed7d7`；
+  schema 为 expand-only `20260802_29`。回环／公网 readiness、`/status`、公共入口、
+  租户用户、品牌管理和运维入口均为 `200`，`diyu-m5-4-backup.timer` active。
 - 无持久化业务轮在运行合同 SHA
   `189e80cac2820e459aa444d75619c85bb7f643d2` 完成；G1/G6 为 `0/0/0`，
   G2/G3/G4/G5/G7/H1/D1 均形成完整成品，人工逐篇全文审阅通过。随后在最终代码 WIP
@@ -55,11 +55,24 @@
   默认权限。该快照已立即收紧至 `0700/0600` 并重新校验 checksum，但不冒充“创建时安全”
   的最终备份。备份脚本现同时显式创建 `0700` snapshot 父目录，并在 MinIO 镜像容器写入
   前执行 `umask 077`；定向反证、Ruff、mypy 与 Golden `379 passed` 已重新通过。
+- 备份权限修复 SHA `b6180b0…` 的最终承重 CI `30463641265` 为 `success`；随后同 SHA
+  部署完成。修复后的新鲜备份
+  `/var/backups/diyu-m5-4/20260729T150217Z-predeploy` 在创建时即满足目录 `0700`、
+  文件 `0600`，checksum 全通过；隔离恢复、RLS、应用 readiness 与对象恢复也全部通过。
+  首次 `dbcbef4…` CI／部署只作为发现权限缺陷的前置候选保留，不冒充最终承重结果。
+- 同一生产 SHA 已一次连续执行 G1—G7/H1/D1：G1/G6 为 `0/0/0`，其余卡形成完整
+  V1/V2；Reviewer 调用为 0。人工阅读全文确认 G2 硬事实仅来自不可变事实块，G3/G5/H1/D1
+  的假设／演绎范围完整，G4 原话逐字保留，G7 保持 Frame、Plan、事实和来源并新增局部已
+  披露演绎。验收的 6 个任务、7 个运行、7 个版本、14 条活动事件和 2 个会话已精确清理，
+  计数恢复且永久 running 为 0。
+- 旧安全镜像 `845f632…` 已在 schema `20260802_29` 上往返回退：旧镜像 readiness
+  `200/200` 且既有 V1/V2 可读，未 downgrade 数据库；随后切回 `b6180b0…` 并再次通过
+  readiness、入口和状态检查。RLS 无作用域读取拒绝，跨账号历史读取失败关闭，系列、平台
+  父子版本、DM01、AIGC 与资产 `41/243/25/119` 均保持。
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
 - 当前任务包：
   [`docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md`](docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)。
-- 当前唯一下一动作：将备份权限修复形成最终前向候选，完成最终承重 CI、重新部署并取得
-  创建时即 `0700/0600` 的备份、隔离恢复与同 SHA 生产验收。
+- 当前唯一下一动作：主控独立终审 UI-12；不得自行 `CLOSED` 或启动 UI-13。
 - 承重裁决：[ADR-028](docs/架构决策/ADR-028-来源语态主体绑定与证据裁决矩阵.md)
   已由本次主控裁决置为 `ACCEPTED`。启动前已把 SDR-001—SDR-037 订正为 42 条无重复
   stable ID、单值 `unit_contract` 的 SDR-001—SDR-042，并通过 diff、唯一性、单合同与
