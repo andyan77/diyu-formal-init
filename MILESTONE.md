@@ -1,7 +1,7 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`BLOCKED`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
+- 状态：`ACTIVE`。此前完整 G3 的 clause-local occurrence 失败与 `BLOCKED` 证据完整
   保留；主控随后在同一 UI-12 内裁决改由服务端确定性绑定 exact quote，并采用“一战到底”
   治理恢复施工。quote-only 责任边界、完整 G3 和 G4 已继续验证；最终 G4 证明当前
   Reviewer 在开放式 evidence 枚举下漏提关系角色和动机等裁决必需 evidence。主控现已把
@@ -264,6 +264,13 @@
 - 当前唯一下一动作：主控只裁决 Reviewer 单角色能力边界；在不降低真人事实边界的前提
   下决定是否授权更换 Reviewer 模型或增加独立语义审查能力。执行端不通过失败句、
   人物词表、默认放行或随机重跑继续。
+- 主控已正式选择 Reviewer-only 单角色替换并解除该阻断：intake 与 Writer 继续使用
+  `deepseek-v4-flash`，唯一 Reviewer 候选使用 `deepseek-v4-pro`；不增加第二 Reviewer、
+  双审、投票、fallback 或事实边界放宽。UI-12 在保留 G4/G7 人工假绿与此前全部
+  `BLOCKED` 证据的前提下恢复 `ACTIVE`，不创建 UI-13。
+- 当前唯一下一动作：先冻结与 Prompt 分离的 Reviewer 资格集，完成 Writer／Reviewer
+  独立模型配置和留痕，再对 `deepseek-v4-pro` 执行无仓储、零重试的 Reviewer-only
+  资格门。资格通过前不调用 Writer、不 push、CI、备份或部署。
 
 ## UI-10 被 UI-11 取代结论（2026-07-28，历史完整保留）
 
