@@ -144,8 +144,8 @@ def _parsed_product_kernel(
 def _product_review_result(
     *,
     text: str,
-    risk_dimension: str,
-    risk_operand: str,
+    risk_dimension: str | None,
+    risk_operand: str | None,
     claim_refs: tuple[str, ...],
 ) -> tuple[str, ...]:
     _, packet, _ = _product_contract()
@@ -171,7 +171,11 @@ def _product_review_result(
             status = "present"
             quote = text
             operands = ["generic_observation"]
-        elif question.dimension == risk_dimension:
+        elif (
+            risk_dimension is not None
+            and question.dimension == risk_dimension
+        ):
+            assert risk_operand is not None
             status = "present"
             quote = text
             operands = [risk_operand]
@@ -434,6 +438,24 @@ def test_claim_refs_never_license_attributes_performance_or_design_motive() -> N
         risk_operand="design_motive",
         claim_refs=(structural_fact,),
     ) == ("unsupported_product_inference",)
+
+
+def test_exact_packet_literal_fails_even_when_reviewer_omits_product_risk() -> None:
+    _, packet, _ = _product_contract()
+    fact_id = next(iter(packet.fact_ids))
+
+    assert _product_review_result(
+        text="先看看双面短外套，再保留自己的选择。",
+        risk_dimension=None,
+        risk_operand=None,
+        claim_refs=(fact_id,),
+    ) == ("product_fact_must_use_immutable_block",)
+    assert _product_review_result(
+        text="先看已知内容，再保留自己的选择。",
+        risk_dimension=None,
+        risk_operand=None,
+        claim_refs=(),
+    ) == ()
 
 
 @pytest.mark.parametrize(

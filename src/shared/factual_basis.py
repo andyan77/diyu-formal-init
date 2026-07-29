@@ -167,6 +167,42 @@ def immutable_fact_blocks_document(
     ]
 
 
+def product_fact_literal_spans(
+    packet: ProductFactPacket,
+    text: str,
+) -> tuple[str, ...]:
+    """Return exact trusted fact atoms copied into writer-owned text.
+
+    These are current-packet values, not a language keyword list.  Boolean
+    facts have no stable literal form and remain the Reviewer's responsibility.
+    """
+    atoms: list[str] = []
+    for item in packet.facts:
+        atoms.extend((item.sku, item.display_name))
+        value = item.structured_value
+        if isinstance(value, str):
+            atoms.append(value)
+        elif isinstance(value, int) and not isinstance(value, bool):
+            atoms.append(str(value))
+        elif isinstance(value, tuple):
+            atoms.extend(value)
+    unique = tuple(
+        dict.fromkeys(
+            atom.strip()
+            for atom in atoms
+            if atom.strip()
+        )
+    )
+    return tuple(
+        atom
+        for atom in sorted(
+            unique,
+            key=lambda value: (-len(value), value),
+        )
+        if atom in text
+    )
+
+
 def _product_packet_items(
     product: ProductFact,
 ) -> tuple[ProductFactPacketItem, ...]:

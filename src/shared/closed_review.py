@@ -4,7 +4,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeAlias, cast
 
-from src.shared.factual_basis import ProductFactPacket
+from src.shared.factual_basis import (
+    ProductFactPacket,
+    product_fact_literal_spans,
+)
 from src.shared.narrative import NarrativeIssue
 from src.shared.review_evidence import (
     ClauseContextV2,
@@ -604,6 +607,23 @@ def _claim_inventory_issues(
                     context.unit_id,
                     "unsupported_product_claim",
                     context.exact_text,
+                )
+            )
+            continue
+        literal_spans = (
+            product_fact_literal_spans(
+                product_fact_packet,
+                context.exact_text,
+            )
+            if product_fact_packet is not None
+            else ()
+        )
+        if literal_spans:
+            issues.append(
+                NarrativeIssue(
+                    context.unit_id,
+                    "product_fact_must_use_immutable_block",
+                    literal_spans[0],
                 )
             )
             continue
