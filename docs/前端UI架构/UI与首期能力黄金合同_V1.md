@@ -8,10 +8,10 @@
 > 创作责任合同的第二个结构候选命中真实停止线，UI-05 已 `SUPERSEDED → UI-06`；UI-06—
 > UI-11 的结构成果和失败历史经线性 successor 链由 UI-12 承接。UI-12 当前采用服务端
 > Writer 前预分配的可信事实轨与四类创作表达轨，Compiler 保持所有独立传播出口的自然
-> 范围，概率 Reviewer 退出生产保存授权；本地与生产业务轮、正式工程门、最终承重 CI、
-> 同 SHA 部署、备份恢复和往返回退均已成立。主控有界返工后的最终运行 SHA 为
-> `c0dfb94…`，CI 为 `30471874527`，schema 为 `20260803_30`；整句稳定事实来源及
-> 每版本不可变审计已进入正式消费者，状态为 `REVIEW`。
+> 范围，概率 Reviewer 退出生产保存授权。主控第二次终审确认旧 `c0dfb94…` 仍存在版本
+> 载荷可 UPDATE 和 Writer 顶层 heading 注入，UI-12 已原地恢复
+> `ACTIVE · 定向返工`，生产回退 `845f632…`、schema 30。本地 schema 31 候选已关闭
+> 两项边界并通过 Golden/OpenAPI `406 passed` 与前端四门，最终 CI 和生产复验尚未完成。
 > 本文仍不是自动化测试平台，也不修改数据库或权限。UI-02 静态原型只证明旅程和状态设计
 > 可浏览；UI-04 的生产证据不等于真实员工采用或市场结果。
 
@@ -231,7 +231,7 @@ UI-02 不建立自动化。UI-03 自动化内容主链直接承重的
 | `UI-07` | `SUPERSEDED → UI-08`；提交门正反证、普通交流无进度与可选“直接生成”已成立；此前 G3 Writer 补造现实微事件且唯一块修复后仍失败 | Gate 成果与失败历史保留，不形成 UI-07 第二候选 |
 | `UI-08` | `SUPERSEDED → UI-09`；计划、fact/constraint、服务端骨架与三类观察结构成立，golden `173 passed`；当前与唯一候选 Writer 的 G3/G4/D1 均失败 | 不改写失败，不把后继进展冒充 UI-08 成功 |
 | `UI-09—UI-11` | 均已 `SUPERSEDED` 并由下一项承接；CreativeKernel、确定性 Compiler、Reviewer evidence 与服务端 program 的成果和各自 BLOCKED 证据保留 | 不恢复后置概率模型的生产放行，不删除历史 raw |
-| `UI-12` | `REVIEW`；服务端在 Writer 前冻结 `trusted_fact + creative_expression`，Compiler 原样插入事实并维持一般观察、建议、假设或演绎范围；最终 `c0dfb94…` 的同 SHA 本地／生产业务轮、每版本审计、人工全文审阅、CI `30471874527` 与 schema 30 部署成立 | 不以测试替代成品审阅；主控独立终审前不自行 CLOSED |
+| `UI-12` | `ACTIVE · 定向返工`；服务端在 Writer 前冻结 `trusted_fact + creative_expression`，Compiler 原样插入事实并维持一般观察、建议、假设或演绎范围；本地 schema 31 候选已关闭版本 UPDATE、摘要读取与 Writer heading 注入，Golden/OpenAPI `406 passed` | 最终 CI、部署和同 SHA 生产复验前不恢复 REVIEW；不以测试替代成品审阅 |
 
 一个合同只有在其实际消费者进入相应工程里程碑时才自动化。静态原型、文档行数或候选资产数量
 均不能代替正式产品行为、生产隔离或真实租户采用。

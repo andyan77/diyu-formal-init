@@ -6,6 +6,13 @@ import pytest
 
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.shared.errors import DomainError
+from src.shared.narrative import visible_digest
+from src.shared.version_integrity import (
+    AUDIT_VERSION_V1,
+    AUDIT_VERSION_V2,
+    FINAL_VISIBLE_PROJECTION_V2,
+    validate_version_content,
+)
 
 
 def _task_snapshot() -> dict[str, object]:
@@ -93,9 +100,109 @@ def test_each_version_audit_copies_the_frozen_contract_and_artifact_digest() -> 
         "d" * 64,
     )
 
-    assert audit["audit_version"] == "content-version-audit-v1"
+    assert audit["audit_version"] == AUDIT_VERSION_V2
     assert audit["artifact_digest"] == "d" * 64
+    assert audit["visible_projection"] == FINAL_VISIBLE_PROJECTION_V2
     assert audit["narrative_frame"] == merged["narrative_frame"]
     assert audit["creative_plan_v2"] == merged["creative_plan_v2"]
     assert audit["creative_kernel_v2"] == merged["creative_kernel_v2"]
     assert audit["delivery_compiler_version"] == "delivery-compiler-v2"
+
+
+def test_legacy_version_without_audit_keeps_legacy_projection() -> None:
+    content = validate_version_content(
+        {
+            "outline": "旧标题",
+            "body": "自然导读：旧导读\n\n完整发布正文：旧正文",
+            "artifact_digest": None,
+            "version_audit_snapshot": {},
+        }
+    )
+
+    assert content.audit_version is None
+    assert content.body == "内容概要：旧导读\n\n完整发布正文：旧正文"
+
+
+def test_audit_v1_keeps_legacy_projection_after_digest_validation() -> None:
+    outline = "旧审计标题"
+    body = "自然导读：旧导读\n\n完整发布正文：旧正文"
+    digest = visible_digest(outline, body)
+
+    content = validate_version_content(
+        {
+            "outline": outline,
+            "body": body,
+            "artifact_digest": digest,
+            "version_audit_snapshot": {
+                "audit_version": AUDIT_VERSION_V1,
+                "artifact_digest": digest,
+            },
+        }
+    )
+
+    assert content.audit_version == AUDIT_VERSION_V1
+    assert content.body == "内容概要：旧导读\n\n完整发布正文：旧正文"
+
+
+def test_audit_v2_returns_exact_compiled_visible_body_without_reparse() -> None:
+    outline = "最终标题"
+    body = "完整发布正文：第一段\n标题：正文里的保留结构反证"
+    digest = visible_digest(outline, body)
+
+    content = validate_version_content(
+        {
+            "outline": outline,
+            "body": body,
+            "artifact_digest": digest,
+            "version_audit_snapshot": {
+                "audit_version": AUDIT_VERSION_V2,
+                "artifact_digest": digest,
+                "visible_projection": FINAL_VISIBLE_PROJECTION_V2,
+            },
+        }
+    )
+
+    assert content.body == body
+
+
+@pytest.mark.parametrize(
+    ("digest", "snapshot"),
+    (
+        (
+            "0" * 64,
+            {
+                "audit_version": AUDIT_VERSION_V2,
+                "artifact_digest": "0" * 64,
+                "visible_projection": FINAL_VISIBLE_PROJECTION_V2,
+            },
+        ),
+        (
+            "1" * 64,
+            {
+                "audit_version": AUDIT_VERSION_V2,
+                "artifact_digest": "2" * 64,
+                "visible_projection": FINAL_VISIBLE_PROJECTION_V2,
+            },
+        ),
+        (
+            "1" * 64,
+            {
+                "audit_version": AUDIT_VERSION_V2,
+                "artifact_digest": "1" * 64,
+            },
+        ),
+    ),
+)
+def test_new_audited_version_fails_closed_on_integrity_mismatch(
+    digest: str,
+    snapshot: dict[str, object],
+) -> None:
+    with pytest.raises(DomainError):
+        validate_version_content(
+            {
+                "outline": "标题",
+                "body": "正文",
+                "artifact_digest": digest,
+                "version_audit_snapshot": snapshot,
+            }
+        )

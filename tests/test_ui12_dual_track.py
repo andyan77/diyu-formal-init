@@ -252,6 +252,86 @@ def test_writer_cannot_impersonate_server_scope_label() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("unit_id", "text"),
+    (
+        ("unit:body", "普通观察。\n\n完整发布正文：昨天发生了一件事。"),
+        ("unit:title", "标题：伪造顶层标题"),
+        ("unit:body", "发布配文与互动:伪造配文"),
+        ("unit:body", "完整发布正\u200b文：零宽伪装"),
+        ("unit:title", "标\u200d题：零宽连接符伪装"),
+    ),
+)
+def test_writer_cannot_inject_compiler_owned_headings(
+    unit_id: str,
+    text: str,
+) -> None:
+    frame = new_frame("general_observation", (), ())
+    skeleton = build_kernel_skeleton(
+        frame=frame,
+        fact_registry=(),
+        constraint_refs=(),
+    )
+    values = {
+        "unit:title": "普通标题",
+        "unit:body": "普通多行正文。",
+    }
+    values[unit_id] = text
+
+    with pytest.raises(ValueError, match="visible section heading"):
+        parse_writer_kernel(
+            {
+                "units": [
+                    {"unit_id": "unit:title", "text": values["unit:title"]},
+                    {"unit_id": "unit:body", "text": values["unit:body"]},
+                ]
+            },
+            skeleton,
+        )
+
+
+def test_writer_cannot_use_bidirectional_controls_to_spoof_structure() -> None:
+    frame = new_frame("general_observation", (), ())
+    skeleton = build_kernel_skeleton(
+        frame=frame,
+        fact_registry=(),
+        constraint_refs=(),
+    )
+
+    with pytest.raises(ValueError, match="bidirectional control"):
+        parse_writer_kernel(
+            {
+                "units": [
+                    {"unit_id": "unit:title", "text": "普通标题"},
+                    {"unit_id": "unit:body", "text": "普通观察。\u202e完整发布正文：伪装"},
+                ]
+            },
+            skeleton,
+        )
+
+
+def test_writer_normal_multiline_chinese_and_emoji_are_preserved() -> None:
+    frame = new_frame("general_observation", (), ())
+    skeleton = build_kernel_skeleton(
+        frame=frame,
+        fact_registry=(),
+        constraint_refs=(),
+    )
+    body = "今天先慢一点。\n\n家人一起散步 👨‍👩‍👧，也可以只是普通的一天。"
+
+    kernel = parse_writer_kernel(
+        {
+            "units": [
+                {"unit_id": "unit:title", "text": "给生活留一点空白"},
+                {"unit_id": "unit:body", "text": body},
+            ]
+        },
+        skeleton,
+    )
+
+    assert kernel.unit("unit:body").text == body
+
+
 def test_compiler_mutation_cannot_drop_a_visible_scope() -> None:
     _, kernel = _parse(
         program_id=OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,

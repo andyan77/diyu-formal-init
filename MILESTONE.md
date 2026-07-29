@@ -1,9 +1,11 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`REVIEW`。此前主控终审的 `FAIL_WITH_BOUNDED_REWORK` 已在同一 UI-12 内完成
-  定向返工，不是重新 `BLOCKED`；UI-07—UI-12 仍是一条自然创作真实性探索链，不创建
-  UI-13。此前
+- 状态：`ACTIVE · 定向返工`。主控对上一轮 `REVIEW` 给出新的
+  `FAIL_WITH_BOUNDED_REWORK`：版本正文尚未在数据库层全量不可变，且 Writer 仍可通过
+  换行、正式 heading 与 Unicode 格式字符逃逸服务端范围。上一轮 `REVIEW`、CI、部署、
+  生产验收和回退证据全部保留，但不构成本轮完成；UI-07—UI-12 仍是一条自然创作真实性
+  探索链，不创建 UI-13。此前
   occurrence、开放 evidence、商品事实职责、Reviewer-only 模型、oracle drift、parser
   与一次 repair 的失败及前向订正均完整保留。
 - 主控已正式取代“单一概率 Reviewer 承担零漏判生产授权”路线，采用服务端预分配的
@@ -35,8 +37,23 @@
   rebase、squash、删除或改写。
 - 生产已先行回退到已验证安全镜像
   `diyu-saas:845f63291ba5060e60f87d1afa5cfc1cdb057e3b`，不 downgrade 数据库；
-  schema 保持 expand-only `20260802_29`，回环／公网 readiness 为 `200/200`。
-  本次回退只退出尚未封死的 UI-12 新自然创作路径，不改写上一轮 CI、备份、验收或回退证据。
+  schema 保持 expand-only `20260803_30`，回环／公网 readiness 为 `200/200`，应用角色
+  可读取 32 条既有非空版本记录。本次回退只退出尚未封死的 UI-12 新自然创作路径，不改写
+  上一轮 CI、备份、验收或回退证据，也不删除 `c0dfb94…` 镜像及 root-only 证据。
+- 本轮只做两项高风险有界返工：以 forward、expand-first 迁移把 `content_versions`
+  收敛为数据库追加式记录，并让所有新审计版本读取统一重算最终可见成品摘要；建立唯一
+  保留可见结构定义，关闭 Writer 对范围标签、正式 heading、零宽与双向控制字符的伪造，
+  且 `delivery-compiler-v2` 成品不再经过 legacy 自由文本重解析。完成前不 push、不触发
+  CI、不部署新候选。
+- 本地返工已形成待 CI 的单一候选：schema head `20260804_31` 使
+  `content_versions` 的任意 UPDATE 由 trigger 失败关闭，并撤销 `diyu_app` 的 UPDATE
+  权限；`content-version-audit-v2` 绑定 compiler-v2 最终可见 outline/body，所有正文
+  返回、历史、复制、导出、修订父版与平台改编源均消费同一摘要校验器。Writer 标题及全部
+  可写单元使用共享保留结构定义进行 NFKC／零宽防伪并拒绝双向控制字符，原始正常中文与
+  emoji 不被改写。旧 raw 反证、数据库 UPDATE、摘要不一致和两项 mutation proof 均已
+  转绿；本地 PostgreSQL 纵向与 Golden/OpenAPI `406 passed`、Ruff、mypy、前端
+  lint/typecheck/interaction/build 全绿。生产仍为 `845f632…` 与 schema 30；在最终
+  push、CI、schema 31 部署和同 SHA 生产终验完成前，状态保持 `ACTIVE · 定向返工`。
 - 定向返工运行代码
   `c0dfb9459f9cffcb0958348d3f43c55f55f3bb26` 收敛：服务端只向 intake 暴露带稳定
   `source_id` 的完整用户事实句，模型无法返回任意事实子串；首人称／指代式真实经历请求在

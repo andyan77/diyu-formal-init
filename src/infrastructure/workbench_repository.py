@@ -11,7 +11,6 @@ from psycopg.types.json import Jsonb
 
 from src.ports.workbench_repository import WorkbenchRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
-from src.shared.content_presentation import project_content_body
 from src.shared.content_snapshot import visible_direction
 from src.shared.errors import DomainError
 from src.shared.types import (
@@ -20,6 +19,7 @@ from src.shared.types import (
     TenantManagementScope,
     TrustedScope,
 )
+from src.shared.version_integrity import validate_version_content
 
 
 class PostgresWorkbenchRepository(WorkbenchRepository):
@@ -1332,6 +1332,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         cursor.execute(
             """
             SELECT version.id, version.version_number, version.outline, version.body,
+                   version.artifact_digest, version.version_audit_snapshot,
                    version.created_at, run.model, task.content_context_snapshot,
                    account.channel, task.media_format
             FROM content_versions version
@@ -1374,6 +1375,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         cursor.execute(
             """
             SELECT version.id, version.version_number, version.outline, version.body,
+                   version.artifact_digest, version.version_audit_snapshot,
                    version.created_at, run.model, task.content_context_snapshot,
                    account.channel, task.media_format, task.parent_version_id
             FROM content_accounts account
@@ -1447,13 +1449,14 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
     def _demo_version(self, row: dict[str, object]) -> dict[str, object]:
         channel = str(row["channel"])
         media = str(row["media_format"])
+        content = validate_version_content(row)
         translation_notice, applied_direction = visible_direction(row["content_context_snapshot"])
         disclosure, reminder = aigc_disclosure(row["model"])
         return {
             "version_id": str(row["id"]),
             "version": self._integer(row["version_number"]),
-            "title": str(row["outline"]),
-            "body": project_content_body(str(row["body"])),
+            "title": content.outline,
+            "body": content.body,
             "platform": channel,
             "media": "图文" if media == "graphic" else "视频",
             "ai_generated": is_ai_generated_content(row["model"]),
@@ -2126,7 +2129,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             cursor.execute(
                 """
                 SELECT t.id AS task_id, t.parent_version_id, cv.id AS version_id,
-                       cv.version_number, cv.outline, cv.created_at,
+                       cv.version_number, cv.outline, cv.body,
+                       cv.artifact_digest, cv.version_audit_snapshot,
+                       cv.created_at,
                        CASE
                          WHEN a.channel = '抖音' AND t.media_format = 'video' THEN 'douyin_video'
                          WHEN a.channel = '小红书' AND t.media_format = 'video' THEN 'xiaohongshu_video'
@@ -2146,26 +2151,33 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 (scope.tenant_id, scope.brand_id, logical_account_id, scope.user_id),
             )
             rows = cursor.fetchall()
-        return [
-            {
-                "task_id": str(row["task_id"]),
-                "source_version_id": (str(row["parent_version_id"]) if row["parent_version_id"] is not None else None),
-                "version_id": str(row["version_id"]),
-                "version": self._integer(row["version_number"]),
-                "title": str(row["outline"]),
-                "target": str(row["target"]),
-                "updated_at": self._time(row["created_at"]),
-                "status": "已有成品",
-            }
-            for row in rows
-        ]
+        result: list[dict[str, object]] = []
+        for row in rows:
+            content = validate_version_content(row)
+            result.append(
+                {
+                    "task_id": str(row["task_id"]),
+                    "source_version_id": (
+                        str(row["parent_version_id"]) if row["parent_version_id"] is not None else None
+                    ),
+                    "version_id": str(row["version_id"]),
+                    "version": self._integer(row["version_number"]),
+                    "title": content.outline,
+                    "target": str(row["target"]),
+                    "updated_at": self._time(row["created_at"]),
+                    "status": "已有成品",
+                }
+            )
+        return result
 
     def content_versions(self, scope: TrustedScope, task_id: UUID) -> list[dict[str, object]]:
         with self._content_tx(scope) as cursor:
             logical_account_id = self._logical_account_id(cursor, scope)
             cursor.execute(
                 """
-                SELECT cv.id AS version_id, cv.version_number, cv.outline, cv.body, cv.created_at, gr.model,
+                SELECT cv.id AS version_id, cv.version_number, cv.outline, cv.body,
+                       cv.artifact_digest, cv.version_audit_snapshot,
+                       cv.created_at, gr.model,
                        t.content_context_snapshot,
                        CASE
                          WHEN a.channel = '抖音' AND t.media_format = 'video' THEN 'douyin_video'
@@ -2191,23 +2203,26 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 ),
             )
             rows = cursor.fetchall()
-        return [
-            {
-                "task_id": str(task_id),
-                "version_id": str(row["version_id"]),
-                "version": self._integer(row["version_number"]),
-                "outline": str(row["outline"]),
-                "body": project_content_body(str(row["body"])),
-                "target_key": str(row["target_key"]),
-                "ai_generated": is_ai_generated_content(row["model"]),
-                "aigc_label": aigc_disclosure(row["model"])[0],
-                "aigc_release_reminder": aigc_disclosure(row["model"])[1],
-                "created_at": self._time(row["created_at"]),
-                "translation_notice": visible_direction(row["content_context_snapshot"])[0],
-                "applied_direction": visible_direction(row["content_context_snapshot"])[1],
-            }
-            for row in rows
-        ]
+        result: list[dict[str, object]] = []
+        for row in rows:
+            content = validate_version_content(row)
+            result.append(
+                {
+                    "task_id": str(task_id),
+                    "version_id": str(row["version_id"]),
+                    "version": self._integer(row["version_number"]),
+                    "outline": content.outline,
+                    "body": content.body,
+                    "target_key": str(row["target_key"]),
+                    "ai_generated": is_ai_generated_content(row["model"]),
+                    "aigc_label": aigc_disclosure(row["model"])[0],
+                    "aigc_release_reminder": aigc_disclosure(row["model"])[1],
+                    "created_at": self._time(row["created_at"]),
+                    "translation_notice": visible_direction(row["content_context_snapshot"])[0],
+                    "applied_direction": visible_direction(row["content_context_snapshot"])[1],
+                }
+            )
+        return result
 
     def recent_display(self, scope: DisplayScope) -> list[dict[str, object]]:
         with self._display_tx(scope) as cursor:
@@ -2567,7 +2582,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             for series in series_rows:
                 cursor.execute(
                     """
-                    SELECT item.task_id, item.position, cv.outline
+                    SELECT item.task_id, item.position, cv.outline, cv.body,
+                           cv.artifact_digest, cv.version_audit_snapshot
                     FROM content_series_items item
                     JOIN business_tasks task ON task.id = item.task_id
                         AND task.tenant_id = item.tenant_id
@@ -2581,6 +2597,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     """,
                     (scope.tenant_id, series["id"], logical_account_id),
                 )
+                item_rows = cursor.fetchall()
+                validated_items = tuple((item, validate_version_content(item)) for item in item_rows)
                 result.append(
                     {
                         "id": str(series["id"]),
@@ -2591,9 +2609,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                             {
                                 "task_id": str(item["task_id"]),
                                 "position": self._integer(item["position"]),
-                                "title": str(item["outline"]),
+                                "title": content.outline,
                             }
-                            for item in cursor.fetchall()
+                            for item, content in validated_items
                         ],
                     }
                 )

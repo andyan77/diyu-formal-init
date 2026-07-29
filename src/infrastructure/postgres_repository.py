@@ -11,7 +11,6 @@ from psycopg.types.json import Jsonb
 
 from src.ports.content_repository import ContentRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
-from src.shared.content_presentation import project_content_body
 from src.shared.content_snapshot import frozen_product_facts, visible_direction
 from src.shared.errors import DomainError
 from src.shared.narrative import visible_digest
@@ -30,6 +29,11 @@ from src.shared.types import (
     SeriesEntry,
     SpeakerKind,
     TrustedScope,
+)
+from src.shared.version_integrity import (
+    AUDIT_VERSION_V2,
+    FINAL_VISIBLE_PROJECTION_V2,
+    validate_version_content,
 )
 
 
@@ -143,8 +147,9 @@ class PostgresContentRepository(ContentRepository):
         if task_snapshot.get("version_authorization") != "deterministic-dual-track-v1":
             return {}
         audit = {
-            "audit_version": "content-version-audit-v1",
+            "audit_version": AUDIT_VERSION_V2,
             "artifact_digest": artifact_digest,
+            "visible_projection": FINAL_VISIBLE_PROJECTION_V2,
             **{key: task_snapshot.get(key) for key in cls._VERSION_AUDIT_KEYS},
         }
         if (
@@ -296,7 +301,9 @@ class PostgresContentRepository(ContentRepository):
             if parent_version_id is not None:
                 cursor.execute(
                     """
-                    SELECT cv.body FROM content_versions cv
+                    SELECT cv.outline, cv.body, cv.artifact_digest,
+                           cv.version_audit_snapshot
+                    FROM content_versions cv
                     JOIN business_tasks t ON t.id = cv.task_id AND t.tenant_id = cv.tenant_id
                     JOIN content_accounts source_account
                       ON source_account.id = t.account_id
@@ -318,7 +325,7 @@ class PostgresContentRepository(ContentRepository):
                     ),
                 )
                 row = self._one(cursor, "只能明确复用当前用户当前作用域中的内容")
-                prior_body = str(row["body"])
+                prior_body = validate_version_content(row).body
             cursor.execute(
                 """
                 INSERT INTO business_tasks
@@ -629,10 +636,16 @@ class PostgresContentRepository(ContentRepository):
             )
             task = self._one(cursor, "找不到当前租户中的内容任务")
             cursor.execute(
-                "SELECT id FROM content_versions WHERE tenant_id = %s AND task_id = %s ORDER BY version_number DESC LIMIT 1",
+                """
+                SELECT id, outline, body, artifact_digest, version_audit_snapshot
+                FROM content_versions
+                WHERE tenant_id = %s AND task_id = %s
+                ORDER BY version_number DESC LIMIT 1
+                """,
                 (scope.tenant_id, task_id),
             )
             version = self._one(cursor, "原版本不存在，不能修改")
+            validate_version_content(version)
             parent_version_id = UUID(str(version["id"]))
             cursor.execute(
                 "UPDATE business_tasks SET revision_instruction = %s, production_conditions = %s WHERE tenant_id = %s AND id = %s",
@@ -690,7 +703,9 @@ class PostgresContentRepository(ContentRepository):
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT cv.id, cv.task_id, cv.version_number, cv.outline, cv.body, cv.created_at, gr.model,
+                SELECT cv.id, cv.task_id, cv.version_number, cv.outline, cv.body,
+                       cv.artifact_digest, cv.version_audit_snapshot,
+                       cv.created_at, gr.model,
                        t.media_format, t.content_context_snapshot, a.channel,
                        parent_cv.version_number AS parent_version_number,
                        parent_a.channel AS parent_channel, parent_t.media_format AS parent_media_format
@@ -714,6 +729,7 @@ class PostgresContentRepository(ContentRepository):
                 ),
             )
             row = self._one(cursor, "找不到该版本")
+        content = validate_version_content(row)
         parent_channel = row["parent_channel"]
         parent_media = row["parent_media_format"]
         parent_version = row["parent_version_number"]
@@ -737,8 +753,8 @@ class PostgresContentRepository(ContentRepository):
             "version_id": str(row["id"]),
             "task_id": str(row["task_id"]),
             "version": self._integer(row["version_number"]),
-            "outline": str(row["outline"]),
-            "body": project_content_body(str(row["body"])),
+            "outline": content.outline,
+            "body": content.body,
             "model": str(row["model"]),
             "ai_generated": is_ai_generated_content(row["model"]),
             "aigc_label": disclosure,
@@ -755,7 +771,9 @@ class PostgresContentRepository(ContentRepository):
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT cv.body FROM content_versions cv
+                SELECT cv.outline, cv.body, cv.artifact_digest,
+                       cv.version_audit_snapshot
+                FROM content_versions cv
                 JOIN business_tasks t ON t.id = cv.task_id AND t.tenant_id = cv.tenant_id
                 WHERE cv.tenant_id = %s AND cv.id = %s
                   AND t.brand_id = %s AND t.account_id = %s AND t.created_by = %s
@@ -763,7 +781,7 @@ class PostgresContentRepository(ContentRepository):
                 (scope.tenant_id, version_id, scope.brand_id, scope.account_id, scope.user_id),
             )
             row = self._one(cursor, "找不到可承接的历史版本")
-        return str(row["body"])
+        return validate_version_content(row).body
 
     def save_version(self, scope: TrustedScope, version_id: UUID) -> dict[str, object]:
         with self._tx(scope) as cursor:
@@ -881,7 +899,9 @@ class PostgresContentRepository(ContentRepository):
             cursor.execute(
                 """
                 SELECT t.id AS task_id, t.weak_seed, t.primary_content_product, t.product_refs, t.media_format,
-                       t.content_context_snapshot, cv.body, cv.version_number, a.channel
+                       t.content_context_snapshot, cv.outline, cv.body,
+                       cv.artifact_digest, cv.version_audit_snapshot,
+                       cv.version_number, a.channel
                 FROM content_versions cv
                 JOIN business_tasks t ON t.id = cv.task_id AND t.tenant_id = cv.tenant_id
                 JOIN content_accounts a ON a.id = t.account_id AND a.tenant_id = t.tenant_id
@@ -905,6 +925,7 @@ class PostgresContentRepository(ContentRepository):
                 ),
             )
             row = self._one(cursor, "只能改编当前用户当前品牌中的明确版本")
+        content = validate_version_content(row)
         refs = row["product_refs"]
         if not isinstance(refs, list) or not all(isinstance(ref, str) for ref in refs):
             raise DomainError("源版本商品引用无效")
@@ -921,7 +942,7 @@ class PostgresContentRepository(ContentRepository):
             products=(
                 frozen_products if frozen_products is not None else self._product_facts_for_refs(scope, tuple(refs))
             ),
-            body=str(row["body"]),
+            body=content.body,
             source_description=f"由{row['channel']}{media_label} V{row['version_number']} 改编",
             source_target=self._target_from_channel_media(str(row["channel"]), str(source_media)),
         )
@@ -967,7 +988,8 @@ class PostgresContentRepository(ContentRepository):
             cursor.execute(
                 """
                 SELECT item.position, task.id AS task_id, version.id AS version_id,
-                       version.version_number, version.outline, version.body
+                       version.version_number, version.outline, version.body,
+                       version.artifact_digest, version.version_audit_snapshot
                 FROM content_series_items item
                 JOIN business_tasks task
                   ON task.id = item.task_id AND task.tenant_id = item.tenant_id
@@ -998,6 +1020,7 @@ class PostgresContentRepository(ContentRepository):
                 ),
             )
             rows = list(reversed(cursor.fetchall()))
+        validated_rows = tuple((row, validate_version_content(row)) for row in rows)
         return SeriesContext(
             series_id=series_id,
             revision=self._integer(series["revision"]),
@@ -1010,10 +1033,10 @@ class PostgresContentRepository(ContentRepository):
                     version_id=UUID(str(row["version_id"])),
                     version=self._integer(row["version_number"]),
                     position=self._integer(row["position"]),
-                    outline=str(row["outline"]),
-                    body=str(row["body"]),
+                    outline=content.outline,
+                    body=content.body,
                 )
-                for row in rows
+                for row, content in validated_rows
             ),
         )
 

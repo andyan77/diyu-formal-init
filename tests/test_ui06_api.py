@@ -20,6 +20,7 @@ from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.production_auth import ProductionAuthRepository, TenantSession
 from src.infrastructure.seed_demo import (
     ACCOUNT_ID,
+    BRAND_ID,
     TENANT_ID,
     USER_ID,
 )
@@ -27,13 +28,14 @@ from src.shared.creative_plan import (
     ACCOUNT_BASELINE_TONE_ID,
     build_creative_plan,
 )
-from src.shared.errors import GenerationFailed
+from src.shared.errors import DomainError, GenerationFailed
 from src.shared.narrative import NarrativeFrame, frame_document, visible_digest
 from src.shared.types import (
     ConversationDecision,
     ConversationInput,
     GeneratedArtifact,
     GenerationInput,
+    TrustedScope,
 )
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 
@@ -289,6 +291,7 @@ def _version_audits(database_url: str, task_id: UUID) -> list[dict[str, object]]
 
 def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
     app_database_url: str,
+    migrator_database_url: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _CAPTURED_FRAMES.clear()
@@ -468,12 +471,25 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         )
         assert current.status_code == 200
         assert current.json()["version"] == 2
+        history = client.get(
+            f"/api/v1/content/tasks/{g4_task_id}/versions",
+            params={
+                "target": "xiaohongshu_graphic",
+                "publishing_identity_id": str(ACCOUNT_ID),
+            },
+        )
+        assert history.status_code == 200
+        history_versions = history.json()
+        assert [item["version"] for item in history_versions] == [2, 1]
+        assert history_versions[0]["body"] == current.json()["body"]
+        assert history_versions[1]["body"] == v1.json()["body"]
         audits = _version_audits(app_database_url, g4_task_id)
         assert [audit["version_number"] for audit in audits] == [1, 2]
         for audit in audits:
             version_audit = audit["version_audit_snapshot"]
             assert isinstance(version_audit, dict)
-            assert version_audit["audit_version"] == "content-version-audit-v1"
+            assert version_audit["audit_version"] == "content-version-audit-v2"
+            assert version_audit["visible_projection"] == "delivery-compiler-v2-final-visible-v1"
             assert version_audit["artifact_digest"] == audit["artifact_digest"]
             assert audit["artifact_digest"] == visible_digest(
                 str(audit["outline"]),
@@ -498,11 +514,87 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
                 "SELECT set_config('app.tenant_id', %s, true)",
                 (str(TENANT_ID),),
             )
-            with pytest.raises(psycopg.errors.RaiseException):
+            for column, value in (
+                ("body", "被篡改的正文"),
+                ("outline", "被篡改的标题"),
+                ("product_contract", "{}"),
+                ("artifact_digest", "0" * 64),
+                ("version_audit_snapshot", "{}"),
+            ):
+                connection.rollback()
                 cursor.execute(
-                    "UPDATE content_versions SET artifact_digest = %s WHERE tenant_id = %s AND id = %s",
-                    ("0" * 64, TENANT_ID, audits[0]["id"]),
+                    "SELECT set_config('app.tenant_id', %s, true)",
+                    (str(TENANT_ID),),
                 )
+                with pytest.raises(psycopg.Error):
+                    cursor.execute(
+                        f"UPDATE content_versions SET {column} = %s WHERE tenant_id = %s AND id = %s",
+                        (value, TENANT_ID, audits[0]["id"]),
+                    )
+
+        with (
+            psycopg.connect(migrator_database_url) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute(
+                "SELECT set_config('app.tenant_id', %s, true)",
+                (str(TENANT_ID),),
+            )
+            with pytest.raises(
+                psycopg.errors.RaiseException,
+                match="content versions are append-only",
+            ):
+                cursor.execute(
+                    "UPDATE content_versions SET body = %s WHERE tenant_id = %s AND id = %s",
+                    ("数据库管理员也不能改写版本正文", TENANT_ID, audits[0]["id"]),
+                )
+
+        original_body = str(audits[0]["body"])
+        task_account_id: UUID
+        with (
+            psycopg.connect(migrator_database_url) as connection,
+            connection.cursor(row_factory=dict_row) as cursor,
+        ):
+            cursor.execute(
+                "SELECT set_config('app.tenant_id', %s, true)",
+                (str(TENANT_ID),),
+            )
+            cursor.execute(
+                "SELECT account_id FROM business_tasks WHERE tenant_id = %s AND id = %s",
+                (TENANT_ID, g4_task_id),
+            )
+            task_row = cursor.fetchone()
+            assert task_row is not None
+            task_account_id = UUID(str(task_row["account_id"]))
+            cursor.execute("ALTER TABLE content_versions DISABLE TRIGGER content_versions_append_only")
+            cursor.execute(
+                "UPDATE content_versions SET body = %s WHERE tenant_id = %s AND id = %s",
+                ("人为构造的摘要不一致正文", TENANT_ID, audits[0]["id"]),
+            )
+            cursor.execute("ALTER TABLE content_versions ENABLE TRIGGER content_versions_append_only")
+        try:
+            repository = PostgresContentRepository(app_database_url)
+            with pytest.raises(DomainError, match="完整性校验失败"):
+                repository.fetch_version(
+                    TrustedScope(TENANT_ID, USER_ID, BRAND_ID, task_account_id),
+                    g4_task_id,
+                    1,
+                )
+        finally:
+            with (
+                psycopg.connect(migrator_database_url) as connection,
+                connection.cursor() as cursor,
+            ):
+                cursor.execute(
+                    "SELECT set_config('app.tenant_id', %s, true)",
+                    (str(TENANT_ID),),
+                )
+                cursor.execute("ALTER TABLE content_versions DISABLE TRIGGER content_versions_append_only")
+                cursor.execute(
+                    "UPDATE content_versions SET body = %s WHERE tenant_id = %s AND id = %s",
+                    (original_body, TENANT_ID, audits[0]["id"]),
+                )
+                cursor.execute("ALTER TABLE content_versions ENABLE TRIGGER content_versions_append_only")
 
         time.sleep(2.05)
         failure_before = _counts(app_database_url)
