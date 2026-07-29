@@ -37,6 +37,12 @@ UnitMode: TypeAlias = Literal[
     "hypothesis",
     "disclosed_dramatization",
 ]
+UnitTextSource: TypeAlias = Literal[
+    "writer",
+    "server_fact",
+    "server_compiler",
+    "prior_version",
+]
 
 LEGACY_KERNEL_VERSION = "creative-kernel-v1"
 KERNEL_VERSION = "creative-kernel-v2"
@@ -173,10 +179,11 @@ class CreativeKernelUnit:
     mode: UnitMode = "general_observation"
     scope_id: str = "scope:general-observation-v1"
     allowed_resource_ids: tuple[str, ...] = ()
+    text_source: UnitTextSource = "writer"
 
     @property
     def writable(self) -> bool:
-        return self.purpose != "frozen_fact"
+        return self.text_source == "writer"
 
 
 @dataclass(frozen=True)
@@ -252,6 +259,7 @@ def build_kernel_skeleton(
             mode="general_observation",
             scope_id="scope:general-observation-v1",
             allowed_resource_ids=resources,
+            text_source="server_compiler",
         ),
     ]
     allowed_fact_ids = frame.allowed_fact_ids
@@ -276,6 +284,7 @@ def build_kernel_skeleton(
                 track="trusted_fact",
                 mode="trusted_fact",
                 scope_id=f"scope:trusted-{record.fact_kind}-v1",
+                text_source="server_fact",
             )
         )
     if program_id in {
@@ -399,6 +408,7 @@ def build_kernel_skeleton(
             mode="general_observation",
             scope_id="scope:general-observation-v1",
             allowed_resource_ids=resources,
+            text_source="server_compiler",
         )
     )
     return CreativeKernelV1(
@@ -432,6 +442,43 @@ def select_kernel_program(
     if frame.narrative_mode == "general_observation" and not frame.allowed_fact_ids:
         return OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2
     return OBSERVATION_ONLY_PROGRAM
+
+
+def freeze_prior_revision_units(
+    skeleton: CreativeKernelV1,
+    prior_kernel: CreativeKernelV1 | None,
+) -> CreativeKernelV1:
+    """Carry a prior reflection as server-owned text when adding local drama."""
+    if skeleton.program_id != ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM:
+        return skeleton
+    if prior_kernel is None:
+        raise ValueError("local dramatization revision requires a prior kernel")
+    try:
+        prior_reflection = prior_kernel.unit("unit:body")
+    except KeyError as exc:
+        raise ValueError("prior reflection unit is unavailable") from exc
+    if (
+        prior_reflection.track != "creative_expression"
+        or prior_reflection.mode != "general_observation"
+        or not prior_reflection.text
+    ):
+        raise ValueError("prior reflection unit cannot be frozen")
+    return replace(
+        skeleton,
+        units=tuple(
+            (
+                replace(
+                    unit,
+                    text=prior_reflection.text,
+                    claim_refs=prior_reflection.claim_refs,
+                    text_source="prior_version",
+                )
+                if unit.unit_id == "unit:body"
+                else unit
+            )
+            for unit in skeleton.units
+        ),
+    )
 
 
 def parse_writer_kernel(
@@ -469,10 +516,12 @@ def parse_writer_kernel(
     if not isinstance(raw_units, list) or not raw_units:
         raise TypeError("writer units are incomplete")
     compiler_texts = dict(compiler_owned_text_by_id or {})
+    unit_by_id = {unit.unit_id: unit for unit in skeleton.units}
     writable_by_id = {unit.unit_id: unit for unit in skeleton.writable_units}
     if any(
-        unit_id not in writable_by_id
-        or writable_by_id[unit_id].purpose not in {"natural_guide", "release_caption"}
+        unit_id not in unit_by_id
+        or unit_by_id[unit_id].purpose not in {"natural_guide", "release_caption"}
+        or unit_by_id[unit_id].text_source != "server_compiler"
         or not isinstance(text, str)
         or not text.strip()
         or compiler_owned_unit_source(unit_id, text) is None
@@ -482,7 +531,7 @@ def parse_writer_kernel(
         {"unit:natural-guide", "unit:release-caption"},
     ):
         raise ValueError("compiler-owned unit contract is invalid")
-    expected = {unit_id: unit for unit_id, unit in writable_by_id.items() if unit_id not in compiler_texts}
+    expected = dict(writable_by_id)
     returned_ids = [value.get("unit_id") for value in raw_units if isinstance(value, Mapping)]
     if (
         len(returned_ids) != len(raw_units)
@@ -491,7 +540,7 @@ def parse_writer_kernel(
     ):
         raise ValueError("writer unit coverage drifted from server skeleton")
     replacements: dict[str, CreativeKernelUnit] = {
-        unit_id: replace(writable_by_id[unit_id], text=text) for unit_id, text in compiler_texts.items()
+        unit_id: replace(unit_by_id[unit_id], text=text) for unit_id, text in compiler_texts.items()
     }
     unit_fields = (
         frozenset({"unit_id", "text", "claim_refs"})
@@ -610,6 +659,7 @@ def kernel_document(kernel: CreativeKernelV1) -> dict[str, object]:
                 "mode": unit.mode,
                 "scope_id": unit.scope_id,
                 "allowed_resource_ids": list(unit.allowed_resource_ids),
+                "text_source": unit.text_source,
             }
             for unit in kernel.units
         ],
@@ -689,6 +739,23 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
                     "allowed_resource_ids",
                 }
             ),
+            frozenset(
+                {
+                    "unit_id",
+                    "purpose",
+                    "allowed_observation_types",
+                    "fact_refs",
+                    "constraint_refs",
+                    "visible_order",
+                    "text",
+                    "claim_refs",
+                    "track",
+                    "mode",
+                    "scope_id",
+                    "allowed_resource_ids",
+                    "text_source",
+                }
+            ),
         }:
             raise DomainError("冻结创作内核单元无效")
         purpose = raw.get("purpose")
@@ -707,6 +774,12 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
             allowed=cast(tuple[ObservationType, ...], allowed),
             raw=raw,
         )
+        text_source = _unit_text_source(
+            purpose=cast(KernelPurpose, purpose),
+            raw=raw,
+        )
+        raw_text = raw.get("text")
+        text = "" if text_source == "server_compiler" and raw_text == "" else _required_string(raw_text)
         units.append(
             CreativeKernelUnit(
                 unit_id=_required_string(raw.get("unit_id")),
@@ -715,12 +788,13 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
                 fact_refs=_string_tuple(raw.get("fact_refs")),
                 constraint_refs=_string_tuple(raw.get("constraint_refs")),
                 visible_order=order,
-                text=_required_string(raw.get("text")),
+                text=text,
                 claim_refs=_string_tuple(raw.get("claim_refs", [])),
                 track=track,
                 mode=mode,
                 scope_id=scope_id,
                 allowed_resource_ids=_string_tuple(raw.get("allowed_resource_ids", [])),
+                text_source=text_source,
             )
         )
     identifiers = [unit.unit_id for unit in units]
@@ -931,6 +1005,36 @@ def _unit_track_contract(
     if raw_track != expected[0] or raw_mode != expected[1] or not isinstance(raw_scope, str) or not raw_scope:
         raise DomainError("冻结创作内核表达轨无效")
     return cast(UnitTrack, raw_track), cast(UnitMode, raw_mode), raw_scope
+
+
+def _unit_text_source(
+    *,
+    purpose: KernelPurpose,
+    raw: Mapping[str, object],
+) -> UnitTextSource:
+    if purpose == "frozen_fact":
+        expected: UnitTextSource = "server_fact"
+    elif purpose in {"natural_guide", "release_caption"}:
+        expected = "server_compiler"
+    else:
+        expected = "writer"
+    value = raw.get("text_source", expected)
+    if value not in {
+        "writer",
+        "server_fact",
+        "server_compiler",
+        "prior_version",
+    }:
+        raise DomainError("冻结创作内核文字来源无效")
+    if purpose == "frozen_fact" and value != "server_fact":
+        raise DomainError("冻结事实文字来源无效")
+    if purpose in {"natural_guide", "release_caption"} and value != "server_compiler":
+        raise DomainError("编译器文字来源无效")
+    if value == "prior_version" and purpose != "body":
+        raise DomainError("历史版本文字来源无效")
+    if value == "server_fact" and purpose != "frozen_fact":
+        raise DomainError("冻结事实文字来源无效")
+    return cast(UnitTextSource, value)
 
 
 def _normalize_writer_visible_text(text: str) -> str:

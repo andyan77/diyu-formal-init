@@ -66,15 +66,7 @@ def _raw_units(
     return {
         "units": [
             {"unit_id": "unit:title", "text": title},
-            {
-                "unit_id": "unit:natural-guide",
-                "text": "这篇从关系里的理解和边界说起。",
-            },
             *body_units,
-            {
-                "unit_id": "unit:release-caption",
-                "text": "理解彼此，也保留自己。",
-            },
         ]
     }
 

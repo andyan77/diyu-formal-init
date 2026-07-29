@@ -12,6 +12,7 @@ from src.shared.creative_kernel import (
     CreativeKernelV1,
     KernelProgramId,
     build_kernel_skeleton,
+    compiler_owned_unit_texts,
     parse_writer_kernel,
 )
 from src.shared.errors import GenerationFailed
@@ -72,7 +73,11 @@ def _frame_and_kernel(
             "unit:release-caption": "理解彼此，也保留自己。",
         }[unit.unit_id]
         raw_units.append({"unit_id": unit.unit_id, "text": text})
-    kernel = parse_writer_kernel({"units": raw_units}, skeleton)
+    kernel = parse_writer_kernel(
+        {"units": raw_units},
+        skeleton,
+        compiler_owned_text_by_id=compiler_owned_unit_texts("brand_life_narrative"),
+    )
     contexts = build_clause_contexts_v2(
         kernel=kernel,
         frame=frame,

@@ -7,6 +7,7 @@ import pytest
 from src.shared.creative_kernel import (
     CreativeKernelV1,
     build_kernel_skeleton,
+    compiler_owned_unit_texts,
     parse_writer_kernel,
 )
 from src.shared.factual_basis import FrozenFactRecord
@@ -43,18 +44,11 @@ def _kernel(
         {
             "units": [
                 {"unit_id": "unit:title", "text": "关系里也可以有边界"},
-                {
-                    "unit_id": "unit:natural-guide",
-                    "text": "这篇更想聊换位思考和边界。",
-                },
                 {"unit_id": "unit:body", "text": body},
-                {
-                    "unit_id": "unit:release-caption",
-                    "text": "把理解留给关系，也把边界留给自己。",
-                },
             ]
         },
         skeleton,
+        compiler_owned_text_by_id=compiler_owned_unit_texts("brand_life_narrative"),
     )
 
 

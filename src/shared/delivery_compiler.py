@@ -168,6 +168,7 @@ def _assert_expression_plan(
                 or unit.constraint_refs
                 or unit.allowed_resource_ids
                 or fact_text_by_id.get(unit.fact_refs[0]) != unit.text
+                or unit.text_source != "server_fact"
             ):
                 raise GenerationFailed("可信事实轨结构漂移")
             continue
@@ -179,6 +180,11 @@ def _assert_expression_plan(
             or any(resource_id not in request.allowed_resource_ids for resource_id in unit.allowed_resource_ids)
         ):
             raise GenerationFailed("创作表达轨结构漂移")
+        if unit.purpose in {"natural_guide", "release_caption"}:
+            if unit.text_source != "server_compiler":
+                raise GenerationFailed("编译器中性文字来源漂移")
+        elif unit.text_source not in {"writer", "prior_version"}:
+            raise GenerationFailed("创作表达文字来源漂移")
         if unit.mode not in {
             "general_observation",
             "recommendation",

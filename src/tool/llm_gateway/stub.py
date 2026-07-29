@@ -6,6 +6,7 @@ from src.shared.creative_kernel import (
     build_kernel_skeleton,
     compiler_owned_unit_texts,
     creative_units_digest,
+    freeze_prior_revision_units,
     kernel_digest,
     kernel_document,
     parse_writer_kernel,
@@ -164,6 +165,10 @@ class DeterministicContentGenerator(ContentGenerator):
                 "resource:creator_expression",
                 *(f"resource:product:{product.sku}" for product in request.products),
             ),
+        )
+        skeleton = freeze_prior_revision_units(
+            skeleton,
+            request.prior_creative_kernel,
         )
         _, guide, spoken, _, subtitles, _ = self._parts(request)
         spoken = spoken + "\n\n" + subtitles + _control_sections(request)

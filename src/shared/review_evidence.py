@@ -237,6 +237,8 @@ class ProtectedSubjectScopeV2:
 def build_review_clauses(kernel: CreativeKernelV1) -> tuple[ReviewClause, ...]:
     clauses: list[ReviewClause] = []
     for unit in kernel.units:
+        if unit.text_source == "server_compiler" and not unit.text:
+            continue
         parts = _split_visible_text(unit.text)
         for index, exact_text in enumerate(parts, start=1):
             clauses.append(

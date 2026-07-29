@@ -14,6 +14,7 @@ from src.shared.closed_review import (
 from src.shared.creative_kernel import (
     CreativeKernelV1,
     build_kernel_skeleton,
+    compiler_owned_unit_texts,
     parse_writer_kernel,
 )
 from src.shared.delivery_compiler import (
@@ -138,6 +139,7 @@ def _parsed_product_kernel(
             fact_blocks=blocks,
             allowed_claim_ids=packet.fact_ids,
             required_fact_block_ids=required_block_ids,
+            compiler_owned_text_by_id=compiler_owned_unit_texts("product_truth"),
         ),
         packet,
     )

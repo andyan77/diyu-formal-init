@@ -12,6 +12,7 @@ from src.shared.creative_kernel import (
     KernelProgramId,
     build_kernel_skeleton,
     compiler_owned_unit_texts,
+    freeze_prior_revision_units,
     kernel_document,
     kernel_from_document,
     parse_writer_kernel,
@@ -112,6 +113,8 @@ def test_server_freezes_track_mode_scope_and_resources_before_writer() -> None:
     assert body.mode == "general_observation"
     assert body.scope_id == "scope:general-observation-v1"
     assert body.allowed_resource_ids == tuple(sorted(_RESOURCES))
+    assert body.text_source == "writer"
+    assert kernel.unit("unit:natural-guide").text_source == "server_compiler"
     assert kernel.kernel_version == "creative-kernel-v2"
 
 
@@ -132,14 +135,6 @@ def test_writer_cannot_return_or_change_track_contract() -> None:
                         "track": "trusted_fact",
                     },
                     {"unit_id": "unit:body", "text": "正文"},
-                    {
-                        "unit_id": "unit:natural-guide",
-                        "text": "导读",
-                    },
-                    {
-                        "unit_id": "unit:release-caption",
-                        "text": "配文",
-                    },
                 ]
             },
             skeleton,
@@ -206,7 +201,10 @@ def test_g7_adds_only_local_disclosed_dramatization() -> None:
         fact_text=fact,
         program_id=selected,
     )
+    v2 = freeze_prior_revision_units(v2, v1)
     assert v2.unit("unit:local-dramatization").mode == ("disclosed_dramatization")
+    assert v2.unit("unit:body").text == v1.unit("unit:body").text
+    assert v2.unit("unit:body").text_source == "prior_version"
     assert next(unit.text for unit in v2.units if unit.track == "trusted_fact") == fact
     compiled = _compile(v2)
     assert compiled.outline.startswith("可信事实＋一般观察＋情景演绎｜")
@@ -252,6 +250,7 @@ def test_legacy_kernel_document_remains_readable_without_reinterpretation() -> N
         unit.pop("mode")
         unit.pop("scope_id")
         unit.pop("allowed_resource_ids")
+        unit.pop("text_source")
     restored = kernel_from_document(document)
     assert restored.kernel_version == "creative-kernel-v1"
     assert restored.unit("unit:body").mode == "general_observation"

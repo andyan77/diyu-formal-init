@@ -367,7 +367,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         v2 = revision.json()
         assert v2["version"] == 2
         assert _G4_FACT in v2["body"]
-        assert "按你的修改要求改变了允许调整的表达" in v2["body"]
+        assert "情境演绎（虚构角色，不对应真实人物或品牌案例）｜" in v2["body"]
         assert len(_CAPTURED_FRAMES) >= 2
         assert frame_document(_CAPTURED_FRAMES[-1]) == frame
         assert len(_CAPTURED_PLANS) >= 5
@@ -404,7 +404,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         )
         assert v1.status_code == 200
         assert v1.json()["version"] == 1
-        assert "按你的修改要求改变了允许调整的表达" not in v1.json()["body"]
+        assert "情境演绎（虚构角色，不对应真实人物或品牌案例）｜" not in v1.json()["body"]
         current = client.get(
             f"/api/v1/tasks/{g4_task_id}/versions/2",
             params={

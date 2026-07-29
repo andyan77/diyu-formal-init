@@ -46,6 +46,7 @@ from src.shared.creative_kernel import (
     compiler_owned_unit_source,
     compiler_owned_unit_texts,
     creative_units_digest,
+    freeze_prior_revision_units,
     kernel_digest,
     kernel_document,
     parse_writer_kernel,
@@ -562,6 +563,10 @@ class DeepSeekGenerator(ContentGenerator):
             program_id=program_id,
             allowed_resource_ids=tuple(sorted(context.resource_ids)),
         )
+        skeleton = freeze_prior_revision_units(
+            skeleton,
+            request.prior_creative_kernel,
+        )
         compiler_texts = compiler_owned_unit_texts(request.primary_product)
         writer_payload, writer_retries = self._request(
             "你是笛语 CreativeKernel Writer。只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。",
@@ -1031,7 +1036,7 @@ class DeepSeekGenerator(ContentGenerator):
                 "text": unit.text,
             }
             for unit in skeleton.units
-            if not unit.writable
+            if unit.track == "trusted_fact"
             and (
                 request.narrative_frame is None
                 or not any(
@@ -1153,14 +1158,18 @@ fact_block_refs，不能增删、换序或更换事实。首次最多选择 {MAX
 title 是自然标题；按可见顺序排列的一个或多个 body 单元共同组成完整核心正文。
 track 与 mode 是服务端在写作前冻结的唯一表达轨；你不能返回、改变或根据准备填写的文字
 重新解释它们。general_observation 可以表达一般判断、观点、比喻和幽默，但不是当前用户、
-品牌、员工、顾客或门店的事实。hypothesis 可以写推演但不要自行添加“假设”标识，Compiler
-会为整个单元及独立传播出口保留范围；它不能绑定真实用户、员工、顾客、门店或已经发生的
-历史。disclosed_dramatization 必须写成完整虚构情境，但不要自行添加演绎声明，Compiler
+品牌、员工、顾客或门店的事实。它必须写成不落到某次已完成经过的一般命题，不得以第一人称
+观察履历、具体人物动作链、对白、事后心理、原因或结果代替抽象观察；需要具体场景时，只能
+填写服务端已分配的 hypothesis 或 disclosed_dramatization 单元。hypothesis 可以写推演但
+不要自行添加“假设”标识，Compiler 会为整个单元及独立传播出口保留范围；它不能绑定真实
+用户、员工、顾客、门店或已经发生的历史。disclosed_dramatization 必须写成完整虚构情境，
+但不要自行添加演绎声明，Compiler
 会提供不可编辑的可见范围。recommendation 必须写清楚这是可以怎样做的建议，不得伪装成
 已执行做法。actuality_reflection 对应的用户现实原文
 已由服务端 frozen fact 单元逐字插入；Writer 只能写不复述该事实的抽象关系反思，或带清楚
 建议／条件语态的泛指做法，不能复制、概括或扩写人物、动作、对白、动机、原因、结果、时间、
-地点与现实细节。
+地点与现实细节。修订时，未出现在可写 skeleton 中的 prior_version 单元已经由服务端冻结，
+不得索取、复述或改写。
 title 也属于服务端预分配的 creative_expression，Compiler 会为标题添加与整篇一致的自然
 范围。由 Compiler 生成的 natural_guide 与 release_caption 不属于 Writer 输出。
 不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。

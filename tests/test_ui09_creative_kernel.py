@@ -32,15 +32,7 @@ def _raw_units(
     return {
         "units": [
             {"unit_id": "unit:title", "text": title},
-            {
-                "unit_id": "unit:natural-guide",
-                "text": "从不同位置看同一段关系，先保留理解的余地。",
-            },
             {"unit_id": "unit:body", "text": body},
-            {
-                "unit_id": "unit:release-caption",
-                "text": "尊重差异，也保留自己的边界。",
-            },
         ]
     }
 
@@ -354,8 +346,10 @@ def test_delivery_compiler_rejects_unreviewed_text_and_resources() -> None:
     compiler_texts = compiler_owned_unit_texts("brand_life_narrative")
     assert compiled.production.natural_guide.endswith(compiler_texts["unit:natural-guide"])
     assert compiled.production.release_caption_and_interaction.endswith(compiler_texts["unit:release-caption"])
-    assert kernel.unit("unit:natural-guide").text not in compiled.body
-    assert kernel.unit("unit:release-caption").text not in compiled.body
+    assert kernel.unit("unit:natural-guide").text == ""
+    assert kernel.unit("unit:release-caption").text == ""
+    assert compiler_texts["unit:natural-guide"] in compiled.body
+    assert compiler_texts["unit:release-caption"] in compiled.body
     assert compiled.visible_provenance["natural_guide"][0].startswith("phrase:compiler-guide-")
     assert compiled.visible_provenance["release_caption_and_interaction"][0].startswith("phrase:compiler-release-")
 
