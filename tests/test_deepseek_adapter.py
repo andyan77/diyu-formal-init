@@ -649,6 +649,9 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert "你看不到、也不需要复述、解释或推断这些事实" in prompt
     assert "判断对象只能是\n泛指读者的选择过程" in prompt
     assert "claim_refs 必须\n是空数组" in prompt
+    assert '"unit_contract": "abstract_observation"' in prompt
+    assert "每个 clause 都必须是 generic_observation" in prompt
+    assert "不得因为 purpose 或写作习惯换成建议、假设、演绎" in prompt
 
 
 def _kernel_observations(

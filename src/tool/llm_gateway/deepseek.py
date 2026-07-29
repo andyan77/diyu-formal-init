@@ -1435,11 +1435,36 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
         affected: frozenset[str],
         trusted_contracts: Mapping[str, UnitContractV2],
     ) -> str:
+        expression_rules: dict[UnitContractV2, str] = {
+            "abstract_observation": (
+                "只写不带行动指示、条件推演或具体外部对象的泛指状态、价值判断或理解原则；"
+                "每个 clause 都必须是 generic_observation"
+            ),
+            "audience_guidance": (
+                "只写本篇给不特定读者的观看回报或阅读邀请；不得断言读者已经发生现实事件"
+            ),
+            "recommendation": (
+                "只写带清楚建议语态的泛指做法；不得写已经发生的事件"
+            ),
+            "hypothetical_example": (
+                "只写服务端假设范围内的条件推演；不得绑定任何现实主体"
+            ),
+            "disclosed_dramatization": (
+                "只写服务端演绎范围内的虚构表达；不得绑定任何现实主体"
+            ),
+            "actuality_reflection": (
+                "只写不复述或扩展现实原文的泛指反思；不得增加现实主体、事件或心理"
+            ),
+            "frozen_fact": "不可写；事实单元不应进入修复范围",
+        }
         units = [
             {
                 "unit_id": unit.unit_id,
                 "purpose": unit.purpose,
                 "unit_contract": trusted_contracts[unit.unit_id],
+                "required_expression": expression_rules[
+                    trusted_contracts[unit.unit_id]
+                ],
                 "allowed_observation_types": list(
                     unit.allowed_observation_types
                 ),
@@ -1465,9 +1490,11 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 
 这是面向最终读者的创意表达层，不是资料说明或内部审查说明。每个 clause 的判断对象只能是
 泛指读者的选择过程、理解方法、信息解读原则或本篇的阅读价值；不得对底层对象、其设计、
-结构、属性、用途、效果、形成原因或现实体验作任何主张。title 写自然标题；natural_guide
-写清观看回报；body 写具有主线的抽象视角或清楚建议；release_caption 写可直接使用的收束。
-不得虚构人物、事件、对白、机构立场或第一人称经历。
+结构、属性、用途、效果、形成原因或现实体验作任何主张。每个 unit 必须逐条服从其唯一
+unit_contract 和 required_expression，不得因为 purpose 或写作习惯换成建议、假设、演绎
+或现实语态。title 写自然标题；natural_guide 写清观看回报；body 写具有主线且符合本 unit
+合同的表达；release_caption 写可直接使用的收束。不得虚构人物、事件、对白、机构立场或
+第一人称经历。
 
 必须恰好覆盖列出的 unit_id，每个 unit 只能有 unit_id、text、claim_refs，claim_refs 必须
 是空数组。不得增加、遗漏、重复或改名。这是唯一修复，只返回：
