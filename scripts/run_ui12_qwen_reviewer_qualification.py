@@ -424,7 +424,7 @@ def main() -> int:
         "reviewer_model": provider.model_name,
         "reasoning_effort": "high",
         "max_retries": 0,
-        "transport": "responses_required_function",
+        "transport": "responses_single_function_fail_closed_auto_choice",
         "bundle_records": records,
         "mismatches": mismatches,
         "elapsed_ms": int((time.monotonic() - started) * 1000),

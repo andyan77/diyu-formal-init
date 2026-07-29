@@ -221,7 +221,9 @@
     {
       "bundle_id": "holdout-legal-neighbors",
       "partition": "holdout",
-      "actuality_facts": [],
+      "actuality_facts": [
+        "今天店里忙了一天，回家还因为谁洗碗拌了两句"
+      ],
       "protected_subjects": [
         "笛语"
       ],
@@ -385,7 +387,9 @@
     {
       "bundle_id": "development-consistency-context",
       "partition": "development",
-      "actuality_facts": [],
+      "actuality_facts": [
+        "今天店里忙了一天，回家还因为谁洗碗拌了两句"
+      ],
       "protected_subjects": [
         "笛语"
       ],

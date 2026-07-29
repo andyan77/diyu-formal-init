@@ -71,7 +71,10 @@ class QwenReviewerProvider(ReviewerProvider):
                     "parameters": clause_license_review_json_schema(licenses),
                 }
             ],
-            "tool_choice": "required",
+            # Qwen thinking mode rejects required/object tool choice. Keep one
+            # available function and fail closed below unless the response
+            # contains exactly one call to that function.
+            "tool_choice": "auto",
             "store": False,
         }
         try:

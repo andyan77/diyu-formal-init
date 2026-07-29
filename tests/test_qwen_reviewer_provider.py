@@ -150,7 +150,7 @@ def _payload(
     }
 
 
-def test_qwen_reviewer_uses_one_required_responses_function() -> None:
+def test_qwen_reviewer_uses_one_responses_function_with_fail_closed_auto_choice() -> None:
     _FakeClient.response = _FakeResponse(_payload())
 
     result = _provider().review(
@@ -174,7 +174,7 @@ def test_qwen_reviewer_uses_one_required_responses_function() -> None:
     assert body["instructions"] == "system"
     assert body["input"] == "prompt"
     assert body["reasoning"] == {"effort": "high"}
-    assert body["tool_choice"] == "required"
+    assert body["tool_choice"] == "auto"
     assert body["store"] is False
     tools = cast(list[dict[str, object]], body["tools"])
     assert len(tools) == 1
