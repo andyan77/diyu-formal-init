@@ -18,11 +18,15 @@
       p("分配资格","admin-member-qualify","选择互斥入口、工作资格和发布账号","当前能力 + 目标分步"),
       p("完整激活链接","admin-activation","交付可点击、可复制的完整 HTTPS 链接","当前有缺陷，UX-02 阻断项"),
       p("发布账号","admin-account","理解逻辑账号与平台载体","当前能力"),
+      p("创建发布账号","admin-account-create","建立账号名称、类型、组织、表达身份和初始平台","UX-02 目标"),
+      p("新账号结果","admin-account-created","保存后进入新账号详情","UX-02 目标"),
       p("多个平台","admin-platforms","同一账号拥有多个合法目标","当前能力"),
       p("五段画像","admin-profile","维护账号的一套表达身份","当前能力"),
       p("三级品牌资料","admin-library","管理品牌全员、总部、指定区域资料","当前能力"),
+      p("新增品牌资料","admin-library-create","记录资料来源、范围和待处理状态","UX-02 目标"),
       p("团队使用","admin-usage","查看真实 7/30 日使用信息","当前能力"),
-      p("能力诊断","admin-readiness","知道依据、缺口、影响和补充入口","当前能力")
+      p("能力诊断","admin-readiness","知道依据、缺口、影响和补充入口","当前能力"),
+      p("账户安全","admin-security","更新密码并理解会话影响","当前能力")
     ]},
     creator: { label: "租户用户创作", pages: [
       p("空工作台","creator-empty","选择账号/平台后，一句话即可开始","目标信息架构"),
@@ -46,6 +50,7 @@
   };
   const one = (selector) => document.querySelector(selector);
   const all = (selector) => [...document.querySelectorAll(selector)];
+  const total = Object.values(journeys).reduce((sum, item) => sum + item.pages.length, 0);
   let journey = ""; let pages = []; let current = 0;
   const show = (index) => {
     if (!pages.length) return;
@@ -75,5 +80,6 @@
   one("[data-desktop]").addEventListener("click",()=>{one("[data-review-canvas]").classList.remove("mobile");all("[data-viewport]").forEach(b=>b.classList.toggle("active",b.dataset.viewport==="desktop"));});
   one("[data-mobile]").addEventListener("click",()=>{one("[data-review-canvas]").classList.add("mobile");all("[data-viewport]").forEach(b=>b.classList.toggle("active",b.dataset.viewport==="mobile"));});
   document.addEventListener("keydown",(event)=>{if(!journey)return;if(event.altKey&&event.key==="ArrowRight")show(current+1);if(event.altKey&&event.key==="ArrowLeft")show(current-1);});
-  window.UX01_REVIEW = { journeys, choose, show };
+  one("[data-review-position]").textContent = `四条旅程 · ${total} 个连续状态`;
+  window.UX01_REVIEW = { journeys, choose, show, total };
 })();

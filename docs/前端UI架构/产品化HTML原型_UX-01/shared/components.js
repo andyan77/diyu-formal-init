@@ -7,9 +7,12 @@
   const logo = (inverse = false) =>
     `<img class="brand-logo" src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal${inverse ? "-ondark" : ""}.svg" alt="笛语">`;
   const button = (label, options = {}) =>
-    `<button type="button" class="${options.primary ? "primary" : options.quiet ? "quiet" : ""}"
+    `<button type="button" class="${options.primary ? "primary" : options.quiet ? "quiet" : ""}${options.className ? ` ${esc(options.className)}` : ""}"
+      ${options.id ? `id="${esc(options.id)}"` : ""}
       ${options.go ? `data-go="${esc(options.go)}"` : ""}
-      ${options.action ? `data-action="${esc(options.action)}"` : ""}>${esc(label)}</button>`;
+      ${options.action ? `data-action="${esc(options.action)}"` : ""}
+      ${options.expanded !== undefined ? `aria-expanded="${options.expanded ? "true" : "false"}"` : ""}
+      ${options.controls ? `aria-controls="${esc(options.controls)}"` : ""}>${esc(label)}</button>`;
   const status = (label, tone = "") => `<span class="status ${tone}">${esc(label)}</span>`;
   const shell = ({ role = "user", nav = [], active = "", title = "", meta = "", body = "" }) => `
     <div class="product-shell ${role}">
@@ -22,7 +25,11 @@
         <div class="side-account"><span class="avatar">${role === "admin" ? "林" : "周"}</span><span>${role === "admin" ? "林予 · 管理员" : "周宁 · 内容运营"}</span></div>
       </aside>
       <section class="shell-main">
-        <header class="topbar"><div><strong>${esc(title)}</strong><small>${esc(meta)}</small></div><button class="icon-button" aria-label="打开个人菜单">•••</button></header>
+        <header class="topbar">
+          ${button("菜单", { action: "open-admin-menu", className: "mobile-admin-menu" })}
+          <div><strong>${esc(title)}</strong><small>${esc(meta)}</small></div>
+          <button type="button" class="icon-button" data-action="open-personal-menu" aria-label="打开个人菜单">•••</button>
+        </header>
         ${body}
       </section>
     </div>`;
