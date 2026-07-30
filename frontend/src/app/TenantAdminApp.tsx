@@ -249,6 +249,21 @@ function readableRequestError(error: unknown): string {
   return error instanceof Error ? error.message : "当前内容暂时无法读取。";
 }
 
+async function copyOneTimeLink(
+  link: string,
+  setNotice: (notice: Notice) => void
+): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(link);
+    setNotice({ tone: "success", message: "链接已复制" });
+  } catch {
+    setNotice({
+      tone: "error",
+      message: "未能自动复制，请手动选择上方链接"
+    });
+  }
+}
+
 function useRequest<T>(path: string, enabled = true): RequestState<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -808,6 +823,10 @@ function Members({
   const [drawer, setDrawer] = useState<"create" | Operator | null>(null);
   const [saving, setSaving] = useState(false);
   const [activationLink, setActivationLink] = useState("");
+  const [confirmingDisable, setConfirmingDisable] = useState(false);
+  const disableReturnFocus = useRef<HTMLButtonElement | null>(null);
+  const confirmDisableButton = useRef<HTMLButtonElement>(null);
+  const disableInFlight = useRef(false);
   const [form, setForm] = useState({
     displayName: "",
     username: "",
@@ -827,6 +846,16 @@ function Members({
   const refresh = async (): Promise<void> => {
     await Promise.all([operators.refresh(), accounts.refresh()]);
   };
+  useEffect(() => {
+    if (confirmingDisable) {
+      confirmDisableButton.current?.focus();
+    }
+  }, [confirmingDisable]);
+
+  const cancelDisable = (): void => {
+    setConfirmingDisable(false);
+    window.requestAnimationFrame(() => disableReturnFocus.current?.focus());
+  };
   const run = async (action: () => Promise<void>, message: string): Promise<void> => {
     setSaving(true);
     try {
@@ -841,6 +870,7 @@ function Members({
   };
   const openCreate = (): void => {
     setActivationLink("");
+    setConfirmingDisable(false);
     setForm({
       displayName: "",
       username: "",
@@ -895,6 +925,7 @@ function Members({
   };
   const openMember = (member: Operator): void => {
     setActivationLink("");
+    setConfirmingDisable(false);
     setEdit({
       entryType: member.entry_type,
       content: hasCapability(member, "content"),
@@ -1108,7 +1139,7 @@ function Members({
                 <button
                   type="button"
                   className="text-action"
-                  onClick={() => void navigator.clipboard.writeText(activationLink)}
+                  onClick={() => void copyOneTimeLink(activationLink, setNotice)}
                 >
                   复制链接
                 </button>
@@ -1273,29 +1304,71 @@ function Members({
                 <button
                   type="button"
                   className="text-action"
-                  onClick={() => void navigator.clipboard.writeText(activationLink)}
+                  onClick={() => void copyOneTimeLink(activationLink, setNotice)}
                 >
                   复制重设链接
                 </button>
               </div>
             )}
-            {drawer.id !== currentUserId && drawer.enabled && (
+            {drawer.id !== currentUserId && drawer.enabled && !confirmingDisable && (
               <button
                 className="text-action danger"
                 type="button"
                 disabled={saving}
-                onClick={() =>
-                  void run(
-                    () =>
-                      api(`/api/v1/tenant-management/users/${drawer.id}/disable`, {
-                        method: "POST"
-                      }),
-                    "成员已停用，现有会话与工作资格已撤销。"
-                  )
-                }
+                onClick={event => {
+                  disableReturnFocus.current = event.currentTarget;
+                  setConfirmingDisable(true);
+                }}
               >
                 停用成员
               </button>
+            )}
+            {drawer.id !== currentUserId && drawer.enabled && confirmingDisable && (
+              <section
+                className="disable-confirmation"
+                role="alertdialog"
+                aria-labelledby="disable-member-title"
+                aria-describedby="disable-member-description"
+                onKeyDown={event => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    cancelDisable();
+                  }
+                }}
+              >
+                <h3 id="disable-member-title">确认停用这名成员？</h3>
+                <p id="disable-member-description">
+                  该成员将无法继续登录，当前会话和工作资格也会被撤销。
+                </p>
+                <div className="disable-confirmation-actions">
+                  <button type="button" className="secondary" onClick={cancelDisable}>
+                    取消
+                  </button>
+                  <button
+                    ref={confirmDisableButton}
+                    type="button"
+                    className="danger-action"
+                    disabled={saving}
+                    onClick={() => {
+                      if (disableInFlight.current) return;
+                      disableInFlight.current = true;
+                      void run(async () => {
+                        await api(
+                          `/api/v1/tenant-management/users/${drawer.id}/disable`,
+                          { method: "POST" }
+                        );
+                        setConfirmingDisable(false);
+                        setDrawer(null);
+                      }, "成员已停用，现有会话与工作资格已撤销。").finally(() => {
+                        disableInFlight.current = false;
+                      });
+                    }}
+                  >
+                    确认停用
+                  </button>
+                </div>
+              </section>
             )}
           </div>
         </Drawer>

@@ -101,6 +101,7 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
         activation_page = client.get(f"/activate/{admin_activation}")
         assert '"activation_purpose": "activate"' in activation_page.text
         assert "设置笛语密码" in activation_page.text
+        assert "name='password_confirm'" in activation_page.text
         tenant_admin_entry = client.get("/tenant-admin", follow_redirects=False)
         assert tenant_admin_entry.status_code == 303
         assert tenant_admin_entry.headers["location"] == "/tenant-admin/login"
@@ -138,7 +139,10 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
         assert client.get("/ui/select/content").status_code == 404
         activated = client.post(
             f"/activate/{admin_activation}",
-            content="password=a-long-enough-password",
+            content=(
+                "password=a-long-enough-password"
+                "&password_confirm=a-long-enough-password"
+            ),
             follow_redirects=False,
         )
         assert activated.status_code == 303
@@ -199,7 +203,10 @@ def test_production_created_user_uses_one_time_link_and_cannot_escalate(
     with TestClient(app, base_url="https://diyuai.cc") as client:
         activated = client.post(
             f"/activate/{created['activation_token']}",
-            content="password=another-long-password",
+            content=(
+                "password=another-long-password"
+                "&password_confirm=another-long-password"
+            ),
             follow_redirects=False,
         )
         assert activated.status_code == 303
@@ -231,7 +238,10 @@ def test_production_created_user_uses_one_time_link_and_cannot_escalate(
         assert (
             client.post(
                 f"/activate/{created['activation_token']}",
-                content="password=one-more-long-password",
+                content=(
+                    "password=one-more-long-password"
+                    "&password_confirm=one-more-long-password"
+                ),
                 follow_redirects=False,
             ).status_code
             == 422
@@ -258,7 +268,7 @@ def test_ux02_admin_provisions_and_disables_content_user_with_trusted_full_url(
     with TestClient(app, base_url="https://diyuai.cc") as admin:
         activated = admin.post(
             f"/activate/{admin_token}",
-            content=f"password={admin_password}",
+            content=f"password={admin_password}&password_confirm={admin_password}",
             follow_redirects=False,
         )
         assert activated.status_code == 303
@@ -317,9 +327,25 @@ def test_ux02_admin_provisions_and_disables_content_user_with_trusted_full_url(
         assert "attacker.invalid" not in created["activation_url"]
 
         with TestClient(app, base_url="https://diyuai.cc") as new_browser:
+            mismatched = new_browser.post(
+                created["activation_url"],
+                content=(
+                    f"password={user_password}"
+                    "&password_confirm=a-different-password-is-long"
+                ),
+                follow_redirects=False,
+            )
+            assert mismatched.status_code == 422
+            assert "两次输入的密码不一致" in mismatched.text
+            assert (
+                repository.authenticate_tenant_user(
+                    username, user_password, "tenant-user"
+                )
+                is None
+            )
             activated_user = new_browser.post(
                 created["activation_url"],
-                content=f"password={user_password}",
+                content=f"password={user_password}&password_confirm={user_password}",
                 follow_redirects=False,
             )
             assert activated_user.status_code == 303
@@ -379,9 +405,30 @@ def test_new_reset_link_invalidates_previous_link_and_activation_revokes_session
         assert reset_page.status_code == 200
         assert '"activation_purpose": "reset"' in reset_page.text
         assert "重新设置密码" in reset_page.text
+        assert "name='password_confirm'" in reset_page.text
+        mismatched_reset = client.post(
+            f"/activate/{second_reset}",
+            content=(
+                "password=second-link-works-once"
+                "&password_confirm=second-link-does-not-match"
+            ),
+            follow_redirects=False,
+        )
+        assert mismatched_reset.status_code == 422
+        assert "两次输入的密码不一致" in mismatched_reset.text
     with pytest.raises(DomainError, match="无效或已过期"):
         repository.complete_activation(first_reset, "first-link-must-not-work")
-    assert repository.complete_activation(second_reset, "second-link-works-once") == "tenant-user"
+    with TestClient(app, base_url="https://diyuai.cc") as client:
+        completed_reset = client.post(
+            f"/activate/{second_reset}",
+            content=(
+                "password=second-link-works-once"
+                "&password_confirm=second-link-works-once"
+            ),
+            follow_redirects=False,
+        )
+        assert completed_reset.status_code == 303
+        assert completed_reset.headers["location"] == "/login"
     with pytest.raises(DomainError, match="无效或已过期"):
         repository.complete_activation(second_reset, "second-link-must-not-work-twice")
     with TestClient(app, base_url="https://diyuai.cc") as client:

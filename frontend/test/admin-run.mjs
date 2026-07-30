@@ -30,11 +30,15 @@ for (const name of [
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let reducedMotion = false;
+let clipboardShouldFail = false;
 const adminRequests = [];
 const copiedTexts = [];
 Object.defineProperty(globalThis.navigator, "clipboard", {
   value: {
     writeText: async value => {
+      if (clipboardShouldFail) {
+        throw new dom.window.DOMException("Clipboard denied", "NotAllowedError");
+      }
       copiedTexts.push(value);
     }
   },
@@ -326,6 +330,12 @@ globalThis.fetch = async (input, init = {}) => {
       reset_url:
         "https://diyu.example/activate/ui05-obviously-fake-reset-fixture"
     };
+  } else if (
+    path === "/api/v1/tenant-management/users/22222222-2222-4222-8222-222222222222/disable" &&
+    method === "POST"
+  ) {
+    operators = operators.map(operator => ({ ...operator, enabled: false }));
+    value = { disabled: true };
   } else if (path === "/api/v1/auth/password" && method === "POST") {
     if (body.current_password === "incorrect-current-password") {
       return {
@@ -415,6 +425,9 @@ globalThis.__DIYU_ADMIN_INTERACTION__ = {
   copiedTexts,
   setReducedMotion: value => {
     reducedMotion = value;
+  },
+  setClipboardFailure: value => {
+    clipboardShouldFail = value;
   },
   setFailedPath: value => {
     failedPath = value;

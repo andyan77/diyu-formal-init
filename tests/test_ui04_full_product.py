@@ -211,7 +211,11 @@ def test_ui04_production_product_seams_are_human_scoped_and_atomic(
             assert all(word not in public_status.text for word in ("PostgreSQL", "S3", "数据库", "供应商"))
 
             invalid_activation = client.post(
-                "/activate/this-is-not-a-real-token", content="password=long-enough-password"
+                "/activate/this-is-not-a-real-token",
+                content=(
+                    "password=long-enough-password"
+                    "&password_confirm=long-enough-password"
+                ),
             )
             assert invalid_activation.status_code == 422
             assert invalid_activation.headers["content-type"].startswith("text/html")

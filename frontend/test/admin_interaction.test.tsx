@@ -11,9 +11,10 @@ const harness = (globalThis as unknown as {
     requests: Array<{ path: string; method: string; body: Record<string, unknown> | null }>;
     copiedTexts: string[];
     setReducedMotion: (value: boolean) => void;
+    setClipboardFailure: (value: boolean) => void;
   };
 }).__DIYU_ADMIN_INTERACTION__;
-const { window, requests, copiedTexts, setReducedMotion } = harness;
+const { window, requests, copiedTexts, setReducedMotion, setClipboardFailure } = harness;
 const document = window.document;
 const bootstrapWindow = window as unknown as {
   __DIYU_BOOTSTRAP__: Record<string, unknown> | null;
@@ -159,6 +160,27 @@ async function main(): Promise<void> {
   });
   assert.match(document.body.textContent ?? "", /重设密码.*重新设置密码/s);
   assert.match(document.body.textContent ?? "", /更新密码/);
+  const resetPassword = document.querySelector(
+    'input[name="password"]'
+  ) as HTMLInputElement | null;
+  const resetConfirmation = document.querySelector(
+    'input[name="password_confirm"]'
+  ) as HTMLInputElement | null;
+  assert.ok(resetPassword);
+  assert.ok(resetConfirmation);
+  await input(resetPassword, "a-long-enough-password");
+  await input(resetConfirmation, "a-different-password");
+  const activationForm = document.querySelector("form");
+  assert.ok(activationForm);
+  let submissionAllowed = true;
+  await act(async () => {
+    submissionAllowed = activationForm.dispatchEvent(
+      new window.Event("submit", { bubbles: true, cancelable: true })
+    );
+  });
+  assert.equal(submissionAllowed, false, "两次密码不一致时必须阻止表单提交");
+  assert.match(document.body.textContent ?? "", /两次输入的密码不一致/);
+  assert.equal(document.activeElement, resetConfirmation);
   await act(async () => root.unmount());
 
   let passwordRedirect = "";
@@ -240,11 +262,14 @@ async function main(): Promise<void> {
   );
   assert.ok(activationAnchor, "完整 HTTPS 激活地址必须可直接点击");
   await click(find(".one-time-link button", "复制链接"));
+  await settle();
   assert.equal(
     copiedTexts.at(-1),
     "https://diyu.example/activate/ui04-obviously-fake-browser-fixture",
     "显示值与复制值必须使用同一个服务端完整 URL"
   );
+  assert.match(document.body.textContent ?? "", /链接已复制/);
+  assert.doesNotMatch(document.body.textContent ?? "", /链接已发送|已交付/);
 
   await click(find(".tenant-drawer button", "关闭"));
   await click(find("button", "查看与处理"));
@@ -268,12 +293,52 @@ async function main(): Promise<void> {
     ),
     "完整 HTTPS 重设地址必须可直接点击"
   );
+  setClipboardFailure(true);
   await click(find(".one-time-link button", "复制重设链接"));
+  await settle();
+  assert.match(
+    document.body.textContent ?? "",
+    /未能自动复制，请手动选择上方链接/
+  );
+  setClipboardFailure(false);
+  await click(find(".one-time-link button", "复制重设链接"));
+  await settle();
   assert.equal(
     copiedTexts.at(-1),
     "https://diyu.example/activate/ui05-obviously-fake-reset-fixture"
   );
-  await click(find(".tenant-drawer button", "关闭"));
+  assert.match(document.body.textContent ?? "", /链接已复制/);
+
+  const disablePath =
+    "/api/v1/tenant-management/users/22222222-2222-4222-8222-222222222222/disable";
+  const disableCount = (): number =>
+    requests.filter(item => item.path === disablePath && item.method === "POST").length;
+  assert.equal(disableCount(), 0);
+  await click(find(".tenant-drawer button", "停用成员"));
+  assert.equal(disableCount(), 0, "停用成员首击不得调用 API");
+  assert.match(document.querySelector('[role="alertdialog"]')?.textContent ?? "", /无法继续登录/);
+  assert.match(
+    document.querySelector('[role="alertdialog"]')?.textContent ?? "",
+    /当前会话和工作资格/
+  );
+  assert.match(document.activeElement?.textContent ?? "", /确认停用/);
+  await click(find('[role="alertdialog"] button', "取消"));
+  assert.equal(disableCount(), 0, "取消停用不得改变成员状态");
+  assert.match(document.activeElement?.textContent ?? "", /停用成员/);
+  await click(find(".tenant-drawer button", "停用成员"));
+  const confirmDisable = find('[role="alertdialog"] button', "确认停用");
+  await act(async () => {
+    confirmDisable.dispatchEvent(
+      new window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
+    confirmDisable.dispatchEvent(
+      new window.MouseEvent("click", { bubbles: true, cancelable: true })
+    );
+  });
+  await settle();
+  assert.equal(disableCount(), 1, "确认停用只能调用一次 API");
+  assert.match(document.body.textContent ?? "", /成员已停用/);
+
   await click(find(".tenant-nav button", "发布账号与账号画像"));
   await click(find("button", "创建发布账号"));
   const accountInputs = Array.from(

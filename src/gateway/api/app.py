@@ -582,34 +582,54 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             set_production_ops_cookie(response, production_authority.repository.create_operator_session(identity))
             return response
 
+        def render_activation_form(
+            activation_token: str,
+            activation_purpose: str,
+            *,
+            error: str | None = None,
+            response_status: int = status.HTTP_200_OK,
+        ) -> HTMLResponse:
+            resetting = activation_purpose == "reset"
+            heading = "重新设置密码" if resetting else "设置笛语密码"
+            action = "更新密码" if resetting else "完成设置"
+            error_markup = (
+                "<p role='alert' id='activation-password-error'>" + escape(error) + "</p>"
+                if error
+                else ""
+            )
+            return HTMLResponse(
+                render_spa_shell(
+                    {
+                        "application": "activation",
+                        "activation_purpose": activation_purpose,
+                        "activation_error": error,
+                    },
+                    fallback=(
+                        "<main><h1>"
+                        + heading
+                        + "</h1>"
+                        + error_markup
+                        + "<form method='post' action='/activate/"
+                        + escape(activation_token)
+                        + "'><label>新密码 <input type='password' name='password' "
+                        "autocomplete='new-password' minlength='12' required></label>"
+                        "<label>再次输入新密码 <input type='password' name='password_confirm' "
+                        "autocomplete='new-password' minlength='12' required></label>"
+                        "<button type='submit'>"
+                        + action
+                        + "</button></form></main>"
+                    ),
+                ),
+                status_code=response_status,
+            )
+
         @app.get("/activate/{activation_token}", include_in_schema=False)
         def activation_page(activation_token: str) -> HTMLResponse:
             activation_purpose = (
                 production_authority.repository.activation_purpose(activation_token)
                 or "activate"
             )
-            resetting = activation_purpose == "reset"
-            heading = "重新设置密码" if resetting else "设置笛语密码"
-            action = "更新密码" if resetting else "完成设置"
-            return HTMLResponse(
-                render_spa_shell(
-                    {
-                        "application": "activation",
-                        "activation_purpose": activation_purpose,
-                    },
-                    fallback=(
-                        "<main><h1>"
-                        + heading
-                        + "</h1><form method='post' action='/activate/"
-                        + escape(activation_token)
-                        + "'><label>新密码 <input type='password' name='password' "
-                        "autocomplete='new-password' required></label>"
-                        "<button type='submit'>"
-                        + action
-                        + "</button></form></main>"
-                    ),
-                )
-            )
+            return render_activation_form(activation_token, activation_purpose)
 
         @app.post("/activate/{activation_token}", include_in_schema=False)
         async def activate(activation_token: str, request: Request) -> Response:
@@ -622,10 +642,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
             fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
             password = fields.get("password", [""])[0]
+            password_confirm = fields.get("password_confirm", [""])[0]
+            activation_purpose = (
+                production_authority.repository.activation_purpose(activation_token)
+                or "activate"
+            )
             if len(password) < 12:
-                return HTMLResponse(
-                    render_activation_failure("新密码至少需要 12 个字符；请返回收到的链接重新设置。"),
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                return render_activation_form(
+                    activation_token,
+                    activation_purpose,
+                    error="新密码至少需要 12 个字符。",
+                    response_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+            if len(password_confirm) < 12:
+                return render_activation_form(
+                    activation_token,
+                    activation_purpose,
+                    error="请再次输入至少 12 个字符的新密码。",
+                    response_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+            if password != password_confirm:
+                return render_activation_form(
+                    activation_token,
+                    activation_purpose,
+                    error="两次输入的密码不一致，请重新确认。",
+                    response_status=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 )
             try:
                 audience = production_authority.repository.complete_activation(activation_token, password)

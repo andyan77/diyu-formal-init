@@ -11,13 +11,16 @@ const required = (name) => {
 };
 
 const baseUrl = required("UX02_BASE_URL").replace(/\/$/, "");
+const expectedPublicUrl = (process.env.UX02_EXPECTED_PUBLIC_URL ?? baseUrl).replace(/\/$/, "");
 const adminUsername = required("UX02_ADMIN_USERNAME");
 const adminPassword = required("UX02_ADMIN_PASSWORD");
 const newUserPassword = required("UX02_NEW_USER_PASSWORD");
 const expectedAccountName = required("UX02_EXPECTED_ACCOUNT_NAME");
 const expectedPlatform = required("UX02_EXPECTED_PLATFORM");
+const boundedAdminOnly = process.env.UX02_BOUNDED_ADMIN_ONLY === "1";
 const newUsername = `ux02-browser-${Date.now()}`;
 const newDisplayName = `UX-02 浏览器成员 ${newUsername.slice(-6)}`;
+const resetUserPassword = `${newUserPassword}-reset`;
 const repo = resolve(new URL("../..", import.meta.url).pathname);
 const chromeCandidates = [
   process.env.UX02_CHROME,
@@ -154,7 +157,11 @@ try {
       throw new Error(`等待超时：${label}；当前 ${await location()}；页面：${body}`);
     };
     const navigate = async path => {
-      await send("Page.navigate", { url: path.startsWith("https://") ? path : `${baseUrl}${path}` }, sessionId);
+      await send(
+        "Page.navigate",
+        { url: /^https?:\/\//.test(path) ? path : `${baseUrl}${path}` },
+        sessionId
+      );
       await waitFor("document.readyState === 'complete'", `加载 ${path}`);
     };
     const fill = async (selector, value) => {
@@ -276,9 +283,16 @@ try {
     const href=document.querySelector('.one-time-link a')?.href;
     return {value,href};
   })()`);
-  ensure(activation.value?.startsWith(`${baseUrl}/activate/`), "显示值不是可信完整 HTTPS URL");
+  ensure(
+    activation.value?.startsWith(`${expectedPublicUrl}/activate/`),
+    "显示值不是可信完整 HTTPS URL"
+  );
   ensure(activation.href === activation.value, "显示值与点击目标不一致");
   await admin.click(".one-time-link button", "复制链接");
+  await admin.waitFor(
+    "document.body.textContent.includes('链接已复制')",
+    "激活链接复制成功反馈"
+  );
   const copiedActivation = await admin.evaluate("navigator.clipboard.readText()");
   ensure(copiedActivation === activation.value, "复制值与显示值不一致");
   record("管理员创建成员与完整激活链接", {
@@ -288,9 +302,20 @@ try {
   });
 
   const user = await createPage();
-  await user.navigate(activation.value);
+  await user.navigate(
+    expectedPublicUrl === baseUrl
+      ? activation.value
+      : `${baseUrl}${new URL(activation.value).pathname}`
+  );
   await user.waitFor("document.querySelector('input[name=password]') !== null", "新会话激活页");
   await user.fill('input[name="password"]', newUserPassword);
+  await user.fill('input[name="password_confirm"]', `${newUserPassword}-mismatch`);
+  await user.click('button[type="submit"]', "完成设置");
+  await user.waitFor(
+    "location.pathname.startsWith('/activate/') && document.body.textContent.includes('两次输入的密码不一致')",
+    "密码不一致留在激活页"
+  );
+  await user.fill('input[name="password_confirm"]', newUserPassword);
   await user.click('button[type="submit"]', "完成设置");
   await user.waitFor("location.pathname === '/login'", "激活后用户登录入口");
   await user.fill('input[name="username"]', newUsername);
@@ -301,6 +326,69 @@ try {
     await user.evaluate("document.body.textContent.includes('开始创作') && !document.body.textContent.includes('品牌管理')"),
     "租户用户入口职责不正确"
   );
+
+  await admin.click(".tenant-drawer button", "关闭");
+  const memberArticleOpened = await admin.evaluate(`(() => {
+    const article=[...document.querySelectorAll('.tenant-list article')]
+      .find(node=>node.textContent.includes(${JSON.stringify(newDisplayName)}));
+    const button=article?.querySelector('button');
+    if(!button)return false;
+    button.click();
+    return true;
+  })()`);
+  ensure(memberArticleOpened, "激活后无法重新打开新成员");
+  await admin.waitFor("document.querySelector('.tenant-drawer') !== null", "成员详情");
+  await admin.click(".tenant-drawer button", "生成一次性重设密码链接");
+  await admin.waitFor(
+    "document.querySelector('.one-time-link code.reset-link') !== null",
+    "完整重设密码链接"
+  );
+  const resetUrl = await admin.evaluate(
+    "document.querySelector('.one-time-link code.reset-link')?.textContent.trim()"
+  );
+  ensure(
+    resetUrl?.startsWith(`${expectedPublicUrl}/activate/`),
+    "重设链接不是可信完整 URL"
+  );
+  await admin.click(".one-time-link button", "复制重设链接");
+  await admin.waitFor(
+    "document.body.textContent.includes('链接已复制')",
+    "重设链接复制成功反馈"
+  );
+  ensure(
+    (await admin.evaluate("navigator.clipboard.readText()")) === resetUrl,
+    "重设链接复制值与显示值不一致"
+  );
+  await user.navigate(
+    expectedPublicUrl === baseUrl
+      ? resetUrl
+      : `${baseUrl}${new URL(resetUrl).pathname}`
+  );
+  await user.waitFor(
+    "document.querySelector('input[name=password_confirm]') !== null",
+    "新会话重设页"
+  );
+  await user.fill('input[name="password"]', resetUserPassword);
+  await user.fill('input[name="password_confirm"]', `${resetUserPassword}-mismatch`);
+  await user.click('button[type="submit"]', "更新密码");
+  await user.waitFor(
+    "location.pathname.startsWith('/activate/') && document.body.textContent.includes('两次输入的密码不一致')",
+    "密码不一致留在重设页"
+  );
+  await user.fill('input[name="password_confirm"]', resetUserPassword);
+  await user.click('button[type="submit"]', "更新密码");
+  await user.waitFor("location.pathname === '/login'", "重设后用户登录入口");
+  await user.fill('input[name="username"]', newUsername);
+  await user.fill('input[name="password"]', resetUserPassword);
+  await user.click('button[type="submit"]', "登录");
+  await user.waitFor("location.pathname === '/user'", "重设后重新登录");
+  record("激活与重设密码双重输入及复制反馈", {
+    mismatch_did_not_consume_token: true,
+    activation_copy_feedback: true,
+    reset_copy_feedback: true
+  });
+
+  if (!boundedAdminOnly) {
   await user.click("a", "开始创作");
   await user.waitFor("location.pathname === '/content'", "进入正式创作工作台");
   await user.waitFor("document.querySelector('textarea[aria-label=\"内容需求\"]') !== null", "创作输入区");
@@ -432,6 +520,7 @@ try {
     v1_v2_v1_current: true,
     aigc_or_image_hint: false
   });
+  }
 
   await admin.navigate("/tenant-admin");
   await admin.waitFor(
@@ -454,11 +543,26 @@ try {
   ensure(opened, "无法打开新成员");
   await admin.waitFor("document.querySelector('.tenant-drawer') !== null", "成员详情");
   await admin.click(".tenant-drawer button", "停用成员");
+  ensure(
+    await user.evaluate("location.pathname === '/user'"),
+    "停用首击不应撤销旧会话"
+  );
+  await admin.waitFor(
+    "document.querySelector('[role=alertdialog]') !== null",
+    "停用成员二次确认"
+  );
+  await admin.click('[role="alertdialog"] button', "取消");
+  ensure(
+    await user.evaluate("location.pathname === '/user'"),
+    "取消停用不应撤销旧会话"
+  );
+  await admin.click(".tenant-drawer button", "停用成员");
+  await admin.click('[role="alertdialog"] button', "确认停用");
   await admin.waitFor("document.body.textContent.includes('现有会话与工作资格已撤销')", "停用反馈");
   await user.navigate("/user");
   await user.waitFor("location.pathname === '/login'", "停用后旧会话失效");
   await user.fill('input[name="username"]', newUsername);
-  await user.fill('input[name="password"]', newUserPassword);
+  await user.fill('input[name="password"]', resetUserPassword);
   await user.click('button[type="submit"]', "登录");
   await user.waitFor("document.body.textContent.includes('用户名、密码或当前入口不匹配')", "停用后登录失败");
   record("成员停用使旧会话与再次登录失效", true);

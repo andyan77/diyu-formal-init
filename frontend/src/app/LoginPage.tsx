@@ -1,4 +1,5 @@
-import type { JSX } from "react";
+import { useRef, useState } from "react";
+import type { FormEvent, JSX } from "react";
 import { BrandMark } from "../components/Brand";
 import type { BootstrapContext } from "./types";
 
@@ -85,6 +86,33 @@ export function ActivationPage({
   context?: BootstrapContext | null;
 }): JSX.Element {
   const resetting = context?.activation_purpose === "reset";
+  const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [error, setError] = useState(context?.activation_error ?? "");
+  const passwordInput = useRef<HTMLInputElement>(null);
+  const confirmationInput = useRef<HTMLInputElement>(null);
+
+  const validatePasswords = (event: FormEvent<HTMLFormElement>): void => {
+    setError("");
+    if (password.length < 12) {
+      event.preventDefault();
+      setError("新密码至少需要 12 个字符。");
+      passwordInput.current?.focus();
+      return;
+    }
+    if (passwordConfirmation.length < 12) {
+      event.preventDefault();
+      setError("请再次输入至少 12 个字符的新密码。");
+      confirmationInput.current?.focus();
+      return;
+    }
+    if (password !== passwordConfirmation) {
+      event.preventDefault();
+      setError("两次输入的密码不一致，请重新确认。");
+      confirmationInput.current?.focus();
+    }
+  };
+
   return (
     <main className="auth-page">
       <a className="auth-brand" href="/" aria-label="返回笛语首页">
@@ -94,14 +122,39 @@ export function ActivationPage({
         <p className="eyebrow">{resetting ? "重设密码" : "首次进入"}</p>
         <h1>{resetting ? "重新设置密码" : "设置你的密码"}</h1>
         <p className="field-help">请使用至少 12 个字符，只在这里输入新密码。</p>
-        <form method="post" action={window.location.pathname}>
+        {error && (
+          <p className="auth-error" id="activation-password-error" role="alert">
+            {error}
+          </p>
+        )}
+        <form method="post" action={window.location.pathname} onSubmit={validatePasswords}>
           <label>
             新密码
             <input
+              ref={passwordInput}
               type="password"
               name="password"
               minLength={12}
               autoComplete="new-password"
+              value={password}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "activation-password-error" : undefined}
+              onChange={event => setPassword(event.target.value)}
+              required
+            />
+          </label>
+          <label>
+            再次输入新密码
+            <input
+              ref={confirmationInput}
+              type="password"
+              name="password_confirm"
+              minLength={12}
+              autoComplete="new-password"
+              value={passwordConfirmation}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "activation-password-error" : undefined}
+              onChange={event => setPasswordConfirmation(event.target.value)}
               required
             />
           </label>

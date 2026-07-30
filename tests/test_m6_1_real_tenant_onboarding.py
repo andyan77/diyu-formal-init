@@ -165,7 +165,7 @@ def test_real_tenant_onboarding_is_atomic_account_independent_and_idempotent(
     with TestClient(app, base_url="https://diyuai.cc") as client:
         activated = client.post(
             f"/activate/{retried['activation_token']}",
-            content=f"password={password}",
+            content=f"password={password}&password_confirm={password}",
             follow_redirects=False,
         )
         assert activated.status_code == 303
@@ -233,7 +233,10 @@ def test_real_tenant_onboarding_is_atomic_account_independent_and_idempotent(
         publishing_password = "m6-1-publishing-password-is-long"
         operator_activated = client.post(
             publishing_operator_payload["activation_link"],
-            content=f"password={publishing_password}",
+            content=(
+                f"password={publishing_password}"
+                f"&password_confirm={publishing_password}"
+            ),
             follow_redirects=False,
         )
         assert operator_activated.status_code == 303

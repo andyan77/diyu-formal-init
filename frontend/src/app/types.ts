@@ -33,6 +33,7 @@ export interface BootstrapContext {
   identity?: Record<string, string>;
   entry?: "tenant-user" | "tenant-admin" | "ops";
   activation_purpose?: "activate" | "reset";
+  activation_error?: string;
   current_target?: Target | null;
   targets?: PlatformTarget[];
   publishing_identities?: PublishingIdentity[];

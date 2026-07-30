@@ -492,6 +492,16 @@ a {
   line-height: 1.55;
 }
 
+.auth-error {
+  margin: -18px 0 24px;
+  padding: 12px 14px;
+  border-left: 3px solid #9a2f26;
+  background: #fff2ef;
+  color: #7b261f;
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
 .auth-recovery {
   color: var(--ink-soft);
   font-size: 0.84rem;
