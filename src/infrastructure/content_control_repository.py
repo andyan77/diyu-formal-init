@@ -150,6 +150,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                   AND target_account.id = %s
                   AND root_account.brand_id = %s
                   AND target_account.enabled = true
+                  AND target_account.platform_enabled = true
                   AND root_account.enabled = true
                 """,
                 (scope.tenant_id, scope.account_id, scope.brand_id),
@@ -213,13 +214,47 @@ class PostgresContentControlRepository(ContentControlRepository):
             row = cursor.fetchone()
         return self._profile_value(row) if row is not None else None
 
+    def account_expression_versions(
+        self,
+        tenant_id: UUID,
+        account_id: UUID,
+    ) -> list[dict[str, object]]:
+        canonical_account_id = self._canonical_account_id(
+            tenant_id,
+            account_id,
+        )
+        with self._tenant_tx(tenant_id) as cursor:
+            cursor.execute(
+                """
+                SELECT profile.id, profile.version,
+                       role.name AS content_role,
+                       profile.identity_position,
+                       profile.authority_boundary,
+                       profile.audience_relationship,
+                       profile.content_territories,
+                       profile.default_production_conditions
+                  FROM account_expression_profile_versions AS profile
+                  JOIN content_roles AS role
+                    ON role.tenant_id = profile.tenant_id
+                   AND role.id = profile.content_role_id
+                 WHERE profile.tenant_id = %s
+                   AND profile.account_id = %s
+                 ORDER BY profile.version DESC
+                """,
+                (tenant_id, canonical_account_id),
+            )
+            return [
+                self._profile_value(row)
+                for row in cursor.fetchall()
+            ]
+
     def _canonical_account_id(self, tenant_id: UUID, account_id: UUID) -> UUID:
         with self._tenant_tx(tenant_id) as cursor:
             cursor.execute(
                 """
                 SELECT COALESCE(carrier_of_account_id, id) AS account_id
                 FROM content_accounts
-                WHERE tenant_id = %s AND id = %s AND enabled = true
+                WHERE tenant_id = %s AND id = %s
                 """,
                 (tenant_id, account_id),
             )
@@ -509,7 +544,6 @@ class PostgresContentControlRepository(ContentControlRepository):
                  AND profile.tenant_id = account.tenant_id
                  AND profile.account_id = account.id
                 WHERE account.tenant_id = %s AND account.brand_id = %s
-                  AND account.enabled = true
                   AND account.carrier_of_account_id IS NULL
                 ORDER BY account.name
                 """,

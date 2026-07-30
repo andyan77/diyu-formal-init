@@ -717,8 +717,7 @@ def test_ui05_c_account_creation_stores_one_profile_without_a_second_boundary(
         "tenant-admin",
     )
     account_id: UUID | None = None
-    role_id: UUID | None = None
-    profile_id: UUID | None = None
+    store_account_id: UUID | None = None
     try:
         with TestClient(
             _app(app_database_url, monkeypatch),
@@ -746,17 +745,17 @@ def test_ui05_c_account_creation_stores_one_profile_without_a_second_boundary(
             assert created.json()["id"] == retried.json()["id"]
             account_id = UUID(created.json()["id"])
 
-            refused = client.post(
+            store_created = client.post(
                 "/api/v1/tenant-management/publishing-accounts",
                 json={
                     **payload,
-                    "name": f"{account_name}-门店越权",
-                    "content_role_name": f"{role_name}-门店越权",
+                    "name": f"{account_name}-门店",
+                    "content_role_name": f"{role_name}-门店",
                     "control_organization_id": str(STORE_ORG_ID),
                 },
             )
-            assert refused.status_code == 422
-            assert "公司级负责团队" in refused.json()["detail"]
+            assert store_created.status_code == 201
+            store_account_id = UUID(store_created.json()["id"])
 
         with (
             psycopg.connect(
@@ -799,8 +798,6 @@ def test_ui05_c_account_creation_stores_one_profile_without_a_second_boundary(
             )
             stored = cursor.fetchone()
             assert stored is not None
-            role_id = UUID(str(stored["role_id"]))
-            profile_id = UUID(str(stored["profile_id"]))
             assert stored["version"] == 1
             assert stored["profile_count"] == 1
             assert stored["voice_boundary"] == segments["authority_boundary"]
@@ -812,41 +809,63 @@ def test_ui05_c_account_creation_stores_one_profile_without_a_second_boundary(
                 psycopg.connect(migrator_database_url) as cleanup_connection,
                 cleanup_connection.cursor() as cleanup_cursor,
             ):
+                account_ids = [
+                    value
+                    for value in (account_id, store_account_id)
+                    if value is not None
+                ]
                 cleanup_cursor.execute(
                     "SELECT set_config('app.tenant_id', %s, true)",
                     (str(TENANT_ID),),
                 )
                 cleanup_cursor.execute(
+                    "SELECT content_role_id FROM account_content_roles "
+                    "WHERE tenant_id = %s AND account_id = ANY(%s)",
+                    (TENANT_ID, account_ids),
+                )
+                role_ids = [row[0] for row in cleanup_cursor.fetchall()]
+                cleanup_cursor.execute(
+                    "SELECT id FROM account_expression_profile_versions "
+                    "WHERE tenant_id = %s AND account_id = ANY(%s)",
+                    (TENANT_ID, account_ids),
+                )
+                profile_ids = [row[0] for row in cleanup_cursor.fetchall()]
+                cleanup_cursor.execute(
                     "DELETE FROM activity_events WHERE tenant_id = %s AND entity_id = ANY(%s)",
                     (
                         TENANT_ID,
-                        [value for value in (account_id, profile_id) if value is not None],
+                        [*account_ids, *profile_ids],
                     ),
                 )
                 cleanup_cursor.execute(
-                    "DELETE FROM auth_grants WHERE tenant_id = %s AND account_id = %s",
-                    (TENANT_ID, account_id),
+                    "DELETE FROM auth_grants WHERE tenant_id = %s AND account_id = ANY(%s)",
+                    (TENANT_ID, account_ids),
                 )
                 cleanup_cursor.execute(
-                    "UPDATE content_accounts SET current_expression_profile_id = NULL WHERE tenant_id = %s AND id = %s",
-                    (TENANT_ID, account_id),
+                    "UPDATE content_accounts SET current_expression_profile_id = NULL "
+                    "WHERE tenant_id = %s AND id = ANY(%s)",
+                    (TENANT_ID, account_ids),
                 )
                 cleanup_cursor.execute(
-                    "DELETE FROM account_expression_profile_versions WHERE tenant_id = %s AND account_id = %s",
-                    (TENANT_ID, account_id),
+                    "DELETE FROM account_expression_profile_versions "
+                    "WHERE tenant_id = %s AND account_id = ANY(%s)",
+                    (TENANT_ID, account_ids),
                 )
                 cleanup_cursor.execute(
-                    "DELETE FROM account_content_roles WHERE tenant_id = %s AND account_id = %s",
-                    (TENANT_ID, account_id),
+                    "DELETE FROM account_content_roles "
+                    "WHERE tenant_id = %s AND account_id = ANY(%s)",
+                    (TENANT_ID, account_ids),
                 )
                 cleanup_cursor.execute(
-                    "DELETE FROM content_accounts WHERE tenant_id = %s AND id = %s",
-                    (TENANT_ID, account_id),
+                    "DELETE FROM content_accounts "
+                    "WHERE tenant_id = %s AND id = ANY(%s)",
+                    (TENANT_ID, account_ids),
                 )
-                if role_id is not None:
+                if role_ids:
                     cleanup_cursor.execute(
-                        "DELETE FROM content_roles WHERE tenant_id = %s AND id = %s",
-                        (TENANT_ID, role_id),
+                        "DELETE FROM content_roles "
+                        "WHERE tenant_id = %s AND id = ANY(%s)",
+                        (TENANT_ID, role_ids),
                     )
 
 

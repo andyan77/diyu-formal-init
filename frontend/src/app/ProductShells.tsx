@@ -20,6 +20,11 @@ export function UserHome({ context }: { context: BootstrapContext }): JSX.Elemen
       <section>
         <p className="eyebrow">{identity.account ?? identity.organization ?? "你的工作空间"}</p>
         <h1>{identity.operator ? `${identity.operator}，` : ""}今天想完成什么？</h1>
+        {identity.organization && (
+          <p className="user-home-scope">
+            所属团队：{identity.organization}
+          </p>
+        )}
         <div className="user-task-choices">
           {canCreateContent && (
             <a className="button primary" href="/content">

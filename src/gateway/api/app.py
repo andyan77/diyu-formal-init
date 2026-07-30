@@ -78,13 +78,18 @@ from src.gateway.api.contracts import (
     ProvisionedTenantResponse,
     ReorderSeriesRequest,
     ResetTenantUserResponse,
+    RestoredTenantUserResponse,
     RevisionRequest,
     SaveBrandProductRequest,
     SavedVersionResponse,
+    SetEnabledRequest,
+    SetExpressionProfileMaintenanceRequest,
     UnmetCapabilityRequest,
     UnmetCapabilityResponseRequest,
+    UpdatePublishingAccountRequest,
     UpdatePublishingSpeakerKindRequest,
     UpdateTenantUserGrantsRequest,
+    UpdateTenantUserRequest,
 )
 from src.gateway.api.html import (
     render_activation_failure,
@@ -365,6 +370,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "name": str(item["name"]),
                     "profile_summary": str(item.get("profile_summary") or "尚未填写账号画像"),
                     "content_role": str(item.get("content_role") or "发布账号"),
+                    "control_organization": (
+                        str(item["control_organization"])
+                        if item.get("control_organization") is not None
+                        else None
+                    ),
+                    "profile_id": (
+                        str(item["profile_id"])
+                        if item.get("profile_id") is not None
+                        else None
+                    ),
+                    "profile_version": item.get("profile_version"),
                     "platform_targets": projected_targets,
                 }
             )
@@ -751,6 +767,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     payload.grants_expression_profile_maintenance,
                     entry_type=payload.entry_type,
                     account_ids=tuple(payload.publishing_identity_ids),
+                    maintenance_account_ids=(
+                        tuple(
+                            payload.expression_profile_maintenance_account_ids
+                        )
+                        if "expression_profile_maintenance_account_ids"
+                        in payload.model_fields_set
+                        else None
+                    ),
                     grants_content_access="content" in payload.capabilities,
                     grants_display_access="display" in payload.capabilities,
                 )
@@ -787,6 +811,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 payload.organization_level,
             )
 
+        @app.patch(
+            "/api/v1/tenant-management/users/{user_id}",
+            responses=business_failures,
+        )
+        def update_tenant_user(
+            user_id: UUID,
+            payload: UpdateTenantUserRequest,
+            request: Request,
+        ) -> dict[str, str]:
+            return production_authority.repository.update_tenant_user(
+                formal_manager_identity(request),
+                user_id,
+                payload.display_name,
+                payload.organization_id,
+            )
+
         @app.post(
             "/api/v1/tenant-management/users/{user_id}/reset",
             responses=business_failures,
@@ -800,6 +840,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             token = production_authority.repository.create_reset_token(identity, user_id)
             reset_link, reset_url = activation_paths(token)
             return ResetTenantUserResponse(reset_link=reset_link, reset_url=reset_url)
+
+        @app.post(
+            "/api/v1/tenant-management/users/{user_id}/restore",
+            responses=business_failures,
+            response_model=RestoredTenantUserResponse,
+        )
+        def restore_tenant_user(
+            user_id: UUID,
+            request: Request,
+        ) -> RestoredTenantUserResponse:
+            restored = production_authority.repository.restore_tenant_user(
+                formal_manager_identity(request),
+                user_id,
+            )
+            activation_link, activation_url = activation_paths(
+                restored["activation_token"]
+            )
+            return RestoredTenantUserResponse(
+                user_id=restored["user_id"],
+                activation_link=activation_link,
+                activation_url=activation_url,
+            )
 
         @app.post("/api/v1/tenant-management/users/{user_id}/disable", responses=business_failures)
         def disable_tenant_user(user_id: UUID, request: Request) -> dict[str, bool]:
@@ -841,8 +903,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 payload.grants_expression_profile_maintenance,
                 entry_type=payload.entry_type,
                 account_ids=tuple(payload.publishing_identity_ids),
+                maintenance_account_ids=(
+                    tuple(payload.expression_profile_maintenance_account_ids)
+                    if payload.expression_profile_maintenance_account_ids
+                    is not None
+                    else None
+                ),
                 grants_content_access="content" in payload.capabilities,
                 grants_display_access="display" in payload.capabilities,
+            )
+
+        @app.put(
+            "/api/v1/tenant-management/users/{user_id}/publishing-accounts/"
+            "{account_id}/profile-maintenance",
+            responses=business_failures,
+        )
+        def set_expression_profile_maintenance(
+            user_id: UUID,
+            account_id: UUID,
+            payload: SetExpressionProfileMaintenanceRequest,
+            request: Request,
+        ) -> dict[str, object]:
+            return production_authority.repository.set_account_profile_maintenance(
+                formal_manager_identity(request),
+                user_id,
+                account_id,
+                payload.enabled,
             )
 
         @app.post(
@@ -1037,7 +1123,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 identity = production_authority._tenant_identity(request)
                 identities = publishing_identities(identity)
                 capabilities: list[str] = []
+                identity_projection: dict[str, object] = {}
                 if identities:
+                    first_identity_id = UUID(str(identities[0]["id"]))
+                    identity_scope = production_authority.repository.content_scope(
+                        identity,
+                        None,
+                        first_identity_id,
+                    )
+                    raw_projection = workbench_service.user_portal_context(
+                        identity_scope
+                    ).get("identity")
+                    if isinstance(raw_projection, dict):
+                        identity_projection = raw_projection
                     capabilities.append("content")
                 try:
                     production_authority.repository.display_scope(identity)
@@ -1047,7 +1145,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     capabilities.append("display")
                 return {
                     "application": "tenant_user",
-                    "identity": {},
+                    "identity": identity_projection,
                     "publishing_identities": identities,
                     "capabilities": capabilities,
                     "formal_runtime": True,
@@ -1307,6 +1405,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.patch(
+        "/api/v1/tenant-management/publishing-accounts/{account_id}",
+        responses=business_failures,
+    )
+    def update_publishing_account(
+        account_id: UUID,
+        payload: UpdatePublishingAccountRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.update_publishing_account(
+            scope,
+            account_id,
+            payload.name,
+            payload.control_organization_id,
+        )
+
+    @app.put(
+        "/api/v1/tenant-management/publishing-accounts/{account_id}/enabled",
+        responses=business_failures,
+    )
+    def set_publishing_account_enabled(
+        account_id: UUID,
+        payload: SetEnabledRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.set_publishing_account_enabled(
+            scope,
+            account_id,
+            payload.enabled,
+        )
+
+    @app.patch(
         "/api/v1/tenant-management/publishing-accounts/{account_id}/speaker-kind",
         responses=business_failures,
     )
@@ -1337,6 +1466,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.channel,
             payload.operator_id,
             payload.confirm_internal_carrier,
+        )
+
+    @app.put(
+        "/api/v1/tenant-management/platform-carriers/{account_id}/enabled",
+        responses=business_failures,
+    )
+    def set_platform_carrier_enabled(
+        account_id: UUID,
+        payload: SetEnabledRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.set_platform_carrier_enabled(
+            scope,
+            account_id,
+            payload.enabled,
         )
 
     @app.post(
@@ -1828,6 +1972,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, object]:
         return control_service.save_management_account_expression(scope, account_id, payload.model_dump())
 
+    @app.get(
+        "/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile/versions",
+        responses=business_failures,
+    )
+    def management_account_expression_versions(
+        account_id: UUID,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return control_service.management_account_expression_versions(
+            scope,
+            account_id,
+        )
+
     @app.get("/api/v1/tenant-management/control-organizations", responses=business_failures)
     def control_organizations(
         scope: TenantManagementScope = Depends(management_scope_from_request),
@@ -2283,9 +2440,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             context: dict[str, object] | None = None
             available_identities = publishing_identities(identity)
             if available_identities:
+                first_identity_id = UUID(str(available_identities[0]["id"]))
+                identity_scope = production_authority.repository.content_scope(
+                    identity,
+                    None,
+                    first_identity_id,
+                )
                 context = {
                     "application": "tenant_user",
-                    "identity": {},
+                    "identity": workbench_service.user_portal_context(
+                        identity_scope
+                    )["identity"],
                     "publishing_identities": available_identities,
                 }
                 capabilities.append("content")

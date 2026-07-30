@@ -5,7 +5,10 @@ from contextlib import suppress
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from src.brain.onboarding_prefill import product_prefills
+from src.brain.onboarding_prefill import (
+    generic_account_profile_candidate,
+    product_prefills,
+)
 from src.ports.material_object_store import MaterialObjectStore
 from src.ports.workbench_repository import WorkbenchRepository
 from src.shared.errors import DomainError
@@ -213,6 +216,13 @@ class WorkbenchService:
         carrier_drafts = self._platform_carrier_prefills(accounts) if metadata else []
         return {
             **metadata,
+            "account_profile_candidate": generic_account_profile_candidate(
+                identity["brand"]
+            ),
+            "account_profile_candidate_source": (
+                "基于当前租户名称、已确认品牌表达边界和通用企业账号冷启动规则生成；"
+                "保存前必须由管理员纠正。"
+            ),
             "product_drafts": pending_products,
             "platform_carrier_drafts": carrier_drafts,
         }
@@ -414,6 +424,37 @@ class WorkbenchService:
             speaker_kind,
         )
 
+    def update_publishing_account(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        name: str | None,
+        control_organization_id: UUID | None,
+    ) -> dict[str, object]:
+        normalized_name = name.strip() if name is not None else None
+        if name is not None and not normalized_name:
+            raise DomainError("发布账号名称不能为空。")
+        if normalized_name is None and control_organization_id is None:
+            raise DomainError("请至少修改账号名称或负责团队。")
+        return self._repository.update_publishing_account(
+            scope,
+            account_id,
+            normalized_name,
+            control_organization_id,
+        )
+
+    def set_publishing_account_enabled(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        return self._repository.set_publishing_account_enabled(
+            scope,
+            account_id,
+            enabled,
+        )
+
     def create_platform_carrier(
         self,
         scope: TenantManagementScope,
@@ -433,6 +474,18 @@ class WorkbenchService:
             name.strip(),
             channel.strip(),
             operator_id,
+        )
+
+    def set_platform_carrier_enabled(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        return self._repository.set_platform_carrier_enabled(
+            scope,
+            account_id,
+            enabled,
         )
 
     def create_operator(

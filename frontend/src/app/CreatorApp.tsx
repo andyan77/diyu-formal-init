@@ -480,7 +480,15 @@ function AccountDrawer({
           </div>
           <div>
             <dt>负责团队</dt>
-            <dd>{identity.organization ?? "—"}</dd>
+            <dd>{publishingIdentity.control_organization ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>账号画像</dt>
+            <dd>
+              {publishingIdentity.profile_version
+                ? `V${publishingIdentity.profile_version}`
+                : "尚未确认"}
+            </dd>
           </div>
         </dl>
         <p className="profile-one-line">{publishingIdentity.profile_summary}</p>

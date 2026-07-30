@@ -305,6 +305,13 @@ class UpdatePublishingSpeakerKindRequest(BaseModel):
     ]
 
 
+class UpdatePublishingAccountRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    control_organization_id: UUID | None = None
+
+
 class CreatePlatformCarrierRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -370,6 +377,14 @@ class ResetTenantUserResponse(BaseModel):
     reset_url: str
 
 
+class RestoredTenantUserResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    activation_link: str
+    activation_url: str
+
+
 class ProvisionedTenantResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -394,6 +409,10 @@ class CreateTenantUserRequest(BaseModel):
     entry_type: Literal["tenant_admin", "tenant_user"] | None = None
     capabilities: list[Literal["content", "display"]] = Field(default_factory=list, max_length=2)
     publishing_identity_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    expression_profile_maintenance_account_ids: list[UUID] = Field(
+        default_factory=list,
+        max_length=20,
+    )
 
 
 class UpdateTenantUserGrantsRequest(BaseModel):
@@ -403,10 +422,35 @@ class UpdateTenantUserGrantsRequest(BaseModel):
     grants_account_access: bool = False
     grants_tenant_management: bool = False
     grants_material_maintenance: bool = False
-    grants_expression_profile_maintenance: bool = False
+    # Omission preserves each account's independent maintenance grant. The
+    # account-specific endpoint is the formal consumer for changing it.
+    grants_expression_profile_maintenance: bool | None = None
     entry_type: Literal["tenant_admin", "tenant_user"] | None = None
     capabilities: list[Literal["content", "display"]] = Field(default_factory=list, max_length=2)
     publishing_identity_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    expression_profile_maintenance_account_ids: list[UUID] | None = Field(
+        default=None,
+        max_length=20,
+    )
+
+
+class UpdateTenantUserRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str | None = Field(default=None, min_length=1, max_length=80)
+    organization_id: UUID | None = None
+
+
+class SetExpressionProfileMaintenanceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+
+
+class SetEnabledRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
 
 
 class CreateOrganizationRequest(BaseModel):

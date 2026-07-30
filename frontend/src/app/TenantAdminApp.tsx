@@ -4,6 +4,11 @@ import { BrandMark } from "../components/Brand";
 import { ApiError, api } from "../services/api";
 import "../styles/tenant-admin.css";
 import type { BootstrapContext, Target } from "./types";
+import {
+  publishingChannelForTarget,
+  publishingPlatformChoices,
+  publishingTargetContract
+} from "./publishingTargets";
 
 type Section =
   | "overview"
@@ -55,6 +60,7 @@ type SpeakerKind = "institutional_account" | "personal_ip_account" | "unknown";
 type PublishingAccount = {
   id: string;
   name: string;
+  enabled: boolean;
   control_organization: {
     id: string;
     name: string;
@@ -76,6 +82,7 @@ type PublishingAccount = {
     target: Target;
     platform: string;
     media: string;
+    enabled: boolean;
   }>;
   carrier_count: number;
 };
@@ -87,6 +94,21 @@ type ManagementProfile = {
   control_organization_source?: string | null;
   current: (ProfileSegments & { version: number }) | null;
   draft?: ProfileSegments | null;
+};
+type ProfileVersion = ProfileSegments & {
+  profile_id: string;
+  version: number;
+};
+
+type BrandExpressionBaseline = {
+  version: number;
+  status: "draft" | "confirmed";
+  draft: string;
+};
+
+type OnboardingPrefill = {
+  account_profile_candidate: ProfileSegments;
+  account_profile_candidate_source: string;
 };
 
 type Usage = {
@@ -222,10 +244,12 @@ const scopeLabels: Record<LibraryScope, string> = {
 };
 
 const targetLabels: Record<Target | "other", string> = {
-  douyin_video: "抖音视频",
-  xiaohongshu_graphic: "小红书图文",
-  xiaohongshu_video: "小红书视频",
-  wechat_channels_video: "微信视频号",
+  ...Object.fromEntries(
+    Object.entries(publishingTargetContract).map(([key, value]) => [
+      key,
+      value.label
+    ])
+  ) as Record<Target, string>,
   other: "其他"
 };
 
@@ -836,13 +860,17 @@ function Members({
     entryType: "tenant_user" as EntryType,
     content: true,
     display: false,
-    accountIds: [] as string[]
+    accountIds: [] as string[],
+    maintenanceAccountIds: [] as string[]
   });
   const [edit, setEdit] = useState({
+    displayName: "",
+    organizationId: "",
     entryType: "tenant_user" as EntryType,
     content: false,
     display: false,
-    accountIds: [] as string[]
+    accountIds: [] as string[],
+    maintenanceAccountIds: [] as string[]
   });
 
   const refresh = async (): Promise<void> => {
@@ -897,7 +925,8 @@ function Members({
       entryType: "tenant_user",
       content: true,
       display: false,
-      accountIds: []
+      accountIds: [],
+      maintenanceAccountIds: []
     });
     setDrawer("create");
   };
@@ -926,6 +955,10 @@ function Members({
                 : [],
             publishing_identity_ids:
               form.entryType === "tenant_user" ? form.accountIds : [],
+            expression_profile_maintenance_account_ids:
+              form.entryType === "tenant_user"
+                ? form.maintenanceAccountIds
+                : [],
             grants_tenant_management: form.entryType === "tenant_admin",
             grants_material_maintenance: false,
             grants_expression_profile_maintenance: false
@@ -940,7 +973,10 @@ function Members({
       ...value,
       accountIds: value.accountIds.includes(accountId)
         ? value.accountIds.filter(item => item !== accountId)
-        : [...value.accountIds, accountId]
+        : [...value.accountIds, accountId],
+      maintenanceAccountIds: value.accountIds.includes(accountId)
+        ? value.maintenanceAccountIds.filter(item => item !== accountId)
+        : value.maintenanceAccountIds
     }));
   };
   const openMember = (member: Operator): void => {
@@ -949,10 +985,15 @@ function Members({
     setConfirmingDisable(false);
     setRestoreDisableFocus(false);
     setEdit({
+      displayName: member.display_name,
+      organizationId: member.organization_id,
       entryType: member.entry_type,
       content: hasCapability(member, "content"),
       display: hasCapability(member, "display"),
-      accountIds: member.account_grants.map(item => item.account_id)
+      accountIds: member.account_grants.map(item => item.account_id),
+      maintenanceAccountIds: member.account_grants
+        .filter(item => item.can_maintain_expression_profile)
+        .map(item => item.account_id)
     });
     setDrawer(member);
   };
@@ -961,7 +1002,10 @@ function Members({
       ...value,
       accountIds: value.accountIds.includes(accountId)
         ? value.accountIds.filter(item => item !== accountId)
-        : [...value.accountIds, accountId]
+        : [...value.accountIds, accountId],
+      maintenanceAccountIds: value.accountIds.includes(accountId)
+        ? value.maintenanceAccountIds.filter(item => item !== accountId)
+        : value.maintenanceAccountIds
     }));
   };
   const requestError = operators.error ?? organizations.error ?? accounts.error;
@@ -1058,7 +1102,8 @@ function Members({
                       entryType: "tenant_admin",
                       content: false,
                       display: false,
-                      accountIds: []
+                      accountIds: [],
+                      maintenanceAccountIds: []
                     })
                   }
                 />
@@ -1094,7 +1139,10 @@ function Members({
                         setForm({
                           ...form,
                           content: event.target.checked,
-                          accountIds: event.target.checked ? form.accountIds : []
+                          accountIds: event.target.checked ? form.accountIds : [],
+                          maintenanceAccountIds: event.target.checked
+                            ? form.maintenanceAccountIds
+                            : []
                         })
                       }
                     />
@@ -1113,17 +1161,44 @@ function Members({
                 </fieldset>
                 <fieldset>
                   <legend>获准操作的发布账号</legend>
-                  {accounts.data?.map(account => (
-                    <label key={account.id}>
-                      <input
-                        type="checkbox"
-                        disabled={!form.content}
-                        checked={form.accountIds.includes(account.id)}
-                        onChange={() => toggleAccount(account.id)}
-                      />
-                      {account.name}
-                    </label>
-                  ))}
+                  {accounts.data
+                    ?.filter(account => account.enabled)
+                    .map(account => (
+                      <div key={account.id} className="account-grant-choice">
+                        <label>
+                          <input
+                            type="checkbox"
+                            disabled={!form.content}
+                            checked={form.accountIds.includes(account.id)}
+                            onChange={() => toggleAccount(account.id)}
+                          />
+                          使用 {account.name}
+                        </label>
+                        <label>
+                          <input
+                            type="checkbox"
+                            disabled={!form.accountIds.includes(account.id)}
+                            checked={form.maintenanceAccountIds.includes(
+                              account.id
+                            )}
+                            onChange={event =>
+                              setForm(value => ({
+                                ...value,
+                                maintenanceAccountIds: event.target.checked
+                                  ? [
+                                      ...value.maintenanceAccountIds,
+                                      account.id
+                                    ]
+                                  : value.maintenanceAccountIds.filter(
+                                      item => item !== account.id
+                                    )
+                              }))
+                            }
+                          />
+                          可维护五段画像
+                        </label>
+                      </div>
+                    ))}
                 </fieldset>
               </>
             )}
@@ -1186,7 +1261,40 @@ function Members({
               {drawer.organization} ·{" "}
               {drawer.entry_type === "tenant_admin" ? "租户管理员" : "租户用户"}
             </p>
-            <fieldset className="member-grants">
+            <fieldset
+              className="member-grants"
+              disabled={drawer.id === currentUserId}
+            >
+              <legend>自然人资料</legend>
+              <label>
+                姓名或工作名
+                <input
+                  value={edit.displayName}
+                  onChange={event =>
+                    setEdit({ ...edit, displayName: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                所属组织
+                <select
+                  value={edit.organizationId}
+                  onChange={event =>
+                    setEdit({ ...edit, organizationId: event.target.value })
+                  }
+                >
+                  {organizations.data?.map(organization => (
+                    <option key={organization.id} value={organization.id}>
+                      {organization.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </fieldset>
+            <fieldset
+              className="member-grants"
+              disabled={drawer.id === currentUserId}
+            >
               <legend>入口与工作资格</legend>
               <label>
                 <input
@@ -1195,10 +1303,12 @@ function Members({
                   checked={edit.entryType === "tenant_admin"}
                   onChange={() =>
                     setEdit({
+                      ...edit,
                       entryType: "tenant_admin",
                       content: false,
                       display: false,
-                      accountIds: []
+                      accountIds: [],
+                      maintenanceAccountIds: []
                     })
                   }
                 />
@@ -1229,7 +1339,10 @@ function Members({
                         setEdit({
                           ...edit,
                           content: event.target.checked,
-                          accountIds: event.target.checked ? edit.accountIds : []
+                          accountIds: event.target.checked ? edit.accountIds : [],
+                          maintenanceAccountIds: event.target.checked
+                            ? edit.maintenanceAccountIds
+                            : []
                         })
                       }
                     />
@@ -1245,17 +1358,44 @@ function Members({
                     />
                     陈列搭配
                   </label>
-                  {accounts.data?.map(account => (
-                    <label key={account.id}>
-                      <input
-                        type="checkbox"
-                        disabled={!edit.content}
-                        checked={edit.accountIds.includes(account.id)}
-                        onChange={() => toggleEditAccount(account.id)}
-                      />
-                      {account.name}
-                    </label>
-                  ))}
+                  {accounts.data
+                    ?.filter(account => account.enabled)
+                    .map(account => (
+                      <div key={account.id} className="account-grant-choice">
+                        <label>
+                          <input
+                            type="checkbox"
+                            disabled={!edit.content}
+                            checked={edit.accountIds.includes(account.id)}
+                            onChange={() => toggleEditAccount(account.id)}
+                          />
+                          使用 {account.name}
+                        </label>
+                        <label>
+                          <input
+                            type="checkbox"
+                            disabled={!edit.accountIds.includes(account.id)}
+                            checked={edit.maintenanceAccountIds.includes(
+                              account.id
+                            )}
+                            onChange={event =>
+                              setEdit(value => ({
+                                ...value,
+                                maintenanceAccountIds: event.target.checked
+                                  ? [
+                                      ...value.maintenanceAccountIds,
+                                      account.id
+                                    ]
+                                  : value.maintenanceAccountIds.filter(
+                                      item => item !== account.id
+                                    )
+                              }))
+                            }
+                          />
+                          可维护五段画像
+                        </label>
+                      </div>
+                    ))}
                 </>
               )}
               {edit.entryType === "tenant_user" &&
@@ -1270,14 +1410,25 @@ function Members({
                 className="primary"
                 disabled={
                   saving ||
+                  drawer.id === currentUserId ||
                   (edit.entryType === "tenant_user" &&
                     edit.content &&
                     edit.accountIds.length === 0)
                 }
                 onClick={() =>
                   void run(
-                    () =>
-                      api(`/api/v1/tenant-management/users/${drawer.id}/grants`, {
+                    async () => {
+                      await api(
+                        `/api/v1/tenant-management/users/${drawer.id}`,
+                        {
+                          method: "PATCH",
+                          body: JSON.stringify({
+                            display_name: edit.displayName,
+                            organization_id: edit.organizationId
+                          })
+                        }
+                      );
+                      await api(`/api/v1/tenant-management/users/${drawer.id}/grants`, {
                         method: "PATCH",
                         body: JSON.stringify({
                           entry_type: edit.entryType,
@@ -1292,36 +1443,68 @@ function Members({
                             edit.entryType === "tenant_user" ? edit.accountIds : [],
                           grants_tenant_management: edit.entryType === "tenant_admin",
                           grants_material_maintenance: false,
-                          grants_expression_profile_maintenance: false
+                          expression_profile_maintenance_account_ids:
+                            edit.entryType === "tenant_user"
+                              ? edit.maintenanceAccountIds
+                              : []
                         })
-                      }),
+                      });
+                    },
                     "成员资格已更新；该成员需要重新登录。"
                   )
                 }
               >
                 保存入口资格
               </button>
+              {drawer.id === currentUserId && (
+                <p className="tenant-security-note">
+                  当前登录管理员的身份和入口资格需要由另一名管理员维护。
+                </p>
+              )}
             </fieldset>
-            <button
-              className="text-action"
-              type="button"
-              disabled={saving}
-              onClick={() => {
-                setCopyFeedback(null);
-                void run(async () => {
-                  const value = await api<{
-                    reset_link: string;
-                    reset_url: string;
-                  }>(
-                    `/api/v1/tenant-management/users/${drawer.id}/reset`,
-                    { method: "POST" }
-                  );
-                  setActivationLink(value.reset_url);
-                }, "新的一次性重设密码链接已生成，此前未使用的重设链接已失效。");
-              }}
-            >
-              生成一次性重设密码链接
-            </button>
+            {drawer.enabled ? (
+              <button
+                className="text-action"
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  setCopyFeedback(null);
+                  void run(async () => {
+                    const value = await api<{
+                      reset_link: string;
+                      reset_url: string;
+                    }>(
+                      `/api/v1/tenant-management/users/${drawer.id}/reset`,
+                      { method: "POST" }
+                    );
+                    setActivationLink(value.reset_url);
+                  }, "新的一次性重设密码链接已生成，此前未使用的重设链接已失效。");
+                }}
+              >
+                生成一次性重设密码链接
+              </button>
+            ) : (
+              <button
+                className="primary"
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  setCopyFeedback(null);
+                  void run(async () => {
+                    const value = await api<{
+                      activation_link: string;
+                      activation_url: string;
+                    }>(
+                      `/api/v1/tenant-management/users/${drawer.id}/restore`,
+                      { method: "POST" }
+                    );
+                    setActivationLink(value.activation_url);
+                  }, "成员登录身份已恢复；请重新分配工作资格，并把新激活链接交给本人。");
+                }}
+              >
+                恢复成员并生成激活链接
+              </button>
+            )}
             {activationLink && (
               <div className="one-time-link">
                 <code className="reset-link">{activationLink}</code>
@@ -1469,16 +1652,26 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
   const accounts = useRequest<PublishingAccount[]>(
     "/api/v1/tenant-management/publishing-accounts"
   );
+  const baseline = useRequest<BrandExpressionBaseline>(
+    "/api/v1/admin/brand-expression"
+  );
+  const onboarding = useRequest<OnboardingPrefill>(
+    "/api/v1/tenant-management/onboarding-prefill"
+  );
   const operators = useRequest<Operator[]>("/api/v1/tenant-management/operators");
   const organizations = useRequest<Organization[]>(
     "/api/v1/tenant-management/control-organizations"
   );
   const [selected, setSelected] = useState<PublishingAccount | null>(null);
-  const [drawer, setDrawer] = useState<"create" | "target" | "profile" | null>(null);
+  const [drawer, setDrawer] = useState<
+    "create" | "target" | "profile" | "settings" | null
+  >(null);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<ProfileSegments>(emptyProfile);
   const [profileAccess, setProfileAccess] = useState<ManagementProfile | null>(null);
+  const [profileVersions, setProfileVersions] = useState<ProfileVersion[]>([]);
   const [profileOrganizationId, setProfileOrganizationId] = useState("");
+  const [baselineDraft, setBaselineDraft] = useState("");
   const [createForm, setCreateForm] = useState({
     name: "",
     role: "",
@@ -1486,12 +1679,20 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
     organizationId: "",
     operatorId: "",
     target: "douyin_video" as Target,
+    canMaintainProfile: false,
     profile: emptyProfile()
   });
   const [targetForm, setTargetForm] = useState({
     target: "xiaohongshu_graphic" as Target,
     operatorId: ""
   });
+  const [settingsForm, setSettingsForm] = useState({
+    name: "",
+    organizationId: ""
+  });
+  useEffect(() => {
+    if (baseline.data) setBaselineDraft(baseline.data.draft);
+  }, [baseline.data]);
   const run = async (action: () => Promise<void>, message: string): Promise<void> => {
     setSaving(true);
     try {
@@ -1506,11 +1707,17 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
   };
   const profileFor = async (account: PublishingAccount): Promise<void> => {
     try {
-      const access = await api<ManagementProfile>(
-        `/api/v1/tenant-management/publishing-accounts/${account.id}/expression-profile`
-      );
+      const [access, versions] = await Promise.all([
+        api<ManagementProfile>(
+          `/api/v1/tenant-management/publishing-accounts/${account.id}/expression-profile`
+        ),
+        api<ProfileVersion[]>(
+          `/api/v1/tenant-management/publishing-accounts/${account.id}/expression-profile/versions`
+        )
+      ]);
       setSelected(account);
       setProfileAccess(access);
+      setProfileVersions(versions);
       setProfile(
         access.current
           ? {
@@ -1536,24 +1743,25 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
         method: "POST",
         body: JSON.stringify({
           name: createForm.name,
-          target: createForm.target,
-          channel: targetLabels[createForm.target].replace(/图文|视频/g, ""),
+          channel: publishingChannelForTarget(createForm.target),
           content_role_name: createForm.role,
           speaker_kind: createForm.speakerKind,
           initial_profile: createForm.profile,
           operator_id: createForm.operatorId,
           control_organization_id: createForm.organizationId,
-          operator_can_maintain_expression_profile: true,
+          operator_can_maintain_expression_profile:
+            createForm.canMaintainProfile,
           as_synthetic_business_fixture: false
         })
       });
       setDrawer(null);
     }, "发布账号已建立。平台载体和账号画像会继续归到同一个发布身份。");
   };
-  const platformCount = (accounts.data ?? []).reduce(
-    (total, account) => total + account.platform_targets.length,
-    0
-  );
+  const platformCount = new Set(
+    (accounts.data ?? []).flatMap(account =>
+      account.platform_targets.map(target => target.account_id)
+    )
+  ).size;
   return (
     <section className="tenant-page">
       <header className="tenant-heading split">
@@ -1574,14 +1782,82 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
               organizationId: "",
               operatorId: "",
               target: "douyin_video",
-              profile: emptyProfile()
+              canMaintainProfile: false,
+              profile:
+                onboarding.data?.account_profile_candidate ?? emptyProfile()
             });
             setDrawer("create");
           }}
+          disabled={
+            baseline.data?.status !== "confirmed" || onboarding.data === null
+          }
         >
           创建发布账号
         </button>
       </header>
+      <article className="brand-expression-baseline">
+        <div>
+          <p className="eyebrow">品牌表达基线</p>
+          <h2>
+            {baseline.data?.status === "confirmed"
+              ? `当前确认版本 V${baseline.data.version}`
+              : "确认后才能创建正式发布账号"}
+          </h2>
+          <p>
+            系统先给出可纠正草案；只有管理员确认后的版本才会成为账号冷启动边界。
+          </p>
+        </div>
+        {baseline.error ? (
+          <RequestFailure message={baseline.error} onRetry={baseline.refresh} />
+        ) : (
+          <form
+            className="tenant-form"
+            onSubmit={event => {
+              event.preventDefault();
+              setSaving(true);
+              void api<BrandExpressionBaseline>(
+                "/api/v1/admin/brand-expression/confirm",
+                {
+                  method: "POST",
+                  body: JSON.stringify({ draft: baselineDraft })
+                }
+              )
+                .then(async () => {
+                  await baseline.refresh();
+                  setNotice({
+                    tone: "success",
+                    message: "品牌表达基线已确认，可继续建立发布账号。"
+                  });
+                })
+                .catch(error =>
+                  setNotice({
+                    tone: "error",
+                    message: readableRequestError(error)
+                  })
+                )
+                .finally(() => setSaving(false));
+            }}
+          >
+            <label>
+              可纠正的品牌表达草案
+              <textarea
+                required
+                value={baselineDraft}
+                onChange={event => setBaselineDraft(event.target.value)}
+              />
+            </label>
+            <button
+              className="primary"
+              type="submit"
+              disabled={saving || baselineDraft.trim().length === 0}
+            >
+              {baseline.data?.status === "confirmed"
+                ? "确认修订为新版本"
+                : "确认当前品牌表达"}
+            </button>
+          </form>
+        )}
+      </article>
       {accounts.error ? (
         <RequestFailure message={accounts.error} onRetry={accounts.refresh} />
       ) : (
@@ -1592,6 +1868,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                 <div>
                   <h2>{account.name}</h2>
                   <p>
+                    {account.enabled ? "已启用" : "已停用"} ·{" "}
                     {account.content_role.name} ·{" "}
                     {account.content_role.speaker_kind === "personal_ip_account"
                       ? "个人 IP"
@@ -1639,20 +1916,113 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                     className="text-action"
                     onClick={() => {
                       setSelected(account);
+                      setSettingsForm({
+                        name: account.name,
+                        organizationId:
+                          account.control_organization?.id ?? ""
+                      });
+                      setDrawer("settings");
+                    }}
+                  >
+                    账号设置
+                  </button>
+                  <button
+                    type="button"
+                    className="text-action"
+                    onClick={() => {
+                      setSelected(account);
                       setTargetForm({
                         target: "xiaohongshu_graphic",
                         operatorId: account.operators[0]?.id ?? ""
                       });
                       setDrawer("target");
                     }}
+                    disabled={!account.enabled}
                   >
                     添加平台
+                  </button>
+                  <button
+                    type="button"
+                    className="text-action"
+                    disabled={saving}
+                    onClick={() =>
+                      void run(
+                        () =>
+                          api(
+                            `/api/v1/tenant-management/publishing-accounts/${account.id}/enabled`,
+                            {
+                              method: "PUT",
+                              body: JSON.stringify({
+                                enabled: !account.enabled
+                              })
+                            }
+                          ),
+                        account.enabled
+                          ? "发布账号已停用；历史引用保持不变。"
+                          : "发布账号已恢复。"
+                      )
+                    }
+                  >
+                    {account.enabled ? "停用账号" : "恢复账号"}
                   </button>
                 </div>
               </header>
               <div className="platform-targets">
-                {account.platform_targets.map(target => (
-                  <span key={target.account_id}>{targetLabels[target.target]}</span>
+                {Array.from(
+                  account.platform_targets.reduce(
+                    (result, target) => {
+                      const current = result.get(target.account_id);
+                      if (current) {
+                        current.labels.push(targetLabels[target.target]);
+                      } else {
+                        result.set(target.account_id, {
+                          id: target.account_id,
+                          platform: target.platform,
+                          enabled: target.enabled,
+                          labels: [targetLabels[target.target]]
+                        });
+                      }
+                      return result;
+                    },
+                    new Map<
+                      string,
+                      {
+                        id: string;
+                        platform: string;
+                        enabled: boolean;
+                        labels: string[];
+                      }
+                    >()
+                  ).values()
+                ).map(target => (
+                  <span key={target.id}>
+                    {target.labels.join("、")} ·{" "}
+                    {target.enabled ? "可选" : "已停用"}
+                    <button
+                      type="button"
+                      className="text-action"
+                      disabled={saving}
+                      onClick={() =>
+                        void run(
+                          () =>
+                            api(
+                              `/api/v1/tenant-management/platform-carriers/${target.id}/enabled`,
+                              {
+                                method: "PUT",
+                                body: JSON.stringify({
+                                  enabled: !target.enabled
+                                })
+                              }
+                            ),
+                          target.enabled
+                            ? `${target.platform}已停用；历史引用保持不变。`
+                            : `${target.platform}已恢复。`
+                        )
+                      }
+                    >
+                      {target.enabled ? "停用" : "恢复"}
+                    </button>
+                  </span>
                 ))}
               </div>
               <p className="account-profile-line">
@@ -1707,17 +2077,26 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                   setCreateForm({ ...createForm, organizationId: event.target.value })
                 }
               >
-                <option value="">请选择公司级组织</option>
-                {organizations.data
-                  ?.filter(
-                    item => (item.level ?? item.organization_level) === "company"
-                  )
-                  .map(item => (
+                <option value="">请选择负责团队</option>
+                {organizations.data?.map(item => (
                     <option key={item.id} value={item.id}>
                       {item.name}
                     </option>
                   ))}
               </select>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={createForm.canMaintainProfile}
+                onChange={event =>
+                  setCreateForm({
+                    ...createForm,
+                    canMaintainProfile: event.target.checked
+                  })
+                }
+              />
+              允许这名首位使用者维护五段账号画像
             </label>
             <label>
               首位使用者
@@ -1730,7 +2109,9 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
               >
                 <option value="">请选择租户用户</option>
                 {operators.data
-                  ?.filter(item => item.entry_type === "tenant_user")
+                  ?.filter(
+                    item => item.entry_type === "tenant_user" && item.enabled
+                  )
                   .map(item => (
                     <option key={item.id} value={item.id}>
                       {item.display_name}
@@ -1739,7 +2120,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
               </select>
             </label>
             <label>
-              首个平台与形式
+              首个平台
               <select
                 value={createForm.target}
                 onChange={event =>
@@ -1749,17 +2130,19 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                   })
                 }
               >
-                {Object.entries(targetLabels)
-                  .filter(([key]) => key !== "other")
-                  .map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
+                {publishingPlatformChoices.map(choice => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
                     </option>
-                ))}
+                  ))}
               </select>
             </label>
             <fieldset>
               <legend>账号画像</legend>
+              <p>
+                {onboarding.data?.account_profile_candidate_source ??
+                  "这是待纠正候选，保存后才形成 V1。"}
+              </p>
               <ProfileFields
                 values={createForm.profile}
                 onChange={(key, value) =>
@@ -1788,8 +2171,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                   body: JSON.stringify({
                     source_account_id: selected.id,
                     name: `${selected.name} · ${targetLabels[targetForm.target]}`,
-                    target: targetForm.target,
-                    channel: targetLabels[targetForm.target].replace(/图文|视频/g, ""),
+                    channel: publishingChannelForTarget(targetForm.target),
                     operator_id: targetForm.operatorId,
                     confirm_internal_carrier: true
                   })
@@ -1799,7 +2181,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
             }}
           >
             <label>
-              平台与形式
+              平台及其可用形式
               <select
                 value={targetForm.target}
                 onChange={event =>
@@ -1809,15 +2191,16 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                   })
                 }
               >
-                {Object.entries(targetLabels)
+                {publishingPlatformChoices
                   .filter(
-                    ([key]) =>
-                      key !== "other" &&
-                      !selected.platform_targets.some(target => target.target === key)
+                    choice =>
+                      !selected.platform_targets.some(target =>
+                        choice.targets.includes(target.target)
+                      )
                   )
-                  .map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
+                  .map(choice => (
+                    <option key={choice.value} value={choice.value}>
+                      {choice.label}
                     </option>
                   ))}
               </select>
@@ -1832,9 +2215,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                 }
               >
                 <option value="">请选择</option>
-                {operators.data
-                  ?.filter(item => item.entry_type === "tenant_user")
-                  .map(item => (
+                {selected.operators.map(item => (
                     <option key={item.id} value={item.id}>
                       {item.display_name}
                     </option>
@@ -1843,6 +2224,67 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
             </label>
             <button className="primary" type="submit" disabled={saving}>
               添加平台
+            </button>
+          </form>
+        </Drawer>
+      )}
+      {drawer === "settings" && selected && (
+        <Drawer title={`${selected.name}的账号设置`} onClose={() => setDrawer(null)}>
+          <form
+            className="tenant-form"
+            onSubmit={event => {
+              event.preventDefault();
+              void run(async () => {
+                await api(
+                  `/api/v1/tenant-management/publishing-accounts/${selected.id}`,
+                  {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      name: settingsForm.name,
+                      control_organization_id:
+                        settingsForm.organizationId
+                    })
+                  }
+                );
+                setDrawer(null);
+              }, "发布账号名称和负责团队已更新；历史内容仍引用原冻结版本。");
+            }}
+          >
+            <label>
+              发布账号名称
+              <input
+                required
+                value={settingsForm.name}
+                onChange={event =>
+                  setSettingsForm({
+                    ...settingsForm,
+                    name: event.target.value
+                  })
+                }
+              />
+            </label>
+            <label>
+              负责团队
+              <select
+                required
+                value={settingsForm.organizationId}
+                onChange={event =>
+                  setSettingsForm({
+                    ...settingsForm,
+                    organizationId: event.target.value
+                  })
+                }
+              >
+                <option value="">请选择</option>
+                {organizations.data?.map(organization => (
+                  <option key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="primary" type="submit" disabled={saving}>
+              保存账号设置
             </button>
           </form>
         </Drawer>
@@ -1938,6 +2380,19 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                     <p>负责团队尚未建立账号画像。</p>
                   )}
                 </div>
+              )}
+              {profileVersions.length > 0 && (
+                <section className="profile-history">
+                  <h3>画像历史</h3>
+                  <ol>
+                    {profileVersions.map(version => (
+                      <li key={version.profile_id}>
+                        <strong>V{version.version}</strong>
+                        <span>{version.identity_position}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
               )}
             </>
           )}

@@ -183,6 +183,24 @@ class ContentControlService:
             scope, account_id, self._checked_segments(segments)
         )
 
+    def management_account_expression_versions(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+    ) -> list[dict[str, object]]:
+        accounts = {
+            str(item["id"])
+            for item in self._repository.management_accounts_with_expression(
+                scope
+            )
+        }
+        if str(account_id) not in accounts:
+            raise DomainError("找不到当前范围内的发布账号。")
+        return self._repository.account_expression_versions(
+            scope.tenant_id,
+            account_id,
+        )
+
     @staticmethod
     def _checked_segments(segments: Mapping[str, str]) -> tuple[str, str, str, str, str]:
         values = tuple((segments.get(key) or "").strip() for key in _SEGMENT_KEYS)

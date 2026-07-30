@@ -16,6 +16,9 @@ export interface PublishingIdentity {
   name: string;
   profile_summary: string;
   content_role: string;
+  control_organization?: string | null;
+  profile_id?: string | null;
+  profile_version?: number | null;
   platform_targets: PlatformTarget[];
 }
 

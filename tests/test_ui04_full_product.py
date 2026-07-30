@@ -283,7 +283,9 @@ def test_ui04_production_product_seams_are_human_scoped_and_atomic(
                         str(STORE_CONTENT_ACCOUNT_ID),
                     ],
                     "grants_material_maintenance": True,
-                    "grants_expression_profile_maintenance": True,
+                    "expression_profile_maintenance_account_ids": [
+                        str(ACCOUNT_ID)
+                    ],
                 },
             )
             assert expanded.status_code == 200
@@ -291,6 +293,10 @@ def test_ui04_production_product_seams_are_human_scoped_and_atomic(
                 str(ACCOUNT_ID),
                 str(STORE_CONTENT_ACCOUNT_ID),
             ]
+            assert expanded.json()["expression_profile_maintenance"] == {
+                str(ACCOUNT_ID): True,
+                str(STORE_CONTENT_ACCOUNT_ID): False,
+            }
             assert _enabled_root_accounts(migrator_database_url, user_id) == (
                 ACCOUNT_ID,
                 STORE_CONTENT_ACCOUNT_ID,

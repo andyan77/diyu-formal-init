@@ -75,6 +75,28 @@ def account_profile_prefill(
     return None
 
 
+def generic_account_profile_candidate(brand_name: str) -> dict[str, str]:
+    """Build an editable cold-start candidate without asserting brand facts."""
+    normalized_brand = brand_name.strip() or "当前品牌"
+    return {
+        "identity_position": (
+            f"作为{normalized_brand}对外表达的一套账号身份，围绕管理员确认后的品牌边界发声。"
+        ),
+        "authority_boundary": (
+            "只使用已经确认的品牌、商品和经营资料；没有来源的价格、库存、效果、经历和承诺不作事实表达。"
+        ),
+        "audience_relationship": (
+            "以平等、清楚的方式回应目标受众的真实问题，不冒充顾客、员工或具体人物经历。"
+        ),
+        "content_territories": (
+            "从已确认的品牌资料、商品事实和账号长期主题中选择内容，不把候选草案当成正式事实。"
+        ),
+        "default_production_conditions": (
+            "按当前已登记的人员、场地、设备和平台形式完成；未登记资源不默认可用。"
+        ),
+    }
+
+
 def product_prefills(brand_name: str) -> tuple[list[dict[str, object]], dict[str, object]]:
     """Return candidate rows separately from confirmed product facts."""
     document = load_brand_prefill(brand_name)

@@ -31,6 +31,14 @@ class ContentControlRepository(ABC):
         """Return one immutable historical version so old tasks keep reading what they used."""
 
     @abstractmethod
+    def account_expression_versions(
+        self,
+        tenant_id: UUID,
+        account_id: UUID,
+    ) -> list[dict[str, object]]:
+        """List immutable profile versions for one logical publishing account."""
+
+    @abstractmethod
     def can_maintain_account_expression(self, scope: TrustedScope) -> bool:
         """Account use never implies profile maintenance; a declared control organization does.
 

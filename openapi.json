@@ -993,6 +993,15 @@
             ],
             "title": "Entry Type"
           },
+          "expression_profile_maintenance_account_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Expression Profile Maintenance Account Ids",
+            "type": "array"
+          },
           "grants_expression_profile_maintenance": {
             "default": false,
             "title": "Grants Expression Profile Maintenance",
@@ -1484,6 +1493,30 @@
         "title": "ResetTenantUserResponse",
         "type": "object"
       },
+      "RestoredTenantUserResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "activation_link": {
+            "title": "Activation Link",
+            "type": "string"
+          },
+          "activation_url": {
+            "title": "Activation Url",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "activation_link",
+          "activation_url"
+        ],
+        "title": "RestoredTenantUserResponse",
+        "type": "object"
+      },
       "RevisionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1677,6 +1710,34 @@
         "title": "SavedVersionResponse",
         "type": "object"
       },
+      "SetEnabledRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "SetEnabledRequest",
+        "type": "object"
+      },
+      "SetExpressionProfileMaintenanceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "SetExpressionProfileMaintenanceRequest",
+        "type": "object"
+      },
       "UnmetCapabilityRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1743,6 +1804,38 @@
         "title": "UnmetCapabilityResponseRequest",
         "type": "object"
       },
+      "UpdatePublishingAccountRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "control_organization_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Control Organization Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "UpdatePublishingAccountRequest",
+        "type": "object"
+      },
       "UpdatePublishingSpeakerKindRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1804,15 +1897,37 @@
             ],
             "title": "Entry Type"
           },
+          "expression_profile_maintenance_account_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression Profile Maintenance Account Ids"
+          },
           "grants_account_access": {
             "default": false,
             "title": "Grants Account Access",
             "type": "boolean"
           },
           "grants_expression_profile_maintenance": {
-            "default": false,
-            "title": "Grants Expression Profile Maintenance",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grants Expression Profile Maintenance"
           },
           "grants_material_maintenance": {
             "default": false,
@@ -1835,6 +1950,38 @@
           }
         },
         "title": "UpdateTenantUserGrantsRequest",
+        "type": "object"
+      },
+      "UpdateTenantUserRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "organization_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization Id"
+          }
+        },
+        "title": "UpdateTenantUserRequest",
         "type": "object"
       },
       "ValidationError": {
@@ -4630,6 +4777,62 @@
         "summary": "Create Platform Carrier"
       }
     },
+    "/api/v1/tenant-management/platform-carriers/{account_id}/enabled": {
+      "put": {
+        "operationId": "set_platform_carrier_enabled_api_v1_tenant_management_platform_carriers__account_id__enabled_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Platform Carrier Enabled Api V1 Tenant Management Platform Carriers  Account Id  Enabled Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Set Platform Carrier Enabled"
+      }
+    },
     "/api/v1/tenant-management/publishing-accounts": {
       "get": {
         "operationId": "management_accounts_api_v1_tenant_management_publishing_accounts_get",
@@ -4709,6 +4912,62 @@
         "summary": "Create Publishing Account"
       }
     },
+    "/api/v1/tenant-management/publishing-accounts/{account_id}": {
+      "patch": {
+        "operationId": "update_publishing_account_api_v1_tenant_management_publishing_accounts__account_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePublishingAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Publishing Account Api V1 Tenant Management Publishing Accounts  Account Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Update Publishing Account"
+      }
+    },
     "/api/v1/tenant-management/publishing-accounts/{account_id}/control-organization": {
       "post": {
         "description": "Declare, once, which organization controls this account.\n\nA value a migration inferred from a creation event is not evidence and grants nothing;\nthis is the explicit decision that makes profile maintenance possible.",
@@ -4766,6 +5025,62 @@
         "summary": "Declare Control Organization"
       }
     },
+    "/api/v1/tenant-management/publishing-accounts/{account_id}/enabled": {
+      "put": {
+        "operationId": "set_publishing_account_enabled_api_v1_tenant_management_publishing_accounts__account_id__enabled_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Publishing Account Enabled Api V1 Tenant Management Publishing Accounts  Account Id  Enabled Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Set Publishing Account Enabled"
+      }
+    },
     "/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile": {
       "get": {
         "operationId": "management_account_expression_profile_api_v1_tenant_management_publishing_accounts__account_id__expression_profile_get",
@@ -4813,6 +5128,53 @@
       }
     },
     "/api/v1/tenant-management/publishing-accounts/{account_id}/expression-profile/versions": {
+      "get": {
+        "operationId": "management_account_expression_versions_api_v1_tenant_management_publishing_accounts__account_id__expression_profile_versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Management Account Expression Versions Api V1 Tenant Management Publishing Accounts  Account Id  Expression Profile Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Account Expression Versions"
+      },
       "post": {
         "operationId": "save_management_account_expression_profile_api_v1_tenant_management_publishing_accounts__account_id__expression_profile_versions_post",
         "parameters": [
@@ -5007,6 +5369,59 @@
         "summary": "Create Tenant User"
       }
     },
+    "/api/v1/tenant-management/users/{user_id}": {
+      "patch": {
+        "operationId": "update_tenant_user_api_v1_tenant_management_users__user_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Update Tenant User Api V1 Tenant Management Users  User Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Update Tenant User"
+      }
+    },
     "/api/v1/tenant-management/users/{user_id}/disable": {
       "post": {
         "operationId": "disable_tenant_user_api_v1_tenant_management_users__user_id__disable_post",
@@ -5101,6 +5516,67 @@
         "summary": "Update Tenant User Grants"
       }
     },
+    "/api/v1/tenant-management/users/{user_id}/publishing-accounts/{account_id}/profile-maintenance": {
+      "put": {
+        "operationId": "set_expression_profile_maintenance_api_v1_tenant_management_users__user_id__publishing_accounts__account_id__profile_maintenance_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetExpressionProfileMaintenanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Expression Profile Maintenance Api V1 Tenant Management Users  User Id  Publishing Accounts  Account Id  Profile Maintenance Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Set Expression Profile Maintenance"
+      }
+    },
     "/api/v1/tenant-management/users/{user_id}/publishing-accounts/{account_id}/revoke": {
       "post": {
         "operationId": "revoke_publishing_account_grant_api_v1_tenant_management_users__user_id__publishing_accounts__account_id__revoke_post",
@@ -5191,6 +5667,45 @@
           }
         },
         "summary": "Reset Tenant User"
+      }
+    },
+    "/api/v1/tenant-management/users/{user_id}/restore": {
+      "post": {
+        "operationId": "restore_tenant_user_api_v1_tenant_management_users__user_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoredTenantUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "summary": "Restore Tenant User"
       }
     },
     "/api/v1/user/creation-preferences": {

@@ -141,6 +141,23 @@ class WorkbenchRepository(ABC):
     ) -> dict[str, object]: ...
 
     @abstractmethod
+    def update_publishing_account(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        name: str | None,
+        control_organization_id: UUID | None,
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def set_publishing_account_enabled(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
     def create_platform_carrier(
         self,
         scope: TenantManagementScope,
@@ -148,6 +165,14 @@ class WorkbenchRepository(ABC):
         name: str,
         channel: str,
         operator_id: UUID,
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def set_platform_carrier_enabled(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        enabled: bool,
     ) -> dict[str, object]: ...
 
     @abstractmethod

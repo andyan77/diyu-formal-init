@@ -64,9 +64,13 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._content_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT b.name AS brand, u.display_name AS operator, o.name AS organization,
+                SELECT b.name AS brand, u.display_name AS operator,
+                       o.name AS organization,
                        root.name AS account, target.channel AS platform,
-                       r.name AS content_role, root.business_data_kind
+                       r.name AS content_role, root.business_data_kind,
+                       control_organization.name AS control_organization,
+                       profile.id AS profile_id,
+                       profile.version AS profile_version
                 FROM users u
                 JOIN organizations o ON o.id = u.organization_id AND o.tenant_id = u.tenant_id
                 JOIN brands b ON b.id = %s AND b.tenant_id = u.tenant_id
@@ -78,15 +82,27 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     AND assignment.account_id = root.id AND assignment.enabled = true
                 JOIN account_content_roles acr ON acr.account_id = root.id AND acr.tenant_id = root.tenant_id
                 JOIN content_roles r ON r.id = acr.content_role_id AND r.tenant_id = acr.tenant_id
+                LEFT JOIN organizations control_organization
+                  ON control_organization.tenant_id = root.tenant_id
+                 AND control_organization.id = root.control_organization_id
+                LEFT JOIN account_expression_profile_versions profile
+                  ON profile.tenant_id = root.tenant_id
+                 AND profile.account_id = root.id
+                 AND profile.id = root.current_expression_profile_id
                 WHERE u.tenant_id = %s AND u.id = %s AND u.enabled = true
                   AND u.entry_kind = 'tenant_user'
-                  AND target.enabled = true AND root.enabled = true
+                  AND target.enabled = true
+                  AND target.platform_enabled = true
+                  AND root.enabled = true
                 ORDER BY r.name LIMIT 1
                 """,
                 (scope.brand_id, scope.account_id, scope.tenant_id, scope.user_id),
             )
             row = self._one(cursor, "找不到当前可信内容身份")
-        return {key: str(value) for key, value in row.items()}
+        return {
+            key: (str(value) if value is not None else "")
+            for key, value in row.items()
+        }
 
     def user_portal_identity(self, scope: TrustedScope) -> dict[str, str]:
         with self._content_tx(scope) as cursor:
@@ -147,7 +163,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     WHERE assignment.tenant_id = %s AND assignment.user_id = %s
                       AND assignment.enabled = true AND u.enabled = true
                       AND u.entry_kind = 'tenant_user'
-                      AND target.enabled = true AND root.enabled = true
+                      AND target.enabled = true
+                      AND target.platform_enabled = true
+                      AND root.enabled = true
                 ) AS allowed
                 """,
                 (scope.account_id, scope.tenant_id, scope.user_id),
@@ -266,7 +284,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT root.id, root.name, root.business_data_kind,
+                SELECT root.id, root.name, root.enabled, root.business_data_kind,
                        root.control_organization_source,
                        control_organization.id AS control_organization_id,
                        control_organization.name AS control_organization,
@@ -303,7 +321,14 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                                    jsonb_build_object(
                                        'id', physical.id,
                                        'name', physical.name,
-                                       'channel', physical.channel
+                                       'channel', physical.channel,
+                                       'enabled',
+                                           physical.platform_enabled
+                                           AND (
+                                               physical.carrier_of_account_id
+                                                   IS NULL
+                                               OR physical.enabled
+                                           )
                                    )
                                    ORDER BY
                                      CASE WHEN physical.id = root.id THEN 0 ELSE 1 END,
@@ -312,7 +337,6 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                                FROM content_accounts physical
                                WHERE physical.tenant_id = root.tenant_id
                                  AND physical.brand_id = root.brand_id
-                                 AND physical.enabled = true
                                  AND (
                                    physical.id = root.id
                                    OR physical.carrier_of_account_id = root.id
@@ -326,6 +350,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                            WHERE carrier.tenant_id = root.tenant_id
                              AND carrier.carrier_of_account_id = root.id
                              AND carrier.enabled = true
+                             AND carrier.platform_enabled = true
                        ) AS carrier_count
                 FROM content_accounts root
                 JOIN account_content_roles account_role
@@ -342,7 +367,6 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                  AND profile.account_id = root.id
                  AND profile.id = root.current_expression_profile_id
                 WHERE root.tenant_id = %s AND root.brand_id = %s
-                  AND root.enabled = true
                   AND root.carrier_of_account_id IS NULL
                 ORDER BY root.name
                 """,
@@ -372,6 +396,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 {
                     "id": str(row["id"]),
                     "name": str(row["name"]),
+                    "enabled": bool(row["enabled"]),
                     "control_organization": (
                         {
                             "id": str(row["control_organization_id"]),
@@ -1626,19 +1651,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             # later by a tenant authority.  Nothing is defaulted, inferred from the creating
             # administrator, or guessed from an account name, a role name or an operator's name;
             # an account created without one simply has no maintainable profile until declared.
-            control_organization_level: str | None = None
             if control_organization_id is not None:
                 cursor.execute(
                     "SELECT id, organization_level FROM organizations WHERE tenant_id = %s AND id = %s",
                     (scope.tenant_id, control_organization_id),
                 )
-                control_organization = self._one(
+                self._one(
                     cursor,
                     "只能指定当前租户已有的组织作为账号控制组织",
                 )
-                control_organization_level = str(control_organization["organization_level"])
-            if initial_profile is not None and control_organization_level != "company":
-                raise DomainError("租户管理员只能在明确的公司级负责团队下建立账号画像。")
             cursor.execute(
                 """
                 SELECT account.id, account.channel, role.name AS content_role,
@@ -1874,6 +1895,158 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "speaker_kind": str(role["speaker_kind"]),
         }
 
+    def update_publishing_account(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        name: str | None,
+        control_organization_id: UUID | None,
+    ) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT name, control_organization_id
+                  FROM content_accounts
+                 WHERE tenant_id = %s
+                   AND brand_id = %s
+                   AND id = %s
+                   AND carrier_of_account_id IS NULL
+                 FOR UPDATE
+                """,
+                (scope.tenant_id, scope.brand_id, account_id),
+            )
+            current = self._one(
+                cursor,
+                "找不到当前租户的逻辑发布账号。",
+            )
+            resolved_control = (
+                control_organization_id
+                if control_organization_id is not None
+                else (
+                    UUID(str(current["control_organization_id"]))
+                    if current["control_organization_id"] is not None
+                    else None
+                )
+            )
+            if resolved_control is not None:
+                cursor.execute(
+                    "SELECT id FROM organizations "
+                    "WHERE tenant_id = %s AND id = %s",
+                    (scope.tenant_id, resolved_control),
+                )
+                self._one(cursor, "只能选择当前租户已有的负责团队。")
+            resolved_name = name or str(current["name"])
+            cursor.execute(
+                """
+                UPDATE content_accounts
+                   SET name = %s,
+                       control_organization_id = %s,
+                       control_organization_source =
+                           CASE WHEN %s IS NULL THEN 'unset' ELSE 'declared' END
+                 WHERE tenant_id = %s
+                   AND id = %s
+                """,
+                (
+                    resolved_name,
+                    resolved_control,
+                    resolved_control,
+                    scope.tenant_id,
+                    account_id,
+                ),
+            )
+            cursor.execute(
+                """
+                UPDATE content_accounts
+                   SET control_organization_id = %s,
+                       control_organization_source =
+                           CASE WHEN %s IS NULL THEN 'unset' ELSE 'declared' END
+                 WHERE tenant_id = %s
+                   AND carrier_of_account_id = %s
+                """,
+                (
+                    resolved_control,
+                    resolved_control,
+                    scope.tenant_id,
+                    account_id,
+                ),
+            )
+            cursor.execute(
+                """
+                UPDATE auth_grants AS grant_record
+                   SET can_maintain_expression_profile = false
+                  FROM users AS person
+                 WHERE grant_record.tenant_id = %s
+                   AND grant_record.account_id = %s
+                   AND grant_record.enabled = true
+                   AND grant_record.can_maintain_expression_profile = true
+                   AND person.tenant_id = grant_record.tenant_id
+                   AND person.id = grant_record.user_id
+                   AND person.organization_id IS DISTINCT FROM %s
+                """,
+                (
+                    scope.tenant_id,
+                    account_id,
+                    resolved_control,
+                ),
+            )
+            self._event(
+                cursor,
+                scope,
+                "publishing_account.updated",
+                "content_account",
+                account_id,
+            )
+        return {
+            "id": str(account_id),
+            "name": resolved_name,
+            "control_organization_id": (
+                str(resolved_control) if resolved_control is not None else None
+            ),
+        }
+
+    def set_publishing_account_enabled(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                UPDATE content_accounts
+                   SET enabled = %s
+                 WHERE tenant_id = %s
+                   AND brand_id = %s
+                   AND id = %s
+                   AND carrier_of_account_id IS NULL
+                   AND enabled <> %s
+                RETURNING id
+                """,
+                (
+                    enabled,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    account_id,
+                    enabled,
+                ),
+            )
+            self._one(
+                cursor,
+                "找不到需要调整状态的逻辑发布账号。",
+            )
+            self._event(
+                cursor,
+                scope,
+                (
+                    "publishing_account.restored"
+                    if enabled
+                    else "publishing_account.disabled"
+                ),
+                "content_account",
+                account_id,
+            )
+        return {"id": str(account_id), "enabled": enabled}
+
     def create_platform_carrier(
         self,
         scope: TenantManagementScope,
@@ -1923,7 +2096,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 raise DomainError("这个平台已经由原发布账号承载。")
             cursor.execute(
                 """
-                SELECT carrier.id, carrier.name
+                SELECT carrier.id, carrier.name, carrier.enabled,
+                       carrier.platform_enabled
                 FROM content_accounts carrier
                 WHERE carrier.tenant_id = %s
                   AND carrier.carrier_of_account_id = %s
@@ -1936,6 +2110,22 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 if str(existing["name"]) != name:
                     raise DomainError("这个表达身份在目标平台已有不同的明确载体。")
                 carrier_id = UUID(str(existing["id"]))
+                if not bool(existing["enabled"]) or not bool(
+                    existing["platform_enabled"]
+                ):
+                    cursor.execute(
+                        "UPDATE content_accounts "
+                        "SET enabled = true, platform_enabled = true "
+                        "WHERE tenant_id = %s AND id = %s",
+                        (scope.tenant_id, carrier_id),
+                    )
+                    self._event(
+                        cursor,
+                        scope,
+                        "publishing_account.platform_carrier_restored",
+                        "content_account",
+                        carrier_id,
+                    )
             else:
                 cursor.execute(
                     """
@@ -2011,6 +2201,73 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "voice_boundary": str(source["voice_boundary"]),
             "operator_id": str(operator_id),
             "shared_password": False,
+        }
+
+    def set_platform_carrier_enabled(
+        self,
+        scope: TenantManagementScope,
+        account_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                UPDATE content_accounts AS physical
+                   SET platform_enabled = %s,
+                       enabled = CASE
+                           WHEN physical.carrier_of_account_id IS NULL
+                           THEN physical.enabled
+                           ELSE %s
+                       END
+                 WHERE physical.tenant_id = %s
+                   AND physical.brand_id = %s
+                   AND physical.id = %s
+                   AND physical.platform_enabled <> %s
+                   AND EXISTS (
+                       SELECT 1
+                         FROM content_accounts AS root
+                        WHERE root.tenant_id = physical.tenant_id
+                          AND root.brand_id = physical.brand_id
+                          AND root.id = COALESCE(
+                              physical.carrier_of_account_id,
+                              physical.id
+                          )
+                          AND root.carrier_of_account_id IS NULL
+                   )
+                RETURNING physical.id,
+                          COALESCE(
+                              physical.carrier_of_account_id,
+                              physical.id
+                          ) AS root_id
+                """,
+                (
+                    enabled,
+                    enabled,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    account_id,
+                    enabled,
+                ),
+            )
+            changed = self._one(
+                cursor,
+                "找不到需要调整状态的平台目标。",
+            )
+            self._event(
+                cursor,
+                scope,
+                (
+                    "publishing_account.platform_carrier_restored"
+                    if enabled
+                    else "publishing_account.platform_carrier_disabled"
+                ),
+                "content_account",
+                account_id,
+            )
+        return {
+            "id": str(changed["id"]),
+            "root_account_id": str(changed["root_id"]),
+            "enabled": enabled,
         }
 
     def create_operator(
@@ -2320,6 +2577,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                      JOIN content_accounts physical
                        ON physical.tenant_id = root.tenant_id
                       AND physical.enabled = true
+                      AND physical.platform_enabled = true
                       AND (physical.id = root.id OR physical.carrier_of_account_id = root.id)
                      WHERE root.tenant_id = %s AND root.brand_id = %s
                        AND root.enabled = true
@@ -3007,13 +3265,14 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
     @staticmethod
     def _platform_targets(
         physical_targets: list[object],
-    ) -> list[dict[str, str]]:
-        result: list[dict[str, str]] = []
+    ) -> list[dict[str, object]]:
+        result: list[dict[str, object]] = []
         for raw_target in physical_targets:
             if not isinstance(raw_target, dict):
                 continue
             account_id = str(raw_target.get("id") or "")
             channel = str(raw_target.get("channel") or "")
+            enabled = bool(raw_target.get("enabled"))
             definitions = {
                 "抖音": (("douyin_video", "抖音", "视频"),),
                 "小红书": (
@@ -3029,6 +3288,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                         "target": target,
                         "platform": platform,
                         "media": media,
+                        "enabled": enabled,
                     }
                 )
         return result

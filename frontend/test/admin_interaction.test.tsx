@@ -257,6 +257,11 @@ async function main(): Promise<void> {
     "33333333-3333-4333-8333-333333333333"
   ]);
   assert.equal(memberCreate?.body?.grants_material_maintenance, false);
+  assert.deepEqual(
+    memberCreate?.body?.expression_profile_maintenance_account_ids,
+    [],
+    "账号使用资格不得静默授予画像维护权"
+  );
   const activationAnchor = document.querySelector(
     '.one-time-link a[href="https://diyu.example/activate/ui04-obviously-fake-browser-fixture"]'
   );
@@ -388,8 +393,44 @@ async function main(): Promise<void> {
   await settle();
   assert.equal(disableCount(), 1, "确认停用只能调用一次 API");
   assert.match(document.body.textContent ?? "", /成员已停用/);
+  await click(find("button", "查看与处理"));
+  await click(find(".tenant-drawer button", "恢复成员并生成激活链接"));
+  await settle();
+  assert.match(
+    document.querySelector(".tenant-drawer")?.textContent ?? "",
+    /ui05-restored-fixture/
+  );
+  await click(find(".tenant-drawer button", "关闭"));
 
   await click(find(".tenant-nav button", "发布账号与账号画像"));
+  const createAccountButton = find(
+    "button",
+    "创建发布账号"
+  ) as HTMLButtonElement;
+  assert.equal(
+    createAccountButton.disabled,
+    true,
+    "全新租户未确认品牌表达基线时不得进入账号创建"
+  );
+  const baselineDraft = document.querySelector(
+    ".brand-expression-baseline textarea"
+  ) as HTMLTextAreaElement;
+  await input(baselineDraft, `${baselineDraft.value}\n管理员确认后的修订。`);
+  await click(find(".brand-expression-baseline button", "确认当前品牌表达"));
+  await settle();
+  const baselineConfirmation = requests.find(
+    item =>
+      item.path === "/api/v1/admin/brand-expression/confirm" &&
+      item.method === "POST"
+  );
+  assert.match(
+    String(baselineConfirmation?.body?.draft ?? ""),
+    /管理员确认后的修订/
+  );
+  assert.equal(
+    (find("button", "创建发布账号") as HTMLButtonElement).disabled,
+    false
+  );
   await click(find("button", "创建发布账号"));
   const accountInputs = Array.from(
     document.querySelectorAll(".tenant-drawer input")
@@ -401,8 +442,8 @@ async function main(): Promise<void> {
   ) as HTMLSelectElement[];
   assert.deepEqual(
     Array.from(accountSelects[1].options).map(option => option.textContent),
-    ["请选择公司级组织", "笛语服饰管理组织"],
-    "租户管理员创建并初始化画像时只能选择明确公司级负责团队"
+    ["请选择负责团队", "笛语服饰管理组织", "浙江区域", "柯桥门店"],
+    "逻辑账号必须显式选择当前租户的控制组织"
   );
   await select(accountSelects[0], "institutional_account");
   await select(accountSelects[1], "11111111-1111-4111-8111-111111111111");
@@ -430,6 +471,13 @@ async function main(): Promise<void> {
   );
   assert.equal(accountCreate?.body?.content_role_name, "品牌官方");
   assert.equal(accountCreate?.body?.speaker_kind, "institutional_account");
+  assert.equal("target" in (accountCreate?.body ?? {}), false);
+  assert.equal(accountCreate?.body?.channel, "抖音");
+  assert.equal(
+    accountCreate?.body?.operator_can_maintain_expression_profile,
+    false,
+    "创建账号不得静默授予画像维护权"
+  );
   assert.equal("voice_boundary" in (accountCreate?.body ?? {}), false);
   assert.deepEqual(accountCreate?.body?.initial_profile, {
     identity_position: profileValues[0],
@@ -451,6 +499,25 @@ async function main(): Promise<void> {
       ) && item.method === "PATCH"
   );
   assert.equal(speakerUpdate?.body?.speaker_kind, "personal_ip_account");
+  await click(find("button", "添加平台"));
+  const targetSelects = Array.from(
+    document.querySelectorAll(".tenant-drawer select")
+  ) as HTMLSelectElement[];
+  await select(targetSelects[0], "wechat_channels_video");
+  await click(find(".tenant-drawer button", "添加平台"));
+  await settle();
+  const platformCreate = requests.find(
+    item =>
+      item.path === "/api/v1/tenant-management/platform-carriers" &&
+      item.method === "POST"
+  );
+  assert.equal(platformCreate?.body?.channel, "微信视频号");
+  assert.equal("target" in (platformCreate?.body ?? {}), false);
+  assert.doesNotMatch(
+    JSON.stringify(platformCreate?.body ?? {}),
+    /微信号"/,
+    "微信视频号不得再通过字符串删除“视频”推导"
+  );
 
   await click(find(".tenant-nav button", "团队使用"));
   await settle();

@@ -72,6 +72,7 @@ let accounts = [
   {
     id: "33333333-3333-4333-8333-333333333333",
     name: "总部品牌内容运营",
+    enabled: true,
     control_organization: {
       id: organizations[0].id,
       name: organizations[0].name,
@@ -99,7 +100,8 @@ let accounts = [
         account_id: "33333333-3333-4333-8333-333333333333",
         target: "xiaohongshu_graphic",
         platform: "小红书",
-        media: "图文"
+        media: "图文",
+        enabled: true
       }
     ],
     carrier_count: 1
@@ -134,6 +136,11 @@ let organizationMaterials = [
     created_at: "2026-07-27T00:00:00Z"
   }
 ];
+let brandBaseline = {
+  version: 1,
+  status: "draft",
+  draft: "真实、克制、有依据。"
+};
 let failedPath = null;
 let unmetRequest = {
   stable_request_id: "UI04-UNMET-FIXTURE",
@@ -241,6 +248,17 @@ globalThis.fetch = async (input, init = {}) => {
     value = organizations;
   } else if (path === "/api/v1/tenant-management/publishing-accounts" && method === "GET") {
     value = accounts;
+  } else if (path === "/api/v1/tenant-management/onboarding-prefill") {
+    value = {
+      account_profile_candidate: {
+        identity_position: "品牌账号的待确认表达身份",
+        authority_boundary: "只使用已确认事实",
+        audience_relationship: "与受众平等交流",
+        content_territories: "品牌长期内容",
+        default_production_conditions: "一人一部手机"
+      },
+      account_profile_candidate_source: "确定性冷启动候选，保存前必须纠正。"
+    };
   } else if (path === "/api/v1/tenant-management/brand-library" && method === "GET") {
     value = [];
   } else if (path === "/api/v1/tenant-management/brand-library" && method === "POST") {
@@ -336,6 +354,17 @@ globalThis.fetch = async (input, init = {}) => {
   ) {
     operators = operators.map(operator => ({ ...operator, enabled: false }));
     value = { disabled: true };
+  } else if (
+    path === "/api/v1/tenant-management/users/22222222-2222-4222-8222-222222222222/restore" &&
+    method === "POST"
+  ) {
+    operators = operators.map(operator => ({ ...operator, enabled: true }));
+    value = {
+      user_id: "22222222-2222-4222-8222-222222222222",
+      activation_link: "/activate/ui05-restored-fixture",
+      activation_url:
+        "https://diyu.example/activate/ui05-restored-fixture"
+    };
   } else if (path === "/api/v1/auth/password" && method === "POST") {
     if (body.current_password === "incorrect-current-password") {
       return {
@@ -353,6 +382,7 @@ globalThis.fetch = async (input, init = {}) => {
       {
         id: "33333333-3333-4333-8333-333333333333",
         name: body.name,
+        enabled: true,
         control_organization: {
           id: body.control_organization_id,
           name: organizations[0].name,
@@ -371,9 +401,15 @@ globalThis.fetch = async (input, init = {}) => {
         platform_targets: [
           {
             account_id: "carrier-fixture",
-            target: body.target,
-            platform: "抖音",
-            media: "视频"
+            target:
+              body.channel === "微信视频号"
+                ? "wechat_channels_video"
+                : body.channel === "小红书"
+                  ? "xiaohongshu_graphic"
+                  : "douyin_video",
+            platform: body.channel,
+            media: body.channel === "小红书" ? "图文" : "视频",
+            enabled: true
           }
         ],
         carrier_count: 1,
@@ -398,6 +434,28 @@ globalThis.fetch = async (input, init = {}) => {
       speaker_kind: body.speaker_kind
     };
   } else if (
+    path === "/api/v1/tenant-management/platform-carriers" &&
+    method === "POST"
+  ) {
+    accounts = accounts.map(account => ({
+      ...account,
+      platform_targets: [
+        ...account.platform_targets,
+        {
+          account_id: "carrier-wechat-fixture",
+          target: "wechat_channels_video",
+          platform: body.channel,
+          media: "视频",
+          enabled: true
+        }
+      ]
+    }));
+    value = {
+      id: "carrier-wechat-fixture",
+      channel: body.channel,
+      carrier_of_account_id: body.source_account_id
+    };
+  } else if (
     path === "/api/v1/tenant-management/brand-products" &&
     method === "PUT"
   ) {
@@ -412,8 +470,18 @@ globalThis.fetch = async (input, init = {}) => {
       }
     ];
     value = products[0];
-  } else if (path.includes("/admin/brand-expression")) {
-    value = { version: 1, status: "confirmed", draft: "真实、克制、有依据。" };
+  } else if (
+    path === "/api/v1/admin/brand-expression/confirm" &&
+    method === "POST"
+  ) {
+    brandBaseline = {
+      version: brandBaseline.status === "confirmed" ? 2 : 1,
+      status: "confirmed",
+      draft: body.draft
+    };
+    value = brandBaseline;
+  } else if (path === "/api/v1/admin/brand-expression") {
+    value = brandBaseline;
   } else if (path.includes("/ops/runtime-summary")) {
     value = { enabled_tenants: 3, content_runs: 12, display_runs: 4 };
   }
