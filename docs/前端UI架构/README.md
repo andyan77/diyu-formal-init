@@ -29,12 +29,14 @@ React/API/PostgreSQL 浏览器纵向、四项 mutation、Golden/OpenAPI `421 pas
 Gate B 首次实现 `a67f44b…` 完成品牌文字资料、商品事实和组织官方素材主体，但主控终审
 发现系列首篇误计为续写、六类诊断跨账号／组织拼接条件，以及指定区域 API 接受门店级组织，
 当时真值诚实退回 `48/10/0/6/0`。有界返工实现
-`4a49e0d912e17a10965e840e89c1ef7f03bca3f6` 让 7/30 日续写只取真实后续篇，并用同一完整
+`4a49e0d912e17a10965e840e89c1ef7f03bca3f6` 让 7/30 日续写只取后续位置，并用同一完整
 账号／组织／资料路径裁定六类状态，evidence 展示真实对象、版本、范围和更新时间；新保存的
 指定区域只接受 region。正式三视口 Chrome、Golden/OpenAPI `422 passed, 1 skipped`、
-三项 mutation 和两份有界审查通过。UX-03 仍为 `ACTIVE`，Gate A 和 Gate B 为
-`COMPLETE`，Gate C 尚未启动；本轮没有 push、CI、部署、生产连接或模型调用。64 项真值
-恢复为 `50/8/0/6/0`，Gate B 等待主控重新独立终审。
+三项 mutation 和两份有界审查通过。最终 FT-031 实现
+`0774ae685da3156e529a1b6fed5d502a920706a1` 进一步要求后续篇成功提交 V1、非平台派生，
+并以 V1 提交时间进入窗口；失败 task 不再冒充续写。UX-03 仍为 `ACTIVE`，Gate A 和
+Gate B 为 `COMPLETE`，Gate C 尚未启动；本轮没有 push、CI、部署、生产连接或模型调用。
+64 项真值保持 `50/8/0/6/0`，Gate B 等待主控最终独立终审。
 
 UI-04 已于 2026-07-27（UTC）通过主控独立终审
 并保持 `CLOSED`；创始人真实使用后出现的产品语义新证据由 successor UI-05 单独承接。

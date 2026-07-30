@@ -3,7 +3,7 @@
 - 当前里程碑：`UX-03` 产品目标一致性与全链路修复。
 - 状态：`ACTIVE`；`Gate A · 正式入驻、身份、逻辑发布账号与多平台关系闭环` 为
   `COMPLETE` 且主控最终终审 `PASS`；`Gate B · 品牌资料、组织作用域、团队使用与能力诊断`
-  为 `COMPLETE`，等待主控重新独立终审；`Gate C` 为 `NOT_STARTED`。UX-02 保持 `CLOSED`，
+  为 `COMPLETE`，等待主控最终独立终审；`Gate C` 为 `NOT_STARTED`。UX-02 保持 `CLOSED`，
   不创建 UX-04。
 - 当前 Git 基线：`86f5df16b9e42fe4eee322694156361a007bdb88`；唯一写入执行端为
   当前 WSL Codex。
@@ -12,7 +12,8 @@
   `4899a068b7b2310cb45cecac4def4ff17e537f05`。Gate B 首次冻结实现
   `a67f44bdc4e73a2a8386cdfa311659220aefc0af` 与首次完成记录 `a961709…` 保留；主控终审
   判定 FT-031／FT-032 为 `FAIL` 后，本次有界返工实现为
-  `4a49e0d912e17a10965e840e89c1ef7f03bca3f6`。本地 `main` 只在 `origin/main` 的 UX-02
+  `4a49e0d912e17a10965e840e89c1ef7f03bca3f6`；其后 FT-031 最小返工实现为
+  `0774ae685da3156e529a1b6fed5d502a920706a1`。本地 `main` 只在 `origin/main` 的 UX-02
   关闭基线上普通前向领先；Gate B 未 push、未触发远程 CI、未部署、未连接生产、未调用模型。
 - 当前任务包：
   [`docs/UX-03-产品目标一致性与全链路修复执行包.md`](docs/UX-03-产品目标一致性与全链路修复执行包.md)。
@@ -31,14 +32,15 @@
   商品和明确选择的素材，后续版本与停用不污染原任务修订。
 - Gate B 首次终审确认 FT-027—FT-030 主体成立，但发现系列首篇被误计为续写，六类诊断会
   把不同账号或组织的独立数量拼成 `available`，指定区域 API 还接受门店级组织；当时真值
-  诚实退回 `48/10/0/6/0`。本次返工后，系列续写只统计 `series_position > 1` 且独立服从
-  7/30 日窗口；六类诊断由同一 tenant／brand 内完整且内部一致的账号、组织、资料路径决定，
-  evidence 返回真实对象、版本、范围和更新时间；指定区域只接受明确登记的 region，历史
-  非 region 数据仅兼容读取。正式 React 三视口及显式 Chrome 纵向通过；Golden/OpenAPI 为
-  `422 passed, 1 skipped`，两份有界审查无阻断。
+  诚实退回 `48/10/0/6/0`。最终返工后，系列续写只统计 `series_position > 1`、
+  `parent_version_id IS NULL`、具有 succeeded run 且实际提交完整 V1 的任务，并以 V1
+  提交时间独立适用 7/30 日窗口；六类诊断仍由同一 tenant／brand 内完整且内部一致的账号、
+  组织、资料路径决定，evidence 返回真实对象、版本、范围和更新时间；指定区域仍只接受
+  明确登记的 region，历史非 region 数据仅兼容读取。Golden/OpenAPI 为
+  `422 passed, 1 skipped`，FT-031 有界复核无阻断。
 - 当前 64 项功能真值为 `50/8/0/6/0`；剩余有缺陷项仅为 FT-039—FT-041、FT-045、
   FT-050—FT-052 和 FT-058。
-- 当前唯一下一动作：主控重新独立终审 Gate B；通过后再输出 Gate C 执行 Prompt，Gate C
+- 当前唯一下一动作：主控最终独立终审 Gate B；通过后再输出 Gate C 执行 Prompt，Gate C
   尚未启动。
 
 ## UX-02 关闭记录（历史保留）
