@@ -1,10 +1,10 @@
 # 当前里程碑
 
 - 当前里程碑：`UX-02` 正式前端工程化与生产替换。
-- 状态：`ACTIVE`。UX-01 主控重新独立终审结论为 `PASS` 并保持 `CLOSED`；UX-02 已从
-  `75ed5283e2616ffa91b2ea20dd0b86e7d64449e3` 启动。管理员开通租户用户、低种子
-  V1→V2→V1 与纯文字 DM01 已在正式 React/API/PostgreSQL 隔离链路成立，当前进入
-  唯一候选 push、承重 CI 与生产替换。
+- 状态：`REVIEW`。UX-01 主控重新独立终审结论为 `PASS` 并保持 `CLOSED`；UX-02 已从
+  `75ed5283e2616ffa91b2ea20dd0b86e7d64449e3` 启动，并完成正式
+  React/API/PostgreSQL 工程化、唯一承重 CI、生产默认前端替换、验收清理与不降级回退。
+  不创建 UX-03，不自行 `CLOSED`。
 - UX-01 第一次执行侧以页面可打开和状态存在
   为主的 `15/15` 验证自报
   `3/3 Gate / REVIEW`，主控第一次独立终审判定 `FAIL_WITH_BOUNDED_REWORK`：错入口、
@@ -18,23 +18,39 @@
   已改变，也不证明真实采用、发布、流量、排名、GMV 或销售效果。
 - UX-01 关闭时只新增产品定义、功能真值台账、产品语言和静态 HTML 原型；没有修改正式
   React、API、OpenAPI、数据库或生产。UX-02 已按正式消费者重新核验 64 项：真实可用
-  `58`、有缺陷 `0`、纯占位 `0`、重复或应删除 `6`、尚无法证明 `0`；该结论在生产替换
-  完成前仍只属于候选工程证据。
+  `58`、有缺陷 `0`、纯占位 `0`、重复或应删除 `6`、尚无法证明 `0`；正式生产消费者与
+  清理后的同 SHA 证据均已成立。
 - 唯一写入执行端：当前 WSL Codex；UX-02 启动基线：
   `75ed5283e2616ffa91b2ea20dd0b86e7d64449e3`。
 - 当前任务包：
   [`docs/UX-02-正式前端工程化与生产替换执行包.md`](docs/UX-02-正式前端工程化与生产替换执行包.md)。
-- 本地完成门：Ruff、mypy、Golden/OpenAPI `418 passed`、前端
-  lint/typecheck/interaction/build 与 `git diff --check` 全绿。正式隔离链路证据位于
-  `/var/lib/diyu-ux02-evidence/c17f1f6541da73ddfc032605db8cdbc085a214b0/`：两个隔离
-  浏览器完成管理员创建、完整 HTTPS 激活、登录与停用；“发送”不建版本；低种子完成
-  V1→V2→V1→当前版复制/导出；DM01 完成纯文字 V1/V2/历史且库存守恒。隔离临时服务和
-  凭据材料已清理。
+- 最终应用实现 `d5f4609288f284e083d2b1f090222cca50c03c1d` 完成管理员创建、完整
+  HTTPS 激活、登录与停用；“发送”不建版本；低种子完成 V1→V2→V1→当前版复制/导出；
+  DM01 完成纯文字 V1/V2/历史且库存守恒。最终运行 SHA
+  `9c6b81779dced53b8c1f216cd5ba45e043ae7d24` 只在该应用语义之上前向修复部署/回退
+  checkout 的继承 umask，二者差分仅为两个部署脚本和直接测试。Ruff、mypy、
+  Golden/OpenAPI `419 passed`、前端 lint/typecheck/interaction/build 与
+  `git diff --check` 全绿。
 - 两份有界审查结论：产品与体验无阻断，三空间职责、移动双工作面、真实状态与错误恢复
   保持；工程与安全无阻断，可信公开域名、互斥资格、请求幂等、租户/品牌/账号/自然人作用域
   及 expand-first schema 33 均失败关闭。
-- 唯一下一动作：形成并推送唯一生产候选，运行承重 CI；只有最终绿色 SHA 才进入备份、
-  部署与生产验收。
+- 最终承重 CI `30523024236` 对应运行 SHA `9c6b81779dced53b8c1f216cd5ba45e043ae7d24`
+  且为 `success`。生产部署仓与镜像均为该 SHA，schema `20260806_33`，公网／回环
+  readiness 与 `/status` 均为 `200`，备份 timer active。新鲜备份
+  `/var/backups/diyu-m5-4/20260730T070654Z-ux02-final-predeploy` 的 `0700/0600`、
+  checksum、隔离恢复、RLS、应用 readiness 与对象恢复均通过。
+- 生产 synthetic 旅程完成管理员开通与停用、低种子 V1→V2→V1、纯文字 DM01
+  V1→V2→V1、移动和响应式验收；全文人工审阅无阻断。验收后通过新鲜备份原子恢复，
+  合成凭据、活动会话、未用 token、运行残留及临时数据库均为 0，正式计数恢复为已启用
+  用户 `19`、授权 `21`、内容版本 `307`。旧健康镜像
+  `9c5b2436f3594b08c5df9c5b758293fd5b4cf177` 已在 schema 33 上成功启动并恢复公网，
+  随后切回最终候选；最终回退脚本在继承 `umask 077` 下真实通过。
+- 生产业务证据位于
+  `/var/lib/diyu-ux02-evidence/d5f4609288f284e083d2b1f090222cca50c03c1d/final-production/`，
+  最终部署、回退与清理锚点位于
+  `/var/lib/diyu-ux02-evidence/9c6b81779dced53b8c1f216cd5ba45e043ae7d24/final-production/`；
+  两处均为 root-only `0700/0600` 且 SHA256SUMS 全绿。
+- 唯一下一动作：主控独立终审 UX-02；在终审前不启动 UX-03。
 
 ## UI-12 关闭结论（历史保留）
 
