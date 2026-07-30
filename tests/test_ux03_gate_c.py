@@ -1,12 +1,23 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import os
+import socket
+import subprocess
+import sys
+import time
 from dataclasses import replace
+from pathlib import Path
 from typing import Any, cast
+from urllib.request import urlopen
 from uuid import UUID, uuid4
 
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from psycopg.rows import dict_row
 
 import src.infrastructure.postgres_repository as repository_module
 from src.brain.content_expression import (
@@ -17,9 +28,11 @@ from src.brain.p1_contract import assert_content_complete
 from src.brain.platform_directions import direction_for
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
+from src.infrastructure.production_auth import ProductionAuthRepository
 from src.infrastructure.seed_demo import (
     ACCOUNT_ID,
     BRAND_ID,
+    HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
     TENANT_ID,
     USER_ID,
 )
@@ -76,6 +89,184 @@ _RESOURCES = frozenset(
         CREATOR_EXPRESSION_RESOURCE_ID,
     }
 )
+
+
+def _run_gate_c_browser(
+    app_database_url: str,
+    token: str,
+    material_root: Path,
+) -> subprocess.CompletedProcess[str]:
+    """Run the formal Creator React/API/PostgreSQL journey in real Chrome."""
+
+    with socket.socket() as port_socket:
+        port_socket.bind(("127.0.0.1", 0))
+        port = int(port_socket.getsockname()[1])
+    base_url = f"http://127.0.0.1:{port}"
+    environment = {
+        **os.environ,
+        "DIYU_RUNTIME_MODE": "test",
+        "DIYU_APP_DATABASE_URL": app_database_url,
+        "DIYU_SESSION_SECRET": "ux03-gate-c-browser-session-secret",
+        "DIYU_DEMO_TENANT_ID": str(TENANT_ID),
+        "DIYU_DEMO_USER_ID": str(USER_ID),
+        "DIYU_DEMO_BRAND_ID": str(BRAND_ID),
+        "DIYU_DEMO_ACCOUNT_ID": str(ACCOUNT_ID),
+        "DIYU_GENERATOR_MODE": "stub",
+        "DIYU_MATERIAL_STORAGE_ROOT": str(material_root),
+    }
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "src.gateway.api.app:create_app",
+            "--factory",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=environment,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        for _ in range(100):
+            if server.poll() is not None:
+                raise AssertionError("Gate C browser API server exited early")
+            try:
+                with urlopen(f"{base_url}/status", timeout=0.2) as response:
+                    if response.status == 200:
+                        break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            raise AssertionError("Gate C browser API server did not become ready")
+        return subprocess.run(
+            ["node", "frontend/test/ux03-gate-c-browser.mjs"],
+            cwd=Path(__file__).resolve().parents[1],
+            env={
+                **os.environ,
+                "UX03_GATE_C_BASE_URL": base_url,
+                "UX03_GATE_C_SESSION_TOKEN": token,
+                "UX03_GATE_C_ACCOUNT_ID": str(ACCOUNT_ID),
+            },
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=5)
+
+
+def _delete_gate_c_browser_artifacts(
+    database_url: str,
+    *,
+    task_ids: tuple[UUID, ...],
+    session_token: str,
+) -> None:
+    """Remove only this local Chrome journey's exact task chain and session."""
+
+    with (
+        psycopg.connect(database_url, row_factory=dict_row) as connection,
+        connection.cursor() as cursor,
+    ):
+        for task_id in task_ids:
+            cursor.execute(
+                "SELECT id FROM content_versions "
+                "WHERE tenant_id = %s AND task_id = %s ORDER BY id",
+                (TENANT_ID, task_id),
+            )
+            for row in cursor.fetchall():
+                version_id = UUID(str(row["id"]))
+                cursor.execute(
+                    "SELECT set_config('app.tenant_id', %s, true)",
+                    (str(TENANT_ID),),
+                )
+                cursor.execute(
+                    "SELECT set_config('diyu.content_version_maintenance', "
+                    "'delete_synthetic_fixture', true)"
+                )
+                cursor.execute(
+                    "SELECT set_config("
+                    "'diyu.content_version_maintenance_transaction_id', "
+                    "pg_current_xact_id()::text, true)"
+                )
+                cursor.execute(
+                    "SELECT set_config("
+                    "'diyu.content_version_maintenance_tenant_id', %s, true)",
+                    (str(TENANT_ID),),
+                )
+                cursor.execute(
+                    "SELECT set_config("
+                    "'diyu.content_version_maintenance_version_id', %s, true)",
+                    (str(version_id),),
+                )
+                cursor.execute(
+                    "DELETE FROM content_versions "
+                    "WHERE tenant_id = %s AND id = %s",
+                    (TENANT_ID, version_id),
+                )
+            cursor.execute(
+                "DELETE FROM activity_events "
+                "WHERE tenant_id = %s AND entity_id = %s",
+                (TENANT_ID, task_id),
+            )
+            cursor.execute(
+                "DELETE FROM generation_runs "
+                "WHERE tenant_id = %s AND task_id = %s",
+                (TENANT_ID, task_id),
+            )
+            cursor.execute(
+                "DELETE FROM content_items "
+                "WHERE tenant_id = %s AND task_id = %s",
+                (TENANT_ID, task_id),
+            )
+            cursor.execute(
+                "DELETE FROM business_tasks "
+                "WHERE tenant_id = %s AND id = %s",
+                (TENANT_ID, task_id),
+            )
+        cursor.execute(
+            "DELETE FROM tenant_sessions "
+            "WHERE tenant_id = %s AND token_digest = %s",
+            (
+                TENANT_ID,
+                ProductionAuthRepository._digest(session_token),
+            ),
+        )
+
+        if task_ids:
+            cursor.execute(
+                """
+                SELECT
+                  (SELECT count(*) FROM business_tasks
+                    WHERE tenant_id = %s AND id = ANY(%s)) AS tasks,
+                  (SELECT count(*) FROM generation_runs
+                    WHERE tenant_id = %s AND task_id = ANY(%s)) AS runs,
+                  (SELECT count(*) FROM content_versions
+                    WHERE tenant_id = %s AND task_id = ANY(%s)) AS versions
+                """,
+                (
+                    TENANT_ID,
+                    list(task_ids),
+                    TENANT_ID,
+                    list(task_ids),
+                    TENANT_ID,
+                    list(task_ids),
+                ),
+            )
+            assert cursor.fetchone() == {
+                "tasks": 0,
+                "runs": 0,
+                "versions": 0,
+            }
 
 
 def _brand(*, account_name: str = "门店生活观察账号") -> BrandContext:
@@ -666,3 +857,113 @@ def test_controls_request_remains_optional_and_has_no_hidden_required_axis() -> 
     assert empty.cleared_axes == ()
     assert empty.custom_text == ""
     assert empty.body_related_opt_in is False
+
+
+def test_formal_creator_gate_c_browser_journey(
+    app_database_url: str,
+    migrator_database_url: str,
+    tmp_path: Path,
+) -> None:
+    if os.environ.get("DIYU_RUN_UX03_GATE_C_BROWSER") != "1":
+        pytest.skip(
+            "set DIYU_RUN_UX03_GATE_C_BROWSER=1 for the formal Chrome journey"
+        )
+    frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+    assert (frontend_dist / "index.html").is_file()
+    token = hmac.new(
+        b"ux03-gate-c-browser-session-secret",
+        b"content-production",
+        hashlib.sha256,
+    ).hexdigest()
+    original_business_data_kind = ""
+    with (
+        psycopg.connect(migrator_database_url, row_factory=dict_row) as connection,
+        connection.cursor() as cursor,
+    ):
+        cursor.execute(
+            "SELECT business_data_kind FROM content_accounts "
+            "WHERE tenant_id = %s AND id = %s",
+            (TENANT_ID, HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID),
+        )
+        account_row = cursor.fetchone()
+        assert account_row is not None
+        original_business_data_kind = str(account_row["business_data_kind"])
+        cursor.execute(
+            "UPDATE content_accounts "
+            "SET business_data_kind = 'synthetic_business_fixture' "
+            "WHERE tenant_id = %s AND id = %s",
+            (TENANT_ID, HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID),
+        )
+        cursor.execute(
+            "SELECT id FROM business_tasks "
+            "WHERE tenant_id = %s AND created_by = %s",
+            (TENANT_ID, USER_ID),
+        )
+        before_task_ids = {
+            UUID(str(row["id"]))
+            for row in cursor.fetchall()
+        }
+    created_task_ids: tuple[UUID, ...] = ()
+    try:
+        browser = _run_gate_c_browser(
+            app_database_url,
+            token,
+            tmp_path / "materials",
+        )
+        assert browser.returncode == 0, (
+            "formal Gate C Chrome journey failed:\n"
+            f"{browser.stdout}\n{browser.stderr}"
+        )
+        result = json.loads(browser.stdout)
+        assert result["failures"] == []
+        assert result["lifecycle_events"] == [
+            "received",
+            "compiling_context",
+            "generating",
+            "validating",
+            "finalizing",
+            "completed",
+        ]
+        created_task_ids = tuple(
+            UUID(item)
+            for item in result["created_task_ids"]
+        )
+        assert len(created_task_ids) == 1
+    finally:
+        with (
+            psycopg.connect(
+                migrator_database_url,
+                row_factory=dict_row,
+            ) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute(
+                "SELECT id FROM business_tasks "
+                "WHERE tenant_id = %s AND created_by = %s",
+                (TENANT_ID, USER_ID),
+            )
+            observed = {
+                UUID(str(row["id"]))
+                for row in cursor.fetchall()
+            }
+        cleanup_ids = tuple(sorted(observed - before_task_ids, key=str))
+        try:
+            _delete_gate_c_browser_artifacts(
+                migrator_database_url,
+                task_ids=cleanup_ids,
+                session_token=token,
+            )
+        finally:
+            with (
+                psycopg.connect(migrator_database_url) as restore_connection,
+                restore_connection.cursor() as cursor,
+            ):
+                cursor.execute(
+                    "UPDATE content_accounts SET business_data_kind = %s "
+                    "WHERE tenant_id = %s AND id = %s",
+                    (
+                        original_business_data_kind,
+                        TENANT_ID,
+                        HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
+                    ),
+                )
