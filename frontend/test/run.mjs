@@ -64,6 +64,20 @@ const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></
   url: "http://localhost/content?target=xiaohongshu_graphic",
   pretendToBeVisual: true
 });
+const mediaListeners = new Set();
+Object.defineProperty(dom.window, "matchMedia", {
+  value: query => ({
+    matches: query === "(max-width: 640px)",
+    media: query,
+    onchange: null,
+    addEventListener: (_event, listener) => mediaListeners.add(listener),
+    removeEventListener: (_event, listener) => mediaListeners.delete(listener),
+    addListener: listener => mediaListeners.add(listener),
+    removeListener: listener => mediaListeners.delete(listener),
+    dispatchEvent: () => true
+  }),
+  configurable: true
+});
 for (const name of [
   "window",
   "document",

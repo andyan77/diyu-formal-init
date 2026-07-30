@@ -668,6 +668,7 @@ export default function CreatorApp({
   const [customAxes, setCustomAxes] = useState<Record<string, string>>({});
   const [materialIds, setMaterialIds] = useState<string[]>([]);
   const [directionsOpen, setDirectionsOpen] = useState(false);
+  const [compactDirections, setCompactDirections] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [toolOpen, setToolOpen] = useState<"series" | "materials" | null>(null);
   const [seriesSelection, setSeriesSelection] = useState<SeriesSelection | null>(null);
@@ -701,11 +702,63 @@ export default function CreatorApp({
   const toolCloseRef = useRef<HTMLButtonElement>(null);
   const toolReturnFocus = useRef<HTMLButtonElement | null>(null);
   const toolRestoreFocusPending = useRef(false);
+  const directionToggleRef = useRef<HTMLButtonElement>(null);
+  const directionPanelRef = useRef<HTMLElement>(null);
+  const directionCloseRef = useRef<HTMLButtonElement>(null);
 
   const targetLabel = currentTargetMetadata.label;
   const bodyOptIn = preference?.body_related_opt_in ?? false;
   const scope = (path: string): string =>
     scopedContentPath(path, currentPublishingIdentityId, currentTarget);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia("(max-width: 640px)");
+    const update = (): void => setCompactDirections(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (directionsOpen && compactDirections) {
+      directionCloseRef.current?.focus();
+    }
+  }, [compactDirections, directionsOpen]);
+
+  const closeDirections = (): void => {
+    if (compactDirections) {
+      directionToggleRef.current?.focus();
+    }
+    setDirectionsOpen(false);
+  };
+
+  const handleDirectionKeyDown = (
+    event: ReactKeyboardEvent<HTMLElement>
+  ): void => {
+    if (!compactDirections) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDirections();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      directionPanelRef.current?.querySelectorAll<HTMLElement>(
+        "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]"
+      ) ?? []
+    );
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   const loadWorkspace = async (): Promise<void> => {
     if (!hasResolvedIdentity) return;
@@ -1564,32 +1617,66 @@ export default function CreatorApp({
                 </div>
               )}
               <button
+                ref={directionToggleRef}
                 className="direction-toggle"
                 type="button"
                 disabled={!hasResolvedIdentity}
                 aria-expanded={directionsOpen}
-                onClick={() => setDirectionsOpen(value => !value)}
+                aria-controls="creator-direction-panel"
+                onClick={() =>
+                  directionsOpen ? closeDirections() : setDirectionsOpen(true)
+                }
               >
                 <span>创作方向（可选）</span>
                 <small>{directionSummary}</small>
               </button>
               {directionsOpen && (
-                <DirectionPanel
-                  catalog={catalog}
-                  selections={selections}
-                  clearedAxes={clearedAxes}
-                  customText={customText}
-                  customAxes={customAxes}
-                  materials={materials}
-                  materialIds={materialIds}
-                  onSelections={setSelections}
-                  onClearedAxes={setClearedAxes}
-                  onCustomText={setCustomText}
-                  onCustomAxes={setCustomAxes}
-                  onMaterialIds={setMaterialIds}
-                  onSaveDefaults={() => void saveDefaults()}
-                  saving={savingDefaults}
-                />
+                <>
+                  <button
+                    className="direction-backdrop"
+                    type="button"
+                    aria-label="关闭创作方向"
+                    onClick={closeDirections}
+                  />
+                  <section
+                    id="creator-direction-panel"
+                    ref={directionPanelRef}
+                    className="direction-panel"
+                    role={compactDirections ? "dialog" : "region"}
+                    aria-modal={compactDirections ? "true" : undefined}
+                    aria-label="创作方向"
+                    onKeyDown={handleDirectionKeyDown}
+                  >
+                    <header className="direction-mobile-header">
+                      <strong>创作方向</strong>
+                      <button
+                        ref={directionCloseRef}
+                        className="icon-button"
+                        type="button"
+                        aria-label="关闭创作方向"
+                        onClick={closeDirections}
+                      >
+                        ×
+                      </button>
+                    </header>
+                    <DirectionPanel
+                      catalog={catalog}
+                      selections={selections}
+                      clearedAxes={clearedAxes}
+                      customText={customText}
+                      customAxes={customAxes}
+                      materials={materials}
+                      materialIds={materialIds}
+                      onSelections={setSelections}
+                      onClearedAxes={setClearedAxes}
+                      onCustomText={setCustomText}
+                      onCustomAxes={setCustomAxes}
+                      onMaterialIds={setMaterialIds}
+                      onSaveDefaults={() => void saveDefaults()}
+                      saving={savingDefaults}
+                    />
+                  </section>
+                </>
               )}
             </>
           )}

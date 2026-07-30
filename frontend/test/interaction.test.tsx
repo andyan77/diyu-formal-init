@@ -210,6 +210,32 @@ async function main(): Promise<void> {
   const directionToggle = find("button", "创作方向（可选）");
   assert.equal(directionToggle.getAttribute("aria-expanded"), "false");
   await click(directionToggle);
+  await settle();
+  assert.equal(
+    document.activeElement?.getAttribute("aria-label"),
+    "关闭创作方向",
+    "移动创作方向打开后焦点必须进入底部抽屉"
+  );
+  assert.equal(
+    document.querySelector(".direction-panel")?.getAttribute("aria-modal"),
+    "true"
+  );
+  await act(async () => {
+    document.querySelector(".direction-panel")?.dispatchEvent(
+      new window.KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+  });
+  await settle();
+  assert.equal(
+    document.activeElement,
+    directionToggle,
+    "Escape 关闭创作方向后焦点必须回到触发按钮"
+  );
+  await click(directionToggle);
   assert.equal(document.querySelectorAll(".direction-axis").length, 3);
   await click(find("button", "更多：讲法与系列互动"));
   assert.equal(document.querySelectorAll(".direction-axis").length, 5);
