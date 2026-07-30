@@ -237,7 +237,14 @@ def build_kernel_skeleton(
     if program_id == ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM and frame.narrative_mode != "actuality_reflection":
         raise ValueError("local dramatization program requires actuality reflection")
     body_types: tuple[ObservationType, ...]
-    if frame.narrative_mode == "hypothesis":
+    uses_hypothesis_body = (
+        frame.narrative_mode == "hypothesis"
+        or (
+            kernel_version == KERNEL_VERSION
+            and frame.narrative_mode == "actuality_reflection"
+        )
+    )
+    if uses_hypothesis_body:
         body_types = ("hypothesis",)
     elif frame.narrative_mode == "dramatization":
         body_types = ("dramatization",)
@@ -449,7 +456,7 @@ def build_kernel_skeleton(
     else:
         body_mode: UnitMode
         body_scope: str
-        if frame.narrative_mode == "hypothesis":
+        if uses_hypothesis_body:
             body_mode = "hypothesis"
             body_scope = "scope:hypothesis-v1"
         elif frame.narrative_mode == "dramatization":

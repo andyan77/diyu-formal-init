@@ -86,6 +86,9 @@ _PHRASES: dict[str, str] = {
         "以下只引用已确认的信息；其余为一般观察，不增加新的现实主张。"
     ),
     "phrase:artifact-hypothesis": "下面的片段是假设，不代表真实发生。",
+    "phrase:artifact-user-fact-hypothesis": (
+        "以下保留你提供的真实片段；其余是创作性推演，不作为这段经历的事实补充。"
+    ),
     "phrase:artifact-dramatization": "以下内容包含情景演绎，不对应真实人物或经历。",
     "phrase:artifact-user-fact-drama": (
         "以下内容保留你提供的真实片段；小剧场为情景演绎，不对应现实经历。"
@@ -628,7 +631,11 @@ def _artifact_scope_source(kernel: CreativeKernelV1) -> str:
     if "disclosed_dramatization" in body_modes:
         return "phrase:artifact-user-fact-drama" if has_user_fact else "phrase:artifact-dramatization"
     if "hypothesis" in body_modes:
-        return "phrase:artifact-hypothesis"
+        return (
+            "phrase:artifact-user-fact-hypothesis"
+            if has_user_fact
+            else "phrase:artifact-hypothesis"
+        )
     if has_user_fact:
         return "phrase:artifact-user-fact"
     if has_confirmed_fact:
@@ -640,7 +647,10 @@ def _title_scope_source(kernel: CreativeKernelV1) -> str:
     artifact_source = _artifact_scope_source(kernel)
     if artifact_source in {"phrase:artifact-dramatization", "phrase:artifact-user-fact-drama"}:
         return "phrase:title-dramatization"
-    if artifact_source == "phrase:artifact-hypothesis":
+    if artifact_source in {
+        "phrase:artifact-hypothesis",
+        "phrase:artifact-user-fact-hypothesis",
+    }:
         return "phrase:title-hypothesis"
     if artifact_source == "phrase:artifact-user-fact":
         return "phrase:title-user-fact"

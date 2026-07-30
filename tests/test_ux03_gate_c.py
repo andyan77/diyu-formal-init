@@ -281,6 +281,49 @@ def test_media_native_units_compile_one_scope_and_distinct_platform_parts() -> N
     assert_content_complete(artifact)
 
 
+def test_actuality_creative_units_are_preallocated_as_disclosed_hypothesis() -> None:
+    fact = "今天喝了一直喝的蓝山咖啡，居然是甜的。"
+    frame = new_frame("actuality_reflection", (fact,), ())
+    request = replace(
+        _generation_input(),
+        weak_seed=fact + "帮我发一条。",
+        narrative_frame=frame,
+        creative_plan=build_creative_plan(
+            topic_spans=(fact,),
+            primary_value="brand_life_narrative",
+            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            mechanism_id=None,
+            target_shape="小红书图文完整成品",
+        ),
+    )
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+
+    assert kernel.unit("unit:body").mode == "hypothesis"
+    compiled = compile_delivery(
+        DeliveryCompileInput(
+            primary_product=request.primary_product,
+            media_format=request.media_format,
+            products=(),
+            production_conditions=request.brand.production_conditions,
+            allowed_resource_ids=_RESOURCES,
+            trusted_fact_texts=(
+                (
+                    frame.user_facts[0].source_id,
+                    fact,
+                ),
+            ),
+        ),
+        kernel,
+    )
+
+    assert f"你提到：“{fact}”" in compiled.body
+    assert compiled.body.count("表达范围：") == 1
+    assert (
+        "其余是创作性推演，不作为这段经历的事实补充"
+        in compiled.body
+    )
+
+
 def test_direction_receipt_freezes_origins_clears_custom_and_body_opt_in() -> None:
     direction = _direction()
     control = ContentControlContext(
