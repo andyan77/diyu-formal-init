@@ -334,6 +334,13 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
     assert "第二篇完整正文" in prompt
     assert '"position": 1' in prompt
     assert '"position": 2' in prompt
+    assert '"unit_contract": "audience_guidance"' in prompt
+    assert '"unit_contract": "abstract_observation"' in prompt
+    assert '"subject_scope": "generic_only"' in prompt
+    assert '"actual_event_or_result"' in prompt
+    assert '"resource_id": "resource:original_composition"' in prompt
+    assert "不包含现实人物、场地、家具、照片、商品或外部素材" in prompt
+    assert '"resource_id": "resource:creator_expression"' in prompt
     assert "其他租户诱饵前情" not in prompt
 
 

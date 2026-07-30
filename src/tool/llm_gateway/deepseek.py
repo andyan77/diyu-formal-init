@@ -20,6 +20,7 @@ from src.shared.clause_license import (
     ClauseLicenseReviewV1,
     ClauseLicenseV1,
     UnitClauseLicensePolicyV1,
+    build_unit_clause_license_policies_v1,
     clause_license_review_json_schema,
     materialize_clause_licenses_v1,
     parse_clause_license_reviews_v1,
@@ -1106,6 +1107,23 @@ class DeepSeekGenerator(ContentGenerator):
             else compiler_texts
         )
         writer_units = tuple(unit for unit in skeleton.writable_units if unit.unit_id not in resolved_compiler_texts)
+        context = BoundaryContext.from_request(
+            request,
+            request.narrative_frame,
+        )
+        trusted_contracts = unit_contracts_v2(
+            skeleton,
+            request.narrative_frame,
+        )
+        policies = build_unit_clause_license_policies_v1(
+            frame=request.narrative_frame,
+            unit_contracts=trusted_contracts,
+        )
+        policy_by_unit = {
+            policy.unit_id: policy
+            for policy in policies
+        }
+        resource_by_id = dict(context.resource_registry)
         writable = [
             {
                 "unit_id": unit.unit_id,
@@ -1114,6 +1132,21 @@ class DeepSeekGenerator(ContentGenerator):
                 "mode": unit.mode,
                 "scope_id": unit.scope_id,
                 "visible_order": unit.visible_order,
+                "unit_contract": trusted_contracts[unit.unit_id],
+                "subject_scope": policy_by_unit[unit.unit_id].subject_scope,
+                "allowed_expression_types": list(
+                    policy_by_unit[unit.unit_id].allowed_expression_types
+                ),
+                "prohibited_bindings": list(
+                    policy_by_unit[unit.unit_id].prohibited_bindings
+                ),
+                "allowed_resources": [
+                    {
+                        "resource_id": resource_id,
+                        "description": resource_by_id[resource_id],
+                    }
+                    for resource_id in unit.allowed_resource_ids
+                ],
                 **(
                     {
                         "expression_requirement": (
@@ -1253,7 +1286,8 @@ Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creati
 服务端冻结的系列前情（只用于承接主线，不是新增现实事实许可证）：
 {json.dumps(series_projection, ensure_ascii=False)}
 
-服务端可写 unit skeleton：
+服务端可写 unit skeleton（unit_contract、subject_scope、prohibited_bindings 与
+allowed_resources 都由服务端在写作前冻结；每个单元必须逐项遵守）：
 {json.dumps(writable, ensure_ascii=False)}
 
 {product_creative_rule}
@@ -1269,6 +1303,9 @@ topic_spans 是用户原话证据，可能同时包含创作命令、控制要�
 {output_contract}
 必须恰好一次覆盖全部既定可写 unit_id，不得增加、遗漏、重复或修改 id，不得输出任何制作
 字段、来源、事实正文、约束、类型或内部规则。商品硬事实正文始终由服务端原样插入。
+每个单元只能使用其 allowed_resources 列出的资源；资源描述是制作许可边界，不是现实事实
+许可证。allowed_resources 为空时，只能写无需现实人物、场地、道具、商品、照片或外部素材
+的原创文字／抽象构图。不得在可见文字里补出未登记资源。
 title 是自然作品标题；natural_guide 用一句话给出具体观看回报；按可见顺序排列的一个或
 多个 body 单元共同组成完整核心正文。media_opening 是首图或短视频开头的可执行承诺；
 media_sequence 让每张图或每段画面承担不同职责；subtitle_strategy 只写字幕取舍与重点，
