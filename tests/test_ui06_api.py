@@ -443,9 +443,9 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert "system_creative_plan" not in snapshot
         kernel_v1 = snapshot["creative_kernel_v2"]
         assert isinstance(kernel_v1, dict)
-        assert kernel_v1["kernel_version"] == "creative-kernel-v2"
+        assert kernel_v1["kernel_version"] == "creative-kernel-v3"
         assert kernel_v1["program_id"] == "observation_only_v1"
-        assert snapshot["delivery_compiler_version"] == "delivery-compiler-v2"
+        assert snapshot["delivery_compiler_version"] == "delivery-compiler-v3"
         assert snapshot["version_authorization"] == "deterministic-dual-track-v1"
         assert "review_evidence_version" not in snapshot
         assert isinstance(snapshot["reviewed_kernel_digest"], str)
@@ -480,7 +480,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         v2 = revision.json()
         assert v2["version"] == 2
         assert _G4_FACT in v2["body"]
-        assert "以下是情景演绎，不对应真实人物或经历：" in v2["body"]
+        assert "小剧场为情景演绎，不对应现实经历" in v2["body"]
         revision_counts = _counts(app_database_url)
         revision_calls = dict(_CALLS)
         replayed_revision = client.post(
@@ -533,7 +533,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         )
         assert v1.status_code == 200
         assert v1.json()["version"] == 1
-        assert "以下是情景演绎，不对应真实人物或经历：" not in v1.json()["body"]
+        assert "情景演绎" not in v1.json()["body"]
         current = client.get(
             f"/api/v1/tasks/{g4_task_id}/versions/2",
             params={
@@ -560,8 +560,8 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         for audit in audits:
             version_audit = audit["version_audit_snapshot"]
             assert isinstance(version_audit, dict)
-            assert version_audit["audit_version"] == "content-version-audit-v2"
-            assert version_audit["visible_projection"] == "delivery-compiler-v2-final-visible-v1"
+            assert version_audit["audit_version"] == "content-version-audit-v3"
+            assert version_audit["visible_projection"] == "delivery-compiler-v3-final-visible-v1"
             assert version_audit["artifact_digest"] == audit["artifact_digest"]
             assert audit["artifact_digest"] == visible_digest(
                 str(audit["outline"]),

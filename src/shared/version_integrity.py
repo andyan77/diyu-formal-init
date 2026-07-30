@@ -9,7 +9,9 @@ from src.shared.narrative import visible_digest
 
 AUDIT_VERSION_V1 = "content-version-audit-v1"
 AUDIT_VERSION_V2 = "content-version-audit-v2"
+AUDIT_VERSION_V3 = "content-version-audit-v3"
 FINAL_VISIBLE_PROJECTION_V2 = "delivery-compiler-v2-final-visible-v1"
+FINAL_VISIBLE_PROJECTION_V3 = "delivery-compiler-v3-final-visible-v1"
 
 
 @dataclass(frozen=True)
@@ -23,8 +25,8 @@ def validate_version_content(row: Mapping[str, object]) -> ValidatedVersionConte
     """Validate one version before any user-visible or source-content read.
 
     Legacy rows have no digest and keep their historical projection. Audit-v1
-    rows retain that same projection after digest verification. Audit-v2 rows
-    bind and return the compiler-v2 final visible outline/body directly.
+    rows retain that same projection after digest verification. Audit-v2/v3
+    rows bind and return their compiler's final visible outline/body directly.
     """
 
     outline = row.get("outline")
@@ -45,7 +47,11 @@ def validate_version_content(row: Mapping[str, object]) -> ValidatedVersionConte
 
     audit_version = snapshot.get("audit_version")
     snapshot_digest = snapshot.get("artifact_digest")
-    if audit_version not in {AUDIT_VERSION_V1, AUDIT_VERSION_V2}:
+    if audit_version not in {
+        AUDIT_VERSION_V1,
+        AUDIT_VERSION_V2,
+        AUDIT_VERSION_V3,
+    }:
         raise DomainError("内容版本审计格式无效")
     if snapshot_digest != digest or visible_digest(outline, body) != digest:
         raise DomainError("内容版本完整性校验失败")
@@ -53,7 +59,12 @@ def validate_version_content(row: Mapping[str, object]) -> ValidatedVersionConte
     if audit_version == AUDIT_VERSION_V1:
         visible_body = project_content_body(body)
     else:
-        if snapshot.get("visible_projection") != FINAL_VISIBLE_PROJECTION_V2:
+        expected_projection = (
+            FINAL_VISIBLE_PROJECTION_V3
+            if audit_version == AUDIT_VERSION_V3
+            else FINAL_VISIBLE_PROJECTION_V2
+        )
+        if snapshot.get("visible_projection") != expected_projection:
             raise DomainError("内容版本可见投影证据无效")
         visible_body = body
     return ValidatedVersionContent(

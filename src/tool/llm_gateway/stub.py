@@ -4,6 +4,8 @@ from dataclasses import replace
 
 from src.ports.content_generator import ContentGenerator
 from src.shared.creative_kernel import (
+    DUAL_TRACK_KERNEL_VERSION,
+    KERNEL_VERSION,
     MAX_PRODUCT_FACT_BLOCKS,
     build_kernel_skeleton,
     compiler_owned_unit_texts,
@@ -21,6 +23,7 @@ from src.shared.creative_plan import (
 )
 from src.shared.delivery_compiler import (
     DELIVERY_COMPILER_VERSION,
+    DUAL_TRACK_DELIVERY_COMPILER_VERSION,
     DeliveryCompileInput,
     compile_delivery,
 )
@@ -127,7 +130,10 @@ class DeterministicContentGenerator(ContentGenerator):
         )
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
-        if request.delivery_compiler_version == DELIVERY_COMPILER_VERSION:
+        if request.delivery_compiler_version in {
+            DUAL_TRACK_DELIVERY_COMPILER_VERSION,
+            DELIVERY_COMPILER_VERSION,
+        }:
             return self._generate_kernel(request)
         return self._generate_legacy(request)
 
@@ -154,6 +160,12 @@ class DeterministicContentGenerator(ContentGenerator):
                 if record.fact_id in frame.allowed_product_fact_ids
             ),
         )
+        kernel_version = (
+            DUAL_TRACK_KERNEL_VERSION
+            if request.delivery_compiler_version
+            == DUAL_TRACK_DELIVERY_COMPILER_VERSION
+            else KERNEL_VERSION
+        )
         skeleton = build_kernel_skeleton(
             frame=frame,
             fact_registry=facts,
@@ -168,16 +180,56 @@ class DeterministicContentGenerator(ContentGenerator):
                 "resource:creator_expression",
                 *(f"resource:product:{product.sku}" for product in request.products),
             ),
+            media_format=request.media_format,
+            kernel_version=kernel_version,
         )
         skeleton = freeze_prior_revision_units(
             skeleton,
             request.prior_creative_kernel,
         )
         _, guide, spoken, _, subtitles, _ = self._parts(request)
-        spoken = spoken + "\n\n" + subtitles + _control_sections(request)
-        if request.revision_instruction:
-            spoken += "\n\n这次按你的修改要求改变了允许调整的表达。"
-        release_caption = subtitles + _control_sections(request)
+        if kernel_version == DUAL_TRACK_KERNEL_VERSION:
+            spoken = spoken + "\n\n" + subtitles + _control_sections(request)
+            if request.revision_instruction:
+                spoken += "\n\n这次按你的修改要求改变了允许调整的表达。"
+            release_caption = subtitles + _control_sections(request)
+            title = _outline(request.primary_product)
+        else:
+            direction = (
+                "、".join(
+                    selection.applied_label
+                    for selection in request.creative_direction.selections
+                )
+                if request.creative_direction is not None
+                else ""
+            )
+            custom = (
+                request.creative_direction.custom_text
+                if request.creative_direction is not None
+                else ""
+            )
+            series_bridge = ""
+            if request.series_context and request.series_context.prior_entries:
+                previous = request.series_context.prior_entries[-1]
+                series_bridge = (
+                    f"\n\n承接上一篇《{previous.outline}》留下的问题，"
+                    f"这一篇把观察推进到第 {request.series_context.target_position} 篇。"
+                )
+            control_bridge = (
+                "\n\n本次表达会采用"
+                + "、".join(value for value in (direction, custom) if value)
+                + "。"
+                if direction or custom
+                else ""
+            )
+            spoken = spoken + series_bridge + control_bridge
+            if request.revision_instruction:
+                spoken += "\n\n这次按你的修改要求改变了允许调整的表达。"
+            release_caption = (
+                subtitles.splitlines()[0].strip()
+                + ("；接着上篇继续。" if series_bridge else "")
+            )
+            title = _media_native_title(request.primary_product)
         product_packet = build_product_fact_packet(
             request.products,
             allowed_fact_ids=frame.allowed_product_fact_ids,
@@ -209,10 +261,28 @@ class DeterministicContentGenerator(ContentGenerator):
                 skeleton,
                 selected_fact_block_ids=selected_fact_block_ids,
             )
-        compiler_texts = compiler_owned_unit_texts(request.primary_product)
+        compiler_texts = (
+            compiler_owned_unit_texts(request.primary_product)
+            if kernel_version == DUAL_TRACK_KERNEL_VERSION
+            else {}
+        )
         text_by_id = {
-            "unit:title": _outline(request.primary_product),
+            "unit:title": title,
             "unit:natural-guide": guide,
+            "unit:media-opening": (
+                "首图用一句具体矛盾作视觉入口。"
+                if request.media_format == "graphic"
+                else "开头两秒由创作者直接抛出本篇核心反差。"
+            ),
+            "unit:media-sequence": (
+                "第 1 张给出入口；第 2、3 张推进判断；末张收束到可执行选择。"
+                if request.media_format == "graphic"
+                else "先抛出反差，再拆开判断，最后回到一个可执行选择。"
+            ),
+            "unit:subtitle-strategy": "只标出转折句和最终选择，不重复整段台词。",
+            "unit:production-note": (
+                "使用当前登记的创作者、手机和普通室内条件完成；声音保持自然。"
+            ),
             "unit:body": spoken,
             "unit:body-opening": spoken,
             "unit:hypothetical-example": ("一方先停一下，另一方也不必马上给出答案。"),
@@ -278,7 +348,7 @@ class DeterministicContentGenerator(ContentGenerator):
                 "creative_kernel_v2": kernel_document(kernel),
                 "expression_plan_version": "expression-plan-v1",
                 "expression_plan_digest": kernel_digest(kernel),
-                "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
+                "delivery_compiler_version": request.delivery_compiler_version,
                 "writer_model": self.model_name,
                 "version_authorization": "deterministic-dual-track-v1",
                 "claim_inventory_v1": [],
@@ -494,6 +564,17 @@ def _outline(product: ContentProduct) -> str:
         "brand_life_narrative": "让受众认识账号怎样观察、判断和待人。",
         "local_response": "从南城店近场信号给出可迁移的关系回应。",
         "visual_styling_story": "让真实商品在画面关系中形成新的穿着可能。",
+    }[product]
+
+
+def _media_native_title(product: ContentProduct) -> str:
+    """Natural titles for the offline double; production Writer remains model-owned."""
+    return {
+        "dressing_decision": "一身衣服，先过真实的一天",
+        "product_truth": "双面之外，先把能确认的说清",
+        "brand_life_narrative": "不急着替别人回答",
+        "local_response": "想自己看看，也可以",
+        "visual_styling_story": "人没换，画面的重音换了",
     }[product]
 
 

@@ -6,7 +6,9 @@ from typing import Literal, TypeAlias
 
 from src.shared.creative_kernel import (
     DRAMATIZATION_DISCLOSURE,
+    DUAL_TRACK_KERNEL_VERSION,
     HYPOTHESIS_DISCLOSURE,
+    KERNEL_VERSION,
     CreativeKernelUnit,
     CreativeKernelV1,
     UnitMode,
@@ -32,8 +34,15 @@ from src.shared.types import (
 DeliveryMedia: TypeAlias = Literal["video", "graphic"]
 
 LEGACY_DELIVERY_COMPILER_VERSION = "delivery-compiler-v1"
-DELIVERY_COMPILER_VERSION = "delivery-compiler-v2"
-SUPPORTED_DELIVERY_COMPILER_VERSIONS = frozenset({LEGACY_DELIVERY_COMPILER_VERSION, DELIVERY_COMPILER_VERSION})
+DUAL_TRACK_DELIVERY_COMPILER_VERSION = "delivery-compiler-v2"
+DELIVERY_COMPILER_VERSION = "delivery-compiler-v3"
+SUPPORTED_DELIVERY_COMPILER_VERSIONS = frozenset(
+    {
+        LEGACY_DELIVERY_COMPILER_VERSION,
+        DUAL_TRACK_DELIVERY_COMPILER_VERSION,
+        DELIVERY_COMPILER_VERSION,
+    }
+)
 ORIGINAL_COMPOSITION_RESOURCE_ID = "resource:original_composition"
 CREATOR_EXPRESSION_RESOURCE_ID = "resource:creator_expression"
 _PHRASES: dict[str, str] = {
@@ -205,7 +214,10 @@ def _assert_expression_plan(
             or any(resource_id not in request.allowed_resource_ids for resource_id in unit.allowed_resource_ids)
         ):
             raise GenerationFailed("创作表达轨结构漂移")
-        if unit.purpose in {"natural_guide", "release_caption"}:
+        if (
+            kernel.kernel_version == DUAL_TRACK_KERNEL_VERSION
+            and unit.purpose in {"natural_guide", "release_caption"}
+        ):
             if unit.text_source != "server_compiler":
                 raise GenerationFailed("编译器中性文字来源漂移")
         elif unit.text_source not in {"writer", "prior_version"}:
@@ -220,6 +232,15 @@ def _assert_expression_plan(
 
 
 def _compile_delivery(
+    request: DeliveryCompileInput,
+    kernel: CreativeKernelV1,
+) -> CompiledDelivery:
+    if kernel.kernel_version == KERNEL_VERSION:
+        return _compile_delivery_v3(request, kernel)
+    return _compile_delivery_v2(request, kernel)
+
+
+def _compile_delivery_v2(
     request: DeliveryCompileInput,
     kernel: CreativeKernelV1,
 ) -> CompiledDelivery:
@@ -359,6 +380,209 @@ def _compile_delivery(
     )
 
 
+def _compile_delivery_v3(
+    request: DeliveryCompileInput,
+    kernel: CreativeKernelV1,
+) -> CompiledDelivery:
+    """Compile a media-native artifact without inventing its creative copy.
+
+    Every creative field is preallocated by the service and filled by Writer.
+    Compiler only inserts frozen facts, one artifact-level scope, registered
+    resources and deterministic structure.
+    """
+
+    singleton_purposes = {
+        "title",
+        "natural_guide",
+        "media_opening",
+        "media_sequence",
+        "production_note",
+        "release_caption",
+    }
+    if request.media_format == "video":
+        singleton_purposes.add("subtitle_strategy")
+    singleton = {
+        unit.purpose: unit
+        for unit in kernel.units
+        if unit.purpose in singleton_purposes
+    }
+    if set(singleton) != singleton_purposes or any(
+        sum(unit.purpose == purpose for unit in kernel.units) != 1
+        for purpose in singleton_purposes
+    ):
+        raise GenerationFailed("创作内核缺少完整媒体原生单元")
+    body_units = tuple(unit for unit in kernel.units if unit.purpose == "body")
+    if not body_units:
+        raise GenerationFailed("创作内核缺少完整核心正文")
+    if any(not unit.text.strip() for unit in (*singleton.values(), *body_units)):
+        raise GenerationFailed("创作内核包含空的可见创作单元")
+
+    title = singleton["title"].text.strip()
+    guide = singleton["natural_guide"].text.strip()
+    release = singleton["release_caption"].text.strip()
+    fact_units = tuple(
+        unit for unit in kernel.units if unit.purpose == "frozen_fact"
+    )
+    spoken_parts = (*fact_units, *body_units)
+    spoken = "\n\n".join(
+        _visible_unit_v3(unit)
+        for unit in spoken_parts
+    )
+    creative_body = "\n\n".join(
+        _visible_unit_v3(unit)
+        for unit in body_units
+    )
+    artifact_scope_source = _artifact_scope_source(kernel)
+    artifact_scope = _PHRASES[artifact_scope_source]
+    contract = _contract(
+        request.primary_product,
+        guide,
+        creative_body,
+        release,
+        fact_units,
+    )
+
+    product_resources = tuple(
+        f"resource:product:{product.sku}"
+        for product in request.products
+        if f"resource:product:{product.sku}" in request.allowed_resource_ids
+    )
+    if ORIGINAL_COMPOSITION_RESOURCE_ID not in request.allowed_resource_ids:
+        raise GenerationFailed("确定性成品编译缺少原创编排资源")
+    resource_refs: tuple[str, ...] = (ORIGINAL_COMPOSITION_RESOURCE_ID,)
+    if request.primary_product in {"product_truth", "visual_styling_story"}:
+        resource_refs = tuple(dict.fromkeys((*resource_refs, *product_resources)))
+    if (
+        request.media_format == "video"
+        and CREATOR_EXPRESSION_RESOURCE_ID in request.allowed_resource_ids
+    ):
+        resource_refs = tuple(
+            dict.fromkeys((*resource_refs, CREATOR_EXPRESSION_RESOURCE_ID))
+        )
+
+    scope_and_units = (
+        artifact_scope_source,
+        *(unit.unit_id for unit in spoken_parts),
+    )
+    provenance: dict[str, tuple[str, ...]] = {
+        "outline": (singleton["title"].unit_id,),
+        "artifact_scope": (artifact_scope_source,),
+        "natural_guide": (singleton["natural_guide"].unit_id,),
+        "release_caption_and_interaction": (
+            singleton["release_caption"].unit_id,
+        ),
+    }
+    production: ContentProductionBundle
+    if request.media_format == "graphic":
+        production = GraphicProductionBundle(
+            natural_guide=guide,
+            hero_image=singleton["media_opening"].text.strip(),
+            image_sequence=singleton["media_sequence"].text.strip(),
+            full_body=spoken,
+            layout_and_production=singleton["production_note"].text.strip(),
+            release_caption_and_interaction=release,
+        )
+        provenance.update(
+            {
+                "hero_image": (singleton["media_opening"].unit_id,),
+                "image_sequence": (singleton["media_sequence"].unit_id,),
+                "full_body": tuple(
+                    source
+                    for unit in spoken_parts
+                    for source in (
+                        unit.unit_id,
+                        *(
+                            (_visible_unit_scope_source(unit),)
+                            if unit.track == "trusted_fact"
+                            else ()
+                        ),
+                    )
+                ),
+                "layout_and_production": (
+                    singleton["production_note"].unit_id,
+                ),
+            }
+        )
+    else:
+        opening = singleton["media_opening"].text.strip()
+        sequence = singleton["media_sequence"].text.strip()
+        production = VideoProductionBundle(
+            natural_guide=guide,
+            spoken_lines=spoken,
+            visual_actions=sequence,
+            subtitles=singleton["subtitle_strategy"].text.strip(),
+            sound_and_production=singleton["production_note"].text.strip(),
+            cover_or_first_frame=opening,
+            viewing_flow=f"{opening}\n{sequence}",
+            natural_duration=_duration(
+                spoken,
+                request.production_conditions,
+            ),
+            release_caption_and_interaction=release,
+        )
+        provenance.update(
+            {
+                "cover_or_first_frame": (
+                    singleton["media_opening"].unit_id,
+                ),
+                "viewing_flow": (
+                    singleton["media_opening"].unit_id,
+                    singleton["media_sequence"].unit_id,
+                ),
+                "spoken_lines": tuple(
+                    source
+                    for unit in spoken_parts
+                    for source in (
+                        unit.unit_id,
+                        *(
+                            (_visible_unit_scope_source(unit),)
+                            if unit.track == "trusted_fact"
+                            else ()
+                        ),
+                    )
+                ),
+                "visual_actions": (singleton["media_sequence"].unit_id,),
+                "subtitles": (singleton["subtitle_strategy"].unit_id,),
+                "sound_and_production": (
+                    singleton["production_note"].unit_id,
+                ),
+                "natural_duration": ("compiler:duration",),
+            }
+        )
+    body = _visible_body_v3(
+        title,
+        artifact_scope,
+        production,
+    )
+    provenance["body"] = (
+        "compiler:visible-body",
+        *scope_and_units,
+        *tuple(
+            source
+            for sources in provenance.values()
+            for source in sources
+        ),
+    )
+    return CompiledDelivery(
+        outline=title,
+        body=body,
+        semantic_contract=contract,
+        production=production,
+        resource_refs=resource_refs,
+        visible_provenance=provenance,
+    )
+
+
+def _visible_unit_v3(unit: CreativeKernelUnit) -> str:
+    if unit.track != "trusted_fact":
+        return unit.text.strip()
+    source = _visible_unit_scope_source(unit)
+    prefix = _PHRASES[source]
+    if source == "phrase:scope-user-fact":
+        return f"{prefix}“{unit.text}”"
+    return f"{prefix}{unit.text}"
+
+
 def _visible_unit(unit: CreativeKernelUnit) -> str:
     source = _visible_unit_scope_source(unit)
     prefix = _PHRASES[source]
@@ -494,3 +718,36 @@ def _visible_body(
             ("发布配文与互动", production.release_caption_and_interaction),
         )
     return "标题：" + title + "\n\n" + "\n\n".join(f"{heading}：{value}" for heading, value in sections)
+
+
+def _visible_body_v3(
+    title: str,
+    artifact_scope: str,
+    production: ContentProductionBundle,
+) -> str:
+    if isinstance(production, VideoProductionBundle):
+        sections: tuple[tuple[str, str], ...] = (
+            ("表达范围", artifact_scope),
+            ("内容看点", production.natural_guide),
+            ("封面/开头", production.cover_or_first_frame),
+            ("完整台词/解说", production.spoken_lines),
+            ("画面动作", production.visual_actions),
+            ("字幕策略", production.subtitles),
+            ("声音与制作提示", production.sound_and_production),
+            ("自然时长", production.natural_duration),
+            ("发布配文", production.release_caption_and_interaction),
+        )
+    else:
+        sections = (
+            ("表达范围", artifact_scope),
+            ("内容看点", production.natural_guide),
+            ("首图", production.hero_image),
+            ("图序与每张职责", production.image_sequence),
+            ("完整正文", production.full_body),
+            ("拍摄/排版提示", production.layout_and_production),
+            ("发布配文", production.release_caption_and_interaction),
+        )
+    return "标题：" + title + "\n\n" + "\n\n".join(
+        f"{heading}：{value}"
+        for heading, value in sections
+    )

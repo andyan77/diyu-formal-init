@@ -38,8 +38,10 @@ from src.shared.closed_review import (
 from src.shared.content_origin import aigc_disclosure
 from src.shared.creative_kernel import (
     DRAMATIZATION_DISCLOSURE,
+    DUAL_TRACK_KERNEL_VERSION,
     HYPOTHESIS_DISCLOSURE,
     KERNEL_VERSION,
+    LEGACY_KERNEL_VERSION,
     MAX_PRODUCT_FACT_BLOCKS,
     CreativeKernelV1,
     build_kernel_skeleton,
@@ -58,7 +60,8 @@ from src.shared.creative_plan import (
     validate_creative_plan,
 )
 from src.shared.delivery_compiler import (
-    DELIVERY_COMPILER_VERSION,
+    DUAL_TRACK_DELIVERY_COMPILER_VERSION,
+    SUPPORTED_DELIVERY_COMPILER_VERSIONS,
     DeliveryCompileInput,
     assert_compiled_delivery,
     compile_delivery,
@@ -545,7 +548,10 @@ class DeepSeekGenerator(ContentGenerator):
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
         if request.delivery_compiler_version is None:
             raise GenerationFailed("新内容生成缺少确定性成品编译合同")
-        if request.delivery_compiler_version != DELIVERY_COMPILER_VERSION:
+        if (
+            request.delivery_compiler_version
+            not in SUPPORTED_DELIVERY_COMPILER_VERSIONS
+        ):
             raise GenerationFailed("不支持的确定性成品编译版本")
         return self._generate_kernel(request)
 
@@ -565,12 +571,20 @@ class DeepSeekGenerator(ContentGenerator):
             prior_kernel=request.prior_creative_kernel,
             revision_instruction=request.revision_instruction,
         )
+        kernel_version = (
+            DUAL_TRACK_KERNEL_VERSION
+            if request.delivery_compiler_version
+            == DUAL_TRACK_DELIVERY_COMPILER_VERSION
+            else KERNEL_VERSION
+        )
         skeleton = build_kernel_skeleton(
             frame=frame,
             fact_registry=context.fact_registry,
             constraint_refs=tuple(identifier for identifier, _ in context.constraint_registry),
             program_id=program_id,
             allowed_resource_ids=tuple(sorted(context.resource_ids)),
+            media_format=request.media_format,
+            kernel_version=kernel_version,
         )
         skeleton = freeze_prior_revision_units(
             skeleton,
@@ -596,7 +610,11 @@ class DeepSeekGenerator(ContentGenerator):
                 skeleton,
                 selected_fact_block_ids=selected_fact_block_ids,
             )
-        compiler_texts = compiler_owned_unit_texts(request.primary_product)
+        compiler_texts = (
+            compiler_owned_unit_texts(request.primary_product)
+            if kernel_version == DUAL_TRACK_KERNEL_VERSION
+            else {}
+        )
         writer_payload, writer_retries = self._request(
             "你是笛语 CreativeKernel Writer。只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。",
             self._kernel_writer_prompt(
@@ -680,7 +698,9 @@ class DeepSeekGenerator(ContentGenerator):
                 "creative_kernel_v2": kernel_document(kernel),
                 "expression_plan_version": "expression-plan-v1",
                 "expression_plan_digest": reviewed_kernel_digest,
-                "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
+                "delivery_compiler_version": (
+                    request.delivery_compiler_version
+                ),
                 "writer_model": self._model,
                 "version_authorization": "deterministic-dual-track-v1",
                 "claim_inventory_v1": [],
@@ -1080,7 +1100,11 @@ class DeepSeekGenerator(ContentGenerator):
         server_selected_product_facts = bool(
             fact_blocks and skeleton.selected_fact_block_ids
         )
-        resolved_compiler_texts = dict(compiler_texts or compiler_owned_unit_texts(request.primary_product))
+        resolved_compiler_texts = dict(
+            compiler_owned_unit_texts(request.primary_product)
+            if compiler_texts is None
+            else compiler_texts
+        )
         writer_units = tuple(unit for unit in skeleton.writable_units if unit.unit_id not in resolved_compiler_texts)
         writable = [
             {
@@ -1140,6 +1164,26 @@ class DeepSeekGenerator(ContentGenerator):
             else []
         )
         controls = self._deidentified_writer_controls(request)
+        series_projection: object = (
+            {
+                "title": request.series_context.title,
+                "premise": request.series_context.premise,
+                "target_position": request.series_context.target_position,
+                "prior_entries": [
+                    {
+                        "task_id": str(entry.task_id),
+                        "version_id": str(entry.version_id),
+                        "version": entry.version,
+                        "position": entry.position,
+                        "outline": entry.outline,
+                        "body": entry.body,
+                    }
+                    for entry in request.series_context.prior_entries
+                ],
+            }
+            if request.series_context is not None
+            else None
+        )
         product_creative_rule = (
             """本篇的可信商品事实块已经由服务端选择并将在编译时原样插入；你看不到也
 不能选择、引用、复述或推导这些事实。title 与 body 只负责一个不指向当前具体商品的
@@ -1180,9 +1224,17 @@ unit_id、text。有商品 Packet 的旧证据回放中，根对象必须恰好�
 事实块，最多选择 {MAX_PRODUCT_FACT_BLOCKS} 个。claim_refs 只是审查线索，只能引用本次
 Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creative text。"""
         )
+        supporting_copy_rule = (
+            "自然导读和发布配文由 DeliveryCompiler 使用版本化中性短语生成。"
+            if resolved_compiler_texts
+            else (
+                "服务端已经预分配标题、观看回报、核心正文、媒体开头、媒体推进、"
+                "字幕策略（视频）、制作提示和发布配文；你只能填写这些既定单元。"
+            )
+        )
         return f"""完成一个可直接交付的 CreativeKernel。你只负责“说什么、怎样表达”，不负责
-scene、actor、resource、action、sound、production_note、发布结构、自然导读、发布配文
-或语义合同；自然导读和发布配文由 DeliveryCompiler 使用版本化中性短语生成。
+创建或改变 scene、actor、resource、track、mode、unit_id、事实、来源或语义合同。
+{supporting_copy_rule}
 
 用户 topic 精确跨度：
 {json.dumps(topic_projection, ensure_ascii=False)}
@@ -1198,6 +1250,8 @@ scene、actor、resource、action、sound、production_note、发布结构、自
 本次修改要求：{request.revision_instruction or "（首次生成）"}
 此前可写内核（首次生成时为空；只用于修改，不是事实来源）：
 {json.dumps(prior, ensure_ascii=False)}
+服务端冻结的系列前情（只用于承接主线，不是新增现实事实许可证）：
+{json.dumps(series_projection, ensure_ascii=False)}
 
 服务端可写 unit skeleton：
 {json.dumps(writable, ensure_ascii=False)}
@@ -1215,7 +1269,14 @@ topic_spans 是用户原话证据，可能同时包含创作命令、控制要�
 {output_contract}
 必须恰好一次覆盖全部既定可写 unit_id，不得增加、遗漏、重复或修改 id，不得输出任何制作
 字段、来源、事实正文、约束、类型或内部规则。商品硬事实正文始终由服务端原样插入。
-title 是自然标题；按可见顺序排列的一个或多个 body 单元共同组成完整核心正文。
+title 是自然作品标题；natural_guide 用一句话给出具体观看回报；按可见顺序排列的一个或
+多个 body 单元共同组成完整核心正文。media_opening 是首图或短视频开头的可执行承诺；
+media_sequence 让每张图或每段画面承担不同职责；subtitle_strategy 只写字幕取舍与重点，
+不得复制完整正文；production_note 只使用本次已登记制作条件与资源，写声音、拍摄、排版
+或剪辑要点；release_caption 是可直接发布的配文，不重复正文，也不强制互动。各单元围绕
+同一个主要价值，但不得机械复述同一句话。图文要有首图、图序、完整正文、制作提示和配文；
+视频要有可拍开头、完整台词、画面动作、字幕策略、声音与配文。只有本次资源确实只支持
+文字卡或用户主动选择时，才把整篇退化为固定文字卡。
 track 与 mode 是服务端在写作前冻结的唯一表达轨；你不能返回、改变或根据准备填写的文字
 重新解释它们。general_observation 可以表达一般判断、观点、比喻和幽默，但不是当前用户、
 品牌、员工、顾客或门店的事实。它必须写成不落到某次已完成经过的一般命题，不得以第一人称
@@ -1230,13 +1291,20 @@ track 与 mode 是服务端在写作前冻结的唯一表达轨；你不能返�
 建议／条件语态的泛指做法，不能复制、概括或扩写人物、动作、对白、动机、原因、结果、时间、
 地点与现实细节。修订时，未出现在可写 skeleton 中的 prior_version 单元已经由服务端冻结，
 不得索取、复述或改写。
-title 也属于服务端预分配的 creative_expression，Compiler 会为标题添加与整篇一致的自然
-范围。由 Compiler 生成的 natural_guide 与 release_caption 不属于 Writer 输出。
+title 也属于服务端预分配的 creative_expression。Compiler 只为整篇插入一次自然范围说明，
+不会替你创作标题前缀、概要、互动句、图序或固定文字卡。
 不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。
-不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。不要讨论拍摄资源或
-制作方式。Writer-owned clause 不得让当前表达者或第一人称复数承担谓语、做法、经历或承诺；
+不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。媒体制作单元只能
+使用本次已登记制作条件，不得新增人物、地点、商品、道具或声音资源。
+Writer-owned clause 不得让当前表达者或第一人称复数承担
+未经品牌事实支持的做法、经历或承诺；
 介绍本文时使用中性的“这篇内容／这个角度”，不能用机构性“我们”。abstract_observation
-只写状态、判断、关系理解或比喻，不给泛指人物安排动作、对白或建议。"""
+只写状态、判断、关系理解或比喻，不给泛指人物安排动作、对白或建议。
+
+如果有系列前情，必须延续其中尚未完成的观察、问题或表达节奏，并让读者能自然读出承接；
+不得机械复述前文，不得把前文中的创作表达升级成现实事实，也不得读取或暗示列表之外的篇次。
+账号画像、受众关系、平台形态、本次方向和系列承接必须真实改变切口与表达，不能只替换同义词。
+成品要有独立观看价值，不用“生活里很多事也是这样”之类泛化升华代替主要价值。"""
 
     @staticmethod
     def _kernel_license_reviewer_prompt(
@@ -1559,7 +1627,10 @@ JSON。"""
             )
             if disclosure is not None:
                 prefix = f"{disclosure}\n"
-                if kernel.kernel_version != KERNEL_VERSION and not current_text.startswith(prefix):
+                if (
+                    kernel.kernel_version == LEGACY_KERNEL_VERSION
+                    and not current_text.startswith(prefix)
+                ):
                     raise GenerationFailed("CreativeKernelV1 服务端披露结构漂移")
                 if current_text.startswith(prefix):
                     current_text = current_text[len(prefix) :]

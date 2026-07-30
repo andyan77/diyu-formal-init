@@ -459,10 +459,10 @@ def snapshot_document(
     """Freeze the conditions this task was compiled from.
 
     Task conditions only: the expression identity and boundary this run actually spoke from, the
-    axis choices that shaped the content, the applied result and the versions used.  Private
-    preference state — its body, its collaboration note, its defaults object and whether the
-    person turned body-related options on — stays in the owner-scoped table, because this
-    snapshot lives in a tenant-scoped row.
+    axis choices that shaped the content, the applied result and the versions used.  The effective
+    body-related opt-in is frozen because it controls which catalog entry was legal for this task.
+    Private preference body, collaboration note and defaults object stay in the owner-scoped table,
+    because this snapshot lives in a tenant-scoped row.
     """
     direction = control.direction
     product_fact_packet = build_product_fact_packet(
@@ -488,6 +488,11 @@ def snapshot_document(
             ),
             "custom_text": direction.custom_text if direction else "",
             "cleared_axes": list(direction.cleared_axes) if direction else [],
+            "body_related_opt_in": (
+                direction.body_related_opt_in
+                if direction
+                else False
+            ),
         },
         "applied_direction": (
             [

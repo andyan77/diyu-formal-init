@@ -12,6 +12,7 @@ from psycopg.types.json import Jsonb
 from src.ports.content_repository import ContentRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.content_snapshot import frozen_product_facts, visible_direction
+from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
 from src.shared.errors import DomainError
 from src.shared.narrative import visible_digest
 from src.shared.types import (
@@ -32,7 +33,9 @@ from src.shared.types import (
 )
 from src.shared.version_integrity import (
     AUDIT_VERSION_V2,
+    AUDIT_VERSION_V3,
     FINAL_VISIBLE_PROJECTION_V2,
+    FINAL_VISIBLE_PROJECTION_V3,
     validate_version_content,
 )
 
@@ -146,10 +149,20 @@ class PostgresContentRepository(ContentRepository):
             return {}
         if task_snapshot.get("version_authorization") != "deterministic-dual-track-v1":
             return {}
+        compiler_version = task_snapshot.get("delivery_compiler_version")
+        audit_version = (
+            AUDIT_VERSION_V3
+            if compiler_version == DELIVERY_COMPILER_VERSION
+            else AUDIT_VERSION_V2
+        )
         audit = {
-            "audit_version": AUDIT_VERSION_V2,
+            "audit_version": audit_version,
             "artifact_digest": artifact_digest,
-            "visible_projection": FINAL_VISIBLE_PROJECTION_V2,
+            "visible_projection": (
+                FINAL_VISIBLE_PROJECTION_V3
+                if audit_version == AUDIT_VERSION_V3
+                else FINAL_VISIBLE_PROJECTION_V2
+            ),
             **{key: task_snapshot.get(key) for key in cls._VERSION_AUDIT_KEYS},
         }
         if (
@@ -553,6 +566,27 @@ class PostgresContentRepository(ContentRepository):
                     scope.user_id,
                 ),
             )
+            cursor.execute(
+                """
+                SELECT outline, body, artifact_digest, version_audit_snapshot
+                FROM content_versions
+                WHERE tenant_id = %s AND id = %s AND task_id = %s
+                  AND run_id = %s AND version_number = %s
+                """,
+                (
+                    scope.tenant_id,
+                    version_id,
+                    task_id,
+                    run_id,
+                    next_version,
+                ),
+            )
+            committed_content = validate_version_content(
+                self._one(
+                    cursor,
+                    "内容版本提交后无法完成完整性回读",
+                )
+            )
             if task["series_id"] is not None and next_version == 1:
                 self._attach_series_task(
                     cursor,
@@ -587,8 +621,8 @@ class PostgresContentRepository(ContentRepository):
             "task_id": str(task_id),
             "version_id": str(version_id),
             "version": next_version,
-            "outline": outline,
-            "body": body,
+            "outline": committed_content.outline,
+            "body": committed_content.body,
             "model": model,
         }
 

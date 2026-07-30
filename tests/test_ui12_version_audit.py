@@ -10,7 +10,9 @@ from src.shared.narrative import visible_digest
 from src.shared.version_integrity import (
     AUDIT_VERSION_V1,
     AUDIT_VERSION_V2,
+    AUDIT_VERSION_V3,
     FINAL_VISIBLE_PROJECTION_V2,
+    FINAL_VISIBLE_PROJECTION_V3,
     validate_version_content,
 )
 
@@ -107,6 +109,44 @@ def test_each_version_audit_copies_the_frozen_contract_and_artifact_digest() -> 
     assert audit["creative_plan_v2"] == merged["creative_plan_v2"]
     assert audit["creative_kernel_v2"] == merged["creative_kernel_v2"]
     assert audit["delivery_compiler_version"] == "delivery-compiler-v2"
+
+
+def test_media_native_version_audit_binds_the_final_visible_artifact() -> None:
+    task = _task_snapshot()
+    task["delivery_compiler_version"] = "delivery-compiler-v3"
+    patch = _completion_patch()
+    patch["delivery_compiler_version"] = "delivery-compiler-v3"
+    kernel = patch["creative_kernel_v2"]
+    assert isinstance(kernel, dict)
+    kernel["kernel_version"] = "creative-kernel-v3"
+    merged = PostgresContentRepository._validated_completion_snapshot(
+        task,
+        patch,
+    )
+
+    audit = PostgresContentRepository._version_audit_snapshot(
+        merged,
+        "e" * 64,
+    )
+
+    assert audit["audit_version"] == AUDIT_VERSION_V3
+    assert audit["visible_projection"] == FINAL_VISIBLE_PROJECTION_V3
+    assert audit["delivery_compiler_version"] == "delivery-compiler-v3"
+    body = "标题：作品标题\n\n表达范围：一次说明\n\n完整正文：完整正文"
+    digest = visible_digest("作品标题", body)
+    validated = validate_version_content(
+        {
+            "outline": "作品标题",
+            "body": body,
+            "artifact_digest": digest,
+            "version_audit_snapshot": {
+                **audit,
+                "artifact_digest": digest,
+            },
+        }
+    )
+    assert validated.audit_version == AUDIT_VERSION_V3
+    assert validated.body == body
 
 
 def test_legacy_version_without_audit_keeps_legacy_projection() -> None:

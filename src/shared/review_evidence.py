@@ -8,7 +8,7 @@ from src.shared.creative_kernel import (
     ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM,
     DRAMATIZATION_DISCLOSURE,
     HYPOTHESIS_DISCLOSURE,
-    KERNEL_VERSION,
+    LEGACY_KERNEL_VERSION,
     OBSERVATION_ONLY_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
@@ -299,7 +299,7 @@ def build_clause_contexts_v2(
         elif contract == "disclosed_dramatization":
             wrapper = f"{DRAMATIZATION_DISCLOSURE}\n"
         if wrapper is not None:
-            if kernel.kernel_version == KERNEL_VERSION:
+            if kernel.kernel_version != LEGACY_KERNEL_VERSION:
                 parts = (wrapper, *parts)
             elif not parts or parts[0] != wrapper:
                 raise ValueError("server wrapper structure drifted")
@@ -822,7 +822,7 @@ def reconcile_review_evidence(
                 )
             )
         if (
-            kernel.kernel_version != KERNEL_VERSION
+            kernel.kernel_version == LEGACY_KERNEL_VERSION
             and unit.allowed_observation_types == ("dramatization",)
             and not unit.text.startswith(DRAMATIZATION_DISCLOSURE)
         ):
@@ -834,7 +834,7 @@ def reconcile_review_evidence(
                 )
             )
         if (
-            kernel.kernel_version != KERNEL_VERSION
+            kernel.kernel_version == LEGACY_KERNEL_VERSION
             and unit.allowed_observation_types == ("hypothesis",)
             and not unit.text.startswith(HYPOTHESIS_DISCLOSURE)
         ):
@@ -1009,6 +1009,14 @@ def unit_contracts_v2(
         "unit:natural-guide": "audience_guidance",
         "unit:release-caption": "audience_guidance",
     }
+    for unit_id in (
+        "unit:media-opening",
+        "unit:media-sequence",
+        "unit:subtitle-strategy",
+        "unit:production-note",
+    ):
+        if any(unit.unit_id == unit_id for unit in kernel.units):
+            contracts[unit_id] = "audience_guidance"
     fact_units = tuple(unit for unit in kernel.units if unit.purpose == "frozen_fact")
     for index, unit in enumerate(fact_units, start=1):
         if unit.unit_id != f"unit:frozen-fact:{index}":
@@ -1073,6 +1081,10 @@ def unit_contracts_v2(
     expected_purpose = {
         "unit:title": "title",
         "unit:natural-guide": "natural_guide",
+        "unit:media-opening": "media_opening",
+        "unit:media-sequence": "media_sequence",
+        "unit:subtitle-strategy": "subtitle_strategy",
+        "unit:production-note": "production_note",
         "unit:release-caption": "release_caption",
     }
     for unit_id, unit in units.items():

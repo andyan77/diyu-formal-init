@@ -39,7 +39,9 @@ from src.shared.creative_plan import (
     build_creative_plan,
     creative_plan_document,
 )
-from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
+from src.shared.delivery_compiler import (
+    DUAL_TRACK_DELIVERY_COMPILER_VERSION,
+)
 from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import (
     brand_fact_records,
@@ -496,7 +498,7 @@ def _kernel_request(
             frame,
             revision_instruction=revision_instruction,
         ),
-        delivery_compiler_version=DELIVERY_COMPILER_VERSION,
+        delivery_compiler_version=DUAL_TRACK_DELIVERY_COMPILER_VERSION,
         prior_creative_kernel=prior_kernel,
     )
 
@@ -1575,7 +1577,10 @@ def test_dual_track_writer_receives_only_deidentified_preassigned_units() -> Non
     artifact = _generator().generate(request)
 
     assert artifact.completion_snapshot_patch is not None
-    assert artifact.completion_snapshot_patch["delivery_compiler_version"] == DELIVERY_COMPILER_VERSION
+    assert (
+        artifact.completion_snapshot_patch["delivery_compiler_version"]
+        == DUAL_TRACK_DELIVERY_COMPILER_VERSION
+    )
     assert artifact.completion_snapshot_patch["writer_model"] == "deepseek-test"
     assert artifact.completion_snapshot_patch["version_authorization"] == ("deterministic-dual-track-v1")
     assert isinstance(artifact.completion_snapshot_patch["claim_inventory_v1"], list)

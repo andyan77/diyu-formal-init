@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
 from src.shared.errors import GenerationFailed
 from src.shared.types import (
     GeneratedArtifact,
@@ -32,30 +33,62 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         not str(value).strip() for value in vars(contract).values()
     ):
         raise GenerationFailed("内容成品缺少当前主要产品的必要部分")
+    compiler_version = (artifact.completion_snapshot_patch or {}).get(
+        "delivery_compiler_version"
+    )
+    media_native = compiler_version == DELIVERY_COMPILER_VERSION
     if isinstance(artifact.production, VideoProductionBundle):
         required = vars(artifact.production).values()
         headings: tuple[str, ...] = (
-            "标题",
-            "内容概要",
-            "封面/首帧",
-            "完整观看链",
-            "完整台词/解说",
-            "画面与动作",
-            "字幕",
-            "声音与制作提示",
-            "自然时长",
-            "发布配文与互动",
+            (
+                "标题",
+                "表达范围",
+                "内容看点",
+                "封面/开头",
+                "完整台词/解说",
+                "画面动作",
+                "字幕策略",
+                "声音与制作提示",
+                "自然时长",
+                "发布配文",
+            )
+            if media_native
+            else (
+                "标题",
+                "内容概要",
+                "封面/首帧",
+                "完整观看链",
+                "完整台词/解说",
+                "画面与动作",
+                "字幕",
+                "声音与制作提示",
+                "自然时长",
+                "发布配文与互动",
+            )
         )
     elif isinstance(artifact.production, GraphicProductionBundle):
         required = vars(artifact.production).values()
         headings = (
-            "标题",
-            "内容概要",
-            "首图方案",
-            "图序与每张职责",
-            "完整发布正文",
-            "拍摄/排版提示",
-            "发布配文与互动",
+            (
+                "标题",
+                "表达范围",
+                "内容看点",
+                "首图",
+                "图序与每张职责",
+                "完整正文",
+                "拍摄/排版提示",
+                "发布配文",
+            )
+            if media_native
+            else (
+                "标题",
+                "内容概要",
+                "首图方案",
+                "图序与每张职责",
+                "完整发布正文",
+                "拍摄/排版提示",
+                "发布配文与互动",
+            )
         )
     else:  # pragma: no cover - typing and constructors keep this unreachable.
         raise GenerationFailed("内容成品媒体格式无效")

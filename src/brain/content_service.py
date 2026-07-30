@@ -27,6 +27,7 @@ from src.brain.p1_contract import assert_content_complete
 from src.brain.platform_directions import direction_for
 from src.ports.content_generator import ContentGenerator
 from src.ports.content_repository import ContentRepository
+from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.content_snapshot import (
     frozen_creative_kernel,
     frozen_creative_plan,
@@ -87,6 +88,12 @@ _EXPLICIT_DRAMATIZATION_CONTROL = re.compile(
     r"(?:情境演绎|情景演绎|情景剧|短剧|小剧场)"
 )
 _NEGATED_CONTROL_SUFFIXES = ("不要", "别", "不想", "不用", "无需", "避免")
+_TARGET_LABELS: dict[ContentTarget, str] = {
+    "douyin_video": "抖音视频",
+    "xiaohongshu_video": "小红书视频",
+    "xiaohongshu_graphic": "小红书图文",
+    "wechat_channels_video": "微信视频号视频",
+}
 
 
 def _requests_explicit_dramatization(natural_text: str) -> bool:
@@ -799,7 +806,8 @@ class ContentService:
             frame = legacy_frame(
                 tuple(record.fact_id for product in products for record in product_fact_records(product))
             )
-        delivery_compiler_version = DELIVERY_COMPILER_VERSION
+        if delivery_compiler_version is None:
+            delivery_compiler_version = DELIVERY_COMPILER_VERSION
         self._validate_plan(
             creative_plan,
             (weak_seed,),
@@ -919,7 +927,8 @@ class ContentService:
                 frame = legacy_frame(
                     tuple(record.fact_id for product in source.products for record in product_fact_records(product))
                 )
-        delivery_compiler_version = DELIVERY_COMPILER_VERSION
+        if delivery_compiler_version is None:
+            delivery_compiler_version = DELIVERY_COMPILER_VERSION
         self._validate_plan(
             creative_plan,
             (source_premise,),
@@ -1112,17 +1121,25 @@ class ContentService:
         version_value = completed["version"]
         if not isinstance(version_value, int):
             raise GenerationFailed("内容版本数据无效")
-        visible = self._repository.fetch_version(scope, task_id, version_value)
+        visible_body = completed.get("body")
+        visible_outline = completed.get("outline")
+        if not isinstance(visible_body, str) or not isinstance(
+            visible_outline,
+            str,
+        ):
+            raise GenerationFailed("内容版本提交回读数据无效")
+        aigc_label, aigc_release_reminder = aigc_disclosure(artifact.model)
         creative = control.direction if control else None
         return completed | {
             "kind": "content",
-            "body": visible["body"],
-            "ai_generated": visible["ai_generated"],
-            "aigc_label": visible["aigc_label"],
-            "aigc_release_reminder": visible["aigc_release_reminder"],
-            "target": visible["target"],
-            "target_key": visible["target_key"],
-            "adapted_from": visible["adapted_from"],
+            "outline": visible_outline,
+            "body": visible_body,
+            "ai_generated": is_ai_generated_content(artifact.model),
+            "aigc_label": aigc_label,
+            "aigc_release_reminder": aigc_release_reminder,
+            "target": _TARGET_LABELS[target],
+            "target_key": target,
+            "adapted_from": source_version_description,
             # Shown before the artifact, never inside it, and never a review report.
             "translation_notice": creative.translation_notice if creative else None,
             "applied_direction": ([item.applied_label for item in creative.selections] if creative else []),

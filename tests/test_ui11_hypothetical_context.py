@@ -5,8 +5,8 @@ from dataclasses import replace
 import pytest
 
 from src.shared.creative_kernel import (
+    DUAL_TRACK_KERNEL_VERSION,
     HYPOTHESIS_DISCLOSURE,
-    KERNEL_VERSION,
     OBSERVATION_ONLY_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
@@ -394,7 +394,7 @@ def test_actuality_fact_and_program_survive_revision_invariants() -> None:
         )
         == original.program_id
     )
-    assert DELIVERY_COMPILER_VERSION == "delivery-compiler-v2"
+    assert DELIVERY_COMPILER_VERSION == "delivery-compiler-v3"
 
     mutated = replace(
         original,
@@ -434,7 +434,7 @@ def test_legacy_kernel_document_remains_readable_and_recompilable() -> None:
     legacy_document.pop("program_id")
 
     restored = kernel_from_document(legacy_document)
-    assert restored.kernel_version == KERNEL_VERSION
+    assert restored.kernel_version == DUAL_TRACK_KERNEL_VERSION
     assert restored.program_id == OBSERVATION_ONLY_PROGRAM
     assert kernel_from_document(kernel_document(restored)) == restored
 

@@ -48,6 +48,14 @@ LEGACY_PROJECTED_HEADINGS = (
 
 PRODUCT_VISIBLE_HEADINGS = (
     *LEGACY_PROJECTED_HEADINGS,
+    "表达范围",
+    "内容看点",
+    "封面/开头",
+    "画面动作",
+    "字幕策略",
+    "首图",
+    "完整正文",
+    "发布配文",
     "正文",
     "封面文案",
     "制作提示",

@@ -22,6 +22,10 @@ KernelPurpose: TypeAlias = Literal[
     "natural_guide",
     "frozen_fact",
     "body",
+    "media_opening",
+    "media_sequence",
+    "subtitle_strategy",
+    "production_note",
     "release_caption",
 ]
 KernelProgramId: TypeAlias = Literal[
@@ -46,7 +50,8 @@ UnitTextSource: TypeAlias = Literal[
 ]
 
 LEGACY_KERNEL_VERSION = "creative-kernel-v1"
-KERNEL_VERSION = "creative-kernel-v2"
+DUAL_TRACK_KERNEL_VERSION = "creative-kernel-v2"
+KERNEL_VERSION = "creative-kernel-v3"
 MAX_PRODUCT_FACT_BLOCKS = 3
 DRAMATIZATION_DISCLOSURE = "以下是情景演绎，不对应真实人物或经历："
 HYPOTHESIS_DISCLOSURE = "假设有这样一幕："
@@ -68,6 +73,10 @@ _PURPOSES = frozenset(
         "natural_guide",
         "frozen_fact",
         "body",
+        "media_opening",
+        "media_sequence",
+        "subtitle_strategy",
+        "production_note",
         "release_caption",
     }
 )
@@ -212,6 +221,8 @@ def build_kernel_skeleton(
     constraint_refs: Sequence[str],
     program_id: KernelProgramId = OBSERVATION_ONLY_PROGRAM,
     allowed_resource_ids: Sequence[str] = (),
+    media_format: Literal["video", "graphic"] = "graphic",
+    kernel_version: str = DUAL_TRACK_KERNEL_VERSION,
 ) -> CreativeKernelV1:
     """Build the one small server-owned writing skeleton for a new artifact."""
     if (
@@ -234,6 +245,9 @@ def build_kernel_skeleton(
         body_types = ("abstract_principle",)
     constraints = tuple(dict.fromkeys(constraint_refs))
     resources = tuple(dict.fromkeys(allowed_resource_ids))
+    if kernel_version not in {DUAL_TRACK_KERNEL_VERSION, KERNEL_VERSION}:
+        raise ValueError("unsupported creative kernel version")
+    compiler_owned_supporting_copy = kernel_version == DUAL_TRACK_KERNEL_VERSION
     units: list[CreativeKernelUnit] = [
         CreativeKernelUnit(
             unit_id="unit:title",
@@ -260,9 +274,73 @@ def build_kernel_skeleton(
             mode="general_observation",
             scope_id="scope:general-observation-v1",
             allowed_resource_ids=resources,
-            text_source="server_compiler",
+            text_source=(
+                "server_compiler"
+                if compiler_owned_supporting_copy
+                else "writer"
+            ),
         ),
     ]
+    if not compiler_owned_supporting_copy:
+        units.extend(
+            (
+                CreativeKernelUnit(
+                    unit_id="unit:media-opening",
+                    purpose="media_opening",
+                    allowed_observation_types=("abstract_principle",),
+                    fact_refs=(),
+                    constraint_refs=constraints,
+                    visible_order=21,
+                    text="",
+                    track="creative_expression",
+                    mode="general_observation",
+                    scope_id="scope:general-observation-v1",
+                    allowed_resource_ids=resources,
+                ),
+                CreativeKernelUnit(
+                    unit_id="unit:media-sequence",
+                    purpose="media_sequence",
+                    allowed_observation_types=("abstract_principle",),
+                    fact_refs=(),
+                    constraint_refs=constraints,
+                    visible_order=22,
+                    text="",
+                    track="creative_expression",
+                    mode="general_observation",
+                    scope_id="scope:general-observation-v1",
+                    allowed_resource_ids=resources,
+                ),
+                CreativeKernelUnit(
+                    unit_id="unit:production-note",
+                    purpose="production_note",
+                    allowed_observation_types=("abstract_principle",),
+                    fact_refs=(),
+                    constraint_refs=constraints,
+                    visible_order=23,
+                    text="",
+                    track="creative_expression",
+                    mode="general_observation",
+                    scope_id="scope:general-observation-v1",
+                    allowed_resource_ids=resources,
+                ),
+            )
+        )
+        if media_format == "video":
+            units.append(
+                CreativeKernelUnit(
+                    unit_id="unit:subtitle-strategy",
+                    purpose="subtitle_strategy",
+                    allowed_observation_types=("abstract_principle",),
+                    fact_refs=(),
+                    constraint_refs=constraints,
+                    visible_order=24,
+                    text="",
+                    track="creative_expression",
+                    mode="general_observation",
+                    scope_id="scope:general-observation-v1",
+                    allowed_resource_ids=resources,
+                )
+            )
     allowed_fact_ids = frame.allowed_fact_ids
     frozen_records = tuple(record for record in fact_registry if record.fact_id in allowed_fact_ids)
     for index, record in enumerate(frozen_records, start=1):
@@ -409,11 +487,15 @@ def build_kernel_skeleton(
             mode="general_observation",
             scope_id="scope:general-observation-v1",
             allowed_resource_ids=resources,
-            text_source="server_compiler",
+            text_source=(
+                "server_compiler"
+                if compiler_owned_supporting_copy
+                else "writer"
+            ),
         )
     )
     return CreativeKernelV1(
-        kernel_version=KERNEL_VERSION,
+        kernel_version=kernel_version,
         units=tuple(sorted(units, key=lambda unit: unit.visible_order)),
         program_id=program_id,
     )
@@ -617,7 +699,7 @@ def parse_writer_kernel(
             *reordered_facts,
         )
     return CreativeKernelV1(
-        kernel_version=KERNEL_VERSION,
+        kernel_version=skeleton.kernel_version,
         units=tuple(sorted(units, key=lambda unit: unit.visible_order)),
         program_id=skeleton.program_id,
         selected_fact_block_ids=selected_fact_block_ids,
@@ -636,7 +718,7 @@ def repair_kernel_units(
     if any(not kernel.unit(unit_id).writable for unit_id in affected_unit_ids):
         raise ValueError("service-authored fact units cannot be repaired")
     repair_skeleton = CreativeKernelV1(
-        kernel_version=KERNEL_VERSION,
+        kernel_version=kernel.kernel_version,
         units=tuple(replace(unit, text="") for unit in kernel.units if unit.unit_id in affected_unit_ids),
         program_id=kernel.program_id,
         selected_fact_block_ids=kernel.selected_fact_block_ids,
@@ -651,7 +733,7 @@ def repair_kernel_units(
     if any(replacements[unit_id].text == kernel.unit(unit_id).text for unit_id in affected_unit_ids):
         raise ValueError("repair did not change every affected unit")
     return CreativeKernelV1(
-        kernel_version=KERNEL_VERSION,
+        kernel_version=kernel.kernel_version,
         units=tuple(replacements.get(unit.unit_id, unit) for unit in kernel.units),
         program_id=kernel.program_id,
         selected_fact_block_ids=kernel.selected_fact_block_ids,
@@ -709,7 +791,12 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
     raw_program = value.get("program_id", OBSERVATION_ONLY_PROGRAM)
     selected_fact_block_ids = _string_tuple(value.get("selected_fact_block_ids", []))
     if (
-        value.get("kernel_version") not in {LEGACY_KERNEL_VERSION, KERNEL_VERSION}
+        value.get("kernel_version")
+        not in {
+            LEGACY_KERNEL_VERSION,
+            DUAL_TRACK_KERNEL_VERSION,
+            KERNEL_VERSION,
+        }
         or not isinstance(raw_units, list)
         or not isinstance(raw_program, str)
         or raw_program not in _PROGRAM_IDS
@@ -795,6 +882,7 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
         text_source = _unit_text_source(
             purpose=cast(KernelPurpose, purpose),
             raw=raw,
+            kernel_version=str(value.get("kernel_version")),
         )
         raw_text = raw.get("text")
         text = "" if text_source == "server_compiler" and raw_text == "" else _required_string(raw_text)
@@ -851,7 +939,7 @@ def creative_units_digest(kernel: CreativeKernelV1) -> str:
                 "claim_refs": list(unit.claim_refs),
             }
             for unit in kernel.writable_units
-            if compiler_owned_unit_source(unit.unit_id, unit.text) is None
+            if unit.text_source != "server_compiler"
         ],
         ensure_ascii=False,
         separators=(",", ":"),
@@ -1047,10 +1135,14 @@ def _unit_text_source(
     *,
     purpose: KernelPurpose,
     raw: Mapping[str, object],
+    kernel_version: str = KERNEL_VERSION,
 ) -> UnitTextSource:
     if purpose == "frozen_fact":
         expected: UnitTextSource = "server_fact"
-    elif purpose in {"natural_guide", "release_caption"}:
+    elif (
+        purpose in {"natural_guide", "release_caption"}
+        and kernel_version != KERNEL_VERSION
+    ):
         expected = "server_compiler"
     else:
         expected = "writer"
@@ -1064,7 +1156,11 @@ def _unit_text_source(
         raise DomainError("冻结创作内核文字来源无效")
     if purpose == "frozen_fact" and value != "server_fact":
         raise DomainError("冻结事实文字来源无效")
-    if purpose in {"natural_guide", "release_caption"} and value != "server_compiler":
+    if (
+        purpose in {"natural_guide", "release_caption"}
+        and kernel_version != KERNEL_VERSION
+        and value != "server_compiler"
+    ):
         raise DomainError("编译器文字来源无效")
     if value == "prior_version" and purpose != "body":
         raise DomainError("历史版本文字来源无效")
