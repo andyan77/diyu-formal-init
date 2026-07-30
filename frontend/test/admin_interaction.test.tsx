@@ -537,6 +537,65 @@ async function main(): Promise<void> {
   assert.match(document.body.textContent ?? "", /品牌管理员录入/);
   assert.match(document.body.textContent ?? "", /浙江区域门店拍摄说明/);
   assert.match(document.body.textContent ?? "", /shooting-note.txt/);
+  await click(find(".library-list button", "查看版本与维护"));
+  await settle();
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /历史版本/);
+  await click(find(".tenant-drawer button", "停用资料"));
+  await settle();
+  assert.ok(
+    requests.some(
+      item =>
+        item.path.endsWith(
+          "/brand-library/66666666-6666-4666-8666-666666666666/enabled"
+        ) && item.body?.enabled === false
+    ),
+    "品牌文字资料停用必须写入正式生命周期接口"
+  );
+  await click(find(".tenant-drawer button", "恢复资料"));
+  await click(find(".tenant-drawer button", "关闭"));
+
+  await click(find(".product-list button", "查看版本与维护"));
+  await settle();
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /V2 · 当前版本/);
+  await click(find(".tenant-drawer button", "查看字段预览"));
+  await settle();
+  const productConfirmation = find(
+    ".tenant-drawer label",
+    "我确认这些是当前品牌可负责的商品事实"
+  ).querySelector("input") as HTMLInputElement;
+  await click(productConfirmation);
+  await click(find(".tenant-drawer button", "保存新版本"));
+  await settle();
+  assert.ok(
+    requests.some(
+      item =>
+        item.path === "/api/v1/tenant-management/brand-products/preview" &&
+        item.method === "POST"
+    ),
+    "商品字段必须先经过正式预览接口"
+  );
+
+  await click(find(".material-list button", "查看版本与维护"));
+  await settle();
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /历史版本/);
+  const materialNote = find(
+    ".tenant-drawer label",
+    "人工说明"
+  ).querySelector("textarea") as HTMLTextAreaElement;
+  await input(materialNote, "复核后的组织素材说明");
+  await click(find(".tenant-drawer button", "保存新版本"));
+  await settle();
+  assert.ok(
+    requests.some(
+      item =>
+        item.path.endsWith(
+          "/organization-materials/44444444-4444-4444-8444-444444444444/versions"
+        ) && item.method === "POST"
+    ),
+    "组织素材说明必须形成新版本"
+  );
+  await click(find(".tenant-drawer button", "关闭"));
+
   await click(find("button", "新增资料"));
   const scope = Array.from(document.querySelectorAll(".tenant-drawer select")).at(-1) as
     | HTMLSelectElement
@@ -545,17 +604,60 @@ async function main(): Promise<void> {
   await select(scope, "organizations");
   assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /未选择的其他区域默认不可使用/);
   assert.equal(
-    (find(".tenant-drawer button", "保存资料") as HTMLButtonElement).disabled,
+    (find(".tenant-drawer button", "查看导入预览") as HTMLButtonElement).disabled,
     true,
     "指定区域未选具体组织时不能保存"
   );
+  const regionChoice = find(
+    ".tenant-drawer fieldset",
+    "选择可用区域"
+  ).querySelector("input") as HTMLInputElement;
+  await click(regionChoice);
+  await input(
+    find(".tenant-drawer label", "资料名称").querySelector("input") as HTMLInputElement,
+    "华东区域表达边界"
+  );
+  await input(
+    find(".tenant-drawer label", "粘贴文字资料").querySelector(
+      "textarea"
+    ) as HTMLTextAreaElement,
+    "只描述已经确认的门店条件。"
+  );
+  await input(
+    find(".tenant-drawer label", "自然来源说明").querySelector(
+      "textarea"
+    ) as HTMLTextAreaElement,
+    "华东区域管理员确认"
+  );
+  await click(find(".tenant-drawer button", "查看导入预览"));
+  await settle();
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /尚未保存/);
+  assert.equal(
+    requests.filter(
+      item =>
+        item.path === "/api/v1/tenant-management/brand-library" &&
+        item.method === "POST"
+    ).length,
+    0,
+    "导入预览不得直接保存正式资料"
+  );
+  await click(find(".tenant-drawer button", "确认保存为当前版本"));
+  await settle();
+  assert.ok(
+    requests.some(
+      item =>
+        item.path === "/api/v1/tenant-management/brand-library" &&
+        item.method === "POST" &&
+        item.body?.confirm_as_current === true
+    ),
+    "管理员明确确认后才保存当前资料"
+  );
 
-  await click(find(".tenant-drawer button", "关闭"));
   await click(find("button", "维护商品事实"));
   assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /明确确认后/);
   assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /导入 CSV/);
   assert.equal(
-    (find(".tenant-drawer button", "保存商品事实") as HTMLButtonElement).disabled,
+    (find(".tenant-drawer button", "查看字段预览") as HTMLButtonElement).disabled,
     true,
     "商品候选没有明确确认时不能升级为事实"
   );

@@ -894,6 +894,7 @@ def test_ui05_d_brand_library_scopes_filter_before_context_and_private_materials
                     "content": f"{title}-CONTENT",
                     "version": "1",
                     "status": "active",
+                    "confirm_as_current": True,
                     "visibility_scope": visibility_scope,
                     "organization_ids": organization_ids,
                 },
@@ -1176,12 +1177,12 @@ def test_ui05_f_readiness_has_rich_evidence_and_a_product_gap_is_localized(
             assert before_response.status_code == 200
             before_items = {item["id"]: item for item in before_response.json()["items"]}
             assert set(before_items) == {
-                "brand_expression",
                 "non_product_content",
                 "product_facts",
                 "continuous_series",
                 "platform_recompile",
                 "dm01_display",
+                "first_creation",
             }
             required = {
                 "status",
@@ -1230,6 +1231,29 @@ def test_ui05_f_readiness_has_rich_evidence_and_a_product_gap_is_localized(
                     "UPDATE brand_products SET source_note = %s WHERE tenant_id = %s AND brand_id = %s AND sku = %s",
                     ("UI-05 后端集成夹具责任来源", TENANT_ID, BRAND_ID, sku),
                 )
+                restore_cursor.execute(
+                    "UPDATE brand_products SET current_version_id = NULL "
+                    "WHERE tenant_id = %s AND brand_id = %s AND sku = %s",
+                    (TENANT_ID, BRAND_ID, sku),
+                )
+                restore_cursor.execute(
+                    "ALTER TABLE brand_product_versions "
+                    "DISABLE TRIGGER brand_product_versions_immutable"
+                )
+                try:
+                    restore_cursor.execute(
+                        "DELETE FROM brand_product_versions "
+                        "WHERE tenant_id = %s AND product_id = ("
+                        "SELECT id FROM brand_products "
+                        "WHERE tenant_id = %s AND brand_id = %s AND sku = %s"
+                        ")",
+                        (TENANT_ID, TENANT_ID, BRAND_ID, sku),
+                    )
+                finally:
+                    restore_cursor.execute(
+                        "ALTER TABLE brand_product_versions "
+                        "ENABLE TRIGGER brand_product_versions_immutable"
+                    )
                 restore_cursor.execute(
                     "DELETE FROM brand_products WHERE tenant_id = %s AND brand_id = %s AND sku = %s",
                     (TENANT_ID, BRAND_ID, sku),

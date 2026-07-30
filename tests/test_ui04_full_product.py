@@ -232,12 +232,12 @@ def test_ui04_production_product_seams_are_human_scoped_and_atomic(
             assert readiness.status_code == 200, readiness.text
             readiness_items = readiness.json()["items"]
             assert [item["id"] for item in readiness_items] == [
-                "brand_expression",
                 "non_product_content",
                 "product_facts",
                 "continuous_series",
                 "platform_recompile",
                 "dm01_display",
+                "first_creation",
             ]
             assert all(item["status"] in {"available", "conditional", "unavailable"} for item in readiness_items)
             assert all(

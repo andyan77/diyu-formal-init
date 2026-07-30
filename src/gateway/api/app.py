@@ -49,6 +49,8 @@ from src.gateway.api.contracts import (
     ApplicationHandoffResponse,
     BrandExpressionConfirmRequest,
     BrandLibraryEntryRequest,
+    BrandLibraryPreviewRequest,
+    BrandLibraryVersionRequest,
     ChangePasswordRequest,
     ContentPlanRequest,
     ContentQuestionResponse,
@@ -72,9 +74,11 @@ from src.gateway.api.contracts import (
     DisplayRevisionRequest,
     DisplayVersionResponse,
     GreetingResponse,
+    MaterialMetadataVersionRequest,
     MaterialReferenceNoteRequest,
     MaterialUploadRequest,
     OrganizationMaterialUploadRequest,
+    ProductImportPreviewRequest,
     ProvisionedTenantResponse,
     ReorderSeriesRequest,
     ResetTenantUserResponse,
@@ -795,7 +799,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
         @app.get("/api/v1/tenant-management/organizations", responses=business_failures)
-        def tenant_organizations(request: Request) -> list[dict[str, str]]:
+        def tenant_organizations(request: Request) -> list[dict[str, object]]:
             return production_authority.repository.tenant_organizations(formal_manager_identity(request))
 
         @app.post(
@@ -806,12 +810,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         def create_tenant_organization(
             payload: CreateOrganizationRequest,
             request: Request,
-        ) -> dict[str, str]:
+        ) -> dict[str, object]:
             return production_authority.repository.create_tenant_organization(
                 formal_manager_identity(request),
                 payload.name,
                 payload.as_synthetic_business_fixture,
                 payload.organization_level,
+                payload.parent_organization_id,
             )
 
         @app.patch(
@@ -1288,6 +1293,69 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             tuple(payload.organization_ids),
         )
 
+    @app.post(
+        "/api/v1/tenant-management/brand-library/preview",
+        responses=business_failures,
+    )
+    def preview_management_brand_library_entry(
+        payload: BrandLibraryPreviewRequest,
+        _: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.preview_brand_library_entry(
+            payload.category,
+            payload.title,
+            payload.source_note,
+            payload.content,
+            payload.version,
+            payload.visibility_scope,
+            tuple(payload.organization_ids),
+        )
+
+    @app.get(
+        "/api/v1/tenant-management/brand-library/{entry_id}/versions",
+        responses=business_failures,
+    )
+    def management_brand_library_versions(
+        entry_id: UUID,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.brand_library_entry_versions(scope, entry_id)
+
+    @app.post(
+        "/api/v1/tenant-management/brand-library/{entry_id}/versions",
+        responses=business_failures,
+    )
+    def save_management_brand_library_version(
+        entry_id: UUID,
+        payload: BrandLibraryVersionRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.save_brand_library_entry_version(
+            scope,
+            entry_id,
+            payload.title,
+            payload.source_note,
+            payload.content,
+            payload.version,
+            payload.visibility_scope,
+            tuple(payload.organization_ids),
+        )
+
+    @app.put(
+        "/api/v1/tenant-management/brand-library/{entry_id}/enabled",
+        responses=business_failures,
+    )
+    def set_management_brand_library_enabled(
+        entry_id: UUID,
+        payload: SetEnabledRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.set_brand_library_entry_enabled(
+            scope,
+            entry_id,
+            payload.enabled,
+        )
+
     @app.get("/api/v1/tenant-management/brand-products", responses=business_failures)
     def management_products(
         scope: TenantManagementScope = Depends(management_scope_from_request),
@@ -1330,6 +1398,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             upload.reference_note,
             upload.visibility_scope,
             tuple(upload.organization_ids),
+        )
+
+    @app.get(
+        "/api/v1/tenant-management/organization-materials/{asset_id}/versions",
+        responses=business_failures,
+    )
+    def management_organization_material_versions(
+        asset_id: UUID,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.management_material_versions(scope, asset_id)
+
+    @app.post(
+        "/api/v1/tenant-management/organization-materials/{asset_id}/versions",
+        responses=business_failures,
+    )
+    def save_management_organization_material_version(
+        asset_id: UUID,
+        payload: MaterialMetadataVersionRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.save_management_material_version(
+            scope,
+            asset_id,
+            payload.title,
+            payload.reference_note,
+            payload.visibility_scope,
+            tuple(payload.organization_ids),
+        )
+
+    @app.put(
+        "/api/v1/tenant-management/organization-materials/{asset_id}/enabled",
+        responses=business_failures,
+    )
+    def set_management_organization_material_enabled(
+        asset_id: UUID,
+        payload: SetEnabledRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.set_management_material_enabled(
+            scope,
+            asset_id,
+            payload.enabled,
         )
 
     @app.delete(
@@ -1378,6 +1489,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.as_synthetic_business_fixture,
             payload.visibility_scope,
             tuple(payload.organization_ids),
+        )
+
+    @app.post(
+        "/api/v1/tenant-management/brand-products/preview",
+        responses=business_failures,
+    )
+    def preview_management_products(
+        payload: ProductImportPreviewRequest,
+        _: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.preview_product_import(
+            payload.source_format,
+            payload.content,
+        )
+
+    @app.get(
+        "/api/v1/tenant-management/brand-products/{sku}/versions",
+        responses=business_failures,
+    )
+    def management_product_versions(
+        sku: str,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.management_product_versions(scope, sku)
+
+    @app.put(
+        "/api/v1/tenant-management/brand-products/{sku}/enabled",
+        responses=business_failures,
+    )
+    def set_management_product_enabled(
+        sku: str,
+        payload: SetEnabledRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.set_management_product_enabled(
+            scope,
+            sku,
+            payload.enabled,
         )
 
     @app.post(
@@ -2170,6 +2319,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             selected_target,
             payload.publishing_identity_id,
         )
+        production_identity = (
+            production_authority._tenant_identity(request)
+            if production_authority is not None
+            else None
+        )
         events: queue.Queue[dict[str, object] | None] = queue.Queue(maxsize=16)
         cancelled = threading.Event()
 
@@ -2241,6 +2395,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if result.get("kind") == "content":
                     events.put({"event": "completed", "result": result})
                 else:
+                    if conversation_only and production_identity is not None:
+                        assert production_authority is not None
+                        production_authority.repository.record_content_conversation(
+                            production_identity
+                        )
                     events.put(
                         {
                             "event": "conversation",

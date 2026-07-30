@@ -340,6 +340,13 @@ class SaveBrandProductRequest(BaseModel):
     organization_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
 
+class ProductImportPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_format: Literal["table", "csv"]
+    content: str = Field(min_length=1, max_length=100_000)
+
+
 class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -459,6 +466,7 @@ class CreateOrganizationRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     as_synthetic_business_fixture: bool = False
     organization_level: Literal["company", "region", "operating_unit", "unspecified"] = "unspecified"
+    parent_organization_id: UUID | None = None
 
 
 class BrandLibraryEntryRequest(BaseModel):
@@ -475,7 +483,46 @@ class BrandLibraryEntryRequest(BaseModel):
     source_note: str = Field(min_length=2, max_length=500)
     content: str = Field(min_length=1, max_length=20_000)
     version: str = Field(min_length=1, max_length=80)
-    status: Literal["candidate", "active"] = "candidate"
+    status: Literal["active"] = "active"
+    confirm_as_current: Literal[True]
+    visibility_scope: Literal["brand_all", "headquarters", "organizations"]
+    organization_ids: list[UUID] = Field(default_factory=list, max_length=20)
+
+
+class BrandLibraryPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category: Literal[
+        "brand_expression",
+        "product",
+        "organization_fact",
+        "reference",
+        "official_material",
+    ]
+    title: str = Field(min_length=1, max_length=160)
+    source_note: str = Field(min_length=2, max_length=500)
+    content: str = Field(min_length=1, max_length=20_000)
+    version: str = Field(min_length=1, max_length=80)
+    visibility_scope: Literal["brand_all", "headquarters", "organizations"]
+    organization_ids: list[UUID] = Field(default_factory=list, max_length=20)
+
+
+class BrandLibraryVersionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=160)
+    source_note: str = Field(min_length=2, max_length=500)
+    content: str = Field(min_length=1, max_length=20_000)
+    version: str = Field(min_length=1, max_length=80)
+    visibility_scope: Literal["brand_all", "headquarters", "organizations"]
+    organization_ids: list[UUID] = Field(default_factory=list, max_length=20)
+
+
+class MaterialMetadataVersionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=120)
+    reference_note: str = Field(min_length=1, max_length=500)
     visibility_scope: Literal["brand_all", "headquarters", "organizations"]
     organization_ids: list[UUID] = Field(default_factory=list, max_length=20)
 

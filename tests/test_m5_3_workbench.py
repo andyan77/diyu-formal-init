@@ -41,12 +41,12 @@ def test_workbench_context_and_onboarding_are_server_scoped() -> None:
         readiness = manager.get("/api/v1/admin/readiness").json()
         readiness_items = readiness["items"]
         assert {item["id"] for item in readiness_items} == {
-            "brand_expression",
             "non_product_content",
             "product_facts",
             "continuous_series",
             "platform_recompile",
             "dm01_display",
+            "first_creation",
         }
         assert all(item["status"] in {"available", "conditional", "unavailable"} for item in readiness_items)
         assert all("state" not in item for item in readiness_items)

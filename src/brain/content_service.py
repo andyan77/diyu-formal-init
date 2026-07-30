@@ -621,7 +621,27 @@ class ContentService:
                 if isinstance(item, dict) and item.get("asset_id")
             }
         materials: tuple[ReferenceMaterial, ...] = ()
-        if self._control is not None and frozen_versions:
+        material_snapshots = snapshot.get("material_snapshots")
+        if isinstance(material_snapshots, list):
+            frozen_materials: list[ReferenceMaterial] = []
+            for item in material_snapshots:
+                if not isinstance(item, dict) or not item.get("asset_id"):
+                    raise DomainError(_MISSING_FROZEN_MATERIAL)
+                raw_version = item.get("reference_version")
+                if not isinstance(raw_version, int):
+                    raise DomainError(_MISSING_FROZEN_MATERIAL)
+                frozen_materials.append(
+                    ReferenceMaterial(
+                        asset_id=UUID(str(item["asset_id"])),
+                        title=str(item.get("title") or ""),
+                        media_type=str(item.get("media_type") or ""),
+                        reference_version=raw_version,
+                        text_body=str(item.get("text_body") or ""),
+                        reference_note=str(item.get("reference_note") or ""),
+                    )
+                )
+            materials = tuple(frozen_materials)
+        elif self._control is not None and frozen_versions:
             try:
                 materials = self._control.reference_materials(scope, tuple(frozen_versions))
             except DomainError as exc:

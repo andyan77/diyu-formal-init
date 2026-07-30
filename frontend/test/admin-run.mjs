@@ -107,6 +107,22 @@ let accounts = [
     carrier_count: 1
   }
 ];
+let brandEntries = [
+  {
+    id: "66666666-6666-4666-8666-666666666666",
+    category: "reference",
+    title: "品牌表达参考",
+    source_note: "品牌管理员确认",
+    content: "保持真实、克制和清楚。",
+    version: "V1",
+    status: "active",
+    current_version_id: "brand-version-1",
+    visibility_scope: "brand_all",
+    scope_organizations: [],
+    updated_at: "2026-07-27T00:00:00Z",
+    impact: "供当前品牌的创作工作参考"
+  }
+];
 let products = [
   {
     sku: "DEMO-A",
@@ -118,6 +134,7 @@ let products = [
     source_note: "品牌管理员录入",
     applicability: "演示资料",
     fact_version: 2,
+    status: "active",
     visibility_scope: "organizations",
     scope_organizations: [organizations[1]],
     updated_at: "2026-07-27T00:00:00Z"
@@ -131,6 +148,7 @@ let organizationMaterials = [
     organization: "浙江区域",
     reference_note: "只参考已确认的室内制作条件",
     reference_version: 1,
+    status: "active",
     visibility_scope: "organizations",
     scope_organizations: [organizations[1]],
     created_at: "2026-07-27T00:00:00Z"
@@ -211,12 +229,16 @@ globalThis.fetch = async (input, init = {}) => {
         activated: operators.length,
         enabled: operators.filter(item => item.enabled).length,
         disabled: operators.filter(item => !item.enabled).length,
+        logged_in: operators.length,
+        product_active: operators.length,
         active: operators.length,
         items: operators.map(item => ({
           id: item.id,
           display_name: item.display_name,
           entry_type: item.entry_type,
           enabled: item.enabled,
+          last_login_at: "2026-07-27T00:00:00Z",
+          last_product_action_at: "2026-07-27T00:00:00Z",
           last_used_at: "2026-07-27T00:00:00Z",
           content_attempts: item.capabilities?.includes("content") ? 3 : 0,
           display_attempts: item.capabilities?.includes("display") ? 1 : 0
@@ -226,12 +248,17 @@ globalThis.fetch = async (input, init = {}) => {
         content_attempts: 3,
         content_successes: 2,
         content_failures: 1,
+        conversations: 2,
+        first_generations: 1,
         revisions: 1,
         series_continuations: 1,
+        dm01_plans: 1,
         display_attempts: 1,
         display_successes: 1,
         display_failures: 0,
-        rate_limited: 0
+        rate_limited: 0,
+        successful_runs: 3,
+        failed_runs: 1
       },
       provider_usage: {
         label: "已记录模型用量",
@@ -260,11 +287,129 @@ globalThis.fetch = async (input, init = {}) => {
       account_profile_candidate_source: "确定性冷启动候选，保存前必须纠正。"
     };
   } else if (path === "/api/v1/tenant-management/brand-library" && method === "GET") {
-    value = [];
+    value = brandEntries;
+  } else if (
+    path === "/api/v1/tenant-management/brand-library/preview" &&
+    method === "POST"
+  ) {
+    value = { ...body, saved: false, message: "这是导入预览" };
   } else if (path === "/api/v1/tenant-management/brand-library" && method === "POST") {
-    value = { id: "library-fixture", ...body };
+    const created = {
+      id: "library-fixture",
+      ...body,
+      current_version_id: "library-version-1",
+      scope_organizations: organizations.filter(item =>
+        body.organization_ids?.includes(item.id)
+      ),
+      updated_at: "2026-07-27T00:00:00Z",
+      impact: "供当前品牌的创作工作参考"
+    };
+    brandEntries = [created, ...brandEntries];
+    value = created;
+  } else if (
+    path.match(/^\/api\/v1\/tenant-management\/brand-library\/[^/]+\/versions$/) &&
+    method === "GET"
+  ) {
+    const entryId = path.split("/").at(-2);
+    const entry = brandEntries.find(item => item.id === entryId) ?? brandEntries[0];
+    value = [
+      {
+        id: "library-version-1",
+        version_number: 1,
+        version: entry.version,
+        title: entry.title,
+        source_note: entry.source_note,
+        content: entry.content,
+        visibility_scope: entry.visibility_scope,
+        organization_ids: entry.scope_organizations.map(item => item.id),
+        status: entry.status,
+        is_current: true,
+        created_at: entry.updated_at
+      }
+    ];
+  } else if (
+    path.match(/^\/api\/v1\/tenant-management\/brand-library\/[^/]+\/versions$/) &&
+    method === "POST"
+  ) {
+    const entryId = path.split("/").at(-2);
+    brandEntries = brandEntries.map(item =>
+      item.id === entryId ? { ...item, ...body, status: "active" } : item
+    );
+    value = { id: "library-version-2", version_number: 2, ...body };
+  } else if (
+    path.match(/^\/api\/v1\/tenant-management\/brand-library\/[^/]+\/enabled$/) &&
+    method === "PUT"
+  ) {
+    const entryId = path.split("/").at(-2);
+    brandEntries = brandEntries.map(item =>
+      item.id === entryId
+        ? { ...item, status: body.enabled ? "active" : "retired" }
+        : item
+    );
+    value = brandEntries.find(item => item.id === entryId);
   } else if (path === "/api/v1/tenant-management/brand-products" && method === "GET") {
     value = products;
+  } else if (
+    path === "/api/v1/tenant-management/brand-products/preview" &&
+    method === "POST"
+  ) {
+    value = { rows: [], saved: false, message: "这是字段预览" };
+  } else if (
+    path.match(/^\/api\/v1\/tenant-management\/brand-products\/[^/]+\/versions$/) &&
+    method === "GET"
+  ) {
+    const sku = decodeURIComponent(path.split("/").at(-2));
+    const product = products.find(item => item.sku === sku) ?? products[0];
+    value = [
+      {
+        id: "product-version-2",
+        fact_version: product.fact_version,
+        display_name: product.display_name,
+        facts: product.facts,
+        source_note: product.source_note,
+        applicability: product.applicability,
+        visibility_scope: product.visibility_scope,
+        organization_ids: product.scope_organizations.map(item => item.id),
+        status: product.status,
+        is_current: true,
+        created_at: product.updated_at
+      }
+    ];
+  } else if (
+    path.match(/^\/api\/v1\/tenant-management\/brand-products\/[^/]+\/enabled$/) &&
+    method === "PUT"
+  ) {
+    const sku = decodeURIComponent(path.split("/").at(-2));
+    products = products.map(item =>
+      item.sku === sku
+        ? { ...item, status: body.enabled ? "active" : "retired" }
+        : item
+    );
+    value = products.find(item => item.sku === sku);
+  } else if (
+    path === "/api/v1/tenant-management/brand-products" &&
+    method === "PUT"
+  ) {
+    const existing = products.find(item => item.sku === body.sku);
+    const saved = {
+      ...existing,
+      ...body,
+      facts: {
+        category: body.category,
+        colors: body.colors,
+        material_or_structure: body.material_or_structure,
+        silhouette: body.silhouette,
+        observable_features: body.observable_features
+      },
+      fact_version: (existing?.fact_version ?? 0) + 1,
+      status: "active",
+      scope_organizations: organizations.filter(item =>
+        body.organization_ids?.includes(item.id)
+      ),
+      updated_at: "2026-07-28T00:00:00Z"
+    };
+    products = [saved, ...products.filter(item => item.sku !== body.sku)];
+    value = saved;
   } else if (
     path === "/api/v1/tenant-management/organization-materials" &&
     method === "GET"
@@ -293,6 +438,64 @@ globalThis.fetch = async (input, init = {}) => {
       }
     ];
     value = organizationMaterials.at(-1);
+  } else if (
+    path.match(
+      /^\/api\/v1\/tenant-management\/organization-materials\/[^/]+\/versions$/
+    ) &&
+    method === "GET"
+  ) {
+    const assetId = path.split("/").at(-2);
+    const material =
+      organizationMaterials.find(item => item.id === assetId) ??
+      organizationMaterials[0];
+    value = [
+      {
+        id: "material-version-1",
+        version: material.reference_version,
+        title: material.title,
+        reference_note: material.reference_note,
+        visibility_scope: material.visibility_scope,
+        organization_ids: material.scope_organizations.map(item => item.id),
+        status: material.status,
+        is_current: true,
+        created_at: material.created_at
+      }
+    ];
+  } else if (
+    path.match(
+      /^\/api\/v1\/tenant-management\/organization-materials\/[^/]+\/versions$/
+    ) &&
+    method === "POST"
+  ) {
+    const assetId = path.split("/").at(-2);
+    organizationMaterials = organizationMaterials.map(item =>
+      item.id === assetId
+        ? {
+            ...item,
+            title: body.title,
+            reference_note: body.reference_note,
+            visibility_scope: body.visibility_scope,
+            scope_organizations: organizations.filter(organization =>
+              body.organization_ids?.includes(organization.id)
+            ),
+            reference_version: item.reference_version + 1
+          }
+        : item
+    );
+    value = { id: "material-version-2", version_number: 2, ...body };
+  } else if (
+    path.match(
+      /^\/api\/v1\/tenant-management\/organization-materials\/[^/]+\/enabled$/
+    ) &&
+    method === "PUT"
+  ) {
+    const assetId = path.split("/").at(-2);
+    organizationMaterials = organizationMaterials.map(item =>
+      item.id === assetId
+        ? { ...item, status: body.enabled ? "active" : "inactive" }
+        : item
+    );
+    value = organizationMaterials.find(item => item.id === assetId);
   } else if (path === "/api/v1/ops/tenants" && method === "POST") {
     value = {
       tenant_id: "77777777-7777-4777-8777-777777777777",

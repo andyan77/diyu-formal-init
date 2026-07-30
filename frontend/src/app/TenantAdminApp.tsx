@@ -25,6 +25,7 @@ type Organization = {
   name: string;
   level?: string;
   organization_level?: string;
+  parent_organization_id?: string | null;
 };
 
 type AccountGrant = {
@@ -120,11 +121,15 @@ type Usage = {
     enabled: number;
     disabled: number;
     active: number;
+    logged_in: number;
+    product_active: number;
     items: Array<{
       id: string;
       display_name: string;
       entry_type: EntryType;
       enabled: boolean;
+      last_login_at: string | null;
+      last_product_action_at: string | null;
       last_used_at: string | null;
       content_attempts: number;
       display_attempts: number;
@@ -134,12 +139,17 @@ type Usage = {
     content_attempts: number;
     content_successes: number;
     content_failures: number;
+    conversations: number;
+    first_generations: number;
     revisions: number;
     series_continuations: number;
+    dm01_plans: number;
     display_attempts: number;
     display_successes: number;
     display_failures: number;
     rate_limited: number;
+    successful_runs: number;
+    failed_runs: number;
   };
   provider_usage: {
     label: string;
@@ -157,11 +167,20 @@ type ReadinessItem = {
   title: string;
   status: "available" | "conditional" | "unavailable";
   evidence: string[];
+  evidence_details?: Array<{
+    source: string;
+    version: string;
+    scope: string;
+    updated_at: string | null;
+  }>;
   gaps: string[];
+  conflicts?: string[];
   impact: string;
+  unaffected?: string[];
   action: { label: string; section: Section };
   source: string;
   version: string;
+  contract_version?: string;
   evaluated_at: string;
 };
 
@@ -174,6 +193,7 @@ type LibraryEntry = {
   content: string;
   version: string;
   status: "candidate" | "active" | "retired";
+  current_version_id?: string | null;
   visibility_scope: LibraryScope;
   visibility_label: string;
   scope_organizations: Organization[];
@@ -200,6 +220,8 @@ type ProductFact = {
   source_note: string;
   applicability: string;
   fact_version?: number;
+  status?: "active" | "retired";
+  current_version_id?: string | null;
   visibility_scope?: LibraryScope;
   scope_organizations?: Organization[];
   updated_at?: string;
@@ -224,9 +246,51 @@ type OrganizationMaterial = {
   organization: string;
   reference_note: string;
   reference_version?: number;
+  status?: "active" | "inactive";
+  current_version_id?: string | null;
   visibility_scope?: LibraryScope;
   scope_organizations?: Organization[];
   created_at?: string;
+};
+
+type LibraryVersion = {
+  id: string;
+  version_number: number;
+  version: string;
+  title: string;
+  source_note: string;
+  content: string;
+  visibility_scope: LibraryScope;
+  organization_ids: string[];
+  status: LibraryEntry["status"];
+  is_current: boolean;
+  created_at: string;
+};
+
+type ProductVersion = {
+  id: string;
+  fact_version: number;
+  display_name: string;
+  facts: NonNullable<ProductFact["facts"]>;
+  source_note: string;
+  applicability: string;
+  visibility_scope: LibraryScope;
+  organization_ids: string[];
+  status: "active" | "retired";
+  is_current: boolean;
+  created_at: string;
+};
+
+type MaterialVersion = {
+  id: string;
+  version: number;
+  title: string;
+  reference_note: string;
+  visibility_scope: LibraryScope;
+  organization_ids: string[];
+  status: "active" | "inactive";
+  is_current: boolean;
+  created_at: string;
 };
 
 const sections: Array<{ id: Section; label: string }> = [
@@ -752,26 +816,23 @@ function TeamUsage(): JSX.Element {
         <>
           <dl className="management-summary usage-summary">
             <div>
-              <dt>活跃成员</dt>
-              <dd>{data?.members.active ?? 0}</dd>
+              <dt>启用成员</dt>
+              <dd>{data?.members.enabled ?? 0}</dd>
             </div>
             <div>
-              <dt>内容成功 / 失败</dt>
+              <dt>有登录行为</dt>
+              <dd>{data?.members.logged_in ?? 0}</dd>
+            </div>
+            <div>
+              <dt>有实际产品动作</dt>
+              <dd>{data?.members.product_active ?? 0}</dd>
+            </div>
+            <div>
+              <dt>成功 / 失败运行</dt>
               <dd>
-                {data?.activity.content_successes ?? 0} /{" "}
-                {data?.activity.content_failures ?? 0}
+                {data?.activity.successful_runs ?? 0} /{" "}
+                {data?.activity.failed_runs ?? 0}
               </dd>
-            </div>
-            <div>
-              <dt>陈列成功 / 失败</dt>
-              <dd>
-                {data?.activity.display_successes ?? 0} /{" "}
-                {data?.activity.display_failures ?? 0}
-              </dd>
-            </div>
-            <div>
-              <dt>限流</dt>
-              <dd>{data?.activity.rate_limited ?? 0}</dd>
             </div>
             <div>
               <dt>{data?.provider_usage.label ?? "已记录模型用量"}</dt>
@@ -788,8 +849,8 @@ function TeamUsage(): JSX.Element {
                     <tr>
                       <th>成员</th>
                       <th>入口</th>
-                      <th>最近使用</th>
-                      <th>内容 / 陈列</th>
+                      <th>最近登录</th>
+                      <th>最近产品动作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -799,15 +860,41 @@ function TeamUsage(): JSX.Element {
                         <td>
                           {member.entry_type === "tenant_admin" ? "租户管理员" : "租户用户"}
                         </td>
-                        <td>{humanDate(member.last_used_at)}</td>
-                        <td>
-                          {member.content_attempts} / {member.display_attempts}
-                        </td>
+                        <td>{humanDate(member.last_login_at)}</td>
+                        <td>{humanDate(member.last_product_action_at)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            </section>
+            <section>
+              <h2>产品动作</h2>
+              <dl className="usage-action-breakdown">
+                <div>
+                  <dt>普通交流</dt>
+                  <dd>{data?.activity.conversations ?? 0}</dd>
+                </div>
+                <div>
+                  <dt>首次生成 / 内容修改</dt>
+                  <dd>
+                    {data?.activity.first_generations ?? 0} /{" "}
+                    {data?.activity.revisions ?? 0}
+                  </dd>
+                </div>
+                <div>
+                  <dt>系列续写</dt>
+                  <dd>{data?.activity.series_continuations ?? 0}</dd>
+                </div>
+                <div>
+                  <dt>陈列参考方案</dt>
+                  <dd>{data?.activity.dm01_plans ?? 0}</dd>
+                </div>
+                <div>
+                  <dt>429</dt>
+                  <dd>{data?.activity.rate_limited ?? 0}</dd>
+                </div>
+              </dl>
             </section>
             <section>
               <h2>发布账号与平台</h2>
@@ -2477,9 +2564,27 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
   );
   const [filter, setFilter] = useState<"all" | LibraryScope>("all");
   const [drawer, setDrawer] = useState<
-    "reference" | "product" | "material" | "organization" | null
+    | "reference"
+    | "reference-preview"
+    | "reference-detail"
+    | "product"
+    | "product-detail"
+    | "material"
+    | "material-detail"
+    | "organization"
+    | null
   >(null);
   const [saving, setSaving] = useState(false);
+  const [referencePreview, setReferencePreview] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<LibraryEntry | null>(null);
+  const [entryVersions, setEntryVersions] = useState<LibraryVersion[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<ProductFact | null>(null);
+  const [productVersions, setProductVersions] = useState<ProductVersion[]>([]);
+  const [selectedMaterial, setSelectedMaterial] =
+    useState<OrganizationMaterial | null>(null);
+  const [materialVersions, setMaterialVersions] = useState<MaterialVersion[]>([]);
+  const [productPreviewSignature, setProductPreviewSignature] =
+    useState<string | null>(null);
   const [form, setForm] = useState({
     category: "brand_expression",
     title: "",
@@ -2503,7 +2608,8 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
   });
   const [organizationForm, setOrganizationForm] = useState({
     name: "",
-    level: "unspecified"
+    level: "unspecified",
+    parentOrganizationId: ""
   });
   const visible = (entries.data ?? []).filter(
     entry => filter === "all" || entry.visibility_scope === filter
@@ -2514,29 +2620,54 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
   const visibleMaterials = (materials.data ?? []).filter(
     item => filter === "all" || (item.visibility_scope ?? "brand_all") === filter
   );
-  const save = (event: FormEvent): void => {
+  const referencePayload = (): Record<string, unknown> => ({
+    category: form.category,
+    title: form.title,
+    source_note: form.sourceNote,
+    content: form.content,
+    version: form.version,
+    visibility_scope: form.visibilityScope,
+    organization_ids:
+      form.visibilityScope === "brand_all" ? [] : form.organizationIds
+  });
+  const previewReference = (event: FormEvent): void => {
     event.preventDefault();
+    setSaving(true);
+    void api("/api/v1/tenant-management/brand-library/preview", {
+      method: "POST",
+      body: JSON.stringify(referencePayload())
+    })
+      .then(() => {
+        setReferencePreview(true);
+        setDrawer("reference-preview");
+        setNotice({
+          tone: "success",
+          message: "已形成导入预览；确认前不会保存为正式资料。"
+        });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
+  };
+  const confirmReference = (): void => {
+    if (!referencePreview) return;
     setSaving(true);
     void api("/api/v1/tenant-management/brand-library", {
       method: "POST",
       body: JSON.stringify({
-        category: form.category,
-        title: form.title,
-        source_note: form.sourceNote,
-        content: form.content,
-        version: form.version,
-        status: "candidate",
-        visibility_scope: form.visibilityScope,
-        organization_ids:
-          form.visibilityScope === "brand_all" ? [] : form.organizationIds
+        ...referencePayload(),
+        status: "active",
+        confirm_as_current: true
       })
     })
       .then(async () => {
         await entries.refresh();
+        setReferencePreview(false);
         setDrawer(null);
         setNotice({
           tone: "success",
-          message: "资料已保存并保留来源与范围；候选资料不会自动变成全局知识。"
+          message: "资料已确认保存，当前版本、来源和可用范围已保留。"
         });
       })
       .catch(error =>
@@ -2565,7 +2696,49 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
         item.source_note.trim() &&
         item.applicability.trim()
     );
-    if (!confirmProducts || validRows.length !== productRows.length) return;
+    if (validRows.length !== productRows.length) return;
+    const signature = JSON.stringify(productRows);
+    if (productPreviewSignature !== signature) {
+      const header = [
+        "sku",
+        "display_name",
+        "category",
+        "material_or_structure",
+        "silhouette",
+        "observable_features"
+      ];
+      const content = [
+        header.join("\t"),
+        ...productRows.map(item =>
+          header
+            .map(key =>
+              String(item[key as keyof ProductDraft] ?? "")
+                .replaceAll("\t", " ")
+                .replaceAll("\n", " ")
+            )
+            .join("\t")
+        )
+      ].join("\n");
+      setSaving(true);
+      void api("/api/v1/tenant-management/brand-products/preview", {
+        method: "POST",
+        body: JSON.stringify({ source_format: "table", content })
+      })
+      .then(() => {
+        setProductPreviewSignature(signature);
+        setConfirmProducts(false);
+        setNotice({
+            tone: "success",
+            message: "字段预览已通过；请核对来源与范围后明确确认保存。"
+          });
+        })
+        .catch(error =>
+          setNotice({ tone: "error", message: readableRequestError(error) })
+        )
+        .finally(() => setSaving(false));
+      return;
+    }
+    if (!confirmProducts) return;
     setSaving(true);
     void Promise.all(
       validRows.map(item =>
@@ -2645,6 +2818,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
       body: JSON.stringify({
         name: organizationForm.name,
         organization_level: organizationForm.level,
+        parent_organization_id: organizationForm.parentOrganizationId || null,
         as_synthetic_business_fixture: false
       })
     })
@@ -2654,6 +2828,224 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
         setNotice({
           tone: "success",
           message: "组织已建立。它的层级来自你的明确选择，不会按名称推断。"
+        });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
+  };
+  const openEntry = (entry: LibraryEntry): void => {
+    setSelectedEntry(entry);
+    setForm({
+      category: entry.category,
+      title: entry.title,
+      sourceNote: entry.source_note,
+      content: entry.content,
+      version: `V${Math.max(2, Number.parseInt(entry.version.replace(/\D/g, ""), 10) + 1 || 2)}`,
+      visibilityScope: entry.visibility_scope,
+      organizationIds: entry.scope_organizations.map(item => item.id)
+    });
+    setDrawer("reference-detail");
+    void api<LibraryVersion[]>(
+      `/api/v1/tenant-management/brand-library/${entry.id}/versions`
+    )
+      .then(setEntryVersions)
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      );
+  };
+  const saveEntryVersion = (event: FormEvent): void => {
+    event.preventDefault();
+    if (!selectedEntry) return;
+    setSaving(true);
+    void api(
+      `/api/v1/tenant-management/brand-library/${selectedEntry.id}/versions`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          title: form.title,
+          source_note: form.sourceNote,
+          content: form.content,
+          version: form.version,
+          visibility_scope: form.visibilityScope,
+          organization_ids:
+            form.visibilityScope === "brand_all" ? [] : form.organizationIds
+        })
+      }
+    )
+      .then(async () => {
+        const [updatedEntries, versions] = await Promise.all([
+          entries.refresh(),
+          api<LibraryVersion[]>(
+            `/api/v1/tenant-management/brand-library/${selectedEntry.id}/versions`
+          )
+        ]);
+        void updatedEntries;
+        setEntryVersions(versions);
+        setSelectedEntry(current =>
+          current
+            ? {
+                ...current,
+                title: form.title,
+                source_note: form.sourceNote,
+                content: form.content,
+                version: form.version,
+                visibility_scope: form.visibilityScope,
+                status: "active"
+              }
+            : current
+        );
+        setNotice({ tone: "success", message: "已保存新版本，旧版本仍可回读。" });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
+  };
+  const setEntryEnabled = (enabled: boolean): void => {
+    if (!selectedEntry) return;
+    setSaving(true);
+    void api(
+      `/api/v1/tenant-management/brand-library/${selectedEntry.id}/enabled`,
+      { method: "PUT", body: JSON.stringify({ enabled }) }
+    )
+      .then(async () => {
+        await entries.refresh();
+        setSelectedEntry({ ...selectedEntry, status: enabled ? "active" : "retired" });
+        setNotice({
+          tone: "success",
+          message: enabled ? "资料已恢复使用。" : "资料已停用，不会进入新任务。"
+        });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
+  };
+  const openProduct = (product: ProductFact): void => {
+    const facts = product.facts ?? product;
+    setSelectedProduct(product);
+    setProductRows([
+      {
+        sku: product.sku,
+        display_name: product.display_name,
+        category: String(facts.category ?? ""),
+        colors: Array.isArray(facts.colors) ? facts.colors.join("，") : "",
+        material_or_structure: String(facts.material_or_structure ?? ""),
+        silhouette: String(facts.silhouette ?? ""),
+        observable_features: String(facts.observable_features ?? ""),
+        source_note: product.source_note,
+        applicability: product.applicability
+      }
+    ]);
+    setProductScope(product.visibility_scope ?? "brand_all");
+    setProductOrganizationIds(
+      (product.scope_organizations ?? []).map(item => item.id)
+    );
+    setConfirmProducts(false);
+    setProductPreviewSignature(null);
+    setDrawer("product-detail");
+    void api<ProductVersion[]>(
+      `/api/v1/tenant-management/brand-products/${encodeURIComponent(product.sku)}/versions`
+    )
+      .then(setProductVersions)
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      );
+  };
+  const setProductEnabled = (enabled: boolean): void => {
+    if (!selectedProduct) return;
+    setSaving(true);
+    void api(
+      `/api/v1/tenant-management/brand-products/${encodeURIComponent(selectedProduct.sku)}/enabled`,
+      { method: "PUT", body: JSON.stringify({ enabled }) }
+    )
+      .then(async () => {
+        await products.refresh();
+        setSelectedProduct({
+          ...selectedProduct,
+          status: enabled ? "active" : "retired"
+        });
+        setNotice({
+          tone: "success",
+          message: enabled ? "商品事实已恢复使用。" : "商品事实已停用，不会进入新任务。"
+        });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
+  };
+  const openMaterial = (material: OrganizationMaterial): void => {
+    setSelectedMaterial(material);
+    setMaterialForm({
+      organizationId: "",
+      title: material.title,
+      note: material.reference_note,
+      file: null,
+      visibilityScope: material.visibility_scope ?? "brand_all",
+      scopeOrganizationIds: (material.scope_organizations ?? []).map(
+        item => item.id
+      )
+    });
+    setDrawer("material-detail");
+    void api<MaterialVersion[]>(
+      `/api/v1/tenant-management/organization-materials/${material.id}/versions`
+    )
+      .then(setMaterialVersions)
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      );
+  };
+  const saveMaterialVersion = (event: FormEvent): void => {
+    event.preventDefault();
+    if (!selectedMaterial) return;
+    setSaving(true);
+    void api(
+      `/api/v1/tenant-management/organization-materials/${selectedMaterial.id}/versions`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          title: materialForm.title,
+          reference_note: materialForm.note,
+          visibility_scope: materialForm.visibilityScope,
+          organization_ids:
+            materialForm.visibilityScope === "brand_all"
+              ? []
+              : materialForm.scopeOrganizationIds
+        })
+      }
+    )
+      .then(async () => {
+        const versions = await api<MaterialVersion[]>(
+          `/api/v1/tenant-management/organization-materials/${selectedMaterial.id}/versions`
+        );
+        await materials.refresh();
+        setMaterialVersions(versions);
+        setNotice({ tone: "success", message: "素材说明与范围已保存为新版本。" });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
+  };
+  const setMaterialEnabled = (enabled: boolean): void => {
+    if (!selectedMaterial) return;
+    setSaving(true);
+    void api(
+      `/api/v1/tenant-management/organization-materials/${selectedMaterial.id}/enabled`,
+      { method: "PUT", body: JSON.stringify({ enabled }) }
+    )
+      .then(async () => {
+        await materials.refresh();
+        setSelectedMaterial({
+          ...selectedMaterial,
+          status: enabled ? "active" : "inactive"
+        });
+        setNotice({
+          tone: "success",
+          message: enabled ? "组织素材已恢复使用。" : "组织素材已停用，不会进入新任务。"
         });
       })
       .catch(error =>
@@ -2681,6 +3073,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
               visibilityScope: "brand_all",
               organizationIds: []
             });
+            setReferencePreview(false);
             setDrawer("reference");
           }}
         >
@@ -2712,6 +3105,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
           onClick={() => {
             setProductRows([emptyProduct()]);
             setConfirmProducts(false);
+            setProductPreviewSignature(null);
             setProductScope("brand_all");
             setProductOrganizationIds([]);
             setDrawer("product");
@@ -2759,7 +3153,9 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                       </span>
                       <h2>{entry.title}</h2>
                     </div>
-                    <span>{entry.version}</span>
+                    <span>
+                      {entry.version} · {entry.status === "active" ? "使用中" : "已停用"}
+                    </span>
                   </header>
                   <p>{entry.source_note}</p>
                   <dl>
@@ -2781,6 +3177,13 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                       <dd>{entry.impact || "供当前品牌的创作工作参考"}</dd>
                     </div>
                   </dl>
+                  <button
+                    type="button"
+                    className="text-action"
+                    onClick={() => openEntry(entry)}
+                  >
+                    查看版本与维护
+                  </button>
                 </article>
               ))}
               {!entries.loading && visible.length === 0 && (
@@ -2812,7 +3215,10 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                           {item.sku} · {category}
                         </span>
                       </div>
-                      <span>V{item.fact_version ?? 1}</span>
+                      <span>
+                        V{item.fact_version ?? 1} ·{" "}
+                        {item.status === "retired" ? "已停用" : "使用中"}
+                      </span>
                       <p>{features}</p>
                       <p>
                         来源：{item.source_note} · 谁可用：
@@ -2824,6 +3230,13 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                           ? ` · 更新于 ${humanDate(item.updated_at)}`
                           : ""}
                       </p>
+                      <button
+                        type="button"
+                        className="text-action"
+                        onClick={() => openProduct(item)}
+                      >
+                        查看版本与维护
+                      </button>
                     </article>
                   );
                 })}
@@ -2847,7 +3260,8 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                     <div>
                       <strong>{item.title}</strong>
                       <span>
-                        {item.original_filename} · V{item.reference_version ?? 1}
+                          {item.original_filename} · V{item.reference_version ?? 1} ·{" "}
+                          {item.status === "inactive" ? "已停用" : "使用中"}
                       </span>
                       <p>
                         来源：{item.organization}
@@ -2863,6 +3277,13 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                           ? ` · 更新于 ${humanDate(item.created_at)}`
                           : ""}
                       </p>
+                      <button
+                        type="button"
+                        className="text-action"
+                        onClick={() => openMaterial(item)}
+                      >
+                        查看版本与维护
+                      </button>
                     </div>
                   </article>
                 ))}
@@ -2876,7 +3297,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
       )}
       {drawer === "reference" && (
         <Drawer title="新增品牌资料" onClose={() => setDrawer(null)}>
-          <form className="tenant-form" onSubmit={save}>
+          <form className="tenant-form" onSubmit={previewReference}>
             <label>
               资料分类
               <select
@@ -2990,7 +3411,11 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                   type="button"
                   className="text-action"
                   onClick={() => {
-                    setOrganizationForm({ name: "", level: "unspecified" });
+                    setOrganizationForm({
+                      name: "",
+                      level: "unspecified",
+                      parentOrganizationId: ""
+                    });
                     setDrawer("organization");
                   }}
                 >
@@ -3007,8 +3432,179 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                   form.organizationIds.length === 0)
               }
             >
-              保存资料
+              查看导入预览
             </button>
+          </form>
+        </Drawer>
+      )}
+      {drawer === "reference-preview" && (
+        <Drawer
+          title="确认品牌资料"
+          onClose={() => setDrawer("reference")}
+        >
+          <section className="tenant-form library-confirmation">
+            <p>以下内容尚未保存。请核对来源、版本和可用范围。</p>
+            <dl>
+              <div>
+                <dt>资料名称</dt>
+                <dd>{form.title}</dd>
+              </div>
+              <div>
+                <dt>来源</dt>
+                <dd>{form.sourceNote}</dd>
+              </div>
+              <div>
+                <dt>版本</dt>
+                <dd>{form.version}</dd>
+              </div>
+              <div>
+                <dt>可用范围</dt>
+                <dd>
+                  {readableScope(
+                    form.visibilityScope,
+                    (organizations.data ?? []).filter(item =>
+                      form.organizationIds.includes(item.id)
+                    )
+                  )}
+                </dd>
+              </div>
+            </dl>
+            <details>
+              <summary>查看文字内容</summary>
+              <p className="preserve-lines">{form.content}</p>
+            </details>
+            <button
+              className="primary"
+              type="button"
+              disabled={saving}
+              onClick={confirmReference}
+            >
+              确认保存为当前版本
+            </button>
+          </section>
+        </Drawer>
+      )}
+      {drawer === "reference-detail" && selectedEntry && (
+        <Drawer
+          title="资料版本与使用状态"
+          onClose={() => setDrawer(null)}
+        >
+          <form className="tenant-form" onSubmit={saveEntryVersion}>
+            <p>
+              当前状态：
+              {selectedEntry.status === "active" ? "使用中" : "已停用"}
+            </p>
+            <label>
+              资料名称
+              <input
+                required
+                value={form.title}
+                onChange={event => setForm({ ...form, title: event.target.value })}
+              />
+            </label>
+            <label>
+              文字内容
+              <textarea
+                required
+                value={form.content}
+                onChange={event => setForm({ ...form, content: event.target.value })}
+              />
+            </label>
+            <label>
+              来源说明
+              <textarea
+                required
+                value={form.sourceNote}
+                onChange={event =>
+                  setForm({ ...form, sourceNote: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              新版本标记
+              <input
+                required
+                value={form.version}
+                onChange={event => setForm({ ...form, version: event.target.value })}
+              />
+            </label>
+            <label>
+              可用范围
+              <select
+                value={form.visibilityScope}
+                onChange={event =>
+                  setForm({
+                    ...form,
+                    visibilityScope: event.target.value as LibraryScope,
+                    organizationIds: []
+                  })
+                }
+              >
+                <option value="brand_all">品牌全员</option>
+                <option value="headquarters">总部专用</option>
+                <option value="organizations">指定区域</option>
+              </select>
+            </label>
+            {form.visibilityScope !== "brand_all" && (
+              <fieldset>
+                <legend>选择可用组织</legend>
+                {organizations.data
+                  ?.filter(item =>
+                    form.visibilityScope === "headquarters"
+                      ? (item.level ?? item.organization_level) === "company"
+                      : (item.level ?? item.organization_level) === "region"
+                  )
+                  .map(item => (
+                    <label key={item.id}>
+                      <input
+                        type={
+                          form.visibilityScope === "headquarters"
+                            ? "radio"
+                            : "checkbox"
+                        }
+                        checked={form.organizationIds.includes(item.id)}
+                        onChange={() => selectScopeOrganization(item.id)}
+                      />
+                      {item.name}
+                    </label>
+                  ))}
+              </fieldset>
+            )}
+            <button
+              className="primary"
+              type="submit"
+              disabled={
+                saving ||
+                (form.visibilityScope !== "brand_all" &&
+                  form.organizationIds.length === 0)
+              }
+            >
+              保存新版本
+            </button>
+            <button
+              type="button"
+              className="text-action"
+              disabled={saving}
+              onClick={() => setEntryEnabled(selectedEntry.status !== "active")}
+            >
+              {selectedEntry.status === "active" ? "停用资料" : "恢复资料"}
+            </button>
+            <section className="version-history">
+              <h3>历史版本</h3>
+              <ol>
+                {entryVersions.map(version => (
+                  <li key={version.id}>
+                    <strong>
+                      {version.version}
+                      {version.is_current ? " · 当前版本" : ""}
+                    </strong>
+                    <span>
+                      {version.title} · {humanDate(version.created_at)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </section>
           </form>
         </Drawer>
       )}
@@ -3045,6 +3641,25 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                 <option value="unspecified">暂未分类</option>
               </select>
             </label>
+            <label>
+              上级组织
+              <select
+                value={organizationForm.parentOrganizationId}
+                onChange={event =>
+                  setOrganizationForm({
+                    ...organizationForm,
+                    parentOrganizationId: event.target.value
+                  })
+                }
+              >
+                <option value="">没有上级组织</option>
+                {organizations.data?.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <p>组织层级由你明确选择；系统不会根据名称猜测。</p>
             <button className="primary" type="submit" disabled={saving}>
               建立组织
@@ -3052,9 +3667,36 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
           </form>
         </Drawer>
       )}
-      {drawer === "product" && (
-        <Drawer title="维护商品事实" onClose={() => setDrawer(null)}>
+      {(drawer === "product" || drawer === "product-detail") && (
+        <Drawer
+          title={drawer === "product" ? "维护商品事实" : "商品事实版本与状态"}
+          onClose={() => setDrawer(null)}
+        >
           <form className="tenant-form" onSubmit={saveProducts}>
+            {drawer === "product-detail" && selectedProduct && (
+              <>
+                <p>
+                  当前状态：
+                  {selectedProduct.status === "retired" ? "已停用" : "使用中"}
+                </p>
+                <section className="version-history">
+                  <h3>历史版本</h3>
+                  <ol>
+                    {productVersions.map(version => (
+                      <li key={version.id}>
+                        <strong>
+                          V{version.fact_version}
+                          {version.is_current ? " · 当前版本" : ""}
+                        </strong>
+                        <span>
+                          {version.display_name} · {humanDate(version.created_at)}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              </>
+            )}
             <p>
               可以手工填写一件，或导入 CSV 后先预览。只有明确确认后，才会保存为当前商品事实。
             </p>
@@ -3068,7 +3710,11 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                   if (!file) return;
                   void file.text().then(text => {
                     const rows = parseProductCsv(text);
-                    if (rows.length) setProductRows(rows);
+                    if (rows.length) {
+                      setProductRows(rows);
+                      setProductPreviewSignature(null);
+                      setConfirmProducts(false);
+                    }
                     else
                       setNotice({
                         tone: "error",
@@ -3208,14 +3854,40 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
               className="primary"
               type="submit"
               disabled={
-                !confirmProducts ||
                 saving ||
+                productRows.some(
+                  item =>
+                    !item.sku.trim() ||
+                    !item.display_name.trim() ||
+                    !item.source_note.trim() ||
+                    !item.applicability.trim()
+                ) ||
+                (productPreviewSignature === JSON.stringify(productRows) &&
+                  !confirmProducts) ||
                 (productScope !== "brand_all" &&
                   productOrganizationIds.length === 0)
               }
             >
-              保存商品事实
+              {productPreviewSignature === JSON.stringify(productRows)
+                ? drawer === "product-detail"
+                  ? "保存新版本"
+                  : "保存商品事实"
+                : "查看字段预览"}
             </button>
+            {drawer === "product-detail" && selectedProduct && (
+              <button
+                type="button"
+                className="text-action"
+                disabled={saving}
+                onClick={() =>
+                  setProductEnabled(selectedProduct.status === "retired")
+                }
+              >
+                {selectedProduct.status === "retired"
+                  ? "恢复商品事实"
+                  : "停用商品事实"}
+              </button>
+            )}
           </form>
         </Drawer>
       )}
@@ -3355,6 +4027,127 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
           </form>
         </Drawer>
       )}
+      {drawer === "material-detail" && selectedMaterial && (
+        <Drawer title="组织素材版本与状态" onClose={() => setDrawer(null)}>
+          <form className="tenant-form" onSubmit={saveMaterialVersion}>
+            <p>
+              原件：{selectedMaterial.original_filename} · 当前状态：
+              {selectedMaterial.status === "inactive" ? "已停用" : "使用中"}
+            </p>
+            <label>
+              素材名称
+              <input
+                required
+                value={materialForm.title}
+                onChange={event =>
+                  setMaterialForm({ ...materialForm, title: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              人工说明
+              <textarea
+                required
+                value={materialForm.note}
+                onChange={event =>
+                  setMaterialForm({ ...materialForm, note: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              可用范围
+              <select
+                value={materialForm.visibilityScope}
+                onChange={event =>
+                  setMaterialForm({
+                    ...materialForm,
+                    visibilityScope: event.target.value as LibraryScope,
+                    scopeOrganizationIds: []
+                  })
+                }
+              >
+                <option value="brand_all">品牌全员</option>
+                <option value="headquarters">总部专用</option>
+                <option value="organizations">指定区域</option>
+              </select>
+            </label>
+            {materialForm.visibilityScope !== "brand_all" && (
+              <fieldset>
+                <legend>选择可用组织</legend>
+                {organizations.data
+                  ?.filter(item =>
+                    materialForm.visibilityScope === "headquarters"
+                      ? (item.level ?? item.organization_level) === "company"
+                      : (item.level ?? item.organization_level) === "region"
+                  )
+                  .map(item => (
+                    <label key={item.id}>
+                      <input
+                        type={
+                          materialForm.visibilityScope === "headquarters"
+                            ? "radio"
+                            : "checkbox"
+                        }
+                        checked={materialForm.scopeOrganizationIds.includes(item.id)}
+                        onChange={() =>
+                          setMaterialForm(value => ({
+                            ...value,
+                            scopeOrganizationIds:
+                              value.visibilityScope === "headquarters"
+                                ? [item.id]
+                                : value.scopeOrganizationIds.includes(item.id)
+                                  ? value.scopeOrganizationIds.filter(
+                                      id => id !== item.id
+                                    )
+                                  : [...value.scopeOrganizationIds, item.id]
+                          }))
+                        }
+                      />
+                      {item.name}
+                    </label>
+                  ))}
+              </fieldset>
+            )}
+            <button
+              className="primary"
+              type="submit"
+              disabled={
+                saving ||
+                (materialForm.visibilityScope !== "brand_all" &&
+                  materialForm.scopeOrganizationIds.length === 0)
+              }
+            >
+              保存新版本
+            </button>
+            <button
+              type="button"
+              className="text-action"
+              disabled={saving}
+              onClick={() =>
+                setMaterialEnabled(selectedMaterial.status === "inactive")
+              }
+            >
+              {selectedMaterial.status === "inactive" ? "恢复素材" : "停用素材"}
+            </button>
+            <section className="version-history">
+              <h3>历史版本</h3>
+              <ol>
+                {materialVersions.map(version => (
+                  <li key={version.id}>
+                    <strong>
+                      V{version.version}
+                      {version.is_current ? " · 当前版本" : ""}
+                    </strong>
+                    <span>
+                      {version.title} · {humanDate(version.created_at)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          </form>
+        </Drawer>
+      )}
     </section>
   );
 }
@@ -3384,18 +4177,39 @@ function Readiness({ onSection }: { onSection: (section: Section) => void }): JS
                   <dt>判断依据</dt>
                   <dd>{item.evidence.join("；") || "当前还没有足够依据"}</dd>
                 </div>
+                {(item.evidence_details ?? []).map(detail => (
+                  <div key={`${detail.source}-${detail.version}-${detail.scope}`}>
+                    <dt>{detail.source}</dt>
+                    <dd>
+                      {detail.version} · {detail.scope}
+                      {detail.updated_at
+                        ? ` · 更新于 ${humanDate(detail.updated_at)}`
+                        : ""}
+                    </dd>
+                  </div>
+                ))}
                 <div>
                   <dt>缺少资料</dt>
                   <dd>{item.gaps.join("；") || "没有当前缺口"}</dd>
+                </div>
+                <div>
+                  <dt>明确冲突</dt>
+                  <dd>
+                    {(item.conflicts ?? []).join("；") || "没有结构化依据表明存在冲突"}
+                  </dd>
                 </div>
                 <div>
                   <dt>影响</dt>
                   <dd>{item.impact}</dd>
                 </div>
                 <div>
-                  <dt>来源与时间</dt>
+                  <dt>不受影响</dt>
+                  <dd>{(item.unaffected ?? []).join("；") || "暂无可单独排除的工作"}</dd>
+                </div>
+                <div>
+                  <dt>判断时间</dt>
                   <dd>
-                    {item.source} · {item.version} · {humanDate(item.evaluated_at)}
+                    {humanDate(item.evaluated_at)}
                   </dd>
                 </div>
               </dl>

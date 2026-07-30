@@ -95,6 +95,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                            WHERE product.tenant_id = root_account.tenant_id
                              AND product.brand_id = root_account.brand_id
                              AND product.status = 'active'
+                             AND product.current_version_id IS NOT NULL
                              AND (
                                product.visibility_scope = 'brand_all'
                                OR (
@@ -110,14 +111,21 @@ class PostgresContentControlRepository(ContentControlRepository):
                                    WHERE product_scope.tenant_id =
                                            product.tenant_id
                                      AND product_scope.product_id = product.id
-                                     AND product_scope.organization_id =
-                                           root_account.control_organization_id
                                      AND (
-                                       product.visibility_scope = 'organizations'
+                                       (
+                                         product.visibility_scope = 'organizations'
+                                         AND organization_is_same_or_descendant(
+                                               product.tenant_id,
+                                               root_account.control_organization_id,
+                                               product_scope.organization_id
+                                             )
+                                       )
                                        OR (
                                          product.visibility_scope = 'headquarters'
                                          AND scoped_organization.organization_level =
                                              'company'
+                                         AND product_scope.organization_id =
+                                             root_account.control_organization_id
                                        )
                                      )
                                  )
@@ -673,6 +681,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                     (asset.scope = 'personal' AND asset.owner_user_id = %s)
                     OR (
                       asset.scope = 'organization'
+                      AND asset.current_version_id IS NOT NULL
                       AND (
                         asset.visibility_scope = 'brand_all'
                         OR EXISTS (
@@ -687,18 +696,25 @@ class PostgresContentControlRepository(ContentControlRepository):
                           JOIN material_asset_scope_organizations material_scope
                             ON material_scope.tenant_id = asset.tenant_id
                            AND material_scope.asset_id = asset.id
-                           AND material_scope.organization_id =
-                               root_account.control_organization_id
                           JOIN organizations scoped_organization
                             ON scoped_organization.tenant_id = material_scope.tenant_id
                            AND scoped_organization.id = material_scope.organization_id
                           WHERE target_account.tenant_id = %s
                             AND target_account.id = %s
                             AND (
-                              asset.visibility_scope = 'organizations'
+                              (
+                                asset.visibility_scope = 'organizations'
+                                AND organization_is_same_or_descendant(
+                                      asset.tenant_id,
+                                      root_account.control_organization_id,
+                                      material_scope.organization_id
+                                    )
+                              )
                               OR (
                                 asset.visibility_scope = 'headquarters'
                                 AND scoped_organization.organization_level = 'company'
+                                AND material_scope.organization_id =
+                                    root_account.control_organization_id
                               )
                             )
                         )
@@ -743,6 +759,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                     (asset.scope = 'personal' AND asset.owner_user_id = %s)
                     OR (
                       asset.scope = 'organization'
+                      AND asset.current_version_id IS NOT NULL
                       AND (
                         asset.visibility_scope = 'brand_all'
                         OR EXISTS (
@@ -757,18 +774,25 @@ class PostgresContentControlRepository(ContentControlRepository):
                           JOIN material_asset_scope_organizations material_scope
                             ON material_scope.tenant_id = asset.tenant_id
                            AND material_scope.asset_id = asset.id
-                           AND material_scope.organization_id =
-                               root_account.control_organization_id
                           JOIN organizations scoped_organization
                             ON scoped_organization.tenant_id = material_scope.tenant_id
                            AND scoped_organization.id = material_scope.organization_id
                           WHERE target_account.tenant_id = %s
                             AND target_account.id = %s
                             AND (
-                              asset.visibility_scope = 'organizations'
+                              (
+                                asset.visibility_scope = 'organizations'
+                                AND organization_is_same_or_descendant(
+                                      asset.tenant_id,
+                                      root_account.control_organization_id,
+                                      material_scope.organization_id
+                                    )
+                              )
                               OR (
                                 asset.visibility_scope = 'headquarters'
                                 AND scoped_organization.organization_level = 'company'
+                                AND material_scope.organization_id =
+                                    root_account.control_organization_id
                               )
                             )
                         )

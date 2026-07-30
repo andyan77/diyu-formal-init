@@ -69,6 +69,34 @@ class WorkbenchRepository(ABC):
     ) -> dict[str, object]: ...
 
     @abstractmethod
+    def brand_library_entry_versions(
+        self,
+        scope: TenantManagementScope,
+        entry_id: UUID,
+    ) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def save_brand_library_entry_version(
+        self,
+        scope: TenantManagementScope,
+        entry_id: UUID,
+        title: str,
+        source_note: str,
+        content: str,
+        version_label: str,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def set_brand_library_entry_enabled(
+        self,
+        scope: TenantManagementScope,
+        entry_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
     def create_management_organization_material(
         self,
         scope: TenantManagementScope,
@@ -83,6 +111,32 @@ class WorkbenchRepository(ABC):
         reference_note: str,
         visibility_scope: str = "organizations",
         organization_ids: tuple[UUID, ...] = (),
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def management_material_versions(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+    ) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def save_management_material_version(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        title: str,
+        reference_note: str,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def set_management_material_enabled(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        enabled: bool,
     ) -> dict[str, object]: ...
 
     @abstractmethod
@@ -114,6 +168,21 @@ class WorkbenchRepository(ABC):
         applicability: str,
         visibility_scope: str = "brand_all",
         organization_ids: tuple[UUID, ...] = (),
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def management_product_versions(
+        self,
+        scope: TenantManagementScope,
+        sku: str,
+    ) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def set_management_product_enabled(
+        self,
+        scope: TenantManagementScope,
+        sku: str,
+        enabled: bool,
     ) -> dict[str, object]: ...
 
     @abstractmethod

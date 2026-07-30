@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 from contextlib import suppress
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -126,6 +128,87 @@ class WorkbenchService:
             unique_organizations,
         )
 
+    def preview_brand_library_entry(
+        self,
+        category: str,
+        title: str,
+        source_note: str,
+        content: str,
+        version: str,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+    ) -> dict[str, object]:
+        normalized = self._brand_library_values(
+            category,
+            title,
+            source_note,
+            content,
+            version,
+            visibility_scope,
+            organization_ids,
+        )
+        return {
+            "category": normalized[0],
+            "title": normalized[1],
+            "source_note": normalized[2],
+            "content": normalized[3],
+            "version": normalized[4],
+            "visibility_scope": visibility_scope,
+            "organization_ids": [str(item) for item in normalized[5]],
+            "saved": False,
+            "message": "这是导入预览；明确确认后才会保存为当前资料。",
+        }
+
+    def brand_library_entry_versions(
+        self,
+        scope: TenantManagementScope,
+        entry_id: UUID,
+    ) -> list[dict[str, object]]:
+        return self._repository.brand_library_entry_versions(scope, entry_id)
+
+    def save_brand_library_entry_version(
+        self,
+        scope: TenantManagementScope,
+        entry_id: UUID,
+        title: str,
+        source_note: str,
+        content: str,
+        version: str,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+    ) -> dict[str, object]:
+        normalized = self._brand_library_values(
+            "reference",
+            title,
+            source_note,
+            content,
+            version,
+            visibility_scope,
+            organization_ids,
+        )
+        return self._repository.save_brand_library_entry_version(
+            scope,
+            entry_id,
+            normalized[1],
+            normalized[2],
+            normalized[3],
+            normalized[4],
+            visibility_scope,
+            normalized[5],
+        )
+
+    def set_brand_library_entry_enabled(
+        self,
+        scope: TenantManagementScope,
+        entry_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        return self._repository.set_brand_library_entry_enabled(
+            scope,
+            entry_id,
+            enabled,
+        )
+
     def add_management_organization_material(
         self,
         scope: TenantManagementScope,
@@ -200,6 +283,52 @@ class WorkbenchService:
             self._repository.finalize_management_material_deletion(scope, asset_id)
         except (OSError, ValueError) as exc:
             raise DomainError("素材删除尚未完成；当前记录已标记为待删除，可直接重试。") from exc
+
+    def management_material_versions(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+    ) -> list[dict[str, object]]:
+        return self._repository.management_material_versions(scope, asset_id)
+
+    def save_management_material_version(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        title: str,
+        reference_note: str,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+    ) -> dict[str, object]:
+        if not title.strip() or len(title.strip()) > 120:
+            raise DomainError("素材名称需要在 1 到 120 个字符之间。")
+        if not reference_note.strip() or len(reference_note.strip()) > 500:
+            raise DomainError("请填写 1 到 500 字的人工说明。")
+        unique_organizations = self._scope_organizations(
+            visibility_scope,
+            organization_ids,
+            "素材",
+        )
+        return self._repository.save_management_material_version(
+            scope,
+            asset_id,
+            title.strip(),
+            reference_note.strip(),
+            visibility_scope,
+            unique_organizations,
+        )
+
+    def set_management_material_enabled(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        return self._repository.set_management_material_enabled(
+            scope,
+            asset_id,
+            enabled,
+        )
 
     def management_demo_content_index(self, scope: TenantManagementScope) -> dict[str, object]:
         return self._repository.management_demo_content_index(scope)
@@ -282,6 +411,68 @@ class WorkbenchService:
             applicability.strip(),
             visibility_scope,
             unique_organizations,
+        )
+
+    def preview_product_import(
+        self,
+        source_format: str,
+        content: str,
+    ) -> dict[str, object]:
+        if source_format not in {"table", "csv"}:
+            raise DomainError("商品导入只支持粘贴表格或 CSV。")
+        delimiter = "\t" if source_format == "table" else ","
+        rows = list(csv.DictReader(io.StringIO(content), delimiter=delimiter))
+        if not rows or len(rows) > 100:
+            raise DomainError("导入内容需要包含表头和 1 到 100 行商品。")
+        required = {"sku", "display_name"}
+        if not required.issubset(rows[0]):
+            raise DomainError("导入表格至少需要 sku 和 display_name 两列。")
+        preview: list[dict[str, object]] = []
+        for row in rows:
+            sku = str(row.get("sku") or "").strip()
+            display_name = str(row.get("display_name") or "").strip()
+            if not sku or not display_name:
+                raise DomainError("每一行都需要商品编号和商品名称。")
+            preview.append(
+                {
+                    "sku": sku,
+                    "display_name": display_name,
+                    "category": str(row.get("category") or "").strip(),
+                    "material_or_structure": str(
+                        row.get("material_or_structure") or ""
+                    ).strip(),
+                    "silhouette": str(row.get("silhouette") or "").strip(),
+                    "observable_features": str(
+                        row.get("observable_features") or ""
+                    ).strip(),
+                }
+            )
+        return {
+            "rows": preview,
+            "saved": False,
+            "message": "这是字段预览；每件商品明确确认后才会保存。",
+        }
+
+    def management_product_versions(
+        self,
+        scope: TenantManagementScope,
+        sku: str,
+    ) -> list[dict[str, object]]:
+        return self._repository.management_product_versions(
+            scope,
+            sku.strip(),
+        )
+
+    def set_management_product_enabled(
+        self,
+        scope: TenantManagementScope,
+        sku: str,
+        enabled: bool,
+    ) -> dict[str, object]:
+        return self._repository.set_management_product_enabled(
+            scope,
+            sku.strip(),
+            enabled,
         )
 
     @staticmethod
@@ -625,6 +816,54 @@ class WorkbenchService:
     def _delete_after_failed_metadata_write(self, object_key: str) -> None:
         with suppress(OSError, ValueError):
             self._object_store.delete(object_key)
+
+    @staticmethod
+    def _scope_organizations(
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+        subject: str,
+    ) -> tuple[UUID, ...]:
+        if visibility_scope not in {"brand_all", "headquarters", "organizations"}:
+            raise DomainError("请选择品牌全员、总部专用或指定区域。")
+        unique = tuple(dict.fromkeys(organization_ids))
+        if visibility_scope == "brand_all" and unique:
+            raise DomainError(f"品牌全员{subject}不需要指定组织。")
+        if visibility_scope == "headquarters" and len(unique) != 1:
+            raise DomainError(f"总部专用{subject}需要明确选择一个公司级组织。")
+        if visibility_scope == "organizations" and not unique:
+            raise DomainError(f"指定区域{subject}至少需要选择一个具体区域。")
+        return unique
+
+    @classmethod
+    def _brand_library_values(
+        cls,
+        category: str,
+        title: str,
+        source_note: str,
+        content: str,
+        version: str,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+    ) -> tuple[str, str, str, str, str, tuple[UUID, ...]]:
+        normalized = (
+            category.strip(),
+            title.strip(),
+            source_note.strip(),
+            content.strip(),
+            version.strip(),
+        )
+        if not all(normalized):
+            raise DomainError("资料名称、内容、自然来源说明和版本都需要填写。")
+        if len(normalized[1]) > 160:
+            raise DomainError("资料名称请控制在 160 个字符以内。")
+        if len(normalized[2]) > 500:
+            raise DomainError("自然来源说明请控制在 500 个字符以内。")
+        unique = cls._scope_organizations(
+            visibility_scope,
+            organization_ids,
+            "资料",
+        )
+        return (*normalized, unique)
 
     @staticmethod
     def _media_type(content_type: str) -> str:

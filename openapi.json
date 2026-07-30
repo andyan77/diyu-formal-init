@@ -121,6 +121,11 @@
             "title": "Category",
             "type": "string"
           },
+          "confirm_as_current": {
+            "const": true,
+            "title": "Confirm As Current",
+            "type": "boolean"
+          },
           "content": {
             "maxLength": 20000,
             "minLength": 1,
@@ -143,12 +148,78 @@
             "type": "string"
           },
           "status": {
-            "default": "candidate",
-            "enum": [
-              "candidate",
-              "active"
-            ],
+            "const": "active",
+            "default": "active",
             "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "enum": [
+              "brand_all",
+              "headquarters",
+              "organizations"
+            ],
+            "title": "Visibility Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "title",
+          "source_note",
+          "content",
+          "version",
+          "confirm_as_current",
+          "visibility_scope"
+        ],
+        "title": "BrandLibraryEntryRequest",
+        "type": "object"
+      },
+      "BrandLibraryPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "enum": [
+              "brand_expression",
+              "product",
+              "organization_fact",
+              "reference",
+              "official_material"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "organization_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Organization Ids",
+            "type": "array"
+          },
+          "source_note": {
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Source Note",
             "type": "string"
           },
           "title": {
@@ -181,7 +252,63 @@
           "version",
           "visibility_scope"
         ],
-        "title": "BrandLibraryEntryRequest",
+        "title": "BrandLibraryPreviewRequest",
+        "type": "object"
+      },
+      "BrandLibraryVersionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "organization_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Organization Ids",
+            "type": "array"
+          },
+          "source_note": {
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Source Note",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "enum": [
+              "brand_all",
+              "headquarters",
+              "organizations"
+            ],
+            "title": "Visibility Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "source_note",
+          "content",
+          "version",
+          "visibility_scope"
+        ],
+        "title": "BrandLibraryVersionRequest",
         "type": "object"
       },
       "ChangePasswordRequest": {
@@ -747,6 +874,18 @@
             ],
             "title": "Organization Level",
             "type": "string"
+          },
+          "parent_organization_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Organization Id"
           }
         },
         "required": [
@@ -1285,6 +1424,48 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "MaterialMetadataVersionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "organization_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Organization Ids",
+            "type": "array"
+          },
+          "reference_note": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reference Note",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "visibility_scope": {
+            "enum": [
+              "brand_all",
+              "headquarters",
+              "organizations"
+            ],
+            "title": "Visibility Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "reference_note",
+          "visibility_scope"
+        ],
+        "title": "MaterialMetadataVersionRequest",
+        "type": "object"
+      },
       "MaterialReferenceNoteRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1420,6 +1601,31 @@
           "organization_id"
         ],
         "title": "OrganizationMaterialUploadRequest",
+        "type": "object"
+      },
+      "ProductImportPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "source_format": {
+            "enum": [
+              "table",
+              "csv"
+            ],
+            "title": "Source Format",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_format",
+          "content"
+        ],
+        "title": "ProductImportPreviewRequest",
         "type": "object"
       },
       "ProvisionedTenantResponse": {
@@ -4270,6 +4476,209 @@
         "summary": "Create Management Brand Library Entry"
       }
     },
+    "/api/v1/tenant-management/brand-library/preview": {
+      "post": {
+        "operationId": "preview_management_brand_library_entry_api_v1_tenant_management_brand_library_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandLibraryPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preview Management Brand Library Entry Api V1 Tenant Management Brand Library Preview Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Preview Management Brand Library Entry"
+      }
+    },
+    "/api/v1/tenant-management/brand-library/{entry_id}/enabled": {
+      "put": {
+        "operationId": "set_management_brand_library_enabled_api_v1_tenant_management_brand_library__entry_id__enabled_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Management Brand Library Enabled Api V1 Tenant Management Brand Library  Entry Id  Enabled Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Set Management Brand Library Enabled"
+      }
+    },
+    "/api/v1/tenant-management/brand-library/{entry_id}/versions": {
+      "get": {
+        "operationId": "management_brand_library_versions_api_v1_tenant_management_brand_library__entry_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Management Brand Library Versions Api V1 Tenant Management Brand Library  Entry Id  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Brand Library Versions"
+      },
+      "post": {
+        "operationId": "save_management_brand_library_version_api_v1_tenant_management_brand_library__entry_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandLibraryVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Management Brand Library Version Api V1 Tenant Management Brand Library  Entry Id  Versions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Save Management Brand Library Version"
+      }
+    },
     "/api/v1/tenant-management/brand-products": {
       "get": {
         "operationId": "management_products_api_v1_tenant_management_brand_products_get",
@@ -4347,6 +4756,153 @@
           }
         ],
         "summary": "Save Management Product"
+      }
+    },
+    "/api/v1/tenant-management/brand-products/preview": {
+      "post": {
+        "operationId": "preview_management_products_api_v1_tenant_management_brand_products_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductImportPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preview Management Products Api V1 Tenant Management Brand Products Preview Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Preview Management Products"
+      }
+    },
+    "/api/v1/tenant-management/brand-products/{sku}/enabled": {
+      "put": {
+        "operationId": "set_management_product_enabled_api_v1_tenant_management_brand_products__sku__enabled_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sku",
+            "required": true,
+            "schema": {
+              "title": "Sku",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Management Product Enabled Api V1 Tenant Management Brand Products  Sku  Enabled Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Set Management Product Enabled"
+      }
+    },
+    "/api/v1/tenant-management/brand-products/{sku}/versions": {
+      "get": {
+        "operationId": "management_product_versions_api_v1_tenant_management_brand_products__sku__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sku",
+            "required": true,
+            "schema": {
+              "title": "Sku",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Management Product Versions Api V1 Tenant Management Brand Products  Sku  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Product Versions"
       }
     },
     "/api/v1/tenant-management/control-organizations": {
@@ -4660,6 +5216,165 @@
         "summary": "Delete Management Organization Material"
       }
     },
+    "/api/v1/tenant-management/organization-materials/{asset_id}/enabled": {
+      "put": {
+        "operationId": "set_management_organization_material_enabled_api_v1_tenant_management_organization_materials__asset_id__enabled_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Management Organization Material Enabled Api V1 Tenant Management Organization Materials  Asset Id  Enabled Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Set Management Organization Material Enabled"
+      }
+    },
+    "/api/v1/tenant-management/organization-materials/{asset_id}/versions": {
+      "get": {
+        "operationId": "management_organization_material_versions_api_v1_tenant_management_organization_materials__asset_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Management Organization Material Versions Api V1 Tenant Management Organization Materials  Asset Id  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Organization Material Versions"
+      },
+      "post": {
+        "operationId": "save_management_organization_material_version_api_v1_tenant_management_organization_materials__asset_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialMetadataVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Management Organization Material Version Api V1 Tenant Management Organization Materials  Asset Id  Versions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Save Management Organization Material Version"
+      }
+    },
     "/api/v1/tenant-management/organizations": {
       "get": {
         "operationId": "tenant_organizations_api_v1_tenant_management_organizations_get",
@@ -4669,9 +5384,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": {
-                      "type": "string"
-                    },
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Tenant Organizations Api V1 Tenant Management Organizations Get",
@@ -4710,9 +5423,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
+                  "additionalProperties": true,
                   "title": "Response Create Tenant Organization Api V1 Tenant Management Organizations Post",
                   "type": "object"
                 }

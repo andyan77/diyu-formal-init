@@ -375,6 +375,17 @@ class ProductionAuthRepository:
                 identity.user_id,
             )
 
+    def record_content_conversation(self, identity: TenantSession) -> None:
+        """Count one completed ordinary conversation without retaining its text."""
+        with self._tenant_tx(identity.tenant_id) as cursor:
+            self._tenant_audit(
+                cursor,
+                identity.tenant_id,
+                identity.user_id,
+                "content.conversation",
+                identity.user_id,
+            )
+
     def revoke_operator_session(self, token: str) -> None:
         """Revoke only the current operations session."""
         with self._tx() as cursor:
@@ -1264,12 +1275,23 @@ class ProductionAuthRepository:
             "can_maintain_expression_profile": enabled,
         }
 
-    def tenant_organizations(self, manager: TenantSession) -> list[dict[str, str]]:
+    def tenant_organizations(self, manager: TenantSession) -> list[dict[str, object]]:
         """Return only the manager's tenant organizations for qualification assignment."""
         with self._tenant_tx(manager.tenant_id) as cursor:
             cursor.execute(
-                "SELECT id, name, business_data_kind, organization_level "
-                "FROM organizations WHERE tenant_id = %s ORDER BY name",
+                """
+                SELECT organization.id, organization.name,
+                       organization.business_data_kind,
+                       organization.organization_level,
+                       organization.parent_organization_id,
+                       parent.name AS parent_organization
+                FROM organizations organization
+                LEFT JOIN organizations parent
+                  ON parent.tenant_id = organization.tenant_id
+                 AND parent.id = organization.parent_organization_id
+                WHERE organization.tenant_id = %s
+                ORDER BY organization.name
+                """,
                 (manager.tenant_id,),
             )
             return [
@@ -1278,6 +1300,16 @@ class ProductionAuthRepository:
                     "name": str(row["name"]),
                     "business_data_kind": str(row["business_data_kind"]),
                     "organization_level": str(row["organization_level"]),
+                    "parent_organization_id": (
+                        str(row["parent_organization_id"])
+                        if row["parent_organization_id"] is not None
+                        else None
+                    ),
+                    "parent_organization": (
+                        str(row["parent_organization"])
+                        if row["parent_organization"] is not None
+                        else None
+                    ),
                 }
                 for row in cursor.fetchall()
             ]
@@ -1288,7 +1320,8 @@ class ProductionAuthRepository:
         name: str,
         as_synthetic_business_fixture: bool = False,
         organization_level: str = "unspecified",
-    ) -> dict[str, str]:
+        parent_organization_id: UUID | None = None,
+    ) -> dict[str, object]:
         organization_id = uuid4()
         normalized_name = name.strip()
         if not normalized_name:
@@ -1302,13 +1335,35 @@ class ProductionAuthRepository:
             raise DomainError("请选择公司、区域、经营单元或暂未指定")
         business_data_kind = "synthetic_business_fixture" if as_synthetic_business_fixture else "formal_business_data"
         with self._tenant_tx(manager.tenant_id) as cursor:
+            parent_name: str | None = None
+            if parent_organization_id is not None:
+                cursor.execute(
+                    """
+                    SELECT name, organization_level
+                    FROM organizations
+                    WHERE tenant_id = %s AND id = %s
+                    """,
+                    (manager.tenant_id, parent_organization_id),
+                )
+                parent = self._one(cursor, "上级组织必须来自当前租户")
+                parent_name = str(parent["name"])
+                parent_level = str(parent["organization_level"])
+                if organization_level == "region" and parent_level != "company":
+                    raise DomainError("区域的上级组织必须是明确登记的公司级组织")
+                if (
+                    organization_level == "operating_unit"
+                    and parent_level not in {"company", "region"}
+                ):
+                    raise DomainError("经营单元的上级组织必须是公司或区域")
             try:
                 cursor.execute(
                     """
                     INSERT INTO organizations
-                        (id, tenant_id, name, business_data_kind, organization_level)
-                    VALUES (%s, %s, %s, %s, %s)
-                    RETURNING id, name, business_data_kind, organization_level
+                        (id, tenant_id, name, business_data_kind,
+                         organization_level, parent_organization_id)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id, name, business_data_kind,
+                              organization_level, parent_organization_id
                     """,
                     (
                         organization_id,
@@ -1316,6 +1371,7 @@ class ProductionAuthRepository:
                         normalized_name,
                         business_data_kind,
                         organization_level,
+                        parent_organization_id,
                     ),
                 )
                 row = self._one(cursor, "组织创建失败")
@@ -1333,6 +1389,12 @@ class ProductionAuthRepository:
             "name": str(row["name"]),
             "business_data_kind": str(row["business_data_kind"]),
             "organization_level": str(row["organization_level"]),
+            "parent_organization_id": (
+                str(row["parent_organization_id"])
+                if row["parent_organization_id"] is not None
+                else None
+            ),
+            "parent_organization": parent_name,
         }
 
     def bootstrap_existing_tenant_admin(self, tenant_id: UUID, user_id: UUID, username: str) -> str:

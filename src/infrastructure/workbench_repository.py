@@ -437,21 +437,26 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                   count(*) FILTER (WHERE user_record.enabled) AS enabled,
                   count(*) FILTER (WHERE NOT user_record.enabled) AS disabled,
                   count(*) FILTER (
-                    WHERE usage.last_used_at >= now() - (%s * interval '1 day')
-                  ) AS active
+                    WHERE login_usage.last_login_at >= now() - (%s * interval '1 day')
+                  ) AS logged_in,
+                  count(*) FILTER (
+                    WHERE product_usage.last_product_action_at >=
+                          now() - (%s * interval '1 day')
+                  ) AS product_active
                 FROM users user_record
                 LEFT JOIN user_credentials credential
                   ON credential.tenant_id = user_record.tenant_id
                  AND credential.user_id = user_record.id
                 LEFT JOIN LATERAL (
-                  SELECT max(value.used_at) AS last_used_at
+                  SELECT max(session_record.issued_at) AS last_login_at
+                  FROM tenant_sessions session_record
+                  WHERE session_record.tenant_id = user_record.tenant_id
+                    AND session_record.user_id = user_record.id
+                ) login_usage ON true
+                LEFT JOIN LATERAL (
+                  SELECT max(value.used_at) AS last_product_action_at
                   FROM (
-                    SELECT max(session_record.issued_at) AS used_at
-                    FROM tenant_sessions session_record
-                    WHERE session_record.tenant_id = user_record.tenant_id
-                      AND session_record.user_id = user_record.id
-                    UNION ALL
-                    SELECT max(task.created_at)
+                    SELECT max(task.created_at) AS used_at
                     FROM business_tasks task
                     WHERE task.tenant_id = user_record.tenant_id
                       AND task.created_by = user_record.id
@@ -460,30 +465,38 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     FROM display_tasks display_task
                     WHERE display_task.tenant_id = user_record.tenant_id
                       AND display_task.created_by = user_record.id
+                    UNION ALL
+                    SELECT max(event.created_at)
+                    FROM activity_events event
+                    WHERE event.tenant_id = user_record.tenant_id
+                      AND event.actor_id = user_record.id
+                      AND event.event_type = 'content.conversation'
                   ) value
-                ) usage ON true
+                ) product_usage ON true
                 WHERE user_record.tenant_id = %s
                 """,
-                (window_days, scope.tenant_id),
+                (window_days, window_days, scope.tenant_id),
             )
             membership = self._one(cursor, "无法读取团队成员汇总")
             cursor.execute(
                 """
                 SELECT user_record.id, user_record.display_name,
                        user_record.entry_kind, user_record.enabled,
-                       usage.last_used_at,
+                       login_usage.last_login_at,
+                       product_usage.last_product_action_at,
                        COALESCE(content_usage.attempts, 0) AS content_attempts,
                        COALESCE(display_usage.attempts, 0) AS display_attempts
                 FROM users user_record
                 LEFT JOIN LATERAL (
-                  SELECT max(value.used_at) AS last_used_at
+                  SELECT max(session_record.issued_at) AS last_login_at
+                  FROM tenant_sessions session_record
+                  WHERE session_record.tenant_id = user_record.tenant_id
+                    AND session_record.user_id = user_record.id
+                ) login_usage ON true
+                LEFT JOIN LATERAL (
+                  SELECT max(value.used_at) AS last_product_action_at
                   FROM (
-                    SELECT max(session_record.issued_at) AS used_at
-                    FROM tenant_sessions session_record
-                    WHERE session_record.tenant_id = user_record.tenant_id
-                      AND session_record.user_id = user_record.id
-                    UNION ALL
-                    SELECT max(task.created_at)
+                    SELECT max(task.created_at) AS used_at
                     FROM business_tasks task
                     WHERE task.tenant_id = user_record.tenant_id
                       AND task.created_by = user_record.id
@@ -492,8 +505,14 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     FROM display_tasks display_task
                     WHERE display_task.tenant_id = user_record.tenant_id
                       AND display_task.created_by = user_record.id
+                    UNION ALL
+                    SELECT max(event.created_at)
+                    FROM activity_events event
+                    WHERE event.tenant_id = user_record.tenant_id
+                      AND event.actor_id = user_record.id
+                      AND event.event_type = 'content.conversation'
                   ) value
-                ) usage ON true
+                ) product_usage ON true
                 LEFT JOIN LATERAL (
                   SELECT count(*) AS attempts
                   FROM business_tasks task
@@ -509,7 +528,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     AND task.created_at >= now() - (%s * interval '1 day')
                 ) display_usage ON true
                 WHERE user_record.tenant_id = %s
-                ORDER BY usage.last_used_at DESC NULLS LAST, user_record.display_name
+                ORDER BY product_usage.last_product_action_at DESC NULLS LAST,
+                         login_usage.last_login_at DESC NULLS LAST,
+                         user_record.display_name
                 """,
                 (window_days, window_days, scope.tenant_id),
             )
@@ -526,9 +547,14 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                   (SELECT count(*) FROM generation_runs run
                    WHERE run.tenant_id = %s AND run.status = 'failed'
                      AND run.started_at >= now() - (%s * interval '1 day')) AS content_failures,
-                  (SELECT count(*) FROM business_tasks task
-                   WHERE task.tenant_id = %s AND task.revision_instruction IS NOT NULL
-                     AND task.created_at >= now() - (%s * interval '1 day')) AS revisions,
+                  (SELECT count(*) FROM content_versions version
+                   WHERE version.tenant_id = %s AND version.version_number > 1
+                     AND version.created_at >=
+                         now() - (%s * interval '1 day')) AS revisions,
+                  (SELECT count(*) FROM content_versions version
+                   WHERE version.tenant_id = %s AND version.version_number = 1
+                     AND version.created_at >=
+                         now() - (%s * interval '1 day')) AS first_generations,
                   (SELECT count(*) FROM business_tasks task
                    WHERE task.tenant_id = %s AND task.series_id IS NOT NULL
                      AND task.created_at >= now() - (%s * interval '1 day')) AS series_continuations,
@@ -549,6 +575,13 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                        'request.rate_limited'
                      )
                      AND event.created_at >= now() - (%s * interval '1 day')) AS rate_limited,
+                  (SELECT count(*) FROM activity_events event
+                   WHERE event.tenant_id = %s
+                     AND event.event_type = 'content.conversation'
+                     AND event.created_at >= now() - (%s * interval '1 day')) AS conversations,
+                  (SELECT count(*) FROM display_artifact_versions version
+                   WHERE version.tenant_id = %s AND version.version_number = 1
+                     AND version.created_at >= now() - (%s * interval '1 day')) AS dm01_plans,
                   (
                     SELECT COALESCE(sum(tokens), 0)::bigint
                     FROM (
@@ -573,6 +606,12 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                   ) AS recorded_tokens
                 """,
                 (
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
+                    scope.tenant_id,
+                    window_days,
                     scope.tenant_id,
                     window_days,
                     scope.tenant_id,
@@ -647,14 +686,34 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "activated": self._integer(membership["activated"]),
                 "enabled": self._integer(membership["enabled"]),
                 "disabled": self._integer(membership["disabled"]),
-                "active": self._integer(membership["active"]),
+                "logged_in": self._integer(membership["logged_in"]),
+                "product_active": self._integer(membership["product_active"]),
+                "active": self._integer(membership["product_active"]),
                 "items": [
                     {
                         "id": str(row["id"]),
                         "display_name": str(row["display_name"]),
                         "entry_type": str(row["entry_kind"]),
                         "enabled": bool(row["enabled"]),
-                        "last_used_at": (self._time(row["last_used_at"]) if row["last_used_at"] is not None else None),
+                        "last_login_at": (
+                            self._time(row["last_login_at"])
+                            if row["last_login_at"] is not None
+                            else None
+                        ),
+                        "last_product_action_at": (
+                            self._time(row["last_product_action_at"])
+                            if row["last_product_action_at"] is not None
+                            else None
+                        ),
+                        "last_used_at": (
+                            self._time(row["last_product_action_at"])
+                            if row["last_product_action_at"] is not None
+                            else (
+                                self._time(row["last_login_at"])
+                                if row["last_login_at"] is not None
+                                else None
+                            )
+                        ),
                         "content_attempts": self._integer(row["content_attempts"]),
                         "display_attempts": self._integer(row["display_attempts"]),
                     }
@@ -667,13 +726,26 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     "content_attempts",
                     "content_successes",
                     "content_failures",
+                    "conversations",
+                    "first_generations",
                     "revisions",
                     "series_continuations",
+                    "dm01_plans",
                     "display_attempts",
                     "display_successes",
                     "display_failures",
                     "rate_limited",
                 )
+            }
+            | {
+                "successful_runs": (
+                    self._integer(activity["content_successes"])
+                    + self._integer(activity["display_successes"])
+                ),
+                "failed_runs": (
+                    self._integer(activity["content_failures"])
+                    + self._integer(activity["display_failures"])
+                ),
             },
             "provider_usage": {
                 "label": "已记录模型用量",
@@ -703,10 +775,10 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT product.sku, product.display_name, product.facts,
+                SELECT product.id, product.sku, product.display_name, product.facts,
                        product.source_kind, product.source_note, product.fact_version,
                        product.applicability, product.status,
-                       product.visibility_scope,
+                       product.visibility_scope, product.current_version_id,
                        person.display_name AS updated_by, product.updated_at,
                        COALESCE(
                          (
@@ -738,6 +810,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             rows = cursor.fetchall()
         return [
             {
+                "id": str(row["id"]),
                 "sku": str(row["sku"]),
                 "display_name": str(row["display_name"]),
                 "facts": row["facts"] if isinstance(row["facts"], dict) else {},
@@ -746,6 +819,11 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "fact_version": self._integer(row["fact_version"]),
                 "applicability": str(row["applicability"]),
                 "status": str(row["status"]),
+                "current_version_id": (
+                    str(row["current_version_id"])
+                    if row["current_version_id"] is not None
+                    else None
+                ),
                 "visibility_scope": str(row["visibility_scope"]),
                 "scope_organizations": (
                     row["scope_organizations"] if isinstance(row["scope_organizations"], list) else []
@@ -767,7 +845,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                        material.created_at, material.status,
                        material.original_filename, material.byte_size,
                        material.reference_note, material.reference_version,
-                       material.visibility_scope,
+                       material.visibility_scope, material.current_version_id,
                        organization.id AS organization_id,
                        organization.name AS organization,
                        COALESCE(
@@ -796,7 +874,6 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 WHERE material.tenant_id = %s
                   AND material.brand_id = %s
                   AND material.scope = 'organization'
-                  AND material.status = 'active'
                 ORDER BY material.created_at DESC
                 """,
                 (scope.tenant_id, scope.brand_id),
@@ -809,6 +886,11 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "media_type": str(row["media_type"]),
                 "created_at": self._time(row["created_at"]),
                 "status": str(row["status"]),
+                "current_version_id": (
+                    str(row["current_version_id"])
+                    if row["current_version_id"] is not None
+                    else None
+                ),
                 "original_filename": str(row["original_filename"]),
                 "byte_size": self._integer(row["byte_size"]),
                 "reference_note": str(row["reference_note"]),
@@ -833,6 +915,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 SELECT entry.id, entry.category, entry.title, entry.source_note,
                        entry.content, entry.version, entry.status,
                        entry.visibility_scope, entry.updated_at,
+                       entry.current_version_id,
                        person.display_name AS updated_by,
                        COALESCE(
                          (
@@ -872,6 +955,11 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "content": str(row["content"]),
                 "version": str(row["version"]),
                 "status": str(row["status"]),
+                "current_version_id": (
+                    str(row["current_version_id"])
+                    if row["current_version_id"] is not None
+                    else None
+                ),
                 "visibility_scope": str(row["visibility_scope"]),
                 "visibility_label": self._visibility_label(
                     str(row["visibility_scope"]),
@@ -900,30 +988,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         organization_ids: tuple[UUID, ...],
     ) -> dict[str, object]:
         entry_id = uuid4()
+        version_id = uuid4()
         with self._management_tx(scope) as cursor:
-            organizations: list[dict[str, object]] = []
-            if organization_ids:
-                cursor.execute(
-                    """
-                    SELECT id, name, organization_level
-                    FROM organizations
-                    WHERE tenant_id = %s AND id = ANY(%s)
-                    ORDER BY name
-                    """,
-                    (scope.tenant_id, list(organization_ids)),
-                )
-                organizations = cursor.fetchall()
-                if len(organizations) != len(organization_ids):
-                    raise DomainError("资料可用范围只能选择当前租户已有的组织。")
-            if visibility_scope == "brand_all" and organizations:
-                raise DomainError("品牌全员资料不需要指定组织。")
-            if visibility_scope == "headquarters":
-                if len(organizations) != 1:
-                    raise DomainError("总部专用资料需要明确选择一个公司级组织。")
-                if str(organizations[0]["organization_level"]) != "company":
-                    raise DomainError("总部专用资料只能绑定明确登记的公司级组织。")
-            if visibility_scope == "organizations" and not organizations:
-                raise DomainError("指定区域资料至少需要选择一个具体区域。")
+            organizations = self._validated_scope_organizations(
+                cursor,
+                scope.tenant_id,
+                visibility_scope,
+                organization_ids,
+                "资料",
+            )
             cursor.execute(
                 """
                 INSERT INTO brand_library_entries
@@ -956,6 +1029,37 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     """,
                     (uuid4(), entry_id, scope.tenant_id, organization["id"]),
                 )
+            cursor.execute(
+                """
+                INSERT INTO brand_library_entry_versions
+                    (id, tenant_id, brand_id, entry_id, version_number,
+                     version_label, category, title, source_note, content,
+                     visibility_scope, scope_organization_ids, created_by)
+                VALUES (%s, %s, %s, %s, 1, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    version_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    entry_id,
+                    version,
+                    category,
+                    title,
+                    source_note,
+                    content,
+                    visibility_scope,
+                    list(organization_ids),
+                    scope.user_id,
+                ),
+            )
+            cursor.execute(
+                """
+                UPDATE brand_library_entries
+                   SET current_version_id = %s
+                 WHERE tenant_id = %s AND id = %s
+                """,
+                (version_id, scope.tenant_id, entry_id),
+            )
             self._event(
                 cursor,
                 scope,
@@ -978,6 +1082,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "source_note": source_note,
             "content": content,
             "version": version,
+            "version_number": 1,
+            "current_version_id": str(version_id),
             "status": status,
             "visibility_scope": visibility_scope,
             "visibility_label": self._visibility_label(
@@ -988,6 +1094,232 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "updated_by": str(scope.user_id),
             "updated_at": self._time(row["updated_at"]),
             "impact": self._library_impact(category),
+        }
+
+    def brand_library_entry_versions(
+        self,
+        scope: TenantManagementScope,
+        entry_id: UUID,
+    ) -> list[dict[str, object]]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT version.id, version.version_number, version.version_label,
+                       version.category, version.title, version.source_note,
+                       version.content, version.visibility_scope,
+                       version.scope_organization_ids, version.created_at,
+                       entry.status,
+                       entry.current_version_id = version.id AS is_current
+                FROM brand_library_entry_versions version
+                JOIN brand_library_entries entry
+                  ON entry.tenant_id = version.tenant_id
+                 AND entry.id = version.entry_id
+                WHERE version.tenant_id = %s
+                  AND version.brand_id = %s
+                  AND version.entry_id = %s
+                ORDER BY version.version_number DESC
+                """,
+                (scope.tenant_id, scope.brand_id, entry_id),
+            )
+            rows = cursor.fetchall()
+        if not rows:
+            raise DomainError("找不到当前品牌的资料版本")
+        return [
+            {
+                "id": str(row["id"]),
+                "entry_id": str(entry_id),
+                "version_number": self._integer(row["version_number"]),
+                "version": str(row["version_label"]),
+                "category": str(row["category"]),
+                "title": str(row["title"]),
+                "source_note": str(row["source_note"]),
+                "content": str(row["content"]),
+                "visibility_scope": str(row["visibility_scope"]),
+                "organization_ids": [
+                    str(item)
+                    for item in (
+                        row["scope_organization_ids"]
+                        if isinstance(row["scope_organization_ids"], list)
+                        else []
+                    )
+                ],
+                "status": str(row["status"]),
+                "is_current": bool(row["is_current"]),
+                "created_at": self._time(row["created_at"]),
+            }
+            for row in rows
+        ]
+
+    def save_brand_library_entry_version(
+        self,
+        scope: TenantManagementScope,
+        entry_id: UUID,
+        title: str,
+        source_note: str,
+        content: str,
+        version_label: str,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+    ) -> dict[str, object]:
+        version_id = uuid4()
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT category
+                FROM brand_library_entries
+                WHERE tenant_id = %s AND brand_id = %s AND id = %s
+                FOR UPDATE
+                """,
+                (scope.tenant_id, scope.brand_id, entry_id),
+            )
+            entry = self._one(cursor, "找不到当前品牌可更新的资料")
+            organizations = self._validated_scope_organizations(
+                cursor,
+                scope.tenant_id,
+                visibility_scope,
+                organization_ids,
+                "资料",
+            )
+            cursor.execute(
+                """
+                SELECT COALESCE(max(version_number), 0) + 1 AS next_version
+                FROM brand_library_entry_versions
+                WHERE tenant_id = %s AND entry_id = %s
+                """,
+                (scope.tenant_id, entry_id),
+            )
+            version_number = self._integer(
+                self._one(cursor, "无法计算资料版本")["next_version"]
+            )
+            cursor.execute(
+                """
+                INSERT INTO brand_library_entry_versions
+                    (id, tenant_id, brand_id, entry_id, version_number,
+                     version_label, category, title, source_note, content,
+                     visibility_scope, scope_organization_ids, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    version_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    entry_id,
+                    version_number,
+                    version_label,
+                    entry["category"],
+                    title,
+                    source_note,
+                    content,
+                    visibility_scope,
+                    list(organization_ids),
+                    scope.user_id,
+                ),
+            )
+            cursor.execute(
+                """
+                UPDATE brand_library_entries
+                   SET title = %s, source_note = %s, content = %s,
+                       version = %s, visibility_scope = %s,
+                       status = 'active', updated_by = %s,
+                       updated_at = now(), current_version_id = %s
+                 WHERE tenant_id = %s AND brand_id = %s AND id = %s
+                RETURNING updated_at
+                """,
+                (
+                    title,
+                    source_note,
+                    content,
+                    version_label,
+                    visibility_scope,
+                    scope.user_id,
+                    version_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    entry_id,
+                ),
+            )
+            saved = self._one(cursor, "品牌资料新版本没有保存成功")
+            cursor.execute(
+                """
+                DELETE FROM brand_library_entry_organizations
+                WHERE tenant_id = %s AND entry_id = %s
+                """,
+                (scope.tenant_id, entry_id),
+            )
+            for organization in organizations:
+                cursor.execute(
+                    """
+                    INSERT INTO brand_library_entry_organizations
+                        (id, entry_id, tenant_id, organization_id)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (
+                        uuid4(),
+                        entry_id,
+                        scope.tenant_id,
+                        organization["id"],
+                    ),
+                )
+            self._event(
+                cursor,
+                scope,
+                "brand_library.version_saved",
+                "brand_library_entry",
+                entry_id,
+            )
+        return {
+            "id": str(entry_id),
+            "current_version_id": str(version_id),
+            "version_number": version_number,
+            "version": version_label,
+            "title": title,
+            "source_note": source_note,
+            "content": content,
+            "status": "active",
+            "visibility_scope": visibility_scope,
+            "scope_organizations": self._scope_projection(organizations),
+            "updated_at": self._time(saved["updated_at"]),
+        }
+
+    def set_brand_library_entry_enabled(
+        self,
+        scope: TenantManagementScope,
+        entry_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                UPDATE brand_library_entries
+                   SET status = %s, updated_by = %s, updated_at = now()
+                 WHERE tenant_id = %s AND brand_id = %s AND id = %s
+                RETURNING id, status, current_version_id, updated_at
+                """,
+                (
+                    "active" if enabled else "retired",
+                    scope.user_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    entry_id,
+                ),
+            )
+            row = self._one(cursor, "找不到当前品牌可停用或恢复的资料")
+            self._event(
+                cursor,
+                scope,
+                "brand_library.restored" if enabled else "brand_library.retired",
+                "brand_library_entry",
+                entry_id,
+            )
+        return {
+            "id": str(row["id"]),
+            "status": str(row["status"]),
+            "current_version_id": (
+                str(row["current_version_id"])
+                if row["current_version_id"] is not None
+                else None
+            ),
+            "updated_at": self._time(row["updated_at"]),
         }
 
     def create_management_organization_material(
@@ -1005,6 +1337,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         visibility_scope: str = "organizations",
         organization_ids: tuple[UUID, ...] = (),
     ) -> dict[str, object]:
+        version_id = uuid4()
         with self._management_tx(scope) as cursor:
             cursor.execute(
                 "SELECT name, organization_level FROM organizations WHERE tenant_id = %s AND id = %s",
@@ -1078,6 +1411,37 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 )
             cursor.execute(
                 """
+                INSERT INTO material_asset_versions
+                    (id, tenant_id, brand_id, asset_id, version_number,
+                     title, reference_note, visibility_scope,
+                     scope_organization_ids, source_filename,
+                     source_checksum_sha256, created_by)
+                VALUES (%s, %s, %s, %s, 1, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    version_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    asset_id,
+                    title,
+                    reference_note,
+                    visibility_scope,
+                    list(organization_ids),
+                    original_filename,
+                    checksum_sha256,
+                    scope.user_id,
+                ),
+            )
+            cursor.execute(
+                """
+                UPDATE material_assets
+                   SET current_version_id = %s
+                 WHERE tenant_id = %s AND id = %s
+                """,
+                (version_id, scope.tenant_id, asset_id),
+            )
+            cursor.execute(
+                """
                 INSERT INTO activity_events
                     (id, tenant_id, actor_id, event_type, entity_type, entity_id)
                 VALUES (%s, %s, %s, 'organization_material.created',
@@ -1091,6 +1455,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "media_type": str(row["media_type"]),
             "created_at": self._time(row["created_at"]),
             "status": str(row["status"]),
+            "current_version_id": str(version_id),
             "original_filename": str(row["original_filename"]),
             "byte_size": self._integer(row["byte_size"]),
             "reference_note": str(row["reference_note"]),
@@ -1109,6 +1474,231 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             ],
             "organization_id": str(organization_id),
             "organization": str(organization["name"]),
+        }
+
+    def management_material_versions(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+    ) -> list[dict[str, object]]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT version.id, version.version_number, version.title,
+                       version.reference_note, version.visibility_scope,
+                       version.scope_organization_ids, version.source_filename,
+                       version.source_checksum_sha256, version.created_at,
+                       asset.current_version_id = version.id AS is_current,
+                       asset.status
+                FROM material_asset_versions version
+                JOIN material_assets asset
+                  ON asset.tenant_id = version.tenant_id
+                 AND asset.id = version.asset_id
+                WHERE version.tenant_id = %s
+                  AND version.brand_id = %s
+                  AND version.asset_id = %s
+                  AND asset.scope = 'organization'
+                ORDER BY version.version_number DESC
+                """,
+                (scope.tenant_id, scope.brand_id, asset_id),
+            )
+            rows = cursor.fetchall()
+        if not rows:
+            raise DomainError("找不到当前品牌的组织素材版本")
+        return [
+            {
+                "id": str(row["id"]),
+                "asset_id": str(asset_id),
+                "version": self._integer(row["version_number"]),
+                "title": str(row["title"]),
+                "reference_note": str(row["reference_note"]),
+                "visibility_scope": str(row["visibility_scope"]),
+                "organization_ids": [
+                    str(item)
+                    for item in (
+                        row["scope_organization_ids"]
+                        if isinstance(row["scope_organization_ids"], list)
+                        else []
+                    )
+                ],
+                "source_filename": str(row["source_filename"]),
+                "source_checksum_sha256": str(row["source_checksum_sha256"]),
+                "status": str(row["status"]),
+                "is_current": bool(row["is_current"]),
+                "created_at": self._time(row["created_at"]),
+            }
+            for row in rows
+        ]
+
+    def save_management_material_version(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        title: str,
+        reference_note: str,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+    ) -> dict[str, object]:
+        version_id = uuid4()
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT original_filename, checksum_sha256
+                FROM material_assets
+                WHERE tenant_id = %s AND brand_id = %s AND id = %s
+                  AND scope = 'organization'
+                FOR UPDATE
+                """,
+                (scope.tenant_id, scope.brand_id, asset_id),
+            )
+            asset = self._one(cursor, "找不到当前品牌可更新的组织素材")
+            organizations = self._validated_scope_organizations(
+                cursor,
+                scope.tenant_id,
+                visibility_scope,
+                organization_ids,
+                "素材",
+            )
+            cursor.execute(
+                """
+                SELECT COALESCE(max(version_number), 0) + 1 AS next_version
+                FROM material_asset_versions
+                WHERE tenant_id = %s AND asset_id = %s
+                """,
+                (scope.tenant_id, asset_id),
+            )
+            version_number = self._integer(
+                self._one(cursor, "无法计算素材版本")["next_version"]
+            )
+            cursor.execute(
+                """
+                INSERT INTO material_asset_versions
+                    (id, tenant_id, brand_id, asset_id, version_number,
+                     title, reference_note, visibility_scope,
+                     scope_organization_ids, source_filename,
+                     source_checksum_sha256, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    version_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    asset_id,
+                    version_number,
+                    title,
+                    reference_note,
+                    visibility_scope,
+                    list(organization_ids),
+                    asset["original_filename"],
+                    asset["checksum_sha256"],
+                    scope.user_id,
+                ),
+            )
+            cursor.execute(
+                """
+                UPDATE material_assets
+                   SET title = %s, reference_note = %s,
+                       visibility_scope = %s, reference_version = %s,
+                       current_version_id = %s, status = 'active'
+                 WHERE tenant_id = %s AND brand_id = %s AND id = %s
+                RETURNING created_at
+                """,
+                (
+                    title,
+                    reference_note,
+                    visibility_scope,
+                    version_number,
+                    version_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    asset_id,
+                ),
+            )
+            saved = self._one(cursor, "组织素材新版本没有保存成功")
+            cursor.execute(
+                """
+                DELETE FROM material_asset_scope_organizations
+                WHERE tenant_id = %s AND asset_id = %s
+                """,
+                (scope.tenant_id, asset_id),
+            )
+            for organization in organizations:
+                cursor.execute(
+                    """
+                    INSERT INTO material_asset_scope_organizations
+                        (id, asset_id, tenant_id, organization_id)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (
+                        uuid4(),
+                        asset_id,
+                        scope.tenant_id,
+                        organization["id"],
+                    ),
+                )
+            self._event(
+                cursor,
+                scope,
+                "organization_material.version_saved",
+                "material_asset",
+                asset_id,
+            )
+        return {
+            "id": str(asset_id),
+            "current_version_id": str(version_id),
+            "reference_version": version_number,
+            "title": title,
+            "reference_note": reference_note,
+            "visibility_scope": visibility_scope,
+            "scope_organizations": self._scope_projection(organizations),
+            "status": "active",
+            "created_at": self._time(saved["created_at"]),
+        }
+
+    def set_management_material_enabled(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                UPDATE material_assets
+                   SET status = %s
+                 WHERE tenant_id = %s AND brand_id = %s AND id = %s
+                   AND scope = 'organization'
+                   AND status IN ('active', 'inactive')
+                RETURNING id, status, current_version_id, reference_version
+                """,
+                (
+                    "active" if enabled else "inactive",
+                    scope.tenant_id,
+                    scope.brand_id,
+                    asset_id,
+                ),
+            )
+            row = self._one(cursor, "找不到当前品牌可停用或恢复的组织素材")
+            self._event(
+                cursor,
+                scope,
+                (
+                    "organization_material.restored"
+                    if enabled
+                    else "organization_material.retired"
+                ),
+                "material_asset",
+                asset_id,
+            )
+        return {
+            "id": str(row["id"]),
+            "status": str(row["status"]),
+            "current_version_id": (
+                str(row["current_version_id"])
+                if row["current_version_id"] is not None
+                else None
+            ),
+            "reference_version": self._integer(row["reference_version"]),
         }
 
     def request_management_material_deletion(
@@ -1505,71 +2095,111 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         visibility_scope: str = "brand_all",
         organization_ids: tuple[UUID, ...] = (),
     ) -> dict[str, object]:
-        product_id = uuid4()
+        proposed_product_id = uuid4()
+        version_id = uuid4()
         with self._management_tx(scope) as cursor:
-            organizations: list[dict[str, object]] = []
-            if organization_ids:
-                cursor.execute(
-                    """
-                    SELECT id, name, organization_level
-                    FROM organizations
-                    WHERE tenant_id = %s AND id = ANY(%s)
-                    ORDER BY name
-                    """,
-                    (scope.tenant_id, list(organization_ids)),
-                )
-                organizations = cursor.fetchall()
-                if len(organizations) != len(organization_ids):
-                    raise DomainError("商品资料范围只能选择当前租户已有的组织。")
-            if visibility_scope == "brand_all" and organizations:
-                raise DomainError("品牌全员商品资料不需要指定组织。")
-            if visibility_scope == "headquarters":
-                if len(organizations) != 1:
-                    raise DomainError("总部专用商品资料需要明确选择一个公司级组织。")
-                if str(organizations[0]["organization_level"]) != "company":
-                    raise DomainError("总部专用商品资料只能绑定明确登记的公司级组织。")
-            if visibility_scope == "organizations" and not organizations:
-                raise DomainError("指定区域商品资料至少需要选择一个具体区域。")
+            organizations = self._validated_scope_organizations(
+                cursor,
+                scope.tenant_id,
+                visibility_scope,
+                organization_ids,
+                "商品资料",
+            )
             cursor.execute(
                 """
-                INSERT INTO brand_products
+                SELECT id, fact_version
+                FROM brand_products
+                WHERE tenant_id = %s AND brand_id = %s AND sku = %s
+                FOR UPDATE
+                """,
+                (scope.tenant_id, scope.brand_id, sku),
+            )
+            existing = cursor.fetchone()
+            if existing is None:
+                product_id = proposed_product_id
+                fact_version = 1
+                cursor.execute(
+                    """
+                    INSERT INTO brand_products
                     (id, tenant_id, brand_id, sku, display_name, facts,
                      source_kind, source_note, fact_version, applicability,
-                     status, updated_by, updated_at, visibility_scope)
+                     status, updated_by, updated_at, visibility_scope,
+                     current_version_id)
                 VALUES (%s, %s, %s, %s, %s, %s, %s,
-                        %s, 1, %s, 'active', %s, now(), %s)
-                ON CONFLICT (tenant_id, brand_id, sku) DO UPDATE
-                SET display_name = EXCLUDED.display_name,
-                    facts = EXCLUDED.facts,
-                    source_kind = EXCLUDED.source_kind,
-                    source_note = EXCLUDED.source_note,
-                    fact_version = brand_products.fact_version + 1,
-                    applicability = EXCLUDED.applicability,
-                    status = 'active',
-                    visibility_scope = EXCLUDED.visibility_scope,
-                    updated_by = EXCLUDED.updated_by,
-                    updated_at = now()
-                RETURNING id, fact_version, updated_at
+                            %s, 1, %s, 'active', %s, now(), %s, NULL)
+                    """,
+                    (
+                        product_id,
+                        scope.tenant_id,
+                        scope.brand_id,
+                        sku,
+                        display_name,
+                        Jsonb(facts),
+                        source_kind,
+                        source_note,
+                        applicability,
+                        scope.user_id,
+                        visibility_scope,
+                    ),
+                )
+            else:
+                product_id = UUID(str(existing["id"]))
+                fact_version = self._integer(existing["fact_version"]) + 1
+            cursor.execute(
+                """
+                INSERT INTO brand_product_versions
+                    (id, tenant_id, brand_id, product_id, version_number,
+                     display_name, facts, source_kind, source_note,
+                     applicability, visibility_scope,
+                     scope_organization_ids, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
-                    product_id,
+                    version_id,
                     scope.tenant_id,
                     scope.brand_id,
-                    sku,
+                    product_id,
+                    fact_version,
                     display_name,
                     Jsonb(facts),
                     source_kind,
                     source_note,
                     applicability,
-                    scope.user_id,
                     visibility_scope,
+                    list(organization_ids),
+                    scope.user_id,
+                ),
+            )
+            cursor.execute(
+                """
+                UPDATE brand_products
+                   SET display_name = %s, facts = %s, source_kind = %s,
+                       source_note = %s, fact_version = %s,
+                       applicability = %s, status = 'active',
+                       visibility_scope = %s, current_version_id = %s,
+                       updated_by = %s, updated_at = now()
+                 WHERE tenant_id = %s AND brand_id = %s AND id = %s
+                RETURNING updated_at
+                """,
+                (
+                    display_name,
+                    Jsonb(facts),
+                    source_kind,
+                    source_note,
+                    fact_version,
+                    applicability,
+                    visibility_scope,
+                    version_id,
+                    scope.user_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    product_id,
                 ),
             )
             row = self._one(cursor, "商品资料保存失败")
-            saved_product_id = UUID(str(row["id"]))
             cursor.execute(
                 "DELETE FROM brand_product_scope_organizations WHERE tenant_id = %s AND product_id = %s",
-                (scope.tenant_id, saved_product_id),
+                (scope.tenant_id, product_id),
             )
             for organization in organizations:
                 cursor.execute(
@@ -1581,7 +2211,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     (
                         uuid4(),
                         scope.tenant_id,
-                        saved_product_id,
+                        product_id,
                         organization["id"],
                     ),
                 )
@@ -1590,15 +2220,17 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 scope,
                 "brand_product.fact_version_saved",
                 "brand_product",
-                saved_product_id,
+                product_id,
             )
         return {
+            "id": str(product_id),
             "sku": sku,
             "display_name": display_name,
             "facts": facts,
             "source_kind": source_kind,
             "source_note": source_note,
-            "fact_version": self._integer(row["fact_version"]),
+            "fact_version": fact_version,
+            "current_version_id": str(version_id),
             "applicability": applicability,
             "status": "active",
             "visibility_scope": visibility_scope,
@@ -1611,6 +2243,99 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 for organization in organizations
             ],
             "updated_at": row["updated_at"],
+        }
+
+    def management_product_versions(
+        self,
+        scope: TenantManagementScope,
+        sku: str,
+    ) -> list[dict[str, object]]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT version.id, version.version_number, version.display_name,
+                       version.facts, version.source_kind, version.source_note,
+                       version.applicability, version.visibility_scope,
+                       version.scope_organization_ids, version.created_at,
+                       product.current_version_id = version.id AS is_current,
+                       product.status
+                FROM brand_product_versions version
+                JOIN brand_products product
+                  ON product.tenant_id = version.tenant_id
+                 AND product.id = version.product_id
+                WHERE version.tenant_id = %s
+                  AND version.brand_id = %s
+                  AND product.sku = %s
+                ORDER BY version.version_number DESC
+                """,
+                (scope.tenant_id, scope.brand_id, sku),
+            )
+            rows = cursor.fetchall()
+        if not rows:
+            raise DomainError("找不到当前品牌的商品事实版本")
+        return [
+            {
+                "id": str(row["id"]),
+                "sku": sku,
+                "fact_version": self._integer(row["version_number"]),
+                "display_name": str(row["display_name"]),
+                "facts": row["facts"] if isinstance(row["facts"], dict) else {},
+                "source_kind": str(row["source_kind"]),
+                "source_note": str(row["source_note"]),
+                "applicability": str(row["applicability"]),
+                "visibility_scope": str(row["visibility_scope"]),
+                "organization_ids": [
+                    str(item)
+                    for item in (
+                        row["scope_organization_ids"]
+                        if isinstance(row["scope_organization_ids"], list)
+                        else []
+                    )
+                ],
+                "status": str(row["status"]),
+                "is_current": bool(row["is_current"]),
+                "created_at": self._time(row["created_at"]),
+            }
+            for row in rows
+        ]
+
+    def set_management_product_enabled(
+        self,
+        scope: TenantManagementScope,
+        sku: str,
+        enabled: bool,
+    ) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                UPDATE brand_products
+                   SET status = %s, updated_by = %s, updated_at = now()
+                 WHERE tenant_id = %s AND brand_id = %s AND sku = %s
+                   AND current_version_id IS NOT NULL
+                RETURNING id, sku, status, fact_version, current_version_id
+                """,
+                (
+                    "active" if enabled else "retired",
+                    scope.user_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    sku,
+                ),
+            )
+            row = self._one(cursor, "找不到当前品牌可停用或恢复的商品")
+            self._event(
+                cursor,
+                scope,
+                "brand_product.restored" if enabled else "brand_product.retired",
+                "brand_product",
+                UUID(str(row["id"])),
+            )
+        return {
+            "id": str(row["id"]),
+            "sku": str(row["sku"]),
+            "status": str(row["status"]),
+            "fact_version": self._integer(row["fact_version"]),
+            "current_version_id": str(row["current_version_id"]),
         }
 
     def create_publishing_account(
@@ -2635,6 +3360,45 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 ),
             )
             state = self._one(cursor, "无法读取当前可用条件")
+            cursor.execute(
+                """
+                SELECT
+                  (SELECT max(updated_at) FROM brand_expression_baselines
+                   WHERE tenant_id = %s AND brand_id = %s) AS expression_updated_at,
+                  (SELECT max(updated_at) FROM brand_products
+                   WHERE tenant_id = %s AND brand_id = %s
+                     AND status = 'active') AS product_updated_at,
+                  (SELECT max(updated_at) FROM brand_library_entries
+                   WHERE tenant_id = %s AND brand_id = %s
+                     AND status = 'active') AS library_updated_at,
+                  (SELECT count(*) FROM brand_library_entries
+                   WHERE tenant_id = %s AND brand_id = %s
+                     AND status = 'active'
+                     AND current_version_id IS NOT NULL) AS library_entries,
+                  (SELECT max(created_at) FROM material_assets
+                   WHERE tenant_id = %s AND brand_id = %s
+                     AND status = 'active') AS material_updated_at,
+                  (SELECT count(*) FROM material_assets
+                   WHERE tenant_id = %s AND brand_id = %s
+                     AND status = 'active'
+                     AND current_version_id IS NOT NULL) AS material_assets
+                """,
+                (
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                ),
+            )
+            evidence_state = self._one(cursor, "无法读取诊断依据")
         expression_confirmed = str(state["expression_status"]) == "confirmed"
         root_accounts = self._integer(state["root_accounts"])
         expression_accounts = self._integer(state["expression_accounts"])
@@ -2645,6 +3409,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         display_products = self._integer(state["display_products"])
         display_users = self._integer(state["display_users"])
         evaluated_at = self._time(state["evaluated_at"])
+        library_entries = self._integer(evidence_state["library_entries"])
+        material_assets = self._integer(evidence_state["material_assets"])
         expression_available = expression_confirmed and expression_accounts > 0
         expression_status = self._condition_status(
             expression_available,
@@ -2668,24 +3434,57 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         )
         common: dict[str, object] = {
             "source": "当前租户的正式业务对象",
-            "version": "ui05-readiness-v1",
+            "version": "ux03-readiness-v2",
+            "contract_version": "ux03-readiness-v2",
             "evaluated_at": evaluated_at,
         }
+        expression_evidence: list[dict[str, object]] = [
+            {
+                "source": "品牌表达基线与逻辑发布账号画像",
+                "version": (
+                    "confirmed"
+                    if expression_confirmed
+                    else str(state["expression_status"])
+                ),
+                "scope": "当前品牌及获准逻辑发布账号",
+                "updated_at": (
+                    self._time(evidence_state["expression_updated_at"])
+                    if evidence_state["expression_updated_at"] is not None
+                    else None
+                ),
+            }
+        ]
+        product_evidence: list[dict[str, object]] = [
+            {
+                "source": "已确认商品事实",
+                "version": f"当前可用商品 {product_facts} 件",
+                "scope": "按逻辑发布账号控制组织确定",
+                "updated_at": (
+                    self._time(evidence_state["product_updated_at"])
+                    if evidence_state["product_updated_at"] is not None
+                    else None
+                ),
+            }
+        ]
+        library_evidence: list[dict[str, object]] = [
+            {
+                "source": "品牌文字资料与组织官方素材",
+                "version": (
+                    f"当前资料 {library_entries} 条；当前素材 {material_assets} 件"
+                ),
+                "scope": "按资料范围与逻辑发布账号控制组织确定",
+                "updated_at": (
+                    self._time(evidence_state["library_updated_at"])
+                    if evidence_state["library_updated_at"] is not None
+                    else (
+                        self._time(evidence_state["material_updated_at"])
+                        if evidence_state["material_updated_at"] is not None
+                        else None
+                    )
+                ),
+            }
+        ]
         return [
-            self._diagnosis(
-                "brand_expression",
-                "品牌与账号表达",
-                expression_status,
-                [
-                    f"已确认品牌表达：{'是' if expression_confirmed else '否'}",
-                    f"具备账号画像和操作者的发布账号：{expression_accounts}",
-                ],
-                [] if expression_available else ["确认品牌表达，并补齐账号画像和操作者。"],
-                "影响内容是否持续保持同一品牌和发布身份的表达边界。",
-                "管理发布账号",
-                "publishing-accounts",
-                common,
-            ),
             self._diagnosis(
                 "non_product_content",
                 "日常非商品内容",
@@ -2696,6 +3495,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "补账号资料",
                 "publishing-accounts",
                 common,
+                evidence_details=expression_evidence + library_evidence,
+                unaffected=["不依赖具体商品事实和门店挂杆资料。"],
             ),
             self._diagnosis(
                 "product_facts",
@@ -2707,6 +3508,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "补商品资料",
                 "brand-library",
                 common,
+                evidence_details=expression_evidence + product_evidence,
+                unaffected=["商品缺口不阻止非商品日常内容。"],
             ),
             self._diagnosis(
                 "continuous_series",
@@ -2721,6 +3524,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "管理发布账号",
                 "publishing-accounts",
                 common,
+                evidence_details=expression_evidence,
+                unaffected=["不影响单条非系列内容。"],
             ),
             self._diagnosis(
                 "platform_recompile",
@@ -2732,6 +3537,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "管理平台版本",
                 "publishing-accounts",
                 common,
+                evidence_details=expression_evidence,
+                unaffected=["不影响当前已获准平台上的单平台内容。"],
             ),
             self._diagnosis(
                 "dm01_display",
@@ -2747,6 +3554,28 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "补门店资料",
                 "brand-library",
                 common,
+                evidence_details=product_evidence + library_evidence,
+                unaffected=["门店资料缺口不阻止普通内容创作。"],
+            ),
+            self._diagnosis(
+                "first_creation",
+                "新成员首次创作",
+                expression_status,
+                [
+                    f"已确认品牌表达：{'是' if expression_confirmed else '否'}",
+                    f"具备操作者和五段画像的逻辑发布账号：{expression_accounts}",
+                ],
+                (
+                    []
+                    if expression_available
+                    else ["确认品牌表达，并为成员分配有画像的逻辑发布账号。"]
+                ),
+                "影响新成员首次进入后能否从弱种子开始创作。",
+                "管理成员与账号",
+                "members",
+                common,
+                evidence_details=expression_evidence,
+                unaffected=["不影响品牌管理员维护资料和团队配置。"],
             ),
         ]
 
@@ -3325,17 +4154,81 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         action_label: str,
         action_section: str,
         common: dict[str, object],
+        *,
+        evidence_details: list[dict[str, object]] | None = None,
+        conflicts: list[str] | None = None,
+        unaffected: list[str] | None = None,
     ) -> dict[str, object]:
         return {
             "id": stable_id,
             "title": title,
             "status": status,
             "evidence": evidence,
+            "evidence_details": evidence_details or [],
             "gaps": gaps,
+            "conflicts": conflicts or [],
             "impact": impact,
+            "unaffected": unaffected or [],
             "action": {"label": action_label, "section": action_section},
             **common,
         }
+
+    @staticmethod
+    def _validated_scope_organizations(
+        cursor: psycopg.Cursor[dict[str, object]],
+        tenant_id: UUID,
+        visibility_scope: str,
+        organization_ids: tuple[UUID, ...],
+        resource_label: str,
+    ) -> list[dict[str, object]]:
+        if visibility_scope not in {"brand_all", "headquarters", "organizations"}:
+            raise DomainError(
+                f"{resource_label}范围只能选择品牌全员、总部专用或指定区域。"
+            )
+        unique_ids = tuple(dict.fromkeys(organization_ids))
+        organizations: list[dict[str, object]] = []
+        if unique_ids:
+            cursor.execute(
+                """
+                SELECT id, name, organization_level
+                FROM organizations
+                WHERE tenant_id = %s AND id = ANY(%s)
+                ORDER BY name
+                """,
+                (tenant_id, list(unique_ids)),
+            )
+            organizations = cursor.fetchall()
+            if len(organizations) != len(unique_ids):
+                raise DomainError(
+                    f"{resource_label}范围只能选择当前租户已有的组织。"
+                )
+        if visibility_scope == "brand_all" and organizations:
+            raise DomainError(f"品牌全员{resource_label}不需要指定组织。")
+        if visibility_scope == "headquarters":
+            if len(organizations) != 1:
+                raise DomainError(
+                    f"总部专用{resource_label}需要明确选择一个公司级组织。"
+                )
+            if str(organizations[0]["organization_level"]) != "company":
+                raise DomainError(
+                    f"总部专用{resource_label}只能绑定明确登记的公司级组织。"
+                )
+        if visibility_scope == "organizations" and not organizations:
+            raise DomainError(f"指定区域{resource_label}至少需要选择一个具体区域。")
+        return organizations
+
+    @staticmethod
+    def _scope_projection(
+        organizations: list[dict[str, object]],
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "id": str(organization["id"]),
+                "name": str(organization["name"]),
+                "level": str(organization["organization_level"]),
+            }
+            for organization in organizations
+        ]
 
     @staticmethod
     def _visibility_label(

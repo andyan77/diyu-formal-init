@@ -202,12 +202,14 @@ class PostgresContentRepository(ContentRepository):
             row = self._one(cursor, "当前身份没有可用内容账号授权")
             cursor.execute(
                 """
-                SELECT entry.category, entry.title, entry.source_note,
-                       entry.content, entry.version
+                SELECT entry.id, entry.current_version_id, entry.category,
+                       entry.title, entry.source_note, entry.content,
+                       entry.version
                 FROM brand_library_entries entry
                 WHERE entry.tenant_id = %s
                   AND entry.brand_id = %s
                   AND entry.status = 'active'
+                  AND entry.current_version_id IS NOT NULL
                   AND (
                     entry.visibility_scope = 'brand_all'
                     OR EXISTS (
@@ -218,12 +220,19 @@ class PostgresContentRepository(ContentRepository):
                          AND scoped_organization.id = entry_scope.organization_id
                         WHERE entry_scope.tenant_id = entry.tenant_id
                           AND entry_scope.entry_id = entry.id
-                          AND entry_scope.organization_id = %s
                           AND (
-                            entry.visibility_scope = 'organizations'
+                            (
+                              entry.visibility_scope = 'organizations'
+                              AND organization_is_same_or_descendant(
+                                    entry.tenant_id,
+                                    %s,
+                                    entry_scope.organization_id
+                                  )
+                            )
                             OR (
                               entry.visibility_scope = 'headquarters'
                               AND scoped_organization.organization_level = 'company'
+                              AND entry_scope.organization_id = %s
                             )
                           )
                     )
@@ -235,11 +244,14 @@ class PostgresContentRepository(ContentRepository):
                     scope.tenant_id,
                     scope.brand_id,
                     row["control_organization_id"],
+                    row["control_organization_id"],
                 ),
             )
             reference_rows = cursor.fetchall()
         brand_reference_context = tuple(
             (
+                f"[资料 {str(reference['id'])}；版本记录 "
+                f"{str(reference['current_version_id'])}] "
                 f"{str(reference['title'])}（{str(reference['category'])}；"
                 f"版本 {str(reference['version'])}；来源：{str(reference['source_note'])}）："
                 f"{str(reference['content'])[:1200]}"
@@ -1142,6 +1154,7 @@ class PostgresContentRepository(ContentRepository):
                      )
                 WHERE product.tenant_id = %s AND product.brand_id = %s
                   AND product.status = 'active'
+                  AND product.current_version_id IS NOT NULL
                   AND (
                     product.visibility_scope = 'brand_all'
                     OR (
@@ -1154,13 +1167,20 @@ class PostgresContentRepository(ContentRepository):
                          AND scoped_organization.id = product_scope.organization_id
                         WHERE product_scope.tenant_id = product.tenant_id
                           AND product_scope.product_id = product.id
-                          AND product_scope.organization_id =
-                              root_account.control_organization_id
                           AND (
-                            product.visibility_scope = 'organizations'
+                            (
+                              product.visibility_scope = 'organizations'
+                              AND organization_is_same_or_descendant(
+                                    product.tenant_id,
+                                    root_account.control_organization_id,
+                                    product_scope.organization_id
+                                  )
+                            )
                             OR (
                               product.visibility_scope = 'headquarters'
                               AND scoped_organization.organization_level = 'company'
+                              AND product_scope.organization_id =
+                                  root_account.control_organization_id
                             )
                           )
                       )
@@ -1238,13 +1258,20 @@ class PostgresContentRepository(ContentRepository):
                          AND scoped_organization.id = product_scope.organization_id
                         WHERE product_scope.tenant_id = product.tenant_id
                           AND product_scope.product_id = product.id
-                          AND product_scope.organization_id =
-                              root_account.control_organization_id
                           AND (
-                            product.visibility_scope = 'organizations'
+                            (
+                              product.visibility_scope = 'organizations'
+                              AND organization_is_same_or_descendant(
+                                    product.tenant_id,
+                                    root_account.control_organization_id,
+                                    product_scope.organization_id
+                                  )
+                            )
                             OR (
                               product.visibility_scope = 'headquarters'
                               AND scoped_organization.organization_level = 'company'
+                              AND product_scope.organization_id =
+                                  root_account.control_organization_id
                             )
                           )
                       )

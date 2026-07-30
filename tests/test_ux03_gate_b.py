@@ -1,0 +1,1124 @@
+from __future__ import annotations
+
+import os
+import socket
+import subprocess
+import sys
+import time
+from datetime import datetime, timedelta, timezone
+from importlib import import_module
+from pathlib import Path
+from urllib.parse import urlsplit
+from urllib.request import urlopen
+from uuid import UUID, uuid4
+
+import psycopg
+from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
+
+from src.brain.content_control_service import ContentControlService
+from src.brain.content_service import ContentService
+from src.brain.workbench_service import WorkbenchService
+from src.gateway.api.app import create_app
+from src.gateway.api.settings import Settings
+from src.infrastructure.content_control_repository import (
+    PostgresContentControlRepository,
+)
+from src.infrastructure.local_object_store import LocalObjectStore
+from src.infrastructure.postgres_repository import PostgresContentRepository
+from src.infrastructure.production_auth import ProductionAuthRepository
+from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
+from src.shared.errors import DomainError
+from src.shared.types import RequestedControls, TrustedScope
+from src.tool.llm_gateway.stub import DeterministicContentGenerator
+
+_PROFILE = {
+    "identity_position": "品牌官方生活方式账号",
+    "authority_boundary": "只表达已确认品牌事实与一般生活观察",
+    "audience_relationship": "帮助关注日常穿着的人做清楚选择",
+    "content_territories": "门店生活、穿着选择与品牌日常",
+    "default_production_conditions": "手机实拍、门店环境、纯文字辅助",
+}
+
+
+def _settings(database_url: str, material_root: Path) -> Settings:
+    return Settings.model_validate(
+        {
+            "DIYU_RUNTIME_MODE": "production",
+            "DIYU_APP_DATABASE_URL": database_url,
+            "DIYU_SESSION_SECRET": "ux03-gate-b-local-session-secret",
+            "DIYU_PUBLIC_URL": "https://diyu.example",
+            "DIYU_GENERATOR_MODE": "deepseek",
+            "DEEPSEEK_API_BASE_URL": "https://example.invalid",
+            "DEEPSEEK_API_KEY": "local-test-placeholder",
+            "DEEPSEEK_MODEL": "deepseek-v4-flash",
+            "DIYU_MATERIAL_STORAGE_ROOT": str(material_root),
+            "DIYU_S3_ENDPOINT_URL": "http://127.0.0.1:9000",
+            "DIYU_S3_BUCKET": "diyu-test",
+            "DIYU_S3_ACCESS_KEY_ID": "local-test-placeholder",
+            "DIYU_S3_SECRET_ACCESS_KEY": "local-test-placeholder",
+        }
+    )
+
+
+def _activate(client: TestClient, url: str, password: str) -> None:
+    response = client.post(
+        urlsplit(url).path,
+        content=f"password={password}&password_confirm={password}",
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+
+def _login(client: TestClient, username: str, password: str, path: str) -> None:
+    response = client.post(
+        path,
+        content=f"username={username}&password={password}",
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+
+def _run_gate_b_browser(
+    app_database_url: str,
+    material_root: Path,
+    username: str,
+    password: str,
+) -> subprocess.CompletedProcess[str]:
+    """Run one real Chrome against the formal React/API/PostgreSQL stack."""
+
+    with socket.socket() as port_socket:
+        port_socket.bind(("127.0.0.1", 0))
+        port = int(port_socket.getsockname()[1])
+    base_url = f"http://127.0.0.1:{port}"
+    environment = {
+        **os.environ,
+        "DIYU_RUNTIME_MODE": "production",
+        "DIYU_APP_DATABASE_URL": app_database_url,
+        "DIYU_SESSION_SECRET": "ux03-gate-b-browser-session-secret",
+        "DIYU_PUBLIC_URL": "https://diyu.example",
+        "DIYU_GENERATOR_MODE": "deepseek",
+        "DEEPSEEK_API_BASE_URL": "https://example.invalid",
+        "DEEPSEEK_API_KEY": "local-browser-placeholder",
+        "DEEPSEEK_MODEL": "deepseek-v4-flash",
+        "DIYU_MATERIAL_STORAGE_ROOT": str(material_root),
+        "DIYU_S3_ENDPOINT_URL": "http://127.0.0.1:9000",
+        "DIYU_S3_BUCKET": "diyu-test",
+        "DIYU_S3_ACCESS_KEY_ID": "local-browser-placeholder",
+        "DIYU_S3_SECRET_ACCESS_KEY": "local-browser-placeholder",
+    }
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "src.gateway.api.app:create_app",
+            "--factory",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        env=environment,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        for _ in range(100):
+            if server.poll() is not None:
+                raise AssertionError("Gate B browser API server exited early")
+            try:
+                with urlopen(f"{base_url}/status", timeout=0.2) as response:
+                    if response.status == 200:
+                        break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            raise AssertionError("Gate B browser API server did not become ready")
+        return subprocess.run(
+            ["node", "frontend/test/ux03-gate-b-browser.mjs"],
+            cwd=Path(__file__).resolve().parents[1],
+            env={
+                **os.environ,
+                "UX03_GATE_B_BASE_URL": base_url,
+                "UX03_GATE_B_USERNAME": username,
+                "UX03_GATE_B_PASSWORD": password,
+            },
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=5)
+
+
+def _create_test_operator(
+    migrator_database_url: str,
+    repository: ProductionAuthRepository,
+    username: str,
+    password: str,
+) -> tuple[UUID, str]:
+    operator_id = uuid4()
+    secret = repository._totp_secret()
+    with psycopg.connect(
+        migrator_database_url
+    ) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO platform_operators
+                (id, username, password_hash, totp_secret)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (
+                operator_id,
+                username,
+                repository._password_hash(password),
+                secret,
+            ),
+        )
+    return operator_id, secret
+
+
+def _delete_gate_b_fixture(
+    database_url: str,
+    tenant_id: UUID,
+    operator_id: UUID,
+) -> None:
+    """Delete only this test's synthetic tenant and operations identity."""
+
+    tenant_tables = (
+        "activity_events",
+        "account_expression_profile_versions",
+        "account_content_roles",
+        "auth_grants",
+        "tenant_management_grants",
+        "display_access_grants",
+        "organization_material_maintainers",
+        "content_accounts",
+        "content_roles",
+        "brand_expression_baselines",
+        "tenant_sessions",
+        "user_activation_tokens",
+        "user_credentials",
+        "brand_library_entry_organizations",
+        "brand_library_entry_versions",
+        "brand_library_entries",
+        "brand_product_scope_organizations",
+        "brand_product_versions",
+        "brand_products",
+        "material_asset_scope_organizations",
+        "material_asset_versions",
+        "material_assets",
+        "users",
+        "brand_audiences",
+        "brands",
+        "organizations",
+    )
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT id FROM content_versions WHERE tenant_id = %s ORDER BY id",
+            (tenant_id,),
+        )
+        for (version_id,) in cursor.fetchall():
+            cursor.execute(
+                "SELECT set_config('app.tenant_id', %s, true)",
+                (str(tenant_id),),
+            )
+            cursor.execute(
+                "SELECT set_config('diyu.content_version_maintenance', "
+                "'delete_synthetic_fixture', true)"
+            )
+            cursor.execute(
+                "SELECT set_config("
+                "'diyu.content_version_maintenance_transaction_id', "
+                "pg_current_xact_id()::text, true)"
+            )
+            cursor.execute(
+                "SELECT set_config("
+                "'diyu.content_version_maintenance_tenant_id', %s, true)",
+                (str(tenant_id),),
+            )
+            cursor.execute(
+                "SELECT set_config("
+                "'diyu.content_version_maintenance_version_id', %s, true)",
+                (str(version_id),),
+            )
+            cursor.execute(
+                "DELETE FROM content_versions WHERE tenant_id = %s AND id = %s",
+                (tenant_id, version_id),
+            )
+        cursor.execute(
+            "DELETE FROM content_items WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "DELETE FROM generation_runs WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "DELETE FROM business_tasks WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "UPDATE brand_library_entries SET current_version_id = NULL "
+            "WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "UPDATE brand_products SET current_version_id = NULL "
+            "WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "UPDATE material_assets SET current_version_id = NULL "
+            "WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "UPDATE content_accounts SET current_expression_profile_id = NULL "
+            "WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        immutable_triggers = {
+            "brand_library_entry_versions": (
+                "brand_library_entry_versions_immutable"
+            ),
+            "brand_product_versions": "brand_product_versions_immutable",
+            "material_asset_versions": "material_asset_versions_immutable",
+        }
+        for table in tenant_tables:
+            trigger = immutable_triggers.get(table)
+            if trigger is not None:
+                cursor.execute(
+                    f"ALTER TABLE {table} DISABLE TRIGGER {trigger}"  # noqa: S608 - fixed allowlist
+                )
+            try:
+                cursor.execute(
+                    f"DELETE FROM {table} WHERE tenant_id = %s",  # noqa: S608 - fixed allowlist
+                    (tenant_id,),
+                )
+            finally:
+                if trigger is not None:
+                    cursor.execute(
+                        f"ALTER TABLE {table} ENABLE TRIGGER {trigger}"  # noqa: S608 - fixed allowlist
+                    )
+        cursor.execute(
+            "DELETE FROM ops_tenant_registry WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute("DELETE FROM tenants WHERE id = %s", (tenant_id,))
+        cursor.execute(
+            "DELETE FROM platform_sessions WHERE operator_id = %s",
+            (operator_id,),
+        )
+        cursor.execute(
+            "DELETE FROM ops_audit_events WHERE operator_id = %s",
+            (operator_id,),
+        )
+        cursor.execute(
+            "DELETE FROM platform_operators WHERE id = %s",
+            (operator_id,),
+        )
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        for table in (
+            "content_versions",
+            "content_items",
+            "generation_runs",
+            "business_tasks",
+        ):
+            cursor.execute(
+                f"SELECT count(*) FROM {table} WHERE tenant_id = %s",  # noqa: S608
+                (tenant_id,),
+            )
+            assert cursor.fetchone() == (0,), table
+        for table in tenant_tables:
+            cursor.execute(
+                f"SELECT count(*) FROM {table} WHERE tenant_id = %s",  # noqa: S608 - fixed allowlist
+                (tenant_id,),
+            )
+            assert cursor.fetchone() == (0,), table
+        cursor.execute(
+            "SELECT count(*) FROM ops_tenant_registry WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        assert cursor.fetchone() == (0,)
+        cursor.execute("SELECT count(*) FROM tenants WHERE id = %s", (tenant_id,))
+        assert cursor.fetchone() == (0,)
+        for table in ("platform_sessions", "ops_audit_events"):
+            cursor.execute(
+                f"SELECT count(*) FROM {table} WHERE operator_id = %s",  # noqa: S608
+                (operator_id,),
+            )
+            assert cursor.fetchone() == (0,), table
+        cursor.execute(
+            "SELECT count(*) FROM platform_operators WHERE id = %s",
+            (operator_id,),
+        )
+        assert cursor.fetchone() == (0,)
+
+
+def test_gate_b_brand_scope_usage_and_readiness_journey(
+    app_database_url: str,
+    migrator_database_url: str,
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """One fresh tenant must carry all six Gate B outcomes and their isolation bait."""
+
+    repository = ProductionAuthRepository(app_database_url)
+    suffix = uuid4().hex[:10]
+    ops_username = f"ux03-b-ops-{suffix}"
+    ops_password = "ux03-gate-b-ops-password"
+    operator_id, secret = _create_test_operator(
+        migrator_database_url,
+        repository,
+        ops_username,
+        ops_password,
+    )
+    object_store = LocalObjectStore(str(tmp_path / "materials"))
+    api_module = import_module("src.gateway.api.app")
+    monkeypatch.setattr(
+        api_module,
+        "build_workbench_service",
+        lambda _: WorkbenchService(
+            PostgresWorkbenchRepository(app_database_url),
+            object_store,
+        ),
+    )
+    monkeypatch.setattr(
+        api_module,
+        "build_content_control_service",
+        lambda _: ContentControlService(
+            PostgresContentControlRepository(app_database_url),
+            object_store,
+        ),
+    )
+    app = create_app(_settings(app_database_url, tmp_path / "materials"))
+    tenant_id: UUID | None = None
+    try:
+        with TestClient(app, base_url="https://diyu.example") as ops:
+            login = ops.post(
+                "/ops/login",
+                content=(
+                    f"username={ops_username}&password={ops_password}"
+                    f"&totp_code={repository._totp_code(secret, int(time.time() // 30))}"
+                ),
+                follow_redirects=False,
+            )
+            assert login.status_code == 303
+            created = ops.post(
+                "/api/v1/ops/tenants",
+                json={
+                    "tenant_name": f"UX03 Gate B 品牌公司 {suffix}",
+                    "administrator_name": "Gate B 首位管理员",
+                    "administrator_username": f"ux03-b-admin-{suffix}",
+                },
+            )
+            assert created.status_code == 201
+            tenant = created.json()
+            tenant_id = UUID(tenant["tenant_id"])
+
+        with TestClient(app, base_url="https://diyu.example") as admin:
+            admin_password = "ux03-gate-b-admin-password"
+            _activate(admin, tenant["activation_url"], admin_password)
+            _login(
+                admin,
+                tenant["username"],
+                admin_password,
+                "/tenant-admin/login",
+            )
+            headquarters = admin.get(
+                "/api/v1/tenant-management/organizations"
+            ).json()[0]
+            east = admin.post(
+                "/api/v1/tenant-management/organizations",
+                json={
+                    "name": "华东区域",
+                    "organization_level": "region",
+                    "parent_organization_id": headquarters["id"],
+                    "as_synthetic_business_fixture": True,
+                },
+            )
+            assert east.status_code == 201
+            east_store = admin.post(
+                "/api/v1/tenant-management/organizations",
+                json={
+                    "name": "柯桥门店",
+                    "organization_level": "operating_unit",
+                    "parent_organization_id": east.json()["id"],
+                    "as_synthetic_business_fixture": True,
+                },
+            )
+            assert east_store.status_code == 201
+            south = admin.post(
+                "/api/v1/tenant-management/organizations",
+                json={
+                    "name": "华南区域",
+                    "organization_level": "region",
+                    "parent_organization_id": headquarters["id"],
+                    "as_synthetic_business_fixture": True,
+                },
+            )
+            assert south.status_code == 201
+            south_store = admin.post(
+                "/api/v1/tenant-management/organizations",
+                json={
+                    "name": "华南门店",
+                    "organization_level": "operating_unit",
+                    "parent_organization_id": south.json()["id"],
+                    "as_synthetic_business_fixture": True,
+                },
+            )
+            assert south_store.status_code == 201
+            baseline = admin.get("/api/v1/admin/brand-expression").json()
+            confirmed = admin.post(
+                "/api/v1/admin/brand-expression/confirm",
+                json={"draft": f"{baseline['draft']}\n资料范围按账号负责团队确定。"},
+            )
+            assert confirmed.status_code == 200
+
+            members: dict[str, dict[str, object]] = {}
+            for label, organization in (
+                ("总部", headquarters),
+                ("柯桥", east_store.json()),
+                ("华南", south_store.json()),
+            ):
+                response = admin.post(
+                    "/api/v1/tenant-management/users",
+                    json={
+                        "display_name": f"{label}内容用户",
+                        "username": f"ux03-b-{label}-{suffix}",
+                        "organization_id": organization["id"],
+                        "entry_type": "tenant_user",
+                        "capabilities": [],
+                        "publishing_identity_ids": [],
+                        "expression_profile_maintenance_account_ids": [],
+                    },
+                )
+                assert response.status_code == 201, response.text
+                members[label] = response.json()
+
+            accounts: dict[str, dict[str, object]] = {}
+            for label, organization in (
+                ("总部", headquarters),
+                ("柯桥", east_store.json()),
+                ("华南", south_store.json()),
+            ):
+                response = admin.post(
+                    "/api/v1/tenant-management/publishing-accounts",
+                    json={
+                        "name": f"{label}逻辑发布账号",
+                        "channel": "小红书",
+                        "content_role_name": f"{label}品牌表达",
+                        "speaker_kind": "institutional_account",
+                        "operator_id": members[label]["user_id"],
+                        "control_organization_id": organization["id"],
+                        "operator_can_maintain_expression_profile": True,
+                        "initial_profile": _PROFILE,
+                        "as_synthetic_business_fixture": True,
+                    },
+                )
+                assert response.status_code == 201, response.text
+                accounts[label] = response.json()
+            cross_organization_use = admin.patch(
+                f"/api/v1/tenant-management/users/{members['总部']['user_id']}/grants",
+                json={
+                    "entry_type": "tenant_user",
+                    "capabilities": ["content"],
+                    "publishing_identity_ids": [
+                        accounts["总部"]["id"],
+                        accounts["柯桥"]["id"],
+                    ],
+                    "expression_profile_maintenance_account_ids": [
+                        accounts["总部"]["id"]
+                    ],
+                },
+            )
+            assert cross_organization_use.status_code == 200
+
+            # Preview is not a formal record; explicit confirmation creates immutable V1.
+            east_reference_payload = {
+                "category": "organization_fact",
+                "title": "华东门店表达参考",
+                "source_note": "品牌管理员根据门店确认资料录入",
+                "content": "华东区域内容可以引用本区域确认的门店信息。",
+                "version": "V1",
+                "visibility_scope": "organizations",
+                "organization_ids": [east.json()["id"]],
+            }
+            preview = admin.post(
+                "/api/v1/tenant-management/brand-library/preview",
+                json=east_reference_payload,
+            )
+            assert preview.status_code == 200
+            assert preview.json()["saved"] is False
+            assert admin.post(
+                "/api/v1/tenant-management/brand-library/preview",
+                json={**east_reference_payload, "unknown_field": True},
+            ).status_code == 422
+            assert admin.post(
+                "/api/v1/tenant-management/brand-library",
+                json=east_reference_payload,
+            ).status_code == 422
+            assert admin.get("/api/v1/tenant-management/brand-library").json() == []
+            reference = admin.post(
+                "/api/v1/tenant-management/brand-library",
+                json={**east_reference_payload, "confirm_as_current": True},
+            )
+            assert reference.status_code == 201, reference.text
+            reference_id = reference.json()["id"]
+            v2_reference = admin.post(
+                f"/api/v1/tenant-management/brand-library/{reference_id}/versions",
+                json={
+                    **{
+                        key: value
+                        for key, value in east_reference_payload.items()
+                        if key != "category"
+                    },
+                    "content": "华东区域内容只引用本区域已经确认的门店信息。",
+                    "version": "V2",
+                },
+            )
+            assert v2_reference.status_code == 200, v2_reference.text
+            history = admin.get(
+                f"/api/v1/tenant-management/brand-library/{reference_id}/versions"
+            )
+            assert [item["version_number"] for item in history.json()] == [2, 1]
+            immutable_update_failed = False
+            try:
+                with psycopg.connect(
+                    app_database_url
+                ) as connection, connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT set_config('app.tenant_id', %s, true)",
+                        (str(tenant_id),),
+                    )
+                    cursor.execute(
+                        "UPDATE brand_library_entry_versions "
+                        "SET content = '不可变更' "
+                        "WHERE tenant_id = %s AND entry_id = %s",
+                        (tenant_id, reference_id),
+                    )
+            except psycopg.Error:
+                immutable_update_failed = True
+            assert immutable_update_failed, "资料历史版本必须在数据库层不可变"
+            retired = admin.put(
+                f"/api/v1/tenant-management/brand-library/{reference_id}/enabled",
+                json={"enabled": False},
+            )
+            assert retired.status_code == 200
+            restored = admin.put(
+                f"/api/v1/tenant-management/brand-library/{reference_id}/enabled",
+                json={"enabled": True},
+            )
+            assert restored.status_code == 200
+            assert restored.json()["current_version_id"] == v2_reference.json()[
+                "current_version_id"
+            ]
+
+            import_preview = admin.post(
+                "/api/v1/tenant-management/brand-products/preview",
+                json={
+                    "source_format": "csv",
+                    "content": (
+                        "sku,display_name,category,material_or_structure\n"
+                        "EAST-01,华东门店针织衫,服装,针织结构\n"
+                    ),
+                },
+            )
+            assert import_preview.status_code == 200
+            assert import_preview.json()["saved"] is False
+            assert admin.post(
+                "/api/v1/tenant-management/brand-products/preview",
+                json={
+                    "source_format": "csv",
+                    "content": "sku,display_name\nEAST-01,华东门店针织衫\n",
+                    "unknown_field": True,
+                },
+            ).status_code == 422
+            product_payload = {
+                "sku": "EAST-01",
+                "display_name": "华东门店针织衫",
+                "category": "服装",
+                "colors": [],
+                "material_or_structure": "针织结构",
+                "silhouette": "",
+                "observable_features": "",
+                "source_note": "品牌管理员确认的商品资料",
+                "applicability": "当前华东区域内容",
+                "confirm_as_current_brand_fact": True,
+                "visibility_scope": "organizations",
+                "organization_ids": [east.json()["id"]],
+            }
+            product_v1 = admin.put(
+                "/api/v1/tenant-management/brand-products",
+                json=product_payload,
+            )
+            assert product_v1.status_code == 200, product_v1.text
+            product_v2 = admin.put(
+                "/api/v1/tenant-management/brand-products",
+                json={
+                    **product_payload,
+                    "observable_features": "圆领",
+                    "applicability": "当前华东区域内容 V2",
+                },
+            )
+            assert product_v2.status_code == 200, product_v2.text
+            product_history = admin.get(
+                "/api/v1/tenant-management/brand-products/EAST-01/versions"
+            )
+            assert [item["fact_version"] for item in product_history.json()] == [2, 1]
+            product_retired = admin.put(
+                "/api/v1/tenant-management/brand-products/EAST-01/enabled",
+                json={"enabled": False},
+            )
+            assert product_retired.status_code == 200
+            assert admin.put(
+                "/api/v1/tenant-management/brand-products/EAST-01/enabled",
+                json={"enabled": True},
+            ).status_code == 200
+
+            material = admin.post(
+                "/api/v1/tenant-management/organization-materials",
+                json={
+                    "organization_id": east_store.json()["id"],
+                    "title": "华东门店官方环境说明",
+                    "filename": "east-store.txt",
+                    "content_type": "text/plain",
+                    "content_base64": "5Y2O5Lic6Zeo5bqX5aSW6KeC6K+05piO",
+                    "declares_identifiable_minor": False,
+                    "reference_note": "门店管理员确认的官方素材",
+                    "visibility_scope": "organizations",
+                    "organization_ids": [east.json()["id"]],
+                },
+            )
+            assert material.status_code == 201, material.text
+            material_id = material.json()["id"]
+            material_v2 = admin.post(
+                f"/api/v1/tenant-management/organization-materials/{material_id}/versions",
+                json={
+                    "title": "华东门店官方环境说明",
+                    "reference_note": "门店管理员复核的官方素材说明 V2",
+                    "visibility_scope": "organizations",
+                    "organization_ids": [east.json()["id"]],
+                },
+            )
+            assert material_v2.status_code == 200, material_v2.text
+            assert [
+                item["version"]
+                for item in admin.get(
+                    f"/api/v1/tenant-management/organization-materials/{material_id}/versions"
+                ).json()
+            ] == [2, 1]
+            assert admin.put(
+                f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
+                json={"enabled": False},
+            ).status_code == 200
+            assert admin.put(
+                f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
+                json={"enabled": True},
+            ).status_code == 200
+
+            # Runtime access derives from each logical account's control organization.
+            with psycopg.connect(
+                migrator_database_url
+            ) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id FROM brands WHERE tenant_id = %s",
+                    (tenant_id,),
+                )
+                brand_row = cursor.fetchone()
+                assert brand_row is not None
+                brand_id = UUID(str(brand_row[0]))
+                bait_brand_id = uuid4()
+                bait_entry_id = uuid4()
+                bait_version_id = uuid4()
+                cursor.execute(
+                    """
+                    INSERT INTO brands
+                        (id, tenant_id, name, positioning,
+                         decision_order, tone)
+                    VALUES (%s, %s, '另一品牌诱饵', '不得进入当前品牌',
+                            '隔离优先', '隔离')
+                    """,
+                    (bait_brand_id, tenant_id),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO brand_library_entries
+                        (id, tenant_id, brand_id, category, title,
+                         source_note, content, version, status,
+                         visibility_scope, updated_by)
+                    VALUES (%s, %s, %s, 'reference', '另一品牌诱饵资料',
+                            '隔离测试', '不得泄漏', 'V1', 'active',
+                            'brand_all', %s)
+                    """,
+                    (
+                        bait_entry_id,
+                        tenant_id,
+                        bait_brand_id,
+                        UUID(str(tenant["administrator_id"])),
+                    ),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO brand_library_entry_versions
+                        (id, tenant_id, brand_id, entry_id,
+                         version_number, version_label, category, title,
+                         source_note, content, visibility_scope, created_by)
+                    VALUES (%s, %s, %s, %s, 1, 'V1', 'reference',
+                            '另一品牌诱饵资料', '隔离测试', '不得泄漏',
+                            'brand_all', %s)
+                    """,
+                    (
+                        bait_version_id,
+                        tenant_id,
+                        bait_brand_id,
+                        bait_entry_id,
+                        UUID(str(tenant["administrator_id"])),
+                    ),
+                )
+                cursor.execute(
+                    "UPDATE brand_library_entries "
+                    "SET current_version_id = %s "
+                    "WHERE tenant_id = %s AND id = %s",
+                    (bait_version_id, tenant_id, bait_entry_id),
+                )
+            east_scope = TrustedScope(
+                tenant_id=tenant_id,
+                brand_id=brand_id,
+                account_id=UUID(str(accounts["柯桥"]["id"])),
+                user_id=UUID(str(members["柯桥"]["user_id"])),
+            )
+            south_scope = TrustedScope(
+                tenant_id=tenant_id,
+                brand_id=brand_id,
+                account_id=UUID(str(accounts["华南"]["id"])),
+                user_id=UUID(str(members["华南"]["user_id"])),
+            )
+            cross_organization_user_scope = TrustedScope(
+                tenant_id=tenant_id,
+                brand_id=brand_id,
+                account_id=UUID(str(accounts["柯桥"]["id"])),
+                user_id=UUID(str(members["总部"]["user_id"])),
+            )
+            content_repository = PostgresContentRepository(app_database_url)
+            east_context = content_repository.load_brand_context(
+                east_scope,
+                "graphic",
+                "手机实拍",
+            )
+            south_context = content_repository.load_brand_context(
+                south_scope,
+                "graphic",
+                "手机实拍",
+            )
+            assert "华东门店表达参考" in "\n".join(
+                east_context.brand_reference_context
+            )
+            assert "华东门店表达参考" in "\n".join(
+                content_repository.load_brand_context(
+                    cross_organization_user_scope,
+                    "graphic",
+                    "手机实拍",
+                ).brand_reference_context
+            )
+            assert "华东门店表达参考" not in "\n".join(
+                south_context.brand_reference_context
+            )
+            assert "另一品牌诱饵资料" not in "\n".join(
+                east_context.brand_reference_context
+            )
+            with psycopg.connect(
+                migrator_database_url
+            ) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT tenant_id, brand_id, id, created_by "
+                    "FROM business_tasks "
+                    "WHERE tenant_id <> %s LIMIT 1",
+                    (tenant_id,),
+                )
+                other_tenant_task = cursor.fetchone()
+            if other_tenant_task is not None:
+                cross_tenant_scope = TrustedScope(
+                    tenant_id=UUID(str(other_tenant_task[0])),
+                    brand_id=brand_id,
+                    account_id=UUID(str(accounts["柯桥"]["id"])),
+                    user_id=UUID(str(members["柯桥"]["user_id"])),
+                )
+                try:
+                    content_repository.load_brand_context(
+                        cross_tenant_scope,
+                        "graphic",
+                        "手机实拍",
+                    )
+                except DomainError:
+                    pass
+                else:
+                    raise AssertionError("跨租户作用域不应读取当前品牌资料")
+            east_products = content_repository.load_product_facts(
+                east_scope,
+                "请介绍 EAST-01",
+            )
+            assert [item.fact_version for item in east_products] == [2]
+            assert (
+                content_repository.load_product_facts(
+                    south_scope,
+                    "请介绍 EAST-01",
+                )
+                == ()
+            )
+            assert (
+                content_repository.load_product_facts(
+                    east_scope,
+                    "今天不知道发什么",
+                )
+                == ()
+            )
+            control_repository = PostgresContentControlRepository(
+                app_database_url
+            )
+            assert control_repository.selected_materials(
+                east_scope,
+                (UUID(material_id),),
+            )
+            assert control_repository.selected_materials(east_scope, ()) == ()
+            try:
+                control_repository.selected_materials(
+                    south_scope,
+                    (UUID(material_id),),
+                )
+            except DomainError as exc:
+                assert "不能使用" in str(exc)
+            else:
+                raise AssertionError("兄弟区域不应读取华东组织素材")
+
+            # One deterministic task freezes exactly the selected versions. Later
+            # versions and retirements must not change its same-goal revision.
+            content_service = ContentService(
+                content_repository,
+                DeterministicContentGenerator(),
+                ContentControlService(control_repository, object_store),
+            )
+            first = content_service.create_from_weak_seed(
+                east_scope,
+                "请用 EAST-01 写一条商品内容",
+                target="xiaohongshu_graphic",
+                controls=RequestedControls(
+                    material_ids=(UUID(material_id),),
+                ),
+            )
+            first_task_id = UUID(str(first["task_id"]))
+            with psycopg.connect(
+                migrator_database_url
+            ) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT content_context_snapshot FROM business_tasks "
+                    "WHERE tenant_id = %s AND id = %s",
+                    (tenant_id, first_task_id),
+                )
+                frozen_row = cursor.fetchone()
+                assert frozen_row is not None
+                frozen_snapshot = frozen_row[0]
+            assert frozen_snapshot["product_facts"][0]["fact_version"] == 2
+            assert frozen_snapshot["material_snapshots"][0][
+                "reference_version"
+            ] == 2
+            assert "版本记录" in frozen_snapshot["brand_reference_context"][0]
+
+            reference_v3 = admin.post(
+                f"/api/v1/tenant-management/brand-library/{reference_id}/versions",
+                json={
+                    "title": "华东门店表达参考",
+                    "source_note": "品牌管理员第三次复核",
+                    "content": "这是后续任务才应消费的 V3。",
+                    "version": "V3",
+                    "visibility_scope": "organizations",
+                    "organization_ids": [east.json()["id"]],
+                },
+            )
+            assert reference_v3.status_code == 200
+            assert admin.put(
+                f"/api/v1/tenant-management/brand-library/{reference_id}/enabled",
+                json={"enabled": False},
+            ).status_code == 200
+            product_v3 = admin.put(
+                "/api/v1/tenant-management/brand-products",
+                json={
+                    **product_payload,
+                    "observable_features": "圆领与后续确认细节",
+                    "applicability": "后续新任务 V3",
+                },
+            )
+            assert product_v3.status_code == 200
+            assert admin.put(
+                "/api/v1/tenant-management/brand-products/EAST-01/enabled",
+                json={"enabled": False},
+            ).status_code == 200
+            material_v3 = admin.post(
+                f"/api/v1/tenant-management/organization-materials/{material_id}/versions",
+                json={
+                    "title": "华东门店官方环境说明",
+                    "reference_note": "后续任务才应读取的素材说明 V3",
+                    "visibility_scope": "organizations",
+                    "organization_ids": [east.json()["id"]],
+                },
+            )
+            assert material_v3.status_code == 200
+            assert admin.put(
+                f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
+                json={"enabled": False},
+            ).status_code == 200
+            current_after_retirement = content_repository.load_brand_context(
+                east_scope,
+                "graphic",
+                "手机实拍",
+            )
+            assert "华东门店表达参考" not in "\n".join(
+                current_after_retirement.brand_reference_context
+            )
+            assert (
+                content_repository.load_product_facts(
+                    east_scope,
+                    "请介绍 EAST-01",
+                )
+                == ()
+            )
+            try:
+                control_repository.selected_materials(
+                    east_scope,
+                    (UUID(material_id),),
+                )
+            except DomainError:
+                pass
+            else:
+                raise AssertionError("已停用组织素材不应进入新任务")
+            content_service.revise(
+                east_scope,
+                first_task_id,
+                "换个讲法，保留原来的资料边界",
+                target="xiaohongshu_graphic",
+            )
+            with psycopg.connect(
+                migrator_database_url
+            ) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT content_context_snapshot FROM business_tasks "
+                    "WHERE tenant_id = %s AND id = %s",
+                    (tenant_id, first_task_id),
+                )
+                revised_row = cursor.fetchone()
+                assert revised_row is not None
+                revised_snapshot = revised_row[0]
+            assert revised_snapshot["product_facts"] == frozen_snapshot[
+                "product_facts"
+            ]
+            assert revised_snapshot["material_snapshots"] == frozen_snapshot[
+                "material_snapshots"
+            ]
+            assert revised_snapshot["brand_reference_context"] == frozen_snapshot[
+                "brand_reference_context"
+            ]
+            assert admin.put(
+                f"/api/v1/tenant-management/brand-library/{reference_id}/enabled",
+                json={"enabled": True},
+            ).status_code == 200
+            assert admin.put(
+                "/api/v1/tenant-management/brand-products/EAST-01/enabled",
+                json={"enabled": True},
+            ).status_code == 200
+            assert admin.put(
+                f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
+                json={"enabled": True},
+            ).status_code == 200
+
+            # One bounded event set proves that 7/30-day windows and event kinds
+            # are not interchangeable. No prompt or content body is stored here.
+            with psycopg.connect(
+                migrator_database_url
+            ) as connection, connection.cursor() as cursor:
+                for days, event_type in (
+                    (5, "content.conversation"),
+                    (15, "content.conversation"),
+                    (5, "content.rate_limited"),
+                    (40, "content.rate_limited"),
+                ):
+                    cursor.execute(
+                        """
+                        INSERT INTO activity_events
+                            (id, tenant_id, actor_id, event_type,
+                             entity_type, entity_id, created_at)
+                        VALUES (%s, %s, %s, %s, 'formal_identity', %s, %s)
+                        """,
+                        (
+                            uuid4(),
+                            tenant_id,
+                            UUID(str(tenant["administrator_id"])),
+                            event_type,
+                            UUID(str(tenant["administrator_id"])),
+                            datetime.now(timezone.utc) - timedelta(days=days),
+                        ),
+                    )
+            usage_7 = admin.get(
+                "/api/v1/tenant-management/team-usage?window_days=7"
+            )
+            usage_30 = admin.get(
+                "/api/v1/tenant-management/team-usage?window_days=30"
+            )
+            assert usage_7.status_code == usage_30.status_code == 200
+            assert usage_7.json()["activity"]["conversations"] == 1
+            assert usage_30.json()["activity"]["conversations"] == 2
+            assert usage_7.json()["activity"]["rate_limited"] == 1
+            assert usage_30.json()["activity"]["rate_limited"] == 1
+            assert usage_7.json()["activity"]["first_generations"] == 1
+            assert usage_7.json()["activity"]["revisions"] == 1
+            assert usage_7.json()["activity"]["successful_runs"] == 2
+            assert usage_7.json()["members"]["logged_in"] >= 1
+            assert usage_7.json()["members"]["product_active"] >= 1
+            assert usage_7.json()["provider_usage"][
+                "is_complete_billing_total"
+            ] is False
+
+            readiness = admin.get("/api/v1/admin/readiness")
+            assert readiness.status_code == 200
+            diagnosis = readiness.json()["items"]
+            assert {item["id"] for item in diagnosis} == {
+                "non_product_content",
+                "product_facts",
+                "continuous_series",
+                "platform_recompile",
+                "dm01_display",
+                "first_creation",
+            }
+            non_product = next(
+                item for item in diagnosis if item["id"] == "non_product_content"
+            )
+            assert non_product["status"] == "available"
+            assert "不依赖具体商品事实" in non_product["unaffected"][0]
+            assert all(item["contract_version"] == "ux03-readiness-v2" for item in diagnosis)
+            assert all("evidence_details" in item for item in diagnosis)
+            if os.environ.get("DIYU_RUN_UX03_GATE_B_BROWSER") == "1":
+                browser = _run_gate_b_browser(
+                    app_database_url,
+                    tmp_path / "materials",
+                    str(tenant["username"]),
+                    admin_password,
+                )
+                assert browser.returncode == 0, (
+                    "formal Gate B Chrome journey failed:\n"
+                    f"{browser.stdout}\n{browser.stderr}"
+                )
+                assert '"failures":[]' in browser.stdout.replace(" ", "")
+    finally:
+        if tenant_id is not None:
+            _delete_gate_b_fixture(
+                migrator_database_url,
+                tenant_id,
+                operator_id,
+            )

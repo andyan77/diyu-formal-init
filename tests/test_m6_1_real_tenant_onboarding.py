@@ -192,12 +192,12 @@ def test_real_tenant_onboarding_is_atomic_account_independent_and_idempotent(
         readiness = client.get("/api/v1/admin/readiness").json()["items"]
         statuses = {item["id"]: item["status"] for item in readiness}
         assert statuses == {
-            "brand_expression": "unavailable",
             "non_product_content": "unavailable",
             "product_facts": "unavailable",
             "continuous_series": "unavailable",
             "platform_recompile": "unavailable",
             "dm01_display": "unavailable",
+            "first_creation": "unavailable",
         }
         operators = client.get("/api/v1/tenant-management/operators").json()
         assert len(operators) == 1

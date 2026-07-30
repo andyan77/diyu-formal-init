@@ -546,6 +546,17 @@ def snapshot_document(
         "material_refs": [
             {"asset_id": str(item.asset_id), "reference_version": item.reference_version} for item in control.materials
         ],
+        "material_snapshots": [
+            {
+                "asset_id": str(item.asset_id),
+                "title": item.title,
+                "media_type": item.media_type,
+                "reference_version": item.reference_version,
+                "text_body": item.text_body,
+                "reference_note": item.reference_note,
+            }
+            for item in control.materials
+        ],
         "product_facts": [
             {
                 "sku": item.sku,
