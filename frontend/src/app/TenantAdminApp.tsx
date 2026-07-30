@@ -169,9 +169,12 @@ type ReadinessItem = {
   evidence: string[];
   evidence_details?: Array<{
     source: string;
+    resource_id?: string;
     version: string;
+    version_id?: string | null;
     scope: string;
     updated_at: string | null;
+    updated_at_label?: string;
   }>;
   gaps: string[];
   conflicts?: string[];
@@ -4184,7 +4187,9 @@ function Readiness({ onSection }: { onSection: (section: Section) => void }): JS
                       {detail.version} · {detail.scope}
                       {detail.updated_at
                         ? ` · 更新于 ${humanDate(detail.updated_at)}`
-                        : ""}
+                        : detail.updated_at_label
+                          ? ` · ${detail.updated_at_label}`
+                          : ""}
                     </dd>
                   </div>
                 ))}

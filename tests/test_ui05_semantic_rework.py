@@ -879,8 +879,6 @@ def test_ui05_d_brand_library_scopes_filter_before_context_and_private_materials
     entries: tuple[tuple[str, list[str], str], ...] = (
         ("brand_all", [], f"UI05-BRAND-{suffix}"),
         ("headquarters", [str(ORG_ID)], f"UI05-HQ-{suffix}"),
-        ("organizations", [str(STORE_ORG_ID)], f"UI05-STORE-{suffix}"),
-        ("organizations", [str(EXTERNAL_OPERATOR_ORG_ID)], f"UI05-OTHER-{suffix}"),
     )
     with TestClient(_app(app_database_url, monkeypatch), base_url="https://diyuai.cc") as client:
         client.cookies.set("diyu_session", admin_token)
@@ -900,6 +898,23 @@ def test_ui05_d_brand_library_scopes_filter_before_context_and_private_materials
                 },
             )
             assert saved.status_code == 201, saved.text
+        for operating_unit_id in (STORE_ORG_ID, EXTERNAL_OPERATOR_ORG_ID):
+            invalid_region_scope = client.post(
+                "/api/v1/tenant-management/brand-library",
+                json={
+                    "category": "reference",
+                    "title": f"UI05-INVALID-REGION-{operating_unit_id}",
+                    "source_note": "operating unit cannot stand in for region",
+                    "content": "must not be saved",
+                    "version": "1",
+                    "status": "active",
+                    "confirm_as_current": True,
+                    "visibility_scope": "organizations",
+                    "organization_ids": [str(operating_unit_id)],
+                },
+            )
+            assert invalid_region_scope.status_code == 422
+            assert "区域" in invalid_region_scope.json()["detail"]
 
     headquarters = PostgresContentRepository(app_database_url).load_brand_context(
         TrustedScope(TENANT_ID, USER_ID, BRAND_ID, ACCOUNT_ID),
@@ -915,12 +930,8 @@ def test_ui05_d_brand_library_scopes_filter_before_context_and_private_materials
     store_refs = "\n".join(store.brand_reference_context)
     assert f"UI05-BRAND-{suffix}" in headquarters_refs
     assert f"UI05-HQ-{suffix}" in headquarters_refs
-    assert f"UI05-STORE-{suffix}" not in headquarters_refs
-    assert f"UI05-OTHER-{suffix}" not in headquarters_refs
     assert f"UI05-BRAND-{suffix}" in store_refs
-    assert f"UI05-STORE-{suffix}" in store_refs
     assert f"UI05-HQ-{suffix}" not in store_refs
-    assert f"UI05-OTHER-{suffix}" not in store_refs
 
     with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (BAIT_TENANT_ID,))
@@ -981,7 +992,6 @@ def test_ui05_d_brand_library_scopes_filter_before_context_and_private_materials
 
     workbench = PostgresWorkbenchRepository(app_database_url)
     headquarters_material_id = uuid4()
-    external_material_id = uuid4()
     management_scope = TenantManagementScope(
         TENANT_ID,
         TENANT_ADMIN_USER_ID,
@@ -1001,20 +1011,21 @@ def test_ui05_d_brand_library_scopes_filter_before_context_and_private_materials
         "headquarters",
         (ORG_ID,),
     )
-    workbench.create_management_organization_material(
-        management_scope,
-        EXTERNAL_OPERATOR_ORG_ID,
-        external_material_id,
-        f"UI05-EXTERNAL-MATERIAL-{suffix}",
-        "image",
-        f"ui05/external/{suffix}.png",
-        8,
-        "external.png",
-        f"external-{suffix}",
-        "external material note",
-        "organizations",
-        (EXTERNAL_OPERATOR_ORG_ID,),
-    )
+    with pytest.raises(DomainError, match="区域"):
+        workbench.create_management_organization_material(
+            management_scope,
+            EXTERNAL_OPERATOR_ORG_ID,
+            uuid4(),
+            f"UI05-INVALID-REGION-MATERIAL-{suffix}",
+            "image",
+            f"ui05/external/{suffix}.png",
+            8,
+            "external.png",
+            f"external-{suffix}",
+            "external material note",
+            "organizations",
+            (EXTERNAL_OPERATOR_ORG_ID,),
+        )
     external_headquarters_scope = TrustedScope(
         TENANT_ID,
         EXTERNAL_OPERATOR_USER_ID,
@@ -1023,7 +1034,6 @@ def test_ui05_d_brand_library_scopes_filter_before_context_and_private_materials
     )
     visible_material_ids = {UUID(str(item["id"])) for item in workbench.list_materials(external_headquarters_scope)}
     assert headquarters_material_id in visible_material_ids
-    assert external_material_id not in visible_material_ids
 
     control_repository = PostgresContentControlRepository(app_database_url)
     selected = control_repository.selected_materials(
@@ -1031,11 +1041,6 @@ def test_ui05_d_brand_library_scopes_filter_before_context_and_private_materials
         (headquarters_material_id,),
     )
     assert {UUID(str(item["asset_id"])) for item in selected} == {headquarters_material_id}
-    with pytest.raises(DomainError, match="当前身份不能使用"):
-        control_repository.selected_materials(
-            external_headquarters_scope,
-            (external_material_id,),
-        )
 
     material_title = f"UI05-PRIVATE-{suffix}"
     workbench.create_material(

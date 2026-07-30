@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 
 import psycopg
 from fastapi.testclient import TestClient
+from psycopg.types.json import Jsonb
 from pytest import MonkeyPatch
 
 from src.brain.content_control_service import ContentControlService
@@ -29,7 +30,7 @@ from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.production_auth import ProductionAuthRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.errors import DomainError
-from src.shared.types import RequestedControls, TrustedScope
+from src.shared.types import RequestedControls, TenantManagementScope, TrustedScope
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 
 _PROFILE = {
@@ -262,7 +263,19 @@ def _delete_gate_b_fixture(
             (tenant_id,),
         )
         cursor.execute(
+            "DELETE FROM content_series_items WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute(
             "DELETE FROM business_tasks WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "DELETE FROM content_series WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "DELETE FROM display_stores WHERE tenant_id = %s",
             (tenant_id,),
         )
         cursor.execute(
@@ -331,6 +344,9 @@ def _delete_gate_b_fixture(
             "content_items",
             "generation_runs",
             "business_tasks",
+            "content_series_items",
+            "content_series",
+            "display_stores",
         ):
             cursor.execute(
                 f"SELECT count(*) FROM {table} WHERE tenant_id = %s",  # noqa: S608
@@ -423,6 +439,16 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             assert created.status_code == 201
             tenant = created.json()
             tenant_id = UUID(tenant["tenant_id"])
+        with psycopg.connect(
+            migrator_database_url
+        ) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM brands WHERE tenant_id = %s",
+                (tenant_id,),
+            )
+            brand_row = cursor.fetchone()
+            assert brand_row is not None
+            brand_id = UUID(str(brand_row[0]))
 
         with TestClient(app, base_url="https://diyu.example") as admin:
             admin_password = "ux03-gate-b-admin-password"
@@ -514,7 +540,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                     "/api/v1/tenant-management/publishing-accounts",
                     json={
                         "name": f"{label}逻辑发布账号",
-                        "channel": "小红书",
+                        "channel": "抖音",
                         "content_role_name": f"{label}品牌表达",
                         "speaker_kind": "institutional_account",
                         "operator_id": members[label]["user_id"],
@@ -526,6 +552,17 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 )
                 assert response.status_code == 201, response.text
                 accounts[label] = response.json()
+            south_xhs = admin.post(
+                "/api/v1/tenant-management/platform-carriers",
+                json={
+                    "source_account_id": accounts["华南"]["id"],
+                    "name": "华南逻辑发布账号 · 小红书",
+                    "channel": "小红书",
+                    "operator_id": members["华南"]["user_id"],
+                    "confirm_internal_carrier": True,
+                },
+            )
+            assert south_xhs.status_code == 201, south_xhs.text
             cross_organization_use = admin.patch(
                 f"/api/v1/tenant-management/users/{members['总部']['user_id']}/grants",
                 json={
@@ -541,6 +578,17 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 },
             )
             assert cross_organization_use.status_code == 200
+            for label in ("总部", "华南"):
+                removed_execution_path = admin.patch(
+                    f"/api/v1/tenant-management/users/{members[label]['user_id']}/grants",
+                    json={
+                        "entry_type": "tenant_user",
+                        "capabilities": [],
+                        "publishing_identity_ids": [],
+                        "expression_profile_maintenance_account_ids": [],
+                    },
+                )
+                assert removed_execution_path.status_code == 200
 
             # Preview is not a formal record; explicit confirmation creates immutable V1.
             east_reference_payload = {
@@ -566,6 +614,16 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 "/api/v1/tenant-management/brand-library",
                 json=east_reference_payload,
             ).status_code == 422
+            invalid_store_scope = admin.post(
+                "/api/v1/tenant-management/brand-library",
+                json={
+                    **east_reference_payload,
+                    "confirm_as_current": True,
+                    "organization_ids": [east_store.json()["id"]],
+                },
+            )
+            assert invalid_store_scope.status_code == 422
+            assert "区域" in invalid_store_scope.json()["detail"]
             assert admin.get("/api/v1/tenant-management/brand-library").json() == []
             reference = admin.post(
                 "/api/v1/tenant-management/brand-library",
@@ -622,6 +680,18 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 "current_version_id"
             ]
 
+            south_reference = admin.post(
+                "/api/v1/tenant-management/brand-library",
+                json={
+                    **east_reference_payload,
+                    "title": "华南兄弟区域诱饵资料",
+                    "content": "只供华南区域账号使用。",
+                    "organization_ids": [south.json()["id"]],
+                    "confirm_as_current": True,
+                },
+            )
+            assert south_reference.status_code == 201
+
             import_preview = admin.post(
                 "/api/v1/tenant-management/brand-products/preview",
                 json={
@@ -656,6 +726,44 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 "visibility_scope": "organizations",
                 "organization_ids": [east.json()["id"]],
             }
+            invalid_store_product = admin.put(
+                "/api/v1/tenant-management/brand-products",
+                json={
+                    **product_payload,
+                    "sku": "INVALID-STORE-SCOPE",
+                    "display_name": "非法门店范围商品",
+                    "organization_ids": [east_store.json()["id"]],
+                },
+            )
+            assert invalid_store_product.status_code == 422
+            assert "区域" in invalid_store_product.json()["detail"]
+
+            south_product = admin.put(
+                "/api/v1/tenant-management/brand-products",
+                json={
+                    **product_payload,
+                    "sku": "SOUTH-ONLY",
+                    "display_name": "华南区域限定商品",
+                    "applicability": "仅华南区域",
+                    "organization_ids": [south.json()["id"]],
+                },
+            )
+            assert south_product.status_code == 200
+
+            misaligned = admin.get("/api/v1/admin/readiness")
+            assert misaligned.status_code == 200, misaligned.text
+            misaligned_items = {
+                item["id"]: item for item in misaligned.json()["items"]
+            }
+            assert misaligned_items["non_product_content"]["status"] == "available"
+            assert misaligned_items["product_facts"]["status"] != "available"
+            assert misaligned_items["platform_recompile"]["status"] != "available"
+            assert all(
+                "华南兄弟区域诱饵资料" not in detail["source"]
+                for item in misaligned_items.values()
+                for detail in item["evidence_details"]
+            )
+
             product_v1 = admin.put(
                 "/api/v1/tenant-management/brand-products",
                 json=product_payload,
@@ -684,6 +792,141 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 json={"enabled": True},
             ).status_code == 200
 
+            east_xhs = admin.post(
+                "/api/v1/tenant-management/platform-carriers",
+                json={
+                    "source_account_id": accounts["柯桥"]["id"],
+                    "name": "柯桥逻辑发布账号 · 小红书",
+                    "channel": "小红书",
+                    "operator_id": members["柯桥"]["user_id"],
+                    "confirm_internal_carrier": True,
+                },
+            )
+            assert east_xhs.status_code == 201
+            aligned = admin.get("/api/v1/admin/readiness")
+            assert aligned.status_code == 200
+            aligned_items = {
+                item["id"]: item for item in aligned.json()["items"]
+            }
+            assert aligned_items["product_facts"]["status"] == "available"
+            assert aligned_items["platform_recompile"]["status"] == "available"
+
+            # A store, a qualified member and a display product must meet in the
+            # same execution organization. Three brand-level counts cannot be
+            # combined into a false-positive DM01 path.
+            display_store_id = uuid4()
+            with psycopg.connect(
+                migrator_database_url
+            ) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO display_stores
+                        (id, tenant_id, brand_id, control_organization_id,
+                         execution_organization_id, name, profile_version,
+                         rail_profile)
+                    VALUES (%s, %s, %s, %s, %s,
+                            '柯桥门店双层挂杆', '1.0', %s)
+                    """,
+                    (
+                        display_store_id,
+                        tenant_id,
+                        brand_id,
+                        headquarters["id"],
+                        east_store.json()["id"],
+                        Jsonb(
+                            {
+                                "schema": "dm01-wall-double-rail-v1",
+                                "upper_comfort_capacity": 8,
+                                "lower_comfort_capacity": 8,
+                            }
+                        ),
+                    ),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO display_access_grants
+                        (id, tenant_id, user_id, enabled)
+                    VALUES (%s, %s, %s, true)
+                    """,
+                    (
+                        uuid4(),
+                        tenant_id,
+                        members["华南"]["user_id"],
+                    ),
+                )
+            management_scope = TenantManagementScope(
+                tenant_id=tenant_id,
+                brand_id=brand_id,
+                user_id=UUID(str(tenant["administrator_id"])),
+            )
+            workbench_repository = PostgresWorkbenchRepository(
+                app_database_url
+            )
+            south_display_product = workbench_repository.save_management_product(
+                management_scope,
+                "SOUTH-DISPLAY",
+                "华南陈列限定上装",
+                {"display_family": "upper"},
+                "tenant_confirmed",
+                "华南区域管理员确认的陈列商品事实",
+                "仅华南区域陈列",
+                "organizations",
+                (UUID(str(south.json()["id"])),),
+            )
+            dm01_misaligned = admin.get("/api/v1/admin/readiness")
+            assert dm01_misaligned.status_code == 200
+            dm01_misaligned_item = next(
+                item
+                for item in dm01_misaligned.json()["items"]
+                if item["id"] == "dm01_display"
+            )
+            assert dm01_misaligned_item["status"] != "available"
+
+            east_display_product = workbench_repository.save_management_product(
+                management_scope,
+                "EAST-DISPLAY",
+                "华东陈列上装",
+                {"display_family": "upper"},
+                "tenant_confirmed",
+                "华东区域管理员确认的陈列商品事实",
+                "当前华东区域陈列",
+                "organizations",
+                (UUID(str(east.json()["id"])),),
+            )
+            with psycopg.connect(
+                migrator_database_url
+            ) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO display_access_grants
+                        (id, tenant_id, user_id, enabled)
+                    VALUES (%s, %s, %s, true)
+                    """,
+                    (
+                        uuid4(),
+                        tenant_id,
+                        members["柯桥"]["user_id"],
+                    ),
+                )
+            dm01_aligned = admin.get("/api/v1/admin/readiness")
+            assert dm01_aligned.status_code == 200
+            dm01_aligned_item = next(
+                item
+                for item in dm01_aligned.json()["items"]
+                if item["id"] == "dm01_display"
+            )
+            assert dm01_aligned_item["status"] == "available"
+            assert any(
+                detail["resource_id"] == east_display_product["id"]
+                and detail["version_id"]
+                == east_display_product["current_version_id"]
+                for detail in dm01_aligned_item["evidence_details"]
+            )
+            assert all(
+                detail["resource_id"] != south_display_product["id"]
+                for detail in dm01_aligned_item["evidence_details"]
+            )
+
             material = admin.post(
                 "/api/v1/tenant-management/organization-materials",
                 json={
@@ -700,6 +943,22 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             )
             assert material.status_code == 201, material.text
             material_id = material.json()["id"]
+            invalid_store_material = admin.post(
+                "/api/v1/tenant-management/organization-materials",
+                json={
+                    "organization_id": east_store.json()["id"],
+                    "title": "非法门店范围素材",
+                    "filename": "invalid-store-scope.txt",
+                    "content_type": "text/plain",
+                    "content_base64": "5LiN5bqU5L+d5a2Y",
+                    "declares_identifiable_minor": False,
+                    "reference_note": "指定区域不能直接绑定门店",
+                    "visibility_scope": "organizations",
+                    "organization_ids": [east_store.json()["id"]],
+                },
+            )
+            assert invalid_store_material.status_code == 422
+            assert "区域" in invalid_store_material.json()["detail"]
             material_v2 = admin.post(
                 f"/api/v1/tenant-management/organization-materials/{material_id}/versions",
                 json={
@@ -729,13 +988,6 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             with psycopg.connect(
                 migrator_database_url
             ) as connection, connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT id FROM brands WHERE tenant_id = %s",
-                    (tenant_id,),
-                )
-                brand_row = cursor.fetchone()
-                assert brand_row is not None
-                brand_id = UUID(str(brand_row[0]))
                 bait_brand_id = uuid4()
                 bait_entry_id = uuid4()
                 bait_version_id = uuid4()
@@ -790,10 +1042,35 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                     "WHERE tenant_id = %s AND id = %s",
                     (bait_version_id, tenant_id, bait_entry_id),
                 )
+            restored_south_execution_path = admin.patch(
+                f"/api/v1/tenant-management/users/{members['华南']['user_id']}/grants",
+                json={
+                    "entry_type": "tenant_user",
+                    "capabilities": ["content"],
+                    "publishing_identity_ids": [accounts["华南"]["id"]],
+                    "expression_profile_maintenance_account_ids": [],
+                },
+            )
+            assert restored_south_execution_path.status_code == 200
+            restored_cross_organization_path = admin.patch(
+                f"/api/v1/tenant-management/users/{members['总部']['user_id']}/grants",
+                json={
+                    "entry_type": "tenant_user",
+                    "capabilities": ["content"],
+                    "publishing_identity_ids": [
+                        accounts["总部"]["id"],
+                        accounts["柯桥"]["id"],
+                    ],
+                    "expression_profile_maintenance_account_ids": [
+                        accounts["总部"]["id"]
+                    ],
+                },
+            )
+            assert restored_cross_organization_path.status_code == 200
             east_scope = TrustedScope(
                 tenant_id=tenant_id,
                 brand_id=brand_id,
-                account_id=UUID(str(accounts["柯桥"]["id"])),
+                account_id=UUID(str(east_xhs.json()["id"])),
                 user_id=UUID(str(members["柯桥"]["user_id"])),
             )
             south_scope = TrustedScope(
@@ -1038,6 +1315,84 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 json={"enabled": True},
             ).status_code == 200
 
+            # Series continuation is a task position, not merely membership in a
+            # series. A first item and an ordinary V2 must never inflate it.
+            series_b = workbench_repository.create_series(
+                east_scope,
+                "只有首篇的系列",
+                "验证首篇不算续写",
+            )
+            content_service.create_from_weak_seed(
+                east_scope,
+                "请生成这个系列的第一篇一般观察",
+                target="xiaohongshu_graphic",
+                series_id=UUID(str(series_b["id"])),
+                series_position=1,
+                primary_product_override="brand_life_narrative",
+            )
+            first_only_usage = admin.get(
+                "/api/v1/tenant-management/team-usage?window_days=7"
+            )
+            assert first_only_usage.status_code == 200
+            assert (
+                first_only_usage.json()["activity"]["series_continuations"]
+                == 0
+            )
+            series_a = workbench_repository.create_series(
+                east_scope,
+                "近七日两篇系列",
+                "验证首篇与续篇口径",
+            )
+            content_service.create_from_weak_seed(
+                east_scope,
+                "请生成系列第一篇，写一般门店观察",
+                target="xiaohongshu_graphic",
+                series_id=UUID(str(series_a["id"])),
+                series_position=1,
+                primary_product_override="brand_life_narrative",
+            )
+            content_service.create_from_weak_seed(
+                east_scope,
+                "请生成系列第二篇，延续一般门店观察",
+                target="xiaohongshu_graphic",
+                series_id=UUID(str(series_a["id"])),
+                series_position=2,
+                primary_product_override="brand_life_narrative",
+            )
+            series_c = workbench_repository.create_series(
+                east_scope,
+                "窗口外续篇系列",
+                "验证时间窗口",
+            )
+            content_service.create_from_weak_seed(
+                east_scope,
+                "请生成窗口系列第一篇一般观察",
+                target="xiaohongshu_graphic",
+                series_id=UUID(str(series_c["id"])),
+                series_position=1,
+                primary_product_override="brand_life_narrative",
+            )
+            old_second = content_service.create_from_weak_seed(
+                east_scope,
+                "请生成窗口系列第二篇一般观察",
+                target="xiaohongshu_graphic",
+                series_id=UUID(str(series_c["id"])),
+                series_position=2,
+                primary_product_override="brand_life_narrative",
+            )
+            assert "task_id" in old_second, old_second
+            with psycopg.connect(
+                migrator_database_url
+            ) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE business_tasks
+                    SET created_at = now() - interval '40 days'
+                    WHERE tenant_id = %s AND id = %s
+                    """,
+                    (tenant_id, old_second["task_id"]),
+                )
+
             # One bounded event set proves that 7/30-day windows and event kinds
             # are not interchangeable. No prompt or content body is stored here.
             with psycopg.connect(
@@ -1076,15 +1431,28 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             assert usage_30.json()["activity"]["conversations"] == 2
             assert usage_7.json()["activity"]["rate_limited"] == 1
             assert usage_30.json()["activity"]["rate_limited"] == 1
-            assert usage_7.json()["activity"]["first_generations"] == 1
             assert usage_7.json()["activity"]["revisions"] == 1
-            assert usage_7.json()["activity"]["successful_runs"] == 2
+            assert usage_7.json()["activity"]["series_continuations"] == 1
+            assert usage_30.json()["activity"]["series_continuations"] == 1
+            assert usage_7.json()["activity"]["first_generations"] == 6
+            assert usage_7.json()["activity"]["successful_runs"] == 7
             assert usage_7.json()["members"]["logged_in"] >= 1
             assert usage_7.json()["members"]["product_active"] >= 1
             assert usage_7.json()["provider_usage"][
                 "is_complete_billing_total"
             ] is False
 
+            for label in ("总部", "华南"):
+                removed_non_east_path = admin.patch(
+                    f"/api/v1/tenant-management/users/{members[label]['user_id']}/grants",
+                    json={
+                        "entry_type": "tenant_user",
+                        "capabilities": [],
+                        "publishing_identity_ids": [],
+                        "expression_profile_maintenance_account_ids": [],
+                    },
+                )
+                assert removed_non_east_path.status_code == 200
             readiness = admin.get("/api/v1/admin/readiness")
             assert readiness.status_code == 200
             diagnosis = readiness.json()["items"]
@@ -1101,8 +1469,39 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             )
             assert non_product["status"] == "available"
             assert "不依赖具体商品事实" in non_product["unaffected"][0]
-            assert all(item["contract_version"] == "ux03-readiness-v2" for item in diagnosis)
+            assert all(
+                item["contract_version"] == "ux03-readiness-v3"
+                for item in diagnosis
+            )
             assert all("evidence_details" in item for item in diagnosis)
+            evidence_details = [
+                detail
+                for item in diagnosis
+                for detail in item["evidence_details"]
+            ]
+            assert evidence_details
+            assert all(detail["resource_id"] for detail in evidence_details)
+            assert all(detail["scope"] for detail in evidence_details)
+            assert all("项" not in detail["version"] for detail in evidence_details)
+            assert all(
+                detail.get("updated_at") or detail.get("updated_at_label")
+                for detail in evidence_details
+            )
+            assert all(
+                "华南兄弟区域诱饵资料" not in detail["source"]
+                and "另一品牌诱饵资料" not in detail["source"]
+                and "华南陈列限定上装" not in detail["source"]
+                for detail in evidence_details
+            )
+            product_diagnosis = next(
+                item for item in diagnosis if item["id"] == "product_facts"
+            )
+            assert product_diagnosis["status"] == "available"
+            assert any(
+                detail["version_id"]
+                for detail in product_diagnosis["evidence_details"]
+                if detail["source"].startswith("华东")
+            )
             if os.environ.get("DIYU_RUN_UX03_GATE_B_BROWSER") == "1":
                 browser = _run_gate_b_browser(
                     app_database_url,

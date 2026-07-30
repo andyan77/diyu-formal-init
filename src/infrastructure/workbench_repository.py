@@ -9,6 +9,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from src.infrastructure.readiness_paths import readiness_path_state
 from src.ports.workbench_repository import WorkbenchRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.content_snapshot import visible_direction
@@ -556,7 +557,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                      AND version.created_at >=
                          now() - (%s * interval '1 day')) AS first_generations,
                   (SELECT count(*) FROM business_tasks task
-                   WHERE task.tenant_id = %s AND task.series_id IS NOT NULL
+                   WHERE task.tenant_id = %s AND task.series_position > 1
                      AND task.created_at >= now() - (%s * interval '1 day')) AS series_continuations,
                   (SELECT count(*) FROM display_generation_runs run
                    WHERE run.tenant_id = %s
@@ -1344,29 +1345,13 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 (scope.tenant_id, organization_id),
             )
             organization = self._one(cursor, "只能把组织素材保存到当前租户的团队")
-            scoped_organizations: list[dict[str, object]] = []
-            if organization_ids:
-                cursor.execute(
-                    """
-                    SELECT id, name, organization_level
-                    FROM organizations
-                    WHERE tenant_id = %s AND id = ANY(%s)
-                    ORDER BY name
-                    """,
-                    (scope.tenant_id, list(organization_ids)),
-                )
-                scoped_organizations = cursor.fetchall()
-                if len(scoped_organizations) != len(organization_ids):
-                    raise DomainError("素材可用范围只能选择当前租户已有的组织。")
-            if visibility_scope == "brand_all" and scoped_organizations:
-                raise DomainError("品牌全员素材不需要指定可用组织。")
-            if visibility_scope == "headquarters":
-                if len(scoped_organizations) != 1:
-                    raise DomainError("总部专用素材需要明确选择一个公司级组织。")
-                if str(scoped_organizations[0]["organization_level"]) != "company":
-                    raise DomainError("总部专用素材只能绑定明确登记的公司级组织。")
-            if visibility_scope == "organizations" and not scoped_organizations:
-                raise DomainError("指定区域素材至少需要选择一个具体区域。")
+            scoped_organizations = self._validated_scope_organizations(
+                cursor,
+                scope.tenant_id,
+                visibility_scope,
+                organization_ids,
+                "素材",
+            )
             cursor.execute(
                 """
                 INSERT INTO material_assets
@@ -3360,130 +3345,122 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 ),
             )
             state = self._one(cursor, "无法读取当前可用条件")
-            cursor.execute(
-                """
-                SELECT
-                  (SELECT max(updated_at) FROM brand_expression_baselines
-                   WHERE tenant_id = %s AND brand_id = %s) AS expression_updated_at,
-                  (SELECT max(updated_at) FROM brand_products
-                   WHERE tenant_id = %s AND brand_id = %s
-                     AND status = 'active') AS product_updated_at,
-                  (SELECT max(updated_at) FROM brand_library_entries
-                   WHERE tenant_id = %s AND brand_id = %s
-                     AND status = 'active') AS library_updated_at,
-                  (SELECT count(*) FROM brand_library_entries
-                   WHERE tenant_id = %s AND brand_id = %s
-                     AND status = 'active'
-                     AND current_version_id IS NOT NULL) AS library_entries,
-                  (SELECT max(created_at) FROM material_assets
-                   WHERE tenant_id = %s AND brand_id = %s
-                     AND status = 'active') AS material_updated_at,
-                  (SELECT count(*) FROM material_assets
-                   WHERE tenant_id = %s AND brand_id = %s
-                     AND status = 'active'
-                     AND current_version_id IS NOT NULL) AS material_assets
-                """,
-                (
-                    scope.tenant_id,
-                    scope.brand_id,
-                    scope.tenant_id,
-                    scope.brand_id,
-                    scope.tenant_id,
-                    scope.brand_id,
-                    scope.tenant_id,
-                    scope.brand_id,
-                    scope.tenant_id,
-                    scope.brand_id,
-                    scope.tenant_id,
-                    scope.brand_id,
-                ),
-            )
-            evidence_state = self._one(cursor, "无法读取诊断依据")
-        expression_confirmed = str(state["expression_status"]) == "confirmed"
+            path_state = readiness_path_state(cursor, scope)
+        expression_paths = self._mapping_list(path_state["expression_paths"])
+        product_paths = self._mapping_list(path_state["product_paths"])
+        library_paths = self._mapping_list(path_state["library_paths"])
+        series_paths = self._mapping_list(path_state["series_paths"])
+        display_paths = self._mapping_list(path_state["display_paths"])
+        expression_confirmed = str(path_state["baseline_status"]) == "confirmed"
         root_accounts = self._integer(state["root_accounts"])
-        expression_accounts = self._integer(state["expression_accounts"])
-        product_facts = self._integer(state["product_facts"])
-        series_count = self._integer(state["series_count"])
-        multi_target_accounts = self._integer(state["multi_target_accounts"])
+        expression_accounts = len(expression_paths)
+        product_components = self._integer(state["product_facts"])
         display_stores = self._integer(state["display_stores"])
         display_products = self._integer(state["display_products"])
         display_users = self._integer(state["display_users"])
         evaluated_at = self._time(state["evaluated_at"])
-        library_entries = self._integer(evidence_state["library_entries"])
-        material_assets = self._integer(evidence_state["material_assets"])
-        expression_available = expression_confirmed and expression_accounts > 0
+        expression_available = expression_confirmed and bool(expression_paths)
         expression_status = self._condition_status(
             expression_available,
             expression_confirmed or root_accounts > 0,
         )
         product_status = self._condition_status(
-            expression_available and product_facts > 0,
-            expression_confirmed or product_facts > 0,
+            expression_confirmed and bool(product_paths),
+            expression_available or product_components > 0,
         )
         series_status = self._condition_status(
-            expression_accounts > 0,
+            expression_available,
             root_accounts > 0,
         )
+        platform_paths = [
+            path
+            for path in expression_paths
+            if self._integer(path.get("target_count")) >= 2
+        ]
         recompile_status = self._condition_status(
-            expression_accounts > 0 and multi_target_accounts > 0,
-            root_accounts > 0,
+            expression_confirmed and bool(platform_paths),
+            bool(expression_paths)
+            or self._integer(path_state["multi_target_components"]) > 0,
         )
         display_status = self._condition_status(
-            display_stores > 0 and display_products > 0 and display_users > 0,
+            bool(display_paths),
             display_stores > 0 or display_products > 0 or display_users > 0,
         )
         common: dict[str, object] = {
             "source": "当前租户的正式业务对象",
-            "version": "ux03-readiness-v2",
-            "contract_version": "ux03-readiness-v2",
+            "version": "ux03-readiness-v3",
+            "contract_version": "ux03-readiness-v3",
             "evaluated_at": evaluated_at,
         }
-        expression_evidence: list[dict[str, object]] = [
-            {
-                "source": "品牌表达基线与逻辑发布账号画像",
-                "version": (
-                    "confirmed"
-                    if expression_confirmed
-                    else str(state["expression_status"])
-                ),
-                "scope": "当前品牌及获准逻辑发布账号",
-                "updated_at": (
-                    self._time(evidence_state["expression_updated_at"])
-                    if evidence_state["expression_updated_at"] is not None
-                    else None
-                ),
-            }
-        ]
-        product_evidence: list[dict[str, object]] = [
-            {
-                "source": "已确认商品事实",
-                "version": f"当前可用商品 {product_facts} 件",
-                "scope": "按逻辑发布账号控制组织确定",
-                "updated_at": (
-                    self._time(evidence_state["product_updated_at"])
-                    if evidence_state["product_updated_at"] is not None
-                    else None
-                ),
-            }
-        ]
-        library_evidence: list[dict[str, object]] = [
-            {
-                "source": "品牌文字资料与组织官方素材",
-                "version": (
-                    f"当前资料 {library_entries} 条；当前素材 {material_assets} 件"
-                ),
-                "scope": "按资料范围与逻辑发布账号控制组织确定",
-                "updated_at": (
-                    self._time(evidence_state["library_updated_at"])
-                    if evidence_state["library_updated_at"] is not None
-                    else (
-                        self._time(evidence_state["material_updated_at"])
-                        if evidence_state["material_updated_at"] is not None
-                        else None
-                    )
-                ),
-            }
-        ]
+        selected_expression = expression_paths[0] if expression_paths else None
+        expression_evidence = self._expression_path_evidence(
+            path_state,
+            selected_expression,
+        )
+        selected_account_id = (
+            str(selected_expression["account_id"])
+            if selected_expression is not None
+            else ""
+        )
+        library_evidence = [
+            self._library_path_evidence(path)
+            for path in library_paths
+            if str(path["account_id"]) == selected_account_id
+        ][:3]
+        selected_product = product_paths[0] if product_paths else None
+        product_expression = next(
+            (
+                path
+                for path in expression_paths
+                if selected_product is not None
+                and str(path["account_id"])
+                == str(selected_product["account_id"])
+            ),
+            None,
+        )
+        product_expression_evidence = self._expression_path_evidence(
+            path_state,
+            product_expression,
+        )
+        product_evidence = (
+            [self._product_path_evidence(selected_product)]
+            if selected_product is not None
+            else []
+        )
+        selected_platform = platform_paths[0] if platform_paths else None
+        platform_expression_evidence = self._expression_path_evidence(
+            path_state,
+            selected_platform,
+        )
+        platform_evidence = (
+            [self._platform_path_evidence(selected_platform)]
+            if selected_platform is not None
+            else []
+        )
+        selected_series = next(
+            (
+                path
+                for path in series_paths
+                if str(path["account_id"]) == selected_account_id
+            ),
+            None,
+        )
+        series_evidence = (
+            [self._series_path_evidence(selected_series)]
+            if selected_series is not None
+            else []
+        )
+        selected_display = display_paths[0] if display_paths else None
+        display_evidence = (
+            self._display_path_evidence(selected_display)
+            if selected_display is not None
+            else []
+        )
+        series_count = sum(
+            1
+            for path in series_paths
+            if str(path["account_id"]) == selected_account_id
+        )
         return [
             self._diagnosis(
                 "non_product_content",
@@ -3502,13 +3479,20 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "product_facts",
                 "商品选择与解释",
                 product_status,
-                [f"有来源且有可用事实的商品资料：{product_facts}"],
+                (
+                    [
+                        f"{str(selected_product['account_name'])}可实际使用"
+                        f"{str(selected_product['display_name'])}"
+                    ]
+                    if selected_product is not None
+                    else ["当前没有账号与商品处于同一条可执行路径。"]
+                ),
                 [] if product_status == "available" else ["补充有来源、版本和可观察事实的商品资料。"],
                 "只影响需要具体商品承担判断、解释或搭配关系的内容。",
                 "补商品资料",
                 "brand-library",
                 common,
-                evidence_details=expression_evidence + product_evidence,
+                evidence_details=product_expression_evidence + product_evidence,
                 unaffected=["商品缺口不阻止非商品日常内容。"],
             ),
             self._diagnosis(
@@ -3524,37 +3508,48 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "管理发布账号",
                 "publishing-accounts",
                 common,
-                evidence_details=expression_evidence,
+                evidence_details=expression_evidence + series_evidence,
                 unaffected=["不影响单条非系列内容。"],
             ),
             self._diagnosis(
                 "platform_recompile",
                 "跨平台版本",
                 recompile_status,
-                [f"具备两个以上平台的逻辑发布账号：{multi_target_accounts}"],
+                (
+                    [
+                        f"{str(selected_platform['account_name'])}具备"
+                        f"{self._integer(selected_platform.get('target_count'))} "
+                        "个启用平台与形式目标"
+                    ]
+                    if selected_platform is not None
+                    else ["当前没有同一合格账号具备两个启用平台与形式目标。"]
+                ),
                 [] if recompile_status == "available" else ["为发布账号补充至少两个明确的平台载体。"],
                 "影响从同一源成品另做其他平台版本。",
                 "管理平台版本",
                 "publishing-accounts",
                 common,
-                evidence_details=expression_evidence,
+                evidence_details=platform_expression_evidence + platform_evidence,
                 unaffected=["不影响当前已获准平台上的单平台内容。"],
             ),
             self._diagnosis(
                 "dm01_display",
                 "门店墙面挂杆参考方案",
                 display_status,
-                [
-                    f"门店挂杆档案：{display_stores}",
-                    f"具备陈列关系的商品资料：{display_products}",
-                    f"具备陈列资格的成员：{display_users}",
-                ],
+                (
+                    [
+                        f"{str(selected_display['execution_organization_name'])}"
+                        "已有同组织门店档案、陈列成员和可用商品"
+                    ]
+                    if selected_display is not None
+                    else ["门店档案、陈列成员与商品尚未在同一执行组织闭合。"]
+                ),
                 ([] if display_status == "available" else ["补齐门店挂杆条件、陈列商品资料和成员陈列资格中的缺项。"]),
                 "只影响门店墙面双层挂杆的文字参考方案。",
                 "补门店资料",
                 "brand-library",
                 common,
-                evidence_details=product_evidence + library_evidence,
+                evidence_details=display_evidence,
                 unaffected=["门店资料缺口不阻止普通内容创作。"],
             ),
             self._diagnosis(
@@ -3563,7 +3558,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 expression_status,
                 [
                     f"已确认品牌表达：{'是' if expression_confirmed else '否'}",
-                    f"具备操作者和五段画像的逻辑发布账号：{expression_accounts}",
+                    (
+                        "可分配的合格发布账号："
+                        + "、".join(
+                            str(path["account_name"])
+                            for path in expression_paths
+                        )
+                        if expression_paths
+                        else "当前没有可分配的合格发布账号"
+                    ),
                 ],
                 (
                     []
@@ -4136,6 +4139,169 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         return result
 
     @staticmethod
+    def _mapping_list(value: object) -> list[dict[str, object]]:
+        if not isinstance(value, list):
+            return []
+        return [item for item in value if isinstance(item, dict)]
+
+    def _expression_path_evidence(
+        self,
+        path_state: dict[str, object],
+        path: dict[str, object] | None,
+    ) -> list[dict[str, object]]:
+        evidence: list[dict[str, object]] = []
+        if path_state["baseline_id"] is not None:
+            evidence.append(
+                {
+                    "source": "当前品牌表达基线",
+                    "resource_id": str(path_state["baseline_id"]),
+                    "version": f"V{self._integer(path_state['baseline_version'])}",
+                    "version_id": None,
+                    "scope": "当前品牌",
+                    "updated_at": (
+                        self._evidence_time(path_state["baseline_updated_at"])
+                        if path_state["baseline_updated_at"] is not None
+                        else None
+                    ),
+                    "updated_at_label": "当前对象未记录更新时间",
+                }
+            )
+        if path is not None:
+            evidence.append(
+                {
+                    "source": (
+                        f"{str(path['account_name'])} · "
+                        f"{str(path['content_role_name'])} · "
+                        f"操作者 {str(path['operator_name'])}"
+                    ),
+                    "resource_id": str(path["account_id"]),
+                    "version": f"五段画像 V{self._integer(path['profile_version'])}",
+                    "version_id": str(path["profile_version_id"]),
+                    "scope": (
+                        f"{str(path['control_organization_name'])}"
+                        "（逻辑发布账号控制组织）"
+                    ),
+                    "updated_at": self._evidence_time(path["profile_created_at"]),
+                    "updated_at_label": "",
+                }
+            )
+        return evidence
+
+    def _library_path_evidence(
+        self,
+        path: dict[str, object],
+    ) -> dict[str, object]:
+        return {
+            "source": str(path["title"]),
+            "resource_id": str(path["entry_id"]),
+            "version": (
+                f"{str(path['version_label'])}（版本 "
+                f"{self._integer(path['version_number'])}）"
+            ),
+            "version_id": str(path["version_id"]),
+            "scope": (
+                f"{str(path['control_organization_name'])}可见 · "
+                f"{self._visibility_name(str(path['visibility_scope']))}"
+            ),
+            "updated_at": self._evidence_time(path["version_created_at"]),
+            "updated_at_label": "",
+        }
+
+    def _product_path_evidence(
+        self,
+        path: dict[str, object],
+    ) -> dict[str, object]:
+        return {
+            "source": f"{str(path['display_name'])}（{str(path['sku'])}）",
+            "resource_id": str(path["product_id"]),
+            "version": f"商品事实 V{self._integer(path['version_number'])}",
+            "version_id": str(path["version_id"]),
+            "scope": (
+                f"{str(path['control_organization_name'])}可用 · "
+                f"{self._visibility_name(str(path['visibility_scope']))}"
+            ),
+            "updated_at": self._evidence_time(path["version_created_at"]),
+            "updated_at_label": "",
+        }
+
+    def _platform_path_evidence(
+        self,
+        path: dict[str, object],
+    ) -> dict[str, object]:
+        return {
+            "source": (
+                f"{str(path['account_name'])}的启用平台与形式目标："
+                f"{self._integer(path.get('target_count'))} 个"
+            ),
+            "resource_id": str(path["account_id"]),
+            "version": "不适用（平台目标未版本化）",
+            "version_id": None,
+            "scope": str(path["control_organization_name"]),
+            "updated_at": None,
+            "updated_at_label": "当前平台目标未记录更新时间",
+        }
+
+    def _series_path_evidence(
+        self,
+        path: dict[str, object],
+    ) -> dict[str, object]:
+        return {
+            "source": str(path["title"]),
+            "resource_id": str(path["series_id"]),
+            "version": f"系列修订 {self._integer(path['revision'])}",
+            "version_id": None,
+            "scope": str(path["account_name"]),
+            "updated_at": self._evidence_time(path["created_at"]),
+            "updated_at_label": "",
+        }
+
+    def _display_path_evidence(
+        self,
+        path: dict[str, object],
+    ) -> list[dict[str, object]]:
+        scope_label = str(path["execution_organization_name"])
+        return [
+            {
+                "source": str(path["store_name"]),
+                "resource_id": str(path["store_id"]),
+                "version": f"门店档案 {str(path['profile_version'])}",
+                "version_id": None,
+                "scope": scope_label,
+                "updated_at": None,
+                "updated_at_label": "当前对象未记录更新时间",
+            },
+            {
+                "source": f"陈列成员 {str(path['user_name'])}",
+                "resource_id": str(path["user_id"]),
+                "version": "不适用（成员资格未版本化）",
+                "version_id": None,
+                "scope": scope_label,
+                "updated_at": None,
+                "updated_at_label": "当前对象未记录更新时间",
+            },
+            {
+                "source": str(path["display_name"]),
+                "resource_id": str(path["product_id"]),
+                "version": f"商品事实 V{self._integer(path['version_number'])}",
+                "version_id": str(path["version_id"]),
+                "scope": (
+                    f"{scope_label}可用 · "
+                    f"{self._visibility_name(str(path['visibility_scope']))}"
+                ),
+                "updated_at": self._evidence_time(path["version_created_at"]),
+                "updated_at_label": "",
+            },
+        ]
+
+    @staticmethod
+    def _visibility_name(visibility_scope: str) -> str:
+        return {
+            "brand_all": "品牌全员",
+            "headquarters": "总部专用",
+            "organizations": "指定区域",
+        }.get(visibility_scope, "当前登记范围")
+
+    @staticmethod
     def _condition_status(available: bool, conditional: bool) -> str:
         if available:
             return "available"
@@ -4215,6 +4381,13 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 )
         if visibility_scope == "organizations" and not organizations:
             raise DomainError(f"指定区域{resource_label}至少需要选择一个具体区域。")
+        if visibility_scope == "organizations" and any(
+            str(organization["organization_level"]) != "region"
+            for organization in organizations
+        ):
+            raise DomainError(
+                f"指定区域{resource_label}只能绑定明确登记的区域；门店或公司级组织不能代替区域。"
+            )
         return organizations
 
     @staticmethod
@@ -4265,6 +4438,14 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         if not isinstance(value, datetime):
             raise DomainError("工作台时间数据无效")
         return value.isoformat()
+
+    @staticmethod
+    def _evidence_time(value: object) -> str:
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, str) and value:
+            return value
+        raise DomainError("诊断依据时间无效")
 
     @staticmethod
     def _display_title(body: str) -> str:
