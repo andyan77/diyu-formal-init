@@ -849,6 +849,11 @@ a {
   color: #8b857c;
 }
 
+.creator-composer textarea:focus-visible {
+  outline: 3px solid rgba(185, 54, 40, 0.34);
+  outline-offset: 3px;
+}
+
 .direction-toggle {
   display: flex;
   width: 100%;
