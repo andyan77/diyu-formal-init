@@ -567,6 +567,16 @@
             "title": "Direct Generate",
             "type": "boolean"
           },
+          "interaction_mode": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "conversation",
+              "generate"
+            ],
+            "title": "Interaction Mode",
+            "type": "string"
+          },
           "material_ids": {
             "items": {
               "format": "uuid",
@@ -586,6 +596,18 @@
             "format": "uuid",
             "title": "Publishing Identity Id",
             "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
           },
           "series_id": {
             "anyOf": [
@@ -1021,6 +1043,35 @@
         "title": "CreateTenantUserRequest",
         "type": "object"
       },
+      "CreatedTenantUserResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "activation_link": {
+            "title": "Activation Link",
+            "type": "string"
+          },
+          "activation_url": {
+            "title": "Activation Url",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "activation_link",
+          "activation_url"
+        ],
+        "title": "CreatedTenantUserResponse",
+        "type": "object"
+      },
       "CreationPreferenceRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1362,6 +1413,40 @@
         "title": "OrganizationMaterialUploadRequest",
         "type": "object"
       },
+      "ProvisionedTenantResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "activation_link": {
+            "title": "Activation Link",
+            "type": "string"
+          },
+          "activation_url": {
+            "title": "Activation Url",
+            "type": "string"
+          },
+          "administrator_id": {
+            "title": "Administrator Id",
+            "type": "string"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "administrator_id",
+          "username",
+          "activation_link",
+          "activation_url"
+        ],
+        "title": "ProvisionedTenantResponse",
+        "type": "object"
+      },
       "ReorderSeriesRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1378,6 +1463,25 @@
           "task_ids"
         ],
         "title": "ReorderSeriesRequest",
+        "type": "object"
+      },
+      "ResetTenantUserResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "reset_link": {
+            "title": "Reset Link",
+            "type": "string"
+          },
+          "reset_url": {
+            "title": "Reset Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reset_link",
+          "reset_url"
+        ],
+        "title": "ResetTenantUserResponse",
         "type": "object"
       },
       "RevisionRequest": {
@@ -1400,6 +1504,18 @@
               }
             ],
             "title": "Publishing Identity Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
           },
           "source_target": {
             "anyOf": [
@@ -3576,11 +3692,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Provision Tenant Api V1 Ops Tenants Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ProvisionedTenantResponse"
                 }
               }
             },
@@ -4876,11 +4988,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Create Tenant User Api V1 Tenant Management Users Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreatedTenantUserResponse"
                 }
               }
             },
@@ -5066,11 +5174,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Reset Tenant User Api V1 Tenant Management Users  User Id  Reset Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ResetTenantUserResponse"
                 }
               }
             },
