@@ -1,0 +1,25 @@
+:root {
+  --ink: #1c1b19;
+  --ink-soft: #514d47;
+  --muted: #777168;
+  --line: #ded9d1;
+  --line-strong: #c9c2b8;
+  --paper: #f5f2eb;
+  --surface: #fffefa;
+  --surface-soft: #ebe7de;
+  --brand: #aa3d28;
+  --brand-dark: #7e2b1e;
+  --brand-wash: #f6e7e1;
+  --success: #316348;
+  --success-wash: #e5efe8;
+  --warning: #815e24;
+  --warning-wash: #f5ecd9;
+  --danger: #9a3427;
+  --shadow: 0 24px 70px rgba(43, 35, 27, 0.11);
+  --shadow-soft: 0 10px 32px rgba(43, 35, 27, 0.07);
+  --radius-xl: 26px;
+  --radius-lg: 18px;
+  --radius-md: 13px;
+  --sans: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+  --serif: "Songti SC", "STSong", "Noto Serif CJK SC", Georgia, serif;
+}

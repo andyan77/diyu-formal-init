@@ -1,0 +1,17 @@
+# UX-01 连续高保真产品原型
+
+- 创始人连续评审入口：[`review/index.html`](review/index.html)
+- 裸产品入口：[`product/index.html`](product/index.html)
+- 功能真值台账：[`../UX-01-前端功能真值台账.md`](../UX-01-前端功能真值台账.md)
+- 产品语言词典：[`../笛语产品语言词典_V1.md`](../笛语产品语言词典_V1.md)
+
+本目录是 UX-01 的静态产品定义，不是正式 React 或生产认证实现。评审壳可连续切换公共与认证、
+租户管理员、租户用户创作、DM01 四条旅程，并在桌面/移动画布中审阅同一裸产品状态。
+
+运行验证：
+
+```bash
+node docs/前端UI架构/产品化HTML原型_UX-01/review/verify-ux01.mjs
+```
+
+验证只读取本地静态文件并启动本机 Headless Chrome；不访问外网、API、数据库或生产。

@@ -110,7 +110,7 @@
 
     <div class="meta">
       <span class="pill"><span class="k">更新</span> <b>2026-07-29（UTC）</b></span>
-      <span class="pill"><span class="k">当前位置</span> <b>无活动里程碑 · UI-12 CLOSED</b></span>
+      <span class="pill"><span class="k">当前位置</span> <b>UX-01 · REVIEW</b></span>
       <span class="pill"><span class="k">业务语义</span> <b>双应用合同与 25 类模型已关闭</b></span>
       <span class="pill"><span class="k">领域资产</span> <b>243 条当前候选快照 · 41 条已激活（内容与媒体 28、DM01 13）</b></span>
       <span class="pill"><span class="k">首期容量</span> <b>预计 2—3、最多 5 租户 · 合计 ≤ 200 已启用账号</b></span>
@@ -119,12 +119,12 @@
 
   <div class="nextbar">
     <div class="lab">当前状态</div>
-    <div class="txt">UI-04 保持 CLOSED；UI-05—UI-11 的成功边界、失败与替代历史完整保留。UI-12 已以服务端可信事实轨＋创作表达轨取代概率 Reviewer 放行，并完成两次主控有界返工。<b>主控第三次、也是最终一次独立终审 PASS，UI-12 正式 CLOSED；当前没有自动启动的后继里程碑。</b></div>
+    <div class="txt">UI-12 已经主控最终独立终审 PASS 并保持 CLOSED。UX-01 已完成 64 项功能真值盘点、四类角色与信息架构冻结，以及四条、33 状态连续高保真旅程。<b>UX-01 当前为 REVIEW；只交付产品定义和静态原型，没有修改正式 React、API、数据库或生产，也没有启动 UX-02。</b></div>
   </div>
 
   <div class="legend">
     <span><i class="dot d-done"></i>CLOSED · 已验收关闭</span>
-    <span><i class="dot d-now"></i>当前节点 · 目前无活动节点</span>
+    <span><i class="dot d-now"></i>当前节点 · UX-01 REVIEW</span>
     <span><i class="dot d-todo"></i>READY · 已规划，满足前置后可启动</span>
     <span><i class="dot d-par"></i>WAITING_EXTERNAL · 等待外部条件</span>
     <span><i class="dot d-mile"></i>里程碑</span>
@@ -261,8 +261,8 @@
     <!-- UI 产品化 -->
     <div class="phase">
       <div class="pcard">
-        <div class="ph-head"><p class="ph-title"><span class="idx">UI</span>产品化重构</p><span class="badge b-done">UI-12 · CLOSED</span></div>
-        <p class="ph-desc">UI-04 保持关闭；UI-05—UI-11 的失败与替代历史完整保留。UI-12 已用服务端前置双轨、不可变版本和确定性 Compiler 关闭自然创作真实性后端主链，并通过主控最终独立终审；前端用户体验产品化尚未由本轮证明或启动。</p>
+        <div class="ph-head"><p class="ph-title"><span class="idx">UX</span>前端产品化</p><span class="badge b-now">UX-01 · REVIEW</span></div>
+        <p class="ph-desc">UI-12 已关闭自然创作真实性后端主链。UX-01 只冻结前端产品定义、当前功能真值和连续旅程，供创始人审阅；它不证明正式前端已经工程化，也不自动启动 UX-02。</p>
         <ul class="nodes">
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">首版页面覆盖盘点<span class="ncode">UI-01 · SUPERSEDED</span></div><div class="ndesc">19 张静态页面完整保留为覆盖盘点与历史反例；因首页无产品叙事、功能机械铺页、说明书化及产品/评审模式混用被取代，不表示通过或关闭</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">产品叙事、资产总账与评审体系<span class="ncode">UI-01R · CLOSED</span></div><div class="ndesc">只表示产品策略探索、资产盘点和方向裁决完成；首页采用 A“种子找到声音”，B/C 留作历史候选，六张代表页不是 React 复制模板</div></div></li>
@@ -273,6 +273,7 @@
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">自然创作与叙事真实性闭环<span class="ncode">UI-06 · SUPERSEDED → UI-07</span></div><div class="ndesc">唯一候选 e77099f4… 的类型化结构与 CI 历史保留；真实 G1 误建任务并失败，差分 +1/+1/+0，G2—G7/H1/D1 未执行，生产回 845f632…。原 UI06-D1 已被 UI-07 前置提交门裁决取代</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">自然创作真实性探索链<span class="ncode">UI-07—UI-11 · SUPERSEDED → UI-12</span></div><div class="ndesc">CreationIntentGate、计划／事实分离、CreativeKernel、服务端证据与假设范围等成果保留；各轮 G3/G4、Reviewer 假绿和未部署证据同样保留，不把 successor 写成旧里程碑成功</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">可信事实轨与创作表达轨最终闭环<span class="ncode">UI-12 · CLOSED</span></div><div class="ndesc">主控最终独立终审 PASS。概率 Reviewer 已退出生产放行；服务端在 Writer 前冻结事实与表达轨，Compiler 保持范围。最终 9c5b243… 以 schema 32 关闭版本 UPDATE/DELETE、恢复 legacy 投影并统一 Unicode 防伪；Golden 417 passed、CI 30500580180、生产兼容、备份恢复及旧镜像回退均成立</div></div></li>
+          <li class="node now"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">前端产品定义、功能真值与逐屏冻结<span class="ncode">UX-01 · REVIEW</span></div><div class="ndesc">盘点 64 项正式交互，冻结访客、管理员、租户用户和运维职责，以及登录身份／逻辑发布账号／平台载体关系；交付公共认证、管理员、创作和纯文字 DM01 四条、33 状态连续高保真原型。未修改正式 React、API、数据库或生产；唯一下一动作是创始人逐旅程审阅，通过后才另行启动 UX-02</div></div></li>
         </ul>
         <div class="tip"><span class="h">资产边界</span>UI-01R 的 CSV/Markdown 只是现有 JSON/JSONL 真源的人可读投影；候选登记、运行激活、本次调用、已验证能力和真实租户采用不得混为一谈。</div>
       </div>
@@ -333,7 +334,7 @@
 
   <footer>
     依据 <code>docs/项目记忆.md</code>、<code>docs/待决策清单.md</code>、正式 ADR、用户提供的 <code>首批领域数据库知识数据</code> 与 D-007 两份资料成果更新。<br>
-    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料、WSL 唯一 Git 主仓迁移、M3-1/M3-2、M4-1/M4-2、M5-1—M5-3、M5-K、M5-4、M6-1 与 M6-2；M6-3 未通过并已 SUPERSEDED 至已关闭的 M7-2B；M7-1、M7-2A、M7-2B、M7-3 均已 CLOSED。目录对账仍为风格 20/20、题材 55/55、体裁 41/44（缺 3 条来源缺口），能力状态为 10/64/6/38/1；不证明真实员工采用、真实商品采用、真实门店现场执行、真实发布、平台流量、排名、爆款、GMV、销售、企业采用、真实跨租户市场差异、企业 SLA 或 20/55/44 全组合稳定支持。UI-01 已 SUPERSEDED 至已关闭的 UI-01R；UI-01R、UI-02、UI-03 与 UI-04 均已 CLOSED。UI-05—UI-11 保留历史并依次 SUPERSEDED 至 UI-12；UI-12 已经主控最终独立终审 PASS 并 CLOSED，生产运行 9c5b243… 与 schema 32。运行资产仍为 41 条，候选 243、目录 25/119、激活增量 0。唯一下一动作是停止执行，等待用户与主控另行启动“前端用户体验产品化”独立里程碑；本轮不提前命名、不施工、不部署。
+    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料、WSL 唯一 Git 主仓迁移、M3-1/M3-2、M4-1/M4-2、M5-1—M5-3、M5-K、M5-4、M6-1 与 M6-2；M6-3 未通过并已 SUPERSEDED 至已关闭的 M7-2B；M7-1、M7-2A、M7-2B、M7-3 均已 CLOSED。目录对账仍为风格 20/20、题材 55/55、体裁 41/44（缺 3 条来源缺口），能力状态为 10/64/6/38/1；不证明真实员工采用、真实商品采用、真实门店现场执行、真实发布、平台流量、排名、爆款、GMV、销售、企业采用、真实跨租户市场差异、企业 SLA 或 20/55/44 全组合稳定支持。UI-01 已 SUPERSEDED 至已关闭的 UI-01R；UI-01R、UI-02、UI-03 与 UI-04 均已 CLOSED。UI-05—UI-11 保留历史并依次 SUPERSEDED 至 UI-12；UI-12 已经主控最终独立终审 PASS 并 CLOSED，生产运行 9c5b243… 与 schema 32。UX-01 当前为 REVIEW，只完成产品定义、64 项功能真值和四条、33 状态静态旅程。运行资产仍为 41 条，候选 243、目录 25/119、激活增量 0。唯一下一动作是创始人按连续评审入口逐旅程审阅；通过后才由主控另行启动 UX-02 正式工程化与生产替换。
   </footer>
 
 </div>

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>UX-01 连续产品评审 · 笛语</title>
+  <link rel="icon" href="../../../../assets/brand/diyu-vi/favicon/favicon.svg">
+  <link rel="stylesheet" href="../../../../assets/brand/diyu-vi/README.md" media="not all">
+  <link rel="stylesheet" href="review.css">
+</head>
+<body>
+  <header class="review-topbar">
+    <button type="button" class="brand-button" data-home aria-label="返回评审首页">
+      <img src="../../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal-ondark.svg" alt="笛语">
+    </button>
+    <div><strong data-review-title>选择一条连续旅程</strong><small data-review-purpose>在同一入口中审阅角色、状态和移动适配</small></div>
+    <div class="review-actions">
+      <a href="../../UX-01-前端功能真值台账.md" target="_blank" rel="noreferrer">功能真值</a>
+      <a href="../../笛语产品语言词典_V1.md" target="_blank" rel="noreferrer">产品语言</a>
+      <button type="button" data-desktop data-viewport="desktop" class="active">桌面</button>
+      <button type="button" data-mobile data-viewport="mobile">移动</button>
+      <a data-open-raw href="../product/index.html" target="_blank" rel="noreferrer" hidden>打开裸产品页</a>
+    </div>
+  </header>
+  <div class="review-layout">
+    <aside class="review-side">
+      <p class="side-label">评审旅程</p>
+      <button type="button" data-journey="public">公共与认证</button>
+      <button type="button" data-journey="admin">租户管理员</button>
+      <button type="button" data-journey="creator">租户用户创作</button>
+      <button type="button" data-journey="dm01">DM01 纯文字参考</button>
+      <p class="side-label">逐屏状态</p>
+      <div class="page-list" data-page-list></div>
+    </aside>
+    <main class="review-main">
+      <section class="review-home" data-journey-home>
+        <div>
+          <p class="eyebrow">UX-01 · 连续产品评审</p>
+          <h1>不登录，也能把四条真实工作旅程从头看到尾。</h1>
+          <p>先选角色，再连续前进。每一屏都会说明用户为什么来到这里、下一步该做什么，以及它是当前能力还是 UX-02 目标。</p>
+          <div class="journey-cards">
+            <button data-journey="public"><strong>公共与认证</strong><span>首页、登录、激活与错误恢复</span></button>
+            <button data-journey="admin"><strong>租户管理员</strong><span>成员、账号、资料与诊断</span></button>
+            <button data-journey="creator"><strong>租户用户创作</strong><span>低种子、完整 V1 与自然修改</span></button>
+            <button data-journey="dm01"><strong>DM01</strong><span>纯文字陈列参考与库存守恒</span></button>
+          </div>
+        </div>
+      </section>
+      <section class="review-canvas" data-review-canvas hidden>
+        <div class="frame-wrap"><iframe data-review-frame title="笛语 UX-01 裸产品页面"></iframe></div>
+      </section>
+    </main>
+  </div>
+  <footer class="review-footer">
+    <button type="button" data-prev hidden>← 上一屏</button>
+    <span data-review-position>四条旅程 · 32 个连续状态</span>
+    <button type="button" data-next hidden>下一屏 →</button>
+  </footer>
+  <script src="review.js"></script>
+</body>
+</html>
