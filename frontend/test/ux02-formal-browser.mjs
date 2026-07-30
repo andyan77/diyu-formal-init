@@ -330,7 +330,10 @@ try {
   await user.fill('input[name="username"]', newUsername);
   await user.fill('input[name="password"]', newUserPassword);
   await user.click('button[type="submit"]', "登录");
-  await user.waitFor("location.pathname === '/user'", "租户用户登录");
+  await user.waitFor(
+    "location.pathname === '/user' && document.body !== null",
+    "租户用户登录"
+  );
   ensure(
     await user.evaluate("document.body.textContent.includes('开始创作') && !document.body.textContent.includes('品牌管理')"),
     "租户用户入口职责不正确"
@@ -572,7 +575,10 @@ try {
   await admin.click('[role="alertdialog"] button', "确认停用");
   await admin.waitFor("document.body.textContent.includes('现有会话与工作资格已撤销')", "停用反馈");
   await user.navigate("/user");
-  await user.waitFor("location.pathname === '/login'", "停用后旧会话失效");
+  await user.waitFor(
+    "location.pathname === '/login' && document.querySelector('input[name=username]') !== null",
+    "停用后旧会话失效"
+  );
   await user.fill('input[name="username"]', newUsername);
   await user.fill('input[name="password"]', resetUserPassword);
   await user.click('button[type="submit"]', "登录");
