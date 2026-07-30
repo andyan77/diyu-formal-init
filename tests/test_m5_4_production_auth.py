@@ -117,6 +117,24 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
         assert "这次没有登录成功" in failed_login.text
         assert "/tenant-admin/login" in failed_login.text
         assert '{"detail":' not in failed_login.text
+        same_origin_private_form = client.post(
+            "/tenant-admin/login",
+            headers={"origin": "null", "sec-fetch-site": "same-origin"},
+            content="username=not-an-admin&password=not-the-password",
+        )
+        assert same_origin_private_form.status_code == 401
+        cross_site_null_origin = client.post(
+            "/tenant-admin/login",
+            headers={"origin": "null", "sec-fetch-site": "cross-site"},
+            content="username=not-an-admin&password=not-the-password",
+        )
+        assert cross_site_null_origin.status_code == 403
+        hostile_origin = client.post(
+            "/tenant-admin/login",
+            headers={"origin": "https://attacker.invalid", "sec-fetch-site": "same-origin"},
+            content="username=not-an-admin&password=not-the-password",
+        )
+        assert hostile_origin.status_code == 403
         assert client.get("/ui/select/content").status_code == 404
         activated = client.post(
             f"/activate/{admin_activation}",

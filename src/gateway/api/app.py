@@ -398,7 +398,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ) -> Response:
             if request.method not in {"GET", "HEAD", "OPTIONS"}:
                 origin = request.headers.get("origin")
-                if origin is not None and urlsplit(origin).hostname != request.url.hostname:
+                fetch_site = request.headers.get("sec-fetch-site")
+                null_origin_is_same_origin = origin == "null" and fetch_site == "same-origin"
+                if (
+                    origin is not None
+                    and not null_origin_is_same_origin
+                    and urlsplit(origin).hostname != request.url.hostname
+                ):
                     return JSONResponse({"detail": "跨站请求被拒绝"}, status_code=status.HTTP_403_FORBIDDEN)
             started = time.perf_counter()
             try:
