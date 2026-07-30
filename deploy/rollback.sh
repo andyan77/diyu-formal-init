@@ -28,10 +28,10 @@ fi
 
 git -C "$repository" fetch --quiet origin "$target"
 git -C "$repository" cat-file -e "${target}^{commit}"
-git -C "$repository" checkout --detach --quiet "$target"
 # Rollback must remain reliable even when invoked from a root-only evidence
-# shell whose inherited umask would make tracked application code unreadable.
+# shell whose inherited umask would make files created by checkout unreadable.
 umask 022
+git -C "$repository" checkout --detach --quiet "$target"
 git -C "$repository" checkout-index --all --force
 export DIYU_IMAGE_TAG="$target"
 export COMPOSE_PROJECT_NAME="diyu-m5-4"
