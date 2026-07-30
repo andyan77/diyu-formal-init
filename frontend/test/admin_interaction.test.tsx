@@ -268,7 +268,14 @@ async function main(): Promise<void> {
     "https://diyu.example/activate/ui04-obviously-fake-browser-fixture",
     "显示值与复制值必须使用同一个服务端完整 URL"
   );
-  assert.match(document.body.textContent ?? "", /链接已复制/);
+  const activationCopyFeedback = find(
+    ".one-time-link [role=status]",
+    "链接已复制"
+  );
+  assert.ok(
+    activationCopyFeedback.closest(".tenant-drawer"),
+    "激活链接复制反馈必须位于当前成员抽屉内"
+  );
   assert.doesNotMatch(document.body.textContent ?? "", /链接已发送|已交付/);
 
   await click(find(".tenant-drawer button", "关闭"));
@@ -296,9 +303,13 @@ async function main(): Promise<void> {
   setClipboardFailure(true);
   await click(find(".one-time-link button", "复制重设链接"));
   await settle();
-  assert.match(
-    document.body.textContent ?? "",
-    /未能自动复制，请手动选择上方链接/
+  const failedResetCopyFeedback = find(
+    ".one-time-link [role=status]",
+    "未能自动复制，请手动选择上方链接"
+  );
+  assert.ok(
+    failedResetCopyFeedback.closest(".tenant-drawer"),
+    "重设链接复制失败反馈必须位于当前成员抽屉内"
   );
   setClipboardFailure(false);
   await click(find(".one-time-link button", "复制重设链接"));
@@ -307,7 +318,14 @@ async function main(): Promise<void> {
     copiedTexts.at(-1),
     "https://diyu.example/activate/ui05-obviously-fake-reset-fixture"
   );
-  assert.match(document.body.textContent ?? "", /链接已复制/);
+  const successfulResetCopyFeedback = find(
+    ".one-time-link [role=status]",
+    "链接已复制"
+  );
+  assert.ok(
+    successfulResetCopyFeedback.closest(".tenant-drawer"),
+    "重设链接复制成功反馈必须位于当前成员抽屉内"
+  );
 
   const disablePath =
     "/api/v1/tenant-management/users/22222222-2222-4222-8222-222222222222/disable";
@@ -324,7 +342,39 @@ async function main(): Promise<void> {
   assert.match(document.activeElement?.textContent ?? "", /确认停用/);
   await click(find('[role="alertdialog"] button', "取消"));
   assert.equal(disableCount(), 0, "取消停用不得改变成员状态");
-  assert.match(document.activeElement?.textContent ?? "", /停用成员/);
+  const disableTriggerAfterCancel = find(
+    ".tenant-drawer button",
+    "停用成员"
+  ) as HTMLButtonElement;
+  assert.equal(disableTriggerAfterCancel.isConnected, true);
+  assert.equal(
+    document.activeElement,
+    disableTriggerAfterCancel,
+    "取消后焦点必须返回重新挂载的真实停用按钮"
+  );
+  await click(disableTriggerAfterCancel);
+  const escapeDialog = document.querySelector('[role="alertdialog"]');
+  assert.ok(escapeDialog);
+  await act(async () => {
+    escapeDialog.dispatchEvent(
+      new window.KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+  });
+  await settle();
+  const disableTriggerAfterEscape = find(
+    ".tenant-drawer button",
+    "停用成员"
+  ) as HTMLButtonElement;
+  assert.equal(disableTriggerAfterEscape.isConnected, true);
+  assert.equal(
+    document.activeElement,
+    disableTriggerAfterEscape,
+    "Escape 后焦点必须返回重新挂载的真实停用按钮"
+  );
   await click(find(".tenant-drawer button", "停用成员"));
   const confirmDisable = find('[role="alertdialog"] button', "确认停用");
   await act(async () => {

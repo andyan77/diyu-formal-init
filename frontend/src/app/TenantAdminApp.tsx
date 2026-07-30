@@ -823,8 +823,10 @@ function Members({
   const [drawer, setDrawer] = useState<"create" | Operator | null>(null);
   const [saving, setSaving] = useState(false);
   const [activationLink, setActivationLink] = useState("");
+  const [copyFeedback, setCopyFeedback] = useState<Notice>(null);
   const [confirmingDisable, setConfirmingDisable] = useState(false);
-  const disableReturnFocus = useRef<HTMLButtonElement | null>(null);
+  const [restoreDisableFocus, setRestoreDisableFocus] = useState(false);
+  const disableTrigger = useRef<HTMLButtonElement>(null);
   const confirmDisableButton = useRef<HTMLButtonElement>(null);
   const disableInFlight = useRef(false);
   const [form, setForm] = useState({
@@ -851,10 +853,25 @@ function Members({
       confirmDisableButton.current?.focus();
     }
   }, [confirmingDisable]);
+  useEffect(() => {
+    if (!restoreDisableFocus || confirmingDisable) return;
+    const trigger = disableTrigger.current;
+    if (trigger?.isConnected) {
+      trigger.focus();
+      setRestoreDisableFocus(false);
+    }
+  }, [confirmingDisable, restoreDisableFocus]);
 
   const cancelDisable = (): void => {
     setConfirmingDisable(false);
-    window.requestAnimationFrame(() => disableReturnFocus.current?.focus());
+    setRestoreDisableFocus(true);
+  };
+  const closeDrawer = (): void => {
+    setDrawer(null);
+    setActivationLink("");
+    setCopyFeedback(null);
+    setConfirmingDisable(false);
+    setRestoreDisableFocus(false);
   };
   const run = async (action: () => Promise<void>, message: string): Promise<void> => {
     setSaving(true);
@@ -870,7 +887,9 @@ function Members({
   };
   const openCreate = (): void => {
     setActivationLink("");
+    setCopyFeedback(null);
     setConfirmingDisable(false);
+    setRestoreDisableFocus(false);
     setForm({
       displayName: "",
       username: "",
@@ -884,6 +903,7 @@ function Members({
   };
   const create = (event: FormEvent): void => {
     event.preventDefault();
+    setCopyFeedback(null);
     void run(async () => {
       const created = await api<{
         activation_link: string;
@@ -925,7 +945,9 @@ function Members({
   };
   const openMember = (member: Operator): void => {
     setActivationLink("");
+    setCopyFeedback(null);
     setConfirmingDisable(false);
+    setRestoreDisableFocus(false);
     setEdit({
       entryType: member.entry_type,
       content: hasCapability(member, "content"),
@@ -989,7 +1011,7 @@ function Members({
         </div>
       )}
       {drawer === "create" && (
-        <Drawer title="添加成员" onClose={() => setDrawer(null)}>
+        <Drawer title="添加成员" onClose={closeDrawer}>
           <form className="tenant-form" onSubmit={create}>
             <label>
               姓名或工作名
@@ -1139,17 +1161,26 @@ function Members({
                 <button
                   type="button"
                   className="text-action"
-                  onClick={() => void copyOneTimeLink(activationLink, setNotice)}
+                  onClick={() => void copyOneTimeLink(activationLink, setCopyFeedback)}
                 >
                   复制链接
                 </button>
+                {copyFeedback && (
+                  <p
+                    className={`one-time-link-feedback ${copyFeedback.tone}`}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {copyFeedback.message}
+                  </p>
+                )}
               </div>
             )}
           </form>
         </Drawer>
       )}
       {drawer && drawer !== "create" && (
-        <Drawer title={drawer.display_name} onClose={() => setDrawer(null)}>
+        <Drawer title={drawer.display_name} onClose={closeDrawer}>
           <div className="tenant-detail">
             <p>
               {drawer.organization} ·{" "}
@@ -1275,7 +1306,8 @@ function Members({
               className="text-action"
               type="button"
               disabled={saving}
-              onClick={() =>
+              onClick={() => {
+                setCopyFeedback(null);
                 void run(async () => {
                   const value = await api<{
                     reset_link: string;
@@ -1285,8 +1317,8 @@ function Members({
                     { method: "POST" }
                   );
                   setActivationLink(value.reset_url);
-                }, "新的一次性重设密码链接已生成，此前未使用的重设链接已失效。")
-              }
+                }, "新的一次性重设密码链接已生成，此前未使用的重设链接已失效。");
+              }}
             >
               生成一次性重设密码链接
             </button>
@@ -1304,19 +1336,29 @@ function Members({
                 <button
                   type="button"
                   className="text-action"
-                  onClick={() => void copyOneTimeLink(activationLink, setNotice)}
+                  onClick={() => void copyOneTimeLink(activationLink, setCopyFeedback)}
                 >
                   复制重设链接
                 </button>
+                {copyFeedback && (
+                  <p
+                    className={`one-time-link-feedback ${copyFeedback.tone}`}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {copyFeedback.message}
+                  </p>
+                )}
               </div>
             )}
             {drawer.id !== currentUserId && drawer.enabled && !confirmingDisable && (
               <button
+                ref={disableTrigger}
                 className="text-action danger"
                 type="button"
                 disabled={saving}
-                onClick={event => {
-                  disableReturnFocus.current = event.currentTarget;
+                onClick={() => {
+                  setRestoreDisableFocus(false);
                   setConfirmingDisable(true);
                 }}
               >
@@ -1359,6 +1401,8 @@ function Members({
                           { method: "POST" }
                         );
                         setConfirmingDisable(false);
+                        setRestoreDisableFocus(false);
+                        setCopyFeedback(null);
                         setDrawer(null);
                       }, "成员已停用，现有会话与工作资格已撤销。").finally(() => {
                         disableInFlight.current = false;

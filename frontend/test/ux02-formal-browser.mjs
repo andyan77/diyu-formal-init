@@ -18,6 +18,8 @@ const newUserPassword = required("UX02_NEW_USER_PASSWORD");
 const expectedAccountName = required("UX02_EXPECTED_ACCOUNT_NAME");
 const expectedPlatform = required("UX02_EXPECTED_PLATFORM");
 const boundedAdminOnly = process.env.UX02_BOUNDED_ADMIN_ONLY === "1";
+const adminViewportWidth = Number(process.env.UX02_ADMIN_VIEWPORT_WIDTH ?? "1440");
+const adminViewportHeight = Number(process.env.UX02_ADMIN_VIEWPORT_HEIGHT ?? "900");
 const newUsername = `ux02-browser-${Date.now()}`;
 const newDisplayName = `UX-02 浏览器成员 ${newUsername.slice(-6)}`;
 const resetUserPassword = `${newUserPassword}-reset`;
@@ -62,6 +64,7 @@ const ensure = (value, message) => {
 let socket;
 const failures = [];
 const results = [];
+const strictOracleFailures = [];
 const record = (name, detail) => results.push({ name, status: "PASS", detail });
 
 try {
@@ -113,7 +116,7 @@ try {
       );
     });
 
-  const createPage = async () => {
+  const createPage = async ({ width = 1440, height = 900 } = {}) => {
     const context = await send("Target.createBrowserContext");
     const target = await send("Target.createTarget", {
       url: "about:blank",
@@ -129,7 +132,7 @@ try {
     await send("Network.enable", {}, sessionId);
     await send(
       "Emulation.setDeviceMetricsOverride",
-      { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false },
+      { width, height, deviceScaleFactor: 1, mobile: width <= 640 },
       sessionId
     );
     await send("Browser.grantPermissions", {
@@ -215,6 +218,7 @@ try {
           ? "nodes[0]"
           : `nodes.find(item=>item.textContent.trim().includes(${JSON.stringify(text)}))`};
         if(!node)return {clicked:false,candidates:nodes.map(item=>item.textContent.trim())};
+        node.scrollIntoView({block:'center',inline:'nearest'});
         node.click();
         return {clicked:true};
       })()`);
@@ -238,7 +242,47 @@ try {
     };
   };
 
-  const admin = await createPage();
+  const admin = await createPage({
+    width: adminViewportWidth,
+    height: adminViewportHeight
+  });
+  const inspectCopyFeedback = () =>
+    admin.evaluate(`(() => {
+      const drawer=document.querySelector('.tenant-drawer');
+      const feedback=[...document.querySelectorAll('[role="status"]')]
+        .find(node=>node.textContent.includes('链接已复制')
+          || node.textContent.includes('未能自动复制'));
+      if(!feedback)return {exists:false};
+      const style=getComputedStyle(feedback);
+      const rect=feedback.getBoundingClientRect();
+      const x=Math.min(window.innerWidth-1,Math.max(0,rect.left+rect.width/2));
+      const y=Math.min(window.innerHeight-1,Math.max(0,rect.top+rect.height/2));
+      const top=document.elementFromPoint(x,y);
+      return {
+        exists:true,
+        inside:drawer?.contains(feedback)===true,
+        display:style.display,
+        visibility:style.visibility,
+        opacity:Number(style.opacity||'1'),
+        inViewport:rect.width>0 && rect.height>0
+          && rect.bottom>0 && rect.right>0
+          && rect.top<window.innerHeight && rect.left<window.innerWidth,
+        uncovered:top===feedback || feedback.contains(top)
+      };
+    })()`);
+  const inspectDisableFocus = () =>
+    admin.evaluate(`(() => {
+      const trigger=[...document.querySelectorAll('.tenant-drawer button')]
+        .find(node=>node.textContent.trim()==='停用成员');
+      const style=trigger?getComputedStyle(trigger):null;
+      return {
+        exists:Boolean(trigger),
+        connected:trigger?.isConnected===true,
+        exact:document.activeElement===trigger,
+        focusVisible:Boolean(style)
+          && (style.outlineStyle!=='none' || style.boxShadow!=='none')
+      };
+    })()`);
   await admin.navigate("/tenant-admin/login");
   await admin.fill('input[name="username"]', adminUsername);
   await admin.fill('input[name="password"]', adminPassword);
@@ -299,6 +343,21 @@ try {
     "document.body.textContent.includes('链接已复制')",
     "激活链接复制成功反馈"
   );
+  const activationCopyFeedback = await inspectCopyFeedback();
+  if (
+    !activationCopyFeedback.exists ||
+    !activationCopyFeedback.inside ||
+    activationCopyFeedback.display === "none" ||
+    activationCopyFeedback.visibility === "hidden" ||
+    activationCopyFeedback.opacity <= 0 ||
+    !activationCopyFeedback.inViewport ||
+    !activationCopyFeedback.uncovered
+  ) {
+    strictOracleFailures.push({
+      check: "activation_copy_feedback_visible_inside_drawer",
+      detail: activationCopyFeedback
+    });
+  }
   const copiedActivation = await admin.evaluate("navigator.clipboard.readText()");
   ensure(copiedActivation === activation.value, "复制值与显示值不一致");
   record("管理员创建成员与完整激活链接", {
@@ -367,6 +426,21 @@ try {
     "document.body.textContent.includes('链接已复制')",
     "重设链接复制成功反馈"
   );
+  const resetCopyFeedback = await inspectCopyFeedback();
+  if (
+    !resetCopyFeedback.exists ||
+    !resetCopyFeedback.inside ||
+    resetCopyFeedback.display === "none" ||
+    resetCopyFeedback.visibility === "hidden" ||
+    resetCopyFeedback.opacity <= 0 ||
+    !resetCopyFeedback.inViewport ||
+    !resetCopyFeedback.uncovered
+  ) {
+    strictOracleFailures.push({
+      check: "reset_copy_feedback_visible_inside_drawer",
+      detail: resetCopyFeedback
+    });
+  }
   ensure(
     (await admin.evaluate("navigator.clipboard.readText()")) === resetUrl,
     "重设链接复制值与显示值不一致"
@@ -567,10 +641,40 @@ try {
     "停用成员二次确认"
   );
   await admin.click('[role="alertdialog"] button', "取消");
+  await admin.waitFor(
+    "document.querySelector('[role=alertdialog]') === null",
+    "取消停用返回成员详情"
+  );
+  const cancelFocus = await inspectDisableFocus();
+  if (!cancelFocus.exists || !cancelFocus.connected || !cancelFocus.exact || !cancelFocus.focusVisible) {
+    strictOracleFailures.push({
+      check: "cancel_returns_exact_connected_visible_focus",
+      detail: cancelFocus
+    });
+  }
   ensure(
     await user.evaluate("location.pathname === '/user'"),
     "取消停用不应撤销旧会话"
   );
+  await admin.click(".tenant-drawer button", "停用成员");
+  await admin.waitFor(
+    "document.querySelector('[role=alertdialog]') !== null",
+    "Escape 前停用成员二次确认"
+  );
+  await admin.evaluate(`document.querySelector('[role=alertdialog]').dispatchEvent(
+    new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})
+  )`);
+  await admin.waitFor(
+    "document.querySelector('[role=alertdialog]') === null",
+    "Escape 返回成员详情"
+  );
+  const escapeFocus = await inspectDisableFocus();
+  if (!escapeFocus.exists || !escapeFocus.connected || !escapeFocus.exact || !escapeFocus.focusVisible) {
+    strictOracleFailures.push({
+      check: "escape_returns_exact_connected_visible_focus",
+      detail: escapeFocus
+    });
+  }
   await admin.click(".tenant-drawer button", "停用成员");
   await admin.click('[role="alertdialog"] button', "确认停用");
   await admin.waitFor("document.body.textContent.includes('现有会话与工作资格已撤销')", "停用反馈");
@@ -601,6 +705,10 @@ try {
       (event.method === "Log.entryAdded" && event.params?.entry?.level === "error")
   );
   ensure(browserErrors.length === 0, `浏览器控制台错误：${JSON.stringify(browserErrors)}`);
+  ensure(
+    strictOracleFailures.length === 0,
+    `严格可见性／焦点 Oracle 失败：${JSON.stringify(strictOracleFailures)}`
+  );
   record("浏览器安全边界", { external_requests: 0, console_errors: 0 });
 } catch (error) {
   failures.push(error instanceof Error ? error.stack ?? error.message : String(error));
