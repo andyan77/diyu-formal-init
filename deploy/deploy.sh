@@ -31,6 +31,11 @@ fi
 git -C "$repository" fetch --quiet origin "$sha"
 git -C "$repository" cat-file -e "${sha}^{commit}"
 git -C "$repository" checkout --detach --quiet "$sha"
+# Root-only backup or evidence shells may deliberately run with umask 077.
+# Re-materialize the index under the product runtime's expected public-read
+# modes before Docker COPY; otherwise the non-root app cannot import 0600 files.
+umask 022
+git -C "$repository" checkout-index --all --force
 
 export DIYU_IMAGE_TAG="$sha"
 export COMPOSE_PROJECT_NAME="diyu-m5-4"

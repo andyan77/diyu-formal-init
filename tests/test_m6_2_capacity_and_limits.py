@@ -498,3 +498,13 @@ def test_backup_restore_scripts_use_snapshot_manifest_and_a_real_application_rol
     assert '"41"' not in restore
     assert "NOBYPASSRLS" in restore
     assert "complete_content_chain_count < 1" in restore
+
+
+def test_deploy_and_rollback_restore_git_modes_before_non_root_build() -> None:
+    for script_path in ("deploy/deploy.sh", "deploy/rollback.sh"):
+        script = Path(script_path).read_text(encoding="utf-8")
+        checkout = script.index("checkout --detach --quiet")
+        safe_umask = script.index("umask 022", checkout)
+        restore_index = script.index("checkout-index --all --force", safe_umask)
+        build = script.index("docker compose", restore_index)
+        assert checkout < safe_umask < restore_index < build
