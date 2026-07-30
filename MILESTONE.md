@@ -2,9 +2,10 @@
 
 - 当前里程碑：`UX-02` 正式前端工程化与生产替换。
 - 状态：`REVIEW`。UX-01 主控重新独立终审结论为 `PASS` 并保持 `CLOSED`；UX-02 原
-  `REVIEW` 证据和主控有界返工裁决完整保留。“两次输入密码、停用成员二次确认、复制一次性
-  链接可感知反馈”三项管理员旅程缺口已完成正式实现、反证、最终 CI、同 SHA 部署和生产
-  定向验收，不创建 UX-03。UX-02 已从
+  `REVIEW` 证据和两轮主控有界返工裁决完整保留。“两次输入密码、停用成员二次确认、复制
+  一次性链接可感知反馈”三项管理员旅程缺口，以及其后发现的“复制反馈位于抽屉遮罩后、取消
+  停用聚焦已卸载按钮”两个界面假绿，均已完成正式实现、精确反证、最终 CI、同 SHA 部署和
+  生产定向验收，不创建 UX-03。UX-02 已从
   `75ed5283e2616ffa91b2ea20dd0b86e7d64449e3` 启动，并完成正式
   React/API/PostgreSQL 工程化、唯一承重 CI、生产默认前端替换、验收清理与不降级回退。
   不创建 UX-03，不自行 `CLOSED`。
@@ -72,6 +73,27 @@
   最终候选。两个 synthetic 用户、会话、token、凭据文件及临时密码环境均精确清理；证据位于
   `/var/lib/diyu-ux02-evidence/1abd0dbc9088ae8ac3127986cd7fcd0d347ef821/bounded-admin-rework/`，
   权限 `0700/0600` 且 SHA256SUMS 全绿。
+- 最后一轮运行实现
+  `3dfe648571b679f74e7dbb4d7c9927de77f03000` 把激活／重设复制反馈直接放在当前
+  `.tenant-drawer` 的一次性链接区内，并在新建链接、切换成员或关闭抽屉时清除旧反馈；
+  停用确认取消或 Escape 后通过真实按钮 ref 和挂载后 effect 精确恢复焦点。测试不再用
+  `body.textContent` 或 activeElement 文本冒充可见性／焦点，而是核验抽屉归属、视口、
+  遮挡、`activeElement === trigger` 和 `trigger.isConnected`。
+- 两项临时 mutation 均真实变红：反馈移回抽屉外时，390×844 Chrome 得到
+  `inside=false / inViewport=false / uncovered=false`；恢复旧 `event.currentTarget`
+  聚焦时，精确测试得到 `activeElement=body`。恢复正确实现后，1440×900 与 390×844
+  Chrome、前端完整门和 Golden/OpenAPI `419 passed` 全绿；产品体验及工程防假绿两份
+  有界审查无阻断。
+- 唯一承重 CI `30537611606` 精确对应 `3dfe648…` 且为 `success`。生产部署仓与镜像均为
+  该 SHA，schema 保持 `20260806_33`，公网／回环 readiness 与 `/status` 均为 200。
+  生产 390×844 定向浏览器证明激活／重设反馈位于抽屉内且真实可见，取消与 Escape 都精确
+  返回已连接的停用按钮。上一健康镜像 `1abd0db…` 已完成不降级回退并切回最终候选；
+  predeploy 备份 `/var/backups/diyu-m5-4/20260730T111509Z-predeploy` 为 `0700/0600`
+  且 checksum 通过。
+- 本轮 synthetic 管理员、成员、会话、token 和临时凭据均已精确清理。root-only 证据位于
+  `/var/lib/diyu-ux02-evidence/3dfe648571b679f74e7dbb4d7c9927de77f03000/final-targeted/`，
+  权限 `0700/0600` 且 SHA256SUMS 全绿。64 项正式真值保持 `58/0/0/6/0`，资产保持
+  `41/243/25/119`、激活增量 0。
 - 唯一下一动作：主控最终独立终审 UX-02；在终审前不启动 UX-03。
 
 ## UI-12 关闭结论（历史保留）
