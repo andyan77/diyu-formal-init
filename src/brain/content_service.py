@@ -108,6 +108,14 @@ class ContentService:
         self._generator = generator
         self._control = control_service
 
+    def completed_request(
+        self,
+        scope: TrustedScope,
+        client_request_id: UUID,
+    ) -> dict[str, object] | None:
+        """Read a previously committed response before reserving provider capacity."""
+        return self._repository.completed_request(scope, client_request_id)
+
     def create_from_weak_seed(
         self,
         scope: TrustedScope,
@@ -123,7 +131,12 @@ class ContentService:
         creative_plan: CreativePlanV2 | None = None,
         creation_commitment: CreationCommitment | None = None,
         explicit_ui: bool = True,
+        client_request_id: UUID | None = None,
     ) -> dict[str, object]:
+        if client_request_id is not None:
+            completed = self._repository.completed_request(scope, client_request_id)
+            if completed is not None:
+                return completed
         if (
             creation_commitment is None
             and primary_product_override is None
@@ -250,6 +263,7 @@ class ContentService:
                 commitment,
             ),
             series_context,
+            client_request_id=client_request_id,
         )
         return self._generate_and_persist(
             scope,
@@ -285,15 +299,21 @@ class ContentService:
         series_position: int | None = None,
         progress: Callable[[str], None] | None = None,
         direct_generate: bool = False,
+        conversation_only: bool = False,
+        client_request_id: UUID | None = None,
     ) -> dict[str, object]:
         """Collaborate without persistence until one request is genuinely generation-ready."""
+        if not conversation_only and client_request_id is not None:
+            completed = self._repository.completed_request(scope, client_request_id)
+            if completed is not None:
+                return completed
         raw_history = tuple(history[-8:])
         if raw_history and raw_history[-1].role == "user" and raw_history[-1].content == message:
             raw_history = raw_history[:-1]
         raw_user_turns = tuple(turn.content for turn in raw_history if turn.role == "user") + (message,)
         commitment = evaluate_creation_intent(
-            raw_user_turns,
-            explicit_ui=direct_generate,
+            () if conversation_only else raw_user_turns,
+            explicit_ui=direct_generate and not conversation_only,
         )
         sanitized_message = sanitize_seed(message)
         sanitized_history = tuple(ConversationTurn(turn.role, sanitize_seed(turn.content)) for turn in raw_history)
@@ -434,6 +454,7 @@ class ContentService:
             narrative_frame=frame,
             creative_plan=decision.creative_plan,
             creation_commitment=commitment,
+            client_request_id=client_request_id,
         )
         return result | {"conversation_message": decision.message}
 
@@ -697,7 +718,12 @@ class ContentService:
         task_id: UUID,
         instruction: str,
         target: ContentTarget = "douyin_video",
+        client_request_id: UUID | None = None,
     ) -> dict[str, object]:
+        if client_request_id is not None:
+            completed = self._repository.completed_request(scope, client_request_id)
+            if completed is not None:
+                return completed
         direction = direction_for(target)
         snapshot = self._repository.load_content_context_snapshot(scope, task_id)
         if snapshot is None:
@@ -776,6 +802,7 @@ class ContentService:
             control,
             series_context,
             source_description,
+            client_request_id=client_request_id,
         )
         return self._generate_and_persist(
             scope,

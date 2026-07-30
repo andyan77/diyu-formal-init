@@ -9,6 +9,8 @@
 .tenant-nav form .quiet { min-width: 44px; min-height: 44px; }
 .tenant-admin-app > main { min-width: 0; }
 .tenant-topbar { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 0 clamp(22px, 5vw, 72px); border-bottom: 1px solid var(--stone-100); color: var(--ink-soft); font-size: .9rem; }
+.tenant-mobile-menu,
+.tenant-nav-backdrop { display: none; }
 .tenant-account-menu { position: relative; z-index: 5; min-width: 0; }
 .tenant-account-menu summary { display: flex; min-height: 44px; align-items: center; cursor: pointer; list-style: none; color: var(--ink); }
 .tenant-account-menu summary span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -48,7 +50,59 @@
 .one-time-link { display: grid; gap: 9px; padding: 14px; border-left: 3px solid var(--vermillion); background: var(--stone-50); }.one-time-link p { margin: 0; color: var(--ink-soft); line-height: 1.55; }.one-time-link code { overflow-wrap: anywhere; font-size: .8rem; }.one-time-link .text-action { justify-self: start; }
 .member-grants { display: grid; gap: 13px; padding: 16px; border: 1px solid var(--stone-200); }.member-grants legend { font-weight: 700; }.member-grants label { display: grid; gap: 7px; color: var(--ink-soft); }.member-grants select { min-height: 44px; padding: 10px 12px; border: 1px solid var(--stone-200); border-radius: 7px; background: var(--white); }.member-grants label:has(input) { display: flex; min-height: 44px; align-items: center; gap: 9px; color: var(--ink); }.member-grants input { width: 18px; height: 18px; }
 .profile-read { margin: 0; padding: 11px 0; border-bottom: 1px solid var(--stone-100); color: var(--ink-soft); font-weight: 400; line-height: 1.6; }.brand-layout { display: grid; gap: 34px; }.tenant-subsection { padding-bottom: 30px; border-bottom: 1px solid var(--stone-200); }.tenant-subsection > header span { color: var(--stone-400); font-size: .85rem; }.tenant-header-actions { display: flex; gap: 14px; flex-wrap: wrap; }.tenant-subsection > textarea { width: 100%; min-height: 150px; margin: 15px 0; padding: 14px; border: 1px solid var(--stone-200); border-radius: 7px; background: var(--white); line-height: 1.65; }.product-list, .material-list { display: grid; gap: 0; border-top: 1px solid var(--stone-100); }.product-list article { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 14px; padding: 14px 0; border-bottom: 1px solid var(--stone-100); }.product-list span { color: var(--stone-400); font-size: .86rem; }.product-list p { grid-column: 1 / -1; margin: 0; }.material-list article { display: flex; align-items: start; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--stone-100); }.material-list div { display: grid; gap: 5px; }.material-list span { color: var(--stone-400); font-size: .86rem; }.material-list p { margin: 0; }.material-guidance { max-width: 670px; }.available-details { margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--stone-200); }.available-details summary { cursor: pointer; font-weight: 700; }.available-details ul { display: grid; gap: 14px; padding: 0; margin: 22px 0 0; list-style: none; }.available-details li { display: grid; gap: 5px; }.available-details span { color: var(--ink-soft); line-height: 1.6; }
-@media (max-width: 780px) { .tenant-admin-app { display: block; }.tenant-nav { position: static; height: auto; display: grid; grid-template-columns: 1fr; gap: 14px; padding: 18px 20px; border-right: 0; border-bottom: 1px solid var(--stone-200); }.tenant-nav nav { grid-column: 1 / -1; display: flex; overflow-x: auto; padding-bottom: 2px; }.tenant-nav nav button { flex: 0 0 auto; }.tenant-topbar { min-height: 54px; padding: 0 20px; }.tenant-page { padding: 34px 20px 48px; }.tenant-heading.split, .tenant-next, .tenant-list article, .account-list article { align-items: flex-start; flex-direction: column; }.need-list article { grid-template-columns: 1fr; gap: 8px; }.tenant-heading h1 { font-size: 2rem; }.account-actions { justify-content: start; }.tenant-drawer { width: 100%; padding: 22px 20px; }.tenant-notice { width: calc(100% - 24px); }.tenant-admin-app .primary { width: 100%; }.tenant-heading.split .primary, .tenant-next .primary { width: auto; }.tenant-account-menu { max-width: 48%; }.tenant-account-menu > div { right: 0; }.tenant-topbar > span { max-width: 48%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } }
+@media (max-width: 780px) {
+  .tenant-admin-app { display: block; }
+  .tenant-nav {
+    position: fixed;
+    z-index: 31;
+    inset: 0 auto 0 0;
+    width: min(86vw, 320px);
+    height: 100vh;
+    display: flex;
+    gap: 18px;
+    padding: 24px 20px;
+    border-right: 1px solid var(--stone-200);
+    background: var(--white);
+    box-shadow: var(--shadow);
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+  }
+  .tenant-nav.mobile-open { transform: translateX(0); }
+  .tenant-nav nav { display: grid; overflow: visible; }
+  .tenant-nav nav button { width: 100%; }
+  .tenant-nav-backdrop {
+    position: fixed;
+    z-index: 30;
+    inset: 0;
+    display: block;
+    width: 100%;
+    border: 0;
+    background: rgba(23, 22, 20, .28);
+  }
+  .tenant-mobile-menu {
+    display: inline-flex;
+    min-width: 54px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--stone-200);
+    border-radius: 8px;
+    background: var(--white);
+  }
+  .tenant-topbar { min-height: 58px; padding: 0 14px; }
+  .tenant-page { padding: 34px 20px 48px; }
+  .tenant-heading.split, .tenant-next, .tenant-list article, .account-list article { align-items: flex-start; flex-direction: column; }
+  .need-list article { grid-template-columns: 1fr; gap: 8px; }
+  .tenant-heading h1 { font-size: 2rem; }
+  .account-actions { justify-content: start; }
+  .tenant-drawer { width: 100%; padding: 22px 20px; }
+  .tenant-notice { width: calc(100% - 24px); }
+  .tenant-admin-app .primary { width: 100%; }
+  .tenant-heading.split .primary, .tenant-next .primary { width: auto; }
+  .tenant-account-menu { max-width: 42%; }
+  .tenant-account-menu > div { right: 0; }
+  .tenant-topbar > span { flex: 1; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
 
 .management-summary {
   display: grid;

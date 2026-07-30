@@ -119,19 +119,86 @@ async function main(): Promise<void> {
     "历史读取必须携带服务端已解析的逻辑账号与目标"
   );
 
+  const seriesTrigger = find(
+    ".composer-resource-actions button",
+    "连续系列"
+  ) as HTMLButtonElement;
+  await click(seriesTrigger);
+  await settle();
+  assert.equal(
+    document.activeElement?.getAttribute("aria-label"),
+    "关闭",
+    "创作资料抽屉打开后焦点必须进入抽屉"
+  );
+  await act(async () => {
+    document.querySelector(".creator-tool-drawer")?.dispatchEvent(
+      new window.KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true
+      })
+    );
+  });
+  await settle();
+  assert.equal(
+    document.activeElement,
+    seriesTrigger,
+    "Escape 关闭抽屉后焦点必须回到触发按钮"
+  );
+
+  const initialComposer = document.querySelector(
+    'textarea[aria-label="内容需求"]'
+  ) as HTMLTextAreaElement;
+  await input(
+    initialComposer,
+    "今天店里忙了一天，回家因为洗碗拌了两句，帮我发条小红书。"
+  );
+  assert.equal(
+    window.sessionStorage.getItem("diyu-content-draft"),
+    "今天店里忙了一天，回家因为洗碗拌了两句，帮我发条小红书。",
+    "未提交输入必须保存在当前浏览器会话"
+  );
+  await click(find(".composer-submit button", "生成内容"));
+  await settle();
+  const directRequest = requests
+    .filter(item => item.path === "/api/v1/content/stream")
+    .at(-1);
+  assert.equal(directRequest?.body?.interaction_mode, "generate");
+  assert.equal(directRequest?.body?.direct_generate, true);
+  assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /当前版本 · V1/);
+  await click(find("button", "另起一条"));
+
   await send("你好");
   assert.match(document.body.textContent ?? "", /你好。今天想聊点什么/);
   assert.equal(document.querySelector(".creator-artifact"), null);
   assert.equal(
-    requests.filter(item => item.path === "/api/v1/content/stream").length,
+    requests.filter(
+      item =>
+        item.path === "/api/v1/content/stream" &&
+        item.body?.message === "你好"
+    ).length,
     1,
     "普通交流走正式语义入口但不产生伪成品"
   );
   assert.deepEqual(
-    requests.find(item => item.path === "/api/v1/content/stream")?.body
+    requests.find(
+      item =>
+        item.path === "/api/v1/content/stream" &&
+        item.body?.message === "你好"
+    )?.body
       ?.conversation,
     [],
     "当前消息只放在 message，不能在 conversation 中重复"
+  );
+  assert.equal(
+    requests.find(
+      item =>
+        item.path === "/api/v1/content/stream" &&
+        item.body?.message === "你好"
+    )?.body
+      ?.interaction_mode,
+    "conversation",
+    "发送必须明确走不持久化交流动作"
   );
 
   await send("最近店里总有人只想自己看看。");
@@ -162,6 +229,7 @@ async function main(): Promise<void> {
     true,
     "轻量动作只把原输入作为一次明确生成请求提交"
   );
+  assert.equal(streamRequest?.body?.interaction_mode, "generate");
   const conversation = streamRequest?.body?.conversation as
     | Array<{ role: string; content: string }>
     | undefined;
@@ -193,9 +261,32 @@ async function main(): Promise<void> {
     "V1 显示后立即输入的修改要求不能被异步版本加载清空"
   );
   await input(revision, "判断保留，改得更像门店人物自己的感受。");
-  await click(find(".composer-submit button", "生成 V2"));
+  await click(find(".composer-submit button", "修改成 V2"));
   await settle();
   assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /当前版本 · V2/);
+
+  const versionCountBeforeConversation = requests.filter(
+    item => item.path === "/api/v1/tasks/t1/revisions"
+  ).length;
+  await input(
+    document.querySelector(
+      'textarea[aria-label="修改要求"]'
+    ) as HTMLTextAreaElement,
+    "这一版的主线是什么？"
+  );
+  await click(find(".composer-submit button", "发送"));
+  await settle();
+  assert.equal(
+    requests.filter(item => item.path === "/api/v1/tasks/t1/revisions").length,
+    versionCountBeforeConversation,
+    "已有成品时发送也不得创建新版本"
+  );
+  assert.equal(
+    requests.filter(item => item.path === "/api/v1/content/stream").at(-1)?.body
+      ?.interaction_mode,
+    "conversation"
+  );
+
   await click(find(".version-history summary", "历史版本"));
   await click(find(".version-history button", "V1"));
   assert.match(document.querySelector(".history-reading")?.textContent ?? "", /回读 V1/);
@@ -213,21 +304,30 @@ async function main(): Promise<void> {
     ) as HTMLTextAreaElement,
     "模拟修改失败，但请保留这条要求。"
   );
-  await click(find(".composer-submit button", "生成 V3"));
+  await click(find(".composer-submit button", "修改成 V3"));
   await settle();
   assert.match(
     document.querySelector(".generation-failure")?.textContent ?? "",
-    /想法仍然保留/
+    /要求和已有版本都已保留/
   );
   const failedRevisionCount = requests.filter(
     item => item.path === "/api/v1/tasks/t1/revisions"
   ).length;
+  const failedRevisionRequest = requests
+    .filter(item => item.path === "/api/v1/tasks/t1/revisions")
+    .at(-1);
   await click(find(".generation-failure button", "再试一次"));
   await settle();
   assert.equal(
     requests.filter(item => item.path === "/api/v1/tasks/t1/revisions").length,
     failedRevisionCount + 1,
     "修改失败后的再试一次必须重放同一条修改请求"
+  );
+  assert.equal(
+    requests.filter(item => item.path === "/api/v1/tasks/t1/revisions").at(-1)
+      ?.body?.request_id,
+    failedRevisionRequest?.body?.request_id,
+    "失败重试必须复用同一个幂等请求 ID"
   );
   assert.match(
     document.querySelector(".creator-artifact")?.textContent ?? "",
@@ -253,9 +353,12 @@ async function main(): Promise<void> {
     "页面明确选择优先，冲突必须由用户透明决定"
   );
 
-  await click(find("button", "另起一条"));
-  await send("模拟失败，请保留我的输入。");
-  assert.match(document.querySelector(".generation-failure")?.textContent ?? "", /想法仍然保留/);
+  await send("模拟限流失败，请保留我的输入。");
+  assert.match(document.querySelector(".generation-failure")?.textContent ?? "", /输入和已有成品都已保留/);
+  assert.match(
+    document.querySelector(".generation-failure")?.textContent ?? "",
+    /当前请求较多，请稍后再试/
+  );
   assert.equal(document.querySelector(".creator-artifact"), null);
   assert.equal(
     document.querySelector(".composer-submit .primary"),
@@ -265,7 +368,7 @@ async function main(): Promise<void> {
   assert.equal(
     (document.querySelector('textarea[aria-label="内容需求"]') as HTMLTextAreaElement)
       .value,
-    "模拟失败，请保留我的输入。"
+    "模拟限流失败，请保留我的输入。"
   );
   for (const forbidden of [
     "内容边界无法在一次单元修复内满足",
@@ -279,12 +382,21 @@ async function main(): Promise<void> {
   const failedStreamCount = requests.filter(
     item => item.path === "/api/v1/content/stream"
   ).length;
+  const failedStreamRequest = requests
+    .filter(item => item.path === "/api/v1/content/stream")
+    .at(-1);
   await click(find(".generation-failure button", "再试一次"));
   await settle();
   assert.equal(
     requests.filter(item => item.path === "/api/v1/content/stream").length,
     failedStreamCount + 1,
     "再试一次必须真实重放最近失败请求"
+  );
+  assert.equal(
+    requests.filter(item => item.path === "/api/v1/content/stream").at(-1)
+      ?.body?.request_id,
+    failedStreamRequest?.body?.request_id,
+    "生成失败重试必须复用同一个幂等请求 ID"
   );
 
   await act(async () => root.unmount());

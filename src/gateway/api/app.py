@@ -57,6 +57,7 @@ from src.gateway.api.contracts import (
     CreateContentRequest,
     CreateConversationRequest,
     CreateDisplayRequest,
+    CreatedTenantUserResponse,
     CreateOperatorRequest,
     CreateOrganizationRequest,
     CreatePlatformCarrierRequest,
@@ -74,7 +75,9 @@ from src.gateway.api.contracts import (
     MaterialReferenceNoteRequest,
     MaterialUploadRequest,
     OrganizationMaterialUploadRequest,
+    ProvisionedTenantResponse,
     ReorderSeriesRequest,
+    ResetTenantUserResponse,
     RevisionRequest,
     SaveBrandProductRequest,
     SavedVersionResponse,
@@ -497,9 +500,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         "required></label><label>密码 <input type='password' name='password' "
                         "autocomplete='current-password' required></label>"
                         "<button type='submit'>登录</button></form>"
-                        "<details><summary>忘记密码</summary>"
-                        "<p>请联系另一名品牌管理员或笛语运维，获取一次性重设密码链接。</p>"
-                        "</details></main>"
+                        "<p>忘记密码？请联系另一名品牌管理员或笛语运维，"
+                        "获取一次性重设密码链接。</p></main>"
                     ),
                 )
             )
@@ -638,9 +640,58 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="当前密码不正确")
             return {"changed": True}
 
-        @app.post("/api/v1/tenant-management/users", status_code=status.HTTP_201_CREATED, responses=business_failures)
-        def create_tenant_user(payload: CreateTenantUserRequest, request: Request) -> dict[str, str]:
+        def activation_paths(raw_token: str) -> tuple[str, str]:
+            relative = f"/activate/{raw_token}"
+            return relative, f"{current_settings.public_url.rstrip('/')}{relative}"
+
+        def validate_entry_grants(
+            entry_type: str | None,
+            capabilities: list[str],
+            publishing_identity_ids: list[UUID],
+            grants_tenant_management: bool,
+        ) -> None:
+            if entry_type is None:
+                return
+            if entry_type == "tenant_admin":
+                if (
+                    not grants_tenant_management
+                    or capabilities
+                    or publishing_identity_ids
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="租户管理员只能进入品牌管理，不能同时取得内容、陈列或发布账号资格",
+                    )
+                return
+            if grants_tenant_management:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="租户用户不能同时取得品牌管理入口",
+                )
+            has_content = "content" in capabilities
+            if has_content != bool(publishing_identity_ids):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="内容创作资格必须同时绑定至少一个获准发布账号",
+                )
+
+        @app.post(
+            "/api/v1/tenant-management/users",
+            status_code=status.HTTP_201_CREATED,
+            responses=business_failures,
+            response_model=CreatedTenantUserResponse,
+        )
+        def create_tenant_user(
+            payload: CreateTenantUserRequest,
+            request: Request,
+        ) -> CreatedTenantUserResponse:
             identity = formal_manager_identity(request)
+            validate_entry_grants(
+                payload.entry_type,
+                list(payload.capabilities),
+                payload.publishing_identity_ids,
+                payload.grants_tenant_management,
+            )
             try:
                 created = production_authority.repository.create_tenant_user(
                     identity,
@@ -661,11 +712,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail="当前租户已有同名自然人，或登录用户名已被使用",
                 ) from exc
-            return {
-                "user_id": created["user_id"],
-                "username": created["username"],
-                "activation_link": f"/activate/{created['activation_token']}",
-            }
+            activation_link, activation_url = activation_paths(created["activation_token"])
+            return CreatedTenantUserResponse(
+                user_id=created["user_id"],
+                username=created["username"],
+                activation_link=activation_link,
+                activation_url=activation_url,
+            )
 
         @app.get("/api/v1/tenant-management/organizations", responses=business_failures)
         def tenant_organizations(request: Request) -> list[dict[str, str]]:
@@ -687,11 +740,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 payload.organization_level,
             )
 
-        @app.post("/api/v1/tenant-management/users/{user_id}/reset", responses=business_failures)
-        def reset_tenant_user(user_id: UUID, request: Request) -> dict[str, str]:
+        @app.post(
+            "/api/v1/tenant-management/users/{user_id}/reset",
+            responses=business_failures,
+            response_model=ResetTenantUserResponse,
+        )
+        def reset_tenant_user(
+            user_id: UUID,
+            request: Request,
+        ) -> ResetTenantUserResponse:
             identity = formal_manager_identity(request)
             token = production_authority.repository.create_reset_token(identity, user_id)
-            return {"reset_link": f"/activate/{token}"}
+            reset_link, reset_url = activation_paths(token)
+            return ResetTenantUserResponse(reset_link=reset_link, reset_url=reset_url)
 
         @app.post("/api/v1/tenant-management/users/{user_id}/disable", responses=business_failures)
         def disable_tenant_user(user_id: UUID, request: Request) -> dict[str, bool]:
@@ -717,6 +778,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload: UpdateTenantUserGrantsRequest,
             request: Request,
         ) -> dict[str, object]:
+            validate_entry_grants(
+                payload.entry_type,
+                list(payload.capabilities),
+                payload.publishing_identity_ids,
+                payload.grants_tenant_management,
+            )
             return production_authority.repository.update_tenant_user_grants(
                 formal_manager_identity(request),
                 user_id,
@@ -731,18 +798,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 grants_display_access="display" in payload.capabilities,
             )
 
-        @app.post("/api/v1/ops/tenants", status_code=status.HTTP_201_CREATED)
-        def provision_tenant(payload: CreateTenantRequest, request: Request) -> dict[str, str]:
+        @app.post(
+            "/api/v1/ops/tenants",
+            status_code=status.HTTP_201_CREATED,
+            response_model=ProvisionedTenantResponse,
+        )
+        def provision_tenant(
+            payload: CreateTenantRequest,
+            request: Request,
+        ) -> ProvisionedTenantResponse:
             operator = production_authority.require_ops(request)
             created = production_authority.repository.provision_tenant(
                 operator, payload.tenant_name, payload.administrator_name, payload.administrator_username
             )
-            return {
-                "tenant_id": created["tenant_id"],
-                "administrator_id": created["administrator_id"],
-                "username": created["username"],
-                "activation_link": f"/activate/{created['activation_token']}",
-            }
+            activation_link, activation_url = activation_paths(created["activation_token"])
+            return ProvisionedTenantResponse(
+                tenant_id=created["tenant_id"],
+                administrator_id=created["administrator_id"],
+                username=created["username"],
+                activation_link=activation_link,
+                activation_url=activation_url,
+            )
 
         @app.post("/api/v1/ops/tenants/{tenant_id}/disable")
         def disable_tenant(tenant_id: UUID, request: Request) -> dict[str, bool]:
@@ -862,12 +938,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 fields.get("administrator_name", [""])[0],
                 fields.get("administrator_username", [""])[0],
             )
+            _, activation_url = activation_paths(created["activation_token"])
             return HTMLResponse(
                 "<main><h1>租户壳已创建</h1><p>用户名："
                 + escape(created["username"])
-                + "</p><p>一次性激活链接：/activate/"
-                + escape(created["activation_token"])
-                + "</p></main>",
+                + "</p><p>一次性激活链接：<a href='"
+                + escape(activation_url)
+                + "'>"
+                + escape(activation_url)
+                + "</a></p></main>",
                 status_code=status.HTTP_201_CREATED,
             )
 
@@ -1918,7 +1997,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         }
                     )
                     return
+                if (
+                    payload.request_id is not None
+                    and payload.interaction_mode != "conversation"
+                ):
+                    completed = service.completed_request(scope, payload.request_id)
+                    if completed is not None:
+                        events.put(
+                            {
+                                "event": "completed",
+                                "result": ContentVersionResponse.model_validate(
+                                    completed
+                                ).model_dump(mode="json"),
+                            }
+                        )
+                        return
                 with model_slot(request):
+                    conversation_only = payload.interaction_mode == "conversation"
+                    direct_generate = (
+                        payload.interaction_mode == "generate"
+                        or payload.direct_generate
+                    )
                     result = service.respond_to_conversation(
                         scope,
                         payload.message,
@@ -1928,7 +2027,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         payload.series_id,
                         payload.series_position,
                         emit,
-                        payload.direct_generate,
+                        direct_generate,
+                        conversation_only,
+                        payload.request_id,
                     )
                 if result.get("kind") == "content":
                     events.put({"event": "completed", "result": result})
@@ -2024,6 +2125,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # preference-free control input.  Declaring the temporary preference-free session here
         # keeps that session honest end to end: it can only narrow this further, never widen it.
         reads_preference = _REVISION_MAY_READ_PREFERENCE and not bypassed
+        if payload.request_id is not None:
+            completed = service.completed_request(source_scope, payload.request_id)
+            if completed is not None:
+                return completed
         with model_slot(request):
             if target != source_target:
                 return service.recompile_task(
@@ -2038,7 +2143,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     target,
                     RequestedControls(use_personal_preferences=reads_preference),
                 )
-            return service.revise(source_scope, task_id, payload.instruction, target)
+            return service.revise(
+                source_scope,
+                task_id,
+                payload.instruction,
+                target,
+                payload.request_id,
+            )
 
     @app.get(
         "/api/v1/tasks/{task_id}/versions/{version}",

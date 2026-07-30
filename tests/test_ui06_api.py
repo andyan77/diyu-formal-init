@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 import pytest
@@ -157,6 +157,7 @@ def _settings(database_url: str) -> Settings:
             "DIYU_RUNTIME_MODE": "production",
             "DIYU_APP_DATABASE_URL": database_url,
             "DIYU_SESSION_SECRET": "ui06-api-test-session-secret",
+            "DIYU_PUBLIC_URL": "https://diyuai.cc",
             "DIYU_GENERATOR_MODE": "deepseek",
             "DEEPSEEK_API_BASE_URL": "https://example.invalid",
             "DEEPSEEK_API_KEY": "not-a-real-key",
@@ -198,6 +199,8 @@ def _app(
 def _events(
     client: TestClient,
     message: str,
+    interaction_mode: str = "auto",
+    request_id: UUID | None = None,
 ) -> list[dict[str, object]]:
     response = client.post(
         "/api/v1/content/stream",
@@ -207,6 +210,8 @@ def _events(
             "publishing_identity_id": str(ACCOUNT_ID),
             "target": "xiaohongshu_graphic",
             "material_ids": [],
+            "interaction_mode": interaction_mode,
+            "request_id": str(request_id) if request_id is not None else None,
         },
     )
     assert response.status_code == 200, response.text
@@ -355,6 +360,13 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert _CALLS == {"intake": 1, "writer": 0, "reviewer": 0}
         time.sleep(2.05)
 
+        conversation_before = _counts(app_database_url)
+        conversation = _events(client, _G3, "conversation")
+        assert [event["event"] for event in conversation] == ["conversation"]
+        assert _counts(app_database_url) == conversation_before
+        assert _CALLS["writer"] == 0
+        time.sleep(2.05)
+
         bad_plan_before = _counts(app_database_url)
         bad_plan_calls = dict(_CALLS)
         bad_plan = _events(client, _BAD_PLAN)
@@ -453,6 +465,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         )
         assert forbidden_frame_change.status_code == 422
 
+        revision_request_id = uuid4()
         revision = client.post(
             f"/api/v1/tasks/{g4_task_id}/revisions",
             json={
@@ -460,6 +473,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
                 "publishing_identity_id": str(ACCOUNT_ID),
                 "target": "xiaohongshu_graphic",
                 "source_target": "xiaohongshu_graphic",
+                "request_id": str(revision_request_id),
             },
         )
         assert revision.status_code == 201, revision.text
@@ -467,6 +481,22 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert v2["version"] == 2
         assert _G4_FACT in v2["body"]
         assert "以下是情景演绎，不对应真实人物或经历：" in v2["body"]
+        revision_counts = _counts(app_database_url)
+        revision_calls = dict(_CALLS)
+        replayed_revision = client.post(
+            f"/api/v1/tasks/{g4_task_id}/revisions",
+            json={
+                "instruction": _G7,
+                "publishing_identity_id": str(ACCOUNT_ID),
+                "target": "xiaohongshu_graphic",
+                "source_target": "xiaohongshu_graphic",
+                "request_id": str(revision_request_id),
+            },
+        )
+        assert replayed_revision.status_code == 201
+        assert replayed_revision.json()["version_id"] == v2["version_id"]
+        assert _counts(app_database_url) == revision_counts
+        assert revision_calls == _CALLS
         assert len(_CAPTURED_FRAMES) >= 2
         assert frame_document(_CAPTURED_FRAMES[-1]) == frame
         assert len(_CAPTURED_PLANS) >= 5
@@ -641,3 +671,18 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             "versions": failure_before["versions"],
         }
         assert _CALLS["reviewer"] == 0
+
+        time.sleep(2.05)
+        idempotency_key = uuid4()
+        first_idempotent = _events(client, _G3, "generate", idempotency_key)
+        assert first_idempotent[-1]["event"] == "completed"
+        first_result = cast(dict[str, object], first_idempotent[-1]["result"])
+        idempotent_counts = _counts(app_database_url)
+        idempotent_calls = dict(_CALLS)
+        replayed = _events(client, _G3, "generate", idempotency_key)
+        replayed_result = cast(dict[str, object], replayed[-1]["result"])
+        assert replayed_result["version_id"] == first_result["version_id"]
+        assert replayed_result["outline"] == first_result["outline"]
+        assert replayed_result["body"] == first_result["body"]
+        assert _counts(app_database_url) == idempotent_counts
+        assert idempotent_calls == _CALLS

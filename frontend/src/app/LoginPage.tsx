@@ -69,12 +69,9 @@ export function LoginPage({ context }: { context: BootstrapContext }): JSX.Eleme
             登录
           </button>
           {entry === "tenant-admin" && (
-            <details className="auth-recovery">
-              <summary>忘记密码</summary>
-              <p>
-                请联系另一名品牌管理员或笛语运维，获取一次性重设密码链接。
-              </p>
-            </details>
+            <p className="auth-recovery">
+              忘记密码？请联系另一名品牌管理员或笛语运维，获取一次性重设密码链接。
+            </p>
           )}
         </form>
       </section>

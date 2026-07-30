@@ -52,10 +52,12 @@
     }
   ],
   "/api/v1/tenant-management/users/operator-1/reset#POST": {
-    "reset_link": "/activate/one-time-test-link"
+    "reset_link": "/activate/one-time-test-link",
+    "reset_url": "https://diyu.example/activate/one-time-test-link"
   },
   "/api/v1/tenant-management/users/demo-hq/reset#POST": {
-    "reset_link": "/activate/demo-one-time-link"
+    "reset_link": "/activate/demo-one-time-link",
+    "reset_url": "https://diyu.example/activate/demo-one-time-link"
   },
   "/api/v1/tenant-management/demo-content-index": {
     "fixture_status": "ready",

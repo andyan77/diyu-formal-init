@@ -24,6 +24,7 @@ def _settings(database_url: str) -> Settings:
             "DIYU_RUNTIME_MODE": "production",
             "DIYU_APP_DATABASE_URL": database_url,
             "DIYU_SESSION_SECRET": "production-test-session-secret",
+            "DIYU_PUBLIC_URL": "https://diyuai.cc",
             "DIYU_GENERATOR_MODE": "deepseek",
             "DEEPSEEK_API_BASE_URL": "https://example.invalid",
             "DEEPSEEK_API_KEY": "not-a-real-key",
@@ -50,6 +51,7 @@ def test_production_requires_writer_but_no_reviewer_model(
             "DIYU_RUNTIME_MODE": "production",
             "DIYU_APP_DATABASE_URL": "postgresql://example.invalid/diyu",
             "DIYU_SESSION_SECRET": "production-test-session-secret",
+            "DIYU_PUBLIC_URL": "https://diyuai.cc",
             "DIYU_GENERATOR_MODE": "deepseek",
             "DEEPSEEK_API_BASE_URL": "https://example.invalid",
             "DEEPSEEK_API_KEY": "not-a-real-key",
@@ -216,6 +218,117 @@ def test_production_created_user_uses_one_time_link_and_cannot_escalate(
             ).status_code
             == 422
         )
+
+
+def test_ux02_admin_provisions_and_disables_content_user_with_trusted_full_url(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    _clear_auth_state(migrator_database_url)
+    repository = ProductionAuthRepository(app_database_url)
+    admin_username = f"ux02-admin-{uuid4().hex[:10]}"
+    admin_token = repository.bootstrap_existing_tenant_admin(
+        TENANT_ID,
+        TENANT_ADMIN_USER_ID,
+        admin_username,
+    )
+    app = create_app(_settings(app_database_url))
+    admin_password = "ux02-admin-password-is-long"
+    user_password = "ux02-user-password-is-long"
+    username = f"ux02-user-{uuid4().hex[:10]}"
+
+    with TestClient(app, base_url="https://diyuai.cc") as admin:
+        activated = admin.post(
+            f"/activate/{admin_token}",
+            content=f"password={admin_password}",
+            follow_redirects=False,
+        )
+        assert activated.status_code == 303
+        signed_in = admin.post(
+            "/tenant-admin/login",
+            content=f"username={admin_username}&password={admin_password}",
+            follow_redirects=False,
+        )
+        assert signed_in.status_code == 303
+
+        missing_account = admin.post(
+            "/api/v1/tenant-management/users",
+            json={
+                "display_name": f"UX-02 缺账号反证-{uuid4().hex[:8]}",
+                "username": f"ux02-missing-{uuid4().hex[:10]}",
+                "organization_id": str(ORG_ID),
+                "entry_type": "tenant_user",
+                "capabilities": ["content"],
+                "publishing_identity_ids": [],
+            },
+        )
+        assert missing_account.status_code == 422
+
+        mixed_admin = admin.post(
+            "/api/v1/tenant-management/users",
+            json={
+                "display_name": f"UX-02 混合入口反证-{uuid4().hex[:8]}",
+                "username": f"ux02-mixed-{uuid4().hex[:10]}",
+                "organization_id": str(ORG_ID),
+                "entry_type": "tenant_admin",
+                "grants_tenant_management": True,
+                "capabilities": ["content"],
+                "publishing_identity_ids": [str(ACCOUNT_ID)],
+            },
+        )
+        assert mixed_admin.status_code == 422
+
+        created_response = admin.post(
+            "/api/v1/tenant-management/users",
+            headers={"host": "attacker.invalid"},
+            json={
+                "display_name": f"UX-02 内容成员-{uuid4().hex[:8]}",
+                "username": username,
+                "organization_id": str(ORG_ID),
+                "entry_type": "tenant_user",
+                "capabilities": ["content"],
+                "publishing_identity_ids": [str(ACCOUNT_ID)],
+            },
+        )
+        assert created_response.status_code == 201
+        created = created_response.json()
+        assert created["activation_link"].startswith("/activate/")
+        assert created["activation_url"] == (
+            f"https://diyuai.cc{created['activation_link']}"
+        )
+        assert "attacker.invalid" not in created["activation_url"]
+
+        with TestClient(app, base_url="https://diyuai.cc") as new_browser:
+            activated_user = new_browser.post(
+                created["activation_url"],
+                content=f"password={user_password}",
+                follow_redirects=False,
+            )
+            assert activated_user.status_code == 303
+            assert activated_user.headers["location"] == "/login"
+            user_login = new_browser.post(
+                "/login",
+                content=f"username={username}&password={user_password}",
+                follow_redirects=False,
+            )
+            assert user_login.status_code == 303
+            assert new_browser.get("/user").status_code == 200
+            content_page = new_browser.get("/content")
+            assert content_page.status_code == 200
+            assert str(ACCOUNT_ID) in content_page.text
+
+            disabled = admin.post(
+                f"/api/v1/tenant-management/users/{created['user_id']}/disable"
+            )
+            assert disabled.status_code == 200
+            stale = new_browser.get("/user", follow_redirects=False)
+            assert stale.status_code == 303
+            assert stale.headers["location"] == "/login"
+            refused_login = new_browser.post(
+                "/login",
+                content=f"username={username}&password={user_password}",
+            )
+            assert refused_login.status_code == 401
 
 
 def test_new_reset_link_invalidates_previous_link_and_activation_revokes_sessions(

@@ -285,6 +285,7 @@ class PostgresContentRepository(ContentRepository):
         snapshot: dict[str, object] | None = None,
         series_context: SeriesContext | None = None,
         reviewer_model: str | None = None,
+        client_request_id: UUID | None = None,
     ) -> tuple[UUID, UUID, str | None]:
         task_id, run_id = uuid4(), uuid4()
         with self._tx(scope) as cursor:
@@ -368,8 +369,10 @@ class PostgresContentRepository(ContentRepository):
             )
             cursor.execute(
                 """
-                INSERT INTO generation_runs (id, tenant_id, task_id, model, status, used_assets, input_receipt)
-                VALUES (%s, %s, %s, %s, 'running', %s, %s)
+                INSERT INTO generation_runs
+                    (id, tenant_id, task_id, model, status, used_assets, input_receipt,
+                     client_request_id)
+                VALUES (%s, %s, %s, %s, 'running', %s, %s, %s)
                 """,
                 (
                     run_id,
@@ -397,6 +400,7 @@ class PostgresContentRepository(ContentRepository):
                             **({"reviewer_model": reviewer_model} if reviewer_model else {}),
                         }
                     ),
+                    client_request_id,
                 ),
             )
             self._event(
@@ -607,6 +611,53 @@ class PostgresContentRepository(ContentRepository):
                 {"task_id": str(task_id)},
             )
 
+    def completed_request(
+        self,
+        scope: TrustedScope,
+        client_request_id: UUID,
+    ) -> dict[str, object] | None:
+        """Replay one committed result without opening a second run or version."""
+        with self._tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT run_record.status, task_record.id AS task_id,
+                       version_record.version_number
+                  FROM generation_runs run_record
+                  JOIN business_tasks task_record
+                    ON task_record.tenant_id = run_record.tenant_id
+                   AND task_record.id = run_record.task_id
+                  LEFT JOIN content_versions version_record
+                    ON version_record.tenant_id = run_record.tenant_id
+                   AND version_record.run_id = run_record.id
+                 WHERE run_record.tenant_id = %s
+                   AND run_record.client_request_id = %s
+                   AND run_record.status IN ('running', 'succeeded')
+                   AND task_record.brand_id = %s
+                   AND task_record.account_id = %s
+                   AND task_record.created_by = %s
+                """,
+                (
+                    scope.tenant_id,
+                    client_request_id,
+                    scope.brand_id,
+                    scope.account_id,
+                    scope.user_id,
+                ),
+            )
+            row = cursor.fetchone()
+        if row is None:
+            return None
+        if row["status"] == "running":
+            raise DomainError("同一请求仍在处理中，请稍后查看结果")
+        version_number = row["version_number"]
+        if not isinstance(version_number, int):
+            raise DomainError("已完成请求缺少不可变版本")
+        return self.fetch_version(
+            scope,
+            UUID(str(row["task_id"])),
+            version_number,
+        )
+
     def revise_task(
         self,
         scope: TrustedScope,
@@ -623,6 +674,7 @@ class PostgresContentRepository(ContentRepository):
         series_context: SeriesContext | None = None,
         source_description: str | None = None,
         reviewer_model: str | None = None,
+        client_request_id: UUID | None = None,
     ) -> tuple[UUID, UUID, str, ContentProduct]:
         run_id = uuid4()
         with self._tx(scope) as cursor:
@@ -653,8 +705,10 @@ class PostgresContentRepository(ContentRepository):
             )
             cursor.execute(
                 """
-                INSERT INTO generation_runs (id, tenant_id, task_id, model, status, used_assets, input_receipt)
-                VALUES (%s, %s, %s, %s, 'running', %s, %s)
+                INSERT INTO generation_runs
+                    (id, tenant_id, task_id, model, status, used_assets, input_receipt,
+                     client_request_id)
+                VALUES (%s, %s, %s, %s, 'running', %s, %s, %s)
                 """,
                 (
                     run_id,
@@ -682,6 +736,7 @@ class PostgresContentRepository(ContentRepository):
                             **({"reviewer_model": reviewer_model} if reviewer_model else {}),
                         }
                     ),
+                    client_request_id,
                 ),
             )
             self._event(

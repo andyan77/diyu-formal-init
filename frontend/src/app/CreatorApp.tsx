@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BrandMark } from "../components/Brand";
 import {
+  ApiError,
   api,
   scopedContentPath,
   streamApi,
@@ -37,6 +38,8 @@ type ConversationMessage = {
 type FailedAttempt = {
   kind: "stream" | "revision";
   instruction: string;
+  interactionMode?: "conversation" | "generate";
+  requestId: string;
 };
 
 const PRIMARY_AXES = new Set(["topic", "style", "form"]);
@@ -678,11 +681,14 @@ export default function CreatorApp({
     target: Target;
     label: string;
     instruction: string;
+    interactionMode: "conversation" | "generate";
+    requestId: string;
   } | null>(null);
   const [directGenerationOffer, setDirectGenerationOffer] = useState<string | null>(
     null
   );
   const [generationFailed, setGenerationFailed] = useState(false);
+  const [generationFailureMessage, setGenerationFailureMessage] = useState("");
   const [lastFailedAttempt, setLastFailedAttempt] =
     useState<FailedAttempt | null>(null);
   const [savingDefaults, setSavingDefaults] = useState(false);
@@ -691,6 +697,10 @@ export default function CreatorApp({
   const identityTriggerRef = useRef<HTMLButtonElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const toolDrawerRef = useRef<HTMLElement>(null);
+  const toolCloseRef = useRef<HTMLButtonElement>(null);
+  const toolReturnFocus = useRef<HTMLButtonElement | null>(null);
+  const toolRestoreFocusPending = useRef(false);
 
   const targetLabel = currentTargetMetadata.label;
   const bodyOptIn = preference?.body_related_opt_in ?? false;
@@ -742,12 +752,70 @@ export default function CreatorApp({
   );
 
   useEffect(() => {
+    if (toolOpen) {
+      toolCloseRef.current?.focus();
+      return;
+    }
+    if (toolRestoreFocusPending.current) {
+      toolRestoreFocusPending.current = false;
+      toolReturnFocus.current?.focus();
+    }
+  }, [toolOpen]);
+
+  useEffect(() => {
     const draft = window.sessionStorage.getItem("diyu-content-draft");
     if (draft) {
       setSeed(draft);
       window.sessionStorage.removeItem("diyu-content-draft");
     }
   }, []);
+
+  useEffect(() => {
+    if (seed) {
+      window.sessionStorage.setItem("diyu-content-draft", seed);
+    } else {
+      window.sessionStorage.removeItem("diyu-content-draft");
+    }
+  }, [seed]);
+
+  const navigateWithDraft = (location: string, draft = seed): void => {
+    if (draft.trim()) {
+      window.sessionStorage.setItem("diyu-content-draft", draft);
+    }
+    window.location.assign(location);
+  };
+
+  const closeTool = (restoreFocus = true): void => {
+    toolRestoreFocusPending.current = restoreFocus;
+    setToolOpen(null);
+    void loadWorkspace();
+  };
+
+  const handleToolKeyDown = (
+    event: ReactKeyboardEvent<HTMLElement>
+  ): void => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeTool();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      toolDrawerRef.current?.querySelectorAll<HTMLElement>(
+        "a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)"
+      ) ?? []
+    );
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   const reloadCatalog = async (): Promise<void> => {
     const value = await api<ExpressionCatalog>(
@@ -769,6 +837,7 @@ export default function CreatorApp({
     setTargetConflict(null);
     setDirectGenerationOffer(null);
     setGenerationFailed(false);
+    setGenerationFailureMessage("");
     setLastFailedAttempt(null);
   };
 
@@ -862,7 +931,8 @@ export default function CreatorApp({
     instruction: string,
     appendUser: boolean,
     targetConflictResolution?: "keep_selected",
-    directGenerate = false
+    interactionMode: "conversation" | "generate" = "conversation",
+    requestId: string = crypto.randomUUID()
   ): Promise<void> => {
     if (pending) return;
     const priorMessages =
@@ -881,6 +951,7 @@ export default function CreatorApp({
     setPending(true);
     setNotice("");
     setGenerationFailed(false);
+    setGenerationFailureMessage("");
     setLastFailedAttempt(null);
     setTargetConflict(null);
     setDirectGenerationOffer(null);
@@ -898,7 +969,9 @@ export default function CreatorApp({
           publishing_identity_id: currentPublishingIdentityId,
           target: currentTarget,
           target_conflict_resolution: targetConflictResolution,
-          direct_generate: directGenerate,
+          interaction_mode: interactionMode,
+          direct_generate: interactionMode === "generate",
+          request_id: requestId,
           creative_direction: {
             catalog_version: catalog?.catalog_version ?? null,
             selections,
@@ -933,7 +1006,9 @@ export default function CreatorApp({
           setTargetConflict({
             target: streamEvent.mentioned_target,
             label: streamEvent.label,
-            instruction
+            instruction,
+            interactionMode,
+            requestId
           });
           setLastFailedAttempt(null);
           terminal = true;
@@ -958,18 +1033,47 @@ export default function CreatorApp({
         }
         if (streamEvent.event === "failed") {
           setGenerationFailed(true);
-          setLastFailedAttempt({ kind: "stream", instruction });
+          setGenerationFailureMessage(
+            `${
+              streamEvent.message ??
+              "这次还没能整理成一份可靠的成品。"
+            } 输入和已有成品都已保留。`
+          );
+          setLastFailedAttempt({
+            kind: "stream",
+            instruction,
+            interactionMode,
+            requestId
+          });
           terminal = true;
         }
       }
       if (!terminal) {
         setGenerationFailed(true);
-        setLastFailedAttempt({ kind: "stream", instruction });
+        setGenerationFailureMessage(
+          "连接提前结束了，输入和已有成品都已保留，可以安全重试。"
+        );
+        setLastFailedAttempt({
+          kind: "stream",
+          instruction,
+          interactionMode,
+          requestId
+        });
       }
     } catch (reason) {
       if (!(reason instanceof DOMException && reason.name === "AbortError")) {
         setGenerationFailed(true);
-        setLastFailedAttempt({ kind: "stream", instruction });
+        setGenerationFailureMessage(
+          reason instanceof ApiError && reason.status === 429
+            ? "当前请求较多，请稍后再试。输入和已有成品都已保留。"
+            : "网络没有完成这次请求。输入和已有成品都已保留，可以恢复后重试。"
+        );
+        setLastFailedAttempt({
+          kind: "stream",
+          instruction,
+          interactionMode,
+          requestId
+        });
       }
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
@@ -979,12 +1083,14 @@ export default function CreatorApp({
 
   const runRevision = async (
     instruction: string,
-    appendUser: boolean
+    appendUser: boolean,
+    requestId: string = crypto.randomUUID()
   ): Promise<void> => {
     if (!current || pending) return;
     setPending(true);
     setNotice("");
     setGenerationFailed(false);
+    setGenerationFailureMessage("");
     setLastFailedAttempt(null);
     if (appendUser) {
       setMessages(value => [
@@ -1001,7 +1107,8 @@ export default function CreatorApp({
             instruction,
             publishing_identity_id: currentPublishingIdentityId,
             target: currentTarget,
-            source_target: currentTarget
+            source_target: currentTarget,
+            request_id: requestId
           })
         }
       );
@@ -1023,7 +1130,10 @@ export default function CreatorApp({
       setLastFailedAttempt(null);
     } catch {
       setGenerationFailed(true);
-      setLastFailedAttempt({ kind: "revision", instruction });
+      setGenerationFailureMessage(
+        "这次修改没有完成。你的要求和已有版本都已保留，可以安全重试。"
+      );
+      setLastFailedAttempt({ kind: "revision", instruction, requestId });
     } finally {
       setPending(false);
     }
@@ -1038,7 +1148,7 @@ export default function CreatorApp({
       return;
     }
     if (current && targetOf(current, currentTarget) !== currentTarget) {
-      window.location.assign(
+      navigateWithDraft(
         contentLocation(
           currentPublishingIdentityId,
           targetOf(current, currentTarget)
@@ -1047,10 +1157,20 @@ export default function CreatorApp({
       return;
     }
     if (!current) {
-      await runCreationStream(instruction, true);
+      await runCreationStream(instruction, true, undefined, "generate");
       return;
     }
     await runRevision(instruction, true);
+  };
+
+  const sendConversation = async (): Promise<void> => {
+    const instruction = seed.trim();
+    if (!instruction || pending) return;
+    if (!hasResolvedIdentity) {
+      setNotice("请先选择一个发布账号。");
+      return;
+    }
+    await runCreationStream(instruction, true, undefined, "conversation");
   };
 
   const saveDefaults = async (): Promise<void> => {
@@ -1124,7 +1244,7 @@ export default function CreatorApp({
               aria-label="发布账号"
               value={currentPublishingIdentityId}
               onChange={event => {
-                window.location.assign(contentLocation(event.target.value));
+                navigateWithDraft(contentLocation(event.target.value));
               }}
             >
               {!hasResolvedIdentity && <option value="">请选择发布账号</option>}
@@ -1158,7 +1278,7 @@ export default function CreatorApp({
                   item => item.platform_label === event.target.value
                 );
                 if (next) {
-                  window.location.assign(
+                  navigateWithDraft(
                     contentLocation(currentPublishingIdentityId, next.value)
                   );
                 }
@@ -1178,7 +1298,7 @@ export default function CreatorApp({
               value={currentTarget}
               disabled={!hasResolvedIdentity}
               onChange={event => {
-                window.location.assign(
+                navigateWithDraft(
                   contentLocation(
                     currentPublishingIdentityId,
                     event.target.value as Target
@@ -1204,7 +1324,10 @@ export default function CreatorApp({
           <button
             type="button"
             disabled={!hasResolvedIdentity}
-            onClick={() => setToolOpen("series")}
+            onClick={event => {
+              toolReturnFocus.current = event.currentTarget;
+              setToolOpen("series");
+            }}
           >
             <span>连续系列</span>
             <small>{seriesSelection ? "本次已选择" : "创建、继续与编排"}</small>
@@ -1212,7 +1335,10 @@ export default function CreatorApp({
           <button
             type="button"
             disabled={!hasResolvedIdentity}
-            onClick={() => setToolOpen("materials")}
+            onClick={event => {
+              toolReturnFocus.current = event.currentTarget;
+              setToolOpen("materials");
+            }}
           >
             <span>我的素材</span>
             <small>{materialIds.length ? `本次参考 ${materialIds.length} 份` : "管理与选择"}</small>
@@ -1280,7 +1406,9 @@ export default function CreatorApp({
                     void runCreationStream(
                       targetConflict.instruction,
                       false,
-                      "keep_selected"
+                      "keep_selected",
+                      targetConflict.interactionMode,
+                      targetConflict.requestId
                     )
                   }
                 >
@@ -1290,15 +1418,12 @@ export default function CreatorApp({
                   type="button"
                   className="primary"
                   onClick={() => {
-                    window.sessionStorage.setItem(
-                      "diyu-content-draft",
-                      targetConflict.instruction
-                    );
-                    window.location.assign(
+                    navigateWithDraft(
                       contentLocation(
                         currentPublishingIdentityId,
                         targetConflict.target
-                      )
+                      ),
+                      targetConflict.instruction
                     );
                   }}
                 >
@@ -1319,7 +1444,7 @@ export default function CreatorApp({
                     directGenerationOffer,
                     false,
                     undefined,
-                    true
+                    "generate"
                   )
                 }
               >
@@ -1329,14 +1454,13 @@ export default function CreatorApp({
           )}
           {generationFailed && (
             <div className="generation-failure" role="alert">
-              <p>
-                这次还没能整理成一份可靠的成品。你的想法仍然保留，可以直接再试一次，也可以告诉我最想保留哪部分。
-              </p>
+              <p>{generationFailureMessage}</p>
               <div>
                 <button
                   type="button"
                   onClick={() => {
                     setGenerationFailed(false);
+                    setGenerationFailureMessage("");
                     setLastFailedAttempt(null);
                     composerRef.current?.focus();
                   }}
@@ -1352,10 +1476,17 @@ export default function CreatorApp({
                     if (lastFailedAttempt.kind === "stream") {
                       void runCreationStream(
                         lastFailedAttempt.instruction,
-                        false
+                        false,
+                        undefined,
+                        lastFailedAttempt.interactionMode ?? "conversation",
+                        lastFailedAttempt.requestId
                       );
                     } else {
-                      void runRevision(lastFailedAttempt.instruction, false);
+                      void runRevision(
+                        lastFailedAttempt.instruction,
+                        false,
+                        lastFailedAttempt.requestId
+                      );
                     }
                   }}
                 >
@@ -1403,14 +1534,20 @@ export default function CreatorApp({
                 <button
                   type="button"
                   disabled={!hasResolvedIdentity}
-                  onClick={() => setToolOpen("series")}
+                  onClick={event => {
+                    toolReturnFocus.current = event.currentTarget;
+                    setToolOpen("series");
+                  }}
                 >
                   {seriesSelection ? "连续系列 · 已选择" : "连续系列"}
                 </button>
                 <button
                   type="button"
                   disabled={!hasResolvedIdentity}
-                  onClick={() => setToolOpen("materials")}
+                  onClick={event => {
+                    toolReturnFocus.current = event.currentTarget;
+                    setToolOpen("materials");
+                  }}
                 >
                   {materialIds.length ? `素材 · ${materialIds.length} 份` : "素材"}
                 </button>
@@ -1463,13 +1600,22 @@ export default function CreatorApp({
               </button>
             )}
             {!targetConflict && !generationFailed && (
-              <button className="primary" type="submit" disabled={!seed.trim() || pending}>
-                {pending
-                  ? STAGE_LABELS[stages.at(-1) ?? "received"]
-                  : current
-                    ? `生成 V${current.version + 1}`
-                    : "发送"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={!seed.trim() || pending}
+                  onClick={() => void sendConversation()}
+                >
+                  发送
+                </button>
+                <button className="primary" type="submit" disabled={!seed.trim() || pending}>
+                  {pending
+                    ? STAGE_LABELS[stages.at(-1) ?? "received"]
+                    : current
+                      ? `修改成 V${current.version + 1}`
+                      : "生成内容"}
+                </button>
+              </>
             )}
           </div>
         </form>
@@ -1523,26 +1669,23 @@ export default function CreatorApp({
         <div
           className="drawer-layer"
           role="presentation"
-          onMouseDown={() => {
-            setToolOpen(null);
-            void loadWorkspace();
-          }}
+          onMouseDown={() => closeTool()}
         >
           <aside
+            ref={toolDrawerRef}
             className="creator-tool-drawer"
             role="dialog"
             aria-modal="true"
             aria-label={toolOpen === "series" ? "连续系列" : "我的素材"}
             onMouseDown={event => event.stopPropagation()}
+            onKeyDown={handleToolKeyDown}
           >
             <button
+              ref={toolCloseRef}
               className="icon-button tool-drawer-close"
               type="button"
               aria-label="关闭"
-              onClick={() => {
-                setToolOpen(null);
-                void loadWorkspace();
-              }}
+              onClick={() => closeTool()}
             >
               ×
             </button>
@@ -1556,7 +1699,7 @@ export default function CreatorApp({
                 onContinue={value => {
                   startFresh();
                   setSeriesSelection(value);
-                  setToolOpen(null);
+                  closeTool(false);
                 }}
               />
             ) : (

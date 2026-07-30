@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from typing import Literal, cast
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import SecretStr
@@ -13,6 +14,7 @@ class Settings:
     app_database_url: str
     session_secret: SecretStr
     runtime_mode: Literal["test", "production"]
+    public_url: str
     demo_tenant_id: UUID
     demo_user_id: UUID
     demo_brand_id: UUID
@@ -56,6 +58,7 @@ class Settings:
             "DIYU_APP_DATABASE_URL": "app_database_url",
             "DIYU_SESSION_SECRET": "session_secret",
             "DIYU_RUNTIME_MODE": "runtime_mode",
+            "DIYU_PUBLIC_URL": "public_url",
             "DIYU_DEMO_TENANT_ID": "demo_tenant_id",
             "DIYU_DEMO_USER_ID": "demo_user_id",
             "DIYU_DEMO_BRAND_ID": "demo_brand_id",
@@ -98,6 +101,8 @@ class Settings:
         if runtime_mode not in ("test", "production"):
             raise RuntimeError("DIYU_RUNTIME_MODE 只能是 test 或 production")
         required_names: tuple[str, ...] = ("DIYU_APP_DATABASE_URL", "DIYU_SESSION_SECRET")
+        if runtime_mode == "production":
+            required_names += ("DIYU_PUBLIC_URL",)
         if runtime_mode == "test":
             required_names += (
                 "DIYU_DEMO_TENANT_ID",
@@ -123,6 +128,7 @@ class Settings:
             app_database_url=str(read("DIYU_APP_DATABASE_URL")),
             session_secret=SecretStr(str(read("DIYU_SESSION_SECRET"))),
             runtime_mode=cast(Literal["test", "production"], runtime_mode),
+            public_url=str(read("DIYU_PUBLIC_URL", "https://diyu.example")),
             demo_tenant_id=UUID(str(read("DIYU_DEMO_TENANT_ID", placeholder_id))),
             demo_user_id=UUID(str(read("DIYU_DEMO_USER_ID", placeholder_id))),
             demo_brand_id=UUID(str(read("DIYU_DEMO_BRAND_ID", placeholder_id))),
@@ -199,6 +205,15 @@ class Settings:
             )
         ):
             raise RuntimeError("deepseek 模式必须配置 API 地址、密钥和已核验模型")
+        public_url = urlsplit(configured.public_url)
+        if (
+            public_url.scheme != "https"
+            or not public_url.netloc
+            or public_url.path not in ("", "/")
+            or public_url.query
+            or public_url.fragment
+        ):
+            raise RuntimeError("DIYU_PUBLIC_URL 必须是无路径、查询或片段的 HTTPS 公开源")
         if not 1 <= configured.login_rate_limit_per_minute <= 60:
             raise RuntimeError("登录限流配置超出安全范围")
         if not 1 <= configured.model_global_concurrency <= 20 or not 1 <= configured.model_tenant_concurrency <= 10:

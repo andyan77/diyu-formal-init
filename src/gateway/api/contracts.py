@@ -59,7 +59,9 @@ class CreateConversationRequest(BaseModel):
     series_id: UUID | None = None
     series_position: int | None = Field(default=None, ge=1, le=999)
     target_conflict_resolution: Literal["keep_selected", "switch"] | None = None
+    interaction_mode: Literal["auto", "conversation", "generate"] = "auto"
     direct_generate: bool = False
+    request_id: UUID | None = None
 
 
 class RevisionRequest(BaseModel):
@@ -69,6 +71,7 @@ class RevisionRequest(BaseModel):
     target: ContentTarget | None = None
     source_target: ContentTarget | None = None
     publishing_identity_id: UUID | None = None
+    request_id: UUID | None = None
 
 
 class ContentVersionResponse(BaseModel):
@@ -349,6 +352,32 @@ class SetPasswordRequest(BaseModel):
 
 class ChangePasswordRequest(SetPasswordRequest):
     current_password: str = Field(min_length=12, max_length=512)
+
+
+class CreatedTenantUserResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    username: str
+    activation_link: str
+    activation_url: str
+
+
+class ResetTenantUserResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reset_link: str
+    reset_url: str
+
+
+class ProvisionedTenantResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: str
+    administrator_id: str
+    username: str
+    activation_link: str
+    activation_url: str
 
 
 class CreateTenantUserRequest(BaseModel):

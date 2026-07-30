@@ -89,7 +89,11 @@ function TenantProvisioning({
     setPending(true);
     setNotice(null);
     try {
-      const created = await api<{ tenant_id: string; activation_link?: string }>("/api/v1/ops/tenants", {
+      const created = await api<{
+        tenant_id: string;
+        activation_link?: string;
+        activation_url?: string;
+      }>("/api/v1/ops/tenants", {
         method: "POST",
         body: JSON.stringify({
           tenant_name: tenantName.trim(),
@@ -100,9 +104,9 @@ function TenantProvisioning({
       setTenantName("");
       setAdministratorName("");
       setAdministratorUsername("");
-      setActivationLink(created.activation_link ?? null);
+      setActivationLink(created.activation_url ?? null);
       setNotice(
-        created.activation_link
+        created.activation_url
           ? "租户已开通。一次性激活链接只在当前页面暂时显示。"
           : "租户已开通。请按既有安全流程交付首次进入方式。"
       );
@@ -145,6 +149,14 @@ function TenantProvisioning({
             <p>请通过受保护的渠道交付。关闭这里、刷新或离开页面后，这条链接不会继续显示。</p>
             <div>
               <input readOnly value={activationLink} aria-label="一次性激活链接" />
+              <a
+                className="ops-outline-button"
+                href={activationLink}
+                target="_blank"
+                rel="noreferrer"
+              >
+                打开激活页
+              </a>
               <button
                 className="ops-outline-button"
                 type="button"

@@ -46,6 +46,7 @@ class ContentRepository(ABC):
         snapshot: dict[str, object] | None = None,
         series_context: SeriesContext | None = None,
         reviewer_model: str | None = None,
+        client_request_id: UUID | None = None,
     ) -> tuple[UUID, UUID, str | None]:
         """Create a task, freeze its content context and open an auditable running run."""
 
@@ -88,8 +89,22 @@ class ContentRepository(ABC):
         series_context: SeriesContext | None = None,
         source_description: str | None = None,
         reviewer_model: str | None = None,
+        client_request_id: UUID | None = None,
     ) -> tuple[UUID, UUID, str, ContentProduct]:
         """Create the next auditable run for a revision request."""
+
+    def completed_request(
+        self,
+        scope: TrustedScope,
+        client_request_id: UUID,
+    ) -> dict[str, object] | None:
+        """Return the artifact already committed for one client request.
+
+        Legacy repository adapters predate transport idempotency and may keep the
+        safe default. Formal persistence overrides this method.
+        """
+        del scope, client_request_id
+        return None
 
     @abstractmethod
     def load_content_context_snapshot(

@@ -48,6 +48,7 @@ def _production_settings(database_url: str) -> Settings:
             "DIYU_RUNTIME_MODE": "production",
             "DIYU_APP_DATABASE_URL": database_url,
             "DIYU_SESSION_SECRET": "m7-3-local-session-secret",
+            "DIYU_PUBLIC_URL": "https://diyuai.cc",
             "DIYU_GENERATOR_MODE": "deepseek",
             "DEEPSEEK_API_BASE_URL": "https://example.invalid",
             "DEEPSEEK_API_KEY": "not-a-real-key",

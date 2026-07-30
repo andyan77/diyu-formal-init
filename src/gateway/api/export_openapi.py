@@ -25,6 +25,7 @@ def _contract_settings(runtime_mode: str) -> Settings:
         values.update(
             {
                 "DIYU_GENERATOR_MODE": "deepseek",
+                "DIYU_PUBLIC_URL": "https://diyu.example",
                 "DEEPSEEK_API_BASE_URL": "https://example.invalid",
                 "DEEPSEEK_API_KEY": "openapi-contract-placeholder",
                 "DEEPSEEK_MODEL": "deepseek-v4-flash",

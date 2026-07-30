@@ -267,11 +267,27 @@ globalThis.fetch = async (input, init = {}) => {
           label: "抖音视频"
         }
       ];
-    } else if (body?.message?.includes("模拟失败")) {
+    } else if (
+      body?.message?.includes("模拟失败") ||
+      body?.message?.includes("模拟限流失败")
+    ) {
       events = [
         { event: "received" },
         { event: "compiling_context" },
-        { event: "failed" }
+        {
+          event: "failed",
+          message: body?.message?.includes("限流")
+            ? "当前请求较多，请稍后再试。"
+            : "这次还没能整理成一份可靠的成品。你的想法仍然保留。"
+        }
+      ];
+    } else if (body?.interaction_mode === "conversation") {
+      events = [
+        {
+          event: "conversation",
+          kind: "chat",
+          message: "这条先继续聊，不会创建新版本。"
+        }
       ];
     } else {
       events = [

@@ -855,7 +855,10 @@ function Members({
   const create = (event: FormEvent): void => {
     event.preventDefault();
     void run(async () => {
-      const created = await api<{ activation_link: string }>(
+      const created = await api<{
+        activation_link: string;
+        activation_url: string;
+      }>(
         "/api/v1/tenant-management/users",
         {
           method: "POST",
@@ -879,7 +882,7 @@ function Members({
           })
         }
       );
-      setActivationLink(created.activation_link);
+      setActivationLink(created.activation_url);
     }, "成员已建立。请把本次一次性激活链接安全交给本人。");
   };
   const toggleAccount = (accountId: string): void => {
@@ -1035,7 +1038,11 @@ function Members({
                       type="checkbox"
                       checked={form.content}
                       onChange={event =>
-                        setForm({ ...form, content: event.target.checked })
+                        setForm({
+                          ...form,
+                          content: event.target.checked,
+                          accountIds: event.target.checked ? form.accountIds : []
+                        })
                       }
                     />
                     内容创作
@@ -1057,6 +1064,7 @@ function Members({
                     <label key={account.id}>
                       <input
                         type="checkbox"
+                        disabled={!form.content}
                         checked={form.accountIds.includes(account.id)}
                         onChange={() => toggleAccount(account.id)}
                       />
@@ -1066,13 +1074,37 @@ function Members({
                 </fieldset>
               </>
             )}
-            <button className="primary" type="submit" disabled={saving}>
+            {form.entryType === "tenant_user" &&
+              form.content &&
+              form.accountIds.length === 0 && (
+                <p className="tenant-security-note">
+                  选择内容创作时，请至少分配一个发布账号。
+                </p>
+              )}
+            <button
+              className="primary"
+              type="submit"
+              disabled={
+                saving ||
+                (form.entryType === "tenant_user" &&
+                  form.content &&
+                  form.accountIds.length === 0)
+              }
+            >
               创建并生成一次性激活链接
             </button>
             {activationLink && (
               <div className="one-time-link">
                 <p>一次性激活链接只显示这一次，请安全交给本人。</p>
                 <code>{activationLink}</code>
+                <a
+                  className="text-action"
+                  href={activationLink}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  打开激活页
+                </a>
                 <button
                   type="button"
                   className="text-action"
@@ -1132,7 +1164,11 @@ function Members({
                       type="checkbox"
                       checked={edit.content}
                       onChange={event =>
-                        setEdit({ ...edit, content: event.target.checked })
+                        setEdit({
+                          ...edit,
+                          content: event.target.checked,
+                          accountIds: event.target.checked ? edit.accountIds : []
+                        })
                       }
                     />
                     内容创作
@@ -1151,6 +1187,7 @@ function Members({
                     <label key={account.id}>
                       <input
                         type="checkbox"
+                        disabled={!edit.content}
                         checked={edit.accountIds.includes(account.id)}
                         onChange={() => toggleEditAccount(account.id)}
                       />
@@ -1159,10 +1196,22 @@ function Members({
                   ))}
                 </>
               )}
+              {edit.entryType === "tenant_user" &&
+                edit.content &&
+                edit.accountIds.length === 0 && (
+                  <p className="tenant-security-note">
+                    内容创作资格必须保留至少一个发布账号。
+                  </p>
+                )}
               <button
                 type="button"
                 className="primary"
-                disabled={saving}
+                disabled={
+                  saving ||
+                  (edit.entryType === "tenant_user" &&
+                    edit.content &&
+                    edit.accountIds.length === 0)
+                }
                 onClick={() =>
                   void run(
                     () =>
@@ -1197,17 +1246,39 @@ function Members({
               disabled={saving}
               onClick={() =>
                 void run(async () => {
-                  const value = await api<{ reset_link: string }>(
+                  const value = await api<{
+                    reset_link: string;
+                    reset_url: string;
+                  }>(
                     `/api/v1/tenant-management/users/${drawer.id}/reset`,
                     { method: "POST" }
                   );
-                  setActivationLink(value.reset_link);
+                  setActivationLink(value.reset_url);
                 }, "新的一次性重设密码链接已生成，此前未使用的重设链接已失效。")
               }
             >
               生成一次性重设密码链接
             </button>
-            {activationLink && <code className="reset-link">{activationLink}</code>}
+            {activationLink && (
+              <div className="one-time-link">
+                <code className="reset-link">{activationLink}</code>
+                <a
+                  className="text-action"
+                  href={activationLink}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  打开重设页
+                </a>
+                <button
+                  type="button"
+                  className="text-action"
+                  onClick={() => void navigator.clipboard.writeText(activationLink)}
+                >
+                  复制重设链接
+                </button>
+              </div>
+            )}
             {drawer.id !== currentUserId && drawer.enabled && (
               <button
                 className="text-action danger"
@@ -2717,18 +2788,44 @@ export default function TenantAdminApp({
   const [section, setSection] = useState<Section>("overview");
   const [notice, setNotice] = useState<Notice>(null);
   const [securityOpen, setSecurityOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuTrigger = useRef<HTMLButtonElement>(null);
+  const firstNavigationItem = useRef<HTMLButtonElement>(null);
   const identity = context.identity ?? {};
   const title = useMemo(() => identity.brand ?? "品牌管理", [identity.brand]);
+  useEffect(() => {
+    if (mobileMenuOpen) firstNavigationItem.current?.focus();
+  }, [mobileMenuOpen]);
   return (
     <div className="tenant-admin-app">
-      <aside className="tenant-nav">
+      {mobileMenuOpen && (
+        <button
+          className="tenant-nav-backdrop"
+          type="button"
+          aria-label="关闭品牌管理菜单"
+          onClick={() => {
+            setMobileMenuOpen(false);
+            mobileMenuTrigger.current?.focus();
+          }}
+        />
+      )}
+      <aside
+        className={`tenant-nav ${mobileMenuOpen ? "mobile-open" : ""}`}
+        onKeyDown={event => {
+          if (event.key === "Escape") {
+            setMobileMenuOpen(false);
+            mobileMenuTrigger.current?.focus();
+          }
+        }}
+      >
         <a href="/tenant-admin" aria-label="回到品牌管理首页">
           <BrandMark />
         </a>
         <p className="tenant-nav-title">品牌管理</p>
         <nav aria-label="品牌管理导航">
-          {sections.map(item => (
+          {sections.map((item, index) => (
             <button
+              ref={index === 0 ? firstNavigationItem : undefined}
               type="button"
               key={item.id}
               className={section === item.id ? "active" : ""}
@@ -2736,15 +2833,34 @@ export default function TenantAdminApp({
               onClick={() => {
                 setNotice(null);
                 setSection(item.id);
+                setMobileMenuOpen(false);
               }}
             >
               {item.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              setSecurityOpen(true);
+            }}
+          >
+            账户安全
+          </button>
         </nav>
       </aside>
       <main>
         <header className="tenant-topbar">
+          <button
+            ref={mobileMenuTrigger}
+            className="tenant-mobile-menu"
+            type="button"
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen(value => !value)}
+          >
+            菜单
+          </button>
           <span>{title}</span>
           <details className="tenant-account-menu">
             <summary>

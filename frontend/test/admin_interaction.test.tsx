@@ -9,10 +9,11 @@ const harness = (globalThis as unknown as {
   __DIYU_ADMIN_INTERACTION__: {
     window: Window & typeof globalThis;
     requests: Array<{ path: string; method: string; body: Record<string, unknown> | null }>;
+    copiedTexts: string[];
     setReducedMotion: (value: boolean) => void;
   };
 }).__DIYU_ADMIN_INTERACTION__;
-const { window, requests, setReducedMotion } = harness;
+const { window, requests, copiedTexts, setReducedMotion } = harness;
 const document = window.document;
 const bootstrapWindow = window as unknown as {
   __DIYU_BOOTSTRAP__: Record<string, unknown> | null;
@@ -187,6 +188,18 @@ async function main(): Promise<void> {
   assert.equal(document.querySelector('a[href="/content"]'), null);
   assert.doesNotMatch(document.body.textContent ?? "", /开始创作|进入创作/);
   assert.match(document.body.textContent ?? "", /今天需要处理什么/);
+  await click(find("button", "菜单"));
+  assert.equal(
+    document.querySelectorAll(".tenant-nav nav button").length,
+    7,
+    "移动管理菜单必须包含六个管理栏目和账户安全"
+  );
+  assert.match(
+    document.activeElement?.textContent ?? "",
+    /概览与当前待办/,
+    "菜单打开后焦点进入第一个栏目"
+  );
+  await click(find(".tenant-nav button", "概览与当前待办"));
 
   await click(find(".tenant-nav button", "成员与入口资格"));
   await click(find("button", "添加成员"));
@@ -204,6 +217,13 @@ async function main(): Promise<void> {
   await click(find(".tenant-drawer label", "租户用户"));
   assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /内容创作/);
   assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /陈列搭配/);
+  assert.equal(
+    (find(".tenant-drawer button", "创建并生成一次性激活链接") as HTMLButtonElement)
+      .disabled,
+    true,
+    "内容创作资格没有发布账号时不能创建"
+  );
+  await click(find(".tenant-drawer label", "总部品牌内容运营"));
   await click(find(".tenant-drawer button", "创建并生成一次性激活链接"));
   await settle();
   const memberCreate = requests.find(
@@ -211,8 +231,20 @@ async function main(): Promise<void> {
   );
   assert.equal(memberCreate?.body?.entry_type, "tenant_user");
   assert.deepEqual(memberCreate?.body?.capabilities, ["content"]);
-  assert.deepEqual(memberCreate?.body?.publishing_identity_ids, []);
+  assert.deepEqual(memberCreate?.body?.publishing_identity_ids, [
+    "33333333-3333-4333-8333-333333333333"
+  ]);
   assert.equal(memberCreate?.body?.grants_material_maintenance, false);
+  const activationAnchor = document.querySelector(
+    '.one-time-link a[href="https://diyu.example/activate/ui04-obviously-fake-browser-fixture"]'
+  );
+  assert.ok(activationAnchor, "完整 HTTPS 激活地址必须可直接点击");
+  await click(find(".one-time-link button", "复制链接"));
+  assert.equal(
+    copiedTexts.at(-1),
+    "https://diyu.example/activate/ui04-obviously-fake-browser-fixture",
+    "显示值与复制值必须使用同一个服务端完整 URL"
+  );
 
   await click(find(".tenant-drawer button", "关闭"));
   await click(find("button", "查看与处理"));
@@ -229,6 +261,17 @@ async function main(): Promise<void> {
   assert.match(
     document.querySelector(".tenant-drawer")?.textContent ?? "",
     /ui05-obviously-fake-reset-fixture/
+  );
+  assert.ok(
+    document.querySelector(
+      '.one-time-link a[href="https://diyu.example/activate/ui05-obviously-fake-reset-fixture"]'
+    ),
+    "完整 HTTPS 重设地址必须可直接点击"
+  );
+  await click(find(".one-time-link button", "复制重设链接"));
+  assert.equal(
+    copiedTexts.at(-1),
+    "https://diyu.example/activate/ui05-obviously-fake-reset-fixture"
   );
   await click(find(".tenant-drawer button", "关闭"));
   await click(find(".tenant-nav button", "发布账号与账号画像"));

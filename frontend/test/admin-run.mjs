@@ -31,6 +31,15 @@ for (const name of [
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let reducedMotion = false;
 const adminRequests = [];
+const copiedTexts = [];
+Object.defineProperty(globalThis.navigator, "clipboard", {
+  value: {
+    writeText: async value => {
+      copiedTexts.push(value);
+    }
+  },
+  configurable: true
+});
 const organizations = [
   {
     id: "11111111-1111-4111-8111-111111111111",
@@ -55,7 +64,43 @@ const organizations = [
   }
 ];
 let operators = [];
-let accounts = [];
+let accounts = [
+  {
+    id: "33333333-3333-4333-8333-333333333333",
+    name: "总部品牌内容运营",
+    control_organization: {
+      id: organizations[0].id,
+      name: organizations[0].name,
+      source: "declared"
+    },
+    content_role: {
+      name: "品牌官方",
+      authority_boundary: "只使用已确认品牌事实",
+      speaker_kind: "institutional_account"
+    },
+    profile: {
+      id: "profile-existing",
+      version: 1,
+      segments: {
+        identity_position: "品牌整体表达",
+        authority_boundary: "只使用已确认品牌事实",
+        audience_relationship: "平等交流",
+        content_territories: "品牌与穿着",
+        default_production_conditions: "一人一部手机"
+      }
+    },
+    operators: [],
+    platform_targets: [
+      {
+        account_id: "33333333-3333-4333-8333-333333333333",
+        target: "xiaohongshu_graphic",
+        platform: "小红书",
+        media: "图文"
+      }
+    ],
+    carrier_count: 1
+  }
+];
 let products = [
   {
     sku: "DEMO-A",
@@ -226,6 +271,14 @@ globalThis.fetch = async (input, init = {}) => {
       }
     ];
     value = organizationMaterials.at(-1);
+  } else if (path === "/api/v1/ops/tenants" && method === "POST") {
+    value = {
+      tenant_id: "77777777-7777-4777-8777-777777777777",
+      administrator_id: "88888888-8888-4888-8888-888888888888",
+      username: body.administrator_username,
+      activation_link: "/activate/ui04-ops-fixture",
+      activation_url: "https://diyu.example/activate/ui04-ops-fixture"
+    };
   } else if (
     path === "/api/v1/ops/tenants" ||
     path === "/api/v1/display/tasks"
@@ -260,14 +313,18 @@ globalThis.fetch = async (input, init = {}) => {
     value = {
       user_id: operators[0].id,
       username: body.username,
-      activation_link: "/activate/ui04-obviously-fake-browser-fixture"
+      activation_link: "/activate/ui04-obviously-fake-browser-fixture",
+      activation_url:
+        "https://diyu.example/activate/ui04-obviously-fake-browser-fixture"
     };
   } else if (
     path === "/api/v1/tenant-management/users/22222222-2222-4222-8222-222222222222/reset" &&
     method === "POST"
   ) {
     value = {
-      reset_link: "/activate/ui05-obviously-fake-reset-fixture"
+      reset_link: "/activate/ui05-obviously-fake-reset-fixture",
+      reset_url:
+        "https://diyu.example/activate/ui05-obviously-fake-reset-fixture"
     };
   } else if (path === "/api/v1/auth/password" && method === "POST") {
     if (body.current_password === "incorrect-current-password") {
@@ -355,6 +412,7 @@ globalThis.fetch = async (input, init = {}) => {
 globalThis.__DIYU_ADMIN_INTERACTION__ = {
   window: dom.window,
   requests: adminRequests,
+  copiedTexts,
   setReducedMotion: value => {
     reducedMotion = value;
   },

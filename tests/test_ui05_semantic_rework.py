@@ -87,6 +87,7 @@ def _settings(database_url: str) -> Settings:
             "DIYU_RUNTIME_MODE": "production",
             "DIYU_APP_DATABASE_URL": database_url,
             "DIYU_SESSION_SECRET": "ui05-semantic-rework-test-session-secret",
+            "DIYU_PUBLIC_URL": "https://diyuai.cc",
             # Production settings remain production-shaped; the generator port is replaced
             # below with the deterministic test double.
             "DIYU_GENERATOR_MODE": "deepseek",
