@@ -1,9 +1,10 @@
 # 当前里程碑
 
 - 当前里程碑：`UX-02` 正式前端工程化与生产替换。
-- 状态：`ACTIVE · 主控终审有界返工`。UX-01 主控重新独立终审结论为 `PASS` 并保持
-  `CLOSED`；UX-02 原 `REVIEW` 证据完整保留，当前只关闭“两次输入密码、停用成员二次确认、
-  复制一次性链接可感知反馈”三项管理员旅程缺口，不创建 UX-03。UX-02 已从
+- 状态：`REVIEW`。UX-01 主控重新独立终审结论为 `PASS` 并保持 `CLOSED`；UX-02 原
+  `REVIEW` 证据和主控有界返工裁决完整保留。“两次输入密码、停用成员二次确认、复制一次性
+  链接可感知反馈”三项管理员旅程缺口已完成正式实现、反证、最终 CI、同 SHA 部署和生产
+  定向验收，不创建 UX-03。UX-02 已从
   `75ed5283e2616ffa91b2ea20dd0b86e7d64449e3` 启动，并完成正式
   React/API/PostgreSQL 工程化、唯一承重 CI、生产默认前端替换、验收清理与不降级回退。
   不创建 UX-03，不自行 `CLOSED`。
@@ -52,8 +53,26 @@
   最终部署、回退与清理锚点位于
   `/var/lib/diyu-ux02-evidence/9c6b81779dced53b8c1f216cd5ba45e043ae7d24/final-production/`；
   两处均为 root-only `0700/0600` 且 SHA256SUMS 全绿。
-- 唯一下一动作：完成上述三项有界返工的本地门、唯一 CI、同 SHA 部署与生产定向验证，
-  再将 UX-02 送回 `REVIEW`；在终审前不启动 UX-03。
+- 主控终审有界返工的最终运行实现为
+  `1abd0dbc9088ae8ac3127986cd7fcd0d347ef821`：激活／重设均要求两次输入至少 12 位密码，
+  不一致时前后端都在消费 token 前失败；停用首击只打开带明确后果的二次确认，取消无写入，
+  确认防重复且只调用一次；激活／重设共用 Clipboard Promise 处理，成功和拒绝均进入
+  `aria-live`，不把“复制”写成“已发送”。三项临时 mutation 均真实使直接测试变红，恢复
+  后转绿；Golden/OpenAPI `419 passed`，前端 lint/typecheck/interaction/build 和
+  `git diff --check` 全绿，两份有界审查无阻断。
+- 最终承重 CI `30528280841` 精确对应 `1abd0db…` 且为 `success`。生产部署仓和镜像均为
+  该 SHA，schema 保持 `20260806_33`，公网／回环 readiness 与 `/status` 为 200。
+  定向正式浏览器 4/4 通过，证明激活／重设不一致不消耗同一 token、修正后可成功，复制成功／
+  失败反馈可见，停用首击和取消不撤销会话、确认后会话与登录资格失效；没有调用模型、创建
+  内容任务或运行 DM01。
+- 最终清洁备份
+  `/var/backups/diyu-m5-4/20260730T090009Z-ux02-final-clean` 的 `0700/0600`、
+  checksum、隔离数据库恢复、RLS、应用 readiness 与对象恢复均通过。上一健康镜像
+  `9c6b81779dced53b8c1f216cd5ba45e043ae7d24` 已在 schema 33 上恢复公网和回环，随后切回
+  最终候选。两个 synthetic 用户、会话、token、凭据文件及临时密码环境均精确清理；证据位于
+  `/var/lib/diyu-ux02-evidence/1abd0dbc9088ae8ac3127986cd7fcd0d347ef821/bounded-admin-rework/`，
+  权限 `0700/0600` 且 SHA256SUMS 全绿。
+- 唯一下一动作：主控最终独立终审 UX-02；在终审前不启动 UX-03。
 
 ## UI-12 关闭结论（历史保留）
 
