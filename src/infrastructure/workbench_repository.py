@@ -556,9 +556,25 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                    WHERE version.tenant_id = %s AND version.version_number = 1
                      AND version.created_at >=
                          now() - (%s * interval '1 day')) AS first_generations,
-                  (SELECT count(*) FROM business_tasks task
-                   WHERE task.tenant_id = %s AND task.series_position > 1
-                     AND task.created_at >= now() - (%s * interval '1 day')) AS series_continuations,
+                  (SELECT count(DISTINCT task.id)
+                   FROM business_tasks task
+                   WHERE task.tenant_id = %s
+                     AND task.series_position > 1
+                     AND task.parent_version_id IS NULL
+                     AND EXISTS (
+                       SELECT 1
+                       FROM content_versions version
+                       JOIN generation_runs run
+                         ON run.tenant_id = version.tenant_id
+                        AND run.id = version.run_id
+                        AND run.task_id = version.task_id
+                        AND run.status = 'succeeded'
+                       WHERE version.tenant_id = task.tenant_id
+                         AND version.task_id = task.id
+                         AND version.version_number = 1
+                         AND version.created_at >=
+                             now() - (%s * interval '1 day')
+                     )) AS series_continuations,
                   (SELECT count(*) FROM display_generation_runs run
                    WHERE run.tenant_id = %s
                      AND run.started_at >= now() - (%s * interval '1 day')) AS display_attempts,

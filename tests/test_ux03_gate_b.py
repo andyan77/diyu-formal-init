@@ -13,6 +13,7 @@ from urllib.request import urlopen
 from uuid import UUID, uuid4
 
 import psycopg
+import pytest
 from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 from pytest import MonkeyPatch
@@ -29,8 +30,14 @@ from src.infrastructure.local_object_store import LocalObjectStore
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.production_auth import ProductionAuthRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
-from src.shared.errors import DomainError
-from src.shared.types import RequestedControls, TenantManagementScope, TrustedScope
+from src.shared.errors import DomainError, GenerationFailed
+from src.shared.types import (
+    GeneratedArtifact,
+    GenerationInput,
+    RequestedControls,
+    TenantManagementScope,
+    TrustedScope,
+)
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 
 _PROFILE = {
@@ -40,6 +47,90 @@ _PROFILE = {
     "content_territories": "门店生活、穿着选择与品牌日常",
     "default_production_conditions": "手机实拍、门店环境、纯文字辅助",
 }
+
+
+class _FailingContentGenerator(DeterministicContentGenerator):
+    """Fail after the service has durably created the task and running run."""
+
+    @property
+    def model_name(self) -> str:
+        return "ux03-gate-b-deterministic-failure"
+
+    def generate(self, request: GenerationInput) -> GeneratedArtifact:
+        del request
+        raise GenerationFailed("Gate B 受控生成失败")
+
+
+def _content_persistence_counts(
+    database_url: str,
+    tenant_id: UUID,
+) -> tuple[int, int, int, int, int]:
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+              (SELECT count(*) FROM business_tasks WHERE tenant_id = %s),
+              (SELECT count(*) FROM generation_runs WHERE tenant_id = %s),
+              (SELECT count(*) FROM content_versions WHERE tenant_id = %s),
+              (SELECT count(*) FROM generation_runs
+               WHERE tenant_id = %s AND status = 'failed'),
+              (SELECT count(*) FROM generation_runs
+               WHERE tenant_id = %s AND status = 'running')
+            """,
+            (tenant_id, tenant_id, tenant_id, tenant_id, tenant_id),
+        )
+        row = cursor.fetchone()
+    assert row is not None
+    tasks, runs, versions, failed_runs, running_runs = row
+    return (
+        int(tasks),
+        int(runs),
+        int(versions),
+        int(failed_runs),
+        int(running_runs),
+    )
+
+
+def _move_version_submission_outside_usage_window(
+    database_url: str,
+    tenant_id: UUID,
+    version_id: UUID,
+) -> None:
+    """Move one synthetic V1 timestamp while always restoring append-only protection."""
+
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        trigger_disabled = False
+        try:
+            cursor.execute(
+                "ALTER TABLE content_versions "
+                "DISABLE TRIGGER content_versions_append_only"
+            )
+            trigger_disabled = True
+            with connection.transaction():
+                cursor.execute(
+                    """
+                    UPDATE content_versions
+                    SET created_at = now() - interval '40 days'
+                    WHERE tenant_id = %s AND id = %s AND version_number = 1
+                    """,
+                    (tenant_id, version_id),
+                )
+                assert cursor.rowcount == 1
+        finally:
+            if trigger_disabled:
+                cursor.execute(
+                    "ALTER TABLE content_versions "
+                    "ENABLE TRIGGER content_versions_append_only"
+                )
+        cursor.execute(
+            """
+            SELECT trigger_record.tgenabled
+            FROM pg_trigger trigger_record
+            WHERE trigger_record.tgrelid = 'content_versions'::regclass
+              AND trigger_record.tgname = 'content_versions_append_only'
+            """
+        )
+        assert cursor.fetchone() == ("O",)
 
 
 def _settings(database_url: str, material_root: Path) -> Settings:
@@ -1315,8 +1406,9 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 json={"enabled": True},
             ).status_code == 200
 
-            # Series continuation is a task position, not merely membership in a
-            # series. A first item and an ordinary V2 must never inflate it.
+            # A series continuation is a later-position task that actually
+            # committed V1. Failed tasks, first items, revisions, platform
+            # adaptations and out-of-window V1 submissions must not inflate it.
             series_b = workbench_repository.create_series(
                 east_scope,
                 "只有首篇的系列",
@@ -1338,6 +1430,43 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 first_only_usage.json()["activity"]["series_continuations"]
                 == 0
             )
+            persistence_before_failure = _content_persistence_counts(
+                migrator_database_url,
+                tenant_id,
+            )
+            failed_content_service = ContentService(
+                content_repository,
+                _FailingContentGenerator(),
+                ContentControlService(control_repository, object_store),
+            )
+            with pytest.raises(GenerationFailed, match="受控生成失败"):
+                failed_content_service.create_from_weak_seed(
+                    east_scope,
+                    "请生成这个系列的第二篇，但本次受控失败",
+                    target="xiaohongshu_graphic",
+                    series_id=UUID(str(series_b["id"])),
+                    series_position=2,
+                    primary_product_override="brand_life_narrative",
+                )
+            persistence_after_failure = _content_persistence_counts(
+                migrator_database_url,
+                tenant_id,
+            )
+            assert persistence_after_failure == (
+                persistence_before_failure[0] + 1,
+                persistence_before_failure[1] + 1,
+                persistence_before_failure[2],
+                persistence_before_failure[3] + 1,
+                0,
+            )
+            failed_second_usage = admin.get(
+                "/api/v1/tenant-management/team-usage?window_days=7"
+            )
+            assert failed_second_usage.status_code == 200
+            assert (
+                failed_second_usage.json()["activity"]["series_continuations"]
+                == 0
+            )
             series_a = workbench_repository.create_series(
                 east_scope,
                 "近七日两篇系列",
@@ -1351,13 +1480,76 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 series_position=1,
                 primary_product_override="brand_life_narrative",
             )
-            content_service.create_from_weak_seed(
+            successful_second = content_service.create_from_weak_seed(
                 east_scope,
                 "请生成系列第二篇，延续一般门店观察",
                 target="xiaohongshu_graphic",
                 series_id=UUID(str(series_a["id"])),
                 series_position=2,
                 primary_product_override="brand_life_narrative",
+            )
+            successful_second_usage = admin.get(
+                "/api/v1/tenant-management/team-usage?window_days=7"
+            )
+            assert successful_second_usage.status_code == 200
+            assert (
+                successful_second_usage.json()["activity"][
+                    "series_continuations"
+                ]
+                == 1
+            )
+            content_service.revise(
+                east_scope,
+                UUID(str(successful_second["task_id"])),
+                "换一种自然表达，不改变系列位置",
+                target="xiaohongshu_graphic",
+            )
+            after_revision_usage = admin.get(
+                "/api/v1/tenant-management/team-usage?window_days=7"
+            )
+            assert after_revision_usage.status_code == 200
+            assert (
+                after_revision_usage.json()["activity"]["series_continuations"]
+                == 1
+            )
+            east_douyin_scope = TrustedScope(
+                tenant_id=tenant_id,
+                brand_id=brand_id,
+                account_id=UUID(str(accounts["柯桥"]["id"])),
+                user_id=UUID(str(members["柯桥"]["user_id"])),
+            )
+            platform_adaptation = content_service.create_from_weak_seed(
+                east_douyin_scope,
+                "将当前系列第二篇适配为抖音视频",
+                reuse_version_id=UUID(str(successful_second["version_id"])),
+                target="douyin_video",
+                series_id=UUID(str(series_a["id"])),
+                series_position=3,
+            )
+            assert "version_id" in platform_adaptation
+            with psycopg.connect(
+                migrator_database_url
+            ) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT parent_version_id
+                    FROM business_tasks
+                    WHERE tenant_id = %s AND id = %s
+                    """,
+                    (tenant_id, platform_adaptation["task_id"]),
+                )
+                assert cursor.fetchone() == (
+                    UUID(str(successful_second["version_id"])),
+                )
+            after_adaptation_usage = admin.get(
+                "/api/v1/tenant-management/team-usage?window_days=7"
+            )
+            assert after_adaptation_usage.status_code == 200
+            assert (
+                after_adaptation_usage.json()["activity"][
+                    "series_continuations"
+                ]
+                == 1
             )
             series_c = workbench_repository.create_series(
                 east_scope,
@@ -1380,18 +1572,12 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 series_position=2,
                 primary_product_override="brand_life_narrative",
             )
-            assert "task_id" in old_second, old_second
-            with psycopg.connect(
-                migrator_database_url
-            ) as connection, connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    UPDATE business_tasks
-                    SET created_at = now() - interval '40 days'
-                    WHERE tenant_id = %s AND id = %s
-                    """,
-                    (tenant_id, old_second["task_id"]),
-                )
+            assert "version_id" in old_second, old_second
+            _move_version_submission_outside_usage_window(
+                migrator_database_url,
+                tenant_id,
+                UUID(str(old_second["version_id"])),
+            )
 
             # One bounded event set proves that 7/30-day windows and event kinds
             # are not interchangeable. No prompt or content body is stored here.
@@ -1431,11 +1617,12 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             assert usage_30.json()["activity"]["conversations"] == 2
             assert usage_7.json()["activity"]["rate_limited"] == 1
             assert usage_30.json()["activity"]["rate_limited"] == 1
-            assert usage_7.json()["activity"]["revisions"] == 1
+            assert usage_7.json()["activity"]["revisions"] == 2
             assert usage_7.json()["activity"]["series_continuations"] == 1
             assert usage_30.json()["activity"]["series_continuations"] == 1
             assert usage_7.json()["activity"]["first_generations"] == 6
-            assert usage_7.json()["activity"]["successful_runs"] == 7
+            assert usage_7.json()["activity"]["successful_runs"] == 9
+            assert usage_7.json()["activity"]["failed_runs"] == 1
             assert usage_7.json()["members"]["logged_in"] >= 1
             assert usage_7.json()["members"]["product_active"] >= 1
             assert usage_7.json()["provider_usage"][
