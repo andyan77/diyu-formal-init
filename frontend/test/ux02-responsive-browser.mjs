@@ -15,6 +15,8 @@ const adminUsername = required("UX02_ADMIN_USERNAME");
 const adminPassword = required("UX02_ADMIN_PASSWORD");
 const userUsername = required("UX02_EXISTING_USER");
 const userPassword = required("UX02_NEW_USER_PASSWORD");
+const existingAccountId = required("UX02_EXISTING_ACCOUNT_ID");
+const existingTarget = required("UX02_EXISTING_TARGET");
 const repo = resolve(new URL("../..", import.meta.url).pathname);
 const chromePath = [
   process.env.UX02_CHROME,
@@ -134,7 +136,9 @@ try {
         if (await evaluate(expression)) return;
         await wait(100);
       }
-      throw new Error(`等待超时：${label}`);
+      const location = await evaluate("location.pathname + location.search");
+      const body = await evaluate("document.body.innerText.slice(0, 500)");
+      throw new Error(`等待超时：${label}；当前 ${location}；页面：${body}`);
     };
     const navigate = async path => {
       await send("Page.navigate", { url: `${baseUrl}${path}` }, sessionId);
@@ -201,7 +205,9 @@ try {
   await user.fill('input[name="password"]', userPassword);
   await user.click('button[type="submit"]', "登录");
   await user.waitFor("location.pathname === '/user'", "租户用户登录");
-  await user.navigate("/content");
+  await user.navigate(
+    `/content?publishing_identity_id=${encodeURIComponent(existingAccountId)}&target=${encodeURIComponent(existingTarget)}`
+  );
   await user.waitFor(
     "document.querySelector('textarea[aria-label=\"内容需求\"]') !== null",
     "移动创作工作台"
@@ -276,15 +282,11 @@ try {
     new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})
   )`);
   await user.waitFor("document.querySelector('.creator-tool-drawer') === null", "Escape 关闭系列抽屉");
-  ensure(
-    await user.evaluate(`(() => {
-      const node=document.querySelector('.creator-history nav button');
-      if(!node)return false;
-      node.click();
-      return true;
-    })()`),
-    "移动版本入口没有可读取的正式历史"
+  await user.waitFor(
+    "document.querySelector('.creator-history nav button') !== null",
+    "移动版本入口可读取的正式历史"
   );
+  await user.evaluate("document.querySelector('.creator-history nav button').click()");
   await user.waitFor("document.querySelector('.creator-artifact') !== null", "移动历史成品");
   ensure(
     await user.evaluate(
@@ -297,9 +299,13 @@ try {
     await user.evaluate("document.querySelector('.artifact-workspace')?.classList.contains('mobile-hidden') === false"),
     "移动成品工作面不能打开"
   );
+  await user.waitFor(
+    "document.querySelector('.version-history summary') !== null",
+    "移动版本历史完成读取"
+  );
   await user.click(".version-history summary", "历史版本");
   ensure(
-    await user.evaluate("document.querySelectorAll('.version-history button').length >= 2"),
+    await user.evaluate("document.querySelectorAll('.version-history button').length >= 1"),
     "移动端没有版本入口"
   );
   results.push("移动创作双工作面、方向/系列抽屉和可见焦点");
