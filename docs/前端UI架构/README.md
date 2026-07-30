@@ -26,13 +26,15 @@ React/API/PostgreSQL 承重旅程、纯文字 DM01、64 项真值复核、响应
 React/API/PostgreSQL 浏览器纵向、四项 mutation、Golden/OpenAPI `421 passed, 1 skipped`
 及两份有界审查均通过。
 
-Gate B 冻结实现 `a67f44bdc4e73a2a8386cdfa311659220aefc0af` 又完成品牌文字资料、
-商品事实和组织官方素材的预览确认、不可变 V1→V2、停用恢复、历史读取及任务消费；品牌
-全员／总部专用／指定区域从逻辑发布账号控制组织裁定，未选素材和无商品输入不加载整个库。
-近 7/30 日团队使用采用固定独立口径，六类能力诊断具有来源、版本、范围、更新时间、缺口、
-冲突、影响和补充入口。正式三视口 Chrome、Golden/OpenAPI `422 passed, 1 skipped` 和
-两份有界审查通过。UX-03 仍为 `ACTIVE`，Gate A 和 Gate B 为 `COMPLETE`，Gate C 尚未
-启动；本轮没有 push、CI、部署、生产连接或模型调用。64 项真值为 `50/8/0/6/0`。
+Gate B 首次实现 `a67f44b…` 完成品牌文字资料、商品事实和组织官方素材主体，但主控终审
+发现系列首篇误计为续写、六类诊断跨账号／组织拼接条件，以及指定区域 API 接受门店级组织，
+当时真值诚实退回 `48/10/0/6/0`。有界返工实现
+`4a49e0d912e17a10965e840e89c1ef7f03bca3f6` 让 7/30 日续写只取真实后续篇，并用同一完整
+账号／组织／资料路径裁定六类状态，evidence 展示真实对象、版本、范围和更新时间；新保存的
+指定区域只接受 region。正式三视口 Chrome、Golden/OpenAPI `422 passed, 1 skipped`、
+三项 mutation 和两份有界审查通过。UX-03 仍为 `ACTIVE`，Gate A 和 Gate B 为
+`COMPLETE`，Gate C 尚未启动；本轮没有 push、CI、部署、生产连接或模型调用。64 项真值
+恢复为 `50/8/0/6/0`，Gate B 等待主控重新独立终审。
 
 UI-04 已于 2026-07-27（UTC）通过主控独立终审
 并保持 `CLOSED`；创始人真实使用后出现的产品语义新证据由 successor UI-05 单独承接。

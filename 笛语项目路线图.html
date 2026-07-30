@@ -119,7 +119,7 @@
 
   <div class="nextbar">
     <div class="lab">当前状态</div>
-    <div class="txt">UI-12、UX-01 与 UX-02 保持 CLOSED，历史验证假绿及返工记录保留。<b>UX-03 Gate A 已经主控 PASS；Gate B 已在本地 COMPLETE：品牌资料、商品、组织素材、三级范围、任务冻结、团队 7/30 日口径和六类能力诊断成立。</b>UX-03 仍为 ACTIVE，Gate C 尚未启动；唯一下一动作是主控独立审阅 Gate B。</div>
+    <div class="txt">UI-12、UX-01 与 UX-02 保持 CLOSED，历史验证假绿及返工记录保留。<b>UX-03 Gate A 已经主控 PASS；Gate B 首次终审失败记录保留，有界返工已用真实系列续篇和同一完整可执行路径关闭 FT-031／FT-032，并统一指定区域 API。</b>UX-03 仍为 ACTIVE，Gate C 尚未启动；唯一下一动作是主控重新独立终审 Gate B。</div>
   </div>
 
   <div class="legend">
@@ -262,7 +262,7 @@
     <div class="phase now">
       <div class="pcard">
         <div class="ph-head"><p class="ph-title"><span class="idx">UX</span>前端产品化</p><span class="badge b-now">UX-03 · ACTIVE</span></div>
-        <p class="ph-desc">UI-12、UX-01 与 UX-02 均已关闭。UX-03 Gate A 主控 PASS；Gate B 已完成本地品牌资料、组织作用域、团队使用与能力诊断闭环；Gate C 尚未启动。</p>
+        <p class="ph-desc">UI-12、UX-01 与 UX-02 均已关闭。UX-03 Gate A 主控 PASS；Gate B 首次终审失败历史保留，有界返工后已重新形成本地完整候选；Gate C 尚未启动。</p>
         <ul class="nodes">
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">首版页面覆盖盘点<span class="ncode">UI-01 · SUPERSEDED</span></div><div class="ndesc">19 张静态页面完整保留为覆盖盘点与历史反例；因首页无产品叙事、功能机械铺页、说明书化及产品/评审模式混用被取代，不表示通过或关闭</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">产品叙事、资产总账与评审体系<span class="ncode">UI-01R · CLOSED</span></div><div class="ndesc">只表示产品策略探索、资产盘点和方向裁决完成；首页采用 A“种子找到声音”，B/C 留作历史候选，六张代表页不是 React 复制模板</div></div></li>
@@ -275,7 +275,7 @@
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">可信事实轨与创作表达轨最终闭环<span class="ncode">UI-12 · CLOSED</span></div><div class="ndesc">主控最终独立终审 PASS。概率 Reviewer 已退出生产放行；服务端在 Writer 前冻结事实与表达轨，Compiler 保持范围。最终 9c5b243… 以 schema 32 关闭版本 UPDATE/DELETE、恢复 legacy 投影并统一 Unicode 防伪；Golden 417 passed、CI 30500580180、生产兼容、备份恢复及旧镜像回退均成立</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">前端产品定义、功能真值与逐屏冻结<span class="ncode">UX-01 · CLOSED</span></div><div class="ndesc">主控重新独立终审 PASS。第一次页面存在性验证假绿历史保留；有界返工后盘点 64 项正式交互，冻结访客、管理员、租户用户和运维职责及身份／账号／平台关系，交付四条、37 状态连续高保真原型，并由 30 项真实操作检查承重。未修改正式 React、API、数据库或生产</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">正式前端工程化与生产替换<span class="ncode">UX-02 · CLOSED</span></div><div class="ndesc">主控最终独立终审 PASS。三条正式纵向、64 项真值、响应式／可访问性、最终运行 3dfe648…、CI 30537611606、schema 33、同 SHA 生产替换、备份、清理与上一健康镜像回退均成立；UX-03 后由用户独立启动</div></div></li>
-          <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">产品目标一致性与全链路修复<span class="ncode">UX-03 · ACTIVE · Gate A/B COMPLETE</span></div><div class="ndesc">Gate A 主控最终终审 PASS。Gate B 冻结实现 a67f44b… 已完成品牌文字资料、商品事实、组织官方素材、三级组织范围、运行消费、任务冻结、7/30 日团队使用和六类能力诊断。三个视口正式 React/API/PostgreSQL、显式 Chrome、Golden/OpenAPI 422 passed（1 skipped）、三项真实红转绿反证和两审通过。真值为 50/8/0/6/0；未 push、CI、部署、连接生产或调用模型。Gate C NOT_STARTED</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">产品目标一致性与全链路修复<span class="ncode">UX-03 · ACTIVE · Gate A/B COMPLETE</span></div><div class="ndesc">Gate A 主控最终终审 PASS。Gate B 首次实现 a67f44b… 的资料主体保留；主控终审发现 FT-031 首篇误计续写、FT-032 跨账号／组织拼接和指定区域 API 接缝，真值曾退为 48/10/0/6/0。有界返工实现 4a49e0d… 已以真实后续篇、共享完整可执行路径和 region-only 保存合同关闭缺口。三个视口正式 React/API/PostgreSQL、显式 Chrome、Golden/OpenAPI 422 passed（1 skipped）、三项 mutation 和两审通过，真值恢复 50/8/0/6/0；未 push、CI、部署、连接生产或调用模型。Gate C NOT_STARTED</div></div></li>
         </ul>
         <div class="tip"><span class="h">资产边界</span>UI-01R 的 CSV/Markdown 只是现有 JSON/JSONL 真源的人可读投影；候选登记、运行激活、本次调用、已验证能力和真实租户采用不得混为一谈。</div>
       </div>
@@ -336,7 +336,7 @@
 
   <footer>
     依据 <code>docs/项目记忆.md</code>、<code>docs/待决策清单.md</code>、正式 ADR、用户提供的 <code>首批领域数据库知识数据</code> 与 D-007 两份资料成果更新。<br>
-    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料、WSL 唯一 Git 主仓迁移、M3-1/M3-2、M4-1/M4-2、M5-1—M5-3、M5-K、M5-4、M6-1 与 M6-2；M6-3 未通过并已 SUPERSEDED 至已关闭的 M7-2B；M7-1、M7-2A、M7-2B、M7-3 均已 CLOSED。目录对账仍为风格 20/20、题材 55/55、体裁 41/44（缺 3 条来源缺口），能力状态为 10/64/6/38/1；不证明真实员工采用、真实商品采用、真实门店现场执行、真实发布、平台流量、排名、爆款、GMV、销售、企业采用、真实跨租户市场差异、企业 SLA 或 20/55/44 全组合稳定支持。UI-01 已 SUPERSEDED 至已关闭的 UI-01R；UI-01R、UI-02、UI-03 与 UI-04 均已 CLOSED。UI-05—UI-11 保留历史并依次 SUPERSEDED 至 UI-12；UI-12 已经主控最终独立终审 PASS 并 CLOSED，生产运行 9c5b243… 与 schema 32。UX-01 经主控重新独立终审 PASS 并 CLOSED，第一次验证假绿历史保留。UX-02 已完成正式三条纵向、唯一 CI、生产默认前端替换、清理和回退，并经主控最终独立终审 PASS 后 CLOSED。UX-03 当前 ACTIVE，Gate A 主控 PASS，Gate B 本地 COMPLETE，Gate C NOT_STARTED；Gate B 未 push、CI、部署、连接生产或调用模型。运行资产仍为 41 条，候选 243、目录 25/119、激活增量 0。
+    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料、WSL 唯一 Git 主仓迁移、M3-1/M3-2、M4-1/M4-2、M5-1—M5-3、M5-K、M5-4、M6-1 与 M6-2；M6-3 未通过并已 SUPERSEDED 至已关闭的 M7-2B；M7-1、M7-2A、M7-2B、M7-3 均已 CLOSED。目录对账仍为风格 20/20、题材 55/55、体裁 41/44（缺 3 条来源缺口），能力状态为 10/64/6/38/1；不证明真实员工采用、真实商品采用、真实门店现场执行、真实发布、平台流量、排名、爆款、GMV、销售、企业采用、真实跨租户市场差异、企业 SLA 或 20/55/44 全组合稳定支持。UI-01 已 SUPERSEDED 至已关闭的 UI-01R；UI-01R、UI-02、UI-03 与 UI-04 均已 CLOSED。UI-05—UI-11 保留历史并依次 SUPERSEDED 至 UI-12；UI-12 已经主控最终独立终审 PASS 并 CLOSED，生产运行 9c5b243… 与 schema 32。UX-01 经主控重新独立终审 PASS 并 CLOSED，第一次验证假绿历史保留。UX-02 已完成正式三条纵向、唯一 CI、生产默认前端替换、清理和回退，并经主控最终独立终审 PASS 后 CLOSED。UX-03 当前 ACTIVE，Gate A 主控 PASS，Gate B 有界返工后本地 COMPLETE、等待主控重新独立终审，Gate C NOT_STARTED；Gate B 未 push、CI、部署、连接生产或调用模型。运行资产仍为 41 条，候选 243、目录 25/119、激活增量 0。
   </footer>
 
 </div>
