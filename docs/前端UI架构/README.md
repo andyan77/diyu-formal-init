@@ -7,11 +7,11 @@ UI-05 Gate A 返工候选已通过产品裁决，Gate B 正式 React/API 与 Gat
 修复完成唯一 CI、同 SHA 部署与定向生产复验。随后 UI-05—UI-11 的创作真实性探索及失败
 历史完整保留并由 UI-12 承接。UI-12 已把新任务主链收敛为服务端 Writer 前预分配
 `trusted_fact + creative_expression`，Compiler 对事实和创作范围作确定性投影，概率
-Reviewer 退出保存授权。主控第二次终审发现的版本载荷 UPDATE 与 Writer 正式 heading
-注入现已由 schema 31 的数据库权限＋trigger、统一最终可见摘要校验和共享 Unicode 防伪
-关闭。最终 `15a6f1f…` 的 Golden/OpenAPI `406 passed`、前端四门、唯一 CI
-`30478106189`、同 SHA 生产业务轮、备份恢复及旧镜像不降级回退均通过；UI-12 现为
-`REVIEW`。
+Reviewer 退出保存授权。两次主控终审发现的版本载荷 UPDATE/DELETE、Writer 正式 heading
+注入、legacy ASCII 冒号漂移与默认不可见字符残余，最终由 schema 32 的应用权限＋
+UPDATE/DELETE trigger、统一摘要、legacy 原投影和共享 Unicode 防伪关闭。最终
+`9c5b243…` 的 Golden/OpenAPI `417 passed`、前端四门、唯一 CI `30500580180`、同 SHA
+生产兼容冒烟、备份恢复及旧镜像不降级回退均通过；UI-12 现为 `REVIEW`。
 
 - [UI-03 正式 React 产品骨架与内容主链执行包](../UI-03-正式React产品骨架与内容主链执行包.md)：
   已在不切换生产默认 UI 的边界内完成公共首页、三入口隔离壳与统一创作端，现为 `CLOSED`；
@@ -51,8 +51,8 @@ Reviewer 退出保存授权。主控第二次终审发现的版本载荷 UPDATE 
 - [UI-12 来源、语态、主体绑定与服务端证据裁决执行包](../UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)：
   当前为 `REVIEW`。新任务由服务端预分配可信事实与四类创作表达单元，Writer 只能填写
   既定创意 unit，Compiler 负责逐字事实、自然范围和全部平台出口；Reviewer 不再参与版本
-  放行。旧 `c0dfb94…` 的生产证据保留但被主控退回；最终 schema 31 实现已经关闭版本
-  UPDATE、摘要读取和 Writer heading 注入，并完成最终 CI 与生产同 SHA 复验；
+  放行。旧候选及两次主控退回证据保留；最终 schema 32 实现已经关闭版本 UPDATE/DELETE、
+  恢复 legacy 原投影并关闭 Writer heading／Unicode 伪装，完成最终 CI、生产兼容与回退；
 - [产品化HTML原型_UI-05](产品化HTML原型_UI-05/)：UI-05 Gate A 的管理员与租户用户两条
   独立旅程及可重放验证。它继续作为历史产品合同与产品裁决证据，不冒充正式实现；打开
   [review/index.html](产品化HTML原型_UI-05/review/index.html) 即可离线回看；

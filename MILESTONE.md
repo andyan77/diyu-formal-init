@@ -1,15 +1,15 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`ACTIVE · 定向返工`。主控对 schema 31 候选的第二次独立终审给出
-  `FAIL_WITH_BOUNDED_REWORK`：版本 UPDATE 与 audit-v2 摘要读取已经关闭，但
-  `diyu_app` 仍有 `content_versions DELETE` 权限且 trigger 未覆盖 DELETE；同时共享
-  heading 定义把 legacy 投影从历史全角冒号合同漂移成全／半角冒号，导致普通
-  `限制: ...` 历史文字被静默隐藏，Unicode 防伪也仍漏过部分
-  `Default_Ignorable_Code_Point`。上一轮 `REVIEW`、CI、部署、生产业务轮和第一次终审
-  返工证据全部保留，但不冒充本轮完成；生产已先行切回安全镜像 `845f632…`，schema 31
-  不降级且 legacy 代表版本可读。UI-07—UI-12 仍是一条自然创作真实性探索链，不创建
-  UI-13。此前
+- 状态：`REVIEW`。主控对 schema 31 候选的第二次独立终审给出
+  `FAIL_WITH_BOUNDED_REWORK` 后，UI-12 已在原里程碑内完成两项确定性收口：
+  schema `20260805_32` 撤销 `diyu_app` 对 `content_versions` 的 UPDATE/DELETE，
+  trigger 同时拒绝 UPDATE/DELETE，只允许迁移角色在事务局部、精确 tenant/version 和
+  synthetic fixture 三重边界下清理；legacy 投影恢复历史“只识别全角冒号”合同，Writer
+  新链路则继续识别全／半角 heading，并按 Unicode Default_Ignorable 统一防伪。最终运行
+  SHA `9c5b2436f3594b08c5df9c5b758293fd5b4cf177` 的唯一 CI `30500580180`
+  绿色，生产部署、兼容冒烟、备份恢复和旧镜像在 schema 32 上的不降级回退均成立。
+  UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13。此前
   occurrence、开放 evidence、商品事实职责、Reviewer-only 模型、oracle drift、parser
   与一次 repair 的失败及前向订正均完整保留。
 - 主控已正式取代“单一概率 Reviewer 承担零漏判生产授权”路线，采用服务端预分配的
@@ -75,6 +75,34 @@
   0；没有改写历史正文。`diyu_app` 的版本 UPDATE 权限为 false，append-only trigger
   恰好 1 个，运行资产 41，候选／目录真源继续为 `243/25/119`，激活增量 0。生产证据位于
   `/var/lib/diyu-ui12-evidence/15a6f1fd57dd46d16baadd0730cc255da9c6d5e2/`。
+- 第二次终审返工的最终实现
+  `9c5b2436f3594b08c5df9c5b758293fd5b4cf177` 以前向 schema
+  `20260805_32` 关闭 DELETE：应用角色权限为 SELECT/INSERT true、
+  UPDATE/DELETE false；数据库 trigger 覆盖 `BEFORE UPDATE OR DELETE`。迁移角色的
+  maintenance gate 只能在同一事务、精确 tenant/version 且目标账号明确为
+  `synthetic_business_fixture` 时删除一行，事务结束后自动失效。legacy 投影恢复为只按
+  全角冒号解析，ASCII `限制:`／`标题:`／`完整发布正文:` 不再隐藏或重排历史文字；
+  Writer 安全匹配仍覆盖全／半角 heading，并按 Default_Ignorable 处理 U+2061、
+  U+2063、U+034F、soft hyphen、variation selectors 与 bidi controls，不改写正常中文
+  或 emoji。
+- 同一实现的 Ruff、mypy、Golden/OpenAPI `417 passed`、前端
+  lint/typecheck/interaction/build 及两份有界审查均通过；唯一承重 CI
+  `30500580180` 为 `success`。生产部署仓与镜像均为该 SHA，schema
+  `20260805_32`，公网／回环 readiness 和 `/status` 为 `200/200`。生产只读 legacy
+  普查为 307 行，旧全角算法差异 0、ASCII 误解析受影响 0、audit-v1 摘要异常 0，未改写
+  任何正文。synthetic audit-v1/v2 冒烟验证了读取、历史、复制／导出同源、平台改编、
+  系列、AIGC 和错误租户 0 行，随后通过精确 maintenance gate 清理，遗留 0。
+- 新鲜备份
+  `/var/backups/diyu-m5-4/20260729T234943Z-ui12-final-predeploy` 创建时目录／文件为
+  `0700/0600`，checksum、隔离数据库恢复、RLS、应用 readiness 与对象恢复均通过；
+  deploy.sh 依既有行为另建
+  `/var/backups/diyu-m5-4/20260729T235012Z-predeploy`，同样通过权限与 checksum。
+  旧镜像 `845f632…` 已在 schema 32 上成功启动、读取 legacy 且错误租户为 0，随后切回
+  最终候选。首次回退因证据 shell 的 `umask 077` 泄漏到 Git checkout，使旧镜像源码为
+  0600 并短暂 502；候选立即恢复，改用构建 `umask 022` 后同路径通过，原始失败证据保留。
+  当前 root-only 证据位于
+  `/var/lib/diyu-ui12-evidence/9c5b2436f3594b08c5df9c5b758293fd5b4cf177/second-bounded-rework/`，
+  目录／文件为 `0700/0600` 且 SHA256SUMS 全绿。
 - 定向返工运行代码
   `c0dfb9459f9cffcb0958348d3f43c55f55f3bb26` 收敛：服务端只向 intake 暴露带稳定
   `source_id` 的完整用户事实句，模型无法返回任意事实子串；首人称／指代式真实经历请求在
@@ -147,9 +175,9 @@
 - 唯一执行端：当前 WSL 执行端；同一时间只允许一个写入者。
 - 当前任务包：
   [`docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md`](docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)。
-- 产品语义与工程安全两份有界审查均为 `PASS`；运行 SHA、唯一 CI、生产部署、备份、
-  验收、清理与回退证明均已成立。UI-12 进入 `REVIEW`，不得自行 `CLOSED`；唯一下一动作
-  是主控重新独立终审 UI-12。
+- 产品语义与工程安全两份有界审查均为 `PASS`；最终运行 SHA、唯一 CI、生产部署、备份、
+  兼容冒烟、精确清理与回退证明均已成立。UI-12 进入 `REVIEW`，不得自行 `CLOSED`；
+  唯一下一动作是主控第三次、也是最终一次独立终审 UI-12。
 - 承重裁决：[ADR-028](docs/架构决策/ADR-028-来源语态主体绑定与证据裁决矩阵.md)
   已由本次主控裁决置为 `ACCEPTED`。启动前已把 SDR-001—SDR-037 订正为 42 条无重复
   stable ID、单值 `unit_contract` 的 SDR-001—SDR-042，并通过 diff、唯一性、单合同与

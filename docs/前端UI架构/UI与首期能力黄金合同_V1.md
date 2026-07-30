@@ -8,11 +8,12 @@
 > 创作责任合同的第二个结构候选命中真实停止线，UI-05 已 `SUPERSEDED → UI-06`；UI-06—
 > UI-11 的结构成果和失败历史经线性 successor 链由 UI-12 承接。UI-12 当前采用服务端
 > Writer 前预分配的可信事实轨与四类创作表达轨，Compiler 保持所有独立传播出口的自然
-> 范围，概率 Reviewer 退出生产保存授权。主控第二次终审确认旧 `c0dfb94…` 仍存在版本
-> 载荷可 UPDATE 和 Writer 顶层 heading 注入；最终 `15a6f1f…` 已用 schema 31 的
-> 权限＋trigger、统一最终可见摘要校验和共享 Unicode 防伪关闭两项边界，并通过
-> Golden/OpenAPI `406 passed`、前端四门、唯一 CI `30478106189`、同 SHA 生产业务轮、
-> 备份恢复及不降级回退。UI-12 现为 `REVIEW`。
+> 范围，概率 Reviewer 退出生产保存授权。两次主控终审确认旧候选仍存在版本
+> UPDATE/DELETE、Writer 顶层 heading 注入、legacy ASCII 冒号漂移和默认不可见字符残余；
+> 最终 `9c5b243…` 已用 schema 32 的权限＋UPDATE/DELETE trigger、统一摘要、legacy 原
+> 投影和共享 Unicode 防伪关闭边界，并通过 Golden/OpenAPI `417 passed`、前端四门、
+> 唯一 CI `30500580180`、同 SHA 生产兼容冒烟、备份恢复及不降级回退。UI-12 现为
+> `REVIEW`。
 > 本文仍不是自动化测试平台，也不修改数据库或权限。UI-02 静态原型只证明旅程和状态设计
 > 可浏览；UI-04 的生产证据不等于真实员工采用或市场结果。
 
@@ -232,7 +233,7 @@ UI-02 不建立自动化。UI-03 自动化内容主链直接承重的
 | `UI-07` | `SUPERSEDED → UI-08`；提交门正反证、普通交流无进度与可选“直接生成”已成立；此前 G3 Writer 补造现实微事件且唯一块修复后仍失败 | Gate 成果与失败历史保留，不形成 UI-07 第二候选 |
 | `UI-08` | `SUPERSEDED → UI-09`；计划、fact/constraint、服务端骨架与三类观察结构成立，golden `173 passed`；当前与唯一候选 Writer 的 G3/G4/D1 均失败 | 不改写失败，不把后继进展冒充 UI-08 成功 |
 | `UI-09—UI-11` | 均已 `SUPERSEDED` 并由下一项承接；CreativeKernel、确定性 Compiler、Reviewer evidence 与服务端 program 的成果和各自 BLOCKED 证据保留 | 不恢复后置概率模型的生产放行，不删除历史 raw |
-| `UI-12` | `REVIEW`；服务端在 Writer 前冻结 `trusted_fact + creative_expression`，Compiler 原样插入事实并维持一般观察、建议、假设或演绎范围；schema 31 已关闭版本 UPDATE、摘要读取与 Writer heading 注入，Golden/OpenAPI `406 passed`、CI `30478106189` 与同 SHA 生产全文审阅成立 | 等待主控重新独立终审；不以测试替代成品审阅 |
+| `UI-12` | `REVIEW`；服务端在 Writer 前冻结 `trusted_fact + creative_expression`，Compiler 原样插入事实并维持一般观察、建议、假设或演绎范围；schema 32 已关闭版本 UPDATE/DELETE、恢复 legacy 原投影并关闭 Writer heading／Unicode 伪装，Golden/OpenAPI `417 passed`、CI `30500580180` 与同 SHA 生产兼容冒烟成立 | 等待主控最终独立终审；不以测试替代成品审阅 |
 
 一个合同只有在其实际消费者进入相应工程里程碑时才自动化。静态原型、文档行数或候选资产数量
 均不能代替正式产品行为、生产隔离或真实租户采用。
@@ -364,7 +365,11 @@ UI-07 的前置提交门继续有效；UI-12 只收敛门后的生成与交付�
 4. Compiler 必须在标题、正文、字幕、配文与平台改编中保持范围，任何独立出口脱标均失败；
 5. G7 保持整体 `actuality_reflection`、真人事实与原反思不变，可以新增一个服务端所有、
    完整披露的局部演绎；
-6. 新任务保存不调用 Reviewer；历史 evidence 仅供旧快照兼容与离线回放。
+6. 新任务保存不调用 Reviewer；历史 evidence 仅供旧快照兼容与离线回放；
+7. 新审计版本的 outline/body、产品合同、digest 与审计快照在数据库中只能追加，
+   `diyu_app` 不得 UPDATE/DELETE；synthetic 清理只走事务局部精确维护门；
+8. legacy 与 audit-v1 保持历史全角冒号投影，audit-v2 直接显示已验证最终成品；Writer
+   新链路仍拒绝全／半角正式 heading 及 Default_Ignorable／bidi 伪装。
 
 前端只显示自然的“一般观察”“如果”“情境演绎”等用户可理解范围，不显示 track、mode、
 unit、Reviewer 或内部许可证。任何异步生成或版本切换仍不得覆盖用户刚输入的新内容。
