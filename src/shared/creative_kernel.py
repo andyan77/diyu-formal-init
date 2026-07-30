@@ -624,20 +624,60 @@ def parse_writer_kernel(
     compiler_texts = dict(compiler_owned_text_by_id or {})
     unit_by_id = {unit.unit_id: unit for unit in skeleton.units}
     writable_by_id = {unit.unit_id: unit for unit in skeleton.writable_units}
-    if any(
+    compiler_ids = set(compiler_texts)
+    legacy_compiler_ids = {
+        "unit:natural-guide",
+        "unit:release-caption",
+    }
+    graphic_fallback_ids = {
+        "unit:media-opening",
+        "unit:media-sequence",
+        "unit:production-note",
+    }
+    video_fallback_ids = {
+        *graphic_fallback_ids,
+        "unit:subtitle-strategy",
+    }
+    invalid_compiler_contract = any(
         unit_id not in unit_by_id
-        or unit_by_id[unit_id].purpose not in {"natural_guide", "release_caption"}
-        or unit_by_id[unit_id].text_source != "server_compiler"
         or not isinstance(text, str)
         or not text.strip()
-        or compiler_owned_unit_source(unit_id, text) is None
         for unit_id, text in compiler_texts.items()
-    ) or set(compiler_texts) not in (
-        set(),
-        {"unit:natural-guide", "unit:release-caption"},
-    ):
+    )
+    if skeleton.kernel_version == DUAL_TRACK_KERNEL_VERSION:
+        invalid_compiler_contract = (
+            invalid_compiler_contract
+            or compiler_ids not in (set(), legacy_compiler_ids)
+            or any(
+                unit_by_id[unit_id].text_source != "server_compiler"
+                or compiler_owned_unit_source(unit_id, text) is None
+                for unit_id, text in compiler_texts.items()
+            )
+        )
+    elif skeleton.kernel_version == KERNEL_VERSION:
+        invalid_compiler_contract = (
+            invalid_compiler_contract
+            or compiler_ids
+            not in (set(), graphic_fallback_ids, video_fallback_ids)
+            or any(
+                unit_by_id[unit_id].purpose
+                not in {
+                    "media_opening",
+                    "media_sequence",
+                    "subtitle_strategy",
+                    "production_note",
+                }
+                or unit_by_id[unit_id].text_source != "writer"
+                for unit_id in compiler_ids
+            )
+        )
+    if invalid_compiler_contract:
         raise ValueError("compiler-owned unit contract is invalid")
-    expected = dict(writable_by_id)
+    expected = {
+        unit_id: unit
+        for unit_id, unit in writable_by_id.items()
+        if unit_id not in compiler_ids
+    }
     returned_ids = [value.get("unit_id") for value in raw_units if isinstance(value, Mapping)]
     if (
         len(returned_ids) != len(raw_units)
@@ -646,7 +686,12 @@ def parse_writer_kernel(
     ):
         raise ValueError("writer unit coverage drifted from server skeleton")
     replacements: dict[str, CreativeKernelUnit] = {
-        unit_id: replace(unit_by_id[unit_id], text=text) for unit_id, text in compiler_texts.items()
+        unit_id: replace(
+            unit_by_id[unit_id],
+            text=text,
+            text_source="server_compiler",
+        )
+        for unit_id, text in compiler_texts.items()
     }
     unit_fields = (
         frozenset({"unit_id", "text", "claim_refs"})

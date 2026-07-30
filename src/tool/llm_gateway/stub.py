@@ -26,6 +26,7 @@ from src.shared.delivery_compiler import (
     DUAL_TRACK_DELIVERY_COMPILER_VERSION,
     DeliveryCompileInput,
     compile_delivery,
+    compiler_owned_media_unit_texts,
 )
 from src.shared.factual_basis import (
     FrozenFactRecord,
@@ -166,6 +167,16 @@ class DeterministicContentGenerator(ContentGenerator):
             == DUAL_TRACK_DELIVERY_COMPILER_VERSION
             else KERNEL_VERSION
         )
+        allowed_resources = frozenset(
+            {
+                "resource:original_composition",
+                "resource:creator_expression",
+                *(
+                    f"resource:product:{product.sku}"
+                    for product in request.products
+                ),
+            }
+        )
         skeleton = build_kernel_skeleton(
             frame=frame,
             fact_registry=facts,
@@ -175,11 +186,7 @@ class DeterministicContentGenerator(ContentGenerator):
                 prior_kernel=request.prior_creative_kernel,
                 revision_instruction=request.revision_instruction,
             ),
-            allowed_resource_ids=(
-                "resource:original_composition",
-                "resource:creator_expression",
-                *(f"resource:product:{product.sku}" for product in request.products),
-            ),
+            allowed_resource_ids=tuple(sorted(allowed_resources)),
             media_format=request.media_format,
             kernel_version=kernel_version,
         )
@@ -261,10 +268,22 @@ class DeterministicContentGenerator(ContentGenerator):
                 skeleton,
                 selected_fact_block_ids=selected_fact_block_ids,
             )
+        delivery_input = DeliveryCompileInput(
+            primary_product=request.primary_product,
+            media_format=request.media_format,
+            products=request.products,
+            production_conditions=request.brand.production_conditions,
+            allowed_resource_ids=allowed_resources,
+            immutable_fact_blocks=fact_blocks,
+            trusted_fact_texts=tuple(
+                (fact.fact_id, fact.exact_text)
+                for fact in facts
+            ),
+        )
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product)
             if kernel_version == DUAL_TRACK_KERNEL_VERSION
-            else {}
+            else compiler_owned_media_unit_texts(delivery_input)
         )
         text_by_id = {
             "unit:title": title,
@@ -308,23 +327,8 @@ class DeterministicContentGenerator(ContentGenerator):
             required_fact_block_ids=required_fact_block_ids,
             compiler_owned_text_by_id=compiler_texts,
         )
-        allowed_resources = frozenset(
-            {
-                "resource:original_composition",
-                "resource:creator_expression",
-                *(f"resource:product:{product.sku}" for product in request.products),
-            }
-        )
         compiled = compile_delivery(
-            DeliveryCompileInput(
-                primary_product=request.primary_product,
-                media_format=request.media_format,
-                products=request.products,
-                production_conditions=request.brand.production_conditions,
-                allowed_resource_ids=allowed_resources,
-                immutable_fact_blocks=fact_blocks,
-                trusted_fact_texts=tuple((fact.fact_id, fact.exact_text) for fact in facts),
-            ),
+            delivery_input,
             kernel,
         )
         selected_blocks = tuple(

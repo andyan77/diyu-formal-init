@@ -66,6 +66,7 @@ from src.shared.delivery_compiler import (
     DeliveryCompileInput,
     assert_compiled_delivery,
     compile_delivery,
+    compiler_owned_media_unit_texts,
 )
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import (
@@ -611,10 +612,21 @@ class DeepSeekGenerator(ContentGenerator):
                 skeleton,
                 selected_fact_block_ids=selected_fact_block_ids,
             )
+        delivery_input = DeliveryCompileInput(
+            primary_product=request.primary_product,
+            media_format=request.media_format,
+            products=request.products,
+            production_conditions=request.brand.production_conditions,
+            allowed_resource_ids=context.resource_ids,
+            immutable_fact_blocks=context.product_fact_blocks,
+            trusted_fact_texts=tuple(
+                sorted(context.fact_text_by_id.items())
+            ),
+        )
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product)
             if kernel_version == DUAL_TRACK_KERNEL_VERSION
-            else {}
+            else compiler_owned_media_unit_texts(delivery_input)
         )
         writer_payload, writer_retries = self._request(
             "你是笛语 CreativeKernel Writer。只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。",
@@ -657,28 +669,9 @@ class DeepSeekGenerator(ContentGenerator):
                 raise GenerationFailed("本次修改没有实质改变允许修改的创作单元")
         reviewed_kernel_digest = kernel_digest(kernel)
         reviewed_creative_digest = creative_units_digest(kernel)
-        compiled = compile_delivery(
-            DeliveryCompileInput(
-                primary_product=request.primary_product,
-                media_format=request.media_format,
-                products=request.products,
-                production_conditions=request.brand.production_conditions,
-                allowed_resource_ids=context.resource_ids,
-                immutable_fact_blocks=context.product_fact_blocks,
-                trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
-            ),
-            kernel,
-        )
+        compiled = compile_delivery(delivery_input, kernel)
         assert_compiled_delivery(
-            DeliveryCompileInput(
-                primary_product=request.primary_product,
-                media_format=request.media_format,
-                products=request.products,
-                production_conditions=request.brand.production_conditions,
-                allowed_resource_ids=context.resource_ids,
-                immutable_fact_blocks=context.product_fact_blocks,
-                trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
-            ),
+            delivery_input,
             kernel,
             compiled,
         )
@@ -1132,21 +1125,32 @@ class DeepSeekGenerator(ContentGenerator):
                 "mode": unit.mode,
                 "scope_id": unit.scope_id,
                 "visible_order": unit.visible_order,
-                "unit_contract": trusted_contracts[unit.unit_id],
-                "subject_scope": policy_by_unit[unit.unit_id].subject_scope,
-                "allowed_expression_types": list(
-                    policy_by_unit[unit.unit_id].allowed_expression_types
-                ),
-                "prohibited_bindings": list(
-                    policy_by_unit[unit.unit_id].prohibited_bindings
-                ),
-                "allowed_resources": [
+                **(
                     {
-                        "resource_id": resource_id,
-                        "description": resource_by_id[resource_id],
+                        "unit_contract": trusted_contracts[unit.unit_id],
+                        "subject_scope": (
+                            policy_by_unit[unit.unit_id].subject_scope
+                        ),
+                        "allowed_expression_types": list(
+                            policy_by_unit[
+                                unit.unit_id
+                            ].allowed_expression_types
+                        ),
+                        "prohibited_bindings": list(
+                            policy_by_unit[unit.unit_id].prohibited_bindings
+                        ),
+                        "allowed_resources": [
+                            {
+                                "resource_id": resource_id,
+                                "description": resource_by_id[resource_id],
+                            }
+                            for resource_id
+                            in unit.allowed_resource_ids
+                        ],
                     }
-                    for resource_id in unit.allowed_resource_ids
-                ],
+                    if skeleton.kernel_version == KERNEL_VERSION
+                    else {}
+                ),
                 **(
                     {
                         "expression_requirement": (

@@ -117,6 +117,57 @@ class CompiledDelivery:
     visible_provenance: dict[str, tuple[str, ...]]
 
 
+def compiler_owned_media_unit_texts(
+    request: DeliveryCompileInput,
+) -> dict[str, str]:
+    """Return the safe media plan when no concrete visual asset is registered.
+
+    This is intentionally a narrow fallback.  Product-bearing work keeps its
+    media units Writer-owned because the selected product resources are
+    concrete.  A seed or trusted fact is not itself permission to invent a
+    photograph, location or prop.
+    """
+
+    if any(
+        resource_id.startswith("resource:product:")
+        for resource_id in request.allowed_resource_ids
+    ):
+        return {}
+    if request.media_format == "graphic":
+        return {
+            "unit:media-opening": (
+                "首图使用本篇标题、抽象色块和线条构图，不调用现实照片或未登记对象。"
+            ),
+            "unit:media-sequence": (
+                "第 1 张呈现标题与观看回报；中间页分别承接服务端插入的事实原句和"
+                "核心表达；末张保留发布配文。"
+            ),
+            "unit:production-note": (
+                "只使用原创字体排版、色块、线条、符号和留白；不添加现实人物、"
+                "场地、道具、商品或外部素材。"
+            ),
+        }
+    opening = (
+        "开头由创作者本人直接说出标题；不重演用户经历，也不调用未登记场景或道具。"
+        if CREATOR_EXPRESSION_RESOURCE_ID in request.allowed_resource_ids
+        else "开头使用原创标题字与抽象图形，不调用现实人物、场地或道具。"
+    )
+    return {
+        "unit:media-opening": opening,
+        "unit:media-sequence": (
+            "先给出观看回报，再由创作者本人或原创文字画面承接事实原句与核心表达，"
+            "最后自然收束；不重演现实经过。"
+        ),
+        "unit:subtitle-strategy": (
+            "字幕只保留标题、事实原句和关键转折，不机械复制整段台词。"
+        ),
+        "unit:production-note": (
+            "只使用创作者本人、原创排版与已登记声音条件完成；不增加演员、"
+            "地点、商品、道具或外部素材。"
+        ),
+    }
+
+
 def compile_delivery(
     request: DeliveryCompileInput,
     kernel: CreativeKernelV1,
@@ -196,6 +247,11 @@ def _assert_expression_plan(
     fact_text_by_id = dict(request.trusted_fact_texts)
     if len(fact_text_by_id) != len(request.trusted_fact_texts):
         raise GenerationFailed("可信事实轨来源重复")
+    expected_compiler_texts = (
+        compiler_owned_unit_texts(request.primary_product)
+        if kernel.kernel_version == DUAL_TRACK_KERNEL_VERSION
+        else compiler_owned_media_unit_texts(request)
+    )
     for unit in kernel.units:
         if unit.track == "trusted_fact":
             if (
@@ -217,11 +273,12 @@ def _assert_expression_plan(
             or any(resource_id not in request.allowed_resource_ids for resource_id in unit.allowed_resource_ids)
         ):
             raise GenerationFailed("创作表达轨结构漂移")
-        if (
-            kernel.kernel_version == DUAL_TRACK_KERNEL_VERSION
-            and unit.purpose in {"natural_guide", "release_caption"}
-        ):
-            if unit.text_source != "server_compiler":
+        expected_compiler_text = expected_compiler_texts.get(unit.unit_id)
+        if expected_compiler_text is not None:
+            if (
+                unit.text_source != "server_compiler"
+                or unit.text != expected_compiler_text
+            ):
                 raise GenerationFailed("编译器中性文字来源漂移")
         elif unit.text_source not in {"writer", "prior_version"}:
             raise GenerationFailed("创作表达文字来源漂移")

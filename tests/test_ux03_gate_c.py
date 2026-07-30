@@ -40,6 +40,7 @@ from src.shared.delivery_compiler import (
     ORIGINAL_COMPOSITION_RESOURCE_ID,
     DeliveryCompileInput,
     compile_delivery,
+    compiler_owned_media_unit_texts,
 )
 from src.shared.errors import DomainError
 from src.shared.narrative import new_frame, visible_digest
@@ -218,6 +219,15 @@ def _filled_kernel(request: GenerationInput) -> object:
         media_format=request.media_format,
         kernel_version=KERNEL_VERSION,
     )
+    compiler_texts = compiler_owned_media_unit_texts(
+        DeliveryCompileInput(
+            primary_product=request.primary_product,
+            media_format=request.media_format,
+            products=(),
+            production_conditions=request.brand.production_conditions,
+            allowed_resource_ids=_RESOURCES,
+        )
+    )
     text_by_purpose = {
         "title": "甜味把熟悉的一天叫醒了",
         "natural_guide": "看一次熟悉感被意外打断后，人会怎样重新注意日常。",
@@ -235,9 +245,14 @@ def _filled_kernel(request: GenerationInput) -> object:
                 "text": text_by_purpose[unit.purpose],
             }
             for unit in skeleton.writable_units
+            if unit.unit_id not in compiler_texts
         ]
     }
-    return parse_writer_kernel(raw, skeleton)
+    return parse_writer_kernel(
+        raw,
+        skeleton,
+        compiler_owned_text_by_id=compiler_texts,
+    )
 
 
 def test_media_native_units_compile_one_scope_and_distinct_platform_parts() -> None:
