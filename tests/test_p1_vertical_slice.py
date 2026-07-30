@@ -68,7 +68,10 @@ def test_content_disclosure_uses_persisted_server_source_and_rejects_client_over
     generated = service.create_from_weak_seed(scope, _SEED)
     assert generated["ai_generated"] is True
     assert generated["aigc_label"] == "AI 辅助生成"
-    assert generated["aigc_release_reminder"] == "发布到当前平台前，请使用平台提供的 AI 内容声明功能；以发布页当前规则为准。"
+    assert (
+        generated["aigc_release_reminder"]
+        == "发布到当前平台前，请使用平台提供的 AI 内容声明功能；以发布页当前规则为准。"
+    )
     task_id = generated["task_id"]
     assert isinstance(task_id, str)
     assert service.fetch_version(scope, UUID(task_id), 1)["ai_generated"] is True
@@ -96,7 +99,7 @@ def test_workbench_renders_complete_artifact_without_internal_trace() -> None:
         assert "完整文字成品" in page.text
         assert "内容概要" in page.text
         assert "完整台词/解说" in page.text
-        assert "画面与动作" in page.text
+        assert "画面动作" in page.text
         assert "字幕" in page.text
         assert "声音与制作提示" in page.text
         assert "离线确定性测试模式" in page.text

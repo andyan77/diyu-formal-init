@@ -237,12 +237,8 @@ def build_kernel_skeleton(
     if program_id == ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM and frame.narrative_mode != "actuality_reflection":
         raise ValueError("local dramatization program requires actuality reflection")
     body_types: tuple[ObservationType, ...]
-    uses_hypothesis_body = (
-        frame.narrative_mode == "hypothesis"
-        or (
-            kernel_version == KERNEL_VERSION
-            and frame.narrative_mode == "actuality_reflection"
-        )
+    uses_hypothesis_body = frame.narrative_mode == "hypothesis" or (
+        kernel_version == KERNEL_VERSION and frame.narrative_mode == "actuality_reflection"
     )
     if uses_hypothesis_body:
         body_types = ("hypothesis",)
@@ -281,11 +277,7 @@ def build_kernel_skeleton(
             mode="general_observation",
             scope_id="scope:general-observation-v1",
             allowed_resource_ids=resources,
-            text_source=(
-                "server_compiler"
-                if compiler_owned_supporting_copy
-                else "writer"
-            ),
+            text_source=("server_compiler" if compiler_owned_supporting_copy else "writer"),
         ),
     ]
     if not compiler_owned_supporting_copy:
@@ -494,11 +486,7 @@ def build_kernel_skeleton(
             mode="general_observation",
             scope_id="scope:general-observation-v1",
             allowed_resource_ids=resources,
-            text_source=(
-                "server_compiler"
-                if compiler_owned_supporting_copy
-                else "writer"
-            ),
+            text_source=("server_compiler" if compiler_owned_supporting_copy else "writer"),
         )
     )
     return CreativeKernelV1(
@@ -549,7 +537,7 @@ def freeze_prior_revision_units(
         raise ValueError("prior reflection unit is unavailable") from exc
     if (
         prior_reflection.track != "creative_expression"
-        or prior_reflection.mode != "general_observation"
+        or prior_reflection.mode not in {"general_observation", "hypothesis"}
         or not prior_reflection.text
     ):
         raise ValueError("prior reflection unit cannot be frozen")
@@ -582,9 +570,7 @@ def parse_writer_kernel(
     compiler_owned_text_by_id: Mapping[str, str] | None = None,
 ) -> CreativeKernelV1:
     product_contract = bool(fact_blocks)
-    server_selected_product_facts = product_contract and bool(
-        skeleton.selected_fact_block_ids
-    )
+    server_selected_product_facts = product_contract and bool(skeleton.selected_fact_block_ids)
     expected_root = (
         frozenset({"units", "fact_block_refs"})
         if product_contract and not server_selected_product_facts
@@ -611,9 +597,8 @@ def parse_writer_kernel(
             raise ValueError("revision changed immutable fact blocks")
     elif product_contract:
         available_block_ids = {block.fact_block_id for block in fact_blocks}
-        if (
-            len(selected_fact_block_ids) > MAX_PRODUCT_FACT_BLOCKS
-            or any(block_id not in available_block_ids for block_id in selected_fact_block_ids)
+        if len(selected_fact_block_ids) > MAX_PRODUCT_FACT_BLOCKS or any(
+            block_id not in available_block_ids for block_id in selected_fact_block_ids
         ):
             raise ValueError("service-selected immutable fact blocks are invalid")
         if required_fact_block_ids is not None and selected_fact_block_ids != required_fact_block_ids:
@@ -639,9 +624,7 @@ def parse_writer_kernel(
         "unit:subtitle-strategy",
     }
     invalid_compiler_contract = any(
-        unit_id not in unit_by_id
-        or not isinstance(text, str)
-        or not text.strip()
+        unit_id not in unit_by_id or not isinstance(text, str) or not text.strip()
         for unit_id, text in compiler_texts.items()
     )
     if skeleton.kernel_version == DUAL_TRACK_KERNEL_VERSION:
@@ -657,8 +640,7 @@ def parse_writer_kernel(
     elif skeleton.kernel_version == KERNEL_VERSION:
         invalid_compiler_contract = (
             invalid_compiler_contract
-            or compiler_ids
-            not in (set(), graphic_fallback_ids, video_fallback_ids)
+            or compiler_ids not in (set(), graphic_fallback_ids, video_fallback_ids)
             or any(
                 unit_by_id[unit_id].purpose
                 not in {
@@ -673,11 +655,7 @@ def parse_writer_kernel(
         )
     if invalid_compiler_contract:
         raise ValueError("compiler-owned unit contract is invalid")
-    expected = {
-        unit_id: unit
-        for unit_id, unit in writable_by_id.items()
-        if unit_id not in compiler_ids
-    }
+    expected = {unit_id: unit for unit_id, unit in writable_by_id.items() if unit_id not in compiler_ids}
     returned_ids = [value.get("unit_id") for value in raw_units if isinstance(value, Mapping)]
     if (
         len(returned_ids) != len(raw_units)
@@ -702,8 +680,7 @@ def parse_writer_kernel(
         if not isinstance(raw_unit, Mapping) or frozenset(raw_unit) != unit_fields:
             message = (
                 "writer creative unit fields are invalid"
-                if (product_contract and not server_selected_product_facts)
-                or require_claim_refs
+                if (product_contract and not server_selected_product_facts) or require_claim_refs
                 else "writer units may contain only unit_id and text"
             )
             raise TypeError(message)
@@ -1191,10 +1168,7 @@ def _unit_text_source(
 ) -> UnitTextSource:
     if purpose == "frozen_fact":
         expected: UnitTextSource = "server_fact"
-    elif (
-        purpose in {"natural_guide", "release_caption"}
-        and kernel_version != KERNEL_VERSION
-    ):
+    elif purpose in {"natural_guide", "release_caption"} and kernel_version != KERNEL_VERSION:
         expected = "server_compiler"
     else:
         expected = "writer"

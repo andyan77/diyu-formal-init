@@ -163,18 +163,14 @@ class DeterministicContentGenerator(ContentGenerator):
         )
         kernel_version = (
             DUAL_TRACK_KERNEL_VERSION
-            if request.delivery_compiler_version
-            == DUAL_TRACK_DELIVERY_COMPILER_VERSION
+            if request.delivery_compiler_version == DUAL_TRACK_DELIVERY_COMPILER_VERSION
             else KERNEL_VERSION
         )
         allowed_resources = frozenset(
             {
                 "resource:original_composition",
                 "resource:creator_expression",
-                *(
-                    f"resource:product:{product.sku}"
-                    for product in request.products
-                ),
+                *(f"resource:product:{product.sku}" for product in request.products),
             }
         )
         skeleton = build_kernel_skeleton(
@@ -202,19 +198,16 @@ class DeterministicContentGenerator(ContentGenerator):
             release_caption = subtitles + _control_sections(request)
             title = _outline(request.primary_product)
         else:
+            if request.primary_product == "visual_styling_story" and any(
+                phrase in request.weak_seed for phrase in ("无口播", "无对白", "无解说", "不讲")
+            ):
+                spoken = "无口播、无对白、无解说；由已登记商品画面、动作关系和字幕承担内容。"
             direction = (
-                "、".join(
-                    selection.applied_label
-                    for selection in request.creative_direction.selections
-                )
+                "、".join(selection.applied_label for selection in request.creative_direction.selections)
                 if request.creative_direction is not None
                 else ""
             )
-            custom = (
-                request.creative_direction.custom_text
-                if request.creative_direction is not None
-                else ""
-            )
+            custom = request.creative_direction.custom_text if request.creative_direction is not None else ""
             series_bridge = ""
             if request.series_context and request.series_context.prior_entries:
                 previous = request.series_context.prior_entries[-1]
@@ -223,19 +216,24 @@ class DeterministicContentGenerator(ContentGenerator):
                     f"这一篇把观察推进到第 {request.series_context.target_position} 篇。"
                 )
             control_bridge = (
-                "\n\n本次表达会采用"
-                + "、".join(value for value in (direction, custom) if value)
-                + "。"
+                "\n\n本次表达会采用" + "、".join(value for value in (direction, custom) if value) + "。"
                 if direction or custom
                 else ""
             )
-            spoken = spoken + series_bridge + control_bridge
+            account_bridge = (
+                "\n\n这次从这个账号一贯的表达位置展开：" + request.account_expression.identity_position
+                if request.account_expression is not None
+                else ""
+            )
+            material_bridge = (
+                "\n\n本次只参考已明确选择的" + "、".join(item.title for item in request.reference_materials) + "。"
+                if request.reference_materials
+                else ""
+            )
+            spoken = spoken + series_bridge + control_bridge + account_bridge + material_bridge
             if request.revision_instruction:
                 spoken += "\n\n这次按你的修改要求改变了允许调整的表达。"
-            release_caption = (
-                subtitles.splitlines()[0].strip()
-                + ("；接着上篇继续。" if series_bridge else "")
-            )
+            release_caption = subtitles.splitlines()[0].strip() + ("；接着上篇继续。" if series_bridge else "")
             title = _media_native_title(request.primary_product)
         product_packet = build_product_fact_packet(
             request.products,
@@ -244,24 +242,17 @@ class DeterministicContentGenerator(ContentGenerator):
         fact_blocks = immutable_product_fact_blocks(product_packet)
         required_fact_block_ids: tuple[str, ...] | None = None
         if request.prior_creative_kernel is not None:
-            required_fact_block_ids = (
-                request.prior_creative_kernel.selected_fact_block_ids
-                or tuple(
-                    block.fact_block_id
-                    for block in fact_blocks
-                    if any(
-                        unit.purpose == "frozen_fact"
-                        and unit.fact_refs == (block.fact_id,)
-                        for unit in request.prior_creative_kernel.units
-                    )
+            required_fact_block_ids = request.prior_creative_kernel.selected_fact_block_ids or tuple(
+                block.fact_block_id
+                for block in fact_blocks
+                if any(
+                    unit.purpose == "frozen_fact" and unit.fact_refs == (block.fact_id,)
+                    for unit in request.prior_creative_kernel.units
                 )
             )
-        selected_fact_block_ids = (
-            required_fact_block_ids
-            or select_product_fact_block_ids(
-                product_packet,
-                limit=MAX_PRODUCT_FACT_BLOCKS,
-            )
+        selected_fact_block_ids = required_fact_block_ids or select_product_fact_block_ids(
+            product_packet,
+            limit=MAX_PRODUCT_FACT_BLOCKS,
         )
         if fact_blocks:
             skeleton = replace(
@@ -275,10 +266,7 @@ class DeterministicContentGenerator(ContentGenerator):
             production_conditions=request.brand.production_conditions,
             allowed_resource_ids=allowed_resources,
             immutable_fact_blocks=fact_blocks,
-            trusted_fact_texts=tuple(
-                (fact.fact_id, fact.exact_text)
-                for fact in facts
-            ),
+            trusted_fact_texts=tuple((fact.fact_id, fact.exact_text) for fact in facts),
         )
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product)
@@ -294,14 +282,16 @@ class DeterministicContentGenerator(ContentGenerator):
                 else "开头两秒由创作者直接抛出本篇核心反差。"
             ),
             "unit:media-sequence": (
-                "第 1 张给出入口；第 2、3 张推进判断；末张收束到可执行选择。"
+                (
+                    "只补拍四张：第 1 张给出入口；第 2、3 张推进判断；第 4 张收束到可执行选择。"
+                    if "四张" in request.brand.production_conditions
+                    else "第 1 张给出入口；第 2、3 张推进判断；末张收束到可执行选择。"
+                )
                 if request.media_format == "graphic"
                 else "先抛出反差，再拆开判断，最后回到一个可执行选择。"
             ),
             "unit:subtitle-strategy": "只标出转折句和最终选择，不重复整段台词。",
-            "unit:production-note": (
-                "使用当前登记的创作者、手机和普通室内条件完成；声音保持自然。"
-            ),
+            "unit:production-note": ("使用当前登记的创作者、手机和普通室内条件完成；声音保持自然。"),
             "unit:body": spoken,
             "unit:body-opening": spoken,
             "unit:hypothetical-example": ("一方先停一下，另一方也不必马上给出答案。"),

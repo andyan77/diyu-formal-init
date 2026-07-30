@@ -94,9 +94,7 @@ def test_platform_provenance_distinguishes_explicit_null_from_a_missing_field(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    resource = json.loads(
-        platform_directions._SOURCE.read_text(encoding="utf-8")
-    )
+    resource = json.loads(platform_directions._SOURCE.read_text(encoding="utf-8"))
     del resource["provenance"][missing_key]
     source = tmp_path / "platform_directions.json"
     source.write_text(json.dumps(resource, ensure_ascii=False), encoding="utf-8")
@@ -115,10 +113,10 @@ def test_four_targets_are_complete_and_server_mapped(app_database_url: str) -> N
         "wechat_channels_video": str(HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID),
     }
     expected_headings = {
-        "douyin_video": "完整观看链",
-        "xiaohongshu_video": "完整观看链",
+        "douyin_video": "完整台词/解说",
+        "xiaohongshu_video": "完整台词/解说",
         "xiaohongshu_graphic": "图序与每张职责",
-        "wechat_channels_video": "完整观看链",
+        "wechat_channels_video": "完整台词/解说",
     }
     with TestClient(app) as client:
         client.get("/ui/select/content")
@@ -129,9 +127,7 @@ def test_four_targets_are_complete_and_server_mapped(app_database_url: str) -> N
             created = client.post("/api/v1/content", json={"weak_seed": _P2D, "target": target})
             assert created.status_code == 200
             payload = created.json()
-            task_account, product, refs, media_format = _task_row(
-                app_database_url, payload["task_id"]
-            )
+            task_account, product, refs, media_format = _task_row(app_database_url, payload["task_id"])
             assert task_account == account_id
             assert product == "product_truth"
             assert refs == ["ZX-C218"]
@@ -150,10 +146,7 @@ def test_four_targets_are_complete_and_server_mapped(app_database_url: str) -> N
     with TestClient(app) as store:
         store.get("/ui/select/content-store")
         assert (
-            store.post(
-                "/api/v1/content", json={"weak_seed": _P2D, "target": "xiaohongshu_graphic"}
-            ).status_code
-            == 403
+            store.post("/api/v1/content", json={"weak_seed": _P2D, "target": "xiaohongshu_graphic"}).status_code == 403
         )
 
 
@@ -162,9 +155,7 @@ def test_recompile_isolated_and_same_target_revisions_stay_on_one_item(
 ) -> None:
     with TestClient(create_app(Settings.model_validate({}))) as client:
         client.get("/ui/select/content")
-        source = client.post(
-            "/api/v1/content", json={"weak_seed": _P2D, "target": "douyin_video"}
-        ).json()
+        source = client.post("/api/v1/content", json={"weak_seed": _P2D, "target": "douyin_video"}).json()
         adapted = client.post(
             "/api/v1/content",
             json={
@@ -178,17 +169,13 @@ def test_recompile_isolated_and_same_target_revisions_stay_on_one_item(
         assert graphic["task_id"] != source["task_id"]
         assert graphic["version"] == 1
         assert graphic["adapted_from"] == "由抖音视频 V1 改编"
-        assert "完整发布正文" in graphic["body"]
-        original = client.get(
-            f"/api/v1/tasks/{source['task_id']}/versions/1?target=douyin_video"
-        ).json()
+        assert "完整正文" in graphic["body"]
+        original = client.get(f"/api/v1/tasks/{source['task_id']}/versions/1?target=douyin_video").json()
         assert original["body"] == source["body"]
         task_account, product, refs, media_format = _task_row(app_database_url, graphic["task_id"])
         assert task_account == str(HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID)
         assert (product, refs, media_format) == ("product_truth", ["ZX-C218"], "graphic")
-        target_history = client.get(
-            "/api/v1/content/tasks?target=xiaohongshu_graphic"
-        ).json()
+        target_history = client.get("/api/v1/content/tasks?target=xiaohongshu_graphic").json()
         persisted = next(item for item in target_history if item["task_id"] == graphic["task_id"])
         assert persisted["source_version_id"] == source["version_id"]
         revised = client.post(
@@ -202,14 +189,14 @@ def test_recompile_isolated_and_same_target_revisions_stay_on_one_item(
         assert "只补拍四张" in graphic_v2["body"]
         revision_receipt = _receipt(app_database_url, graphic["task_id"])
         assert revision_receipt["source_description"] == "由抖音视频 V1 改编"
-        assert client.get(
-            f"/api/v1/content/tasks/{graphic['task_id']}/versions"
-            "?target=xiaohongshu_graphic"
-        ).json()[0]["version"] == 2
         assert (
-            client.get(f"/api/v1/tasks/{source['task_id']}/versions/1?target=douyin_video").json()[
-                "body"
+            client.get(f"/api/v1/content/tasks/{graphic['task_id']}/versions?target=xiaohongshu_graphic").json()[0][
+                "version"
             ]
+            == 2
+        )
+        assert (
+            client.get(f"/api/v1/tasks/{source['task_id']}/versions/1?target=douyin_video").json()["body"]
             == source["body"]
         )
 
@@ -250,9 +237,7 @@ def test_same_target_reuse_parent_is_not_mislabeled_as_platform_adaptation(
 def test_transform_boundaries_receipts_and_silent_store_video(app_database_url: str) -> None:
     with TestClient(create_app(Settings.model_validate({}))) as headquarters:
         headquarters.get("/ui/select/content")
-        source = headquarters.post(
-            "/api/v1/content", json={"weak_seed": _P2D, "target": "douyin_video"}
-        ).json()
+        source = headquarters.post("/api/v1/content", json={"weak_seed": _P2D, "target": "douyin_video"}).json()
         short = headquarters.post(
             f"/api/v1/tasks/{source['task_id']}/revisions",
             json={"instruction": "压成 8 秒，什么都别删。", "target": "douyin_video"},
@@ -260,9 +245,7 @@ def test_transform_boundaries_receipts_and_silent_store_video(app_database_url: 
         assert short.status_code == 201
         assert "8 秒窄主题版" in short.json()["body"]
         assert (
-            headquarters.get(
-                f"/api/v1/tasks/{source['task_id']}/versions/1?target=douyin_video"
-            ).json()["body"]
+            headquarters.get(f"/api/v1/tasks/{source['task_id']}/versions/1?target=douyin_video").json()["body"]
             == source["body"]
         )
         receipt = _receipt(app_database_url, source["task_id"])
@@ -279,16 +262,14 @@ def test_transform_boundaries_receipts_and_silent_store_video(app_database_url: 
         assert snapshot["last_verified_at"] == "2026-07-26"
         assert snapshot["freshness_status"] == "current_for_phase_1"
         assert snapshot["maintenance_owner"] == "笛语系统运维"
-        assert snapshot["direction_digest"] == direction_for(
-            "douyin_video"
-        ).direction_digest
+        assert snapshot["direction_digest"] == direction_for("douyin_video").direction_digest
         assert "8 秒" in str(receipt["production_conditions"])
     with TestClient(create_app(Settings.model_validate({}))) as store:
         store.get("/ui/select/content-store")
         created = store.post("/api/v1/content", json={"weak_seed": _P5D, "target": "douyin_video"})
         assert created.status_code == 200
         body = created.json()["body"]
-        assert "完整观看链" in body
+        assert "完整台词/解说" in body
         assert "无口播、无对白、无解说" in body
         assert "声音与制作提示" in body
         assert "图序与每张职责" not in body

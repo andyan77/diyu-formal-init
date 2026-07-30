@@ -79,20 +79,12 @@ _PHRASES: dict[str, str] = {
     "phrase:title-hypothesis": "假设一下：",
     "phrase:title-dramatization": "情景演绎：",
     "phrase:artifact-general": "以下是围绕这个主题的创作表达，不对应真实人物或经历。",
-    "phrase:artifact-user-fact": (
-        "以下内容保留你提供的真实片段；其余为创作性观察，不补充现实细节。"
-    ),
-    "phrase:artifact-confirmed-fact": (
-        "以下只引用已确认的信息；其余为一般观察，不增加新的现实主张。"
-    ),
+    "phrase:artifact-user-fact": ("以下内容保留你提供的真实片段；其余为创作性观察，不补充现实细节。"),
+    "phrase:artifact-confirmed-fact": ("以下只引用已确认的信息；其余为一般观察，不增加新的现实主张。"),
     "phrase:artifact-hypothesis": "下面的片段是假设，不代表真实发生。",
-    "phrase:artifact-user-fact-hypothesis": (
-        "以下保留你提供的真实片段；其余是创作性推演，不作为这段经历的事实补充。"
-    ),
+    "phrase:artifact-user-fact-hypothesis": ("以下保留你提供的真实片段；其余是创作性推演，不作为这段经历的事实补充。"),
     "phrase:artifact-dramatization": "以下内容包含情景演绎，不对应真实人物或经历。",
-    "phrase:artifact-user-fact-drama": (
-        "以下内容保留你提供的真实片段；小剧场为情景演绎，不对应现实经历。"
-    ),
+    "phrase:artifact-user-fact-drama": ("以下内容保留你提供的真实片段；小剧场为情景演绎，不对应现实经历。"),
 }
 
 
@@ -128,23 +120,16 @@ def compiler_owned_media_unit_texts(
     photograph, location or prop.
     """
 
-    if any(
-        resource_id.startswith("resource:product:")
-        for resource_id in request.allowed_resource_ids
-    ):
+    if any(resource_id.startswith("resource:product:") for resource_id in request.allowed_resource_ids):
         return {}
     if request.media_format == "graphic":
         return {
-            "unit:media-opening": (
-                "首图使用本篇标题、抽象色块和线条构图，不调用现实照片或未登记对象。"
-            ),
+            "unit:media-opening": ("首图使用本篇标题、抽象色块和线条构图，不调用现实照片或未登记对象。"),
             "unit:media-sequence": (
-                "第 1 张呈现标题与观看回报；中间页分别承接服务端插入的事实原句和"
-                "核心表达；末张保留发布配文。"
+                "第 1 张呈现标题与观看回报；中间页分别承接服务端插入的事实原句和核心表达；末张保留发布配文。"
             ),
             "unit:production-note": (
-                "只使用原创字体排版、色块、线条、符号和留白；不添加现实人物、"
-                "场地、道具、商品或外部素材。"
+                "只使用原创字体排版、色块、线条、符号和留白；不添加现实人物、场地、道具、商品或外部素材。"
             ),
         }
     opening = (
@@ -155,15 +140,11 @@ def compiler_owned_media_unit_texts(
     return {
         "unit:media-opening": opening,
         "unit:media-sequence": (
-            "先给出观看回报，再由创作者本人或原创文字画面承接事实原句与核心表达，"
-            "最后自然收束；不重演现实经过。"
+            "先给出观看回报，再由创作者本人或原创文字画面承接事实原句与核心表达，最后自然收束；不重演现实经过。"
         ),
-        "unit:subtitle-strategy": (
-            "字幕只保留标题、事实原句和关键转折，不机械复制整段台词。"
-        ),
+        "unit:subtitle-strategy": ("字幕只保留标题、事实原句和关键转折，不机械复制整段台词。"),
         "unit:production-note": (
-            "只使用创作者本人、原创排版与已登记声音条件完成；不增加演员、"
-            "地点、商品、道具或外部素材。"
+            "只使用创作者本人、原创排版与已登记声音条件完成；不增加演员、地点、商品、道具或外部素材。"
         ),
     }
 
@@ -248,9 +229,7 @@ def _assert_expression_plan(
     if len(fact_text_by_id) != len(request.trusted_fact_texts):
         raise GenerationFailed("可信事实轨来源重复")
     expected_compiler_texts = (
-        compiler_owned_unit_texts(request.primary_product)
-        if kernel.kernel_version == DUAL_TRACK_KERNEL_VERSION
-        else compiler_owned_media_unit_texts(request)
+        compiler_owned_media_unit_texts(request) if kernel.kernel_version == KERNEL_VERSION else {}
     )
     for unit in kernel.units:
         if unit.track == "trusted_fact":
@@ -274,11 +253,14 @@ def _assert_expression_plan(
         ):
             raise GenerationFailed("创作表达轨结构漂移")
         expected_compiler_text = expected_compiler_texts.get(unit.unit_id)
-        if expected_compiler_text is not None:
-            if (
-                unit.text_source != "server_compiler"
-                or unit.text != expected_compiler_text
-            ):
+        if kernel.kernel_version == DUAL_TRACK_KERNEL_VERSION:
+            if unit.purpose in {"natural_guide", "release_caption"}:
+                if unit.text_source != "server_compiler":
+                    raise GenerationFailed("编译器中性文字来源漂移")
+            elif unit.text_source not in {"writer", "prior_version"}:
+                raise GenerationFailed("创作表达文字来源漂移")
+        elif expected_compiler_text is not None:
+            if unit.text_source != "server_compiler" or unit.text != expected_compiler_text:
                 raise GenerationFailed("编译器中性文字来源漂移")
         elif unit.text_source not in {"writer", "prior_version"}:
             raise GenerationFailed("创作表达文字来源漂移")
@@ -360,9 +342,7 @@ def _compile_delivery_v2(
         )
     )
     spoken_sources = tuple(
-        source
-        for unit in spoken_parts
-        for source in (unit.unit_id, _visible_unit_scope_source(unit))
+        source for unit in spoken_parts for source in (unit.unit_id, _visible_unit_scope_source(unit))
     )
     provenance: dict[str, tuple[str, ...]] = {
         "outline": (singleton_by_purpose["title"].unit_id, title_scope_source),
@@ -461,14 +441,9 @@ def _compile_delivery_v3(
     }
     if request.media_format == "video":
         singleton_purposes.add("subtitle_strategy")
-    singleton = {
-        unit.purpose: unit
-        for unit in kernel.units
-        if unit.purpose in singleton_purposes
-    }
+    singleton = {unit.purpose: unit for unit in kernel.units if unit.purpose in singleton_purposes}
     if set(singleton) != singleton_purposes or any(
-        sum(unit.purpose == purpose for unit in kernel.units) != 1
-        for purpose in singleton_purposes
+        sum(unit.purpose == purpose for unit in kernel.units) != 1 for purpose in singleton_purposes
     ):
         raise GenerationFailed("创作内核缺少完整媒体原生单元")
     body_units = tuple(unit for unit in kernel.units if unit.purpose == "body")
@@ -480,18 +455,10 @@ def _compile_delivery_v3(
     title = singleton["title"].text.strip()
     guide = singleton["natural_guide"].text.strip()
     release = singleton["release_caption"].text.strip()
-    fact_units = tuple(
-        unit for unit in kernel.units if unit.purpose == "frozen_fact"
-    )
+    fact_units = tuple(unit for unit in kernel.units if unit.purpose == "frozen_fact")
     spoken_parts = (*fact_units, *body_units)
-    spoken = "\n\n".join(
-        _visible_unit_v3(unit)
-        for unit in spoken_parts
-    )
-    creative_body = "\n\n".join(
-        _visible_unit_v3(unit)
-        for unit in body_units
-    )
+    spoken = "\n\n".join(_visible_unit_v3(unit) for unit in spoken_parts)
+    creative_body = "\n\n".join(_visible_unit_v3(unit) for unit in body_units)
     artifact_scope_source = _artifact_scope_source(kernel)
     artifact_scope = _PHRASES[artifact_scope_source]
     contract = _contract(
@@ -512,13 +479,8 @@ def _compile_delivery_v3(
     resource_refs: tuple[str, ...] = (ORIGINAL_COMPOSITION_RESOURCE_ID,)
     if request.primary_product in {"product_truth", "visual_styling_story"}:
         resource_refs = tuple(dict.fromkeys((*resource_refs, *product_resources)))
-    if (
-        request.media_format == "video"
-        and CREATOR_EXPRESSION_RESOURCE_ID in request.allowed_resource_ids
-    ):
-        resource_refs = tuple(
-            dict.fromkeys((*resource_refs, CREATOR_EXPRESSION_RESOURCE_ID))
-        )
+    if request.media_format == "video" and CREATOR_EXPRESSION_RESOURCE_ID in request.allowed_resource_ids:
+        resource_refs = tuple(dict.fromkeys((*resource_refs, CREATOR_EXPRESSION_RESOURCE_ID)))
 
     scope_and_units = (
         artifact_scope_source,
@@ -528,9 +490,7 @@ def _compile_delivery_v3(
         "outline": (singleton["title"].unit_id,),
         "artifact_scope": (artifact_scope_source,),
         "natural_guide": (singleton["natural_guide"].unit_id,),
-        "release_caption_and_interaction": (
-            singleton["release_caption"].unit_id,
-        ),
+        "release_caption_and_interaction": (singleton["release_caption"].unit_id,),
     }
     production: ContentProductionBundle
     if request.media_format == "graphic":
@@ -551,16 +511,10 @@ def _compile_delivery_v3(
                     for unit in spoken_parts
                     for source in (
                         unit.unit_id,
-                        *(
-                            (_visible_unit_scope_source(unit),)
-                            if unit.track == "trusted_fact"
-                            else ()
-                        ),
+                        *((_visible_unit_scope_source(unit),) if unit.track == "trusted_fact" else ()),
                     )
                 ),
-                "layout_and_production": (
-                    singleton["production_note"].unit_id,
-                ),
+                "layout_and_production": (singleton["production_note"].unit_id,),
             }
         )
     else:
@@ -582,9 +536,7 @@ def _compile_delivery_v3(
         )
         provenance.update(
             {
-                "cover_or_first_frame": (
-                    singleton["media_opening"].unit_id,
-                ),
+                "cover_or_first_frame": (singleton["media_opening"].unit_id,),
                 "viewing_flow": (
                     singleton["media_opening"].unit_id,
                     singleton["media_sequence"].unit_id,
@@ -594,18 +546,12 @@ def _compile_delivery_v3(
                     for unit in spoken_parts
                     for source in (
                         unit.unit_id,
-                        *(
-                            (_visible_unit_scope_source(unit),)
-                            if unit.track == "trusted_fact"
-                            else ()
-                        ),
+                        *((_visible_unit_scope_source(unit),) if unit.track == "trusted_fact" else ()),
                     )
                 ),
                 "visual_actions": (singleton["media_sequence"].unit_id,),
                 "subtitles": (singleton["subtitle_strategy"].unit_id,),
-                "sound_and_production": (
-                    singleton["production_note"].unit_id,
-                ),
+                "sound_and_production": (singleton["production_note"].unit_id,),
                 "natural_duration": ("compiler:duration",),
             }
         )
@@ -617,11 +563,7 @@ def _compile_delivery_v3(
     provenance["body"] = (
         "compiler:visible-body",
         *scope_and_units,
-        *tuple(
-            source
-            for sources in provenance.values()
-            for source in sources
-        ),
+        *tuple(source for sources in provenance.values() for source in sources),
     )
     return CompiledDelivery(
         outline=title,
@@ -672,27 +614,17 @@ def _visible_unit_scope_source(unit: CreativeKernelUnit) -> str:
 
 
 def _artifact_scope_source(kernel: CreativeKernelV1) -> str:
-    body_modes = {
-        unit.mode
-        for unit in kernel.units
-        if unit.purpose == "body" and unit.track == "creative_expression"
-    }
+    body_modes = {unit.mode for unit in kernel.units if unit.purpose == "body" and unit.track == "creative_expression"}
     has_user_fact = any(
-        unit.track == "trusted_fact" and unit.allowed_observation_types == ("user_actuality",)
-        for unit in kernel.units
+        unit.track == "trusted_fact" and unit.allowed_observation_types == ("user_actuality",) for unit in kernel.units
     )
     has_confirmed_fact = any(
-        unit.track == "trusted_fact" and unit.allowed_observation_types != ("user_actuality",)
-        for unit in kernel.units
+        unit.track == "trusted_fact" and unit.allowed_observation_types != ("user_actuality",) for unit in kernel.units
     )
     if "disclosed_dramatization" in body_modes:
         return "phrase:artifact-user-fact-drama" if has_user_fact else "phrase:artifact-dramatization"
     if "hypothesis" in body_modes:
-        return (
-            "phrase:artifact-user-fact-hypothesis"
-            if has_user_fact
-            else "phrase:artifact-hypothesis"
-        )
+        return "phrase:artifact-user-fact-hypothesis" if has_user_fact else "phrase:artifact-hypothesis"
     if has_user_fact:
         return "phrase:artifact-user-fact"
     if has_confirmed_fact:
@@ -814,7 +746,4 @@ def _visible_body_v3(
             ("拍摄/排版提示", production.layout_and_production),
             ("发布配文", production.release_caption_and_interaction),
         )
-    return "标题：" + title + "\n\n" + "\n\n".join(
-        f"{heading}：{value}"
-        for heading, value in sections
-    )
+    return "标题：" + title + "\n\n" + "\n\n".join(f"{heading}：{value}" for heading, value in sections)

@@ -415,7 +415,7 @@ def test_direction_reaches_generation_and_a_soft_conflict_stays_visible(
         assert "你还可以继续改。" in directed["translation_notice"]
         assert "克制的冷幽默" in directed["applied_direction"]
         assert "幽默玩梗" not in directed["body"]
-        assert "本次创作方向" in directed["body"]
+        assert "本次表达会采用" in directed["body"]
         assert "结尾自然收住就行。" in directed["body"]
 
         snapshot = _snapshot(app_database_url, directed["task_id"])
@@ -760,8 +760,9 @@ def test_no_backend_only_field_reaches_the_visible_artifact(app_database_url: st
     for leaked in ("CAT-", "OPP-", "content-expression-catalog-v", created["task_id"], created["version_id"]):
         assert leaked not in body
     snapshot = _snapshot(app_database_url, created["task_id"])
-    # Preference state is owner-scoped; a tenant-scoped snapshot keeps task conditions only.
-    assert "body_related_opt_in" not in snapshot["original_direction"]
+    # The one-task body-related choice is part of the frozen direction contract, while
+    # reusable owner defaults remain outside the tenant-scoped task snapshot.
+    assert snapshot["original_direction"]["body_related_opt_in"] is False
     assert "direction_defaults" not in json.dumps(snapshot, ensure_ascii=False)
     assert "collaboration_note" not in json.dumps(snapshot, ensure_ascii=False)
 
