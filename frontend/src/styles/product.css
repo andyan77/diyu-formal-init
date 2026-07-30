@@ -1376,6 +1376,36 @@ a {
   line-height: 1.7;
 }
 
+.account-profile-editor {
+  display: grid;
+  gap: 14px;
+}
+
+.account-profile-editor label {
+  display: grid;
+  gap: 6px;
+  color: var(--ink-soft);
+  font-size: .88rem;
+  font-weight: 650;
+}
+
+.account-profile-editor textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.account-profile-editor .drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.profile-read-only {
+  color: var(--ink-soft);
+  font-size: .88rem;
+  line-height: 1.65;
+}
+
 .switch-line {
   display: flex;
   min-height: 56px;

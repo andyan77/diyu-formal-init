@@ -983,40 +983,52 @@ class ProductionAuthRepository:
             organization_id = UUID(str(target["organization_id"]))
             cursor.execute(
                 """
-                SELECT account_id, can_maintain_expression_profile
+                SELECT account_id, enabled, can_maintain_expression_profile
                   FROM auth_grants
                  WHERE tenant_id = %s
                    AND user_id = %s
                 """,
                 (manager.tenant_id, user_id),
             )
-            previous_maintenance = {
-                UUID(str(row["account_id"])): bool(
-                    row["can_maintain_expression_profile"]
-                )
+            previous_grants = {
+                UUID(str(row["account_id"])): {
+                    "enabled": bool(row["enabled"]),
+                    "maintenance": bool(
+                        row["can_maintain_expression_profile"]
+                    ),
+                }
                 for row in cursor.fetchall()
             }
 
             for requested_account_id in requested_account_ids:
                 cursor.execute(
-                    "SELECT id, control_organization_id FROM content_accounts "
-                    "WHERE tenant_id = %s AND id = %s AND enabled = true "
+                    "SELECT id, enabled, control_organization_id FROM content_accounts "
+                    "WHERE tenant_id = %s AND id = %s "
                     "AND carrier_of_account_id IS NULL",
                     (manager.tenant_id, requested_account_id),
                 )
                 account = self._one(
                     cursor,
-                    "只能维护当前租户已启用的表达账号资格",
+                    "只能维护当前租户的表达账号资格",
                 )
+                previous = previous_grants.get(requested_account_id)
+                if not bool(account["enabled"]) and not (
+                    previous and bool(previous["enabled"])
+                ):
+                    raise DomainError(
+                        "已停用的发布账号不能新增给成员使用"
+                    )
                 should_maintain = (
                     requested_account_id in requested_maintenance_ids
                     if requested_maintenance_ids is not None
                     else (
                         grants_expression_profile_maintenance
                         if grants_expression_profile_maintenance is not None
-                        else previous_maintenance.get(
-                            requested_account_id,
-                            False,
+                        else bool(
+                            previous_grants.get(
+                                requested_account_id,
+                                {},
+                            ).get("maintenance", False)
                         )
                     )
                 )
@@ -1054,9 +1066,11 @@ class ProductionAuthRepository:
                             grants_expression_profile_maintenance
                             if grants_expression_profile_maintenance
                             is not None
-                            else previous_maintenance.get(
-                                requested_account_id,
-                                False,
+                            else bool(
+                                previous_grants.get(
+                                    requested_account_id,
+                                    {},
+                                ).get("maintenance", False)
                             )
                         )
                     )
@@ -1165,7 +1179,12 @@ class ProductionAuthRepository:
                 str(account_id): (
                     account_id in requested_maintenance_ids
                     if requested_maintenance_ids is not None
-                    else previous_maintenance.get(account_id, False)
+                    else bool(
+                        previous_grants.get(account_id, {}).get(
+                            "maintenance",
+                            False,
+                        )
+                    )
                 )
                 for account_id in requested_account_ids
             }
@@ -1602,6 +1621,7 @@ class ProductionAuthRepository:
                    root.control_organization_id,
                    control_organization.name AS control_organization_name,
                    role_record.name AS content_role_name,
+                   grant_record.can_maintain_expression_profile,
                    profile.id AS profile_id,
                    profile.version AS profile_version,
                    profile.identity_position
@@ -1705,6 +1725,9 @@ class ProductionAuthRepository:
                             else None
                         ),
                         "content_role": str(root["content_role_name"] or ""),
+                        "can_maintain_expression_profile": bool(
+                            root["can_maintain_expression_profile"]
+                        ),
                         "profile_id": (
                             str(root["profile_id"])
                             if root["profile_id"] is not None

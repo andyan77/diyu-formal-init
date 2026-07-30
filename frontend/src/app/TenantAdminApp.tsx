@@ -30,6 +30,7 @@ type Organization = {
 type AccountGrant = {
   account_id: string;
   account_name: string;
+  account_enabled: boolean;
   can_maintain_expression_profile: boolean;
 };
 
@@ -1279,9 +1280,23 @@ function Members({
                 所属组织
                 <select
                   value={edit.organizationId}
-                  onChange={event =>
-                    setEdit({ ...edit, organizationId: event.target.value })
-                  }
+                  onChange={event => {
+                    const organizationId = event.target.value;
+                    setEdit(value => ({
+                      ...value,
+                      organizationId,
+                      maintenanceAccountIds:
+                        value.maintenanceAccountIds.filter(accountId => {
+                          const account = accounts.data?.find(
+                            item => item.id === accountId
+                          );
+                          return (
+                            account?.control_organization?.id ===
+                            organizationId
+                          );
+                        })
+                    }));
+                  }}
                 >
                   {organizations.data?.map(organization => (
                     <option key={organization.id} value={organization.id}>
@@ -1358,23 +1373,37 @@ function Members({
                     />
                     陈列搭配
                   </label>
-                  {accounts.data
-                    ?.filter(account => account.enabled)
-                    .map(account => (
+                  {accounts.data?.map(account => {
+                    const alreadyGranted =
+                      drawer.account_grants.some(
+                        item => item.account_id === account.id
+                      );
+                    const canSelectAccount =
+                      account.enabled || alreadyGranted;
+                    const canSelectMaintenance =
+                      edit.accountIds.includes(account.id) &&
+                      account.control_organization?.id ===
+                        edit.organizationId &&
+                      (account.enabled ||
+                        edit.maintenanceAccountIds.includes(account.id));
+                    return (
                       <div key={account.id} className="account-grant-choice">
                         <label>
                           <input
                             type="checkbox"
-                            disabled={!edit.content}
+                            disabled={!edit.content || !canSelectAccount}
                             checked={edit.accountIds.includes(account.id)}
                             onChange={() => toggleEditAccount(account.id)}
                           />
                           使用 {account.name}
+                          {!account.enabled && (
+                            <small>已停用，不能用于新工作</small>
+                          )}
                         </label>
                         <label>
                           <input
                             type="checkbox"
-                            disabled={!edit.accountIds.includes(account.id)}
+                            disabled={!canSelectMaintenance}
                             checked={edit.maintenanceAccountIds.includes(
                               account.id
                             )}
@@ -1395,7 +1424,8 @@ function Members({
                           可维护五段画像
                         </label>
                       </div>
-                    ))}
+                    );
+                  })}
                 </>
               )}
               {edit.entryType === "tenant_user" &&
@@ -1738,6 +1768,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
   };
   const createAccount = (event: FormEvent): void => {
     event.preventDefault();
+    if (createMaintenanceMismatch) return;
     void run(async () => {
       await api("/api/v1/tenant-management/publishing-accounts", {
         method: "POST",
@@ -1757,6 +1788,14 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
       setDrawer(null);
     }, "发布账号已建立。平台载体和账号画像会继续归到同一个发布身份。");
   };
+  const selectedCreateOperator = operators.data?.find(
+    item => item.id === createForm.operatorId
+  );
+  const createMaintenanceMismatch =
+    createForm.canMaintainProfile &&
+    (createForm.organizationId.length === 0 ||
+      !selectedCreateOperator ||
+      selectedCreateOperator.organization_id !== createForm.organizationId);
   const platformCount = new Set(
     (accounts.data ?? []).flatMap(account =>
       account.platform_targets.map(target => target.account_id)
@@ -2073,9 +2112,17 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
               <select
                 required
                 value={createForm.organizationId}
-                onChange={event =>
-                  setCreateForm({ ...createForm, organizationId: event.target.value })
-                }
+                onChange={event => {
+                  const organizationId = event.target.value;
+                  setCreateForm(value => ({
+                    ...value,
+                    organizationId,
+                    canMaintainProfile:
+                      value.organizationId === organizationId
+                        ? value.canMaintainProfile
+                        : false
+                  }));
+                }}
               >
                 <option value="">请选择负责团队</option>
                 {organizations.data?.map(item => (
@@ -2089,6 +2136,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
               <input
                 type="checkbox"
                 checked={createForm.canMaintainProfile}
+                aria-describedby="create-profile-maintenance-rule"
                 onChange={event =>
                   setCreateForm({
                     ...createForm,
@@ -2098,14 +2146,28 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
               />
               允许这名首位使用者维护五段账号画像
             </label>
+            <p
+              id="create-profile-maintenance-rule"
+              className={createMaintenanceMismatch ? "inline-error" : "tenant-security-note"}
+            >
+              维护五段画像的成员必须属于账号负责团队；仅使用账号可以跨团队分配。
+            </p>
             <label>
               首位使用者
               <select
                 required
                 value={createForm.operatorId}
-                onChange={event =>
-                  setCreateForm({ ...createForm, operatorId: event.target.value })
-                }
+                onChange={event => {
+                  const operatorId = event.target.value;
+                  setCreateForm(value => ({
+                    ...value,
+                    operatorId,
+                    canMaintainProfile:
+                      value.operatorId === operatorId
+                        ? value.canMaintainProfile
+                        : false
+                  }));
+                }}
               >
                 <option value="">请选择租户用户</option>
                 {operators.data
@@ -2153,7 +2215,11 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                 }
               />
             </fieldset>
-            <button className="primary" type="submit" disabled={saving}>
+            <button
+              className="primary"
+              type="submit"
+              disabled={saving || createMaintenanceMismatch}
+            >
               创建发布账号
             </button>
           </form>

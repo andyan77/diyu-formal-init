@@ -156,6 +156,61 @@ def _delete_gate_a_fixture(
             "DELETE FROM platform_operators WHERE id = %s",
             (operator_id,),
         )
+    _assert_gate_a_fixture_absent(database_url, tenant_id, operator_id)
+
+
+def _assert_gate_a_fixture_absent(
+    database_url: str,
+    tenant_id: UUID,
+    operator_id: UUID,
+) -> None:
+    """Prove the bounded synthetic tenant and its operations identity left no residue."""
+
+    tenant_tables = (
+        "activity_events",
+        "account_expression_profile_versions",
+        "account_content_roles",
+        "auth_grants",
+        "tenant_management_grants",
+        "display_access_grants",
+        "organization_material_maintainers",
+        "content_accounts",
+        "content_roles",
+        "brand_expression_baselines",
+        "tenant_sessions",
+        "user_activation_tokens",
+        "user_credentials",
+        "users",
+        "brand_audiences",
+        "brands",
+        "organizations",
+    )
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        for table in tenant_tables:
+            cursor.execute(
+                f"SELECT count(*) FROM {table} WHERE tenant_id = %s",  # noqa: S608 - fixed allowlist
+                (tenant_id,),
+            )
+            assert cursor.fetchone() == (0,), table
+        for table in ("ops_tenant_registry",):
+            cursor.execute(
+                f"SELECT count(*) FROM {table} WHERE tenant_id = %s",  # noqa: S608 - fixed allowlist
+                (tenant_id,),
+            )
+            assert cursor.fetchone() == (0,), table
+        cursor.execute("SELECT count(*) FROM tenants WHERE id = %s", (tenant_id,))
+        assert cursor.fetchone() == (0,), "tenants"
+        for table in (
+            "platform_sessions",
+            "ops_audit_events",
+            "platform_operators",
+        ):
+            column = "id" if table == "platform_operators" else "operator_id"
+            cursor.execute(
+                f"SELECT count(*) FROM {table} WHERE {column} = %s",  # noqa: S608 - fixed allowlist
+                (operator_id,),
+            )
+            assert cursor.fetchone() == (0,), table
 
 
 def test_publishing_account_and_platform_contracts_are_strict() -> None:
@@ -366,6 +421,69 @@ def test_new_tenant_identity_account_and_platform_journey(
                 "status"
             ] == "confirmed"
 
+            mismatched_maintenance_payload = {
+                "name": "跨组织维护权反证账号",
+                "channel": "小红书",
+                "content_role_name": "跨组织维护权反证身份",
+                "speaker_kind": "institutional_account",
+                "operator_id": store_member["user_id"],
+                "control_organization_id": company["id"],
+                "operator_can_maintain_expression_profile": True,
+                "initial_profile": _PROFILE,
+                "as_synthetic_business_fixture": True,
+            }
+            mismatched_maintenance = admin.post(
+                "/api/v1/tenant-management/publishing-accounts",
+                json=mismatched_maintenance_payload,
+            )
+            assert mismatched_maintenance.status_code == 422
+            assert "负责团队" in mismatched_maintenance.json()["detail"]
+            without_control = admin.post(
+                "/api/v1/tenant-management/publishing-accounts",
+                json={
+                    **mismatched_maintenance_payload,
+                    "name": "没有控制组织的维护权反证账号",
+                    "content_role_name": "没有控制组织的维护权反证身份",
+                    "control_organization_id": None,
+                },
+            )
+            assert without_control.status_code == 422
+            nonexistent_operator = admin.post(
+                "/api/v1/tenant-management/publishing-accounts",
+                json={
+                    **mismatched_maintenance_payload,
+                    "name": "不存在使用者反证账号",
+                    "content_role_name": "不存在使用者反证身份",
+                    "operator_id": str(uuid4()),
+                    "operator_can_maintain_expression_profile": False,
+                },
+            )
+            assert nonexistent_operator.status_code == 422
+            with psycopg.connect(
+                migrator_database_url
+            ) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT count(*) FROM content_accounts "
+                    "WHERE tenant_id = %s AND name IN (%s, %s, %s)",
+                    (
+                        tenant_id,
+                        "跨组织维护权反证账号",
+                        "没有控制组织的维护权反证账号",
+                        "不存在使用者反证账号",
+                    ),
+                )
+                assert cursor.fetchone() == (0,)
+                cursor.execute(
+                    "SELECT count(*) FROM auth_grants grant_record "
+                    "JOIN content_accounts account "
+                    "ON account.tenant_id = grant_record.tenant_id "
+                    "AND account.id = grant_record.account_id "
+                    "WHERE grant_record.tenant_id = %s "
+                    "AND account.name = %s",
+                    (tenant_id, "跨组织维护权反证账号"),
+                )
+                assert cursor.fetchone() == (0,)
+
             hq_account_response = admin.post(
                 "/api/v1/tenant-management/publishing-accounts",
                 json=hq_account_payload,
@@ -394,6 +512,7 @@ def test_new_tenant_identity_account_and_platform_journey(
             assert store_account_response.status_code == 201
             store_account_id = store_account_response.json()["id"]
 
+            hq_carrier_ids: list[str] = []
             for channel in ("小红书", "微信视频号"):
                 carrier = admin.post(
                     "/api/v1/tenant-management/platform-carriers",
@@ -407,6 +526,7 @@ def test_new_tenant_identity_account_and_platform_journey(
                 )
                 assert carrier.status_code == 201
                 assert carrier.json()["carrier_of_account_id"] == hq_account_id
+                hq_carrier_ids.append(carrier.json()["id"])
 
             hq_grants = admin.patch(
                 f"/api/v1/tenant-management/users/{hq_member['user_id']}/grants",
@@ -502,12 +622,76 @@ def test_new_tenant_identity_account_and_platform_journey(
             )
             assert disabled_history.status_code == 200
             assert disabled_history.json()[0]["version"] == 1
+            edited_with_disabled_grant = admin.patch(
+                f"/api/v1/tenant-management/users/{hq_member['user_id']}",
+                json={
+                    "display_name": "总部内容负责人",
+                    "organization_id": company["id"],
+                },
+            )
+            assert edited_with_disabled_grant.status_code == 200
+            preserved_disabled_grant = admin.patch(
+                f"/api/v1/tenant-management/users/{hq_member['user_id']}/grants",
+                json={
+                    "entry_type": "tenant_user",
+                    "capabilities": ["content"],
+                    "publishing_identity_ids": [hq_account_id],
+                    "expression_profile_maintenance_account_ids": [],
+                },
+            )
+            assert preserved_disabled_grant.status_code == 200
+            hq_operator = next(
+                item
+                for item in admin.get(
+                    "/api/v1/tenant-management/operators"
+                ).json()
+                if item["id"] == hq_member["user_id"]
+            )
+            assert hq_operator["display_name"] == "总部内容负责人"
+            assert hq_operator["account_grants"] == [
+                {
+                    "account_id": hq_account_id,
+                    "account_name": "总部品牌逻辑发布账号",
+                    "account_enabled": False,
+                    "can_maintain_expression_profile": False,
+                }
+            ]
+            removed_disabled_grant = admin.patch(
+                f"/api/v1/tenant-management/users/{hq_member['user_id']}/grants",
+                json={
+                    "entry_type": "tenant_user",
+                    "capabilities": [],
+                    "publishing_identity_ids": [],
+                    "expression_profile_maintenance_account_ids": [],
+                },
+            )
+            assert removed_disabled_grant.status_code == 200
+            illegal_disabled_add = admin.patch(
+                f"/api/v1/tenant-management/users/{hq_member['user_id']}/grants",
+                json={
+                    "entry_type": "tenant_user",
+                    "capabilities": ["content"],
+                    "publishing_identity_ids": [hq_account_id],
+                    "expression_profile_maintenance_account_ids": [],
+                },
+            )
+            assert illegal_disabled_add.status_code == 422
             account_restored = admin.put(
                 f"/api/v1/tenant-management/publishing-accounts/"
                 f"{hq_account_id}/enabled",
                 json={"enabled": True},
             )
             assert account_restored.status_code == 200
+            reassigned_after_restore = admin.patch(
+                f"/api/v1/tenant-management/users/{hq_member['user_id']}/grants",
+                json={
+                    "entry_type": "tenant_user",
+                    "capabilities": ["content"],
+                    "publishing_identity_ids": [hq_account_id],
+                    "expression_profile_maintenance_account_ids": [],
+                },
+            )
+            assert reassigned_after_restore.status_code == 200
 
             moved_member = admin.patch(
                 f"/api/v1/tenant-management/users/{store_member['user_id']}",
@@ -553,7 +737,7 @@ def test_new_tenant_identity_account_and_platform_journey(
             assert hq_user.get("/user").status_code == 200
             assert hq_user.get("/tenant-admin").status_code == 403
             portal = hq_user.get("/api/v1/session/context").json()
-            assert portal["identity"]["operator"] == "总部内容用户"
+            assert portal["identity"]["operator"] == "总部内容负责人"
             assert portal["identity"]["organization"] == company["name"]
             identities = hq_user.get(
                 "/api/v1/content/publishing-identities"
@@ -563,6 +747,7 @@ def test_new_tenant_identity_account_and_platform_journey(
             assert identity["id"] == hq_account_id
             assert identity["control_organization"] == company["name"]
             assert identity["profile_version"] == 1
+            assert identity["can_maintain_profile"] is False
             profile_ids = set()
             for target in (
                 "douyin_video",
@@ -595,6 +780,7 @@ def test_new_tenant_identity_account_and_platform_journey(
             ).json()[0]
             assert store_identity["id"] == store_account_id
             assert store_identity["control_organization"] == store["name"]
+            assert store_identity["can_maintain_profile"] is True
             updated_profile = store_user.post(
                 "/api/v1/content/account-expression-profile/versions",
                 params={"publishing_identity_id": store_account_id},
@@ -605,6 +791,36 @@ def test_new_tenant_identity_account_and_platform_journey(
             )
             assert updated_profile.status_code == 201
             assert updated_profile.json()["version"] == 2
+            v2_profiles = []
+            for target in ("xiaohongshu_graphic", "xiaohongshu_video"):
+                current_profile = store_user.get(
+                    "/api/v1/content/account-expression-profile",
+                    params={
+                        "publishing_identity_id": store_account_id,
+                        "target": target,
+                    },
+                )
+                assert current_profile.status_code == 200
+                assert current_profile.json()["can_maintain"] is True
+                assert current_profile.json()["current"]["version"] == 2
+                v2_profiles.append(
+                    current_profile.json()["current"]["profile_id"]
+                )
+            assert len(set(v2_profiles)) == 1
+            wrong_account = store_user.post(
+                "/api/v1/content/account-expression-profile/versions",
+                params={"publishing_identity_id": hq_account_id},
+                json={
+                    **store_profile,
+                    "content_territories": "不应写入错误账号。",
+                },
+            )
+            assert wrong_account.status_code == 422
+            carrier_as_identity = store_user.get(
+                "/api/v1/content/account-expression-profile",
+                params={"publishing_identity_id": hq_carrier_ids[0]},
+            )
+            assert carrier_as_identity.status_code == 422
 
         with TestClient(app, base_url="https://diyu.example") as admin:
             _login(
@@ -618,6 +834,22 @@ def test_new_tenant_identity_account_and_platform_journey(
                 f"{store_account_id}/expression-profile/versions"
             )
             assert [item["version"] for item in versions.json()] == [2, 1]
+
+            cross_organization_usage = admin.post(
+                "/api/v1/tenant-management/publishing-accounts",
+                json={
+                    "name": "跨组织仅使用账号",
+                    "channel": "抖音",
+                    "content_role_name": "跨组织仅使用身份",
+                    "speaker_kind": "institutional_account",
+                    "operator_id": store_member["user_id"],
+                    "control_organization_id": company["id"],
+                    "operator_can_maintain_expression_profile": False,
+                    "initial_profile": _PROFILE,
+                    "as_synthetic_business_fixture": True,
+                },
+            )
+            assert cross_organization_usage.status_code == 201
 
             accounts = {
                 item["id"]: item

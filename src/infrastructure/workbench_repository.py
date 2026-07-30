@@ -218,6 +218,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                              jsonb_build_object(
                                'account_id', account_grant.account_id,
                                'account_name', granted_account.name,
+                               'account_enabled', granted_account.enabled,
                                'can_maintain_expression_profile',
                                    account_grant.can_maintain_expression_profile
                              )
@@ -1641,12 +1642,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             # Serialize grants for this person while allowing one natural person to operate
             # several explicitly authorized logical publishing identities.
             cursor.execute(
-                "SELECT id FROM users "
+                "SELECT id, organization_id FROM users "
                 "WHERE tenant_id = %s AND id = %s AND enabled = true "
                 "AND entry_kind = 'tenant_user' FOR UPDATE",
                 (scope.tenant_id, operator_id),
             )
-            self._one(cursor, "只能向当前租户已登记且启用的自然人授权发布账号")
+            operator = self._one(
+                cursor,
+                "只能向当前租户已登记且启用的自然人授权发布账号",
+            )
             # Which organization controls this account is an explicit decision, made here or
             # later by a tenant authority.  Nothing is defaulted, inferred from the creating
             # administrator, or guessed from an account name, a role name or an operator's name;
@@ -1660,6 +1664,15 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     cursor,
                     "只能指定当前租户已有的组织作为账号控制组织",
                 )
+            if operator_can_maintain_expression_profile:
+                if control_organization_id is None:
+                    raise DomainError(
+                        "账号尚未指定负责团队，不能授予五段画像维护资格"
+                    )
+                if UUID(str(operator["organization_id"])) != control_organization_id:
+                    raise DomainError(
+                        "只有账号负责团队的成员可以获得五段画像维护资格"
+                    )
             cursor.execute(
                 """
                 SELECT account.id, account.channel, role.name AS content_role,

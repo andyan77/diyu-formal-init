@@ -370,6 +370,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "name": str(item["name"]),
                     "profile_summary": str(item.get("profile_summary") or "尚未填写账号画像"),
                     "content_role": str(item.get("content_role") or "发布账号"),
+                    "can_maintain_profile": bool(
+                        item.get("can_maintain_expression_profile")
+                    ),
                     "control_organization": (
                         str(item["control_organization"])
                         if item.get("control_organization") is not None

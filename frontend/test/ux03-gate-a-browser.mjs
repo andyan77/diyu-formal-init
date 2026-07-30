@@ -484,12 +484,34 @@ try {
     );
     await admin.labeledControl("发布账号名称", "input", name);
     await admin.labeledControl("账号类型短标签", "input", role);
-    await admin.labeledControl("负责团队", "select", organization);
-    await admin.labeledControl("首位使用者", "select", operator);
-    await admin.labeledControl("首个平台", "select", target);
     if (maintenance) {
+      await admin.labeledControl("负责团队", "select", companyName);
+      await admin.labeledControl("首位使用者", "select", operator);
       await admin.toggleLabeledCheckbox("允许这名首位使用者维护");
+      ensure(
+        await admin.evaluate(`(() => {
+          const drawer=document.querySelector('.tenant-drawer');
+          const submit=drawer?.querySelector('button[type=submit]');
+          return submit?.disabled===true &&
+            drawer?.innerText.includes('维护五段画像的成员必须属于账号负责团队');
+        })()`),
+        "跨组织画像维护权没有在正式 React 中失败关闭"
+      );
+      await admin.labeledControl("负责团队", "select", organization);
+      ensure(
+        await admin.evaluate(`(() => {
+          const label=[...document.querySelectorAll('.tenant-drawer label')]
+            .find(node=>node.textContent.includes('允许这名首位使用者维护'));
+          return label?.querySelector('input[type=checkbox]')?.checked===false;
+        })()`),
+        "更改负责团队后仍保留了失效的画像维护勾选"
+      );
+      await admin.toggleLabeledCheckbox("允许这名首位使用者维护");
+    } else {
+      await admin.labeledControl("负责团队", "select", organization);
+      await admin.labeledControl("首位使用者", "select", operator);
     }
+    await admin.labeledControl("首个平台", "select", target);
     const profileValues = await admin.evaluate(`(() => {
       const fields=[...document.querySelectorAll('.tenant-drawer fieldset textarea')];
       return fields.map(item=>item.value);
@@ -630,6 +652,61 @@ try {
     store_maintenance: true
   });
 
+  await admin.click("nav button", "发布账号与账号画像");
+  await admin.clickIn(
+    ".publishing-account-list > article",
+    hqAccountName,
+    "停用账号"
+  );
+  await admin.waitFor(
+    `(() => {
+      const card=[...document.querySelectorAll('.publishing-account-list > article')]
+        .find(node=>node.textContent.includes(${JSON.stringify(hqAccountName)}));
+      return card?.innerText.includes('已停用');
+    })()`,
+    "发布账号停用"
+  );
+  await admin.click("nav button", "成员与入口资格");
+  await admin.clickIn(".tenant-list article", hqDisplayName, "查看与处理");
+  await admin.waitFor(
+    "document.querySelector('.tenant-drawer')?.innerText.includes('已停用，不能用于新工作')",
+    "成员抽屉保留停用账号授权"
+  );
+  ensure(
+    await admin.evaluate(`(() => {
+      const label=[...document.querySelectorAll('.tenant-drawer label')]
+        .find(node=>node.textContent.includes(${JSON.stringify(`使用 ${hqAccountName}`)}));
+      const input=label?.querySelector('input[type=checkbox]');
+      return input?.checked===true && input.disabled===false;
+    })()`),
+    "已有停用账号授权不能被显式保留或移除"
+  );
+  await admin.click(".tenant-drawer button.primary", "保存入口资格");
+  await admin.waitFor(
+    "document.body.innerText.includes('成员资格已更新')",
+    "停用账号存在时编辑成员"
+  );
+  await admin.click(".tenant-drawer button", "关闭");
+  await admin.click("nav button", "发布账号与账号画像");
+  await admin.clickIn(
+    ".publishing-account-list > article",
+    hqAccountName,
+    "恢复账号"
+  );
+  await admin.waitFor(
+    `(() => {
+      const card=[...document.querySelectorAll('.publishing-account-list > article')]
+        .find(node=>node.textContent.includes(${JSON.stringify(hqAccountName)}));
+      return card?.innerText.includes('已启用');
+    })()`,
+    "发布账号恢复"
+  );
+  record("停用账号授权与成员编辑接缝", {
+    disabled_grant_visible: true,
+    unrelated_edit_saved: true,
+    historical_grant_preserved: true
+  });
+
   const inspectUser = async ({
     activation,
     username,
@@ -638,7 +715,8 @@ try {
     organization,
     accountName,
     expectedPlatforms,
-    width
+    width,
+    canMaintain
   }) => {
     const user = await createPage({ width, height: width <= 640 ? 844 : 900 });
     await activateAndLogin(
@@ -717,6 +795,10 @@ try {
     );
     ensure(identity.includes(organization), "负责团队错误使用登录人组织");
     ensure(identity.includes("V1"), "账号画像版本投影缺失");
+    ensure(
+      identity.includes("维护账号画像") === canMaintain,
+      "画像维护动作没有按照可信授权投影"
+    );
     const focused = await user.evaluate(`(() => {
       const node=document.activeElement;
       if(!node)return false;
@@ -740,7 +822,8 @@ try {
       "小红书",
       "微信视频号"
     ],
-    width: 1440
+    width: 1440,
+    canMaintain: false
   });
   const storeUser = await inspectUser({
     activation: storeActivationPath,
@@ -750,7 +833,50 @@ try {
     organization: storeOrganizationName,
     accountName: storeAccountName,
     expectedPlatforms: ["小红书"],
-    width: 390
+    width: 390,
+    canMaintain: true
+  });
+  await storeUser.click(".account-drawer button", "维护账号画像");
+  await storeUser.waitFor(
+    "document.querySelectorAll('.account-profile-editor textarea').length===5",
+    "五段画像编辑器"
+  );
+  ensure(
+    await storeUser.evaluate(`(() => {
+      const textarea=document.querySelectorAll('.account-profile-editor textarea')[3];
+      if(!textarea)return false;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')
+        .set.call(textarea,'门店日常、在地回应和已确认商品取舍。');
+      textarea.dispatchEvent(new Event('input',{bubbles:true}));
+      textarea.dispatchEvent(new Event('change',{bubbles:true}));
+      return true;
+    })()`),
+    "无法编辑当前账号五段画像"
+  );
+  await storeUser.click(".account-profile-editor button.primary", "保存为 V2");
+  await storeUser.waitFor(
+    "document.querySelector('.account-drawer')?.innerText.includes('账号定位 · V2')",
+    "内容用户保存画像 V2"
+  );
+  await storeUser.click(".account-drawer button[aria-label=关闭]");
+  await storeUser.evaluate(`(() => {
+    const select=document.querySelector('select[aria-label="内容形式"]');
+    select.value='xiaohongshu_video';
+    select.dispatchEvent(new Event('change',{bubbles:true}));
+  })()`);
+  await storeUser.waitFor(
+    "new URLSearchParams(location.search).get('target')==='xiaohongshu_video' && document.querySelector('button.identity-trigger') !== null",
+    "同一账号切换小红书形式"
+  );
+  await storeUser.click("button.identity-trigger");
+  await storeUser.waitFor(
+    "document.querySelector('.account-drawer')?.innerText.includes('V2') && document.querySelector('.account-drawer')?.innerText.includes('门店日常、在地回应和已确认商品取舍。')",
+    "跨形式共享同一画像 V2"
+  );
+  record("内容用户画像 V1 到 V2 与跨平台共享", {
+    maintenance_consumer: true,
+    current_version: 2,
+    shared_logical_account: true
   });
   await admin.setViewport(768, 900);
   ensure(

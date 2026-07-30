@@ -19,6 +19,7 @@ export interface PublishingIdentity {
   control_organization?: string | null;
   profile_id?: string | null;
   profile_version?: number | null;
+  can_maintain_profile?: boolean;
   platform_targets: PlatformTarget[];
 }
 
@@ -118,17 +119,23 @@ export interface Material {
   reference_note?: string;
 }
 
+export interface AccountExpressionProfileFields {
+  identity_position: string;
+  authority_boundary: string;
+  audience_relationship: string;
+  content_territories: string;
+  default_production_conditions: string;
+}
+
 export interface AccountExpression {
   account: string;
   content_role: string;
-  current: {
+  can_maintain: boolean;
+  current: (AccountExpressionProfileFields & {
     version: number;
-    identity_position: string;
-    authority_boundary: string;
-    audience_relationship: string;
-    content_territories: string;
-    default_production_conditions: string;
-  } | null;
+    profile_id: string;
+  }) | null;
+  draft?: AccountExpressionProfileFields | null;
 }
 
 export type AssistantReply = {

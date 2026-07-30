@@ -13,6 +13,7 @@ import { SeriesPanel } from "./SeriesPanel";
 import type { SeriesSelection } from "./SeriesPanel";
 import type {
   AccountExpression,
+  AccountExpressionProfileFields,
   AssistantReply,
   BootstrapContext,
   CatalogAxis,
@@ -374,31 +375,64 @@ function DirectionPanel({
   );
 }
 
+function editableAccountProfile(
+  value:
+    | AccountExpression["current"]
+    | AccountExpression["draft"]
+    | null
+    | undefined
+): AccountExpressionProfileFields | null {
+  return value
+    ? {
+        identity_position: value.identity_position,
+        authority_boundary: value.authority_boundary,
+        audience_relationship: value.audience_relationship,
+        content_territories: value.content_territories,
+        default_production_conditions: value.default_production_conditions
+      }
+    : null;
+}
+
 function AccountDrawer({
   context,
   publishingIdentity,
   preferencePath,
   preference,
   profile,
+  profilePath,
   onClose,
-  onPreference
+  onPreference,
+  onProfile
 }: {
   context: BootstrapContext;
   publishingIdentity: PublishingIdentity;
   preferencePath: string;
   preference: CreationPreference | null;
   profile: AccountExpression | null;
+  profilePath: string;
   onClose: () => void;
   onPreference: (value: CreationPreference) => void;
+  onProfile: (value: AccountExpression) => void;
 }): JSX.Element {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileDraft, setProfileDraft] =
+    useState<AccountExpressionProfileFields | null>(
+      editableAccountProfile(profile?.current ?? profile?.draft)
+    );
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     closeRef.current?.focus();
   }, []);
+  useEffect(() => {
+    setProfileDraft(
+      editableAccountProfile(profile?.current ?? profile?.draft)
+    );
+    setEditingProfile(false);
+  }, [profile]);
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>): void => {
     if (event.key === "Escape") {
@@ -442,6 +476,31 @@ function AccountDrawer({
       onPreference(next);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "没有保存成功。");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const saveProfile = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    if (!profile?.can_maintain || !profileDraft || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const saved = await api<NonNullable<AccountExpression["current"]>>(
+        profilePath,
+        {
+        method: "POST",
+        body: JSON.stringify(profileDraft)
+        }
+      );
+      onProfile({ ...profile, current: saved, draft: null });
+      setEditingProfile(false);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "账号画像没有保存成功。"
+      );
     } finally {
       setSaving(false);
     }
@@ -492,13 +551,83 @@ function AccountDrawer({
           </div>
         </dl>
         <p className="profile-one-line">{publishingIdentity.profile_summary}</p>
-        {profile?.current && (
+        {profile?.current && !editingProfile && (
           <section className="profile-summary">
             <h3>账号定位 · V{profile.current.version}</h3>
             <p>{profile.current.identity_position}</p>
+            <p>{profile.current.authority_boundary}</p>
             <p>{profile.current.audience_relationship}</p>
+            <p>{profile.current.content_territories}</p>
+            <p>{profile.current.default_production_conditions}</p>
+            {profile.can_maintain && (
+              <button
+                type="button"
+                className="text-action"
+                onClick={() => setEditingProfile(true)}
+              >
+                维护账号画像
+              </button>
+            )}
           </section>
         )}
+        {profile?.can_maintain && editingProfile && profileDraft && (
+          <form className="account-profile-editor" onSubmit={event => void saveProfile(event)}>
+            <h3>
+              基于当前 V{profile.current?.version ?? 0} 保存新版本
+            </h3>
+            {(
+              [
+                ["identity_position", "表达身份"],
+                ["authority_boundary", "权威边界"],
+                ["audience_relationship", "受众关系"],
+                ["content_territories", "内容领地"],
+                ["default_production_conditions", "长期制作条件"]
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key}>
+                {label}
+                <textarea
+                  required
+                  value={profileDraft[key]}
+                  onChange={event =>
+                    setProfileDraft(value =>
+                      value
+                        ? { ...value, [key]: event.target.value }
+                        : value
+                    )
+                  }
+                />
+              </label>
+            ))}
+            <div className="drawer-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setProfileDraft(
+                    editableAccountProfile(
+                      profile.current ?? profile.draft
+                    )
+                  );
+                  setEditingProfile(false);
+                  setError("");
+                }}
+              >
+                取消
+              </button>
+              <button className="primary" type="submit" disabled={saving}>
+                {saving
+                  ? "正在保存……"
+                  : `保存为 V${(profile.current?.version ?? 0) + 1}`}
+              </button>
+            </div>
+          </form>
+        )}
+        {profile && !profile.can_maintain && (
+          <p className="profile-read-only">
+            你可以查看完整账号画像；维护资格由账号负责团队单独分配。
+          </p>
+        )}
+        {error && <p className="inline-error">{error}</p>}
         {preference && (
           <section className="personal-controls">
             <h3>我的创作偏好</h3>
@@ -514,7 +643,6 @@ function AccountDrawer({
                 onChange={() => void toggleBodyDirections()}
               />
             </label>
-            {error && <p className="inline-error">{error}</p>}
           </section>
         )}
       </aside>
@@ -1753,11 +1881,15 @@ export default function CreatorApp({
           preferencePath={scope("/api/v1/user/creation-preferences")}
           preference={preference}
           profile={profile}
+          profilePath={scope(
+            "/api/v1/content/account-expression-profile/versions"
+          )}
           onClose={() => {
             setAccountOpen(false);
             identityTriggerRef.current?.focus();
           }}
           onPreference={updatePreference}
+          onProfile={setProfile}
         />
       )}
       {toolOpen && (
