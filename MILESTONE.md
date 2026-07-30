@@ -1,8 +1,9 @@
 # 当前里程碑
 
 - 当前里程碑：`UI-12` 来源、语态、主体绑定与服务端证据裁决闭环。
-- 状态：`REVIEW`。主控对 schema 31 候选的第二次独立终审给出
-  `FAIL_WITH_BOUNDED_REWORK` 后，UI-12 已在原里程碑内完成两项确定性收口：
+- 状态：`CLOSED`。主控第三次、也是最终一次独立终审结论为 `PASS`。主控对 schema 31
+  候选的第二次独立终审给出 `FAIL_WITH_BOUNDED_REWORK` 后，UI-12 已在原里程碑内完成
+  两项确定性收口：
   schema `20260805_32` 撤销 `diyu_app` 对 `content_versions` 的 UPDATE/DELETE，
   trigger 同时拒绝 UPDATE/DELETE，只允许迁移角色在事务局部、精确 tenant/version 和
   synthetic fixture 三重边界下清理；legacy 投影恢复历史“只识别全角冒号”合同，Writer
@@ -12,6 +13,10 @@
   UI-07—UI-12 仍是一条自然创作真实性探索链，不创建 UI-13。此前
   occurrence、开放 evidence、商品事实职责、Reviewer-only 模型、oracle drift、parser
   与一次 repair 的失败及前向订正均完整保留。
+- UI-12 `CLOSED` 证明自然创作后端主链、可信事实与创作表达责任边界、版本不可变保护、
+  legacy/audit 兼容、失败原子性以及同 SHA 生产闭环在既定范围内成立。它不证明前端用户
+  体验已经完成产品化，也不证明真实员工／品牌采用、真实发布、流量、排名、爆款、
+  GMV／销售、多真实租户市场差异、企业 SLA 或 20/55/44 全组合稳定支持。
 - 主控已正式取代“单一概率 Reviewer 承担零漏判生产授权”路线，采用服务端预分配的
   `trusted_fact + creative_expression` 双轨合同。Reviewer 退出新任务生产放行；历史
   DeepSeek／千问 raw、人工否决和 `BLOCKED` 事件继续保留。当前归档引用
@@ -176,8 +181,10 @@
 - 当前任务包：
   [`docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md`](docs/UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)。
 - 产品语义与工程安全两份有界审查均为 `PASS`；最终运行 SHA、唯一 CI、生产部署、备份、
-  兼容冒烟、精确清理与回退证明均已成立。UI-12 进入 `REVIEW`，不得自行 `CLOSED`；
-  唯一下一动作是主控第三次、也是最终一次独立终审 UI-12。
+  兼容冒烟、精确清理与回退证明均已成立。主控第三次、也是最终一次独立终审为 `PASS`，
+  UI-12 正式 `CLOSED`。当前没有由本次自动启动的后继里程碑；唯一下一动作是停止执行，
+  等待用户与主控另行启动“前端用户体验产品化”独立里程碑，本轮不提前命名、不施工、
+  不部署。
 - 承重裁决：[ADR-028](docs/架构决策/ADR-028-来源语态主体绑定与证据裁决矩阵.md)
   已由本次主控裁决置为 `ACCEPTED`。启动前已把 SDR-001—SDR-037 订正为 42 条无重复
   stable ID、单值 `unit_contract` 的 SDR-001—SDR-042，并通过 diff、唯一性、单合同与

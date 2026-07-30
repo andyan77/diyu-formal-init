@@ -11,7 +11,8 @@ Reviewer 退出保存授权。两次主控终审发现的版本载荷 UPDATE/DEL
 注入、legacy ASCII 冒号漂移与默认不可见字符残余，最终由 schema 32 的应用权限＋
 UPDATE/DELETE trigger、统一摘要、legacy 原投影和共享 Unicode 防伪关闭。最终
 `9c5b243…` 的 Golden/OpenAPI `417 passed`、前端四门、唯一 CI `30500580180`、同 SHA
-生产兼容冒烟、备份恢复及旧镜像不降级回退均通过；UI-12 现为 `REVIEW`。
+生产兼容冒烟、备份恢复及旧镜像不降级回退均通过；主控第三次、也是最终一次独立终审
+`PASS`，UI-12 现为 `CLOSED`。
 
 - [UI-03 正式 React 产品骨架与内容主链执行包](../UI-03-正式React产品骨架与内容主链执行包.md)：
   已在不切换生产默认 UI 的边界内完成公共首页、三入口隔离壳与统一创作端，现为 `CLOSED`；
@@ -49,10 +50,11 @@ UPDATE/DELETE trigger、统一摘要、legacy 原投影和共享 Unicode 防伪�
   G3/G4/D1 单次 Writer-only 预检中均失败；未运行 Reviewer 资格、CI 或部署，失败历史
   不改写为成功；
 - [UI-12 来源、语态、主体绑定与服务端证据裁决执行包](../UI-12-来源语态主体绑定与服务端证据裁决闭环执行包.md)：
-  当前为 `REVIEW`。新任务由服务端预分配可信事实与四类创作表达单元，Writer 只能填写
+  当前为 `CLOSED`。新任务由服务端预分配可信事实与四类创作表达单元，Writer 只能填写
   既定创意 unit，Compiler 负责逐字事实、自然范围和全部平台出口；Reviewer 不再参与版本
   放行。旧候选及两次主控退回证据保留；最终 schema 32 实现已经关闭版本 UPDATE/DELETE、
   恢复 legacy 原投影并关闭 Writer heading／Unicode 伪装，完成最终 CI、生产兼容与回退；
+  主控最终独立终审为 `PASS`；
 - [产品化HTML原型_UI-05](产品化HTML原型_UI-05/)：UI-05 Gate A 的管理员与租户用户两条
   独立旅程及可重放验证。它继续作为历史产品合同与产品裁决证据，不冒充正式实现；打开
   [review/index.html](产品化HTML原型_UI-05/review/index.html) 即可离线回看；
@@ -92,4 +94,5 @@ V1.0、评审意见和 PNG 预览同样只作历史参考；`prototype_verified`
   前向修复；后续创作责任合同恢复命中候选 B 结构停止线并由 UI-06 取代。UI-06 唯一生产
   候选又被真实 G1 否决，现已 `SUPERSEDED → UI-07`。UI-07—UI-11 的结构成果与失败
   均由 UI-12 承接；UI-12 当前用前置双轨与确定性 Compiler 取代概率 Reviewer 的生产
-  放行，状态为 `REVIEW`；唯一下一动作是主控重新独立终审。
+  放行并已 `CLOSED`。关闭不证明前端用户体验已经产品化；当前不启动后继，唯一下一动作是
+  停止执行，等待用户与主控另行启动“前端用户体验产品化”独立里程碑。
