@@ -150,10 +150,16 @@ try {
     const waitFor = async (expression, label, timeout = 20000) => {
       const started = Date.now();
       while (Date.now() - started < timeout) {
-        if (await evaluate(expression)) return;
+        try {
+          if (await evaluate(expression)) return;
+        } catch {
+          // A real navigation may briefly expose no document/body between the
+          // outgoing and incoming page. Keep polling the requested condition;
+          // a persistent failure is reported with the final page context below.
+        }
         await wait(100);
       }
-      const body = await evaluate("document.body.innerText.slice(0, 600)");
+      const body = await evaluate("document.body?.innerText.slice(0, 600) ?? ''");
       throw new Error(`等待超时：${label}；当前 ${await location()}；页面：${body}`);
     };
     const navigate = async path => {
