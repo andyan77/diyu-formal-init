@@ -26,7 +26,8 @@ React/API/PostgreSQL 承重旅程、纯文字 DM01、64 项真值复核、响应
 React/API/PostgreSQL 浏览器纵向、四项 mutation、Golden/OpenAPI `421 passed, 1 skipped`
 及两份有界审查均通过。UX-03 仍为 `ACTIVE`，Gate A 为 `COMPLETE`，Gate B 尚未启动；
 本轮没有 push、CI、部署、生产连接或模型调用。64 项真值按当前完整产品目标重算为
-`45/13/0/6/0`，未完成项继续由 UX-03 后续 Gate 承接。
+`44/14/0/6/0`；FT-032 因诊断来源可信度、时效、冲突及与当前工作的完整关联未闭环，
+与其他未完成项继续由 UX-03 后续 Gate 承接。
 
 UI-04 已于 2026-07-27（UTC）通过主控独立终审
 并保持 `CLOSED`；创始人真实使用后出现的产品语义新证据由 successor UI-05 单独承接。

@@ -5,16 +5,24 @@
   `COMPLETE`，`Gate B` 为 `NOT_STARTED`。UX-02 保持 `CLOSED`，不创建 UX-04。
 - 当前 Git 基线：`86f5df16b9e42fe4eee322694156361a007bdb88`；唯一写入执行端为
   当前 WSL Codex。
-- Gate A 冻结实现：`734dcee900bc67e23d058d4fd6f8ef15db8d9847`。本地 `main` 只在
-  `origin/main` 的 UX-02 关闭基线上普通前向领先；未 push、未触发远程 CI、未部署、未连接
-  生产、未调用模型。
+- Gate A 首次实现 `734dcee900bc67e23d058d4fd6f8ef15db8d9847` 与完成记录
+  `11444a4d7920e5aa55979241691908120f25aca2` 保留；主控有界返工后的最终实现为
+  `4899a068b7b2310cb45cecac4def4ff17e537f05`。本地 `main` 只在 `origin/main` 的 UX-02
+  关闭基线上普通前向领先；未 push、未触发远程 CI、未部署、未连接生产、未调用模型。
 - 当前任务包：
   [`docs/UX-03-产品目标一致性与全链路修复执行包.md`](docs/UX-03-产品目标一致性与全链路修复执行包.md)。
 - Gate A 已在本地完成正式 React/API/PostgreSQL 的新租户入驻、品牌基线、自然人资格、
   逻辑发布账号、五段画像、多平台目标及最小生命周期闭环。全新 synthetic tenant 纵向和
   1440×900／768px／390×844 正式浏览器旅程通过并已精确清理；Golden/OpenAPI 为
   `421 passed, 1 skipped`，Ruff、mypy、前端四门和两份有界审查均无阻断。
-- 当前唯一下一动作：主控审阅 Gate A；通过后输出 Gate B 执行 Prompt。Gate B 尚未启动。
+- 最终有界返工进一步封闭：跨组织账号使用不再推导画像维护权；停用账号的既有成员授权可
+  原样保留或显式移除、但不能新增；有维护资格的内容用户可在身份抽屉查看完整五段画像并保存
+  Vn+1，同一逻辑账号跨平台／形式继续读取同一版本；synthetic 清理后对租户、身份、凭据、
+  会话、授权、账号、画像、事件和运维对象逐项断言为 0。显式命令
+  `DIYU_RUN_UX03_BROWSER=1 .venv/bin/pytest -q tests/test_ux03_gate_a.py` 退出码 0。
+- 当前 64 项功能真值为 `44/14/0/6/0`；FT-032 因资料来源可信度、版本时效、冲突及与当前
+  工作的完整关联仍待 Gate B，诚实记为“有缺陷”。
+- 当前唯一下一动作：主控最终复核 Gate A；通过后输出 Gate B 执行 Prompt。Gate B 尚未启动。
 
 ## UX-02 关闭记录（历史保留）
 
