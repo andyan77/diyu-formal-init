@@ -323,7 +323,10 @@ try {
   );
   await user.fill('input[name="password_confirm"]', newUserPassword);
   await user.click('button[type="submit"]', "完成设置");
-  await user.waitFor("location.pathname === '/login'", "激活后用户登录入口");
+  await user.waitFor(
+    "location.pathname === '/login' && document.querySelector('input[name=username]') !== null",
+    "激活后用户登录入口"
+  );
   await user.fill('input[name="username"]', newUsername);
   await user.fill('input[name="password"]', newUserPassword);
   await user.click('button[type="submit"]', "登录");
@@ -383,7 +386,10 @@ try {
   );
   await user.fill('input[name="password_confirm"]', resetUserPassword);
   await user.click('button[type="submit"]', "更新密码");
-  await user.waitFor("location.pathname === '/login'", "重设后用户登录入口");
+  await user.waitFor(
+    "location.pathname === '/login' && document.querySelector('input[name=username]') !== null",
+    "重设后用户登录入口"
+  );
   await user.fill('input[name="username"]', newUsername);
   await user.fill('input[name="password"]', resetUserPassword);
   await user.click('button[type="submit"]', "登录");
