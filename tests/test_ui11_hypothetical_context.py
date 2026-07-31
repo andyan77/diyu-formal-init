@@ -394,7 +394,7 @@ def test_actuality_fact_and_program_survive_revision_invariants() -> None:
         )
         == original.program_id
     )
-    assert DELIVERY_COMPILER_VERSION == "delivery-compiler-v3"
+    assert DELIVERY_COMPILER_VERSION == "delivery-compiler-v4"
 
     mutated = replace(
         original,

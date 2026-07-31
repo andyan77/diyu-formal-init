@@ -186,7 +186,9 @@ def test_recompile_isolated_and_same_target_revisions_stay_on_one_item(
         graphic_v2 = revised.json()
         assert graphic_v2["version"] == 2
         assert graphic_v2["adapted_from"] == "由抖音视频 V1 改编"
-        assert "只补拍四张" in graphic_v2["body"]
+        assert "只补拍四张" not in graphic_v2["body"]
+        assert "可选补拍建议" in graphic_v2["body"]
+        assert "没有也不影响" in graphic_v2["body"]
         revision_receipt = _receipt(app_database_url, graphic["task_id"])
         assert revision_receipt["source_description"] == "由抖音视频 V1 改编"
         assert (
@@ -268,11 +270,9 @@ def test_transform_boundaries_receipts_and_silent_store_video(app_database_url: 
         store.get("/ui/select/content-store")
         created = store.post("/api/v1/content", json={"weak_seed": _P5D, "target": "douyin_video"})
         assert created.status_code == 200
-        body = created.json()["body"]
-        assert "完整台词/解说" in body
-        assert "无口播、无对白、无解说" in body
-        assert "声音与制作提示" in body
-        assert "图序与每张职责" not in body
+        payload = created.json()
+        assert payload["kind"] == "question"
+        assert "当前可用于制作的登记商品素材" in payload["message"]
 
 
 def test_openapi_exposes_only_target_names_and_not_account_ids() -> None:

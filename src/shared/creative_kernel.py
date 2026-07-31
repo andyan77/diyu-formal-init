@@ -55,7 +55,11 @@ UnitTextSource: TypeAlias = Literal[
 
 LEGACY_KERNEL_VERSION = "creative-kernel-v1"
 DUAL_TRACK_KERNEL_VERSION = "creative-kernel-v2"
-KERNEL_VERSION = "creative-kernel-v3"
+MEDIA_NATIVE_KERNEL_VERSION = "creative-kernel-v3"
+KERNEL_VERSION = "creative-kernel-v4"
+_WRITER_SUPPORTING_COPY_KERNEL_VERSIONS = frozenset(
+    {MEDIA_NATIVE_KERNEL_VERSION, KERNEL_VERSION}
+)
 MAX_PRODUCT_FACT_BLOCKS = 3
 DRAMATIZATION_DISCLOSURE = "以下是情景演绎，不对应真实人物或经历："
 HYPOTHESIS_DISCLOSURE = "假设有这样一幕："
@@ -252,14 +256,14 @@ def build_kernel_skeleton(
     if program_id == ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM and frame.narrative_mode != "actuality_reflection":
         raise ValueError("local dramatization program requires actuality reflection")
     body_types: tuple[ObservationType, ...]
-    product_recommendation_body = kernel_version == KERNEL_VERSION and primary_product in {
+    product_recommendation_body = kernel_version in _WRITER_SUPPORTING_COPY_KERNEL_VERSIONS and primary_product in {
         "dressing_decision",
         "product_truth",
         "local_response",
         "visual_styling_story",
     }
     product_hypothesis_body = (
-        kernel_version == KERNEL_VERSION
+        kernel_version in _WRITER_SUPPORTING_COPY_KERNEL_VERSIONS
         and primary_product == "brand_life_narrative"
         and frame.narrative_mode == "actuality_reflection"
     )
@@ -273,11 +277,24 @@ def build_kernel_skeleton(
     constraints = tuple(dict.fromkeys(constraint_refs))
     resources = tuple(dict.fromkeys(allowed_resource_ids))
     expression_resources = (
-        resources
-        if kernel_version == KERNEL_VERSION and primary_product == "visual_styling_story"
-        else tuple(resource_id for resource_id in resources if not resource_id.startswith("resource:product:"))
+        ()
+        if kernel_version == KERNEL_VERSION
+        else (
+            resources
+            if kernel_version == MEDIA_NATIVE_KERNEL_VERSION
+            and primary_product == "visual_styling_story"
+            else tuple(
+                resource_id
+                for resource_id in resources
+                if not resource_id.startswith("resource:product:")
+            )
+        )
     )
-    if kernel_version not in {DUAL_TRACK_KERNEL_VERSION, KERNEL_VERSION}:
+    if kernel_version not in {
+        DUAL_TRACK_KERNEL_VERSION,
+        MEDIA_NATIVE_KERNEL_VERSION,
+        KERNEL_VERSION,
+    }:
         raise ValueError("unsupported creative kernel version")
     compiler_owned_supporting_copy = kernel_version == DUAL_TRACK_KERNEL_VERSION
     units: list[CreativeKernelUnit] = [
@@ -309,7 +326,7 @@ def build_kernel_skeleton(
             text_source=("server_compiler" if compiler_owned_supporting_copy else "writer"),
         ),
     ]
-    if not compiler_owned_supporting_copy:
+    if kernel_version == MEDIA_NATIVE_KERNEL_VERSION:
         units.extend(
             (
                 CreativeKernelUnit(
@@ -666,7 +683,10 @@ def parse_writer_kernel(
                 for unit_id, text in compiler_texts.items()
             )
         )
-    elif skeleton.kernel_version == KERNEL_VERSION:
+    elif skeleton.kernel_version in {
+        MEDIA_NATIVE_KERNEL_VERSION,
+        KERNEL_VERSION,
+    }:
         invalid_compiler_contract = (
             invalid_compiler_contract
             or bool(compiler_ids)
@@ -850,6 +870,7 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
         not in {
             LEGACY_KERNEL_VERSION,
             DUAL_TRACK_KERNEL_VERSION,
+            MEDIA_NATIVE_KERNEL_VERSION,
             KERNEL_VERSION,
         }
         or not isinstance(raw_units, list)
@@ -1197,7 +1218,10 @@ def _unit_text_source(
 ) -> UnitTextSource:
     if purpose == "frozen_fact":
         expected: UnitTextSource = "server_fact"
-    elif purpose in {"natural_guide", "release_caption"} and kernel_version != KERNEL_VERSION:
+    elif (
+        purpose in {"natural_guide", "release_caption"}
+        and kernel_version not in _WRITER_SUPPORTING_COPY_KERNEL_VERSIONS
+    ):
         expected = "server_compiler"
     else:
         expected = "writer"
@@ -1213,7 +1237,7 @@ def _unit_text_source(
         raise DomainError("冻结事实文字来源无效")
     if (
         purpose in {"natural_guide", "release_caption"}
-        and kernel_version != KERNEL_VERSION
+        and kernel_version not in _WRITER_SUPPORTING_COPY_KERNEL_VERSIONS
         and value != "server_compiler"
     ):
         raise DomainError("编译器文字来源无效")
@@ -1236,7 +1260,11 @@ def normalize_writer_unit_text(
     normalized_input = text
     removed_prefix: str | None = None
     if (
-        kernel_version == KERNEL_VERSION
+        kernel_version
+        in {
+            MEDIA_NATIVE_KERNEL_VERSION,
+            KERNEL_VERSION,
+        }
         and unit.text_source == "writer"
         and media_format is not None
     ):

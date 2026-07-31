@@ -14,6 +14,14 @@ from src.shared.factual_basis import (
     build_product_fact_packet,
     product_fact_packet_document,
 )
+from src.shared.media_program import (
+    MediaCapabilityEnvelopeV1,
+    MediaProgramSelectionV1,
+    media_envelope_digest,
+    media_envelope_document,
+    media_program_digest,
+    media_program_document,
+)
 from src.shared.narrative import NarrativeFrame, frame_document
 from src.shared.types import (
     ContentControlContext,
@@ -455,6 +463,8 @@ def snapshot_document(
     creative_plan: CreativePlanV2 | None = None,
     creation_commitment: CreationCommitment | None = None,
     delivery_compiler_version: str | None = DELIVERY_COMPILER_VERSION,
+    media_capability_envelope: MediaCapabilityEnvelopeV1 | None = None,
+    media_program: MediaProgramSelectionV1 | None = None,
 ) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
@@ -529,6 +539,26 @@ def snapshot_document(
         "narrative_frame": (frame_document(narrative_frame) if narrative_frame is not None else None),
         "creative_kernel_v1": None,
         "delivery_compiler_version": delivery_compiler_version,
+        "media_capability_envelope": (
+            media_envelope_document(media_capability_envelope)
+            if media_capability_envelope is not None
+            else None
+        ),
+        "media_capability_envelope_digest": (
+            media_envelope_digest(media_capability_envelope)
+            if media_capability_envelope is not None
+            else None
+        ),
+        "media_program": (
+            media_program_document(media_program)
+            if media_program is not None
+            else None
+        ),
+        "media_program_digest": (
+            media_program_digest(media_program)
+            if media_program is not None
+            else None
+        ),
         "reviewed_kernel_digest": None,
         "visible_provenance": None,
         "account_expression": (

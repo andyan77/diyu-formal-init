@@ -82,16 +82,16 @@ def test_x01_routes_assets_versions_and_shared_product_truth(app_database_url: s
     p3 = service.create_from_weak_seed(scope, R2_A)
     p4 = service.create_from_weak_seed(scope, R2_B)
     independent = service.create_from_weak_seed(scope, R3, UUID(str(p3["version_id"])))
-    assert [item["kind"] for item in (p1, p2, p5, p3, p4, independent)] == ["content"] * 6
-    assert [_product(item, app_database_url) for item in (p1, p2, p5, p3, p4, independent)] == [
+    assert [item["kind"] for item in (p1, p2, p3, p4)] == ["content"] * 4
+    assert p5["kind"] == "question"
+    assert independent["kind"] == "question"
+    assert "当前可用于制作的登记商品素材" in str(p5["message"])
+    assert [_product(item, app_database_url) for item in (p1, p2, p3, p4)] == [
         "dressing_decision",
         "product_truth",
-        "visual_styling_story",
         "brand_life_narrative",
         "local_response",
-        "visual_styling_story",
     ]
-    assert p3["task_id"] != independent["task_id"]
     assert service.fetch_version(scope, UUID(str(p3["task_id"])), 1)["body"] == p3["body"]
     p1_v2 = service.revise(scope, UUID(str(p1["task_id"])), "把开头放轻一点。")
     assert p1_v2["version"] == 2
@@ -106,9 +106,6 @@ def test_x01_routes_assets_versions_and_shared_product_truth(app_database_url: s
         received["brand_life_narrative"]
     )
     assert {"C-LOCAL-001", "C-LOCAL-002", "D-RESPONSE-002"}.issubset(received["local_response"])
-    assert {"B-VIS-001", "B-VIS-003", "B-VIS-005", "B-VIS-006"}.issubset(
-        received["visual_styling_story"]
-    )
     p2_input = next(item for item in generator.inputs if item.primary_product == "product_truth")
     p2_assets = {asset.asset_id: asset.body for asset in p2_input.active_domain_assets}
     assert "厚度增加可能改变支撑和体积" not in p2_assets["A-MAT-005"]
@@ -126,30 +123,7 @@ def test_x01_routes_assets_versions_and_shared_product_truth(app_database_url: s
     ]
     assert all(item.products and item.products[0].sku == "ZX-C218" for item in product_inputs)
     assert "960 克" in str(p2["body"])
-    assert "炭灰纯色" in str(p5["body"])
     assert "想先看就先看，不用解释" in str(p4["body"])
-    with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
-        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
-        cursor.execute(
-            "SELECT input_receipt FROM generation_runs WHERE task_id=%s ORDER BY started_at DESC LIMIT 1",
-            (p5["task_id"],),
-        )
-        receipt = cursor.fetchone()
-    assert receipt is not None
-    assert receipt[0]["primary_content_product"] == "visual_styling_story"
-    assert receipt[0]["product_refs"] == [
-        {
-            "sku": "ZX-C218",
-            "display_name": "双面短外套",
-            "source_kind": "legacy_seed",
-            "source_note": "",
-            "fact_version": 1,
-            "applicability": "legacy_scope",
-        }
-    ]
-    p5_v2 = service.revise(scope, UUID(str(p5["task_id"])), "把开头放轻一点。")
-    assert p5_v2["version"] == 2
-    assert generator.inputs[-1].products[0].sku == "ZX-C218"
 
 
 def test_store_identity_ui_and_account_boundary(app_database_url: str) -> None:
@@ -199,6 +173,6 @@ def test_sibling_brand_product_never_enters_store_content_input(
         generator,
     )
     created = service.create_from_weak_seed(_store_scope(), R1_C)
-    assert created["kind"] == "content"
-    assert "兄弟品牌诱饵" not in str(generator.inputs[-1].products)
-    assert generator.inputs[-1].brand.brand_name == "折线之间"
+    assert created["kind"] == "question"
+    assert "当前可用于制作的登记商品素材" in str(created["message"])
+    assert generator.inputs == []

@@ -44,6 +44,7 @@ from src.shared.creative_kernel import (
     KERNEL_VERSION,
     LEGACY_KERNEL_VERSION,
     MAX_PRODUCT_FACT_BLOCKS,
+    MEDIA_NATIVE_KERNEL_VERSION,
     CreativeKernelV1,
     build_kernel_skeleton,
     compiler_owned_unit_source,
@@ -62,6 +63,7 @@ from src.shared.creative_plan import (
 )
 from src.shared.delivery_compiler import (
     DUAL_TRACK_DELIVERY_COMPILER_VERSION,
+    MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
     SUPPORTED_DELIVERY_COMPILER_VERSIONS,
     DeliveryCompileInput,
     assert_compiled_delivery,
@@ -81,6 +83,13 @@ from src.shared.factual_basis import (
     product_fact_records,
     registered_product_claims,
     select_product_fact_block_ids,
+)
+from src.shared.media_program import (
+    assert_media_program_allowed,
+    media_envelope_digest,
+    media_envelope_document,
+    media_program_digest,
+    media_program_document,
 )
 from src.shared.narrative import (
     NarrativeBlock,
@@ -317,22 +326,37 @@ class BoundaryContext:
             ),
         )
         resource_registry = (
-            (
-                _CREATOR_EXPRESSION_RESOURCE_ID,
-                "创作者本人可选择口播、旁白、手势或不出镜表达；不证明其具有题材中的家庭、职业或经历身份",
-            ),
-            (
-                _ORIGINAL_COMPOSITION_RESOURCE_ID,
-                "本次原创的抽象构图、排版、留白、色块、符号、文字和声音组织；"
-                "不包含现实人物、场地、家具、照片、商品或外部素材",
-            ),
-            *(
+            tuple(
                 (
-                    f"resource:product:{product.sku}",
-                    f"本次已确认可用商品样衣 {product.sku}",
+                    resource.resource_id,
+                    (
+                        "服务端冻结媒体资源；只供确定性媒体程序使用，"
+                        "不授权 Writer 写拍摄、道具、场地或声音说明"
+                    ),
                 )
-                for product in request.products
-            ),
+                for resource in request.media_capability_envelope.resources
+            )
+            if request.media_capability_envelope is not None
+            else (
+                (
+                    _CREATOR_EXPRESSION_RESOURCE_ID,
+                    "创作者本人可选择口播、旁白、手势或不出镜表达；"
+                    "不证明其具有题材中的家庭、职业或经历身份",
+                ),
+                (
+                    _ORIGINAL_COMPOSITION_RESOURCE_ID,
+                    "本次原创的抽象构图、排版、留白、色块、符号、"
+                    "文字和声音组织；不包含现实人物、场地、家具、"
+                    "照片、商品或外部素材",
+                ),
+                *(
+                    (
+                        f"resource:product:{product.sku}",
+                        f"本次已确认可用商品样衣 {product.sku}",
+                    )
+                    for product in request.products
+                ),
+            )
         )
         method_parts = [
             "冻结 CreativePlanV2："
@@ -399,7 +423,17 @@ class BoundaryContext:
                     _CREATOR_ACTOR_ID,
                     "当前创作者，仅以拍摄者／表达者身份出现，不扮演题材人物",
                 ),
-            ),
+            )
+            if any(
+                resource.capability_id == "creator_expression"
+                for resource in (
+                    request.media_capability_envelope.resources
+                    if request.media_capability_envelope is not None
+                    else ()
+                )
+            )
+            or request.media_capability_envelope is None
+            else (),
             product_facts_text=product_facts_text or "（本次没有冻结商品事实。）",
             brand_text=brand_text,
             method_text="\n".join(part for part in method_parts if part),
@@ -569,11 +603,29 @@ class DeepSeekGenerator(ContentGenerator):
             prior_kernel=request.prior_creative_kernel,
             revision_instruction=request.revision_instruction,
         )
-        kernel_version = (
-            DUAL_TRACK_KERNEL_VERSION
-            if request.delivery_compiler_version == DUAL_TRACK_DELIVERY_COMPILER_VERSION
-            else KERNEL_VERSION
-        )
+        if (
+            request.delivery_compiler_version
+            == DUAL_TRACK_DELIVERY_COMPILER_VERSION
+        ):
+            kernel_version = DUAL_TRACK_KERNEL_VERSION
+        elif (
+            request.delivery_compiler_version
+            == MEDIA_NATIVE_DELIVERY_COMPILER_VERSION
+        ):
+            kernel_version = MEDIA_NATIVE_KERNEL_VERSION
+        else:
+            kernel_version = KERNEL_VERSION
+            if (
+                request.media_capability_envelope is None
+                or request.media_program is None
+            ):
+                raise GenerationFailed(
+                    "新内容生成缺少冻结媒体能力包或媒体程序"
+                )
+            assert_media_program_allowed(
+                request.media_capability_envelope,
+                request.media_program,
+            )
         skeleton = build_kernel_skeleton(
             frame=frame,
             fact_registry=context.fact_registry,
@@ -613,6 +665,10 @@ class DeepSeekGenerator(ContentGenerator):
             allowed_resource_ids=context.resource_ids,
             immutable_fact_blocks=context.product_fact_blocks,
             trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
+            media_capability_envelope=(
+                request.media_capability_envelope
+            ),
+            media_program=request.media_program,
         )
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product)
@@ -713,6 +769,30 @@ class DeepSeekGenerator(ContentGenerator):
                 ),
                 "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
                 "delivery_resource_refs": list(compiled.resource_refs),
+                "media_capability_envelope": (
+                    media_envelope_document(
+                        request.media_capability_envelope
+                    )
+                    if request.media_capability_envelope is not None
+                    else None
+                ),
+                "media_capability_envelope_digest": (
+                    media_envelope_digest(
+                        request.media_capability_envelope
+                    )
+                    if request.media_capability_envelope is not None
+                    else None
+                ),
+                "media_program": (
+                    media_program_document(request.media_program)
+                    if request.media_program is not None
+                    else None
+                ),
+                "media_program_digest": (
+                    media_program_digest(request.media_program)
+                    if request.media_program is not None
+                    else None
+                ),
             },
         )
 
@@ -1227,17 +1307,15 @@ class DeepSeekGenerator(ContentGenerator):
 部件或“它／这件对象”都不能成为 Writer 文字的主语、宾语或指代对象；所有文字必须在不知
 道对象名称、类别和属性时仍然成立。不得出现 SKU、商品名、
 品类、颜色、数字、结构、性能、用途、效果、价格、库存、设计动机、比较结论、手感或实际
-体验。媒体单元只能安排服务端事实原句和已登记资源怎样进入画面，不能借制作说明补充商品
-语义。title 应短而自然，body 提供独立观看价值；不能写成事实审计、资料说明或免责声明。"""
+体验。title 应短而自然，body 提供独立观看价值；不能写成事实审计、资料说明或免责声明。"""
             if fact_blocks
             else ""
         )
         if fact_blocks and request.primary_product == "visual_styling_story":
             product_creative_rule += """
-本篇另外给出的 resource:registered-product-N 只证明有若干件登记样衣可进入画面，不包含
-也不许可推断它们的品类、上下装关系、材质、版型、穿着效果或适用场景。创作文字只能称为
-“第一件／第二件登记样衣”或“这组样衣”，围绕同背景、同机位下的并置、间距、前后顺序和
-画面重心给出可拍步骤；不得把其中任何一件猜成上衣、裤子、裙子，也不得写上身效果。"""
+本篇存在由服务端独立控制的登记商品媒体资源，但它们不包含也不许可推断品类、上下装关系、
+材质、版型、穿着效果或适用场景。你只写本篇的选择价值，不写拍摄、摆放、出镜、道具、
+场地、声音或资源说明；媒体关系由服务端确定性编排。"""
         safe_product_topics = list(request.creative_plan.topic_spans)
         if server_selected_product_facts:
             for index, topic in enumerate(safe_product_topics):
@@ -1290,10 +1368,55 @@ Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creati
             "自然导读和发布配文由 DeliveryCompiler 使用版本化中性短语生成。"
             if resolved_compiler_texts
             else (
-                "服务端已经预分配标题、观看回报、核心正文、媒体开头、媒体推进、"
-                "字幕策略（视频）、制作提示和发布配文；你只能填写这些既定单元。"
+                "服务端已经预分配标题、观看回报、核心正文和发布配文；"
+                "首图／首帧、图序／观看链、字幕、声音和制作提示由服务端冻结的"
+                f"媒体程序 {request.media_program.program_id} 确定性生成。"
+                "你不得返回任何媒体单元、资源引用、拍摄、摆放、出镜、道具、"
+                "场地或声音绑定。"
+                if skeleton.kernel_version == KERNEL_VERSION
+                and request.media_program is not None
+                else (
+                    "服务端已经预分配标题、观看回报、核心正文、媒体开头、"
+                    "媒体推进、字幕策略（视频）、制作提示和发布配文；"
+                    "你只能填写这些既定单元。"
+                )
             )
         )
+        if skeleton.kernel_version == KERNEL_VERSION:
+            resource_instruction = (
+                "v4 的全部 Writer unit 均不持有媒体资源；allowed_resources 必须为空。"
+                "你只写标题、观看回报、核心正文和发布配文，不得写拍摄、摆放、"
+                "出镜、镜头、图片、场地、道具、商品实物或声音安排。"
+            )
+            unit_instruction = (
+                "title 直接写自然作品标题；natural_guide 用一句话给出具体观看回报；"
+                "按可见顺序排列的一个或多个 body 单元共同组成完整核心正文；"
+                "release_caption 是可直接发布的配文，不重复正文，也不强制互动。"
+                "完整平台媒体结构由服务端冻结的媒体程序确定性生成。"
+            )
+            media_instruction = (
+                "不要返回或描述媒体制作单元。你不能把 production condition、"
+                "ProductFact、用户原话或系列前情解释为现实资源许可。"
+            )
+        else:
+            resource_instruction = (
+                "每个单元只能使用其 allowed_resources 列出的资源；资源描述是制作许可"
+                "边界，不是现实事实许可证。allowed_resources 为空时，只能写无需现实"
+                "人物、场地、道具、商品、照片或外部素材的原创文字／抽象构图。"
+                "不得在可见文字里补出未登记资源。"
+            )
+            unit_instruction = (
+                "title 直接写自然作品标题；natural_guide 直接用一句话给出具体观看回报；"
+                "按可见顺序排列的一个或多个 body 单元共同组成完整核心正文。"
+                "media_opening 直接写观众首先看到或听到的具体内容；media_sequence 让每张"
+                "图或每段画面承担不同职责；subtitle_strategy 只写字幕取舍与重点，不得"
+                "复制完整正文；production_note 只使用本次已登记制作条件与资源，写声音、"
+                "拍摄、排版或剪辑要点；release_caption 是可直接发布的配文。"
+            )
+            media_instruction = (
+                "媒体制作单元只能使用本次已登记制作条件，不得新增人物、地点、商品、"
+                "道具或声音资源。"
+            )
         return f"""完成一个可直接交付的 CreativeKernel。你只负责“说什么、怎样表达”，不负责
 创建或改变 scene、actor、resource、track、mode、unit_id、事实、来源或语义合同。
 {supporting_copy_rule}
@@ -1340,14 +1463,9 @@ topic_spans 是用户原话证据，可能同时包含创作命令、控制要�
 DeliveryCompiler 根据 unit_id 确定性组装。skeleton 中的 purpose 只说明下游消费用途，
 不是要求写入 text 的标题；text_contract 规定 Writer 从该单元的实际内容第一字开始填写，
 结构包装归 wrapper_owner 所有。
-每个单元只能使用其 allowed_resources 列出的资源；资源描述是制作许可边界，不是现实事实
-许可证。allowed_resources 为空时，只能写无需现实人物、场地、道具、商品、照片或外部素材
-的原创文字／抽象构图。不得在可见文字里补出未登记资源。
-title 直接写自然作品标题；natural_guide 直接用一句话给出具体观看回报；按可见顺序排列的
-一个或多个 body 单元共同组成完整核心正文。media_opening 直接写观众首先看到或听到的
-具体内容；media_sequence 让每张图或每段画面承担不同职责；subtitle_strategy 只写字幕取舍与重点，
-不得复制完整正文；production_note 只使用本次已登记制作条件与资源，写声音、拍摄、排版
-或剪辑要点；release_caption 是可直接发布的配文，不重复正文，也不强制互动。各单元围绕
+{resource_instruction}
+{unit_instruction}
+各单元围绕
 同一个主要价值，但不得机械复述同一句话。图文要有首图、图序、完整正文、制作提示和配文；
 视频要有可拍开头、完整台词、画面动作、字幕策略、声音与配文。只有本次资源确实只支持
 文字卡或用户主动选择时，才把整篇退化为固定文字卡。
@@ -1368,8 +1486,7 @@ track 与 mode 是服务端在写作前冻结的唯一表达轨；你不能返�
 title 也属于服务端预分配的 creative_expression。Compiler 只为整篇插入一次自然范围说明，
 不会替你创作标题前缀、概要、互动句、图序或固定文字卡。
 不要把 topic 写成用户亲历；除 hypothesis/dramatization 既定单元外，不要创造人物微事件。
-不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。媒体制作单元只能
-使用本次已登记制作条件，不得新增人物、地点、商品、道具或声音资源。
+不要写品牌、公司、门店或账号相信、坚持、倡导、承诺、长期做法或历史。{media_instruction}
 Writer-owned clause 不得让当前表达者或第一人称复数承担
 未经品牌事实支持的做法、经历或承诺；
 介绍本文时使用中性的“这篇内容／这个角度”，不能用机构性“我们”。abstract_observation

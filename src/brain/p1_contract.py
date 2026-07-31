@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import re
 
-from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
+from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_VERSION,
+    MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
+)
 from src.shared.errors import GenerationFailed
 from src.shared.types import (
     GeneratedArtifact,
@@ -36,9 +39,16 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
     compiler_version = (artifact.completion_snapshot_patch or {}).get(
         "delivery_compiler_version"
     )
-    media_native = compiler_version == DELIVERY_COMPILER_VERSION
+    media_native = compiler_version in {
+        MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
+        DELIVERY_COMPILER_VERSION,
+    }
     if isinstance(artifact.production, VideoProductionBundle):
-        required = vars(artifact.production).values()
+        required = tuple(
+            value
+            for key, value in vars(artifact.production).items()
+            if key != "optional_capture_suggestion"
+        )
         headings: tuple[str, ...] = (
             (
                 "标题",
@@ -67,7 +77,11 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
             )
         )
     elif isinstance(artifact.production, GraphicProductionBundle):
-        required = vars(artifact.production).values()
+        required = tuple(
+            value
+            for key, value in vars(artifact.production).items()
+            if key != "optional_capture_suggestion"
+        )
         headings = (
             (
                 "标题",
@@ -96,6 +110,11 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         raise GenerationFailed("内容成品缺少可执行的媒体制作部分")
     if not all(heading in artifact.body for heading in headings):
         raise GenerationFailed("内容成品正文没有完整可见文字包")
+    if (
+        artifact.production.optional_capture_suggestion
+        and "可选补拍建议" not in artifact.body
+    ):
+        raise GenerationFailed("内容成品遗漏可见的可选补拍建议")
     # The semantic contract remains persisted and validated above, but it is no longer copied
     # verbatim into the user artifact as compiler scaffolding. Source binding and product-specific
     # generation checks establish the contract; the production bundle is the user-facing result.

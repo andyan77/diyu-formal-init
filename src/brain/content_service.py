@@ -32,6 +32,7 @@ from src.shared.content_snapshot import (
     frozen_creative_kernel,
     frozen_creative_plan,
     frozen_delivery_compiler_version,
+    frozen_media_contract,
     frozen_narrative_frame,
     frozen_series_context,
     frozen_user_premise,
@@ -50,6 +51,12 @@ from src.shared.delivery_compiler import (
 )
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import brand_fact_records, product_fact_records
+from src.shared.media_program import (
+    MediaCapabilityEnvelopeV1,
+    MediaProgramSelectionV1,
+    build_media_capability_envelope,
+    select_media_program,
+)
 from src.shared.narrative import (
     NarrativeFrame,
     NarrativeMode,
@@ -69,6 +76,7 @@ from src.shared.types import (
     ConversationInput,
     ConversationTurn,
     GenerationInput,
+    MediaFormat,
     PlatformDirection,
     ProductFact,
     ReferenceMaterial,
@@ -242,6 +250,18 @@ class ContentService:
         frozen_frame = narrative_frame or legacy_frame(
             tuple(record.fact_id for product in products for record in product_fact_records(product))
         )
+        try:
+            media_envelope, media_program = self._new_media_contract(
+                control=control,
+                target=target,
+                media_format=direction.media_format,
+                primary_product=primary_product,
+                creative_plan=plan,
+                series_context=series_context,
+                fact_count=len(frozen_frame.allowed_fact_ids),
+            )
+        except GenerationFailed as exc:
+            return {"kind": "question", "message": str(exc)}
         task_id, run_id, prior_body = self._repository.create_task_and_running_run(
             scope,
             sanitized_seed,
@@ -268,6 +288,8 @@ class ContentService:
                 sanitized_seed,
                 plan,
                 commitment,
+                media_capability_envelope=media_envelope,
+                media_program=media_program,
             ),
             series_context,
             client_request_id=client_request_id,
@@ -293,6 +315,8 @@ class ContentService:
             plan,
             DELIVERY_COMPILER_VERSION,
             None,
+            media_envelope,
+            media_program,
         )
 
     def respond_to_conversation(
@@ -784,10 +808,15 @@ class ContentService:
         creative_plan = frozen_creative_plan(snapshot)
         delivery_compiler_version = frozen_delivery_compiler_version(snapshot)
         prior_creative_kernel = frozen_creative_kernel(snapshot)
+        media_envelope, media_program = frozen_media_contract(snapshot)
         if delivery_compiler_version is not None and (
             delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
             raise GenerationFailed("这条内容冻结的创作内核无法可靠读取")
+        if delivery_compiler_version == DELIVERY_COMPILER_VERSION and (
+            media_envelope is None or media_program is None
+        ):
+            raise GenerationFailed("这条内容冻结的媒体合同无法可靠读取")
         if creative_plan is None:
             frame = new_frame(
                 (frame.narrative_mode if frame is not None else "general_observation"),
@@ -853,6 +882,8 @@ class ContentService:
             creative_plan,
             delivery_compiler_version,
             prior_creative_kernel,
+            media_envelope,
+            media_program,
         )
 
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:
@@ -890,6 +921,7 @@ class ContentService:
         creative_plan = frozen_creative_plan(snapshot)
         delivery_compiler_version = frozen_delivery_compiler_version(snapshot)
         prior_creative_kernel = frozen_creative_kernel(snapshot)
+        frozen_media_contract(snapshot)
         if delivery_compiler_version is not None and (
             delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
@@ -937,6 +969,25 @@ class ContentService:
             target,
             direction.media_format,
         )
+        media_envelope: MediaCapabilityEnvelopeV1 | None = None
+        media_program: MediaProgramSelectionV1 | None = None
+        if delivery_compiler_version == DELIVERY_COMPILER_VERSION:
+            try:
+                media_envelope, media_program = self._new_media_contract(
+                    control=control,
+                    target=target,
+                    media_format=direction.media_format,
+                    primary_product=source.primary_product,
+                    creative_plan=creative_plan,
+                    series_context=series_context,
+                    fact_count=(
+                        len(frame.allowed_fact_ids)
+                        if frame is not None
+                        else 0
+                    ),
+                )
+            except GenerationFailed as exc:
+                return {"kind": "question", "message": str(exc)}
         assets = self._repository.load_active_assets(
             target_scope,
             source.primary_product,
@@ -976,6 +1027,8 @@ class ContentService:
                     creation_kind="recompile",
                 ),
                 delivery_compiler_version=delivery_compiler_version,
+                media_capability_envelope=media_envelope,
+                media_program=media_program,
             ),
             None,
         )
@@ -1000,6 +1053,8 @@ class ContentService:
             creative_plan,
             delivery_compiler_version,
             prior_creative_kernel,
+            media_envelope,
+            media_program,
         )
 
     def identity_summary(self, scope: TrustedScope, target: ContentTarget = "douyin_video") -> dict[str, str]:
@@ -1018,6 +1073,40 @@ class ContentService:
             "platform": context.platform,
             "media_format": context.media_format,
         }
+
+    @staticmethod
+    def _new_media_contract(
+        *,
+        control: ContentControlContext,
+        target: ContentTarget,
+        media_format: str,
+        primary_product: ContentProduct,
+        creative_plan: CreativePlanV2,
+        series_context: SeriesContext | None,
+        fact_count: int,
+    ) -> tuple[MediaCapabilityEnvelopeV1, MediaProgramSelectionV1]:
+        if media_format not in {"graphic", "video"}:
+            raise GenerationFailed("当前内容形式没有可用的媒体程序")
+        envelope = build_media_capability_envelope(
+            platform_shape=platform_shape(
+                target,
+                cast(MediaFormat, media_format),
+            ),
+            media_format=cast(MediaFormat, media_format),
+            selected_materials=control.materials,
+        )
+        program = select_media_program(
+            primary_product=primary_product,
+            envelope=envelope,
+            mechanism_id=creative_plan.mechanism_id,
+            series_position=(
+                series_context.target_position
+                if series_context is not None
+                else None
+            ),
+            fact_count=fact_count,
+        )
+        return envelope, program
 
     def _generate_and_persist(
         self,
@@ -1041,6 +1130,8 @@ class ContentService:
         creative_plan: CreativePlanV2 | None = None,
         delivery_compiler_version: str | None = None,
         prior_creative_kernel: CreativeKernelV1 | None = None,
+        media_capability_envelope: MediaCapabilityEnvelopeV1 | None = None,
+        media_program: MediaProgramSelectionV1 | None = None,
     ) -> dict[str, object]:
         try:
             # The run is already durable here. Keep the first generation event
@@ -1072,6 +1163,8 @@ class ContentService:
                     creative_plan=creative_plan,
                     delivery_compiler_version=delivery_compiler_version,
                     prior_creative_kernel=prior_creative_kernel,
+                    media_capability_envelope=media_capability_envelope,
+                    media_program=media_program,
                 )
             )
             if progress is not None:

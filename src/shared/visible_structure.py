@@ -78,6 +78,7 @@ PRODUCT_VISIBLE_HEADINGS = (
     "封面文案",
     "制作提示",
     "配文",
+    "可选补拍建议",
     *tuple(
         dict.fromkeys(
             V3_COMPILER_VISIBLE_HEADING_BY_MEDIA_PURPOSE.values()

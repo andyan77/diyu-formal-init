@@ -443,9 +443,9 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert "system_creative_plan" not in snapshot
         kernel_v1 = snapshot["creative_kernel_v2"]
         assert isinstance(kernel_v1, dict)
-        assert kernel_v1["kernel_version"] == "creative-kernel-v3"
+        assert kernel_v1["kernel_version"] == "creative-kernel-v4"
         assert kernel_v1["program_id"] == "observation_only_v1"
-        assert snapshot["delivery_compiler_version"] == "delivery-compiler-v3"
+        assert snapshot["delivery_compiler_version"] == "delivery-compiler-v4"
         assert snapshot["version_authorization"] == "deterministic-dual-track-v1"
         assert "review_evidence_version" not in snapshot
         assert isinstance(snapshot["reviewed_kernel_digest"], str)

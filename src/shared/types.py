@@ -9,6 +9,10 @@ from src.shared.narrative import NarrativeFrame, NarrativeMode, UserFactCandidat
 
 if TYPE_CHECKING:
     from src.shared.creative_kernel import CreativeKernelV1
+    from src.shared.media_program import (
+        MediaCapabilityEnvelopeV1,
+        MediaProgramSelectionV1,
+    )
 
 ContentProduct: TypeAlias = Literal[
     "dressing_decision",
@@ -168,6 +172,7 @@ class VideoProductionBundle(P1ProductionBundle):
     viewing_flow: str
     natural_duration: str
     release_caption_and_interaction: str
+    optional_capture_suggestion: str | None = None
 
 
 @dataclass(frozen=True)
@@ -180,6 +185,7 @@ class GraphicProductionBundle:
     full_body: str
     layout_and_production: str
     release_caption_and_interaction: str
+    optional_capture_suggestion: str | None = None
 
 
 ContentProductionBundle: TypeAlias = VideoProductionBundle | GraphicProductionBundle
@@ -402,6 +408,8 @@ class GenerationInput:
     creative_plan: CreativePlanV2 | None = None
     delivery_compiler_version: str | None = None
     prior_creative_kernel: CreativeKernelV1 | None = None
+    media_capability_envelope: MediaCapabilityEnvelopeV1 | None = None
+    media_program: MediaProgramSelectionV1 | None = None
 
 
 @dataclass(frozen=True)

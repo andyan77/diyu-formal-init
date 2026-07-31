@@ -12,6 +12,15 @@ from src.shared.creative_plan import (
     creative_plan_from_document,
 )
 from src.shared.errors import DomainError
+from src.shared.media_program import (
+    MediaCapabilityEnvelopeV1,
+    MediaProgramSelectionV1,
+    assert_media_program_allowed,
+    media_envelope_digest,
+    media_envelope_from_document,
+    media_program_digest,
+    media_program_from_document,
+)
 from src.shared.narrative import NarrativeFrame, frame_from_document
 from src.shared.types import ProductFact, SeriesContext, SeriesEntry
 
@@ -50,6 +59,30 @@ def frozen_delivery_compiler_version(
 ) -> str | None:
     value = snapshot.get("delivery_compiler_version")
     return value if isinstance(value, str) and value else None
+
+
+def frozen_media_contract(
+    snapshot: Mapping[str, object],
+) -> tuple[
+    MediaCapabilityEnvelopeV1 | None,
+    MediaProgramSelectionV1 | None,
+]:
+    raw_envelope = snapshot.get("media_capability_envelope")
+    raw_program = snapshot.get("media_program")
+    if raw_envelope is None and raw_program is None:
+        return None, None
+    if raw_envelope is None or raw_program is None:
+        raise DomainError("内容任务冻结的媒体合同不完整")
+    envelope = media_envelope_from_document(raw_envelope)
+    program = media_program_from_document(raw_program)
+    assert_media_program_allowed(envelope, program)
+    if snapshot.get("media_capability_envelope_digest") != media_envelope_digest(
+        envelope
+    ):
+        raise DomainError("内容任务冻结的媒体能力包摘要不一致")
+    if snapshot.get("media_program_digest") != media_program_digest(program):
+        raise DomainError("内容任务冻结的媒体程序摘要不一致")
+    return envelope, program
 
 
 def visible_direction(snapshot: object) -> tuple[str | None, list[str]]:

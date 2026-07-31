@@ -21,6 +21,7 @@ from src.shared.creative_kernel import (
 from src.shared.delivery_compiler import (
     DELIVERY_COMPILER_VERSION,
     DUAL_TRACK_DELIVERY_COMPILER_VERSION,
+    MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
     CompiledDelivery,
     DeliveryCompileInput,
     assert_compiled_delivery,
@@ -384,4 +385,5 @@ def test_legacy_kernel_document_remains_readable_without_reinterpretation() -> N
 
 def test_delivery_compiler_versions_keep_the_ui12_contract_readable() -> None:
     assert DUAL_TRACK_DELIVERY_COMPILER_VERSION == "delivery-compiler-v2"
-    assert DELIVERY_COMPILER_VERSION == "delivery-compiler-v3"
+    assert MEDIA_NATIVE_DELIVERY_COMPILER_VERSION == "delivery-compiler-v3"
+    assert DELIVERY_COMPILER_VERSION == "delivery-compiler-v4"

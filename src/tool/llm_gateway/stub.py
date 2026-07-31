@@ -7,6 +7,7 @@ from src.shared.creative_kernel import (
     DUAL_TRACK_KERNEL_VERSION,
     KERNEL_VERSION,
     MAX_PRODUCT_FACT_BLOCKS,
+    MEDIA_NATIVE_KERNEL_VERSION,
     build_kernel_skeleton,
     compiler_owned_unit_texts,
     creative_units_digest,
@@ -24,6 +25,7 @@ from src.shared.creative_plan import (
 from src.shared.delivery_compiler import (
     DELIVERY_COMPILER_VERSION,
     DUAL_TRACK_DELIVERY_COMPILER_VERSION,
+    MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
     DeliveryCompileInput,
     compile_delivery,
 )
@@ -35,6 +37,12 @@ from src.shared.factual_basis import (
     product_fact_packet_document,
     product_fact_records,
     select_product_fact_block_ids,
+)
+from src.shared.media_program import (
+    media_envelope_digest,
+    media_envelope_document,
+    media_program_digest,
+    media_program_document,
 )
 from src.shared.narrative import legacy_frame, visible_digest
 from src.shared.types import (
@@ -132,6 +140,7 @@ class DeterministicContentGenerator(ContentGenerator):
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
         if request.delivery_compiler_version in {
             DUAL_TRACK_DELIVERY_COMPILER_VERSION,
+            MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
             DELIVERY_COMPILER_VERSION,
         }:
             return self._generate_kernel(request)
@@ -160,17 +169,31 @@ class DeterministicContentGenerator(ContentGenerator):
                 if record.fact_id in frame.allowed_product_fact_ids
             ),
         )
-        kernel_version = (
-            DUAL_TRACK_KERNEL_VERSION
-            if request.delivery_compiler_version == DUAL_TRACK_DELIVERY_COMPILER_VERSION
-            else KERNEL_VERSION
-        )
-        allowed_resources = frozenset(
-            {
-                "resource:original_composition",
-                "resource:creator_expression",
-                *(f"resource:product:{product.sku}" for product in request.products),
-            }
+        if (
+            request.delivery_compiler_version
+            == DUAL_TRACK_DELIVERY_COMPILER_VERSION
+        ):
+            kernel_version = DUAL_TRACK_KERNEL_VERSION
+        elif (
+            request.delivery_compiler_version
+            == MEDIA_NATIVE_DELIVERY_COMPILER_VERSION
+        ):
+            kernel_version = MEDIA_NATIVE_KERNEL_VERSION
+        else:
+            kernel_version = KERNEL_VERSION
+        allowed_resources = (
+            request.media_capability_envelope.resource_ids
+            if request.media_capability_envelope is not None
+            else frozenset(
+                {
+                    "resource:original_composition",
+                    "resource:creator_expression",
+                    *(
+                        f"resource:product:{product.sku}"
+                        for product in request.products
+                    ),
+                }
+            )
         )
         skeleton = build_kernel_skeleton(
             frame=frame,
@@ -267,6 +290,8 @@ class DeterministicContentGenerator(ContentGenerator):
             allowed_resource_ids=allowed_resources,
             immutable_fact_blocks=fact_blocks,
             trusted_fact_texts=tuple((fact.fact_id, fact.exact_text) for fact in facts),
+            media_capability_envelope=request.media_capability_envelope,
+            media_program=request.media_program,
         )
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product)
@@ -355,6 +380,30 @@ class DeterministicContentGenerator(ContentGenerator):
                 "product_fact_renderer_version": (fact_blocks[0].renderer_version if fact_blocks else None),
                 "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
                 "delivery_resource_refs": list(compiled.resource_refs),
+                "media_capability_envelope": (
+                    media_envelope_document(
+                        request.media_capability_envelope
+                    )
+                    if request.media_capability_envelope is not None
+                    else None
+                ),
+                "media_capability_envelope_digest": (
+                    media_envelope_digest(
+                        request.media_capability_envelope
+                    )
+                    if request.media_capability_envelope is not None
+                    else None
+                ),
+                "media_program": (
+                    media_program_document(request.media_program)
+                    if request.media_program is not None
+                    else None
+                ),
+                "media_program_digest": (
+                    media_program_digest(request.media_program)
+                    if request.media_program is not None
+                    else None
+                ),
             },
         )
 

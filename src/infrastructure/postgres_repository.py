@@ -12,7 +12,10 @@ from psycopg.types.json import Jsonb
 from src.ports.content_repository import ContentRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.content_snapshot import frozen_product_facts, visible_direction
-from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
+from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_VERSION,
+    MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
+)
 from src.shared.errors import DomainError
 from src.shared.narrative import visible_digest
 from src.shared.types import (
@@ -41,6 +44,14 @@ from src.shared.version_integrity import (
 
 
 class PostgresContentRepository(ContentRepository):
+    _MEDIA_PROGRAM_COMPLETION_KEYS = frozenset(
+        {
+            "media_capability_envelope",
+            "media_capability_envelope_digest",
+            "media_program",
+            "media_program_digest",
+        }
+    )
     _DUAL_TRACK_COMPLETION_KEYS = frozenset(
         {
             "creative_kernel_v2",
@@ -59,7 +70,14 @@ class PostgresContentRepository(ContentRepository):
             "product_fact_renderer_version",
             "visible_provenance",
             "delivery_resource_refs",
+            "media_capability_envelope",
+            "media_capability_envelope_digest",
+            "media_program",
+            "media_program_digest",
         }
+    )
+    _LEGACY_DUAL_TRACK_COMPLETION_KEYS = (
+        _DUAL_TRACK_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
     )
     _REVISION_IMMUTABLE_SNAPSHOT_KEYS = frozenset(
         {
@@ -73,6 +91,10 @@ class PostgresContentRepository(ContentRepository):
             "used_product_fact_block_ids",
             "product_fact_renderer_version",
             "delivery_resource_refs",
+            "media_capability_envelope",
+            "media_capability_envelope_digest",
+            "media_program",
+            "media_program_digest",
         }
     )
     _VERSION_AUDIT_KEYS = (
@@ -93,6 +115,10 @@ class PostgresContentRepository(ContentRepository):
         "product_fact_renderer_version",
         "visible_provenance",
         "delivery_resource_refs",
+        "media_capability_envelope",
+        "media_capability_envelope_digest",
+        "media_program",
+        "media_program_digest",
     )
 
     def __init__(
@@ -129,7 +155,18 @@ class PostgresContentRepository(ContentRepository):
     ) -> dict[str, object]:
         if not isinstance(current, dict):
             raise DomainError("新内容缺少可审计的任务快照")
-        if frozenset(patch) != cls._DUAL_TRACK_COMPLETION_KEYS:
+        patch_keys = frozenset(patch)
+        expected_keys = cls._DUAL_TRACK_COMPLETION_KEYS
+        if (
+            patch.get("delivery_compiler_version")
+            != DELIVERY_COMPILER_VERSION
+        ):
+            expected_keys = cls._LEGACY_DUAL_TRACK_COMPLETION_KEYS
+        if patch_keys != expected_keys and not (
+            patch.get("delivery_compiler_version")
+            != DELIVERY_COMPILER_VERSION
+            and patch_keys == cls._DUAL_TRACK_COMPLETION_KEYS
+        ):
             raise DomainError("创作内核快照补丁字段不完整或越界")
         if patch.get("version_authorization") != "deterministic-dual-track-v1":
             raise DomainError("内容版本缺少确定性双轨授权")
@@ -152,7 +189,11 @@ class PostgresContentRepository(ContentRepository):
         compiler_version = task_snapshot.get("delivery_compiler_version")
         audit_version = (
             AUDIT_VERSION_V3
-            if compiler_version == DELIVERY_COMPILER_VERSION
+            if compiler_version
+            in {
+                MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
+                DELIVERY_COMPILER_VERSION,
+            }
             else AUDIT_VERSION_V2
         )
         audit = {

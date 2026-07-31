@@ -36,10 +36,12 @@ from src.infrastructure.seed_demo import (
     TENANT_ID,
     USER_ID,
 )
+from src.shared.content_snapshot import frozen_media_contract
 from src.shared.creative_kernel import (
     DUAL_TRACK_KERNEL_VERSION,
     KERNEL_VERSION,
     LEGACY_KERNEL_VERSION,
+    MEDIA_NATIVE_KERNEL_VERSION,
     CreativeKernelV1,
     build_kernel_skeleton,
     normalize_writer_unit_text,
@@ -59,11 +61,17 @@ from src.shared.delivery_compiler import (
     compile_delivery,
     compiler_owned_media_unit_texts,
 )
-from src.shared.errors import DomainError
+from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import (
     build_product_fact_packet,
     immutable_product_fact_blocks,
     select_product_fact_block_ids,
+)
+from src.shared.media_program import (
+    MediaResourceV1,
+    assert_media_program_allowed,
+    build_media_capability_envelope,
+    select_media_program,
 )
 from src.shared.narrative import new_frame, visible_digest
 from src.shared.types import (
@@ -77,6 +85,7 @@ from src.shared.types import (
     GraphicProductionBundle,
     P3SemanticContract,
     ProductFact,
+    ReferenceMaterial,
     RequestedControls,
     SeriesContext,
     SeriesEntry,
@@ -366,6 +375,32 @@ def _generation_input(
 ) -> GenerationInput:
     target = "xiaohongshu_graphic" if media_format == "graphic" else "douyin_video"
     frame = new_frame("general_observation", (), ())
+    plan = build_creative_plan(
+        topic_spans=("今天喝了一直喝的蓝山咖啡，居然是甜的",),
+        primary_value="brand_life_narrative",
+        tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        mechanism_id=None,
+        target_shape="小红书图文完整成品",
+    )
+    envelope = build_media_capability_envelope(
+        platform_shape=(
+            "小红书图文完整成品"
+            if media_format == "graphic"
+            else "抖音短视频完整成品"
+        ),
+        media_format=cast(Any, media_format),
+    )
+    media_program = select_media_program(
+        primary_product="brand_life_narrative",
+        envelope=envelope,
+        mechanism_id=plan.mechanism_id,
+        series_position=(
+            series_context.target_position
+            if series_context is not None
+            else None
+        ),
+        fact_count=0,
+    )
     return GenerationInput(
         run_id=_RUN_ID,
         task_id=_TASK_ID,
@@ -393,14 +428,24 @@ def _generation_input(
         ),
         series_context=series_context,
         narrative_frame=frame,
-        creative_plan=build_creative_plan(
-            topic_spans=("今天喝了一直喝的蓝山咖啡，居然是甜的",),
-            primary_value="brand_life_narrative",
-            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
-            mechanism_id=None,
-            target_shape="小红书图文完整成品",
-        ),
+        creative_plan=plan,
         delivery_compiler_version=DELIVERY_COMPILER_VERSION,
+        media_capability_envelope=envelope,
+        media_program=media_program,
+    )
+
+
+def _compile_input(request: GenerationInput) -> DeliveryCompileInput:
+    assert request.media_capability_envelope is not None
+    assert request.media_program is not None
+    return DeliveryCompileInput(
+        primary_product=request.primary_product,
+        media_format=request.media_format,
+        products=request.products,
+        production_conditions=request.brand.production_conditions,
+        allowed_resource_ids=request.media_capability_envelope.resource_ids,
+        media_capability_envelope=request.media_capability_envelope,
+        media_program=request.media_program,
     )
 
 
@@ -446,13 +491,7 @@ def test_media_native_units_compile_one_scope_and_distinct_platform_parts() -> N
     request = _generation_input(media_format="video")
     kernel = _filled_kernel(request)
     compiled = compile_delivery(
-        DeliveryCompileInput(
-            primary_product=request.primary_product,
-            media_format=request.media_format,
-            products=(),
-            production_conditions=request.brand.production_conditions,
-            allowed_resource_ids=_RESOURCES,
-        ),
+        _compile_input(request),
         cast(Any, kernel),
     )
 
@@ -492,7 +531,7 @@ def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:
         constraint_refs=(),
         allowed_resource_ids=tuple(sorted(_RESOURCES)),
         media_format="video",
-        kernel_version=KERNEL_VERSION,
+        kernel_version=MEDIA_NATIVE_KERNEL_VERSION,
         primary_product=request.primary_product,
     )
     text_by_id = {
@@ -546,6 +585,288 @@ def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:
         )
 
 
+def test_v4_writer_has_no_media_units_and_rejects_one_if_returned() -> None:
+    request = _generation_input()
+    assert request.narrative_frame is not None
+    skeleton = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=(),
+        constraint_refs=(),
+        media_format=request.media_format,
+        kernel_version=KERNEL_VERSION,
+        primary_product=request.primary_product,
+    )
+
+    assert tuple(unit.purpose for unit in skeleton.writable_units) == (
+        "title",
+        "natural_guide",
+        "body",
+        "release_caption",
+    )
+    payload = {
+        "units": [
+            {"unit_id": unit.unit_id, "text": f"{unit.purpose} 的自然内容"}
+            for unit in skeleton.writable_units
+        ]
+        + [
+            {
+                "unit_id": "unit:media-opening",
+                "text": "拍摄一个未登记现实物件。",
+            }
+        ]
+    }
+    with pytest.raises(ValueError, match="coverage"):
+        parse_writer_kernel(payload, skeleton)
+
+
+def test_product_fact_and_production_condition_do_not_grant_media_capability() -> None:
+    request = replace(
+        _generation_input(media_format="video"),
+        products=(
+            ProductFact(
+                sku="P-ONLY-FACT",
+                display_name="只登记事实的商品",
+                facts={"category": "测试类别"},
+                source_kind="synthetic_confirmed_product_record",
+            ),
+        ),
+        brand=replace(
+            _generation_input(media_format="video").brand,
+            production_conditions="一人一部手机，普通室内环境。",
+        ),
+    )
+    assert request.media_capability_envelope is not None
+
+    assert request.media_capability_envelope.capability_ids == (
+        "abstract_composition",
+    )
+    assert request.media_capability_envelope.resource_ids == frozenset(
+        {ORIGINAL_COMPOSITION_RESOURCE_ID}
+    )
+    assert "video_creator_expression_v1" not in (
+        request.media_capability_envelope.allowed_program_ids
+    )
+    assert "video_registered_product_display_v1" not in (
+        request.media_capability_envelope.allowed_program_ids
+    )
+
+
+def test_only_explicitly_selected_media_enters_the_envelope() -> None:
+    chosen = ReferenceMaterial(
+        UUID("83000000-0000-0000-0000-000000000031"),
+        "本次明确选择的素材",
+        "image",
+        2,
+        reference_note="不透明图片素材",
+    )
+    unchosen = ReferenceMaterial(
+        UUID("83000000-0000-0000-0000-000000000032"),
+        "资料库中未选择的素材",
+        "image",
+        7,
+        reference_note="不应进入本次任务",
+    )
+    envelope = build_media_capability_envelope(
+        platform_shape="小红书图文完整成品",
+        media_format="graphic",
+        selected_materials=(chosen,),
+    )
+
+    assert str(chosen.asset_id) in " ".join(envelope.resource_ids)
+    assert str(unchosen.asset_id) not in " ".join(envelope.resource_ids)
+    selected = envelope.resources_for("selected_media_asset")
+    assert len(selected) == 1
+    assert selected[0].resource_version == "2"
+    assert selected[0].source_ref.endswith(":v2")
+
+
+def test_media_program_rejects_unlisted_program_and_outside_resource() -> None:
+    envelope = build_media_capability_envelope(
+        platform_shape="小红书图文完整成品",
+        media_format="graphic",
+    )
+    program = select_media_program(
+        primary_product="brand_life_narrative",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=None,
+        fact_count=0,
+    )
+
+    with pytest.raises(GenerationFailed, match="不属于冻结媒体能力包"):
+        assert_media_program_allowed(
+            envelope,
+            replace(
+                program,
+                program_id=cast(
+                    Any,
+                    "video_registered_product_display_v1",
+                ),
+            ),
+        )
+    with pytest.raises(GenerationFailed, match="媒体能力包之外"):
+        assert_media_program_allowed(
+            envelope,
+            replace(
+                program,
+                required_resource_ids=(
+                    *program.required_resource_ids,
+                    "resource:outside-envelope",
+                ),
+            ),
+        )
+
+
+def test_optional_capture_is_visible_but_never_a_required_resource() -> None:
+    base = _generation_input()
+    assert base.media_capability_envelope is not None
+    program = select_media_program(
+        primary_product="brand_life_narrative",
+        envelope=base.media_capability_envelope,
+        mechanism_id=None,
+        series_position=None,
+        fact_count=1,
+    )
+    request = replace(base, media_program=program)
+    compiled = compile_delivery(
+        _compile_input(request),
+        cast(Any, _filled_kernel(request)),
+    )
+
+    assert compiled.resource_refs == (ORIGINAL_COMPOSITION_RESOURCE_ID,)
+    assert "可选补拍建议：" in compiled.body
+    assert "如果刚才提到的事物仍在手边" in compiled.body
+    assert "没有也不影响" in compiled.body
+    assert isinstance(compiled.production, GraphicProductionBundle)
+    assert compiled.production.optional_capture_suggestion is not None
+    assert all(
+        "optional" not in resource_id
+        for resource_id in compiled.resource_refs
+    )
+    assert any(
+        source.startswith("compiler:optional-capture-suggestion:")
+        for source in compiled.visible_provenance["optional_capture_suggestion"]
+    )
+
+
+def test_p5_requires_two_frozen_registered_product_resources() -> None:
+    empty_envelope = build_media_capability_envelope(
+        platform_shape="抖音短视频完整成品",
+        media_format="video",
+    )
+    with pytest.raises(GenerationFailed, match="至少两件"):
+        select_media_program(
+            primary_product="visual_styling_story",
+            envelope=empty_envelope,
+            mechanism_id=None,
+            series_position=None,
+            fact_count=2,
+        )
+
+    registered = tuple(
+        MediaResourceV1(
+            resource_id=f"resource:registered-product:{index}:v1",
+            resource_version="1",
+            media_type="image",
+            source_ref=f"product-media:{index}:v1",
+            capability_id="registered_product_display",
+        )
+        for index in (1, 2)
+    )
+    envelope = build_media_capability_envelope(
+        platform_shape="抖音短视频完整成品",
+        media_format="video",
+        registered_resources=registered,
+    )
+    program = select_media_program(
+        primary_product="visual_styling_story",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=None,
+        fact_count=2,
+    )
+    assert program.program_id == "video_registered_product_display_v1"
+    assert set(program.required_resource_ids) == envelope.resource_ids
+
+
+def test_series_positions_receive_distinct_closed_media_programs() -> None:
+    envelope = build_media_capability_envelope(
+        platform_shape="小红书图文完整成品",
+        media_format="graphic",
+    )
+    series2 = select_media_program(
+        primary_product="brand_life_narrative",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=2,
+        fact_count=0,
+    )
+    series3 = select_media_program(
+        primary_product="brand_life_narrative",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=3,
+        fact_count=0,
+    )
+
+    assert series2.program_id == "graphic_series_response_v1"
+    assert series3.program_id == "graphic_series_choice_v1"
+    request2 = replace(
+        _generation_input(series_context=replace(_series_context(), target_position=2)),
+        media_capability_envelope=envelope,
+        media_program=series2,
+    )
+    request3 = replace(
+        _generation_input(series_context=_series_context()),
+        media_capability_envelope=envelope,
+        media_program=series3,
+    )
+    compiled2 = compile_delivery(
+        _compile_input(request2),
+        cast(Any, _filled_kernel(request2)),
+    )
+    compiled3 = compile_delivery(
+        _compile_input(request3),
+        cast(Any, _filled_kernel(request3)),
+    )
+    assert isinstance(compiled2.production, GraphicProductionBundle)
+    assert isinstance(compiled3.production, GraphicProductionBundle)
+    assert compiled2.production.hero_image != compiled3.production.hero_image
+    assert (
+        compiled2.production.image_sequence
+        != compiled3.production.image_sequence
+    )
+
+
+def test_media_envelope_and_program_are_frozen_and_digest_bound() -> None:
+    request = _generation_input(series_context=_series_context())
+    assert request.media_capability_envelope is not None
+    assert request.media_program is not None
+    control = ContentControlContext(
+        catalog_version="content-expression-catalog-v1",
+        direction=None,
+        account_expression=request.account_expression,
+        materials=(),
+        preference_mode="preference_disabled",
+        preference_version=None,
+    )
+    snapshot = snapshot_document(
+        control,
+        "门店生活观察者",
+        media_capability_envelope=request.media_capability_envelope,
+        media_program=request.media_program,
+    )
+
+    assert frozen_media_contract(snapshot) == (
+        request.media_capability_envelope,
+        request.media_program,
+    )
+    tampered = dict(snapshot)
+    tampered["media_program_digest"] = "0" * 64
+    with pytest.raises(DomainError, match="摘要不一致"):
+        frozen_media_contract(tampered)
+
+
 @pytest.mark.parametrize(
     ("raw_text", "expected"),
     (
@@ -569,7 +890,7 @@ def test_graphic_media_opening_removes_one_exact_compiler_wrapper(
         constraint_refs=(),
         allowed_resource_ids=tuple(sorted(_RESOURCES)),
         media_format="graphic",
-        kernel_version=KERNEL_VERSION,
+        kernel_version=MEDIA_NATIVE_KERNEL_VERSION,
         primary_product=request.primary_product,
     )
     opening = skeleton.unit("unit:media-opening")
@@ -577,7 +898,7 @@ def test_graphic_media_opening_removes_one_exact_compiler_wrapper(
     normalized, receipt = normalize_writer_unit_text(
         raw_text,
         unit=opening,
-        kernel_version=KERNEL_VERSION,
+        kernel_version=MEDIA_NATIVE_KERNEL_VERSION,
         media_format="graphic",
     )
 
@@ -620,7 +941,7 @@ def test_graphic_media_opening_rejects_noncanonical_or_nested_wrappers(
         constraint_refs=(),
         allowed_resource_ids=tuple(sorted(_RESOURCES)),
         media_format="graphic",
-        kernel_version=KERNEL_VERSION,
+        kernel_version=MEDIA_NATIVE_KERNEL_VERSION,
         primary_product=request.primary_product,
     ).unit("unit:media-opening")
 
@@ -628,7 +949,7 @@ def test_graphic_media_opening_rejects_noncanonical_or_nested_wrappers(
         normalize_writer_unit_text(
             raw_text,
             unit=opening,
-            kernel_version=KERNEL_VERSION,
+            kernel_version=MEDIA_NATIVE_KERNEL_VERSION,
             media_format="graphic",
         )
 
@@ -642,7 +963,7 @@ def test_wrapper_normalization_never_applies_to_wrong_purpose_legacy_fact_or_com
         constraint_refs=(),
         allowed_resource_ids=tuple(sorted(_RESOURCES)),
         media_format="graphic",
-        kernel_version=KERNEL_VERSION,
+        kernel_version=MEDIA_NATIVE_KERNEL_VERSION,
         primary_product=request.primary_product,
     )
     opening = skeleton.unit("unit:media-opening")
@@ -660,7 +981,7 @@ def test_wrapper_normalization_never_applies_to_wrong_purpose_legacy_fact_or_com
             normalize_writer_unit_text(
                 "首图：不能进入规范化路径。",
                 unit=unit,
-                kernel_version=KERNEL_VERSION,
+                kernel_version=MEDIA_NATIVE_KERNEL_VERSION,
                 media_format="graphic",
             )
     for legacy_version in (
@@ -685,7 +1006,7 @@ def test_initial_and_repair_paths_share_exact_wrapper_normalization() -> None:
         constraint_refs=(),
         allowed_resource_ids=tuple(sorted(_RESOURCES)),
         media_format="graphic",
-        kernel_version=KERNEL_VERSION,
+        kernel_version=MEDIA_NATIVE_KERNEL_VERSION,
         primary_product=request.primary_product,
     )
     initial = parse_writer_kernel(
@@ -742,12 +1063,8 @@ def test_actuality_life_units_are_preallocated_as_disclosed_hypothesis() -> None
 
     assert kernel.unit("unit:body").mode == "hypothesis"
     compiled = compile_delivery(
-        DeliveryCompileInput(
-            primary_product=request.primary_product,
-            media_format=request.media_format,
-            products=(),
-            production_conditions=request.brand.production_conditions,
-            allowed_resource_ids=_RESOURCES,
+        replace(
+            _compile_input(request),
             trusted_fact_texts=(
                 (
                     frame.user_facts[0].source_id,
@@ -879,13 +1196,15 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
     assert '"unit_contract": "abstract_observation"' in prompt
     assert '"subject_scope": "generic_only"' in prompt
     assert '"actual_event_or_result"' in prompt
-    assert '"resource_id": "resource:original_composition"' in prompt
-    assert "不包含现实人物、场地、家具、照片、商品或外部素材" in prompt
-    assert '"resource_id": "resource:creator_expression"' in prompt
+    assert '"allowed_resources": []' in prompt
+    assert "媒体程序 graphic_series_choice_v1 确定性生成" in prompt
+    assert "不得返回任何媒体单元、资源引用" in prompt
+    assert "resource:original_composition" not in prompt
+    assert "resource:creator_expression" not in prompt
     assert "其他租户诱饵前情" not in prompt
 
 
-def test_product_facts_are_hidden_while_registered_media_resource_is_bounded() -> None:
+def test_product_facts_are_hidden_and_do_not_grant_media_resources() -> None:
     product = ProductFact(
         sku="ZX-C218",
         display_name="双面短外套",
@@ -896,8 +1215,17 @@ def test_product_facts_are_hidden_while_registered_media_resource_is_bounded() -
         },
         source_kind="synthetic_confirmed_product_record",
     )
+    base_request = _generation_input()
+    assert base_request.media_capability_envelope is not None
+    media_program = select_media_program(
+        primary_product="product_truth",
+        envelope=base_request.media_capability_envelope,
+        mechanism_id=None,
+        series_position=None,
+        fact_count=3,
+    )
     request = replace(
-        _generation_input(),
+        base_request,
         weak_seed="帮我解释这个已选商品。",
         primary_product="product_truth",
         products=(product,),
@@ -913,6 +1241,7 @@ def test_product_facts_are_hidden_while_registered_media_resource_is_bounded() -
             mechanism_id=None,
             target_shape="小红书图文完整成品",
         ),
+        media_program=media_program,
     )
     assert request.narrative_frame is not None
     context = BoundaryContext.from_request(request, request.narrative_frame)
@@ -950,12 +1279,13 @@ def test_product_facts_are_hidden_while_registered_media_resource_is_bounded() -
     assert "炭灰纯色" not in prompt
     assert "深绿细格纹" not in prompt
     assert "resource:product:" not in prompt
-    assert "resource:registered-product-1" in prompt
-    assert "不授权复述商品名、编号或属性" in prompt
+    assert "resource:registered-product-1" not in prompt
+    assert "resource:selected-media:" not in prompt
     assert "本次已选商品" in prompt
     assert "全部 Writer unit" in prompt
     assert "不能成为 Writer 文字的主语、宾语或指代对象" in prompt
-    assert "媒体单元只能安排服务端事实原句和已登记资源怎样进入画面" in prompt
+    assert "媒体程序 graphic_fact_guided_v1 确定性生成" in prompt
+    assert "不得返回任何媒体单元、资源引用" in prompt
 
 
 def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
@@ -998,13 +1328,7 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert "purpose 只说明下游消费用途" in prompt
 
     compiled = compile_delivery(
-        DeliveryCompileInput(
-            primary_product=request.primary_product,
-            media_format=request.media_format,
-            products=(),
-            production_conditions=request.brand.production_conditions,
-            allowed_resource_ids=_RESOURCES,
-        ),
+        _compile_input(request),
         kernel,
     )
     assert isinstance(compiled.semantic_contract, P3SemanticContract)
@@ -1014,7 +1338,7 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert compiled.semantic_contract.brand_account_link in compiled.body
 
 
-def test_visual_styling_writer_receives_only_ordered_product_resource_aliases() -> None:
+def test_visual_styling_writer_never_receives_registered_product_resources() -> None:
     products = (
         ProductFact(
             sku="ZX-C218",
@@ -1030,8 +1354,36 @@ def test_visual_styling_writer_receives_only_ordered_product_resource_aliases() 
         ),
     )
     fact_ids = tuple(fact.fact_id for product in products for fact in build_product_fact_packet((product,)).facts)
+    registered_resources = (
+        MediaResourceV1(
+            "resource:registered-product:one:v1",
+            "1",
+            "image",
+            "product-media:one:v1",
+            "registered_product_display",
+        ),
+        MediaResourceV1(
+            "resource:registered-product:two:v1",
+            "1",
+            "image",
+            "product-media:two:v1",
+            "registered_product_display",
+        ),
+    )
+    envelope = build_media_capability_envelope(
+        platform_shape="抖音短视频完整成品",
+        media_format="video",
+        registered_resources=registered_resources,
+    )
+    media_program = select_media_program(
+        primary_product="visual_styling_story",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=None,
+        fact_count=4,
+    )
     request = replace(
-        _generation_input(),
+        _generation_input(media_format="video"),
         weak_seed="用 ZX-C218 和 ZX-S104 做一条能照着拍的视觉造型短视频。",
         primary_product="visual_styling_story",
         products=products,
@@ -1043,6 +1395,8 @@ def test_visual_styling_writer_receives_only_ordered_product_resource_aliases() 
             mechanism_id=None,
             target_shape="抖音短视频完整成品",
         ),
+        media_capability_envelope=envelope,
+        media_program=media_program,
     )
     assert request.narrative_frame is not None
     context = BoundaryContext.from_request(request, request.narrative_frame)
@@ -1073,9 +1427,10 @@ def test_visual_styling_writer_receives_only_ordered_product_resource_aliases() 
     assert "ZX-S104" not in prompt
     assert "双面短外套" not in prompt
     assert "深灰直筒半裙" not in prompt
-    assert '"resource_id": "resource:registered-product-1"' in prompt
-    assert '"resource_id": "resource:registered-product-2"' in prompt
-    assert "第一件／第二件登记样衣" in prompt
+    assert "resource:registered-product:" not in prompt
+    assert '"allowed_resources": []' in prompt
+    assert "媒体关系由服务端确定性编排" in prompt
+    assert "video_registered_product_display_v1" in prompt
 
 
 def test_restricted_media_fallback_stays_available_outside_the_v3_main_path() -> None:

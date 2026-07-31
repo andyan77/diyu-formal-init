@@ -9,6 +9,7 @@ from src.shared.creative_kernel import (
     DUAL_TRACK_KERNEL_VERSION,
     HYPOTHESIS_DISCLOSURE,
     KERNEL_VERSION,
+    MEDIA_NATIVE_KERNEL_VERSION,
     CreativeKernelUnit,
     CreativeKernelV1,
     UnitMode,
@@ -17,6 +18,13 @@ from src.shared.creative_kernel import (
 )
 from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import ImmutableFactBlock
+from src.shared.media_program import (
+    MediaCapabilityEnvelopeV1,
+    MediaProgramSelectionV1,
+    assert_media_program_allowed,
+    media_envelope_digest,
+    media_program_digest,
+)
 from src.shared.types import (
     ContentProduct,
     ContentProductionBundle,
@@ -36,11 +44,13 @@ DeliveryMedia: TypeAlias = Literal["video", "graphic"]
 
 LEGACY_DELIVERY_COMPILER_VERSION = "delivery-compiler-v1"
 DUAL_TRACK_DELIVERY_COMPILER_VERSION = "delivery-compiler-v2"
-DELIVERY_COMPILER_VERSION = "delivery-compiler-v3"
+MEDIA_NATIVE_DELIVERY_COMPILER_VERSION = "delivery-compiler-v3"
+DELIVERY_COMPILER_VERSION = "delivery-compiler-v4"
 SUPPORTED_DELIVERY_COMPILER_VERSIONS = frozenset(
     {
         LEGACY_DELIVERY_COMPILER_VERSION,
         DUAL_TRACK_DELIVERY_COMPILER_VERSION,
+        MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
         DELIVERY_COMPILER_VERSION,
     }
 )
@@ -103,6 +113,8 @@ class DeliveryCompileInput:
     allowed_resource_ids: frozenset[str]
     immutable_fact_blocks: tuple[ImmutableFactBlock, ...] = ()
     trusted_fact_texts: tuple[tuple[str, str], ...] = ()
+    media_capability_envelope: MediaCapabilityEnvelopeV1 | None = None
+    media_program: MediaProgramSelectionV1 | None = None
 
 
 @dataclass(frozen=True)
@@ -217,6 +229,28 @@ def assert_compiled_delivery(
         ),
         "compiler:duration",
         "compiler:visible-body",
+        *(
+            (
+                f"media-envelope:{media_envelope_digest(request.media_capability_envelope)}",
+                f"media-program:{media_program_digest(request.media_program)}",
+                f"media-program:{request.media_program.program_id}",
+                *(
+                    f"media-resource:{resource_id}"
+                    for resource_id in request.media_program.required_resource_ids
+                ),
+                *(
+                    (
+                        "compiler:optional-capture-suggestion:"
+                        f"{request.media_program.optional_capture_suggestion_id}"
+                    ,)
+                    if request.media_program.optional_capture_suggestion_id
+                    else ()
+                ),
+            )
+            if request.media_capability_envelope is not None
+            and request.media_program is not None
+            else ()
+        ),
     }
     if any(source not in allowed_sources for sources in compiled.visible_provenance.values() for source in sources):
         raise GenerationFailed("确定性成品编译包含未知可见来源")
@@ -288,6 +322,11 @@ def _assert_expression_plan(
                 raise GenerationFailed("创作表达文字来源漂移")
         elif unit.text_source not in {"writer", "prior_version"}:
             raise GenerationFailed("创作表达文字来源漂移")
+        if (
+            kernel.kernel_version == KERNEL_VERSION
+            and unit.allowed_resource_ids
+        ):
+            raise GenerationFailed("Writer 创作单元不得绑定媒体资源")
         if unit.mode not in {
             "general_observation",
             "recommendation",
@@ -302,6 +341,8 @@ def _compile_delivery(
     kernel: CreativeKernelV1,
 ) -> CompiledDelivery:
     if kernel.kernel_version == KERNEL_VERSION:
+        return _compile_delivery_v4(request, kernel)
+    if kernel.kernel_version == MEDIA_NATIVE_KERNEL_VERSION:
         return _compile_delivery_v3(request, kernel)
     return _compile_delivery_v2(request, kernel)
 
@@ -443,6 +484,358 @@ def _compile_delivery_v2(
         resource_refs=resource_refs,
         visible_provenance=provenance,
     )
+
+
+def _compile_delivery_v4(
+    request: DeliveryCompileInput,
+    kernel: CreativeKernelV1,
+) -> CompiledDelivery:
+    """Compile the resource-closed v4 artifact from one frozen MediaProgram."""
+
+    envelope = request.media_capability_envelope
+    program = request.media_program
+    if envelope is None or program is None:
+        raise GenerationFailed("新成品缺少冻结媒体能力包或媒体程序")
+    assert_media_program_allowed(envelope, program)
+    if request.media_format != envelope.media_format:
+        raise GenerationFailed("媒体能力包与成品形式不一致")
+    if request.allowed_resource_ids != envelope.resource_ids:
+        raise GenerationFailed("成品编译资源集合与冻结媒体能力包不一致")
+    forbidden_media_purposes = {
+        "media_opening",
+        "media_sequence",
+        "subtitle_strategy",
+        "production_note",
+    }
+    if any(unit.purpose in forbidden_media_purposes for unit in kernel.units):
+        raise GenerationFailed("Writer 返回了服务端专属媒体单元")
+    singleton_purposes = {
+        "title",
+        "natural_guide",
+        "release_caption",
+    }
+    singleton = {
+        unit.purpose: unit
+        for unit in kernel.units
+        if unit.purpose in singleton_purposes
+    }
+    if set(singleton) != singleton_purposes or any(
+        sum(unit.purpose == purpose for unit in kernel.units) != 1
+        for purpose in singleton_purposes
+    ):
+        raise GenerationFailed("创作内核缺少完整文字单元")
+    body_units = tuple(
+        unit for unit in kernel.units if unit.purpose == "body"
+    )
+    if not body_units or any(
+        not unit.text.strip() for unit in (*singleton.values(), *body_units)
+    ):
+        raise GenerationFailed("创作内核包含空的可见创作单元")
+    title = singleton["title"].text.strip()
+    guide = singleton["natural_guide"].text.strip()
+    release = singleton["release_caption"].text.strip()
+    fact_units = tuple(
+        unit for unit in kernel.units if unit.purpose == "frozen_fact"
+    )
+    content_units = (*fact_units, *body_units)
+    full_body = "\n\n".join(
+        _visible_unit_v3(unit) for unit in content_units
+    )
+    creative_body = "\n\n".join(
+        _visible_unit_v3(unit) for unit in body_units
+    )
+    artifact_scope_source = _artifact_scope_source(kernel)
+    artifact_scope = _PHRASES[artifact_scope_source]
+    contract = _contract(
+        request.primary_product,
+        guide,
+        creative_body,
+        release,
+        fact_units,
+        media_native=True,
+    )
+    envelope_source = f"media-envelope:{media_envelope_digest(envelope)}"
+    program_digest_source = f"media-program:{media_program_digest(program)}"
+    program_source = f"media-program:{program.program_id}"
+    resource_sources = tuple(
+        f"media-resource:{resource_id}"
+        for resource_id in program.required_resource_ids
+    )
+    content_sources = tuple(
+        source
+        for unit in content_units
+        for source in (
+            unit.unit_id,
+            *(
+                (_visible_unit_scope_source(unit),)
+                if unit.track == "trusted_fact"
+                else ()
+            ),
+        )
+    )
+    provenance: dict[str, tuple[str, ...]] = {
+        "outline": (singleton["title"].unit_id,),
+        "artifact_scope": (artifact_scope_source,),
+        "natural_guide": (singleton["natural_guide"].unit_id,),
+        "release_caption_and_interaction": (
+            singleton["release_caption"].unit_id,
+        ),
+        "media_program": (
+            envelope_source,
+            program_digest_source,
+            program_source,
+            *resource_sources,
+        ),
+    }
+    optional_suggestion = _optional_capture_suggestion(program)
+    if optional_suggestion is not None:
+        provenance["optional_capture_suggestion"] = (
+            "compiler:optional-capture-suggestion:"
+            f"{program.optional_capture_suggestion_id}",
+        )
+    production: ContentProductionBundle
+    if request.media_format == "graphic":
+        opening, sequence, production_note = _graphic_media_program_text(
+            program,
+        )
+        production = GraphicProductionBundle(
+            natural_guide=guide,
+            hero_image=opening,
+            image_sequence=sequence,
+            full_body=full_body,
+            layout_and_production=production_note,
+            release_caption_and_interaction=release,
+            optional_capture_suggestion=optional_suggestion,
+        )
+        provenance.update(
+            {
+                "hero_image": (program_source, envelope_source),
+                "image_sequence": (
+                    program_source,
+                    *content_sources,
+                    *resource_sources,
+                ),
+                "full_body": content_sources,
+                "layout_and_production": (
+                    program_source,
+                    envelope_source,
+                ),
+            }
+        )
+    else:
+        (
+            opening,
+            sequence,
+            spoken,
+            subtitles,
+            production_note,
+        ) = _video_media_program_text(
+            program,
+            full_body,
+        )
+        production = VideoProductionBundle(
+            natural_guide=guide,
+            spoken_lines=spoken,
+            visual_actions=sequence,
+            subtitles=subtitles,
+            sound_and_production=production_note,
+            cover_or_first_frame=opening,
+            viewing_flow=f"{opening}\n{sequence}",
+            natural_duration=_duration(
+                full_body,
+                request.production_conditions,
+            ),
+            release_caption_and_interaction=release,
+            optional_capture_suggestion=optional_suggestion,
+        )
+        provenance.update(
+            {
+                "cover_or_first_frame": (
+                    program_source,
+                    envelope_source,
+                ),
+                "viewing_flow": (
+                    program_source,
+                    *content_sources,
+                    *resource_sources,
+                ),
+                "spoken_lines": (
+                    *content_sources,
+                    program_source,
+                ),
+                "visual_actions": (
+                    program_source,
+                    *resource_sources,
+                ),
+                "subtitles": (
+                    *content_sources,
+                    program_source,
+                ),
+                "sound_and_production": (
+                    program_source,
+                    envelope_source,
+                ),
+                "natural_duration": ("compiler:duration",),
+            }
+        )
+    body = _visible_body_v3(
+        title,
+        artifact_scope,
+        production,
+    )
+    provenance["body"] = (
+        "compiler:visible-body",
+        artifact_scope_source,
+        *tuple(
+            source
+            for sources in provenance.values()
+            for source in sources
+        ),
+    )
+    return CompiledDelivery(
+        outline=title,
+        body=body,
+        semantic_contract=contract,
+        production=production,
+        resource_refs=program.required_resource_ids,
+        visible_provenance=provenance,
+    )
+
+
+def _optional_capture_suggestion(
+    program: MediaProgramSelectionV1,
+) -> str | None:
+    if (
+        program.optional_capture_suggestion_id
+        == "optional-current-product-capture-v1"
+    ):
+        return (
+            "如果刚才提到的商品仍在手边，而且你愿意补拍，可以另加一张整体照片；"
+            "没有也不影响，当前版本可直接用文字、色块和留白完成。"
+        )
+    if (
+        program.optional_capture_suggestion_id
+        == "optional-current-subject-capture-v1"
+    ):
+        return (
+            "如果刚才提到的事物仍在手边，而且你愿意补拍，可以另加一张照片；"
+            "没有也不影响，当前版本可直接用文字、色块和留白完成。"
+        )
+    return None
+
+
+def _graphic_media_program_text(
+    program: MediaProgramSelectionV1,
+) -> tuple[str, str, str]:
+    abstract_note = (
+        "仅使用文字、排版、色块、线条、符号和留白；"
+        "不要求现实人物、商品、照片、家具、场地或道具。"
+    )
+    by_program: dict[str, tuple[str, str, str]] = {
+        "graphic_fact_guided_v1": (
+            "首图用标题与两块克制色块建立“已知信息／选择判断”的阅读入口。",
+            "第 1 页给标题和观看回报；第 2 页逐字呈现已确认事实；"
+            "第 3 页进入正文中的选择解释；末页用发布配文收束。",
+            abstract_note,
+        ),
+        "graphic_observation_progression_v1": (
+            "首图用标题、单一强调色和留白制造一次可读停顿。",
+            "第 1 页交代标题；第 2 页给自然导读；中间页按正文段落逐层推进；"
+            "末页只保留本篇发布配文。",
+            abstract_note,
+        ),
+        "graphic_choice_contrast_v1": (
+            "首图把标题放在中轴，两侧用不同色块预告两种选择条件。",
+            "第 1 页提出选择；第 2、3 页分别承接两组条件与边界；"
+            "第 4 页给下一步动作；末页用发布配文收束。",
+            abstract_note,
+        ),
+        "graphic_series_response_v1": (
+            "首图保留系列标题位置，并用一条推进线标出这是对前一篇的回应。",
+            "第 1 页回扣前篇留下的问题；中间页只展开本篇新增回应；"
+            "末页留下下一篇仍可继续的空间。",
+            abstract_note,
+        ),
+        "graphic_series_choice_v1": (
+            "首图用两段错位文字承接前两篇，并把本篇选择放在视觉重心。",
+            "第 1 页承接前两篇共同问题；第 2 页分开可选路径；"
+            "第 3 页说明本篇取舍；末页保留开放选择。",
+            abstract_note,
+        ),
+        "graphic_registered_product_relation_v1": (
+            "首图将本次选中的登记商品素材以同一尺度并列，标题不遮挡主体。",
+            "先分别完整呈现每个登记素材，再保持一致画面条件呈现彼此关系；"
+            "事实原句独立排入对应页面，末页回到本篇视觉选择。",
+            "只使用本次冻结的登记商品素材与抽象排版；"
+            "保持一致尺度、间距、层级和画面重心，不增加其他实物。",
+        ),
+        "graphic_selected_asset_sequence_v1": (
+            "首图使用本次明确选择的登记素材，并把标题置于不遮挡内容的留白区。",
+            "按冻结素材顺序进入，每页只承担一个正文转折；"
+            "末页回到发布配文，不补入未选择素材。",
+            "只使用本次冻结的所选素材与抽象排版，不根据文件名或说明猜测现实事实。",
+        ),
+    }
+    try:
+        return by_program[program.program_id]
+    except KeyError as exc:
+        raise GenerationFailed("图文媒体程序与成品形式不一致") from exc
+
+
+def _video_media_program_text(
+    program: MediaProgramSelectionV1,
+    full_body: str,
+) -> tuple[str, str, str, str, str]:
+    abstract_sound = (
+        "默认静音，不要求环境声；仅使用文字、排版、色块、线条、符号、留白"
+        "和字幕切换完成。"
+    )
+    if program.program_id == "video_dynamic_text_v1":
+        return (
+            "首帧只出现标题和一处强调色，不调用现实画面。",
+            "标题短停后，正文按段落逐屏进入；关键转折改变对齐与留白，"
+            "最后回到发布配文。",
+            "本版不要求口播；完整正文由动态文字与字幕承担。",
+            full_body,
+            abstract_sound,
+        )
+    if program.program_id == "video_condition_choice_v1":
+        return (
+            "首帧用左右两块色域提出两种条件，标题位于中间。",
+            "先给共同问题，再让两组条件交替进入；选择边界单独停留，"
+            "最后显示下一步动作与发布配文。",
+            "本版不要求口播；完整选择帮助由动态文字与字幕承担。",
+            full_body,
+            abstract_sound,
+        )
+    if program.program_id == "video_creator_expression_v1":
+        return (
+            "首帧先给标题，随后由已登记创作者表达进入。",
+            "标题短停后进入完整正文表达；关键转折用字幕强调，"
+            "最后以发布配文收束。",
+            full_body,
+            "字幕保留标题、事实原句和每段关键转折，不另写现实细节。",
+            "只使用已登记的创作者表达与抽象编排；不要求场地、道具或环境声。",
+        )
+    if program.program_id == "video_registered_product_display_v1":
+        return (
+            "首帧让本次选中的登记商品素材完整进入同一画面，标题不遮挡主体。",
+            "按冻结顺序分别完整呈现登记素材，再以一致画面条件呈现彼此关系；"
+            "事实原句只进入对应字幕。",
+            "本版不要求口播；正文由字幕与登记商品画面共同承担。",
+            full_body,
+            "只使用冻结的登记商品素材和抽象编排；不增加演员、场地、道具或环境声。",
+        )
+    if program.program_id == "video_selected_asset_sequence_v1":
+        return (
+            "首帧使用本次明确选择的登记素材，标题位于不遮挡内容的区域。",
+            "按冻结素材顺序推进，每个素材只承接一个正文转折；"
+            "最后回到发布配文，不补入未选择素材。",
+            "本版不要求口播；正文由字幕与所选素材共同承担。",
+            full_body,
+            "只使用本次冻结的所选素材与抽象编排，不根据文件名或说明猜测现实事实。",
+        )
+    raise GenerationFailed("视频媒体程序与成品形式不一致")
 
 
 def _compile_delivery_v3(
@@ -790,6 +1183,16 @@ def _visible_body_v3(
                 v3_compiler_visible_heading("video", "release_caption"),
                 production.release_caption_and_interaction,
             ),
+            *(
+                (
+                    (
+                        "可选补拍建议",
+                        production.optional_capture_suggestion,
+                    ),
+                )
+                if production.optional_capture_suggestion
+                else ()
+            ),
         )
     else:
         sections = (
@@ -817,6 +1220,16 @@ def _visible_body_v3(
             (
                 v3_compiler_visible_heading("graphic", "release_caption"),
                 production.release_caption_and_interaction,
+            ),
+            *(
+                (
+                    (
+                        "可选补拍建议",
+                        production.optional_capture_suggestion,
+                    ),
+                )
+                if production.optional_capture_suggestion
+                else ()
             ),
         )
     return "标题：" + title + "\n\n" + "\n\n".join(f"{heading}：{value}" for heading, value in sections)
