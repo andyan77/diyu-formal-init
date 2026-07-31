@@ -2516,6 +2516,7 @@ def test_p2_exact_fact_repetition_gets_one_bounded_affected_unit_repair(
     ) -> tuple[dict[str, Any], int]:
         del self, max_tokens, thinking_disabled, timeout_seconds
         calls.append(system)
+        content: dict[str, object]
         if len(calls) == 1:
             content = {
                 "units": [
