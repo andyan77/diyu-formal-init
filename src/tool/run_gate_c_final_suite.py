@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -245,6 +246,8 @@ def _settings(
 def _run_formal_p5_browser(
     app: object,
     journey: _FormalJourney,
+    *,
+    evidence_root: Path,
 ) -> UUID:
     with socket.socket() as port_socket:
         port_socket.bind(("127.0.0.1", 0))
@@ -299,6 +302,35 @@ def _run_formal_p5_browser(
             timeout=180,
         )
         if completed.returncode != 0:
+            browser_result: dict[str, object] = {}
+            try:
+                parsed = json.loads(completed.stdout)
+                if isinstance(parsed, dict):
+                    browser_result = {
+                        "task_id": parsed.get("task_id"),
+                        "lifecycle_events": parsed.get("lifecycle_events"),
+                        "failure_count": (
+                            len(parsed.get("failures", []))
+                            if isinstance(parsed.get("failures"), list)
+                            else None
+                        ),
+                    }
+            except (TypeError, ValueError):
+                pass
+            _write_private_json(
+                evidence_root / "P5.browser.failed.json",
+                {
+                    "failure_contract": "ux03-gate-c-browser-failure-v1",
+                    "returncode": completed.returncode,
+                    "stdout_sha256": hashlib.sha256(
+                        completed.stdout.encode("utf-8")
+                    ).hexdigest(),
+                    "stderr_sha256": hashlib.sha256(
+                        completed.stderr.encode("utf-8")
+                    ).hexdigest(),
+                    **browser_result,
+                },
+            )
             raise RuntimeError("formal P5 browser journey failed")
         result = json.loads(completed.stdout)
         if not isinstance(result, dict) or result.get("failures") != [] or not result.get("task_id"):
@@ -597,7 +629,11 @@ def _generate(args: argparse.Namespace) -> None:
             if spec.card_id == "P5":
                 generator.begin_card("P5")
                 try:
-                    task_id = _run_formal_p5_browser(app, journey)
+                    task_id = _run_formal_p5_browser(
+                        app,
+                        journey,
+                        evidence_root=evidence_root,
+                    )
                 except Exception:
                     generator.abort_card(
                         event_names=("formal_p5_browser_failed",),
