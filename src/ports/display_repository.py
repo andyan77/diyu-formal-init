@@ -46,6 +46,7 @@ class DisplayRepository(ABC):
         context: DisplayContext,
         model: str,
         assets: tuple[ActiveAsset, ...],
+        hard_requirements: frozenset[str],
     ) -> tuple[UUID, UUID]:
         """Create an internal display task and auditable running generation."""
 

@@ -27,7 +27,11 @@ from psycopg import sql
 
 from src.brain.display_contract import assert_display_complete
 from src.brain.display_service import DisplayService
-from src.brain.dm01_display_compiler import DM01DisplayCompiler
+from src.brain.dm01_display_compiler import (
+    DM01DisplayCompiler,
+    parse_hard_requirements,
+    parse_revision_target,
+)
 from src.gateway.api.app import create_app
 from src.gateway.api.contracts import CreateDisplayRequest
 from src.gateway.api.settings import Settings
@@ -538,17 +542,22 @@ def test_provider_429_is_degraded_without_affecting_core_readiness(monkeypatch: 
 
 
 @pytest.mark.parametrize(
-    ("error_code", "error_type"),
+    ("status_code", "error_code", "error_type"),
     (
-        ("content_filter", "invalid_request_error"),
-        ("context_length_exceeded", "invalid_request_error"),
-        ("invalid_max_tokens", "invalid_request_error"),
-        ("invalid_parameter", "invalid_request_error"),
-        ("invalid_response_format", "invalid_request_error"),
+        (400, "content_filter", "invalid_request_error"),
+        (403, "content_filter", "invalid_request_error"),
+        (400, "context_length_exceeded", "invalid_request_error"),
+        (400, "input_length", "invalid_request_error"),
+        (400, "invalid_max_tokens", "invalid_request_error"),
+        (403, "invalid_parameter", "invalid_request_error"),
+        (404, "invalid_response_format", "invalid_request_error"),
+        (403, "", "content_filter"),
+        (404, "provider_specific_request_code", "invalid_response_format"),
     ),
 )
 def test_request_scoped_provider_4xx_does_not_pollute_global_observation(
     monkeypatch: pytest.MonkeyPatch,
+    status_code: int,
     error_code: str,
     error_type: str,
 ) -> None:
@@ -565,7 +574,7 @@ def test_request_scoped_provider_4xx_does_not_pollute_global_observation(
         def post(self, *args: object, **kwargs: object) -> Response:
             del args, kwargs
             return Response(
-                400,
+                status_code,
                 json={
                     "error": {
                         "code": error_code,
@@ -791,6 +800,77 @@ def _minimal_context(rule_bundle: DM01RuleBundleV1) -> DisplayContext:
         (("UP-01", {"name": "上装", "display_family": "upper"}), ("LOW-01", {"name": "下装", "display_family": "lower"})),
         rule_bundle=rule_bundle,
     )
+
+
+def _product_reference_context(rule_bundle: DM01RuleBundleV1) -> DisplayContext:
+    return replace(
+        _minimal_context(rule_bundle),
+        products=(
+            ("abc-123", {"name": "小写编号商品", "display_family": "upper"}),
+            ("ABC123", {"name": "无连字符字母商品", "display_family": "lower"}),
+            ("123456", {"name": "纯数字编号商品", "display_family": "upper"}),
+            ("款号一", {"name": "中文编号商品", "display_family": "lower"}),
+            ("GD-UP-01", {"name": "既有编号商品", "display_family": "upper"}),
+            ("DUP-01", {"name": "重复名称", "display_family": "upper"}),
+            ("DUP-02", {"name": "重复名称", "display_family": "lower"}),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected_sku"),
+    (
+        ("abc-123", "abc-123"),
+        ("ABC123", "ABC123"),
+        ("123456", "123456"),
+        ("款号一", "款号一"),
+        ("GD-UP-01", "GD-UP-01"),
+        ("中文编号商品", "款号一"),
+    ),
+)
+def test_hard_requirements_resolve_only_frozen_product_identity(
+    app_database_url: str,
+    reference: str,
+    expected_sku: str,
+) -> None:
+    context = _product_reference_context(PostgresDisplayRepository(app_database_url).load_rule_bundle())
+    requirements, clarification = parse_hard_requirements(f"{reference} 必须保留。", context)
+    assert clarification is None
+    assert requirements == frozenset({expected_sku})
+
+
+def test_hard_requirements_accept_multiple_explicit_products_and_close_ambiguity(
+    app_database_url: str,
+) -> None:
+    context = _product_reference_context(PostgresDisplayRepository(app_database_url).load_rule_bundle())
+    requirements, clarification = parse_hard_requirements(
+        "abc-123 与 中文编号商品务必保留；GD-UP-01 不得更换。",
+        context,
+    )
+    assert clarification is None
+    assert requirements == frozenset({"abc-123", "款号一", "GD-UP-01"})
+
+    for text in ("重复名称必须保留。", "未知商品必须保留。", "必须保留主推商品。"):
+        requirements, clarification = parse_hard_requirements(text, context)
+        assert requirements == frozenset()
+        assert clarification is not None and "商品编号或完整商品名称" in clarification
+
+
+def test_revision_target_reuses_frozen_product_identity_without_sku_rules(
+    app_database_url: str,
+) -> None:
+    context = _product_reference_context(PostgresDisplayRepository(app_database_url).load_rule_bundle())
+    assert parse_revision_target("中间上杆 abc-123 太挤，请减少一件。", context) == (
+        "abc-123",
+        "center",
+        "upper",
+    )
+    assert parse_revision_target("左侧下杆 中文编号商品太挤，请减少一件。", context) == (
+        "款号一",
+        "left",
+        "lower",
+    )
+    assert parse_revision_target("左侧下杆 重复名称太挤，请减少一件。", context) is None
 
 
 def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
@@ -1076,22 +1156,36 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                 for sku, _, _, quantity in product_payloads
             ]
             inventory = "、".join(f"{sku} {quantity} 件" for sku, _, _, quantity in product_payloads) + "。"
+            hard_requirement_text = "abc-123、ABC123、123456、款号一与 GD-UP-01 必须保留。"
+            unclear_before = _counts(app_database_url, tenant_id)
+            unclear = user.post(
+                "/api/v1/display",
+                json={
+                    "inventory_text": "必须保留主推商品。",
+                    "products": structured_inventory,
+                },
+            )
+            assert unclear.status_code == 200
+            assert unclear.json()["kind"] == "question"
+            assert "商品编号或完整商品名称" in unclear.json()["message"]
+            assert _counts(app_database_url, tenant_id) == unclear_before
             with _without_rule_activation(migrator_database_url, "G-TASK-003"):
                 missing_rule = user.post(
                     "/api/v1/display",
-                    json={"inventory_text": "", "products": structured_inventory},
+                    json={"inventory_text": hard_requirement_text, "products": structured_inventory},
                 )
                 assert missing_rule.status_code == 422
                 assert _counts(app_database_url, tenant_id) == before
             v1_response = user.post(
                 "/api/v1/display",
-                json={"inventory_text": "", "products": structured_inventory},
+                json={"inventory_text": hard_requirement_text, "products": structured_inventory},
             )
             assert v1_response.status_code == 200, v1_response.text
             v1 = v1_response.json()
             assert _counts(app_database_url, tenant_id)[:3] == (before[0] + 1, before[1] + 1, before[2] + 1)
             assert "资料待补商品" in v1["body"] and "只计入库存对账" in v1["body"]
             assert all(sku in v1["body"] for sku, _, _, _ in product_payloads)
+            assert "本次明确要求保留" in v1["body"]
             assert "AIGC" not in v1["body"] and "示意图" not in v1["body"]
 
             with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
@@ -1107,7 +1201,12 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                     (tenant_id, v1["task_id"]),
                 )
                 plan_row = cursor.fetchone()
-            assert run is not None and plan_row is not None
+                cursor.execute(
+                    "SELECT context_snapshot FROM display_tasks WHERE tenant_id=%s AND id=%s",
+                    (tenant_id, v1["task_id"]),
+                )
+                task_row = cursor.fetchone()
+            assert run is not None and plan_row is not None and task_row is not None
             assert run[3] is None and run[4] == "dm01-rule-compiler-v1"
             assert len(run[2]) == 11
             assert len(run[1]["product_snapshots"]) == len(product_payloads)
@@ -1116,6 +1215,10 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             ]
             assert len(run[1]["rule_bundle"]["revision_assets"]) == 13
             assert all(item["snapshot_digest"] for item in run[1]["product_snapshots"])
+            expected_hard_requirements = {"abc-123", "ABC123", "123456", "款号一", "GD-UP-01"}
+            assert set(run[1]["hard_requirements"]) == expected_hard_requirements
+            assert set(task_row[0]["hard_requirements"]) == expected_hard_requirements
+            assert set(plan_row[0]["hard_requirements"]) == expected_hard_requirements
             assert plan_row[0]["artifact_audit"]["artifact_digest"]
 
             with TestClient(app, base_url="https://diyu.example") as current_admin:

@@ -541,8 +541,16 @@ async function main(): Promise<void> {
   await click(find("button", "重新检查"));
   await settle();
   assert.match(document.body.textContent ?? "", /当前状态暂无法确认/);
+  assert.doesNotMatch(document.body.textContent ?? "", /笛语暂时无法接单/);
+  assert.doesNotMatch(document.body.textContent ?? "", /主要功能可以使用/);
   assert.doesNotMatch(document.body.textContent ?? "", /正在检查/);
   setPublicStatusFailure(false);
+  setPublicStatus("available");
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /主要功能可以使用/);
+  assert.doesNotMatch(document.body.textContent ?? "", /当前状态暂无法确认/);
+  assert.doesNotMatch(document.body.textContent ?? "", /笛语暂时无法接单/);
   assert.equal(
     requests.filter(item => item.path === "/api/v1/status").every(item => item.method === "GET"),
     true,

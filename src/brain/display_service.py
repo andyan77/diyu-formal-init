@@ -50,14 +50,22 @@ class DisplayService:
         if context is None:
             return self._missing_store_question()
         assert_dm01_rule_bundle(context.rule_bundle, revision=False, error_type=DomainError)
-        hard_requirements = parse_hard_requirements(inventory_text)
+        hard_requirements, clarification = parse_hard_requirements(inventory_text, context)
+        if clarification is not None:
+            return {"kind": "question", "message": clarification}
         gap = required_inventory_gap(inventory, context, hard_requirements)
         if gap is not None:
             return {"kind": "question", "message": gap}
         assert context.rule_bundle is not None
         assets = self._active_assets(context.rule_bundle.generation_assets)
         task_id, run_id = self._repository.create_run(
-            scope, stored_inventory_text, inventory, context, self._generator.model_name, assets
+            scope,
+            stored_inventory_text,
+            inventory,
+            context,
+            self._generator.model_name,
+            assets,
+            hard_requirements,
         )
         return self._generate(
             scope,

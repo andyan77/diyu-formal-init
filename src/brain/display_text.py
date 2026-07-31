@@ -52,6 +52,13 @@ def compile_display_body(context: DisplayContext, plan: dict[str, object], revis
         )
     if str(cast(dict[str, object], layout["focus_contract"]).get("focus_source")) == "system_narrowed":
         sections.append("本次输入建议的焦点商品这次不可用，系统已在当前商品里重新选择主焦点。")
+    hard_requirements = cast(list[str], plan.get("hard_requirements", []))
+    if hard_requirements:
+        sections.append(
+            "本次明确要求保留："
+            + "、".join(f"{_product_label(context, sku)}（{sku}）" for sku in hard_requirements)
+            + "；这些商品已按本次库存进入方案与逐项对账。"
+        )
     sections.extend(
         [
             "逐商品库存对账："

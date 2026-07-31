@@ -13,18 +13,31 @@ from src.shared.types import DisplayContext, DisplayGenerationInput, GeneratedDi
 _POSITIONS = ("left", "center", "right")
 _REDUCTION_MARKERS = ("减少", "少挂", "拿掉", "撤下", "太挤", "挂不下", "遮挡", "难取", "不好拿")
 _HARD_MARKERS = ("必须", "务必", "固定", "不可改变", "不能改", "不得更换")
-_SKU_TOKEN = re.compile(r"[A-Z0-9]+(?:-[A-Z0-9]+)+")
 _SENTENCE = re.compile(r"[。；;.\n]")
 _RAIL_TEXT = {"upper": "上杆", "lower": "下杆"}
 
 
-def parse_hard_requirements(text: str) -> frozenset[str]:
-    """Only this task's own wording can make a product mandatory; nothing else grants that status."""
+def parse_hard_requirements(
+    text: str,
+    context: DisplayContext,
+) -> tuple[frozenset[str], str | None]:
+    """Resolve mandatory products only against the already frozen product identities."""
     marked: set[str] = set()
-    for sentence in _SENTENCE.split(text.upper()):
+    for sentence in _SENTENCE.split(text):
         if any(marker in sentence for marker in _HARD_MARKERS):
-            marked.update(_SKU_TOKEN.findall(sentence))
-    return frozenset(marked)
+            resolved, ambiguous = _resolve_product_references(sentence, context)
+            if ambiguous:
+                return (
+                    frozenset(),
+                    "这条必须保留的要求可能对应多件本次商品，请改用商品编号或完整商品名称再说明一次。",
+                )
+            if not resolved:
+                return (
+                    frozenset(),
+                    "我还不能确定这条必须保留的要求指哪件本次商品，请改用商品编号或完整商品名称再说明一次。",
+                )
+            marked.update(resolved)
+    return frozenset(marked), None
 
 
 def required_inventory_gap(
@@ -64,11 +77,7 @@ def parse_revision_target(
     normalized = feedback.casefold()
     if not any(marker in normalized for marker in _REDUCTION_MARKERS):
         return None
-    matched_products: list[str] = []
-    for sku, facts in context.products:
-        labels = (sku, str(facts.get("name", "")), str(facts.get("category", "")))
-        if any(label and label.casefold() in normalized for label in labels):
-            matched_products.append(sku)
+    matched_products, ambiguous = _resolve_product_references(feedback, context)
     positions = [
         position
         for position, markers in {
@@ -83,9 +92,49 @@ def parse_revision_target(
         for rail, markers in {"upper": ("上杆", "上层"), "lower": ("下杆", "下层")}.items()
         if any(marker in normalized for marker in markers)
     ]
-    if len(set(matched_products)) != 1 or len(positions) != 1 or len(rails) != 1:
+    if ambiguous or len(matched_products) != 1 or len(positions) != 1 or len(rails) != 1:
         return None
-    return matched_products[0], positions[0], rails[0]
+    return next(iter(matched_products)), positions[0], rails[0]
+
+
+def _resolve_product_references(
+    text: str,
+    context: DisplayContext,
+) -> tuple[frozenset[str], bool]:
+    """Match literal frozen SKU/name aliases and return original database SKU values.
+
+    Case folding is used only to compare the person's words. No normalization, SKU grammar,
+    prefix match or similarity rule is allowed to mint a product identity.
+    """
+    aliases: dict[str, set[str]] = {}
+    for sku, facts in context.products:
+        for label in (sku, str(facts.get("name", ""))):
+            if label:
+                aliases.setdefault(label.casefold(), set()).add(sku)
+
+    normalized = text.casefold()
+    candidates: list[tuple[int, int, frozenset[str]]] = []
+    for alias, skus in aliases.items():
+        start = normalized.find(alias)
+        while start >= 0:
+            candidates.append((start, start + len(alias), frozenset(skus)))
+            start = normalized.find(alias, start + 1)
+
+    selected: list[tuple[int, int, frozenset[str]]] = []
+    for candidate in sorted(candidates, key=lambda item: (item[0], -(item[1] - item[0]))):
+        start, end, _ = candidate
+        if any(start < chosen_end and end > chosen_start for chosen_start, chosen_end, _ in selected):
+            continue
+        selected.append(candidate)
+
+    resolved: set[str] = set()
+    ambiguous = False
+    for _, _, frozen_skus in selected:
+        if len(frozen_skus) != 1:
+            ambiguous = True
+        else:
+            resolved.update(frozen_skus)
+    return frozenset(resolved), ambiguous
 
 
 class DM01DisplayCompiler(DisplayGenerator):
@@ -247,6 +296,7 @@ class DM01DisplayCompiler(DisplayGenerator):
             "rule_bundle_digest": (
                 request.context.rule_bundle.bundle_digest if request.context.rule_bundle is not None else None
             ),
+            "hard_requirements": sorted(request.hard_requirements),
             "inventory_conservation": {
                 sku: {
                     "input": amount,

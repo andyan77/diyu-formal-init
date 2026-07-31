@@ -274,6 +274,7 @@ class PostgresDisplayRepository(DisplayRepository):
         context: DisplayContext,
         model: str,
         assets: tuple[ActiveAsset, ...],
+        hard_requirements: frozenset[str],
     ) -> tuple[UUID, UUID]:
         task_id, run_id = uuid4(), uuid4()
         actor_organization_id = scope.actor_organization_id or scope.organization_id
@@ -302,10 +303,20 @@ class PostgresDisplayRepository(DisplayRepository):
                     store_id,
                     inventory_text,
                     Jsonb(dict(inventory)),
-                    Jsonb(_frozen_context(context)),
+                    Jsonb(_frozen_context(context, hard_requirements)),
                 ),
             )
-            self._run(cursor, scope, run_id, task_id, model, assets, context, inventory)
+            self._run(
+                cursor,
+                scope,
+                run_id,
+                task_id,
+                model,
+                assets,
+                context,
+                inventory,
+                hard_requirements,
+            )
         return task_id, run_id
 
     def create_revision_run(
@@ -568,6 +579,7 @@ class PostgresDisplayRepository(DisplayRepository):
         assets: tuple[ActiveAsset, ...],
         context: DisplayContext,
         inventory: tuple[tuple[str, int], ...],
+        hard_requirements: frozenset[str] = frozenset(),
     ) -> None:
         receipts = [{"asset_id": a.asset_id, "schema_version": a.schema_version} for a in assets]
         input_receipt = {
@@ -580,6 +592,7 @@ class PostgresDisplayRepository(DisplayRepository):
             "product_snapshots": list(context.product_snapshots),
             "rule_bundle": context.rule_bundle.document() if context.rule_bundle is not None else None,
             "inventory": dict(inventory),
+            "hard_requirements": sorted(hard_requirements),
         }
         cursor.execute(
             "INSERT INTO display_generation_runs (id,tenant_id,task_id,model,status,used_assets,input_receipt) VALUES (%s,%s,%s,%s,'running',%s,%s)",
@@ -829,7 +842,10 @@ class PostgresDisplayRepository(DisplayRepository):
         )
 
 
-def _frozen_context(context: DisplayContext) -> dict[str, object]:
+def _frozen_context(
+    context: DisplayContext,
+    hard_requirements: frozenset[str] = frozenset(),
+) -> dict[str, object]:
     """Everything a later revision must reproduce; the live operator is recorded per run instead."""
     return {
         "contract_version": "dm01-context-snapshot-v2",
@@ -842,6 +858,7 @@ def _frozen_context(context: DisplayContext) -> dict[str, object]:
         "store_profile_version": context.store_profile_version,
         "rail_profile": context.rail_profile,
         "products": [{"sku": sku, "facts": facts} for sku, facts in context.products],
+        "hard_requirements": sorted(hard_requirements),
         "product_snapshots": list(context.product_snapshots),
         "rule_bundle": context.rule_bundle.document() if context.rule_bundle is not None else None,
     }

@@ -158,6 +158,16 @@ _PROVIDER_UNAVAILABLE_ERROR_CODES = frozenset(
         "unauthorized",
     }
 )
+_REQUEST_SCOPED_ERROR_CODES = frozenset(
+    {
+        "content_filter",
+        "context_length_exceeded",
+        "input_length",
+        "invalid_max_tokens",
+        "invalid_parameter",
+        "invalid_response_format",
+    }
+)
 
 
 def _provider_rejection_state(
@@ -166,8 +176,13 @@ def _provider_rejection_state(
     error_type: str,
 ) -> ProviderState | None:
     """Classify provider availability without treating one invalid request as an outage."""
-    stable_markers = {error_code.casefold(), error_type.casefold()}
-    if status_code in {401, 403, 404} or stable_markers & _PROVIDER_UNAVAILABLE_ERROR_CODES:
+    stable_code = error_code.strip().casefold()
+    stable_type = error_type.strip().casefold()
+    if stable_code in _REQUEST_SCOPED_ERROR_CODES or stable_type in _REQUEST_SCOPED_ERROR_CODES:
+        return None
+    if stable_code in _PROVIDER_UNAVAILABLE_ERROR_CODES or stable_type in _PROVIDER_UNAVAILABLE_ERROR_CODES:
+        return "unavailable"
+    if status_code in {401, 403, 404}:
         return "unavailable"
     if status_code == 429:
         return "degraded"

@@ -257,7 +257,11 @@ def test_reference_plan_never_asks_for_confirmation_and_accepts_a_changed_invent
     assert chosen_focus["focus_source"] == "system_narrowed"
     assert chosen_focus["secondary_present"] is False
 
-    hard = parse_hard_requirements("今天这组墙可用：DIYU-CSPU-002 4 件；DIYU-CSPU-006 必须留在主焦点。")
+    hard, clarification = parse_hard_requirements(
+        "今天这组墙可用：DIYU-CSPU-002 4 件；DIYU-CSPU-006 必须留在主焦点。",
+        context,
+    )
+    assert clarification is None
     assert hard == frozenset({"DIYU-CSPU-006"})
     question = required_inventory_gap(without_focus, context, hard)
     assert question is not None

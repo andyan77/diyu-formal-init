@@ -46,9 +46,11 @@ export default function StatusPage(): JSX.Element {
 
   const coreAvailable = status?.core.state === "available";
   const pendingLabel = error ? "当前状态暂无法确认" : "正在检查";
-  const headline = error || status?.core.state === "unavailable"
-    ? "笛语暂时无法接单，请稍后再试。"
-    : status?.content_generation.state === "degraded" ||
+  const headline = error
+    ? "当前状态暂无法确认，请稍后重新检查。"
+    : status?.core.state === "unavailable"
+      ? "笛语暂时无法接单，请稍后再试。"
+      : status?.content_generation.state === "degraded" ||
         status?.content_generation.state === "unavailable"
       ? "内容生成暂时受影响；品牌管理和纯文字陈列参考方案仍可使用。"
       : status?.content_generation.state === "unknown"
