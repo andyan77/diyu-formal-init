@@ -12,6 +12,7 @@ from src.shared.creative_kernel import (
     OBSERVATION_ONLY_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
+    PRODUCT_VALUE_UNIT_ID,
     CreativeKernelV1,
     compiler_owned_unit_source,
 )
@@ -1022,6 +1023,8 @@ def unit_contracts_v2(
         if unit.unit_id != f"unit:frozen-fact:{index}":
             raise ValueError("frozen fact unit mapping is incomplete")
         contracts[unit.unit_id] = "frozen_fact"
+    if any(unit.unit_id == PRODUCT_VALUE_UNIT_ID for unit in kernel.units):
+        contracts[PRODUCT_VALUE_UNIT_ID] = "audience_guidance"
     visible_fact_refs = {ref for unit in fact_units for ref in unit.fact_refs}
     required_fact_refs = {
         *(fact.source_id for fact in frame.user_facts),

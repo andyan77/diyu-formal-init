@@ -45,6 +45,10 @@ from src.shared.media_program import (
     media_program_document,
 )
 from src.shared.narrative import legacy_frame, visible_digest
+from src.shared.product_value import (
+    product_value_contract_digest,
+    product_value_contract_document,
+)
 from src.shared.types import (
     ContentProduct,
     ContentSemanticContract,
@@ -208,6 +212,7 @@ class DeterministicContentGenerator(ContentGenerator):
             media_format=request.media_format,
             kernel_version=kernel_version,
             primary_product=request.primary_product,
+            product_value_contract=request.product_value_contract,
         )
         skeleton = freeze_prior_revision_units(
             skeleton,
@@ -292,6 +297,7 @@ class DeterministicContentGenerator(ContentGenerator):
             trusted_fact_texts=tuple((fact.fact_id, fact.exact_text) for fact in facts),
             media_capability_envelope=request.media_capability_envelope,
             media_program=request.media_program,
+            product_value_contract=request.product_value_contract,
         )
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product)
@@ -402,6 +408,20 @@ class DeterministicContentGenerator(ContentGenerator):
                 "media_program_digest": (
                     media_program_digest(request.media_program)
                     if request.media_program is not None
+                    else None
+                ),
+                "product_value_contract": (
+                    product_value_contract_document(
+                        request.product_value_contract
+                    )
+                    if request.product_value_contract is not None
+                    else None
+                ),
+                "product_value_contract_digest": (
+                    product_value_contract_digest(
+                        request.product_value_contract
+                    )
+                    if request.product_value_contract is not None
                     else None
                 ),
             },

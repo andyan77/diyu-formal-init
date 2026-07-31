@@ -6,6 +6,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast
+from uuid import UUID
 
 from src.shared.creative_kernel import (
     KERNEL_VERSION,
@@ -47,6 +48,7 @@ class HumanReviewInput:
     verdict: str
     criteria: dict[str, str]
     notes: str
+    value_evidence: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,14 @@ def write_gate_c_evidence(
         artifact_sha = sha256_file(artifact_path)
         visible = artifact_visible_digest(artifact_path)
         raw_sha = sha256_file(raw_path)
+        artifact_document = _json_object(artifact_path)
+        persistence_ids = {
+            identifier: _required_uuid_text(
+                artifact_document.get(identifier),
+                label=f"{item.card_id}: formal {identifier}",
+            )
+            for identifier in ("task_id", "run_id", "version_id")
+        }
         raw_path_by_card[item.card_id] = raw_path
         review = review_by_card[item.card_id]
         if review.artifact_file != item.artifact_file:
@@ -137,6 +147,11 @@ def write_gate_c_evidence(
             review.criteria[criterion] != "PASS" for criterion in GATE_C_REVIEW_CRITERIA
         ):
             raise EvidenceBindingError(f"{item.card_id}: human review criteria are incomplete")
+        value_evidence = _assert_value_evidence(
+            item.card_id,
+            artifact_path=artifact_path,
+            value=review.value_evidence,
+        )
         artifact_records.append(
             {
                 "card_id": item.card_id,
@@ -145,6 +160,7 @@ def write_gate_c_evidence(
                 "visible_digest": visible,
                 "raw_response_file": item.raw_response_file,
                 "raw_response_sha256": raw_sha,
+                **persistence_ids,
             }
         )
         review_records.append(
@@ -156,6 +172,7 @@ def write_gate_c_evidence(
                 "verdict": review.verdict,
                 "criteria": {criterion: review.criteria[criterion] for criterion in GATE_C_REVIEW_CRITERIA},
                 "notes": review.notes,
+                "value_evidence": value_evidence,
             }
         )
 
@@ -173,7 +190,7 @@ def write_gate_c_evidence(
     _write_private_json(
         root / "human-review.json",
         {
-            "review_contract": "ux03-gate-c-human-review-v1",
+            "review_contract": "ux03-gate-c-human-review-v2",
             "digest_algorithm": "src.shared.narrative.visible_digest(outline, body)",
             "reviews": review_records,
         },
@@ -181,7 +198,7 @@ def write_gate_c_evidence(
     _write_private_json(
         root / "manifest.json",
         {
-            "manifest_version": "ux03-gate-c-evidence-v1",
+            "manifest_version": "ux03-gate-c-evidence-v2",
             "implementation_sha": implementation_sha,
             "provider_config": {
                 "model": model,
@@ -205,6 +222,12 @@ def write_gate_c_evidence(
 def verify_gate_c_evidence(root: Path) -> None:
     manifest = _json_object(root / "manifest.json")
     review_document = _json_object(root / "human-review.json")
+    if (
+        manifest.get("manifest_version") != "ux03-gate-c-evidence-v2"
+        or review_document.get("review_contract")
+        != "ux03-gate-c-human-review-v2"
+    ):
+        raise EvidenceBindingError("Gate C evidence contract version drifted")
     implementation_sha = manifest.get("implementation_sha")
     if not isinstance(implementation_sha, str):
         raise EvidenceBindingError("manifest implementation SHA is unavailable")
@@ -230,6 +253,16 @@ def verify_gate_c_evidence(root: Path) -> None:
         artifact_path = _private_child(root, artifact_file)
         raw_path = _private_child(root, raw_response_file)
         raw_path_by_card[card_id] = raw_path
+        artifact_document = _json_object(artifact_path)
+        for identifier in ("task_id", "run_id", "version_id"):
+            persisted = _required_uuid_text(
+                artifact_document.get(identifier),
+                label=f"{card_id}: formal {identifier}",
+            )
+            if record.get(identifier) != persisted:
+                raise EvidenceBindingError(
+                    f"{card_id}: manifest {identifier} does not match artifact"
+                )
         artifact_sha = sha256_file(artifact_path)
         visible = artifact_visible_digest(artifact_path)
         raw_sha = sha256_file(raw_path)
@@ -256,6 +289,11 @@ def verify_gate_c_evidence(root: Path) -> None:
             or any(criteria.get(criterion) != "PASS" for criterion in GATE_C_REVIEW_CRITERIA)
         ):
             raise EvidenceBindingError(f"{card_id}: human review criteria are incomplete")
+        _assert_value_evidence(
+            card_id,
+            artifact_path=artifact_path,
+            value=review.get("value_evidence"),
+        )
     if set(reviews_by_card) != {str(record.get("card_id")) for record in artifacts if isinstance(record, dict)}:
         raise EvidenceBindingError("human review contains an unrelated card")
     normalization_keys: set[tuple[str, str]] = set()
@@ -284,6 +322,93 @@ def verify_gate_c_evidence(root: Path) -> None:
         if record != expected:
             raise EvidenceBindingError(f"{card_id}: writer wrapper normalization evidence does not match raw response")
     _verify_sha256sums(root)
+
+
+def _assert_value_evidence(
+    card_id: str,
+    *,
+    artifact_path: Path,
+    value: object,
+) -> dict[str, object] | None:
+    """Bind the two product cards to concrete, reviewable value evidence.
+
+    PASS flags remain human judgements.  This deterministic layer only prevents
+    an all-PASS form from standing in for the product-specific proposition that
+    was actually read in the bound artifact.
+    """
+
+    if card_id not in {"P2", "P5"}:
+        if value is not None:
+            raise EvidenceBindingError(f"{card_id}: unrelated product value evidence")
+        return None
+    if not isinstance(value, dict):
+        raise EvidenceBindingError(f"{card_id}: product value evidence is unavailable")
+    artifact = _json_object(artifact_path)
+    body = artifact.get("body")
+    snapshot = artifact.get("formal_snapshot")
+    if not isinstance(body, str) or not isinstance(snapshot, dict):
+        raise EvidenceBindingError(f"{card_id}: product value artifact is incomplete")
+    contract = snapshot.get("product_value_contract")
+    if not isinstance(contract, dict):
+        raise EvidenceBindingError(f"{card_id}: frozen product value contract is unavailable")
+    if card_id == "P2":
+        expected_keys = {
+            "product_specific_understanding",
+            "tradeoff_or_limit",
+            "validity_condition",
+        }
+        contract_keys = {
+            "product_specific_understanding": "product_insight",
+            "tradeoff_or_limit": "tradeoff_or_limit",
+            "validity_condition": "validity_condition",
+        }
+        if set(value) != expected_keys:
+            raise EvidenceBindingError("P2: product value evidence fields drifted")
+        for evidence_key, contract_key in contract_keys.items():
+            text = value.get(evidence_key)
+            if (
+                not isinstance(text, str)
+                or not text.strip()
+                or text != contract.get(contract_key)
+                or text not in body
+            ):
+                raise EvidenceBindingError(
+                    f"P2: {evidence_key} is not bound to the visible artifact"
+                )
+        return dict(value)
+    expected_keys = {"concrete_visual_proposition", "resource_refs"}
+    if set(value) != expected_keys:
+        raise EvidenceBindingError("P5: product value evidence fields drifted")
+    proposition = value.get("concrete_visual_proposition")
+    refs = value.get("resource_refs")
+    if (
+        not isinstance(proposition, str)
+        or not proposition.strip()
+        or proposition != contract.get("visible_styling_proposition")
+        or proposition not in body
+        or not isinstance(refs, list)
+        or len(refs) != 2
+        or any(not isinstance(item, str) or not item for item in refs)
+        or len(set(refs)) != 2
+        or refs != contract.get("resource_refs")
+    ):
+        raise EvidenceBindingError("P5: visual proposition or resource refs are not bound")
+    envelope = snapshot.get("media_capability_envelope")
+    resources = envelope.get("resources") if isinstance(envelope, dict) else None
+    registered_refs = (
+        {
+            str(resource.get("resource_id"))
+            for resource in resources
+            if isinstance(resource, dict)
+            and resource.get("capability_id")
+            == "registered_product_display"
+        }
+        if isinstance(resources, list)
+        else set()
+    )
+    if set(refs) != registered_refs:
+        raise EvidenceBindingError("P5: review resource refs do not match the frozen envelope")
+    return dict(value)
 
 
 def _normalization_record(
@@ -427,3 +552,11 @@ def _assert_sha(value: str, *, label: str) -> None:
         raise EvidenceBindingError(f"{label} has an invalid length")
     if any(character not in "0123456789abcdef" for character in value):
         raise EvidenceBindingError(f"{label} is not lowercase hexadecimal")
+
+
+def _required_uuid_text(value: object, *, label: str) -> str:
+    try:
+        parsed = UUID(str(value))
+    except (TypeError, ValueError) as exc:
+        raise EvidenceBindingError(f"{label} is unavailable") from exc
+    return str(parsed)

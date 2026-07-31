@@ -23,6 +23,11 @@ from src.shared.media_program import (
     media_program_document,
 )
 from src.shared.narrative import NarrativeFrame, frame_document
+from src.shared.product_value import (
+    ProductValueContract,
+    product_value_contract_digest,
+    product_value_contract_document,
+)
 from src.shared.types import (
     ContentControlContext,
     CreativeDirection,
@@ -465,6 +470,7 @@ def snapshot_document(
     delivery_compiler_version: str | None = DELIVERY_COMPILER_VERSION,
     media_capability_envelope: MediaCapabilityEnvelope | None = None,
     media_program: MediaProgramSelectionV1 | None = None,
+    product_value_contract: ProductValueContract | None = None,
 ) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
@@ -543,6 +549,16 @@ def snapshot_document(
         ),
         "media_program": (media_program_document(media_program) if media_program is not None else None),
         "media_program_digest": (media_program_digest(media_program) if media_program is not None else None),
+        "product_value_contract": (
+            product_value_contract_document(product_value_contract)
+            if product_value_contract is not None
+            else None
+        ),
+        "product_value_contract_digest": (
+            product_value_contract_digest(product_value_contract)
+            if product_value_contract is not None
+            else None
+        ),
         "reviewed_kernel_digest": None,
         "visible_provenance": None,
         "account_expression": (

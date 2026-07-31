@@ -22,6 +22,11 @@ from src.shared.media_program import (
     media_program_from_document,
 )
 from src.shared.narrative import NarrativeFrame, frame_from_document
+from src.shared.product_value import (
+    ProductValueContract,
+    product_value_contract_digest,
+    product_value_contract_from_document,
+)
 from src.shared.types import ProductFact, SeriesContext, SeriesEntry
 
 
@@ -81,6 +86,21 @@ def frozen_media_contract(
     if snapshot.get("media_program_digest") != media_program_digest(program):
         raise DomainError("内容任务冻结的媒体程序摘要不一致")
     return envelope, program
+
+
+def frozen_product_value_contract(
+    snapshot: Mapping[str, object],
+) -> ProductValueContract | None:
+    value = snapshot.get("product_value_contract")
+    digest = snapshot.get("product_value_contract_digest")
+    if value is None and digest is None:
+        return None
+    if value is None or not isinstance(digest, str):
+        raise DomainError("内容任务冻结的商品价值合同不完整")
+    contract = product_value_contract_from_document(value)
+    if product_value_contract_digest(contract) != digest:
+        raise DomainError("内容任务冻结的商品价值合同摘要不一致")
+    return contract
 
 
 def visible_direction(snapshot: object) -> tuple[str | None, list[str]]:

@@ -13,6 +13,9 @@ const baseUrl = required("UX03_PRODUCT_MEDIA_BASE_URL").replace(/\/$/, "");
 const adminToken = required("UX03_PRODUCT_MEDIA_ADMIN_TOKEN");
 const creatorToken = required("UX03_PRODUCT_MEDIA_CREATOR_TOKEN");
 const accountId = required("UX03_PRODUCT_MEDIA_ACCOUNT_ID");
+const forbiddenMaterial = required(
+  "UX03_PRODUCT_MEDIA_FORBIDDEN_MATERIAL"
+);
 const skipBinding =
   process.env.UX03_PRODUCT_MEDIA_SKIP_BINDING === "1";
 const products = [
@@ -287,6 +290,13 @@ try {
   await waitFor(
     "document.querySelectorAll('.material-picker label').length >= 2",
     "本次素材选择"
+  );
+  const leakedHeadquartersMaterial = await evaluate(
+    `document.querySelector('.creator-tool-drawer')?.innerText.includes(${JSON.stringify(forbiddenMaterial)}) ?? false`
+  );
+  ensure(
+    !leakedHeadquartersMaterial,
+    "区域账号看到了总部专用素材元数据"
   );
   for (const product of products) {
     const checked = await evaluate(`(() => {

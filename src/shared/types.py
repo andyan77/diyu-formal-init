@@ -13,6 +13,7 @@ if TYPE_CHECKING:
         MediaCapabilityEnvelope,
         MediaProgramSelectionV1,
     )
+    from src.shared.product_value import ProductValueContract
 
 ContentProduct: TypeAlias = Literal[
     "dressing_decision",
@@ -436,6 +437,7 @@ class GenerationInput:
     prior_creative_kernel: CreativeKernelV1 | None = None
     media_capability_envelope: MediaCapabilityEnvelope | None = None
     media_program: MediaProgramSelectionV1 | None = None
+    product_value_contract: ProductValueContract | None = None
 
 
 @dataclass(frozen=True)

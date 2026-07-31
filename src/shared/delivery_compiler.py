@@ -10,6 +10,7 @@ from src.shared.creative_kernel import (
     HYPOTHESIS_DISCLOSURE,
     KERNEL_VERSION,
     MEDIA_NATIVE_KERNEL_VERSION,
+    PRODUCT_VALUE_UNIT_ID,
     CreativeKernelUnit,
     CreativeKernelV1,
     UnitMode,
@@ -24,6 +25,11 @@ from src.shared.media_program import (
     assert_media_program_allowed,
     media_envelope_digest,
     media_program_digest,
+)
+from src.shared.product_value import (
+    P2ProductValueContractV1,
+    P5ProductValueContractV1,
+    ProductValueContract,
 )
 from src.shared.types import (
     ContentProduct,
@@ -115,6 +121,7 @@ class DeliveryCompileInput:
     trusted_fact_texts: tuple[tuple[str, str], ...] = ()
     media_capability_envelope: MediaCapabilityEnvelope | None = None
     media_program: MediaProgramSelectionV1 | None = None
+    product_value_contract: ProductValueContract | None = None
 
 
 @dataclass(frozen=True)
@@ -313,6 +320,15 @@ def _assert_expression_plan(
                     raise GenerationFailed("编译器中性文字来源漂移")
             elif unit.text_source not in {"writer", "prior_version"}:
                 raise GenerationFailed("创作表达文字来源漂移")
+        elif unit.unit_id == PRODUCT_VALUE_UNIT_ID:
+            if (
+                request.product_value_contract is None
+                or unit.text_source != "server_compiler"
+                or unit.purpose != "body"
+                or unit.mode != "recommendation"
+                or unit.text != request.product_value_contract.visible_text
+            ):
+                raise GenerationFailed("商品价值合同可见单元漂移")
         elif unit.text_source not in {"writer", "prior_version"}:
             raise GenerationFailed("创作表达文字来源漂移")
         if kernel.kernel_version == KERNEL_VERSION and unit.allowed_resource_ids:
@@ -324,6 +340,18 @@ def _assert_expression_plan(
             "disclosed_dramatization",
         }:
             raise GenerationFailed("创作表达轨语态无效")
+    value_units = tuple(
+        unit for unit in kernel.units if unit.unit_id == PRODUCT_VALUE_UNIT_ID
+    )
+    if request.product_value_contract is None:
+        if value_units:
+            raise GenerationFailed("无商品价值合同的成品包含商品价值单元")
+    elif (
+        len(value_units) != 1
+        or request.product_value_contract.primary_product
+        != request.primary_product
+    ):
+        raise GenerationFailed("商品价值合同与成品产品不一致")
 
 
 def _compile_delivery(
@@ -521,14 +549,30 @@ def _compile_delivery_v4(
     creative_body = "\n\n".join(_visible_unit_v3(unit) for unit in body_units)
     artifact_scope_source = _artifact_scope_source(kernel)
     artifact_scope = _PHRASES[artifact_scope_source]
-    contract = _contract(
-        request.primary_product,
-        guide,
-        creative_body,
-        release,
-        fact_units,
-        media_native=True,
-    )
+    if isinstance(request.product_value_contract, P2ProductValueContractV1):
+        contract: ContentSemanticContract = P2SemanticContract(
+            request.product_value_contract.product_insight,
+            request.product_value_contract.tradeoff_or_limit,
+            request.product_value_contract.validity_condition,
+        )
+    elif isinstance(
+        request.product_value_contract,
+        P5ProductValueContractV1,
+    ):
+        contract = P5SemanticContract(
+            request.product_value_contract.real_product_anchor,
+            request.product_value_contract.visible_styling_proposition,
+            request.product_value_contract.visual_dependency,
+        )
+    else:
+        contract = _contract(
+            request.primary_product,
+            guide,
+            creative_body,
+            release,
+            fact_units,
+            media_native=True,
+        )
     envelope_source = f"media-envelope:{media_envelope_digest(envelope)}"
     program_digest_source = f"media-program:{media_program_digest(program)}"
     program_source = f"media-program:{program.program_id}"

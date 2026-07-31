@@ -44,6 +44,12 @@ from src.shared.version_integrity import (
 
 
 class PostgresContentRepository(ContentRepository):
+    _PRODUCT_VALUE_COMPLETION_KEYS = frozenset(
+        {
+            "product_value_contract",
+            "product_value_contract_digest",
+        }
+    )
     _MEDIA_PROGRAM_COMPLETION_KEYS = frozenset(
         {
             "media_capability_envelope",
@@ -74,10 +80,15 @@ class PostgresContentRepository(ContentRepository):
             "media_capability_envelope_digest",
             "media_program",
             "media_program_digest",
+            "product_value_contract",
+            "product_value_contract_digest",
         }
     )
+    _MEDIA_NATIVE_COMPLETION_KEYS = (
+        _DUAL_TRACK_COMPLETION_KEYS - _PRODUCT_VALUE_COMPLETION_KEYS
+    )
     _LEGACY_DUAL_TRACK_COMPLETION_KEYS = (
-        _DUAL_TRACK_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
+        _MEDIA_NATIVE_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
     )
     _REVISION_IMMUTABLE_SNAPSHOT_KEYS = frozenset(
         {
@@ -95,6 +106,8 @@ class PostgresContentRepository(ContentRepository):
             "media_capability_envelope_digest",
             "media_program",
             "media_program_digest",
+            "product_value_contract",
+            "product_value_contract_digest",
         }
     )
     _VERSION_AUDIT_KEYS = (
@@ -119,6 +132,8 @@ class PostgresContentRepository(ContentRepository):
         "media_capability_envelope_digest",
         "media_program",
         "media_program_digest",
+        "product_value_contract",
+        "product_value_contract_digest",
     )
 
     def __init__(
@@ -156,17 +171,21 @@ class PostgresContentRepository(ContentRepository):
         if not isinstance(current, dict):
             raise DomainError("新内容缺少可审计的任务快照")
         patch_keys = frozenset(patch)
-        expected_keys = cls._DUAL_TRACK_COMPLETION_KEYS
-        if (
-            patch.get("delivery_compiler_version")
-            != DELIVERY_COMPILER_VERSION
-        ):
-            expected_keys = cls._LEGACY_DUAL_TRACK_COMPLETION_KEYS
-        if patch_keys != expected_keys and not (
-            patch.get("delivery_compiler_version")
-            != DELIVERY_COMPILER_VERSION
-            and patch_keys == cls._DUAL_TRACK_COMPLETION_KEYS
-        ):
+        compiler_version = patch.get("delivery_compiler_version")
+        expected_key_sets: tuple[frozenset[str], ...]
+        if compiler_version == DELIVERY_COMPILER_VERSION:
+            expected_key_sets = (cls._DUAL_TRACK_COMPLETION_KEYS,)
+        elif compiler_version == MEDIA_NATIVE_DELIVERY_COMPILER_VERSION:
+            # Historical v3 writers existed both before and after the media
+            # program snapshot was introduced.  Keep both exact old shapes
+            # readable without accepting a partially populated hybrid.
+            expected_key_sets = (
+                cls._LEGACY_DUAL_TRACK_COMPLETION_KEYS,
+                cls._MEDIA_NATIVE_COMPLETION_KEYS,
+            )
+        else:
+            expected_key_sets = (cls._LEGACY_DUAL_TRACK_COMPLETION_KEYS,)
+        if patch_keys not in expected_key_sets:
             raise DomainError("创作内核快照补丁字段不完整或越界")
         if patch.get("version_authorization") != "deterministic-dual-track-v1":
             raise DomainError("内容版本缺少确定性双轨授权")

@@ -49,7 +49,10 @@ from src.infrastructure.seed_demo import (
     USER_ID,
 )
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
-from src.shared.content_snapshot import frozen_media_contract
+from src.shared.content_snapshot import (
+    frozen_media_contract,
+    frozen_product_value_contract,
+)
 from src.shared.creative_kernel import (
     DUAL_TRACK_KERNEL_VERSION,
     KERNEL_VERSION,
@@ -87,6 +90,11 @@ from src.shared.media_program import (
     select_media_program,
 )
 from src.shared.narrative import new_frame, visible_digest
+from src.shared.product_value import (
+    P2ProductValueContractV1,
+    P5ProductValueContractV1,
+    build_product_value_contract,
+)
 from src.shared.types import (
     AccountExpression,
     BoundProductMedia,
@@ -99,7 +107,9 @@ from src.shared.types import (
     GeneratedArtifact,
     GenerationInput,
     GraphicProductionBundle,
+    P2SemanticContract,
     P3SemanticContract,
+    P5SemanticContract,
     ProductFact,
     ReferenceMaterial,
     RequestedControls,
@@ -125,6 +135,7 @@ from src.tool.run_gate_c_final_suite import (
     _artifact_document,
     _EvidenceDeepSeekGenerator,
     _reviews_from_file,
+    _write_evidence_projection,
 )
 from tests.test_ui05_semantic_rework import (
     _app,
@@ -313,6 +324,7 @@ def _run_product_media_browser(
     account_id: UUID,
     product_names: tuple[str, str],
     material_titles: tuple[str, str],
+    forbidden_material_title: str,
 ) -> subprocess.CompletedProcess[str]:
     """Exercise formal product binding and P5 selection in one real browser."""
 
@@ -359,6 +371,9 @@ def _run_product_media_browser(
                 "UX03_PRODUCT_MEDIA_PRODUCT_2": product_names[1],
                 "UX03_PRODUCT_MEDIA_MATERIAL_1": material_titles[0],
                 "UX03_PRODUCT_MEDIA_MATERIAL_2": material_titles[1],
+                "UX03_PRODUCT_MEDIA_FORBIDDEN_MATERIAL": (
+                    forbidden_material_title
+                ),
             },
             capture_output=True,
             text=True,
@@ -613,6 +628,7 @@ def _compile_input(request: GenerationInput) -> DeliveryCompileInput:
         allowed_resource_ids=request.media_capability_envelope.resource_ids,
         media_capability_envelope=request.media_capability_envelope,
         media_program=request.media_program,
+        product_value_contract=request.product_value_contract,
     )
 
 
@@ -628,6 +644,7 @@ def _filled_kernel(request: GenerationInput) -> object:
         media_format=request.media_format,
         kernel_version=KERNEL_VERSION,
         primary_product=request.primary_product,
+        product_value_contract=request.product_value_contract,
     )
     text_by_purpose = {
         "title": "甜味把熟悉的一天叫醒了",
@@ -925,6 +942,20 @@ def test_p5_requires_two_frozen_registered_product_resources() -> None:
     )
     assert program.program_id == "video_registered_product_display_v1"
     assert set(program.required_resource_ids) == envelope.resource_ids
+    insufficient_media = tuple(
+        _bound_product_media(index=index)
+        for index in (1, 2)
+    )
+    with pytest.raises(
+        GenerationFailed,
+        match="还不足以形成具体造型关系",
+    ):
+        build_product_value_contract(
+            primary_product="visual_styling_story",
+            products=tuple(item.product for item in insufficient_media),
+            bound_product_media=insufficient_media,
+            media_envelope=envelope,
+        )
 
 
 def test_p5_rejects_two_bindings_that_do_not_prove_two_distinct_products_and_assets() -> None:
@@ -1028,6 +1059,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
     )
     browser_product_ids: list[UUID] = []
     browser_asset_ids: list[UUID] = []
+    insufficient_asset_ids: list[UUID] = []
     admin_session_token = ""
     try:
         with TestClient(app, base_url="https://diyu.example") as ops:
@@ -1137,16 +1169,65 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
             )
             assert account.status_code == 201, account.text
             account_id = UUID(str(account.json()["id"]))
+            headquarters_account = admin.post(
+                "/api/v1/tenant-management/publishing-accounts",
+                json={
+                    "name": "公司级素材校验账号",
+                    "channel": "小红书",
+                    "content_role_name": "公司级素材校验编辑",
+                    "speaker_kind": "institutional_account",
+                    "operator_id": member.json()["user_id"],
+                    "control_organization_id": organization["id"],
+                    "operator_can_maintain_expression_profile": False,
+                    "initial_profile": {
+                        "identity_position": "公司级素材校验编辑",
+                        "authority_boundary": "只使用当前账号可见资料",
+                        "audience_relationship": "帮助读者看清选择",
+                        "content_territories": "品牌日常与商品选择",
+                        "default_production_conditions": "一人低成本制作",
+                    },
+                    "as_synthetic_business_fixture": True,
+                },
+            )
+            assert headquarters_account.status_code == 201, headquarters_account.text
+            headquarters_account_id = UUID(
+                str(headquarters_account.json()["id"])
+            )
             granted = admin.patch(
                 f"/api/v1/tenant-management/users/{member.json()['user_id']}/grants",
                 json={
                     "entry_type": "tenant_user",
                     "capabilities": ["content"],
-                    "publishing_identity_ids": [str(account_id)],
+                    "publishing_identity_ids": [
+                        str(account_id),
+                        str(headquarters_account_id),
+                    ],
                     "expression_profile_maintenance_account_ids": [],
                 },
             )
             assert granted.status_code == 200, granted.text
+
+            headquarters_material_title = "只供公司级账号使用的总部素材"
+            headquarters_material = admin.post(
+                "/api/v1/tenant-management/organization-materials",
+                json={
+                    "organization_id": organization["id"],
+                    "title": headquarters_material_title,
+                    "filename": "headquarters-only.png",
+                    "content_type": "image/png",
+                    "content_base64": base64.b64encode(
+                        b"synthetic-headquarters-only-media"
+                    ).decode(),
+                    "declares_identifiable_minor": False,
+                    "reference_note": "仅精确公司控制组织可见",
+                    "visibility_scope": "headquarters",
+                    "organization_ids": [organization["id"]],
+                },
+            )
+            assert headquarters_material.status_code == 201, headquarters_material.text
+            headquarters_material_id = UUID(
+                str(headquarters_material.json()["id"])
+            )
 
             product_ids: list[UUID] = []
             asset_ids: list[UUID] = []
@@ -1158,7 +1239,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                         "sku": f"ZX-GC-{suffix}-{index}",
                         "display_name": f"登记商品 {index}",
                         "category": "服饰商品",
-                        "colors": [],
+                        "colors": (["炭灰"] if index == 1 else ["暖白"]),
                         "material_or_structure": "",
                         "silhouette": "",
                         "observable_features": f"第 {index} 件完整外观",
@@ -1232,6 +1313,65 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 json={"product_id": str(product_ids[0])},
             )
             assert same_product_binding.status_code == 201
+            for insufficient_index in (1, 2):
+                insufficient_product = admin.put(
+                    "/api/v1/tenant-management/brand-products",
+                    json={
+                        "sku": (
+                            f"ZX-GC-INSUFFICIENT-{suffix}-"
+                            f"{insufficient_index}"
+                        ),
+                        "display_name": (
+                            f"造型关系资料不足商品 {insufficient_index}"
+                        ),
+                        "category": "服饰商品",
+                        "colors": [],
+                        "material_or_structure": "",
+                        "silhouette": "",
+                        "observable_features": "仅确认商品身份",
+                        "source_note": "Gate C synthetic 资料不足反证",
+                        "applicability": "只验证任务前退出",
+                        "confirm_as_current_brand_fact": True,
+                        "as_synthetic_business_fixture": True,
+                        "visibility_scope": "brand_all",
+                        "organization_ids": [],
+                    },
+                )
+                assert insufficient_product.status_code == 200
+                insufficient_material = admin.post(
+                    "/api/v1/tenant-management/organization-materials",
+                    json={
+                        "organization_id": organization["id"],
+                        "title": (
+                            f"造型资料不足商品 {insufficient_index} 官方图片"
+                        ),
+                        "filename": f"insufficient-{insufficient_index}.png",
+                        "content_type": "image/png",
+                        "content_base64": base64.b64encode(
+                            (
+                                "synthetic-insufficient-product-media-"
+                                f"{insufficient_index}"
+                            ).encode()
+                        ).decode(),
+                        "declares_identifiable_minor": False,
+                        "reference_note": "只证明正式媒体绑定",
+                        "visibility_scope": "brand_all",
+                        "organization_ids": [],
+                    },
+                )
+                assert insufficient_material.status_code == 201
+                insufficient_asset_id = UUID(
+                    str(insufficient_material.json()["id"])
+                )
+                insufficient_asset_ids.append(insufficient_asset_id)
+                insufficient_binding = admin.post(
+                    "/api/v1/tenant-management/organization-materials/"
+                    f"{insufficient_asset_id}/product-bindings",
+                    json={
+                        "product_id": str(insufficient_product.json()["id"])
+                    },
+                )
+                assert insufficient_binding.status_code == 201
             forged_binding = admin.post(
                 f"/api/v1/tenant-management/organization-materials/{unbound_asset_id}/product-bindings",
                 json={
@@ -1246,7 +1386,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     "sku": f"ZX-GC-SOUTH-{suffix}",
                     "display_name": "华南区域诱饵商品",
                     "category": "服饰商品",
-                    "colors": [],
+                    "colors": ["砖红"],
                     "material_or_structure": "",
                     "silhouette": "",
                     "observable_features": "仅华南区域确认的完整外观",
@@ -1289,7 +1429,11 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                             "sku": (f"ZX-BROWSER-{suffix}-{browser_index + 1}"),
                             "display_name": browser_product_names[browser_index],
                             "category": "服饰商品",
-                            "colors": [],
+                            "colors": (
+                                ["海军蓝"]
+                                if browser_index == 0
+                                else ["浅沙色"]
+                            ),
                             "material_or_structure": "",
                             "silhouette": "",
                             "observable_features": (f"浏览器登记商品 {browser_index + 1} 完整外观"),
@@ -1354,8 +1498,34 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
             )
             creator_session_token = str(creator.cookies.get("diyu_session") or "")
             assert creator_session_token
-            materials = creator.get("/api/v1/materials")
+            materials = creator.get(
+                "/api/v1/materials",
+                params={
+                    "publishing_identity_id": str(account_id),
+                    "target": "xiaohongshu_graphic",
+                },
+            )
             assert materials.status_code == 200
+            region_material_document = json.dumps(
+                materials.json(),
+                ensure_ascii=False,
+            )
+            assert headquarters_material_title not in region_material_document
+            assert str(headquarters_material_id) not in region_material_document
+            headquarters_materials = creator.get(
+                "/api/v1/materials",
+                params={
+                    "publishing_identity_id": str(
+                        headquarters_account_id
+                    ),
+                    "target": "xiaohongshu_graphic",
+                },
+            )
+            assert headquarters_materials.status_code == 200
+            assert headquarters_material_id in {
+                UUID(str(item["id"]))
+                for item in headquarters_materials.json()
+            }
             creator_scope = TrustedScope(
                 tenant_id=tenant_id,
                 user_id=UUID(str(member.json()["user_id"])),
@@ -1400,6 +1570,45 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     == before
                 )
                 time.sleep(2.05)
+            insufficient_value = creator.post(
+                "/api/v1/content/stream",
+                json={
+                    "message": "用这两件登记商品做一条具体造型关系图文。",
+                    "conversation": [],
+                    "publishing_identity_id": str(account_id),
+                    "target": "xiaohongshu_graphic",
+                    "material_ids": [
+                        str(item) for item in insufficient_asset_ids
+                    ],
+                    "product_media_intent": True,
+                    "interaction_mode": "generate",
+                    "direct_generate": True,
+                    "request_id": str(uuid4()),
+                },
+            )
+            insufficient_events = [
+                json.loads(line)
+                for line in insufficient_value.text.splitlines()
+                if line.strip()
+            ]
+            assert any(
+                item["event"] == "conversation"
+                and item["kind"] == "question"
+                and "还不足以形成具体造型关系" in item["message"]
+                for item in insufficient_events
+            )
+            assert not any(
+                item["event"] == "completed"
+                for item in insufficient_events
+            )
+            assert (
+                _tenant_persistence_counts(
+                    migrator_database_url,
+                    tenant_id,
+                )
+                == before
+            )
+            time.sleep(2.05)
             sibling_scope_rejected = creator.post(
                 "/api/v1/content/stream",
                 json={
@@ -1491,6 +1700,19 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 for item in envelope["resources"]
                 if item["capability_id"] in {"abstract_composition", "registered_product_display"}
             }
+            value_document = snapshot["product_value_contract"]
+            assert value_document["primary_product"] == (
+                "visual_styling_story"
+            )
+            assert value_document["relation_kind"] == "color_hierarchy"
+            assert set(value_document["resource_refs"]) == {
+                item["resource_id"] for item in resources
+            }
+            assert (
+                value_document["visible_styling_proposition"]
+                in result["body"]
+            )
+            assert frozen_product_value_contract(snapshot) is not None
 
             with TestClient(
                 app,
@@ -1529,13 +1751,19 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
             assert revised.json()["version"] == 2
             versions = creator.get(
                 f"/api/v1/content/tasks/{task_id}/versions",
-                params={"target": "xiaohongshu_graphic"},
+                params={
+                    "target": "xiaohongshu_graphic",
+                    "publishing_identity_id": str(account_id),
+                },
             )
             assert versions.status_code == 200
             assert [item["version"] for item in versions.json()] == [2, 1]
             v1 = creator.get(
                 f"/api/v1/tasks/{task_id}/versions/1",
-                params={"target": "xiaohongshu_graphic"},
+                params={
+                    "target": "xiaohongshu_graphic",
+                    "publishing_identity_id": str(account_id),
+                },
             )
             assert v1.status_code == 200
             assert v1.json()["version"] == 1
@@ -1551,6 +1779,12 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 assert revised_row is not None
                 revised_snapshot = revised_row[0]
             assert revised_snapshot["media_capability_envelope"] == envelope
+            assert revised_snapshot["product_value_contract"] == (
+                value_document
+            )
+            assert revised_snapshot["product_value_contract_digest"] == (
+                snapshot["product_value_contract_digest"]
+            )
             stable_counts = _tenant_persistence_counts(
                 migrator_database_url,
                 tenant_id,
@@ -1596,6 +1830,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     account_id=account_id,
                     product_names=browser_product_names,
                     material_titles=browser_material_titles,
+                    forbidden_material_title=headquarters_material_title,
                 )
                 assert browser.returncode == 0, (
                     f"formal product-media Chrome journey failed:\n{browser.stdout}\n{browser.stderr}"
@@ -2060,7 +2295,7 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
     assert "其他租户诱饵前情" not in prompt
 
 
-def test_product_facts_are_hidden_and_do_not_grant_media_resources() -> None:
+def test_p2_writer_receives_only_controlled_product_semantics_without_media_rights() -> None:
     product = ProductFact(
         sku="ZX-C218",
         display_name="双面短外套",
@@ -2068,6 +2303,7 @@ def test_product_facts_are_hidden_and_do_not_grant_media_resources() -> None:
             "entity_kind": "apparel_product",
             "category": "双面短外套",
             "colors": ["炭灰纯色", "深绿细格纹"],
+            "both_sides_complete": True,
         },
         source_kind="synthetic_confirmed_product_record",
     )
@@ -2080,6 +2316,11 @@ def test_product_facts_are_hidden_and_do_not_grant_media_resources() -> None:
         series_position=None,
         fact_count=3,
     )
+    value_contract = build_product_value_contract(
+        primary_product="product_truth",
+        products=(product,),
+    )
+    assert isinstance(value_contract, P2ProductValueContractV1)
     request = replace(
         base_request,
         weak_seed="帮我解释这个已选商品。",
@@ -2098,6 +2339,7 @@ def test_product_facts_are_hidden_and_do_not_grant_media_resources() -> None:
             target_shape="小红书图文完整成品",
         ),
         media_program=media_program,
+        product_value_contract=value_contract,
     )
     assert request.narrative_frame is not None
     context = BoundaryContext.from_request(request, request.narrative_frame)
@@ -2111,6 +2353,8 @@ def test_product_facts_are_hidden_and_do_not_grant_media_resources() -> None:
         allowed_resource_ids=tuple(sorted(context.resource_ids)),
         media_format="graphic",
         kernel_version=KERNEL_VERSION,
+        primary_product="product_truth",
+        product_value_contract=value_contract,
     )
     skeleton = replace(
         skeleton,
@@ -2130,21 +2374,83 @@ def test_product_facts_are_hidden_and_do_not_grant_media_resources() -> None:
         {},
     )
 
-    assert "ZX-C218" not in prompt
-    assert "双面短外套" not in prompt
-    assert "炭灰纯色" not in prompt
-    assert "深绿细格纹" not in prompt
+    assert '"fact_key": "colors"' in prompt
+    assert "双面短外套" in prompt
+    assert "炭灰纯色" in prompt
+    assert "深绿细格纹" in prompt
     assert "resource:product:" not in prompt
     assert "resource:registered-product-1" not in prompt
     assert "resource:selected-media:" not in prompt
-    assert "deidentified-product-writer-brief-v1" in prompt
-    assert '"object_identity": "withheld"' in prompt
-    assert "帮我解释这个已选商品" not in prompt
-    assert "穿衣判断" not in prompt
-    assert "全部 Writer unit" in prompt
-    assert "不能让当前对象或其代词承担 Writer 自己" in prompt
+    assert "controlled-product-writer-brief-v2" in prompt
+    assert "专属新增理解" in prompt
+    assert "相伴取舍" in prompt
+    assert "这项理解只在" in prompt
+    assert "先看信息再自己判断" in prompt
     assert "媒体程序 graphic_fact_guided_v1 确定性生成" in prompt
     assert "不得返回任何媒体单元、资源引用" in prompt
+
+    raw = {
+        "units": [
+            {
+                "unit_id": unit.unit_id,
+                "text": {
+                    "title": "双面不是两个局部",
+                    "natural_guide": "把这次选择落到两套完整外观。",
+                    "body": "先看信息，再自己判断。",
+                    "release_caption": "这次你会先突出哪一套完整外观？",
+                }[unit.purpose],
+            }
+            for unit in skeleton.writable_units
+        ]
+    }
+    kernel = parse_writer_kernel(
+        raw,
+        skeleton,
+        fact_blocks=context.product_fact_blocks,
+        allowed_claim_ids=context.product_fact_packet.fact_ids,
+    )
+    compiled = compile_delivery(
+        DeliveryCompileInput(
+            primary_product="product_truth",
+            media_format="graphic",
+            products=(product,),
+            production_conditions=request.brand.production_conditions,
+            allowed_resource_ids=context.resource_ids,
+            immutable_fact_blocks=context.product_fact_blocks,
+            trusted_fact_texts=tuple(
+                sorted(context.fact_text_by_id.items())
+            ),
+            media_capability_envelope=request.media_capability_envelope,
+            media_program=media_program,
+            product_value_contract=value_contract,
+        ),
+        kernel,
+    )
+    assert isinstance(compiled.semantic_contract, P2SemanticContract)
+    assert compiled.semantic_contract.product_insight == (
+        value_contract.product_insight
+    )
+    assert value_contract.product_insight in compiled.body
+    assert value_contract.tradeoff_or_limit in compiled.body
+    assert value_contract.validity_condition in compiled.body
+
+
+def test_p2_rejects_identity_only_facts_instead_of_emitting_generic_advice() -> None:
+    product = ProductFact(
+        sku="ZX-IDENTITY-ONLY",
+        display_name="仅有身份的商品",
+        facts={"entity_kind": "apparel_product"},
+        source_kind="synthetic_confirmed_product_record",
+    )
+
+    with pytest.raises(
+        GenerationFailed,
+        match="不足以形成商品专属理解、相伴取舍和成立条件",
+    ):
+        build_product_value_contract(
+            primary_product="product_truth",
+            products=(product,),
+        )
 
 
 def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
@@ -2195,28 +2501,38 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert compiled.semantic_contract.brand_account_link in compiled.body
 
 
-def test_visual_styling_writer_never_receives_registered_product_resources() -> None:
+def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() -> None:
     products = (
         ProductFact(
             sku="ZX-C218",
             display_name="双面短外套",
-            facts={"entity_kind": "apparel_product", "category": "双面短外套"},
+            facts={
+                "entity_kind": "apparel_product",
+                "category": "双面短外套",
+                "colors": ["炭灰"],
+            },
             source_kind="synthetic_confirmed_product_record",
         ),
         ProductFact(
             sku="ZX-S104",
             display_name="深灰直筒半裙",
-            facts={"entity_kind": "apparel_product", "category": "直筒半裙"},
+            facts={
+                "entity_kind": "apparel_product",
+                "category": "直筒半裙",
+                "colors": ["暖白"],
+            },
             source_kind="synthetic_confirmed_product_record",
         ),
     )
     fact_ids = tuple(fact.fact_id for product in products for fact in build_product_fact_packet((product,)).facts)
+    bound_media = tuple(
+        _bound_product_media(index=index, product=product)
+        for index, product in enumerate(products, start=1)
+    )
     envelope = build_media_capability_envelope_v2(
         platform_shape="抖音短视频完整成品",
         media_format="video",
-        bound_product_media=tuple(
-            _bound_product_media(index=index, product=product) for index, product in enumerate(products, start=1)
-        ),
+        bound_product_media=bound_media,
     )
     media_program = select_media_program(
         primary_product="visual_styling_story",
@@ -2225,6 +2541,13 @@ def test_visual_styling_writer_never_receives_registered_product_resources() -> 
         series_position=None,
         fact_count=4,
     )
+    value_contract = build_product_value_contract(
+        primary_product="visual_styling_story",
+        products=products,
+        bound_product_media=bound_media,
+        media_envelope=envelope,
+    )
+    assert isinstance(value_contract, P5ProductValueContractV1)
     request = replace(
         _generation_input(media_format="video"),
         weak_seed="用 ZX-C218 和 ZX-S104 做一条能照着拍的视觉造型短视频。",
@@ -2240,6 +2563,7 @@ def test_visual_styling_writer_never_receives_registered_product_resources() -> 
         ),
         media_capability_envelope=envelope,
         media_program=media_program,
+        product_value_contract=value_contract,
     )
     assert request.narrative_frame is not None
     context = BoundaryContext.from_request(request, request.narrative_frame)
@@ -2252,6 +2576,7 @@ def test_visual_styling_writer_never_receives_registered_product_resources() -> 
         media_format="video",
         kernel_version=KERNEL_VERSION,
         primary_product="visual_styling_story",
+        product_value_contract=value_contract,
     )
     skeleton = replace(
         skeleton,
@@ -2266,19 +2591,66 @@ def test_visual_styling_writer_never_receives_registered_product_resources() -> 
         "deepseek-test",
     )._kernel_writer_prompt(request, skeleton, {})
 
-    assert "ZX-C218" not in prompt
-    assert "ZX-S104" not in prompt
-    assert "双面短外套" not in prompt
-    assert "深灰直筒半裙" not in prompt
-    assert "视觉造型短视频" not in prompt
+    assert '"fact_key": "colors"' in prompt
+    assert "双面短外套" in prompt
+    assert "深灰直筒半裙" in prompt
+    assert "炭灰" in prompt
+    assert "暖白" in prompt
     assert "穿着可能" not in prompt
     assert "穿衣判断" not in prompt
     assert "上下装关系" not in prompt
     assert "resource:registered-product:" not in prompt
     assert '"allowed_resources": []' in prompt
-    assert "具体视觉关系和全部制作动作" in prompt
-    assert "由服务端确定性编排" in prompt
+    assert "双面短外套的已确认炭灰承担画面主色" in prompt
+    assert "深灰直筒半裙的已确认暖白作为回应色" in prompt
     assert "video_registered_product_display_v1" in prompt
+
+    kernel = parse_writer_kernel(
+        {
+            "units": [
+                {
+                    "unit_id": unit.unit_id,
+                    "text": {
+                        "title": "两件商品，两个视觉位置",
+                        "natural_guide": "这次不平均分配画面重心。",
+                        "body": "先放两个锚点，再比较差异。",
+                        "release_caption": "你会让哪一个视觉位置先被看见？",
+                    }[unit.purpose],
+                }
+                for unit in skeleton.writable_units
+            ]
+        },
+        skeleton,
+        fact_blocks=context.product_fact_blocks,
+        allowed_claim_ids=context.product_fact_packet.fact_ids,
+    )
+    compiled = compile_delivery(
+        DeliveryCompileInput(
+            primary_product="visual_styling_story",
+            media_format="video",
+            products=products,
+            production_conditions=request.brand.production_conditions,
+            allowed_resource_ids=envelope.resource_ids,
+            immutable_fact_blocks=context.product_fact_blocks,
+            trusted_fact_texts=tuple(
+                sorted(context.fact_text_by_id.items())
+            ),
+            media_capability_envelope=envelope,
+            media_program=media_program,
+            product_value_contract=value_contract,
+        ),
+        kernel,
+    )
+    assert isinstance(compiled.semantic_contract, P5SemanticContract)
+    assert compiled.semantic_contract.visible_styling_proposition == (
+        value_contract.visible_styling_proposition
+    )
+    assert value_contract.visible_styling_proposition in compiled.body
+    assert set(value_contract.resource_refs) == {
+        resource.resource_id
+        for resource in envelope.resources
+        if resource.capability_id == "registered_product_display"
+    }
 
 
 def test_restricted_media_fallback_stays_available_outside_the_v3_main_path() -> None:
@@ -2388,13 +2760,91 @@ def _write_gate_c_evidence_fixture(
     root.mkdir(mode=0o700, exist_ok=True)
     artifacts: list[ArtifactEvidenceInput] = []
     reviews: list[HumanReviewInput] = []
-    for card_id in ("P1", "P2", "P3", "P4", "P5", "series2", "series3"):
+    for index, card_id in enumerate(
+        ("P1", "P2", "P3", "P4", "P5", "series2", "series3"),
+        start=1,
+    ):
+        p2_values = {
+            "product_specific_understanding": (
+                "两面完整外观让选择落在两套完整呈现。"
+            ),
+            "tradeoff_or_limit": "突出一面会弱化另一面的可见存在。",
+            "validity_condition": "只有本次确实比较两面时才成立。",
+        }
+        p5_values: dict[str, object] = {
+            "concrete_visual_proposition": (
+                "第一件承担主色，第二件作为回应色。"
+            ),
+            "resource_refs": [
+                "resource:registered-product:one",
+                "resource:registered-product:two",
+            ],
+        }
+        value_lines = (
+            "\n".join(p2_values.values())
+            if card_id == "P2"
+            else (
+                str(p5_values["concrete_visual_proposition"])
+                if card_id == "P5"
+                else ""
+            )
+        )
+        product_value_contract: dict[str, object] | None = None
+        if card_id == "P2":
+            product_value_contract = {
+                "product_insight": p2_values[
+                    "product_specific_understanding"
+                ],
+                "tradeoff_or_limit": p2_values["tradeoff_or_limit"],
+                "validity_condition": p2_values["validity_condition"],
+            }
+        elif card_id == "P5":
+            product_value_contract = {
+                "visible_styling_proposition": p5_values[
+                    "concrete_visual_proposition"
+                ],
+                "resource_refs": p5_values["resource_refs"],
+            }
         artifact = root / f"{card_id}-artifact.json"
         artifact.write_text(
             json.dumps(
                 {
+                    "task_id": str(
+                        UUID(f"85000000-0000-0000-0001-{index:012d}")
+                    ),
+                    "run_id": str(
+                        UUID(f"85000000-0000-0000-0002-{index:012d}")
+                    ),
+                    "version_id": str(
+                        UUID(f"85000000-0000-0000-0003-{index:012d}")
+                    ),
                     "outline": f"{card_id} 的自然标题",
-                    "body": (f"标题：{card_id} 的自然标题\n\n完整正文：服务端事实原句与一般判断各自保留边界。"),
+                    "body": (
+                        f"标题：{card_id} 的自然标题\n\n"
+                        "完整正文：服务端事实原句与一般判断各自保留边界。"
+                        + (f"\n{value_lines}" if value_lines else "")
+                    ),
+                    "formal_snapshot": {
+                        "product_value_contract": product_value_contract,
+                        "media_capability_envelope": {
+                            "resources": (
+                                [
+                                    {
+                                        "resource_id": resource_id,
+                                        "capability_id": (
+                                            "registered_product_display"
+                                        ),
+                                    }
+                                    for resource_id in cast(
+                                        list[str],
+                                        p5_values["resource_refs"],
+                                    )
+                                ]
+                                if card_id == "P5"
+                                else []
+                            )
+                        },
+                    },
                 },
                 ensure_ascii=False,
             ),
@@ -2431,6 +2881,13 @@ def _write_gate_c_evidence_fixture(
         criteria = {criterion: "PASS" for criterion in GATE_C_REVIEW_CRITERIA}
         if card_id == "P2":
             criteria["fact_and_resource_boundary"] = fact_boundary
+        value_evidence: dict[str, object] | None = None
+        if card_id == "P2":
+            value_evidence = {
+                key: value for key, value in p2_values.items()
+            }
+        elif card_id == "P5":
+            value_evidence = dict(p5_values)
         artifacts.append(
             ArtifactEvidenceInput(
                 card_id,
@@ -2445,6 +2902,7 @@ def _write_gate_c_evidence_fixture(
                 "PASS",
                 criteria,
                 "测试夹具只验证摘要绑定。",
+                value_evidence,
             )
         )
     write_gate_c_evidence(
@@ -2506,9 +2964,39 @@ def test_gate_c_evidence_binds_file_sha_visible_digest_and_human_review(
     artifact_path = root / record["artifact_file"]
     assert record["artifact_sha256"] == sha256_file(artifact_path)
     assert record["visible_digest"] == artifact_visible_digest(artifact_path)
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert record["task_id"] == artifact["task_id"]
+    assert record["run_id"] == artifact["run_id"]
+    assert record["version_id"] == artifact["version_id"]
     assert (root / "SHA256SUMS").is_file()
     assert (root.stat().st_mode & 0o777) == 0o700
     assert all((path.stat().st_mode & 0o777) == 0o600 for path in root.iterdir() if path.is_file())
+
+
+def test_gate_c_public_projection_is_an_honest_self_checking_index(
+    tmp_path: Path,
+) -> None:
+    root = _write_gate_c_evidence_fixture(tmp_path)
+    projection = tmp_path / "projection"
+
+    _write_evidence_projection(root, projection)
+
+    index = json.loads(
+        (projection / "EVIDENCE_INDEX.json").read_text(encoding="utf-8")
+    )
+    assert index["projection_kind"] == "index"
+    assert index["private_evidence_root"] == str(root.resolve())
+    assert index["private_sha256sums_sha256"] == sha256_file(
+        root / "SHA256SUMS"
+    )
+    checked = subprocess.run(
+        ["sha256sum", "-c", "SHA256SUMS"],
+        cwd=projection,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert checked.returncode == 0, checked.stderr
 
 
 def test_gate_c_evidence_rejects_artifact_or_review_binding_tamper(
@@ -2516,14 +3004,11 @@ def test_gate_c_evidence_rejects_artifact_or_review_binding_tamper(
 ) -> None:
     root = _write_gate_c_evidence_fixture(tmp_path)
     artifact = root / "P2-artifact.json"
+    document = json.loads(artifact.read_text(encoding="utf-8"))
+    document["outline"] = "被篡改的标题"
+    document["body"] = "被篡改的正文"
     artifact.write_text(
-        json.dumps(
-            {
-                "outline": "被篡改的标题",
-                "body": "被篡改的正文",
-            },
-            ensure_ascii=False,
-        ),
+        json.dumps(document, ensure_ascii=False),
         encoding="utf-8",
     )
 
@@ -2558,6 +3043,74 @@ def test_gate_c_evidence_rejects_human_review_digest_tamper(
     with pytest.raises(
         EvidenceBindingError,
         match="human review is bound to another artifact",
+    ):
+        verify_gate_c_evidence(root)
+
+
+def test_gate_c_evidence_rejects_persistence_identifier_tamper(
+    tmp_path: Path,
+) -> None:
+    root = _write_gate_c_evidence_fixture(tmp_path)
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["artifacts"][0]["version_id"] = str(uuid4())
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    sums_path = root / "SHA256SUMS"
+    sums_path.write_text(
+        "".join(
+            (
+                f"{sha256_file(manifest_path)}  manifest.json\n"
+                if line.endswith("  manifest.json")
+                else f"{line}\n"
+            )
+            for line in sums_path.read_text(encoding="utf-8").splitlines()
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        EvidenceBindingError,
+        match="manifest version_id does not match artifact",
+    ):
+        verify_gate_c_evidence(root)
+
+
+@pytest.mark.parametrize("card_id", ["P2", "P5"])
+def test_gate_c_evidence_rejects_all_pass_without_product_value_details(
+    tmp_path: Path,
+    card_id: str,
+) -> None:
+    root = _write_gate_c_evidence_fixture(tmp_path)
+    review_path = root / "human-review.json"
+    review = json.loads(review_path.read_text(encoding="utf-8"))
+    target = next(
+        item for item in review["reviews"] if item["card_id"] == card_id
+    )
+    assert target["verdict"] == "PASS"
+    target["value_evidence"] = None
+    review_path.write_text(
+        json.dumps(review, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    sums_path = root / "SHA256SUMS"
+    sums_path.write_text(
+        "".join(
+            (
+                f"{sha256_file(review_path)}  human-review.json\n"
+                if line.endswith("  human-review.json")
+                else f"{line}\n"
+            )
+            for line in sums_path.read_text(encoding="utf-8").splitlines()
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        EvidenceBindingError,
+        match="product value evidence is unavailable",
     ):
         verify_gate_c_evidence(root)
 
@@ -2605,12 +3158,28 @@ def test_gate_c_finalizer_requires_explicit_structured_human_review(
                 "verdict": ("FAIL" if card_id == "P5" else "PASS"),
                 "criteria": criteria,
                 "notes": "执行端逐项阅读全文后的结构化裁决。",
+                "value_evidence": (
+                    {
+                        "product_specific_understanding": "专属理解",
+                        "tradeoff_or_limit": "相伴取舍",
+                        "validity_condition": "成立条件",
+                    }
+                    if card_id == "P2"
+                    else (
+                        {
+                            "concrete_visual_proposition": "具体视觉命题",
+                            "resource_refs": ["resource:one", "resource:two"],
+                        }
+                        if card_id == "P5"
+                        else None
+                    )
+                ),
             }
         )
     review_path.write_text(
         json.dumps(
             {
-                "review_contract": "ux03-gate-c-human-review-v1",
+                "review_contract": "ux03-gate-c-human-review-v2",
                 "reviews": reviews,
             },
             ensure_ascii=False,
@@ -2627,8 +3196,11 @@ def test_gate_c_finalizer_requires_explicit_structured_human_review(
 
 def test_gate_c_artifact_binds_formal_aigc_disclosure() -> None:
     result: dict[str, object] = {
-        "task_id": "task-1",
-        "id": "version-1",
+        "task_id": str(UUID("85000000-0000-0000-0001-000000000001")),
+        "run_id": str(UUID("85000000-0000-0000-0002-000000000001")),
+        "version_id": str(
+            UUID("85000000-0000-0000-0003-000000000001")
+        ),
         "version": 1,
         "outline": "标题",
         "body": "正文",
@@ -2647,6 +3219,9 @@ def test_gate_c_artifact_binds_formal_aigc_disclosure() -> None:
     assert artifact["ai_generated"] is True
     assert artifact["aigc_label"] == "AI 辅助生成"
     assert artifact["aigc_release_reminder"] == "发布前请使用平台提供的 AI 内容声明功能。"
+    assert artifact["task_id"] == result["task_id"]
+    assert artifact["run_id"] == result["run_id"]
+    assert artifact["version_id"] == result["version_id"]
     assert "aigc_notice" not in artifact
 
 

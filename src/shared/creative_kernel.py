@@ -14,6 +14,7 @@ from src.shared.narrative import (
     ObservationType,
     ReviewerObservation,
 )
+from src.shared.product_value import ProductValueContract
 from src.shared.types import ContentProduct, MediaFormat
 from src.shared.visible_structure import (
     WRITER_WRAPPER_NORMALIZATION_CONTRACT_VERSION,
@@ -61,6 +62,7 @@ _WRITER_SUPPORTING_COPY_KERNEL_VERSIONS = frozenset(
     {MEDIA_NATIVE_KERNEL_VERSION, KERNEL_VERSION}
 )
 MAX_PRODUCT_FACT_BLOCKS = 3
+PRODUCT_VALUE_UNIT_ID = "unit:product-value"
 DRAMATIZATION_DISCLOSURE = "以下是情景演绎，不对应真实人物或经历："
 HYPOTHESIS_DISCLOSURE = "假设有这样一幕："
 OBSERVATION_ONLY_PROGRAM: KernelProgramId = "observation_only_v1"
@@ -242,6 +244,7 @@ def build_kernel_skeleton(
     media_format: Literal["video", "graphic"] = "graphic",
     kernel_version: str = DUAL_TRACK_KERNEL_VERSION,
     primary_product: ContentProduct | None = None,
+    product_value_contract: ProductValueContract | None = None,
 ) -> CreativeKernelV1:
     """Build the one small server-owned writing skeleton for a new artifact."""
     if (
@@ -409,6 +412,28 @@ def build_kernel_skeleton(
                 mode="trusted_fact",
                 scope_id=f"scope:trusted-{record.fact_kind}-v1",
                 text_source="server_fact",
+            )
+        )
+    if product_value_contract is not None:
+        if (
+            primary_product != product_value_contract.primary_product
+            or primary_product not in {"product_truth", "visual_styling_story"}
+        ):
+            raise ValueError("product value contract does not match the creative product")
+        units.append(
+            CreativeKernelUnit(
+                unit_id=PRODUCT_VALUE_UNIT_ID,
+                purpose="body",
+                allowed_observation_types=("abstract_principle",),
+                fact_refs=(),
+                constraint_refs=constraints,
+                visible_order=80,
+                text=product_value_contract.visible_text,
+                track="creative_expression",
+                mode="recommendation",
+                scope_id="scope:recommendation-v1",
+                allowed_resource_ids=(),
+                text_source="server_compiler",
             )
         )
     if program_id in {

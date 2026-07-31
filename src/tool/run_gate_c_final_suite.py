@@ -38,6 +38,7 @@ from src.tool.gate_c_evidence import (
     ArtifactEvidenceInput,
     EvidenceRuntimeInput,
     HumanReviewInput,
+    sha256_file,
     write_gate_c_evidence,
 )
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
@@ -267,6 +268,9 @@ def _run_formal_p5_browser(
                 "UX03_PRODUCT_MEDIA_PRODUCT_2": journey.p5_product_names[1],
                 "UX03_PRODUCT_MEDIA_MATERIAL_1": (journey.p5_material_titles[0]),
                 "UX03_PRODUCT_MEDIA_MATERIAL_2": (journey.p5_material_titles[1]),
+                "UX03_PRODUCT_MEDIA_FORBIDDEN_MATERIAL": (
+                    "__no-unrelated-headquarters-material__"
+                ),
                 "UX03_PRODUCT_MEDIA_SKIP_BINDING": "1",
             },
             capture_output=True,
@@ -397,10 +401,48 @@ def _task_snapshot(
     return cast(dict[str, object], row[0])
 
 
+def _persistence_ids(
+    database_url: str,
+    tenant_id: UUID,
+    task_id: UUID,
+    version: int,
+) -> tuple[UUID, UUID]:
+    """Return the authoritative run/version pair committed for one artifact."""
+
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT set_config('app.tenant_id', %s, true)",
+            (str(tenant_id),),
+        )
+        cursor.execute(
+            """
+            SELECT version.run_id, version.id
+            FROM content_versions version
+            JOIN generation_runs run
+              ON run.tenant_id = version.tenant_id
+             AND run.id = version.run_id
+             AND run.task_id = version.task_id
+             AND run.status = 'succeeded'
+            WHERE version.tenant_id = %s
+              AND version.task_id = %s
+              AND version.version_number = %s
+            """,
+            (tenant_id, task_id, version),
+        )
+        row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError("formal committed run/version identifiers are unavailable")
+    return UUID(str(row[0])), UUID(str(row[1]))
+
+
 def _artifact_document(
     card_id: str,
     result: Mapping[str, object],
     snapshot: Mapping[str, object],
+    *,
+    task_id: UUID | None = None,
+    run_id: UUID | None = None,
+    version_id: UUID | None = None,
 ) -> dict[str, object]:
     outline = result.get("outline")
     body = result.get("body")
@@ -410,11 +452,17 @@ def _artifact_document(
     program = snapshot.get("media_program")
     if not isinstance(envelope, dict) or not isinstance(program, dict):
         raise RuntimeError(f"{card_id}: formal media snapshot is unavailable")
+    resolved_task_id = task_id or UUID(str(result.get("task_id")))
+    resolved_run_id = run_id or UUID(str(result.get("run_id")))
+    resolved_version_id = version_id or UUID(str(result.get("version_id")))
+    if result.get("task_id") is not None and UUID(str(result["task_id"])) != resolved_task_id:
+        raise RuntimeError(f"{card_id}: task identifier drifted")
     return {
         "suite_version": _SUITE_VERSION,
         "card_id": card_id,
-        "task_id": str(result.get("task_id")),
-        "version_id": str(result.get("id")),
+        "task_id": str(resolved_task_id),
+        "run_id": str(resolved_run_id),
+        "version_id": str(resolved_version_id),
         "version": result.get("version"),
         "outline": outline,
         "body": body,
@@ -426,6 +474,9 @@ def _artifact_document(
         "formal_snapshot": {
             "media_capability_envelope": envelope,
             "media_program": program,
+            "product_value_contract": snapshot.get(
+                "product_value_contract"
+            ),
             "creative_direction": snapshot.get("creative_direction"),
             "series_context": snapshot.get("series_context"),
         },
@@ -546,10 +597,23 @@ def _generate(args: argparse.Namespace) -> None:
                 journey.tenant_id,
                 task_id,
             )
+            raw_version = result.get("version")
+            if not isinstance(raw_version, int) or raw_version < 1:
+                raise RuntimeError("formal artifact version is unavailable")
+            version_number = raw_version
+            run_id, version_id = _persistence_ids(
+                database_url,
+                journey.tenant_id,
+                task_id,
+                version_number,
+            )
             artifact = _artifact_document(
                 spec.card_id,
                 result,
                 snapshot,
+                task_id=task_id,
+                run_id=run_id,
+                version_id=version_id,
             )
             _write_private_json(
                 evidence_root / f"{spec.card_id}.artifact.json",
@@ -559,7 +623,9 @@ def _generate(args: argparse.Namespace) -> None:
                 {
                     "card_id": spec.card_id,
                     "task_id": str(task_id),
-                    "version": result.get("version"),
+                    "run_id": str(run_id),
+                    "version_id": str(version_id),
+                    "version": version_number,
                     "visible_digest": artifact["visible_digest"],
                     "program_id": cast(
                         Mapping[str, object],
@@ -587,7 +653,7 @@ def _reviews_from_file(path: Path) -> tuple[HumanReviewInput, ...]:
     document = _json_object(path)
     if set(document) != {"review_contract", "reviews"}:
         raise ValueError("human review document fields drifted")
-    if document["review_contract"] != "ux03-gate-c-human-review-v1":
+    if document["review_contract"] != "ux03-gate-c-human-review-v2":
         raise ValueError("human review contract version drifted")
     raw_reviews = document["reviews"]
     if not isinstance(raw_reviews, list):
@@ -602,6 +668,7 @@ def _reviews_from_file(path: Path) -> tuple[HumanReviewInput, ...]:
             "verdict",
             "criteria",
             "notes",
+            "value_evidence",
         }:
             raise ValueError("human review record fields drifted")
         criteria = raw["criteria"]
@@ -621,6 +688,11 @@ def _reviews_from_file(path: Path) -> tuple[HumanReviewInput, ...]:
                 verdict=verdict,
                 criteria=criterion_values,
                 notes=notes,
+                value_evidence=(
+                    cast(dict[str, object], raw["value_evidence"])
+                    if isinstance(raw["value_evidence"], dict)
+                    else None
+                ),
             )
         )
     if {review.card_id for review in reviews} != GATE_C_FINAL_CARD_IDS or len(reviews) != len(GATE_C_FINAL_CARD_IDS):
@@ -677,10 +749,36 @@ def _write_evidence_projection(source: Path, destination: Path) -> None:
         raise RuntimeError("evidence projection already exists")
     destination.mkdir(mode=0o700, parents=True)
     destination.chmod(0o700)
-    for filename in ("manifest.json", "human-review.json", "SHA256SUMS"):
+    for filename in ("manifest.json", "human-review.json"):
         target = destination / filename
         shutil.copyfile(source / filename, target)
         target.chmod(0o600)
+    _write_private_json(
+        destination / "EVIDENCE_INDEX.json",
+        {
+            "projection_contract": "ux03-gate-c-evidence-index-v1",
+            "projection_kind": "index",
+            "private_evidence_root": str(source),
+            "private_sha256sums_sha256": sha256_file(
+                source / "SHA256SUMS"
+            ),
+            "note": (
+                "此目录是可复算索引；原始响应和完整成品保留在上方私有目录。"
+            ),
+        },
+    )
+    projected_files = sorted(
+        path
+        for path in destination.iterdir()
+        if path.is_file() and path.name != "SHA256SUMS"
+    )
+    checksum_lines = "".join(
+        f"{sha256_file(path)}  {path.name}\n"
+        for path in projected_files
+    )
+    checksum_path = destination / "SHA256SUMS"
+    checksum_path.write_text(checksum_lines, encoding="utf-8")
+    checksum_path.chmod(0o600)
 
 
 def _json_object(path: Path) -> dict[str, object]:

@@ -4166,6 +4166,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                               OR (
                                 m.visibility_scope = 'headquarters'
                                 AND scoped_organization.organization_level = 'company'
+                                AND material_scope.organization_id =
+                                    root_account.control_organization_id
                               )
                             )
                         )

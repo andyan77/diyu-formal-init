@@ -34,6 +34,7 @@ from src.shared.content_snapshot import (
     frozen_delivery_compiler_version,
     frozen_media_contract,
     frozen_narrative_frame,
+    frozen_product_value_contract,
     frozen_series_context,
     frozen_user_premise,
 )
@@ -66,6 +67,10 @@ from src.shared.narrative import (
     new_frame,
     user_fact_candidates,
     visible_digest,
+)
+from src.shared.product_value import (
+    ProductValueContract,
+    build_product_value_contract,
 )
 from src.shared.types import (
     AccountExpression,
@@ -289,6 +294,12 @@ class ContentService:
                 series_context=series_context,
                 fact_count=len(frozen_frame.allowed_fact_ids),
             )
+            product_value_contract = build_product_value_contract(
+                primary_product=primary_product,
+                products=products,
+                bound_product_media=control.bound_product_media,
+                media_envelope=media_envelope,
+            )
         except GenerationFailed as exc:
             return {"kind": "question", "message": str(exc)}
         task_id, run_id, prior_body = self._repository.create_task_and_running_run(
@@ -319,6 +330,7 @@ class ContentService:
                 commitment,
                 media_capability_envelope=media_envelope,
                 media_program=media_program,
+                product_value_contract=product_value_contract,
             ),
             series_context,
             client_request_id=client_request_id,
@@ -346,6 +358,7 @@ class ContentService:
             None,
             media_envelope,
             media_program,
+            product_value_contract,
         )
 
     @staticmethod
@@ -902,6 +915,7 @@ class ContentService:
         delivery_compiler_version = frozen_delivery_compiler_version(snapshot)
         prior_creative_kernel = frozen_creative_kernel(snapshot)
         media_envelope, media_program = frozen_media_contract(snapshot)
+        product_value_contract = frozen_product_value_contract(snapshot)
         if delivery_compiler_version is not None and (
             delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
@@ -975,6 +989,7 @@ class ContentService:
             prior_creative_kernel,
             media_envelope,
             media_program,
+            product_value_contract,
         )
 
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:
@@ -1013,6 +1028,7 @@ class ContentService:
         delivery_compiler_version = frozen_delivery_compiler_version(snapshot)
         prior_creative_kernel = frozen_creative_kernel(snapshot)
         source_media_envelope, _ = frozen_media_contract(snapshot)
+        product_value_contract = frozen_product_value_contract(snapshot)
         if delivery_compiler_version is not None and (
             delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
@@ -1158,6 +1174,7 @@ class ContentService:
                 delivery_compiler_version=delivery_compiler_version,
                 media_capability_envelope=media_envelope,
                 media_program=media_program,
+                product_value_contract=product_value_contract,
             ),
             None,
         )
@@ -1184,6 +1201,7 @@ class ContentService:
             prior_creative_kernel,
             media_envelope,
             media_program,
+            product_value_contract,
         )
 
     def identity_summary(self, scope: TrustedScope, target: ContentTarget = "douyin_video") -> dict[str, str]:
@@ -1258,6 +1276,7 @@ class ContentService:
         prior_creative_kernel: CreativeKernelV1 | None = None,
         media_capability_envelope: MediaCapabilityEnvelope | None = None,
         media_program: MediaProgramSelectionV1 | None = None,
+        product_value_contract: ProductValueContract | None = None,
     ) -> dict[str, object]:
         try:
             # The run is already durable here. Keep the first generation event
@@ -1291,6 +1310,7 @@ class ContentService:
                     prior_creative_kernel=prior_creative_kernel,
                     media_capability_envelope=media_capability_envelope,
                     media_program=media_program,
+                    product_value_contract=product_value_contract,
                 )
             )
             if progress is not None:

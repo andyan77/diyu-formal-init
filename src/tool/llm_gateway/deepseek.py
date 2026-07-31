@@ -103,6 +103,10 @@ from src.shared.narrative import (
     user_fact_candidates,
     visible_digest,
 )
+from src.shared.product_value import (
+    product_value_contract_digest,
+    product_value_contract_document,
+)
 from src.shared.review_evidence import (
     ClauseContextV2,
     UnitContractV2,
@@ -641,6 +645,7 @@ class DeepSeekGenerator(ContentGenerator):
             media_format=request.media_format,
             kernel_version=kernel_version,
             primary_product=request.primary_product,
+            product_value_contract=request.product_value_contract,
         )
         skeleton = freeze_prior_revision_units(
             skeleton,
@@ -675,6 +680,7 @@ class DeepSeekGenerator(ContentGenerator):
                 request.media_capability_envelope
             ),
             media_program=request.media_program,
+            product_value_contract=request.product_value_contract,
         )
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product)
@@ -797,6 +803,20 @@ class DeepSeekGenerator(ContentGenerator):
                 "media_program_digest": (
                     media_program_digest(request.media_program)
                     if request.media_program is not None
+                    else None
+                ),
+                "product_value_contract": (
+                    product_value_contract_document(
+                        request.product_value_contract
+                    )
+                    if request.product_value_contract is not None
+                    else None
+                ),
+                "product_value_contract_digest": (
+                    product_value_contract_digest(
+                        request.product_value_contract
+                    )
+                    if request.product_value_contract is not None
                     else None
                 ),
             },
@@ -1310,27 +1330,57 @@ class DeepSeekGenerator(ContentGenerator):
             if request.series_context is not None
             else None
         )
-        product_creative_rule = (
-            """本篇的可信事实块和登记资源已由服务端冻结，且它们的具体内容有意不进入
-Writer 输入。Writer 只负责一个去实体化的判断顺序：先读服务端原样插入的已确认信息，
-再比较其中明确呈现的差异，最后把决定留给受众。每个 Writer unit 都必须在不知道当前对象
-是什么、具有什么属性、怎样使用时仍然完整成立；不能让当前对象或其代词承担 Writer 自己
-补出的命题。title 应短而自然，body 要让这套判断顺序本身具有观看价值，不能写成资料审计、
-免责声明或对隐藏对象的猜测。"""
-            if fact_blocks
-            else ""
+        product_value_projection: object = None
+        if request.product_value_contract is not None:
+            projection = product_value_contract_document(
+                request.product_value_contract
+            )
+            projection.pop("resource_refs", None)
+            product_value_projection = projection
+        product_fact_projection: object = (
+            [
+                {
+                    "fact_id": item.fact_id,
+                    "fact_key": item.fact_key,
+                    "fact_version": item.fact_version,
+                    "source_kind": item.source_kind,
+                }
+                for item in context.product_fact_packet.facts
+                if item.fact_id
+                in (
+                    request.product_value_contract.source_fact_ids
+                    if request.product_value_contract is not None
+                    else ()
+                )
+            ]
+            if request.product_value_contract is not None
+            else []
         )
-        if fact_blocks and request.primary_product == "visual_styling_story":
-            product_creative_rule += """
-本篇存在由服务端独立控制的两个登记视觉锚点，但 Writer 不知道它们的对象身份、属性或用途。
-只写“怎样观察两个锚点的已确认差异、怎样保留取舍”的通用顺序；具体视觉关系和全部制作动作
-由服务端确定性编排。"""
+        product_creative_rule = (
+            """本篇的可信商品事实和商品价值合同均由服务端冻结。你可以读取下方受控事实，
+用来协调标题、观看回报、正文语气和发布配文，但不得在 Writer unit 中复述、换写、概括或
+扩展任何商品硬事实。服务端会把事实原句与商品专属理解、相伴取舍和成立条件分别插入成品。
+你的正文只负责让这些内容自然连贯、对当前受众有用，不能退回“先看信息再自己判断”这类
+可以替换到任意商品的通用方法，也不能补充价格、库存、性能、用途、效果、体验或设计动机。"""
+            if request.product_value_contract is not None
+            else (
+                "可信事实块和登记资源已由服务端冻结；Writer 不得选择、引用、复述或"
+                "扩写其正文。"
+                if server_selected_product_facts
+                else ""
+            )
+        )
         topic_projection: object
-        if server_selected_product_facts:
+        if server_selected_product_facts and request.product_value_contract is not None:
+            topic_projection = {
+                "contract_version": "controlled-product-writer-brief-v2",
+                "task": _PRODUCT_VALUE[request.primary_product],
+                "source_fact_trace": product_fact_projection,
+                "product_value_contract": product_value_projection,
+            }
+        elif server_selected_product_facts:
             topic_projection = {
                 "contract_version": "deidentified-product-writer-brief-v1",
-                "object_identity": "withheld",
-                "object_attributes": "withheld",
                 "task": _PRODUCT_VALUE[request.primary_product],
             }
         else:
