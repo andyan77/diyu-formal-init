@@ -258,8 +258,10 @@ def build_kernel_skeleton(
         body_types = ("abstract_principle",)
     constraints = tuple(dict.fromkeys(constraint_refs))
     resources = tuple(dict.fromkeys(allowed_resource_ids))
-    expression_resources = tuple(
-        resource_id for resource_id in resources if not resource_id.startswith("resource:product:")
+    expression_resources = (
+        resources
+        if kernel_version == KERNEL_VERSION and primary_product == "visual_styling_story"
+        else tuple(resource_id for resource_id in resources if not resource_id.startswith("resource:product:"))
     )
     if kernel_version not in {DUAL_TRACK_KERNEL_VERSION, KERNEL_VERSION}:
         raise ValueError("unsupported creative kernel version")

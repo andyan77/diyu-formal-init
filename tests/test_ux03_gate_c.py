@@ -689,6 +689,81 @@ def test_product_resources_are_hidden_from_the_writer_prompt() -> None:
     assert "本次已选商品" in prompt
 
 
+def test_visual_styling_writer_receives_only_ordered_product_resource_aliases() -> None:
+    products = (
+        ProductFact(
+            sku="ZX-C218",
+            display_name="双面短外套",
+            facts={"entity_kind": "apparel_product", "category": "双面短外套"},
+            source_kind="synthetic_confirmed_product_record",
+        ),
+        ProductFact(
+            sku="ZX-S104",
+            display_name="深灰直筒半裙",
+            facts={"entity_kind": "apparel_product", "category": "直筒半裙"},
+            source_kind="synthetic_confirmed_product_record",
+        ),
+    )
+    fact_ids = tuple(fact.fact_id for product in products for fact in build_product_fact_packet((product,)).facts)
+    request = replace(
+        _generation_input(),
+        weak_seed="用 ZX-C218 和 ZX-S104 做一条能照着拍的视觉造型短视频。",
+        primary_product="visual_styling_story",
+        products=products,
+        narrative_frame=new_frame("general_observation", (), fact_ids),
+        creative_plan=build_creative_plan(
+            topic_spans=("用 ZX-C218 和 ZX-S104 做一条能照着拍的视觉造型短视频",),
+            primary_value="visual_styling_story",
+            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            mechanism_id=None,
+            target_shape="抖音短视频完整成品",
+        ),
+    )
+    assert request.narrative_frame is not None
+    context = BoundaryContext.from_request(request, request.narrative_frame)
+    skeleton = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=context.fact_registry,
+        constraint_refs=tuple(context.constraint_ids),
+        program_id=select_kernel_program(frame=request.narrative_frame),
+        allowed_resource_ids=tuple(sorted(context.resource_ids)),
+        media_format="video",
+        kernel_version=KERNEL_VERSION,
+        primary_product="visual_styling_story",
+    )
+    skeleton = replace(
+        skeleton,
+        selected_fact_block_ids=select_product_fact_block_ids(
+            context.product_fact_packet,
+            limit=3,
+        ),
+    )
+    compiler_texts = compiler_owned_media_unit_texts(
+        DeliveryCompileInput(
+            primary_product=request.primary_product,
+            media_format=request.media_format,
+            products=request.products,
+            production_conditions=request.brand.production_conditions,
+            allowed_resource_ids=context.resource_ids,
+            immutable_fact_blocks=context.product_fact_blocks,
+            trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
+        )
+    )
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, skeleton, compiler_texts)
+
+    assert "ZX-C218" not in prompt
+    assert "ZX-S104" not in prompt
+    assert "双面短外套" not in prompt
+    assert "深灰直筒半裙" not in prompt
+    assert '"resource_id": "resource:registered-product-1"' in prompt
+    assert '"resource_id": "resource:registered-product-2"' in prompt
+    assert "第一件／第二件登记样衣" in prompt
+
+
 def test_product_media_units_are_server_owned_without_product_semantic_invention() -> None:
     request = DeliveryCompileInput(
         primary_product="visual_styling_story",

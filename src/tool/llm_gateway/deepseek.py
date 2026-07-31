@@ -1226,6 +1226,12 @@ class DeepSeekGenerator(ContentGenerator):
             if fact_blocks
             else ""
         )
+        if fact_blocks and request.primary_product == "visual_styling_story":
+            product_creative_rule += """
+本篇另外给出的 resource:registered-product-N 只证明有若干件登记样衣可进入画面，不包含
+也不许可推断它们的品类、上下装关系、材质、版型、穿着效果或适用场景。创作文字只能称为
+“第一件／第二件登记样衣”或“这组样衣”，围绕同背景、同机位下的并置、间距、前后顺序和
+画面重心给出可拍步骤；不得把其中任何一件猜成上衣、裤子、裙子，也不得写上身效果。"""
         safe_product_topics = list(request.creative_plan.topic_spans)
         if server_selected_product_facts:
             for index, topic in enumerate(safe_product_topics):
