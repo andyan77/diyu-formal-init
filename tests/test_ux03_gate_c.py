@@ -122,6 +122,7 @@ from src.tool.gate_c_evidence import (
 from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
 from src.tool.run_gate_c_final_suite import (
+    _artifact_document,
     _EvidenceDeepSeekGenerator,
     _reviews_from_file,
 )
@@ -2622,6 +2623,31 @@ def test_gate_c_finalizer_requires_explicit_structured_human_review(
 
     assert next(item for item in parsed if item.card_id == "P5").verdict == "FAIL"
     assert next(item for item in parsed if item.card_id == "P5").criteria["fact_and_resource_boundary"] == "FAIL"
+
+
+def test_gate_c_artifact_binds_formal_aigc_disclosure() -> None:
+    result: dict[str, object] = {
+        "task_id": "task-1",
+        "id": "version-1",
+        "version": 1,
+        "outline": "标题",
+        "body": "正文",
+        "production": None,
+        "ai_generated": True,
+        "aigc_label": "AI 辅助生成",
+        "aigc_release_reminder": "发布前请使用平台提供的 AI 内容声明功能。",
+    }
+    snapshot: dict[str, object] = {
+        "media_capability_envelope": {"envelope_version": "media-capability-envelope-v2"},
+        "media_program": {"program_id": "graphic_fact_guided_v1"},
+    }
+
+    artifact = _artifact_document("P2", result, snapshot)
+
+    assert artifact["ai_generated"] is True
+    assert artifact["aigc_label"] == "AI 辅助生成"
+    assert artifact["aigc_release_reminder"] == "发布前请使用平台提供的 AI 内容声明功能。"
+    assert "aigc_notice" not in artifact
 
 
 def test_gate_c_final_runner_cannot_manufacture_registered_product_resources() -> None:

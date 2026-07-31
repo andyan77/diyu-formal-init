@@ -420,7 +420,9 @@ def _artifact_document(
         "body": body,
         "visible_digest": visible_digest(outline, body),
         "production": result.get("production"),
-        "aigc_notice": result.get("aigc_notice"),
+        "ai_generated": result.get("ai_generated"),
+        "aigc_label": result.get("aigc_label"),
+        "aigc_release_reminder": result.get("aigc_release_reminder"),
         "formal_snapshot": {
             "media_capability_envelope": envelope,
             "media_program": program,
