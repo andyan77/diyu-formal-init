@@ -38,14 +38,16 @@ Gate B 首次实现 `a67f44b…` 完成品牌文字资料、商品事实和组�
 
 Gate C 首次候选和多轮 FT-041 失败、假绿及主控退回历史完整保留；FT-039、FT-040、
 FT-045 已获主控 `PASS`。最终本地实现
-`ee1e2a4e56b2bd9303e44d83a3b001ab084230a5` 以
-`MediaCapabilityEnvelopeV2`、正式商品—组织官方素材绑定和可信 resolver 关闭最后的
-正式消费者缺口：只有管理员显式绑定、用户本次明确选择且租户／品牌／账号控制组织、状态、
-版本与 checksum 均合法的两件不同商品素材，才能形成登记商品媒体能力。ProductFact、
-production condition、个人或未选择素材仍不授予资源。正式 React/API/PostgreSQL P5、
-两个 Chrome 纵向、Golden/OpenAPI `481 passed, 2 skipped`、承重 mutation 和两份有界
-审查均通过；同 SHA 七卡逐篇人工全文与 file SHA／raw SHA／`visible_digest` 绑定通过，
-synthetic 数据零残留。UX-03 仍为 `ACTIVE`，Gate A、Gate B 为 `COMPLETE / PASS`，
+`faa4792538cbbcb54ff7b329dee7d03dd9488a24` 在既有
+`MediaCapabilityEnvelopeV2`、正式商品—组织官方素材绑定和可信 resolver 上继续封闭
+headquarters 精确控制组织作用域、P2／P5 主价值与证据假绿：只有管理员显式绑定、用户本次
+明确选择且租户／品牌／账号控制组织、状态、版本与 checksum 均合法的两件不同商品素材，
+才能形成登记商品媒体能力；P2 必须显示商品专属理解、取舍和条件，P5 必须显示可由两个冻结
+resource refs 承载的具体色彩／轮廓主次。ProductFact、production condition、个人或未选择
+素材仍不授予资源。正式 React/API/PostgreSQL P5、显式 Chrome、Golden/OpenAPI
+`491 passed, 2 skipped`、承重 mutation 和两份有界审查均通过；同 SHA 七卡真实
+task/run/version、逐篇人工全文与 file SHA／raw SHA／`visible_digest` 绑定通过，synthetic
+数据零残留。UX-03 仍为 `ACTIVE`，Gate A、Gate B 为 `COMPLETE / PASS`，
 Gate C 为 `COMPLETE / 等待主控独立终审`；没有 push、CI、部署或生产连接。64 项真值为
 `54/4/0/6/0`，Gate D 尚未启动。
 

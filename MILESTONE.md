@@ -9,6 +9,9 @@
   `CLOSED`，Gate D 为 `NOT_STARTED`，不创建 UX-04。
 - 当前 Git 基线：`86f5df16b9e42fe4eee322694156361a007bdb88`；唯一写入执行端为
   当前 WSL Codex。
+- Gate C 当前最终实现为 `faa4792538cbbcb54ff7b329dee7d03dd9488a24`；它在正式消费者
+  候选 `ee1e2a4e56b2bd9303e44d83a3b001ab084230a5` 上继续关闭总部素材元数据泄漏、P2／P5
+  主价值合同和证据 ID／审阅绑定假绿。此前所有失败候选与审计退回记录继续作为历史保留。
 - Gate A 首次实现 `734dcee900bc67e23d058d4fd6f8ef15db8d9847` 与完成记录
   `11444a4d7920e5aa55979241691908120f25aca2` 保留；主控有界返工后的最终实现为
   `4899a068b7b2310cb45cecac4def4ff17e537f05`。Gate B 首次冻结实现
@@ -106,18 +109,24 @@
   product／asset／binding 才生成 `registered_product_display`。ProductFact、
   production condition、个人素材、未选择素材及客户端伪造 ID 均不授予媒体能力；预检失败
   为 task/run/version `0/0/0`，修订重放冻结 Envelope V2 和绑定版本。
-- 最终运行实现为 `ee1e2a4e56b2bd9303e44d83a3b001ab084230a5`。其前一实现
-  `4da65d86a3cec695ce566a5f8b98b07512da21ae` 确定性修复 P5 正式绑定意图被概率 intake
-  错路由；最终提交只补证据工具对正式 API 的 `AI 辅助生成` 标签和发布提醒绑定。完整门为
-  Ruff、mypy、Golden/OpenAPI `481 passed, 2 skipped`、前端四门及两条显式 Chrome；
-  产品／体验与工程／安全两份有界审查无阻断。
-- 同一 `ee1e2a4…`、同一模型配置的 P1—P5、series2、series3 各执行一次，正式
-  API/PostgreSQL task/run/version 为 `7/7/7`、永久 running 为 0、传输重试为 0。P5
-  使用 `graphic_registered_product_relation_v1`，Envelope V2 精确冻结两个不同商品、
-  素材、绑定、版本和 checksum；七卡逐篇 8 项人工全文审阅通过。file SHA、raw SHA、
-  `visible_digest` 与人工审阅可复算证据位于
-  [`var/evidence/ux03-gate-c-ee1e2a4e/manifest.json`](var/evidence/ux03-gate-c-ee1e2a4e/manifest.json)；
-  private raw 保留在本地主机权限受限目录。synthetic 租户及 25 类关联对象已核对零残留。
+- 最终实现 `faa4792538cbbcb54ff7b329dee7d03dd9488a24` 让内容素材列表与正式 resolver 复用同一
+  账号控制组织边界：`headquarters` 素材归属组织必须精确等于当前逻辑发布账号控制组织，
+  区域／门店素材的标题、文件名、checksum、说明及商品绑定元数据均不返回。P2 以冻结、
+  可追踪的商品价值合同向 Writer 提供受控语义，服务端确定性插入商品专属理解、相伴取舍和
+  成立条件；P5 只有在两份正式绑定素材和冻结事实能够形成具体色彩或轮廓主次时才进入，
+  否则在 task/run/version 前自然失败。完整门为 Ruff、mypy、Golden/OpenAPI
+  `491 passed, 2 skipped`、前端四门及显式 Gate C Chrome；产品／体验与工程／安全两份
+  有界审查均无阻断。
+- 同一 `faa4792…`、同一 `deepseek-v4-flash`、temperature 0、max_retries 0 下，
+  P1—P5、series2、series3 各执行一次，正式 API/PostgreSQL task/run/version 为
+  `7/7/7`、全部 run succeeded、永久 running 为 0、传输重试为 0。P2 三项价值证据逐字
+  绑定可见成品与冻结合同；P5 使用 `graphic_registered_product_relation_v1`，其具体
+  “一主一辅”视觉命题绑定两个不同登记商品 resource refs。七卡逐篇 8 项人工全文审阅通过。
+  私有完整证据位于
+  `/home/faye/.local/share/diyu-ux03-evidence/faa4792538cbbcb54ff7b329dee7d03dd9488a24/gate-c-final-suite/`；
+  无凭据、可自校验的本地主机索引位于
+  `var/tmp/ux03-gate-c-final-evidence-faa4792/`。私有 19 项与索引 3 项 checksum 均复算通过；
+  synthetic 租户、运维身份及全部断言关联对象为 0，临时凭据／会话目录和一次性脚本已清理。
 - 当前 64 项功能真值为 `54/4/0/6/0`；有缺陷项为 FT-050—FT-052 和 FT-058。
   运行资产保持 `41/243/25/119`，激活增量 0。
 - Gate C 不证明真实员工／品牌采用、真实发布、平台流量、排名、爆款、GMV／销售、多真实
