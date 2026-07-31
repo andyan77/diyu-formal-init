@@ -2599,6 +2599,8 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert "本篇账号关联路径" in prompt
     assert "从穿衣编辑的位置重新看熟悉事物" in prompt
     assert "陪正在重新选择日常节奏的人看清取舍" in prompt
+    assert '"required_visible_spans"' in prompt
+    assert '"总部穿衣编辑"' in prompt
     assert "为什么会说这段话" in prompt
     assert "折线衣间" not in prompt
     assert "每个 text 只填写该单元的自然内容" in prompt
@@ -2616,6 +2618,103 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert isinstance(compiled.semantic_contract, P3SemanticContract)
     assert compiled.semantic_contract.brand_account_link == ("看一次熟悉感被意外打断后，人会怎样重新注意日常。")
     assert compiled.semantic_contract.brand_account_link in compiled.body
+
+
+def _p3_account_link_request() -> GenerationInput:
+    base_request = _generation_input()
+    fact = "今天喝了一直喝的蓝山咖啡，居然是甜的，帮我发一条。"
+    return replace(
+        base_request,
+        brand=replace(
+            base_request.brand,
+            content_role_name="总部穿衣编辑",
+            audience_description="陪正在重新选择日常节奏的人看清取舍。",
+        ),
+        account_expression=AccountExpression(
+            UUID("83000000-0000-0000-0000-000000000020"),
+            3,
+            "从穿衣编辑的位置重新看熟悉事物",
+            "不把表达位置写成真实职业履历或机构事实。",
+            "陪正在重新选择日常节奏的人看清取舍。",
+            "穿衣选择、熟悉事物被重新看见的时刻。",
+            "一人一部手机，普通室内环境。",
+            False,
+        ),
+        weak_seed=fact,
+        primary_product="brand_life_narrative",
+        narrative_frame=new_frame("actuality_reflection", (fact,), ()),
+        creative_plan=build_creative_plan(
+            topic_spans=(fact,),
+            primary_value="brand_life_narrative",
+            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            mechanism_id=None,
+            target_shape="小红书图文完整成品",
+        ),
+    )
+
+
+@pytest.mark.parametrize("include_link", (False, True))
+def test_p3_writer_copy_must_bind_the_frozen_account_link(
+    monkeypatch: pytest.MonkeyPatch,
+    include_link: bool,
+) -> None:
+    request = _p3_account_link_request()
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        guide = (
+            "总部穿衣编辑也会重新看一次熟悉的日常。"
+            if include_link
+            else "重新注意一次熟悉的日常。"
+        )
+        body = (
+            "陪正在重新选择日常节奏的人看清取舍。"
+            if include_link
+            else "熟悉的味道偶尔也会让人重新发现日常。"
+        )
+        content = {
+            "units": [
+                {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
+                {"unit_id": "unit:natural-guide", "text": guide},
+                {"unit_id": "unit:body", "text": body},
+                {
+                    "unit_id": "unit:release-caption",
+                    "text": "今天也重新看见了熟悉的味道。",
+                },
+            ]
+        }
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(content, ensure_ascii=False)
+                    }
+                }
+            ]
+        }, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    generator = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )
+    if not include_link:
+        with pytest.raises(GenerationFailed, match="账号表达路径"):
+            generator.generate(request)
+        return
+
+    artifact = generator.generate(request)
+    assert "总部穿衣编辑" in artifact.body
+    assert "陪正在重新选择日常节奏的人看清取舍。" in artifact.body
 
 
 def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() -> None:

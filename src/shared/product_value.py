@@ -366,7 +366,7 @@ def _build_p5_contract(
         proposition = (
             f"让{ordered_products[0].display_name}的已确认{color_pair[0]}承担画面主色，"
             f"让{ordered_products[1].display_name}的已确认{color_pair[1]}作为回应色，"
-            "形成一主一次、不能互换的具体色彩关系。"
+            "形成一主一辅、不能互换的具体色彩关系。"
         )
         dependency = (
             "只有两份登记素材都能承载各自冻结颜色时，这条色彩主次命题才成立；"
@@ -395,7 +395,7 @@ def _build_p5_contract(
         proposition = (
             f"让{ordered_products[0].display_name}的已确认{silhouettes[0]}承担画面主体，"
             f"让{ordered_products[1].display_name}的已确认{silhouettes[1]}作为回应，"
-            "形成一主一次、不能互换的具体轮廓关系。"
+            "形成一主一辅、不能互换的具体轮廓关系。"
         )
         dependency = (
             "只有两份登记素材都能承载各自冻结轮廓时，这条轮廓主次命题才成立；"

@@ -785,6 +785,7 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed(
                 "CreativeKernelV1 商品事实边界无法在一次 affected-unit 修复内满足"
             ) from exc
+        self._assert_p3_account_link(request, kernel)
         if request.revision_instruction and request.prior_creative_kernel:
             before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
             after = tuple(unit.text for unit in kernel.writable_units)
@@ -1483,7 +1484,9 @@ class DeepSeekGenerator(ContentGenerator):
             """本篇必须让受众从作品本身读出当前账号为什么会说这段话。标题、正文、媒体组织
 和发布配文应共同沿同一条编辑视角展开；至少 natural_guide 或 body 要自然体现下方的表达
 位置与受众关系，不能只在元数据中存在。不要照抄画像标签，不要硬插商品、账号名或品牌名，
-不要把表达位置写成真实职业履历、机构事实或已经发生的经历。"""
+不要把表达位置写成真实职业履历、机构事实或已经发生的经历。required_visible_spans 中的
+每个冻结字面都必须在 natural_guide、body 与 release_caption 的整体可见文字里原样出现
+至少一次；这些字面只绑定本账号的表达位置与受众关系，不授予新的现实事实。"""
             if request.primary_product == "brand_life_narrative"
             else ""
         )
@@ -2262,7 +2265,9 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         ) or "自然、清楚、不过度下结论"
 
     @staticmethod
-    def _deidentified_account_link(request: GenerationInput) -> dict[str, str]:
+    def _deidentified_account_link(
+        request: GenerationInput,
+    ) -> dict[str, object]:
         """Project one trusted editorial lens without tenant/account identifiers."""
 
         expression = request.account_expression
@@ -2295,11 +2300,64 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             request.brand.account_name,
             request.brand.operator_name,
         )
-        return {
+        projection: dict[str, object] = {
             key: DeepSeekGenerator._deidentify_text(value, protected)
             for key, value in values.items()
             if value.strip()
         }
+        projection["required_visible_spans"] = list(
+            DeepSeekGenerator._required_account_link_spans(request)
+        )
+        return projection
+
+    @staticmethod
+    def _required_account_link_spans(
+        request: GenerationInput,
+    ) -> tuple[str, ...]:
+        """Bind P3 copy to the frozen role and audience relationship.
+
+        This is positive source binding, not semantic classification: the
+        service requires exact, deidentified spans that already belong to the
+        current account profile and never infers an account link from prose.
+        """
+
+        relationship = (
+            request.account_expression.audience_relationship
+            if request.account_expression is not None
+            else request.brand.audience_description
+        )
+        protected = (
+            request.brand.brand_name,
+            request.brand.organization_name,
+            request.brand.account_name,
+            request.brand.operator_name,
+        )
+        values = (
+            DeepSeekGenerator._deidentify_text(
+                request.brand.content_role_name,
+                protected,
+            ),
+            DeepSeekGenerator._deidentify_text(
+                relationship,
+                protected,
+            ),
+        )
+        return tuple(dict.fromkeys(value for value in values if value))
+
+    @classmethod
+    def _assert_p3_account_link(
+        cls,
+        request: GenerationInput,
+        kernel: CreativeKernelV1,
+    ) -> None:
+        if request.primary_product != "brand_life_narrative":
+            return
+        required = cls._required_account_link_spans(request)
+        if not required:
+            raise GenerationFailed("当前账号缺少可冻结的账号表达路径")
+        visible = "\n".join(unit.text for unit in kernel.writable_units)
+        if any(span not in visible for span in required):
+            raise GenerationFailed("Writer 成品未绑定当前账号表达路径")
 
     @staticmethod
     def _deidentify_text(
