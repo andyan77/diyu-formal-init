@@ -34,9 +34,17 @@ Gate B 首次实现 `a67f44b…` 完成品牌文字资料、商品事实和组�
 指定区域只接受 region。正式三视口 Chrome、Golden/OpenAPI `422 passed, 1 skipped`、
 三项 mutation 和两份有界审查通过。最终 FT-031 实现
 `0774ae685da3156e529a1b6fed5d502a920706a1` 进一步要求后续篇成功提交 V1、非平台派生，
-并以 V1 提交时间进入窗口；失败 task 不再冒充续写。UX-03 仍为 `ACTIVE`，Gate A 和
-Gate B 为 `COMPLETE`，Gate C 尚未启动；本轮没有 push、CI、部署、生产连接或模型调用。
-64 项真值保持 `50/8/0/6/0`，Gate B 等待主控最终独立终审。
+并以 V1 提交时间进入窗口；失败 task 不再冒充续写。主控最终终审 Gate B `PASS`。
+
+Gate C 最终实现 `4d797d35614216c92a7e62ae7a62d7456165d70b` 已关闭可选创作方向、
+真实 NDJSON 阶段、P1—P5 媒体原生完整成品和系列前情消费。服务端在 Writer 前预分配标题、
+正文、图序／镜头和发布配文等可写单元；Compiler 只组装冻结事实、一次自然范围、媒体结构
+与 AIGC，不再创作固定标题前缀、概要或互动句。方向与系列前情同时进入 Writer 输入和任务
+快照，修订只重放原冻结条件；`completed` 只在事务提交、digest 校验和正式回读后发出。
+最终同 SHA 七张成品、三个视口正式 Chrome、Golden/OpenAPI `440 passed, 2 skipped`、
+五项 mutation 和两份有界审查均通过。UX-03 仍为 `ACTIVE`，Gate A、Gate B 为
+`COMPLETE / PASS`，Gate C 为 `COMPLETE / 等待主控独立终审`；没有 push、CI、部署或
+生产连接。64 项真值为 `54/4/0/6/0`，后续 Gate 尚未启动。
 
 UI-04 已于 2026-07-27（UTC）通过主控独立终审
 并保持 `CLOSED`；创始人真实使用后出现的产品语义新证据由 successor UI-05 单独承接。
@@ -143,5 +151,6 @@ V1.0、评审意见和 PNG 预览同样只作历史参考；`prototype_verified`
   均由 UI-12 承接；UI-12 当前用前置双轨与确定性 Compiler 取代概率 Reviewer 的生产
   放行并已 `CLOSED`。关闭不证明前端用户体验已经产品化；UX-01 已作为独立产品定义
   里程碑在有界返工和主控重审后 `CLOSED`。UX-02 已将该定义工程化并完成生产默认前端替换，
-  经主控最终独立终审 `PASS` 后为 `CLOSED`。UX-03 后由用户独立启动，当前 Gate A 已完成
-  本地纵向并等待主控审阅；以根目录 `MILESTONE.md` 为当前状态真源。
+  经主控最终独立终审 `PASS` 后为 `CLOSED`。UX-03 后由用户独立启动；当前 Gate A、
+  Gate B 已主控 `PASS`，Gate C 已完成本地纵向并等待主控独立终审；以根目录
+  `MILESTONE.md` 为当前状态真源。

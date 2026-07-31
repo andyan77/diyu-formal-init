@@ -4,7 +4,7 @@
 - 状态：`ACTIVE`；`Gate A · 正式入驻、身份、逻辑发布账号与多平台关系闭环` 为
   `COMPLETE` 且主控最终终审 `PASS`；`Gate B · 品牌资料、组织作用域、团队使用与能力诊断`
   为 `COMPLETE` 且主控最终终审 `PASS`；`Gate C · 创作控制、真实阶段、完整成品与系列前情`
-  为 `ACTIVE`。UX-02 保持 `CLOSED`，
+  为 `COMPLETE`，等待主控独立终审。UX-02 保持 `CLOSED`，
   不创建 UX-04。
 - 当前 Git 基线：`86f5df16b9e42fe4eee322694156361a007bdb88`；唯一写入执行端为
   当前 WSL Codex。
@@ -15,7 +15,10 @@
   判定 FT-031／FT-032 为 `FAIL` 后，本次有界返工实现为
   `4a49e0d912e17a10965e840e89c1ef7f03bca3f6`；其后 FT-031 最小返工实现为
   `0774ae685da3156e529a1b6fed5d502a920706a1`。本地 `main` 只在 `origin/main` 的 UX-02
-  关闭基线上普通前向领先；Gate B 未 push、未触发远程 CI、未部署、未连接生产、未调用模型。
+  关闭基线上普通前向领先。Gate C 最终实现为
+  `4d797d35614216c92a7e62ae7a62d7456165d70b`；Gate A—C 均未 push、未触发远程 CI、
+  未部署或连接生产。Gate C 只在获准的无数据库、无 Redis、无业务持久化隔离路径调用
+  `deepseek-v4-flash` 完成最终同 SHA 套件。
 - 当前任务包：
   [`docs/UX-03-产品目标一致性与全链路修复执行包.md`](docs/UX-03-产品目标一致性与全链路修复执行包.md)。
 - Gate A 已在本地完成正式 React/API/PostgreSQL 的新租户入驻、品牌基线、自然人资格、
@@ -39,10 +42,20 @@
   组织、资料路径决定，evidence 返回真实对象、版本、范围和更新时间；指定区域仍只接受
   明确登记的 region，历史非 region 数据仅兼容读取。Golden/OpenAPI 为
   `422 passed, 1 skipped`，FT-031 有界复核无阻断。
-- 当前 64 项功能真值为 `50/8/0/6/0`；剩余有缺陷项仅为 FT-039—FT-041、FT-045、
-  FT-050—FT-052 和 FT-058。
-- 当前唯一下一动作：在同一 UX-03 内完成 Gate C 的 FT-039、FT-040、FT-041、FT-045
-  本地纵向实现与验证；不启动后续 Gate。
+- Gate C 已关闭 FT-039、FT-040、FT-041 和 FT-045：五轴可选方向及开放原话冻结到任务并
+  随修订重放；NDJSON 只在实际节点发出阶段，`completed` 位于原子提交、digest 校验和正式
+  回读之后；媒体原生标题、正文、图序／镜头和发布配文由服务端预分配可写单元，Compiler
+  只确定性插入事实、一次范围、结构和 AIGC；系列前情以同租户／品牌／逻辑账号／系列边界
+  冻结并进入 Writer 输入。最终同 SHA P1—P5 与三篇系列 7 次必要调用均经人工全文审阅
+  `PASS`，隔离执行主机的 root-only 证据位于
+  `/var/lib/diyu-ux03-evidence/4d797d35614216c92a7e62ae7a62d7456165d70b/gate-c-final-suite/`。
+  `git diff --check`、Ruff、mypy、Golden/OpenAPI `440 passed, 2 skipped`、前端四门、
+  显式三视口 Chrome 和两份有界审查均无阻断。
+- 当前 64 项功能真值为 `54/4/0/6/0`；剩余有缺陷项仅为 FT-050—FT-052 和 FT-058。
+  运行资产保持 `41/243/25/119`，激活增量 0。
+- Gate C 不证明真实员工／品牌采用、真实发布、平台流量、排名、爆款、GMV／销售、多真实
+  租户市场差异、企业 SLA 或 `20/55/44` 全组合稳定支持。
+- 当前唯一下一动作：主控独立终审 Gate C；后续 Gate 保持 `NOT_STARTED`。
 
 ## UX-02 关闭记录（历史保留）
 
