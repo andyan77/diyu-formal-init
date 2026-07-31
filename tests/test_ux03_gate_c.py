@@ -1281,9 +1281,12 @@ def test_product_facts_are_hidden_and_do_not_grant_media_resources() -> None:
     assert "resource:product:" not in prompt
     assert "resource:registered-product-1" not in prompt
     assert "resource:selected-media:" not in prompt
-    assert "本次已选商品" in prompt
+    assert "deidentified-product-writer-brief-v1" in prompt
+    assert '"object_identity": "withheld"' in prompt
+    assert "帮我解释这个已选商品" not in prompt
+    assert "穿衣判断" not in prompt
     assert "全部 Writer unit" in prompt
-    assert "不能成为 Writer 文字的主语、宾语或指代对象" in prompt
+    assert "不能让当前对象或其代词承担 Writer 自己" in prompt
     assert "媒体程序 graphic_fact_guided_v1 确定性生成" in prompt
     assert "不得返回任何媒体单元、资源引用" in prompt
 
@@ -1427,9 +1430,14 @@ def test_visual_styling_writer_never_receives_registered_product_resources() -> 
     assert "ZX-S104" not in prompt
     assert "双面短外套" not in prompt
     assert "深灰直筒半裙" not in prompt
+    assert "视觉造型短视频" not in prompt
+    assert "穿着可能" not in prompt
+    assert "穿衣判断" not in prompt
+    assert "上下装关系" not in prompt
     assert "resource:registered-product:" not in prompt
     assert '"allowed_resources": []' in prompt
-    assert "媒体关系由服务端确定性编排" in prompt
+    assert "具体视觉关系和全部制作动作" in prompt
+    assert "由服务端确定性编排" in prompt
     assert "video_registered_product_display_v1" in prompt
 
 

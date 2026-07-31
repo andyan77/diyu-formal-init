@@ -170,10 +170,16 @@ _CONTRACT_FIELDS: dict[ContentProduct, tuple[str, str, str]] = {
 }
 _PRODUCT_VALUE: dict[ContentProduct, str] = {
     "dressing_decision": "帮助受众完成有条件、有边界的穿衣选择",
-    "product_truth": "围绕服务端原样呈现的可见选择，帮助受众形成不超出已确认信息的判断",
+    "product_truth": (
+        "在不知道当前对象身份或属性的前提下，提供一套先读已确认信息、"
+        "再比较明确可见差异并保留个人判断的顺序"
+    ),
     "brand_life_narrative": "让受众认识这个账号怎样观察、判断和待人",
     "local_response": "从近场信号给未参与者一份关系回应",
-    "visual_styling_story": "用真实商品与画面动作创造可见的穿着可能",
+    "visual_styling_story": (
+        "在不知道两个当前对象身份或属性的前提下，提供一套观察两个已确认"
+        "视觉锚点之间关系、比较差异并保留个人判断的顺序"
+    ),
 }
 _MODE_BLOCK_TYPE: dict[NarrativeMode, NarrativeBlockType] = {
     "actuality_reflection": "general_observation",
@@ -1279,7 +1285,11 @@ class DeepSeekGenerator(ContentGenerator):
             if request.prior_creative_kernel is not None
             else []
         )
-        controls = self._deidentified_writer_controls(request)
+        controls = (
+            self._deidentified_product_writer_controls(request)
+            if server_selected_product_facts
+            else self._deidentified_writer_controls(request)
+        )
         series_projection: object = (
             {
                 "title": request.series_context.title,
@@ -1301,36 +1311,30 @@ class DeepSeekGenerator(ContentGenerator):
             else None
         )
         product_creative_rule = (
-            """本篇的可信商品事实块已经由服务端选择并将在编译时原样插入；你看不到也
-不能选择、引用、复述或推导这些事实。全部 Writer unit 只负责一个不指向当前具体商品的
-选择顺序：帮助受众先看服务端原样插入的已确认信息，再保留自己的判断。任何商品、服装、
-部件或“它／这件对象”都不能成为 Writer 文字的主语、宾语或指代对象；所有文字必须在不知
-道对象名称、类别和属性时仍然成立。不得出现 SKU、商品名、
-品类、颜色、数字、结构、性能、用途、效果、价格、库存、设计动机、比较结论、手感或实际
-体验。title 应短而自然，body 提供独立观看价值；不能写成事实审计、资料说明或免责声明。"""
+            """本篇的可信事实块和登记资源已由服务端冻结，且它们的具体内容有意不进入
+Writer 输入。Writer 只负责一个去实体化的判断顺序：先读服务端原样插入的已确认信息，
+再比较其中明确呈现的差异，最后把决定留给受众。每个 Writer unit 都必须在不知道当前对象
+是什么、具有什么属性、怎样使用时仍然完整成立；不能让当前对象或其代词承担 Writer 自己
+补出的命题。title 应短而自然，body 要让这套判断顺序本身具有观看价值，不能写成资料审计、
+免责声明或对隐藏对象的猜测。"""
             if fact_blocks
             else ""
         )
         if fact_blocks and request.primary_product == "visual_styling_story":
             product_creative_rule += """
-本篇存在由服务端独立控制的登记商品媒体资源，但它们不包含也不许可推断品类、上下装关系、
-材质、版型、穿着效果或适用场景。你只写本篇的选择价值，不写拍摄、摆放、出镜、道具、
-场地、声音或资源说明；媒体关系由服务端确定性编排。"""
-        safe_product_topics = list(request.creative_plan.topic_spans)
+本篇存在由服务端独立控制的两个登记视觉锚点，但 Writer 不知道它们的对象身份、属性或用途。
+只写“怎样观察两个锚点的已确认差异、怎样保留取舍”的通用顺序；具体视觉关系和全部制作动作
+由服务端确定性编排。"""
+        topic_projection: object
         if server_selected_product_facts:
-            for index, topic in enumerate(safe_product_topics):
-                for literal in product_fact_literal_spans(
-                    product_fact_packet,
-                    topic,
-                ):
-                    topic = topic.replace(
-                        literal,
-                        "本次已选商品",
-                    )
-                safe_product_topics[index] = topic
-        topic_projection: object = (
-            safe_product_topics if server_selected_product_facts else request.creative_plan.topic_spans
-        )
+            topic_projection = {
+                "contract_version": "deidentified-product-writer-brief-v1",
+                "object_identity": "withheld",
+                "object_attributes": "withheld",
+                "task": _PRODUCT_VALUE[request.primary_product],
+            }
+        else:
+            topic_projection = request.creative_plan.topic_spans
         packet_projection: object = (
             {
                 "service_selected": True,
@@ -2095,6 +2099,37 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             if identifier:
                 value = value.replace(identifier, "当前表达方")
         return value[:600] or "自然、清楚、不过度下结论"
+
+    @staticmethod
+    def _deidentified_product_writer_controls(
+        request: GenerationInput,
+    ) -> str:
+        """Preserve expression controls without leaking product semantics."""
+
+        parts = [
+            request.brand.decision_order,
+            request.brand.tone,
+            *(
+                tuple(
+                    selection.applied_label
+                    for selection in request.creative_direction.selections
+                )
+                if request.creative_direction is not None
+                else ()
+            ),
+        ]
+        value = "；".join(part.strip() for part in parts if part.strip())
+        protected = (
+            request.brand.brand_name,
+            request.brand.organization_name,
+            request.brand.account_name,
+            request.brand.operator_name,
+            request.brand.content_role_name,
+        )
+        return DeepSeekGenerator._deidentify_text(
+            value,
+            protected,
+        ) or "自然、清楚、不过度下结论"
 
     @staticmethod
     def _deidentified_account_link(request: GenerationInput) -> dict[str, str]:

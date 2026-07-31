@@ -657,7 +657,8 @@ def test_kernel_writer_prompt_hides_product_facts_and_fact_authorship() -> None:
     assert "ZX-C218" not in prompt
     assert "selected_fact_block_count" in prompt
     assert "不授权 Writer 选择或引用事实" in prompt
-    assert "事实块已经由服务端选择" in prompt
+    assert "可信事实块和登记资源已由服务端冻结" in prompt
+    assert "deidentified-product-writer-brief-v1" in prompt
     assert "根对象必须恰好只有 units" in prompt
     assert '"claim_refs"' not in prompt
     assert "禁止返回 fact_block_refs、claim_refs" in prompt
