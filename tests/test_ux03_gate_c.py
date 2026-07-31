@@ -37,10 +37,14 @@ from src.infrastructure.seed_demo import (
     USER_ID,
 )
 from src.shared.creative_kernel import (
+    DUAL_TRACK_KERNEL_VERSION,
     KERNEL_VERSION,
+    LEGACY_KERNEL_VERSION,
     CreativeKernelV1,
     build_kernel_skeleton,
+    normalize_writer_unit_text,
     parse_writer_kernel,
+    repair_kernel_units,
     select_kernel_program,
 )
 from src.shared.creative_plan import (
@@ -83,6 +87,7 @@ from src.tool.gate_c_evidence import (
     ArtifactEvidenceInput,
     EvidenceBindingError,
     HumanReviewInput,
+    NormalizationEvidenceInput,
     artifact_visible_digest,
     sha256_file,
     verify_gate_c_evidence,
@@ -541,6 +546,183 @@ def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("raw_text", "expected"),
+    (
+        ("首图：从颜色的两面开始看选择。", "从颜色的两面开始看选择。"),
+        ("首图：\n从颜色的两面开始看选择。", "\n从颜色的两面开始看选择。"),
+        (
+            "首图：第一行保留，标点不改；\n第二行保留 emoji 👨‍👩‍👧。",
+            "第一行保留，标点不改；\n第二行保留 emoji 👨‍👩‍👧。",
+        ),
+    ),
+)
+def test_graphic_media_opening_removes_one_exact_compiler_wrapper(
+    raw_text: str,
+    expected: str,
+) -> None:
+    request = _generation_input()
+    assert request.narrative_frame is not None
+    skeleton = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=(),
+        constraint_refs=(),
+        allowed_resource_ids=tuple(sorted(_RESOURCES)),
+        media_format="graphic",
+        kernel_version=KERNEL_VERSION,
+        primary_product=request.primary_product,
+    )
+    opening = skeleton.unit("unit:media-opening")
+
+    normalized, receipt = normalize_writer_unit_text(
+        raw_text,
+        unit=opening,
+        kernel_version=KERNEL_VERSION,
+        media_format="graphic",
+    )
+
+    assert normalized == expected
+    assert receipt is not None
+    assert receipt.unit_id == opening.unit_id
+    assert receipt.purpose == opening.purpose
+    assert receipt.removed_prefix == "首图："
+    assert receipt.raw_text_sha256 == hashlib.sha256(raw_text.encode()).hexdigest()
+    assert receipt.normalized_text_sha256 == hashlib.sha256(expected.encode()).hexdigest()
+    assert receipt.contract_version == "writer-wrapper-normalization-v1"
+
+
+@pytest.mark.parametrize(
+    "raw_text",
+    (
+        "普通开头。\n首图：第二行伪装。",
+        "首图：首图：重复包装。",
+        "首图：标题：嵌套标题。",
+        "首图：\n发布配文：嵌套标题。",
+        "首图:半角冒号。",
+        "首图﹕兼容冒号。",
+        "首\u200b图：零宽拆分。",
+        "**首图：** Markdown 包装。",
+        "- 首图：项目符号包装。",
+        "【首图】：额外标点包装。",
+        "你提到：服务端范围说明。",
+        "首图：",
+        "首图：\u202e双向控制。",
+    ),
+)
+def test_graphic_media_opening_rejects_noncanonical_or_nested_wrappers(
+    raw_text: str,
+) -> None:
+    request = _generation_input()
+    assert request.narrative_frame is not None
+    opening = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=(),
+        constraint_refs=(),
+        allowed_resource_ids=tuple(sorted(_RESOURCES)),
+        media_format="graphic",
+        kernel_version=KERNEL_VERSION,
+        primary_product=request.primary_product,
+    ).unit("unit:media-opening")
+
+    with pytest.raises(ValueError):
+        normalize_writer_unit_text(
+            raw_text,
+            unit=opening,
+            kernel_version=KERNEL_VERSION,
+            media_format="graphic",
+        )
+
+
+def test_wrapper_normalization_never_applies_to_wrong_purpose_legacy_fact_or_compiler_text() -> None:
+    request = _generation_input()
+    assert request.narrative_frame is not None
+    skeleton = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=(),
+        constraint_refs=(),
+        allowed_resource_ids=tuple(sorted(_RESOURCES)),
+        media_format="graphic",
+        kernel_version=KERNEL_VERSION,
+        primary_product=request.primary_product,
+    )
+    opening = skeleton.unit("unit:media-opening")
+    excluded_units = (
+        skeleton.unit("unit:title"),
+        replace(
+            opening,
+            purpose="frozen_fact",
+            text_source="server_fact",
+        ),
+        replace(opening, text_source="server_compiler"),
+    )
+    for unit in excluded_units:
+        with pytest.raises(ValueError):
+            normalize_writer_unit_text(
+                "首图：不能进入规范化路径。",
+                unit=unit,
+                kernel_version=KERNEL_VERSION,
+                media_format="graphic",
+            )
+    for legacy_version in (
+        LEGACY_KERNEL_VERSION,
+        DUAL_TRACK_KERNEL_VERSION,
+    ):
+        with pytest.raises(ValueError):
+            normalize_writer_unit_text(
+                "首图：legacy 不能进入规范化路径。",
+                unit=opening,
+                kernel_version=legacy_version,
+                media_format="graphic",
+            )
+
+
+def test_initial_and_repair_paths_share_exact_wrapper_normalization() -> None:
+    request = _generation_input()
+    assert request.narrative_frame is not None
+    skeleton = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=(),
+        constraint_refs=(),
+        allowed_resource_ids=tuple(sorted(_RESOURCES)),
+        media_format="graphic",
+        kernel_version=KERNEL_VERSION,
+        primary_product=request.primary_product,
+    )
+    initial = parse_writer_kernel(
+        {
+            "units": [
+                {
+                    "unit_id": unit.unit_id,
+                    "text": (
+                        "首图：第一次的可见开头。"
+                        if unit.unit_id == "unit:media-opening"
+                        else f"{unit.purpose} 的自然内容"
+                    ),
+                }
+                for unit in skeleton.writable_units
+            ]
+        },
+        skeleton,
+        media_format="graphic",
+    )
+    assert initial.unit("unit:media-opening").text == "第一次的可见开头。"
+
+    repaired = repair_kernel_units(
+        kernel=initial,
+        affected_unit_ids=frozenset({"unit:media-opening"}),
+        raw={
+            "units": [
+                {
+                    "unit_id": "unit:media-opening",
+                    "text": "首图：修复后的可见开头。",
+                }
+            ]
+        },
+        media_format="graphic",
+    )
+    assert repaired.unit("unit:media-opening").text == "修复后的可见开头。"
+
+
 def test_actuality_life_units_are_preallocated_as_disclosed_hypothesis() -> None:
     fact = "今天喝了一直喝的蓝山咖啡，居然是甜的。"
     frame = new_frame("actuality_reflection", (fact,), ())
@@ -997,6 +1179,7 @@ def _write_gate_c_evidence_fixture(
     tmp_path: Path,
     *,
     fact_boundary: str = "PASS",
+    include_normalization: bool = False,
 ) -> Path:
     root = tmp_path / "gate-c-evidence"
     root.mkdir(mode=0o700, exist_ok=True)
@@ -1019,8 +1202,29 @@ def _write_gate_c_evidence_fixture(
         )
         artifact.chmod(0o600)
         raw = root / f"{card_id}-raw-response.json"
+        raw_document: object = {"provider_response": "redacted-test-fixture"}
+        if card_id == "P2" and include_normalization:
+            raw_document = {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "units": [
+                                        {
+                                            "unit_id": "unit:media-opening",
+                                            "text": "首图：从两面完整外观开始看选择。",
+                                        }
+                                    ]
+                                },
+                                ensure_ascii=False,
+                            )
+                        }
+                    }
+                ]
+            }
         raw.write_text(
-            json.dumps({"provider_response": "redacted-test-fixture"}),
+            json.dumps(raw_document, ensure_ascii=False),
             encoding="utf-8",
         )
         raw.chmod(0o600)
@@ -1054,8 +1258,52 @@ def _write_gate_c_evidence_fixture(
         max_retries=0,
         artifacts=tuple(artifacts),
         reviews=tuple(reviews),
+        normalizations=(
+            (
+                NormalizationEvidenceInput(
+                    card_id="P2",
+                    unit_id="unit:media-opening",
+                    purpose="media_opening",
+                    media_format="graphic",
+                ),
+            )
+            if include_normalization
+            else ()
+        ),
     )
     return root
+
+
+def test_gate_c_evidence_records_exact_writer_wrapper_normalization(
+    tmp_path: Path,
+) -> None:
+    root = _write_gate_c_evidence_fixture(
+        tmp_path,
+        include_normalization=True,
+    )
+
+    verify_gate_c_evidence(root)
+    manifest = json.loads(
+        (root / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["writer_wrapper_normalizations"] == [
+        {
+            "card_id": "P2",
+            "media_format": "graphic",
+            "normalization_contract_version": (
+                "writer-wrapper-normalization-v1"
+            ),
+            "normalized_text_sha256": hashlib.sha256(
+                "从两面完整外观开始看选择。".encode()
+            ).hexdigest(),
+            "purpose": "media_opening",
+            "raw_text_sha256": hashlib.sha256(
+                "首图：从两面完整外观开始看选择。".encode()
+            ).hexdigest(),
+            "removed_prefix": "首图：",
+            "unit_id": "unit:media-opening",
+        }
+    ]
 
 
 def test_gate_c_evidence_binds_file_sha_visible_digest_and_human_review(

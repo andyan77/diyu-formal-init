@@ -5,9 +5,16 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
+from src.shared.creative_kernel import (
+    KERNEL_VERSION,
+    CreativeKernelUnit,
+    KernelPurpose,
+    normalize_writer_unit_text,
+)
 from src.shared.narrative import visible_digest
+from src.shared.types import MediaFormat
 
 GATE_C_REVIEW_CRITERIA: Final[tuple[str, ...]] = (
     "primary_value",
@@ -44,6 +51,14 @@ class HumanReviewInput:
     notes: str
 
 
+@dataclass(frozen=True)
+class NormalizationEvidenceInput:
+    card_id: str
+    unit_id: str
+    purpose: KernelPurpose
+    media_format: MediaFormat
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as source:
@@ -72,6 +87,7 @@ def write_gate_c_evidence(
     max_retries: int,
     artifacts: tuple[ArtifactEvidenceInput, ...],
     reviews: tuple[HumanReviewInput, ...],
+    normalizations: tuple[NormalizationEvidenceInput, ...] = (),
 ) -> None:
     """Write one private, reproducible manifest for an already completed suite."""
 
@@ -96,12 +112,14 @@ def write_gate_c_evidence(
 
     artifact_records: list[dict[str, str]] = []
     review_records: list[dict[str, object]] = []
+    raw_path_by_card: dict[str, Path] = {}
     for item in artifacts:
         artifact_path = _private_child(root, item.artifact_file)
         raw_path = _private_child(root, item.raw_response_file)
         artifact_sha = sha256_file(artifact_path)
         visible = artifact_visible_digest(artifact_path)
         raw_sha = sha256_file(raw_path)
+        raw_path_by_card[item.card_id] = raw_path
         review = review_by_card[item.card_id]
         if review.artifact_file != item.artifact_file:
             raise EvidenceBindingError(f"{item.card_id}: review references another artifact")
@@ -137,6 +155,20 @@ def write_gate_c_evidence(
             }
         )
 
+    normalization_records = [
+        _normalization_record(
+            item,
+            raw_path=raw_path_by_card.get(item.card_id),
+        )
+        for item in normalizations
+    ]
+    normalization_keys = {
+        (str(record["card_id"]), str(record["unit_id"]))
+        for record in normalization_records
+    }
+    if len(normalization_keys) != len(normalization_records):
+        raise EvidenceBindingError("writer wrapper normalization records are duplicated")
+
     _write_private_json(
         root / "human-review.json",
         {
@@ -159,6 +191,7 @@ def write_gate_c_evidence(
                 "business_persistence": False,
             },
             "artifacts": artifact_records,
+            "writer_wrapper_normalizations": normalization_records,
         },
     )
     checksummed = sorted(
@@ -179,8 +212,13 @@ def verify_gate_c_evidence(root: Path) -> None:
         raise EvidenceBindingError("manifest implementation SHA is unavailable")
     _assert_sha(implementation_sha, label="manifest implementation SHA")
     artifacts = manifest.get("artifacts")
+    normalizations = manifest.get("writer_wrapper_normalizations")
     reviews = review_document.get("reviews")
-    if not isinstance(artifacts, list) or not isinstance(reviews, list):
+    if (
+        not isinstance(artifacts, list)
+        or not isinstance(normalizations, list)
+        or not isinstance(reviews, list)
+    ):
         raise EvidenceBindingError("manifest or review record list is unavailable")
     artifact_card_ids = {
         str(record.get("card_id"))
@@ -199,6 +237,7 @@ def verify_gate_c_evidence(root: Path) -> None:
     }
     if len(reviews_by_card) != len(reviews):
         raise EvidenceBindingError("human review card IDs are duplicated")
+    raw_path_by_card: dict[str, Path] = {}
     for record in artifacts:
         if not isinstance(record, dict):
             raise EvidenceBindingError("artifact record is invalid")
@@ -207,6 +246,7 @@ def verify_gate_c_evidence(root: Path) -> None:
         raw_response_file = str(record.get("raw_response_file"))
         artifact_path = _private_child(root, artifact_file)
         raw_path = _private_child(root, raw_response_file)
+        raw_path_by_card[card_id] = raw_path
         artifact_sha = sha256_file(artifact_path)
         visible = artifact_visible_digest(artifact_path)
         raw_sha = sha256_file(raw_path)
@@ -238,7 +278,113 @@ def verify_gate_c_evidence(root: Path) -> None:
         if isinstance(record, dict)
     }:
         raise EvidenceBindingError("human review contains an unrelated card")
+    normalization_keys: set[tuple[str, str]] = set()
+    for record in normalizations:
+        if not isinstance(record, dict):
+            raise EvidenceBindingError("writer wrapper normalization record is invalid")
+        card_id = str(record.get("card_id"))
+        unit_id = str(record.get("unit_id"))
+        key = (card_id, unit_id)
+        if key in normalization_keys:
+            raise EvidenceBindingError("writer wrapper normalization records are duplicated")
+        normalization_keys.add(key)
+        purpose = record.get("purpose")
+        media_format = record.get("media_format")
+        if purpose != "media_opening" or media_format != "graphic":
+            raise EvidenceBindingError(
+                f"{card_id}: writer wrapper normalization scope is invalid"
+            )
+        expected = _normalization_record(
+            NormalizationEvidenceInput(
+                card_id=card_id,
+                unit_id=unit_id,
+                purpose=cast(KernelPurpose, purpose),
+                media_format=cast(MediaFormat, media_format),
+            ),
+            raw_path=raw_path_by_card.get(card_id),
+        )
+        if record != expected:
+            raise EvidenceBindingError(
+                f"{card_id}: writer wrapper normalization evidence does not match raw response"
+            )
     _verify_sha256sums(root)
+
+
+def _normalization_record(
+    item: NormalizationEvidenceInput,
+    *,
+    raw_path: Path | None,
+) -> dict[str, str]:
+    if raw_path is None:
+        raise EvidenceBindingError(
+            f"{item.card_id}: normalization references an unknown card"
+        )
+    document = _json_object(raw_path)
+    try:
+        choices = document["choices"]
+        if not isinstance(choices, list) or len(choices) != 1:
+            raise TypeError
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            raise TypeError
+        message = choice["message"]
+        if not isinstance(message, dict):
+            raise TypeError
+        content = message["content"]
+        if not isinstance(content, str):
+            raise TypeError
+        payload = json.loads(content)
+        if not isinstance(payload, dict):
+            raise TypeError
+        units = payload["units"]
+        if not isinstance(units, list):
+            raise TypeError
+        matches = [
+            unit
+            for unit in units
+            if isinstance(unit, dict) and unit.get("unit_id") == item.unit_id
+        ]
+        if len(matches) != 1 or not isinstance(matches[0].get("text"), str):
+            raise TypeError
+        raw_text = str(matches[0]["text"])
+        unit = CreativeKernelUnit(
+            unit_id=item.unit_id,
+            purpose=item.purpose,
+            allowed_observation_types=("abstract_principle",),
+            fact_refs=(),
+            constraint_refs=(),
+            visible_order=0,
+            text="",
+        )
+        _, receipt = normalize_writer_unit_text(
+            raw_text,
+            unit=unit,
+            kernel_version=KERNEL_VERSION,
+            media_format=item.media_format,
+        )
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        json.JSONDecodeError,
+    ) as exc:
+        raise EvidenceBindingError(
+            f"{item.card_id}: normalization raw response is invalid"
+        ) from exc
+    if receipt is None:
+        raise EvidenceBindingError(
+            f"{item.card_id}: normalization did not remove an approved wrapper"
+        )
+    return {
+        "card_id": item.card_id,
+        "unit_id": receipt.unit_id,
+        "purpose": receipt.purpose,
+        "media_format": item.media_format,
+        "removed_prefix": receipt.removed_prefix,
+        "raw_text_sha256": receipt.raw_text_sha256,
+        "normalized_text_sha256": receipt.normalized_text_sha256,
+        "normalization_contract_version": receipt.contract_version,
+    }
 
 
 def _verify_sha256sums(root: Path) -> None:

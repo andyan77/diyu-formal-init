@@ -315,6 +315,7 @@ class DeterministicContentGenerator(ContentGenerator):
             allowed_claim_ids=product_packet.fact_ids,
             required_fact_block_ids=required_fact_block_ids,
             compiler_owned_text_by_id=compiler_texts,
+            media_format=request.media_format,
         )
         compiled = compile_delivery(
             delivery_input,

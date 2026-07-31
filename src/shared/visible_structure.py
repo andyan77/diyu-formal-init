@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unicodedata
+from typing import Final
 
 # Compiler-owned heading names are shared. Their parsing rules are not: legacy
 # projection recognizes only the historical full-width colon, while Writer
@@ -46,21 +47,42 @@ LEGACY_PROJECTED_HEADINGS = (
     *tuple(sorted(INTERNAL_VISIBLE_HEADINGS)),
 )
 
+V3_COMPILER_VISIBLE_HEADING_BY_MEDIA_PURPOSE: Final[dict[tuple[str, str], str]] = {
+    ("video", "natural_guide"): "内容看点",
+    ("video", "media_opening"): "封面/开头",
+    ("video", "body"): "完整台词/解说",
+    ("video", "media_sequence"): "画面动作",
+    ("video", "subtitle_strategy"): "字幕策略",
+    ("video", "production_note"): "声音与制作提示",
+    ("video", "release_caption"): "发布配文",
+    ("graphic", "natural_guide"): "内容看点",
+    ("graphic", "media_opening"): "首图",
+    ("graphic", "media_sequence"): "图序与每张职责",
+    ("graphic", "body"): "完整正文",
+    ("graphic", "production_note"): "拍摄/排版提示",
+    ("graphic", "release_caption"): "发布配文",
+}
+WRITER_WRAPPER_NORMALIZATION_CONTRACT_VERSION = (
+    "writer-wrapper-normalization-v1"
+)
+_WRITER_WRAPPER_NORMALIZATION_KEYS = frozenset(
+    {
+        ("graphic", "media_opening"),
+    }
+)
+
 PRODUCT_VISIBLE_HEADINGS = (
     *LEGACY_PROJECTED_HEADINGS,
     "表达范围",
-    "内容看点",
-    "封面/开头",
-    "画面动作",
-    "字幕策略",
-    "首图",
-    "完整正文",
-    "发布配文",
     "正文",
     "封面文案",
     "制作提示",
-    "发布配文",
     "配文",
+    *tuple(
+        dict.fromkeys(
+            V3_COMPILER_VISIBLE_HEADING_BY_MEDIA_PURPOSE.values()
+        )
+    ),
 )
 
 SERVER_VISIBLE_SCOPE_PREFIXES = (
@@ -136,6 +158,58 @@ _NORMALIZED_SCOPE_PREFIXES = tuple(_security_match_view(prefix) for prefix in SE
 _NORMALIZED_HEADINGS = tuple(_security_match_view(heading) for heading in PRODUCT_VISIBLE_HEADINGS)
 
 
+def v3_compiler_visible_heading(
+    media_format: str,
+    purpose: str,
+) -> str:
+    """Return the one Compiler-owned v3 heading for a media unit."""
+
+    try:
+        return V3_COMPILER_VISIBLE_HEADING_BY_MEDIA_PURPOSE[
+            (media_format, purpose)
+        ]
+    except KeyError as exc:
+        raise ValueError("v3 Compiler visible heading is not registered") from exc
+
+
+def approved_writer_wrapper_prefix(
+    media_format: str,
+    purpose: str,
+) -> str | None:
+    """Return an exact raw prefix only for the approved normalization seam."""
+
+    key = (media_format, purpose)
+    if key not in _WRITER_WRAPPER_NORMALIZATION_KEYS:
+        return None
+    return f"{v3_compiler_visible_heading(media_format, purpose)}："
+
+
+def _without_leading_structural_decoration(value: str) -> str:
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if not (
+            character.isspace()
+            or unicodedata.category(character).startswith(("P", "S"))
+        ):
+            break
+        index += 1
+    return value[index:]
+
+
+def _starts_with_decorated_heading(value: str, heading: str) -> bool:
+    candidate = _without_leading_structural_decoration(value)
+    if not candidate.startswith(heading):
+        return False
+    suffix = candidate[len(heading) :]
+    colon_index = suffix.find(":")
+    return colon_index >= 0 and all(
+        character.isspace()
+        or unicodedata.category(character).startswith(("P", "S"))
+        for character in suffix[:colon_index]
+    )
+
+
 def assert_writer_visible_text_safe(text: str) -> None:
     """Reject structural impersonation without rewriting natural Writer text."""
 
@@ -143,7 +217,14 @@ def assert_writer_visible_text_safe(text: str) -> None:
         raise ValueError("writer visible text contains bidirectional control characters")
     for line in text.splitlines():
         candidate = _security_match_view(line).lstrip()
-        if any(candidate.startswith(prefix) for prefix in _NORMALIZED_SCOPE_PREFIXES):
+        structural_candidate = _without_leading_structural_decoration(candidate)
+        if any(
+            structural_candidate.startswith(prefix)
+            for prefix in _NORMALIZED_SCOPE_PREFIXES
+        ):
             raise ValueError("writer forged a server wrapper by impersonating a server-owned scope label")
-        if any(candidate.startswith(f"{heading}:") for heading in _NORMALIZED_HEADINGS):
+        if any(
+            _starts_with_decorated_heading(candidate, heading)
+            for heading in _NORMALIZED_HEADINGS
+        ):
             raise ValueError("writer forged a compiler-owned visible section heading")

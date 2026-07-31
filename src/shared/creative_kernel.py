@@ -14,8 +14,12 @@ from src.shared.narrative import (
     ObservationType,
     ReviewerObservation,
 )
-from src.shared.types import ContentProduct
-from src.shared.visible_structure import assert_writer_visible_text_safe
+from src.shared.types import ContentProduct, MediaFormat
+from src.shared.visible_structure import (
+    WRITER_WRAPPER_NORMALIZATION_CONTRACT_VERSION,
+    approved_writer_wrapper_prefix,
+    assert_writer_visible_text_safe,
+)
 
 KernelPurpose: TypeAlias = Literal[
     "title",
@@ -212,6 +216,16 @@ class CreativeKernelV1:
             if unit.unit_id == unit_id:
                 return unit
         raise KeyError(unit_id)
+
+
+@dataclass(frozen=True)
+class WriterWrapperNormalization:
+    unit_id: str
+    purpose: KernelPurpose
+    removed_prefix: str
+    raw_text_sha256: str
+    normalized_text_sha256: str
+    contract_version: str = WRITER_WRAPPER_NORMALIZATION_CONTRACT_VERSION
 
 
 def build_kernel_skeleton(
@@ -591,6 +605,7 @@ def parse_writer_kernel(
     require_claim_refs: bool = False,
     required_fact_block_ids: tuple[str, ...] | None = None,
     compiler_owned_text_by_id: Mapping[str, str] | None = None,
+    media_format: MediaFormat | None = None,
 ) -> CreativeKernelV1:
     product_contract = bool(fact_blocks)
     server_selected_product_facts = product_contract and bool(skeleton.selected_fact_block_ids)
@@ -691,9 +706,15 @@ def parse_writer_kernel(
         claim_refs = _string_tuple(raw_unit.get("claim_refs")) if "claim_refs" in unit_fields else ()
         if any(ref not in allowed_claim_ids for ref in claim_refs):
             raise ValueError("writer claim ref is outside ProductFactPacket")
+        normalized_text, _ = normalize_writer_unit_text(
+            _required_string(raw_unit.get("text")),
+            unit=expected[unit_id],
+            kernel_version=skeleton.kernel_version,
+            media_format=media_format,
+        )
         replacements[unit_id] = replace(
             expected[unit_id],
-            text=_normalize_writer_visible_text(_required_string(raw_unit.get("text"))),
+            text=normalized_text,
             claim_refs=claim_refs,
         )
     units = tuple(replacements.get(unit.unit_id, unit) for unit in skeleton.units)
@@ -744,6 +765,7 @@ def repair_kernel_units(
     affected_unit_ids: frozenset[str],
     raw: object,
     allowed_claim_ids: frozenset[str] = frozenset(),
+    media_format: MediaFormat | None = None,
 ) -> CreativeKernelV1:
     if not affected_unit_ids:
         raise ValueError("repair has no affected writable units")
@@ -760,6 +782,7 @@ def repair_kernel_units(
         repair_skeleton,
         allowed_claim_ids=allowed_claim_ids,
         require_claim_refs=bool(allowed_claim_ids),
+        media_format=media_format,
     )
     replacements = {unit.unit_id: unit for unit in repaired.units}
     if any(replacements[unit_id].text == kernel.unit(unit_id).text for unit_id in affected_unit_ids):
@@ -1199,6 +1222,48 @@ def _unit_text_source(
     if value == "server_fact" and purpose != "frozen_fact":
         raise DomainError("冻结事实文字来源无效")
     return cast(UnitTextSource, value)
+
+
+def normalize_writer_unit_text(
+    text: str,
+    *,
+    unit: CreativeKernelUnit,
+    kernel_version: str,
+    media_format: MediaFormat | None,
+) -> tuple[str, WriterWrapperNormalization | None]:
+    """Remove one exact approved wrapper, then run the complete safety scan."""
+
+    normalized_input = text
+    removed_prefix: str | None = None
+    if (
+        kernel_version == KERNEL_VERSION
+        and unit.text_source == "writer"
+        and media_format is not None
+    ):
+        approved_prefix = approved_writer_wrapper_prefix(
+            media_format,
+            unit.purpose,
+        )
+        if approved_prefix is not None and text.startswith(approved_prefix):
+            normalized_input = text[len(approved_prefix) :]
+            if not normalized_input.strip():
+                raise ValueError("writer wrapper normalization left empty text")
+            removed_prefix = approved_prefix
+    normalized_text = _normalize_writer_visible_text(normalized_input)
+    if removed_prefix is None:
+        return normalized_text, None
+    return (
+        normalized_text,
+        WriterWrapperNormalization(
+            unit_id=unit.unit_id,
+            purpose=unit.purpose,
+            removed_prefix=removed_prefix,
+            raw_text_sha256=hashlib.sha256(text.encode()).hexdigest(),
+            normalized_text_sha256=hashlib.sha256(
+                normalized_text.encode()
+            ).hexdigest(),
+        ),
+    )
 
 
 def _normalize_writer_visible_text(text: str) -> str:

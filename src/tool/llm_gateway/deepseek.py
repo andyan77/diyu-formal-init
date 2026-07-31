@@ -638,6 +638,7 @@ class DeepSeekGenerator(ContentGenerator):
                 allowed_claim_ids=context.product_fact_packet.fact_ids,
                 required_fact_block_ids=required_fact_block_ids,
                 compiler_owned_text_by_id=compiler_texts,
+                media_format=request.media_format,
             )
             self._validate_product_fact_selection(
                 request,

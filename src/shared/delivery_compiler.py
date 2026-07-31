@@ -30,6 +30,7 @@ from src.shared.types import (
     ProductFact,
     VideoProductionBundle,
 )
+from src.shared.visible_structure import v3_compiler_visible_heading
 
 DeliveryMedia: TypeAlias = Literal["video", "graphic"]
 
@@ -760,23 +761,62 @@ def _visible_body_v3(
     if isinstance(production, VideoProductionBundle):
         sections: tuple[tuple[str, str], ...] = (
             ("表达范围", artifact_scope),
-            ("内容看点", production.natural_guide),
-            ("封面/开头", production.cover_or_first_frame),
-            ("完整台词/解说", production.spoken_lines),
-            ("画面动作", production.visual_actions),
-            ("字幕策略", production.subtitles),
-            ("声音与制作提示", production.sound_and_production),
+            (
+                v3_compiler_visible_heading("video", "natural_guide"),
+                production.natural_guide,
+            ),
+            (
+                v3_compiler_visible_heading("video", "media_opening"),
+                production.cover_or_first_frame,
+            ),
+            (
+                v3_compiler_visible_heading("video", "body"),
+                production.spoken_lines,
+            ),
+            (
+                v3_compiler_visible_heading("video", "media_sequence"),
+                production.visual_actions,
+            ),
+            (
+                v3_compiler_visible_heading("video", "subtitle_strategy"),
+                production.subtitles,
+            ),
+            (
+                v3_compiler_visible_heading("video", "production_note"),
+                production.sound_and_production,
+            ),
             ("自然时长", production.natural_duration),
-            ("发布配文", production.release_caption_and_interaction),
+            (
+                v3_compiler_visible_heading("video", "release_caption"),
+                production.release_caption_and_interaction,
+            ),
         )
     else:
         sections = (
             ("表达范围", artifact_scope),
-            ("内容看点", production.natural_guide),
-            ("首图", production.hero_image),
-            ("图序与每张职责", production.image_sequence),
-            ("完整正文", production.full_body),
-            ("拍摄/排版提示", production.layout_and_production),
-            ("发布配文", production.release_caption_and_interaction),
+            (
+                v3_compiler_visible_heading("graphic", "natural_guide"),
+                production.natural_guide,
+            ),
+            (
+                v3_compiler_visible_heading("graphic", "media_opening"),
+                production.hero_image,
+            ),
+            (
+                v3_compiler_visible_heading("graphic", "media_sequence"),
+                production.image_sequence,
+            ),
+            (
+                v3_compiler_visible_heading("graphic", "body"),
+                production.full_body,
+            ),
+            (
+                v3_compiler_visible_heading("graphic", "production_note"),
+                production.layout_and_production,
+            ),
+            (
+                v3_compiler_visible_heading("graphic", "release_caption"),
+                production.release_caption_and_interaction,
+            ),
         )
     return "标题：" + title + "\n\n" + "\n\n".join(f"{heading}：{value}" for heading, value in sections)
