@@ -47,9 +47,12 @@ resource refs 承载的具体色彩／轮廓主次。ProductFact、production co
 素材仍不授予资源。正式 React/API/PostgreSQL P5、显式 Chrome、Golden/OpenAPI
 `491 passed, 2 skipped`、承重 mutation 和两份有界审查均通过；同 SHA 七卡真实
 task/run/version、逐篇人工全文与 file SHA／raw SHA／`visible_digest` 绑定通过，synthetic
-数据零残留。UX-03 仍为 `ACTIVE`，Gate A、Gate B 为 `COMPLETE / PASS`，
-Gate C 为 `COMPLETE / 等待主控独立终审`；没有 push、CI、部署或生产连接。64 项真值为
-`54/4/0/6/0`，Gate D 尚未启动。
+数据零残留。Gate C 已获主控最终终审 `PASS`。Gate D 最终本地实现 `f2b5e266…` 又把纯文字
+DM01 接到 Gate B 正式商品版本、执行组织作用域和 13 条确定性规则束，完成冻结条件下的
+V1→V2→历史 V1→当前 V2、复制及逐 SKU 守恒；`/status` 现在诚实分开核心、内容生成与纯文字
+陈列，并将陈旧或缺失的供应商观察显示为 unknown。Golden/OpenAPI `504 passed, 2 skipped`、
+前端四门、显式三视口 Chrome、七项 mutation 和两审通过。UX-03 现为 `REVIEW`，Gate A—D
+均已完成，64 项真值为 `58/0/0/6/0`；仍未 push、CI、部署或连接生产。
 
 UI-04 已于 2026-07-27（UTC）通过主控独立终审
 并保持 `CLOSED`；创始人真实使用后出现的产品语义新证据由 successor UI-05 单独承接。

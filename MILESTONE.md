@@ -1,12 +1,12 @@
 # 当前里程碑
 
 - 当前里程碑：`UX-03` 产品目标一致性与全链路修复。
-- 状态：`ACTIVE`；`Gate A · 正式入驻、身份、逻辑发布账号与多平台关系闭环` 为
+- 状态：`REVIEW`；`Gate A · 正式入驻、身份、逻辑发布账号与多平台关系闭环` 为
   `COMPLETE` 且主控最终终审 `PASS`；`Gate B · 品牌资料、组织作用域、团队使用与能力诊断`
   为 `COMPLETE` 且主控最终终审 `PASS`；`Gate C · 创作控制、真实阶段、完整成品与系列前情`
   为 `COMPLETE` 且主控最终终审 `PASS`。FT-039、FT-040、FT-041、FT-045 均已通过；此前
-  FT-041 的主控退回、失败套件和自报通过历史完整保留。UX-02 保持 `CLOSED`，Gate D 为
-  `ACTIVE`，本轮关闭 FT-050—FT-052 与 FT-058；不创建 UX-04。
+  FT-041 的主控退回、失败套件和自报通过历史完整保留。UX-02 保持 `CLOSED`；Gate D 已
+  `COMPLETE / 等待主控独立终审`，FT-050—FT-052 与 FT-058 均已在本地候选关闭；不创建 UX-04。
 - 当前 Git 基线：`86f5df16b9e42fe4eee322694156361a007bdb88`；唯一写入执行端为
   当前 WSL Codex。
 - Gate C 当前运行实现为 `ec3dbe45d485816c7a49f9c801cd2baa2fe58c04`；其后仅有测试 oracle
@@ -145,12 +145,26 @@
   lint/typecheck/interaction/build 和显式 Gate C Chrome；产品／内容与工程／安全／兼容
   两份有界审查均无阻断。首次 Golden 暴露一个历史测试仍要求 Writer 自由带出未选重量事实，
   测试 oracle 已改为校验服务端实际冻结的“双面完整外观”，定向与全量回归转绿。
-- 当前 64 项功能真值为 `54/4/0/6/0`；剩余有缺陷项精确为 FT-050—FT-052 和 FT-058。
+- Gate D 最终本地运行实现为 `f2b5e266da44bc8a43aef65d92760076fa7e2987`，本地 schema
+  `20260810_37`。新 DM01 任务只解析 Gate B 已确认、启用、当前且对执行组织可见的商品版本，
+  并冻结商品摘要、门店档案与完整 `DM01RuleBundleV1`；V1 实际消费 11 条生成资产，修订资格
+  冻结 13 条完整资产且 V2 不重读当前商品、门店或激活状态。每版正文与 plan 绑定摘要，数据库
+  角色仅有 SELECT/INSERT，UPDATE/DELETE 由权限和 append-only trigger 双重拒绝。正式
+  React/API/PostgreSQL/Chrome 完成 V1→V2→历史 V1→当前 V2、复制与失败恢复；资格预检为
+  `0/0/0`，编译失败为 `+1/+1/+0` 且永久 running 为 0。
+- `/health/live` 只证明进程存活，`/health/ready` 只证明数据库／对象存储等核心依赖；`/status`
+  以 `public-service-status-v1` 分别显示核心、内容生成与纯文字陈列。内容生成只采用 900 秒内
+  的规范化真实供应商结果；过期或从未观察均为 `unknown`，页面访问不探测模型、不产生费用，
+  供应商异常不把 DM01 或核心 readiness 判死。完整门为 Ruff、mypy、Golden/OpenAPI
+  `504 passed, 2 skipped`、前端四门及显式 Gate D Chrome；七项 mutation proof 与两份有界
+  审查无阻断。脱敏 synthetic 证据位于
+  `/home/faye/.local/share/diyu-ux03-evidence/f2b5e266da44bc8a43aef65d92760076fa7e2987/gate-d/`，0700/0600 且
+  `SHA256SUMS` 可复算；验收对象已精确清零。
+- 当前 64 项功能真值为 `58/0/0/6/0`；没有继续标为有缺陷、占位或尚无法证明的正式项。
   运行资产保持 `41/243/25/119`，激活增量 0。
-- Gate C 不证明真实员工／品牌采用、真实发布、平台流量、排名、爆款、GMV／销售、多真实
+- UX-03 本地候选不证明生产新能力、真实员工／品牌采用、真实发布、平台流量、排名、爆款、GMV／销售、多真实
   租户市场差异、企业 SLA 或 `20/55/44` 全组合稳定支持。
-- 当前唯一下一动作：在本地完成 Gate D 的正式 DM01 与诚实状态页纵向闭环，全部完成门通过后
-  将 UX-03 置为 `REVIEW`，等待主控独立终审。
+- 当前唯一下一动作：主控独立终审 UX-03；不启动 UX-04。
 
 ## UX-02 关闭记录（历史保留）
 
