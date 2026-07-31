@@ -550,10 +550,7 @@ class DeepSeekGenerator(ContentGenerator):
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
         if request.delivery_compiler_version is None:
             raise GenerationFailed("新内容生成缺少确定性成品编译合同")
-        if (
-            request.delivery_compiler_version
-            not in SUPPORTED_DELIVERY_COMPILER_VERSIONS
-        ):
+        if request.delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS:
             raise GenerationFailed("不支持的确定性成品编译版本")
         return self._generate_kernel(request)
 
@@ -575,8 +572,7 @@ class DeepSeekGenerator(ContentGenerator):
         )
         kernel_version = (
             DUAL_TRACK_KERNEL_VERSION
-            if request.delivery_compiler_version
-            == DUAL_TRACK_DELIVERY_COMPILER_VERSION
+            if request.delivery_compiler_version == DUAL_TRACK_DELIVERY_COMPILER_VERSION
             else KERNEL_VERSION
         )
         skeleton = build_kernel_skeleton(
@@ -600,12 +596,9 @@ class DeepSeekGenerator(ContentGenerator):
             if request.prior_creative_kernel is not None
             else None
         )
-        selected_fact_block_ids = (
-            required_fact_block_ids
-            or select_product_fact_block_ids(
-                context.product_fact_packet,
-                limit=MAX_PRODUCT_FACT_BLOCKS,
-            )
+        selected_fact_block_ids = required_fact_block_ids or select_product_fact_block_ids(
+            context.product_fact_packet,
+            limit=MAX_PRODUCT_FACT_BLOCKS,
         )
         if context.product_fact_blocks:
             skeleton = replace(
@@ -619,9 +612,7 @@ class DeepSeekGenerator(ContentGenerator):
             production_conditions=request.brand.production_conditions,
             allowed_resource_ids=context.resource_ids,
             immutable_fact_blocks=context.product_fact_blocks,
-            trusted_fact_texts=tuple(
-                sorted(context.fact_text_by_id.items())
-            ),
+            trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
         )
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product)
@@ -692,9 +683,7 @@ class DeepSeekGenerator(ContentGenerator):
                 "creative_kernel_v2": kernel_document(kernel),
                 "expression_plan_version": "expression-plan-v1",
                 "expression_plan_digest": reviewed_kernel_digest,
-                "delivery_compiler_version": (
-                    request.delivery_compiler_version
-                ),
+                "delivery_compiler_version": (request.delivery_compiler_version),
                 "writer_model": self._model,
                 "version_authorization": "deterministic-dual-track-v1",
                 "claim_inventory_v1": [],
@@ -1091,13 +1080,9 @@ class DeepSeekGenerator(ContentGenerator):
         )
         packet_document = product_fact_packet_document(product_fact_packet)
         fact_blocks = immutable_product_fact_blocks(product_fact_packet)
-        server_selected_product_facts = bool(
-            fact_blocks and skeleton.selected_fact_block_ids
-        )
+        server_selected_product_facts = bool(fact_blocks and skeleton.selected_fact_block_ids)
         resolved_compiler_texts = dict(
-            compiler_owned_unit_texts(request.primary_product)
-            if compiler_texts is None
-            else compiler_texts
+            compiler_owned_unit_texts(request.primary_product) if compiler_texts is None else compiler_texts
         )
         writer_units = tuple(unit for unit in skeleton.writable_units if unit.unit_id not in resolved_compiler_texts)
         context = BoundaryContext.from_request(
@@ -1112,11 +1097,21 @@ class DeepSeekGenerator(ContentGenerator):
             frame=request.narrative_frame,
             unit_contracts=trusted_contracts,
         )
-        policy_by_unit = {
-            policy.unit_id: policy
-            for policy in policies
-        }
-        resource_by_id = dict(context.resource_registry)
+        policy_by_unit = {policy.unit_id: policy for policy in policies}
+        writer_resource_by_id: dict[str, tuple[str, str]] = {}
+        product_resource_index = 0
+        for resource_id, description in context.resource_registry:
+            if resource_id.startswith("resource:product:"):
+                product_resource_index += 1
+                writer_resource_by_id[resource_id] = (
+                    f"resource:registered-product-{product_resource_index}",
+                    "本次已确认可用于画面组织的登记商品样衣；不授权复述商品名、编号或属性。",
+                )
+            else:
+                writer_resource_by_id[resource_id] = (
+                    resource_id,
+                    description,
+                )
         writable = [
             {
                 "unit_id": unit.unit_id,
@@ -1128,24 +1123,15 @@ class DeepSeekGenerator(ContentGenerator):
                 **(
                     {
                         "unit_contract": trusted_contracts[unit.unit_id],
-                        "subject_scope": (
-                            policy_by_unit[unit.unit_id].subject_scope
-                        ),
-                        "allowed_expression_types": list(
-                            policy_by_unit[
-                                unit.unit_id
-                            ].allowed_expression_types
-                        ),
-                        "prohibited_bindings": list(
-                            policy_by_unit[unit.unit_id].prohibited_bindings
-                        ),
+                        "subject_scope": (policy_by_unit[unit.unit_id].subject_scope),
+                        "allowed_expression_types": list(policy_by_unit[unit.unit_id].allowed_expression_types),
+                        "prohibited_bindings": list(policy_by_unit[unit.unit_id].prohibited_bindings),
                         "allowed_resources": [
                             {
-                                "resource_id": resource_id,
-                                "description": resource_by_id[resource_id],
+                                "resource_id": (writer_resource_by_id[resource_id][0]),
+                                "description": (writer_resource_by_id[resource_id][1]),
                             }
-                            for resource_id
-                            in unit.allowed_resource_ids
+                            for resource_id in unit.allowed_resource_ids
                         ],
                     }
                     if skeleton.kernel_version == KERNEL_VERSION
@@ -1154,8 +1140,7 @@ class DeepSeekGenerator(ContentGenerator):
                 **(
                     {
                         "expression_requirement": (
-                            "写成完整虚构情境，包含场景推进、角色行动或对白以及可见收束；"
-                            "不能写成观点文章。"
+                            "写成完整虚构情境，包含场景推进、角色行动或对白以及可见收束；不能写成观点文章。"
                         )
                     }
                     if unit.mode == "disclosed_dramatization"
@@ -1169,11 +1154,7 @@ class DeepSeekGenerator(ContentGenerator):
                 {
                     "unit_id": unit.unit_id,
                     "text": f"填写 {unit.purpose} 的完整可见文字",
-                    **(
-                        {"claim_refs": []}
-                        if fact_blocks and not server_selected_product_facts
-                        else {}
-                    ),
+                    **({"claim_refs": []} if fact_blocks and not server_selected_product_facts else {}),
                 }
                 for unit in writer_units
             ]
@@ -1238,18 +1219,12 @@ class DeepSeekGenerator(ContentGenerator):
         packet_projection: object = (
             {
                 "service_selected": True,
-                "selected_fact_block_count": len(
-                    skeleton.selected_fact_block_ids
-                ),
+                "selected_fact_block_count": len(skeleton.selected_fact_block_ids),
             }
             if server_selected_product_facts
             else packet_document
         )
-        blocks_projection: object = (
-            []
-            if server_selected_product_facts
-            else immutable_fact_blocks_document(fact_blocks)
-        )
+        blocks_projection: object = [] if server_selected_product_facts else immutable_fact_blocks_document(fact_blocks)
         output_contract = (
             """根对象必须恰好只有 units；每个 unit 必须恰好只有 unit_id、text。商品事实块
 已由服务端冻结，禁止返回 fact_block_refs、claim_refs 或任何商品事实正文。"""
@@ -1668,10 +1643,7 @@ JSON。"""
             )
             if disclosure is not None:
                 prefix = f"{disclosure}\n"
-                if (
-                    kernel.kernel_version == LEGACY_KERNEL_VERSION
-                    and not current_text.startswith(prefix)
-                ):
+                if kernel.kernel_version == LEGACY_KERNEL_VERSION and not current_text.startswith(prefix):
                     raise GenerationFailed("CreativeKernelV1 服务端披露结构漂移")
                 if current_text.startswith(prefix):
                     current_text = current_text[len(prefix) :]
@@ -2399,8 +2371,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
         candidates = request.user_fact_candidates or user_fact_candidates(available_user_turns)
         candidate_document = [
-            {"sentence_id": candidate.source_id, "exact_text": candidate.exact_text}
-            for candidate in candidates
+            {"sentence_id": candidate.source_id, "exact_text": candidate.exact_text} for candidate in candidates
         ]
         return f"""编译本轮创作条件。服务端已经独立判断是否存在创作承诺；你只能提议，不能授权
 创建任务。只返回以下一种 JSON：

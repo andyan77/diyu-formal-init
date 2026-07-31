@@ -56,6 +56,10 @@ from src.shared.delivery_compiler import (
     compiler_owned_media_unit_texts,
 )
 from src.shared.errors import DomainError
+from src.shared.factual_basis import (
+    build_product_fact_packet,
+    select_product_fact_block_ids,
+)
 from src.shared.narrative import new_frame, visible_digest
 from src.shared.types import (
     AccountExpression,
@@ -66,6 +70,7 @@ from src.shared.types import (
     GeneratedArtifact,
     GenerationInput,
     GraphicProductionBundle,
+    ProductFact,
     RequestedControls,
     SeriesContext,
     SeriesEntry,
@@ -179,8 +184,7 @@ def _delete_gate_c_browser_artifacts(
     ):
         for task_id in task_ids:
             cursor.execute(
-                "SELECT id FROM content_versions "
-                "WHERE tenant_id = %s AND task_id = %s ORDER BY id",
+                "SELECT id FROM content_versions WHERE tenant_id = %s AND task_id = %s ORDER BY id",
                 (TENANT_ID, task_id),
             )
             for row in cursor.fetchall():
@@ -190,8 +194,7 @@ def _delete_gate_c_browser_artifacts(
                     (str(TENANT_ID),),
                 )
                 cursor.execute(
-                    "SELECT set_config('diyu.content_version_maintenance', "
-                    "'delete_synthetic_fixture', true)"
+                    "SELECT set_config('diyu.content_version_maintenance', 'delete_synthetic_fixture', true)"
                 )
                 cursor.execute(
                     "SELECT set_config("
@@ -199,43 +202,35 @@ def _delete_gate_c_browser_artifacts(
                     "pg_current_xact_id()::text, true)"
                 )
                 cursor.execute(
-                    "SELECT set_config("
-                    "'diyu.content_version_maintenance_tenant_id', %s, true)",
+                    "SELECT set_config('diyu.content_version_maintenance_tenant_id', %s, true)",
                     (str(TENANT_ID),),
                 )
                 cursor.execute(
-                    "SELECT set_config("
-                    "'diyu.content_version_maintenance_version_id', %s, true)",
+                    "SELECT set_config('diyu.content_version_maintenance_version_id', %s, true)",
                     (str(version_id),),
                 )
                 cursor.execute(
-                    "DELETE FROM content_versions "
-                    "WHERE tenant_id = %s AND id = %s",
+                    "DELETE FROM content_versions WHERE tenant_id = %s AND id = %s",
                     (TENANT_ID, version_id),
                 )
             cursor.execute(
-                "DELETE FROM activity_events "
-                "WHERE tenant_id = %s AND entity_id = %s",
+                "DELETE FROM activity_events WHERE tenant_id = %s AND entity_id = %s",
                 (TENANT_ID, task_id),
             )
             cursor.execute(
-                "DELETE FROM generation_runs "
-                "WHERE tenant_id = %s AND task_id = %s",
+                "DELETE FROM generation_runs WHERE tenant_id = %s AND task_id = %s",
                 (TENANT_ID, task_id),
             )
             cursor.execute(
-                "DELETE FROM content_items "
-                "WHERE tenant_id = %s AND task_id = %s",
+                "DELETE FROM content_items WHERE tenant_id = %s AND task_id = %s",
                 (TENANT_ID, task_id),
             )
             cursor.execute(
-                "DELETE FROM business_tasks "
-                "WHERE tenant_id = %s AND id = %s",
+                "DELETE FROM business_tasks WHERE tenant_id = %s AND id = %s",
                 (TENANT_ID, task_id),
             )
         cursor.execute(
-            "DELETE FROM tenant_sessions "
-            "WHERE tenant_id = %s AND token_digest = %s",
+            "DELETE FROM tenant_sessions WHERE tenant_id = %s AND token_digest = %s",
             (
                 TENANT_ID,
                 ProductionAuthRepository._digest(session_token),
@@ -352,11 +347,7 @@ def _generation_input(
     series_context: SeriesContext | None = None,
     creative_direction: CreativeDirection | None = None,
 ) -> GenerationInput:
-    target = (
-        "xiaohongshu_graphic"
-        if media_format == "graphic"
-        else "douyin_video"
-    )
+    target = "xiaohongshu_graphic" if media_format == "graphic" else "douyin_video"
     frame = new_frame("general_observation", (), ())
     return GenerationInput(
         run_id=_RUN_ID,
@@ -402,9 +393,7 @@ def _filled_kernel(request: GenerationInput) -> object:
     skeleton = build_kernel_skeleton(
         frame=request.narrative_frame,
         fact_registry=context.fact_registry,
-        constraint_refs=tuple(
-            identifier for identifier, _ in context.constraint_registry
-        ),
+        constraint_refs=tuple(identifier for identifier, _ in context.constraint_registry),
         program_id=select_kernel_program(frame=request.narrative_frame),
         allowed_resource_ids=tuple(sorted(_RESOURCES)),
         media_format=request.media_format,
@@ -524,10 +513,7 @@ def test_actuality_creative_units_are_preallocated_as_disclosed_hypothesis() -> 
 
     assert f"你提到：“{fact}”" in compiled.body
     assert compiled.body.count("表达范围：") == 1
-    assert (
-        "其余是创作性推演，不作为这段经历的事实补充"
-        in compiled.body
-    )
+    assert "其余是创作性推演，不作为这段经历的事实补充" in compiled.body
 
 
 def test_direction_receipt_freezes_origins_clears_custom_and_body_opt_in() -> None:
@@ -593,6 +579,74 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
     assert "其他租户诱饵前情" not in prompt
 
 
+def test_product_resources_are_deidentified_before_the_writer_prompt() -> None:
+    product = ProductFact(
+        sku="ZX-C218",
+        display_name="双面短外套",
+        facts={
+            "entity_kind": "apparel_product",
+            "category": "双面短外套",
+            "colors": ["炭灰纯色", "深绿细格纹"],
+        },
+        source_kind="synthetic_confirmed_product_record",
+    )
+    request = replace(
+        _generation_input(),
+        weak_seed="帮我解释这个已选商品。",
+        primary_product="product_truth",
+        products=(product,),
+        narrative_frame=new_frame(
+            "general_observation",
+            (),
+            tuple(item.fact_id for item in build_product_fact_packet((product,)).facts),
+        ),
+        creative_plan=build_creative_plan(
+            topic_spans=("帮我解释这个已选商品",),
+            primary_value="product_truth",
+            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            mechanism_id=None,
+            target_shape="小红书图文完整成品",
+        ),
+    )
+    assert request.narrative_frame is not None
+    context = BoundaryContext.from_request(request, request.narrative_frame)
+    skeleton = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=context.fact_registry,
+        constraint_refs=tuple(context.constraint_ids),
+        program_id=select_kernel_program(
+            frame=request.narrative_frame,
+        ),
+        allowed_resource_ids=tuple(sorted(context.resource_ids)),
+        media_format="graphic",
+        kernel_version=KERNEL_VERSION,
+    )
+    skeleton = replace(
+        skeleton,
+        selected_fact_block_ids=select_product_fact_block_ids(
+            context.product_fact_packet,
+            limit=3,
+        ),
+    )
+
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(
+        request,
+        skeleton,
+        {},
+    )
+
+    assert "ZX-C218" not in prompt
+    assert "双面短外套" not in prompt
+    assert "炭灰纯色" not in prompt
+    assert "深绿细格纹" not in prompt
+    assert '"resource_id": "resource:registered-product-1"' in prompt
+    assert "不授权复述商品名、编号或属性" in prompt
+
+
 def test_deepseek_adapter_accepts_only_the_complete_media_native_unit_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -654,10 +708,7 @@ def test_deepseek_adapter_accepts_only_the_complete_media_native_unit_set(
     assert artifact.outline == "甜味把熟悉的一天叫醒了"
     assert artifact.body.count("表达范围：") == 1
     assert artifact.completion_snapshot_patch is not None
-    assert (
-        artifact.completion_snapshot_patch["delivery_compiler_version"]
-        == DELIVERY_COMPILER_VERSION
-    )
+    assert artifact.completion_snapshot_patch["delivery_compiler_version"] == DELIVERY_COMPILER_VERSION
     assert "第一篇：先允许沉默" in prompts[0]
     assert "不把任何一方写成反派" in prompts[0]
 
@@ -760,9 +811,7 @@ def test_three_episode_series_reaches_writer_in_order_and_revision_replays_it(
         assert second.status_code == 200
         second_request = captured[-1]
         assert second_request.series_context is not None
-        assert [
-            item.outline for item in second_request.series_context.prior_entries
-        ] == [first.json()["outline"]]
+        assert [item.outline for item in second_request.series_context.prior_entries] == [first.json()["outline"]]
 
         third = client.post(
             "/api/v1/content",
@@ -781,10 +830,7 @@ def test_three_episode_series_reaches_writer_in_order_and_revision_replays_it(
             first.json()["outline"],
             second.json()["outline"],
         ]
-        assert all(
-            "其他租户诱饵前情" not in item.body
-            for item in frozen.prior_entries
-        )
+        assert all("其他租户诱饵前情" not in item.body for item in frozen.prior_entries)
 
         revised = client.post(
             f"/api/v1/tasks/{third.json()['task_id']}/revisions",
@@ -865,9 +911,7 @@ def test_formal_creator_gate_c_browser_journey(
     tmp_path: Path,
 ) -> None:
     if os.environ.get("DIYU_RUN_UX03_GATE_C_BROWSER") != "1":
-        pytest.skip(
-            "set DIYU_RUN_UX03_GATE_C_BROWSER=1 for the formal Chrome journey"
-        )
+        pytest.skip("set DIYU_RUN_UX03_GATE_C_BROWSER=1 for the formal Chrome journey")
     frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
     assert (frontend_dist / "index.html").is_file()
     token = hmac.new(
@@ -881,8 +925,7 @@ def test_formal_creator_gate_c_browser_journey(
         connection.cursor() as cursor,
     ):
         cursor.execute(
-            "SELECT business_data_kind FROM content_accounts "
-            "WHERE tenant_id = %s AND id = %s",
+            "SELECT business_data_kind FROM content_accounts WHERE tenant_id = %s AND id = %s",
             (TENANT_ID, HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID),
         )
         account_row = cursor.fetchone()
@@ -895,14 +938,10 @@ def test_formal_creator_gate_c_browser_journey(
             (TENANT_ID, HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID),
         )
         cursor.execute(
-            "SELECT id FROM business_tasks "
-            "WHERE tenant_id = %s AND created_by = %s",
+            "SELECT id FROM business_tasks WHERE tenant_id = %s AND created_by = %s",
             (TENANT_ID, USER_ID),
         )
-        before_task_ids = {
-            UUID(str(row["id"]))
-            for row in cursor.fetchall()
-        }
+        before_task_ids = {UUID(str(row["id"])) for row in cursor.fetchall()}
     created_task_ids: tuple[UUID, ...] = ()
     try:
         browser = _run_gate_c_browser(
@@ -910,10 +949,7 @@ def test_formal_creator_gate_c_browser_journey(
             token,
             tmp_path / "materials",
         )
-        assert browser.returncode == 0, (
-            "formal Gate C Chrome journey failed:\n"
-            f"{browser.stdout}\n{browser.stderr}"
-        )
+        assert browser.returncode == 0, f"formal Gate C Chrome journey failed:\n{browser.stdout}\n{browser.stderr}"
         result = json.loads(browser.stdout)
         assert result["failures"] == []
         assert result["lifecycle_events"] == [
@@ -924,10 +960,7 @@ def test_formal_creator_gate_c_browser_journey(
             "finalizing",
             "completed",
         ]
-        created_task_ids = tuple(
-            UUID(item)
-            for item in result["created_task_ids"]
-        )
+        created_task_ids = tuple(UUID(item) for item in result["created_task_ids"])
         assert len(created_task_ids) == 1
     finally:
         with (
@@ -938,14 +971,10 @@ def test_formal_creator_gate_c_browser_journey(
             connection.cursor() as cursor,
         ):
             cursor.execute(
-                "SELECT id FROM business_tasks "
-                "WHERE tenant_id = %s AND created_by = %s",
+                "SELECT id FROM business_tasks WHERE tenant_id = %s AND created_by = %s",
                 (TENANT_ID, USER_ID),
             )
-            observed = {
-                UUID(str(row["id"]))
-                for row in cursor.fetchall()
-            }
+            observed = {UUID(str(row["id"])) for row in cursor.fetchall()}
         cleanup_ids = tuple(sorted(observed - before_task_ids, key=str))
         try:
             _delete_gate_c_browser_artifacts(
@@ -959,8 +988,7 @@ def test_formal_creator_gate_c_browser_journey(
                 restore_connection.cursor() as cursor,
             ):
                 cursor.execute(
-                    "UPDATE content_accounts SET business_data_kind = %s "
-                    "WHERE tenant_id = %s AND id = %s",
+                    "UPDATE content_accounts SET business_data_kind = %s WHERE tenant_id = %s AND id = %s",
                     (
                         original_business_data_kind,
                         TENANT_ID,
