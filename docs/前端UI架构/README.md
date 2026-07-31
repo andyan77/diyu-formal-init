@@ -52,14 +52,17 @@ DM01 接到 Gate B 正式商品版本、执行组织作用域和 13 条确定性
 V1→V2→历史 V1→当前 V2、复制及逐 SKU 守恒；该候选随后因 SKU 合同、finalize 异常边界、
 请求级 4xx 污染供应商状态和 core／provider 组合真值四个接缝被主控退回。
 
-当前前向实现 `06669c8cc46e412227ca188cc85745d4040c0c03` 让正式 React 以稳定商品版本 ID 与
+最终前向实现 `28e19b0a93ec702062eb783fd08c76ff66d6bcea` 让正式 React 以稳定商品版本 ID 与
 数量选择 DM01 商品，服务端保留 `abc-123`、`ABC123`、`123456`、`款号一`、`GD-UP-01`
 原值并重新核验当前版本和执行组织。V1／V2 finalize 的保存、指针和正式回读置于同一事务／
 异常边界，连接中断遗留由 900 秒同作用域租约回收；错误文案不再冒充模型失败。`/status`
 的无脚本页、React 与 API 共用 no-store 投影：core 不可用时三类能力均不可用，请求级 4xx 不
 污染 observation，429／5xx／传输／认证按供应商可用性映射，过期／未来／空观察为 unknown。
-Golden/OpenAPI `517 passed, 2 skipped`、前端四门、显式三视口 Chrome、四项 mutation 和
-两审通过。UX-03 现为 `REVIEW`，Gate A—D 均已完成，64 项真值为 `58/0/0/6/0`；仍未
+第二次终审遗漏也已关闭：硬约束与修订只按冻结 SKU 原值／完整名称唯一绑定；稳定请求级
+code/type 先于 400／403／404；API error 只显示状态无法确认，只有明确 core unavailable 才显示
+无法接单。Golden/OpenAPI `529 passed, 2 skipped`、前端四门、显式三视口 Chrome、三项
+mutation 和两审通过。UX-03 现为 `REVIEW`，Gate A—D 均已完成，64 项真值为
+`58/0/0/6/0`；仍未
 push、CI、部署或连接生产。
 
 UI-04 已于 2026-07-27（UTC）通过主控独立终审
@@ -167,6 +170,6 @@ V1.0、评审意见和 PNG 预览同样只作历史参考；`prototype_verified`
   均由 UI-12 承接；UI-12 当前用前置双轨与确定性 Compiler 取代概率 Reviewer 的生产
   放行并已 `CLOSED`。关闭不证明前端用户体验已经产品化；UX-01 已作为独立产品定义
   里程碑在有界返工和主控重审后 `CLOSED`。UX-02 已将该定义工程化并完成生产默认前端替换，
-  经主控最终独立终审 `PASS` 后为 `CLOSED`。UX-03 后由用户独立启动；当前 Gate A、
-  Gate B 已主控 `PASS`，Gate C 已完成本地纵向并等待主控独立终审；以根目录
+  经主控最终独立终审 `PASS` 后为 `CLOSED`。UX-03 后由用户独立启动；当前 Gate A—C
+  已主控 `PASS`，Gate D 已完成本地有界返工并等待主控最终独立终审；以根目录
   `MILESTONE.md` 为当前状态真源。
