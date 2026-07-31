@@ -145,6 +145,27 @@ async function main(): Promise<void> {
     seriesTrigger,
     "Escape 关闭抽屉后焦点必须回到触发按钮"
   );
+  await click(find(".composer-resource-actions button", "素材"));
+  await settle();
+  assert.match(
+    document.querySelector(".creator-tool-drawer")?.textContent ?? "",
+    /已关联 登记商品一（ZX-ONE）/
+  );
+  assert.match(
+    document.querySelector(".creator-tool-drawer")?.textContent ?? "",
+    /已关联 登记商品二（ZX-TWO）/
+  );
+  for (const productName of ["登记商品一", "登记商品二"]) {
+    const choice = find(
+      ".material-picker label",
+      productName
+    ).querySelector("input") as HTMLInputElement;
+    await click(choice);
+  }
+  await click(
+    document.querySelector(".creator-tool-drawer .tool-drawer-close") as HTMLButtonElement
+  );
+  await settle();
 
   const initialComposer = document.querySelector(
     'textarea[aria-label="内容需求"]'
@@ -165,6 +186,14 @@ async function main(): Promise<void> {
     .at(-1);
   assert.equal(directRequest?.body?.interaction_mode, "generate");
   assert.equal(directRequest?.body?.direct_generate, true);
+  assert.deepEqual(
+    directRequest?.body?.material_ids,
+    [
+      "44444444-4444-4444-8444-444444444441",
+      "44444444-4444-4444-8444-444444444442"
+    ],
+    "两件商品素材必须由用户在本次任务明确选择"
+  );
   assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /当前版本 · V1/);
   await click(find("button", "另起一条"));
 

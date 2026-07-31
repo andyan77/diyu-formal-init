@@ -117,6 +117,13 @@ export interface Material {
   created_at: string;
   status: string;
   reference_note?: string;
+  product_media?: Array<{
+    binding_id: string;
+    product_id: string;
+    sku: string;
+    product_name: string;
+    product_version: number;
+  }>;
 }
 
 export interface AccountExpressionProfileFields {

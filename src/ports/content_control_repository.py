@@ -19,15 +19,11 @@ class ContentControlRepository(ABC):
         """Read the brand, role and audience facts a profile draft may legitimately use."""
 
     @abstractmethod
-    def current_account_expression(
-        self, tenant_id: UUID, account_id: UUID
-    ) -> dict[str, object] | None:
+    def current_account_expression(self, tenant_id: UUID, account_id: UUID) -> dict[str, object] | None:
         """Return the account's current profile version, or None when none is confirmed yet."""
 
     @abstractmethod
-    def account_expression_by_id(
-        self, tenant_id: UUID, account_id: UUID, profile_id: UUID
-    ) -> dict[str, object] | None:
+    def account_expression_by_id(self, tenant_id: UUID, account_id: UUID, profile_id: UUID) -> dict[str, object] | None:
         """Return one immutable historical version so old tasks keep reading what they used."""
 
     @abstractmethod
@@ -47,9 +43,7 @@ class ContentControlRepository(ABC):
         """
 
     @abstractmethod
-    def can_manage_account_expression(
-        self, scope: TenantManagementScope, account_id: UUID
-    ) -> bool:
+    def can_manage_account_expression(self, scope: TenantManagementScope, account_id: UUID) -> bool:
         """A tenant administrator only maintains accounts their own organization controls."""
 
     @abstractmethod
@@ -78,9 +72,7 @@ class ContentControlRepository(ABC):
         """
 
     @abstractmethod
-    def management_accounts_with_expression(
-        self, scope: TenantManagementScope
-    ) -> list[dict[str, object]]:
+    def management_accounts_with_expression(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         """List this brand's accounts with control organization and current profile version."""
 
     @abstractmethod
@@ -107,10 +99,23 @@ class ContentControlRepository(ABC):
         """Remove the acting person's own private preference; nothing else is affected."""
 
     @abstractmethod
-    def selected_materials(
-        self, scope: TrustedScope, asset_ids: tuple[UUID, ...]
-    ) -> tuple[dict[str, object], ...]:
+    def selected_materials(self, scope: TrustedScope, asset_ids: tuple[UUID, ...]) -> tuple[dict[str, object], ...]:
         """Resolve explicitly chosen references inside the current scope; fail closed."""
+
+    @abstractmethod
+    def selected_product_media(
+        self,
+        scope: TrustedScope,
+        asset_ids: tuple[UUID, ...],
+    ) -> tuple[dict[str, object], ...]:
+        """Resolve formal product/media bindings for explicitly selected assets only."""
+
+    @abstractmethod
+    def account_media_scope(
+        self,
+        scope: TrustedScope,
+    ) -> dict[str, object]:
+        """Return the trusted logical root and its control organization."""
 
     @abstractmethod
     def available_material_notes(self, scope: TrustedScope) -> tuple[dict[str, object], ...]:

@@ -140,6 +140,30 @@ class WorkbenchRepository(ABC):
     ) -> dict[str, object]: ...
 
     @abstractmethod
+    def management_product_media_bindings(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+    ) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def create_management_product_media_binding(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        product_id: UUID,
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def set_management_product_media_binding_enabled(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        binding_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
     def request_management_material_deletion(
         self,
         scope: TenantManagementScope,

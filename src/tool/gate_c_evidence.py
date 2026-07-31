@@ -26,9 +26,7 @@ GATE_C_REVIEW_CRITERIA: Final[tuple[str, ...]] = (
     "production_executability",
     "series_continuity",
 )
-GATE_C_FINAL_CARD_IDS: Final[frozenset[str]] = frozenset(
-    {"P1", "P2", "P3", "P4", "P5", "series2", "series3"}
-)
+GATE_C_FINAL_CARD_IDS: Final[frozenset[str]] = frozenset({"P1", "P2", "P3", "P4", "P5", "series2", "series3"})
 
 
 class EvidenceBindingError(ValueError):
@@ -49,6 +47,13 @@ class HumanReviewInput:
     verdict: str
     criteria: dict[str, str]
     notes: str
+
+
+@dataclass(frozen=True)
+class EvidenceRuntimeInput:
+    database: bool
+    formal_api: bool
+    business_persistence: bool
 
 
 @dataclass(frozen=True)
@@ -88,18 +93,21 @@ def write_gate_c_evidence(
     artifacts: tuple[ArtifactEvidenceInput, ...],
     reviews: tuple[HumanReviewInput, ...],
     normalizations: tuple[NormalizationEvidenceInput, ...] = (),
+    runtime: EvidenceRuntimeInput | None = None,
 ) -> None:
     """Write one private, reproducible manifest for an already completed suite."""
 
     _assert_sha(implementation_sha, label="implementation SHA")
+    runtime = runtime or EvidenceRuntimeInput(
+        database=False,
+        formal_api=False,
+        business_persistence=False,
+    )
     if not model.strip() or temperature != 0 or max_retries != 0:
         raise EvidenceBindingError("final suite model configuration drifted")
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     root.chmod(0o700)
-    if any(
-        (root / filename).exists()
-        for filename in ("manifest.json", "human-review.json", "SHA256SUMS")
-    ):
+    if any((root / filename).exists() for filename in ("manifest.json", "human-review.json", "SHA256SUMS")):
         raise EvidenceBindingError("final suite evidence outputs already exist")
     if {item.card_id for item in artifacts} != GATE_C_FINAL_CARD_IDS:
         raise EvidenceBindingError("final suite card coverage drifted")
@@ -126,8 +134,7 @@ def write_gate_c_evidence(
         if review.verdict != "PASS":
             raise EvidenceBindingError(f"{item.card_id}: human review did not pass")
         if set(review.criteria) != set(GATE_C_REVIEW_CRITERIA) or any(
-            review.criteria[criterion] != "PASS"
-            for criterion in GATE_C_REVIEW_CRITERIA
+            review.criteria[criterion] != "PASS" for criterion in GATE_C_REVIEW_CRITERIA
         ):
             raise EvidenceBindingError(f"{item.card_id}: human review criteria are incomplete")
         artifact_records.append(
@@ -147,10 +154,7 @@ def write_gate_c_evidence(
                 "artifact_sha256": artifact_sha,
                 "visible_digest": visible,
                 "verdict": review.verdict,
-                "criteria": {
-                    criterion: review.criteria[criterion]
-                    for criterion in GATE_C_REVIEW_CRITERIA
-                },
+                "criteria": {criterion: review.criteria[criterion] for criterion in GATE_C_REVIEW_CRITERIA},
                 "notes": review.notes,
             }
         )
@@ -162,10 +166,7 @@ def write_gate_c_evidence(
         )
         for item in normalizations
     ]
-    normalization_keys = {
-        (str(record["card_id"]), str(record["unit_id"]))
-        for record in normalization_records
-    }
+    normalization_keys = {(str(record["card_id"]), str(record["unit_id"])) for record in normalization_records}
     if len(normalization_keys) != len(normalization_records):
         raise EvidenceBindingError("writer wrapper normalization records are duplicated")
 
@@ -186,19 +187,16 @@ def write_gate_c_evidence(
                 "model": model,
                 "temperature": temperature,
                 "max_retries": max_retries,
-                "database": False,
+                "database": runtime.database,
                 "redis": False,
-                "business_persistence": False,
+                "formal_api": runtime.formal_api,
+                "business_persistence": runtime.business_persistence,
             },
             "artifacts": artifact_records,
             "writer_wrapper_normalizations": normalization_records,
         },
     )
-    checksummed = sorted(
-        path
-        for path in root.iterdir()
-        if path.is_file() and path.name != "SHA256SUMS"
-    )
+    checksummed = sorted(path for path in root.iterdir() if path.is_file() and path.name != "SHA256SUMS")
     lines = "".join(f"{sha256_file(path)}  {path.name}\n" for path in checksummed)
     _write_private(root / "SHA256SUMS", lines.encode())
     verify_gate_c_evidence(root)
@@ -214,27 +212,12 @@ def verify_gate_c_evidence(root: Path) -> None:
     artifacts = manifest.get("artifacts")
     normalizations = manifest.get("writer_wrapper_normalizations")
     reviews = review_document.get("reviews")
-    if (
-        not isinstance(artifacts, list)
-        or not isinstance(normalizations, list)
-        or not isinstance(reviews, list)
-    ):
+    if not isinstance(artifacts, list) or not isinstance(normalizations, list) or not isinstance(reviews, list):
         raise EvidenceBindingError("manifest or review record list is unavailable")
-    artifact_card_ids = {
-        str(record.get("card_id"))
-        for record in artifacts
-        if isinstance(record, dict)
-    }
-    if (
-        len(artifact_card_ids) != len(artifacts)
-        or artifact_card_ids != GATE_C_FINAL_CARD_IDS
-    ):
+    artifact_card_ids = {str(record.get("card_id")) for record in artifacts if isinstance(record, dict)}
+    if len(artifact_card_ids) != len(artifacts) or artifact_card_ids != GATE_C_FINAL_CARD_IDS:
         raise EvidenceBindingError("final suite card coverage drifted")
-    reviews_by_card = {
-        str(review.get("card_id")): review
-        for review in reviews
-        if isinstance(review, dict)
-    }
+    reviews_by_card = {str(review.get("card_id")): review for review in reviews if isinstance(review, dict)}
     if len(reviews_by_card) != len(reviews):
         raise EvidenceBindingError("human review card IDs are duplicated")
     raw_path_by_card: dict[str, Path] = {}
@@ -267,16 +250,13 @@ def verify_gate_c_evidence(root: Path) -> None:
         ):
             raise EvidenceBindingError(f"{card_id}: human review is bound to another artifact")
         criteria = review.get("criteria")
-        if not isinstance(criteria, dict) or set(criteria) != set(GATE_C_REVIEW_CRITERIA) or any(
-            criteria.get(criterion) != "PASS"
-            for criterion in GATE_C_REVIEW_CRITERIA
+        if (
+            not isinstance(criteria, dict)
+            or set(criteria) != set(GATE_C_REVIEW_CRITERIA)
+            or any(criteria.get(criterion) != "PASS" for criterion in GATE_C_REVIEW_CRITERIA)
         ):
             raise EvidenceBindingError(f"{card_id}: human review criteria are incomplete")
-    if set(reviews_by_card) != {
-        str(record.get("card_id"))
-        for record in artifacts
-        if isinstance(record, dict)
-    }:
+    if set(reviews_by_card) != {str(record.get("card_id")) for record in artifacts if isinstance(record, dict)}:
         raise EvidenceBindingError("human review contains an unrelated card")
     normalization_keys: set[tuple[str, str]] = set()
     for record in normalizations:
@@ -291,9 +271,7 @@ def verify_gate_c_evidence(root: Path) -> None:
         purpose = record.get("purpose")
         media_format = record.get("media_format")
         if purpose != "media_opening" or media_format != "graphic":
-            raise EvidenceBindingError(
-                f"{card_id}: writer wrapper normalization scope is invalid"
-            )
+            raise EvidenceBindingError(f"{card_id}: writer wrapper normalization scope is invalid")
         expected = _normalization_record(
             NormalizationEvidenceInput(
                 card_id=card_id,
@@ -304,9 +282,7 @@ def verify_gate_c_evidence(root: Path) -> None:
             raw_path=raw_path_by_card.get(card_id),
         )
         if record != expected:
-            raise EvidenceBindingError(
-                f"{card_id}: writer wrapper normalization evidence does not match raw response"
-            )
+            raise EvidenceBindingError(f"{card_id}: writer wrapper normalization evidence does not match raw response")
     _verify_sha256sums(root)
 
 
@@ -316,9 +292,7 @@ def _normalization_record(
     raw_path: Path | None,
 ) -> dict[str, str]:
     if raw_path is None:
-        raise EvidenceBindingError(
-            f"{item.card_id}: normalization references an unknown card"
-        )
+        raise EvidenceBindingError(f"{item.card_id}: normalization references an unknown card")
     document = _json_object(raw_path)
     try:
         choices = document["choices"]
@@ -339,11 +313,7 @@ def _normalization_record(
         units = payload["units"]
         if not isinstance(units, list):
             raise TypeError
-        matches = [
-            unit
-            for unit in units
-            if isinstance(unit, dict) and unit.get("unit_id") == item.unit_id
-        ]
+        matches = [unit for unit in units if isinstance(unit, dict) and unit.get("unit_id") == item.unit_id]
         if len(matches) != 1 or not isinstance(matches[0].get("text"), str):
             raise TypeError
         raw_text = str(matches[0]["text"])
@@ -368,13 +338,9 @@ def _normalization_record(
         ValueError,
         json.JSONDecodeError,
     ) as exc:
-        raise EvidenceBindingError(
-            f"{item.card_id}: normalization raw response is invalid"
-        ) from exc
+        raise EvidenceBindingError(f"{item.card_id}: normalization raw response is invalid") from exc
     if receipt is None:
-        raise EvidenceBindingError(
-            f"{item.card_id}: normalization did not remove an approved wrapper"
-        )
+        raise EvidenceBindingError(f"{item.card_id}: normalization did not remove an approved wrapper")
     return {
         "card_id": item.card_id,
         "unit_id": receipt.unit_id,
@@ -398,11 +364,7 @@ def _verify_sha256sums(root: Path) -> None:
             raise EvidenceBindingError("SHA256SUMS contains an invalid record")
         _assert_sha(digest, label="file SHA")
         expected[filename] = digest
-    observed_files = {
-        path.name
-        for path in root.iterdir()
-        if path.is_file() and path.name != "SHA256SUMS"
-    }
+    observed_files = {path.name for path in root.iterdir() if path.is_file() and path.name != "SHA256SUMS"}
     if set(expected) != observed_files:
         raise EvidenceBindingError("SHA256SUMS file coverage drifted")
     for filename, digest in expected.items():

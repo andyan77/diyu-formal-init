@@ -460,6 +460,12 @@ class SetEnabledRequest(BaseModel):
     enabled: bool
 
 
+class CreateProductMediaBindingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+
+
 class CreateOrganizationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -7,8 +8,10 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import replace
+from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 from urllib.request import urlopen
@@ -16,18 +19,27 @@ from uuid import UUID, uuid4
 
 import psycopg
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
 
 import src.infrastructure.postgres_repository as repository_module
+from src.brain.content_control_service import ContentControlService
 from src.brain.content_expression import (
     direction_from_snapshot,
     snapshot_document,
 )
+from src.brain.content_service import ContentService
 from src.brain.p1_contract import assert_content_complete
 from src.brain.platform_directions import direction_for
+from src.brain.workbench_service import WorkbenchService
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
+from src.infrastructure.content_control_repository import (
+    PostgresContentControlRepository,
+)
+from src.infrastructure.local_object_store import LocalObjectStore
+from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.production_auth import ProductionAuthRepository
 from src.infrastructure.seed_demo import (
     ACCOUNT_ID,
@@ -36,6 +48,7 @@ from src.infrastructure.seed_demo import (
     TENANT_ID,
     USER_ID,
 )
+from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.content_snapshot import frozen_media_contract
 from src.shared.creative_kernel import (
     DUAL_TRACK_KERNEL_VERSION,
@@ -68,14 +81,15 @@ from src.shared.factual_basis import (
     select_product_fact_block_ids,
 )
 from src.shared.media_program import (
-    MediaResourceV1,
     assert_media_program_allowed,
     build_media_capability_envelope,
+    build_media_capability_envelope_v2,
     select_media_program,
 )
 from src.shared.narrative import new_frame, visible_digest
 from src.shared.types import (
     AccountExpression,
+    BoundProductMedia,
     BrandContext,
     ContentControlContext,
     CreativeDirection,
@@ -89,6 +103,7 @@ from src.shared.types import (
     RequestedControls,
     SeriesContext,
     SeriesEntry,
+    TrustedScope,
     VideoProductionBundle,
 )
 from src.tool.gate_c_evidence import (
@@ -104,12 +119,26 @@ from src.tool.gate_c_evidence import (
 )
 from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
+from src.tool.run_gate_c_final_suite import _reviews_from_file
 from tests.test_ui05_semantic_rework import (
     _app,
     _conversation_payload,
     _persistence_counts,
     _session_token,
     _stream_events,
+)
+from tests.test_ux03_gate_b import (
+    _activate as _activate_formal_user,
+)
+from tests.test_ux03_gate_b import (
+    _create_test_operator,
+    _delete_gate_b_fixture,
+)
+from tests.test_ux03_gate_b import (
+    _login as _login_formal_user,
+)
+from tests.test_ux03_gate_b import (
+    _settings as _formal_settings,
 )
 
 _RUN_ID = UUID("83000000-0000-0000-0000-000000000001")
@@ -120,6 +149,56 @@ _RESOURCES = frozenset(
         CREATOR_EXPRESSION_RESOURCE_ID,
     }
 )
+
+
+def _bound_product_media(
+    *,
+    index: int,
+    product: ProductFact | None = None,
+) -> BoundProductMedia:
+    item = product or ProductFact(
+        sku=f"ZX-TEST-{index}",
+        display_name=f"登记商品 {index}",
+        facts={"entity_kind": "apparel_product"},
+        source_kind="synthetic_confirmed_product_record",
+        source_note="测试确认记录",
+    )
+    return BoundProductMedia(
+        binding_id=UUID(f"84000000-0000-0000-0000-{index:012d}"),
+        product_id=UUID(f"84000000-0000-0000-0001-{index:012d}"),
+        product_version_id=UUID(f"84000000-0000-0000-0002-{index:012d}"),
+        product=item,
+        asset_id=UUID(f"84000000-0000-0000-0003-{index:012d}"),
+        asset_version_id=UUID(f"84000000-0000-0000-0004-{index:012d}"),
+        asset_version=1,
+        media_type="image",
+        source_ref=f"product-media-binding:{index}",
+        source_checksum_sha256=f"{index:064x}",
+        root_account_id=UUID("84000000-0000-0000-0005-000000000001"),
+        control_organization_id=UUID("84000000-0000-0000-0006-000000000001"),
+    )
+
+
+def _tenant_persistence_counts(
+    database_url: str,
+    tenant_id: UUID,
+) -> tuple[int, int, int]:
+    with (
+        psycopg.connect(database_url) as connection,
+        connection.cursor() as cursor,
+    ):
+        cursor.execute(
+            """
+            SELECT
+              (SELECT count(*) FROM business_tasks WHERE tenant_id = %s),
+              (SELECT count(*) FROM generation_runs WHERE tenant_id = %s),
+              (SELECT count(*) FROM content_versions WHERE tenant_id = %s)
+            """,
+            (tenant_id, tenant_id, tenant_id),
+        )
+        row = cursor.fetchone()
+    assert row is not None
+    return (int(row[0]), int(row[1]), int(row[2]))
 
 
 def _run_gate_c_browser(
@@ -194,6 +273,72 @@ def _run_gate_c_browser(
         except subprocess.TimeoutExpired:
             server.kill()
             server.wait(timeout=5)
+
+
+def _run_product_media_browser(
+    app: object,
+    *,
+    admin_token: str,
+    creator_token: str,
+    account_id: UUID,
+    product_names: tuple[str, str],
+    material_titles: tuple[str, str],
+) -> subprocess.CompletedProcess[str]:
+    """Exercise formal product binding and P5 selection in one real browser."""
+
+    with socket.socket() as port_socket:
+        port_socket.bind(("127.0.0.1", 0))
+        port = int(port_socket.getsockname()[1])
+    server = uvicorn.Server(
+        uvicorn.Config(
+            cast(Any, app),
+            host="127.0.0.1",
+            port=port,
+            log_level="error",
+        )
+    )
+    thread = threading.Thread(
+        target=server.run,
+        name="ux03-product-media-browser-server",
+        daemon=True,
+    )
+    thread.start()
+    base_url = f"http://127.0.0.1:{port}"
+    try:
+        for _ in range(100):
+            if not thread.is_alive():
+                raise AssertionError("商品素材浏览器服务提前退出")
+            try:
+                with urlopen(f"{base_url}/status", timeout=0.2) as response:
+                    if response.status == 200:
+                        break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            raise AssertionError("商品素材浏览器服务未就绪")
+        return subprocess.run(
+            ["node", "frontend/test/ux03-product-media-browser.mjs"],
+            cwd=Path(__file__).resolve().parents[1],
+            env={
+                **os.environ,
+                "UX03_PRODUCT_MEDIA_BASE_URL": base_url,
+                "UX03_PRODUCT_MEDIA_ADMIN_TOKEN": admin_token,
+                "UX03_PRODUCT_MEDIA_CREATOR_TOKEN": creator_token,
+                "UX03_PRODUCT_MEDIA_ACCOUNT_ID": str(account_id),
+                "UX03_PRODUCT_MEDIA_PRODUCT_1": product_names[0],
+                "UX03_PRODUCT_MEDIA_PRODUCT_2": product_names[1],
+                "UX03_PRODUCT_MEDIA_MATERIAL_1": material_titles[0],
+                "UX03_PRODUCT_MEDIA_MATERIAL_2": material_titles[1],
+            },
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
+        if thread.is_alive():
+            raise AssertionError("商品素材浏览器服务没有停止")
 
 
 def _delete_gate_c_browser_artifacts(
@@ -383,22 +528,14 @@ def _generation_input(
         target_shape="小红书图文完整成品",
     )
     envelope = build_media_capability_envelope(
-        platform_shape=(
-            "小红书图文完整成品"
-            if media_format == "graphic"
-            else "抖音短视频完整成品"
-        ),
+        platform_shape=("小红书图文完整成品" if media_format == "graphic" else "抖音短视频完整成品"),
         media_format=cast(Any, media_format),
     )
     media_program = select_media_program(
         primary_product="brand_life_narrative",
         envelope=envelope,
         mechanism_id=plan.mechanism_id,
-        series_position=(
-            series_context.target_position
-            if series_context is not None
-            else None
-        ),
+        series_position=(series_context.target_position if series_context is not None else None),
         fact_count=0,
     )
     return GenerationInput(
@@ -544,12 +681,7 @@ def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:
         "unit:body": "完整正文",
         "unit:release-caption": "发布配文",
     }
-    raw = {
-        "units": [
-            {"unit_id": unit.unit_id, "text": text_by_id[unit.unit_id]}
-            for unit in skeleton.writable_units
-        ]
-    }
+    raw = {"units": [{"unit_id": unit.unit_id, "text": text_by_id[unit.unit_id]} for unit in skeleton.writable_units]}
 
     parsed = parse_writer_kernel(raw, skeleton)
     for purpose in (
@@ -604,10 +736,7 @@ def test_v4_writer_has_no_media_units_and_rejects_one_if_returned() -> None:
         "release_caption",
     )
     payload = {
-        "units": [
-            {"unit_id": unit.unit_id, "text": f"{unit.purpose} 的自然内容"}
-            for unit in skeleton.writable_units
-        ]
+        "units": [{"unit_id": unit.unit_id, "text": f"{unit.purpose} 的自然内容"} for unit in skeleton.writable_units]
         + [
             {
                 "unit_id": "unit:media-opening",
@@ -637,18 +766,10 @@ def test_product_fact_and_production_condition_do_not_grant_media_capability() -
     )
     assert request.media_capability_envelope is not None
 
-    assert request.media_capability_envelope.capability_ids == (
-        "abstract_composition",
-    )
-    assert request.media_capability_envelope.resource_ids == frozenset(
-        {ORIGINAL_COMPOSITION_RESOURCE_ID}
-    )
-    assert "video_creator_expression_v1" not in (
-        request.media_capability_envelope.allowed_program_ids
-    )
-    assert "video_registered_product_display_v1" not in (
-        request.media_capability_envelope.allowed_program_ids
-    )
+    assert request.media_capability_envelope.capability_ids == ("abstract_composition",)
+    assert request.media_capability_envelope.resource_ids == frozenset({ORIGINAL_COMPOSITION_RESOURCE_ID})
+    assert "video_creator_expression_v1" not in (request.media_capability_envelope.allowed_program_ids)
+    assert "video_registered_product_display_v1" not in (request.media_capability_envelope.allowed_program_ids)
 
 
 def test_only_explicitly_selected_media_enters_the_envelope() -> None:
@@ -739,10 +860,7 @@ def test_optional_capture_is_visible_but_never_a_required_resource() -> None:
     assert "没有也不影响" in compiled.body
     assert isinstance(compiled.production, GraphicProductionBundle)
     assert compiled.production.optional_capture_suggestion is not None
-    assert all(
-        "optional" not in resource_id
-        for resource_id in compiled.resource_refs
-    )
+    assert all("optional" not in resource_id for resource_id in compiled.resource_refs)
     assert any(
         source.startswith("compiler:optional-capture-suggestion:")
         for source in compiled.visible_provenance["optional_capture_suggestion"]
@@ -754,7 +872,7 @@ def test_p5_requires_two_frozen_registered_product_resources() -> None:
         platform_shape="抖音短视频完整成品",
         media_format="video",
     )
-    with pytest.raises(GenerationFailed, match="至少两件"):
+    with pytest.raises(GenerationFailed, match="两件不同商品"):
         select_media_program(
             primary_product="visual_styling_story",
             envelope=empty_envelope,
@@ -763,20 +881,10 @@ def test_p5_requires_two_frozen_registered_product_resources() -> None:
             fact_count=2,
         )
 
-    registered = tuple(
-        MediaResourceV1(
-            resource_id=f"resource:registered-product:{index}:v1",
-            resource_version="1",
-            media_type="image",
-            source_ref=f"product-media:{index}:v1",
-            capability_id="registered_product_display",
-        )
-        for index in (1, 2)
-    )
-    envelope = build_media_capability_envelope(
+    envelope = build_media_capability_envelope_v2(
         platform_shape="抖音短视频完整成品",
         media_format="video",
-        registered_resources=registered,
+        bound_product_media=tuple(_bound_product_media(index=index) for index in (1, 2)),
     )
     program = select_media_program(
         primary_product="visual_styling_story",
@@ -787,6 +895,722 @@ def test_p5_requires_two_frozen_registered_product_resources() -> None:
     )
     assert program.program_id == "video_registered_product_display_v1"
     assert set(program.required_resource_ids) == envelope.resource_ids
+
+
+def test_p5_rejects_two_bindings_that_do_not_prove_two_distinct_products_and_assets() -> None:
+    first = _bound_product_media(index=1)
+    second = _bound_product_media(index=2)
+    same_product = replace(second, product_id=first.product_id)
+    same_asset = replace(second, asset_id=first.asset_id)
+    same_binding = replace(second, binding_id=first.binding_id)
+
+    for records in (
+        (first, same_product),
+        (first, same_asset),
+        (first, same_binding),
+    ):
+        envelope = build_media_capability_envelope_v2(
+            platform_shape="小红书图文完整成品",
+            media_format="graphic",
+            bound_product_media=records,
+        )
+        with pytest.raises(GenerationFailed, match="两件不同商品"):
+            select_media_program(
+                primary_product="visual_styling_story",
+                envelope=envelope,
+                mechanism_id=None,
+                series_position=None,
+                fact_count=2,
+            )
+
+
+def test_formal_product_media_binding_creates_and_freezes_p5(
+    app_database_url: str,
+    migrator_database_url: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the formal admin and creator paths may grant P5 product media."""
+
+    with psycopg.connect(migrator_database_url) as migration_connection, migration_connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT relation.relrowsecurity,
+                   relation.relforcerowsecurity,
+                   has_table_privilege(
+                     'diyu_app',
+                     'product_media_bindings',
+                     'DELETE'
+                   )
+            FROM pg_class relation
+            WHERE relation.oid = 'product_media_bindings'::regclass
+            """
+        )
+        assert cursor.fetchone() == (True, True, False)
+
+    auth = ProductionAuthRepository(app_database_url)
+    suffix = uuid4().hex[:10]
+    operator_id, secret = _create_test_operator(
+        migrator_database_url,
+        auth,
+        f"ux03-c-media-ops-{suffix}",
+        "ux03-gate-c-media-ops-password",
+    )
+    material_root = tmp_path / "product-media"
+    object_store = LocalObjectStore(str(material_root))
+    api_module = import_module("src.gateway.api.app")
+    content_repository = PostgresContentRepository(app_database_url)
+    control_repository = PostgresContentControlRepository(app_database_url)
+    control_service = ContentControlService(
+        control_repository,
+        object_store,
+    )
+    monkeypatch.setattr(
+        api_module,
+        "build_workbench_service",
+        lambda _: WorkbenchService(
+            PostgresWorkbenchRepository(app_database_url),
+            object_store,
+        ),
+    )
+    monkeypatch.setattr(
+        api_module,
+        "build_content_control_service",
+        lambda _: control_service,
+    )
+    monkeypatch.setattr(
+        api_module,
+        "build_content_service",
+        lambda _: ContentService(
+            content_repository,
+            DeterministicContentGenerator(),
+            control_service,
+        ),
+    )
+    app = create_app(_formal_settings(app_database_url, material_root))
+    tenant_id: UUID | None = None
+    browser_enabled = os.environ.get("DIYU_RUN_UX03_PRODUCT_MEDIA_BROWSER") == "1"
+    browser_product_names = ("浏览器登记商品甲", "浏览器登记商品乙")
+    browser_material_titles = (
+        "浏览器商品甲官方图片",
+        "浏览器商品乙官方图片",
+    )
+    browser_product_ids: list[UUID] = []
+    browser_asset_ids: list[UUID] = []
+    admin_session_token = ""
+    try:
+        with TestClient(app, base_url="https://diyu.example") as ops:
+            login = ops.post(
+                "/ops/login",
+                content=(
+                    f"username=ux03-c-media-ops-{suffix}"
+                    "&password=ux03-gate-c-media-ops-password"
+                    f"&totp_code={auth._totp_code(secret, int(time.time() // 30))}"
+                ),
+                follow_redirects=False,
+            )
+            assert login.status_code == 303
+            created = ops.post(
+                "/api/v1/ops/tenants",
+                json={
+                    "tenant_name": f"UX03 Gate C 商品素材 {suffix}",
+                    "administrator_name": "Gate C 商品素材管理员",
+                    "administrator_username": f"ux03-c-media-admin-{suffix}",
+                },
+            )
+            assert created.status_code == 201, created.text
+            tenant = created.json()
+            tenant_id = UUID(str(tenant["tenant_id"]))
+        with psycopg.connect(migrator_database_url) as brand_connection, brand_connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM brands WHERE tenant_id = %s",
+                (tenant_id,),
+            )
+            brand_row = cursor.fetchone()
+            assert brand_row is not None
+            brand_id = UUID(str(brand_row[0]))
+        with TestClient(app, base_url="https://diyu.example") as admin:
+            admin_password = "ux03-gate-c-media-admin-password"
+            _activate_formal_user(
+                admin,
+                str(tenant["activation_url"]),
+                admin_password,
+            )
+            _login_formal_user(
+                admin,
+                str(tenant["username"]),
+                admin_password,
+                "/tenant-admin/login",
+            )
+            organization = admin.get("/api/v1/tenant-management/organizations").json()[0]
+            east_region = admin.post(
+                "/api/v1/tenant-management/organizations",
+                json={
+                    "name": "Gate C 华东区域",
+                    "organization_level": "region",
+                    "parent_organization_id": organization["id"],
+                    "as_synthetic_business_fixture": True,
+                },
+            )
+            assert east_region.status_code == 201, east_region.text
+            south_region = admin.post(
+                "/api/v1/tenant-management/organizations",
+                json={
+                    "name": "Gate C 华南区域",
+                    "organization_level": "region",
+                    "parent_organization_id": organization["id"],
+                    "as_synthetic_business_fixture": True,
+                },
+            )
+            assert south_region.status_code == 201, south_region.text
+            baseline = admin.get("/api/v1/admin/brand-expression").json()
+            assert (
+                admin.post(
+                    "/api/v1/admin/brand-expression/confirm",
+                    json={"draft": baseline["draft"]},
+                ).status_code
+                == 200
+            )
+            member = admin.post(
+                "/api/v1/tenant-management/users",
+                json={
+                    "display_name": "视觉内容用户",
+                    "username": f"ux03-c-media-user-{suffix}",
+                    "organization_id": organization["id"],
+                    "entry_type": "tenant_user",
+                    "capabilities": [],
+                    "publishing_identity_ids": [],
+                    "expression_profile_maintenance_account_ids": [],
+                },
+            )
+            assert member.status_code == 201, member.text
+            account = admin.post(
+                "/api/v1/tenant-management/publishing-accounts",
+                json={
+                    "name": "总部视觉编辑",
+                    "channel": "小红书",
+                    "content_role_name": "品牌穿衣编辑",
+                    "speaker_kind": "institutional_account",
+                    "operator_id": member.json()["user_id"],
+                    "control_organization_id": east_region.json()["id"],
+                    "operator_can_maintain_expression_profile": False,
+                    "initial_profile": {
+                        "identity_position": "品牌总部穿衣编辑",
+                        "authority_boundary": "只使用已确认商品事实",
+                        "audience_relationship": "帮助读者看清视觉选择",
+                        "content_territories": "商品关系与穿衣选择",
+                        "default_production_conditions": "一人低成本制作",
+                    },
+                    "as_synthetic_business_fixture": True,
+                },
+            )
+            assert account.status_code == 201, account.text
+            account_id = UUID(str(account.json()["id"]))
+            granted = admin.patch(
+                f"/api/v1/tenant-management/users/{member.json()['user_id']}/grants",
+                json={
+                    "entry_type": "tenant_user",
+                    "capabilities": ["content"],
+                    "publishing_identity_ids": [str(account_id)],
+                    "expression_profile_maintenance_account_ids": [],
+                },
+            )
+            assert granted.status_code == 200, granted.text
+
+            product_ids: list[UUID] = []
+            asset_ids: list[UUID] = []
+            binding_ids: list[UUID] = []
+            for index in (1, 2):
+                product = admin.put(
+                    "/api/v1/tenant-management/brand-products",
+                    json={
+                        "sku": f"ZX-GC-{suffix}-{index}",
+                        "display_name": f"登记商品 {index}",
+                        "category": "服饰商品",
+                        "colors": [],
+                        "material_or_structure": "",
+                        "silhouette": "",
+                        "observable_features": f"第 {index} 件完整外观",
+                        "source_note": "Gate C synthetic 品牌确认记录",
+                        "applicability": "本次视觉关系测试",
+                        "confirm_as_current_brand_fact": True,
+                        "as_synthetic_business_fixture": True,
+                        "visibility_scope": "brand_all",
+                        "organization_ids": [],
+                    },
+                )
+                assert product.status_code == 200, product.text
+                product_ids.append(UUID(str(product.json()["id"])))
+                material = admin.post(
+                    "/api/v1/tenant-management/organization-materials",
+                    json={
+                        "organization_id": organization["id"],
+                        "title": f"登记商品 {index} 官方图片",
+                        "filename": f"p5-{index}.png",
+                        "content_type": "image/png",
+                        "content_base64": base64.b64encode(f"synthetic-product-media-{index}".encode()).decode(),
+                        "declares_identifiable_minor": False,
+                        "reference_note": "品牌管理员确认的商品原图",
+                        "visibility_scope": "brand_all",
+                        "organization_ids": [],
+                    },
+                )
+                assert material.status_code == 201, material.text
+                asset_id = UUID(str(material.json()["id"]))
+                asset_ids.append(asset_id)
+                binding = admin.post(
+                    f"/api/v1/tenant-management/organization-materials/{asset_id}/product-bindings",
+                    json={"product_id": str(product_ids[-1])},
+                )
+                assert binding.status_code == 201, binding.text
+                binding_ids.append(UUID(str(binding.json()["id"])))
+            unbound_material = admin.post(
+                "/api/v1/tenant-management/organization-materials",
+                json={
+                    "organization_id": organization["id"],
+                    "title": "普通未绑定组织图片",
+                    "filename": "unbound.png",
+                    "content_type": "image/png",
+                    "content_base64": base64.b64encode(b"synthetic-unbound-media").decode(),
+                    "declares_identifiable_minor": False,
+                    "reference_note": "没有商品关联的普通组织图片",
+                    "visibility_scope": "brand_all",
+                    "organization_ids": [],
+                },
+            )
+            assert unbound_material.status_code == 201
+            unbound_asset_id = UUID(str(unbound_material.json()["id"]))
+            same_product_material = admin.post(
+                "/api/v1/tenant-management/organization-materials",
+                json={
+                    "organization_id": organization["id"],
+                    "title": "同一商品的另一张图片",
+                    "filename": "same-product.png",
+                    "content_type": "image/png",
+                    "content_base64": base64.b64encode(b"synthetic-same-product-media").decode(),
+                    "declares_identifiable_minor": False,
+                    "reference_note": "仍然只关联第一件商品",
+                    "visibility_scope": "brand_all",
+                    "organization_ids": [],
+                },
+            )
+            assert same_product_material.status_code == 201
+            same_product_asset_id = UUID(str(same_product_material.json()["id"]))
+            same_product_binding = admin.post(
+                f"/api/v1/tenant-management/organization-materials/{same_product_asset_id}/product-bindings",
+                json={"product_id": str(product_ids[0])},
+            )
+            assert same_product_binding.status_code == 201
+            forged_binding = admin.post(
+                f"/api/v1/tenant-management/organization-materials/{unbound_asset_id}/product-bindings",
+                json={
+                    "product_id": str(product_ids[1]),
+                    "capability_id": "registered_product_display",
+                },
+            )
+            assert forged_binding.status_code == 422
+            south_product = admin.put(
+                "/api/v1/tenant-management/brand-products",
+                json={
+                    "sku": f"ZX-GC-SOUTH-{suffix}",
+                    "display_name": "华南区域诱饵商品",
+                    "category": "服饰商品",
+                    "colors": [],
+                    "material_or_structure": "",
+                    "silhouette": "",
+                    "observable_features": "仅华南区域确认的完整外观",
+                    "source_note": "Gate C synthetic 兄弟区域诱饵",
+                    "applicability": "仅华南区域",
+                    "confirm_as_current_brand_fact": True,
+                    "as_synthetic_business_fixture": True,
+                    "visibility_scope": "organizations",
+                    "organization_ids": [south_region.json()["id"]],
+                },
+            )
+            assert south_product.status_code == 200, south_product.text
+            south_material = admin.post(
+                "/api/v1/tenant-management/organization-materials",
+                json={
+                    "organization_id": south_region.json()["id"],
+                    "title": "华南区域诱饵商品图片",
+                    "filename": "south-only.png",
+                    "content_type": "image/png",
+                    "content_base64": base64.b64encode(b"synthetic-south-only-media").decode(),
+                    "declares_identifiable_minor": False,
+                    "reference_note": "仅华南区域可用的官方素材",
+                    "visibility_scope": "organizations",
+                    "organization_ids": [south_region.json()["id"]],
+                },
+            )
+            assert south_material.status_code == 201, south_material.text
+            south_asset_id = UUID(str(south_material.json()["id"]))
+            south_binding = admin.post(
+                f"/api/v1/tenant-management/organization-materials/{south_asset_id}/product-bindings",
+                json={"product_id": str(south_product.json()["id"])},
+            )
+            assert south_binding.status_code == 201, south_binding.text
+            if browser_enabled:
+                assert (Path(__file__).resolve().parents[1] / "frontend" / "dist" / "index.html").is_file()
+                for browser_index in (0, 1):
+                    browser_product = admin.put(
+                        "/api/v1/tenant-management/brand-products",
+                        json={
+                            "sku": (f"ZX-BROWSER-{suffix}-{browser_index + 1}"),
+                            "display_name": browser_product_names[browser_index],
+                            "category": "服饰商品",
+                            "colors": [],
+                            "material_or_structure": "",
+                            "silhouette": "",
+                            "observable_features": (f"浏览器登记商品 {browser_index + 1} 完整外观"),
+                            "source_note": ("正式浏览器 synthetic 品牌确认记录"),
+                            "applicability": "浏览器 P5 纵向",
+                            "confirm_as_current_brand_fact": True,
+                            "as_synthetic_business_fixture": True,
+                            "visibility_scope": "brand_all",
+                            "organization_ids": [],
+                        },
+                    )
+                    assert browser_product.status_code == 200
+                    browser_product_ids.append(UUID(str(browser_product.json()["id"])))
+                    browser_material = admin.post(
+                        "/api/v1/tenant-management/organization-materials",
+                        json={
+                            "organization_id": organization["id"],
+                            "title": browser_material_titles[browser_index],
+                            "filename": (f"browser-p5-{browser_index + 1}.png"),
+                            "content_type": "image/png",
+                            "content_base64": base64.b64encode(
+                                (f"browser-product-media-{browser_index + 1}").encode()
+                            ).decode(),
+                            "declares_identifiable_minor": False,
+                            "reference_note": ("浏览器正式关联的商品原图"),
+                            "visibility_scope": "brand_all",
+                            "organization_ids": [],
+                        },
+                    )
+                    assert browser_material.status_code == 201
+                    browser_asset_ids.append(UUID(str(browser_material.json()["id"])))
+                admin_session_token = str(admin.cookies.get("diyu_session") or "")
+                assert admin_session_token
+            with psycopg.connect(app_database_url) as isolated_connection, isolated_connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT set_config('app.tenant_id', %s, true)",
+                    (str(uuid4()),),
+                )
+                cursor.execute("SELECT count(*) FROM product_media_bindings")
+                assert cursor.fetchone() == (0,)
+
+            listed = admin.get("/api/v1/tenant-management/organization-materials")
+            assert listed.status_code == 200
+            assert set(asset_ids) <= {UUID(str(item["id"])) for item in listed.json()}
+
+        before = _tenant_persistence_counts(
+            migrator_database_url,
+            tenant_id,
+        )
+        with TestClient(app, base_url="https://diyu.example") as creator:
+            member_password = "ux03-gate-c-media-user-password"
+            _activate_formal_user(
+                creator,
+                str(member.json()["activation_url"]),
+                member_password,
+            )
+            _login_formal_user(
+                creator,
+                str(member.json()["username"]),
+                member_password,
+                "/login",
+            )
+            creator_session_token = str(creator.cookies.get("diyu_session") or "")
+            assert creator_session_token
+            materials = creator.get("/api/v1/materials")
+            assert materials.status_code == 200
+            creator_scope = TrustedScope(
+                tenant_id=tenant_id,
+                user_id=UUID(str(member.json()["user_id"])),
+                brand_id=brand_id,
+                account_id=account_id,
+            )
+            assert control_repository.selected_product_media(
+                creator_scope,
+                (south_asset_id,),
+            ) == ()
+            linked = {UUID(str(item["id"])): item["product_media"] for item in materials.json()}
+            assert all(len(linked[asset_id]) == 1 for asset_id in asset_ids)
+            for invalid_material_ids in (
+                (asset_ids[0], unbound_asset_id),
+                (asset_ids[0], same_product_asset_id),
+                (asset_ids[0], asset_ids[0]),
+            ):
+                rejected = creator.post(
+                    "/api/v1/content/stream",
+                    json={
+                        "message": "让这两件登记商品形成清楚的视觉重音。",
+                        "conversation": [],
+                        "publishing_identity_id": str(account_id),
+                        "target": "xiaohongshu_graphic",
+                        "material_ids": [str(item) for item in invalid_material_ids],
+                        "interaction_mode": "generate",
+                        "direct_generate": True,
+                        "request_id": str(uuid4()),
+                    },
+                )
+                rejected_events = [json.loads(line) for line in rejected.text.splitlines() if line.strip()]
+                assert any(
+                    item["event"] == "conversation" and item["kind"] == "question" and "两件不同商品" in item["message"]
+                    for item in rejected_events
+                )
+                assert (
+                    _tenant_persistence_counts(
+                        migrator_database_url,
+                        tenant_id,
+                    )
+                    == before
+                )
+                time.sleep(2.05)
+            sibling_scope_rejected = creator.post(
+                "/api/v1/content/stream",
+                json={
+                    "message": "让这两件登记商品形成清楚的视觉重音。",
+                    "conversation": [],
+                    "publishing_identity_id": str(account_id),
+                    "target": "xiaohongshu_graphic",
+                    "material_ids": [str(asset_ids[0]), str(south_asset_id)],
+                    "interaction_mode": "generate",
+                    "direct_generate": True,
+                    "request_id": str(uuid4()),
+                },
+            )
+            assert sibling_scope_rejected.status_code == 200
+            sibling_events = [
+                json.loads(line)
+                for line in sibling_scope_rejected.text.splitlines()
+                if line.strip()
+            ]
+            assert not any(item["event"] == "completed" for item in sibling_events)
+            assert any(
+                item.get("event") == "failed"
+                and "可靠的成品" in str(item.get("message") or "")
+                for item in sibling_events
+            ), sibling_events
+            assert (
+                _tenant_persistence_counts(
+                    migrator_database_url,
+                    tenant_id,
+                )
+                == before
+            )
+            time.sleep(2.05)
+            response = creator.post(
+                "/api/v1/content/stream",
+                json={
+                    "message": "让这两件登记商品形成清楚的视觉重音。",
+                    "conversation": [],
+                    "publishing_identity_id": str(account_id),
+                    "target": "xiaohongshu_graphic",
+                    "material_ids": [str(item) for item in asset_ids],
+                    "interaction_mode": "generate",
+                    "direct_generate": True,
+                    "request_id": str(uuid4()),
+                },
+            )
+            assert response.status_code == 200, response.text
+            events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+            completed_events = [item for item in events if item["event"] == "completed"]
+            assert completed_events, events
+            completed = completed_events[0]
+            result = completed["result"]
+            task_id = UUID(str(result["task_id"]))
+            assert result["version"] == 1
+
+            after = _tenant_persistence_counts(
+                migrator_database_url,
+                tenant_id,
+            )
+            assert tuple(after[index] - before[index] for index in range(3)) == (1, 1, 1)
+
+            with (
+                psycopg.connect(migrator_database_url) as connection,
+                connection.cursor() as cursor,
+            ):
+                cursor.execute(
+                    "SELECT content_context_snapshot FROM business_tasks WHERE tenant_id = %s AND id = %s",
+                    (tenant_id, task_id),
+                )
+                row = cursor.fetchone()
+                assert row is not None
+                snapshot = row[0]
+            envelope = snapshot["media_capability_envelope"]
+            resources = [
+                item for item in envelope["resources"] if item["capability_id"] == "registered_product_display"
+            ]
+            assert envelope["envelope_version"] == ("media-capability-envelope-v2")
+            assert {UUID(item["product_id"]) for item in resources} == set(product_ids)
+            assert {UUID(item["asset_id"]) for item in resources} == set(asset_ids)
+            assert {UUID(item["binding_id"]) for item in resources} == set(binding_ids)
+            assert all(len(item["source_checksum_sha256"]) == 64 for item in resources)
+            assert set(snapshot["media_program"]["required_resource_ids"]) == {
+                item["resource_id"]
+                for item in envelope["resources"]
+                if item["capability_id"] in {"abstract_composition", "registered_product_display"}
+            }
+
+            with TestClient(
+                app,
+                base_url="https://diyu.example",
+            ) as admin_again:
+                _login_formal_user(
+                    admin_again,
+                    str(tenant["username"]),
+                    admin_password,
+                    "/tenant-admin/login",
+                )
+                for asset_id, binding_id in zip(
+                    asset_ids,
+                    binding_ids,
+                    strict=True,
+                ):
+                    disabled = admin_again.put(
+                        "/api/v1/tenant-management/"
+                        f"organization-materials/{asset_id}/"
+                        f"product-bindings/{binding_id}/enabled",
+                        json={"enabled": False},
+                    )
+                    assert disabled.status_code == 200
+            time.sleep(2.05)
+            revised = creator.post(
+                f"/api/v1/tasks/{task_id}/revisions",
+                json={
+                    "instruction": "保留两件商品和原素材，只调整文字节奏。",
+                    "target": "xiaohongshu_graphic",
+                    "source_target": "xiaohongshu_graphic",
+                    "publishing_identity_id": str(account_id),
+                    "request_id": str(uuid4()),
+                },
+            )
+            assert revised.status_code == 201, revised.text
+            assert revised.json()["version"] == 2
+            versions = creator.get(
+                f"/api/v1/content/tasks/{task_id}/versions",
+                params={"target": "xiaohongshu_graphic"},
+            )
+            assert versions.status_code == 200
+            assert [item["version"] for item in versions.json()] == [2, 1]
+            v1 = creator.get(
+                f"/api/v1/tasks/{task_id}/versions/1",
+                params={"target": "xiaohongshu_graphic"},
+            )
+            assert v1.status_code == 200
+            assert v1.json()["version"] == 1
+            with (
+                psycopg.connect(migrator_database_url) as connection,
+                connection.cursor() as cursor,
+            ):
+                cursor.execute(
+                    "SELECT content_context_snapshot FROM business_tasks WHERE tenant_id = %s AND id = %s",
+                    (tenant_id, task_id),
+                )
+                revised_row = cursor.fetchone()
+                assert revised_row is not None
+                revised_snapshot = revised_row[0]
+            assert revised_snapshot["media_capability_envelope"] == envelope
+            stable_counts = _tenant_persistence_counts(
+                migrator_database_url,
+                tenant_id,
+            )
+            time.sleep(2.05)
+            rejected = creator.post(
+                "/api/v1/content/stream",
+                json={
+                    "message": "让这两件登记商品形成清楚的视觉重音。",
+                    "conversation": [],
+                    "publishing_identity_id": str(account_id),
+                    "target": "xiaohongshu_graphic",
+                    "material_ids": [str(item) for item in asset_ids],
+                    "interaction_mode": "generate",
+                    "direct_generate": True,
+                    "request_id": str(uuid4()),
+                },
+            )
+            rejected_events = [json.loads(line) for line in rejected.text.splitlines() if line.strip()]
+            assert not any(item["event"] == "completed" for item in rejected_events)
+            assert any(
+                item["event"] == "conversation" and item["kind"] == "question" and "两件不同商品" in item["message"]
+                for item in rejected_events
+            )
+            assert (
+                _tenant_persistence_counts(
+                    migrator_database_url,
+                    tenant_id,
+                )
+                == stable_counts
+            )
+            if browser_enabled:
+                time.sleep(2.05)
+                before_browser = _tenant_persistence_counts(
+                    migrator_database_url,
+                    tenant_id,
+                )
+                browser = _run_product_media_browser(
+                    app,
+                    admin_token=admin_session_token,
+                    creator_token=creator_session_token,
+                    account_id=account_id,
+                    product_names=browser_product_names,
+                    material_titles=browser_material_titles,
+                )
+                assert browser.returncode == 0, (
+                    f"formal product-media Chrome journey failed:\n{browser.stdout}\n{browser.stderr}"
+                )
+                browser_result = json.loads(browser.stdout)
+                assert browser_result["failures"] == []
+                assert browser_result["lifecycle_events"] == [
+                    "received",
+                    "compiling_context",
+                    "generating",
+                    "validating",
+                    "finalizing",
+                    "completed",
+                ]
+                browser_task_id = UUID(str(browser_result["task_id"]))
+                after_browser = _tenant_persistence_counts(
+                    migrator_database_url,
+                    tenant_id,
+                )
+                assert tuple(after_browser[index] - before_browser[index] for index in range(3)) == (1, 1, 1)
+                with (
+                    psycopg.connect(
+                        migrator_database_url,
+                        row_factory=dict_row,
+                    ) as browser_connection,
+                    browser_connection.cursor() as browser_cursor,
+                ):
+                    browser_cursor.execute(
+                        """
+                        SELECT content_context_snapshot
+                        FROM business_tasks
+                        WHERE tenant_id = %s AND id = %s
+                        """,
+                        (tenant_id, browser_task_id),
+                    )
+                    browser_snapshot_row = browser_cursor.fetchone()
+                assert browser_snapshot_row is not None
+                browser_resources = [
+                    item
+                    for item in browser_snapshot_row["content_context_snapshot"]["media_capability_envelope"][
+                        "resources"
+                    ]
+                    if item["capability_id"] == "registered_product_display"
+                ]
+                assert {UUID(item["product_id"]) for item in browser_resources} == set(browser_product_ids)
+                assert {UUID(item["asset_id"]) for item in browser_resources} == set(browser_asset_ids)
+    finally:
+        if tenant_id is not None:
+            _delete_gate_b_fixture(
+                migrator_database_url,
+                tenant_id,
+                operator_id,
+            )
 
 
 def test_series_positions_receive_distinct_closed_media_programs() -> None:
@@ -832,10 +1656,7 @@ def test_series_positions_receive_distinct_closed_media_programs() -> None:
     assert isinstance(compiled2.production, GraphicProductionBundle)
     assert isinstance(compiled3.production, GraphicProductionBundle)
     assert compiled2.production.hero_image != compiled3.production.hero_image
-    assert (
-        compiled2.production.image_sequence
-        != compiled3.production.image_sequence
-    )
+    assert compiled2.production.image_sequence != compiled3.production.image_sequence
 
 
 def test_media_envelope_and_program_are_frozen_and_digest_bound() -> None:
@@ -1096,10 +1917,7 @@ def test_p2_server_selects_only_the_three_frozen_product_facts() -> None:
     blocks = immutable_product_fact_blocks(packet)
     selected_ids = select_product_fact_block_ids(packet, limit=3)
     selected = tuple(
-        block.canonical_text
-        for block_id in selected_ids
-        for block in blocks
-        if block.fact_block_id == block_id
+        block.canonical_text for block_id in selected_ids for block in blocks if block.fact_block_id == block_id
     )
 
     assert selected == (
@@ -1335,9 +2153,7 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
         kernel,
     )
     assert isinstance(compiled.semantic_contract, P3SemanticContract)
-    assert compiled.semantic_contract.brand_account_link == (
-        "看一次熟悉感被意外打断后，人会怎样重新注意日常。"
-    )
+    assert compiled.semantic_contract.brand_account_link == ("看一次熟悉感被意外打断后，人会怎样重新注意日常。")
     assert compiled.semantic_contract.brand_account_link in compiled.body
 
 
@@ -1357,26 +2173,12 @@ def test_visual_styling_writer_never_receives_registered_product_resources() -> 
         ),
     )
     fact_ids = tuple(fact.fact_id for product in products for fact in build_product_fact_packet((product,)).facts)
-    registered_resources = (
-        MediaResourceV1(
-            "resource:registered-product:one:v1",
-            "1",
-            "image",
-            "product-media:one:v1",
-            "registered_product_display",
-        ),
-        MediaResourceV1(
-            "resource:registered-product:two:v1",
-            "1",
-            "image",
-            "product-media:two:v1",
-            "registered_product_display",
-        ),
-    )
-    envelope = build_media_capability_envelope(
+    envelope = build_media_capability_envelope_v2(
         platform_shape="抖音短视频完整成品",
         media_format="video",
-        registered_resources=registered_resources,
+        bound_product_media=tuple(
+            _bound_product_media(index=index, product=product) for index, product in enumerate(products, start=1)
+        ),
     )
     media_program = select_media_program(
         primary_product="visual_styling_story",
@@ -1554,10 +2356,7 @@ def _write_gate_c_evidence_fixture(
             json.dumps(
                 {
                     "outline": f"{card_id} 的自然标题",
-                    "body": (
-                        f"标题：{card_id} 的自然标题\n\n"
-                        "完整正文：服务端事实原句与一般判断各自保留边界。"
-                    ),
+                    "body": (f"标题：{card_id} 的自然标题\n\n完整正文：服务端事实原句与一般判断各自保留边界。"),
                 },
                 ensure_ascii=False,
             ),
@@ -1591,10 +2390,7 @@ def _write_gate_c_evidence_fixture(
             encoding="utf-8",
         )
         raw.chmod(0o600)
-        criteria = {
-            criterion: "PASS"
-            for criterion in GATE_C_REVIEW_CRITERIA
-        }
+        criteria = {criterion: "PASS" for criterion in GATE_C_REVIEW_CRITERIA}
         if card_id == "P2":
             criteria["fact_and_resource_boundary"] = fact_boundary
         artifacts.append(
@@ -1646,23 +2442,15 @@ def test_gate_c_evidence_records_exact_writer_wrapper_normalization(
     )
 
     verify_gate_c_evidence(root)
-    manifest = json.loads(
-        (root / "manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["writer_wrapper_normalizations"] == [
         {
             "card_id": "P2",
             "media_format": "graphic",
-            "normalization_contract_version": (
-                "writer-wrapper-normalization-v1"
-            ),
-            "normalized_text_sha256": hashlib.sha256(
-                "从两面完整外观开始看选择。".encode()
-            ).hexdigest(),
+            "normalization_contract_version": ("writer-wrapper-normalization-v1"),
+            "normalized_text_sha256": hashlib.sha256("从两面完整外观开始看选择。".encode()).hexdigest(),
             "purpose": "media_opening",
-            "raw_text_sha256": hashlib.sha256(
-                "首图：从两面完整外观开始看选择。".encode()
-            ).hexdigest(),
+            "raw_text_sha256": hashlib.sha256("首图：从两面完整外观开始看选择。".encode()).hexdigest(),
             "removed_prefix": "首图：",
             "unit_id": "unit:media-opening",
         }
@@ -1682,11 +2470,7 @@ def test_gate_c_evidence_binds_file_sha_visible_digest_and_human_review(
     assert record["visible_digest"] == artifact_visible_digest(artifact_path)
     assert (root / "SHA256SUMS").is_file()
     assert (root.stat().st_mode & 0o777) == 0o700
-    assert all(
-        (path.stat().st_mode & 0o777) == 0o600
-        for path in root.iterdir()
-        if path.is_file()
-    )
+    assert all((path.stat().st_mode & 0o777) == 0o600 for path in root.iterdir() if path.is_file())
 
 
 def test_gate_c_evidence_rejects_artifact_or_review_binding_tamper(
@@ -1765,6 +2549,54 @@ def test_gate_c_evidence_never_overwrites_an_existing_final_manifest(
         _write_gate_c_evidence_fixture(tmp_path)
 
     verify_gate_c_evidence(root)
+
+
+def test_gate_c_finalizer_requires_explicit_structured_human_review(
+    tmp_path: Path,
+) -> None:
+    review_path = tmp_path / "human-review-input.json"
+    reviews = []
+    for card_id in ("P1", "P2", "P3", "P4", "P5", "series2", "series3"):
+        criteria = {criterion: "PASS" for criterion in GATE_C_REVIEW_CRITERIA}
+        if card_id == "P5":
+            criteria["fact_and_resource_boundary"] = "FAIL"
+        reviews.append(
+            {
+                "card_id": card_id,
+                "artifact_file": f"{card_id}.artifact.json",
+                "verdict": ("FAIL" if card_id == "P5" else "PASS"),
+                "criteria": criteria,
+                "notes": "执行端逐项阅读全文后的结构化裁决。",
+            }
+        )
+    review_path.write_text(
+        json.dumps(
+            {
+                "review_contract": "ux03-gate-c-human-review-v1",
+                "reviews": reviews,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    review_path.chmod(0o600)
+
+    parsed = _reviews_from_file(review_path)
+
+    assert next(item for item in parsed if item.card_id == "P5").verdict == "FAIL"
+    assert next(item for item in parsed if item.card_id == "P5").criteria["fact_and_resource_boundary"] == "FAIL"
+
+
+def test_gate_c_final_runner_cannot_manufacture_registered_product_resources() -> None:
+    runner_path = Path(__file__).resolve().parents[1] / "src" / "tool" / "run_gate_c_final_suite.py"
+    source = runner_path.read_text(encoding="utf-8")
+
+    assert "MediaResourceV1" not in source
+    assert "_registered_product_resources" not in source
+    assert "build_media_capability_envelope" not in source
+    assert 'verdict="PASS"' not in source
+    assert "review-file" in source
+    assert '"/api/v1/content/stream"' in source
 
 
 def test_stub_output_changes_with_direction_and_series_without_repeating_body() -> None:

@@ -938,6 +938,21 @@
         "title": "CreatePlatformCarrierRequest",
         "type": "object"
       },
+      "CreateProductMediaBindingRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "product_id": {
+            "format": "uuid",
+            "title": "Product Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "product_id"
+        ],
+        "title": "CreateProductMediaBindingRequest",
+        "type": "object"
+      },
       "CreatePublishingAccountRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5270,6 +5285,175 @@
           }
         ],
         "summary": "Set Management Organization Material Enabled"
+      }
+    },
+    "/api/v1/tenant-management/organization-materials/{asset_id}/product-bindings": {
+      "get": {
+        "operationId": "management_product_media_bindings_api_v1_tenant_management_organization_materials__asset_id__product_bindings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Management Product Media Bindings Api V1 Tenant Management Organization Materials  Asset Id  Product Bindings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Product Media Bindings"
+      },
+      "post": {
+        "operationId": "create_management_product_media_binding_api_v1_tenant_management_organization_materials__asset_id__product_bindings_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProductMediaBindingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Management Product Media Binding Api V1 Tenant Management Organization Materials  Asset Id  Product Bindings Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Management Product Media Binding"
+      }
+    },
+    "/api/v1/tenant-management/organization-materials/{asset_id}/product-bindings/{binding_id}/enabled": {
+      "put": {
+        "operationId": "set_management_product_media_binding_enabled_api_v1_tenant_management_organization_materials__asset_id__product_bindings__binding_id__enabled_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "binding_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Binding Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Management Product Media Binding Enabled Api V1 Tenant Management Organization Materials  Asset Id  Product Bindings  Binding Id  Enabled Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Set Management Product Media Binding Enabled"
       }
     },
     "/api/v1/tenant-management/organization-materials/{asset_id}/versions": {

@@ -13,7 +13,7 @@ from src.shared.creative_plan import (
 )
 from src.shared.errors import DomainError
 from src.shared.media_program import (
-    MediaCapabilityEnvelopeV1,
+    MediaCapabilityEnvelope,
     MediaProgramSelectionV1,
     assert_media_program_allowed,
     media_envelope_digest,
@@ -64,7 +64,7 @@ def frozen_delivery_compiler_version(
 def frozen_media_contract(
     snapshot: Mapping[str, object],
 ) -> tuple[
-    MediaCapabilityEnvelopeV1 | None,
+    MediaCapabilityEnvelope | None,
     MediaProgramSelectionV1 | None,
 ]:
     raw_envelope = snapshot.get("media_capability_envelope")
@@ -76,9 +76,7 @@ def frozen_media_contract(
     envelope = media_envelope_from_document(raw_envelope)
     program = media_program_from_document(raw_program)
     assert_media_program_allowed(envelope, program)
-    if snapshot.get("media_capability_envelope_digest") != media_envelope_digest(
-        envelope
-    ):
+    if snapshot.get("media_capability_envelope_digest") != media_envelope_digest(envelope):
         raise DomainError("内容任务冻结的媒体能力包摘要不一致")
     if snapshot.get("media_program_digest") != media_program_digest(program):
         raise DomainError("内容任务冻结的媒体程序摘要不一致")

@@ -330,6 +330,42 @@ class WorkbenchService:
             enabled,
         )
 
+    def management_product_media_bindings(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+    ) -> list[dict[str, object]]:
+        return self._repository.management_product_media_bindings(
+            scope,
+            asset_id,
+        )
+
+    def create_management_product_media_binding(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        product_id: UUID,
+    ) -> dict[str, object]:
+        return self._repository.create_management_product_media_binding(
+            scope,
+            asset_id,
+            product_id,
+        )
+
+    def set_management_product_media_binding_enabled(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        binding_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        return self._repository.set_management_product_media_binding_enabled(
+            scope,
+            asset_id,
+            binding_id,
+            enabled,
+        )
+
     def management_demo_content_index(self, scope: TenantManagementScope) -> dict[str, object]:
         return self._repository.management_demo_content_index(scope)
 
@@ -345,12 +381,9 @@ class WorkbenchService:
         carrier_drafts = self._platform_carrier_prefills(accounts) if metadata else []
         return {
             **metadata,
-            "account_profile_candidate": generic_account_profile_candidate(
-                identity["brand"]
-            ),
+            "account_profile_candidate": generic_account_profile_candidate(identity["brand"]),
             "account_profile_candidate_source": (
-                "基于当前租户名称、已确认品牌表达边界和通用企业账号冷启动规则生成；"
-                "保存前必须由管理员纠正。"
+                "基于当前租户名称、已确认品牌表达边界和通用企业账号冷启动规则生成；保存前必须由管理员纠正。"
             ),
             "product_drafts": pending_products,
             "platform_carrier_drafts": carrier_drafts,
@@ -438,13 +471,9 @@ class WorkbenchService:
                     "sku": sku,
                     "display_name": display_name,
                     "category": str(row.get("category") or "").strip(),
-                    "material_or_structure": str(
-                        row.get("material_or_structure") or ""
-                    ).strip(),
+                    "material_or_structure": str(row.get("material_or_structure") or "").strip(),
                     "silhouette": str(row.get("silhouette") or "").strip(),
-                    "observable_features": str(
-                        row.get("observable_features") or ""
-                    ).strip(),
+                    "observable_features": str(row.get("observable_features") or "").strip(),
                 }
             )
         return {

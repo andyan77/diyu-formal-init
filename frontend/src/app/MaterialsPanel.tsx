@@ -12,6 +12,13 @@ export type ReferenceMaterial = {
   created_at: string;
   status: string;
   reference_note?: string;
+  product_media?: Array<{
+    binding_id: string;
+    product_id: string;
+    sku: string;
+    product_name: string;
+    product_version: number;
+  }>;
 };
 
 async function filePayload(file: File): Promise<string> {
@@ -53,7 +60,17 @@ export function MaterialPicker({
               disabled={!readable}
               onChange={event => onSelectedIdsChange(event.target.checked ? [...selectedIds, item.id] : selectedIds.filter(id => id !== item.id))}
             />
-            <span><strong>{item.title}</strong><small>{item.scope === "personal" ? "我的素材" : "组织素材"}{readable ? "" : " · 先补一句说明"}</small></span>
+            <span>
+              <strong>{item.title}</strong>
+              <small>
+                {item.scope === "personal" ? "我的素材" : "组织素材"}
+                {readable ? "" : " · 先补一句说明"}
+                {(item.product_media ?? []).map(
+                  product =>
+                    ` · 已关联 ${product.product_name}（${product.sku}）`
+                )}
+              </small>
+            </span>
             {!readable && item.scope === "personal" && <button type="button" className="text-action" onClick={event => { event.preventDefault(); onWriteNote(item); }}>补说明</button>}
           </label>
         );
@@ -190,7 +207,21 @@ export function MaterialsPanel({
       <h3>{heading}</h3>
       {items.length === 0 ? <p>还没有素材。</p> : <ul>{items.map(item => (
         <li key={item.id}>
-          <div><strong>{item.title}</strong><small>{item.media_type === "text" ? "文字原件" : item.media_type === "image" ? "图片原件" : "视频原件"}{isReadable(item) ? " · 已有说明" : " · 还缺说明"}</small></div>
+          <div>
+            <strong>{item.title}</strong>
+            <small>
+              {item.media_type === "text"
+                ? "文字原件"
+                : item.media_type === "image"
+                  ? "图片原件"
+                  : "视频原件"}
+              {isReadable(item) ? " · 已有说明" : " · 还缺说明"}
+              {(item.product_media ?? []).map(
+                product =>
+                  ` · ${product.product_name}（${product.sku}）`
+              )}
+            </small>
+          </div>
           {editable && <span><button type="button" onClick={() => { setEditing(item); setEditingNote(item.reference_note ?? ""); }}>写说明</button><button type="button" onClick={() => void remove(item)}>移除</button></span>}
         </li>
       ))}</ul>}

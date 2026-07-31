@@ -219,6 +219,42 @@ globalThis.fetch = async (input, init = {}) => {
         status: "active",
         created_at: "2026-07-26T00:00:00Z",
         reference_note: ""
+      },
+      {
+        id: "44444444-4444-4444-8444-444444444441",
+        title: "登记商品一官方图片",
+        media_type: "image",
+        scope: "organization",
+        status: "active",
+        created_at: "2026-07-26T00:00:00Z",
+        reference_note: "品牌确认原图",
+        product_media: [
+          {
+            binding_id: "binding-product-one",
+            product_id: "product-one",
+            sku: "ZX-ONE",
+            product_name: "登记商品一",
+            product_version: 1
+          }
+        ]
+      },
+      {
+        id: "44444444-4444-4444-8444-444444444442",
+        title: "登记商品二官方图片",
+        media_type: "image",
+        scope: "organization",
+        status: "active",
+        created_at: "2026-07-26T00:00:00Z",
+        reference_note: "品牌确认原图",
+        product_media: [
+          {
+            binding_id: "binding-product-two",
+            product_id: "product-two",
+            sku: "ZX-TWO",
+            product_name: "登记商品二",
+            product_version: 1
+          }
+        ]
       }
     ];
   } else if (path === "/api/v1/content/series" && method === "GET") {

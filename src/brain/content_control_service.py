@@ -18,7 +18,9 @@ from src.ports.material_object_store import MaterialObjectStore
 from src.shared.errors import DomainError
 from src.shared.types import (
     AccountExpression,
+    BoundProductMedia,
     CreativeDirection,
+    ProductFact,
     ReferenceMaterial,
     TenantManagementScope,
     TrustedScope,
@@ -38,9 +40,7 @@ _SEGMENT_LABELS = {
     "content_territories": "可持续经营的内容领地",
     "default_production_conditions": "可长期依赖的制作条件",
 }
-_DEFAULT_PRODUCTION_CONDITIONS = (
-    "一名创作者、一部手机、普通室内或门店；按当前条件完成拍摄、录音、排版或剪辑。"
-)
+_DEFAULT_PRODUCTION_CONDITIONS = "一名创作者、一部手机、普通室内或门店；按当前条件完成拍摄、录音、排版或剪辑。"
 _MAX_MATERIAL_TEXT = 4000
 _MAX_SELECTED_MATERIALS = 5
 _UNMET_STATUSES = frozenset({"received", "classified", "answered"})
@@ -80,9 +80,7 @@ class ContentControlService:
         """In a temporary preference-free session the catalog is not allowed to read it either."""
         preference = self._repository.creation_preference(scope) if read_preference else None
         body_opt_in = bool(preference and preference["body_related_opt_in"])
-        defaults = (
-            preference["direction_defaults"] if preference and preference["enabled"] else {}
-        )
+        defaults = preference["direction_defaults"] if preference and preference["enabled"] else {}
         visible = self._catalog.visible(body_opt_in)
         return {
             "catalog_version": self._catalog.catalog_version,
@@ -123,13 +121,9 @@ class ContentControlService:
             "segment_labels": dict(_SEGMENT_LABELS),
         }
 
-    def save_account_expression(
-        self, scope: TrustedScope, segments: Mapping[str, str]
-    ) -> dict[str, object]:
+    def save_account_expression(self, scope: TrustedScope, segments: Mapping[str, str]) -> dict[str, object]:
         # The maintenance check happens inside the writing transaction, not before it.
-        return self._repository.save_account_expression_as_operator(
-            scope, self._checked_segments(segments)
-        )
+        return self._repository.save_account_expression_as_operator(scope, self._checked_segments(segments))
 
     def management_accounts(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         return self._repository.management_accounts_with_expression(scope)
@@ -142,12 +136,8 @@ class ContentControlService:
     ) -> dict[str, object]:
         return self._repository.declare_control_organization(scope, account_id, organization_id)
 
-    def management_account_expression(
-        self, scope: TenantManagementScope, account_id: UUID
-    ) -> dict[str, object]:
-        accounts = {
-            str(item["id"]): item for item in self._repository.management_accounts_with_expression(scope)
-        }
+    def management_account_expression(self, scope: TenantManagementScope, account_id: UUID) -> dict[str, object]:
+        accounts = {str(item["id"]): item for item in self._repository.management_accounts_with_expression(scope)}
         account = accounts.get(str(account_id))
         if account is None:
             raise DomainError("找不到当前范围内的发布账号。")
@@ -179,21 +169,14 @@ class ContentControlService:
     def save_management_account_expression(
         self, scope: TenantManagementScope, account_id: UUID, segments: Mapping[str, str]
     ) -> dict[str, object]:
-        return self._repository.save_account_expression_as_manager(
-            scope, account_id, self._checked_segments(segments)
-        )
+        return self._repository.save_account_expression_as_manager(scope, account_id, self._checked_segments(segments))
 
     def management_account_expression_versions(
         self,
         scope: TenantManagementScope,
         account_id: UUID,
     ) -> list[dict[str, object]]:
-        accounts = {
-            str(item["id"])
-            for item in self._repository.management_accounts_with_expression(
-                scope
-            )
-        }
+        accounts = {str(item["id"]) for item in self._repository.management_accounts_with_expression(scope)}
         if str(account_id) not in accounts:
             raise DomainError("找不到当前范围内的发布账号。")
         return self._repository.account_expression_versions(
@@ -204,11 +187,7 @@ class ContentControlService:
     @staticmethod
     def _checked_segments(segments: Mapping[str, str]) -> tuple[str, str, str, str, str]:
         values = tuple((segments.get(key) or "").strip() for key in _SEGMENT_KEYS)
-        missing = [
-            _SEGMENT_LABELS[key]
-            for key, value in zip(_SEGMENT_KEYS, values, strict=True)
-            if not value
-        ]
+        missing = [_SEGMENT_LABELS[key] for key, value in zip(_SEGMENT_KEYS, values, strict=True) if not value]
         if missing:
             raise DomainError("这张画像还差：" + "、".join(missing) + "。")
         if any(len(value) > 800 for value in values):
@@ -229,12 +208,10 @@ class ContentControlService:
                 f"当前表达身份是「{source['content_role_name']}」。"
             ),
             "authority_boundary": (
-                f"{source['voice_boundary']}没有已确认来源的商品、价格、库存、顾客、门店和"
-                "个人经历不作为事实。"
+                f"{source['voice_boundary']}没有已确认来源的商品、价格、库存、顾客、门店和个人经历不作为事实。"
             ),
             "audience_relationship": (
-                source.get("audience_description")
-                or "长期服务愿意认真挑选衣服的人；不预设年龄、身份或消费动机。"
+                source.get("audience_description") or "长期服务愿意认真挑选衣服的人；不预设年龄、身份或消费动机。"
             ),
             "content_territories": territory or "长期可持续经营的内容方向待品牌方补充。",
             "default_production_conditions": _DEFAULT_PRODUCTION_CONDITIONS,
@@ -245,9 +222,7 @@ class ContentControlService:
     ) -> AccountExpression | None:
         """Return the profile a run must actually use: a frozen one when replaying, else current."""
         record = (
-            self._repository.account_expression_by_id(
-                scope.tenant_id, scope.account_id, profile_id
-            )
+            self._repository.account_expression_by_id(scope.tenant_id, scope.account_id, profile_id)
             if profile_id is not None
             else self._repository.current_account_expression(scope.tenant_id, scope.account_id)
         )
@@ -344,10 +319,7 @@ class ContentControlService:
         Returns the resolved direction, which preference mode applied, which preference version
         it was, and the person's own soft collaboration note when they are using preferences.
         """
-        if (
-            requested_catalog_version
-            and requested_catalog_version != self._catalog.catalog_version
-        ):
+        if requested_catalog_version and requested_catalog_version != self._catalog.catalog_version:
             raise DomainError("创作方向目录已更新，请刷新后重新选择。")
         if not use_personal_preferences:
             preference = None
@@ -374,9 +346,7 @@ class ContentControlService:
             preference_version = version if isinstance(version, int) else None
             collaboration_note = str(preference["collaboration_note"])
         explicit = {key: value for key, value in selections.items() if value}
-        effective_defaults = {
-            axis: value for axis, value in defaults.items() if axis not in cleared_axes
-        }
+        effective_defaults = {axis: value for axis, value in defaults.items() if axis not in cleared_axes}
         steered = bool(explicit or effective_defaults or cleared_axes or custom_text.strip())
         # Nothing steered by the panel; the person's own words may still map onto a label.
         if not steered and not read_natural_text(self._catalog, natural_text).wanted:
@@ -396,9 +366,7 @@ class ContentControlService:
 
     # ---- F. this-task legal references ---------------------------------------------------
 
-    def reference_materials(
-        self, scope: TrustedScope, asset_ids: tuple[UUID, ...]
-    ) -> tuple[ReferenceMaterial, ...]:
+    def reference_materials(self, scope: TrustedScope, asset_ids: tuple[UUID, ...]) -> tuple[ReferenceMaterial, ...]:
         if len(asset_ids) > _MAX_SELECTED_MATERIALS:
             raise DomainError(f"这次参考最多选择 {_MAX_SELECTED_MATERIALS} 份素材。")
         selected = self._repository.selected_materials(scope, asset_ids)
@@ -425,6 +393,56 @@ class ContentControlService:
                 )
             )
         return tuple(materials)
+
+    def bound_product_media(
+        self,
+        scope: TrustedScope,
+        asset_ids: tuple[UUID, ...],
+    ) -> tuple[BoundProductMedia, ...]:
+        records = self._repository.selected_product_media(
+            scope,
+            asset_ids,
+        )
+        return tuple(
+            BoundProductMedia(
+                binding_id=UUID(str(record["binding_id"])),
+                product_id=UUID(str(record["product_id"])),
+                product_version_id=UUID(str(record["product_version_id"])),
+                product=ProductFact(
+                    sku=str(record["sku"]),
+                    display_name=str(record["display_name"]),
+                    facts=(dict(record["facts"]) if isinstance(record["facts"], dict) else {}),
+                    source_kind=str(record["source_kind"]),
+                    source_note=str(record["source_note"]),
+                    fact_version=int(str(record["fact_version"])),
+                    applicability=str(record["applicability"]),
+                ),
+                asset_id=UUID(str(record["asset_id"])),
+                asset_version_id=UUID(str(record["asset_version_id"])),
+                asset_version=int(str(record["asset_version"])),
+                media_type=str(record["media_type"]),
+                source_ref=(
+                    "product-media-binding:"
+                    f"{record['binding_id']}:product:"
+                    f"{record['product_version_id']}:asset:"
+                    f"{record['asset_version_id']}"
+                ),
+                source_checksum_sha256=str(record["source_checksum_sha256"]),
+                root_account_id=UUID(str(record["root_account_id"])),
+                control_organization_id=UUID(str(record["control_organization_id"])),
+            )
+            for record in records
+        )
+
+    def account_media_scope(
+        self,
+        scope: TrustedScope,
+    ) -> tuple[UUID, UUID]:
+        record = self._repository.account_media_scope(scope)
+        return (
+            UUID(str(record["root_account_id"])),
+            UUID(str(record["control_organization_id"])),
+        )
 
     # ---- G. cold-start opportunities and the light plan ----------------------------------
 
@@ -509,9 +527,7 @@ class ContentControlService:
         material_ids: list[str] | None = None,
     ) -> dict[str, object]:
         available = {
-            axis: stable_id
-            for axis, stable_id in selections.items()
-            if self._catalog.entry(stable_id) is not None
+            axis: stable_id for axis, stable_id in selections.items() if self._catalog.entry(stable_id) is not None
         }
         return {
             "id": f"OPP-{uuid.uuid5(uuid.NAMESPACE_URL, f'{scope.account_id}:{kind}')}",
@@ -546,18 +562,13 @@ class ContentControlService:
             raise DomainError("请用一两句话说明你想做但现在做不到的事。")
         snapshot: dict[str, object] = {
             "selections": (
-                [
-                    {"axis": item.axis, "stable_id": item.stable_id, "label": item.label}
-                    for item in direction.selections
-                ]
+                [{"axis": item.axis, "stable_id": item.stable_id, "label": item.label} for item in direction.selections]
                 if direction
                 else []
             ),
             "custom_text": direction.custom_text if direction else "",
         }
-        return self._repository.create_unmet_request(
-            scope, text, self._catalog.catalog_version, snapshot
-        )
+        return self._repository.create_unmet_request(scope, text, self._catalog.catalog_version, snapshot)
 
     def list_unmet_requests(self, scope: TrustedScope) -> list[dict[str, object]]:
         return self._repository.list_unmet_requests(scope)

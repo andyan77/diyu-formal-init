@@ -578,6 +578,45 @@ async function main(): Promise<void> {
   await click(find(".material-list button", "查看版本与维护"));
   await settle();
   assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /历史版本/);
+  const productBindingSelect = find(
+    ".tenant-drawer label",
+    "选择已确认商品"
+  ).querySelector("select") as HTMLSelectElement;
+  await select(
+    productBindingSelect,
+    "77777777-7777-4777-8777-777777777701"
+  );
+  await click(find(".tenant-drawer button", "建立商品关联"));
+  await settle();
+  assert.ok(
+    requests.some(
+      item =>
+        item.path.endsWith(
+          "/organization-materials/44444444-4444-4444-8444-444444444444/product-bindings"
+        ) &&
+        item.method === "POST" &&
+        item.body?.product_id ===
+          "77777777-7777-4777-8777-777777777701"
+    ),
+    "商品与组织官方素材必须通过正式关联接口明确登记"
+  );
+  assert.match(
+    document.querySelector(".tenant-drawer")?.textContent ?? "",
+    /牛角扣外套.*DEMO-A/s
+  );
+  await click(find(".tenant-drawer button", "停用关联"));
+  await settle();
+  assert.ok(
+    requests.some(
+      item =>
+        item.path.includes("/product-bindings/") &&
+        item.path.endsWith("/enabled") &&
+        item.body?.enabled === false
+    ),
+    "商品素材关联必须具备正式停用消费者"
+  );
+  await click(find(".tenant-drawer button", "恢复关联"));
+  await settle();
   const materialNote = find(
     ".tenant-drawer label",
     "人工说明"

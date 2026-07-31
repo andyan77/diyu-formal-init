@@ -63,6 +63,7 @@ from src.gateway.api.contracts import (
     CreateOperatorRequest,
     CreateOrganizationRequest,
     CreatePlatformCarrierRequest,
+    CreateProductMediaBindingRequest,
     CreatePublishingAccountRequest,
     CreateSeriesRequest,
     CreateTenantRequest,
@@ -374,19 +375,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "name": str(item["name"]),
                     "profile_summary": str(item.get("profile_summary") or "尚未填写账号画像"),
                     "content_role": str(item.get("content_role") or "发布账号"),
-                    "can_maintain_profile": bool(
-                        item.get("can_maintain_expression_profile")
-                    ),
+                    "can_maintain_profile": bool(item.get("can_maintain_expression_profile")),
                     "control_organization": (
-                        str(item["control_organization"])
-                        if item.get("control_organization") is not None
-                        else None
+                        str(item["control_organization"]) if item.get("control_organization") is not None else None
                     ),
-                    "profile_id": (
-                        str(item["profile_id"])
-                        if item.get("profile_id") is not None
-                        else None
-                    ),
+                    "profile_id": (str(item["profile_id"]) if item.get("profile_id") is not None else None),
                     "profile_version": item.get("profile_version"),
                     "platform_targets": projected_targets,
                 }
@@ -615,11 +608,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resetting = activation_purpose == "reset"
             heading = "重新设置密码" if resetting else "设置笛语密码"
             action = "更新密码" if resetting else "完成设置"
-            error_markup = (
-                "<p role='alert' id='activation-password-error'>" + escape(error) + "</p>"
-                if error
-                else ""
-            )
+            error_markup = "<p role='alert' id='activation-password-error'>" + escape(error) + "</p>" if error else ""
             return HTMLResponse(
                 render_spa_shell(
                     {
@@ -638,9 +627,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         "autocomplete='new-password' minlength='12' required></label>"
                         "<label>再次输入新密码 <input type='password' name='password_confirm' "
                         "autocomplete='new-password' minlength='12' required></label>"
-                        "<button type='submit'>"
-                        + action
-                        + "</button></form></main>"
+                        "<button type='submit'>" + action + "</button></form></main>"
                     ),
                 ),
                 status_code=response_status,
@@ -648,10 +635,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         @app.get("/activate/{activation_token}", include_in_schema=False)
         def activation_page(activation_token: str) -> HTMLResponse:
-            activation_purpose = (
-                production_authority.repository.activation_purpose(activation_token)
-                or "activate"
-            )
+            activation_purpose = production_authority.repository.activation_purpose(activation_token) or "activate"
             return render_activation_form(activation_token, activation_purpose)
 
         @app.post("/activate/{activation_token}", include_in_schema=False)
@@ -666,10 +650,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             fields = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
             password = fields.get("password", [""])[0]
             password_confirm = fields.get("password_confirm", [""])[0]
-            activation_purpose = (
-                production_authority.repository.activation_purpose(activation_token)
-                or "activate"
-            )
+            activation_purpose = production_authority.repository.activation_purpose(activation_token) or "activate"
             if len(password) < 12:
                 return render_activation_form(
                     activation_token,
@@ -723,11 +704,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if entry_type is None:
                 return
             if entry_type == "tenant_admin":
-                if (
-                    not grants_tenant_management
-                    or capabilities
-                    or publishing_identity_ids
-                ):
+                if not grants_tenant_management or capabilities or publishing_identity_ids:
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         detail="租户管理员只能进入品牌管理，不能同时取得内容、陈列或发布账号资格",
@@ -775,11 +752,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     entry_type=payload.entry_type,
                     account_ids=tuple(payload.publishing_identity_ids),
                     maintenance_account_ids=(
-                        tuple(
-                            payload.expression_profile_maintenance_account_ids
-                        )
-                        if "expression_profile_maintenance_account_ids"
-                        in payload.model_fields_set
+                        tuple(payload.expression_profile_maintenance_account_ids)
+                        if "expression_profile_maintenance_account_ids" in payload.model_fields_set
                         else None
                     ),
                     grants_content_access="content" in payload.capabilities,
@@ -862,9 +836,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 formal_manager_identity(request),
                 user_id,
             )
-            activation_link, activation_url = activation_paths(
-                restored["activation_token"]
-            )
+            activation_link, activation_url = activation_paths(restored["activation_token"])
             return RestoredTenantUserResponse(
                 user_id=restored["user_id"],
                 activation_link=activation_link,
@@ -913,8 +885,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 account_ids=tuple(payload.publishing_identity_ids),
                 maintenance_account_ids=(
                     tuple(payload.expression_profile_maintenance_account_ids)
-                    if payload.expression_profile_maintenance_account_ids
-                    is not None
+                    if payload.expression_profile_maintenance_account_ids is not None
                     else None
                 ),
                 grants_content_access="content" in payload.capabilities,
@@ -922,8 +893,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
         @app.put(
-            "/api/v1/tenant-management/users/{user_id}/publishing-accounts/"
-            "{account_id}/profile-maintenance",
+            "/api/v1/tenant-management/users/{user_id}/publishing-accounts/{account_id}/profile-maintenance",
             responses=business_failures,
         )
         def set_expression_profile_maintenance(
@@ -1139,9 +1109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         None,
                         first_identity_id,
                     )
-                    raw_projection = workbench_service.user_portal_context(
-                        identity_scope
-                    ).get("identity")
+                    raw_projection = workbench_service.user_portal_context(identity_scope).get("identity")
                     if isinstance(raw_projection, dict):
                         identity_projection = raw_projection
                     capabilities.append("content")
@@ -1443,6 +1411,52 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.enabled,
         )
 
+    @app.get(
+        "/api/v1/tenant-management/organization-materials/{asset_id}/product-bindings",
+        responses=business_failures,
+    )
+    def management_product_media_bindings(
+        asset_id: UUID,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.management_product_media_bindings(
+            scope,
+            asset_id,
+        )
+
+    @app.post(
+        "/api/v1/tenant-management/organization-materials/{asset_id}/product-bindings",
+        status_code=status.HTTP_201_CREATED,
+        responses=business_failures,
+    )
+    def create_management_product_media_binding(
+        asset_id: UUID,
+        payload: CreateProductMediaBindingRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.create_management_product_media_binding(
+            scope,
+            asset_id,
+            payload.product_id,
+        )
+
+    @app.put(
+        "/api/v1/tenant-management/organization-materials/{asset_id}/product-bindings/{binding_id}/enabled",
+        responses=business_failures,
+    )
+    def set_management_product_media_binding_enabled(
+        asset_id: UUID,
+        binding_id: UUID,
+        payload: SetEnabledRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.set_management_product_media_binding_enabled(
+            scope,
+            asset_id,
+            binding_id,
+            payload.enabled,
+        )
+
     @app.delete(
         "/api/v1/tenant-management/organization-materials/{asset_id}",
         responses=business_failures,
@@ -1548,11 +1562,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.control_organization_id,
             payload.operator_can_maintain_expression_profile,
             payload.as_synthetic_business_fixture,
-            (
-                payload.initial_profile.model_dump()
-                if payload.initial_profile is not None
-                else None
-            ),
+            (payload.initial_profile.model_dump() if payload.initial_profile is not None else None),
             payload.speaker_kind,
         )
 
@@ -2320,9 +2330,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.publishing_identity_id,
         )
         production_identity = (
-            production_authority._tenant_identity(request)
-            if production_authority is not None
-            else None
+            production_authority._tenant_identity(request) if production_authority is not None else None
         )
         events: queue.Queue[dict[str, object] | None] = queue.Queue(maxsize=16)
         cancelled = threading.Event()
@@ -2358,27 +2366,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         }
                     )
                     return
-                if (
-                    payload.request_id is not None
-                    and payload.interaction_mode != "conversation"
-                ):
+                if payload.request_id is not None and payload.interaction_mode != "conversation":
                     completed = service.completed_request(scope, payload.request_id)
                     if completed is not None:
                         events.put(
                             {
                                 "event": "completed",
-                                "result": ContentVersionResponse.model_validate(
-                                    completed
-                                ).model_dump(mode="json"),
+                                "result": ContentVersionResponse.model_validate(completed).model_dump(mode="json"),
                             }
                         )
                         return
                 with model_slot(request):
                     conversation_only = payload.interaction_mode == "conversation"
-                    direct_generate = (
-                        payload.interaction_mode == "generate"
-                        or payload.direct_generate
-                    )
+                    direct_generate = payload.interaction_mode == "generate" or payload.direct_generate
                     result = service.respond_to_conversation(
                         scope,
                         payload.message,
@@ -2397,17 +2397,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 else:
                     if conversation_only and production_identity is not None:
                         assert production_authority is not None
-                        production_authority.repository.record_content_conversation(
-                            production_identity
-                        )
+                        production_authority.repository.record_content_conversation(production_identity)
                     events.put(
                         {
                             "event": "conversation",
                             "kind": result.get("kind", "chat"),
                             "message": result.get("message", ""),
-                            "direct_generation_available": bool(
-                                result.get("direct_generation_available", False)
-                            ),
+                            "direct_generation_available": bool(result.get("direct_generation_available", False)),
                         }
                     )
             except HTTPException as exc:
@@ -2610,9 +2606,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
                 context = {
                     "application": "tenant_user",
-                    "identity": workbench_service.user_portal_context(
-                        identity_scope
-                    )["identity"],
+                    "identity": workbench_service.user_portal_context(identity_scope)["identity"],
                     "publishing_identities": available_identities,
                 }
                 capabilities.append("content")

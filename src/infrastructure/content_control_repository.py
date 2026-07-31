@@ -251,10 +251,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                 """,
                 (tenant_id, canonical_account_id),
             )
-            return [
-                self._profile_value(row)
-                for row in cursor.fetchall()
-            ]
+            return [self._profile_value(row) for row in cursor.fetchall()]
 
     def _canonical_account_id(self, tenant_id: UUID, account_id: UUID) -> UUID:
         with self._tenant_tx(tenant_id) as cursor:
@@ -747,6 +744,222 @@ class PostgresContentControlRepository(ContentControlRepository):
             }
             for row in rows
         )
+
+    def selected_product_media(
+        self,
+        scope: TrustedScope,
+        asset_ids: tuple[UUID, ...],
+    ) -> tuple[dict[str, object], ...]:
+        if not asset_ids:
+            return ()
+        with self._tenant_tx(scope.tenant_id) as cursor:
+            cursor.execute(
+                """
+                SELECT binding.id AS binding_id,
+                       product.id AS product_id,
+                       product_version.id AS product_version_id,
+                       product.sku, product_version.display_name,
+                       product_version.facts, product_version.source_kind,
+                       product_version.source_note,
+                       product_version.version_number AS fact_version,
+                       product_version.applicability,
+                       asset.id AS asset_id,
+                       asset_version.id AS asset_version_id,
+                       asset_version.version_number AS asset_version,
+                       asset.media_type,
+                       asset_version.source_checksum_sha256,
+                       root_account.id AS root_account_id,
+                       root_account.control_organization_id
+                FROM product_media_bindings binding
+                JOIN brand_products product
+                  ON product.tenant_id = binding.tenant_id
+                 AND product.brand_id = binding.brand_id
+                 AND product.id = binding.product_id
+                JOIN brand_product_versions product_version
+                  ON product_version.tenant_id = product.tenant_id
+                 AND product_version.brand_id = product.brand_id
+                 AND product_version.product_id = product.id
+                 AND product_version.id = product.current_version_id
+                JOIN material_assets asset
+                  ON asset.tenant_id = binding.tenant_id
+                 AND asset.brand_id = binding.brand_id
+                 AND asset.id = binding.asset_id
+                JOIN material_asset_versions asset_version
+                  ON asset_version.tenant_id = asset.tenant_id
+                 AND asset_version.brand_id = asset.brand_id
+                 AND asset_version.asset_id = asset.id
+                 AND asset_version.id = asset.current_version_id
+                JOIN content_accounts target_account
+                  ON target_account.tenant_id = binding.tenant_id
+                 AND target_account.brand_id = binding.brand_id
+                 AND target_account.id = %s
+                JOIN content_accounts root_account
+                  ON root_account.tenant_id = target_account.tenant_id
+                 AND root_account.id = COALESCE(
+                       target_account.carrier_of_account_id,
+                       target_account.id
+                     )
+                JOIN auth_grants operator_grant
+                  ON operator_grant.tenant_id = root_account.tenant_id
+                 AND operator_grant.account_id = root_account.id
+                 AND operator_grant.user_id = %s
+                 AND operator_grant.enabled = true
+                WHERE binding.tenant_id = %s
+                  AND binding.brand_id = %s
+                  AND binding.asset_id = ANY(%s)
+                  AND binding.status = 'active'
+                  AND product.status = 'active'
+                  AND product.current_version_id IS NOT NULL
+                  AND asset.status = 'active'
+                  AND asset.scope = 'organization'
+                  AND asset.media_type IN ('image', 'video')
+                  AND asset.current_version_id IS NOT NULL
+                  AND target_account.enabled = true
+                  AND target_account.platform_enabled = true
+                  AND root_account.enabled = true
+                  AND root_account.control_organization_id IS NOT NULL
+                  AND (
+                    product_version.visibility_scope = 'brand_all'
+                    OR (
+                      product_version.visibility_scope = 'organizations'
+                      AND EXISTS (
+                        SELECT 1
+                        FROM unnest(
+                          product_version.scope_organization_ids
+                        ) AS product_scope(organization_id)
+                        WHERE organization_is_same_or_descendant(
+                          product.tenant_id,
+                          root_account.control_organization_id,
+                          product_scope.organization_id
+                        )
+                      )
+                    )
+                    OR (
+                      product_version.visibility_scope = 'headquarters'
+                      AND EXISTS (
+                        SELECT 1
+                        FROM unnest(
+                          product_version.scope_organization_ids
+                        ) AS product_scope(organization_id)
+                        JOIN organizations company
+                          ON company.tenant_id = product.tenant_id
+                         AND company.id = product_scope.organization_id
+                         AND company.organization_level = 'company'
+                        WHERE product_scope.organization_id =
+                              root_account.control_organization_id
+                      )
+                    )
+                  )
+                  AND (
+                    asset_version.visibility_scope = 'brand_all'
+                    OR (
+                      asset_version.visibility_scope = 'organizations'
+                      AND EXISTS (
+                        SELECT 1
+                        FROM unnest(
+                          asset_version.scope_organization_ids
+                        ) AS asset_scope(organization_id)
+                        WHERE organization_is_same_or_descendant(
+                          asset.tenant_id,
+                          root_account.control_organization_id,
+                          asset_scope.organization_id
+                        )
+                      )
+                    )
+                    OR (
+                      asset_version.visibility_scope = 'headquarters'
+                      AND EXISTS (
+                        SELECT 1
+                        FROM unnest(
+                          asset_version.scope_organization_ids
+                        ) AS asset_scope(organization_id)
+                        JOIN organizations company
+                          ON company.tenant_id = asset.tenant_id
+                         AND company.id = asset_scope.organization_id
+                         AND company.organization_level = 'company'
+                        WHERE asset_scope.organization_id =
+                              root_account.control_organization_id
+                      )
+                    )
+                  )
+                ORDER BY binding.created_at, binding.id
+                """,
+                (
+                    scope.account_id,
+                    scope.user_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    list(asset_ids),
+                ),
+            )
+            rows = cursor.fetchall()
+        return tuple(
+            {
+                "binding_id": str(row["binding_id"]),
+                "product_id": str(row["product_id"]),
+                "product_version_id": str(row["product_version_id"]),
+                "sku": str(row["sku"]),
+                "display_name": str(row["display_name"]),
+                "facts": (row["facts"] if isinstance(row["facts"], dict) else {}),
+                "source_kind": str(row["source_kind"]),
+                "source_note": str(row["source_note"]),
+                "fact_version": self._integer(row["fact_version"]),
+                "applicability": str(row["applicability"]),
+                "asset_id": str(row["asset_id"]),
+                "asset_version_id": str(row["asset_version_id"]),
+                "asset_version": self._integer(row["asset_version"]),
+                "media_type": str(row["media_type"]),
+                "source_checksum_sha256": str(row["source_checksum_sha256"]),
+                "root_account_id": str(row["root_account_id"]),
+                "control_organization_id": str(row["control_organization_id"]),
+            }
+            for row in rows
+        )
+
+    def account_media_scope(
+        self,
+        scope: TrustedScope,
+    ) -> dict[str, object]:
+        with self._tenant_tx(scope.tenant_id) as cursor:
+            cursor.execute(
+                """
+                SELECT root_account.id AS root_account_id,
+                       root_account.control_organization_id
+                FROM content_accounts target_account
+                JOIN content_accounts root_account
+                  ON root_account.tenant_id = target_account.tenant_id
+                 AND root_account.id = COALESCE(
+                       target_account.carrier_of_account_id,
+                       target_account.id
+                     )
+                JOIN auth_grants operator_grant
+                  ON operator_grant.tenant_id = root_account.tenant_id
+                 AND operator_grant.account_id = root_account.id
+                 AND operator_grant.user_id = %s
+                 AND operator_grant.enabled = true
+                WHERE target_account.tenant_id = %s
+                  AND target_account.brand_id = %s
+                  AND target_account.id = %s
+                  AND target_account.enabled = true
+                  AND target_account.platform_enabled = true
+                  AND root_account.enabled = true
+                  AND root_account.control_organization_id IS NOT NULL
+                """,
+                (
+                    scope.user_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.account_id,
+                ),
+            )
+            row = self._one(
+                cursor,
+                "当前发布账号没有可用的媒体作用域",
+            )
+        return {
+            "root_account_id": str(row["root_account_id"]),
+            "control_organization_id": str(row["control_organization_id"]),
+        }
 
     def available_material_notes(self, scope: TrustedScope) -> tuple[dict[str, object], ...]:
         with self._tenant_tx(scope.tenant_id) as cursor:

@@ -10,7 +10,7 @@ from src.shared.narrative import NarrativeFrame, NarrativeMode, UserFactCandidat
 if TYPE_CHECKING:
     from src.shared.creative_kernel import CreativeKernelV1
     from src.shared.media_program import (
-        MediaCapabilityEnvelopeV1,
+        MediaCapabilityEnvelope,
         MediaProgramSelectionV1,
     )
 
@@ -348,6 +348,29 @@ class ReferenceMaterial:
 
 
 @dataclass(frozen=True)
+class BoundProductMedia:
+    """One explicitly selected, scope-checked product/media binding.
+
+    Product facts and media bytes remain separate trusted sources.  This record
+    only freezes their explicit administrative relationship and the precise
+    current versions that were legal for this task.
+    """
+
+    binding_id: UUID
+    product_id: UUID
+    product_version_id: UUID
+    product: ProductFact
+    asset_id: UUID
+    asset_version_id: UUID
+    asset_version: int
+    media_type: str
+    source_ref: str
+    source_checksum_sha256: str
+    root_account_id: UUID
+    control_organization_id: UUID
+
+
+@dataclass(frozen=True)
 class RequestedControls:
     """Raw, untrusted client control input for one request; scopes are never sent by clients."""
 
@@ -375,6 +398,7 @@ class ContentControlContext:
     materials: tuple[ReferenceMaterial, ...]
     preference_mode: str
     preference_version: int | None
+    bound_product_media: tuple[BoundProductMedia, ...] = ()
     # The expression identity this run really spoke from, frozen with the task.
     content_role: str = ""
     content_role_boundary: str = ""
@@ -408,7 +432,7 @@ class GenerationInput:
     creative_plan: CreativePlanV2 | None = None
     delivery_compiler_version: str | None = None
     prior_creative_kernel: CreativeKernelV1 | None = None
-    media_capability_envelope: MediaCapabilityEnvelopeV1 | None = None
+    media_capability_envelope: MediaCapabilityEnvelope | None = None
     media_program: MediaProgramSelectionV1 | None = None
 
 

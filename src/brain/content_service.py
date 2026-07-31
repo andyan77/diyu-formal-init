@@ -52,9 +52,11 @@ from src.shared.delivery_compiler import (
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import brand_fact_records, product_fact_records
 from src.shared.media_program import (
-    MediaCapabilityEnvelopeV1,
+    BoundProductMediaResourceV2,
+    MediaCapabilityEnvelope,
     MediaProgramSelectionV1,
-    build_media_capability_envelope,
+    build_media_capability_envelope_v2,
+    retarget_media_envelope,
     select_media_program,
 )
 from src.shared.narrative import (
@@ -180,6 +182,12 @@ class ContentService:
         production_conditions = self._production_conditions(sanitized_seed, direction.media_format)
         context = self._repository.load_brand_context(scope, direction.media_format, production_conditions)
         self._assert_target_context(context, direction.platform)
+        control = self._control_context(
+            scope,
+            context,
+            controls,
+            sanitized_seed,
+        )
         series_context = (
             self._series_context(scope, series_id, series_position, sanitized_seed) if series_id is not None else None
         )
@@ -203,7 +211,12 @@ class ContentService:
                 is_recompile = source.source_target != target
                 source_description = source.source_description if is_recompile else None
         else:
-            products = self._repository.load_product_facts(scope, sanitized_seed)
+            named_products = self._repository.load_product_facts(
+                scope,
+                sanitized_seed,
+            )
+            bound_products = self._bound_products(control)
+            products = named_products
             if not products and self._requires_confirmed_product(sanitized_seed, context.brand_name):
                 return {
                     "kind": "question",
@@ -217,6 +230,20 @@ class ContentService:
             primary_product = primary_product_override or self._generator.route(
                 RoutingInput(sanitized_seed, context, products, series_prior)
             )
+            if primary_product == "visual_styling_story":
+                if not bound_products:
+                    return {
+                        "kind": "question",
+                        "message": self._product_media_selection_question(),
+                    }
+                named_skus = {product.sku for product in named_products}
+                bound_skus = {product.sku for product in bound_products}
+                if named_skus and not named_skus <= bound_skus:
+                    return {
+                        "kind": "question",
+                        "message": ("你提到的商品与本次选择的登记素材不一致，请保留对应素材或重新选择商品。"),
+                    }
+                products = bound_products
             prior_body = None
             source_description = None
         if primary_product is None:
@@ -227,11 +254,13 @@ class ContentService:
                 "message": "这条商品解释要以哪件当前品牌已确认商品为依据？",
             }
         if primary_product == "visual_styling_story" and not products:
-            return {"kind": "question", "message": "这条视觉内容要以哪件当前品牌商品为锚？"}
+            return {
+                "kind": "question",
+                "message": self._product_media_selection_question(),
+            }
         assets = self._repository.load_active_assets(
             scope, primary_product, sanitized_seed, products, target, is_recompile
         )
-        control = self._control_context(scope, context, controls, sanitized_seed)
         plan = creative_plan or self._default_creative_plan(
             sanitized_seed,
             primary_product,
@@ -319,6 +348,22 @@ class ContentService:
             media_program,
         )
 
+    @staticmethod
+    def _bound_products(
+        control: ContentControlContext,
+    ) -> tuple[ProductFact, ...]:
+        products: dict[UUID, ProductFact] = {}
+        for item in control.bound_product_media:
+            products.setdefault(item.product_id, item.product)
+        return tuple(products.values())
+
+    @staticmethod
+    def _product_media_selection_question() -> str:
+        return (
+            "当前可用于制作的登记商品素材不足。"
+            "这条视觉内容需要选择两件不同商品，并为每件选择一份已登记图片。"
+        )
+
     def respond_to_conversation(
         self,
         scope: TrustedScope,
@@ -369,8 +414,11 @@ class ContentService:
                 sanitized_message,
             ]
         )
-        products = self._repository.load_product_facts(scope, combined_text)
         control = self._control_context(scope, context, controls, combined_text)
+        products = self._repository.load_product_facts(
+            scope,
+            combined_text,
+        )
         selected_direction = ""
         if control.direction is not None:
             selected_direction = "；".join(
@@ -437,20 +485,32 @@ class ContentService:
             or decision.creative_plan is None
         ):
             raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
+        if decision.primary_product == "visual_styling_story":
+            bound_products = self._bound_products(control)
+            if not bound_products:
+                return {
+                    "kind": "question",
+                    "message": self._product_media_selection_question(),
+                }
+            named_skus = {product.sku for product in products}
+            bound_skus = {product.sku for product in bound_products}
+            if named_skus and not named_skus <= bound_skus:
+                return {
+                    "kind": "question",
+                    "message": "你提到的商品与本次选择的登记素材不一致，请保留对应素材或重新选择商品。",
+                }
+            products = bound_products
         if sanitized_message not in decision.user_premises or any(
             premise not in available_user_turns for premise in decision.user_premises
         ):
             raise GenerationFailed("模型没有可靠保留用户原话")
         candidate_by_id = {candidate.source_id: candidate.exact_text for candidate in fact_candidates}
-        if (
-            len(decision.user_fact_source_ids) != len(decision.user_fact_spans)
-            or any(
-                candidate_by_id.get(source_id) != exact_text
-                for source_id, exact_text in zip(
-                    decision.user_fact_source_ids,
-                    decision.user_fact_spans,
-                    strict=True,
-                )
+        if len(decision.user_fact_source_ids) != len(decision.user_fact_spans) or any(
+            candidate_by_id.get(source_id) != exact_text
+            for source_id, exact_text in zip(
+                decision.user_fact_source_ids,
+                decision.user_fact_spans,
+                strict=True,
             )
         ):
             raise GenerationFailed("模型返回的用户事实句标识不存在或原文漂移")
@@ -614,6 +674,10 @@ class ContentService:
             materials=self._control.reference_materials(scope, requested.material_ids),
             preference_mode=preference_mode,
             preference_version=preference_version,
+            bound_product_media=self._control.bound_product_media(
+                scope,
+                requested.material_ids,
+            ),
             content_role=context.content_role_name,
             content_role_boundary=context.content_role_boundary,
             speaker_kind=context.speaker_kind,
@@ -813,9 +877,7 @@ class ContentService:
             delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
             raise GenerationFailed("这条内容冻结的创作内核无法可靠读取")
-        if delivery_compiler_version == DELIVERY_COMPILER_VERSION and (
-            media_envelope is None or media_program is None
-        ):
+        if delivery_compiler_version == DELIVERY_COMPILER_VERSION and (media_envelope is None or media_program is None):
             raise GenerationFailed("这条内容冻结的媒体合同无法可靠读取")
         if creative_plan is None:
             frame = new_frame(
@@ -921,7 +983,7 @@ class ContentService:
         creative_plan = frozen_creative_plan(snapshot)
         delivery_compiler_version = frozen_delivery_compiler_version(snapshot)
         prior_creative_kernel = frozen_creative_kernel(snapshot)
-        frozen_media_contract(snapshot)
+        source_media_envelope, _ = frozen_media_contract(snapshot)
         if delivery_compiler_version is not None and (
             delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
@@ -969,23 +1031,61 @@ class ContentService:
             target,
             direction.media_format,
         )
-        media_envelope: MediaCapabilityEnvelopeV1 | None = None
+        media_envelope: MediaCapabilityEnvelope | None = None
         media_program: MediaProgramSelectionV1 | None = None
         if delivery_compiler_version == DELIVERY_COMPILER_VERSION:
             try:
-                media_envelope, media_program = self._new_media_contract(
-                    control=control,
-                    target=target,
-                    media_format=direction.media_format,
-                    primary_product=source.primary_product,
-                    creative_plan=creative_plan,
-                    series_context=series_context,
-                    fact_count=(
-                        len(frame.allowed_fact_ids)
-                        if frame is not None
-                        else 0
-                    ),
+                frozen_product_resources = (
+                    tuple(
+                        resource
+                        for resource in source_media_envelope.resources
+                        if isinstance(
+                            resource,
+                            BoundProductMediaResourceV2,
+                        )
+                    )
+                    if source_media_envelope is not None
+                    else ()
                 )
+                if frozen_product_resources:
+                    if source_media_envelope is None:
+                        raise GenerationFailed("源内容缺少冻结的媒体能力合同")
+                    if self._control is None:
+                        raise GenerationFailed("当前无法核对源内容的冻结商品素材")
+                    root_id, control_organization_id = self._control.account_media_scope(
+                        target_scope,
+                    )
+                    if any(
+                        resource.root_account_id != str(root_id)
+                        or resource.control_organization_id != str(control_organization_id)
+                        for resource in frozen_product_resources
+                    ):
+                        raise GenerationFailed("目标发布账号不能使用源内容冻结的商品素材")
+                    media_envelope = retarget_media_envelope(
+                        source_media_envelope,
+                        platform_shape=platform_shape(
+                            target,
+                            direction.media_format,
+                        ),
+                        media_format=direction.media_format,
+                    )
+                    media_program = select_media_program(
+                        primary_product=source.primary_product,
+                        envelope=media_envelope,
+                        mechanism_id=creative_plan.mechanism_id,
+                        series_position=(series_context.target_position if series_context is not None else None),
+                        fact_count=(len(frame.allowed_fact_ids) if frame is not None else 0),
+                    )
+                else:
+                    media_envelope, media_program = self._new_media_contract(
+                        control=control,
+                        target=target,
+                        media_format=direction.media_format,
+                        primary_product=source.primary_product,
+                        creative_plan=creative_plan,
+                        series_context=series_context,
+                        fact_count=(len(frame.allowed_fact_ids) if frame is not None else 0),
+                    )
             except GenerationFailed as exc:
                 return {"kind": "question", "message": str(exc)}
         assets = self._repository.load_active_assets(
@@ -1084,26 +1184,23 @@ class ContentService:
         creative_plan: CreativePlanV2,
         series_context: SeriesContext | None,
         fact_count: int,
-    ) -> tuple[MediaCapabilityEnvelopeV1, MediaProgramSelectionV1]:
+    ) -> tuple[MediaCapabilityEnvelope, MediaProgramSelectionV1]:
         if media_format not in {"graphic", "video"}:
             raise GenerationFailed("当前内容形式没有可用的媒体程序")
-        envelope = build_media_capability_envelope(
+        envelope = build_media_capability_envelope_v2(
             platform_shape=platform_shape(
                 target,
                 cast(MediaFormat, media_format),
             ),
             media_format=cast(MediaFormat, media_format),
             selected_materials=control.materials,
+            bound_product_media=control.bound_product_media,
         )
         program = select_media_program(
             primary_product=primary_product,
             envelope=envelope,
             mechanism_id=creative_plan.mechanism_id,
-            series_position=(
-                series_context.target_position
-                if series_context is not None
-                else None
-            ),
+            series_position=(series_context.target_position if series_context is not None else None),
             fact_count=fact_count,
         )
         return envelope, program
@@ -1130,7 +1227,7 @@ class ContentService:
         creative_plan: CreativePlanV2 | None = None,
         delivery_compiler_version: str | None = None,
         prior_creative_kernel: CreativeKernelV1 | None = None,
-        media_capability_envelope: MediaCapabilityEnvelopeV1 | None = None,
+        media_capability_envelope: MediaCapabilityEnvelope | None = None,
         media_program: MediaProgramSelectionV1 | None = None,
     ) -> dict[str, object]:
         try:

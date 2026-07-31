@@ -100,10 +100,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 (scope.brand_id, scope.account_id, scope.tenant_id, scope.user_id),
             )
             row = self._one(cursor, "找不到当前可信内容身份")
-        return {
-            key: (str(value) if value is not None else "")
-            for key, value in row.items()
-        }
+        return {key: (str(value) if value is not None else "") for key, value in row.items()}
 
     def user_portal_identity(self, scope: TrustedScope) -> dict[str, str]:
         with self._content_tx(scope) as cursor:
@@ -713,9 +710,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                         "entry_type": str(row["entry_kind"]),
                         "enabled": bool(row["enabled"]),
                         "last_login_at": (
-                            self._time(row["last_login_at"])
-                            if row["last_login_at"] is not None
-                            else None
+                            self._time(row["last_login_at"]) if row["last_login_at"] is not None else None
                         ),
                         "last_product_action_at": (
                             self._time(row["last_product_action_at"])
@@ -725,11 +720,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                         "last_used_at": (
                             self._time(row["last_product_action_at"])
                             if row["last_product_action_at"] is not None
-                            else (
-                                self._time(row["last_login_at"])
-                                if row["last_login_at"] is not None
-                                else None
-                            )
+                            else (self._time(row["last_login_at"]) if row["last_login_at"] is not None else None)
                         ),
                         "content_attempts": self._integer(row["content_attempts"]),
                         "display_attempts": self._integer(row["display_attempts"]),
@@ -756,12 +747,10 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             }
             | {
                 "successful_runs": (
-                    self._integer(activity["content_successes"])
-                    + self._integer(activity["display_successes"])
+                    self._integer(activity["content_successes"]) + self._integer(activity["display_successes"])
                 ),
                 "failed_runs": (
-                    self._integer(activity["content_failures"])
-                    + self._integer(activity["display_failures"])
+                    self._integer(activity["content_failures"]) + self._integer(activity["display_failures"])
                 ),
             },
             "provider_usage": {
@@ -837,9 +826,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "applicability": str(row["applicability"]),
                 "status": str(row["status"]),
                 "current_version_id": (
-                    str(row["current_version_id"])
-                    if row["current_version_id"] is not None
-                    else None
+                    str(row["current_version_id"]) if row["current_version_id"] is not None else None
                 ),
                 "visibility_scope": str(row["visibility_scope"]),
                 "scope_organizations": (
@@ -904,9 +891,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "created_at": self._time(row["created_at"]),
                 "status": str(row["status"]),
                 "current_version_id": (
-                    str(row["current_version_id"])
-                    if row["current_version_id"] is not None
-                    else None
+                    str(row["current_version_id"]) if row["current_version_id"] is not None else None
                 ),
                 "original_filename": str(row["original_filename"]),
                 "byte_size": self._integer(row["byte_size"]),
@@ -973,9 +958,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "version": str(row["version"]),
                 "status": str(row["status"]),
                 "current_version_id": (
-                    str(row["current_version_id"])
-                    if row["current_version_id"] is not None
-                    else None
+                    str(row["current_version_id"]) if row["current_version_id"] is not None else None
                 ),
                 "visibility_scope": str(row["visibility_scope"]),
                 "visibility_label": self._visibility_label(
@@ -1155,9 +1138,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "organization_ids": [
                     str(item)
                     for item in (
-                        row["scope_organization_ids"]
-                        if isinstance(row["scope_organization_ids"], list)
-                        else []
+                        row["scope_organization_ids"] if isinstance(row["scope_organization_ids"], list) else []
                     )
                 ],
                 "status": str(row["status"]),
@@ -1205,9 +1186,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 """,
                 (scope.tenant_id, entry_id),
             )
-            version_number = self._integer(
-                self._one(cursor, "无法计算资料版本")["next_version"]
-            )
+            version_number = self._integer(self._one(cursor, "无法计算资料版本")["next_version"])
             cursor.execute(
                 """
                 INSERT INTO brand_library_entry_versions
@@ -1331,11 +1310,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         return {
             "id": str(row["id"]),
             "status": str(row["status"]),
-            "current_version_id": (
-                str(row["current_version_id"])
-                if row["current_version_id"] is not None
-                else None
-            ),
+            "current_version_id": (str(row["current_version_id"]) if row["current_version_id"] is not None else None),
             "updated_at": self._time(row["updated_at"]),
         }
 
@@ -1517,9 +1492,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "organization_ids": [
                     str(item)
                     for item in (
-                        row["scope_organization_ids"]
-                        if isinstance(row["scope_organization_ids"], list)
-                        else []
+                        row["scope_organization_ids"] if isinstance(row["scope_organization_ids"], list) else []
                     )
                 ],
                 "source_filename": str(row["source_filename"]),
@@ -1568,9 +1541,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 """,
                 (scope.tenant_id, asset_id),
             )
-            version_number = self._integer(
-                self._one(cursor, "无法计算素材版本")["next_version"]
-            )
+            version_number = self._integer(self._one(cursor, "无法计算素材版本")["next_version"])
             cursor.execute(
                 """
                 INSERT INTO material_asset_versions
@@ -1683,23 +1654,323 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             self._event(
                 cursor,
                 scope,
-                (
-                    "organization_material.restored"
-                    if enabled
-                    else "organization_material.retired"
-                ),
+                ("organization_material.restored" if enabled else "organization_material.retired"),
                 "material_asset",
                 asset_id,
             )
         return {
             "id": str(row["id"]),
             "status": str(row["status"]),
-            "current_version_id": (
-                str(row["current_version_id"])
-                if row["current_version_id"] is not None
-                else None
-            ),
+            "current_version_id": (str(row["current_version_id"]) if row["current_version_id"] is not None else None),
             "reference_version": self._integer(row["reference_version"]),
+        }
+
+    def management_product_media_bindings(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+    ) -> list[dict[str, object]]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT binding.id, binding.product_id, binding.asset_id,
+                       binding.usage_kind, binding.status,
+                       binding.created_at, binding.updated_at,
+                       product.sku, product_version.display_name,
+                       product.status AS product_status,
+                       product.current_version_id AS product_version_id,
+                       product_version.version_number AS product_version
+                FROM product_media_bindings binding
+                JOIN brand_products product
+                  ON product.tenant_id = binding.tenant_id
+                 AND product.brand_id = binding.brand_id
+                 AND product.id = binding.product_id
+                JOIN brand_product_versions product_version
+                  ON product_version.tenant_id = product.tenant_id
+                 AND product_version.brand_id = product.brand_id
+                 AND product_version.product_id = product.id
+                 AND product_version.id = product.current_version_id
+                JOIN material_assets asset
+                  ON asset.tenant_id = binding.tenant_id
+                 AND asset.brand_id = binding.brand_id
+                 AND asset.id = binding.asset_id
+                WHERE binding.tenant_id = %s
+                  AND binding.brand_id = %s
+                  AND binding.asset_id = %s
+                  AND asset.scope = 'organization'
+                ORDER BY binding.created_at, binding.id
+                """,
+                (scope.tenant_id, scope.brand_id, asset_id),
+            )
+            rows = cursor.fetchall()
+        return [
+            {
+                "id": str(row["id"]),
+                "product_id": str(row["product_id"]),
+                "asset_id": str(row["asset_id"]),
+                "usage_kind": str(row["usage_kind"]),
+                "status": str(row["status"]),
+                "sku": str(row["sku"]),
+                "product_name": str(row["display_name"]),
+                "product_status": str(row["product_status"]),
+                "product_version_id": str(row["product_version_id"]),
+                "product_version": self._integer(row["product_version"]),
+                "created_at": self._time(row["created_at"]),
+                "updated_at": self._time(row["updated_at"]),
+            }
+            for row in rows
+        ]
+
+    def create_management_product_media_binding(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        product_id: UUID,
+    ) -> dict[str, object]:
+        binding_id = uuid4()
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT asset.id, asset.media_type, asset.status,
+                       asset.current_version_id,
+                       version.visibility_scope,
+                       version.scope_organization_ids
+                FROM material_assets asset
+                JOIN material_asset_versions version
+                  ON version.tenant_id = asset.tenant_id
+                 AND version.brand_id = asset.brand_id
+                 AND version.asset_id = asset.id
+                 AND version.id = asset.current_version_id
+                WHERE asset.tenant_id = %s
+                  AND asset.brand_id = %s
+                  AND asset.id = %s
+                  AND asset.scope = 'organization'
+                FOR UPDATE OF asset
+                """,
+                (scope.tenant_id, scope.brand_id, asset_id),
+            )
+            asset = self._one(
+                cursor,
+                "找不到当前品牌的组织官方素材",
+            )
+            if (
+                str(asset["status"]) != "active"
+                or str(asset["media_type"]) not in {"image", "video"}
+                or asset["current_version_id"] is None
+            ):
+                raise DomainError("只有已启用并有当前版本的图片或视频可以关联商品。")
+            cursor.execute(
+                """
+                SELECT product.id, product.sku, product.status,
+                       product.current_version_id,
+                       version.display_name, version.version_number,
+                       version.visibility_scope,
+                       version.scope_organization_ids
+                FROM brand_products product
+                JOIN brand_product_versions version
+                  ON version.tenant_id = product.tenant_id
+                 AND version.brand_id = product.brand_id
+                 AND version.product_id = product.id
+                 AND version.id = product.current_version_id
+                WHERE product.tenant_id = %s
+                  AND product.brand_id = %s
+                  AND product.id = %s
+                FOR UPDATE OF product
+                """,
+                (scope.tenant_id, scope.brand_id, product_id),
+            )
+            product = self._one(
+                cursor,
+                "找不到当前品牌已确认的商品",
+            )
+            if str(product["status"]) != "active" or product["current_version_id"] is None:
+                raise DomainError("只有已启用并确认当前版本的商品可以关联素材。")
+            cursor.execute(
+                """
+                SELECT (
+                  %s = 'brand_all'
+                  OR %s = 'brand_all'
+                  OR (
+                    %s = 'headquarters'
+                    AND %s = 'headquarters'
+                    AND EXISTS (
+                      SELECT 1
+                      FROM unnest(%s::uuid[])
+                           asset_scope(organization_id)
+                      JOIN unnest(%s::uuid[])
+                           product_scope(organization_id)
+                        ON product_scope.organization_id =
+                           asset_scope.organization_id
+                    )
+                  )
+                  OR (
+                    %s = 'organizations'
+                    AND %s = 'organizations'
+                    AND EXISTS (
+                      SELECT 1
+                      FROM unnest(%s::uuid[])
+                           asset_scope(organization_id)
+                      CROSS JOIN unnest(%s::uuid[])
+                           product_scope(organization_id)
+                      WHERE organization_is_same_or_descendant(
+                              %s,
+                              asset_scope.organization_id,
+                              product_scope.organization_id
+                            )
+                         OR organization_is_same_or_descendant(
+                              %s,
+                              product_scope.organization_id,
+                              asset_scope.organization_id
+                            )
+                    )
+                  )
+                ) AS intersects
+                """,
+                (
+                    asset["visibility_scope"],
+                    product["visibility_scope"],
+                    asset["visibility_scope"],
+                    product["visibility_scope"],
+                    asset["scope_organization_ids"],
+                    product["scope_organization_ids"],
+                    asset["visibility_scope"],
+                    product["visibility_scope"],
+                    asset["scope_organization_ids"],
+                    product["scope_organization_ids"],
+                    scope.tenant_id,
+                    scope.tenant_id,
+                ),
+            )
+            if not bool(
+                self._one(
+                    cursor,
+                    "无法核对商品与素材范围",
+                )["intersects"]
+            ):
+                raise DomainError("这件商品与素材的可用范围没有交集。")
+            cursor.execute(
+                """
+                SELECT id
+                FROM product_media_bindings
+                WHERE tenant_id = %s AND brand_id = %s
+                  AND product_id = %s AND asset_id = %s
+                """,
+                (
+                    scope.tenant_id,
+                    scope.brand_id,
+                    product_id,
+                    asset_id,
+                ),
+            )
+            if cursor.fetchone() is not None:
+                raise DomainError("这件商品与素材已经有关联；如已停用，请直接恢复。")
+            cursor.execute(
+                """
+                INSERT INTO product_media_bindings
+                    (id, tenant_id, brand_id, product_id, asset_id,
+                     usage_kind, status, created_by)
+                VALUES (%s, %s, %s, %s, %s,
+                        'existing_product_media', 'active', %s)
+                RETURNING created_at, updated_at
+                """,
+                (
+                    binding_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    product_id,
+                    asset_id,
+                    scope.user_id,
+                ),
+            )
+            saved = self._one(
+                cursor,
+                "商品素材关联没有保存成功",
+            )
+            self._event(
+                cursor,
+                scope,
+                "product_media_binding.created",
+                "product_media_binding",
+                binding_id,
+            )
+        return {
+            "id": str(binding_id),
+            "product_id": str(product_id),
+            "asset_id": str(asset_id),
+            "usage_kind": "existing_product_media",
+            "status": "active",
+            "sku": str(product["sku"]),
+            "product_name": str(product["display_name"]),
+            "product_status": str(product["status"]),
+            "product_version_id": str(product["current_version_id"]),
+            "product_version": self._integer(product["version_number"]),
+            "created_at": self._time(saved["created_at"]),
+            "updated_at": self._time(saved["updated_at"]),
+        }
+
+    def set_management_product_media_binding_enabled(
+        self,
+        scope: TenantManagementScope,
+        asset_id: UUID,
+        binding_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                UPDATE product_media_bindings binding
+                   SET status = %s
+                  FROM material_assets asset, brand_products product
+                 WHERE binding.tenant_id = %s
+                   AND binding.brand_id = %s
+                   AND binding.id = %s
+                   AND binding.asset_id = %s
+                   AND asset.tenant_id = binding.tenant_id
+                   AND asset.brand_id = binding.brand_id
+                   AND asset.id = binding.asset_id
+                   AND asset.scope = 'organization'
+                   AND product.tenant_id = binding.tenant_id
+                   AND product.brand_id = binding.brand_id
+                   AND product.id = binding.product_id
+                   AND (
+                     %s = false
+                     OR (
+                       asset.status = 'active'
+                       AND asset.current_version_id IS NOT NULL
+                       AND product.status = 'active'
+                       AND product.current_version_id IS NOT NULL
+                     )
+                   )
+                RETURNING binding.id, binding.product_id,
+                          binding.asset_id, binding.status,
+                          binding.updated_at
+                """,
+                (
+                    "active" if enabled else "inactive",
+                    scope.tenant_id,
+                    scope.brand_id,
+                    binding_id,
+                    asset_id,
+                    enabled,
+                ),
+            )
+            row = self._one(
+                cursor,
+                ("找不到可恢复的商品素材关联" if enabled else "找不到可停用的商品素材关联"),
+            )
+            self._event(
+                cursor,
+                scope,
+                ("product_media_binding.restored" if enabled else "product_media_binding.inactivated"),
+                "product_media_binding",
+                binding_id,
+            )
+        return {
+            "id": str(row["id"]),
+            "product_id": str(row["product_id"]),
+            "asset_id": str(row["asset_id"]),
+            "status": str(row["status"]),
+            "updated_at": self._time(row["updated_at"]),
         }
 
     def request_management_material_deletion(
@@ -2288,9 +2559,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "organization_ids": [
                     str(item)
                     for item in (
-                        row["scope_organization_ids"]
-                        if isinstance(row["scope_organization_ids"], list)
-                        else []
+                        row["scope_organization_ids"] if isinstance(row["scope_organization_ids"], list) else []
                     )
                 ],
                 "status": str(row["status"]),
@@ -2392,13 +2661,9 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 )
             if operator_can_maintain_expression_profile:
                 if control_organization_id is None:
-                    raise DomainError(
-                        "账号尚未指定负责团队，不能授予五段画像维护资格"
-                    )
+                    raise DomainError("账号尚未指定负责团队，不能授予五段画像维护资格")
                 if UUID(str(operator["organization_id"])) != control_organization_id:
-                    raise DomainError(
-                        "只有账号负责团队的成员可以获得五段画像维护资格"
-                    )
+                    raise DomainError("只有账号负责团队的成员可以获得五段画像维护资格")
             cursor.execute(
                 """
                 SELECT account.id, account.channel, role.name AS content_role,
@@ -2669,8 +2934,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             )
             if resolved_control is not None:
                 cursor.execute(
-                    "SELECT id FROM organizations "
-                    "WHERE tenant_id = %s AND id = %s",
+                    "SELECT id FROM organizations WHERE tenant_id = %s AND id = %s",
                     (scope.tenant_id, resolved_control),
                 )
                 self._one(cursor, "只能选择当前租户已有的负责团队。")
@@ -2738,9 +3002,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         return {
             "id": str(account_id),
             "name": resolved_name,
-            "control_organization_id": (
-                str(resolved_control) if resolved_control is not None else None
-            ),
+            "control_organization_id": (str(resolved_control) if resolved_control is not None else None),
         }
 
     def set_publishing_account_enabled(
@@ -2776,11 +3038,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             self._event(
                 cursor,
                 scope,
-                (
-                    "publishing_account.restored"
-                    if enabled
-                    else "publishing_account.disabled"
-                ),
+                ("publishing_account.restored" if enabled else "publishing_account.disabled"),
                 "content_account",
                 account_id,
             )
@@ -2849,9 +3107,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 if str(existing["name"]) != name:
                     raise DomainError("这个表达身份在目标平台已有不同的明确载体。")
                 carrier_id = UUID(str(existing["id"]))
-                if not bool(existing["enabled"]) or not bool(
-                    existing["platform_enabled"]
-                ):
+                if not bool(existing["enabled"]) or not bool(existing["platform_enabled"]):
                     cursor.execute(
                         "UPDATE content_accounts "
                         "SET enabled = true, platform_enabled = true "
@@ -3388,15 +3644,10 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             expression_available,
             root_accounts > 0,
         )
-        platform_paths = [
-            path
-            for path in expression_paths
-            if self._integer(path.get("target_count")) >= 2
-        ]
+        platform_paths = [path for path in expression_paths if self._integer(path.get("target_count")) >= 2]
         recompile_status = self._condition_status(
             expression_confirmed and bool(platform_paths),
-            bool(expression_paths)
-            or self._integer(path_state["multi_target_components"]) > 0,
+            bool(expression_paths) or self._integer(path_state["multi_target_components"]) > 0,
         )
         display_status = self._condition_status(
             bool(display_paths),
@@ -3413,11 +3664,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             path_state,
             selected_expression,
         )
-        selected_account_id = (
-            str(selected_expression["account_id"])
-            if selected_expression is not None
-            else ""
-        )
+        selected_account_id = str(selected_expression["account_id"]) if selected_expression is not None else ""
         library_evidence = [
             self._library_path_evidence(path)
             for path in library_paths
@@ -3428,9 +3675,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             (
                 path
                 for path in expression_paths
-                if selected_product is not None
-                and str(path["account_id"])
-                == str(selected_product["account_id"])
+                if selected_product is not None and str(path["account_id"]) == str(selected_product["account_id"])
             ),
             None,
         )
@@ -3438,45 +3683,21 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             path_state,
             product_expression,
         )
-        product_evidence = (
-            [self._product_path_evidence(selected_product)]
-            if selected_product is not None
-            else []
-        )
+        product_evidence = [self._product_path_evidence(selected_product)] if selected_product is not None else []
         selected_platform = platform_paths[0] if platform_paths else None
         platform_expression_evidence = self._expression_path_evidence(
             path_state,
             selected_platform,
         )
-        platform_evidence = (
-            [self._platform_path_evidence(selected_platform)]
-            if selected_platform is not None
-            else []
-        )
+        platform_evidence = [self._platform_path_evidence(selected_platform)] if selected_platform is not None else []
         selected_series = next(
-            (
-                path
-                for path in series_paths
-                if str(path["account_id"]) == selected_account_id
-            ),
+            (path for path in series_paths if str(path["account_id"]) == selected_account_id),
             None,
         )
-        series_evidence = (
-            [self._series_path_evidence(selected_series)]
-            if selected_series is not None
-            else []
-        )
+        series_evidence = [self._series_path_evidence(selected_series)] if selected_series is not None else []
         selected_display = display_paths[0] if display_paths else None
-        display_evidence = (
-            self._display_path_evidence(selected_display)
-            if selected_display is not None
-            else []
-        )
-        series_count = sum(
-            1
-            for path in series_paths
-            if str(path["account_id"]) == selected_account_id
-        )
+        display_evidence = self._display_path_evidence(selected_display) if selected_display is not None else []
+        series_count = sum(1 for path in series_paths if str(path["account_id"]) == selected_account_id)
         return [
             self._diagnosis(
                 "non_product_content",
@@ -3496,10 +3717,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "商品选择与解释",
                 product_status,
                 (
-                    [
-                        f"{str(selected_product['account_name'])}可实际使用"
-                        f"{str(selected_product['display_name'])}"
-                    ]
+                    [f"{str(selected_product['account_name'])}可实际使用{str(selected_product['display_name'])}"]
                     if selected_product is not None
                     else ["当前没有账号与商品处于同一条可执行路径。"]
                 ),
@@ -3553,10 +3771,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "门店墙面挂杆参考方案",
                 display_status,
                 (
-                    [
-                        f"{str(selected_display['execution_organization_name'])}"
-                        "已有同组织门店档案、陈列成员和可用商品"
-                    ]
+                    [f"{str(selected_display['execution_organization_name'])}已有同组织门店档案、陈列成员和可用商品"]
                     if selected_display is not None
                     else ["门店档案、陈列成员与商品尚未在同一执行组织闭合。"]
                 ),
@@ -3575,20 +3790,12 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 [
                     f"已确认品牌表达：{'是' if expression_confirmed else '否'}",
                     (
-                        "可分配的合格发布账号："
-                        + "、".join(
-                            str(path["account_name"])
-                            for path in expression_paths
-                        )
+                        "可分配的合格发布账号：" + "、".join(str(path["account_name"]) for path in expression_paths)
                         if expression_paths
                         else "当前没有可分配的合格发布账号"
                     ),
                 ],
-                (
-                    []
-                    if expression_available
-                    else ["确认品牌表达，并为成员分配有画像的逻辑发布账号。"]
-                ),
+                ([] if expression_available else ["确认品牌表达，并为成员分配有画像的逻辑发布账号。"]),
                 "影响新成员首次进入后能否从弱种子开始创作。",
                 "管理成员与账号",
                 "members",
@@ -3826,7 +4033,102 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 """
                 SELECT m.id, m.title, m.media_type, m.scope, m.created_at, m.status,
                        m.original_filename, m.byte_size, m.checksum_sha256, m.reference_version,
-                       m.reference_note, m.visibility_scope
+                       m.reference_note, m.visibility_scope,
+                       COALESCE(
+                         (
+                           SELECT jsonb_agg(
+                             jsonb_build_object(
+                               'binding_id', binding.id,
+                               'product_id', product.id,
+                               'sku', product.sku,
+                               'product_name', product_version.display_name,
+                               'product_version',
+                                   product_version.version_number
+                             )
+                             ORDER BY product.sku, binding.id
+                           )
+                           FROM product_media_bindings binding
+                           JOIN brand_products product
+                             ON product.tenant_id = binding.tenant_id
+                            AND product.brand_id = binding.brand_id
+                            AND product.id = binding.product_id
+                           JOIN brand_product_versions product_version
+                             ON product_version.tenant_id =
+                                  product.tenant_id
+                            AND product_version.brand_id =
+                                  product.brand_id
+                            AND product_version.product_id = product.id
+                            AND product_version.id =
+                                  product.current_version_id
+                           JOIN content_accounts target_account
+                             ON target_account.tenant_id =
+                                  binding.tenant_id
+                            AND target_account.brand_id =
+                                  binding.brand_id
+                            AND target_account.id = %s
+                           JOIN content_accounts root_account
+                             ON root_account.tenant_id =
+                                  target_account.tenant_id
+                            AND root_account.id = COALESCE(
+                                  target_account.carrier_of_account_id,
+                                  target_account.id
+                                )
+                          WHERE binding.tenant_id = m.tenant_id
+                            AND binding.brand_id = m.brand_id
+                            AND binding.asset_id = m.id
+                            AND binding.status = 'active'
+                            AND product.status = 'active'
+                            AND product.current_version_id IS NOT NULL
+                            AND root_account.enabled = true
+                            AND root_account.control_organization_id
+                                IS NOT NULL
+                            AND (
+                              product_version.visibility_scope =
+                                  'brand_all'
+                              OR (
+                                product_version.visibility_scope =
+                                    'organizations'
+                                AND EXISTS (
+                                  SELECT 1
+                                  FROM unnest(
+                                    product_version
+                                      .scope_organization_ids
+                                  ) AS product_scope(organization_id)
+                                  WHERE
+                                    organization_is_same_or_descendant(
+                                      product.tenant_id,
+                                      root_account
+                                        .control_organization_id,
+                                      product_scope.organization_id
+                                    )
+                                )
+                              )
+                              OR (
+                                product_version.visibility_scope =
+                                    'headquarters'
+                                AND EXISTS (
+                                  SELECT 1
+                                  FROM unnest(
+                                    product_version
+                                      .scope_organization_ids
+                                  ) AS product_scope(organization_id)
+                                  JOIN organizations company
+                                    ON company.tenant_id =
+                                         product.tenant_id
+                                   AND company.id =
+                                         product_scope.organization_id
+                                   AND company.organization_level =
+                                         'company'
+                                  WHERE
+                                    product_scope.organization_id =
+                                      root_account
+                                        .control_organization_id
+                                )
+                              )
+                            )
+                         ),
+                         '[]'::jsonb
+                       ) AS product_media
                 FROM material_assets m
                 WHERE m.tenant_id = %s AND m.brand_id = %s AND m.status = 'active'
                   AND (
@@ -3847,15 +4149,20 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                           JOIN material_asset_scope_organizations material_scope
                             ON material_scope.tenant_id = m.tenant_id
                            AND material_scope.asset_id = m.id
-                           AND material_scope.organization_id =
-                               root_account.control_organization_id
                           JOIN organizations scoped_organization
                             ON scoped_organization.tenant_id = material_scope.tenant_id
                            AND scoped_organization.id = material_scope.organization_id
                           WHERE target_account.tenant_id = %s
                             AND target_account.id = %s
                             AND (
-                              m.visibility_scope = 'organizations'
+                              (
+                                m.visibility_scope = 'organizations'
+                                AND organization_is_same_or_descendant(
+                                      m.tenant_id,
+                                      root_account.control_organization_id,
+                                      material_scope.organization_id
+                                    )
+                              )
                               OR (
                                 m.visibility_scope = 'headquarters'
                                 AND scoped_organization.organization_level = 'company'
@@ -3868,6 +4175,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 ORDER BY m.created_at DESC
                 """,
                 (
+                    scope.account_id,
                     scope.tenant_id,
                     scope.brand_id,
                     scope.user_id,
@@ -3890,6 +4198,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "reference_version": self._integer(row["reference_version"]),
                 "reference_note": str(row["reference_note"]),
                 "visibility_scope": str(row["visibility_scope"]),
+                "product_media": (row["product_media"] if isinstance(row["product_media"], list) else []),
             }
             for row in rows
         ]
@@ -4193,10 +4502,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     "resource_id": str(path["account_id"]),
                     "version": f"五段画像 V{self._integer(path['profile_version'])}",
                     "version_id": str(path["profile_version_id"]),
-                    "scope": (
-                        f"{str(path['control_organization_name'])}"
-                        "（逻辑发布账号控制组织）"
-                    ),
+                    "scope": (f"{str(path['control_organization_name'])}（逻辑发布账号控制组织）"),
                     "updated_at": self._evidence_time(path["profile_created_at"]),
                     "updated_at_label": "",
                 }
@@ -4210,14 +4516,10 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         return {
             "source": str(path["title"]),
             "resource_id": str(path["entry_id"]),
-            "version": (
-                f"{str(path['version_label'])}（版本 "
-                f"{self._integer(path['version_number'])}）"
-            ),
+            "version": (f"{str(path['version_label'])}（版本 {self._integer(path['version_number'])}）"),
             "version_id": str(path["version_id"]),
             "scope": (
-                f"{str(path['control_organization_name'])}可见 · "
-                f"{self._visibility_name(str(path['visibility_scope']))}"
+                f"{str(path['control_organization_name'])}可见 · {self._visibility_name(str(path['visibility_scope']))}"
             ),
             "updated_at": self._evidence_time(path["version_created_at"]),
             "updated_at_label": "",
@@ -4233,8 +4535,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "version": f"商品事实 V{self._integer(path['version_number'])}",
             "version_id": str(path["version_id"]),
             "scope": (
-                f"{str(path['control_organization_name'])}可用 · "
-                f"{self._visibility_name(str(path['visibility_scope']))}"
+                f"{str(path['control_organization_name'])}可用 · {self._visibility_name(str(path['visibility_scope']))}"
             ),
             "updated_at": self._evidence_time(path["version_created_at"]),
             "updated_at_label": "",
@@ -4246,8 +4547,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
     ) -> dict[str, object]:
         return {
             "source": (
-                f"{str(path['account_name'])}的启用平台与形式目标："
-                f"{self._integer(path.get('target_count'))} 个"
+                f"{str(path['account_name'])}的启用平台与形式目标：{self._integer(path.get('target_count'))} 个"
             ),
             "resource_id": str(path["account_id"]),
             "version": "不适用（平台目标未版本化）",
@@ -4300,10 +4600,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "resource_id": str(path["product_id"]),
                 "version": f"商品事实 V{self._integer(path['version_number'])}",
                 "version_id": str(path["version_id"]),
-                "scope": (
-                    f"{scope_label}可用 · "
-                    f"{self._visibility_name(str(path['visibility_scope']))}"
-                ),
+                "scope": (f"{scope_label}可用 · {self._visibility_name(str(path['visibility_scope']))}"),
                 "updated_at": self._evidence_time(path["version_created_at"]),
                 "updated_at_label": "",
             },
@@ -4364,9 +4661,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         resource_label: str,
     ) -> list[dict[str, object]]:
         if visibility_scope not in {"brand_all", "headquarters", "organizations"}:
-            raise DomainError(
-                f"{resource_label}范围只能选择品牌全员、总部专用或指定区域。"
-            )
+            raise DomainError(f"{resource_label}范围只能选择品牌全员、总部专用或指定区域。")
         unique_ids = tuple(dict.fromkeys(organization_ids))
         organizations: list[dict[str, object]] = []
         if unique_ids:
@@ -4381,29 +4676,20 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             )
             organizations = cursor.fetchall()
             if len(organizations) != len(unique_ids):
-                raise DomainError(
-                    f"{resource_label}范围只能选择当前租户已有的组织。"
-                )
+                raise DomainError(f"{resource_label}范围只能选择当前租户已有的组织。")
         if visibility_scope == "brand_all" and organizations:
             raise DomainError(f"品牌全员{resource_label}不需要指定组织。")
         if visibility_scope == "headquarters":
             if len(organizations) != 1:
-                raise DomainError(
-                    f"总部专用{resource_label}需要明确选择一个公司级组织。"
-                )
+                raise DomainError(f"总部专用{resource_label}需要明确选择一个公司级组织。")
             if str(organizations[0]["organization_level"]) != "company":
-                raise DomainError(
-                    f"总部专用{resource_label}只能绑定明确登记的公司级组织。"
-                )
+                raise DomainError(f"总部专用{resource_label}只能绑定明确登记的公司级组织。")
         if visibility_scope == "organizations" and not organizations:
             raise DomainError(f"指定区域{resource_label}至少需要选择一个具体区域。")
         if visibility_scope == "organizations" and any(
-            str(organization["organization_level"]) != "region"
-            for organization in organizations
+            str(organization["organization_level"]) != "region" for organization in organizations
         ):
-            raise DomainError(
-                f"指定区域{resource_label}只能绑定明确登记的区域；门店或公司级组织不能代替区域。"
-            )
+            raise DomainError(f"指定区域{resource_label}只能绑定明确登记的区域；门店或公司级组织不能代替区域。")
         return organizations
 
     @staticmethod

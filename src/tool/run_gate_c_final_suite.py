@@ -3,74 +3,114 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import socket
 import subprocess
-from dataclasses import asdict, dataclass
+import threading
+import time
+from collections.abc import Mapping
+from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
-from uuid import NAMESPACE_URL, UUID, uuid5
+from urllib.request import urlopen
+from uuid import UUID, uuid4
 
-from src.brain.platform_directions import direction_for
-from src.shared.creative_plan import (
-    ACCOUNT_BASELINE_TONE_ID,
-    build_creative_plan,
+import psycopg
+import uvicorn
+from fastapi.testclient import TestClient
+
+from src.brain.content_control_service import ContentControlService
+from src.brain.content_service import ContentService
+from src.brain.workbench_service import WorkbenchService
+from src.gateway.api.app import create_app
+from src.gateway.api.settings import Settings
+from src.infrastructure.content_control_repository import (
+    PostgresContentControlRepository,
 )
-from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
-from src.shared.factual_basis import build_product_fact_packet
-from src.shared.media_program import (
-    MediaResourceV1,
-    build_media_capability_envelope,
-    media_envelope_digest,
-    media_envelope_document,
-    media_program_digest,
-    media_program_document,
-    select_media_program,
-)
-from src.shared.narrative import new_frame, visible_digest
-from src.shared.types import (
-    AccountExpression,
-    BrandContext,
-    ContentProduct,
-    ContentTarget,
-    CreativeDirection,
-    DirectionSelection,
-    GeneratedArtifact,
-    GenerationInput,
-    MediaFormat,
-    ProductFact,
-    SeriesContext,
-    SeriesEntry,
-)
+from src.infrastructure.local_object_store import LocalObjectStore
+from src.infrastructure.postgres_repository import PostgresContentRepository
+from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
+from src.shared.narrative import visible_digest
 from src.tool.gate_c_evidence import (
     GATE_C_FINAL_CARD_IDS,
     GATE_C_REVIEW_CRITERIA,
     ArtifactEvidenceInput,
+    EvidenceRuntimeInput,
     HumanReviewInput,
     write_gate_c_evidence,
 )
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
 
 _MODEL = "deepseek-v4-flash"
-_SUITE_VERSION = "ux03-gate-c-final-suite-v2"
+_SUITE_VERSION = "ux03-gate-c-formal-final-suite-v3"
 _CARDS = ("P1", "P2", "P3", "P4", "P5", "series2", "series3")
-_HQ_PROFILE_ID = UUID("84000000-0000-0000-0000-000000000001")
-_STORE_PROFILE_ID = UUID("84000000-0000-0000-0000-000000000002")
-_SERIES_ID = UUID("84000000-0000-0000-0000-000000000003")
 
 
 @dataclass(frozen=True)
 class _CardSpec:
     card_id: str
-    weak_seed: str
-    primary_product: ContentProduct
-    target: ContentTarget
-    account_kind: str
-    user_fact: str | None = None
-    products: tuple[ProductFact, ...] = ()
-    direction: CreativeDirection | None = None
+    message: str
+    publishing_identity_id: UUID
+    target: str
+    material_ids: tuple[UUID, ...] = ()
+    series_position: int | None = None
+
+
+@dataclass(frozen=True)
+class _FormalJourney:
+    tenant_id: UUID
+    session_token: str
+    headquarters_identity_id: UUID
+    store_identity_id: UUID
+    p5_material_ids: tuple[UUID, UUID]
+    p5_product_names: tuple[str, str]
+    p5_material_titles: tuple[str, str]
+
+    @classmethod
+    def from_file(cls, path: Path) -> _FormalJourney:
+        document = _json_object(path)
+        allowed = {
+            "tenant_id",
+            "session_token",
+            "headquarters_identity_id",
+            "store_identity_id",
+            "p5_material_ids",
+            "p5_product_names",
+            "p5_material_titles",
+        }
+        if set(document) != allowed:
+            raise ValueError("formal journey file fields drifted")
+        raw_material_ids = document["p5_material_ids"]
+        if not isinstance(raw_material_ids, list) or len(raw_material_ids) != 2:
+            raise ValueError("formal journey needs exactly two selected materials")
+        material_ids = tuple(UUID(str(item)) for item in raw_material_ids)
+        if len(set(material_ids)) != 2:
+            raise ValueError("formal journey materials must be distinct")
+        product_names = _two_non_empty_strings(
+            document["p5_product_names"],
+            label="product names",
+        )
+        material_titles = _two_non_empty_strings(
+            document["p5_material_titles"],
+            label="material titles",
+        )
+        session_token = str(document["session_token"])
+        if not session_token:
+            raise ValueError("formal journey session is unavailable")
+        return cls(
+            tenant_id=UUID(str(document["tenant_id"])),
+            session_token=session_token,
+            headquarters_identity_id=UUID(str(document["headquarters_identity_id"])),
+            store_identity_id=UUID(str(document["store_identity_id"])),
+            p5_material_ids=cast(tuple[UUID, UUID], material_ids),
+            p5_product_names=product_names,
+            p5_material_titles=material_titles,
+        )
 
 
 class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
-    """Persist each provider response before local parsing or compilation."""
+    """Persist the one provider response made by each formal API card."""
 
     def __init__(self, *, evidence_root: Path, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -99,10 +139,8 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
         card_id = self._active_card
-        if card_id is None:
+        if card_id is None or self._request_count != 0:
             raise RuntimeError("provider call is not bound to one final card")
-        if self._request_count != 0:
-            raise RuntimeError("a final card attempted an additional provider call")
         payload, retries = super()._request(
             system,
             prompt,
@@ -118,378 +156,263 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
         return payload, retries
 
 
-def _stable_uuid(label: str) -> UUID:
-    return uuid5(NAMESPACE_URL, f"diyu:ux03:gate-c:{label}")
+def _two_non_empty_strings(
+    value: object,
+    *,
+    label: str,
+) -> tuple[str, str]:
+    if not isinstance(value, list) or len(value) != 2:
+        raise ValueError(f"formal journey {label} must contain two values")
+    values = tuple(str(item).strip() for item in value)
+    if any(not item for item in values) or len(set(values)) != 2:
+        raise ValueError(f"formal journey {label} must be distinct")
+    return cast(tuple[str, str], values)
 
 
-def _brand(account_kind: str, *, target: ContentTarget) -> BrandContext:
-    is_hq = account_kind == "hq"
-    media_format = "图文" if target == "xiaohongshu_graphic" else "视频"
-    platform = "小红书" if target.startswith("xiaohongshu") else "抖音"
-    return BrandContext(
-        brand_name="折线衣间",
-        positioning="用克制的选择帮助，让熟悉事物重新被看见",
-        decision_order="先保留真实信息，再给出清楚选择",
-        tone="自然、克制、具体，不用通用鸡汤代替判断",
-        account_name=(
-            "折线衣间·总部穿衣编辑"
-            if is_hq
-            else "折线衣间·柯桥门店观察员"
-        ),
-        operator_name="synthetic 运营者",
-        organization_name=("折线衣间总部" if is_hq else "柯桥门店"),
-        content_role_name=("穿衣选择编辑" if is_hq else "门店关系观察员"),
-        content_role_boundary=(
-            "提供穿衣选择与观察视角，不冒充商品体验或品牌历史。"
-            if is_hq
-            else "回应门店关系议题，不冒充顾客、员工或门店历史。"
-        ),
-        audience_description=(
-            "希望在有限信息下得到清楚穿衣判断的人"
-            if is_hq
-            else "希望被尊重、不被催促，也能获得清楚回应的人"
-        ),
-        strategy_version="synthetic-brand-expression-v1",
-        platform=platform,
-        media_format=media_format,
-        production_conditions="低成本单人制作；没有登记实物时使用抽象编排。",
-        speaker_kind="institutional_account",
+def _settings(
+    *,
+    database_url: str,
+    object_store_root: Path,
+) -> Settings:
+    api_key = os.environ.get("DEEPSEEK_API_KEY", "")
+    api_base_url = os.environ.get("DEEPSEEK_API_BASE_URL", "")
+    session_secret = os.environ.get("DIYU_SESSION_SECRET", "")
+    if not api_key or not api_base_url or not session_secret:
+        raise RuntimeError("protected final-suite configuration is unavailable")
+    return Settings.model_validate(
+        {
+            "DIYU_RUNTIME_MODE": "production",
+            "DIYU_APP_DATABASE_URL": database_url,
+            "DIYU_SESSION_SECRET": session_secret,
+            "DIYU_PUBLIC_URL": "https://diyu.example",
+            "DIYU_GENERATOR_MODE": "deepseek",
+            "DEEPSEEK_API_BASE_URL": api_base_url,
+            "DEEPSEEK_API_KEY": api_key,
+            "DEEPSEEK_MODEL": _MODEL,
+            "DIYU_MODEL_TIMEOUT_SECONDS": "120",
+            "DIYU_MODEL_MAX_RETRIES": "0",
+            "DIYU_MATERIAL_STORAGE_ROOT": str(object_store_root),
+            "DIYU_S3_ENDPOINT_URL": "http://127.0.0.1:1",
+            "DIYU_S3_BUCKET": "unused-local-final-suite",
+            "DIYU_S3_ACCESS_KEY_ID": "unused-local-final-suite",
+            "DIYU_S3_SECRET_ACCESS_KEY": "unused-local-final-suite",
+        }
     )
 
 
-def _account(account_kind: str) -> AccountExpression:
-    if account_kind == "hq":
-        return AccountExpression(
-            _HQ_PROFILE_ID,
-            1,
-            "把穿衣问题拆成具体条件与可选路径的编辑",
-            "不冒充试穿、商品体验、品牌历史或专业背书",
-            "帮助受众在有限信息下保留自己的判断",
-            "穿衣选择、商品认知、熟悉事物重新被看见",
-            "低成本单人制作；抽象编排优先",
-            False,
+def _run_formal_p5_browser(
+    app: object,
+    journey: _FormalJourney,
+) -> UUID:
+    with socket.socket() as port_socket:
+        port_socket.bind(("127.0.0.1", 0))
+        port = int(port_socket.getsockname()[1])
+    server = uvicorn.Server(
+        uvicorn.Config(
+            cast(Any, app),
+            host="127.0.0.1",
+            port=port,
+            log_level="error",
         )
-    return AccountExpression(
-        _STORE_PROFILE_ID,
-        1,
-        "尊重人在门店里按自己节奏选择的观察者",
-        "不冒充顾客、员工、门店历史或已执行服务",
-        "给想自己看一会儿的人留出空间，也给出可用回应",
-        "门店关系、选择节奏、不打扰与回应",
-        "低成本单人制作；抽象编排优先",
-        False,
     )
-
-
-def _explicit_direction() -> CreativeDirection:
-    return CreativeDirection(
-        catalog_version="content-expression-catalog-v1",
-        selections=(
-            DirectionSelection(
-                axis="mechanism",
-                stable_id="CAT-MECHANISM-CONTRAST-01",
-                label="条件对照",
-                applied_label="条件对照",
-                translated=False,
-                preserved_aspect="",
-                origin="explicit",
-            ),
-            DirectionSelection(
-                axis="style",
-                stable_id="CAT-STYLE-PLAIN-01",
-                label="克制直接",
-                applied_label="克制直接",
-                translated=False,
-                preserved_aspect="",
-                origin="explicit",
-            ),
-        ),
-        custom_text="先给两组条件，再给一个不替用户做决定的下一步",
-        body_related_opt_in=False,
-        translation_notice=None,
+    thread = threading.Thread(
+        target=server.run,
+        name="ux03-final-p5-browser-server",
+        daemon=True,
     )
+    thread.start()
+    base_url = f"http://127.0.0.1:{port}"
+    try:
+        for _ in range(100):
+            if not thread.is_alive():
+                raise RuntimeError("formal P5 browser server exited early")
+            try:
+                with urlopen(f"{base_url}/status", timeout=0.2) as response:
+                    if response.status == 200:
+                        break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            raise RuntimeError("formal P5 browser server did not become ready")
+        completed = subprocess.run(
+            ["node", "frontend/test/ux03-product-media-browser.mjs"],
+            cwd=Path(__file__).resolve().parents[2],
+            env={
+                **os.environ,
+                "UX03_PRODUCT_MEDIA_BASE_URL": base_url,
+                "UX03_PRODUCT_MEDIA_ADMIN_TOKEN": journey.session_token,
+                "UX03_PRODUCT_MEDIA_CREATOR_TOKEN": journey.session_token,
+                "UX03_PRODUCT_MEDIA_ACCOUNT_ID": str(journey.headquarters_identity_id),
+                "UX03_PRODUCT_MEDIA_PRODUCT_1": journey.p5_product_names[0],
+                "UX03_PRODUCT_MEDIA_PRODUCT_2": journey.p5_product_names[1],
+                "UX03_PRODUCT_MEDIA_MATERIAL_1": (journey.p5_material_titles[0]),
+                "UX03_PRODUCT_MEDIA_MATERIAL_2": (journey.p5_material_titles[1]),
+                "UX03_PRODUCT_MEDIA_SKIP_BINDING": "1",
+            },
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        if completed.returncode != 0:
+            raise RuntimeError("formal P5 browser journey failed")
+        result = json.loads(completed.stdout)
+        if not isinstance(result, dict) or result.get("failures") != [] or not result.get("task_id"):
+            raise RuntimeError("formal P5 browser journey did not commit")
+        return UUID(str(result["task_id"]))
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
+        if thread.is_alive():
+            raise RuntimeError("formal P5 browser server did not stop")
 
 
-def _p2_product() -> ProductFact:
-    return ProductFact(
-        sku="ZX-C218",
-        display_name="双面短外套",
-        facts={
-            "observable_features": "炭灰纯色、深绿细格纹",
-            "both_sides_complete": True,
-        },
-        source_kind="synthetic_confirmed_product_record",
-        source_note="Gate C P2 冻结事实",
-        fact_version=1,
-        applicability="synthetic_brand_all",
-    )
-
-
-def _p5_products() -> tuple[ProductFact, ...]:
-    return (
-        ProductFact(
-            sku="SYN-VIS-01",
-            display_name="登记商品甲",
-            facts={"observable_features": "深色纯色外观"},
-            source_kind="synthetic_confirmed_product_record",
-            source_note="Gate C P5 冻结事实",
-            fact_version=1,
-            applicability="synthetic_brand_all",
-        ),
-        ProductFact(
-            sku="SYN-VIS-02",
-            display_name="登记商品乙",
-            facts={"observable_features": "浅色细格外观"},
-            source_kind="synthetic_confirmed_product_record",
-            source_note="Gate C P5 冻结事实",
-            fact_version=1,
-            applicability="synthetic_brand_all",
-        ),
-    )
-
-
-def _card_specs() -> tuple[_CardSpec, ...]:
+def _card_specs(
+    journey: _FormalJourney,
+    *,
+    series_id: UUID,
+) -> tuple[_CardSpec, ...]:
     return (
         _CardSpec(
             "P1",
             "早上出门有点凉，中午又热，今天怎么穿更稳妥？",
-            "dressing_decision",
+            journey.headquarters_identity_id,
             "douyin_video",
-            "hq",
-            direction=_explicit_direction(),
         ),
         _CardSpec(
             "P2",
             "ZX-C218，帮我写一篇小红书，重点说清两面完整外观带来的选择。",
-            "product_truth",
+            journey.headquarters_identity_id,
             "xiaohongshu_graphic",
-            "hq",
-            products=(_p2_product(),),
         ),
         _CardSpec(
             "P3",
             "今天喝了一直喝的蓝山咖啡，居然是甜的，帮我发一条。",
-            "brand_life_narrative",
+            journey.headquarters_identity_id,
             "xiaohongshu_graphic",
-            "hq",
-            user_fact="今天喝了一直喝的蓝山咖啡，居然是甜的。",
         ),
         _CardSpec(
             "P4",
             "今天店里有人只想自己看看。写一条回应这种状态的小红书。",
-            "local_response",
+            journey.store_identity_id,
             "xiaohongshu_graphic",
-            "store",
-            user_fact="今天店里有人只想自己看看。",
+            series_position=1,
         ),
         _CardSpec(
             "P5",
             "用本次明确选择的两件登记商品做一条视觉关系图文。",
-            "visual_styling_story",
+            journey.headquarters_identity_id,
             "xiaohongshu_graphic",
-            "hq",
-            products=_p5_products(),
+            material_ids=journey.p5_material_ids,
         ),
         _CardSpec(
             "series2",
             "沿着第一篇的不打扰，继续写第二篇：怎样给出回应。",
-            "local_response",
+            journey.store_identity_id,
             "xiaohongshu_graphic",
-            "store",
         ),
         _CardSpec(
             "series3",
             "继续第三篇：回应之后，怎样把选择留给对方。",
-            "local_response",
+            journey.store_identity_id,
             "xiaohongshu_graphic",
-            "store",
         ),
     )
 
 
-def _registered_product_resources() -> tuple[MediaResourceV1, ...]:
-    return tuple(
-        MediaResourceV1(
-            resource_id=f"resource:registered-product:{index}:v1",
-            resource_version="1",
-            media_type="image",
-            source_ref=f"synthetic-selected-product-media:{index}:v1",
-            capability_id="registered_product_display",
-        )
-        for index in (1, 2)
-    )
-
-
-def _series_context(
-    card_id: str,
-    artifacts: dict[str, GeneratedArtifact],
-) -> SeriesContext | None:
-    if card_id not in {"series2", "series3"}:
-        return None
-    p4 = artifacts.get("P4")
-    if p4 is None:
-        raise RuntimeError("series evidence requires the first frozen entry")
-    entries = [
-        SeriesEntry(
-            task_id=_stable_uuid("task:P4"),
-            version_id=_stable_uuid("version:P4"),
-            version=1,
-            position=1,
-            outline=p4.outline,
-            body=p4.body,
-        )
-    ]
-    if card_id == "series3":
-        series2 = artifacts.get("series2")
-        if series2 is None:
-            raise RuntimeError("series3 requires the frozen second entry")
-        entries.append(
-            SeriesEntry(
-                task_id=_stable_uuid("task:series2"),
-                version_id=_stable_uuid("version:series2"),
-                version=1,
-                position=2,
-                outline=series2.outline,
-                body=series2.body,
-            )
-        )
-    return SeriesContext(
-        series_id=_SERIES_ID,
-        revision=1,
-        title="把选择留给人的三篇门店观察",
-        premise="从不打扰，推进到回应，再推进到留出选择。",
-        target_position=2 if card_id == "series2" else 3,
-        prior_entries=tuple(entries),
-    )
-
-
-def _request_for(
+def _stream_card(
+    client: TestClient,
+    generator: _EvidenceDeepSeekGenerator,
     spec: _CardSpec,
-    artifacts: dict[str, GeneratedArtifact],
-) -> GenerationInput:
-    media_format: MediaFormat = (
-        "graphic" if spec.target == "xiaohongshu_graphic" else "video"
-    )
-    platform_shape = (
-        "小红书图文完整成品"
-        if media_format == "graphic"
-        else "抖音短视频完整成品"
-    )
-    product_ids = tuple(build_product_fact_packet(spec.products).fact_ids)
-    frame = new_frame(
-        "actuality_reflection" if spec.user_fact is not None else "general_observation",
-        (spec.user_fact,) if spec.user_fact is not None else (),
-        product_ids,
-    )
-    series_context = _series_context(spec.card_id, artifacts)
-    plan = build_creative_plan(
-        topic_spans=(spec.weak_seed,),
-        primary_value=spec.primary_product,
-        tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
-        mechanism_id=None,
-        target_shape=platform_shape,
-    )
-    envelope = build_media_capability_envelope(
-        platform_shape=platform_shape,
-        media_format=media_format,
-        registered_resources=(
-            _registered_product_resources() if spec.card_id == "P5" else ()
-        ),
-    )
-    program = select_media_program(
-        primary_product=spec.primary_product,
-        envelope=envelope,
-        mechanism_id=plan.mechanism_id,
-        series_position=(
-            series_context.target_position
-            if series_context is not None
-            else None
-        ),
-        fact_count=len(product_ids),
-    )
-    return GenerationInput(
-        run_id=_stable_uuid(f"run:{spec.card_id}"),
-        task_id=_stable_uuid(f"task:{spec.card_id}"),
-        weak_seed=spec.weak_seed,
-        primary_product=spec.primary_product,
-        revision_instruction=None,
-        brand=_brand(spec.account_kind, target=spec.target),
-        target=spec.target,
-        media_format=media_format,
-        platform_direction=direction_for(spec.target),
-        products=spec.products,
-        creative_direction=spec.direction,
-        account_expression=_account(spec.account_kind),
-        series_context=series_context,
-        narrative_frame=frame,
-        creative_plan=plan,
-        delivery_compiler_version=DELIVERY_COMPILER_VERSION,
-        media_capability_envelope=envelope,
-        media_program=program,
-    )
+    *,
+    series_id: UUID,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "message": spec.message,
+        "conversation": [],
+        "publishing_identity_id": str(spec.publishing_identity_id),
+        "target": spec.target,
+        "material_ids": [str(item) for item in spec.material_ids],
+        "interaction_mode": "generate",
+        "direct_generate": True,
+        "request_id": str(uuid4()),
+        "series_id": str(series_id) if spec.card_id in {"P4", "series2", "series3"} else None,
+        "series_position": spec.series_position,
+    }
+    generator.begin_card(spec.card_id)
+    response = client.post("/api/v1/content/stream", json=payload)
+    if response.status_code != 200:
+        raise RuntimeError(f"{spec.card_id}: formal content API failed")
+    events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
+    completed = [item for item in events if item.get("event") == "completed"]
+    if len(completed) != 1:
+        raise RuntimeError(f"{spec.card_id}: formal content API did not commit once")
+    generator.end_card()
+    result = completed[0].get("result")
+    if not isinstance(result, dict):
+        raise RuntimeError(f"{spec.card_id}: completed artifact is unavailable")
+    return cast(dict[str, object], result)
+
+
+def _task_snapshot(
+    database_url: str,
+    tenant_id: UUID,
+    task_id: UUID,
+) -> dict[str, object]:
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT set_config('app.tenant_id', %s, true)",
+            (str(tenant_id),),
+        )
+        cursor.execute(
+            """
+            SELECT content_context_snapshot
+            FROM business_tasks
+            WHERE tenant_id = %s AND id = %s
+            """,
+            (tenant_id, task_id),
+        )
+        row = cursor.fetchone()
+    if row is None or not isinstance(row[0], dict):
+        raise RuntimeError("formal task snapshot is unavailable")
+    return cast(dict[str, object], row[0])
 
 
 def _artifact_document(
     card_id: str,
-    request: GenerationInput,
-    artifact: GeneratedArtifact,
+    result: Mapping[str, object],
+    snapshot: Mapping[str, object],
 ) -> dict[str, object]:
-    envelope = request.media_capability_envelope
-    program = request.media_program
-    if envelope is None or program is None:
-        raise RuntimeError("final artifact is missing its media contract")
-    digest = visible_digest(artifact.outline, artifact.body)
-    if digest != artifact.reviewed_digest:
-        raise RuntimeError("generated artifact visible digest drifted")
+    outline = result.get("outline")
+    body = result.get("body")
+    if not isinstance(outline, str) or not isinstance(body, str):
+        raise RuntimeError(f"{card_id}: formal visible artifact is unavailable")
+    envelope = snapshot.get("media_capability_envelope")
+    program = snapshot.get("media_program")
+    if not isinstance(envelope, dict) or not isinstance(program, dict):
+        raise RuntimeError(f"{card_id}: formal media snapshot is unavailable")
     return {
         "suite_version": _SUITE_VERSION,
         "card_id": card_id,
-        "outline": artifact.outline,
-        "body": artifact.body,
-        "visible_digest": digest,
-        "model": artifact.model,
-        "latency_ms": artifact.latency_ms,
-        "retry_count": artifact.retry_count,
-        "provider_usage": artifact.provider_usage,
-        "primary_product": artifact.primary_product,
-        "semantic_contract": asdict(artifact.semantic_contract),
-        "production": asdict(artifact.production),
-        "completion_snapshot_patch": artifact.completion_snapshot_patch,
-        "request_contract": {
-            "target": request.target,
-            "media_format": request.media_format,
-            "account_profile_id": str(
-                request.account_expression.profile_id
-                if request.account_expression is not None
-                else ""
-            ),
-            "account_profile_version": (
-                request.account_expression.version
-                if request.account_expression is not None
-                else None
-            ),
-            "series_id": (
-                str(request.series_context.series_id)
-                if request.series_context is not None
-                else None
-            ),
-            "series_position": (
-                request.series_context.target_position
-                if request.series_context is not None
-                else None
-            ),
-            "media_capability_envelope": media_envelope_document(envelope),
-            "media_capability_envelope_digest": media_envelope_digest(
-                envelope
-            ),
-            "media_program": media_program_document(program),
-            "media_program_digest": media_program_digest(program),
+        "task_id": str(result.get("task_id")),
+        "version_id": str(result.get("id")),
+        "version": result.get("version"),
+        "outline": outline,
+        "body": body,
+        "visible_digest": visible_digest(outline, body),
+        "production": result.get("production"),
+        "aigc_notice": result.get("aigc_notice"),
+        "formal_snapshot": {
+            "media_capability_envelope": envelope,
+            "media_program": program,
+            "creative_direction": snapshot.get("creative_direction"),
+            "series_context": snapshot.get("series_context"),
         },
     }
 
 
 def _generate(args: argparse.Namespace) -> None:
     evidence_root = Path(args.evidence_root).resolve()
+    journey_file = Path(args.journey_file).resolve()
     implementation_sha = _current_head()
     if implementation_sha != args.implementation_sha:
         raise RuntimeError("current HEAD is not the frozen implementation SHA")
@@ -497,8 +420,44 @@ def _generate(args: argparse.Namespace) -> None:
         raise RuntimeError("final suite requires a clean worktree")
     if evidence_root.exists():
         raise RuntimeError("final suite evidence directory already exists")
+    journey = _FormalJourney.from_file(journey_file)
+    database_url = os.environ.get("DIYU_APP_DATABASE_URL", "")
+    if not database_url:
+        raise RuntimeError("formal application database is unavailable")
     evidence_root.mkdir(mode=0o700, parents=True)
     evidence_root.chmod(0o700)
+    object_store_root = evidence_root / "object-store"
+    settings = _settings(
+        database_url=database_url,
+        object_store_root=object_store_root,
+    )
+    object_store = LocalObjectStore(str(object_store_root))
+    control_service = ContentControlService(
+        PostgresContentControlRepository(database_url),
+        object_store,
+    )
+    generator = _EvidenceDeepSeekGenerator(
+        evidence_root=evidence_root,
+        api_base_url=cast(str, settings.deepseek_api_base_url),
+        api_key=cast(Any, settings.deepseek_api_key).get_secret_value(),
+        model=_MODEL,
+        reviewer_provider=None,
+        timeout_seconds=120.0,
+        max_retries=0,
+    )
+    content_service = ContentService(
+        PostgresContentRepository(database_url),
+        generator,
+        control_service,
+    )
+    api_runtime = cast(Any, import_module("src.gateway.api.app"))
+    api_runtime.build_content_control_service = lambda _: control_service
+    api_runtime.build_content_service = lambda _: content_service
+    api_runtime.build_workbench_service = lambda _: WorkbenchService(
+        PostgresWorkbenchRepository(database_url),
+        object_store,
+    )
+    app = create_app(settings)
     _write_private_json(
         evidence_root / "suite-config.json",
         {
@@ -508,79 +467,143 @@ def _generate(args: argparse.Namespace) -> None:
                 "model": _MODEL,
                 "temperature": 0,
                 "max_retries": 0,
-                "database": False,
-                "redis": False,
-                "business_persistence": False,
-            },
-            "synthetic_registered_product_media_contract": {
-                "tenant_scope": "synthetic-gate-c-tenant",
-                "brand_scope": "synthetic-gate-c-brand",
-                "account_scope": str(_HQ_PROFILE_ID),
-                "organization_scope": "synthetic-gate-c-headquarters",
-                "enabled": True,
-                "selected_for_this_task": True,
-                "frozen_version": "1",
+                "database": True,
+                "formal_api": True,
+                "business_persistence": True,
             },
             "cards": list(_CARDS),
         },
     )
-    api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    api_base_url = os.environ.get("DEEPSEEK_API_BASE_URL", "")
-    if not api_key:
-        raise RuntimeError("credential_loaded=false")
-    if not api_base_url:
-        raise RuntimeError("provider endpoint is unavailable")
-    generator = _EvidenceDeepSeekGenerator(
-        evidence_root=evidence_root,
-        api_base_url=api_base_url,
-        api_key=api_key,
-        model=_MODEL,
-        reviewer_provider=None,
-        timeout_seconds=180.0,
-        max_retries=0,
-    )
-    artifacts: dict[str, GeneratedArtifact] = {}
     summaries: list[dict[str, object]] = []
-    for spec in _card_specs():
-        request = _request_for(spec, artifacts)
-        generator.begin_card(spec.card_id)
-        artifact = generator.generate(request)
-        generator.end_card()
-        artifacts[spec.card_id] = artifact
-        document = _artifact_document(spec.card_id, request, artifact)
-        _write_private_json(
-            evidence_root / f"{spec.card_id}.artifact.json",
-            document,
+    with TestClient(app, base_url="https://diyu.example") as client:
+        client.cookies.set("diyu_session", journey.session_token)
+        series_response = client.post(
+            "/api/v1/content/series",
+            params={
+                "target": "xiaohongshu_graphic",
+                "publishing_identity_id": str(journey.store_identity_id),
+            },
+            json={
+                "title": "把选择留给人的三篇门店观察",
+                "premise": "从不打扰，推进到回应，再推进到留出选择。",
+            },
         )
-        summaries.append(
-            {
-                "card_id": spec.card_id,
-                "visible_digest": document["visible_digest"],
-                "program_id": (
-                    request.media_program.program_id
-                    if request.media_program is not None
-                    else None
-                ),
-                "retry_count": artifact.retry_count,
-            }
-        )
-        print(
-            json.dumps(
-                summaries[-1],
-                ensure_ascii=False,
-                sort_keys=True,
+        if series_response.status_code != 201:
+            raise RuntimeError("formal series could not be created")
+        series_id = UUID(str(series_response.json()["id"]))
+        for index, spec in enumerate(_card_specs(journey, series_id=series_id)):
+            if index:
+                time.sleep(2.05)
+            if spec.card_id == "P5":
+                generator.begin_card("P5")
+                task_id = _run_formal_p5_browser(app, journey)
+                generator.end_card()
+                version_response = client.get(
+                    f"/api/v1/tasks/{task_id}/versions/1",
+                    params={
+                        "target": spec.target,
+                        "publishing_identity_id": str(spec.publishing_identity_id),
+                    },
+                )
+                if version_response.status_code != 200:
+                    raise RuntimeError("P5 formal browser artifact is unavailable")
+                result = cast(
+                    dict[str, object],
+                    version_response.json(),
+                )
+            else:
+                result = _stream_card(
+                    client,
+                    generator,
+                    spec,
+                    series_id=series_id,
+                )
+                task_id = UUID(str(result["task_id"]))
+            snapshot = _task_snapshot(
+                database_url,
+                journey.tenant_id,
+                task_id,
             )
-        )
+            artifact = _artifact_document(
+                spec.card_id,
+                result,
+                snapshot,
+            )
+            _write_private_json(
+                evidence_root / f"{spec.card_id}.artifact.json",
+                artifact,
+            )
+            summaries.append(
+                {
+                    "card_id": spec.card_id,
+                    "task_id": str(task_id),
+                    "version": result.get("version"),
+                    "visible_digest": artifact["visible_digest"],
+                    "program_id": cast(
+                        Mapping[str, object],
+                        cast(
+                            Mapping[str, object],
+                            artifact["formal_snapshot"],
+                        )["media_program"],
+                    ).get("program_id"),
+                }
+            )
     _write_private_json(
         evidence_root / "generation-summary.json",
         {
             "suite_version": _SUITE_VERSION,
             "implementation_sha": implementation_sha,
-            "provider_response": "received",
+            "formal_api": True,
+            "database": True,
             "card_count": len(summaries),
             "cards": summaries,
         },
     )
+
+
+def _reviews_from_file(path: Path) -> tuple[HumanReviewInput, ...]:
+    document = _json_object(path)
+    if set(document) != {"review_contract", "reviews"}:
+        raise ValueError("human review document fields drifted")
+    if document["review_contract"] != "ux03-gate-c-human-review-v1":
+        raise ValueError("human review contract version drifted")
+    raw_reviews = document["reviews"]
+    if not isinstance(raw_reviews, list):
+        raise ValueError("human review list is unavailable")
+    reviews: list[HumanReviewInput] = []
+    for raw in raw_reviews:
+        if not isinstance(raw, dict):
+            raise ValueError("human review record is invalid")
+        if set(raw) != {
+            "card_id",
+            "artifact_file",
+            "verdict",
+            "criteria",
+            "notes",
+        }:
+            raise ValueError("human review record fields drifted")
+        criteria = raw["criteria"]
+        if not isinstance(criteria, dict) or set(criteria) != set(GATE_C_REVIEW_CRITERIA):
+            raise ValueError("human review criteria coverage drifted")
+        verdict = str(raw["verdict"])
+        criterion_values = {criterion: str(criteria[criterion]) for criterion in GATE_C_REVIEW_CRITERIA}
+        notes = str(raw["notes"]).strip()
+        if verdict not in {"PASS", "FAIL"} or any(value not in {"PASS", "FAIL"} for value in criterion_values.values()):
+            raise ValueError("human review verdict is invalid")
+        if not notes:
+            raise ValueError("human review note is unavailable")
+        reviews.append(
+            HumanReviewInput(
+                card_id=str(raw["card_id"]),
+                artifact_file=str(raw["artifact_file"]),
+                verdict=verdict,
+                criteria=criterion_values,
+                notes=notes,
+            )
+        )
+    if {review.card_id for review in reviews} != GATE_C_FINAL_CARD_IDS or len(reviews) != len(GATE_C_FINAL_CARD_IDS):
+        raise ValueError("human review does not cover the seven final cards")
+    return tuple(reviews)
 
 
 def _finalize(args: argparse.Namespace) -> None:
@@ -588,7 +611,6 @@ def _finalize(args: argparse.Namespace) -> None:
     implementation_sha = _current_head()
     if implementation_sha != args.implementation_sha:
         raise RuntimeError("current HEAD is not the frozen implementation SHA")
-    notes = _review_notes(args.review)
     artifacts = tuple(
         ArtifactEvidenceInput(
             card_id=card_id,
@@ -597,19 +619,7 @@ def _finalize(args: argparse.Namespace) -> None:
         )
         for card_id in _CARDS
     )
-    reviews = tuple(
-        HumanReviewInput(
-            card_id=card_id,
-            artifact_file=f"{card_id}.artifact.json",
-            verdict="PASS",
-            criteria={
-                criterion: "PASS"
-                for criterion in GATE_C_REVIEW_CRITERIA
-            },
-            notes=notes[card_id],
-        )
-        for card_id in _CARDS
-    )
+    reviews = _reviews_from_file(Path(args.review_file).resolve())
     write_gate_c_evidence(
         evidence_root,
         implementation_sha=implementation_sha,
@@ -618,6 +628,15 @@ def _finalize(args: argparse.Namespace) -> None:
         max_retries=0,
         artifacts=artifacts,
         reviews=reviews,
+        runtime=EvidenceRuntimeInput(
+            database=True,
+            formal_api=True,
+            business_persistence=True,
+        ),
+    )
+    _write_evidence_projection(
+        evidence_root,
+        Path(args.evidence_projection).resolve(),
     )
     print(
         json.dumps(
@@ -631,18 +650,24 @@ def _finalize(args: argparse.Namespace) -> None:
     )
 
 
-def _review_notes(values: list[str]) -> dict[str, str]:
-    notes: dict[str, str] = {}
-    for value in values:
-        card_id, separator, note = value.partition("=")
-        if separator != "=" or card_id not in GATE_C_FINAL_CARD_IDS:
-            raise ValueError("review must use CARD=NOTE")
-        if not note.strip() or card_id in notes:
-            raise ValueError("each final card needs one non-empty review note")
-        notes[card_id] = note.strip()
-    if set(notes) != GATE_C_FINAL_CARD_IDS:
-        raise ValueError("human review does not cover the seven final cards")
-    return notes
+def _write_evidence_projection(source: Path, destination: Path) -> None:
+    if destination.exists():
+        raise RuntimeError("evidence projection already exists")
+    destination.mkdir(mode=0o700, parents=True)
+    destination.chmod(0o700)
+    for filename in ("manifest.json", "human-review.json", "SHA256SUMS"):
+        target = destination / filename
+        shutil.copyfile(source / filename, target)
+        target.chmod(0o600)
+
+
+def _json_object(path: Path) -> dict[str, object]:
+    if path.stat().st_mode & 0o077:
+        raise ValueError(f"{path.name} must be private")
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{path.name} must contain one JSON object")
+    return cast(dict[str, object], value)
 
 
 def _write_private_json(path: Path, value: object) -> None:
@@ -691,17 +716,19 @@ def _git_status() -> str:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run and bind the isolated UX-03 Gate C final suite.",
+        description="Run and bind the formal UX-03 Gate C final suite.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     generate = subparsers.add_parser("generate")
     generate.add_argument("--implementation-sha", required=True)
     generate.add_argument("--evidence-root", required=True)
+    generate.add_argument("--journey-file", required=True)
     generate.set_defaults(action=_generate)
     finalize = subparsers.add_parser("finalize")
     finalize.add_argument("--implementation-sha", required=True)
     finalize.add_argument("--evidence-root", required=True)
-    finalize.add_argument("--review", action="append", default=[])
+    finalize.add_argument("--review-file", required=True)
+    finalize.add_argument("--evidence-projection", required=True)
     finalize.set_defaults(action=_finalize)
     return parser
 

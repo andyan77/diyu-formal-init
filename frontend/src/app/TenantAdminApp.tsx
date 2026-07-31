@@ -206,6 +206,7 @@ type LibraryEntry = {
 };
 
 type ProductFact = {
+  id: string;
   sku: string;
   display_name: string;
   facts?: {
@@ -254,6 +255,21 @@ type OrganizationMaterial = {
   visibility_scope?: LibraryScope;
   scope_organizations?: Organization[];
   created_at?: string;
+};
+
+type ProductMediaBinding = {
+  id: string;
+  product_id: string;
+  asset_id: string;
+  usage_kind: "existing_product_media";
+  status: "active" | "inactive";
+  sku: string;
+  product_name: string;
+  product_status: "active" | "retired";
+  product_version_id: string;
+  product_version: number;
+  created_at: string;
+  updated_at: string;
 };
 
 type LibraryVersion = {
@@ -2586,6 +2602,10 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
   const [selectedMaterial, setSelectedMaterial] =
     useState<OrganizationMaterial | null>(null);
   const [materialVersions, setMaterialVersions] = useState<MaterialVersion[]>([]);
+  const [materialBindings, setMaterialBindings] = useState<
+    ProductMediaBinding[]
+  >([]);
+  const [bindingProductId, setBindingProductId] = useState("");
   const [productPreviewSignature, setProductPreviewSignature] =
     useState<string | null>(null);
   const [form, setForm] = useState({
@@ -2993,13 +3013,73 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
       )
     });
     setDrawer("material-detail");
-    void api<MaterialVersion[]>(
-      `/api/v1/tenant-management/organization-materials/${material.id}/versions`
-    )
-      .then(setMaterialVersions)
+    setBindingProductId("");
+    void Promise.all([
+      api<MaterialVersion[]>(
+        `/api/v1/tenant-management/organization-materials/${material.id}/versions`
+      ),
+      api<ProductMediaBinding[]>(
+        `/api/v1/tenant-management/organization-materials/${material.id}/product-bindings`
+      )
+    ])
+      .then(([versions, bindings]) => {
+        setMaterialVersions(versions);
+        setMaterialBindings(bindings);
+      })
       .catch(error =>
         setNotice({ tone: "error", message: readableRequestError(error) })
       );
+  };
+  const createProductMediaBinding = (): void => {
+    if (!selectedMaterial || !bindingProductId) return;
+    setSaving(true);
+    void api<ProductMediaBinding>(
+      `/api/v1/tenant-management/organization-materials/${selectedMaterial.id}/product-bindings`,
+      {
+        method: "POST",
+        body: JSON.stringify({ product_id: bindingProductId })
+      }
+    )
+      .then(async () => {
+        const bindings = await api<ProductMediaBinding[]>(
+          `/api/v1/tenant-management/organization-materials/${selectedMaterial.id}/product-bindings`
+        );
+        setMaterialBindings(bindings);
+        setBindingProductId("");
+        setNotice({
+          tone: "success",
+          message: "商品与这份官方素材已经建立明确关联。"
+        });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
+  };
+  const setProductMediaBindingEnabled = (
+    binding: ProductMediaBinding,
+    enabled: boolean
+  ): void => {
+    if (!selectedMaterial) return;
+    setSaving(true);
+    void api(
+      `/api/v1/tenant-management/organization-materials/${selectedMaterial.id}/product-bindings/${binding.id}/enabled`,
+      { method: "PUT", body: JSON.stringify({ enabled }) }
+    )
+      .then(async () => {
+        const bindings = await api<ProductMediaBinding[]>(
+          `/api/v1/tenant-management/organization-materials/${selectedMaterial.id}/product-bindings`
+        );
+        setMaterialBindings(bindings);
+        setNotice({
+          tone: "success",
+          message: enabled ? "商品素材关联已恢复。" : "商品素材关联已停用。"
+        });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
   };
   const saveMaterialVersion = (event: FormEvent): void => {
     event.preventDefault();
@@ -4132,6 +4212,78 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
             >
               {selectedMaterial.status === "inactive" ? "恢复素材" : "停用素材"}
             </button>
+            <section className="version-history" aria-labelledby="product-media-title">
+              <h3 id="product-media-title">关联商品</h3>
+              <p>
+                只有这里明确关联、且创作时再次选择的官方图片或视频，才能用于商品画面。
+              </p>
+              {materialBindings.length === 0 ? (
+                <p>这份素材还没有关联商品。</p>
+              ) : (
+                <ol>
+                  {materialBindings.map(binding => (
+                    <li key={binding.id}>
+                      <strong>
+                        {binding.product_name} · {binding.sku}
+                      </strong>
+                      <span>
+                        商品 V{binding.product_version} ·{" "}
+                        {binding.status === "active" ? "使用中" : "已停用"}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-action"
+                        disabled={saving}
+                        onClick={() =>
+                          setProductMediaBindingEnabled(
+                            binding,
+                            binding.status !== "active"
+                          )
+                        }
+                      >
+                        {binding.status === "active" ? "停用关联" : "恢复关联"}
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              <label>
+                选择已确认商品
+                <select
+                  value={bindingProductId}
+                  onChange={event => setBindingProductId(event.target.value)}
+                  disabled={saving || selectedMaterial.status === "inactive"}
+                >
+                  <option value="">请选择商品</option>
+                  {(products.data ?? [])
+                    .filter(
+                      product =>
+                        product.status !== "retired" &&
+                        product.current_version_id &&
+                        !materialBindings.some(
+                          binding => binding.product_id === product.id
+                        )
+                    )
+                    .map(product => (
+                      <option key={product.id} value={product.id}>
+                        {product.display_name} · {product.sku}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="text-action"
+                disabled={
+                  saving ||
+                  selectedMaterial.status === "inactive" ||
+                  !bindingProductId
+                }
+                onClick={createProductMediaBinding}
+              >
+                建立商品关联
+              </button>
+            </section>
             <section className="version-history">
               <h3>历史版本</h3>
               <ol>

@@ -125,6 +125,7 @@ let brandEntries = [
 ];
 let products = [
   {
+    id: "77777777-7777-4777-8777-777777777701",
     sku: "DEMO-A",
     display_name: "牛角扣外套",
     facts: {
@@ -134,12 +135,14 @@ let products = [
     source_note: "品牌管理员录入",
     applicability: "演示资料",
     fact_version: 2,
+    current_version_id: "product-version-2",
     status: "active",
     visibility_scope: "organizations",
     scope_organizations: [organizations[1]],
     updated_at: "2026-07-27T00:00:00Z"
   }
 ];
+let productMediaBindings = [];
 let organizationMaterials = [
   {
     id: "44444444-4444-4444-8444-444444444444",
@@ -394,6 +397,9 @@ globalThis.fetch = async (input, init = {}) => {
     const saved = {
       ...existing,
       ...body,
+      id:
+        existing?.id ??
+        "77777777-7777-4777-8777-777777777702",
       facts: {
         category: body.category,
         colors: body.colors,
@@ -402,6 +408,7 @@ globalThis.fetch = async (input, init = {}) => {
         observable_features: body.observable_features
       },
       fact_version: (existing?.fact_version ?? 0) + 1,
+      current_version_id: "product-version-current",
       status: "active",
       scope_organizations: organizations.filter(item =>
         body.organization_ids?.includes(item.id)
@@ -496,6 +503,58 @@ globalThis.fetch = async (input, init = {}) => {
         : item
     );
     value = organizationMaterials.find(item => item.id === assetId);
+  } else if (
+    path.match(
+      /^\/api\/v1\/tenant-management\/organization-materials\/[^/]+\/product-bindings$/
+    ) &&
+    method === "GET"
+  ) {
+    const assetId = path.split("/").at(-2);
+    value = productMediaBindings.filter(item => item.asset_id === assetId);
+  } else if (
+    path.match(
+      /^\/api\/v1\/tenant-management\/organization-materials\/[^/]+\/product-bindings$/
+    ) &&
+    method === "POST"
+  ) {
+    const assetId = path.split("/").at(-2);
+    const product = products.find(item => item.id === body.product_id);
+    const binding = {
+      id: "88888888-8888-4888-8888-888888888801",
+      asset_id: assetId,
+      product_id: product.id,
+      usage_kind: "existing_product_media",
+      status: "active",
+      sku: product.sku,
+      product_name: product.display_name,
+      product_status: product.status,
+      product_version_id: product.current_version_id,
+      product_version: product.fact_version,
+      created_at: "2026-07-29T00:00:00Z",
+      updated_at: "2026-07-29T00:00:00Z"
+    };
+    productMediaBindings = [
+      binding,
+      ...productMediaBindings.filter(
+        item =>
+          item.asset_id !== assetId ||
+          item.product_id !== product.id
+      )
+    ];
+    value = binding;
+  } else if (
+    path.match(
+      /^\/api\/v1\/tenant-management\/organization-materials\/[^/]+\/product-bindings\/[^/]+\/enabled$/
+    ) &&
+    method === "PUT"
+  ) {
+    const bindingId = path.split("/").at(-2);
+    productMediaBindings = productMediaBindings.map(item =>
+      item.id === bindingId
+        ? { ...item, status: body.enabled ? "active" : "inactive" }
+        : item
+    );
+    value = productMediaBindings.find(item => item.id === bindingId);
   } else if (path === "/api/v1/ops/tenants" && method === "POST") {
     value = {
       tenant_id: "77777777-7777-4777-8777-777777777777",

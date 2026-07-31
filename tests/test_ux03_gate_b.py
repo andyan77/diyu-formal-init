@@ -101,10 +101,7 @@ def _move_version_submission_outside_usage_window(
     with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
         trigger_disabled = False
         try:
-            cursor.execute(
-                "ALTER TABLE content_versions "
-                "DISABLE TRIGGER content_versions_append_only"
-            )
+            cursor.execute("ALTER TABLE content_versions DISABLE TRIGGER content_versions_append_only")
             trigger_disabled = True
             with connection.transaction():
                 cursor.execute(
@@ -118,10 +115,7 @@ def _move_version_submission_outside_usage_window(
                 assert cursor.rowcount == 1
         finally:
             if trigger_disabled:
-                cursor.execute(
-                    "ALTER TABLE content_versions "
-                    "ENABLE TRIGGER content_versions_append_only"
-                )
+                cursor.execute("ALTER TABLE content_versions ENABLE TRIGGER content_versions_append_only")
         cursor.execute(
             """
             SELECT trigger_record.tgenabled
@@ -258,9 +252,7 @@ def _create_test_operator(
 ) -> tuple[UUID, str]:
     operator_id = uuid4()
     secret = repository._totp_secret()
-    with psycopg.connect(
-        migrator_database_url
-    ) as connection, connection.cursor() as cursor:
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
         cursor.execute(
             """
             INSERT INTO platform_operators
@@ -285,6 +277,7 @@ def _delete_gate_b_fixture(
     """Delete only this test's synthetic tenant and operations identity."""
 
     tenant_tables = (
+        "product_media_bindings",
         "activity_events",
         "account_expression_profile_versions",
         "account_content_roles",
@@ -314,6 +307,35 @@ def _delete_gate_b_fixture(
     )
     with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
         cursor.execute(
+            "SELECT id FROM product_media_bindings WHERE tenant_id = %s ORDER BY id",
+            (tenant_id,),
+        )
+        for (binding_id,) in cursor.fetchall():
+            cursor.execute(
+                "SELECT set_config('app.tenant_id', %s, true)",
+                (str(tenant_id),),
+            )
+            cursor.execute(
+                "SELECT set_config('diyu.product_media_binding_maintenance', 'delete_synthetic_fixture', true)"
+            )
+            cursor.execute(
+                "SELECT set_config("
+                "'diyu.product_media_binding_maintenance_transaction_id', "
+                "pg_current_xact_id()::text, true)"
+            )
+            cursor.execute(
+                "SELECT set_config('diyu.product_media_binding_maintenance_tenant_id', %s, true)",
+                (str(tenant_id),),
+            )
+            cursor.execute(
+                "SELECT set_config('diyu.product_media_binding_maintenance_binding_id', %s, true)",
+                (str(binding_id),),
+            )
+            cursor.execute(
+                "DELETE FROM product_media_bindings WHERE tenant_id = %s AND id = %s",
+                (tenant_id, binding_id),
+            )
+        cursor.execute(
             "SELECT id FROM content_versions WHERE tenant_id = %s ORDER BY id",
             (tenant_id,),
         )
@@ -322,23 +344,16 @@ def _delete_gate_b_fixture(
                 "SELECT set_config('app.tenant_id', %s, true)",
                 (str(tenant_id),),
             )
+            cursor.execute("SELECT set_config('diyu.content_version_maintenance', 'delete_synthetic_fixture', true)")
             cursor.execute(
-                "SELECT set_config('diyu.content_version_maintenance', "
-                "'delete_synthetic_fixture', true)"
+                "SELECT set_config('diyu.content_version_maintenance_transaction_id', pg_current_xact_id()::text, true)"
             )
             cursor.execute(
-                "SELECT set_config("
-                "'diyu.content_version_maintenance_transaction_id', "
-                "pg_current_xact_id()::text, true)"
-            )
-            cursor.execute(
-                "SELECT set_config("
-                "'diyu.content_version_maintenance_tenant_id', %s, true)",
+                "SELECT set_config('diyu.content_version_maintenance_tenant_id', %s, true)",
                 (str(tenant_id),),
             )
             cursor.execute(
-                "SELECT set_config("
-                "'diyu.content_version_maintenance_version_id', %s, true)",
+                "SELECT set_config('diyu.content_version_maintenance_version_id', %s, true)",
                 (str(version_id),),
             )
             cursor.execute(
@@ -370,29 +385,23 @@ def _delete_gate_b_fixture(
             (tenant_id,),
         )
         cursor.execute(
-            "UPDATE brand_library_entries SET current_version_id = NULL "
-            "WHERE tenant_id = %s",
+            "UPDATE brand_library_entries SET current_version_id = NULL WHERE tenant_id = %s",
             (tenant_id,),
         )
         cursor.execute(
-            "UPDATE brand_products SET current_version_id = NULL "
-            "WHERE tenant_id = %s",
+            "UPDATE brand_products SET current_version_id = NULL WHERE tenant_id = %s",
             (tenant_id,),
         )
         cursor.execute(
-            "UPDATE material_assets SET current_version_id = NULL "
-            "WHERE tenant_id = %s",
+            "UPDATE material_assets SET current_version_id = NULL WHERE tenant_id = %s",
             (tenant_id,),
         )
         cursor.execute(
-            "UPDATE content_accounts SET current_expression_profile_id = NULL "
-            "WHERE tenant_id = %s",
+            "UPDATE content_accounts SET current_expression_profile_id = NULL WHERE tenant_id = %s",
             (tenant_id,),
         )
         immutable_triggers = {
-            "brand_library_entry_versions": (
-                "brand_library_entry_versions_immutable"
-            ),
+            "brand_library_entry_versions": ("brand_library_entry_versions_immutable"),
             "brand_product_versions": "brand_product_versions_immutable",
             "material_asset_versions": "material_asset_versions_immutable",
         }
@@ -530,9 +539,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             assert created.status_code == 201
             tenant = created.json()
             tenant_id = UUID(tenant["tenant_id"])
-        with psycopg.connect(
-            migrator_database_url
-        ) as connection, connection.cursor() as cursor:
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
             cursor.execute(
                 "SELECT id FROM brands WHERE tenant_id = %s",
                 (tenant_id,),
@@ -550,9 +557,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 admin_password,
                 "/tenant-admin/login",
             )
-            headquarters = admin.get(
-                "/api/v1/tenant-management/organizations"
-            ).json()[0]
+            headquarters = admin.get("/api/v1/tenant-management/organizations").json()[0]
             east = admin.post(
                 "/api/v1/tenant-management/organizations",
                 json={
@@ -663,9 +668,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                         accounts["总部"]["id"],
                         accounts["柯桥"]["id"],
                     ],
-                    "expression_profile_maintenance_account_ids": [
-                        accounts["总部"]["id"]
-                    ],
+                    "expression_profile_maintenance_account_ids": [accounts["总部"]["id"]],
                 },
             )
             assert cross_organization_use.status_code == 200
@@ -697,14 +700,20 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             )
             assert preview.status_code == 200
             assert preview.json()["saved"] is False
-            assert admin.post(
-                "/api/v1/tenant-management/brand-library/preview",
-                json={**east_reference_payload, "unknown_field": True},
-            ).status_code == 422
-            assert admin.post(
-                "/api/v1/tenant-management/brand-library",
-                json=east_reference_payload,
-            ).status_code == 422
+            assert (
+                admin.post(
+                    "/api/v1/tenant-management/brand-library/preview",
+                    json={**east_reference_payload, "unknown_field": True},
+                ).status_code
+                == 422
+            )
+            assert (
+                admin.post(
+                    "/api/v1/tenant-management/brand-library",
+                    json=east_reference_payload,
+                ).status_code
+                == 422
+            )
             invalid_store_scope = admin.post(
                 "/api/v1/tenant-management/brand-library",
                 json={
@@ -725,25 +734,17 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             v2_reference = admin.post(
                 f"/api/v1/tenant-management/brand-library/{reference_id}/versions",
                 json={
-                    **{
-                        key: value
-                        for key, value in east_reference_payload.items()
-                        if key != "category"
-                    },
+                    **{key: value for key, value in east_reference_payload.items() if key != "category"},
                     "content": "华东区域内容只引用本区域已经确认的门店信息。",
                     "version": "V2",
                 },
             )
             assert v2_reference.status_code == 200, v2_reference.text
-            history = admin.get(
-                f"/api/v1/tenant-management/brand-library/{reference_id}/versions"
-            )
+            history = admin.get(f"/api/v1/tenant-management/brand-library/{reference_id}/versions")
             assert [item["version_number"] for item in history.json()] == [2, 1]
             immutable_update_failed = False
             try:
-                with psycopg.connect(
-                    app_database_url
-                ) as connection, connection.cursor() as cursor:
+                with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
                     cursor.execute(
                         "SELECT set_config('app.tenant_id', %s, true)",
                         (str(tenant_id),),
@@ -767,9 +768,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 json={"enabled": True},
             )
             assert restored.status_code == 200
-            assert restored.json()["current_version_id"] == v2_reference.json()[
-                "current_version_id"
-            ]
+            assert restored.json()["current_version_id"] == v2_reference.json()["current_version_id"]
 
             south_reference = admin.post(
                 "/api/v1/tenant-management/brand-library",
@@ -788,21 +787,23 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 json={
                     "source_format": "csv",
                     "content": (
-                        "sku,display_name,category,material_or_structure\n"
-                        "EAST-01,华东门店针织衫,服装,针织结构\n"
+                        "sku,display_name,category,material_or_structure\nEAST-01,华东门店针织衫,服装,针织结构\n"
                     ),
                 },
             )
             assert import_preview.status_code == 200
             assert import_preview.json()["saved"] is False
-            assert admin.post(
-                "/api/v1/tenant-management/brand-products/preview",
-                json={
-                    "source_format": "csv",
-                    "content": "sku,display_name\nEAST-01,华东门店针织衫\n",
-                    "unknown_field": True,
-                },
-            ).status_code == 422
+            assert (
+                admin.post(
+                    "/api/v1/tenant-management/brand-products/preview",
+                    json={
+                        "source_format": "csv",
+                        "content": "sku,display_name\nEAST-01,华东门店针织衫\n",
+                        "unknown_field": True,
+                    },
+                ).status_code
+                == 422
+            )
             product_payload = {
                 "sku": "EAST-01",
                 "display_name": "华东门店针织衫",
@@ -843,9 +844,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
 
             misaligned = admin.get("/api/v1/admin/readiness")
             assert misaligned.status_code == 200, misaligned.text
-            misaligned_items = {
-                item["id"]: item for item in misaligned.json()["items"]
-            }
+            misaligned_items = {item["id"]: item for item in misaligned.json()["items"]}
             assert misaligned_items["non_product_content"]["status"] == "available"
             assert misaligned_items["product_facts"]["status"] != "available"
             assert misaligned_items["platform_recompile"]["status"] != "available"
@@ -869,19 +868,20 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 },
             )
             assert product_v2.status_code == 200, product_v2.text
-            product_history = admin.get(
-                "/api/v1/tenant-management/brand-products/EAST-01/versions"
-            )
+            product_history = admin.get("/api/v1/tenant-management/brand-products/EAST-01/versions")
             assert [item["fact_version"] for item in product_history.json()] == [2, 1]
             product_retired = admin.put(
                 "/api/v1/tenant-management/brand-products/EAST-01/enabled",
                 json={"enabled": False},
             )
             assert product_retired.status_code == 200
-            assert admin.put(
-                "/api/v1/tenant-management/brand-products/EAST-01/enabled",
-                json={"enabled": True},
-            ).status_code == 200
+            assert (
+                admin.put(
+                    "/api/v1/tenant-management/brand-products/EAST-01/enabled",
+                    json={"enabled": True},
+                ).status_code
+                == 200
+            )
 
             east_xhs = admin.post(
                 "/api/v1/tenant-management/platform-carriers",
@@ -896,9 +896,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             assert east_xhs.status_code == 201
             aligned = admin.get("/api/v1/admin/readiness")
             assert aligned.status_code == 200
-            aligned_items = {
-                item["id"]: item for item in aligned.json()["items"]
-            }
+            aligned_items = {item["id"]: item for item in aligned.json()["items"]}
             assert aligned_items["product_facts"]["status"] == "available"
             assert aligned_items["platform_recompile"]["status"] == "available"
 
@@ -906,9 +904,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             # same execution organization. Three brand-level counts cannot be
             # combined into a false-positive DM01 path.
             display_store_id = uuid4()
-            with psycopg.connect(
-                migrator_database_url
-            ) as connection, connection.cursor() as cursor:
+            with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO display_stores
@@ -950,9 +946,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 brand_id=brand_id,
                 user_id=UUID(str(tenant["administrator_id"])),
             )
-            workbench_repository = PostgresWorkbenchRepository(
-                app_database_url
-            )
+            workbench_repository = PostgresWorkbenchRepository(app_database_url)
             south_display_product = workbench_repository.save_management_product(
                 management_scope,
                 "SOUTH-DISPLAY",
@@ -967,9 +961,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             dm01_misaligned = admin.get("/api/v1/admin/readiness")
             assert dm01_misaligned.status_code == 200
             dm01_misaligned_item = next(
-                item
-                for item in dm01_misaligned.json()["items"]
-                if item["id"] == "dm01_display"
+                item for item in dm01_misaligned.json()["items"] if item["id"] == "dm01_display"
             )
             assert dm01_misaligned_item["status"] != "available"
 
@@ -984,9 +976,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 "organizations",
                 (UUID(str(east.json()["id"])),),
             )
-            with psycopg.connect(
-                migrator_database_url
-            ) as connection, connection.cursor() as cursor:
+            with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO display_access_grants
@@ -1001,21 +991,15 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 )
             dm01_aligned = admin.get("/api/v1/admin/readiness")
             assert dm01_aligned.status_code == 200
-            dm01_aligned_item = next(
-                item
-                for item in dm01_aligned.json()["items"]
-                if item["id"] == "dm01_display"
-            )
+            dm01_aligned_item = next(item for item in dm01_aligned.json()["items"] if item["id"] == "dm01_display")
             assert dm01_aligned_item["status"] == "available"
             assert any(
                 detail["resource_id"] == east_display_product["id"]
-                and detail["version_id"]
-                == east_display_product["current_version_id"]
+                and detail["version_id"] == east_display_product["current_version_id"]
                 for detail in dm01_aligned_item["evidence_details"]
             )
             assert all(
-                detail["resource_id"] != south_display_product["id"]
-                for detail in dm01_aligned_item["evidence_details"]
+                detail["resource_id"] != south_display_product["id"] for detail in dm01_aligned_item["evidence_details"]
             )
 
             material = admin.post(
@@ -1062,23 +1046,25 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             assert material_v2.status_code == 200, material_v2.text
             assert [
                 item["version"]
-                for item in admin.get(
-                    f"/api/v1/tenant-management/organization-materials/{material_id}/versions"
-                ).json()
+                for item in admin.get(f"/api/v1/tenant-management/organization-materials/{material_id}/versions").json()
             ] == [2, 1]
-            assert admin.put(
-                f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
-                json={"enabled": False},
-            ).status_code == 200
-            assert admin.put(
-                f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
-                json={"enabled": True},
-            ).status_code == 200
+            assert (
+                admin.put(
+                    f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
+                    json={"enabled": False},
+                ).status_code
+                == 200
+            )
+            assert (
+                admin.put(
+                    f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
+                    json={"enabled": True},
+                ).status_code
+                == 200
+            )
 
             # Runtime access derives from each logical account's control organization.
-            with psycopg.connect(
-                migrator_database_url
-            ) as connection, connection.cursor() as cursor:
+            with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
                 bait_brand_id = uuid4()
                 bait_entry_id = uuid4()
                 bait_version_id = uuid4()
@@ -1128,9 +1114,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                     ),
                 )
                 cursor.execute(
-                    "UPDATE brand_library_entries "
-                    "SET current_version_id = %s "
-                    "WHERE tenant_id = %s AND id = %s",
+                    "UPDATE brand_library_entries SET current_version_id = %s WHERE tenant_id = %s AND id = %s",
                     (bait_version_id, tenant_id, bait_entry_id),
                 )
             restored_south_execution_path = admin.patch(
@@ -1152,9 +1136,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                         accounts["总部"]["id"],
                         accounts["柯桥"]["id"],
                     ],
-                    "expression_profile_maintenance_account_ids": [
-                        accounts["总部"]["id"]
-                    ],
+                    "expression_profile_maintenance_account_ids": [accounts["总部"]["id"]],
                 },
             )
             assert restored_cross_organization_path.status_code == 200
@@ -1187,9 +1169,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 "graphic",
                 "手机实拍",
             )
-            assert "华东门店表达参考" in "\n".join(
-                east_context.brand_reference_context
-            )
+            assert "华东门店表达参考" in "\n".join(east_context.brand_reference_context)
             assert "华东门店表达参考" in "\n".join(
                 content_repository.load_brand_context(
                     cross_organization_user_scope,
@@ -1197,19 +1177,11 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                     "手机实拍",
                 ).brand_reference_context
             )
-            assert "华东门店表达参考" not in "\n".join(
-                south_context.brand_reference_context
-            )
-            assert "另一品牌诱饵资料" not in "\n".join(
-                east_context.brand_reference_context
-            )
-            with psycopg.connect(
-                migrator_database_url
-            ) as connection, connection.cursor() as cursor:
+            assert "华东门店表达参考" not in "\n".join(south_context.brand_reference_context)
+            assert "另一品牌诱饵资料" not in "\n".join(east_context.brand_reference_context)
+            with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT tenant_id, brand_id, id, created_by "
-                    "FROM business_tasks "
-                    "WHERE tenant_id <> %s LIMIT 1",
+                    "SELECT tenant_id, brand_id, id, created_by FROM business_tasks WHERE tenant_id <> %s LIMIT 1",
                     (tenant_id,),
                 )
                 other_tenant_task = cursor.fetchone()
@@ -1249,9 +1221,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 )
                 == ()
             )
-            control_repository = PostgresContentControlRepository(
-                app_database_url
-            )
+            control_repository = PostgresContentControlRepository(app_database_url)
             assert control_repository.selected_materials(
                 east_scope,
                 (UUID(material_id),),
@@ -1283,21 +1253,16 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 ),
             )
             first_task_id = UUID(str(first["task_id"]))
-            with psycopg.connect(
-                migrator_database_url
-            ) as connection, connection.cursor() as cursor:
+            with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT content_context_snapshot FROM business_tasks "
-                    "WHERE tenant_id = %s AND id = %s",
+                    "SELECT content_context_snapshot FROM business_tasks WHERE tenant_id = %s AND id = %s",
                     (tenant_id, first_task_id),
                 )
                 frozen_row = cursor.fetchone()
                 assert frozen_row is not None
                 frozen_snapshot = frozen_row[0]
             assert frozen_snapshot["product_facts"][0]["fact_version"] == 2
-            assert frozen_snapshot["material_snapshots"][0][
-                "reference_version"
-            ] == 2
+            assert frozen_snapshot["material_snapshots"][0]["reference_version"] == 2
             assert "版本记录" in frozen_snapshot["brand_reference_context"][0]
 
             reference_v3 = admin.post(
@@ -1312,10 +1277,13 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 },
             )
             assert reference_v3.status_code == 200
-            assert admin.put(
-                f"/api/v1/tenant-management/brand-library/{reference_id}/enabled",
-                json={"enabled": False},
-            ).status_code == 200
+            assert (
+                admin.put(
+                    f"/api/v1/tenant-management/brand-library/{reference_id}/enabled",
+                    json={"enabled": False},
+                ).status_code
+                == 200
+            )
             product_v3 = admin.put(
                 "/api/v1/tenant-management/brand-products",
                 json={
@@ -1325,10 +1293,13 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 },
             )
             assert product_v3.status_code == 200
-            assert admin.put(
-                "/api/v1/tenant-management/brand-products/EAST-01/enabled",
-                json={"enabled": False},
-            ).status_code == 200
+            assert (
+                admin.put(
+                    "/api/v1/tenant-management/brand-products/EAST-01/enabled",
+                    json={"enabled": False},
+                ).status_code
+                == 200
+            )
             material_v3 = admin.post(
                 f"/api/v1/tenant-management/organization-materials/{material_id}/versions",
                 json={
@@ -1339,18 +1310,19 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 },
             )
             assert material_v3.status_code == 200
-            assert admin.put(
-                f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
-                json={"enabled": False},
-            ).status_code == 200
+            assert (
+                admin.put(
+                    f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
+                    json={"enabled": False},
+                ).status_code
+                == 200
+            )
             current_after_retirement = content_repository.load_brand_context(
                 east_scope,
                 "graphic",
                 "手机实拍",
             )
-            assert "华东门店表达参考" not in "\n".join(
-                current_after_retirement.brand_reference_context
-            )
+            assert "华东门店表达参考" not in "\n".join(current_after_retirement.brand_reference_context)
             assert (
                 content_repository.load_product_facts(
                     east_scope,
@@ -1373,38 +1345,38 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 "换个讲法，保留原来的资料边界",
                 target="xiaohongshu_graphic",
             )
-            with psycopg.connect(
-                migrator_database_url
-            ) as connection, connection.cursor() as cursor:
+            with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT content_context_snapshot FROM business_tasks "
-                    "WHERE tenant_id = %s AND id = %s",
+                    "SELECT content_context_snapshot FROM business_tasks WHERE tenant_id = %s AND id = %s",
                     (tenant_id, first_task_id),
                 )
                 revised_row = cursor.fetchone()
                 assert revised_row is not None
                 revised_snapshot = revised_row[0]
-            assert revised_snapshot["product_facts"] == frozen_snapshot[
-                "product_facts"
-            ]
-            assert revised_snapshot["material_snapshots"] == frozen_snapshot[
-                "material_snapshots"
-            ]
-            assert revised_snapshot["brand_reference_context"] == frozen_snapshot[
-                "brand_reference_context"
-            ]
-            assert admin.put(
-                f"/api/v1/tenant-management/brand-library/{reference_id}/enabled",
-                json={"enabled": True},
-            ).status_code == 200
-            assert admin.put(
-                "/api/v1/tenant-management/brand-products/EAST-01/enabled",
-                json={"enabled": True},
-            ).status_code == 200
-            assert admin.put(
-                f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
-                json={"enabled": True},
-            ).status_code == 200
+            assert revised_snapshot["product_facts"] == frozen_snapshot["product_facts"]
+            assert revised_snapshot["material_snapshots"] == frozen_snapshot["material_snapshots"]
+            assert revised_snapshot["brand_reference_context"] == frozen_snapshot["brand_reference_context"]
+            assert (
+                admin.put(
+                    f"/api/v1/tenant-management/brand-library/{reference_id}/enabled",
+                    json={"enabled": True},
+                ).status_code
+                == 200
+            )
+            assert (
+                admin.put(
+                    "/api/v1/tenant-management/brand-products/EAST-01/enabled",
+                    json={"enabled": True},
+                ).status_code
+                == 200
+            )
+            assert (
+                admin.put(
+                    f"/api/v1/tenant-management/organization-materials/{material_id}/enabled",
+                    json={"enabled": True},
+                ).status_code
+                == 200
+            )
 
             # A series continuation is a later-position task that actually
             # committed V1. Failed tasks, first items, revisions, platform
@@ -1422,14 +1394,9 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 series_position=1,
                 primary_product_override="brand_life_narrative",
             )
-            first_only_usage = admin.get(
-                "/api/v1/tenant-management/team-usage?window_days=7"
-            )
+            first_only_usage = admin.get("/api/v1/tenant-management/team-usage?window_days=7")
             assert first_only_usage.status_code == 200
-            assert (
-                first_only_usage.json()["activity"]["series_continuations"]
-                == 0
-            )
+            assert first_only_usage.json()["activity"]["series_continuations"] == 0
             persistence_before_failure = _content_persistence_counts(
                 migrator_database_url,
                 tenant_id,
@@ -1459,14 +1426,9 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 persistence_before_failure[3] + 1,
                 0,
             )
-            failed_second_usage = admin.get(
-                "/api/v1/tenant-management/team-usage?window_days=7"
-            )
+            failed_second_usage = admin.get("/api/v1/tenant-management/team-usage?window_days=7")
             assert failed_second_usage.status_code == 200
-            assert (
-                failed_second_usage.json()["activity"]["series_continuations"]
-                == 0
-            )
+            assert failed_second_usage.json()["activity"]["series_continuations"] == 0
             series_a = workbench_repository.create_series(
                 east_scope,
                 "近七日两篇系列",
@@ -1488,30 +1450,18 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 series_position=2,
                 primary_product_override="brand_life_narrative",
             )
-            successful_second_usage = admin.get(
-                "/api/v1/tenant-management/team-usage?window_days=7"
-            )
+            successful_second_usage = admin.get("/api/v1/tenant-management/team-usage?window_days=7")
             assert successful_second_usage.status_code == 200
-            assert (
-                successful_second_usage.json()["activity"][
-                    "series_continuations"
-                ]
-                == 1
-            )
+            assert successful_second_usage.json()["activity"]["series_continuations"] == 1
             content_service.revise(
                 east_scope,
                 UUID(str(successful_second["task_id"])),
                 "换一种自然表达，不改变系列位置",
                 target="xiaohongshu_graphic",
             )
-            after_revision_usage = admin.get(
-                "/api/v1/tenant-management/team-usage?window_days=7"
-            )
+            after_revision_usage = admin.get("/api/v1/tenant-management/team-usage?window_days=7")
             assert after_revision_usage.status_code == 200
-            assert (
-                after_revision_usage.json()["activity"]["series_continuations"]
-                == 1
-            )
+            assert after_revision_usage.json()["activity"]["series_continuations"] == 1
             east_douyin_scope = TrustedScope(
                 tenant_id=tenant_id,
                 brand_id=brand_id,
@@ -1527,9 +1477,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 series_position=3,
             )
             assert "version_id" in platform_adaptation
-            with psycopg.connect(
-                migrator_database_url
-            ) as connection, connection.cursor() as cursor:
+            with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
                 cursor.execute(
                     """
                     SELECT parent_version_id
@@ -1538,19 +1486,10 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                     """,
                     (tenant_id, platform_adaptation["task_id"]),
                 )
-                assert cursor.fetchone() == (
-                    UUID(str(successful_second["version_id"])),
-                )
-            after_adaptation_usage = admin.get(
-                "/api/v1/tenant-management/team-usage?window_days=7"
-            )
+                assert cursor.fetchone() == (UUID(str(successful_second["version_id"])),)
+            after_adaptation_usage = admin.get("/api/v1/tenant-management/team-usage?window_days=7")
             assert after_adaptation_usage.status_code == 200
-            assert (
-                after_adaptation_usage.json()["activity"][
-                    "series_continuations"
-                ]
-                == 1
-            )
+            assert after_adaptation_usage.json()["activity"]["series_continuations"] == 1
             series_c = workbench_repository.create_series(
                 east_scope,
                 "窗口外续篇系列",
@@ -1581,9 +1520,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
 
             # One bounded event set proves that 7/30-day windows and event kinds
             # are not interchangeable. No prompt or content body is stored here.
-            with psycopg.connect(
-                migrator_database_url
-            ) as connection, connection.cursor() as cursor:
+            with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
                 for days, event_type in (
                     (5, "content.conversation"),
                     (15, "content.conversation"),
@@ -1606,12 +1543,8 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                             datetime.now(timezone.utc) - timedelta(days=days),
                         ),
                     )
-            usage_7 = admin.get(
-                "/api/v1/tenant-management/team-usage?window_days=7"
-            )
-            usage_30 = admin.get(
-                "/api/v1/tenant-management/team-usage?window_days=30"
-            )
+            usage_7 = admin.get("/api/v1/tenant-management/team-usage?window_days=7")
+            usage_30 = admin.get("/api/v1/tenant-management/team-usage?window_days=30")
             assert usage_7.status_code == usage_30.status_code == 200
             assert usage_7.json()["activity"]["conversations"] == 1
             assert usage_30.json()["activity"]["conversations"] == 2
@@ -1625,9 +1558,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             assert usage_7.json()["activity"]["failed_runs"] == 1
             assert usage_7.json()["members"]["logged_in"] >= 1
             assert usage_7.json()["members"]["product_active"] >= 1
-            assert usage_7.json()["provider_usage"][
-                "is_complete_billing_total"
-            ] is False
+            assert usage_7.json()["provider_usage"]["is_complete_billing_total"] is False
 
             for label in ("总部", "华南"):
                 removed_non_east_path = admin.patch(
@@ -1651,38 +1582,24 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 "dm01_display",
                 "first_creation",
             }
-            non_product = next(
-                item for item in diagnosis if item["id"] == "non_product_content"
-            )
+            non_product = next(item for item in diagnosis if item["id"] == "non_product_content")
             assert non_product["status"] == "available"
             assert "不依赖具体商品事实" in non_product["unaffected"][0]
-            assert all(
-                item["contract_version"] == "ux03-readiness-v3"
-                for item in diagnosis
-            )
+            assert all(item["contract_version"] == "ux03-readiness-v3" for item in diagnosis)
             assert all("evidence_details" in item for item in diagnosis)
-            evidence_details = [
-                detail
-                for item in diagnosis
-                for detail in item["evidence_details"]
-            ]
+            evidence_details = [detail for item in diagnosis for detail in item["evidence_details"]]
             assert evidence_details
             assert all(detail["resource_id"] for detail in evidence_details)
             assert all(detail["scope"] for detail in evidence_details)
             assert all("项" not in detail["version"] for detail in evidence_details)
-            assert all(
-                detail.get("updated_at") or detail.get("updated_at_label")
-                for detail in evidence_details
-            )
+            assert all(detail.get("updated_at") or detail.get("updated_at_label") for detail in evidence_details)
             assert all(
                 "华南兄弟区域诱饵资料" not in detail["source"]
                 and "另一品牌诱饵资料" not in detail["source"]
                 and "华南陈列限定上装" not in detail["source"]
                 for detail in evidence_details
             )
-            product_diagnosis = next(
-                item for item in diagnosis if item["id"] == "product_facts"
-            )
+            product_diagnosis = next(item for item in diagnosis if item["id"] == "product_facts")
             assert product_diagnosis["status"] == "available"
             assert any(
                 detail["version_id"]
@@ -1697,8 +1614,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                     admin_password,
                 )
                 assert browser.returncode == 0, (
-                    "formal Gate B Chrome journey failed:\n"
-                    f"{browser.stdout}\n{browser.stderr}"
+                    f"formal Gate B Chrome journey failed:\n{browser.stdout}\n{browser.stderr}"
                 )
                 assert '"failures":[]' in browser.stdout.replace(" ", "")
     finally:
