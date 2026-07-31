@@ -581,7 +581,10 @@ def _generate(args: argparse.Namespace) -> None:
                 "publishing_identity_id": str(journey.store_identity_id),
             },
             json={
-                "title": "把选择留给人的三篇门店观察",
+                "title": (
+                    "把选择留给人的三篇门店观察 · "
+                    f"{implementation_sha[:12]}"
+                ),
                 "premise": "从不打扰，推进到回应，再推进到留出选择。",
             },
         )
