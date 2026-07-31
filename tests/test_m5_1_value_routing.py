@@ -122,7 +122,11 @@ def test_x01_routes_assets_versions_and_shared_product_truth(app_database_url: s
         if item.primary_product in {"product_truth", "visual_styling_story"}
     ]
     assert all(item.products and item.products[0].sku == "ZX-C218" for item in product_inputs)
-    assert "960 克" in str(p2["body"])
+    # ProductValueContract now chooses the product facts that actually support
+    # this P2 proposition.  The sample weight remains available in the trusted
+    # product packet, but Writer is no longer allowed to surface it through
+    # unrelated free copy.
+    assert "两面都以完整外观呈现" in str(p2["body"])
     assert "想先看就先看，不用解释" in str(p4["body"])
 
 
