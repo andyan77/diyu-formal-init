@@ -334,6 +334,9 @@ class SaveBrandProductRequest(BaseModel):
     material_or_structure: str = Field(default="", max_length=500)
     silhouette: str = Field(default="", max_length=300)
     observable_features: str = Field(default="", max_length=800)
+    display_family: Literal["upper", "lower"] | None = None
+    display_is_long: bool = False
+    display_accent: bool = False
     source_note: str = Field(min_length=1, max_length=300)
     applicability: str = Field(min_length=1, max_length=300)
     confirm_as_current_brand_fact: Literal[True]

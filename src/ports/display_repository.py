@@ -3,13 +3,18 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from uuid import UUID
 
+from src.shared.dm01_rules import DM01RuleBundleV1
 from src.shared.types import ActiveAsset, DisplayContext, DisplayScope
 
 
 class DisplayRepository(ABC):
     @abstractmethod
-    def load_context(self, scope: DisplayScope) -> DisplayContext | None:
-        """Load the wall structure and the default seed a new task starts from."""
+    def load_context(
+        self,
+        scope: DisplayScope,
+        inventory: tuple[tuple[str, int], ...] | None = None,
+    ) -> DisplayContext | None:
+        """Load the store identity, or resolve a formal product snapshot for a new task."""
 
     @abstractmethod
     def load_task_context(self, scope: DisplayScope, task_id: UUID) -> DisplayContext | None:
@@ -22,6 +27,14 @@ class DisplayRepository(ABC):
     @abstractmethod
     def load_assets(self, revision: bool) -> tuple[ActiveAsset, ...]:
         """Compile only DM01 assets applicable to this operation."""
+
+    @abstractmethod
+    def load_rule_bundle(self) -> DM01RuleBundleV1:
+        """Resolve the exact governed rule bundle required by generation and revision."""
+
+    @abstractmethod
+    def available_products(self, scope: DisplayScope) -> list[dict[str, object]]:
+        """List only active current product versions visible to this execution organization."""
 
     @abstractmethod
     def create_run(

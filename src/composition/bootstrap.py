@@ -14,6 +14,7 @@ from src.infrastructure.s3_object_store import S3ObjectStore
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.ports.content_generator import ContentGenerator
 from src.ports.material_object_store import MaterialObjectStore
+from src.shared.service_status import ProviderStatusTracker
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
 from src.tool.llm_gateway.stub import DeterministicP1Generator
 
@@ -47,6 +48,7 @@ def build_content_control_service(settings: Settings) -> ContentControlService:
 
 
 def build_content_service(settings: Settings) -> ContentService:
+    status_tracker = ProviderStatusTracker()
     generator: ContentGenerator
     if settings.generator_mode == "stub":
         generator = DeterministicP1Generator()
@@ -63,6 +65,7 @@ def build_content_service(settings: Settings) -> ContentService:
             model=settings.deepseek_model,
             timeout_seconds=settings.model_timeout_seconds,
             max_retries=settings.model_max_retries,
+            status_tracker=status_tracker,
         )
     return ContentService(
         PostgresContentRepository(
@@ -72,6 +75,7 @@ def build_content_service(settings: Settings) -> ContentService:
         ),
         generator,
         build_content_control_service(settings),
+        status_tracker,
     )
 
 

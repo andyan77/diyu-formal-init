@@ -19,6 +19,10 @@ const harness = (globalThis as unknown as {
     exportedBlobs: Blob[];
     deferNextVersionLoad: () => void;
     releaseDeferredVersionLoad: () => void;
+    setPublicStatus: (
+      contentState: "available" | "degraded" | "unavailable" | "unknown",
+      coreState?: "available" | "unavailable"
+    ) => void;
     window: Window & typeof globalThis;
   };
 }).__DIYU_INTERACTION__;
@@ -28,6 +32,7 @@ const {
   exportedBlobs,
   deferNextVersionLoad,
   releaseDeferredVersionLoad,
+  setPublicStatus,
   window
 } = harness;
 const document = window.document;
@@ -499,6 +504,41 @@ async function main(): Promise<void> {
   await click(find(".composer-submit button", "发送"));
   assert.match(document.querySelector(".conversation-notice")?.textContent ?? "", /先选择一个发布账号/);
   assert.equal(requests.length, requestCount);
+  await act(async () => root.unmount());
+
+  window.history.pushState({}, "", "/status");
+  setPublicStatus("unknown");
+  root = createRoot(container);
+  await act(async () => root.render(<Root />));
+  await settle();
+  assert.match(document.body.textContent ?? "", /内容生成近期状态尚无法确认/);
+  assert.match(document.body.textContent ?? "", /纯文字陈列参考方案可以使用/);
+
+  setPublicStatus("degraded");
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /内容生成暂时受影响/);
+  assert.match(document.body.textContent ?? "", /纯文字陈列参考方案仍可使用/);
+
+  setPublicStatus("unavailable");
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /内容生成暂时受影响/);
+
+  setPublicStatus("available");
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /主要功能可以使用/);
+
+  setPublicStatus("unknown", "unavailable");
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /笛语暂时无法接单/);
+  assert.equal(
+    requests.filter(item => item.path === "/api/v1/status").every(item => item.method === "GET"),
+    true,
+    "状态页只能读取状态投影，不得创建内容任务或外部探测"
+  );
   await act(async () => root.unmount());
 }
 

@@ -9,6 +9,7 @@ from src.shared.narrative import NarrativeFrame, NarrativeMode, UserFactCandidat
 
 if TYPE_CHECKING:
     from src.shared.creative_kernel import CreativeKernelV1
+    from src.shared.dm01_rules import DM01RuleBundleV1
     from src.shared.media_program import (
         MediaCapabilityEnvelope,
         MediaProgramSelectionV1,
@@ -488,6 +489,8 @@ class DisplayContext:
     store_profile_version: str
     rail_profile: dict[str, object]
     products: tuple[tuple[str, dict[str, object]], ...]
+    product_snapshots: tuple[dict[str, object], ...] = ()
+    rule_bundle: DM01RuleBundleV1 | None = None
 
 
 @dataclass(frozen=True)

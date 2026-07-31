@@ -10,6 +10,7 @@ _POSITION_TEXT = {"left": "左侧", "center": "中间", "right": "右侧"}
 def compile_display_body(context: DisplayContext, plan: dict[str, object], revision: bool) -> str:
     mounted = cast(dict[str, int], plan["mounted"])
     unmounted = cast(dict[str, int], plan["unmounted"])
+    conservation = cast(dict[str, dict[str, int]], plan["inventory_conservation"])
     layout = cast(dict[str, object], plan["layout"])
     zones = cast(dict[str, dict[str, object]], layout["zones"])
     total_mounted, total_unmounted = sum(mounted.values()), sum(unmounted.values())
@@ -53,6 +54,13 @@ def compile_display_body(context: DisplayContext, plan: dict[str, object], revis
         sections.append("本次输入建议的焦点商品这次不可用，系统已在当前商品里重新选择主焦点。")
     sections.extend(
         [
+            "逐商品库存对账："
+            + "；".join(
+                f"{_product_label(context, sku)}（{sku}）{proof['input']} 件"
+                f" = 上墙 {proof['displayed']} 件 + 不上墙 {proof['undisplayed']} 件"
+                for sku, proof in conservation.items()
+            )
+            + "。",
             f"正挂、侧挂与间距：{layout['spacing']}",
             f"替代与收窄：{layout['substitution']}",
             "不上墙："

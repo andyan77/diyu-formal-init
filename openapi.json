@@ -1855,6 +1855,31 @@
             "title": "Confirm As Current Brand Fact",
             "type": "boolean"
           },
+          "display_accent": {
+            "default": false,
+            "title": "Display Accent",
+            "type": "boolean"
+          },
+          "display_family": {
+            "anyOf": [
+              {
+                "enum": [
+                  "upper",
+                  "lower"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Family"
+          },
+          "display_is_long": {
+            "default": false,
+            "title": "Display Is Long",
+            "type": "boolean"
+          },
           "display_name": {
             "maxLength": 120,
             "minLength": 1,
@@ -3714,6 +3739,43 @@
           }
         ],
         "summary": "Get Display"
+      }
+    },
+    "/api/v1/display/products": {
+      "get": {
+        "operationId": "list_display_products_api_v1_display_products_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Display Products Api V1 Display Products Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "List Display Products"
       }
     },
     "/api/v1/display/tasks": {

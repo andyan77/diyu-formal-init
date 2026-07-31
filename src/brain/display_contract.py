@@ -14,6 +14,7 @@ def assert_display_complete(
     artifact: GeneratedDisplayArtifact,
     inventory: tuple[tuple[str, int], ...],
     revision: bool = False,
+    product_facts: dict[str, dict[str, object]] | None = None,
 ) -> None:
     del revision
     plan = artifact.plan
@@ -22,7 +23,18 @@ def assert_display_complete(
         raise GenerationFailed("陈列方案结构不完整")
     available = dict(inventory)
     _assert_quantities(mounted, unmounted, available)
-    placed, rail_totals = _placed_quantities(layout, available)
+    conservation = plan.get("inventory_conservation")
+    if not isinstance(conservation, dict) or set(conservation) != set(available):
+        raise GenerationFailed("陈列方案缺少逐商品库存守恒证明")
+    for sku, input_amount in available.items():
+        proof = conservation.get(sku)
+        if not isinstance(proof, dict) or proof != {
+            "input": input_amount,
+            "displayed": mounted[sku],
+            "undisplayed": unmounted[sku],
+        }:
+            raise GenerationFailed("陈列方案逐商品库存守恒证明不一致")
+    placed, rail_totals = _placed_quantities(layout, available, product_facts)
     if dict(placed) != {sku: amount for sku, amount in mounted.items() if cast(int, amount) > 0}:
         raise GenerationFailed("上墙数量必须由上下挂杆槽位唯一聚合")
     capacities = layout.get("capacities")
@@ -111,6 +123,7 @@ def _assert_quantities(
 def _placed_quantities(
     layout: dict[object, object],
     available: dict[str, int],
+    product_facts: dict[str, dict[str, object]] | None,
 ) -> tuple[Counter[str], dict[str, int]]:
     order, reading_order, zones = (
         layout.get("physical_order"),
@@ -156,6 +169,10 @@ def _placed_quantities(
                     raise GenerationFailed("陈列槽位商品、名称或数量无效")
                 if mount not in {"front_facing", "front_facing_layered", "side_hang"}:
                     raise GenerationFailed("陈列槽位缺少正挂或侧挂表达")
+                if product_facts is not None:
+                    facts = product_facts.get(sku)
+                    if facts is None or facts.get("display_family") != rail:
+                        raise GenerationFailed("商品进入了正式陈列属性不允许的挂杆")
                 placed[sku] += quantity
                 rail_totals[rail] += quantity
     if rail_totals["upper"] < 1 or rail_totals["lower"] < 1:

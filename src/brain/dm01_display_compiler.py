@@ -6,6 +6,7 @@ from copy import deepcopy
 from typing import cast
 
 from src.ports.display_generator import DisplayGenerator
+from src.shared.dm01_rules import assert_dm01_rule_bundle
 from src.shared.errors import GenerationFailed
 from src.shared.types import DisplayContext, DisplayGenerationInput, GeneratedDisplayArtifact
 
@@ -95,6 +96,11 @@ class DM01DisplayCompiler(DisplayGenerator):
         return "dm01-rule-compiler-v1"
 
     def generate(self, request: DisplayGenerationInput) -> GeneratedDisplayArtifact:
+        if request.context.rule_bundle is not None:
+            assert_dm01_rule_bundle(
+                request.context.rule_bundle,
+                revision=request.feedback is not None,
+            )
         if request.feedback is not None:
             return self._revise(request)
         return self._compile_v1(request)
@@ -196,7 +202,11 @@ class DM01DisplayCompiler(DisplayGenerator):
             lower_index += 1
 
         unmounted = {sku: amount - mounted.get(sku, 0) for sku, amount in dict(request.inventory).items()}
-        undescribed = sorted(sku for sku in unmounted if sku not in products)
+        undescribed = sorted(
+            sku
+            for sku in unmounted
+            if sku not in products or products[sku].get("display_family") not in {"upper", "lower"}
+        )
         constraints = _string_tuple(profile.get("constraints"), "现场硬限制")
         layout: dict[str, object] = {
             "schema": "dm01-wall-double-rail-v1",
@@ -232,9 +242,26 @@ class DM01DisplayCompiler(DisplayGenerator):
             ],
             "zones": zones,
         }
+        plan: dict[str, object] = {
+            "contract_version": "dm01-plan-v2" if request.context.rule_bundle is not None else "dm01-plan-v1",
+            "rule_bundle_digest": (
+                request.context.rule_bundle.bundle_digest if request.context.rule_bundle is not None else None
+            ),
+            "inventory_conservation": {
+                sku: {
+                    "input": amount,
+                    "displayed": mounted[sku],
+                    "undisplayed": unmounted[sku],
+                }
+                for sku, amount in request.inventory
+            },
+            "mounted": mounted,
+            "unmounted": unmounted,
+            "layout": layout,
+        }
         return GeneratedDisplayArtifact(
             "Visible text is deterministically compiled after the plan contract passes.",
-            {"mounted": mounted, "unmounted": unmounted, "layout": layout},
+            plan,
             self.model_name,
             0,
             0,
@@ -253,7 +280,10 @@ class DM01DisplayCompiler(DisplayGenerator):
         if sku not in mounted or position not in zones or rail not in {"upper", "lower"}:
             raise GenerationFailed("现场反馈指向的商品或挂杆不在上一版中")
         slots = cast(list[dict[str, object]], zones[position][rail])
-        slot = next((item for item in slots if item.get("sku") == sku), None)
+        matching_slots = [item for item in slots if item.get("sku") == sku]
+        slot = next((item for item in matching_slots if item.get("mount") == "side_hang"), None)
+        if slot is None:
+            slot = next(iter(matching_slots), None)
         if slot is None:
             raise GenerationFailed("现场反馈指向的位置没有这件商品")
         quantity = cast(int, slot["quantity"])
@@ -263,6 +293,14 @@ class DM01DisplayCompiler(DisplayGenerator):
             slot["quantity"] = quantity - 1
         mounted[sku] -= 1
         unmounted[sku] += 1
+        conservation = cast(dict[str, dict[str, int]], plan.get("inventory_conservation"))
+        if sku not in conservation:
+            raise GenerationFailed("上一版缺少逐商品库存守恒证明")
+        conservation[sku] = {
+            "input": mounted[sku] + unmounted[sku],
+            "displayed": mounted[sku],
+            "undisplayed": unmounted[sku],
+        }
         label = str(slot["label"])
         layout["revision_note"] = (
             f"根据现场反馈，仅将{_position_text(position)}{_rail_text(rail)}的"

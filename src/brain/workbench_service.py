@@ -405,6 +405,9 @@ class WorkbenchService:
         as_synthetic_business_fixture: bool = False,
         visibility_scope: str = "brand_all",
         organization_ids: tuple[UUID, ...] = (),
+        display_family: str | None = None,
+        display_is_long: bool = False,
+        display_accent: bool = False,
     ) -> dict[str, object]:
         if not confirm_as_current_brand_fact:
             raise DomainError("请先纠正草案，并明确确认它是当前品牌商品事实。")
@@ -420,9 +423,14 @@ class WorkbenchService:
                 ("material_or_structure", material_or_structure.strip()),
                 ("silhouette", silhouette.strip()),
                 ("observable_features", observable_features.strip()),
+                ("display_family", display_family),
+                ("is_long", display_is_long if display_family == "upper" else False),
+                ("accent", display_accent if display_family == "upper" else False),
             )
-            if value
+            if value not in (None, "", [], False)
         }
+        if display_family not in {None, "upper", "lower"}:
+            raise DomainError("陈列位置只能选择上杆或下杆。")
         if not facts:
             raise DomainError("请至少填写一项本轮内容实际需要的商品事实。")
         if visibility_scope not in {"brand_all", "headquarters", "organizations"}:

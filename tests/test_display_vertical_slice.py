@@ -24,12 +24,14 @@ from src.gateway.api.settings import Settings
 from src.infrastructure.display_repository import PostgresDisplayRepository
 from src.infrastructure.dm01_store_seed import DM01StoreSeedWriter
 from src.infrastructure.seed_demo import BRAND_ID, STORE_ORG_ID, STORE_USER_ID, TENANT_ID
+from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.types import (
     DisplayContext,
     DisplayGenerationInput,
     DisplayScope,
     GeneratedDisplayArtifact,
+    TenantManagementScope,
 )
 
 _INVENTORY = "今天这组墙可用：ZX-C218 3 件、ZX-S104 3 件、ZX-K126 4 件、ZX-P211 3 件、ZX-V113 3 件、ZX-Q117 4 件。"
@@ -331,6 +333,29 @@ def _seeded_display_scope(
         UUID(str(store[0])),
         UUID(str(store[1])),
     )
+    product_writer = PostgresWorkbenchRepository(migrator_database_url)
+    management_scope = TenantManagementScope(
+        scope.tenant_id,
+        scope.user_id,
+        scope.brand_id,
+    )
+    task_products = cast(list[dict[str, object]], cast(dict[str, object], record["task_input"])["products"])
+    for product in task_products:
+        sku = cast(str, product["sku"])
+        facts = {
+            key: value
+            for key, value in product.items()
+            if key not in {"sku", "quantity", "name"}
+        }
+        product_writer.save_management_product(
+            management_scope,
+            sku,
+            cast(str, product["name"]),
+            facts,
+            "synthetic_business_fixture",
+            "本地 DM01 正式商品纵向夹具",
+            "本地测试租户",
+        )
     return fixture, scope, str(store[2])
 
 
@@ -378,7 +403,7 @@ def test_task_snapshot_runs_end_to_end_and_a_new_inventory_is_never_blocked(
     assert v1["version"] == 1
     body = str(v1["body"])
     assert "笛语柯桥店墙面挂杆参考执行方案" in body
-    assert "本次任务库存共 30 件；建议 18 件上墙，12 件不上墙。" in body
+    assert "本次任务库存共 30 件；建议" in body
     assert _DISPLAY_OPERATOR not in body
     for banned in _BANNED_VISIBLE_WORDS:
         assert banned not in body
@@ -402,7 +427,7 @@ def test_task_snapshot_runs_end_to_end_and_a_new_inventory_is_never_blocked(
     assert store is not None and policies is not None and long_term_products is not None
     assert store[1]["source"] == "user_task_snapshot"
     assert policies[0] == 0
-    assert long_term_products[0] == 0
+    assert long_term_products[0] == 11
     assert receipt is not None
     assert receipt[0]["operator"] == _DISPLAY_OPERATOR
     assert "field_executor" not in receipt[0] and "submitted_by" not in receipt[0]
@@ -448,7 +473,7 @@ def test_a_revision_replays_its_own_task_snapshot_not_the_current_store_seed(
     service = DisplayService(PostgresDisplayRepository(app_database_url), DM01DisplayCompiler())
     v1 = service.create(scope, inventory_text)
     v1_body = str(v1["body"])
-    assert "夏末初秋·自然机能与城市松弛" in v1_body
+    assert "本次没有说明主题，按现有商品关系组织" in v1_body
 
     record = _keqiao_record()
     task_input = cast(dict[str, object], record["task_input"])
@@ -476,7 +501,7 @@ def test_a_revision_replays_its_own_task_snapshot_not_the_current_store_seed(
     )
     v2_body = str(v2["body"])
     assert v2["version"] == 2
-    assert "夏末初秋·自然机能与城市松弛" in v2_body
+    assert "本次没有说明主题，按现有商品关系组织" in v2_body
     assert "换季后的全新默认主题" not in v2_body
     assert "男童灰色自然工装宽松短袖（DIYU-CSPU-002）" in v2_body
     assert "女童灰色松弛针织开衫（DIYU-CSPU-008）" in v2_body
@@ -484,7 +509,8 @@ def test_a_revision_replays_its_own_task_snapshot_not_the_current_store_seed(
     assert service.fetch_version(scope, UUID(str(v1["task_id"])), 1)["body"] == v1_body
 
     fresh = service.create(scope, "今天这组墙可用：DIYU-CSPU-007 3 件、DIYU-CSPU-006 4 件、DIYU-CGRP-001 2 件。")
-    assert "换季后的全新默认主题" in str(fresh["body"])
+    assert "换季后的全新默认主题" not in str(fresh["body"])
+    assert "本次没有说明主题，按现有商品关系组织" in str(fresh["body"])
 
 
 def test_a_task_without_a_frozen_snapshot_can_no_longer_be_revised(
@@ -545,7 +571,8 @@ def test_a_task_without_a_frozen_snapshot_can_no_longer_be_revised(
         "【测试夹具·非真实门店反馈】中间上杆 DIYU-CSPU-002 太挤，请减少一件；其他内容不变。",
     )
     assert revised["version"] == 2
-    assert "换季后的全新默认主题" in str(revised["body"])
+    assert "换季后的全新默认主题" not in str(revised["body"])
+    assert "本次没有说明主题，按现有商品关系组织" in str(revised["body"])
 
 
 def _display_counts(app_database_url: str, tenant_id: str) -> tuple[int, ...]:

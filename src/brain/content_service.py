@@ -72,6 +72,7 @@ from src.shared.product_value import (
     ProductValueContract,
     build_product_value_contract,
 )
+from src.shared.service_status import ProviderStatusTracker
 from src.shared.types import (
     AccountExpression,
     ActiveAsset,
@@ -125,10 +126,12 @@ class ContentService:
         repository: ContentRepository,
         generator: ContentGenerator,
         control_service: ContentControlService | None = None,
+        provider_status: ProviderStatusTracker | None = None,
     ) -> None:
         self._repository = repository
         self._generator = generator
         self._control = control_service
+        self.provider_status = provider_status or ProviderStatusTracker()
 
     def completed_request(
         self,

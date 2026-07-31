@@ -12,6 +12,7 @@ from src.brain.dm01_display_compiler import (
 )
 from src.ports.display_generator import DisplayGenerator
 from src.ports.display_repository import DisplayRepository
+from src.shared.dm01_rules import DM01RuleAssetV1, assert_dm01_rule_bundle
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.types import ActiveAsset, DisplayContext, DisplayGenerationInput, DisplayScope
 
@@ -24,18 +25,20 @@ class DisplayService:
         self._generator = generator
 
     def create(self, scope: DisplayScope, inventory_text: str) -> dict[str, object]:
-        context = self._repository.load_context(scope)
+        inventory = self._inventory(inventory_text)
+        context = self._repository.load_context(scope, inventory)
         if context is None:
             return {
                 "kind": "question",
                 "message": "这家门店还缺少上下挂杆、固定正挂点和来客方向这项条件；请先补充它。",
             }
-        inventory = self._inventory(inventory_text, context)
+        assert_dm01_rule_bundle(context.rule_bundle, revision=False, error_type=DomainError)
         hard_requirements = parse_hard_requirements(inventory_text)
         gap = required_inventory_gap(inventory, context, hard_requirements)
         if gap is not None:
             return {"kind": "question", "message": gap}
-        assets = self._repository.load_assets(revision=False)
+        assert context.rule_bundle is not None
+        assets = self._active_assets(context.rule_bundle.generation_assets)
         task_id, run_id = self._repository.create_run(
             scope, inventory_text, inventory, context, self._generator.model_name, assets
         )
@@ -66,7 +69,9 @@ class DisplayService:
                 "kind": "question",
                 "message": "请在一段话中说明要减少的商品，以及受影响的左/中/右位置和上杆/下杆；其余内容会保留。",
             }
-        assets = self._repository.load_assets(revision=True)
+        assert_dm01_rule_bundle(context.rule_bundle, revision=True, error_type=DomainError)
+        assert context.rule_bundle is not None
+        assets = self._active_assets(context.rule_bundle.revision_assets)
         run_id, prior, inventory = self._repository.create_revision_run(
             scope, task_id, feedback, context, self._generator.model_name, assets
         )
@@ -96,6 +101,9 @@ class DisplayService:
             "store": context.store_name,
         }
 
+    def available_products(self, scope: DisplayScope) -> list[dict[str, object]]:
+        return self._repository.available_products(scope)
+
     def _generate(
         self,
         scope: DisplayScope,
@@ -123,7 +131,12 @@ class DisplayService:
                     hard_requirements,
                 )
             )
-            assert_display_complete(artifact, inventory, revision=feedback is not None)
+            assert_display_complete(
+                artifact,
+                inventory,
+                revision=feedback is not None,
+                product_facts=dict(context.products),
+            )
             if feedback is not None and prior is not None:
                 assert_display_revision(prior, artifact.plan)
             body = compile_display_body(context, artifact.plan, revision=feedback is not None)
@@ -145,9 +158,21 @@ class DisplayService:
         ) | {"kind": "display"}
 
     @staticmethod
-    def _inventory(text: str, context: DisplayContext) -> tuple[tuple[str, int], ...]:
+    def _inventory(text: str) -> tuple[tuple[str, int], ...]:
         lines = tuple((sku, int(amount)) for sku, amount in _LINE.findall(text.upper()))
         if not lines or len({sku for sku, _ in lines}) != len(lines) or any(amount < 1 for _, amount in lines):
-            example = context.products[0][0] if context.products else "商品编号"
-            raise DomainError(f"请用“{example} 3 件”这样的自然清单说明本次可用商品和数量")
+            raise DomainError("请用“商品编号 3 件”这样的自然清单说明本次可用商品和数量")
         return lines
+
+    @staticmethod
+    def _active_assets(assets: tuple[DM01RuleAssetV1, ...]) -> tuple[ActiveAsset, ...]:
+        return tuple(
+            ActiveAsset(
+                asset.asset_id,
+                asset.schema_version,
+                "dm01_rule",
+                asset.invariant_id,
+                asset.body_digest,
+            )
+            for asset in assets
+        )

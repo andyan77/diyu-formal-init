@@ -215,6 +215,9 @@ type ProductFact = {
     material_or_structure?: string;
     silhouette?: string;
     observable_features?: string;
+    display_family?: "upper" | "lower";
+    is_long?: boolean;
+    accent?: boolean;
   };
   category?: string;
   colors?: string[];
@@ -239,6 +242,9 @@ type ProductDraft = {
   material_or_structure: string;
   silhouette: string;
   observable_features: string;
+  display_family: "" | "upper" | "lower";
+  display_is_long: boolean;
+  display_accent: boolean;
   source_note: string;
   applicability: string;
 };
@@ -659,11 +665,16 @@ function splitCsvLine(line: string): string[] {
   return values;
 }
 
+type ProductTextField = Exclude<
+  keyof ProductDraft,
+  "display_family" | "display_is_long" | "display_accent"
+>;
+
 function parseProductCsv(text: string): ProductDraft[] {
   const lines = text.split(/\r?\n/).filter(line => line.trim());
   if (lines.length < 2) return [];
   const headers = splitCsvLine(lines[0]).map(value => value.toLowerCase());
-  const aliases: Record<keyof ProductDraft, string[]> = {
+  const aliases: Record<ProductTextField, string[]> = {
     sku: ["sku", "商品编号"],
     display_name: ["display_name", "商品名称"],
     category: ["category", "品类"],
@@ -674,11 +685,11 @@ function parseProductCsv(text: string): ProductDraft[] {
     source_note: ["source_note", "资料来源说明"],
     applicability: ["applicability", "适用范围"]
   };
-  const column = (key: keyof ProductDraft): number =>
+  const column = (key: ProductTextField): number =>
     headers.findIndex(header => aliases[key].includes(header));
   return lines.slice(1).map(line => {
     const values = splitCsvLine(line);
-    const read = (key: keyof ProductDraft): string => {
+    const read = (key: ProductTextField): string => {
       const index = column(key);
       return index >= 0 ? values[index] ?? "" : "";
     };
@@ -690,6 +701,9 @@ function parseProductCsv(text: string): ProductDraft[] {
       material_or_structure: read("material_or_structure"),
       silhouette: read("silhouette"),
       observable_features: read("observable_features"),
+      display_family: "",
+      display_is_long: false,
+      display_accent: false,
       source_note: read("source_note"),
       applicability: read("applicability")
     };
@@ -704,6 +718,9 @@ const emptyProduct = (): ProductDraft => ({
   material_or_structure: "",
   silhouette: "",
   observable_features: "",
+  display_family: "",
+  display_is_long: false,
+  display_accent: false,
   source_note: "",
   applicability: ""
 });
@@ -2773,6 +2790,9 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
               .split(/[，,]/)
               .map(value => value.trim())
               .filter(Boolean),
+            display_family: item.display_family || null,
+            display_is_long: item.display_is_long,
+            display_accent: item.display_accent,
             confirm_as_current_brand_fact: true,
             as_synthetic_business_fixture: false,
             visibility_scope: productScope,
@@ -2947,7 +2967,13 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
       .finally(() => setSaving(false));
   };
   const openProduct = (product: ProductFact): void => {
-    const facts = product.facts ?? product;
+    const facts: NonNullable<ProductFact["facts"]> = product.facts ?? {
+      category: product.category,
+      colors: product.colors,
+      material_or_structure: product.material_or_structure,
+      silhouette: product.silhouette,
+      observable_features: product.observable_features
+    };
     setSelectedProduct(product);
     setProductRows([
       {
@@ -2958,6 +2984,12 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
         material_or_structure: String(facts.material_or_structure ?? ""),
         silhouette: String(facts.silhouette ?? ""),
         observable_features: String(facts.observable_features ?? ""),
+        display_family:
+          facts.display_family === "upper" || facts.display_family === "lower"
+            ? facts.display_family
+            : "",
+        display_is_long: facts.is_long === true,
+        display_accent: facts.accent === true,
         source_note: product.source_note,
         applicability: product.applicability
       }
@@ -3820,13 +3852,64 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                     {label}
                     <input
                       required={["sku", "display_name"].includes(key)}
-                      value={productRows[0][key as keyof ProductDraft]}
+                      value={productRows[0][key as ProductTextField]}
                       onChange={event =>
                         setProductRows([{ ...productRows[0], [key]: event.target.value }])
                       }
                     />
                   </label>
                 ))}
+                <label>
+                  陈列位置（可选）
+                  <select
+                    value={productRows[0].display_family}
+                    onChange={event =>
+                      setProductRows([{
+                        ...productRows[0],
+                        display_family: event.target.value as ProductDraft["display_family"],
+                        display_is_long:
+                          event.target.value === "upper" && productRows[0].display_is_long,
+                        display_accent:
+                          event.target.value === "upper" && productRows[0].display_accent
+                      }])
+                    }
+                  >
+                    <option value="">只做库存对账，暂不上墙</option>
+                    <option value="upper">上杆</option>
+                    <option value="lower">下杆</option>
+                  </select>
+                </label>
+                {productRows[0].display_family === "upper" && (
+                  <fieldset>
+                    <legend>上杆陈列属性</legend>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={productRows[0].display_is_long}
+                        onChange={event =>
+                          setProductRows([{
+                            ...productRows[0],
+                            display_is_long: event.target.checked
+                          }])
+                        }
+                      />
+                      长款，需避免遮挡下杆
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={productRows[0].display_accent}
+                        onChange={event =>
+                          setProductRows([{
+                            ...productRows[0],
+                            display_accent: event.target.checked
+                          }])
+                        }
+                      />
+                      强调款，默认少量上墙
+                    </label>
+                  </fieldset>
+                )}
                 {[
                   ["material_or_structure", "材质或结构"],
                   ["observable_features", "肉眼可见特征"],
@@ -3837,7 +3920,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                     {label}
                     <textarea
                       required={["source_note", "applicability"].includes(key)}
-                      value={productRows[0][key as keyof ProductDraft]}
+                      value={productRows[0][key as ProductTextField]}
                       onChange={event =>
                         setProductRows([{ ...productRows[0], [key]: event.target.value }])
                       }

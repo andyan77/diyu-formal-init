@@ -116,6 +116,7 @@ from src.shared.review_evidence import (
     validate_server_owned_contexts_v2,
     writer_clause_contexts_v2,
 )
+from src.shared.service_status import ProviderStatusTracker
 from src.shared.types import (
     ContentProduct,
     ContentProductionBundle,
@@ -462,6 +463,7 @@ class DeepSeekGenerator(ContentGenerator):
         reviewer_provider: ReviewerProvider | None = None,
         timeout_seconds: float = 30.0,
         max_retries: int = 2,
+        status_tracker: ProviderStatusTracker | None = None,
     ) -> None:
         self._api_base_url = api_base_url.rstrip("/")
         self._api_key = api_key
@@ -470,6 +472,7 @@ class DeepSeekGenerator(ContentGenerator):
         self._reviewer_model = reviewer_provider.model_name if reviewer_provider is not None else None
         self._timeout_seconds = timeout_seconds
         self._max_retries = max_retries
+        self._status_tracker = status_tracker
         self._review_timeout_seconds = max(timeout_seconds, 60.0)
 
     @property
@@ -3596,6 +3599,8 @@ CreativePlanV2：{
                         result = response.json()
                         if not isinstance(result, dict):
                             raise GenerationFailed("模型返回无效")
+                        if self._status_tracker is not None:
+                            self._status_tracker.record("available")
                         return result, retries
                     if response.status_code != 429 and not 500 <= response.status_code < 600:
                         error_code = ""
@@ -3631,12 +3636,20 @@ CreativePlanV2：{
                             error_code or "unavailable",
                             error_category,
                         )
+                        if self._status_tracker is not None:
+                            self._status_tracker.record("unavailable")
                         raise GenerationFailed("模型服务拒绝当前请求")
                     if retries >= self._max_retries:
+                        if self._status_tracker is not None:
+                            self._status_tracker.record(
+                                "degraded" if response.status_code == 429 else "unavailable"
+                            )
                         raise GenerationFailed("模型服务暂时不可用")
                     delay = self._retry_delay(response.headers.get("Retry-After"), retries)
                 except httpx.TransportError as exc:
                     if retries >= self._max_retries:
+                        if self._status_tracker is not None:
+                            self._status_tracker.record("unavailable")
                         raise GenerationFailed("模型网络请求失败") from exc
                     delay = min(4.0, 0.5 * (2**retries))
                 retries += 1

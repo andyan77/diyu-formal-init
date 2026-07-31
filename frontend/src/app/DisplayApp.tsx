@@ -27,6 +27,13 @@ type RecentDisplay = {
   updated_at: string;
 };
 
+type AvailableProduct = {
+  sku: string;
+  display_name: string;
+  display_family: "upper" | "lower" | "";
+  product_version_id: string;
+};
+
 function isVersion(value: DisplayVersion | DisplayQuestion): value is DisplayVersion {
   return "task_id" in value;
 }
@@ -59,6 +66,7 @@ export default function DisplayApp({
   const [viewed, setViewed] = useState<DisplayVersion | null>(null);
   const [versions, setVersions] = useState<DisplayVersion[]>([]);
   const [recent, setRecent] = useState<RecentDisplay[]>([]);
+  const [products, setProducts] = useState<AvailableProduct[]>([]);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [mobileView, setMobileView] = useState<"conversation" | "plan">("conversation");
@@ -79,7 +87,17 @@ export default function DisplayApp({
 
   useEffect(() => {
     void loadRecent();
+    void api<AvailableProduct[]>("/api/v1/display/products")
+      .then(setProducts)
+      .catch(error =>
+        setNotice(error instanceof Error ? error.message : "暂时无法读取本店商品。")
+      );
   }, []);
+
+  const addProduct = (product: AvailableProduct): void => {
+    const line = `${product.sku} 1 件`;
+    setInventory(value => value.trim() ? `${value.replace(/[。.]?$/, "")}、${line}。` : `本次可用：${line}。`);
+  };
 
   const accept = async (value: DisplayVersion | DisplayQuestion): Promise<void> => {
     if (!isVersion(value)) {
@@ -118,13 +136,12 @@ export default function DisplayApp({
     setBusy(true);
     setNotice("");
     try {
-      await accept(
-        await api<DisplayVersion | DisplayQuestion>(
-          `/api/v1/display-tasks/${current.task_id}/revisions`,
-          { method: "POST", body: JSON.stringify({ feedback: feedback.trim() }) }
-        )
+      const value = await api<DisplayVersion | DisplayQuestion>(
+        `/api/v1/display-tasks/${current.task_id}/revisions`,
+        { method: "POST", body: JSON.stringify({ feedback: feedback.trim() }) }
       );
-      setFeedback("");
+      await accept(value);
+      if (isVersion(value)) setFeedback("");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "这次修改没有生成，原方案仍保留。");
     } finally {
@@ -216,6 +233,23 @@ export default function DisplayApp({
         {notice && <p className="user-path-notice" role="status">{notice}</p>}
         {!current ? (
           <form className="display-composer" onSubmit={event => void create(event)}>
+            <fieldset className="display-product-picker">
+              <legend>本店当前可用商品</legend>
+              {products.length === 0 ? (
+                <p>还没有可用于本店的正式商品，请联系品牌管理员补充。</p>
+              ) : (
+                products.map(product => (
+                  <button
+                    key={product.product_version_id}
+                    type="button"
+                    className="text-action"
+                    onClick={() => addProduct(product)}
+                  >
+                    添加 {product.display_name}（{product.sku}）
+                  </button>
+                ))
+              )}
+            </fieldset>
             <label htmlFor="display-inventory">本次库存</label>
             <textarea
               id="display-inventory"

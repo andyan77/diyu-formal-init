@@ -13,6 +13,7 @@ from src.infrastructure.readiness_paths import readiness_path_state
 from src.ports.workbench_repository import WorkbenchRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.content_snapshot import visible_direction
+from src.shared.display_integrity import assert_display_artifact_integrity
 from src.shared.errors import DomainError
 from src.shared.types import (
     DisplayScope,
@@ -3480,7 +3481,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._display_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT t.id AS task_id, v.id AS version_id, v.version_number, v.body, v.created_at
+                SELECT t.id AS task_id, v.id AS version_id, v.version_number, v.body, v.plan, v.created_at
                 FROM display_artifacts artifact
                 JOIN display_tasks t ON t.id = artifact.task_id AND t.tenant_id = artifact.tenant_id
                 JOIN display_artifact_versions v ON v.task_id = t.id AND v.tenant_id = t.tenant_id
@@ -3491,6 +3492,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 (scope.tenant_id, scope.brand_id, scope.organization_id, scope.user_id),
             )
             rows = cursor.fetchall()
+        for row in rows:
+            assert_display_artifact_integrity(row["body"], row["plan"])
         return [
             {
                 "task_id": str(row["task_id"]),
@@ -3507,7 +3510,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._display_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT v.id AS version_id, v.version_number, v.body, v.created_at
+                SELECT v.id AS version_id, v.version_number, v.body, v.plan, v.created_at
                 FROM display_artifact_versions v
                 JOIN display_tasks t ON t.id = v.task_id AND t.tenant_id = v.tenant_id
                 WHERE v.tenant_id = %s AND v.task_id = %s AND t.brand_id = %s
@@ -3517,6 +3520,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 (scope.tenant_id, task_id, scope.brand_id, scope.organization_id, scope.user_id),
             )
             rows = cursor.fetchall()
+        for row in rows:
+            assert_display_artifact_integrity(row["body"], row["plan"])
         return [
             {
                 "task_id": str(task_id),

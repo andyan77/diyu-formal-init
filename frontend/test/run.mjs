@@ -107,6 +107,14 @@ let revisionFailureCount = 0;
 let copyShouldFail = false;
 let deferVersionLoad = false;
 let releaseVersionLoad = null;
+let publicStatusProjection = {
+  contract_version: "public-service-status-v1",
+  checked_at: "2026-07-31T12:00:00+00:00",
+  provider_freshness_seconds: 900,
+  core: { state: "available" },
+  content_generation: { state: "unknown", observed_at: null, fresh_until: null },
+  text_display: { state: "available" }
+};
 const requests = [];
 const copiedTexts = [];
 const exportedBlobs = [];
@@ -179,7 +187,8 @@ globalThis.fetch = async (input, init = {}) => {
   let payload = {};
   let ok = true;
   let status = 200;
-  if (path === "/api/v1/content/expression-catalog") payload = catalogResponse(bodyEnabled);
+  if (path === "/api/v1/status") payload = publicStatusProjection;
+  else if (path === "/api/v1/content/expression-catalog") payload = catalogResponse(bodyEnabled);
   else if (path === "/api/v1/user/creation-preferences" && method === "GET") {
     payload = {
       exists: true,
@@ -397,6 +406,18 @@ globalThis.__DIYU_INTERACTION__ = {
   },
   releaseDeferredVersionLoad: () => {
     releaseVersionLoad?.();
+  },
+  setPublicStatus: (contentState, coreState = "available") => {
+    publicStatusProjection = {
+      ...publicStatusProjection,
+      core: { state: coreState },
+      content_generation: {
+        state: contentState,
+        observed_at: contentState === "unknown" ? null : "2026-07-31T11:58:00+00:00",
+        fresh_until: contentState === "unknown" ? null : "2026-07-31T12:13:00+00:00"
+      },
+      text_display: { state: coreState }
+    };
   },
   window: dom.window
 };

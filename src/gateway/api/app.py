@@ -122,6 +122,7 @@ from src.shared.application_handoff import (
     requests_display_merchandising,
 )
 from src.shared.errors import DomainError, GenerationFailed
+from src.shared.service_status import public_service_status
 from src.shared.types import (
     ContentTarget,
     ConversationTurn,
@@ -187,6 +188,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     synthetic_authority = cast(SessionAuthority, authority)
     service = build_content_service(current_settings)
+    provider_status = service.provider_status
     display_service = build_display_service(current_settings)
     workbench_service = build_workbench_service(current_settings)
     control_service = build_content_control_service(current_settings)
@@ -196,6 +198,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="可信 cookie 会话决定租户、品牌、发布账号和操作人；客户端不能切换这些作用域。",
     )
     app.state.session_authority = authority
+    app.state.provider_status = provider_status
     session_cookie = APIKeyCookie(name="diyu_session", auto_error=False)
     app.mount("/app", StaticFiles(directory=Path("frontend/dist"), check_dir=False), name="frontend")
     business_failures: dict[int | str, dict[str, Any]] = {
@@ -1091,6 +1094,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         )
 
+    @app.get("/api/v1/status", include_in_schema=False)
+    def public_status_contract() -> dict[str, object]:
+        return public_service_status(
+            core_ready=dependencies_are_ready(),
+            provider_observation=provider_status.snapshot(),
+        )
+
     @app.get("/api/v1/session/context", responses=business_failures)
     def session_context(request: Request) -> dict[str, object]:
         application = authority.application(request)
@@ -1183,6 +1193,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scope: DisplayScope = Depends(display_scope_from_request),
     ) -> list[dict[str, object]]:
         return workbench_service.recent_display(scope)
+
+    @app.get("/api/v1/display/products", responses=business_failures)
+    def list_display_products(
+        scope: DisplayScope = Depends(display_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return display_service.available_products(scope)
 
     @app.get("/api/v1/display/tasks/{task_id}/versions", responses=business_failures)
     def list_display_versions(
@@ -1503,6 +1519,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.as_synthetic_business_fixture,
             payload.visibility_scope,
             tuple(payload.organization_ids),
+            payload.display_family,
+            payload.display_is_long,
+            payload.display_accent,
         )
 
     @app.post(
