@@ -49,9 +49,21 @@ export function MaterialPicker({
   return (
     <fieldset className="material-picker">
       <legend>本次参考（可选）</legend>
+      <p className="material-picker-help">
+        选择两份已关联商品的组织素材时，先选的是主视觉，后选的是辅助视觉。
+      </p>
       {materials.map(item => {
         const readable = isReadable(item);
         const checked = selectedIds.includes(item.id);
+        const selectedPosition = selectedIds.indexOf(item.id);
+        const visualRole =
+          checked && (item.product_media ?? []).length > 0
+            ? selectedPosition === 0
+              ? "主视觉"
+              : selectedPosition === 1
+                ? "辅助视觉"
+                : "普通参考"
+            : "";
         return (
           <label key={item.id} className={readable ? "" : "needs-note"}>
             <input
@@ -69,6 +81,7 @@ export function MaterialPicker({
                   product =>
                     ` · 已关联 ${product.product_name}（${product.sku}）`
                 )}
+                {visualRole ? ` · ${visualRole}` : ""}
               </small>
             </span>
             {!readable && item.scope === "personal" && <button type="button" className="text-action" onClick={event => { event.preventDefault(); onWriteNote(item); }}>补说明</button>}

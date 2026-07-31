@@ -11,6 +11,7 @@ from src.shared.factual_basis import build_product_fact_packet
 from src.shared.media_program import (
     BoundProductMediaResourceV2,
     MediaCapabilityEnvelope,
+    MediaProgramSelectionV1,
 )
 from src.shared.types import BoundProductMedia, ContentProduct, ProductFact
 
@@ -72,6 +73,7 @@ def build_product_value_contract(
     products: Sequence[ProductFact],
     bound_product_media: Sequence[BoundProductMedia] = (),
     media_envelope: MediaCapabilityEnvelope | None = None,
+    media_program: MediaProgramSelectionV1 | None = None,
 ) -> ProductValueContract | None:
     if primary_product == "product_truth":
         return _build_p2_contract(products)
@@ -80,6 +82,7 @@ def build_product_value_contract(
             products,
             bound_product_media=bound_product_media,
             media_envelope=media_envelope,
+            media_program=media_program,
         )
     return None
 
@@ -210,45 +213,45 @@ def _build_p2_contract(
     if both_sides and len(colors) >= 2:
         source_keys = ("display_name", "colors", "both_sides_complete")
         insight = (
-            f"{product.display_name}的专属新增理解是：{colors[0]}与{colors[1]}两面都作为"
-            "完整外观存在时，选择的单位不是一个局部细节，而是同一件商品的两套完整视觉呈现。"
+            f"{product.display_name}的{colors[0]}与{colors[1]}两面都以完整外观存在，"
+            "带来的不是一个局部细节变化，而是同一件商品的两种完整可见选择。"
         )
         tradeoff = (
-            "相伴取舍是一次内容只能先突出其中一套完整外观；突出一面会暂时弱化"
-            "另一面的可见存在，不能把双面直接夸成两件商品。"
+            "同一时刻对外主要呈现的仍是其中一面：选定一面，就会暂时放下另一面的"
+            "视觉重点；双面也不能被说成两件商品。"
         )
         condition = (
-            "这项理解只在本次判断确实围绕两面完整外观时成立；如果本次只固定呈现"
-            "其中一面，双面就不是这次选择的决定因素。"
+            "只有你确实需要在这两种完整外观之间切换时，这项选择价值才成立；"
+            "如果始终只会固定呈现其中一面，双面就不是决定因素。"
         )
     elif observable and len(colors) >= 2:
         source_keys = ("display_name", "colors", "observable_features")
         insight = (
-            f"{product.display_name}的专属新增理解是：已确认的“{observable}”与"
+            f"{product.display_name}已确认的“{observable}”与"
             f"{colors[0]}、{colors[1]}要放在同一个选择里看；本次选择应落在先呈现"
             "哪一套完整外观，而不是只比较孤立色块。"
         )
         tradeoff = (
-            "相伴取舍是一次内容只能先突出一套完整外观；先呈现一种可见重心会暂时"
+            "同一时刻主要呈现一套完整外观；先选择一种可见重心会暂时"
             "弱化另一套的存在，但不能把两套完整外观说成两件商品。"
         )
         condition = (
-            f"这项理解只在本次问题同时依赖“{observable}”和已确认颜色差异时成立；"
+            f"只有本次选择同时依赖“{observable}”和已确认颜色差异时，这个判断才成立；"
             "如果只固定呈现其中一套，或者选择不取决于颜色，这组事实就不能替代其他"
             "尚未确认的判断依据。"
         )
     elif len(colors) >= 2:
         source_keys = ("display_name", "colors")
         insight = (
-            f"{product.display_name}的专属新增理解是：已确认的{colors[0]}与{colors[1]}"
+            f"{product.display_name}已确认的{colors[0]}与{colors[1]}"
             "提供了不同的可见重心，选择应落在本次想让哪一种颜色先被看见。"
         )
         tradeoff = (
-            "相伴取舍是突出一种颜色会弱化其他颜色在本次内容里的存在；这不等于"
+            "突出一种颜色会暂时弱化其他颜色的可见存在；这不等于"
             "颜色已经证明用途、效果或穿着体验。"
         )
         condition = (
-            "这项理解只在本次问题确实依赖颜色差异时成立；如果选择并不取决于颜色，"
+            "只有本次选择确实依赖颜色差异时，这个判断才成立；如果选择并不取决于颜色，"
             "这组颜色就不能替代其他尚未确认的判断依据。"
         )
     elif structure and silhouette:
@@ -259,11 +262,11 @@ def _build_p2_contract(
         )
         source_keys = ("display_name", structure_key, "silhouette")
         insight = (
-            f"{product.display_name}的专属新增理解是：已确认的{structure}与{silhouette}"
+            f"{product.display_name}已确认的{structure}与{silhouette}"
             "可以放在同一个选择里解释，让结构信息和轮廓信息彼此校准，而不是各说一遍。"
         )
         tradeoff = (
-            "相伴取舍是这项解释只能落在已确认的结构与轮廓关系上，不能由此推出材质手感、"
+            "这项选择只能落在已确认的结构与轮廓关系上，不能由此推出材质手感、"
             "保暖、舒适、用途或上身效果。"
         )
         condition = (
@@ -273,11 +276,11 @@ def _build_p2_contract(
     elif observable:
         source_keys = ("display_name", "observable_features")
         insight = (
-            f"{product.display_name}的专属新增理解是：已确认的“{observable}”可以成为本次"
-            "内容唯一的观察支点，解释应围绕它具体怎样被看见展开。"
+            f"{product.display_name}已确认的“{observable}”可以成为本次选择的观察支点，"
+            "判断只围绕它具体怎样被看见展开。"
         )
         tradeoff = (
-            "相伴取舍是这项可见特征不能替代尚未确认的材质、性能、用途或穿着体验。"
+            "选择这项可见特征作为依据，就不能再用它替代尚未确认的材质、性能、用途或穿着体验。"
         )
         condition = (
             "当本次问题直接依赖这项可见特征时，这个判断成立；如果决定因素在其他未确认"
@@ -291,11 +294,11 @@ def _build_p2_contract(
         )
         source_keys = ("display_name", structure_key)
         insight = (
-            f"{product.display_name}的专属新增理解是：当前已确认的{structure}把本次解释"
+            f"{product.display_name}当前已确认的{structure}把本次判断"
             "限定在这一项具体结构信息上，而不是一份通用商品介绍。"
         )
         tradeoff = (
-            "相伴取舍是结构信息本身不能证明材质手感、性能、用途、舒适或上身效果。"
+            "以结构信息作选择依据，就不能同时把尚未确认的材质手感、性能、用途、舒适或上身效果当作结论。"
         )
         condition = (
             "当本次问题直接依赖这项结构信息时，这个判断成立；如果问题依赖体验或使用"
@@ -304,11 +307,11 @@ def _build_p2_contract(
     elif silhouette:
         source_keys = ("display_name", "silhouette")
         insight = (
-            f"{product.display_name}的专属新增理解是：已确认的{silhouette}让本次解释可以"
+            f"{product.display_name}已确认的{silhouette}让本次判断可以"
             "聚焦轮廓本身怎样被看见，而不是借未确认属性补足意义。"
         )
         tradeoff = (
-            "相伴取舍是轮廓信息不能自动证明材质、性能、用途、舒适或上身效果。"
+            "以轮廓作选择依据，就不能同时把尚未确认的材质、性能、用途、舒适或上身效果当作结论。"
         )
         condition = (
             "当本次选择确实由这项轮廓决定时，这个判断成立；如果决定因素在其他未确认"
@@ -341,6 +344,7 @@ def _build_p5_contract(
     *,
     bound_product_media: Sequence[BoundProductMedia],
     media_envelope: MediaCapabilityEnvelope | None,
+    media_program: MediaProgramSelectionV1 | None,
 ) -> P5ProductValueContractV1:
     if len(products) != 2 or len(bound_product_media) != 2 or media_envelope is None:
         raise GenerationFailed(
@@ -356,14 +360,26 @@ def _build_p5_contract(
     if len(resources) != 2 or len({item.resource_id for item in resources}) != 2:
         raise GenerationFailed("这条视觉内容缺少两份冻结的登记商品素材。")
     resource_by_product = {resource.product_id: resource for resource in resources}
+    resource_by_id = {resource.resource_id: resource for resource in resources}
     media_by_product = {str(item.product_id): item for item in bound_product_media}
     if set(resource_by_product) != set(media_by_product):
         raise GenerationFailed("登记商品素材与当前商品关系不一致。")
+    if (
+        media_program is None
+        or not media_program.primary_resource_id
+        or not media_program.secondary_resource_id
+        or media_program.primary_resource_id not in resource_by_id
+        or media_program.secondary_resource_id not in resource_by_id
+        or media_program.primary_resource_id == media_program.secondary_resource_id
+    ):
+        raise GenerationFailed("这条视觉内容缺少本次明确的主视觉与辅助视觉选择。")
+    ordered_resources = (
+        resource_by_id[media_program.primary_resource_id],
+        resource_by_id[media_program.secondary_resource_id],
+    )
     ordered_media = tuple(
-        sorted(
-            bound_product_media,
-            key=lambda item: str(item.product_id),
-        )
+        media_by_product[resource.product_id]
+        for resource in ordered_resources
     )
     ordered_products = tuple(item.product for item in ordered_media)
     packets = tuple(build_product_fact_packet((product,)) for product in ordered_products)
@@ -380,13 +396,13 @@ def _build_p5_contract(
                 if item.fact_key in {"display_name", "colors"}
             )
         proposition = (
-            f"让{ordered_products[0].display_name}的已确认{color_pair[0]}承担画面主色，"
-            f"让{ordered_products[1].display_name}的已确认{color_pair[1]}作为回应色，"
-            "形成一主一辅、不能互换的具体色彩关系。"
+            f"让{ordered_products[0].display_name}的已确认{color_pair[0]}先成为画面主色，"
+            f"再让{ordered_products[1].display_name}的已确认{color_pair[1]}在侧边回应；"
+            "主色先定调，回应色再把两件商品的关系拉开。"
         )
         dependency = (
-            "只有两份登记素材都能承载各自冻结颜色时，这条色彩主次命题才成立；"
-            "任一颜色关系无法由登记素材承载，就退出这条造型命题。"
+            "两份图片都要清楚呈现各自已确认的颜色；只要其中一种颜色在图片里看不清，"
+            "这组主辅关系就不成立。"
         )
     else:
         silhouettes = tuple(
@@ -409,26 +425,23 @@ def _build_p5_contract(
                 if item.fact_key in {"display_name", "silhouette"}
             )
         proposition = (
-            f"让{ordered_products[0].display_name}的已确认{silhouettes[0]}承担画面主体，"
-            f"让{ordered_products[1].display_name}的已确认{silhouettes[1]}作为回应，"
-            "形成一主一辅、不能互换的具体轮廓关系。"
+            f"让{ordered_products[0].display_name}的已确认{silhouettes[0]}先成为画面主体，"
+            f"再让{ordered_products[1].display_name}的已确认{silhouettes[1]}在侧边回应；"
+            "主体先定形，回应轮廓再把两件商品的关系拉开。"
         )
         dependency = (
-            "只有两份登记素材都能承载各自冻结轮廓时，这条轮廓主次命题才成立；"
-            "任一轮廓无法由登记素材承载，就退出这条造型命题。"
+            "两份图片都要清楚呈现各自已确认的轮廓；只要其中一个轮廓在图片里看不清，"
+            "这组主辅关系就不成立。"
         )
     packet_digest = hashlib.sha256(
         ":".join(packet.packet_digest for packet in packets).encode()
     ).hexdigest()
-    resource_refs = tuple(
-        resource_by_product[str(item.product_id)].resource_id
-        for item in ordered_media
-    )
+    resource_refs = tuple(resource.resource_id for resource in ordered_resources)
     return P5ProductValueContractV1(
         contract_version=PRODUCT_VALUE_CONTRACT_VERSION,
         primary_product="visual_styling_story",
         real_product_anchor=(
-            "本篇只依赖本次冻结的两份登记商品素材，并让两件不同商品各承担一个不可互换的位置。"
+            "这组画面只使用你这次选定的两件商品素材，两件商品各有自己的视觉位置。"
         ),
         visible_styling_proposition=proposition,
         visual_dependency=dependency,

@@ -299,6 +299,7 @@ class ContentService:
                 products=products,
                 bound_product_media=control.bound_product_media,
                 media_envelope=media_envelope,
+                media_program=media_program,
             )
         except GenerationFailed as exc:
             return {"kind": "question", "message": str(exc)}

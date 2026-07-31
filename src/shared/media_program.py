@@ -42,6 +42,7 @@ OptionalCaptureSuggestionId: TypeAlias = Literal[
 MEDIA_CAPABILITY_ENVELOPE_VERSION = "media-capability-envelope-v1"
 MEDIA_CAPABILITY_ENVELOPE_V2_VERSION = "media-capability-envelope-v2"
 MEDIA_PROGRAM_VERSION = "media-program-v1"
+MEDIA_PROGRAM_V2_VERSION = "media-program-v2"
 ABSTRACT_COMPOSITION_RESOURCE_ID = "resource:original_composition"
 
 _PROGRAM_MEDIA_FORMAT: dict[MediaProgramId, MediaFormat] = {
@@ -232,6 +233,11 @@ class MediaProgramSelectionV1:
     unit_bindings: tuple[str, ...]
     series_position: int | None
     optional_capture_suggestion_id: OptionalCaptureSuggestionId | None = None
+    # New P5 tasks freeze the person's explicit selection roles in the media
+    # program.  The fields stay absent from legacy documents so their digest
+    # and historical projection do not change.
+    primary_resource_id: str | None = None
+    secondary_resource_id: str | None = None
 
 
 def _canonical_digest(document: Mapping[str, object]) -> str:
@@ -287,7 +293,7 @@ def media_envelope_document(
 def media_program_document(
     selection: MediaProgramSelectionV1,
 ) -> dict[str, object]:
-    return {
+    document: dict[str, object] = {
         "program_version": selection.program_version,
         "program_id": selection.program_id,
         "required_resource_ids": list(selection.required_resource_ids),
@@ -295,6 +301,11 @@ def media_program_document(
         "series_position": selection.series_position,
         "optional_capture_suggestion_id": (selection.optional_capture_suggestion_id),
     }
+    if selection.primary_resource_id is not None:
+        document["primary_resource_id"] = selection.primary_resource_id
+    if selection.secondary_resource_id is not None:
+        document["secondary_resource_id"] = selection.secondary_resource_id
+    return document
 
 
 def media_envelope_digest(envelope: MediaCapabilityEnvelope) -> str:
@@ -490,6 +501,8 @@ def select_media_program(
     registered_products = envelope.resources_for("registered_product_display")
     creator_resources = envelope.resources_for("creator_expression")
     optional_suggestion: OptionalCaptureSuggestionId | None = None
+    primary_resource_id: str | None = None
+    secondary_resource_id: str | None = None
     if primary_product == "visual_styling_story":
         registered_v2 = tuple(
             resource for resource in registered_products if isinstance(resource, BoundProductMediaResourceV2)
@@ -507,6 +520,11 @@ def select_media_program(
             if envelope.media_format == "graphic"
             else "video_registered_product_display_v1"
         )
+        # Envelope V2 preserves the explicit order in which the person chose
+        # the two bound assets.  Freeze that business decision here instead of
+        # deriving visual hierarchy from UUIDs or database return order.
+        primary_resource_id = registered_v2[0].resource_id
+        secondary_resource_id = registered_v2[1].resource_id
     elif selected_assets:
         program_id = (
             "graphic_selected_asset_sequence_v1"
@@ -558,12 +576,18 @@ def select_media_program(
         )
     )
     return MediaProgramSelectionV1(
-        program_version=MEDIA_PROGRAM_VERSION,
+        program_version=(
+            MEDIA_PROGRAM_V2_VERSION
+            if primary_product == "visual_styling_story"
+            else MEDIA_PROGRAM_VERSION
+        ),
         program_id=program_id,
         required_resource_ids=required_resource_ids,
         unit_bindings=_PROGRAM_UNIT_BINDINGS[program_id],
         series_position=series_position,
         optional_capture_suggestion_id=optional_suggestion,
+        primary_resource_id=primary_resource_id,
+        secondary_resource_id=secondary_resource_id,
     )
 
 
@@ -577,7 +601,8 @@ def assert_media_program_allowed(
             MEDIA_CAPABILITY_ENVELOPE_VERSION,
             MEDIA_CAPABILITY_ENVELOPE_V2_VERSION,
         }
-        or selection.program_version != MEDIA_PROGRAM_VERSION
+        or selection.program_version
+        not in {MEDIA_PROGRAM_VERSION, MEDIA_PROGRAM_V2_VERSION}
     ):
         raise GenerationFailed("媒体能力包或成品程序版本无效")
     if selection.program_id not in envelope.allowed_program_ids:
@@ -609,6 +634,37 @@ def assert_media_program_allowed(
     }
     if set(selection.required_resource_ids) != required_resources:
         raise GenerationFailed("成品程序所需资源集合漂移")
+    product_relation_programs = {
+        "graphic_registered_product_relation_v1",
+        "video_registered_product_display_v1",
+    }
+    if (
+        selection.program_id in product_relation_programs
+        and selection.program_version == MEDIA_PROGRAM_V2_VERSION
+    ):
+        registered_resource_ids = {
+            resource.resource_id
+            for resource in envelope.resources
+            if resource.capability_id == "registered_product_display"
+        }
+        if (
+            not selection.primary_resource_id
+            or not selection.secondary_resource_id
+            or selection.primary_resource_id == selection.secondary_resource_id
+            or {
+                selection.primary_resource_id,
+                selection.secondary_resource_id,
+            }
+            != registered_resource_ids
+        ):
+            raise GenerationFailed("成品程序缺少冻结的主视觉与辅助视觉角色")
+    elif selection.program_version == MEDIA_PROGRAM_V2_VERSION:
+        raise GenerationFailed("媒体程序 v2 只用于冻结商品主辅角色")
+    elif (
+        selection.primary_resource_id is not None
+        or selection.secondary_resource_id is not None
+    ):
+        raise GenerationFailed("历史媒体程序不得携带商品主辅角色")
 
 
 def media_envelope_from_document(
@@ -766,6 +822,8 @@ def media_program_from_document(
             raise TypeError
         raw_position = value.get("series_position")
         raw_suggestion = value.get("optional_capture_suggestion_id")
+        raw_primary = value.get("primary_resource_id")
+        raw_secondary = value.get("secondary_resource_id")
         return MediaProgramSelectionV1(
             program_version=str(value["program_version"]),
             program_id=cast(MediaProgramId, value["program_id"]),
@@ -774,6 +832,12 @@ def media_program_from_document(
             series_position=(int(raw_position) if raw_position is not None else None),
             optional_capture_suggestion_id=(
                 cast(OptionalCaptureSuggestionId, raw_suggestion) if raw_suggestion is not None else None
+            ),
+            primary_resource_id=(
+                str(raw_primary) if raw_primary is not None else None
+            ),
+            secondary_resource_id=(
+                str(raw_secondary) if raw_secondary is not None else None
             ),
         )
     except (KeyError, TypeError, ValueError) as exc:

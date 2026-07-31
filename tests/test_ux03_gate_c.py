@@ -74,6 +74,7 @@ from src.shared.delivery_compiler import (
     DELIVERY_COMPILER_VERSION,
     ORIGINAL_COMPOSITION_RESOURCE_ID,
     DeliveryCompileInput,
+    _graphic_media_program_text,
     compile_delivery,
     compiler_owned_media_unit_texts,
 )
@@ -219,6 +220,28 @@ def _bound_product_media(
         root_account_id=UUID("84000000-0000-0000-0005-000000000001"),
         control_organization_id=UUID("84000000-0000-0000-0006-000000000001"),
     )
+
+
+def _bound_product_media_record(item: BoundProductMedia) -> dict[str, object]:
+    return {
+        "binding_id": str(item.binding_id),
+        "product_id": str(item.product_id),
+        "product_version_id": str(item.product_version_id),
+        "sku": item.product.sku,
+        "display_name": item.product.display_name,
+        "facts": dict(item.product.facts),
+        "source_kind": item.product.source_kind,
+        "source_note": item.product.source_note,
+        "fact_version": item.product.fact_version,
+        "applicability": item.product.applicability,
+        "asset_id": str(item.asset_id),
+        "asset_version_id": str(item.asset_version_id),
+        "asset_version": item.asset_version,
+        "media_type": item.media_type,
+        "source_checksum_sha256": item.source_checksum_sha256,
+        "root_account_id": str(item.root_account_id),
+        "control_organization_id": str(item.control_organization_id),
+    }
 
 
 def _tenant_persistence_counts(
@@ -962,6 +985,7 @@ def test_p5_requires_two_frozen_registered_product_resources() -> None:
             products=tuple(item.product for item in insufficient_media),
             bound_product_media=insufficient_media,
             media_envelope=envelope,
+            media_program=program,
         )
 
 
@@ -1707,6 +1731,16 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 for item in envelope["resources"]
                 if item["capability_id"] in {"abstract_composition", "registered_product_display"}
             }
+            resource_by_asset = {
+                UUID(item["asset_id"]): item["resource_id"]
+                for item in resources
+            }
+            assert snapshot["media_program"]["primary_resource_id"] == (
+                resource_by_asset[asset_ids[0]]
+            )
+            assert snapshot["media_program"]["secondary_resource_id"] == (
+                resource_by_asset[asset_ids[1]]
+            )
             value_document = snapshot["product_value_contract"]
             assert value_document["primary_product"] == (
                 "visual_styling_story"
@@ -2228,8 +2262,12 @@ def test_p2_formal_observable_and_colors_share_one_product_value_path() -> None:
     assert isinstance(contract, P2ProductValueContractV1)
     assert "两面都以完整外观呈现" in contract.product_insight
     assert "先呈现哪一套完整外观" in contract.product_insight
-    assert "一次内容只能先突出一套完整外观" in contract.tradeoff_or_limit
-    assert "同时依赖" in contract.validity_condition
+    assert "同一时刻主要呈现一套完整外观" in contract.tradeoff_or_limit
+    assert "只有本次选择同时依赖" in contract.validity_condition
+    assert all(
+        label not in contract.visible_text
+        for label in ("专属新增理解", "相伴取舍", "成立条件")
+    )
     assert len(contract.source_fact_ids) == 3
 
 
@@ -2415,9 +2453,9 @@ def test_p2_writer_receives_only_controlled_product_semantics_without_media_righ
     assert "resource:registered-product-1" not in prompt
     assert "resource:selected-media:" not in prompt
     assert "controlled-product-writer-brief-v2" in prompt
-    assert "专属新增理解" in prompt
-    assert "相伴取舍" in prompt
-    assert "这项理解只在" in prompt
+    assert "两种完整可见选择" in prompt
+    assert "同一时刻对外主要呈现" in prompt
+    assert "只有你确实需要" in prompt
     assert "先看信息再自己判断" in prompt
     assert "媒体程序 graphic_fact_guided_v1 确定性生成" in prompt
     assert "不得返回任何媒体单元、资源引用" in prompt
@@ -2466,6 +2504,68 @@ def test_p2_writer_receives_only_controlled_product_semantics_without_media_righ
     assert value_contract.product_insight in compiled.body
     assert value_contract.tradeoff_or_limit in compiled.body
     assert value_contract.validity_condition in compiled.body
+    assert all(
+        label not in compiled.body
+        for label in ("专属新增理解", "相伴取舍", "成立条件")
+    )
+    assert all(
+        phrase not in value_contract.tradeoff_or_limit
+        for phrase in (
+            "内容只能",
+            "稿件只能",
+            "页面只能",
+            "表达只能",
+        )
+    )
+    bad_writer_kernel = replace(
+        kernel,
+        units=tuple(
+            replace(unit, text="专属新增理解：照着合同写。")
+            if unit.writable and unit.purpose == "body"
+            else unit
+            for unit in kernel.units
+        ),
+    )
+    with pytest.raises(GenerationFailed, match="内部商品语义标签"):
+        compile_delivery(
+            DeliveryCompileInput(
+                primary_product="product_truth",
+                media_format="graphic",
+                products=(product,),
+                production_conditions=request.brand.production_conditions,
+                allowed_resource_ids=context.resource_ids,
+                immutable_fact_blocks=context.product_fact_blocks,
+                trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
+                media_capability_envelope=request.media_capability_envelope,
+                media_program=media_program,
+                product_value_contract=value_contract,
+            ),
+            bad_writer_kernel,
+        )
+    with pytest.raises(GenerationFailed, match="商品取舍错误"):
+        compile_delivery(
+            replace(
+                DeliveryCompileInput(
+                    primary_product="product_truth",
+                    media_format="graphic",
+                    products=(product,),
+                    production_conditions=request.brand.production_conditions,
+                    allowed_resource_ids=context.resource_ids,
+                    immutable_fact_blocks=context.product_fact_blocks,
+                    trusted_fact_texts=tuple(
+                        sorted(context.fact_text_by_id.items())
+                    ),
+                    media_capability_envelope=request.media_capability_envelope,
+                    media_program=media_program,
+                    product_value_contract=value_contract,
+                ),
+                product_value_contract=replace(
+                    value_contract,
+                    tradeoff_or_limit="一篇内容只能突出一个重点。",
+                ),
+            ),
+            kernel,
+        )
 
 
 def test_p2_rejects_identity_only_facts_instead_of_emitting_generic_advice() -> None:
@@ -2796,8 +2896,16 @@ def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() ->
         products=products,
         bound_product_media=bound_media,
         media_envelope=envelope,
+        media_program=media_program,
     )
     assert isinstance(value_contract, P5ProductValueContractV1)
+    registered_resources = tuple(
+        resource
+        for resource in envelope.resources
+        if resource.capability_id == "registered_product_display"
+    )
+    assert media_program.primary_resource_id == registered_resources[0].resource_id
+    assert media_program.secondary_resource_id == registered_resources[1].resource_id
     request = replace(
         _generation_input(media_format="video"),
         weak_seed="用 ZX-C218 和 ZX-S104 做一条能照着拍的视觉造型短视频。",
@@ -2851,8 +2959,8 @@ def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() ->
     assert "上下装关系" not in prompt
     assert "resource:registered-product:" not in prompt
     assert '"allowed_resources": []' in prompt
-    assert "双面短外套的已确认炭灰承担画面主色" in prompt
-    assert "深灰直筒半裙的已确认暖白作为回应色" in prompt
+    assert "双面短外套的已确认炭灰先成为画面主色" in prompt
+    assert "深灰直筒半裙的已确认暖白在侧边回应" in prompt
     assert "video_registered_product_display_v1" in prompt
 
     kernel = parse_writer_kernel(
@@ -2901,6 +3009,176 @@ def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() ->
         for resource in envelope.resources
         if resource.capability_id == "registered_product_display"
     }
+    assert "主视觉素材居中并占较大面积" in compiled.body
+    assert "辅助视觉素材从侧边进入" in compiled.body
+    assert "主视觉先出现、居中且较大" in compiled.body
+    assert "同一尺度并列" not in compiled.body
+    assert "主次不固定" not in compiled.body
+
+
+def test_p5_visual_roles_are_invariant_to_uuid_recreation() -> None:
+    products = (
+        ProductFact(
+            sku="ZX-C218",
+            display_name="双面短外套",
+            facts={"entity_kind": "apparel_product", "colors": ["炭灰"]},
+            source_kind="synthetic_confirmed_product_record",
+        ),
+        ProductFact(
+            sku="ZX-S104",
+            display_name="深灰直筒半裙",
+            facts={"entity_kind": "apparel_product", "colors": ["暖白"]},
+            source_kind="synthetic_confirmed_product_record",
+        ),
+    )
+
+    def build(
+        media: tuple[BoundProductMedia, BoundProductMedia],
+    ) -> tuple[str, str, str]:
+        envelope = build_media_capability_envelope_v2(
+            platform_shape="小红书图文完整成品",
+            media_format="graphic",
+            bound_product_media=media,
+        )
+        program = select_media_program(
+            primary_product="visual_styling_story",
+            envelope=envelope,
+            mechanism_id=None,
+            series_position=None,
+            fact_count=4,
+        )
+        contract = build_product_value_contract(
+            primary_product="visual_styling_story",
+            products=products,
+            bound_product_media=media,
+            media_envelope=envelope,
+            media_program=program,
+        )
+        assert isinstance(contract, P5ProductValueContractV1)
+        assert program.primary_resource_id is not None
+        assert program.secondary_resource_id is not None
+        return (
+            contract.visible_styling_proposition,
+            media[0].product.display_name,
+            media[1].product.display_name,
+        )
+
+    original = cast(
+        tuple[BoundProductMedia, BoundProductMedia],
+        tuple(
+            _bound_product_media(index=index, product=product)
+            for index, product in enumerate(products, start=1)
+        ),
+    )
+    recreated = (
+        replace(
+            original[0],
+            binding_id=UUID("ffffffff-ffff-4fff-8fff-fffffffffff1"),
+            product_id=UUID("ffffffff-ffff-4fff-8fff-fffffffffff2"),
+            product_version_id=UUID("ffffffff-ffff-4fff-8fff-fffffffffff3"),
+            asset_id=UUID("ffffffff-ffff-4fff-8fff-fffffffffff4"),
+            asset_version_id=UUID("ffffffff-ffff-4fff-8fff-fffffffffff5"),
+        ),
+        replace(
+            original[1],
+            binding_id=UUID("00000000-0000-4000-8000-000000000001"),
+            product_id=UUID("00000000-0000-4000-8000-000000000002"),
+            product_version_id=UUID("00000000-0000-4000-8000-000000000003"),
+            asset_id=UUID("00000000-0000-4000-8000-000000000004"),
+            asset_version_id=UUID("00000000-0000-4000-8000-000000000005"),
+        ),
+    )
+
+    assert build(original) == build(recreated)
+
+
+def test_product_media_resolver_restores_explicit_selection_order() -> None:
+    first = _bound_product_media(index=1)
+    second = _bound_product_media(index=2)
+
+    class ReverseRepository:
+        def selected_product_media(
+            self,
+            scope: TrustedScope,
+            asset_ids: tuple[UUID, ...],
+        ) -> tuple[dict[str, object], ...]:
+            del scope, asset_ids
+            return (
+                _bound_product_media_record(second),
+                _bound_product_media_record(first),
+            )
+
+    service = ContentControlService(
+        cast(Any, ReverseRepository()),
+        cast(Any, object()),
+    )
+    resolved = service.bound_product_media(
+        TrustedScope(
+            tenant_id=uuid4(),
+            user_id=uuid4(),
+            brand_id=uuid4(),
+            account_id=uuid4(),
+        ),
+        (first.asset_id, second.asset_id),
+    )
+
+    assert tuple(item.asset_id for item in resolved) == (
+        first.asset_id,
+        second.asset_id,
+    )
+
+
+def test_p5_media_program_requires_and_renders_frozen_resource_roles() -> None:
+    products = (
+        ProductFact(
+            sku="ZX-C218",
+            display_name="双面短外套",
+            facts={"entity_kind": "apparel_product", "colors": ["炭灰"]},
+            source_kind="synthetic_confirmed_product_record",
+        ),
+        ProductFact(
+            sku="ZX-S104",
+            display_name="深灰直筒半裙",
+            facts={"entity_kind": "apparel_product", "colors": ["暖白"]},
+            source_kind="synthetic_confirmed_product_record",
+        ),
+    )
+    media = tuple(
+        _bound_product_media(index=index, product=product)
+        for index, product in enumerate(products, start=1)
+    )
+    envelope = build_media_capability_envelope_v2(
+        platform_shape="小红书图文完整成品",
+        media_format="graphic",
+        bound_product_media=media,
+    )
+    program = select_media_program(
+        primary_product="visual_styling_story",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=None,
+        fact_count=4,
+    )
+    assert_media_program_allowed(envelope, program)
+    opening, sequence, production_note = _graphic_media_program_text(program)
+    assert "主视觉素材居中并占较大面积" in opening
+    assert "辅助视觉素材位于侧边、面积较小" in opening
+    assert "主视觉素材" in sequence and "辅助视觉素材" in sequence
+    assert "主视觉始终先出现、居中且较大" in production_note
+    assert "辅助视觉随后出现、侧置且较小" in production_note
+    assert "同一尺度并列" not in "\n".join(
+        (opening, sequence, production_note)
+    )
+
+    with pytest.raises(GenerationFailed, match="主视觉与辅助视觉角色"):
+        assert_media_program_allowed(
+            envelope,
+            replace(
+                program,
+                primary_resource_id=None,
+                secondary_resource_id=None,
+            ),
+        )
 
 
 def test_restricted_media_fallback_stays_available_outside_the_v3_main_path() -> None:
@@ -3014,27 +3292,51 @@ def _write_gate_c_evidence_fixture(
         ("P1", "P2", "P3", "P4", "P5", "series2", "series3"),
         start=1,
     ):
-        p2_values = {
+        title = f"{card_id} 的自然标题"
+        p2_contract_values = {
             "product_specific_understanding": (
-                "两面完整外观让选择落在两套完整呈现。"
+                "双面短外套的两面完整外观，让选择落在两套完整呈现之间。"
             ),
-            "tradeoff_or_limit": "突出一面会弱化另一面的可见存在。",
-            "validity_condition": "只有本次确实比较两面时才成立。",
+            "tradeoff_or_limit": (
+                "选定一面，就会暂时放下另一面的视觉重点。"
+            ),
+            "validity_condition": (
+                "只有确实需要在两种完整外观之间切换时，这项价值才成立。"
+            ),
         }
+        p2_values = {
+            "artifact_title_quote": title,
+            "product_specific_understanding": "选择落在两套完整呈现之间",
+            "tradeoff_or_limit": "暂时放下另一面的视觉重点",
+            "validity_condition": "需要在两种完整外观之间切换",
+        }
+        primary_ref = "resource:registered-product:one"
+        secondary_ref = "resource:registered-product:two"
+        p5_contract_proposition = (
+            "第一件登记商品承担主色，第二件登记商品作为回应色，形成清楚的一主一辅关系。"
+        )
         p5_values: dict[str, object] = {
-            "concrete_visual_proposition": (
-                "第一件承担主色，第二件作为回应色。"
-            ),
-            "resource_refs": [
-                "resource:registered-product:one",
-                "resource:registered-product:two",
-            ],
+            "artifact_title_quote": title,
+            "concrete_visual_proposition": "形成清楚的一主一辅关系",
+            "primary_resource_ref": primary_ref,
+            "secondary_resource_ref": secondary_ref,
+            "primary_role_quote": "主视觉素材居中并占较大面积",
+            "secondary_role_quote": "辅助视觉素材位于侧边、面积较小",
+            "media_sequence_quote": "第 1 页先呈现主视觉，随后由辅助视觉回应",
+            "production_note_quote": "主视觉居中且较大，辅助视觉侧置且较小",
         }
         value_lines = (
-            "\n".join(p2_values.values())
+            "\n".join(p2_contract_values.values())
             if card_id == "P2"
             else (
-                str(p5_values["concrete_visual_proposition"])
+                "\n".join(
+                    (
+                        p5_contract_proposition,
+                        "主视觉素材居中并占较大面积；辅助视觉素材位于侧边、面积较小。",
+                        "第 1 页先呈现主视觉，随后由辅助视觉回应。",
+                        "主视觉居中且较大，辅助视觉侧置且较小。",
+                    )
+                )
                 if card_id == "P5"
                 else ""
             )
@@ -3042,18 +3344,16 @@ def _write_gate_c_evidence_fixture(
         product_value_contract: dict[str, object] | None = None
         if card_id == "P2":
             product_value_contract = {
-                "product_insight": p2_values[
+                "product_insight": p2_contract_values[
                     "product_specific_understanding"
                 ],
-                "tradeoff_or_limit": p2_values["tradeoff_or_limit"],
-                "validity_condition": p2_values["validity_condition"],
+                "tradeoff_or_limit": p2_contract_values["tradeoff_or_limit"],
+                "validity_condition": p2_contract_values["validity_condition"],
             }
         elif card_id == "P5":
             product_value_contract = {
-                "visible_styling_proposition": p5_values[
-                    "concrete_visual_proposition"
-                ],
-                "resource_refs": p5_values["resource_refs"],
+                "visible_styling_proposition": p5_contract_proposition,
+                "resource_refs": [primary_ref, secondary_ref],
             }
         artifact = root / f"{card_id}-artifact.json"
         artifact.write_text(
@@ -3068,14 +3368,22 @@ def _write_gate_c_evidence_fixture(
                     "version_id": str(
                         UUID(f"85000000-0000-0000-0003-{index:012d}")
                     ),
-                    "outline": f"{card_id} 的自然标题",
+                    "outline": title,
                     "body": (
-                        f"标题：{card_id} 的自然标题\n\n"
+                        f"标题：{title}\n\n"
                         "完整正文：服务端事实原句与一般判断各自保留边界。"
                         + (f"\n{value_lines}" if value_lines else "")
                     ),
                     "formal_snapshot": {
                         "product_value_contract": product_value_contract,
+                        "media_program": (
+                            {
+                                "primary_resource_id": primary_ref,
+                                "secondary_resource_id": secondary_ref,
+                            }
+                            if card_id == "P5"
+                            else None
+                        ),
                         "media_capability_envelope": {
                             "resources": (
                                 [
@@ -3085,10 +3393,7 @@ def _write_gate_c_evidence_fixture(
                                             "registered_product_display"
                                         ),
                                     }
-                                    for resource_id in cast(
-                                        list[str],
-                                        p5_values["resource_refs"],
-                                    )
+                                    for resource_id in (primary_ref, secondary_ref)
                                 ]
                                 if card_id == "P5"
                                 else []
@@ -3365,6 +3670,49 @@ def test_gate_c_evidence_rejects_all_pass_without_product_value_details(
         verify_gate_c_evidence(root)
 
 
+def test_gate_c_evidence_rejects_snapshot_only_p2_review_text(
+    tmp_path: Path,
+) -> None:
+    root = _write_gate_c_evidence_fixture(tmp_path)
+    artifact = json.loads(
+        (root / "P2-artifact.json").read_text(encoding="utf-8")
+    )
+    contract = artifact["formal_snapshot"]["product_value_contract"]
+    review_path = root / "human-review.json"
+    review = json.loads(review_path.read_text(encoding="utf-8"))
+    target = next(
+        item for item in review["reviews"] if item["card_id"] == "P2"
+    )
+    target["value_evidence"] = {
+        "artifact_title_quote": artifact["outline"],
+        "product_specific_understanding": contract["product_insight"],
+        "tradeoff_or_limit": contract["tradeoff_or_limit"],
+        "validity_condition": contract["validity_condition"],
+    }
+    review_path.write_text(
+        json.dumps(review, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    sums_path = root / "SHA256SUMS"
+    sums_path.write_text(
+        "".join(
+            (
+                f"{sha256_file(review_path)}  human-review.json\n"
+                if line.endswith("  human-review.json")
+                else f"{line}\n"
+            )
+            for line in sums_path.read_text(encoding="utf-8").splitlines()
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        EvidenceBindingError,
+        match="not bound to the visible artifact",
+    ):
+        verify_gate_c_evidence(root)
+
+
 def test_gate_c_evidence_rejects_p2_with_unsupported_product_semantics(
     tmp_path: Path,
 ) -> None:
@@ -3410,15 +3758,22 @@ def test_gate_c_finalizer_requires_explicit_structured_human_review(
                 "notes": "执行端逐项阅读全文后的结构化裁决。",
                 "value_evidence": (
                     {
-                        "product_specific_understanding": "专属理解",
-                        "tradeoff_or_limit": "相伴取舍",
-                        "validity_condition": "成立条件",
+                        "artifact_title_quote": "P2 标题",
+                        "product_specific_understanding": "商品理解摘录",
+                        "tradeoff_or_limit": "选择取舍摘录",
+                        "validity_condition": "成立范围摘录",
                     }
                     if card_id == "P2"
                     else (
                         {
-                            "concrete_visual_proposition": "具体视觉命题",
-                            "resource_refs": ["resource:one", "resource:two"],
+                            "artifact_title_quote": "P5 标题",
+                            "concrete_visual_proposition": "具体视觉命题摘录",
+                            "primary_resource_ref": "resource:one",
+                            "secondary_resource_ref": "resource:two",
+                            "primary_role_quote": "主视觉证据",
+                            "secondary_role_quote": "辅助视觉证据",
+                            "media_sequence_quote": "图序证据",
+                            "production_note_quote": "制作提示证据",
                         }
                         if card_id == "P5"
                         else None
@@ -3429,7 +3784,7 @@ def test_gate_c_finalizer_requires_explicit_structured_human_review(
     review_path.write_text(
         json.dumps(
             {
-                "review_contract": "ux03-gate-c-human-review-v2",
+                "review_contract": "ux03-gate-c-human-review-v3",
                 "reviews": reviews,
             },
             ensure_ascii=False,

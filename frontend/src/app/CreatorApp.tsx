@@ -334,6 +334,15 @@ function DirectionPanel({
           {materials.map(material => {
             const readable =
               material.media_type === "text" || Boolean(material.reference_note?.trim());
+            const selectedPosition = materialIds.indexOf(material.id);
+            const visualRole =
+              selectedPosition >= 0 && Boolean(material.product_media?.length)
+                ? selectedPosition === 0
+                  ? "主视觉"
+                  : selectedPosition === 1
+                    ? "辅助视觉"
+                    : "普通参考"
+                : "";
             return (
               <label key={material.id} className={!readable ? "unavailable" : ""}>
                 <input
@@ -353,6 +362,7 @@ function DirectionPanel({
                   <small>
                     {material.scope === "personal" ? "我的素材" : "组织素材"}
                     {!readable ? " · 还缺一句可读说明" : ""}
+                    {visualRole ? ` · ${visualRole}` : ""}
                   </small>
                 </span>
               </label>

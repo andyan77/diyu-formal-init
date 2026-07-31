@@ -28,6 +28,9 @@ GATE_C_REVIEW_CRITERIA: Final[tuple[str, ...]] = (
     "series_continuity",
 )
 GATE_C_FINAL_CARD_IDS: Final[frozenset[str]] = frozenset({"P1", "P2", "P3", "P4", "P5", "series2", "series3"})
+GATE_C_HUMAN_REVIEW_CONTRACT_VERSION: Final[str] = (
+    "ux03-gate-c-human-review-v3"
+)
 
 
 class EvidenceBindingError(ValueError):
@@ -190,7 +193,7 @@ def write_gate_c_evidence(
     _write_private_json(
         root / "human-review.json",
         {
-            "review_contract": "ux03-gate-c-human-review-v2",
+            "review_contract": GATE_C_HUMAN_REVIEW_CONTRACT_VERSION,
             "digest_algorithm": "src.shared.narrative.visible_digest(outline, body)",
             "reviews": review_records,
         },
@@ -225,7 +228,7 @@ def verify_gate_c_evidence(root: Path) -> None:
     if (
         manifest.get("manifest_version") != "ux03-gate-c-evidence-v2"
         or review_document.get("review_contract")
-        != "ux03-gate-c-human-review-v2"
+        != GATE_C_HUMAN_REVIEW_CONTRACT_VERSION
     ):
         raise EvidenceBindingError("Gate C evidence contract version drifted")
     implementation_sha = manifest.get("implementation_sha")
@@ -344,15 +347,22 @@ def _assert_value_evidence(
     if not isinstance(value, dict):
         raise EvidenceBindingError(f"{card_id}: product value evidence is unavailable")
     artifact = _json_object(artifact_path)
+    outline = artifact.get("outline")
     body = artifact.get("body")
     snapshot = artifact.get("formal_snapshot")
-    if not isinstance(body, str) or not isinstance(snapshot, dict):
+    if (
+        not isinstance(outline, str)
+        or not outline.strip()
+        or not isinstance(body, str)
+        or not isinstance(snapshot, dict)
+    ):
         raise EvidenceBindingError(f"{card_id}: product value artifact is incomplete")
     contract = snapshot.get("product_value_contract")
     if not isinstance(contract, dict):
         raise EvidenceBindingError(f"{card_id}: frozen product value contract is unavailable")
     if card_id == "P2":
         expected_keys = {
+            "artifact_title_quote",
             "product_specific_understanding",
             "tradeoff_or_limit",
             "validity_condition",
@@ -364,33 +374,94 @@ def _assert_value_evidence(
         }
         if set(value) != expected_keys:
             raise EvidenceBindingError("P2: product value evidence fields drifted")
+        title_quote = value.get("artifact_title_quote")
+        if title_quote != outline:
+            raise EvidenceBindingError(
+                "P2: review does not cite the final artifact title"
+            )
+        if any(
+            label in body
+            for label in ("专属新增理解", "相伴取舍", "成立条件")
+        ):
+            raise EvidenceBindingError(
+                "P2: internal acceptance labels leaked into the artifact"
+            )
         for evidence_key, contract_key in contract_keys.items():
             text = value.get(evidence_key)
+            contract_text = contract.get(contract_key)
             if (
                 not isinstance(text, str)
-                or not text.strip()
-                or text != contract.get(contract_key)
+                or len(text.strip()) < 6
+                or not isinstance(contract_text, str)
+                or text == contract_text
+                or text not in contract_text
                 or text not in body
             ):
                 raise EvidenceBindingError(
                     f"P2: {evidence_key} is not bound to the visible artifact"
                 )
         return dict(value)
-    expected_keys = {"concrete_visual_proposition", "resource_refs"}
+    expected_keys = {
+        "artifact_title_quote",
+        "concrete_visual_proposition",
+        "primary_resource_ref",
+        "secondary_resource_ref",
+        "primary_role_quote",
+        "secondary_role_quote",
+        "media_sequence_quote",
+        "production_note_quote",
+    }
     if set(value) != expected_keys:
         raise EvidenceBindingError("P5: product value evidence fields drifted")
     proposition = value.get("concrete_visual_proposition")
-    refs = value.get("resource_refs")
+    contract_proposition = contract.get("visible_styling_proposition")
+    primary_ref = value.get("primary_resource_ref")
+    secondary_ref = value.get("secondary_resource_ref")
+    primary_quote = value.get("primary_role_quote")
+    secondary_quote = value.get("secondary_role_quote")
+    sequence_quote = value.get("media_sequence_quote")
+    production_quote = value.get("production_note_quote")
+    program = snapshot.get("media_program")
     if (
+        value.get("artifact_title_quote") != outline
+        or
         not isinstance(proposition, str)
-        or not proposition.strip()
-        or proposition != contract.get("visible_styling_proposition")
+        or len(proposition.strip()) < 6
+        or not isinstance(contract_proposition, str)
+        or proposition == contract_proposition
+        or proposition not in contract_proposition
         or proposition not in body
-        or not isinstance(refs, list)
-        or len(refs) != 2
-        or any(not isinstance(item, str) or not item for item in refs)
-        or len(set(refs)) != 2
-        or refs != contract.get("resource_refs")
+        or not isinstance(primary_ref, str)
+        or not isinstance(secondary_ref, str)
+        or primary_ref == secondary_ref
+        or not isinstance(program, dict)
+        or primary_ref != program.get("primary_resource_id")
+        or secondary_ref != program.get("secondary_resource_id")
+        or [primary_ref, secondary_ref] != contract.get("resource_refs")
+        or not _artifact_quote(
+            primary_quote,
+            body=body,
+            required_terms=("主视觉",),
+            any_terms=("居中", "较大", "先出现"),
+        )
+        or not _artifact_quote(
+            secondary_quote,
+            body=body,
+            required_terms=("辅助视觉",),
+            any_terms=("侧", "较小", "随后"),
+        )
+        or not _artifact_quote(
+            sequence_quote,
+            body=body,
+            required_terms=("主视觉", "辅助视觉"),
+            any_terms=("第 1 页", "先", "随后"),
+        )
+        or not _artifact_quote(
+            production_quote,
+            body=body,
+            required_terms=("主视觉", "辅助视觉"),
+            any_terms=("居中", "侧置", "较大", "较小"),
+        )
     ):
         raise EvidenceBindingError("P5: visual proposition or resource refs are not bound")
     envelope = snapshot.get("media_capability_envelope")
@@ -406,9 +477,23 @@ def _assert_value_evidence(
         if isinstance(resources, list)
         else set()
     )
-    if set(refs) != registered_refs:
+    if {primary_ref, secondary_ref} != registered_refs:
         raise EvidenceBindingError("P5: review resource refs do not match the frozen envelope")
     return dict(value)
+
+
+def _artifact_quote(
+    value: object,
+    *,
+    body: str,
+    required_terms: tuple[str, ...],
+    any_terms: tuple[str, ...],
+) -> bool:
+    if not isinstance(value, str) or len(value.strip()) < 6 or value not in body:
+        return False
+    return all(term in value for term in required_terms) and any(
+        term in value for term in any_terms
+    )
 
 
 def _normalization_record(

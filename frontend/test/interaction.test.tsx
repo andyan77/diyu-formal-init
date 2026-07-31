@@ -162,6 +162,16 @@ async function main(): Promise<void> {
     ).querySelector("input") as HTMLInputElement;
     await click(choice);
   }
+  assert.match(
+    find(".material-picker label", "登记商品一").textContent ?? "",
+    /主视觉/,
+    "第一份明确选择的登记商品素材必须显示为主视觉"
+  );
+  assert.match(
+    find(".material-picker label", "登记商品二").textContent ?? "",
+    /辅助视觉/,
+    "第二份明确选择的登记商品素材必须显示为辅助视觉"
+  );
   await click(
     document.querySelector(".creator-tool-drawer .tool-drawer-close") as HTMLButtonElement
   );

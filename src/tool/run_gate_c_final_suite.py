@@ -687,7 +687,7 @@ def _reviews_from_file(path: Path) -> tuple[HumanReviewInput, ...]:
     document = _json_object(path)
     if set(document) != {"review_contract", "reviews"}:
         raise ValueError("human review document fields drifted")
-    if document["review_contract"] != "ux03-gate-c-human-review-v2":
+    if document["review_contract"] != "ux03-gate-c-human-review-v3":
         raise ValueError("human review contract version drifted")
     raw_reviews = document["reviews"]
     if not isinstance(raw_reviews, list):

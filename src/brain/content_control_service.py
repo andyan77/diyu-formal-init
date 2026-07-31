@@ -403,6 +403,24 @@ class ContentControlService:
             scope,
             asset_ids,
         )
+        by_asset_id = {
+            UUID(str(record["asset_id"])): record
+            for record in records
+        }
+        # The product UI makes selection order meaningful: first is the main
+        # visual, second is the supporting visual.  SQL result order is never
+        # allowed to overwrite that task-scoped decision.
+        ordered_asset_ids = tuple(
+            dict.fromkeys(
+                asset_id
+                for asset_id in asset_ids
+                if asset_id in by_asset_id
+            )
+        )
+        ordered_records = tuple(
+            by_asset_id[asset_id]
+            for asset_id in ordered_asset_ids
+        )
         return tuple(
             BoundProductMedia(
                 binding_id=UUID(str(record["binding_id"])),
@@ -431,7 +449,7 @@ class ContentControlService:
                 root_account_id=UUID(str(record["root_account_id"])),
                 control_organization_id=UUID(str(record["control_organization_id"])),
             )
-            for record in records
+            for record in ordered_records
         )
 
     def account_media_scope(

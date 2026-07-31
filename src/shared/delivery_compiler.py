@@ -240,8 +240,19 @@ def assert_compiled_delivery(
             (
                 f"media-envelope:{media_envelope_digest(request.media_capability_envelope)}",
                 f"media-program:{media_program_digest(request.media_program)}",
-                f"media-program:{request.media_program.program_id}",
-                *(f"media-resource:{resource_id}" for resource_id in request.media_program.required_resource_ids),
+                    f"media-program:{request.media_program.program_id}",
+                    *(f"media-resource:{resource_id}" for resource_id in request.media_program.required_resource_ids),
+                    *(
+                        (
+                            "media-role:primary:"
+                            f"{request.media_program.primary_resource_id}",
+                            "media-role:secondary:"
+                            f"{request.media_program.secondary_resource_id}",
+                        )
+                        if request.media_program.primary_resource_id
+                        and request.media_program.secondary_resource_id
+                        else ()
+                    ),
                 *(
                     (f"compiler:optional-capture-suggestion:{request.media_program.optional_capture_suggestion_id}",)
                     if request.media_program.optional_capture_suggestion_id
@@ -540,6 +551,27 @@ def _compile_delivery_v4(
     body_units = tuple(unit for unit in kernel.units if unit.purpose == "body")
     if not body_units or any(not unit.text.strip() for unit in (*singleton.values(), *body_units)):
         raise GenerationFailed("创作内核包含空的可见创作单元")
+    if isinstance(request.product_value_contract, P2ProductValueContractV1):
+        writer_visible_text = "\n".join(
+            unit.text
+            for unit in kernel.units
+            if unit.text_source == "writer"
+        )
+        if any(
+            label in writer_visible_text
+            for label in ("专属新增理解", "相伴取舍", "成立条件")
+        ):
+            raise GenerationFailed("Writer 把内部商品语义标签写进了成品")
+        if any(
+            phrase in request.product_value_contract.tradeoff_or_limit
+            for phrase in (
+                "内容只能",
+                "稿件只能",
+                "页面只能",
+                "表达只能",
+            )
+        ):
+            raise GenerationFailed("商品取舍错误地落在了内容表达上")
     title = singleton["title"].text.strip()
     guide = singleton["natural_guide"].text.strip()
     release = singleton["release_caption"].text.strip()
@@ -595,6 +627,15 @@ def _compile_delivery_v4(
             program_digest_source,
             program_source,
             *resource_sources,
+            *(
+                (
+                    f"media-role:primary:{program.primary_resource_id}",
+                    f"media-role:secondary:{program.secondary_resource_id}",
+                )
+                if program.primary_resource_id
+                and program.secondary_resource_id
+                else ()
+            ),
         ),
     }
     optional_suggestion = _optional_capture_suggestion(program)
@@ -727,6 +768,25 @@ def _graphic_media_program_text(
     program: MediaProgramSelectionV1,
 ) -> tuple[str, str, str]:
     abstract_note = "仅使用文字、排版、色块、线条、符号和留白；不要求现实人物、商品、照片、家具、场地或道具。"
+    if program.program_id == "graphic_registered_product_relation_v1":
+        if not program.primary_resource_id or not program.secondary_resource_id:
+            # Historical media-program-v1 artifacts retain their original
+            # projection.  New v2 tasks cannot reach this branch because the
+            # media-contract validator requires both frozen roles.
+            return (
+                "首图将本次选中的登记商品素材以同一尺度并列，标题不遮挡主体。",
+                "先分别完整呈现每个登记素材，再保持一致画面条件呈现彼此关系；"
+                "事实原句独立排入对应页面，末页回到本篇视觉选择。",
+                "只使用本次冻结的登记商品素材与抽象排版；保持一致尺度、间距、层级和画面重心，不增加其他实物。",
+            )
+        return (
+            "首图先让主视觉素材居中并占较大面积，辅助视觉素材位于侧边、面积较小；标题不遮挡两件商品。",
+            "第 1 页先完整呈现主视觉素材；第 2 页让辅助视觉素材从侧边回应；"
+            "第 3 页保持主视觉居中且约占六成、辅助视觉侧置且约占四成，"
+            "呈现冻结的一主一辅关系；事实原句独立排入对应页面，末页回到本篇选择。",
+            "只使用本次冻结的两份登记商品素材与抽象排版；主视觉始终先出现、居中且较大，"
+            "辅助视觉随后出现、侧置且较小，不交换角色，不增加其他实物。",
+        )
     by_program: dict[str, tuple[str, str, str]] = {
         "graphic_fact_guided_v1": (
             "首图用标题与两块克制色块建立“已知信息／选择判断”的阅读入口。",
@@ -752,12 +812,6 @@ def _graphic_media_program_text(
             "首图用两段错位文字承接前两篇，并把本篇选择放在视觉重心。",
             "第 1 页承接前两篇共同问题；第 2 页分开可选路径；第 3 页说明本篇取舍；末页保留开放选择。",
             abstract_note,
-        ),
-        "graphic_registered_product_relation_v1": (
-            "首图将本次选中的登记商品素材以同一尺度并列，标题不遮挡主体。",
-            "先分别完整呈现每个登记素材，再保持一致画面条件呈现彼此关系；"
-            "事实原句独立排入对应页面，末页回到本篇视觉选择。",
-            "只使用本次冻结的登记商品素材与抽象排版；保持一致尺度、间距、层级和画面重心，不增加其他实物。",
         ),
         "graphic_selected_asset_sequence_v1": (
             "首图使用本次明确选择的登记素材，并把标题置于不遮挡内容的留白区。",
@@ -801,6 +855,16 @@ def _video_media_program_text(
             "只使用已登记的创作者表达与抽象编排；不要求场地、道具或环境声。",
         )
     if program.program_id == "video_registered_product_display_v1":
+        if program.primary_resource_id and program.secondary_resource_id:
+            return (
+                "首帧先让主视觉素材居中并占较大面积，辅助视觉素材侧置且较小，标题不遮挡主体。",
+                "先完整呈现主视觉素材，再让辅助视觉素材从侧边进入；关系帧保持主视觉约六成、"
+                "辅助视觉约四成，最后回到两者的一主一辅关系；事实原句只进入对应字幕。",
+                "本版不要求口播；正文由字幕与两份登记商品素材共同承担。",
+                full_body,
+                "只使用冻结的两份登记商品素材和抽象编排；主视觉先出现、居中且较大，"
+                "辅助视觉后出现、侧置且较小，不交换角色，不增加演员、场地、道具或环境声。",
+            )
         return (
             "首帧让本次选中的登记商品素材完整进入同一画面，标题不遮挡主体。",
             "按冻结顺序分别完整呈现登记素材，再以一致画面条件呈现彼此关系；事实原句只进入对应字幕。",
