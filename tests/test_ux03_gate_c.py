@@ -119,7 +119,10 @@ from src.tool.gate_c_evidence import (
 )
 from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
-from src.tool.run_gate_c_final_suite import _reviews_from_file
+from src.tool.run_gate_c_final_suite import (
+    _EvidenceDeepSeekGenerator,
+    _reviews_from_file,
+)
 from tests.test_ui05_semantic_rework import (
     _app,
     _conversation_payload,
@@ -2597,6 +2600,52 @@ def test_gate_c_final_runner_cannot_manufacture_registered_product_resources() -
     assert 'verdict="PASS"' not in source
     assert "review-file" in source
     assert '"/api/v1/content/stream"' in source
+
+
+def test_gate_c_final_runner_binds_all_formal_provider_stages(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = iter(
+        (
+            {"choices": [{"message": {"content": '{"kind":"ready"}'}}]},
+            {"choices": [{"message": {"content": '{"units":[]}'}}]},
+        )
+    )
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        return next(responses), 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    root = tmp_path / "evidence"
+    root.mkdir(mode=0o700)
+    generator = _EvidenceDeepSeekGenerator(
+        evidence_root=root,
+        api_base_url="https://example.invalid",
+        api_key="test-only",
+        model="deepseek-test",
+        reviewer_provider=None,
+    )
+
+    generator.begin_card("P1")
+    generator._request("intake", "one", 100)
+    generator._request("writer", "two", 100)
+    generator.end_card()
+
+    bundle = json.loads((root / "P1.raw.json").read_text(encoding="utf-8"))
+    assert bundle["raw_bundle_version"] == "ux03-gate-c-provider-stages-v1"
+    assert bundle["request_count"] == 2
+    assert [item["request_index"] for item in bundle["responses"]] == [1, 2]
+    assert [item["transport_retries"] for item in bundle["responses"]] == [0, 0]
 
 
 def test_stub_output_changes_with_direction_and_series_without_repeating_body() -> None:

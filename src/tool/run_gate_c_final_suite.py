@@ -110,24 +110,41 @@ class _FormalJourney:
 
 
 class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
-    """Persist the one provider response made by each formal API card."""
+    """Persist every bounded provider stage used by one formal API card."""
 
     def __init__(self, *, evidence_root: Path, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._evidence_root = evidence_root
         self._active_card: str | None = None
         self._request_count = 0
+        self._responses: list[dict[str, object]] = []
 
     def begin_card(self, card_id: str) -> None:
         if card_id not in GATE_C_FINAL_CARD_IDS:
             raise ValueError("unknown Gate C card")
         self._active_card = card_id
         self._request_count = 0
+        self._responses = []
 
     def end_card(self) -> None:
-        if self._request_count != 1:
-            raise RuntimeError("each final card must make exactly one provider call")
+        card_id = self._active_card
+        if card_id is None or not 2 <= self._request_count <= 3:
+            raise RuntimeError(
+                "each final card must include only intake, Writer, and optional affected-unit repair stages"
+            )
+        if any(item["transport_retries"] != 0 for item in self._responses):
+            raise RuntimeError("final card provider transport retry is forbidden")
+        _write_private_json(
+            self._evidence_root / f"{card_id}.raw.json",
+            {
+                "raw_bundle_version": "ux03-gate-c-provider-stages-v1",
+                "card_id": card_id,
+                "request_count": self._request_count,
+                "responses": self._responses,
+            },
+        )
         self._active_card = None
+        self._responses = []
 
     def _request(
         self,
@@ -139,7 +156,7 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
         card_id = self._active_card
-        if card_id is None or self._request_count != 0:
+        if card_id is None:
             raise RuntimeError("provider call is not bound to one final card")
         payload, retries = super()._request(
             system,
@@ -149,9 +166,12 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
             timeout_seconds=timeout_seconds,
         )
         self._request_count += 1
-        _write_private_json(
-            self._evidence_root / f"{card_id}.raw.json",
-            payload,
+        self._responses.append(
+            {
+                "request_index": self._request_count,
+                "transport_retries": retries,
+                "response": payload,
+            }
         )
         return payload, retries
 
