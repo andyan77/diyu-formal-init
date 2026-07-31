@@ -15,6 +15,15 @@ _REDUCTION_MARKERS = ("减少", "少挂", "拿掉", "撤下", "太挤", "挂不�
 _HARD_MARKERS = ("必须", "务必", "固定", "不可改变", "不能改", "不得更换")
 _SENTENCE = re.compile(r"[。；;.\n]")
 _RAIL_TEXT = {"upper": "上杆", "lower": "下杆"}
+_REFERENCE_SEPARATORS = frozenset(" \t\r\n，,。；;、：:（）()【】[]“”‘’\"'!?！？/")
+_REFERENCE_ATTACHED_HARD_SUFFIXES = tuple(
+    suffix.casefold()
+    for suffix in ("必须保留", "务必保留", "固定", "不可改变", "不能改", "不得更换", "保留")
+)
+_REFERENCE_ATTACHED_REVISION_SUFFIXES = tuple(
+    suffix.casefold() for suffix in ("太挤", "挂不下", "遮挡", "难取", "不好拿")
+)
+_REFERENCE_CONJUNCTIONS = tuple(token.casefold() for token in ("与", "和", "及"))
 
 
 def parse_hard_requirements(
@@ -24,7 +33,7 @@ def parse_hard_requirements(
     """Resolve mandatory products only against the already frozen product identities."""
     marked: set[str] = set()
     for sentence in _SENTENCE.split(text):
-        if any(marker in sentence for marker in _HARD_MARKERS):
+        if _has_hard_instruction(sentence):
             resolved, ambiguous = _resolve_product_references(sentence, context)
             if ambiguous:
                 return (
@@ -38,6 +47,13 @@ def parse_hard_requirements(
                 )
             marked.update(resolved)
     return frozenset(marked), None
+
+
+def _has_hard_instruction(sentence: str) -> bool:
+    if any(marker in sentence for marker in _HARD_MARKERS):
+        return True
+    _, separator, remainder = sentence.partition("请把")
+    return bool(separator and "保留" in remainder)
 
 
 def required_inventory_gap(
@@ -117,7 +133,9 @@ def _resolve_product_references(
     for alias, skus in aliases.items():
         start = normalized.find(alias)
         while start >= 0:
-            candidates.append((start, start + len(alias), frozenset(skus)))
+            end = start + len(alias)
+            if _is_complete_product_reference(normalized, start, end):
+                candidates.append((start, end, frozenset(skus)))
             start = normalized.find(alias, start + 1)
 
     selected: list[tuple[int, int, frozenset[str]]] = []
@@ -135,6 +153,34 @@ def _resolve_product_references(
         else:
             resolved.update(frozen_skus)
     return frozenset(resolved), ambiguous
+
+
+def _is_complete_product_reference(text: str, start: int, end: int) -> bool:
+    """Accept an exact frozen alias only at a visible natural-language boundary.
+
+    The immediate action suffix supports ordinary Chinese such as ``abc-123必须保留``
+    without turning a longer identifier or product name into a prefix match. Delimiters are an
+    explicit visible set so invisible format characters cannot manufacture a boundary.
+    """
+    left_is_bounded = start == 0 or text[start - 1] in _REFERENCE_SEPARATORS
+    if not left_is_bounded:
+        return False
+    if end == len(text) or text[end] in _REFERENCE_SEPARATORS:
+        return True
+    return any(
+        text.startswith(suffix, end) and _has_reference_boundary(text, end + len(suffix))
+        for suffix in _REFERENCE_ATTACHED_HARD_SUFFIXES
+    ) or any(
+        text.startswith(suffix, end) and _has_reference_boundary(text, end + len(suffix))
+        for suffix in _REFERENCE_ATTACHED_REVISION_SUFFIXES
+    ) or any(
+        text.startswith(conjunction, end) and _has_reference_boundary(text, end + len(conjunction))
+        for conjunction in _REFERENCE_CONJUNCTIONS
+    )
+
+
+def _has_reference_boundary(text: str, index: int) -> bool:
+    return index == len(text) or text[index] in _REFERENCE_SEPARATORS
 
 
 class DM01DisplayCompiler(DisplayGenerator):

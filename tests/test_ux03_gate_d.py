@@ -855,6 +855,56 @@ def test_hard_requirements_accept_multiple_explicit_products_and_close_ambiguity
         assert requirements == frozenset()
         assert clarification is not None and "商品编号或完整商品名称" in clarification
 
+    requirements, clarification = parse_hard_requirements("请不要把 abc-123 保留。", context)
+    assert requirements == frozenset()
+    assert clarification is None
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_skus"),
+    (
+        ("abc-123 必须保留。", frozenset({"abc-123"})),
+        ("abc-123必须保留。", frozenset({"abc-123"})),
+        ("请把 abc-123 保留。", frozenset({"abc-123"})),
+        ("中文编号商品务必保留。", frozenset({"款号一"})),
+        ("abc-123 与 中文编号商品务必保留。", frozenset({"abc-123", "款号一"})),
+        ("ABC-123 必须保留。", frozenset({"abc-123"})),
+    ),
+)
+def test_hard_requirements_accept_complete_references_in_natural_sentences(
+    app_database_url: str,
+    text: str,
+    expected_skus: frozenset[str],
+) -> None:
+    context = _product_reference_context(PostgresDisplayRepository(app_database_url).load_rule_bundle())
+    requirements, clarification = parse_hard_requirements(text, context)
+    assert clarification is None
+    assert requirements == expected_skus
+
+
+@pytest.mark.parametrize(
+    "text",
+    (
+        "abc-1234 必须保留。",
+        "Xabc-123 必须保留。",
+        "ABC123X 必须保留。",
+        "小写编号商品升级款必须保留。",
+        "升级款小写编号商品必须保留。",
+        "小写编号商品保留款必须保留。",
+        "完全未知商品必须保留。",
+        "必须保留主推商品。",
+        "重复名称必须保留。",
+    ),
+)
+def test_hard_requirements_reject_neighbouring_or_non_unique_references(
+    app_database_url: str,
+    text: str,
+) -> None:
+    context = _product_reference_context(PostgresDisplayRepository(app_database_url).load_rule_bundle())
+    requirements, clarification = parse_hard_requirements(text, context)
+    assert requirements == frozenset()
+    assert clarification is not None and "商品编号或完整商品名称" in clarification
+
 
 def test_revision_target_reuses_frozen_product_identity_without_sku_rules(
     app_database_url: str,
@@ -870,7 +920,22 @@ def test_revision_target_reuses_frozen_product_identity_without_sku_rules(
         "left",
         "lower",
     )
+    assert parse_revision_target("请把中间上杆的 abc-123 减少一件。", context) == (
+        "abc-123",
+        "center",
+        "upper",
+    )
     assert parse_revision_target("左侧下杆 重复名称太挤，请减少一件。", context) is None
+    for text in (
+        "中间上杆 abc-1234 太挤，请减少一件。",
+        "中间上杆 Xabc-123 太挤，请减少一件。",
+        "中间上杆 ABC123X 太挤，请减少一件。",
+        "中间上杆 小写编号商品升级款太挤，请减少一件。",
+        "中间上杆 升级款小写编号商品太挤，请减少一件。",
+        "中间上杆 小写编号商品保留款太挤，请减少一件。",
+        "中间上杆 完全未知商品太挤，请减少一件。",
+    ):
+        assert parse_revision_target(text, context) is None
 
 
 def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
@@ -1169,6 +1234,22 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             assert unclear.json()["kind"] == "question"
             assert "商品编号或完整商品名称" in unclear.json()["message"]
             assert _counts(app_database_url, tenant_id) == unclear_before
+            for invalid_reference in (
+                "abc-1234 必须保留。",
+                "Xabc-123 必须保留。",
+                "ABC123X 必须保留。",
+                "小写编号商品升级款必须保留。",
+                "升级款小写编号商品必须保留。",
+            ):
+                rejected = user.post(
+                    "/api/v1/display",
+                    json={"inventory_text": invalid_reference, "products": structured_inventory},
+                )
+                assert rejected.status_code == 200
+                assert rejected.json()["kind"] == "question"
+                assert "商品编号或完整商品名称" in rejected.json()["message"]
+                assert "task_id" not in rejected.json() and "version_id" not in rejected.json()
+                assert _counts(app_database_url, tenant_id) == unclear_before
             with _without_rule_activation(migrator_database_url, "G-TASK-003"):
                 missing_rule = user.post(
                     "/api/v1/display",
@@ -1266,6 +1347,23 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             )
             assert vague.status_code == 201 and vague.json()["kind"] == "question"
             assert _counts(app_database_url, tenant_id) == vague_before
+
+            for invalid_feedback in (
+                "中间上杆 abc-1234 太挤，请减少一件。",
+                "中间上杆 ABC123X 太挤，请减少一件。",
+                "中间上杆 小写编号商品升级款太挤，请减少一件。",
+            ):
+                rejected_revision = user.post(
+                    f"/api/v1/display-tasks/{v1['task_id']}/revisions",
+                    json={"feedback": invalid_feedback},
+                )
+                assert rejected_revision.status_code == 201
+                assert rejected_revision.json()["kind"] == "question"
+                assert "task_id" not in rejected_revision.json()
+                assert _counts(app_database_url, tenant_id) == vague_before
+                assert user.get(
+                    f"/api/v1/display-tasks/{v1['task_id']}/versions/1"
+                ).json()["body"] == v1["body"]
 
             with _without_rule_activation(migrator_database_url, "G-REV-003"):
                 v2_response = user.post(
