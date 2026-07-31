@@ -807,6 +807,8 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert "陪正在重新选择日常节奏的人看清取舍" in prompt
     assert "为什么会说这段话" in prompt
     assert "折线衣间" not in prompt
+    assert "每个 text 只填写该单元的自然内容" in prompt
+    assert "正式标题、正文、字幕、制作提示和发布配文的结构只由" in prompt
 
     compiled = compile_delivery(
         DeliveryCompileInput(
