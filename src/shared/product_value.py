@@ -227,18 +227,17 @@ def _build_p2_contract(
     elif observable and len(colors) >= 2:
         source_keys = ("display_name", "colors", "observable_features")
         insight = (
-            f"{product.display_name}已确认的“{observable}”与"
-            f"{colors[0]}、{colors[1]}要放在同一个选择里看；本次选择应落在先呈现"
-            "哪一套完整外观，而不是只比较孤立色块。"
+            f"{colors[0]}和{colors[1]}不是两个零散色块；因为{product.display_name}的"
+            f"“{observable}”，真正要选的是此刻先让哪一面成为整件商品的视觉重心。"
         )
         tradeoff = (
-            "同一时刻主要呈现一套完整外观；先选择一种可见重心会暂时"
-            "弱化另一套的存在，但不能把两套完整外观说成两件商品。"
+            f"先呈现{colors[0]}这一面时，{colors[1]}会暂时退到看不见的位置；换到"
+            f"{colors[1]}这一面，也会暂时放下{colors[0]}的重点。一次只能让其中一套"
+            "完整外观站在前面，但它仍是同一件商品。"
         )
         condition = (
-            f"只有本次选择同时依赖“{observable}”和已确认颜色差异时，这个判断才成立；"
-            "如果只固定呈现其中一套，或者选择不取决于颜色，这组事实就不能替代其他"
-            "尚未确认的判断依据。"
+            "如果你确实会在这两套完整外观之间切换，这种双面选择才有价值；如果始终"
+            "只会呈现固定一面，它就不是决定因素。"
         )
     elif len(colors) >= 2:
         source_keys = ("display_name", "colors")

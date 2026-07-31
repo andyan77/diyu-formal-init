@@ -576,8 +576,6 @@ def _compile_delivery_v4(
     guide = singleton["natural_guide"].text.strip()
     release = singleton["release_caption"].text.strip()
     fact_units = tuple(unit for unit in kernel.units if unit.purpose == "frozen_fact")
-    content_units = (*fact_units, *body_units)
-    full_body = "\n\n".join(_visible_unit_v3(unit) for unit in content_units)
     creative_body = "\n\n".join(_visible_unit_v3(unit) for unit in body_units)
     artifact_scope_source = _artifact_scope_source(kernel)
     artifact_scope = _PHRASES[artifact_scope_source]
@@ -604,6 +602,20 @@ def _compile_delivery_v4(
             release,
             fact_units,
             media_native=True,
+        )
+    if isinstance(
+        request.product_value_contract,
+        (P2ProductValueContractV1, P5ProductValueContractV1),
+    ):
+        content_units = fact_units
+        full_body = _product_value_full_body(
+            fact_units,
+            request.product_value_contract.visible_text,
+        )
+    else:
+        content_units = (*fact_units, *body_units)
+        full_body = "\n\n".join(
+            _visible_unit_v3(unit) for unit in content_units
         )
     envelope_source = f"media-envelope:{media_envelope_digest(envelope)}"
     program_digest_source = f"media-program:{media_program_digest(program)}"
@@ -1047,6 +1059,24 @@ def _visible_unit_v3(unit: CreativeKernelUnit) -> str:
     if source == "phrase:scope-user-fact":
         return f"{prefix}“{unit.text}”"
     return f"{prefix}{unit.text}"
+
+
+def _product_value_full_body(
+    fact_units: tuple[CreativeKernelUnit, ...],
+    product_value_text: str,
+) -> str:
+    visible_parts: list[str] = []
+    grouped_facts: dict[str, list[str]] = {}
+    for unit in fact_units:
+        source = _visible_unit_scope_source(unit)
+        if source == "phrase:scope-user-fact":
+            visible_parts.append(_visible_unit_v3(unit))
+            continue
+        grouped_facts.setdefault(source, []).append(unit.text.strip())
+    for source, facts in grouped_facts.items():
+        visible_parts.append(f"{_PHRASES[source]}\n" + "\n".join(facts))
+    visible_parts.append(product_value_text.strip())
+    return "\n\n".join(visible_parts)
 
 
 def _visible_unit(unit: CreativeKernelUnit) -> str:

@@ -2278,9 +2278,9 @@ def test_p2_formal_observable_and_colors_share_one_product_value_path() -> None:
 
     assert isinstance(contract, P2ProductValueContractV1)
     assert "两面都以完整外观呈现" in contract.product_insight
-    assert "先呈现哪一套完整外观" in contract.product_insight
-    assert "同一时刻主要呈现一套完整外观" in contract.tradeoff_or_limit
-    assert "只有本次选择同时依赖" in contract.validity_condition
+    assert "先让哪一面成为整件商品的视觉重心" in contract.product_insight
+    assert "暂时退到看不见的位置" in contract.tradeoff_or_limit
+    assert "确实会在这两套完整外观之间切换" in contract.validity_condition
     assert all(
         label not in contract.visible_text
         for label in ("专属新增理解", "相伴取舍", "成立条件")
@@ -2521,6 +2521,8 @@ def test_p2_writer_receives_only_controlled_product_semantics_without_media_righ
     assert value_contract.product_insight in compiled.body
     assert value_contract.tradeoff_or_limit in compiled.body
     assert value_contract.validity_condition in compiled.body
+    assert "先看信息，再自己判断" not in compiled.body
+    assert compiled.body.count("已确认的商品信息：") == 1
     assert all(
         label not in compiled.body
         for label in ("专属新增理解", "相伴取舍", "成立条件")
@@ -3021,6 +3023,7 @@ def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() ->
         value_contract.visible_styling_proposition
     )
     assert value_contract.visible_styling_proposition in compiled.body
+    assert "先放两个锚点，再比较差异" not in compiled.body
     assert set(value_contract.resource_refs) == {
         resource.resource_id
         for resource in envelope.resources
