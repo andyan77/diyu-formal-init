@@ -4,10 +4,9 @@
 - 状态：`ACTIVE`；`Gate A · 正式入驻、身份、逻辑发布账号与多平台关系闭环` 为
   `COMPLETE` 且主控最终终审 `PASS`；`Gate B · 品牌资料、组织作用域、团队使用与能力诊断`
   为 `COMPLETE` 且主控最终终审 `PASS`；`Gate C · 创作控制、真实阶段、完整成品与系列前情`
-  为 `ACTIVE / REWORK`。FT-039、FT-040、FT-045 保持 `PASS`；FT-041 因正式消费者
-  尚未建立商品—组织官方素材绑定与可信资源解析而为 `FAIL`。此前“七卡通过”记录保留为
-  历史，但已被正式消费者审计退回。UX-02 保持 `CLOSED`，
-  不创建 UX-04。
+  为 `COMPLETE / 等待主控独立终审`。FT-039、FT-040、FT-041、FT-045 的本地正式消费者
+  候选均已成立；此前“七卡通过”被正式消费者审计退回的历史完整保留。UX-02 保持
+  `CLOSED`，Gate D 为 `NOT_STARTED`，不创建 UX-04。
 - 当前 Git 基线：`86f5df16b9e42fe4eee322694156361a007bdb88`；唯一写入执行端为
   当前 WSL Codex。
 - Gate A 首次实现 `734dcee900bc67e23d058d4fd6f8ef15db8d9847` 与完成记录
@@ -19,9 +18,9 @@
   `0774ae685da3156e529a1b6fed5d502a920706a1`。本地 `main` 只在 `origin/main` 的 UX-02
   关闭基线上普通前向领先。Gate C 首次候选实现为
   `4d797d35614216c92a7e62ae7a62d7456165d70b`；主控已保留该候选及失败证据并退回
-  FT-041。Gate A—C 均未 push、未触发远程 CI、
-  未部署或连接生产。Gate C 只在获准的无数据库、无 Redis、无业务持久化隔离路径调用
-  `deepseek-v4-flash` 完成最终同 SHA 套件。
+  FT-041。Gate A—C 均未 push、未触发远程 CI、未部署或连接生产。Gate C 最终套件只在
+  本地 synthetic PostgreSQL、正式 API 与正式 React 消费者上调用受保护的
+  `deepseek-v4-flash`；没有连接生产、Redis 或真实客户数据。
 - FT-041 前向返工先后形成 `715838f0a093f12e1be77b4d76581f5db8814e6c`、
   `c18fcf5d0393c7bb7a4bffbd1a8a92f335703834` 与最终重试实现
   `ad398e60ea4b7544211190b99788c19ce7e293dc`。最后实现已通过 Ruff、mypy、
@@ -100,12 +99,30 @@
   `git diff --check`、Ruff、mypy、Golden/OpenAPI `440 passed, 2 skipped`、前端四门、
   显式三视口 Chrome 和两份有界审查是该首次候选的历史工程证据，不替代本次 FT-041
   返工完成门。
-- 当前 64 项功能真值为 `53/5/0/6/0`；有缺陷项为 FT-041、FT-050—FT-052 和 FT-058。
+- FT-041 最终正式消费者实现以 schema `20260809_36` 增加最小
+  `product_media_bindings`：管理员可将同租户／品牌、作用域合法的组织官方图片或视频明确
+  关联到已确认商品；内容用户本次明确选择两份素材后，正式 resolver 同时校验逻辑账号控制
+  组织、商品／素材／绑定启用状态、当前版本与 checksum，只有两个不同
+  product／asset／binding 才生成 `registered_product_display`。ProductFact、
+  production condition、个人素材、未选择素材及客户端伪造 ID 均不授予媒体能力；预检失败
+  为 task/run/version `0/0/0`，修订重放冻结 Envelope V2 和绑定版本。
+- 最终运行实现为 `ee1e2a4e56b2bd9303e44d83a3b001ab084230a5`。其前一实现
+  `4da65d86a3cec695ce566a5f8b98b07512da21ae` 确定性修复 P5 正式绑定意图被概率 intake
+  错路由；最终提交只补证据工具对正式 API 的 `AI 辅助生成` 标签和发布提醒绑定。完整门为
+  Ruff、mypy、Golden/OpenAPI `481 passed, 2 skipped`、前端四门及两条显式 Chrome；
+  产品／体验与工程／安全两份有界审查无阻断。
+- 同一 `ee1e2a4…`、同一模型配置的 P1—P5、series2、series3 各执行一次，正式
+  API/PostgreSQL task/run/version 为 `7/7/7`、永久 running 为 0、传输重试为 0。P5
+  使用 `graphic_registered_product_relation_v1`，Envelope V2 精确冻结两个不同商品、
+  素材、绑定、版本和 checksum；七卡逐篇 8 项人工全文审阅通过。file SHA、raw SHA、
+  `visible_digest` 与人工审阅可复算证据位于
+  [`var/evidence/ux03-gate-c-ee1e2a4e/manifest.json`](var/evidence/ux03-gate-c-ee1e2a4e/manifest.json)；
+  private raw 保留在本地主机权限受限目录。synthetic 租户及 25 类关联对象已核对零残留。
+- 当前 64 项功能真值为 `54/4/0/6/0`；有缺陷项为 FT-050—FT-052 和 FT-058。
   运行资产保持 `41/243/25/119`，激活增量 0。
 - Gate C 不证明真实员工／品牌采用、真实发布、平台流量、排名、爆款、GMV／销售、多真实
   租户市场差异、企业 SLA 或 `20/55/44` 全组合稳定支持。
-- 当前唯一下一动作：在同一 Gate C 建立商品—组织官方素材正式绑定、可信解析、正式
-  React/API/PostgreSQL P5 纵向与防假绿证据；后续 Gate 保持 `NOT_STARTED`。
+- 当前唯一下一动作：主控独立终审 Gate C；Gate D 保持 `NOT_STARTED`。
 
 ## UX-02 关闭记录（历史保留）
 

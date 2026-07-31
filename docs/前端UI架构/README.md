@@ -36,15 +36,18 @@ Gate B 首次实现 `a67f44b…` 完成品牌文字资料、商品事实和组�
 `0774ae685da3156e529a1b6fed5d502a920706a1` 进一步要求后续篇成功提交 V1、非平台派生，
 并以 V1 提交时间进入窗口；失败 task 不再冒充续写。主控最终终审 Gate B `PASS`。
 
-Gate C 最终实现 `4d797d35614216c92a7e62ae7a62d7456165d70b` 已关闭可选创作方向、
-真实 NDJSON 阶段、P1—P5 媒体原生完整成品和系列前情消费。服务端在 Writer 前预分配标题、
-正文、图序／镜头和发布配文等可写单元；Compiler 只组装冻结事实、一次自然范围、媒体结构
-与 AIGC，不再创作固定标题前缀、概要或互动句。方向与系列前情同时进入 Writer 输入和任务
-快照，修订只重放原冻结条件；`completed` 只在事务提交、digest 校验和正式回读后发出。
-最终同 SHA 七张成品、三个视口正式 Chrome、Golden/OpenAPI `440 passed, 2 skipped`、
-五项 mutation 和两份有界审查均通过。UX-03 仍为 `ACTIVE`，Gate A、Gate B 为
-`COMPLETE / PASS`，Gate C 为 `COMPLETE / 等待主控独立终审`；没有 push、CI、部署或
-生产连接。64 项真值为 `54/4/0/6/0`，后续 Gate 尚未启动。
+Gate C 首次候选和多轮 FT-041 失败、假绿及主控退回历史完整保留；FT-039、FT-040、
+FT-045 已获主控 `PASS`。最终本地实现
+`ee1e2a4e56b2bd9303e44d83a3b001ab084230a5` 以
+`MediaCapabilityEnvelopeV2`、正式商品—组织官方素材绑定和可信 resolver 关闭最后的
+正式消费者缺口：只有管理员显式绑定、用户本次明确选择且租户／品牌／账号控制组织、状态、
+版本与 checksum 均合法的两件不同商品素材，才能形成登记商品媒体能力。ProductFact、
+production condition、个人或未选择素材仍不授予资源。正式 React/API/PostgreSQL P5、
+两个 Chrome 纵向、Golden/OpenAPI `481 passed, 2 skipped`、承重 mutation 和两份有界
+审查均通过；同 SHA 七卡逐篇人工全文与 file SHA／raw SHA／`visible_digest` 绑定通过，
+synthetic 数据零残留。UX-03 仍为 `ACTIVE`，Gate A、Gate B 为 `COMPLETE / PASS`，
+Gate C 为 `COMPLETE / 等待主控独立终审`；没有 push、CI、部署或生产连接。64 项真值为
+`54/4/0/6/0`，Gate D 尚未启动。
 
 UI-04 已于 2026-07-27（UTC）通过主控独立终审
 并保持 `CLOSED`；创始人真实使用后出现的产品语义新证据由 successor UI-05 单独承接。

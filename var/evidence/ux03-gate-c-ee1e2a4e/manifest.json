@@ -1,0 +1,72 @@
+{
+  "artifacts": [
+    {
+      "artifact_file": "P1.artifact.json",
+      "artifact_sha256": "b53af92fc2e7aea35c472881a2f7fcd62b616b002cdf82e8a934c36501a93ed5",
+      "card_id": "P1",
+      "raw_response_file": "P1.raw.json",
+      "raw_response_sha256": "42ea462bef036c8b983f11e9067b72c5225a59f495f80b5339bab7e642ad30d0",
+      "visible_digest": "85153a4982dc018d5e4055db45984fd7bb8e6b8ad93ccc4c5a9fdba20df26753"
+    },
+    {
+      "artifact_file": "P2.artifact.json",
+      "artifact_sha256": "683acc4587ae48e38e7a0da907eca70c59a36dad029cbdbddc2937b19d337c10",
+      "card_id": "P2",
+      "raw_response_file": "P2.raw.json",
+      "raw_response_sha256": "f8865ffcca43d31c7f1c4e8dc6f1016d2068446c3638f29eb25a1fc08f2ea31e",
+      "visible_digest": "60100a32a38bbff3a80792e7e74e39b101597640862d324e6f238e66430f6925"
+    },
+    {
+      "artifact_file": "P3.artifact.json",
+      "artifact_sha256": "93561fc4553add0b47683d591e67f31743fae4177e567e8ba8284b15f138f3b9",
+      "card_id": "P3",
+      "raw_response_file": "P3.raw.json",
+      "raw_response_sha256": "bd953a7625976e51c3affc867c7c49ca55cca86a10f3faf59535f819cf66db55",
+      "visible_digest": "243749bd2829eb29735fd2be8c09ef19dce7c6c5cafd8d36644d2c760bf7f8f6"
+    },
+    {
+      "artifact_file": "P4.artifact.json",
+      "artifact_sha256": "0d0fc0b4babb6ca9c196b71ce82fa11832a670324e3336bb0924b323ab989c0e",
+      "card_id": "P4",
+      "raw_response_file": "P4.raw.json",
+      "raw_response_sha256": "c42abdc987a178b41701253f60499016545d025a9cff1b4ce8a986f8e9ce82bc",
+      "visible_digest": "5fbe109e26a75a9737afe8a2134cc3acaf2d8b995fb37ad6035160126b077398"
+    },
+    {
+      "artifact_file": "P5.artifact.json",
+      "artifact_sha256": "05d7443aef39b24487136a6eb9c0839c1c05b6d665b9ee16d6cb8ce5c789e3a6",
+      "card_id": "P5",
+      "raw_response_file": "P5.raw.json",
+      "raw_response_sha256": "69e00272a751f7e7ebcd92c7e3224dd36480b1b04f10c3d80c111ad550a626a6",
+      "visible_digest": "439b56b55b11801e127097ea51f50396c52476db103dd9d348a4137148a8704b"
+    },
+    {
+      "artifact_file": "series2.artifact.json",
+      "artifact_sha256": "bded03de5c2f620d46fa0ed2bc6d1f0283a050a8eeeeb1a57cdfcbd4ace0c277",
+      "card_id": "series2",
+      "raw_response_file": "series2.raw.json",
+      "raw_response_sha256": "022ec26f9578789eabc8bcb54b9bd697d1f35e12075f25bf478ec04328b08369",
+      "visible_digest": "41b045913900f92f4e0b91f87281b533b09e002439173955d64ba0914bbdf23e"
+    },
+    {
+      "artifact_file": "series3.artifact.json",
+      "artifact_sha256": "3b1de24909bfe58ceb8a84d005b64ad5d413085f8d105a53aac6c89e78b6b71a",
+      "card_id": "series3",
+      "raw_response_file": "series3.raw.json",
+      "raw_response_sha256": "4a1a1683158d669447cdda53f1dacd688086c191c1ea0b5a48f5fbed38ed3e8b",
+      "visible_digest": "58be86898dcf30fafe6dff038708fbe10c48fc42d17e387e9071a03207b99bc1"
+    }
+  ],
+  "implementation_sha": "ee1e2a4e56b2bd9303e44d83a3b001ab084230a5",
+  "manifest_version": "ux03-gate-c-evidence-v1",
+  "provider_config": {
+    "business_persistence": true,
+    "database": true,
+    "formal_api": true,
+    "max_retries": 0,
+    "model": "deepseek-v4-flash",
+    "redis": false,
+    "temperature": 0
+  },
+  "writer_wrapper_normalizations": []
+}

@@ -1,0 +1,132 @@
+{
+  "digest_algorithm": "src.shared.narrative.visible_digest(outline, body)",
+  "review_contract": "ux03-gate-c-human-review-v1",
+  "reviews": [
+    {
+      "artifact_file": "P1.artifact.json",
+      "artifact_sha256": "b53af92fc2e7aea35c472881a2f7fcd62b616b002cdf82e8a934c36501a93ed5",
+      "card_id": "P1",
+      "criteria": {
+        "account_link": "PASS",
+        "fact_and_resource_boundary": "PASS",
+        "media_non_repetition": "PASS",
+        "natural_language": "PASS",
+        "platform_completeness": "PASS",
+        "primary_value": "PASS",
+        "production_executability": "PASS",
+        "series_continuity": "PASS"
+      },
+      "notes": "全文审阅通过：给出随温差调整层次的具体选择帮助；总部穿衣编辑视角明确；动态文字视频不依赖未登记现实资源，AIGC 提醒完整。",
+      "verdict": "PASS",
+      "visible_digest": "85153a4982dc018d5e4055db45984fd7bb8e6b8ad93ccc4c5a9fdba20df26753"
+    },
+    {
+      "artifact_file": "P2.artifact.json",
+      "artifact_sha256": "683acc4587ae48e38e7a0da907eca70c59a36dad029cbdbddc2937b19d337c10",
+      "card_id": "P2",
+      "criteria": {
+        "account_link": "PASS",
+        "fact_and_resource_boundary": "PASS",
+        "media_non_repetition": "PASS",
+        "natural_language": "PASS",
+        "platform_completeness": "PASS",
+        "primary_value": "PASS",
+        "production_executability": "PASS",
+        "series_continuity": "PASS"
+      },
+      "notes": "全文审阅通过：三个冻结商品事实独立逐字呈现，选择解释保持一般方法身份；未新增该商品属性、用途、性能或体验；事实引导图文可直接排版。",
+      "verdict": "PASS",
+      "visible_digest": "60100a32a38bbff3a80792e7e74e39b101597640862d324e6f238e66430f6925"
+    },
+    {
+      "artifact_file": "P3.artifact.json",
+      "artifact_sha256": "93561fc4553add0b47683d591e67f31743fae4177e567e8ba8284b15f138f3b9",
+      "card_id": "P3",
+      "criteria": {
+        "account_link": "PASS",
+        "fact_and_resource_boundary": "PASS",
+        "media_non_repetition": "PASS",
+        "natural_language": "PASS",
+        "platform_completeness": "PASS",
+        "primary_value": "PASS",
+        "production_executability": "PASS",
+        "series_continuity": "PASS"
+      },
+      "notes": "全文审阅通过：咖啡原句逐字保留，创作推演有一次清楚范围；以重新看见熟悉事物的编辑观察方式形成账号关联；抽象图文不依赖咖啡杯或场地。",
+      "verdict": "PASS",
+      "visible_digest": "243749bd2829eb29735fd2be8c09ef19dce7c6c5cafd8d36644d2c760bf7f8f6"
+    },
+    {
+      "artifact_file": "P4.artifact.json",
+      "artifact_sha256": "0d0fc0b4babb6ca9c196b71ce82fa11832a670324e3336bb0924b323ab989c0e",
+      "card_id": "P4",
+      "criteria": {
+        "account_link": "PASS",
+        "fact_and_resource_boundary": "PASS",
+        "media_non_repetition": "PASS",
+        "natural_language": "PASS",
+        "platform_completeness": "PASS",
+        "primary_value": "PASS",
+        "production_executability": "PASS",
+        "series_continuity": "PASS"
+      },
+      "notes": "全文审阅通过：门店观察逐字保留，回应建议保持未执行的创作推演；门店账号关系和受众回报清楚；抽象图文不要求顾客或门店重演。",
+      "verdict": "PASS",
+      "visible_digest": "5fbe109e26a75a9737afe8a2134cc3acaf2d8b995fb37ad6035160126b077398"
+    },
+    {
+      "artifact_file": "P5.artifact.json",
+      "artifact_sha256": "05d7443aef39b24487136a6eb9c0839c1c05b6d665b9ee16d6cb8ce5c789e3a6",
+      "card_id": "P5",
+      "criteria": {
+        "account_link": "PASS",
+        "fact_and_resource_boundary": "PASS",
+        "media_non_repetition": "PASS",
+        "natural_language": "PASS",
+        "platform_completeness": "PASS",
+        "primary_value": "PASS",
+        "production_executability": "PASS",
+        "series_continuity": "PASS"
+      },
+      "notes": "全文审阅通过：两件不同商品的两份正式登记素材承担视觉关系；事实与一般观察分开；图序只引用冻结资源，未猜商品属性或引入额外实物。",
+      "verdict": "PASS",
+      "visible_digest": "439b56b55b11801e127097ea51f50396c52476db103dd9d348a4137148a8704b"
+    },
+    {
+      "artifact_file": "series2.artifact.json",
+      "artifact_sha256": "bded03de5c2f620d46fa0ed2bc6d1f0283a050a8eeeeb1a57cdfcbd4ace0c277",
+      "card_id": "series2",
+      "criteria": {
+        "account_link": "PASS",
+        "fact_and_resource_boundary": "PASS",
+        "media_non_repetition": "PASS",
+        "natural_language": "PASS",
+        "platform_completeness": "PASS",
+        "primary_value": "PASS",
+        "production_executability": "PASS",
+        "series_continuity": "PASS"
+      },
+      "notes": "全文审阅通过：只承接第一篇的不打扰并推进到回应；系列账号关系连续，媒体职责为回应推进且不要求新增现实资源。",
+      "verdict": "PASS",
+      "visible_digest": "41b045913900f92f4e0b91f87281b533b09e002439173955d64ba0914bbdf23e"
+    },
+    {
+      "artifact_file": "series3.artifact.json",
+      "artifact_sha256": "3b1de24909bfe58ceb8a84d005b64ad5d413085f8d105a53aac6c89e78b6b71a",
+      "card_id": "series3",
+      "criteria": {
+        "account_link": "PASS",
+        "fact_and_resource_boundary": "PASS",
+        "media_non_repetition": "PASS",
+        "natural_language": "PASS",
+        "platform_completeness": "PASS",
+        "primary_value": "PASS",
+        "production_executability": "PASS",
+        "series_continuity": "PASS"
+      },
+      "notes": "全文审阅通过：承接前两篇并推进到把选择留给对方；与第二篇职责不同，假设范围清楚，不把示例动作冒充真实门店事件或媒体资源。",
+      "verdict": "PASS",
+      "visible_digest": "58be86898dcf30fafe6dff038708fbe10c48fc42d17e387e9071a03207b99bc1"
+    }
+  ]
+}

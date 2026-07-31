@@ -109,7 +109,7 @@
     <p class="sub">从已确认的业务与数据基线，到一套 ECS 共享 SaaS 上线、真实租户入驻与第一阶段验收 · 只保留当前有下游的工作</p>
 
     <div class="meta">
-      <span class="pill"><span class="k">更新</span> <b>2026-07-30（UTC）</b></span>
+      <span class="pill"><span class="k">更新</span> <b>2026-07-31（UTC）</b></span>
       <span class="pill"><span class="k">当前里程碑</span> <b>UX-03 · ACTIVE</b></span>
       <span class="pill"><span class="k">业务语义</span> <b>双应用合同与 25 类模型已关闭</b></span>
       <span class="pill"><span class="k">领域资产</span> <b>243 条当前候选快照 · 41 条已激活（内容与媒体 28、DM01 13）</b></span>
@@ -119,7 +119,7 @@
 
   <div class="nextbar">
     <div class="lab">当前状态</div>
-    <div class="txt">UI-12、UX-01 与 UX-02 保持 CLOSED，历史验证假绿及返工记录保留。<b>UX-03 Gate A、Gate B 已经主控 PASS；Gate C 已用服务端预分配媒体单元、真实阶段与冻结系列前情关闭 FT-039—FT-041、FT-045。</b>UX-03 仍为 ACTIVE，Gate C 等待主控独立终审；后续 Gate 未启动。</div>
+    <div class="txt">UI-12、UX-01 与 UX-02 保持 CLOSED，历史验证假绿及返工记录保留。<b>UX-03 Gate A、Gate B 已经主控 PASS；Gate C 的最终本地候选已以正式商品媒体绑定、可信解析、真实阶段和冻结系列前情关闭 FT-039—FT-041、FT-045。</b>UX-03 仍为 ACTIVE，Gate C 等待主控独立终审；Gate D 未启动。</div>
   </div>
 
   <div class="legend">
@@ -275,7 +275,7 @@
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">可信事实轨与创作表达轨最终闭环<span class="ncode">UI-12 · CLOSED</span></div><div class="ndesc">主控最终独立终审 PASS。概率 Reviewer 已退出生产放行；服务端在 Writer 前冻结事实与表达轨，Compiler 保持范围。最终 9c5b243… 以 schema 32 关闭版本 UPDATE/DELETE、恢复 legacy 投影并统一 Unicode 防伪；Golden 417 passed、CI 30500580180、生产兼容、备份恢复及旧镜像回退均成立</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">前端产品定义、功能真值与逐屏冻结<span class="ncode">UX-01 · CLOSED</span></div><div class="ndesc">主控重新独立终审 PASS。第一次页面存在性验证假绿历史保留；有界返工后盘点 64 项正式交互，冻结访客、管理员、租户用户和运维职责及身份／账号／平台关系，交付四条、37 状态连续高保真原型，并由 30 项真实操作检查承重。未修改正式 React、API、数据库或生产</div></div></li>
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">正式前端工程化与生产替换<span class="ncode">UX-02 · CLOSED</span></div><div class="ndesc">主控最终独立终审 PASS。三条正式纵向、64 项真值、响应式／可访问性、最终运行 3dfe648…、CI 30537611606、schema 33、同 SHA 生产替换、备份、清理与上一健康镜像回退均成立；UX-03 后由用户独立启动</div></div></li>
-          <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">产品目标一致性与全链路修复<span class="ncode">UX-03 · ACTIVE · Gate A/B/C COMPLETE</span></div><div class="ndesc">Gate A、Gate B 主控最终终审 PASS；Gate B 首次失败和两次前向返工历史保留。Gate C 实现 4d797d3… 已关闭方向快照、真实阶段、P1—P5 媒体原生成品与系列前情 Writer 消费。最终同 SHA 七张成品人工全文审阅通过，三个视口 Chrome、Golden/OpenAPI 440 passed（2 skipped）、五项 mutation 和两审通过，真值为 54/4/0/6/0；未 push、CI、部署或连接生产。Gate C 等待主控独立终审，后续 Gate NOT_STARTED</div></div></li>
+          <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">产品目标一致性与全链路修复<span class="ncode">UX-03 · ACTIVE · Gate A/B/C COMPLETE</span></div><div class="ndesc">Gate A、Gate B 主控最终终审 PASS；历史失败和前向返工保留。Gate C 最终本地实现 ee1e2a4… 以正式商品—组织官方素材绑定、Envelope V2 和可信 resolver 关闭 FT-041；正式 React/API/PostgreSQL P5、两个 Chrome 纵向、Golden/OpenAPI 481 passed（2 skipped）、mutation、两审及同 SHA 七卡可复算人工全文审阅通过，真值为 54/4/0/6/0；未 push、CI、部署或连接生产。Gate C 等待主控独立终审，Gate D NOT_STARTED</div></div></li>
         </ul>
         <div class="tip"><span class="h">资产边界</span>UI-01R 的 CSV/Markdown 只是现有 JSON/JSONL 真源的人可读投影；候选登记、运行激活、本次调用、已验证能力和真实租户采用不得混为一谈。</div>
       </div>
