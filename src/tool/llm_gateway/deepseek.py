@@ -1137,6 +1137,10 @@ class DeepSeekGenerator(ContentGenerator):
                 "mode": unit.mode,
                 "scope_id": unit.scope_id,
                 "visible_order": unit.visible_order,
+                "text_contract": {
+                    "shape": "content_only",
+                    "wrapper_owner": "delivery_compiler",
+                },
                 **(
                     {
                         "unit_contract": trusted_contracts[unit.unit_id],
@@ -1166,7 +1170,7 @@ class DeepSeekGenerator(ContentGenerator):
             "units": [
                 {
                     "unit_id": unit.unit_id,
-                    "text": f"填写 {unit.purpose} 的完整可见文字",
+                    "text": "",
                     **({"claim_refs": []} if fact_blocks and not server_selected_product_facts else {}),
                 }
                 for unit in writer_units
@@ -1332,13 +1336,15 @@ topic_spans 是用户原话证据，可能同时包含创作命令、控制要�
 字段、来源、事实正文、约束、类型或内部规则。商品硬事实正文始终由服务端原样插入。
 每个 text 只填写该单元的自然内容，不添加章节名、字段名、冒号标签、Markdown 标题或其他
 可被误解为成品顶层结构的包装；正式标题、正文、字幕、制作提示和发布配文的结构只由
-DeliveryCompiler 根据 unit_id 确定性组装。
+DeliveryCompiler 根据 unit_id 确定性组装。skeleton 中的 purpose 只说明下游消费用途，
+不是要求写入 text 的标题；text_contract 规定 Writer 从该单元的实际内容第一字开始填写，
+结构包装归 wrapper_owner 所有。
 每个单元只能使用其 allowed_resources 列出的资源；资源描述是制作许可边界，不是现实事实
 许可证。allowed_resources 为空时，只能写无需现实人物、场地、道具、商品、照片或外部素材
 的原创文字／抽象构图。不得在可见文字里补出未登记资源。
-title 是自然作品标题；natural_guide 用一句话给出具体观看回报；按可见顺序排列的一个或
-多个 body 单元共同组成完整核心正文。media_opening 是首图或短视频开头的可执行承诺；
-media_sequence 让每张图或每段画面承担不同职责；subtitle_strategy 只写字幕取舍与重点，
+title 直接写自然作品标题；natural_guide 直接用一句话给出具体观看回报；按可见顺序排列的
+一个或多个 body 单元共同组成完整核心正文。media_opening 直接写观众首先看到或听到的
+具体内容；media_sequence 让每张图或每段画面承担不同职责；subtitle_strategy 只写字幕取舍与重点，
 不得复制完整正文；production_note 只使用本次已登记制作条件与资源，写声音、拍摄、排版
 或剪辑要点；release_caption 是可直接发布的配文，不重复正文，也不强制互动。各单元围绕
 同一个主要价值，但不得机械复述同一句话。图文要有首图、图序、完整正文、制作提示和配文；

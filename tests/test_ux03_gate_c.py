@@ -809,6 +809,11 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert "折线衣间" not in prompt
     assert "每个 text 只填写该单元的自然内容" in prompt
     assert "正式标题、正文、字幕、制作提示和发布配文的结构只由" in prompt
+    assert '"shape": "content_only"' in prompt
+    assert '"wrapper_owner": "delivery_compiler"' in prompt
+    assert '"text": ""' in prompt
+    assert "填写 media_opening 的完整可见文字" not in prompt
+    assert "purpose 只说明下游消费用途" in prompt
 
     compiled = compile_delivery(
         DeliveryCompileInput(
