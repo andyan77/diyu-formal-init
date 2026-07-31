@@ -844,6 +844,16 @@ export default function CreatorApp({
 
   const targetLabel = currentTargetMetadata.label;
   const bodyOptIn = preference?.body_related_opt_in ?? false;
+  const productMediaIntent =
+    materialIds.length === 2 &&
+    materialIds.every(id =>
+      materials.some(
+        material =>
+          material.id === id &&
+          material.scope === "organization" &&
+          Boolean(material.product_media?.length)
+      )
+    );
   const scope = (path: string): string =>
     scopedContentPath(path, currentPublishingIdentityId, currentTarget);
 
@@ -1170,6 +1180,7 @@ export default function CreatorApp({
           },
           use_personal_preferences: true,
           material_ids: materialIds,
+          product_media_intent: productMediaIntent,
           series_id: seriesSelection?.seriesId ?? null,
           series_position: seriesSelection?.position ?? null
         },

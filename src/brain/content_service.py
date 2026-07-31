@@ -358,6 +358,26 @@ class ContentService:
         return tuple(products.values())
 
     @staticmethod
+    def _requests_visual_product_story(
+        control: ContentControlContext,
+        controls: RequestedControls | None,
+    ) -> bool:
+        """Separate an explicit P5 route request from trusted media capability."""
+        requested_ids = () if controls is None else controls.material_ids
+        records = control.bound_product_media
+        return (
+            bool(controls and controls.product_media_intent)
+            or (
+                len(requested_ids) == 2
+                and len(set(requested_ids)) == 2
+                and len(records) == 2
+                and {record.asset_id for record in records} == set(requested_ids)
+                and len({record.product_id for record in records}) == 2
+                and len({record.binding_id for record in records}) == 2
+            )
+        )
+
+    @staticmethod
     def _product_media_selection_question() -> str:
         return (
             "当前可用于制作的登记商品素材不足。"
@@ -485,7 +505,16 @@ class ContentService:
             or decision.creative_plan is None
         ):
             raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
-        if decision.primary_product == "visual_styling_story":
+        primary_product = decision.primary_product
+        narrative_mode = decision.narrative_mode
+        creative_plan = decision.creative_plan
+        if self._requests_visual_product_story(control, controls):
+            primary_product = "visual_styling_story"
+            creative_plan = replace(
+                creative_plan,
+                primary_value="visual_styling_story",
+            )
+        if primary_product == "visual_styling_story":
             bound_products = self._bound_products(control)
             if not bound_products:
                 return {
@@ -516,15 +545,15 @@ class ContentService:
             raise GenerationFailed("模型返回的用户事实句标识不存在或原文漂移")
         premise = "\n".join(decision.user_premises)
         self._validate_plan(
-            decision.creative_plan,
+            creative_plan,
             available_user_turns,
-            decision.primary_product,
+            primary_product,
             control,
             target,
             direction.media_format,
         )
         frame = new_frame(
-            decision.narrative_mode,
+            narrative_mode,
             decision.user_fact_spans,
             tuple(record.fact_id for product in products for record in product_fact_records(product)),
             (),
@@ -540,10 +569,10 @@ class ContentService:
             controls=controls,
             series_id=series_id,
             series_position=series_position,
-            primary_product_override=decision.primary_product,
+            primary_product_override=primary_product,
             progress=progress,
             narrative_frame=frame,
-            creative_plan=decision.creative_plan,
+            creative_plan=creative_plan,
             creation_commitment=commitment,
             client_request_id=client_request_id,
         )

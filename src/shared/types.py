@@ -382,6 +382,8 @@ class RequestedControls:
     body_related_opt_in: bool = False
     use_personal_preferences: bool = True
     material_ids: tuple[UUID, ...] = ()
+    # An explicit product-story route request; it never grants media capability.
+    product_media_intent: bool = False
 
 
 @dataclass(frozen=True)

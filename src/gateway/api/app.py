@@ -2063,6 +2063,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             body_related_opt_in=bool(direction and direction.body_related_opt_in),
             use_personal_preferences=payload.use_personal_preferences and not bypassed,
             material_ids=tuple(payload.material_ids),
+            product_media_intent=payload.product_media_intent,
         )
 
     def preference_session_bypassed(request: Request) -> bool:

@@ -194,6 +194,11 @@ async function main(): Promise<void> {
     ],
     "两件商品素材必须由用户在本次任务明确选择"
   );
+  assert.equal(
+    directRequest?.body?.product_media_intent,
+    true,
+    "两件已关联组织商品素材必须显式选择 P5 路由，但不能自行授予资源"
+  );
   assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /当前版本 · V1/);
   await click(find("button", "另起一条"));
 

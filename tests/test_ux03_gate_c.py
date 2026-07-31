@@ -92,6 +92,8 @@ from src.shared.types import (
     BoundProductMedia,
     BrandContext,
     ContentControlContext,
+    ConversationDecision,
+    ConversationInput,
     CreativeDirection,
     DirectionSelection,
     GeneratedArtifact,
@@ -152,6 +154,30 @@ _RESOURCES = frozenset(
         CREATOR_EXPRESSION_RESOURCE_ID,
     }
 )
+
+
+class _P5IntakeRegressionGenerator(DeterministicContentGenerator):
+    """Reproduce a probabilistic intake miss after formal product-media selection."""
+
+    def __init__(self) -> None:
+        self.force_non_visual_intake = False
+
+    def collaborate(self, request: ConversationInput) -> ConversationDecision:
+        decision = super().collaborate(request)
+        if (
+            self.force_non_visual_intake
+            and decision.disposition == "ready"
+            and decision.creative_plan is not None
+        ):
+            return replace(
+                decision,
+                primary_product="brand_life_narrative",
+                creative_plan=replace(
+                    decision.creative_plan,
+                    primary_value="brand_life_narrative",
+                ),
+            )
+        return decision
 
 
 def _bound_product_media(
@@ -968,6 +994,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
         control_repository,
         object_store,
     )
+    generator = _P5IntakeRegressionGenerator()
     monkeypatch.setattr(
         api_module,
         "build_workbench_service",
@@ -986,7 +1013,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
         "build_content_service",
         lambda _: ContentService(
             content_repository,
-            DeterministicContentGenerator(),
+            generator,
             control_service,
         ),
     )
@@ -1353,6 +1380,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                         "publishing_identity_id": str(account_id),
                         "target": "xiaohongshu_graphic",
                         "material_ids": [str(item) for item in invalid_material_ids],
+                        "product_media_intent": True,
                         "interaction_mode": "generate",
                         "direct_generate": True,
                         "request_id": str(uuid4()),
@@ -1379,6 +1407,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     "publishing_identity_id": str(account_id),
                     "target": "xiaohongshu_graphic",
                     "material_ids": [str(asset_ids[0]), str(south_asset_id)],
+                    "product_media_intent": True,
                     "interaction_mode": "generate",
                     "direct_generate": True,
                     "request_id": str(uuid4()),
@@ -1404,6 +1433,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 == before
             )
             time.sleep(2.05)
+            generator.force_non_visual_intake = True
             response = creator.post(
                 "/api/v1/content/stream",
                 json={
@@ -1412,6 +1442,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     "publishing_identity_id": str(account_id),
                     "target": "xiaohongshu_graphic",
                     "material_ids": [str(item) for item in asset_ids],
+                    "product_media_intent": True,
                     "interaction_mode": "generate",
                     "direct_generate": True,
                     "request_id": str(uuid4()),
@@ -1444,6 +1475,8 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 assert row is not None
                 snapshot = row[0]
             envelope = snapshot["media_capability_envelope"]
+            assert snapshot["creative_plan_v2"]["primary_value"] == "visual_styling_story"
+            assert snapshot["media_program"]["program_id"] == "graphic_registered_product_relation_v1"
             resources = [
                 item for item in envelope["resources"] if item["capability_id"] == "registered_product_display"
             ]
@@ -1530,6 +1563,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     "publishing_identity_id": str(account_id),
                     "target": "xiaohongshu_graphic",
                     "material_ids": [str(item) for item in asset_ids],
+                    "product_media_intent": True,
                     "interaction_mode": "generate",
                     "direct_generate": True,
                     "request_id": str(uuid4()),

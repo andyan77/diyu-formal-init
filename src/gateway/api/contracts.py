@@ -32,6 +32,7 @@ class CreateContentRequest(BaseModel):
     creative_direction: CreativeDirectionRequest | None = None
     use_personal_preferences: bool = True
     material_ids: list[UUID] = Field(default_factory=list, max_length=5)
+    product_media_intent: bool = False
     series_id: UUID | None = None
     series_position: int | None = Field(default=None, ge=1, le=999)
     publishing_identity_id: UUID | None = None
@@ -56,6 +57,7 @@ class CreateConversationRequest(BaseModel):
     creative_direction: CreativeDirectionRequest | None = None
     use_personal_preferences: bool = True
     material_ids: list[UUID] = Field(default_factory=list, max_length=5)
+    product_media_intent: bool = False
     series_id: UUID | None = None
     series_position: int | None = Field(default=None, ge=1, le=999)
     target_conflict_resolution: Literal["keep_selected", "switch"] | None = None
