@@ -4,8 +4,8 @@
 - 状态：`ACTIVE`；`Gate A · 正式入驻、身份、逻辑发布账号与多平台关系闭环` 为
   `COMPLETE` 且主控最终终审 `PASS`；`Gate B · 品牌资料、组织作用域、团队使用与能力诊断`
   为 `COMPLETE` 且主控最终终审 `PASS`；`Gate C · 创作控制、真实阶段、完整成品与系列前情`
-  为 `ACTIVE / REWORK`。主控终审确认 FT-039、FT-040、FT-045 `PASS`，只将 FT-041
-  退回同一 Gate C 有界返工。UX-02 保持 `CLOSED`，
+  为 `COMPLETE / 等待主控独立终审`。FT-039、FT-040、FT-041、FT-045 均已形成同一最终
+  本地候选；主控此前退回 FT-041 的失败证据完整保留。UX-02 保持 `CLOSED`，
   不创建 UX-04。
 - 当前 Git 基线：`86f5df16b9e42fe4eee322694156361a007bdb88`；唯一写入执行端为
   当前 WSL Codex。
@@ -41,6 +41,30 @@
   `/var/lib/diyu-ux03-evidence/1f0dffcea106bff814925051ac3671bcb654f409/gate-c-final-suite/`；
   该目录的 `SHA256SUMS`、`normalization-replay.json`、`human-review-failure.json`、
   `bounded-reviews.json` 和 `suite-failure.json` 已复算校验；未生成成功 manifest。
+- 主控其后冻结“确定镜头／可选补拍建议／抽象编排”三层媒体责任。实现
+  `fc45c11a5beb021d8c4ff69aee61a19f035eba77` 引入
+  `media-capability-envelope-v1`、封闭 `media-program-v1` 与
+  `delivery-compiler-v4`：Writer 只填写标题、自然导读、正文和发布配文；服务端在调用前
+  冻结能力、资源、程序和单元绑定；Compiler 确定性生成首图／首帧、图序／观看链、字幕、
+  声音和制作提示。只有正式登记、启用、作用域合法、本次明确选择且版本冻结的资源才能形成
+  确定制作指令；无登记资源时成品以文字、排版、色块、线条、符号和留白独立成立。可选补拍
+  建议由 Compiler 以条件语态单独生成，不进入 required resource refs，不成为成品成立条件，
+  但进入 provenance 与 artifact digest。
+- 首轮最终套件又暴露 P2／P5 Writer 仍能从原题材和账号领地推导商品语义。最终实现
+  `0c4f0d48f2d89daf0082c063c22c4f14aa6ea7e5` 将商品类 Writer brief 收敛为去对象化的
+  判断顺序：冻结商品事实仍由服务端逐字插入，Writer 不再看到可推导商品属性、用途和体验的
+  原始商品题材。恢复 raw product topic 的 mutation 会使 P2／P5 合同测试同时变红。
+  该实现通过 `git diff --check`、Ruff、mypy、Golden/OpenAPI `475 passed, 2 skipped`、
+  前端四门与显式 Gate C Chrome；产品／内容审查和工程／安全／兼容审查均无阻断。
+- 在同一 `0c4f0d4…`、`deepseek-v4-flash`、temperature 0、max_retries 0 下，
+  P1—P5、series2、series3 各执行一次；无数据库、Redis 或业务持久化，不择优、不拼接
+  不同 SHA。七卡逐篇阅读全文均通过，使用七种不同 MediaProgram；P2 三条冻结事实各逐字
+  一次且无新增属性／用途／效果，P3 咖啡原句逐字且账号观察路径自然，P5 的 required
+  resource refs 精确等于本次冻结的两个登记商品资源，series2／3 按冻结前情连续推进。
+  root-only 正式证据位于隔离执行主机
+  `/var/lib/diyu-ux03-evidence/0c4f0d48f2d89daf0082c063c22c4f14aa6ea7e5/gate-c-final-suite/`，
+  含七份 raw、artifact、配置、`manifest.json`、`human-review.json` 与
+  `SHA256SUMS`；file SHA、raw SHA、正式 `visible_digest` 和人工审阅引用可复算一致。
 - 当前任务包：
   [`docs/UX-03-产品目标一致性与全链路修复执行包.md`](docs/UX-03-产品目标一致性与全链路修复执行包.md)。
 - Gate A 已在本地完成正式 React/API/PostgreSQL 的新租户入驻、品牌基线、自然人资格、
@@ -64,24 +88,21 @@
   组织、资料路径决定，evidence 返回真实对象、版本、范围和更新时间；指定区域仍只接受
   明确登记的 region，历史非 region 数据仅兼容读取。Golden/OpenAPI 为
   `422 passed, 1 skipped`，FT-031 有界复核无阻断。
-- Gate C 已关闭 FT-039、FT-040 和 FT-045：五轴可选方向及开放原话冻结到任务并
+- Gate C 已关闭 FT-039、FT-040、FT-041 和 FT-045：五轴可选方向及开放原话冻结到任务并
   随修订重放；NDJSON 只在实际节点发出阶段，`completed` 位于原子提交、digest 校验和正式
   回读之后；系列前情以同租户／品牌／逻辑账号／系列边界冻结并进入 Writer 输入。FT-041
-  尚未关闭：主控确认 v3 媒体单元仍由固定 Compiler 模板主导，P2 扩写未冻结商品语义，
-  P3 缺少正文可识别的账号关联，且人工审阅摘要无法按文件 SHA 或正式 visible digest
-  复算。首次同 SHA P1—P5 与三篇系列证据完整保留在
+  以服务端冻结的 MediaCapabilityEnvelope 与封闭 MediaProgram 关闭未登记现实资源问题，
+  以去对象化商品 Writer brief 关闭 P2／P5 语义扩写，并以可复算 file SHA／正式
+  `visible_digest` 绑定人工审阅。首次同 SHA P1—P5 与三篇系列失败证据完整保留在
   `/var/lib/diyu-ux03-evidence/4d797d35614216c92a7e62ae7a62d7456165d70b/gate-c-final-suite/`。
   `git diff --check`、Ruff、mypy、Golden/OpenAPI `440 passed, 2 skipped`、前端四门、
   显式三视口 Chrome 和两份有界审查是该首次候选的历史工程证据，不替代本次 FT-041
   返工完成门。
-- 当前 64 项功能真值暂为 `53/5/0/6/0`；有缺陷项为 FT-041、FT-050—FT-052 和 FT-058。
+- 当前 64 项功能真值为 `54/4/0/6/0`；剩余有缺陷项仅为 FT-050—FT-052 和 FT-058。
   运行资产保持 `41/243/25/119`，激活增量 0。
 - Gate C 不证明真实员工／品牌采用、真实发布、平台流量、排名、爆款、GMV／销售、多真实
   租户市场差异、企业 SLA 或 `20/55/44` 全组合稳定支持。
-- 当前唯一下一动作：主控裁决在没有登记现实媒体资源时，是把媒体单元收敛为服务端可验证的
-  受限抽象编排，还是正式改变资源闭世界／媒体创作责任合同；当前“自由概率 Writer 媒体文案
-  ＋无后置语义裁决＋零未登记现实资源”组合无法由现有确定性边界证明。裁决前不再调用模型，
-  后续 Gate 保持 `NOT_STARTED`。
+- 当前唯一下一动作：主控独立终审 Gate C；通过前后续 Gate 保持 `NOT_STARTED`。
 
 ## UX-02 关闭记录（历史保留）
 
