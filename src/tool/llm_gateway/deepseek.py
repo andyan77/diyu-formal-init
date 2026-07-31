@@ -785,6 +785,62 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed(
                 "CreativeKernelV1 商品事实边界无法在一次 affected-unit 修复内满足"
             ) from exc
+        missing_account_spans = self._missing_p3_account_link_spans(
+            request,
+            kernel,
+        )
+        if missing_account_spans:
+            if affected_product_units:
+                raise GenerationFailed(
+                    "账号表达路径无法与商品事实修复共享第二次修复调用"
+                )
+            guide_unit = next(
+                (
+                    unit
+                    for unit in kernel.writable_units
+                    if unit.purpose == "natural_guide"
+                ),
+                None,
+            )
+            if guide_unit is None:
+                raise GenerationFailed("账号表达路径缺少可修复的自然导读单元")
+            repair_payload, repair_retries = self._request(
+                "你是笛语 CreativeKernel Writer。只返回一次受影响 unit 修复 JSON，不展示推理或内部规则。",
+                self._account_link_repair_prompt(
+                    unit_id=guide_unit.unit_id,
+                    current_text=guide_unit.text,
+                    required_spans=self._required_account_link_spans(request),
+                ),
+                1024,
+            )
+            provider_payloads.append(repair_payload)
+            retries += repair_retries
+            try:
+                kernel = repair_kernel_units(
+                    kernel=kernel,
+                    affected_unit_ids=frozenset({guide_unit.unit_id}),
+                    raw=json.loads(
+                        self._json_content(
+                            str(
+                                repair_payload["choices"][0]["message"][
+                                    "content"
+                                ]
+                            )
+                        )
+                    ),
+                    allowed_claim_ids=context.product_fact_packet.fact_ids,
+                    media_format=request.media_format,
+                )
+            except (
+                KeyError,
+                IndexError,
+                TypeError,
+                ValueError,
+                json.JSONDecodeError,
+            ) as exc:
+                raise GenerationFailed(
+                    "CreativeKernelV1 账号表达路径 affected-unit 修复格式不完整"
+                ) from exc
         self._assert_p3_account_link(request, kernel)
         if request.revision_instruction and request.prior_creative_kernel:
             before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
@@ -2359,9 +2415,37 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         required = cls._required_account_link_spans(request)
         if not required:
             raise GenerationFailed("当前账号缺少可冻结的账号表达路径")
-        visible = "\n".join(unit.text for unit in kernel.writable_units)
-        if any(span not in visible for span in required):
+        if cls._missing_p3_account_link_spans(request, kernel):
             raise GenerationFailed("Writer 成品未绑定当前账号表达路径")
+
+    @classmethod
+    def _missing_p3_account_link_spans(
+        cls,
+        request: GenerationInput,
+        kernel: CreativeKernelV1,
+    ) -> tuple[str, ...]:
+        if (
+            request.primary_product != "brand_life_narrative"
+            or kernel.kernel_version != KERNEL_VERSION
+        ):
+            return ()
+        required = cls._required_account_link_spans(request)
+        visible = "\n".join(unit.text for unit in kernel.writable_units)
+        return tuple(span for span in required if span not in visible)
+
+    @staticmethod
+    def _account_link_repair_prompt(
+        *,
+        unit_id: str,
+        current_text: str,
+        required_spans: tuple[str, ...],
+    ) -> str:
+        return f"""只修复一个自然导读 unit。根对象只能有 units；units 只能有一个元素，
+该元素只能有 unit_id、text。unit_id 必须逐字为 {json.dumps(unit_id, ensure_ascii=False)}。
+在保留原导读观看回报的前提下，把下列已经冻结、去标识的账号表达 span 各逐字使用一次，
+写成一句自然中文；不得把它们扩写成真实职业履历、机构事实或已经发生的经历：
+{json.dumps(required_spans, ensure_ascii=False)}
+原导读：{json.dumps(current_text, ensure_ascii=False)}"""
 
     @staticmethod
     def _deidentify_text(

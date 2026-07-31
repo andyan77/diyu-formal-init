@@ -2820,6 +2820,7 @@ def test_p3_writer_copy_must_bind_the_frozen_account_link(
     include_link: bool,
 ) -> None:
     request = _p3_account_link_request()
+    request_count = 0
 
     def respond(
         self: DeepSeekGenerator,
@@ -2830,7 +2831,29 @@ def test_p3_writer_copy_must_bind_the_frozen_account_link(
         thinking_disabled: bool = True,
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
+        nonlocal request_count
+        request_count += 1
         del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        if not include_link and request_count == 2:
+            content = {
+                "units": [
+                    {
+                        "unit_id": "unit:natural-guide",
+                        "text": (
+                            "总部穿衣编辑陪正在重新选择日常节奏的人看清取舍。"
+                        ),
+                    }
+                ]
+            }
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(content, ensure_ascii=False)
+                        }
+                    }
+                ]
+            }, 0
         guide = (
             "总部穿衣编辑也会重新看一次熟悉的日常。"
             if include_link
@@ -2868,14 +2891,10 @@ def test_p3_writer_copy_must_bind_the_frozen_account_link(
         "not-a-real-key",
         "deepseek-test",
     )
-    if not include_link:
-        with pytest.raises(GenerationFailed, match="账号表达路径"):
-            generator.generate(request)
-        return
-
     artifact = generator.generate(request)
     assert "总部穿衣编辑" in artifact.body
     assert "陪正在重新选择日常节奏的人看清取舍。" in artifact.body
+    assert request_count == (1 if include_link else 2)
 
 
 def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() -> None:
