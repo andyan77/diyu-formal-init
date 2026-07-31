@@ -29,6 +29,18 @@
   Compiler 所有的可见结构包装并失败关闭。root-only 失败证据及可复算校验位于
   `/var/lib/diyu-ux03-evidence/ad398e60ea4b7544211190b99788c19ce7e293dc/gate-c-final-suite/`；
   未生成最终 manifest 或人工 PASS。
+- 主控随后批准服务端仅对图文 `media_opening` Writer 单元起始位置的规范字面
+  `首图：` 去除一次，并对剩余全文重新执行既有可见结构与 Unicode 安全检查。实现
+  `1f0dffcea106bff814925051ac3671bcb654f409` 已用保存的 P2 raw 完成无模型回放，三项
+  mutation proof 均真实变红后恢复转绿，并通过 Ruff、mypy、Golden/OpenAPI
+  `467 passed, 2 skipped`、前端四门和显式 Chrome。新同 SHA 七卡均只调用一次并成功
+  生成，但人工阅读全文只确认 P5 完整通过；P1、P3、P4、series2、series3 的媒体单元引入
+  未登记现实资源，P2 还把冻结的“两面完整外观”扩写成正反面及未冻结视觉细节，多张图文
+  继续重复低饱和静物／居中排字结构。因此精确去包装缺口已关闭，FT-041 的事实／资源闭世界
+  和媒体责任缺口仍未关闭，不得以工程门绿色代替产品通过。新 raw 与成品保留在
+  `/var/lib/diyu-ux03-evidence/1f0dffcea106bff814925051ac3671bcb654f409/gate-c-final-suite/`；
+  该目录的 `SHA256SUMS`、`normalization-replay.json`、`human-review-failure.json`、
+  `bounded-reviews.json` 和 `suite-failure.json` 已复算校验；未生成成功 manifest。
 - 当前任务包：
   [`docs/UX-03-产品目标一致性与全链路修复执行包.md`](docs/UX-03-产品目标一致性与全链路修复执行包.md)。
 - Gate A 已在本地完成正式 React/API/PostgreSQL 的新租户入驻、品牌基线、自然人资格、
@@ -66,9 +78,10 @@
   运行资产保持 `41/243/25/119`，激活增量 0。
 - Gate C 不证明真实员工／品牌采用、真实发布、平台流量、排名、爆款、GMV／销售、多真实
   租户市场差异、企业 SLA 或 `20/55/44` 全组合稳定支持。
-- 当前唯一下一动作：主控裁决是否把 Writer 原始输出合同从“结构包装出现即失败”改为“仅对
-  与当前 unit purpose 精确对应的首行冗余包装做服务端确定性去除，其余保留 heading 仍失败
-  关闭”；未获裁决前不做第三轮模型收敛，后续 Gate 保持 `NOT_STARTED`。
+- 当前唯一下一动作：主控裁决在没有登记现实媒体资源时，是把媒体单元收敛为服务端可验证的
+  受限抽象编排，还是正式改变资源闭世界／媒体创作责任合同；当前“自由概率 Writer 媒体文案
+  ＋无后置语义裁决＋零未登记现实资源”组合无法由现有确定性边界证明。裁决前不再调用模型，
+  后续 Gate 保持 `NOT_STARTED`。
 
 ## UX-02 关闭记录（历史保留）
 
