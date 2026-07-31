@@ -596,8 +596,15 @@ def _generate(args: argparse.Namespace) -> None:
                 time.sleep(2.05)
             if spec.card_id == "P5":
                 generator.begin_card("P5")
-                task_id = _run_formal_p5_browser(app, journey)
-                generator.end_card()
+                try:
+                    task_id = _run_formal_p5_browser(app, journey)
+                except Exception:
+                    generator.abort_card(
+                        event_names=("formal_p5_browser_failed",),
+                    )
+                    raise
+                else:
+                    generator.end_card()
                 version_response = client.get(
                     f"/api/v1/tasks/{task_id}/versions/1",
                     params={
