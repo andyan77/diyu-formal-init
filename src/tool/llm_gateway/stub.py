@@ -185,6 +185,7 @@ class DeterministicContentGenerator(ContentGenerator):
             allowed_resource_ids=tuple(sorted(allowed_resources)),
             media_format=request.media_format,
             kernel_version=kernel_version,
+            primary_product=request.primary_product,
         )
         skeleton = freeze_prior_revision_units(
             skeleton,

@@ -516,6 +516,36 @@ def test_actuality_creative_units_are_preallocated_as_scoped_observation() -> No
     assert "其余为创作性观察，不补充现实细节" in compiled.body
 
 
+@pytest.mark.parametrize(
+    ("primary_product", "frame_mode", "expected_mode"),
+    (
+        ("dressing_decision", "general_observation", "recommendation"),
+        ("product_truth", "general_observation", "recommendation"),
+        ("local_response", "actuality_reflection", "recommendation"),
+        ("visual_styling_story", "general_observation", "recommendation"),
+        ("brand_life_narrative", "actuality_reflection", "hypothesis"),
+    ),
+)
+def test_v3_body_license_is_preallocated_from_the_content_value(
+    primary_product: str,
+    frame_mode: str,
+    expected_mode: str,
+) -> None:
+    skeleton = build_kernel_skeleton(
+        frame=new_frame(
+            cast(Any, frame_mode),
+            ("冻结现实片段",) if frame_mode == "actuality_reflection" else (),
+            (),
+        ),
+        fact_registry=(),
+        constraint_refs=(),
+        kernel_version=KERNEL_VERSION,
+        primary_product=cast(Any, primary_product),
+    )
+
+    assert skeleton.unit("unit:body").mode == expected_mode
+
+
 def test_direction_receipt_freezes_origins_clears_custom_and_body_opt_in() -> None:
     direction = _direction()
     control = ContentControlContext(

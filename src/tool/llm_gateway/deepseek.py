@@ -583,6 +583,7 @@ class DeepSeekGenerator(ContentGenerator):
             allowed_resource_ids=tuple(sorted(context.resource_ids)),
             media_format=request.media_format,
             kernel_version=kernel_version,
+            primary_product=request.primary_product,
         )
         skeleton = freeze_prior_revision_units(
             skeleton,
@@ -1098,6 +1099,23 @@ class DeepSeekGenerator(ContentGenerator):
             unit_contracts=trusted_contracts,
         )
         policy_by_unit = {policy.unit_id: policy for policy in policies}
+        expression_requirement_by_mode = {
+            "general_observation": (
+                "只写不绑定当前用户、品牌、员工、顾客或门店的一般命题；不续写本次事实中的"
+                "人物动作、对白、动机、原因、结果或商品属性。"
+            ),
+            "recommendation": (
+                "只写面向一般受众、尚未发生的可选做法或判断步骤；不得写成当前人物、品牌、"
+                "员工、顾客或门店已经执行的做法，也不得补充当前商品属性或效果。"
+            ),
+            "hypothesis": (
+                "只写条件成立时才可能出现的推演，不续写服务端冻结事实；具体动作、对白、"
+                "心理、原因或结果必须处于条件语态，Compiler 会统一添加假设范围。"
+            ),
+            "disclosed_dramatization": (
+                "写成完整虚构情境，包含场景推进、角色行动或对白以及可见收束；不能写成观点文章。"
+            ),
+        }
         writer_resource_by_id: dict[str, tuple[str, str]] = {}
         product_resource_index = 0
         for resource_id, description in context.resource_registry:
@@ -1138,12 +1156,8 @@ class DeepSeekGenerator(ContentGenerator):
                     else {}
                 ),
                 **(
-                    {
-                        "expression_requirement": (
-                            "写成完整虚构情境，包含场景推进、角色行动或对白以及可见收束；不能写成观点文章。"
-                        )
-                    }
-                    if unit.mode == "disclosed_dramatization"
+                    {"expression_requirement": expression_requirement_by_mode[unit.mode]}
+                    if unit.mode in expression_requirement_by_mode
                     else {}
                 ),
             }

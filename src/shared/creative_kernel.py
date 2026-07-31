@@ -223,6 +223,7 @@ def build_kernel_skeleton(
     allowed_resource_ids: Sequence[str] = (),
     media_format: Literal["video", "graphic"] = "graphic",
     kernel_version: str = DUAL_TRACK_KERNEL_VERSION,
+    primary_product: ContentProduct | None = None,
 ) -> CreativeKernelV1:
     """Build the one small server-owned writing skeleton for a new artifact."""
     if (
@@ -237,7 +238,18 @@ def build_kernel_skeleton(
     if program_id == ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM and frame.narrative_mode != "actuality_reflection":
         raise ValueError("local dramatization program requires actuality reflection")
     body_types: tuple[ObservationType, ...]
-    uses_hypothesis_body = frame.narrative_mode == "hypothesis"
+    product_recommendation_body = kernel_version == KERNEL_VERSION and primary_product in {
+        "dressing_decision",
+        "product_truth",
+        "local_response",
+        "visual_styling_story",
+    }
+    product_hypothesis_body = (
+        kernel_version == KERNEL_VERSION
+        and primary_product == "brand_life_narrative"
+        and frame.narrative_mode == "actuality_reflection"
+    )
+    uses_hypothesis_body = frame.narrative_mode == "hypothesis" or product_hypothesis_body
     if uses_hypothesis_body:
         body_types = ("hypothesis",)
     elif frame.narrative_mode == "dramatization":
@@ -452,6 +464,9 @@ def build_kernel_skeleton(
         if uses_hypothesis_body:
             body_mode = "hypothesis"
             body_scope = "scope:hypothesis-v1"
+        elif product_recommendation_body:
+            body_mode = "recommendation"
+            body_scope = "scope:recommendation-v1"
         elif frame.narrative_mode == "dramatization":
             body_mode = "disclosed_dramatization"
             body_scope = "scope:disclosed-dramatization-v1"
@@ -538,7 +553,12 @@ def freeze_prior_revision_units(
         raise ValueError("prior reflection unit is unavailable") from exc
     if (
         prior_reflection.track != "creative_expression"
-        or prior_reflection.mode not in {"general_observation", "hypothesis"}
+        or prior_reflection.mode
+        not in {
+            "general_observation",
+            "recommendation",
+            "hypothesis",
+        }
         or not prior_reflection.text
     ):
         raise ValueError("prior reflection unit cannot be frozen")
@@ -1155,6 +1175,9 @@ def _unit_track_contract(
         default_scope = "scope:general-observation-v1"
     raw_track = raw.get("track", expected[0])
     raw_mode = raw.get("mode", expected[1])
+    if purpose != "frozen_fact" and allowed == ("abstract_principle",) and raw_mode == "recommendation":
+        expected = ("creative_expression", "recommendation")
+        default_scope = "scope:recommendation-v1"
     raw_scope = raw.get("scope_id", default_scope)
     if raw_track != expected[0] or raw_mode != expected[1] or not isinstance(raw_scope, str) or not raw_scope:
         raise DomainError("冻结创作内核表达轨无效")
