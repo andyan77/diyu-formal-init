@@ -476,7 +476,7 @@ def test_media_native_units_compile_one_scope_and_distinct_platform_parts() -> N
     assert_content_complete(artifact)
 
 
-def test_actuality_creative_units_are_preallocated_as_disclosed_hypothesis() -> None:
+def test_actuality_creative_units_are_preallocated_as_scoped_observation() -> None:
     fact = "今天喝了一直喝的蓝山咖啡，居然是甜的。"
     frame = new_frame("actuality_reflection", (fact,), ())
     request = replace(
@@ -493,7 +493,7 @@ def test_actuality_creative_units_are_preallocated_as_disclosed_hypothesis() -> 
     )
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
 
-    assert kernel.unit("unit:body").mode == "hypothesis"
+    assert kernel.unit("unit:body").mode == "general_observation"
     compiled = compile_delivery(
         DeliveryCompileInput(
             primary_product=request.primary_product,
@@ -513,7 +513,7 @@ def test_actuality_creative_units_are_preallocated_as_disclosed_hypothesis() -> 
 
     assert f"你提到：“{fact}”" in compiled.body
     assert compiled.body.count("表达范围：") == 1
-    assert "其余是创作性推演，不作为这段经历的事实补充" in compiled.body
+    assert "其余为创作性观察，不补充现实细节" in compiled.body
 
 
 def test_direction_receipt_freezes_origins_clears_custom_and_body_opt_in() -> None:
@@ -579,7 +579,7 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
     assert "其他租户诱饵前情" not in prompt
 
 
-def test_product_resources_are_deidentified_before_the_writer_prompt() -> None:
+def test_product_resources_are_hidden_from_the_writer_prompt() -> None:
     product = ProductFact(
         sku="ZX-C218",
         display_name="双面短外套",
@@ -601,7 +601,7 @@ def test_product_resources_are_deidentified_before_the_writer_prompt() -> None:
             tuple(item.fact_id for item in build_product_fact_packet((product,)).facts),
         ),
         creative_plan=build_creative_plan(
-            topic_spans=("帮我解释这个已选商品",),
+            topic_spans=("ZX-C218，帮我解释这个商品",),
             primary_value="product_truth",
             tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
             mechanism_id=None,
@@ -629,6 +629,17 @@ def test_product_resources_are_deidentified_before_the_writer_prompt() -> None:
         ),
     )
 
+    compiler_texts = compiler_owned_media_unit_texts(
+        DeliveryCompileInput(
+            primary_product=request.primary_product,
+            media_format=request.media_format,
+            products=request.products,
+            production_conditions=request.brand.production_conditions,
+            allowed_resource_ids=context.resource_ids,
+            immutable_fact_blocks=context.product_fact_blocks,
+            trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
+        )
+    )
     prompt = DeepSeekGenerator(
         "https://example.invalid",
         "not-a-real-key",
@@ -636,15 +647,47 @@ def test_product_resources_are_deidentified_before_the_writer_prompt() -> None:
     )._kernel_writer_prompt(
         request,
         skeleton,
-        {},
+        compiler_texts,
     )
 
     assert "ZX-C218" not in prompt
     assert "双面短外套" not in prompt
     assert "炭灰纯色" not in prompt
     assert "深绿细格纹" not in prompt
-    assert '"resource_id": "resource:registered-product-1"' in prompt
-    assert "不授权复述商品名、编号或属性" in prompt
+    assert "resource:product:" not in prompt
+    assert "resource:registered-product-" not in prompt
+    assert "本次已选商品" in prompt
+
+
+def test_product_media_units_are_server_owned_without_product_semantic_invention() -> None:
+    request = DeliveryCompileInput(
+        primary_product="visual_styling_story",
+        media_format="video",
+        products=(),
+        production_conditions="一人一部手机。",
+        allowed_resource_ids=frozenset(
+            {
+                ORIGINAL_COMPOSITION_RESOURCE_ID,
+                CREATOR_EXPRESSION_RESOURCE_ID,
+                "resource:product:one",
+                "resource:product:two",
+            }
+        ),
+    )
+    compiler_texts = compiler_owned_media_unit_texts(request)
+
+    assert set(compiler_texts) == {
+        "unit:media-opening",
+        "unit:media-sequence",
+        "unit:subtitle-strategy",
+        "unit:production-note",
+    }
+    assert "已登记商品样衣" in compiler_texts["unit:media-opening"]
+    assert "同一机位和背景" in compiler_texts["unit:media-sequence"]
+    assert "resource:product:" not in json.dumps(
+        compiler_texts,
+        ensure_ascii=False,
+    )
 
 
 def test_deepseek_adapter_accepts_only_the_complete_media_native_unit_set(

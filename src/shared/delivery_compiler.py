@@ -120,9 +120,27 @@ def compiler_owned_media_unit_texts(
     photograph, location or prop.
     """
 
-    if any(resource_id.startswith("resource:product:") for resource_id in request.allowed_resource_ids):
-        return {}
+    product_resources = tuple(
+        resource_id for resource_id in request.allowed_resource_ids if resource_id.startswith("resource:product:")
+    )
     if request.media_format == "graphic":
+        if product_resources:
+            sequence = (
+                "只补拍四张：第 1 张让本次已登记样衣完整进入画面；第 2、3 张保持同一背景与机位呈现每件样衣；"
+                "第 4 张呈现它们的并置关系。事实原句由服务端独立排入图序。"
+                if "四张" in request.production_conditions
+                else (
+                    "先拍每件已登记样衣的完整轮廓，再保持同一背景与机位呈现它们的"
+                    "并置关系；事实原句由服务端独立排入图序，末张回到本篇选择。"
+                )
+            )
+            return {
+                "unit:media-opening": ("首图让本次已登记商品样衣完整进入画面，背景和标题不遮挡主体。"),
+                "unit:media-sequence": sequence,
+                "unit:production-note": (
+                    "只使用本次登记的商品样衣、创作者、手机和普通室内条件；不补入未登记人物、地点、道具或商品属性。"
+                ),
+            }
         return {
             "unit:media-opening": ("首图使用本篇标题、抽象色块和线条构图，不调用现实照片或未登记对象。"),
             "unit:media-sequence": (
@@ -132,20 +150,26 @@ def compiler_owned_media_unit_texts(
                 "只使用原创字体排版、色块、线条、符号和留白；不添加现实人物、场地、道具、商品或外部素材。"
             ),
         }
-    opening = (
-        "开头由创作者本人直接说出标题；不重演用户经历，也不调用未登记场景或道具。"
-        if CREATOR_EXPRESSION_RESOURCE_ID in request.allowed_resource_ids
-        else "开头使用原创标题字与抽象图形，不调用现实人物、场地或道具。"
-    )
+    if product_resources:
+        opening = "开头两秒让本次已登记商品样衣完整进入同一画面，创作者只说本篇标题。"
+        sequence = (
+            "保持同一机位和背景，先给每件已登记样衣一个完整镜头，再呈现它们的"
+            "并置关系；事实原句由服务端独立进入字幕，最后回到可执行选择。"
+        )
+        production = "只使用本次登记的商品样衣、创作者、手机和普通室内条件；不增加演员、地点、道具或商品属性。"
+    else:
+        opening = (
+            "开头由创作者本人直接说出标题；不重演用户经历，也不调用未登记场景或道具。"
+            if CREATOR_EXPRESSION_RESOURCE_ID in request.allowed_resource_ids
+            else "开头使用原创标题字与抽象图形，不调用现实人物、场地或道具。"
+        )
+        sequence = "先给出观看回报，再由创作者本人或原创文字画面承接事实原句与核心表达，最后自然收束；不重演现实经过。"
+        production = "只使用创作者本人、原创排版与已登记声音条件完成；不增加演员、地点、商品、道具或外部素材。"
     return {
         "unit:media-opening": opening,
-        "unit:media-sequence": (
-            "先给出观看回报，再由创作者本人或原创文字画面承接事实原句与核心表达，最后自然收束；不重演现实经过。"
-        ),
+        "unit:media-sequence": sequence,
         "unit:subtitle-strategy": ("字幕只保留标题、事实原句和关键转折，不机械复制整段台词。"),
-        "unit:production-note": (
-            "只使用创作者本人、原创排版与已登记声音条件完成；不增加演员、地点、商品、道具或外部素材。"
-        ),
+        "unit:production-note": production,
     }
 
 

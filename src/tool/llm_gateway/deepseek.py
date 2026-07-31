@@ -1205,16 +1205,27 @@ class DeepSeekGenerator(ContentGenerator):
         product_creative_rule = (
             """本篇的可信商品事实块已经由服务端选择并将在编译时原样插入；你看不到也
 不能选择、引用、复述或推导这些事实。title 与 body 只负责一个不指向当前具体商品的
-选购观察：帮助读者区分“已经确认的信息”和“仍需本人判断的选择”，不得出现 SKU、商品名、
+解释或选择框架：顺着用户本次真正想解决的问题，帮助读者理解如何使用已确认信息作判断，
+不得出现 SKU、商品名、
 品类、颜色、数字、结构、性能、用途、效果、价格、库存、设计动机、比较结论、手感或实际
 体验。title 应短而自然，body 提供独立观看价值；不能写成事实审计、资料说明或免责声明。"""
             if fact_blocks
             else ""
         )
+        safe_product_topics = list(request.creative_plan.topic_spans)
+        if server_selected_product_facts:
+            for index, topic in enumerate(safe_product_topics):
+                for literal in product_fact_literal_spans(
+                    product_fact_packet,
+                    topic,
+                ):
+                    topic = topic.replace(
+                        literal,
+                        "本次已选商品",
+                    )
+                safe_product_topics[index] = topic
         topic_projection: object = (
-            ["如何在已确认信息与个人选择之间保留判断"]
-            if server_selected_product_facts
-            else request.creative_plan.topic_spans
+            safe_product_topics if server_selected_product_facts else request.creative_plan.topic_spans
         )
         packet_projection: object = (
             {

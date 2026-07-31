@@ -237,9 +237,7 @@ def build_kernel_skeleton(
     if program_id == ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM and frame.narrative_mode != "actuality_reflection":
         raise ValueError("local dramatization program requires actuality reflection")
     body_types: tuple[ObservationType, ...]
-    uses_hypothesis_body = frame.narrative_mode == "hypothesis" or (
-        kernel_version == KERNEL_VERSION and frame.narrative_mode == "actuality_reflection"
-    )
+    uses_hypothesis_body = frame.narrative_mode == "hypothesis"
     if uses_hypothesis_body:
         body_types = ("hypothesis",)
     elif frame.narrative_mode == "dramatization":
@@ -248,6 +246,9 @@ def build_kernel_skeleton(
         body_types = ("abstract_principle",)
     constraints = tuple(dict.fromkeys(constraint_refs))
     resources = tuple(dict.fromkeys(allowed_resource_ids))
+    expression_resources = tuple(
+        resource_id for resource_id in resources if not resource_id.startswith("resource:product:")
+    )
     if kernel_version not in {DUAL_TRACK_KERNEL_VERSION, KERNEL_VERSION}:
         raise ValueError("unsupported creative kernel version")
     compiler_owned_supporting_copy = kernel_version == DUAL_TRACK_KERNEL_VERSION
@@ -263,7 +264,7 @@ def build_kernel_skeleton(
             track="creative_expression",
             mode="general_observation",
             scope_id="scope:general-observation-v1",
-            allowed_resource_ids=resources,
+            allowed_resource_ids=expression_resources,
         ),
         CreativeKernelUnit(
             unit_id="unit:natural-guide",
@@ -276,7 +277,7 @@ def build_kernel_skeleton(
             track="creative_expression",
             mode="general_observation",
             scope_id="scope:general-observation-v1",
-            allowed_resource_ids=resources,
+            allowed_resource_ids=expression_resources,
             text_source=("server_compiler" if compiler_owned_supporting_copy else "writer"),
         ),
     ]
@@ -337,7 +338,7 @@ def build_kernel_skeleton(
                     track="creative_expression",
                     mode="general_observation",
                     scope_id="scope:general-observation-v1",
-                    allowed_resource_ids=resources,
+                    allowed_resource_ids=expression_resources,
                 )
             )
     allowed_fact_ids = frame.allowed_fact_ids
@@ -382,7 +383,7 @@ def build_kernel_skeleton(
                     track="creative_expression",
                     mode="general_observation",
                     scope_id="scope:general-observation-v1",
-                    allowed_resource_ids=resources,
+                    allowed_resource_ids=expression_resources,
                 ),
                 CreativeKernelUnit(
                     unit_id="unit:hypothetical-example",
@@ -395,7 +396,7 @@ def build_kernel_skeleton(
                     track="creative_expression",
                     mode="hypothesis",
                     scope_id="scope:hypothesis-v1",
-                    allowed_resource_ids=resources,
+                    allowed_resource_ids=expression_resources,
                 ),
                 CreativeKernelUnit(
                     unit_id="unit:body-closing",
@@ -408,7 +409,7 @@ def build_kernel_skeleton(
                     track="creative_expression",
                     mode="general_observation",
                     scope_id="scope:general-observation-v1",
-                    allowed_resource_ids=resources,
+                    allowed_resource_ids=expression_resources,
                 ),
             )
         )
@@ -427,7 +428,7 @@ def build_kernel_skeleton(
                     track="creative_expression",
                     mode="general_observation",
                     scope_id="scope:general-observation-v1",
-                    allowed_resource_ids=resources,
+                    allowed_resource_ids=expression_resources,
                 ),
                 CreativeKernelUnit(
                     unit_id="unit:local-dramatization",
@@ -440,7 +441,7 @@ def build_kernel_skeleton(
                     track="creative_expression",
                     mode="disclosed_dramatization",
                     scope_id="scope:disclosed-dramatization-v1",
-                    allowed_resource_ids=resources,
+                    allowed_resource_ids=expression_resources,
                 ),
             )
         )
@@ -469,7 +470,7 @@ def build_kernel_skeleton(
                 track="creative_expression",
                 mode=body_mode,
                 scope_id=body_scope,
-                allowed_resource_ids=resources,
+                allowed_resource_ids=expression_resources,
             )
         )
         release_order = 110
@@ -485,7 +486,7 @@ def build_kernel_skeleton(
             track="creative_expression",
             mode="general_observation",
             scope_id="scope:general-observation-v1",
-            allowed_resource_ids=resources,
+            allowed_resource_ids=expression_resources,
             text_source=("server_compiler" if compiler_owned_supporting_copy else "writer"),
         )
     )
