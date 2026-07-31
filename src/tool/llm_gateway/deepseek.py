@@ -66,7 +66,6 @@ from src.shared.delivery_compiler import (
     DeliveryCompileInput,
     assert_compiled_delivery,
     compile_delivery,
-    compiler_owned_media_unit_texts,
 )
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import (
@@ -162,7 +161,7 @@ _CONTRACT_FIELDS: dict[ContentProduct, tuple[str, str, str]] = {
 }
 _PRODUCT_VALUE: dict[ContentProduct, str] = {
     "dressing_decision": "帮助受众完成有条件、有边界的穿衣选择",
-    "product_truth": "解释一件商品能确认什么、不能确认什么",
+    "product_truth": "围绕服务端原样呈现的可见选择，帮助受众形成不超出已确认信息的判断",
     "brand_life_narrative": "让受众认识这个账号怎样观察、判断和待人",
     "local_response": "从近场信号给未参与者一份关系回应",
     "visual_styling_story": "用真实商品与画面动作创造可见的穿着可能",
@@ -618,7 +617,7 @@ class DeepSeekGenerator(ContentGenerator):
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product)
             if kernel_version == DUAL_TRACK_KERNEL_VERSION
-            else compiler_owned_media_unit_texts(delivery_input)
+            else {}
         )
         writer_payload, writer_retries = self._request(
             "你是笛语 CreativeKernel Writer。只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。",
@@ -1218,11 +1217,13 @@ class DeepSeekGenerator(ContentGenerator):
         )
         product_creative_rule = (
             """本篇的可信商品事实块已经由服务端选择并将在编译时原样插入；你看不到也
-不能选择、引用、复述或推导这些事实。title 与 body 只负责一个不指向当前具体商品的
-解释或选择框架：顺着用户本次真正想解决的问题，帮助读者理解如何使用已确认信息作判断，
-不得出现 SKU、商品名、
+不能选择、引用、复述或推导这些事实。全部 Writer unit 只负责一个不指向当前具体商品的
+选择顺序：帮助受众先看服务端原样插入的已确认信息，再保留自己的判断。任何商品、服装、
+部件或“它／这件对象”都不能成为 Writer 文字的主语、宾语或指代对象；所有文字必须在不知
+道对象名称、类别和属性时仍然成立。不得出现 SKU、商品名、
 品类、颜色、数字、结构、性能、用途、效果、价格、库存、设计动机、比较结论、手感或实际
-体验。title 应短而自然，body 提供独立观看价值；不能写成事实审计、资料说明或免责声明。"""
+体验。媒体单元只能安排服务端事实原句和已登记资源怎样进入画面，不能借制作说明补充商品
+语义。title 应短而自然，body 提供独立观看价值；不能写成事实审计、资料说明或免责声明。"""
             if fact_blocks
             else ""
         )
@@ -1256,6 +1257,19 @@ class DeepSeekGenerator(ContentGenerator):
             else packet_document
         )
         blocks_projection: object = [] if server_selected_product_facts else immutable_fact_blocks_document(fact_blocks)
+        account_link_projection: object = (
+            self._deidentified_account_link(request)
+            if request.primary_product == "brand_life_narrative"
+            else None
+        )
+        account_link_rule = (
+            """本篇必须让受众从作品本身读出当前账号为什么会说这段话。标题、正文、媒体组织
+和发布配文应共同沿同一条编辑视角展开；至少 natural_guide 或 body 要自然体现下方的表达
+位置与受众关系，不能只在元数据中存在。不要照抄画像标签，不要硬插商品、账号名或品牌名，
+不要把表达位置写成真实职业履历、机构事实或已经发生的经历。"""
+            if request.primary_product == "brand_life_narrative"
+            else ""
+        )
         output_contract = (
             """根对象必须恰好只有 units；每个 unit 必须恰好只有 unit_id、text。商品事实块
 已由服务端冻结，禁止返回 fact_block_refs、claim_refs 或任何商品事实正文。"""
@@ -1288,6 +1302,8 @@ Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creati
 旧证据兼容用 ImmutableFactBlock 候选（新双轨主链为空；正文始终由服务端原样插入）：
 {json.dumps(blocks_projection, ensure_ascii=False)}
 本篇受众价值：{_PRODUCT_VALUE[request.primary_product]}
+本篇账号关联路径（仅 P3 使用；是表达视角，不是现实事实许可证）：
+{json.dumps(account_link_projection, ensure_ascii=False)}
 平台与形式：{request.target} / {request.media_format}
 去标识化表达控制：{controls}
 本次修改要求：{request.revision_instruction or "（首次生成）"}
@@ -1301,6 +1317,7 @@ allowed_resources 都由服务端在写作前冻结；每个单元必须逐项�
 {json.dumps(writable, ensure_ascii=False)}
 
 {product_creative_rule}
+{account_link_rule}
 
 topic_spans 是用户原话证据，可能同时包含创作命令、控制要求或“尚未想到题材”的状态，不等于
 必须逐字充当成品题目。若其中没有面向受众的实际题材，系统应根据本篇受众价值、账号边界与
@@ -1951,6 +1968,57 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             if identifier:
                 value = value.replace(identifier, "当前表达方")
         return value[:600] or "自然、清楚、不过度下结论"
+
+    @staticmethod
+    def _deidentified_account_link(request: GenerationInput) -> dict[str, str]:
+        """Project one trusted editorial lens without tenant/account identifiers."""
+
+        expression = request.account_expression
+        values = {
+            "editorial_position": (
+                expression.identity_position
+                if expression is not None
+                else request.brand.content_role_name
+            ),
+            "audience_relationship": (
+                expression.audience_relationship
+                if expression is not None
+                else request.brand.audience_description
+            ),
+            "content_territories": (
+                expression.content_territories
+                if expression is not None
+                else request.brand.positioning
+            ),
+            "decision_order": request.brand.decision_order,
+            "authority_boundary": (
+                expression.authority_boundary
+                if expression is not None
+                else request.brand.content_role_boundary
+            ),
+        }
+        protected = (
+            request.brand.brand_name,
+            request.brand.organization_name,
+            request.brand.account_name,
+            request.brand.operator_name,
+        )
+        return {
+            key: DeepSeekGenerator._deidentify_text(value, protected)
+            for key, value in values.items()
+            if value.strip()
+        }
+
+    @staticmethod
+    def _deidentify_text(
+        value: str,
+        protected: tuple[str, ...],
+    ) -> str:
+        result = value.strip()
+        for identifier in protected:
+            if identifier:
+                result = result.replace(identifier, "当前表达方")
+        return result[:240]
 
     @staticmethod
     def _singleton_slots(

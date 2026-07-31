@@ -117,12 +117,13 @@ class CompiledDelivery:
 def compiler_owned_media_unit_texts(
     request: DeliveryCompileInput,
 ) -> dict[str, str]:
-    """Return the safe media plan when no concrete visual asset is registered.
+    """Return an explicit restricted fallback media plan.
 
-    This is intentionally a narrow fallback.  Product-bearing work keeps its
-    media units Writer-owned because the selected product resources are
-    concrete.  A seed or trusted fact is not itself permission to invent a
-    photograph, location or prop.
+    This compatibility helper is not part of the creative-kernel-v3 production
+    path.  A caller that deliberately cannot run Writer may use the text as an
+    honestly constrained fallback, but v3 parsing rejects it as compiler-owned
+    copy.  A seed or trusted fact is not permission to invent a photograph,
+    location or prop.
     """
 
     product_resources = tuple(
@@ -257,9 +258,6 @@ def _assert_expression_plan(
     fact_text_by_id = dict(request.trusted_fact_texts)
     if len(fact_text_by_id) != len(request.trusted_fact_texts):
         raise GenerationFailed("可信事实轨来源重复")
-    expected_compiler_texts = (
-        compiler_owned_media_unit_texts(request) if kernel.kernel_version == KERNEL_VERSION else {}
-    )
     for unit in kernel.units:
         if unit.track == "trusted_fact":
             if (
@@ -281,16 +279,12 @@ def _assert_expression_plan(
             or any(resource_id not in request.allowed_resource_ids for resource_id in unit.allowed_resource_ids)
         ):
             raise GenerationFailed("创作表达轨结构漂移")
-        expected_compiler_text = expected_compiler_texts.get(unit.unit_id)
         if kernel.kernel_version == DUAL_TRACK_KERNEL_VERSION:
             if unit.purpose in {"natural_guide", "release_caption"}:
                 if unit.text_source != "server_compiler":
                     raise GenerationFailed("编译器中性文字来源漂移")
             elif unit.text_source not in {"writer", "prior_version"}:
                 raise GenerationFailed("创作表达文字来源漂移")
-        elif expected_compiler_text is not None:
-            if unit.text_source != "server_compiler" or unit.text != expected_compiler_text:
-                raise GenerationFailed("编译器中性文字来源漂移")
         elif unit.text_source not in {"writer", "prior_version"}:
             raise GenerationFailed("创作表达文字来源漂移")
         if unit.mode not in {
@@ -353,6 +347,7 @@ def _compile_delivery_v2(
         creative_body,
         release,
         fact_units,
+        media_native=False,
     )
     product_resources = tuple(
         f"resource:product:{product.sku}"
@@ -496,6 +491,7 @@ def _compile_delivery_v3(
         creative_body,
         release,
         fact_units,
+        media_native=True,
     )
 
     product_resources = tuple(
@@ -699,6 +695,8 @@ def _contract(
     body: str,
     release: str,
     facts: tuple[CreativeKernelUnit, ...],
+    *,
+    media_native: bool,
 ) -> ContentSemanticContract:
     fact_text = "\n".join(unit.text for unit in facts) or _PHRASES["phrase:fact-boundary"]
     if product == "dressing_decision":
@@ -709,7 +707,7 @@ def _contract(
         return P3SemanticContract(
             body,
             release,
-            _PHRASES["phrase:account-view"],
+            guide if media_native else _PHRASES["phrase:account-view"],
         )
     if product == "local_response":
         return P4SemanticContract(guide, body, release)

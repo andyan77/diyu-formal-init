@@ -637,15 +637,6 @@ def parse_writer_kernel(
         "unit:natural-guide",
         "unit:release-caption",
     }
-    graphic_fallback_ids = {
-        "unit:media-opening",
-        "unit:media-sequence",
-        "unit:production-note",
-    }
-    video_fallback_ids = {
-        *graphic_fallback_ids,
-        "unit:subtitle-strategy",
-    }
     invalid_compiler_contract = any(
         unit_id not in unit_by_id or not isinstance(text, str) or not text.strip()
         for unit_id, text in compiler_texts.items()
@@ -663,18 +654,7 @@ def parse_writer_kernel(
     elif skeleton.kernel_version == KERNEL_VERSION:
         invalid_compiler_contract = (
             invalid_compiler_contract
-            or compiler_ids not in (set(), graphic_fallback_ids, video_fallback_ids)
-            or any(
-                unit_by_id[unit_id].purpose
-                not in {
-                    "media_opening",
-                    "media_sequence",
-                    "subtitle_strategy",
-                    "production_note",
-                }
-                or unit_by_id[unit_id].text_source != "writer"
-                for unit_id in compiler_ids
-            )
+            or bool(compiler_ids)
         )
     if invalid_compiler_contract:
         raise ValueError("compiler-owned unit contract is invalid")

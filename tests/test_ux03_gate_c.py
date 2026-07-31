@@ -58,6 +58,7 @@ from src.shared.delivery_compiler import (
 from src.shared.errors import DomainError
 from src.shared.factual_basis import (
     build_product_fact_packet,
+    immutable_product_fact_blocks,
     select_product_fact_block_ids,
 )
 from src.shared.narrative import new_frame, visible_digest
@@ -70,11 +71,22 @@ from src.shared.types import (
     GeneratedArtifact,
     GenerationInput,
     GraphicProductionBundle,
+    P3SemanticContract,
     ProductFact,
     RequestedControls,
     SeriesContext,
     SeriesEntry,
     VideoProductionBundle,
+)
+from src.tool.gate_c_evidence import (
+    GATE_C_REVIEW_CRITERIA,
+    ArtifactEvidenceInput,
+    EvidenceBindingError,
+    HumanReviewInput,
+    artifact_visible_digest,
+    sha256_file,
+    verify_gate_c_evidence,
+    write_gate_c_evidence,
 )
 from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
 from src.tool.llm_gateway.stub import DeterministicContentGenerator
@@ -400,15 +412,6 @@ def _filled_kernel(request: GenerationInput) -> object:
         kernel_version=KERNEL_VERSION,
         primary_product=request.primary_product,
     )
-    compiler_texts = compiler_owned_media_unit_texts(
-        DeliveryCompileInput(
-            primary_product=request.primary_product,
-            media_format=request.media_format,
-            products=(),
-            production_conditions=request.brand.production_conditions,
-            allowed_resource_ids=_RESOURCES,
-        )
-    )
     text_by_purpose = {
         "title": "甜味把熟悉的一天叫醒了",
         "natural_guide": "看一次熟悉感被意外打断后，人会怎样重新注意日常。",
@@ -426,13 +429,11 @@ def _filled_kernel(request: GenerationInput) -> object:
                 "text": text_by_purpose[unit.purpose],
             }
             for unit in skeleton.writable_units
-            if unit.unit_id not in compiler_texts
         ]
     }
     return parse_writer_kernel(
         raw,
         skeleton,
-        compiler_owned_text_by_id=compiler_texts,
     )
 
 
@@ -477,6 +478,69 @@ def test_media_native_units_compile_one_scope_and_distinct_platform_parts() -> N
     assert_content_complete(artifact)
 
 
+def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:
+    request = _generation_input(media_format="video")
+    assert request.narrative_frame is not None
+    skeleton = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=(),
+        constraint_refs=(),
+        allowed_resource_ids=tuple(sorted(_RESOURCES)),
+        media_format="video",
+        kernel_version=KERNEL_VERSION,
+        primary_product=request.primary_product,
+    )
+    text_by_id = {
+        "unit:title": "标题",
+        "unit:natural-guide": "导读",
+        "unit:media-opening": "本篇独有的开头",
+        "unit:media-sequence": "本篇独有的画面推进",
+        "unit:subtitle-strategy": "本篇独有的字幕取舍",
+        "unit:production-note": "本篇独有的制作提示",
+        "unit:body": "完整正文",
+        "unit:release-caption": "发布配文",
+    }
+    raw = {
+        "units": [
+            {"unit_id": unit.unit_id, "text": text_by_id[unit.unit_id]}
+            for unit in skeleton.writable_units
+        ]
+    }
+
+    parsed = parse_writer_kernel(raw, skeleton)
+    for purpose in (
+        "media_opening",
+        "media_sequence",
+        "subtitle_strategy",
+        "production_note",
+    ):
+        unit = next(item for item in parsed.units if item.purpose == purpose)
+        assert unit.text_source == "writer"
+        assert unit.text == text_by_id[unit.unit_id]
+
+    fallback = compiler_owned_media_unit_texts(
+        DeliveryCompileInput(
+            primary_product=request.primary_product,
+            media_format=request.media_format,
+            products=(),
+            production_conditions=request.brand.production_conditions,
+            allowed_resource_ids=_RESOURCES,
+        )
+    )
+    with pytest.raises(ValueError, match="compiler-owned unit contract"):
+        parse_writer_kernel(
+            {
+                "units": [
+                    {"unit_id": unit.unit_id, "text": text_by_id[unit.unit_id]}
+                    for unit in skeleton.writable_units
+                    if unit.unit_id not in fallback
+                ]
+            },
+            skeleton,
+            compiler_owned_text_by_id=fallback,
+        )
+
+
 def test_actuality_life_units_are_preallocated_as_disclosed_hypothesis() -> None:
     fact = "今天喝了一直喝的蓝山咖啡，居然是甜的。"
     frame = new_frame("actuality_reflection", (fact,), ())
@@ -515,6 +579,35 @@ def test_actuality_life_units_are_preallocated_as_disclosed_hypothesis() -> None
     assert f"你提到：“{fact}”" in compiled.body
     assert compiled.body.count("表达范围：") == 1
     assert "其余是创作性推演，不作为这段经历的事实补充" in compiled.body
+
+
+def test_p2_server_selects_only_the_three_frozen_product_facts() -> None:
+    product = ProductFact(
+        sku="ZX-C218",
+        display_name="双面短外套",
+        facts={
+            "entity_kind": "apparel_product",
+            "category": "双面短外套",
+            "colors": ["炭灰纯色", "深绿细格纹"],
+            "both_sides_complete": True,
+        },
+        source_kind="synthetic_confirmed_product_record",
+    )
+    packet = build_product_fact_packet((product,))
+    blocks = immutable_product_fact_blocks(packet)
+    selected_ids = select_product_fact_block_ids(packet, limit=3)
+    selected = tuple(
+        block.canonical_text
+        for block_id in selected_ids
+        for block in blocks
+        if block.fact_block_id == block_id
+    )
+
+    assert selected == (
+        "ZX-C218 是一件双面短外套。",
+        "双面短外套有炭灰纯色、深绿细格纹这些已确认颜色。",
+        "双面短外套两面都以完整外观呈现。",
+    )
 
 
 @pytest.mark.parametrize(
@@ -610,7 +703,7 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
     assert "其他租户诱饵前情" not in prompt
 
 
-def test_product_resources_are_hidden_from_the_writer_prompt() -> None:
+def test_product_facts_are_hidden_while_registered_media_resource_is_bounded() -> None:
     product = ProductFact(
         sku="ZX-C218",
         display_name="双面短外套",
@@ -660,17 +753,6 @@ def test_product_resources_are_hidden_from_the_writer_prompt() -> None:
         ),
     )
 
-    compiler_texts = compiler_owned_media_unit_texts(
-        DeliveryCompileInput(
-            primary_product=request.primary_product,
-            media_format=request.media_format,
-            products=request.products,
-            production_conditions=request.brand.production_conditions,
-            allowed_resource_ids=context.resource_ids,
-            immutable_fact_blocks=context.product_fact_blocks,
-            trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
-        )
-    )
     prompt = DeepSeekGenerator(
         "https://example.invalid",
         "not-a-real-key",
@@ -678,7 +760,7 @@ def test_product_resources_are_hidden_from_the_writer_prompt() -> None:
     )._kernel_writer_prompt(
         request,
         skeleton,
-        compiler_texts,
+        {},
     )
 
     assert "ZX-C218" not in prompt
@@ -686,8 +768,61 @@ def test_product_resources_are_hidden_from_the_writer_prompt() -> None:
     assert "炭灰纯色" not in prompt
     assert "深绿细格纹" not in prompt
     assert "resource:product:" not in prompt
-    assert "resource:registered-product-" not in prompt
+    assert "resource:registered-product-1" in prompt
+    assert "不授权复述商品名、编号或属性" in prompt
     assert "本次已选商品" in prompt
+    assert "全部 Writer unit" in prompt
+    assert "不能成为 Writer 文字的主语、宾语或指代对象" in prompt
+    assert "媒体单元只能安排服务端事实原句和已登记资源怎样进入画面" in prompt
+
+
+def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
+    request = replace(
+        _generation_input(),
+        brand=replace(
+            _generation_input().brand,
+            account_name="折线衣间·总部穿衣编辑",
+            content_role_name="总部穿衣编辑",
+        ),
+        account_expression=AccountExpression(
+            UUID("83000000-0000-0000-0000-000000000020"),
+            3,
+            "从穿衣编辑的位置重新看熟悉事物",
+            "不把表达位置写成真实职业履历或机构事实。",
+            "陪正在重新选择日常节奏的人看清取舍。",
+            "穿衣选择、熟悉事物被重新看见的时刻。",
+            "一人一部手机，普通室内环境。",
+            False,
+        ),
+    )
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, kernel, {})
+
+    assert "本篇账号关联路径" in prompt
+    assert "从穿衣编辑的位置重新看熟悉事物" in prompt
+    assert "陪正在重新选择日常节奏的人看清取舍" in prompt
+    assert "为什么会说这段话" in prompt
+    assert "折线衣间" not in prompt
+
+    compiled = compile_delivery(
+        DeliveryCompileInput(
+            primary_product=request.primary_product,
+            media_format=request.media_format,
+            products=(),
+            production_conditions=request.brand.production_conditions,
+            allowed_resource_ids=_RESOURCES,
+        ),
+        kernel,
+    )
+    assert isinstance(compiled.semantic_contract, P3SemanticContract)
+    assert compiled.semantic_contract.brand_account_link == (
+        "看一次熟悉感被意外打断后，人会怎样重新注意日常。"
+    )
+    assert compiled.semantic_contract.brand_account_link in compiled.body
 
 
 def test_visual_styling_writer_receives_only_ordered_product_resource_aliases() -> None:
@@ -739,22 +874,11 @@ def test_visual_styling_writer_receives_only_ordered_product_resource_aliases() 
             limit=3,
         ),
     )
-    compiler_texts = compiler_owned_media_unit_texts(
-        DeliveryCompileInput(
-            primary_product=request.primary_product,
-            media_format=request.media_format,
-            products=request.products,
-            production_conditions=request.brand.production_conditions,
-            allowed_resource_ids=context.resource_ids,
-            immutable_fact_blocks=context.product_fact_blocks,
-            trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
-        )
-    )
     prompt = DeepSeekGenerator(
         "https://example.invalid",
         "not-a-real-key",
         "deepseek-test",
-    )._kernel_writer_prompt(request, skeleton, compiler_texts)
+    )._kernel_writer_prompt(request, skeleton, {})
 
     assert "ZX-C218" not in prompt
     assert "ZX-S104" not in prompt
@@ -765,7 +889,7 @@ def test_visual_styling_writer_receives_only_ordered_product_resource_aliases() 
     assert "第一件／第二件登记样衣" in prompt
 
 
-def test_product_media_units_are_server_owned_without_product_semantic_invention() -> None:
+def test_restricted_media_fallback_stays_available_outside_the_v3_main_path() -> None:
     request = DeliveryCompileInput(
         primary_product="visual_styling_story",
         media_format="video",
@@ -860,6 +984,169 @@ def test_deepseek_adapter_accepts_only_the_complete_media_native_unit_set(
     assert artifact.completion_snapshot_patch["delivery_compiler_version"] == DELIVERY_COMPILER_VERSION
     assert "第一篇：先允许沉默" in prompts[0]
     assert "不把任何一方写成反派" in prompts[0]
+
+
+def _write_gate_c_evidence_fixture(
+    tmp_path: Path,
+    *,
+    fact_boundary: str = "PASS",
+) -> Path:
+    root = tmp_path / "gate-c-evidence"
+    root.mkdir(mode=0o700, exist_ok=True)
+    artifacts: list[ArtifactEvidenceInput] = []
+    reviews: list[HumanReviewInput] = []
+    for card_id in ("P1", "P2", "P3", "P4", "P5", "series2", "series3"):
+        artifact = root / f"{card_id}-artifact.json"
+        artifact.write_text(
+            json.dumps(
+                {
+                    "outline": f"{card_id} 的自然标题",
+                    "body": (
+                        f"标题：{card_id} 的自然标题\n\n"
+                        "完整正文：服务端事实原句与一般判断各自保留边界。"
+                    ),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        artifact.chmod(0o600)
+        raw = root / f"{card_id}-raw-response.json"
+        raw.write_text(
+            json.dumps({"provider_response": "redacted-test-fixture"}),
+            encoding="utf-8",
+        )
+        raw.chmod(0o600)
+        criteria = {
+            criterion: "PASS"
+            for criterion in GATE_C_REVIEW_CRITERIA
+        }
+        if card_id == "P2":
+            criteria["fact_and_resource_boundary"] = fact_boundary
+        artifacts.append(
+            ArtifactEvidenceInput(
+                card_id,
+                artifact.name,
+                raw.name,
+            )
+        )
+        reviews.append(
+            HumanReviewInput(
+                card_id,
+                artifact.name,
+                "PASS",
+                criteria,
+                "测试夹具只验证摘要绑定。",
+            )
+        )
+    write_gate_c_evidence(
+        root,
+        implementation_sha="1" * 40,
+        model="deepseek-v4-flash",
+        temperature=0,
+        max_retries=0,
+        artifacts=tuple(artifacts),
+        reviews=tuple(reviews),
+    )
+    return root
+
+
+def test_gate_c_evidence_binds_file_sha_visible_digest_and_human_review(
+    tmp_path: Path,
+) -> None:
+    root = _write_gate_c_evidence_fixture(tmp_path)
+
+    verify_gate_c_evidence(root)
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    record = manifest["artifacts"][0]
+    artifact_path = root / record["artifact_file"]
+    assert record["artifact_sha256"] == sha256_file(artifact_path)
+    assert record["visible_digest"] == artifact_visible_digest(artifact_path)
+    assert (root / "SHA256SUMS").is_file()
+    assert (root.stat().st_mode & 0o777) == 0o700
+    assert all(
+        (path.stat().st_mode & 0o777) == 0o600
+        for path in root.iterdir()
+        if path.is_file()
+    )
+
+
+def test_gate_c_evidence_rejects_artifact_or_review_binding_tamper(
+    tmp_path: Path,
+) -> None:
+    root = _write_gate_c_evidence_fixture(tmp_path)
+    artifact = root / "P2-artifact.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "outline": "被篡改的标题",
+                "body": "被篡改的正文",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(EvidenceBindingError, match="artifact file SHA"):
+        verify_gate_c_evidence(root)
+
+
+def test_gate_c_evidence_rejects_human_review_digest_tamper(
+    tmp_path: Path,
+) -> None:
+    root = _write_gate_c_evidence_fixture(tmp_path)
+    review_path = root / "human-review.json"
+    review = json.loads(review_path.read_text(encoding="utf-8"))
+    review["reviews"][0]["visible_digest"] = "0" * 64
+    review_path.write_text(
+        json.dumps(review, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    sums_path = root / "SHA256SUMS"
+    sums_path.write_text(
+        "".join(
+            (
+                f"{sha256_file(review_path)}  human-review.json\n"
+                if line.endswith("  human-review.json")
+                else f"{line}\n"
+            )
+            for line in sums_path.read_text(encoding="utf-8").splitlines()
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        EvidenceBindingError,
+        match="human review is bound to another artifact",
+    ):
+        verify_gate_c_evidence(root)
+
+
+def test_gate_c_evidence_rejects_p2_with_unsupported_product_semantics(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        EvidenceBindingError,
+        match="human review criteria are incomplete",
+    ):
+        _write_gate_c_evidence_fixture(
+            tmp_path,
+            fact_boundary="FAIL",
+        )
+
+
+def test_gate_c_evidence_never_overwrites_an_existing_final_manifest(
+    tmp_path: Path,
+) -> None:
+    root = _write_gate_c_evidence_fixture(tmp_path)
+
+    with pytest.raises(
+        EvidenceBindingError,
+        match="evidence outputs already exist",
+    ):
+        _write_gate_c_evidence_fixture(tmp_path)
+
+    verify_gate_c_evidence(root)
 
 
 def test_stub_output_changes_with_direction_and_series_without_repeating_body() -> None:

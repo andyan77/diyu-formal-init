@@ -26,7 +26,6 @@ from src.shared.delivery_compiler import (
     DUAL_TRACK_DELIVERY_COMPILER_VERSION,
     DeliveryCompileInput,
     compile_delivery,
-    compiler_owned_media_unit_texts,
 )
 from src.shared.factual_basis import (
     FrozenFactRecord,
@@ -272,7 +271,7 @@ class DeterministicContentGenerator(ContentGenerator):
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product)
             if kernel_version == DUAL_TRACK_KERNEL_VERSION
-            else compiler_owned_media_unit_texts(delivery_input)
+            else {}
         )
         text_by_id = {
             "unit:title": title,
@@ -307,7 +306,6 @@ class DeterministicContentGenerator(ContentGenerator):
                     "text": text_by_id[unit.unit_id],
                 }
                 for unit in skeleton.writable_units
-                if unit.unit_id not in compiler_texts
             ]
         }
         kernel = parse_writer_kernel(
