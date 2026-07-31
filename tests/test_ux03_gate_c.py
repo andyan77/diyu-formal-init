@@ -2257,6 +2257,14 @@ def test_p2_server_selects_only_the_three_frozen_product_facts() -> None:
         "双面短外套两面都以完整外观呈现。",
     )
 
+    prefixed_name = replace(product, display_name="ZX-C218 双面短外套")
+    prefixed_packet = build_product_fact_packet((prefixed_name,))
+    display_fact = next(
+        item for item in prefixed_packet.facts if item.fact_key == "display_name"
+    )
+    assert display_fact.structured_value == "ZX-C218 双面短外套"
+    assert display_fact.canonical_text == "ZX-C218 是一件双面短外套。"
+
 
 def test_p2_formal_observable_and_colors_share_one_product_value_path() -> None:
     product = ProductFact(

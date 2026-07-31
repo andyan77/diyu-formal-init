@@ -274,11 +274,15 @@ def _product_packet_items(
         )
     ]
     if product.display_name:
+        display_descriptor = _display_descriptor(
+            product.sku,
+            product.display_name,
+        )
         specs.append(
             (
                 "display_name",
                 product.display_name,
-                f"{product.sku} 是一件{product.display_name}。",
+                f"{product.sku} 是一件{display_descriptor}。",
                 ("identity",),
             )
         )
@@ -390,6 +394,15 @@ def _product_packet_items(
         )
         for fact_key, structured_value, canonical_text, categories in specs
     )
+
+
+def _display_descriptor(sku: str, display_name: str) -> str:
+    suffix = display_name[len(sku) :] if display_name.startswith(sku) else ""
+    if suffix and (suffix[0].isspace() or suffix[0] in "-_·/"):
+        normalized = suffix.lstrip(" -_·/")
+        if normalized:
+            return normalized
+    return display_name
 
 
 def _packet_item_document(
