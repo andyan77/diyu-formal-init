@@ -52,7 +52,7 @@ DM01 接到 Gate B 正式商品版本、执行组织作用域和 13 条确定性
 V1→V2→历史 V1→当前 V2、复制及逐 SKU 守恒；该候选随后因 SKU 合同、finalize 异常边界、
 请求级 4xx 污染供应商状态和 core／provider 组合真值四个接缝被主控退回。
 
-最终前向实现 `28e19b0a93ec702062eb783fd08c76ff66d6bcea` 让正式 React 以稳定商品版本 ID 与
+前向实现 `28e19b0a93ec702062eb783fd08c76ff66d6bcea` 让正式 React 以稳定商品版本 ID 与
 数量选择 DM01 商品，服务端保留 `abc-123`、`ABC123`、`123456`、`款号一`、`GD-UP-01`
 原值并重新核验当前版本和执行组织。V1／V2 finalize 的保存、指针和正式回读置于同一事务／
 异常边界，连接中断遗留由 900 秒同作用域租约回收；错误文案不再冒充模型失败。`/status`
@@ -61,7 +61,12 @@ V1→V2→历史 V1→当前 V2、复制及逐 SKU 守恒；该候选随后因 S
 第二次终审遗漏也已关闭：硬约束与修订只按冻结 SKU 原值／完整名称唯一绑定；稳定请求级
 code/type 先于 400／403／404；API error 只显示状态无法确认，只有明确 core unavailable 才显示
 无法接单。Golden/OpenAPI `529 passed, 2 skipped`、前端四门、显式三视口 Chrome、三项
-mutation 和两审通过。UX-03 现为 `REVIEW`，Gate A—D 均已完成，64 项真值为
+mutation 和两审通过。主控其后独立复现 DM01 冻结商品引用仍接受近邻子串；最终本地实现
+`b5f568820a23354761f6618d6076c8c81d731e7d` 已把硬约束与修订目标收敛为有明确自然语法边界的
+冻结 SKU 原值或完整商品名称，casefold 只做唯一字面比较，近邻 SKU、名称扩展、未知和歧义
+引用均在 task／run／version 前自然澄清。定向 `49 passed`、Golden/OpenAPI
+`544 passed, 2 skipped`、Ruff、mypy 和一份定向审查通过；正式前端和 API 契约无差异，
+复用 `28e19b0…` 已通过的前端与 Chrome 证据。UX-03 现为 `REVIEW`，Gate A—D 均已完成，64 项真值为
 `58/0/0/6/0`；仍未
 push、CI、部署或连接生产。
 
