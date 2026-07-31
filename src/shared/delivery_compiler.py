@@ -81,6 +81,11 @@ _PHRASES: dict[str, str] = {
     "phrase:artifact-general": "以下是围绕这个主题的创作表达，不对应真实人物或经历。",
     "phrase:artifact-user-fact": ("以下内容保留你提供的真实片段；其余为创作性观察，不补充现实细节。"),
     "phrase:artifact-confirmed-fact": ("以下只引用已确认的信息；其余为一般观察，不增加新的现实主张。"),
+    "phrase:artifact-recommendation": "以下是可选择的创作建议，不表示已经执行。",
+    "phrase:artifact-user-fact-recommendation": ("以下内容保留你提供的真实片段；其余为可选择建议，不表示已经执行。"),
+    "phrase:artifact-confirmed-fact-recommendation": (
+        "以下只引用已确认的信息；其余为可选择建议，不新增商品或现实事实。"
+    ),
     "phrase:artifact-hypothesis": "下面的片段是假设，不代表真实发生。",
     "phrase:artifact-user-fact-hypothesis": ("以下保留你提供的真实片段；其余是创作性推演，不作为这段经历的事实补充。"),
     "phrase:artifact-dramatization": "以下内容包含情景演绎，不对应真实人物或经历。",
@@ -649,6 +654,12 @@ def _artifact_scope_source(kernel: CreativeKernelV1) -> str:
         return "phrase:artifact-user-fact-drama" if has_user_fact else "phrase:artifact-dramatization"
     if "hypothesis" in body_modes:
         return "phrase:artifact-user-fact-hypothesis" if has_user_fact else "phrase:artifact-hypothesis"
+    if "recommendation" in body_modes:
+        if has_user_fact:
+            return "phrase:artifact-user-fact-recommendation"
+        if has_confirmed_fact:
+            return "phrase:artifact-confirmed-fact-recommendation"
+        return "phrase:artifact-recommendation"
     if has_user_fact:
         return "phrase:artifact-user-fact"
     if has_confirmed_fact:

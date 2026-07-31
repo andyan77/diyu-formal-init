@@ -398,6 +398,7 @@ def _filled_kernel(request: GenerationInput) -> object:
         allowed_resource_ids=tuple(sorted(_RESOURCES)),
         media_format=request.media_format,
         kernel_version=KERNEL_VERSION,
+        primary_product=request.primary_product,
     )
     compiler_texts = compiler_owned_media_unit_texts(
         DeliveryCompileInput(
@@ -476,7 +477,7 @@ def test_media_native_units_compile_one_scope_and_distinct_platform_parts() -> N
     assert_content_complete(artifact)
 
 
-def test_actuality_creative_units_are_preallocated_as_scoped_observation() -> None:
+def test_actuality_life_units_are_preallocated_as_disclosed_hypothesis() -> None:
     fact = "今天喝了一直喝的蓝山咖啡，居然是甜的。"
     frame = new_frame("actuality_reflection", (fact,), ())
     request = replace(
@@ -493,7 +494,7 @@ def test_actuality_creative_units_are_preallocated_as_scoped_observation() -> No
     )
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
 
-    assert kernel.unit("unit:body").mode == "general_observation"
+    assert kernel.unit("unit:body").mode == "hypothesis"
     compiled = compile_delivery(
         DeliveryCompileInput(
             primary_product=request.primary_product,
@@ -513,7 +514,7 @@ def test_actuality_creative_units_are_preallocated_as_scoped_observation() -> No
 
     assert f"你提到：“{fact}”" in compiled.body
     assert compiled.body.count("表达范围：") == 1
-    assert "其余为创作性观察，不补充现实细节" in compiled.body
+    assert "其余是创作性推演，不作为这段经历的事实补充" in compiled.body
 
 
 @pytest.mark.parametrize(
