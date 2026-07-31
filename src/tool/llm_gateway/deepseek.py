@@ -54,6 +54,7 @@ from src.shared.creative_kernel import (
     kernel_digest,
     kernel_document,
     parse_writer_kernel,
+    repair_kernel_units,
     select_kernel_program,
 )
 from src.shared.creative_plan import (
@@ -708,11 +709,6 @@ class DeepSeekGenerator(ContentGenerator):
                 compiler_owned_text_by_id=compiler_texts,
                 media_format=request.media_format,
             )
-            self._validate_product_fact_selection(
-                request,
-                context,
-                kernel,
-            )
         except (
             KeyError,
             IndexError,
@@ -722,6 +718,73 @@ class DeepSeekGenerator(ContentGenerator):
         ) as exc:
             raise GenerationFailed("CreativeKernelV1 Writer 返回格式不完整") from exc
         receipts: tuple[FactRepairReceipt, ...] = ()
+        affected_product_units = self._product_fact_repetition_units(
+            context,
+            kernel,
+        )
+        if affected_product_units:
+            repair_payload, repair_retries = self._request(
+                "你是笛语 CreativeKernel Writer。只返回一次受影响 unit 修复 JSON，不展示推理或事实正文。",
+                self._product_fact_repair_prompt(
+                    kernel=kernel,
+                    affected=affected_product_units,
+                    trusted_contracts=unit_contracts_v2(
+                        kernel,
+                        frame,
+                    ),
+                    expression_controls=(
+                        self._deidentified_writer_controls(request)
+                    ),
+                    platform=request.target,
+                    media_format=request.media_format,
+                ),
+                4096,
+            )
+            provider_payloads.append(repair_payload)
+            retries += repair_retries
+            try:
+                kernel = repair_kernel_units(
+                    kernel=kernel,
+                    affected_unit_ids=affected_product_units,
+                    raw=json.loads(
+                        self._json_content(
+                            str(
+                                repair_payload["choices"][0]["message"][
+                                    "content"
+                                ]
+                            )
+                        )
+                    ),
+                    allowed_claim_ids=context.product_fact_packet.fact_ids,
+                    media_format=request.media_format,
+                )
+            except (
+                KeyError,
+                IndexError,
+                TypeError,
+                ValueError,
+                json.JSONDecodeError,
+            ) as exc:
+                raise GenerationFailed(
+                    "CreativeKernelV1 商品事实 affected-unit 修复格式不完整"
+                ) from exc
+            receipts = tuple(
+                FactRepairReceipt(
+                    field=unit_id,
+                    fragments=("server_selected_product_fact_literal",),
+                )
+                for unit_id in sorted(affected_product_units)
+            )
+        try:
+            self._validate_product_fact_selection(
+                request,
+                context,
+                kernel,
+            )
+        except (KeyError, ValueError) as exc:
+            raise GenerationFailed(
+                "CreativeKernelV1 商品事实边界无法在一次 affected-unit 修复内满足"
+            ) from exc
         if request.revision_instruction and request.prior_creative_kernel:
             before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
             after = tuple(unit.text for unit in kernel.writable_units)
@@ -1151,6 +1214,23 @@ class DeepSeekGenerator(ContentGenerator):
                 continue
             if product_fact_literal_spans(packet, unit.text):
                 raise ValueError("writer repeated an immutable product fact")
+
+    @staticmethod
+    def _product_fact_repetition_units(
+        context: BoundaryContext,
+        kernel: CreativeKernelV1,
+    ) -> frozenset[str]:
+        """Locate only exact current-packet fact repetitions for one bounded repair."""
+
+        packet = context.product_fact_packet
+        if not packet.facts:
+            return frozenset()
+        return frozenset(
+            unit.unit_id
+            for unit in kernel.writable_units
+            if compiler_owned_unit_source(unit.unit_id, unit.text) is None
+            and product_fact_literal_spans(packet, unit.text)
+        )
 
     def _kernel_writer_prompt(
         self,

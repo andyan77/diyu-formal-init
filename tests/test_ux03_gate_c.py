@@ -104,6 +104,7 @@ from src.shared.types import (
     ConversationInput,
     CreativeDirection,
     DirectionSelection,
+    FactRepairReceipt,
     GeneratedArtifact,
     GenerationInput,
     GraphicProductionBundle,
@@ -2451,6 +2452,121 @@ def test_p2_rejects_identity_only_facts_instead_of_emitting_generic_advice() -> 
             primary_product="product_truth",
             products=(product,),
         )
+
+
+def test_p2_exact_fact_repetition_gets_one_bounded_affected_unit_repair(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    product = ProductFact(
+        sku="ZX-C218",
+        display_name="双面短外套",
+        facts={
+            "entity_kind": "apparel_product",
+            "category": "双面短外套",
+            "colors": ["炭灰纯色", "深绿细格纹"],
+            "both_sides_complete": True,
+        },
+        source_kind="synthetic_confirmed_product_record",
+    )
+    base_request = _generation_input()
+    assert base_request.media_capability_envelope is not None
+    value_contract = build_product_value_contract(
+        primary_product="product_truth",
+        products=(product,),
+    )
+    request = replace(
+        base_request,
+        weak_seed="ZX-C218，帮我解释这个商品。",
+        primary_product="product_truth",
+        products=(product,),
+        narrative_frame=new_frame(
+            "general_observation",
+            (),
+            tuple(
+                item.fact_id
+                for item in build_product_fact_packet((product,)).facts
+            ),
+        ),
+        creative_plan=build_creative_plan(
+            topic_spans=("ZX-C218，帮我解释这个商品",),
+            primary_value="product_truth",
+            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            mechanism_id=None,
+            target_shape="小红书图文完整成品",
+        ),
+        media_program=select_media_program(
+            primary_product="product_truth",
+            envelope=base_request.media_capability_envelope,
+            mechanism_id=None,
+            series_position=None,
+            fact_count=3,
+        ),
+        product_value_contract=value_contract,
+    )
+    calls: list[str] = []
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        del self, max_tokens, thinking_disabled, timeout_seconds
+        calls.append(system)
+        if len(calls) == 1:
+            content = {
+                "units": [
+                    {"unit_id": "unit:title", "text": "这次先看哪一面"},
+                    {
+                        "unit_id": "unit:natural-guide",
+                        "text": "把注意力留给这次真正看重的差异。",
+                    },
+                    {
+                        "unit_id": "unit:body",
+                        "text": "先确定这次更想突出炭灰纯色还是深绿细格纹，再保留自己的判断。",
+                    },
+                    {
+                        "unit_id": "unit:release-caption",
+                        "text": "这次你更想让哪一种选择先被看见？",
+                    },
+                ]
+            }
+        else:
+            assert "你看不到、也不需要复述" in prompt
+            content = {
+                "units": [
+                    {
+                        "unit_id": "unit:body",
+                        "text": "先确定这次最想保留的可见重心，再排除与当前选择无关的干扰。",
+                        "claim_refs": [],
+                    }
+                ]
+            }
+        return {
+            "choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]
+        }, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    artifact = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    ).generate(request)
+
+    assert len(calls) == 2
+    assert artifact.retry_count == 0
+    assert artifact.fact_repair_receipts == (
+        FactRepairReceipt(
+            field="unit:body",
+            fragments=("server_selected_product_fact_literal",),
+        ),
+    )
+    assert "炭灰纯色" in artifact.body
+    assert "深绿细格纹" in artifact.body
+    assert artifact.body.count("炭灰纯色") == 2
 
 
 def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
