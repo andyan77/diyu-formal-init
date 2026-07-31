@@ -18,15 +18,18 @@ from urllib.parse import urlsplit
 from urllib.request import urlopen
 from uuid import UUID, uuid4
 
+import httpx
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Response
+from psycopg import sql
 
 from src.brain.display_contract import assert_display_complete
 from src.brain.display_service import DisplayService
 from src.brain.dm01_display_compiler import DM01DisplayCompiler
 from src.gateway.api.app import create_app
+from src.gateway.api.contracts import CreateDisplayRequest
 from src.gateway.api.settings import Settings
 from src.infrastructure.display_repository import PostgresDisplayRepository
 from src.infrastructure.dm01_store_seed import DM01StoreSeedWriter
@@ -327,6 +330,58 @@ def _without_rule_activation(database_url: str, asset_id: str) -> Iterator[None]
             )
 
 
+@contextmanager
+def _reject_display_finalize(database_url: str, failure: str) -> Iterator[None]:
+    suffix = uuid4().hex
+    function_name = f"ux03_gate_d_fail_{suffix}"
+    trigger_name = f"ux03_gate_d_trigger_{suffix}"
+    if failure == "version_insert":
+        table = "display_artifact_versions"
+        trigger_clause = sql.SQL("BEFORE INSERT")
+        defer_clause = sql.SQL("")
+    elif failure == "artifact_pointer":
+        table = "display_artifacts"
+        trigger_clause = sql.SQL("BEFORE UPDATE OF current_version")
+        defer_clause = sql.SQL("")
+    elif failure == "commit":
+        table = "display_artifact_versions"
+        trigger_clause = sql.SQL("AFTER INSERT")
+        defer_clause = sql.SQL("DEFERRABLE INITIALLY DEFERRED")
+    else:
+        raise ValueError("unknown display finalize failure")
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            sql.SQL(
+                "CREATE FUNCTION {}() RETURNS trigger LANGUAGE plpgsql "
+                "AS 'BEGIN RAISE EXCEPTION ''synthetic display finalize failure''; END'"
+            ).format(sql.Identifier(function_name))
+        )
+        constraint = sql.SQL("CONSTRAINT ") if failure == "commit" else sql.SQL("")
+        cursor.execute(
+            sql.SQL("CREATE {}TRIGGER {} {} ON {} {} FOR EACH ROW EXECUTE FUNCTION {}()").format(
+                constraint,
+                sql.Identifier(trigger_name),
+                trigger_clause,
+                sql.Identifier(table),
+                defer_clause,
+                sql.Identifier(function_name),
+            )
+        )
+    try:
+        yield
+    finally:
+        with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                sql.SQL("DROP TRIGGER IF EXISTS {} ON {}").format(
+                    sql.Identifier(trigger_name),
+                    sql.Identifier(table),
+                )
+            )
+            cursor.execute(
+                sql.SQL("DROP FUNCTION IF EXISTS {}()").format(sql.Identifier(function_name))
+            )
+
+
 def test_public_status_requires_a_fresh_real_provider_observation() -> None:
     now = datetime(2026, 7, 31, 12, tzinfo=timezone.utc)
     unknown = public_service_status(core_ready=True, provider_observation=None, now=now)
@@ -358,6 +413,39 @@ def test_public_status_requires_a_fresh_real_provider_observation() -> None:
     assert degraded["content_generation"]["state"] == "degraded"  # type: ignore[index]
     assert degraded["text_display"] == {"state": "available"}
 
+    core_failure = public_service_status(
+        core_ready=False,
+        provider_observation=ProviderObservation("available", now),
+        now=now,
+    )
+    assert core_failure["core"] == {"state": "unavailable"}
+    assert core_failure["content_generation"]["state"] == "unavailable"  # type: ignore[index]
+    assert core_failure["text_display"] == {"state": "unavailable"}
+
+    future = public_service_status(
+        core_ready=True,
+        provider_observation=ProviderObservation("available", now + timedelta(seconds=1)),
+        now=now,
+    )
+    assert future["content_generation"]["state"] == "unknown"  # type: ignore[index]
+
+
+def test_display_request_accepts_structured_current_product_versions() -> None:
+    first_version, second_version = uuid4(), uuid4()
+    request = CreateDisplayRequest.model_validate(
+        {
+            "inventory_text": "本次按已选商品生成。",
+            "products": [
+                {"product_version_id": str(first_version), "quantity": 2},
+                {"product_version_id": str(second_version), "quantity": 1},
+            ],
+        }
+    )
+    assert [(item.product_version_id, item.quantity) for item in request.products] == [
+        (first_version, 2),
+        (second_version, 1),
+    ]
+
 
 def test_provider_tracker_starts_unknown_and_never_carries_sensitive_details() -> None:
     tracker = ProviderStatusTracker()
@@ -387,10 +475,34 @@ def test_public_status_api_is_observational_and_does_not_probe_a_model(
     app = create_app(settings)
     with TestClient(app) as client:
         response = client.get("/api/v1/status")
+        page = client.get("/status")
     assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
     assert response.json()["core"] == {"state": "available"}
     assert response.json()["content_generation"]["state"] == "unknown"
     assert response.json()["text_display"] == {"state": "available"}
+    assert page.headers["cache-control"] == "no-store"
+    assert "核心服务" in page.text and "内容生成" in page.text and "纯文字陈列参考方案" in page.text
+    assert "笛语当前可以使用" not in page.text
+
+
+def test_core_failure_dominates_api_and_no_script_status_projection(
+    app_database_url: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.gateway.api.app.S3ObjectStore.is_ready", lambda _: False)
+    app = create_app(_production_settings(app_database_url, tmp_path / "unavailable-status"))
+    app.state.provider_status.record("available")
+    with TestClient(app) as client:
+        contract = client.get("/api/v1/status")
+        page = client.get("/status")
+    assert contract.json()["core"] == {"state": "unavailable"}
+    assert contract.json()["content_generation"]["state"] == "unavailable"
+    assert contract.json()["text_display"] == {"state": "unavailable"}
+    assert page.headers["cache-control"] == "no-store"
+    assert "笛语暂时无法接单" in page.text
+    assert page.text.count("暂时不可用") >= 3
 
 
 def test_provider_429_is_degraded_without_affecting_core_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -423,6 +535,163 @@ def test_provider_429_is_degraded_without_affecting_core_readiness(monkeypatch: 
     assert status["core"] == {"state": "available"}
     assert status["content_generation"]["state"] == "degraded"  # type: ignore[index]
     assert status["text_display"] == {"state": "available"}
+
+
+@pytest.mark.parametrize(
+    ("error_code", "error_type"),
+    (
+        ("content_filter", "invalid_request_error"),
+        ("context_length_exceeded", "invalid_request_error"),
+        ("invalid_max_tokens", "invalid_request_error"),
+        ("invalid_parameter", "invalid_request_error"),
+        ("invalid_response_format", "invalid_request_error"),
+    ),
+)
+def test_request_scoped_provider_4xx_does_not_pollute_global_observation(
+    monkeypatch: pytest.MonkeyPatch,
+    error_code: str,
+    error_type: str,
+) -> None:
+    class FakeClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        def __enter__(self) -> FakeClient:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            del args
+
+        def post(self, *args: object, **kwargs: object) -> Response:
+            del args, kwargs
+            return Response(
+                400,
+                json={
+                    "error": {
+                        "code": error_code,
+                        "type": error_type,
+                        "message": "request rejected",
+                    }
+                },
+            )
+
+    monkeypatch.setattr("src.tool.llm_gateway.deepseek.httpx.Client", FakeClient)
+    tracker = ProviderStatusTracker()
+    generator = DeepSeekGenerator(
+        "https://example.invalid",
+        "test-placeholder",
+        "test-model",
+        max_retries=0,
+        status_tracker=tracker,
+    )
+    with pytest.raises(GenerationFailed):
+        generator._request("system", "prompt", 20)
+    assert tracker.snapshot() is None
+
+    tracker.record("available")
+    before = tracker.snapshot()
+    with pytest.raises(GenerationFailed):
+        generator._request("system", "prompt", 20)
+    assert tracker.snapshot() == before
+
+
+@pytest.mark.parametrize(
+    ("status_code", "error_code", "expected"),
+    (
+        (401, "invalid_api_key", "unavailable"),
+        (403, "permission_denied", "unavailable"),
+        (404, "model_not_found", "unavailable"),
+        (429, "rate_limit_exceeded", "degraded"),
+        (503, "provider_unavailable", "unavailable"),
+    ),
+)
+def test_provider_availability_errors_update_only_the_normalized_state(
+    monkeypatch: pytest.MonkeyPatch,
+    status_code: int,
+    error_code: str,
+    expected: str,
+) -> None:
+    class FakeClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        def __enter__(self) -> FakeClient:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            del args
+
+        def post(self, *args: object, **kwargs: object) -> Response:
+            del args, kwargs
+            return Response(
+                status_code,
+                json={"error": {"code": error_code, "type": "provider_error"}},
+            )
+
+    monkeypatch.setattr("src.tool.llm_gateway.deepseek.httpx.Client", FakeClient)
+    tracker = ProviderStatusTracker()
+    generator = DeepSeekGenerator(
+        "https://example.invalid",
+        "test-placeholder",
+        "test-model",
+        max_retries=0,
+        status_tracker=tracker,
+    )
+    with pytest.raises(GenerationFailed):
+        generator._request("system", "prompt", 20)
+    observation = tracker.snapshot()
+    assert observation is not None and observation.state == expected
+
+
+def test_provider_transport_failure_and_success_update_availability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class TransportFailureClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        def __enter__(self) -> TransportFailureClient:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            del args
+
+        def post(self, *args: object, **kwargs: object) -> Response:
+            del args, kwargs
+            raise httpx.ConnectError("synthetic transport failure")
+
+    tracker = ProviderStatusTracker()
+    generator = DeepSeekGenerator(
+        "https://example.invalid",
+        "test-placeholder",
+        "test-model",
+        max_retries=0,
+        status_tracker=tracker,
+    )
+    monkeypatch.setattr("src.tool.llm_gateway.deepseek.httpx.Client", TransportFailureClient)
+    with pytest.raises(GenerationFailed):
+        generator._request("system", "prompt", 20)
+    failed = tracker.snapshot()
+    assert failed is not None and failed.state == "unavailable"
+
+    class SuccessfulClient:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            del args, kwargs
+
+        def __enter__(self) -> SuccessfulClient:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            del args
+
+        def post(self, *args: object, **kwargs: object) -> Response:
+            del args, kwargs
+            return Response(200, json={"choices": []})
+
+    monkeypatch.setattr("src.tool.llm_gateway.deepseek.httpx.Client", SuccessfulClient)
+    generator._request("system", "prompt", 20)
+    succeeded = tracker.snapshot()
+    assert succeeded is not None and succeeded.state == "available"
 
 
 def test_health_ready_does_not_depend_on_provider_observation(
@@ -611,12 +880,15 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             )
             assert member.status_code == 201, member.text
             product_payloads = (
-                ("GD-UP-01", "Gate D 上装", "upper"),
-                ("GD-LOW-01", "Gate D 下装", "lower"),
-                ("GD-PENDING-01", "资料待补商品", None),
+                ("abc-123", "小写编号商品", "upper", 2),
+                ("ABC123", "无连字符字母商品", "lower", 2),
+                ("123456", "纯数字编号商品", "upper", 1),
+                ("款号一", "中文编号商品", "lower", 1),
+                ("GD-UP-01", "既有编号商品", "upper", 2),
+                ("GD-PENDING-01", "资料待补商品", None, 1),
             )
             products: list[dict[str, object]] = []
-            for sku, name, family in product_payloads:
+            for sku, name, family, _ in product_payloads:
                 response = admin.put(
                     "/api/v1/tenant-management/brand-products",
                     json={
@@ -730,29 +1002,96 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             assert user.get("/display").status_code == 200
             visible = user.get("/api/v1/display/products")
             assert visible.status_code == 200
-            assert {item["sku"] for item in visible.json()} == {sku for sku, _, _ in product_payloads}
+            assert {item["sku"] for item in visible.json()} == {sku for sku, _, _, _ in product_payloads}
+            visible_by_sku = {str(item["sku"]): item for item in visible.json()}
 
             before = _counts(app_database_url, tenant_id)
-            inactive = user.post("/api/v1/display", json={"inventory_text": "GD-INACTIVE-01 1 件。"})
+            inactive = user.post(
+                "/api/v1/display",
+                json={
+                    "products": [
+                        {
+                            "product_version_id": inactive_product.json()["current_version_id"],
+                            "quantity": 1,
+                        }
+                    ]
+                },
+            )
             assert inactive.status_code == 422
             assert _counts(app_database_url, tenant_id) == before
-            sibling = user.post("/api/v1/display", json={"inventory_text": "GD-SIBLING-01 1 件。"})
+            sibling = user.post(
+                "/api/v1/display",
+                json={
+                    "products": [
+                        {
+                            "product_version_id": sibling_product.json()["current_version_id"],
+                            "quantity": 1,
+                        }
+                    ]
+                },
+            )
             assert sibling.status_code == 422
             assert _counts(app_database_url, tenant_id) == before
-            missing = user.post("/api/v1/display", json={"inventory_text": "UNKNOWN-SKU 1 件。"})
+            missing = user.post(
+                "/api/v1/display",
+                json={"products": [{"product_version_id": str(uuid4()), "quantity": 1}]},
+            )
             assert missing.status_code == 422
             assert _counts(app_database_url, tenant_id) == before
+            duplicate = user.post(
+                "/api/v1/display",
+                json={
+                    "products": [
+                        {
+                            "product_version_id": visible_by_sku["abc-123"]["product_version_id"],
+                            "quantity": 1,
+                        },
+                        {
+                            "product_version_id": visible_by_sku["abc-123"]["product_version_id"],
+                            "quantity": 2,
+                        },
+                    ]
+                },
+            )
+            assert duplicate.status_code == 422
+            zero_quantity = user.post(
+                "/api/v1/display",
+                json={
+                    "products": [
+                        {
+                            "product_version_id": visible_by_sku["abc-123"]["product_version_id"],
+                            "quantity": 0,
+                        }
+                    ]
+                },
+            )
+            assert zero_quantity.status_code == 422
+            assert _counts(app_database_url, tenant_id) == before
 
-            inventory = "GD-UP-01 3 件、GD-LOW-01 3 件、GD-PENDING-01 2 件。"
+            structured_inventory = [
+                {
+                    "product_version_id": visible_by_sku[sku]["product_version_id"],
+                    "quantity": quantity,
+                }
+                for sku, _, _, quantity in product_payloads
+            ]
+            inventory = "、".join(f"{sku} {quantity} 件" for sku, _, _, quantity in product_payloads) + "。"
             with _without_rule_activation(migrator_database_url, "G-TASK-003"):
-                missing_rule = user.post("/api/v1/display", json={"inventory_text": inventory})
+                missing_rule = user.post(
+                    "/api/v1/display",
+                    json={"inventory_text": "", "products": structured_inventory},
+                )
                 assert missing_rule.status_code == 422
                 assert _counts(app_database_url, tenant_id) == before
-            v1_response = user.post("/api/v1/display", json={"inventory_text": inventory})
+            v1_response = user.post(
+                "/api/v1/display",
+                json={"inventory_text": "", "products": structured_inventory},
+            )
             assert v1_response.status_code == 200, v1_response.text
             v1 = v1_response.json()
             assert _counts(app_database_url, tenant_id)[:3] == (before[0] + 1, before[1] + 1, before[2] + 1)
             assert "资料待补商品" in v1["body"] and "只计入库存对账" in v1["body"]
+            assert all(sku in v1["body"] for sku, _, _, _ in product_payloads)
             assert "AIGC" not in v1["body"] and "示意图" not in v1["body"]
 
             with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
@@ -771,7 +1110,10 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             assert run is not None and plan_row is not None
             assert run[3] is None and run[4] == "dm01-rule-compiler-v1"
             assert len(run[2]) == 11
-            assert len(run[1]["product_snapshots"]) == 3
+            assert len(run[1]["product_snapshots"]) == len(product_payloads)
+            assert [item["sku"] for item in run[1]["product_snapshots"]] == [
+                sku for sku, _, _, _ in product_payloads
+            ]
             assert len(run[1]["rule_bundle"]["revision_assets"]) == 13
             assert all(item["snapshot_digest"] for item in run[1]["product_snapshots"])
             assert plan_row[0]["artifact_audit"]["artifact_digest"]
@@ -781,7 +1123,7 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                 changed_product = current_admin.put(
                     "/api/v1/tenant-management/brand-products",
                     json={
-                        "sku": "GD-UP-01",
+                            "sku": "abc-123",
                         "display_name": "后来改动的商品名称",
                         "category": "服装",
                         "colors": [],
@@ -799,6 +1141,21 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                 )
                 assert changed_product.status_code == 200
 
+            old_version_before = _counts(app_database_url, tenant_id)
+            old_version = user.post(
+                "/api/v1/display",
+                json={
+                    "products": [
+                        {
+                            "product_version_id": visible_by_sku["abc-123"]["product_version_id"],
+                            "quantity": 1,
+                        }
+                    ]
+                },
+            )
+            assert old_version.status_code == 422
+            assert _counts(app_database_url, tenant_id) == old_version_before
+
             vague_before = _counts(app_database_url, tenant_id)
             vague = user.post(
                 f"/api/v1/display-tasks/{v1['task_id']}/revisions",
@@ -810,13 +1167,13 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             with _without_rule_activation(migrator_database_url, "G-REV-003"):
                 v2_response = user.post(
                     f"/api/v1/display-tasks/{v1['task_id']}/revisions",
-                    json={"feedback": "右侧上杆 GD-UP-01 太挤，请减少一件；其他内容不变。"},
+                        json={"feedback": "右侧上杆 abc-123 太挤，请减少一件；其他内容不变。"},
                 )
             assert v2_response.status_code == 201, v2_response.text
             v2 = v2_response.json()
             assert v2["version"] == 2
             assert "减少 1 件" in v2["body"]
-            assert "Gate D 上装" in v2["body"] and "后来改动的商品名称" not in v2["body"]
+            assert "小写编号商品" in v2["body"] and "后来改动的商品名称" not in v2["body"]
             assert _counts(app_database_url, tenant_id)[:3] == (before[0] + 1, before[1] + 2, before[2] + 2)
             with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
                 cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant_id),))
@@ -906,8 +1263,8 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                 restored_product = current_admin.put(
                     "/api/v1/tenant-management/brand-products",
                     json={
-                        "sku": "GD-UP-01",
-                        "display_name": "Gate D 上装（当前新任务）",
+                        "sku": "abc-123",
+                        "display_name": "小写编号商品（当前新任务）",
                         "category": "服装",
                         "colors": [],
                         "material_or_structure": "",
@@ -945,6 +1302,114 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                     "浏览器边界",
                 ]
 
+            current_structured_inventory = tuple(
+                (
+                    UUID(
+                        str(
+                            restored_product.json()["current_version_id"]
+                            if sku == "abc-123"
+                            else visible_by_sku[sku]["product_version_id"]
+                        )
+                    ),
+                    quantity,
+                )
+                for sku, _, _, quantity in product_payloads
+            )
+            display_scope = DisplayScope(
+                tenant_id,
+                UUID(str(member.json()["user_id"])),
+                brand_id,
+                UUID(str(store["id"])),
+            )
+
+            for finalize_failure in ("version_insert", "commit"):
+                finalize_before = _counts(app_database_url, tenant_id)
+                with (
+                    _reject_display_finalize(migrator_database_url, finalize_failure),
+                    pytest.raises(GenerationFailed, match="纯文字方案没有生成完成"),
+                ):
+                    DisplayService(
+                        PostgresDisplayRepository(app_database_url),
+                        DM01DisplayCompiler(),
+                    ).create(display_scope, "", current_structured_inventory)
+                finalize_after = _counts(app_database_url, tenant_id)
+                assert finalize_after == (
+                    finalize_before[0] + 1,
+                    finalize_before[1] + 1,
+                    finalize_before[2],
+                    finalize_before[3] + 1,
+                    0,
+                )
+
+            revision_service = DisplayService(
+                PostgresDisplayRepository(app_database_url),
+                DM01DisplayCompiler(),
+            )
+            revision_base = revision_service.create(
+                display_scope,
+                "",
+                current_structured_inventory,
+            )
+            revision_failure_before = _counts(app_database_url, tenant_id)
+            with (
+                _reject_display_finalize(migrator_database_url, "artifact_pointer"),
+                pytest.raises(GenerationFailed, match="纯文字方案没有生成完成"),
+            ):
+                revision_service.revise(
+                    display_scope,
+                    UUID(str(revision_base["task_id"])),
+                    "右侧上杆 abc-123 太挤，请减少一件；其他内容不变。",
+                )
+            revision_failure_after = _counts(app_database_url, tenant_id)
+            assert revision_failure_after == (
+                revision_failure_before[0],
+                revision_failure_before[1] + 1,
+                revision_failure_before[2],
+                revision_failure_before[3] + 1,
+                0,
+            )
+
+            lost_repository = PostgresDisplayRepository(app_database_url)
+
+            def lost_complete(*args: object, **kwargs: object) -> dict[str, object]:
+                del args, kwargs
+                raise psycopg.OperationalError("synthetic connection lost during finalize")
+
+            def lost_fail(*args: object, **kwargs: object) -> None:
+                del args, kwargs
+                raise psycopg.OperationalError("synthetic connection unavailable")
+
+            stale_before = _counts(app_database_url, tenant_id)
+            with pytest.MonkeyPatch.context() as patcher:
+                patcher.setattr(lost_repository, "complete_run", lost_complete)
+                patcher.setattr(lost_repository, "fail_run", lost_fail)
+                with pytest.raises(GenerationFailed, match="纯文字方案没有生成完成"):
+                    DisplayService(lost_repository, DM01DisplayCompiler()).create(
+                        display_scope,
+                        "",
+                        current_structured_inventory,
+                    )
+            stale_pending = _counts(app_database_url, tenant_id)
+            assert stale_pending == (
+                stale_before[0] + 1,
+                stale_before[1] + 1,
+                stale_before[2],
+                stale_before[3],
+                stale_before[4] + 1,
+            )
+            with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE display_generation_runs SET started_at=now()-interval '16 minutes' "
+                    "WHERE tenant_id=%s AND status='running'",
+                    (tenant_id,),
+                )
+                assert cursor.rowcount == 1
+            assert PostgresDisplayRepository(app_database_url).recover_stale_runs(display_scope, 900) == 1
+            stale_recovered = _counts(app_database_url, tenant_id)
+            assert stale_recovered[2] == stale_before[2]
+            assert stale_recovered[3] == stale_before[3] + 1
+            assert stale_recovered[4] == 0
+
             class FailingCompiler(DM01DisplayCompiler):
                 def generate(self, request: DisplayGenerationInput):  # type: ignore[no-untyped-def]
                     del request
@@ -957,13 +1422,9 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             )
             with pytest.raises(GenerationFailed):
                 failing_service.create(
-                    DisplayScope(
-                        tenant_id,
-                        UUID(str(member.json()["user_id"])),
-                        brand_id,
-                        UUID(str(store["id"])),
-                    ),
-                    inventory,
+                    display_scope,
+                    "",
+                    current_structured_inventory,
                 )
             failure_after = _counts(app_database_url, tenant_id)
             assert failure_after == (

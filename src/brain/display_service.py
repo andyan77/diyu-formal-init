@@ -17,6 +17,8 @@ from src.shared.errors import DomainError, GenerationFailed
 from src.shared.types import ActiveAsset, DisplayContext, DisplayGenerationInput, DisplayScope
 
 _LINE = re.compile(r"(?<![A-Z0-9-])([A-Z0-9]+(?:-[A-Z0-9]+)+)\s*(\d+)\s*件")
+_DISPLAY_RUN_LEASE_SECONDS = 900
+_DISPLAY_FAILURE_MESSAGE = "这次纯文字方案没有生成完成，请保留输入后再试。"
 
 
 class DisplayService:
@@ -24,14 +26,29 @@ class DisplayService:
         self._repository = repository
         self._generator = generator
 
-    def create(self, scope: DisplayScope, inventory_text: str) -> dict[str, object]:
-        inventory = self._inventory(inventory_text)
-        context = self._repository.load_context(scope, inventory)
+    def create(
+        self,
+        scope: DisplayScope,
+        inventory_text: str,
+        product_version_inventory: tuple[tuple[UUID, int], ...] = (),
+    ) -> dict[str, object]:
+        self._repository.recover_stale_runs(scope, _DISPLAY_RUN_LEASE_SECONDS)
+        if product_version_inventory:
+            self._assert_structured_inventory(product_version_inventory)
+            context = self._repository.load_context(
+                scope,
+                product_version_inventory=product_version_inventory,
+            )
+            if context is None:
+                return self._missing_store_question()
+            inventory = self._inventory_from_context(context, product_version_inventory)
+            stored_inventory_text = inventory_text.strip() or self._inventory_text(inventory)
+        else:
+            inventory = self._inventory(inventory_text)
+            context = self._repository.load_context(scope, inventory)
+            stored_inventory_text = inventory_text
         if context is None:
-            return {
-                "kind": "question",
-                "message": "这家门店还缺少上下挂杆、固定正挂点和来客方向这项条件；请先补充它。",
-            }
+            return self._missing_store_question()
         assert_dm01_rule_bundle(context.rule_bundle, revision=False, error_type=DomainError)
         hard_requirements = parse_hard_requirements(inventory_text)
         gap = required_inventory_gap(inventory, context, hard_requirements)
@@ -40,7 +57,7 @@ class DisplayService:
         assert context.rule_bundle is not None
         assets = self._active_assets(context.rule_bundle.generation_assets)
         task_id, run_id = self._repository.create_run(
-            scope, inventory_text, inventory, context, self._generator.model_name, assets
+            scope, stored_inventory_text, inventory, context, self._generator.model_name, assets
         )
         return self._generate(
             scope,
@@ -55,6 +72,7 @@ class DisplayService:
         )
 
     def revise(self, scope: DisplayScope, task_id: UUID, feedback: str) -> dict[str, object]:
+        self._repository.recover_stale_runs(scope, _DISPLAY_RUN_LEASE_SECONDS)
         if not feedback.strip():
             raise DomainError("请说明这次现场变化")
         context = self._repository.load_task_context(scope, task_id)
@@ -140,22 +158,31 @@ class DisplayService:
             if feedback is not None and prior is not None:
                 assert_display_revision(prior, artifact.plan)
             body = compile_display_body(context, artifact.plan, revision=feedback is not None)
+            completed = self._repository.complete_run(
+                scope,
+                task_id,
+                run_id,
+                {"body": body, "plan": artifact.plan},
+                artifact.model,
+                artifact.latency_ms,
+                artifact.retry_count,
+                artifact.provider_usage,
+            )
         except GenerationFailed as exc:
-            self._repository.fail_run(scope, task_id, run_id, str(exc))
+            self._fail_run(scope, task_id, run_id, str(exc))
             raise
         except Exception as exc:
-            self._repository.fail_run(scope, task_id, run_id, "模型调用失败，请稍后重试")
-            raise GenerationFailed("模型调用失败，请稍后重试") from exc
-        return self._repository.complete_run(
-            scope,
-            task_id,
-            run_id,
-            {"body": body, "plan": artifact.plan},
-            artifact.model,
-            artifact.latency_ms,
-            artifact.retry_count,
-            artifact.provider_usage,
-        ) | {"kind": "display"}
+            self._fail_run(scope, task_id, run_id, _DISPLAY_FAILURE_MESSAGE)
+            raise GenerationFailed(_DISPLAY_FAILURE_MESSAGE) from exc
+        return completed | {"kind": "display"}
+
+    def _fail_run(self, scope: DisplayScope, task_id: UUID, run_id: UUID, reason: str) -> None:
+        try:
+            self._repository.fail_run(scope, task_id, run_id, reason)
+        except Exception:
+            # A lost database connection cannot be repaired in the same request. The next safe
+            # scoped access reclaims only runs whose explicit lease has expired.
+            return
 
     @staticmethod
     def _inventory(text: str) -> tuple[tuple[str, int], ...]:
@@ -163,6 +190,43 @@ class DisplayService:
         if not lines or len({sku for sku, _ in lines}) != len(lines) or any(amount < 1 for _, amount in lines):
             raise DomainError("请用“商品编号 3 件”这样的自然清单说明本次可用商品和数量")
         return lines
+
+    @staticmethod
+    def _assert_structured_inventory(inventory: tuple[tuple[UUID, int], ...]) -> None:
+        product_version_ids = tuple(product_version_id for product_version_id, _ in inventory)
+        if (
+            not inventory
+            or len(set(product_version_ids)) != len(product_version_ids)
+            or any(quantity < 1 for _, quantity in inventory)
+        ):
+            raise DomainError("请为本次选择的每件商品填写正整数数量，且不要重复选择同一商品")
+
+    @staticmethod
+    def _inventory_from_context(
+        context: DisplayContext,
+        requested: tuple[tuple[UUID, int], ...],
+    ) -> tuple[tuple[str, int], ...]:
+        snapshots = {
+            UUID(str(item["product_version_id"])): str(item["sku"])
+            for item in context.product_snapshots
+        }
+        if len(snapshots) != len(requested):
+            raise DomainError("本次选择中有商品版本不可用，请重新选择")
+        try:
+            return tuple((snapshots[product_version_id], quantity) for product_version_id, quantity in requested)
+        except KeyError as exc:
+            raise DomainError("本次选择中有商品版本不可用，请重新选择") from exc
+
+    @staticmethod
+    def _inventory_text(inventory: tuple[tuple[str, int], ...]) -> str:
+        return "本次可用：" + "、".join(f"{sku} {quantity} 件" for sku, quantity in inventory) + "。"
+
+    @staticmethod
+    def _missing_store_question() -> dict[str, object]:
+        return {
+            "kind": "question",
+            "message": "这家门店还缺少上下挂杆、固定正挂点和来客方向这项条件；请先补充它。",
+        }
 
     @staticmethod
     def _active_assets(assets: tuple[DM01RuleAssetV1, ...]) -> tuple[ActiveAsset, ...]:

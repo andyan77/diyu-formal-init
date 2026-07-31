@@ -13,6 +13,7 @@ class DisplayRepository(ABC):
         self,
         scope: DisplayScope,
         inventory: tuple[tuple[str, int], ...] | None = None,
+        product_version_inventory: tuple[tuple[UUID, int], ...] | None = None,
     ) -> DisplayContext | None:
         """Load the store identity, or resolve a formal product snapshot for a new task."""
 
@@ -77,6 +78,10 @@ class DisplayRepository(ABC):
     @abstractmethod
     def fail_run(self, scope: DisplayScope, task_id: UUID, run_id: UUID, reason: str) -> None:
         """Record a failed run without any version."""
+
+    @abstractmethod
+    def recover_stale_runs(self, scope: DisplayScope, lease_seconds: int) -> int:
+        """Fail only expired running DM01 work in the caller's trusted display scope."""
 
     @abstractmethod
     def fetch_version(self, scope: DisplayScope, task_id: UUID, version: int) -> dict[str, object]:

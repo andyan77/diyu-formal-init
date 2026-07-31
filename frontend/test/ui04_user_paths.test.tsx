@@ -71,8 +71,11 @@ async function displayJourney(): Promise<void> {
   };
   const root = await render(<DisplayApp context={displayContext} />);
   assert.ok(document.querySelector(".display-app"));
-  const inventory = document.querySelector("#display-inventory") as HTMLTextAreaElement;
-  await input(inventory, "今天这组墙可用：SKU-A 3 件、SKU-B 2 件。");
+  await click(find(".display-product-picker button", "上装 A"));
+  await click(find(".display-product-picker button", "下装 B"));
+  const quantities = Array.from(document.querySelectorAll(".display-selected-products input")) as HTMLInputElement[];
+  await input(quantities[0], "3");
+  await input(quantities[1], "2");
   await click(find("button", "生成参考方案"));
   await settle();
   assert.match(document.body.textContent ?? "", /当前版本 · V1/);
@@ -87,14 +90,18 @@ async function displayJourney(): Promise<void> {
   assert.match(document.body.textContent ?? "", /历史版本 · V1/);
   await click(find("button", "复制"));
   assert.equal(copiedTexts.at(-1)?.includes("左侧（主焦点）"), true);
-  assert.ok(requests.some(item => item.method === "POST" && item.path === "/api/v1/display" && Object.keys(item.body as object).join(",") === "inventory_text"));
+  const displayWrite = requests.find(item => item.method === "POST" && item.path === "/api/v1/display");
+  assert.deepEqual(Object.keys(displayWrite?.body as object), ["inventory_text", "products"]);
+  assert.deepEqual((displayWrite?.body as { products: unknown[] }).products, [
+    { product_version_id: "pv-a", quantity: 3 },
+    { product_version_id: "pv-b", quantity: 2 }
+  ]);
   assert.ok(requests.some(item => item.method === "POST" && item.path === "/api/v1/display-tasks/d1/revisions" && Object.keys(item.body as object).join(",") === "feedback"));
   await act(async () => root.unmount());
 
   setDisplayQuestion(true);
   const questionRoot = await render(<DisplayApp context={displayContext} />);
-  const questionInventory = document.querySelector("#display-inventory") as HTMLTextAreaElement;
-  await input(questionInventory, "今天这组墙可用：SKU-A 3 件。");
+  await click(find(".display-product-picker button", "上装 A"));
   await click(find("button", "生成参考方案"));
   await settle();
   assert.match(document.body.textContent ?? "", /请补充这组墙的上下挂杆条件/);

@@ -59,6 +59,8 @@ def public_service_status(
         ).isoformat()
         if 0 <= age <= freshness_seconds:
             content_state = provider_observation.state
+    if not core_ready:
+        content_state = "unavailable"
     return {
         "contract_version": STATUS_CONTRACT_VERSION,
         "checked_at": checked_at.isoformat(),

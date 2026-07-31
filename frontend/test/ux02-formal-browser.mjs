@@ -573,9 +573,31 @@ try {
   await user.waitFor("document.body.innerText.includes('做陈列搭配')", "陈列搭配入口");
   await user.click("a", "做陈列搭配");
   await user.waitFor("location.pathname === '/display'", "进入陈列搭配");
-  const inventory =
-    "今天这组墙可用：ZX-C218 3 件、ZX-S104 3 件、ZX-K126 4 件、ZX-P211 3 件、ZX-V113 3 件、ZX-Q117 4 件。";
-  await user.fill("#display-inventory", inventory);
+  const inventory = {
+    "ZX-C218": 3,
+    "ZX-S104": 3,
+    "ZX-K126": 4,
+    "ZX-P211": 3,
+    "ZX-V113": 3,
+    "ZX-Q117": 4
+  };
+  for (const sku of Object.keys(inventory)) {
+    await user.click(".display-product-picker button", sku);
+  }
+  const inventoryPrepared = await user.evaluate(`(() => {
+    const quantities=${JSON.stringify(inventory)};
+    for(const row of document.querySelectorAll('.display-selected-products > div')) {
+      const sku=Object.keys(quantities).find(value=>row.textContent.includes(value));
+      const input=row.querySelector('input[type="number"]');
+      if(!sku||!input)continue;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,String(quantities[sku]));
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+      input.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+    return [...document.querySelectorAll('.display-selected-products input')]
+      .reduce((sum,node)=>sum+Number(node.value),0);
+  })()`);
+  ensure(inventoryPrepared === 20, "DM01 结构化商品数量没有保持");
   await user.click(".display-composer button.primary", "生成参考方案");
   await user.waitFor(
     "document.querySelector('.display-artifact .eyebrow')?.textContent.includes('V1')",

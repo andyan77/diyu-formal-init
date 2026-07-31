@@ -33,7 +33,7 @@ export default function StatusPage(): JSX.Element {
   async function check(): Promise<void> {
     setError(false);
     try {
-      setStatus(await api<PublicStatus>("/api/v1/status"));
+      setStatus(await api<PublicStatus>("/api/v1/status", { cache: "no-store" }));
     } catch {
       setStatus(null);
       setError(true);
@@ -45,6 +45,7 @@ export default function StatusPage(): JSX.Element {
   }, []);
 
   const coreAvailable = status?.core.state === "available";
+  const pendingLabel = error ? "当前状态暂无法确认" : "正在检查";
   const headline = error || status?.core.state === "unavailable"
     ? "笛语暂时无法接单，请稍后再试。"
     : status?.content_generation.state === "degraded" ||
@@ -65,15 +66,15 @@ export default function StatusPage(): JSX.Element {
         <dl className="status-services">
           <div>
             <dt>核心服务</dt>
-            <dd>{status ? labels[status.core.state] : "正在检查"}</dd>
+            <dd>{status ? labels[status.core.state] : pendingLabel}</dd>
           </div>
           <div>
             <dt>内容生成</dt>
-            <dd>{status ? labels[status.content_generation.state] : "正在检查"}</dd>
+            <dd>{status ? labels[status.content_generation.state] : pendingLabel}</dd>
           </div>
           <div>
             <dt>纯文字陈列参考方案</dt>
-            <dd>{status ? labels[status.text_display.state] : "正在检查"}</dd>
+            <dd>{status ? labels[status.text_display.state] : pendingLabel}</dd>
           </div>
         </dl>
         {status && (

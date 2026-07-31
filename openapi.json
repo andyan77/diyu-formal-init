@@ -814,15 +814,20 @@
         "additionalProperties": false,
         "properties": {
           "inventory_text": {
+            "default": "",
             "maxLength": 2000,
-            "minLength": 4,
             "title": "Inventory Text",
             "type": "string"
+          },
+          "products": {
+            "items": {
+              "$ref": "#/components/schemas/DisplayProductSelectionRequest"
+            },
+            "maxItems": 80,
+            "title": "Products",
+            "type": "array"
           }
         },
-        "required": [
-          "inventory_text"
-        ],
         "title": "CreateDisplayRequest",
         "type": "object"
       },
@@ -1347,6 +1352,28 @@
           "boundary"
         ],
         "title": "DefaultPersonaRequest",
+        "type": "object"
+      },
+      "DisplayProductSelectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "product_version_id": {
+            "format": "uuid",
+            "title": "Product Version Id",
+            "type": "string"
+          },
+          "quantity": {
+            "maximum": 999.0,
+            "minimum": 1.0,
+            "title": "Quantity",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "product_version_id",
+          "quantity"
+        ],
+        "title": "DisplayProductSelectionRequest",
         "type": "object"
       },
       "DisplayQuestionResponse": {

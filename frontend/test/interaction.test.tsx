@@ -14,6 +14,7 @@ const harness = (globalThis as unknown as {
       path: string;
       query: string;
       body: Record<string, unknown> | null;
+      cache: RequestCache;
     }>;
     copiedTexts: string[];
     exportedBlobs: Blob[];
@@ -23,6 +24,7 @@ const harness = (globalThis as unknown as {
       contentState: "available" | "degraded" | "unavailable" | "unknown",
       coreState?: "available" | "unavailable"
     ) => void;
+    setPublicStatusFailure: (value: boolean) => void;
     window: Window & typeof globalThis;
   };
 }).__DIYU_INTERACTION__;
@@ -33,6 +35,7 @@ const {
   deferNextVersionLoad,
   releaseDeferredVersionLoad,
   setPublicStatus,
+  setPublicStatusFailure,
   window
 } = harness;
 const document = window.document;
@@ -534,10 +537,21 @@ async function main(): Promise<void> {
   await click(find("button", "重新检查"));
   await settle();
   assert.match(document.body.textContent ?? "", /笛语暂时无法接单/);
+  setPublicStatusFailure(true);
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /当前状态暂无法确认/);
+  assert.doesNotMatch(document.body.textContent ?? "", /正在检查/);
+  setPublicStatusFailure(false);
   assert.equal(
     requests.filter(item => item.path === "/api/v1/status").every(item => item.method === "GET"),
     true,
     "状态页只能读取状态投影，不得创建内容任务或外部探测"
+  );
+  assert.equal(
+    requests.filter(item => item.path === "/api/v1/status").every(item => item.cache === "no-store"),
+    true,
+    "状态页重新检查不得读取旧缓存"
   );
   await act(async () => root.unmount());
 }

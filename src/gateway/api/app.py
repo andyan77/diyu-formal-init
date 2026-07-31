@@ -179,6 +179,41 @@ def _target_metadata(value: ContentTarget) -> dict[str, str]:
     }
 
 
+def _public_status_fallback(document: dict[str, object]) -> str:
+    labels = {
+        "available": "可以使用",
+        "degraded": "暂时受影响",
+        "unavailable": "暂时不可用",
+        "unknown": "近期状态尚无法确认",
+    }
+    core = cast(dict[str, object], document["core"])
+    content = cast(dict[str, object], document["content_generation"])
+    display = cast(dict[str, object], document["text_display"])
+    core_state = str(core["state"])
+    content_state = str(content["state"])
+    display_state = str(display["state"])
+    if core_state == "unavailable":
+        headline = "笛语暂时无法接单，请稍后再试。"
+    elif content_state in {"degraded", "unavailable"}:
+        headline = "内容生成暂时受影响；品牌管理和纯文字陈列参考方案仍可使用。"
+    elif content_state == "unknown":
+        headline = "主要功能可以使用；内容生成近期状态尚无法确认。"
+    else:
+        headline = "主要功能可以使用。"
+    return (
+        "<main><h1>服务状态</h1><p>"
+        + escape(headline)
+        + "</p><dl>"
+        + "<dt>核心服务</dt><dd>"
+        + labels[core_state]
+        + "</dd><dt>内容生成</dt><dd>"
+        + labels[content_state]
+        + "</dd><dt>纯文字陈列参考方案</dt><dd>"
+        + labels[display_state]
+        + "</dd></dl><p>页面检查不会发起内容生成。</p></main>"
+    )
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     current_settings = settings or Settings.model_validate({})
     authority = (
@@ -1079,23 +1114,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/status", response_class=HTMLResponse, include_in_schema=False)
     def public_status() -> HTMLResponse:
-        service_state = "available" if dependencies_are_ready() else "unavailable"
+        document = public_service_status(
+            core_ready=dependencies_are_ready(),
+            provider_observation=provider_status.snapshot(),
+        )
         return HTMLResponse(
             render_spa_shell(
                 {
                     "application": "status",
-                    "service_state": service_state,
+                    "public_status": document,
                 },
-                fallback=(
-                    "<main><h1>服务状态</h1><p>"
-                    + ("笛语当前可以使用。" if service_state == "available" else "笛语暂时不可用，请稍后再试。")
-                    + "</p></main>"
-                ),
-            )
+                fallback=_public_status_fallback(document),
+            ),
+            headers={"Cache-Control": "no-store"},
         )
 
     @app.get("/api/v1/status", include_in_schema=False)
-    def public_status_contract() -> dict[str, object]:
+    def public_status_contract(response: Response) -> dict[str, object]:
+        response.headers["Cache-Control"] = "no-store"
         return public_service_status(
             core_ready=dependencies_are_ready(),
             provider_observation=provider_status.snapshot(),
@@ -1922,7 +1958,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, object]:
         if requests_content_production(payload.inventory_text):
             return {"kind": "handoff", "message": "这是面向外部受众的内容任务，请切换到内容生产。"}
-        return display_service.create(scope, payload.inventory_text)
+        return display_service.create(
+            scope,
+            payload.inventory_text,
+            tuple((item.product_version_id, item.quantity) for item in payload.products),
+        )
 
     @app.post(
         "/api/v1/display-tasks/{task_id}/revisions",

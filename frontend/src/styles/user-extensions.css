@@ -63,4 +63,12 @@
 .material-picker label > span { flex:1; }
 .material-picker .needs-note { color:var(--stone,#726f68); }
 .material-picker-empty,.series-empty { color:var(--ink-soft,#58554f); }
+.display-selected-products { display:grid; gap:10px; margin:0; padding:14px; border:1px solid var(--line,#dedbd4); border-radius:10px; }
+.display-selected-products > p { margin:0; color:var(--ink-soft,#58554f); }
+.display-selected-products > div { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--line-soft,#ece9e3); }
+.display-selected-products > div:last-child { border-bottom:0; }
+.display-selected-products label { flex:1; justify-content:flex-start; }
+.display-selected-products label > span:first-child { display:grid; min-width:0; }
+.display-selected-products label small { overflow-wrap:anywhere; color:var(--stone,#726f68); }
+.display-selected-products input { width:76px; min-height:44px; padding:8px; border:1px solid var(--line,#dedbd4); border-radius:6px; font:inherit; }
 @media (max-width:760px) { .display-topbar { grid-template-columns:54px minmax(0,1fr) auto; padding-right:12px; }.display-topbar > a { width:54px; }.display-app { display:block; min-height:calc(100vh - 66px); }.display-history { display:none; }.display-conversation,.display-artifact { min-height:calc(100vh - 122px); padding:30px 18px 100px; border:0; }.display-mobile-tabs { position:fixed; z-index:10; right:0; bottom:0; left:0; display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:8px 16px calc(8px + env(safe-area-inset-bottom)); border-top:1px solid var(--line,#dedbd4); background:rgba(255,255,255,.96); }.display-mobile-tabs button { min-height:44px; border:0; border-radius:8px; background:transparent; }.display-mobile-tabs button.active { background:var(--red-pale,#f8ece8); color:var(--red,#a23627); }.mobile-hidden { display:none; }.material-zones { grid-template-columns:1fr; }.series-entry-heading,.series-actions,.material-zone li { align-items:stretch; flex-direction:column; }.series-actions label { width:100%; }.series-actions input { width:100%; } }

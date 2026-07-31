@@ -50,7 +50,10 @@ class PostgresDisplayRepository(DisplayRepository):
         self,
         scope: DisplayScope,
         inventory: tuple[tuple[str, int], ...] | None = None,
+        product_version_inventory: tuple[tuple[UUID, int], ...] | None = None,
     ) -> DisplayContext | None:
+        if inventory is not None and product_version_inventory is not None:
+            raise DomainError("陈列商品只能使用一种选择方式")
         actor_organization_id = scope.actor_organization_id or scope.organization_id
         with self._tx(scope) as cursor:
             cursor.execute(
@@ -82,11 +85,16 @@ class PostgresDisplayRepository(DisplayRepository):
             task_input = self._optional_object(row["current_task_input"], "本次任务输入")
             product_snapshots: tuple[dict[str, object], ...] = ()
             rule_bundle: DM01RuleBundleV1 | None = None
-            if inventory is not None:
-                products, product_snapshots = self._formal_products(
+            if product_version_inventory is not None:
+                products, product_snapshots = self._formal_products_by_versions(
                     cursor,
                     scope,
-                    tuple(sku for sku, _ in inventory),
+                    tuple(product_version_id for product_version_id, _ in product_version_inventory),
+                )
+                rule_bundle = self.load_rule_bundle()
+            elif inventory is not None:
+                products, product_snapshots = self._formal_products_by_skus(
+                    cursor, scope, tuple(sku for sku, _ in inventory)
                 )
                 rule_bundle = self.load_rule_bundle()
             else:
@@ -436,6 +444,17 @@ class PostgresDisplayRepository(DisplayRepository):
                     scope.user_id,
                 ),
             )
+            cursor.execute(
+                "SELECT v.body,v.plan,a.current_version "
+                "FROM display_artifact_versions v "
+                "JOIN display_artifacts a ON a.tenant_id=v.tenant_id AND a.id=v.artifact_id "
+                "WHERE v.tenant_id=%s AND v.id=%s AND v.task_id=%s",
+                (scope.tenant_id, version_id, task_id),
+            )
+            saved = self._one(cursor, "陈列成品保存后无法回读")
+            if int(str(saved["current_version"])) != next_version:
+                raise DomainError("陈列成品当前版本没有同步")
+            assert_display_artifact_integrity(saved["body"], saved["plan"])
         return {
             "task_id": str(task_id),
             "version_id": str(version_id),
@@ -472,6 +491,37 @@ class PostgresDisplayRepository(DisplayRepository):
             )
             if cursor.rowcount != 1:
                 raise DomainError("当前作用域不能结束此生成")
+
+    def recover_stale_runs(self, scope: DisplayScope, lease_seconds: int) -> int:
+        if lease_seconds < 1:
+            raise ValueError("display run lease must be positive")
+        actor_organization_id = scope.actor_organization_id or scope.organization_id
+        with self._tx(scope) as cursor:
+            cursor.execute(
+                """UPDATE display_generation_runs r
+                   SET status='failed',
+                       failure_reason='这次纯文字方案没有生成完成，请保留输入后再试。',
+                       completed_at=now()
+                   FROM display_tasks t, display_stores s
+                   WHERE r.tenant_id=%s AND r.status='running'
+                     AND r.started_at < now() - make_interval(secs => %s)
+                     AND t.id=r.task_id AND t.tenant_id=r.tenant_id
+                     AND s.id=t.store_id AND s.tenant_id=t.tenant_id
+                     AND t.brand_id=%s AND t.organization_id=%s
+                     AND (t.created_by=%s OR s.execution_organization_id=%s)
+                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)""",
+                (
+                    scope.tenant_id,
+                    lease_seconds,
+                    scope.brand_id,
+                    scope.organization_id,
+                    scope.user_id,
+                    actor_organization_id,
+                    actor_organization_id,
+                    actor_organization_id,
+                ),
+            )
+            return cursor.rowcount
 
     def fetch_version(self, scope: DisplayScope, task_id: UUID, version: int) -> dict[str, object]:
         actor_organization_id = scope.actor_organization_id or scope.organization_id
@@ -603,7 +653,7 @@ class PostgresDisplayRepository(DisplayRepository):
             snapshots.append(item)
         return tuple(snapshots)
 
-    def _formal_products(
+    def _formal_products_by_skus(
         self,
         cursor: psycopg.Cursor[dict[str, object]],
         scope: DisplayScope,
@@ -668,33 +718,102 @@ class PostgresDisplayRepository(DisplayRepository):
         snapshots: list[dict[str, object]] = []
         for sku in skus:
             row = resolved[sku]
-            facts = self._object(row["facts"], "正式商品事实")
-            scope_organization_ids = row["scope_organization_ids"]
-            if not isinstance(scope_organization_ids, (list, tuple)):
-                raise DomainError("正式商品范围记录不可用。")
-            version_created_at = row["created_at"]
-            if not isinstance(version_created_at, datetime):
-                raise DomainError("正式商品版本时间不可用。")
-            visible_facts = {**facts, "name": str(row["display_name"])}
-            unsigned: dict[str, object] = {
-                "snapshot_version": "dm01-product-snapshot-v1",
-                "product_id": str(row["product_id"]),
-                "product_version_id": str(row["product_version_id"]),
-                "version_number": int(str(row["version_number"])),
-                "sku": sku,
-                "display_name": str(row["display_name"]),
-                "facts": visible_facts,
-                "source_kind": str(row["source_kind"]),
-                "source_note": str(row["source_note"]),
-                "visibility_scope": str(row["visibility_scope"]),
-                "scope_organization_ids": [str(item) for item in scope_organization_ids],
-                "scope_organization_id": str(scope.organization_id),
-                "version_created_at": version_created_at.isoformat(),
-            }
-            snapshot = {**unsigned, "snapshot_digest": canonical_json_digest(unsigned)}
-            products.append((sku, visible_facts))
-            snapshots.append(snapshot)
+            products.append((sku, self._visible_product_facts(row)))
+            snapshots.append(self._product_snapshot(row, scope))
         return tuple(products), tuple(snapshots)
+
+    def _formal_products_by_versions(
+        self,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: DisplayScope,
+        product_version_ids: tuple[UUID, ...],
+    ) -> tuple[tuple[tuple[str, dict[str, object]], ...], tuple[dict[str, object], ...]]:
+        cursor.execute(
+            """
+            SELECT product.id AS product_id, product.sku,
+                   version.id AS product_version_id, version.version_number,
+                   version.display_name, version.facts, version.source_kind,
+                   version.source_note, version.visibility_scope,
+                   version.scope_organization_ids, version.created_at
+            FROM brand_products product
+            JOIN brand_product_versions version
+              ON version.tenant_id = product.tenant_id
+             AND version.product_id = product.id
+             AND version.id = product.current_version_id
+            WHERE product.tenant_id = %s AND product.brand_id = %s
+              AND product.status = 'active' AND version.id = ANY(%s::uuid[])
+              AND (
+                version.visibility_scope = 'brand_all'
+                OR (
+                  version.visibility_scope = 'organizations'
+                  AND EXISTS (
+                    SELECT 1 FROM unnest(version.scope_organization_ids) AS scoped(organization_id)
+                    WHERE organization_is_same_or_descendant(
+                      product.tenant_id, %s, scoped.organization_id
+                    )
+                  )
+                )
+                OR (
+                  version.visibility_scope = 'headquarters'
+                  AND %s = ANY(version.scope_organization_ids)
+                  AND EXISTS (
+                    SELECT 1 FROM organizations organization
+                    WHERE organization.tenant_id = product.tenant_id
+                      AND organization.id = %s
+                      AND organization.organization_level = 'company'
+                  )
+                )
+              )
+            ORDER BY array_position(%s::uuid[], version.id)
+            """,
+            (
+                scope.tenant_id,
+                scope.brand_id,
+                list(product_version_ids),
+                scope.organization_id,
+                scope.organization_id,
+                scope.organization_id,
+                list(product_version_ids),
+            ),
+        )
+        rows = cursor.fetchall()
+        resolved = {UUID(str(row["product_version_id"])): row for row in rows}
+        if len(resolved) != len(product_version_ids):
+            raise DomainError("本次选择中有商品版本已变更或不可用于当前门店，请重新选择。")
+        products: list[tuple[str, dict[str, object]]] = []
+        snapshots: list[dict[str, object]] = []
+        for product_version_id in product_version_ids:
+            row = resolved[product_version_id]
+            products.append((str(row["sku"]), self._visible_product_facts(row)))
+            snapshots.append(self._product_snapshot(row, scope))
+        return tuple(products), tuple(snapshots)
+
+    def _visible_product_facts(self, row: dict[str, object]) -> dict[str, object]:
+        return {**self._object(row["facts"], "正式商品事实"), "name": str(row["display_name"])}
+
+    def _product_snapshot(self, row: dict[str, object], scope: DisplayScope) -> dict[str, object]:
+        scope_organization_ids = row["scope_organization_ids"]
+        if not isinstance(scope_organization_ids, (list, tuple)):
+            raise DomainError("正式商品范围记录不可用。")
+        version_created_at = row["created_at"]
+        if not isinstance(version_created_at, datetime):
+            raise DomainError("正式商品版本时间不可用。")
+        unsigned: dict[str, object] = {
+            "snapshot_version": "dm01-product-snapshot-v1",
+            "product_id": str(row["product_id"]),
+            "product_version_id": str(row["product_version_id"]),
+            "version_number": int(str(row["version_number"])),
+            "sku": str(row["sku"]),
+            "display_name": str(row["display_name"]),
+            "facts": self._visible_product_facts(row),
+            "source_kind": str(row["source_kind"]),
+            "source_note": str(row["source_note"]),
+            "visibility_scope": str(row["visibility_scope"]),
+            "scope_organization_ids": [str(item) for item in scope_organization_ids],
+            "scope_organization_id": str(scope.organization_id),
+            "version_created_at": version_created_at.isoformat(),
+        }
+        return {**unsigned, "snapshot_digest": canonical_json_digest(unsigned)}
 
     @staticmethod
     def _active_assets(assets: tuple[DM01RuleAssetV1, ...]) -> tuple[ActiveAsset, ...]:

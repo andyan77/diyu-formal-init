@@ -116,7 +116,7 @@ from src.shared.review_evidence import (
     validate_server_owned_contexts_v2,
     writer_clause_contexts_v2,
 )
-from src.shared.service_status import ProviderStatusTracker
+from src.shared.service_status import ProviderState, ProviderStatusTracker
 from src.shared.types import (
     ContentProduct,
     ContentProductionBundle,
@@ -148,6 +148,32 @@ _SCENE_PURPOSE = "scene"
 _REVIEW_TOKEN_BASE = 1024
 _REVIEW_TOKEN_PER_QUESTION = 160
 _LICENSE_REVIEW_TOKEN_PER_CLAUSE = 640
+
+_PROVIDER_UNAVAILABLE_ERROR_CODES = frozenset(
+    {
+        "authentication_error",
+        "invalid_api_key",
+        "model_not_found",
+        "permission_denied",
+        "unauthorized",
+    }
+)
+
+
+def _provider_rejection_state(
+    status_code: int,
+    error_code: str,
+    error_type: str,
+) -> ProviderState | None:
+    """Classify provider availability without treating one invalid request as an outage."""
+    stable_markers = {error_code.casefold(), error_type.casefold()}
+    if status_code in {401, 403, 404} or stable_markers & _PROVIDER_UNAVAILABLE_ERROR_CODES:
+        return "unavailable"
+    if status_code == 429:
+        return "degraded"
+    if 500 <= status_code < 600 or status_code == 408:
+        return "unavailable"
+    return None
 _REVIEW_TOKEN_HARD_LIMIT = 16384
 _CLOSED_REVIEW_BATCH_CLAUSES = 8
 
@@ -3604,7 +3630,7 @@ CreativePlanV2：{
                         return result, retries
                     if response.status_code != 429 and not 500 <= response.status_code < 600:
                         error_code = ""
-                        error_category = "unavailable"
+                        error_type = ""
                         try:
                             error_body = response.json()
                             if isinstance(error_body, dict):
@@ -3613,31 +3639,24 @@ CreativePlanV2：{
                                     raw_code = raw_error.get("code")
                                     if isinstance(raw_code, str):
                                         error_code = raw_code
-                                    raw_message = raw_error.get("message")
-                                    if isinstance(raw_message, str):
-                                        lowered_message = raw_message.casefold()
-                                        for category, markers in (
-                                            ("max_tokens", ("max_tokens", "maximum tokens")),
-                                            ("context_length", ("context length", "context_length")),
-                                            ("input_length", ("input length", "prompt length")),
-                                            ("thinking", ("thinking",)),
-                                            ("response_format", ("response_format",)),
-                                            ("content_filter", ("sensitive", "content filter")),
-                                            ("parameter", ("parameter", "invalid value")),
-                                        ):
-                                            if any(marker in lowered_message for marker in markers):
-                                                error_category = category
-                                                break
+                                    raw_type = raw_error.get("type")
+                                    if isinstance(raw_type, str):
+                                        error_type = raw_type
                         except (TypeError, ValueError):
                             pass
+                        state = _provider_rejection_state(
+                            response.status_code,
+                            error_code,
+                            error_type,
+                        )
                         _LOGGER.warning(
                             "model request rejected: status=%s code=%s category=%s",
                             response.status_code,
-                            error_code or "unavailable",
-                            error_category,
+                            error_code or "unspecified",
+                            error_type or "unspecified",
                         )
-                        if self._status_tracker is not None:
-                            self._status_tracker.record("unavailable")
+                        if self._status_tracker is not None and state is not None:
+                            self._status_tracker.record(state)
                         raise GenerationFailed("模型服务拒绝当前请求")
                     if retries >= self._max_retries:
                         if self._status_tracker is not None:

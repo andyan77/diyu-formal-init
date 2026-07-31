@@ -60,7 +60,8 @@ export default function DisplayApp({
 }: {
   context: BootstrapContext;
 }): JSX.Element {
-  const [inventory, setInventory] = useState("");
+  const [inventoryNote, setInventoryNote] = useState("");
+  const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState("");
   const [current, setCurrent] = useState<DisplayVersion | null>(null);
   const [viewed, setViewed] = useState<DisplayVersion | null>(null);
@@ -95,9 +96,15 @@ export default function DisplayApp({
   }, []);
 
   const addProduct = (product: AvailableProduct): void => {
-    const line = `${product.sku} 1 件`;
-    setInventory(value => value.trim() ? `${value.replace(/[。.]?$/, "")}、${line}。` : `本次可用：${line}。`);
+    setSelectedQuantities(value => ({
+      ...value,
+      [product.product_version_id]: (value[product.product_version_id] ?? 0) + 1
+    }));
   };
+
+  const selectedProducts = products.filter(
+    product => selectedQuantities[product.product_version_id] !== undefined
+  );
 
   const accept = async (value: DisplayVersion | DisplayQuestion): Promise<void> => {
     if (!isVersion(value)) {
@@ -113,14 +120,20 @@ export default function DisplayApp({
 
   const create = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
-    if (!inventory.trim() || busy) return;
+    if (selectedProducts.length === 0 || busy) return;
     setBusy(true);
     setNotice("");
     try {
       await accept(
         await api<DisplayVersion | DisplayQuestion>("/api/v1/display", {
           method: "POST",
-          body: JSON.stringify({ inventory_text: inventory.trim() })
+          body: JSON.stringify({
+            inventory_text: inventoryNote.trim(),
+            products: selectedProducts.map(product => ({
+              product_version_id: product.product_version_id,
+              quantity: selectedQuantities[product.product_version_id]
+            }))
+          })
         })
       );
     } catch (error) {
@@ -203,6 +216,8 @@ export default function DisplayApp({
             setViewed(null);
             setVersions([]);
             setFeedback("");
+            setSelectedQuantities({});
+            setInventoryNote("");
             setMobileView("conversation");
           }}
         >
@@ -228,7 +243,7 @@ export default function DisplayApp({
         <header className="display-heading">
           <p className="eyebrow">陈列搭配</p>
           <h1>说清这组墙现在有什么。</h1>
-          <p>按商品编号和数量写下来，就能得到一份可执行的文字参考方案。</p>
+          <p>从本店正式商品中选择并填写数量，就能得到一份可执行的文字参考方案。</p>
         </header>
         {notice && <p className="user-path-notice" role="status">{notice}</p>}
         {!current ? (
@@ -250,15 +265,53 @@ export default function DisplayApp({
                 ))
               )}
             </fieldset>
-            <label htmlFor="display-inventory">本次库存</label>
+            <fieldset className="display-selected-products">
+              <legend>本次库存</legend>
+              {selectedProducts.length === 0 ? (
+                <p>还没有选择商品。</p>
+              ) : selectedProducts.map(product => (
+                <div key={product.product_version_id}>
+                  <label htmlFor={`display-quantity-${product.product_version_id}`}>
+                    <span>{product.display_name}<small>{product.sku}</small></span>
+                    <input
+                      id={`display-quantity-${product.product_version_id}`}
+                      data-product-version-id={product.product_version_id}
+                      type="number"
+                      min="1"
+                      max="999"
+                      value={selectedQuantities[product.product_version_id]}
+                      onChange={event => {
+                        const quantity = Number(event.target.value);
+                        if (!Number.isInteger(quantity) || quantity < 1) return;
+                        setSelectedQuantities(value => ({
+                          ...value,
+                          [product.product_version_id]: quantity
+                        }));
+                      }}
+                    />
+                    <span>件</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="text-action"
+                    onClick={() => setSelectedQuantities(value => {
+                      const next = { ...value };
+                      delete next[product.product_version_id];
+                      return next;
+                    })}
+                  >移除</button>
+                </div>
+              ))}
+            </fieldset>
+            <label htmlFor="display-inventory-note">本次补充（选填）</label>
             <textarea
-              id="display-inventory"
-              value={inventory}
-              onChange={event => setInventory(event.target.value)}
-              placeholder="例如：今天这组墙可用：商品编号 3 件、商品编号 2 件。"
+              id="display-inventory-note"
+              value={inventoryNote}
+              onChange={event => setInventoryNote(event.target.value)}
+              placeholder="例如：右侧上杆必须保留主推商品。"
               maxLength={2000}
             />
-            <button className="primary" type="submit" disabled={!inventory.trim() || busy}>
+            <button className="primary" type="submit" disabled={selectedProducts.length === 0 || busy}>
               {busy ? "正在整理方案……" : "生成参考方案"}
             </button>
           </form>

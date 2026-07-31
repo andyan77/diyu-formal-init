@@ -115,6 +115,7 @@ let publicStatusProjection = {
   content_generation: { state: "unknown", observed_at: null, fresh_until: null },
   text_display: { state: "available" }
 };
+let publicStatusRequestFails = false;
 const requests = [];
 const copiedTexts = [];
 const exportedBlobs = [];
@@ -183,11 +184,15 @@ globalThis.fetch = async (input, init = {}) => {
   const path = url.pathname;
   const method = init.method ?? "GET";
   const body = init.body ? JSON.parse(String(init.body)) : null;
-  requests.push({ method, path, query: url.search, body });
+  requests.push({ method, path, query: url.search, body, cache: init.cache ?? "default" });
   let payload = {};
   let ok = true;
   let status = 200;
-  if (path === "/api/v1/status") payload = publicStatusProjection;
+  if (path === "/api/v1/status" && publicStatusRequestFails) {
+    ok = false;
+    status = 503;
+    payload = { detail: "状态暂不可用" };
+  } else if (path === "/api/v1/status") payload = publicStatusProjection;
   else if (path === "/api/v1/content/expression-catalog") payload = catalogResponse(bodyEnabled);
   else if (path === "/api/v1/user/creation-preferences" && method === "GET") {
     payload = {
@@ -418,6 +423,9 @@ globalThis.__DIYU_INTERACTION__ = {
       },
       text_display: { state: coreState }
     };
+  },
+  setPublicStatusFailure: value => {
+    publicStatusRequestFails = value;
   },
   window: dom.window
 };

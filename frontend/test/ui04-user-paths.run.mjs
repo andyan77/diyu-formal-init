@@ -106,6 +106,11 @@ globalThis.fetch = async (input, init = {}) => {
 
   if (path === "/api/v1/display/tasks") {
     payload = [{ task_id: "d1", version_id: displayRevised ? "dv2" : "dv1", version: displayRevised ? 2 : 1, title: "本次墙面方案", updated_at: "2026-07-26T00:00:00Z" }];
+  } else if (path === "/api/v1/display/products") {
+    payload = [
+      { sku: "SKU-A", display_name: "上装 A", display_family: "upper", product_version_id: "pv-a" },
+      { sku: "SKU-B", display_name: "下装 B", display_family: "lower", product_version_id: "pv-b" }
+    ];
   } else if (path === "/api/v1/display" && method === "POST") {
     payload = displayQuestion ? { kind: "question", message: "请补充这组墙的上下挂杆条件。" } : displayV1;
   } else if (path === "/api/v1/display-tasks/d1/revisions") {

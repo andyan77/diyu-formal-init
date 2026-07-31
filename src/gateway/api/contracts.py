@@ -184,9 +184,17 @@ class SavedVersionResponse(BaseModel):
     saved_at: datetime
 
 
+class DisplayProductSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product_version_id: UUID
+    quantity: int = Field(ge=1, le=999)
+
+
 class CreateDisplayRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    inventory_text: str = Field(min_length=4, max_length=2000)
+    inventory_text: str = Field(default="", max_length=2000)
+    products: list[DisplayProductSelectionRequest] = Field(default_factory=list, max_length=80)
 
 
 class DisplayRevisionRequest(BaseModel):

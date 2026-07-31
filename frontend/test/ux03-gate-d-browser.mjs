@@ -148,6 +148,19 @@ try {
     })()`);
     ensure(changed, `找不到输入控件 ${selector}`);
   };
+  const fillProductQuantity = async (label, value) => {
+    const changed = await evaluate(`(() => {
+      const row=[...document.querySelectorAll('.display-selected-products > div')]
+        .find(item=>item.textContent.includes(${JSON.stringify(label)}));
+      const node=row?.querySelector('input[type="number"]');
+      if(!node)return false;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(node,${JSON.stringify(value)});
+      node.dispatchEvent(new Event('input',{bubbles:true}));
+      node.dispatchEvent(new Event('change',{bubbles:true}));
+      return true;
+    })()`);
+    ensure(changed, `找不到已选商品数量 ${label}`);
+  };
   const click = async (selector, text) => {
     const clicked = await evaluate(`(() => {
       const nodes=[...document.querySelectorAll(${JSON.stringify(selector)})];
@@ -195,14 +208,38 @@ try {
   await click('button[type="submit"]', "登录");
   await waitFor("location.pathname==='/user'", "正式租户用户入口");
   await click("a,button", "陈列搭配");
-  await waitFor("Boolean(location.pathname.startsWith('/display') && document.querySelector('#display-inventory'))", "正式陈列入口");
+  await waitFor("Boolean(location.pathname.startsWith('/display') && document.querySelector('#display-inventory-note'))", "正式陈列入口");
 
-  for (const label of ["Gate D 上装", "Gate D 下装", "资料待补商品"]) {
+  for (const label of [
+    "小写编号商品",
+    "无连字符字母商品",
+    "纯数字编号商品",
+    "中文编号商品",
+    "既有编号商品",
+    "资料待补商品"
+  ]) {
     await click(".display-product-picker button", label);
   }
-  const inventory = await evaluate("document.querySelector('#display-inventory').value");
-  ensure(inventory.includes("GD-UP-01") && inventory.includes("GD-LOW-01"), "商品选择没有写入本次库存");
-  await fill("#display-inventory", "GD-UP-01 3 件、GD-LOW-01 3 件、GD-PENDING-01 2 件。");
+  await fillProductQuantity("小写编号商品", "2");
+  await fillProductQuantity("无连字符字母商品", "2");
+  await fillProductQuantity("纯数字编号商品", "1");
+  await fillProductQuantity("中文编号商品", "1");
+  await fillProductQuantity("既有编号商品", "2");
+  await fillProductQuantity("资料待补商品", "1");
+  const selectedInventory = await evaluate(`(() => [...document.querySelectorAll('.display-selected-products > div')].map(row=>({
+    text:row.textContent,
+    quantity:row.querySelector('input')?.value
+  })))()`);
+  ensure(
+    selectedInventory.length === 6 &&
+      selectedInventory.some(item => item.text.includes("abc-123") && item.quantity === "2") &&
+      selectedInventory.some(item => item.text.includes("ABC123") && item.quantity === "2") &&
+      selectedInventory.some(item => item.text.includes("123456") && item.quantity === "1") &&
+      selectedInventory.some(item => item.text.includes("款号一") && item.quantity === "1") &&
+      selectedInventory.some(item => item.text.includes("GD-UP-01") && item.quantity === "2") &&
+      selectedInventory.some(item => item.text.includes("GD-PENDING-01") && item.quantity === "1"),
+    "结构化商品数量没有保持"
+  );
   await click(".display-composer button.primary", "生成参考方案");
   await waitFor("document.querySelector('.display-artifact')?.innerText.includes('当前版本 · V1')", "生成 V1");
   const v1Body = await evaluate("document.querySelector('.display-plan-text')?.innerText ?? ''");
@@ -211,7 +248,26 @@ try {
   ensure(!/AIGC|示意图|效果图|确认人|已采用/.test(v1Body), "DM01 出现越界措辞");
   record("正式商品与规则生成 V1", { version: 1, inventory_preserved: true });
 
-  await fill("#display-feedback", "右侧上杆 GD-UP-01 太挤，请减少一件；其他内容不变。");
+  const knownSkus = ["abc-123", "ABC123", "123456", "款号一", "GD-UP-01"];
+  let revisionTarget;
+  for (const position of ["中间", "左侧", "右侧"]) {
+    const line = v1Body.split("\n").find(item => item.startsWith(`${position}（`));
+    if (!line) continue;
+    for (const rail of ["上杆", "下杆"]) {
+      const segment = line.match(new RegExp(`${rail} ([^；。]+)`))?.[1] ?? "";
+      const sku = knownSkus.find(item => segment.includes(`（${item}）`));
+      if (sku) {
+        revisionTarget = { position, rail, sku };
+        break;
+      }
+    }
+    if (revisionTarget) break;
+  }
+  ensure(revisionTarget, "V1 没有可局部修改的实际位置商品");
+  await fill(
+    "#display-feedback",
+    `${revisionTarget.position}${revisionTarget.rail} ${revisionTarget.sku} 太挤，请减少一件；其他内容不变。`
+  );
   await click(".display-revision button.primary", "生成 V2");
   await waitFor("document.querySelector('.display-artifact')?.innerText.includes('当前版本 · V2')", "生成 V2");
   const v2Body = await evaluate("document.querySelector('.display-plan-text')?.innerText ?? ''");
