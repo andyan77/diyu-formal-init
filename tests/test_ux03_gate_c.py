@@ -3283,6 +3283,46 @@ def test_gate_c_final_runner_binds_all_formal_provider_stages(
     assert [item["transport_retries"] for item in bundle["responses"]] == [0, 0]
 
 
+def test_gate_c_final_runner_preserves_failed_provider_stages(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        return {"choices": [{"message": {"content": '{"kind":"question"}'}}]}, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    root = tmp_path / "evidence"
+    root.mkdir(mode=0o700)
+    generator = _EvidenceDeepSeekGenerator(
+        evidence_root=root,
+        api_base_url="https://example.invalid",
+        api_key="test-only",
+        model="deepseek-test",
+        reviewer_provider=None,
+    )
+
+    generator.begin_card("P1")
+    generator._request("intake", "one", 100)
+    generator.abort_card(event_names=("received", "conversation"))
+
+    bundle = json.loads(
+        (root / "P1.failed.raw.json").read_text(encoding="utf-8")
+    )
+    assert bundle["raw_bundle_version"] == "ux03-gate-c-provider-failure-v1"
+    assert bundle["request_count"] == 1
+    assert bundle["event_names"] == ["received", "conversation"]
+    assert not (root / "P1.raw.json").exists()
+
+
 def test_stub_output_changes_with_direction_and_series_without_repeating_body() -> None:
     generator = DeterministicContentGenerator()
     plain = generator.generate(_generation_input())

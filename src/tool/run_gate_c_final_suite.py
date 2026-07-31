@@ -147,6 +147,27 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
         self._active_card = None
         self._responses = []
 
+    def abort_card(self, *, event_names: tuple[str, ...]) -> None:
+        """Persist provider stages for a failed card without calling them success evidence."""
+
+        card_id = self._active_card
+        if card_id is None:
+            raise RuntimeError("failed final card is not active")
+        if any(item["transport_retries"] != 0 for item in self._responses):
+            raise RuntimeError("final card provider transport retry is forbidden")
+        _write_private_json(
+            self._evidence_root / f"{card_id}.failed.raw.json",
+            {
+                "raw_bundle_version": "ux03-gate-c-provider-failure-v1",
+                "card_id": card_id,
+                "request_count": self._request_count,
+                "event_names": list(event_names),
+                "responses": self._responses,
+            },
+        )
+        self._active_card = None
+        self._responses = []
+
     def _request(
         self,
         system: str,
@@ -369,6 +390,9 @@ def _stream_card(
     events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
     completed = [item for item in events if item.get("event") == "completed"]
     if len(completed) != 1:
+        generator.abort_card(
+            event_names=tuple(str(item.get("event", "")) for item in events),
+        )
         raise RuntimeError(f"{spec.card_id}: formal content API did not commit once")
     generator.end_card()
     result = completed[0].get("result")
