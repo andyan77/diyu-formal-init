@@ -4,15 +4,16 @@
 - 状态：`ACTIVE`；`Gate A · 正式入驻、身份、逻辑发布账号与多平台关系闭环` 为
   `COMPLETE` 且主控最终终审 `PASS`；`Gate B · 品牌资料、组织作用域、团队使用与能力诊断`
   为 `COMPLETE` 且主控最终终审 `PASS`；`Gate C · 创作控制、真实阶段、完整成品与系列前情`
-  为 `ACTIVE / REWORK`。FT-039、FT-040、FT-045 保持 `PASS`；FT-041 因 P2 验收标签／
-  非商品取舍、P5 UUID／返回顺序主次和人工证据复述快照被主控退回。此前候选与七卡历史
-  完整保留。UX-02 保持
+  为 `COMPLETE / 等待主控独立终审`。FT-039、FT-040、FT-041、FT-045 均已形成当前本地
+  候选；此前 FT-041 的主控退回、失败套件和自报通过历史完整保留。UX-02 保持
   `CLOSED`，Gate D 为 `NOT_STARTED`，不创建 UX-04。
 - 当前 Git 基线：`86f5df16b9e42fe4eee322694156361a007bdb88`；唯一写入执行端为
   当前 WSL Codex。
-- Gate C 当前最终实现为 `faa4792538cbbcb54ff7b329dee7d03dd9488a24`；它在正式消费者
-  候选 `ee1e2a4e56b2bd9303e44d83a3b001ab084230a5` 上继续关闭总部素材元数据泄漏、P2／P5
-  主价值合同和证据 ID／审阅绑定假绿。此前所有失败候选与审计退回记录继续作为历史保留。
+- Gate C 当前运行实现为 `ec3dbe45d485816c7a49f9c801cd2baa2fe58c04`；其后仅有测试 oracle
+  前向提交 `6e3cb462dff4101658aec559fa5b94d077f85d91`，没有运行代码变化。当前实现继续保留
+  `faa4792538cbbcb54ff7b329dee7d03dd9488a24` 已关闭的总部素材作用域、正式 P5 消费者和
+  证据 ID／摘要边界，并关闭 P2 自然商品取舍、P5 与 UUID／数据库顺序无关的冻结主辅角色及
+  artifact 独立人工证据。此前所有失败候选与审计退回记录继续作为历史保留。
 - Gate A 首次实现 `734dcee900bc67e23d058d4fd6f8ef15db8d9847` 与完成记录
   `11444a4d7920e5aa55979241691908120f25aca2` 保留；主控有界返工后的最终实现为
   `4899a068b7b2310cb45cecac4def4ff17e537f05`。Gate B 首次冻结实现
@@ -128,13 +129,27 @@
   无凭据、可自校验的本地主机索引位于
   `var/tmp/ux03-gate-c-final-evidence-faa4792/`。私有 19 项与索引 3 项 checksum 均复算通过；
   synthetic 租户、运维身份及全部断言关联对象为 0，临时凭据／会话目录和一次性脚本已清理。
-- 当前返工期间 64 项功能真值为 `53/5/0/6/0`；有缺陷项为 FT-041、FT-050—FT-052 和
-  FT-058。只有本轮完成门全部成立后才能恢复 `54/4/0/6/0`。
+- 最终实现 `ec3dbe45d485816c7a49f9c801cd2baa2fe58c04` 在同一 SHA、同一
+  `deepseek-v4-flash`、temperature 0、max_retries 0 下完成 P1—P5、series2、series3
+  各一次正式 API/PostgreSQL 生成；7 task／7 succeeded run／7 version 均有真实 UUID，
+  永久 running 与传输重试为 0。P2 的“双面完整外观”形成自然的选择、取舍和成立条件，
+  不出现验收标签或未冻结商品语义；P5 的主辅来自本次冻结素材顺序而非 UUID／数据库返回
+  顺序，并由首图、图序和制作提示共同实现。七卡逐篇八项人工全文审阅均通过。
+- 私有完整证据位于
+  `/home/faye/.local/share/diyu-ux03-evidence/ec3dbe45d485816c7a49f9c801cd2baa2fe58c04/gate-c-final-suite/`；
+  本地主机可读的诚实索引位于 `var/tmp/ux03-gate-c-final-evidence-ec3dbe4/`。两处
+  `SHA256SUMS` 均复算通过，manifest 绑定真实 task/run/version、raw/artifact SHA、正式
+  `visible_digest` 与引用 artifact 原文的结构化人工审阅。synthetic tenant、任务、运行、
+  版本、会话、商品、素材、绑定及临时 token／runner 已精确清零。
+- 完整门最终为 Ruff、mypy、Golden/OpenAPI `495 passed, 2 skipped`、前端
+  lint/typecheck/interaction/build 和显式 Gate C Chrome；产品／内容与工程／安全／兼容
+  两份有界审查均无阻断。首次 Golden 暴露一个历史测试仍要求 Writer 自由带出未选重量事实，
+  测试 oracle 已改为校验服务端实际冻结的“双面完整外观”，定向与全量回归转绿。
+- 当前 64 项功能真值为 `54/4/0/6/0`；剩余有缺陷项精确为 FT-050—FT-052 和 FT-058。
   运行资产保持 `41/243/25/119`，激活增量 0。
 - Gate C 不证明真实员工／品牌采用、真实发布、平台流量、排名、爆款、GMV／销售、多真实
   租户市场差异、企业 SLA 或 `20/55/44` 全组合稳定支持。
-- 当前唯一下一动作：在同一 Gate C 完成 FT-041 最终产品语义收敛；Gate D 保持
-  `NOT_STARTED`。
+- 当前唯一下一动作：主控独立终审 Gate C；Gate D 保持 `NOT_STARTED`，不得提前启动。
 
 ## UX-02 关闭记录（历史保留）
 
