@@ -120,12 +120,32 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
     # generation checks establish the contract; the production bundle is the user-facing result.
     if re.search(r"1[3-9]\d{9}|[\w.+-]+@[\w.-]+|订单号?\s*[:：]?\s*[A-Za-z0-9-]+", artifact.body):
         raise GenerationFailed("内容成品包含个人标识")
+    internal_marker_view = _without_frozen_fact_literals(artifact)
     if re.search(
         r"\bP[1-5]\b|dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story",
-        artifact.body,
+        internal_marker_view,
         re.IGNORECASE,
     ):
         raise GenerationFailed("内容成品泄露内部产品标识")
+
+
+def _without_frozen_fact_literals(artifact: GeneratedArtifact) -> str:
+    """Keep trusted fact bytes while excluding them from internal-label scanning."""
+
+    patch = artifact.completion_snapshot_patch
+    if not isinstance(patch, dict):
+        return artifact.body
+    raw_blocks = patch.get("immutable_product_fact_blocks")
+    if not isinstance(raw_blocks, list):
+        return artifact.body
+    value = artifact.body
+    for raw_block in raw_blocks:
+        if not isinstance(raw_block, dict):
+            continue
+        canonical_text = raw_block.get("canonical_text")
+        if isinstance(canonical_text, str) and canonical_text:
+            value = value.replace(canonical_text, "")
+    return value
 
 
 def assert_p1_complete(artifact: GeneratedArtifact) -> None:

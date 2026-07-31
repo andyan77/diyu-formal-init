@@ -735,6 +735,23 @@ def test_media_native_units_compile_one_scope_and_distinct_platform_parts() -> N
     )
     assert_content_complete(artifact)
 
+    frozen_sku_fact = "ZX-P5-synthetic 是一件已确认商品。"
+    fact_artifact = replace(
+        artifact,
+        body=f"{artifact.body}\n已确认的商品信息：{frozen_sku_fact}",
+        completion_snapshot_patch={
+            "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
+            "immutable_product_fact_blocks": [
+                {"canonical_text": frozen_sku_fact},
+            ],
+        },
+    )
+    assert_content_complete(fact_artifact)
+    with pytest.raises(GenerationFailed, match="内部产品标识"):
+        assert_content_complete(
+            replace(fact_artifact, body=f"{fact_artifact.body}\nP5")
+        )
+
 
 def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:
     request = _generation_input(media_format="video")
