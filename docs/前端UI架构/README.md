@@ -47,12 +47,20 @@ resource refs 承载的具体色彩／轮廓主次。ProductFact、production co
 素材仍不授予资源。正式 React/API/PostgreSQL P5、显式 Chrome、Golden/OpenAPI
 `491 passed, 2 skipped`、承重 mutation 和两份有界审查均通过；同 SHA 七卡真实
 task/run/version、逐篇人工全文与 file SHA／raw SHA／`visible_digest` 绑定通过，synthetic
-数据零残留。Gate C 已获主控最终终审 `PASS`。Gate D 最终本地实现 `f2b5e266…` 又把纯文字
+数据零残留。Gate C 已获主控最终终审 `PASS`。Gate D 首次本地实现 `f2b5e266…` 把纯文字
 DM01 接到 Gate B 正式商品版本、执行组织作用域和 13 条确定性规则束，完成冻结条件下的
-V1→V2→历史 V1→当前 V2、复制及逐 SKU 守恒；`/status` 现在诚实分开核心、内容生成与纯文字
-陈列，并将陈旧或缺失的供应商观察显示为 unknown。Golden/OpenAPI `504 passed, 2 skipped`、
-前端四门、显式三视口 Chrome、七项 mutation 和两审通过。UX-03 现为 `REVIEW`，Gate A—D
-均已完成，64 项真值为 `58/0/0/6/0`；仍未 push、CI、部署或连接生产。
+V1→V2→历史 V1→当前 V2、复制及逐 SKU 守恒；该候选随后因 SKU 合同、finalize 异常边界、
+请求级 4xx 污染供应商状态和 core／provider 组合真值四个接缝被主控退回。
+
+当前前向实现 `06669c8cc46e412227ca188cc85745d4040c0c03` 让正式 React 以稳定商品版本 ID 与
+数量选择 DM01 商品，服务端保留 `abc-123`、`ABC123`、`123456`、`款号一`、`GD-UP-01`
+原值并重新核验当前版本和执行组织。V1／V2 finalize 的保存、指针和正式回读置于同一事务／
+异常边界，连接中断遗留由 900 秒同作用域租约回收；错误文案不再冒充模型失败。`/status`
+的无脚本页、React 与 API 共用 no-store 投影：core 不可用时三类能力均不可用，请求级 4xx 不
+污染 observation，429／5xx／传输／认证按供应商可用性映射，过期／未来／空观察为 unknown。
+Golden/OpenAPI `517 passed, 2 skipped`、前端四门、显式三视口 Chrome、四项 mutation 和
+两审通过。UX-03 现为 `REVIEW`，Gate A—D 均已完成，64 项真值为 `58/0/0/6/0`；仍未
+push、CI、部署或连接生产。
 
 UI-04 已于 2026-07-27（UTC）通过主控独立终审
 并保持 `CLOSED`；创始人真实使用后出现的产品语义新证据由 successor UI-05 单独承接。

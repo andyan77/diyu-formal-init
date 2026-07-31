@@ -145,21 +145,34 @@
   lint/typecheck/interaction/build 和显式 Gate C Chrome；产品／内容与工程／安全／兼容
   两份有界审查均无阻断。首次 Golden 暴露一个历史测试仍要求 Writer 自由带出未选重量事实，
   测试 oracle 已改为校验服务端实际冻结的“双面完整外观”，定向与全量回归转绿。
-- Gate D 最终本地运行实现为 `f2b5e266da44bc8a43aef65d92760076fa7e2987`，本地 schema
-  `20260810_37`。新 DM01 任务只解析 Gate B 已确认、启用、当前且对执行组织可见的商品版本，
-  并冻结商品摘要、门店档案与完整 `DM01RuleBundleV1`；V1 实际消费 11 条生成资产，修订资格
-  冻结 13 条完整资产且 V2 不重读当前商品、门店或激活状态。每版正文与 plan 绑定摘要，数据库
-  角色仅有 SELECT/INSERT，UPDATE/DELETE 由权限和 append-only trigger 双重拒绝。正式
-  React/API/PostgreSQL/Chrome 完成 V1→V2→历史 V1→当前 V2、复制与失败恢复；资格预检为
-  `0/0/0`，编译失败为 `+1/+1/+0` 且永久 running 为 0。
+- Gate D 首次本地候选 `f2b5e266da44bc8a43aef65d92760076fa7e2987` 与文档候选
+  `cda7b72318c1934d0f01fd7c235d188e48444091` 的完成记录保留。主控终审随后确定四个接缝：
+  正式商品与 DM01 SKU 合同分裂、finalize 不在完整异常边界内、请求级 4xx 污染供应商全局
+  状态，以及核心不可用时公共状态仍可能显示内容可用。Gate D 因此原地返回
+  `ACTIVE / REWORK`；本次前向实现 `06669c8cc46e412227ca188cc85745d4040c0c03` 一次关闭
+  四项后重新进入 `COMPLETE / 等待主控独立终审`，历史自报完成不作删除或改写。
+- 当前 Gate D 本地实现继续使用 schema `20260810_37`。新 React/API 以稳定商品版本 ID 与
+  正整数数量提交，服务端从正式当前版本和执行组织作用域解析并保留数据库 SKU 原值；
+  `abc-123`、`ABC123`、`123456`、`款号一` 与 `GD-UP-01` 均已通过正式
+  React/API/PostgreSQL 纵向。legacy `inventory_text` 保持兼容但不扩大授权；伪造、重复、
+  停用、旧版本或越界选择均在建任务前失败为 `0/0/0`。
+- 新 DM01 任务仍冻结商品摘要、门店档案与完整 `DM01RuleBundleV1`；V1 实际消费 11 条生成
+  资产，修订资格冻结 13 条完整资产且 V2 不重读当前商品、门店或激活状态。finalize 现在把
+  生成、校验、正文、版本保存、当前版本更新及正式回读放在同一异常边界和数据库事务内；
+  V1／V2 插入、指针更新或提交失败均无新版本、run=failed、永久 running=0，数据库连接中断
+  遗留的超租约 display run 只在后续安全同作用域访问时回收。用户只看到纯文字方案失败提示。
 - `/health/live` 只证明进程存活，`/health/ready` 只证明数据库／对象存储等核心依赖；`/status`
-  以 `public-service-status-v1` 分别显示核心、内容生成与纯文字陈列。内容生成只采用 900 秒内
-  的规范化真实供应商结果；过期或从未观察均为 `unknown`，页面访问不探测模型、不产生费用，
-  供应商异常不把 DM01 或核心 readiness 判死。完整门为 Ruff、mypy、Golden/OpenAPI
-  `504 passed, 2 skipped`、前端四门及显式 Gate D Chrome；七项 mutation proof 与两份有界
-  审查无阻断。脱敏 synthetic 证据位于
-  `/home/faye/.local/share/diyu-ux03-evidence/f2b5e266da44bc8a43aef65d92760076fa7e2987/gate-d/`，0700/0600 且
-  `SHA256SUMS` 可复算；验收对象已精确清零。
+  的 HTML fallback、React 与 API 共用 `public-service-status-v1`。核心不可用时三类能力均不可用；
+  核心可用时 DM01 可用，内容生成按 900 秒内 observation 映射 available／degraded／unavailable，
+  缺失、未来或过期 observation 为 unknown。请求级 content_filter、长度、参数或格式 4xx 不改写
+  observation；429 为 degraded，5xx／传输／认证／权限／模型不存在为 unavailable。两类状态
+  响应均 `Cache-Control: no-store`，访问和重新检查不调用模型。
+- 完整门为 `git diff --check`、Ruff、mypy、Golden/OpenAPI `517 passed, 2 skipped`、前端
+  lint/typecheck/interaction/build 和显式 Gate D Chrome；四项 mutation 分别恢复 SKU
+  大写／旧正则、把 finalize 移出保护边界、让请求级 4xx 写 unavailable、删除 core 对内容状态
+  的约束，均真实变红并在恢复后转绿。产品／用户体验与工程／安全／兼容两份有界审查无阻断；
+  synthetic tenant、任务、运行、版本、会话、token、运维身份和浏览器目录均由正式测试精确
+  清零。此前 `f2b5e266…` 的脱敏证据保持为历史，不拼接为本候选的新证据。
 - 当前 64 项功能真值为 `58/0/0/6/0`；没有继续标为有缺陷、占位或尚无法证明的正式项。
   运行资产保持 `41/243/25/119`，激活增量 0。
 - UX-03 本地候选不证明生产新能力、真实员工／品牌采用、真实发布、平台流量、排名、爆款、GMV／销售、多真实
