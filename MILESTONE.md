@@ -4,7 +4,8 @@
 - 状态：`ACTIVE`；`Gate A · 正式入驻、身份、逻辑发布账号与多平台关系闭环` 为
   `COMPLETE` 且主控最终终审 `PASS`；`Gate B · 品牌资料、组织作用域、团队使用与能力诊断`
   为 `COMPLETE` 且主控最终终审 `PASS`；`Gate C · 创作控制、真实阶段、完整成品与系列前情`
-  为 `COMPLETE`，等待主控独立终审。UX-02 保持 `CLOSED`，
+  为 `ACTIVE / REWORK`。主控终审确认 FT-039、FT-040、FT-045 `PASS`，只将 FT-041
+  退回同一 Gate C 有界返工。UX-02 保持 `CLOSED`，
   不创建 UX-04。
 - 当前 Git 基线：`86f5df16b9e42fe4eee322694156361a007bdb88`；唯一写入执行端为
   当前 WSL Codex。
@@ -15,10 +16,19 @@
   判定 FT-031／FT-032 为 `FAIL` 后，本次有界返工实现为
   `4a49e0d912e17a10965e840e89c1ef7f03bca3f6`；其后 FT-031 最小返工实现为
   `0774ae685da3156e529a1b6fed5d502a920706a1`。本地 `main` 只在 `origin/main` 的 UX-02
-  关闭基线上普通前向领先。Gate C 最终实现为
-  `4d797d35614216c92a7e62ae7a62d7456165d70b`；Gate A—C 均未 push、未触发远程 CI、
+  关闭基线上普通前向领先。Gate C 首次候选实现为
+  `4d797d35614216c92a7e62ae7a62d7456165d70b`；主控已保留该候选及失败证据并退回
+  FT-041。Gate A—C 均未 push、未触发远程 CI、
   未部署或连接生产。Gate C 只在获准的无数据库、无 Redis、无业务持久化隔离路径调用
   `deepseek-v4-flash` 完成最终同 SHA 套件。
+- FT-041 前向返工先后形成 `715838f0a093f12e1be77b4d76581f5db8814e6c`、
+  `c18fcf5d0393c7bb7a4bffbd1a8a92f335703834` 与最终重试实现
+  `ad398e60ea4b7544211190b99788c19ce7e293dc`。最后实现已通过 Ruff、mypy、
+  Golden/OpenAPI `448 passed, 2 skipped`、前端四门和显式 Chrome；但按冻结纪律只运行
+  一次的同 SHA 七卡套件在 P1 完成后，于 P2 的 `unit:media-opening` 检出 Writer 再次写入
+  Compiler 所有的可见结构包装并失败关闭。root-only 失败证据及可复算校验位于
+  `/var/lib/diyu-ux03-evidence/ad398e60ea4b7544211190b99788c19ce7e293dc/gate-c-final-suite/`；
+  未生成最终 manifest 或人工 PASS。
 - 当前任务包：
   [`docs/UX-03-产品目标一致性与全链路修复执行包.md`](docs/UX-03-产品目标一致性与全链路修复执行包.md)。
 - Gate A 已在本地完成正式 React/API/PostgreSQL 的新租户入驻、品牌基线、自然人资格、
@@ -42,20 +52,23 @@
   组织、资料路径决定，evidence 返回真实对象、版本、范围和更新时间；指定区域仍只接受
   明确登记的 region，历史非 region 数据仅兼容读取。Golden/OpenAPI 为
   `422 passed, 1 skipped`，FT-031 有界复核无阻断。
-- Gate C 已关闭 FT-039、FT-040、FT-041 和 FT-045：五轴可选方向及开放原话冻结到任务并
+- Gate C 已关闭 FT-039、FT-040 和 FT-045：五轴可选方向及开放原话冻结到任务并
   随修订重放；NDJSON 只在实际节点发出阶段，`completed` 位于原子提交、digest 校验和正式
-  回读之后；媒体原生标题、正文、图序／镜头和发布配文由服务端预分配可写单元，Compiler
-  只确定性插入事实、一次范围、结构和 AIGC；系列前情以同租户／品牌／逻辑账号／系列边界
-  冻结并进入 Writer 输入。最终同 SHA P1—P5 与三篇系列 7 次必要调用均经人工全文审阅
-  `PASS`，隔离执行主机的 root-only 证据位于
+  回读之后；系列前情以同租户／品牌／逻辑账号／系列边界冻结并进入 Writer 输入。FT-041
+  尚未关闭：主控确认 v3 媒体单元仍由固定 Compiler 模板主导，P2 扩写未冻结商品语义，
+  P3 缺少正文可识别的账号关联，且人工审阅摘要无法按文件 SHA 或正式 visible digest
+  复算。首次同 SHA P1—P5 与三篇系列证据完整保留在
   `/var/lib/diyu-ux03-evidence/4d797d35614216c92a7e62ae7a62d7456165d70b/gate-c-final-suite/`。
   `git diff --check`、Ruff、mypy、Golden/OpenAPI `440 passed, 2 skipped`、前端四门、
-  显式三视口 Chrome 和两份有界审查均无阻断。
-- 当前 64 项功能真值为 `54/4/0/6/0`；剩余有缺陷项仅为 FT-050—FT-052 和 FT-058。
+  显式三视口 Chrome 和两份有界审查是该首次候选的历史工程证据，不替代本次 FT-041
+  返工完成门。
+- 当前 64 项功能真值暂为 `53/5/0/6/0`；有缺陷项为 FT-041、FT-050—FT-052 和 FT-058。
   运行资产保持 `41/243/25/119`，激活增量 0。
 - Gate C 不证明真实员工／品牌采用、真实发布、平台流量、排名、爆款、GMV／销售、多真实
   租户市场差异、企业 SLA 或 `20/55/44` 全组合稳定支持。
-- 当前唯一下一动作：主控独立终审 Gate C；后续 Gate 保持 `NOT_STARTED`。
+- 当前唯一下一动作：主控裁决是否把 Writer 原始输出合同从“结构包装出现即失败”改为“仅对
+  与当前 unit purpose 精确对应的首行冗余包装做服务端确定性去除，其余保留 heading 仍失败
+  关闭”；未获裁决前不做第三轮模型收敛，后续 Gate 保持 `NOT_STARTED`。
 
 ## UX-02 关闭记录（历史保留）
 
