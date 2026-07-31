@@ -2350,7 +2350,10 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         request: GenerationInput,
         kernel: CreativeKernelV1,
     ) -> None:
-        if request.primary_product != "brand_life_narrative":
+        if (
+            request.primary_product != "brand_life_narrative"
+            or kernel.kernel_version != KERNEL_VERSION
+        ):
             return
         required = cls._required_account_link_spans(request)
         if not required:
