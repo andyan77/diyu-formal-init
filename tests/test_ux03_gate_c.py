@@ -2207,6 +2207,32 @@ def test_p2_server_selects_only_the_three_frozen_product_facts() -> None:
     )
 
 
+def test_p2_formal_observable_and_colors_share_one_product_value_path() -> None:
+    product = ProductFact(
+        sku="ZX-C218",
+        display_name="双面短外套",
+        facts={
+            "entity_kind": "apparel_product",
+            "category": "双面短外套",
+            "colors": ["炭灰纯色", "深绿细格纹"],
+            "observable_features": "两面都以完整外观呈现",
+        },
+        source_kind="synthetic_confirmed_product_record",
+    )
+
+    contract = build_product_value_contract(
+        primary_product="product_truth",
+        products=(product,),
+    )
+
+    assert isinstance(contract, P2ProductValueContractV1)
+    assert "两面都以完整外观呈现" in contract.product_insight
+    assert "先呈现哪一套完整外观" in contract.product_insight
+    assert "一次内容只能先突出一套完整外观" in contract.tradeoff_or_limit
+    assert "同时依赖" in contract.validity_condition
+    assert len(contract.source_fact_ids) == 3
+
+
 @pytest.mark.parametrize(
     ("primary_product", "frame_mode", "expected_mode"),
     (

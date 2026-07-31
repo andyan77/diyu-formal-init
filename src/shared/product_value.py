@@ -221,6 +221,22 @@ def _build_p2_contract(
             "这项理解只在本次判断确实围绕两面完整外观时成立；如果本次只固定呈现"
             "其中一面，双面就不是这次选择的决定因素。"
         )
+    elif observable and len(colors) >= 2:
+        source_keys = ("display_name", "colors", "observable_features")
+        insight = (
+            f"{product.display_name}的专属新增理解是：已确认的“{observable}”与"
+            f"{colors[0]}、{colors[1]}要放在同一个选择里看；本次选择应落在先呈现"
+            "哪一套完整外观，而不是只比较孤立色块。"
+        )
+        tradeoff = (
+            "相伴取舍是一次内容只能先突出一套完整外观；先呈现一种可见重心会暂时"
+            "弱化另一套的存在，但不能把两套完整外观说成两件商品。"
+        )
+        condition = (
+            f"这项理解只在本次问题同时依赖“{observable}”和已确认颜色差异时成立；"
+            "如果只固定呈现其中一套，或者选择不取决于颜色，这组事实就不能替代其他"
+            "尚未确认的判断依据。"
+        )
     elif len(colors) >= 2:
         source_keys = ("display_name", "colors")
         insight = (
