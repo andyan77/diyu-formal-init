@@ -2196,6 +2196,83 @@ def test_initial_and_repair_paths_share_exact_wrapper_normalization() -> None:
     assert repaired.unit("unit:media-opening").text == "修复后的可见开头。"
 
 
+def test_account_text_repair_preserves_frozen_claim_refs_without_requiring_them_in_response() -> None:
+    request = _generation_input()
+    assert request.narrative_frame is not None
+    skeleton = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=(),
+        constraint_refs=(),
+        allowed_resource_ids=tuple(sorted(_RESOURCES)),
+        media_format="graphic",
+        kernel_version=KERNEL_VERSION,
+        primary_product=request.primary_product,
+    )
+    filled = parse_writer_kernel(
+        {
+            "units": [
+                {
+                    "unit_id": unit.unit_id,
+                    "text": f"{unit.purpose} 的自然内容",
+                }
+                for unit in skeleton.writable_units
+            ]
+        },
+        skeleton,
+        media_format="graphic",
+    )
+    claim_id = "fact:account-expression"
+    kernel = CreativeKernelV1(
+        kernel_version=filled.kernel_version,
+        units=tuple(
+            replace(unit, claim_refs=(claim_id,))
+            if unit.unit_id == "unit:natural-guide"
+            else unit
+            for unit in filled.units
+        ),
+        program_id=filled.program_id,
+        selected_fact_block_ids=filled.selected_fact_block_ids,
+    )
+    raw = {
+        "units": [
+            {
+                "unit_id": "unit:natural-guide",
+                "text": "用已经冻结的账号观察方式自然带入这一篇。",
+            }
+        ]
+    }
+
+    with pytest.raises(TypeError):
+        repair_kernel_units(
+            kernel=kernel,
+            affected_unit_ids=frozenset({"unit:natural-guide"}),
+            raw=raw,
+            allowed_claim_ids=frozenset({claim_id}),
+            media_format="graphic",
+        )
+
+    with pytest.raises(ValueError):
+        repair_kernel_units(
+            kernel=kernel,
+            affected_unit_ids=frozenset({"unit:natural-guide"}),
+            raw=raw,
+            allowed_claim_ids=frozenset(),
+            media_format="graphic",
+            preserve_claim_refs=True,
+        )
+
+    repaired = repair_kernel_units(
+        kernel=kernel,
+        affected_unit_ids=frozenset({"unit:natural-guide"}),
+        raw=raw,
+        allowed_claim_ids=frozenset({claim_id}),
+        media_format="graphic",
+        preserve_claim_refs=True,
+    )
+    assert repaired.unit("unit:natural-guide").claim_refs == (claim_id,)
+    assert repaired.unit("unit:natural-guide").text == raw["units"][0]["text"]
+
+
 def test_actuality_life_units_are_preallocated_as_disclosed_hypothesis() -> None:
     fact = "今天喝了一直喝的蓝山咖啡，居然是甜的。"
     frame = new_frame("actuality_reflection", (fact,), ())

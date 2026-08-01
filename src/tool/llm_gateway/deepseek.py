@@ -874,6 +874,7 @@ class DeepSeekGenerator(ContentGenerator):
                     ),
                     allowed_claim_ids=context.product_fact_packet.fact_ids,
                     media_format=request.media_format,
+                    preserve_claim_refs=True,
                 )
             except (
                 KeyError,

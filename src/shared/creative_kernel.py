@@ -811,11 +811,18 @@ def repair_kernel_units(
     raw: object,
     allowed_claim_ids: frozenset[str] = frozenset(),
     media_format: MediaFormat | None = None,
+    preserve_claim_refs: bool = False,
 ) -> CreativeKernelV1:
     if not affected_unit_ids:
         raise ValueError("repair has no affected writable units")
     if any(not kernel.unit(unit_id).writable for unit_id in affected_unit_ids):
         raise ValueError("service-authored fact units cannot be repaired")
+    if preserve_claim_refs and any(
+        claim_ref not in allowed_claim_ids
+        for unit_id in affected_unit_ids
+        for claim_ref in kernel.unit(unit_id).claim_refs
+    ):
+        raise ValueError("preserved repair claim ref is outside ProductFactPacket")
     repair_skeleton = CreativeKernelV1(
         kernel_version=kernel.kernel_version,
         units=tuple(replace(unit, text="") for unit in kernel.units if unit.unit_id in affected_unit_ids),
@@ -826,9 +833,22 @@ def repair_kernel_units(
         raw,
         repair_skeleton,
         allowed_claim_ids=allowed_claim_ids,
-        require_claim_refs=bool(allowed_claim_ids),
+        require_claim_refs=bool(allowed_claim_ids) and not preserve_claim_refs,
         media_format=media_format,
     )
+    if preserve_claim_refs:
+        repaired = CreativeKernelV1(
+            kernel_version=repaired.kernel_version,
+            units=tuple(
+                replace(
+                    unit,
+                    claim_refs=kernel.unit(unit.unit_id).claim_refs,
+                )
+                for unit in repaired.units
+            ),
+            program_id=repaired.program_id,
+            selected_fact_block_ids=repaired.selected_fact_block_ids,
+        )
     replacements = {unit.unit_id: unit for unit in repaired.units}
     if any(replacements[unit_id].text == kernel.unit(unit_id).text for unit_id in affected_unit_ids):
         raise ValueError("repair did not change every affected unit")
