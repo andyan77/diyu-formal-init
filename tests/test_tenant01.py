@@ -229,6 +229,11 @@ def test_tenant01_content_product_taxonomy_is_not_an_insertable_brand_fact() -> 
         ("稳定目标人群",),
         "面向需要日常穿衣选择帮助的人。",
     ) == "brand_fact"
+    assert classify_source_segment(
+        "DIYU-AUDIENCE-PROFILE-001",
+        ("十八、本批验收项",),
+        "验收目录只用于核对资料覆盖。",
+    ) == "source_catalog_only"
 
 
 def test_source_identity_uses_embedded_metadata_not_filename(tmp_path: Path) -> None:
@@ -489,6 +494,7 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
     management_scope, organization_id = _import_scope(migrator_database_url)
     account_id = uuid4()
     legacy_taxonomy_segment_id = uuid4()
+    legacy_acceptance_segment_id = uuid4()
     importer = TenantSourceImporter(app_database_url)
     try:
         _write_source_batch(tmp_path)
@@ -519,6 +525,26 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
                     ["十二、五类内容产品与受众价值"],
                     legacy_text,
                     sha256(legacy_text.encode()).hexdigest(),
+                ),
+            )
+            acceptance_text = "验收目录包含内部内容产品代号，不是品牌事实。"
+            cursor.execute(
+                "INSERT INTO brand_source_segments "
+                "(id, tenant_id, brand_id, document_id, document_version_id, "
+                " segment_key, heading_path, source_locator, exact_text, "
+                " semantic_kind, evidence_level, applicability, digest) "
+                "VALUES (%s, %s, %s, %s, %s, 'legacy-acceptance', %s, "
+                " 'line:1000', %s, 'brand_fact', 'brand_user_authorized', "
+                " '只用于测试旧解析器验收目录的安全投影', %s)",
+                (
+                    legacy_acceptance_segment_id,
+                    management_scope.tenant_id,
+                    management_scope.brand_id,
+                    source_row[0],
+                    source_row[1],
+                    ["十八、本批验收项"],
+                    acceptance_text,
+                    sha256(acceptance_text.encode()).hexdigest(),
                 ),
             )
             cursor.execute(
@@ -610,7 +636,14 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
         assert legacy_segment.semantic_kind == "expression_constraint"
         assert legacy_segment.exact_text in selected.expression_constraint_context
         assert legacy_segment.exact_text not in selected.brand_reference_context
-        assert all(item.semantic_kind != "template_only" for item in selected.context_packet.segments)
+        assert all(
+            item.segment_id != str(legacy_acceptance_segment_id)
+            for item in selected.context_packet.segments
+        )
+        assert all(
+            item.semantic_kind not in {"template_only", "source_catalog_only"}
+            for item in selected.context_packet.segments
+        )
     finally:
         _delete_import_scope(migrator_database_url, management_scope)
 

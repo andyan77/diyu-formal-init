@@ -494,9 +494,11 @@ class PostgresContentRepository(ContentRepository):
         effective_rows = tuple(
             {
                 **row,
-                "semantic_kind": self._effective_segment_kind(row),
+                "semantic_kind": effective_kind,
             }
             for row in rows
+            if (effective_kind := self._effective_segment_kind(row))
+            not in {"source_catalog_only", "template_only"}
         )
         ranked = sorted(
             effective_rows,

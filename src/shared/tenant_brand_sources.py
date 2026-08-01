@@ -78,6 +78,12 @@ _BRAND_FACT_DOCUMENTS = frozenset(
         "DIYU-AUDIENCE-PROFILE-001",
     }
 )
+_NON_CONSUMABLE_HEADING_MARKERS = (
+    "验收项",
+    "验收标准",
+    "验收结论",
+    "本批结论",
+)
 
 
 @dataclass(frozen=True)
@@ -195,6 +201,9 @@ def classify_source_segment(
 
     if exact_text and _is_document_metadata(exact_text):
         return "source_catalog_only"
+    joined = "/".join(heading_path)
+    if any(marker in joined for marker in _NON_CONSUMABLE_HEADING_MARKERS):
+        return "source_catalog_only"
     if source_id in _TEMPLATE_DOCUMENTS:
         return "template_only"
     if source_id in _CATALOG_DOCUMENTS:
@@ -209,7 +218,6 @@ def classify_source_segment(
         # These documents contain explicit gaps and candidate/example sections.
         # The heading, not free prose or a model, decides whether the segment can
         # be licensed as an immutable brand fact.
-        joined = "/".join(heading_path)
         if any(
             marker in joined
             for marker in (
