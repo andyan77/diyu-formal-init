@@ -310,6 +310,7 @@ class ConversationInput:
     explicit_narrative_mode: NarrativeMode | None = None
     prior_series_summary: str = ""
     creation_committed: bool = False
+    indispensable_fact_question_allowed: bool = False
     allowed_tone_ids: tuple[str, ...] = ()
     allowed_mechanism_ids: tuple[str, ...] = ()
     platform_shape: str = ""

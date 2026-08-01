@@ -581,6 +581,8 @@ class DeepSeekGenerator(ContentGenerator):
             request.message,
         )
         if kind == "question":
+            if not request.indispensable_fact_question_allowed:
+                raise GenerationFailed("当前创作条件不允许把可直接完成的低种子输入退回追问")
             missing_span = document.get("missing_fact_span")
             if (
                 not isinstance(missing_span, str)
@@ -2908,7 +2910,9 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 责任合同：
 - 服务端创作承诺={str(request.creation_committed).lower()}。为 false 时自然交流优先；即使你认为
   适合创作，也只能给自然回复并将 creation_proposal 设为 true，不能把提议当作授权。
-- 服务端创作承诺为 true 时，负责形成 ready 或一次不可替代事实 question；不追问题材、观点、
+- 服务端创作承诺为 true 时，负责形成 ready；只有“服务端允许不可替代事实追问”为 true 时，
+  才能返回一次 question。服务端允许不可替代事实追问=
+  {str(request.indispensable_fact_question_allowed).lower()}。不得自行扩大追问范围，不追问题材、观点、
   受众或结构。
 - 商品编号加生成请求、开放题材加生成请求、生活流水账／抱怨／感悟加生成请求、以及“没想好
   发什么”的生成请求都直接 ready。系统自己选观点与结构，不追问创作选择。

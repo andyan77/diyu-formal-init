@@ -1255,10 +1255,41 @@ def test_conversation_question_must_bind_one_user_fact_gap() -> None:
             _brand(),
             (),
             "xiaohongshu_graphic",
+            indispensable_fact_question_allowed=True,
         )
     )
     assert decision.disposition == "question"
     assert "具体发生" in decision.message
+
+
+def test_committed_low_seed_cannot_be_returned_as_an_unnecessary_question() -> None:
+    message = "今天喝了一直喝的蓝山咖啡，居然是甜的"
+    request = ConversationInput(
+        message=message,
+        history=(),
+        brand=_brand(),
+        products=(),
+        target="xiaohongshu_graphic",
+        creation_committed=True,
+        indispensable_fact_question_allowed=False,
+        allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        platform_shape="xiaohongshu_graphic:graphic",
+    )
+    prompt = _generator()._conversation_prompt(request)
+    assert "服务端允许不可替代事实追问=\n  false" in prompt
+    FakeClient.responses = [
+        _completion(
+            {
+                "kind": "question",
+                "message": "还需要补充一点细节。",
+                "missing_fact_span": message,
+                "creation_proposal": True,
+            }
+        )
+    ]
+
+    with pytest.raises(GenerationFailed, match="不允许.*退回追问"):
+        _generator().collaborate(request)
 
 
 def test_conversation_rejects_synthetic_or_mode_drifted_spans() -> None:

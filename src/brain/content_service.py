@@ -541,6 +541,10 @@ class ContentService:
                 ),
                 prior_series_summary=series_summary,
                 creation_committed=commitment.committed,
+                indispensable_fact_question_allowed=(
+                    commitment.committed
+                    and requires_indispensable_user_fact(commitment.intent_span)
+                ),
                 allowed_tone_ids=self._allowed_tone_ids(control),
                 allowed_mechanism_ids=self._allowed_mechanism_ids(control),
                 platform_shape=platform_shape(target, direction.media_format),
