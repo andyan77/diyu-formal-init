@@ -259,7 +259,7 @@
     <div class="phase mile"><div class="mile-card"><span class="flag">🏁</span> 第一阶段已通过主控产品级独立终审，M7-3 正式 CLOSED</div></div>
 
     <!-- UI 产品化 -->
-    <div class="phase now">
+    <div class="phase">
       <div class="pcard">
         <div class="ph-head"><p class="ph-title"><span class="idx">UX</span>前端产品化</p><span class="badge b-done">UX-03 · CLOSED</span></div>
         <p class="ph-desc">UI-12、UX-01、UX-02 与 UX-03 均已关闭。UX-03 各轮失败历史保留；Gate A—D 已经主控最终独立终审 PASS，并完成生产交付与回退清理。</p>
@@ -278,6 +278,16 @@
           <li class="node"><span class="nstat"><i class="dot d-done"></i></span><div class="nbody"><div class="ntitle">产品目标一致性与全链路修复<span class="ncode">UX-03 · CLOSED</span></div><div class="ndesc">主控最终独立终审 PASS。Gate A—D 均 COMPLETE / PASS，历史失败和前向返工保留。最终运行 1f6aafee…、权威 CI 30684531999、schema 20260810_37、新鲜备份恢复、同 SHA Gate A—D／七卡生产验收、回退往返与 synthetic 清理均通过；真值 58/0/0/6/0，资产 41/243/25/119。未启动后继里程碑</div></div></li>
         </ul>
         <div class="tip"><span class="h">资产边界</span>UI-01R 的 CSV/Markdown 只是现有 JSON/JSONL 真源的人可读投影；候选登记、运行激活、本次调用、已验证能力和真实租户采用不得混为一谈。</div>
+      </div>
+    </div>
+
+    <div class="phase now">
+      <div class="pcard">
+        <div class="ph-head"><p class="ph-title"><span class="idx">TENANT</span>首租户生产就绪</p><span class="badge b-now">TENANT-01 · REVIEW</span></div>
+        <p class="ph-desc">笛语服饰的正式账号、画像、四个平台／形式目标、21 份源资料与 14 个候选商品已进入生产消费者；当前等待主控独立终审。</p>
+        <ul class="nodes">
+          <li class="node"><span class="nstat"><i class="dot d-now"></i></span><div class="nbody"><div class="ntitle">笛语服饰首租户生产就绪与全能力演示<span class="ncode">TENANT-01 · REVIEW</span></div><div class="ndesc">最终运行 96dcb74…、权威 CI 30712642287、schema 20260812_39、备份恢复、生产导入、隔离黄金套件与旧镜像回退往返成立。21 份源文档形成 5,046 个类型化 segment，14 个候选商品形成 203 条字段证据；P5 无正式商品媒体、DM01 无正式门店／库存为租户资料缺口，不改变软件真值 58/0/0/6/0</div></div></li>
+        </ul>
       </div>
     </div>
 
@@ -336,7 +346,7 @@
 
   <footer>
     依据 <code>docs/项目记忆.md</code>、<code>docs/待决策清单.md</code>、正式 ADR、用户提供的 <code>首批领域数据库知识数据</code> 与 D-007 两份资料成果更新。<br>
-    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料、WSL 唯一 Git 主仓迁移、M3-1/M3-2、M4-1/M4-2、M5-1—M5-3、M5-K、M5-4、M6-1 与 M6-2；M6-3 未通过并已 SUPERSEDED 至已关闭的 M7-2B；M7-1、M7-2A、M7-2B、M7-3 均已 CLOSED。目录对账仍为风格 20/20、题材 55/55、体裁 41/44（缺 3 条来源缺口），能力状态为 10/64/6/38/1；不证明真实员工采用、真实商品采用、真实门店现场执行、真实发布、平台流量、排名、爆款、GMV、销售、企业采用、真实跨租户市场差异、企业 SLA 或 20/55/44 全组合稳定支持。UI-01 已 SUPERSEDED 至已关闭的 UI-01R；UI-01R、UI-02、UI-03 与 UI-04 均已 CLOSED。UI-05—UI-11 保留历史并依次 SUPERSEDED 至 UI-12；UI-12 已经主控最终独立终审 PASS 并 CLOSED，生产运行 9c5b243… 与 schema 32。UX-01 经主控重新独立终审 PASS 并 CLOSED，第一次验证假绿历史保留。UX-02 已完成正式三条纵向、唯一 CI、生产默认前端替换、清理和回退，并经主控最终独立终审 PASS 后 CLOSED。UX-03 也已完成 Gate A—D、权威 CI、生产部署、备份恢复、同 SHA 验收、回退往返与清理，并经主控最终独立终审 PASS 后 CLOSED。运行资产仍为 41 条，候选 243、目录 25/119、激活增量 0；当前未启动后继里程碑。
+    当前已完成立项前业务与数据语义基线、领域候选接收、合成品牌资料、WSL 唯一 Git 主仓迁移、M3-1/M3-2、M4-1/M4-2、M5-1—M5-3、M5-K、M5-4、M6-1 与 M6-2；M6-3 未通过并已 SUPERSEDED 至已关闭的 M7-2B；M7-1、M7-2A、M7-2B、M7-3 均已 CLOSED。目录对账仍为风格 20/20、题材 55/55、体裁 41/44（缺 3 条来源缺口），能力状态为 10/64/6/38/1；不证明真实员工采用、真实商品采用、真实门店现场执行、真实发布、平台流量、排名、爆款、GMV、销售、企业采用、真实跨租户市场差异、企业 SLA 或 20/55/44 全组合稳定支持。UI-01 已 SUPERSEDED 至已关闭的 UI-01R；UI-01R、UI-02、UI-03 与 UI-04 均已 CLOSED。UI-05—UI-11 保留历史并依次 SUPERSEDED 至 UI-12；UI-12 已经主控最终独立终审 PASS 并 CLOSED，生产运行 9c5b243… 与 schema 32。UX-01 经主控重新独立终审 PASS 并 CLOSED，第一次验证假绿历史保留。UX-02 已完成正式三条纵向、唯一 CI、生产默认前端替换、清理和回退，并经主控最终独立终审 PASS 后 CLOSED。UX-03 也已完成 Gate A—D、权威 CI、生产部署、备份恢复、同 SHA 验收、回退往返与清理，并经主控最终独立终审 PASS 后 CLOSED。TENANT-01 已完成首租户生产导入、正式消费者、隔离黄金验收、备份恢复和旧镜像回退，当前为 REVIEW。运行资产仍为 41 条，候选 243、目录 25/119、激活增量 0；唯一下一动作是主控独立终审 TENANT-01。
   </footer>
 
 </div>
