@@ -1649,6 +1649,71 @@ def test_dual_track_writer_receives_only_deidentified_preassigned_units() -> Non
     assert "reviewer_model" not in artifact.completion_snapshot_patch
 
 
+def test_writer_full_paragraph_block_repetition_is_repaired_once() -> None:
+    request = _kernel_request()
+    paragraph_block = (
+        "先承认彼此的位置。\n\n"
+        "再说明可以怎样回应。\n\n"
+        "先承认彼此的位置。\n\n"
+        "再说明可以怎样回应。"
+    )
+    raw = _kernel_writer(body=paragraph_block)
+    repaired_text = "先承认彼此的位置。\n\n再说明可以怎样回应，并把选择留给对方。"
+    FakeClient.responses = [
+        _completion(raw),
+        _completion(
+            {
+                "units": [
+                    {
+                        "unit_id": "unit:body-opening",
+                        "text": repaired_text,
+                    }
+                ]
+            }
+        ),
+    ]
+
+    artifact = _generator().generate(request)
+
+    assert len(FakeClient.requests) == 2
+    assert artifact.completion_snapshot_patch is not None
+    kernel_document = artifact.completion_snapshot_patch["creative_kernel_v2"]
+    assert isinstance(kernel_document, dict)
+    units = kernel_document["units"]
+    assert isinstance(units, list)
+    repaired_unit = next(
+        unit
+        for unit in units
+        if isinstance(unit, dict) and unit.get("unit_id") == "unit:body-opening"
+    )
+    assert repaired_unit["text"] == repaired_text
+    assert "逐段完全相同的重复块" in _payload_prompts()[1]
+
+
+def test_writer_repetition_repair_fails_closed_when_repeated_block_remains() -> None:
+    request = _kernel_request()
+    repeated = "第一段。\n\n第二段。\n\n第一段。\n\n第二段。"
+    raw = _kernel_writer(body=repeated)
+    FakeClient.responses = [
+        _completion(raw),
+        _completion(
+            {
+                "units": [
+                    {
+                        "unit_id": "unit:body-opening",
+                        "text": "新的第一段。\n\n新的第二段。\n\n新的第一段。\n\n新的第二段。",
+                    }
+                ]
+            }
+        ),
+    ]
+
+    with pytest.raises(GenerationFailed, match="重复正文无法在一次"):
+        _generator().generate(request)
+
+    assert len(FakeClient.requests) == 2
+
+
 def test_ui12_writer_cannot_return_compiler_owned_visible_fields() -> None:
     request = _kernel_request()
     raw = _kernel_writer()

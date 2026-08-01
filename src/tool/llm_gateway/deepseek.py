@@ -810,6 +810,41 @@ class DeepSeekGenerator(ContentGenerator):
             )
         except (KeyError, ValueError) as exc:
             raise GenerationFailed("CreativeKernelV1 商品事实边界无法在一次 affected-unit 修复内满足") from exc
+        repeated_units = self._mechanically_repeated_writer_units(kernel)
+        if repeated_units:
+            repair_payload, repair_retries = self._request(
+                "你是笛语 CreativeKernel Writer。只返回一次受影响 unit 修复 JSON，不展示推理或内部规则。",
+                self._repeated_writer_unit_repair_prompt(
+                    kernel=kernel,
+                    affected=repeated_units,
+                ),
+                4096,
+            )
+            provider_payloads.append(repair_payload)
+            retries += repair_retries
+            try:
+                kernel = repair_kernel_units(
+                    kernel=kernel,
+                    affected_unit_ids=repeated_units,
+                    raw=json.loads(
+                        self._json_content(
+                            str(repair_payload["choices"][0]["message"]["content"])
+                        )
+                    ),
+                    allowed_claim_ids=context.product_fact_packet.fact_ids,
+                    media_format=request.media_format,
+                    preserve_claim_refs=True,
+                )
+            except (
+                KeyError,
+                IndexError,
+                TypeError,
+                ValueError,
+                json.JSONDecodeError,
+            ) as exc:
+                raise GenerationFailed("CreativeKernelV1 重复正文 affected-unit 修复格式不完整") from exc
+            if self._mechanically_repeated_writer_units(kernel):
+                raise GenerationFailed("CreativeKernelV1 重复正文无法在一次 affected-unit 修复内满足")
         missing_account_spans = self._missing_p3_account_link_spans(
             request,
             kernel,
@@ -1286,6 +1321,69 @@ class DeepSeekGenerator(ContentGenerator):
             if compiler_owned_unit_source(unit.unit_id, unit.text) is None
             and product_fact_literal_spans(packet, unit.text)
         )
+
+    @staticmethod
+    def _mechanically_repeated_writer_units(
+        kernel: CreativeKernelV1,
+    ) -> frozenset[str]:
+        """Locate an exact consecutive paragraph block repeated in full.
+
+        This is intentionally narrower than semantic similarity: an intentional
+        refrain may repeat one line, while duplicating an entire multi-paragraph
+        half is a deterministic transport/writer defect.  Frozen fact and
+        compiler-owned units are never candidates.
+        """
+
+        affected: set[str] = set()
+        for unit in kernel.writable_units:
+            if compiler_owned_unit_source(unit.unit_id, unit.text) is not None:
+                continue
+            paragraphs = tuple(
+                paragraph.strip()
+                for paragraph in unit.text.split("\n\n")
+                if paragraph.strip()
+            )
+            if len(paragraphs) < 4 or len(paragraphs) % 2:
+                continue
+            midpoint = len(paragraphs) // 2
+            if paragraphs[:midpoint] == paragraphs[midpoint:]:
+                affected.add(unit.unit_id)
+        return frozenset(affected)
+
+    @staticmethod
+    def _repeated_writer_unit_repair_prompt(
+        *,
+        kernel: CreativeKernelV1,
+        affected: frozenset[str],
+    ) -> str:
+        units = [
+            {
+                "unit_id": unit.unit_id,
+                "purpose": unit.purpose,
+                "current_text": unit.text,
+            }
+            for unit in kernel.writable_units
+            if unit.unit_id in affected
+        ]
+        template = {
+            "units": [
+                {
+                    "unit_id": unit["unit_id"],
+                    "text": "去除整块机械重复后的完整自然文字",
+                }
+                for unit in units
+            ]
+        }
+        return f"""只修复服务端列出的机械重复创意 unit。每个 current_text 的前后两半是
+逐段完全相同的重复块；保留一条完整、有推进的表达，不新增人物、事件、事实、资源、场地、
+道具或机构主张，也不要把重复块换词后再写一遍。
+
+受影响 unit：
+{json.dumps(units, ensure_ascii=False)}
+
+必须恰好一次返回全部列出的 unit_id，且只能返回 unit_id、text。返回文字必须与原文实质
+不同、不能仍由两个完全相同的多段块组成。只返回：
+{json.dumps(template, ensure_ascii=False)}"""
 
     def _kernel_writer_prompt(
         self,
