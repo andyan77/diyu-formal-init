@@ -18,6 +18,7 @@ from src.infrastructure.production_auth import (
 from src.shared.types import (
     ContentTarget,
     DisplayScope,
+    MaterialMaintenanceScope,
     TenantManagementScope,
     TrustedScope,
 )
@@ -157,6 +158,15 @@ class SessionAuthority:
         self._require_application(request, ("display-merchandising",))
         return self._display_scope()
 
+    def require_material_maintenance(self, request: Request) -> MaterialMaintenanceScope:
+        self._require_application(request, ("tenant-user", "dual-tenant-user"))
+        return MaterialMaintenanceScope(
+            self._scope.tenant_id,
+            self._scope.user_id,
+            self._scope.brand_id,
+            self._settings.demo_display_organization_id,
+        )
+
     def require_user_portal(self, request: Request) -> TrustedScope:
         application = self._require_application(request, _USER_PORTAL_APPLICATIONS)
         if application in _CONTENT_APPLICATIONS:
@@ -239,7 +249,15 @@ class ProductionSessionAuthority:
         identity = self._tenant_identity(request)
         if identity.audience != "tenant-user":
             raise HTTPException(status_code=403, detail="当前正式会话没有租户用户入口资格")
-        return self.repository.display_scope(identity)
+        raw_store_id = request.query_params.get("store_id")
+        try:
+            store_id = UUID(raw_store_id) if raw_store_id else None
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="请选择有效的门店档案") from exc
+        return self.repository.display_scope(identity, store_id)
+
+    def require_material_maintenance(self, request: Request) -> MaterialMaintenanceScope:
+        return self.repository.material_maintenance_scope(self._tenant_identity(request))
 
     def require_user_portal(self, request: Request) -> TrustedScope:
         identity = self._tenant_identity(request)

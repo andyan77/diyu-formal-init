@@ -44,7 +44,8 @@ export interface BootstrapContext {
   current_publishing_identity_id?: string | null;
   formal_runtime?: boolean;
   generator_mode?: "stub" | "deepseek";
-  capabilities?: Array<"content" | "display">;
+  capabilities?: Array<"content" | "display" | "materials">;
+  display_stores?: Array<{ id: string; name: string }>;
   service_state?: "available" | "unavailable";
   runtime_summary?: Record<string, number | null>;
   pending_requests?: number;
@@ -65,6 +66,14 @@ export interface ContentVersion {
   adapted_from?: string | null;
   translation_notice?: string | null;
   applied_direction?: string[];
+  context_basis?: {
+    account: string;
+    platform_and_format: string;
+    brand_material_categories: string[];
+    has_product_facts: boolean;
+    selected_material_count: number;
+    gaps: string[];
+  };
   created_at?: string;
 }
 

@@ -933,9 +933,16 @@
             "type": "string"
           },
           "operator_id": {
-            "format": "uuid",
-            "title": "Operator Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Id"
           },
           "source_account_id": {
             "format": "uuid",
@@ -947,7 +954,6 @@
           "source_account_id",
           "name",
           "channel",
-          "operator_id",
           "confirm_internal_carrier"
         ],
         "title": "CreatePlatformCarrierRequest",
@@ -1025,9 +1031,16 @@
             "type": "boolean"
           },
           "operator_id": {
-            "format": "uuid",
-            "title": "Operator Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operator Id"
           },
           "speaker_kind": {
             "default": "unknown",
@@ -1056,8 +1069,7 @@
         "required": [
           "name",
           "channel",
-          "content_role_name",
-          "operator_id"
+          "content_role_name"
         ],
         "title": "CreatePublishingAccountRequest",
         "type": "object"
@@ -1146,6 +1158,15 @@
             "minLength": 1,
             "title": "Display Name",
             "type": "string"
+          },
+          "display_store_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Display Store Ids",
+            "type": "array"
           },
           "entry_type": {
             "anyOf": [
@@ -1973,6 +1994,54 @@
         "title": "SaveBrandProductRequest",
         "type": "object"
       },
+      "SaveDisplayStoreRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_as_current": {
+            "const": true,
+            "title": "Confirm As Current",
+            "type": "boolean"
+          },
+          "control_organization_id": {
+            "format": "uuid",
+            "title": "Control Organization Id",
+            "type": "string"
+          },
+          "execution_organization_id": {
+            "format": "uuid",
+            "title": "Execution Organization Id",
+            "type": "string"
+          },
+          "lower_comfort_capacity": {
+            "maximum": 999.0,
+            "minimum": 1.0,
+            "title": "Lower Comfort Capacity",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "upper_comfort_capacity": {
+            "maximum": 999.0,
+            "minimum": 1.0,
+            "title": "Upper Comfort Capacity",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "control_organization_id",
+          "execution_organization_id",
+          "upper_comfort_capacity",
+          "lower_comfort_capacity",
+          "confirm_as_current"
+        ],
+        "title": "SaveDisplayStoreRequest",
+        "type": "object"
+      },
       "SavedVersionResponse": {
         "properties": {
           "saved_at": {
@@ -2164,6 +2233,22 @@
             "maxItems": 2,
             "title": "Capabilities",
             "type": "array"
+          },
+          "display_store_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Store Ids"
           },
           "entry_type": {
             "anyOf": [
@@ -5090,6 +5175,197 @@
         "summary": "Management Demo Content Index"
       }
     },
+    "/api/v1/tenant-management/display-stores": {
+      "get": {
+        "operationId": "management_display_stores_api_v1_tenant_management_display_stores_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Management Display Stores Api V1 Tenant Management Display Stores Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Display Stores"
+      },
+      "post": {
+        "operationId": "create_management_display_store_api_v1_tenant_management_display_stores_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDisplayStoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Management Display Store Api V1 Tenant Management Display Stores Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Management Display Store"
+      }
+    },
+    "/api/v1/tenant-management/display-stores/{store_id}/enabled": {
+      "put": {
+        "operationId": "set_management_display_store_enabled_api_v1_tenant_management_display_stores__store_id__enabled_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "store_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Store Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Management Display Store Enabled Api V1 Tenant Management Display Stores  Store Id  Enabled Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Set Management Display Store Enabled"
+      }
+    },
+    "/api/v1/tenant-management/display-stores/{store_id}/versions": {
+      "post": {
+        "operationId": "save_management_display_store_version_api_v1_tenant_management_display_stores__store_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "store_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Store Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDisplayStoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Management Display Store Version Api V1 Tenant Management Display Stores  Store Id  Versions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Save Management Display Store Version"
+      }
+    },
     "/api/v1/tenant-management/onboarding-prefill": {
       "get": {
         "operationId": "management_onboarding_prefill_api_v1_tenant_management_onboarding_prefill_get",
@@ -5127,6 +5403,18 @@
     "/api/v1/tenant-management/operators": {
       "get": {
         "operationId": "management_operators_api_v1_tenant_management_operators_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -5830,6 +6118,18 @@
     "/api/v1/tenant-management/publishing-accounts": {
       "get": {
         "operationId": "management_accounts_api_v1_tenant_management_publishing_accounts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6854,6 +7154,292 @@
         "summary": "Update Default Persona"
       }
     },
+    "/api/v1/user/organization-materials": {
+      "get": {
+        "operationId": "user_organization_materials_api_v1_user_organization_materials_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response User Organization Materials Api V1 User Organization Materials Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "User Organization Materials"
+      },
+      "post": {
+        "operationId": "create_user_organization_material_api_v1_user_organization_materials_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create User Organization Material Api V1 User Organization Materials Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create User Organization Material"
+      }
+    },
+    "/api/v1/user/organization-materials/{asset_id}": {
+      "delete": {
+        "operationId": "delete_user_organization_material_api_v1_user_organization_materials__asset_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Delete User Organization Material Api V1 User Organization Materials  Asset Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Delete User Organization Material"
+      }
+    },
+    "/api/v1/user/organization-materials/{asset_id}/enabled": {
+      "put": {
+        "operationId": "set_user_organization_material_enabled_api_v1_user_organization_materials__asset_id__enabled_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set User Organization Material Enabled Api V1 User Organization Materials  Asset Id  Enabled Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Set User Organization Material Enabled"
+      }
+    },
+    "/api/v1/user/organization-materials/{asset_id}/versions": {
+      "get": {
+        "operationId": "user_organization_material_versions_api_v1_user_organization_materials__asset_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response User Organization Material Versions Api V1 User Organization Materials  Asset Id  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "User Organization Material Versions"
+      },
+      "post": {
+        "operationId": "save_user_organization_material_version_api_v1_user_organization_materials__asset_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterialMetadataVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save User Organization Material Version Api V1 User Organization Materials  Asset Id  Versions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Save User Organization Material Version"
+      }
+    },
     "/content": {
       "get": {
         "operationId": "content_workbench_content_get",
@@ -7028,6 +7614,23 @@
               ],
               "title": "Notice"
             }
+          },
+          {
+            "in": "query",
+            "name": "store_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
           }
         ],
         "responses": {
@@ -7057,6 +7660,38 @@
           }
         ],
         "summary": "Display Workbench"
+      }
+    },
+    "/organization-materials": {
+      "get": {
+        "operationId": "organization_materials_portal_organization_materials_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Organization Materials Portal"
       }
     },
     "/tenant-admin": {

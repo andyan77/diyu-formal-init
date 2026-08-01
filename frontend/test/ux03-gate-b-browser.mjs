@@ -369,7 +369,7 @@ try {
 
   await click("nav button", "当前可用与待补");
   await waitFor(
-    "document.querySelectorAll('.readiness-list article').length===6",
+    "document.querySelectorAll('[aria-labelledby=software-readiness-title] .readiness-list article').length===6",
     "六类能力诊断"
   );
   ensure(

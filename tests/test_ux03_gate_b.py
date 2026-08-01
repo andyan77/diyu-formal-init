@@ -306,6 +306,19 @@ def _delete_gate_b_fixture(
         "organizations",
     )
     with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        # This fresh tenant is created solely by this test but exercises the formal
+        # consumer path. Mark only its disposable tasks for the existing guarded
+        # maintenance deletion; no production or shared fixture row is touched.
+        cursor.execute(
+            "UPDATE business_tasks SET business_data_kind = "
+            "'synthetic_business_fixture' WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "UPDATE content_accounts SET business_data_kind = "
+            "'synthetic_business_fixture' WHERE tenant_id = %s",
+            (tenant_id,),
+        )
         cursor.execute(
             "SELECT id FROM product_media_bindings WHERE tenant_id = %s ORDER BY id",
             (tenant_id,),
@@ -564,7 +577,6 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                     "name": "华东区域",
                     "organization_level": "region",
                     "parent_organization_id": headquarters["id"],
-                    "as_synthetic_business_fixture": True,
                 },
             )
             assert east.status_code == 201
@@ -574,7 +586,6 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                     "name": "柯桥门店",
                     "organization_level": "operating_unit",
                     "parent_organization_id": east.json()["id"],
-                    "as_synthetic_business_fixture": True,
                 },
             )
             assert east_store.status_code == 201
@@ -584,7 +595,6 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                     "name": "华南区域",
                     "organization_level": "region",
                     "parent_organization_id": headquarters["id"],
-                    "as_synthetic_business_fixture": True,
                 },
             )
             assert south.status_code == 201
@@ -594,7 +604,6 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                     "name": "华南门店",
                     "organization_level": "operating_unit",
                     "parent_organization_id": south.json()["id"],
-                    "as_synthetic_business_fixture": True,
                 },
             )
             assert south_store.status_code == 201
@@ -643,7 +652,6 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                         "control_organization_id": organization["id"],
                         "operator_can_maintain_expression_profile": True,
                         "initial_profile": _PROFILE,
-                        "as_synthetic_business_fixture": True,
                     },
                 )
                 assert response.status_code == 201, response.text
@@ -1062,6 +1070,93 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 ).status_code
                 == 200
             )
+            delegated_grant = admin.patch(
+                f"/api/v1/tenant-management/users/{members['柯桥']['user_id']}/grants",
+                json={
+                    "entry_type": "tenant_user",
+                    "capabilities": ["content"],
+                    "publishing_identity_ids": [accounts["柯桥"]["id"]],
+                    "expression_profile_maintenance_account_ids": [
+                        accounts["柯桥"]["id"]
+                    ],
+                    "grants_material_maintenance": True,
+                },
+            )
+            assert delegated_grant.status_code == 200, delegated_grant.text
+
+            with TestClient(app, base_url="https://diyu.example") as material_user:
+                material_password = "ux03-gate-b-material-user-password"
+                _activate(
+                    material_user,
+                    str(members["柯桥"]["activation_url"]),
+                    material_password,
+                )
+                _login(
+                    material_user,
+                    str(members["柯桥"]["username"]),
+                    material_password,
+                    "/login",
+                )
+                assert material_user.get("/organization-materials").status_code == 200
+                delegated = material_user.post(
+                    "/api/v1/user/organization-materials",
+                    json={
+                        "title": "柯桥团队维护说明",
+                        "filename": "team-note.txt",
+                        "content_type": "text/plain",
+                        "content_base64": "5p+l5qGl5Zui6Zif5a6Y5pa56K+05piO",
+                        "declares_identifiable_minor": False,
+                        "reference_note": "由获授权成员维护",
+                    },
+                )
+                assert delegated.status_code == 201, delegated.text
+                delegated_id = delegated.json()["id"]
+                listed_delegated = material_user.get(
+                    "/api/v1/user/organization-materials"
+                )
+                assert listed_delegated.status_code == 200
+                assert delegated_id in {item["id"] for item in listed_delegated.json()}
+                saved_delegated_version = material_user.post(
+                    f"/api/v1/user/organization-materials/{delegated_id}/versions",
+                    json={
+                        "title": "柯桥团队维护说明 V2",
+                        "reference_note": "由获授权成员复核说明",
+                        "visibility_scope": "organizations",
+                        "organization_ids": [east_store.json()["id"]],
+                    },
+                )
+                assert saved_delegated_version.status_code == 200, saved_delegated_version.text
+                assert (
+                    material_user.put(
+                        f"/api/v1/user/organization-materials/{delegated_id}/enabled",
+                        json={"enabled": False},
+                    ).status_code
+                    == 200
+                )
+                assert (
+                    material_user.put(
+                        f"/api/v1/user/organization-materials/{delegated_id}/enabled",
+                        json={"enabled": True},
+                    ).status_code
+                    == 200
+                )
+
+            with TestClient(app, base_url="https://diyu.example") as unauthorized_user:
+                unauthorized_password = "ux03-gate-b-no-material-password"
+                _activate(
+                    unauthorized_user,
+                    str(members["华南"]["activation_url"]),
+                    unauthorized_password,
+                )
+                _login(
+                    unauthorized_user,
+                    str(members["华南"]["username"]),
+                    unauthorized_password,
+                    "/login",
+                )
+                assert unauthorized_user.get(
+                    "/api/v1/user/organization-materials"
+                ).status_code == 422
 
             # Runtime access derives from each logical account's control organization.
             with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:

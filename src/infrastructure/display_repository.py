@@ -67,15 +67,18 @@ class PostgresDisplayRepository(DisplayRepository):
                    LEFT JOIN display_policies p ON p.brand_id=b.id AND p.tenant_id=b.tenant_id
                       AND p.version=s.profile_version
                    WHERE b.tenant_id=%s AND b.id=%s AND u.organization_id=%s
-                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)""",
+                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)
+                     AND (%s::uuid IS NULL OR s.id=%s)""",
                 (
                     scope.user_id,
                     scope.organization_id,
                     scope.tenant_id,
                     scope.brand_id,
+                    scope.organization_id,
                     actor_organization_id,
                     actor_organization_id,
-                    actor_organization_id,
+                    scope.store_id,
+                    scope.store_id,
                 ),
             )
             row = cursor.fetchone()
@@ -147,7 +150,8 @@ class PostgresDisplayRepository(DisplayRepository):
                    JOIN users u ON u.id=%s AND u.tenant_id=t.tenant_id
                    WHERE t.tenant_id=%s AND t.id=%s AND t.brand_id=%s AND t.organization_id=%s
                      AND (t.created_by=%s OR s.execution_organization_id=%s)
-                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)""",
+                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)
+                     AND (%s::uuid IS NULL OR s.id=%s)""",
                 (
                     scope.user_id,
                     scope.tenant_id,
@@ -158,6 +162,8 @@ class PostgresDisplayRepository(DisplayRepository):
                     actor_organization_id,
                     actor_organization_id,
                     actor_organization_id,
+                    scope.store_id,
+                    scope.store_id,
                 ),
             )
             row = self._one(cursor, "找不到当前作用域中的陈列任务")
@@ -282,13 +288,17 @@ class PostgresDisplayRepository(DisplayRepository):
             cursor.execute(
                 """SELECT id FROM display_stores
                    WHERE tenant_id=%s AND brand_id=%s AND execution_organization_id=%s
-                     AND (execution_organization_id=%s OR control_organization_id=%s)""",
+                     AND (execution_organization_id=%s OR control_organization_id=%s)
+                     AND enabled=true
+                     AND (%s::uuid IS NULL OR id=%s)""",
                 (
                     scope.tenant_id,
                     scope.brand_id,
                     scope.organization_id,
                     actor_organization_id,
                     actor_organization_id,
+                    scope.store_id,
+                    scope.store_id,
                 ),
             )
             store_id = UUID(str(self._one(cursor, "当前组织没有可用陈列门店")["id"]))
@@ -337,6 +347,7 @@ class PostgresDisplayRepository(DisplayRepository):
                    WHERE t.tenant_id=%s AND t.id=%s AND t.brand_id=%s AND t.organization_id=%s
                      AND (t.created_by=%s OR s.execution_organization_id=%s)
                      AND (s.execution_organization_id=%s OR s.control_organization_id=%s)
+                     AND (%s::uuid IS NULL OR s.id=%s)
                    FOR UPDATE OF t""",
                 (
                     scope.tenant_id,
@@ -347,6 +358,8 @@ class PostgresDisplayRepository(DisplayRepository):
                     actor_organization_id,
                     actor_organization_id,
                     actor_organization_id,
+                    scope.store_id,
+                    scope.store_id,
                 ),
             )
             task = self._one(cursor, "找不到当前作用域中的陈列任务")
@@ -394,7 +407,8 @@ class PostgresDisplayRepository(DisplayRepository):
                    JOIN display_stores s ON s.id=t.store_id AND s.tenant_id=t.tenant_id
                    WHERE t.tenant_id=%s AND t.id=%s AND t.brand_id=%s AND t.organization_id=%s
                      AND (t.created_by=%s OR s.execution_organization_id=%s)
-                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)""",
+                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)
+                     AND (%s::uuid IS NULL OR s.id=%s)""",
                 (
                     scope.tenant_id,
                     task_id,
@@ -404,6 +418,8 @@ class PostgresDisplayRepository(DisplayRepository):
                     actor_organization_id,
                     actor_organization_id,
                     actor_organization_id,
+                    scope.store_id,
+                    scope.store_id,
                 ),
             )
             self._one(cursor, "当前作用域不能完成此生成")
@@ -486,7 +502,8 @@ class PostgresDisplayRepository(DisplayRepository):
                      AND s.id=t.store_id AND s.tenant_id=t.tenant_id
                      AND t.brand_id=%s AND t.organization_id=%s
                      AND (t.created_by=%s OR s.execution_organization_id=%s)
-                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)""",
+                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)
+                     AND (%s::uuid IS NULL OR s.id=%s)""",
                 (
                     reason[:300],
                     scope.tenant_id,
@@ -498,6 +515,8 @@ class PostgresDisplayRepository(DisplayRepository):
                     actor_organization_id,
                     actor_organization_id,
                     actor_organization_id,
+                    scope.store_id,
+                    scope.store_id,
                 ),
             )
             if cursor.rowcount != 1:
@@ -520,7 +539,8 @@ class PostgresDisplayRepository(DisplayRepository):
                      AND s.id=t.store_id AND s.tenant_id=t.tenant_id
                      AND t.brand_id=%s AND t.organization_id=%s
                      AND (t.created_by=%s OR s.execution_organization_id=%s)
-                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)""",
+                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)
+                     AND (%s::uuid IS NULL OR s.id=%s)""",
                 (
                     scope.tenant_id,
                     lease_seconds,
@@ -530,6 +550,8 @@ class PostgresDisplayRepository(DisplayRepository):
                     actor_organization_id,
                     actor_organization_id,
                     actor_organization_id,
+                    scope.store_id,
+                    scope.store_id,
                 ),
             )
             return cursor.rowcount
@@ -546,7 +568,8 @@ class PostgresDisplayRepository(DisplayRepository):
                    WHERE v.tenant_id=%s AND v.task_id=%s AND v.version_number=%s
                      AND t.brand_id=%s AND t.organization_id=%s
                      AND (t.created_by=%s OR s.execution_organization_id=%s)
-                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)""",
+                     AND (s.execution_organization_id=%s OR s.control_organization_id=%s)
+                     AND (%s::uuid IS NULL OR s.id=%s)""",
                 (
                     scope.tenant_id,
                     task_id,
@@ -557,6 +580,8 @@ class PostgresDisplayRepository(DisplayRepository):
                     actor_organization_id,
                     actor_organization_id,
                     actor_organization_id,
+                    scope.store_id,
+                    scope.store_id,
                 ),
             )
             row = self._one(cursor, "找不到该陈列版本")

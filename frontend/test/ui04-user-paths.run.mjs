@@ -80,6 +80,28 @@ let materials = [
     reference_note: "只有袖口和扣子。"
   }
 ];
+let organizationMaterials = [
+  {
+    id: "om1",
+    title: "总部官方版式参考",
+    media_type: "image",
+    status: "active",
+    reference_note: "仅记录版式与留白，不补造现实对象。",
+    reference_version: 1,
+    organization_id: "org-hq",
+    organization: "总部团队"
+  }
+];
+let organizationMaterialVersions = [
+  {
+    id: "omv1",
+    version: 1,
+    title: "总部官方版式参考",
+    reference_note: "仅记录版式与留白，不补造现实对象。",
+    is_current: true,
+    created_at: "2026-08-01T00:00:00Z"
+  }
+];
 
 const displayV1 = {
   kind: "display",
@@ -129,6 +151,41 @@ globalThis.fetch = async (input, init = {}) => {
   } else if (path === "/api/v1/content/series/s1/items" && method === "PUT") {
     series = series.map(item => item.id === "s1" ? { ...item, revision: 3, items: body.task_ids.map((task_id, index) => ({ ...item.items.find(entry => entry.task_id === task_id), task_id, position: index + 1 })) } : item);
     payload = series.find(item => item.id === "s1");
+  } else if (path === "/api/v1/user/organization-materials" && method === "GET") {
+    payload = organizationMaterials;
+  } else if (path === "/api/v1/user/organization-materials/om1/versions" && method === "GET") {
+    payload = organizationMaterialVersions;
+  } else if (path === "/api/v1/user/organization-materials/om1/versions" && method === "POST") {
+    organizationMaterialVersions = organizationMaterialVersions.map(item => ({
+      ...item,
+      is_current: false
+    }));
+    organizationMaterialVersions.unshift({
+      id: "omv2",
+      version: 2,
+      title: body.title,
+      reference_note: body.reference_note,
+      is_current: true,
+      created_at: "2026-08-01T00:01:00Z"
+    });
+    organizationMaterials = organizationMaterials.map(item =>
+      item.id === "om1"
+        ? {
+            ...item,
+            title: body.title,
+            reference_note: body.reference_note,
+            reference_version: 2
+          }
+        : item
+    );
+    payload = organizationMaterials[0];
+  } else if (path === "/api/v1/user/organization-materials/om1/enabled" && method === "PUT") {
+    organizationMaterials = organizationMaterials.map(item =>
+      item.id === "om1"
+        ? { ...item, status: body.enabled ? "active" : "inactive" }
+        : item
+    );
+    payload = organizationMaterials[0];
   } else if (path === "/api/v1/materials" && method === "GET") {
     payload = materials;
   } else if (path === "/api/v1/materials/m2/reference-note" && method === "PATCH") {

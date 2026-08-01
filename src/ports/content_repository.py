@@ -26,6 +26,18 @@ class ContentRepository(ABC):
     ) -> BrandContext:
         """Load the authorized brand/account context in the trusted scope."""
 
+    def select_brand_context_for_task(
+        self,
+        scope: TrustedScope,
+        context: BrandContext,
+        weak_seed: str,
+        primary_product: ContentProduct,
+        products: tuple[ProductFact, ...],
+    ) -> BrandContext:
+        """Select an immutable, task-relevant packet when the repository supports it."""
+        del scope, weak_seed, primary_product, products
+        return context
+
     @abstractmethod
     def create_task_and_running_run(
         self,

@@ -29,11 +29,31 @@ class WorkbenchRepository(ABC):
     @abstractmethod
     def is_tenant_manager(self, scope: TenantManagementScope) -> bool: ...
 
-    @abstractmethod
-    def management_operators(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
+    def tenant_readiness_inputs(
+        self,
+        scope: TenantManagementScope,
+    ) -> dict[str, object]:
+        del scope
+        return {
+            "brand_name": "当前品牌",
+            "source_documents": 0,
+            "product_media_products": 0,
+            "confirmed_stores": 0,
+        }
 
     @abstractmethod
-    def management_accounts(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
+    def management_operators(
+        self,
+        scope: TenantManagementScope,
+        include_archived: bool = False,
+    ) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def management_accounts(
+        self,
+        scope: TenantManagementScope,
+        include_archived: bool = False,
+    ) -> list[dict[str, object]]: ...
 
     @abstractmethod
     def team_usage(
@@ -46,7 +66,11 @@ class WorkbenchRepository(ABC):
     def management_products(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
 
     @abstractmethod
-    def management_organization_materials(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
+    def management_organization_materials(
+        self,
+        scope: TenantManagementScope,
+        owner_organization_id: UUID | None = None,
+    ) -> list[dict[str, object]]: ...
 
     @abstractmethod
     def brand_library_entries(
@@ -111,6 +135,7 @@ class WorkbenchRepository(ABC):
         reference_note: str,
         visibility_scope: str = "organizations",
         organization_ids: tuple[UUID, ...] = (),
+        exact_owner_scope: bool = False,
     ) -> dict[str, object]: ...
 
     @abstractmethod
@@ -118,6 +143,7 @@ class WorkbenchRepository(ABC):
         self,
         scope: TenantManagementScope,
         asset_id: UUID,
+        owner_organization_id: UUID | None = None,
     ) -> list[dict[str, object]]: ...
 
     @abstractmethod
@@ -129,6 +155,7 @@ class WorkbenchRepository(ABC):
         reference_note: str,
         visibility_scope: str,
         organization_ids: tuple[UUID, ...],
+        owner_organization_id: UUID | None = None,
     ) -> dict[str, object]: ...
 
     @abstractmethod
@@ -137,6 +164,7 @@ class WorkbenchRepository(ABC):
         scope: TenantManagementScope,
         asset_id: UUID,
         enabled: bool,
+        owner_organization_id: UUID | None = None,
     ) -> dict[str, object]: ...
 
     @abstractmethod
@@ -168,6 +196,7 @@ class WorkbenchRepository(ABC):
         self,
         scope: TenantManagementScope,
         asset_id: UUID,
+        owner_organization_id: UUID | None = None,
     ) -> str: ...
 
     @abstractmethod
@@ -175,6 +204,7 @@ class WorkbenchRepository(ABC):
         self,
         scope: TenantManagementScope,
         asset_id: UUID,
+        owner_organization_id: UUID | None = None,
     ) -> None: ...
 
     @abstractmethod
@@ -217,7 +247,7 @@ class WorkbenchRepository(ABC):
         channel: str,
         content_role_name: str,
         voice_boundary: str,
-        operator_id: UUID,
+        operator_id: UUID | None = None,
         control_organization_id: UUID | None = None,
         operator_can_maintain_expression_profile: bool = False,
         business_data_kind: str = "formal_business_data",
@@ -257,7 +287,7 @@ class WorkbenchRepository(ABC):
         source_account_id: UUID,
         name: str,
         channel: str,
-        operator_id: UUID,
+        operator_id: UUID | None = None,
     ) -> dict[str, object]: ...
 
     @abstractmethod
@@ -298,6 +328,31 @@ class WorkbenchRepository(ABC):
 
     @abstractmethod
     def readiness(self, scope: TenantManagementScope) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def management_display_stores(
+        self,
+        scope: TenantManagementScope,
+    ) -> list[dict[str, object]]: ...
+
+    @abstractmethod
+    def save_management_display_store(
+        self,
+        scope: TenantManagementScope,
+        store_id: UUID | None,
+        name: str,
+        control_organization_id: UUID,
+        execution_organization_id: UUID,
+        rail_profile: dict[str, object],
+    ) -> dict[str, object]: ...
+
+    @abstractmethod
+    def set_management_display_store_enabled(
+        self,
+        scope: TenantManagementScope,
+        store_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]: ...
 
     @abstractmethod
     def brand_expression(self, scope: TenantManagementScope) -> dict[str, object]: ...

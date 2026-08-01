@@ -292,7 +292,10 @@ class CreatePublishingAccountRequest(BaseModel):
         "personal_ip_account",
         "unknown",
     ] = "unknown"
-    operator_id: UUID
+    # Kept as an optional additive compatibility field for older callers.  A
+    # logical publishing identity is created before member qualification and
+    # never silently creates a person's grant.
+    operator_id: UUID | None = None
     # Legacy API callers may still send the internal boundary alone.  The product UI sends
     # one complete account profile instead, and its authority segment becomes this short
     # ContentRole's internal boundary without asking the user to repeat it.
@@ -328,7 +331,10 @@ class CreatePlatformCarrierRequest(BaseModel):
     source_account_id: UUID
     name: str = Field(min_length=1, max_length=120)
     channel: Literal["抖音", "小红书", "微信视频号"]
-    operator_id: UUID
+    # Legacy callers may identify an already-authorized operator.  New product
+    # clients do not: platform targets inherit compatibility grants from the
+    # logical root inside the server transaction.
+    operator_id: UUID | None = None
     confirm_internal_carrier: Literal[True]
 
 
@@ -433,6 +439,7 @@ class CreateTenantUserRequest(BaseModel):
         default_factory=list,
         max_length=20,
     )
+    display_store_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
 
 class UpdateTenantUserGrantsRequest(BaseModel):
@@ -452,6 +459,7 @@ class UpdateTenantUserGrantsRequest(BaseModel):
         default=None,
         max_length=20,
     )
+    display_store_ids: list[UUID] | None = Field(default=None, max_length=20)
 
 
 class UpdateTenantUserRequest(BaseModel):
@@ -486,6 +494,17 @@ class CreateOrganizationRequest(BaseModel):
     as_synthetic_business_fixture: bool = False
     organization_level: Literal["company", "region", "operating_unit", "unspecified"] = "unspecified"
     parent_organization_id: UUID | None = None
+
+
+class SaveDisplayStoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    control_organization_id: UUID
+    execution_organization_id: UUID
+    upper_comfort_capacity: int = Field(ge=1, le=999)
+    lower_comfort_capacity: int = Field(ge=1, le=999)
+    confirm_as_current: Literal[True]
 
 
 class BrandLibraryEntryRequest(BaseModel):

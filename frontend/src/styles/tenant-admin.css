@@ -388,6 +388,42 @@
 .readiness-list article > .text-action {
   margin-top: 14px;
 }
+.tenant-inline-panel {
+  margin: 0 0 28px;
+  padding: 0 20px 20px;
+  border: 1px solid var(--stone-200);
+  border-radius: 12px;
+  background: var(--white);
+}
+.tenant-inline-panel > summary {
+  min-height: 52px;
+  padding: 16px 0;
+  cursor: pointer;
+  font-weight: 700;
+}
+.tenant-inline-panel .tenant-form {
+  margin-top: 4px;
+}
+.tenant-compact-row {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 0;
+  border-top: 1px solid var(--stone-100);
+}
+.tenant-compact-row > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.tenant-compact-row small { color: var(--stone-400); }
+.tenant-compact-row > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
 
 @media (max-width: 920px) {
   .management-summary,
@@ -411,6 +447,11 @@
   .publishing-account-list > article,
   .library-list > article,
   .readiness-list > article { padding: 18px; }
+  .tenant-compact-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .tenant-compact-row > div:last-child { justify-content: flex-start; }
   .tenant-admin-app .account-actions .text-action,
   .tenant-admin-app .library-filters button,
   .tenant-admin-app .period-switch button {

@@ -52,6 +52,19 @@
 .material-zone li div,.material-zone li span,.material-picker span { display:grid; gap:4px; }
 .material-zone small,.material-picker small { color:var(--stone,#726f68); }
 .material-zone li span { display:flex; grid-template-columns:repeat(2,max-content); }
+.organization-materials-page > section {
+  margin-top: clamp(48px, 9vh, 90px);
+  text-align: left;
+}
+.organization-materials-page > section > h1 {
+  margin-bottom: 18px;
+}
+.organization-materials-page .material-zone {
+  margin-top: 32px;
+}
+.organization-materials-page .tenant-drawer {
+  overflow-y: auto;
+}
 .material-upload-form label,.material-minor { display:grid; gap:7px; }
 .material-minor { display:flex !important; align-items:center; }
 .material-note-form { margin-top:24px; padding:18px; border:1px solid var(--line,#dedbd4); border-radius:10px; }

@@ -8,6 +8,15 @@ export class ApiError extends Error {
   }
 }
 
+export const SESSION_INVALID_EVENT = "diyu:session-invalid";
+
+function signalInvalidSession(status: number): void {
+  if (status !== 401 && status !== 403) return;
+  window.dispatchEvent(
+    new CustomEvent(SESSION_INVALID_EVENT, { detail: { status } })
+  );
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: "same-origin",
@@ -18,6 +27,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     }
   });
   if (!response.ok) {
+    signalInvalidSession(response.status);
     const payload: unknown = await response.json().catch(() => ({}));
     const detail =
       typeof payload === "object" && payload !== null && "detail" in payload
@@ -44,6 +54,7 @@ export async function* streamApi<T>(
     signal
   });
   if (!response.ok) {
+    signalInvalidSession(response.status);
     const failure: unknown = await response.json().catch(() => ({}));
     const detail =
       typeof failure === "object" && failure !== null && "detail" in failure

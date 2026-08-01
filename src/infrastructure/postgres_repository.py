@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from dataclasses import replace
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -11,7 +15,11 @@ from psycopg.types.json import Jsonb
 
 from src.ports.content_repository import ContentRepository
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
-from src.shared.content_snapshot import frozen_product_facts, visible_direction
+from src.shared.content_snapshot import (
+    frozen_product_facts,
+    visible_context_basis,
+    visible_direction,
+)
 from src.shared.delivery_compiler import (
     DELIVERY_COMPILER_VERSION,
     MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
@@ -21,6 +29,8 @@ from src.shared.narrative import visible_digest
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
+    BrandContextPacketV1,
+    BrandContextSegment,
     ContentControlContext,
     ContentProduct,
     ContentTarget,
@@ -44,6 +54,9 @@ from src.shared.version_integrity import (
 
 
 class PostgresContentRepository(ContentRepository):
+    _BRAND_PACKET_VERSION = "brand-context-packet-v1"
+    _BRAND_PACKET_CHARACTER_BUDGET = 12_000
+    _BRAND_PACKET_SEGMENT_LIMIT = 24
     _PRODUCT_VALUE_COMPLETION_KEYS = frozenset(
         {
             "product_value_contract",
@@ -84,12 +97,8 @@ class PostgresContentRepository(ContentRepository):
             "product_value_contract_digest",
         }
     )
-    _MEDIA_NATIVE_COMPLETION_KEYS = (
-        _DUAL_TRACK_COMPLETION_KEYS - _PRODUCT_VALUE_COMPLETION_KEYS
-    )
-    _LEGACY_DUAL_TRACK_COMPLETION_KEYS = (
-        _MEDIA_NATIVE_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
-    )
+    _MEDIA_NATIVE_COMPLETION_KEYS = _DUAL_TRACK_COMPLETION_KEYS - _PRODUCT_VALUE_COMPLETION_KEYS
+    _LEGACY_DUAL_TRACK_COMPLETION_KEYS = _MEDIA_NATIVE_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
     _REVISION_IMMUTABLE_SNAPSHOT_KEYS = frozenset(
         {
             "creation_commitment",
@@ -219,9 +228,7 @@ class PostgresContentRepository(ContentRepository):
             "audit_version": audit_version,
             "artifact_digest": artifact_digest,
             "visible_projection": (
-                FINAL_VISIBLE_PROJECTION_V3
-                if audit_version == AUDIT_VERSION_V3
-                else FINAL_VISIBLE_PROJECTION_V2
+                FINAL_VISIBLE_PROJECTION_V3 if audit_version == AUDIT_VERSION_V3 else FINAL_VISIBLE_PROJECTION_V2
             ),
             **{key: task_snapshot.get(key) for key in cls._VERSION_AUDIT_KEYS},
         }
@@ -239,7 +246,8 @@ class PostgresContentRepository(ContentRepository):
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT b.name AS brand_name, b.positioning, b.decision_order, b.tone,
+                SELECT COALESCE(NULLIF(b.public_name, ''), b.name) AS brand_name,
+                       b.positioning, b.decision_order, b.tone,
                        root_account.name AS account_name,
                        u.display_name AS operator_name, o.name AS organization_name,
                        cr.name AS content_role_name, cr.voice_boundary,
@@ -310,8 +318,7 @@ class PostgresContentRepository(ContentRepository):
                           )
                     )
                   )
-                ORDER BY entry.updated_at DESC, entry.id
-                LIMIT 6
+                ORDER BY entry.title, entry.id
                 """,
                 (
                     scope.tenant_id,
@@ -321,16 +328,23 @@ class PostgresContentRepository(ContentRepository):
                 ),
             )
             reference_rows = cursor.fetchall()
-        brand_reference_context = tuple(
-            (
-                f"[资料 {str(reference['id'])}；版本记录 "
-                f"{str(reference['current_version_id'])}] "
-                f"{str(reference['title'])}（{str(reference['category'])}；"
-                f"版本 {str(reference['version'])}；来源：{str(reference['source_note'])}）："
-                f"{str(reference['content'])[:1200]}"
-            )
+        brand_reference_candidates = tuple(
+            f"[资料 {str(reference['id'])}；版本记录 "
+            f"{str(reference['current_version_id'])}] "
+            f"{str(reference['title'])}（{str(reference['category'])}；"
+            f"版本 {str(reference['version'])}；来源：{str(reference['source_note'])}）："
+            f"{str(reference['content'])}"
             for reference in reference_rows
         )
+        brand_reference_context: list[str] = []
+        character_count = 0
+        for reference in brand_reference_candidates:
+            if len(brand_reference_context) >= self._BRAND_PACKET_SEGMENT_LIMIT:
+                break
+            if character_count + len(reference) > self._BRAND_PACKET_CHARACTER_BUDGET:
+                continue
+            brand_reference_context.append(reference)
+            character_count += len(reference)
         return BrandContext(
             brand_name=str(row["brand_name"]),
             positioning=str(row["positioning"]),
@@ -347,8 +361,211 @@ class PostgresContentRepository(ContentRepository):
             media_format="图文" if media_format == "graphic" else "视频",
             production_conditions=production_conditions,
             business_data_kind=str(row["business_data_kind"]),
-            brand_reference_context=brand_reference_context,
+            brand_reference_context=tuple(brand_reference_context),
             speaker_kind=cast(SpeakerKind, str(row["speaker_kind"])),
+        )
+
+    @staticmethod
+    def _task_terms(*values: str) -> frozenset[str]:
+        terms: set[str] = set()
+        for value in values:
+            folded = value.casefold()
+            terms.update(re.findall(r"[a-z0-9][a-z0-9_-]{1,}", folded))
+            for run in re.findall(r"[\u4e00-\u9fff]{2,}", folded):
+                terms.add(run)
+                terms.update(run[index : index + 2] for index in range(len(run) - 1))
+                terms.update(run[index : index + 3] for index in range(max(0, len(run) - 2)))
+        return frozenset(term for term in terms if len(term) >= 2)
+
+    @classmethod
+    def _segment_score(
+        cls,
+        row: Mapping[str, object],
+        terms: frozenset[str],
+        explicit_product_terms: frozenset[str],
+        primary_product: ContentProduct,
+    ) -> int:
+        kind = str(row["semantic_kind"])
+        base = {
+            "brand_fact": 120,
+            "expression_constraint": 105,
+            "creative_method": 70,
+            "candidate_product_guidance": 25,
+            "source_catalog_only": 5,
+        }.get(kind, 0)
+        text = (str(row["exact_text"]) + " " + str(row["applicability"]) + " " + str(row["embedded_title"])).casefold()
+        matches = sum(1 for term in terms if term in text)
+        explicit_product_match = any(term in text for term in explicit_product_terms)
+        product_markers = {
+            "dressing_decision": ("穿衣", "选择", "搭配", "人群"),
+            "product_truth": ("商品", "产品", "款", "事实"),
+            "brand_life_narrative": ("生活", "声纹", "账号", "表达"),
+            "local_response": ("门店", "本地", "服务", "关系"),
+            "visual_styling_story": ("视觉", "造型", "画面", "商品"),
+        }[primary_product]
+        product_matches = sum(1 for marker in product_markers if marker in text)
+        return base + matches * 18 + product_matches * 12 + (360 if explicit_product_match else 0)
+
+    def select_brand_context_for_task(
+        self,
+        scope: TrustedScope,
+        context: BrandContext,
+        weak_seed: str,
+        primary_product: ContentProduct,
+        products: tuple[ProductFact, ...],
+    ) -> BrandContext:
+        with self._tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT segment.id, segment.document_id,
+                       segment.document_version_id, source.source_id,
+                       version_record.source_version, segment.semantic_kind,
+                       segment.evidence_level, segment.visibility_scope,
+                       segment.digest, segment.exact_text,
+                       segment.applicability, source.embedded_title,
+                       segment.segment_key
+                  FROM brand_source_segments segment
+                  JOIN brand_source_documents source
+                    ON source.tenant_id = segment.tenant_id
+                   AND source.id = segment.document_id
+                   AND source.current_version_id = segment.document_version_id
+                   AND source.status = 'active'
+                   AND source.activation_status = 'brand_user_authorized'
+                  JOIN brand_source_document_versions version_record
+                    ON version_record.tenant_id = segment.tenant_id
+                   AND version_record.id = segment.document_version_id
+                  JOIN content_accounts target_account
+                    ON target_account.tenant_id = segment.tenant_id
+                   AND target_account.id = %s
+                  JOIN content_accounts root_account
+                    ON root_account.tenant_id = target_account.tenant_id
+                   AND root_account.id = COALESCE(
+                       target_account.carrier_of_account_id,
+                       target_account.id
+                   )
+                 WHERE segment.tenant_id = %s
+                   AND segment.brand_id = %s
+                   AND segment.semantic_kind <> 'template_only'
+                   AND (
+                     segment.visibility_scope = 'brand_all'
+                     OR (
+                       segment.visibility_scope = 'headquarters'
+                       AND EXISTS (
+                         SELECT 1 FROM organizations organization
+                          WHERE organization.tenant_id = segment.tenant_id
+                            AND organization.id = root_account.control_organization_id
+                            AND organization.organization_level = 'company'
+                       )
+                     )
+                   )
+                """,
+                (scope.account_id, scope.tenant_id, scope.brand_id),
+            )
+            rows = cursor.fetchall()
+        if not rows:
+            return context
+        terms = self._task_terms(
+            weak_seed,
+            context.account_name,
+            context.content_role_name,
+            context.platform,
+            *(product.sku for product in products),
+            *(product.display_name for product in products),
+        )
+        explicit_product_terms = frozenset(
+            term.casefold() for product in products for term in (product.sku, product.display_name) if term.strip()
+        )
+        ranked = sorted(
+            rows,
+            key=lambda row: (
+                -self._segment_score(
+                    row,
+                    terms,
+                    explicit_product_terms,
+                    primary_product,
+                ),
+                str(row["source_id"]),
+                str(row["segment_key"]),
+            ),
+        )
+        selected: list[Mapping[str, object]] = []
+        document_counts: dict[str, int] = {}
+        character_count = 0
+        for pass_number in (1, 2):
+            for row in ranked:
+                if row in selected:
+                    continue
+                document_id = str(row["document_id"])
+                if pass_number == 1 and document_counts.get(document_id, 0) >= 2:
+                    continue
+                text = str(row["exact_text"])
+                if not text or character_count + len(text) > self._BRAND_PACKET_CHARACTER_BUDGET:
+                    continue
+                selected.append(row)
+                document_counts[document_id] = document_counts.get(document_id, 0) + 1
+                character_count += len(text)
+                if len(selected) >= self._BRAND_PACKET_SEGMENT_LIMIT:
+                    break
+            if len(selected) >= self._BRAND_PACKET_SEGMENT_LIMIT:
+                break
+        segments = tuple(
+            BrandContextSegment(
+                segment_id=str(row["id"]),
+                source_document_id=str(row["document_id"]),
+                source_document_version_id=str(row["document_version_id"]),
+                source_id=str(row["source_id"]),
+                source_version=str(row["source_version"]),
+                semantic_kind=str(row["semantic_kind"]),
+                evidence_level=str(row["evidence_level"]),
+                visibility_scope=str(row["visibility_scope"]),
+                digest=str(row["digest"]),
+                exact_text=str(row["exact_text"]),
+            )
+            for row in selected
+        )
+        packet_document = [
+            {
+                "segment_id": segment.segment_id,
+                "source_document_id": segment.source_document_id,
+                "source_document_version_id": segment.source_document_version_id,
+                "source_id": segment.source_id,
+                "source_version": segment.source_version,
+                "semantic_kind": segment.semantic_kind,
+                "evidence_level": segment.evidence_level,
+                "visibility_scope": segment.visibility_scope,
+                "digest": segment.digest,
+                "exact_text": segment.exact_text,
+            }
+            for segment in segments
+        ]
+        packet_digest = hashlib.sha256(
+            json.dumps(
+                packet_document,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+        packet = BrandContextPacketV1(
+            self._BRAND_PACKET_VERSION,
+            packet_digest,
+            segments,
+        )
+        return replace(
+            context,
+            brand_reference_context=tuple(
+                segment.exact_text for segment in segments if segment.semantic_kind == "brand_fact"
+            ),
+            expression_constraint_context=tuple(
+                segment.exact_text for segment in segments if segment.semantic_kind == "expression_constraint"
+            ),
+            creative_method_context=tuple(
+                segment.exact_text for segment in segments if segment.semantic_kind == "creative_method"
+            ),
+            candidate_product_guidance_context=tuple(
+                segment.exact_text for segment in segments if segment.semantic_kind == "candidate_product_guidance"
+            ),
+            context_packet=packet,
         )
 
     def create_task_and_running_run(
@@ -868,6 +1085,7 @@ class PostgresContentRepository(ContentRepository):
                        cv.artifact_digest, cv.version_audit_snapshot,
                        cv.created_at, gr.model,
                        t.media_format, t.content_context_snapshot, a.channel,
+                       a.name AS account_name,
                        parent_cv.version_number AS parent_version_number,
                        parent_a.channel AS parent_channel, parent_t.media_format AS parent_media_format
                 FROM content_versions cv
@@ -926,6 +1144,12 @@ class PostgresContentRepository(ContentRepository):
             "adapted_from": adapted_from,
             "translation_notice": translation_notice,
             "applied_direction": applied_direction,
+            "context_basis": visible_context_basis(
+                cast(dict[str, object], row["content_context_snapshot"]),
+                account_name=str(row["account_name"]),
+                channel=channel,
+                media_format=media_format,
+            ),
         }
 
     def fetch_version_body(self, scope: TrustedScope, version_id: UUID) -> str:
@@ -1234,7 +1458,8 @@ class PostgresContentRepository(ContentRepository):
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT sku, display_name, facts, source_kind, source_note,
+                SELECT product.id AS product_id, product.current_version_id AS product_version_id,
+                       sku, display_name, facts, source_kind, source_note,
                        fact_version, applicability
                 FROM brand_products product
                 JOIN content_accounts target_account
@@ -1249,6 +1474,7 @@ class PostgresContentRepository(ContentRepository):
                 WHERE product.tenant_id = %s AND product.brand_id = %s
                   AND product.status = 'active'
                   AND product.current_version_id IS NOT NULL
+                  AND product.business_data_kind = 'formal_business_data'
                   AND (
                     product.visibility_scope = 'brand_all'
                     OR (
@@ -1326,7 +1552,8 @@ class PostgresContentRepository(ContentRepository):
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT sku, display_name, facts, source_kind, source_note,
+                SELECT product.id AS product_id, product.current_version_id AS product_version_id,
+                       sku, display_name, facts, source_kind, source_note,
                        fact_version, applicability
                 FROM brand_products product
                 JOIN content_accounts target_account
@@ -1340,6 +1567,7 @@ class PostgresContentRepository(ContentRepository):
                      )
                 WHERE product.tenant_id = %s AND product.brand_id = %s
                   AND product.sku = ANY(%s)
+                  AND product.business_data_kind = 'formal_business_data'
                   AND (
                     product.visibility_scope = 'brand_all'
                     OR (
@@ -1393,6 +1621,10 @@ class PostgresContentRepository(ContentRepository):
             source_note=str(row["source_note"]),
             fact_version=version,
             applicability=str(row["applicability"]),
+            product_id=(UUID(str(row["product_id"])) if row.get("product_id") is not None else None),
+            product_version_id=(
+                UUID(str(row["product_version_id"])) if row.get("product_version_id") is not None else None
+            ),
         )
 
     def _attach_series_task(
@@ -1527,6 +1759,28 @@ class PostgresContentRepository(ContentRepository):
             "speaker_kind": context.speaker_kind,
             "business_data_kind": context.business_data_kind,
             "brand_reference_context": list(context.brand_reference_context),
+            "brand_context_packet": (
+                {
+                    "packet_version": context.context_packet.packet_version,
+                    "packet_digest": context.context_packet.packet_digest,
+                    "segments": [
+                        {
+                            "segment_id": segment.segment_id,
+                            "source_document_id": segment.source_document_id,
+                            "source_document_version_id": segment.source_document_version_id,
+                            "source_id": segment.source_id,
+                            "source_version": segment.source_version,
+                            "semantic_kind": segment.semantic_kind,
+                            "evidence_level": segment.evidence_level,
+                            "visibility_scope": segment.visibility_scope,
+                            "digest": segment.digest,
+                        }
+                        for segment in context.context_packet.segments
+                    ],
+                }
+                if context.context_packet is not None
+                else None
+            ),
             "product_refs": [
                 {
                     "sku": item.sku,
@@ -1535,6 +1789,8 @@ class PostgresContentRepository(ContentRepository):
                     "source_note": item.source_note,
                     "fact_version": item.fact_version,
                     "applicability": item.applicability,
+                    "product_id": str(item.product_id) if item.product_id else None,
+                    "product_version_id": (str(item.product_version_id) if item.product_version_id else None),
                 }
                 for item in products
             ],

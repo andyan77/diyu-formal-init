@@ -16,6 +16,7 @@ from src.infrastructure.seed_demo import (
     HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ID,
     HEADQUARTERS_XIAOHONGSHU_ACCOUNT_ID,
     ORG_ID,
+    STORE_ID,
     STORE_ORG_ID,
     TENANT_ADMIN_USER_ID,
     TENANT_ID,
@@ -122,6 +123,14 @@ def test_formal_pages_freeze_their_route_specific_context_in_the_spa_bootstrap(
             """,
             (uuid4(), TENANT_ID, display_user_id),
         )
+        cursor.execute(
+            """
+            INSERT INTO display_store_access_grants
+              (id, tenant_id, user_id, store_id)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (uuid4(), TENANT_ID, display_user_id, STORE_ID),
+        )
     repository = ProductionAuthRepository(app_database_url)
     identities = {
         "content": TenantSession(TENANT_ID, content_user_id, "tenant-user"),
@@ -175,6 +184,11 @@ def test_formal_pages_freeze_their_route_specific_context_in_the_spa_bootstrap(
             cursor.execute(
                 "DELETE FROM auth_grants WHERE tenant_id = %s AND user_id = %s",
                 (TENANT_ID, content_user_id),
+            )
+            cursor.execute(
+                "DELETE FROM display_store_access_grants "
+                "WHERE tenant_id = %s AND user_id = %s",
+                (TENANT_ID, display_user_id),
             )
             cursor.execute(
                 "DELETE FROM display_access_grants WHERE tenant_id = %s AND user_id = %s",

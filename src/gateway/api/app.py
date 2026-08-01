@@ -86,6 +86,7 @@ from src.gateway.api.contracts import (
     RestoredTenantUserResponse,
     RevisionRequest,
     SaveBrandProductRequest,
+    SaveDisplayStoreRequest,
     SavedVersionResponse,
     SetEnabledRequest,
     SetExpressionProfileMaintenanceRequest,
@@ -129,6 +130,7 @@ from src.shared.types import (
     CreativeDirection,
     DirectionSelection,
     DisplayScope,
+    MaterialMaintenanceScope,
     RequestedControls,
     TenantManagementScope,
     TrustedScope,
@@ -367,6 +369,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def display_scope_from_request(request: Request, _: str | None = Security(session_cookie)) -> DisplayScope:
         return authority.require_display(request)
+
+    def material_maintenance_scope_from_request(
+        request: Request,
+        _: str | None = Security(session_cookie),
+    ) -> MaterialMaintenanceScope:
+        return authority.require_material_maintenance(request)
+
+    def material_management_scope(scope: MaterialMaintenanceScope) -> TenantManagementScope:
+        return TenantManagementScope(scope.tenant_id, scope.user_id, scope.brand_id)
 
     def content_targets(
         scope: TrustedScope,
@@ -796,16 +807,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     ),
                     grants_content_access="content" in payload.capabilities,
                     grants_display_access="display" in payload.capabilities,
+                    display_store_ids=tuple(payload.display_store_ids),
                 )
             except psycopg.errors.UniqueViolation as exc:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail="当前租户已有同名自然人，或登录用户名已被使用",
                 ) from exc
-            activation_link, activation_url = activation_paths(created["activation_token"])
+            activation_link, activation_url = activation_paths(str(created["activation_token"]))
             return CreatedTenantUserResponse(
-                user_id=created["user_id"],
-                username=created["username"],
+                user_id=str(created["user_id"]),
+                username=str(created["username"]),
                 activation_link=activation_link,
                 activation_url=activation_url,
             )
@@ -928,6 +940,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
                 grants_content_access="content" in payload.capabilities,
                 grants_display_access="display" in payload.capabilities,
+                display_store_ids=(
+                    tuple(payload.display_store_ids)
+                    if payload.display_store_ids is not None
+                    else None
+                ),
             )
 
         @app.put(
@@ -1147,7 +1164,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 identity = production_authority._tenant_identity(request)
                 identities = publishing_identities(identity)
                 capabilities: list[str] = []
-                identity_projection: dict[str, object] = {}
+                identity_projection: dict[str, object] = dict(
+                    production_authority.repository.tenant_user_identity(identity)
+                )
                 if identities:
                     first_identity_id = UUID(str(identities[0]["id"]))
                     identity_scope = production_authority.repository.content_scope(
@@ -1157,19 +1176,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
                     raw_projection = workbench_service.user_portal_context(identity_scope).get("identity")
                     if isinstance(raw_projection, dict):
-                        identity_projection = raw_projection
+                        identity_projection.update(raw_projection)
                     capabilities.append("content")
+                display_stores = production_authority.repository.display_stores(identity)
+                if display_stores:
+                    capabilities.append("display")
                 try:
-                    production_authority.repository.display_scope(identity)
+                    production_authority.repository.material_maintenance_scope(identity)
+                    capabilities.append("materials")
                 except DomainError:
                     pass
-                else:
-                    capabilities.append("display")
                 return {
                     "application": "tenant_user",
                     "identity": identity_projection,
                     "publishing_identities": identities,
                     "capabilities": capabilities,
+                    "display_stores": display_stores,
                     "formal_runtime": True,
                 }
             return workbench_service.user_portal_context(user_scope_from_request(request))
@@ -1263,15 +1285,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/tenant-management/operators", responses=business_failures)
     def management_operators(
+        include_archived: bool = False,
         scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> list[dict[str, object]]:
-        return workbench_service.management_operators(scope)
+        return workbench_service.management_operators(scope, include_archived)
 
     @app.get("/api/v1/tenant-management/publishing-accounts", responses=business_failures)
     def management_accounts(
+        include_archived: bool = False,
         scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> list[dict[str, object]]:
-        return workbench_service.management_accounts(scope)
+        return workbench_service.management_accounts(scope, include_archived)
 
     @app.get("/api/v1/tenant-management/team-usage", responses=business_failures)
     def management_team_usage(
@@ -1285,6 +1309,65 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "label": "当前租户请求额度",
         }
         return result
+
+    @app.get("/api/v1/tenant-management/display-stores", responses=business_failures)
+    def management_display_stores(
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.management_display_stores(scope)
+
+    @app.post(
+        "/api/v1/tenant-management/display-stores",
+        status_code=status.HTTP_201_CREATED,
+        responses=business_failures,
+    )
+    def create_management_display_store(
+        payload: SaveDisplayStoreRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.save_management_display_store(
+            scope,
+            None,
+            payload.name,
+            payload.control_organization_id,
+            payload.execution_organization_id,
+            payload.upper_comfort_capacity,
+            payload.lower_comfort_capacity,
+        )
+
+    @app.post(
+        "/api/v1/tenant-management/display-stores/{store_id}/versions",
+        responses=business_failures,
+    )
+    def save_management_display_store_version(
+        store_id: UUID,
+        payload: SaveDisplayStoreRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.save_management_display_store(
+            scope,
+            store_id,
+            payload.name,
+            payload.control_organization_id,
+            payload.execution_organization_id,
+            payload.upper_comfort_capacity,
+            payload.lower_comfort_capacity,
+        )
+
+    @app.put(
+        "/api/v1/tenant-management/display-stores/{store_id}/enabled",
+        responses=business_failures,
+    )
+    def set_management_display_store_enabled(
+        store_id: UUID,
+        payload: SetEnabledRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.set_management_display_store_enabled(
+            scope,
+            store_id,
+            payload.enabled,
+        )
 
     @app.get("/api/v1/tenant-management/brand-library", responses=business_failures)
     def management_brand_library(
@@ -1521,6 +1604,119 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"deleted": True}
 
     @app.get(
+        "/api/v1/user/organization-materials",
+        responses=business_failures,
+    )
+    def user_organization_materials(
+        scope: MaterialMaintenanceScope = Depends(material_maintenance_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.management_organization_materials(
+            material_management_scope(scope),
+            scope.organization_id,
+        )
+
+    @app.post(
+        "/api/v1/user/organization-materials",
+        status_code=status.HTTP_201_CREATED,
+        responses=business_failures,
+    )
+    def create_user_organization_material(
+        upload: MaterialUploadRequest,
+        scope: MaterialMaintenanceScope = Depends(material_maintenance_scope_from_request),
+    ) -> dict[str, object]:
+        try:
+            payload = base64.b64decode(upload.content_base64, validate=True)
+        except (ValueError, binascii.Error) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="素材原件编码无效",
+            ) from exc
+        return workbench_service.add_management_organization_material(
+            material_management_scope(scope),
+            scope.organization_id,
+            upload.title,
+            upload.filename,
+            upload.content_type,
+            payload,
+            upload.declares_identifiable_minor,
+            upload.reference_note,
+            "organizations",
+            (scope.organization_id,),
+            True,
+        )
+
+    @app.get(
+        "/api/v1/user/organization-materials/{asset_id}/versions",
+        responses=business_failures,
+    )
+    def user_organization_material_versions(
+        asset_id: UUID,
+        scope: MaterialMaintenanceScope = Depends(material_maintenance_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.management_material_versions(
+            material_management_scope(scope),
+            asset_id,
+            scope.organization_id,
+        )
+
+    @app.post(
+        "/api/v1/user/organization-materials/{asset_id}/versions",
+        responses=business_failures,
+    )
+    def save_user_organization_material_version(
+        asset_id: UUID,
+        payload: MaterialMetadataVersionRequest,
+        scope: MaterialMaintenanceScope = Depends(material_maintenance_scope_from_request),
+    ) -> dict[str, object]:
+        if payload.visibility_scope != "organizations" or tuple(payload.organization_ids) != (
+            scope.organization_id,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="组织素材维护者只能保存到自己的所属团队",
+            )
+        return workbench_service.save_management_material_version(
+            material_management_scope(scope),
+            asset_id,
+            payload.title,
+            payload.reference_note,
+            "organizations",
+            (scope.organization_id,),
+            scope.organization_id,
+        )
+
+    @app.put(
+        "/api/v1/user/organization-materials/{asset_id}/enabled",
+        responses=business_failures,
+    )
+    def set_user_organization_material_enabled(
+        asset_id: UUID,
+        payload: SetEnabledRequest,
+        scope: MaterialMaintenanceScope = Depends(material_maintenance_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.set_management_material_enabled(
+            material_management_scope(scope),
+            asset_id,
+            payload.enabled,
+            scope.organization_id,
+        )
+
+    @app.delete(
+        "/api/v1/user/organization-materials/{asset_id}",
+        responses=business_failures,
+    )
+    def delete_user_organization_material(
+        asset_id: UUID,
+        scope: MaterialMaintenanceScope = Depends(material_maintenance_scope_from_request),
+    ) -> dict[str, bool]:
+        workbench_service.delete_management_organization_material(
+            material_management_scope(scope),
+            asset_id,
+            scope.organization_id,
+        )
+        return {"deleted": True}
+
+    @app.get(
         "/api/v1/tenant-management/demo-content-index",
         responses=business_failures,
     )
@@ -1681,8 +1877,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.source_account_id,
             payload.name,
             payload.channel,
-            payload.operator_id,
             payload.confirm_internal_carrier,
+            payload.operator_id,
         )
 
     @app.put(
@@ -2026,6 +2222,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         task: UUID | None = None,
         version: int | None = None,
         notice: str | None = None,
+        store_id: UUID | None = None,
     ) -> Response:
         if production_authority is not None:
             try:
@@ -2047,7 +2244,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     status_code=status.HTTP_403_FORBIDDEN,
                 )
             try:
-                scope = production_authority.repository.display_scope(identity)
+                scope = production_authority.repository.display_scope(identity, store_id)
             except DomainError:
                 return HTMLResponse(
                     render_tenant_user_access_denied(
@@ -2655,7 +2852,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     status_code=status.HTTP_403_FORBIDDEN,
                 )
             capabilities: list[str] = []
-            context: dict[str, object] | None = None
+            context: dict[str, object] = {
+                "application": "tenant_user",
+                "identity": production_authority.repository.tenant_user_identity(identity),
+            }
             available_identities = publishing_identities(identity)
             if available_identities:
                 first_identity_id = UUID(str(available_identities[0]["id"]))
@@ -2664,28 +2864,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     None,
                     first_identity_id,
                 )
-                context = {
-                    "application": "tenant_user",
-                    "identity": workbench_service.user_portal_context(identity_scope)["identity"],
-                    "publishing_identities": available_identities,
-                }
+                account_identity = workbench_service.user_portal_context(identity_scope)["identity"]
+                if isinstance(account_identity, dict):
+                    context["identity"] = {
+                        **cast(dict[str, object], context["identity"]),
+                        **account_identity,
+                    }
+                context["publishing_identities"] = available_identities
                 capabilities.append("content")
-            try:
-                display_scope = production_authority.repository.display_scope(identity)
-            except DomainError:
-                pass
-            else:
+            display_stores = production_authority.repository.display_stores(identity)
+            if display_stores:
                 capabilities.append("display")
-                if context is None:
+                if not available_identities:
+                    display_scope = production_authority.repository.display_scope(
+                        identity,
+                        UUID(display_stores[0]["id"]),
+                    )
                     display_context = workbench_service.display_context(
                         display_scope,
                         current_settings.generator_mode,
                     )
-                    context = {
-                        "application": "tenant_user",
-                        "identity": display_context["identity"],
-                    }
-            if context is None:
+                    context["identity"] = display_context["identity"]
+            try:
+                production_authority.repository.material_maintenance_scope(identity)
+                capabilities.append("materials")
+            except DomainError:
+                pass
+            if not capabilities:
                 return HTMLResponse(
                     render_tenant_user_access_denied(
                         "租户用户入口",
@@ -2695,6 +2900,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     status_code=status.HTTP_403_FORBIDDEN,
                 )
             context["capabilities"] = capabilities
+            context["display_stores"] = display_stores
             context["formal_runtime"] = True
         else:
             context = workbench_service.user_portal_context(user_scope_from_request(request))
@@ -2708,6 +2914,53 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     if current_settings.is_production
                     else "<p><a href='/ui/select/content'>内容生产（对外）</a> · "
                     "<a href='/ui/select/display'>陈列搭配（对内）</a></p>"
+                ),
+            )
+        )
+
+    @app.get(
+        "/organization-materials",
+        response_class=HTMLResponse,
+        dependencies=[Security(session_cookie)],
+        responses=business_failures,
+    )
+    def organization_materials_portal(request: Request) -> Response:
+        try:
+            maintenance_scope = material_maintenance_scope_from_request(request)
+            identity = (
+                production_authority._tenant_identity(request)
+                if production_authority is not None
+                else None
+            )
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+            raise
+        except DomainError:
+            return HTMLResponse(
+                render_tenant_user_access_denied(
+                    "组织官方素材",
+                    "/user",
+                    "返回租户用户工作台",
+                ),
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
+        identity_projection: dict[str, str] = {}
+        if production_authority is not None and identity is not None:
+            identity_projection = production_authority.repository.tenant_user_identity(identity)
+        context: dict[str, object] = {
+            "application": "tenant_user",
+            "identity": identity_projection,
+            "capabilities": ["materials"],
+            "formal_runtime": current_settings.is_production,
+            "organization_id": str(maintenance_scope.organization_id),
+        }
+        return HTMLResponse(
+            render_spa_shell(
+                context,
+                fallback=(
+                    "<main><h1>组织官方素材</h1><p>请启用 JavaScript 后维护当前团队素材。</p>"
+                    "<a href='/user'>返回工作台</a></main>"
                 ),
             )
         )

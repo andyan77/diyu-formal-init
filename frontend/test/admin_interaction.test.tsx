@@ -447,7 +447,11 @@ async function main(): Promise<void> {
   );
   await select(accountSelects[0], "institutional_account");
   await select(accountSelects[1], "11111111-1111-4111-8111-111111111111");
-  await select(accountSelects[2], "22222222-2222-4222-8222-222222222222");
+  assert.doesNotMatch(
+    document.querySelector(".tenant-drawer")?.textContent ?? "",
+    /首位使用者/,
+    "零租户用户时也必须能先建立账号；成员资格只能在成员页面分配"
+  );
   const profileValues = [
     "以总部品牌内容运营身份出现",
     "代表已确认品牌立场，不代替门店陈述经历",
@@ -535,6 +539,9 @@ async function main(): Promise<void> {
   }
   assert.match(document.body.textContent ?? "", /牛角扣外套/);
   assert.match(document.body.textContent ?? "", /品牌管理员录入/);
+  assert.match(document.body.textContent ?? "", /笛语品牌身份与内容战略基线/);
+  assert.match(document.body.textContent ?? "", /DIYU-BRAND-BASELINE-001/);
+  assert.match(document.body.textContent ?? "", /按稳定语义段和证据等级/);
   assert.match(document.body.textContent ?? "", /浙江区域门店拍摄说明/);
   assert.match(document.body.textContent ?? "", /shooting-note.txt/);
   await click(find(".library-list button", "查看版本与维护"));
@@ -557,6 +564,12 @@ async function main(): Promise<void> {
   await click(find(".product-list button", "查看版本与维护"));
   await settle();
   assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /V2 · 当前版本/);
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /可见颜色 · V/);
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /建议价格 · P/);
+  assert.match(
+    document.querySelector(".tenant-drawer")?.textContent ?? "",
+    /不作为客观商品事实/
+  );
   await click(find(".tenant-drawer button", "查看字段预览"));
   await settle();
   const productConfirmation = find(

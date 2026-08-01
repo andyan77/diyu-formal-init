@@ -56,6 +56,37 @@ class TenantManagementScope:
 
 
 @dataclass(frozen=True)
+class MaterialMaintenanceScope:
+    """Trusted tenant-user scope for maintaining their own organization assets."""
+
+    tenant_id: UUID
+    user_id: UUID
+    brand_id: UUID
+    organization_id: UUID
+
+
+@dataclass(frozen=True)
+class BrandContextSegment:
+    segment_id: str
+    source_document_id: str
+    source_document_version_id: str
+    source_id: str
+    source_version: str
+    semantic_kind: str
+    evidence_level: str
+    visibility_scope: str
+    digest: str
+    exact_text: str
+
+
+@dataclass(frozen=True)
+class BrandContextPacketV1:
+    packet_version: str
+    packet_digest: str
+    segments: tuple[BrandContextSegment, ...]
+
+
+@dataclass(frozen=True)
 class BrandContext:
     brand_name: str
     positioning: str
@@ -74,6 +105,10 @@ class BrandContext:
     business_data_kind: str = "formal_business_data"
     brand_reference_context: tuple[str, ...] = ()
     speaker_kind: SpeakerKind = "unknown"
+    expression_constraint_context: tuple[str, ...] = ()
+    creative_method_context: tuple[str, ...] = ()
+    candidate_product_guidance_context: tuple[str, ...] = ()
+    context_packet: BrandContextPacketV1 | None = None
 
 
 @dataclass(frozen=True)
@@ -202,6 +237,8 @@ class ProductFact:
     source_note: str = ""
     fact_version: int = 1
     applicability: str = "legacy_scope"
+    product_id: UUID | None = None
+    product_version_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -474,6 +511,7 @@ class DisplayScope:
     brand_id: UUID
     organization_id: UUID
     actor_organization_id: UUID | None = None
+    store_id: UUID | None = None
 
 
 @dataclass(frozen=True)

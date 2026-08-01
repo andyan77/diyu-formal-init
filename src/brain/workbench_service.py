@@ -54,11 +54,19 @@ class WorkbenchService:
     def is_tenant_manager(self, scope: TenantManagementScope) -> bool:
         return self._repository.is_tenant_manager(scope)
 
-    def management_operators(self, scope: TenantManagementScope) -> list[dict[str, object]]:
-        return self._repository.management_operators(scope)
+    def management_operators(
+        self,
+        scope: TenantManagementScope,
+        include_archived: bool = False,
+    ) -> list[dict[str, object]]:
+        return self._repository.management_operators(scope, include_archived)
 
-    def management_accounts(self, scope: TenantManagementScope) -> list[dict[str, object]]:
-        return self._repository.management_accounts(scope)
+    def management_accounts(
+        self,
+        scope: TenantManagementScope,
+        include_archived: bool = False,
+    ) -> list[dict[str, object]]:
+        return self._repository.management_accounts(scope, include_archived)
 
     def team_usage(
         self,
@@ -75,8 +83,12 @@ class WorkbenchService:
     def management_organization_materials(
         self,
         scope: TenantManagementScope,
+        owner_organization_id: UUID | None = None,
     ) -> list[dict[str, object]]:
-        return self._repository.management_organization_materials(scope)
+        return self._repository.management_organization_materials(
+            scope,
+            owner_organization_id,
+        )
 
     def brand_library_entries(
         self,
@@ -221,6 +233,7 @@ class WorkbenchService:
         reference_note: str,
         visibility_scope: str = "organizations",
         organization_ids: tuple[UUID, ...] = (),
+        exact_owner_scope: bool = False,
     ) -> dict[str, object]:
         if declares_identifiable_minor:
             raise DomainError("第一版不能保存认得出真人未成年人的照片、视频或声音。")
@@ -259,6 +272,7 @@ class WorkbenchService:
                 reference_note.strip(),
                 visibility_scope,
                 unique_organizations,
+                exact_owner_scope,
             )
         except (OSError, ValueError) as exc:
             if "object_key" in locals():
@@ -273,14 +287,20 @@ class WorkbenchService:
         self,
         scope: TenantManagementScope,
         asset_id: UUID,
+        owner_organization_id: UUID | None = None,
     ) -> None:
         object_key = self._repository.request_management_material_deletion(
             scope,
             asset_id,
+            owner_organization_id,
         )
         try:
             self._object_store.delete(object_key)
-            self._repository.finalize_management_material_deletion(scope, asset_id)
+            self._repository.finalize_management_material_deletion(
+                scope,
+                asset_id,
+                owner_organization_id,
+            )
         except (OSError, ValueError) as exc:
             raise DomainError("素材删除尚未完成；当前记录已标记为待删除，可直接重试。") from exc
 
@@ -288,8 +308,13 @@ class WorkbenchService:
         self,
         scope: TenantManagementScope,
         asset_id: UUID,
+        owner_organization_id: UUID | None = None,
     ) -> list[dict[str, object]]:
-        return self._repository.management_material_versions(scope, asset_id)
+        return self._repository.management_material_versions(
+            scope,
+            asset_id,
+            owner_organization_id,
+        )
 
     def save_management_material_version(
         self,
@@ -299,6 +324,7 @@ class WorkbenchService:
         reference_note: str,
         visibility_scope: str,
         organization_ids: tuple[UUID, ...],
+        owner_organization_id: UUID | None = None,
     ) -> dict[str, object]:
         if not title.strip() or len(title.strip()) > 120:
             raise DomainError("素材名称需要在 1 到 120 个字符之间。")
@@ -316,6 +342,7 @@ class WorkbenchService:
             reference_note.strip(),
             visibility_scope,
             unique_organizations,
+            owner_organization_id,
         )
 
     def set_management_material_enabled(
@@ -323,11 +350,13 @@ class WorkbenchService:
         scope: TenantManagementScope,
         asset_id: UUID,
         enabled: bool,
+        owner_organization_id: UUID | None = None,
     ) -> dict[str, object]:
         return self._repository.set_management_material_enabled(
             scope,
             asset_id,
             enabled,
+            owner_organization_id,
         )
 
     def management_product_media_bindings(
@@ -586,7 +615,7 @@ class WorkbenchService:
         channel: str,
         content_role_name: str,
         voice_boundary: str | None,
-        operator_id: UUID,
+        operator_id: UUID | None = None,
         control_organization_id: UUID | None = None,
         operator_can_maintain_expression_profile: bool = False,
         as_synthetic_business_fixture: bool = False,
@@ -629,6 +658,8 @@ class WorkbenchService:
             raise DomainError("发布账号、账号类型短标签和账号画像都需要填写。")
         if normalized_profile is not None and control_organization_id is None:
             raise DomainError("建立账号画像前，请先明确负责团队。")
+        if operator_id is None and operator_can_maintain_expression_profile:
+            raise DomainError("请在成员与资格中明确授予五段画像维护资格。")
         return self._repository.create_publishing_account(
             scope,
             *values,
@@ -689,8 +720,8 @@ class WorkbenchService:
         source_account_id: UUID,
         name: str,
         channel: str,
-        operator_id: UUID,
         confirm_internal_carrier: bool,
+        operator_id: UUID | None = None,
     ) -> dict[str, object]:
         if not confirm_internal_carrier:
             raise DomainError("请先确认这只是内部内容载体，不会连接或登录真实平台。")
@@ -748,6 +779,47 @@ class WorkbenchService:
             "identity": self._repository.display_identity(scope),
         }
 
+    def management_display_stores(
+        self,
+        scope: TenantManagementScope,
+    ) -> list[dict[str, object]]:
+        return self._repository.management_display_stores(scope)
+
+    def save_management_display_store(
+        self,
+        scope: TenantManagementScope,
+        store_id: UUID | None,
+        name: str,
+        control_organization_id: UUID,
+        execution_organization_id: UUID,
+        upper_comfort_capacity: int,
+        lower_comfort_capacity: int,
+    ) -> dict[str, object]:
+        return self._repository.save_management_display_store(
+            scope,
+            store_id,
+            name.strip(),
+            control_organization_id,
+            execution_organization_id,
+            {
+                "schema": "dm01-wall-double-rail-v1",
+                "upper_comfort_capacity": upper_comfort_capacity,
+                "lower_comfort_capacity": lower_comfort_capacity,
+            },
+        )
+
+    def set_management_display_store_enabled(
+        self,
+        scope: TenantManagementScope,
+        store_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        return self._repository.set_management_display_store_enabled(
+            scope,
+            store_id,
+            enabled,
+        )
+
     def recent_content(self, scope: TrustedScope) -> list[dict[str, object]]:
         return self._repository.recent_content(scope)
 
@@ -761,7 +833,168 @@ class WorkbenchService:
         return self._repository.display_versions(scope, task_id)
 
     def readiness(self, scope: TenantManagementScope) -> dict[str, object]:
-        return {"items": self._repository.readiness(scope)}
+        items = self._repository.readiness(scope)
+        by_id = {str(item["id"]): item for item in items}
+        inputs = self._repository.tenant_readiness_inputs(scope)
+        source_document_count = inputs.get("source_documents")
+        product_media_count = inputs.get("product_media_products")
+        confirmed_store_count = inputs.get("confirmed_stores")
+        if not all(
+            isinstance(value, int)
+            for value in (
+                source_document_count,
+                product_media_count,
+                confirmed_store_count,
+            )
+        ):
+            raise DomainError("当前品牌资料就绪条件无效。")
+        assert isinstance(source_document_count, int)
+        assert isinstance(product_media_count, int)
+        assert isinstance(confirmed_store_count, int)
+
+        def tenant_item(
+            item_id: str,
+            title: str,
+            state: str,
+            evidence: list[str],
+            missing: list[str],
+            impact: str,
+            unaffected: str,
+            action: str,
+            section: str,
+        ) -> dict[str, object]:
+            return {
+                "id": item_id,
+                "title": title,
+                "state": state,
+                "evidence": evidence,
+                "missing": missing,
+                "impact": impact,
+                "unaffected": unaffected,
+                "action": {"label": action, "section": section},
+            }
+
+        expression_ready = str(by_id.get("non_product_content", {}).get("status")) == "available"
+        product_ready = str(by_id.get("product_facts", {}).get("status")) == "available"
+        platform_ready = str(by_id.get("platform_recompile", {}).get("status")) == "available"
+        series_ready = str(by_id.get("continuous_series", {}).get("status")) == "available"
+        first_ready = str(by_id.get("first_creation", {}).get("status")) == "available"
+        dm01_ready = str(by_id.get("dm01_display", {}).get("status")) == "available"
+        source_ready = source_document_count > 0
+        visual_ready = product_media_count >= 2
+        tenant_items = [
+            tenant_item(
+                "tenant_non_product",
+                "普通非商品内容",
+                "ready" if expression_ready and source_ready else "ready_after_admin_action",
+                [f"已授权品牌源文档：{source_document_count} 份"],
+                [] if expression_ready and source_ready else ["确认品牌资料与可操作账号。"],
+                "决定品牌日常表达是否有稳定依据。",
+                "不影响管理员维护成员、组织和资料。",
+                "查看品牌资料",
+                "brand-library",
+            ),
+            tenant_item(
+                "tenant_product_content",
+                "商品承重 P1 / P2",
+                "ready" if product_ready else "data_missing",
+                ["只使用当前商品版本中获准进入事实包的字段。"],
+                [] if product_ready else ["补充至少一件有 V 级可观察依据的商品。"],
+                "只影响需要具体商品承担判断或解释的内容。",
+                "不影响非商品内容。",
+                "查看商品资料",
+                "brand-library",
+            ),
+            tenant_item(
+                "tenant_life_content",
+                "P3 生活与账号内容",
+                "ready" if expression_ready and source_ready else "ready_after_admin_action",
+                ["账号画像与品牌表达边界独立进入创作。"],
+                [] if expression_ready and source_ready else ["确认账号画像和品牌表达资料。"],
+                "影响生活片段如何形成该账号自己的表达。",
+                "不要求商品或门店资料。",
+                "管理发布账号",
+                "publishing-accounts",
+            ),
+            tenant_item(
+                "tenant_local_content",
+                "P4 门店内容",
+                "ready" if confirmed_store_count > 0 else "data_missing",
+                [f"已确认门店档案：{confirmed_store_count} 份"],
+                [] if confirmed_store_count > 0 else ["当前没有品牌确认的真实门店档案。"],
+                "只影响需要门店或本地服务事实的内容。",
+                "用户明确提供的单次观察仍可按其原话创作。",
+                "建立门店档案",
+                "members",
+            ),
+            tenant_item(
+                "tenant_visual_content",
+                "P5 商品视觉",
+                "ready" if visual_ready else "data_missing",
+                [f"具备正式媒体绑定的商品：{product_media_count} 件"],
+                [] if visual_ready else ["至少为两件不同商品登记并明确选择真实图片或视频。"],
+                "只影响以商品视觉关系为主价值的成品。",
+                "不影响 P1—P4 与纯文字内容。",
+                "补充组织官方素材",
+                "brand-library",
+            ),
+            tenant_item(
+                "tenant_series",
+                "连续系列",
+                "ready" if series_ready else "ready_after_admin_action",
+                ["系列前情会随任务冻结。"],
+                [] if series_ready else ["先完成一个可操作发布账号和画像。"],
+                "影响连续内容的前情承接。",
+                "不影响单条内容。",
+                "管理发布账号",
+                "publishing-accounts",
+            ),
+            tenant_item(
+                "tenant_dm01",
+                "纯文字陈列参考方案",
+                "ready" if dm01_ready else "data_missing",
+                [f"已确认门店档案：{confirmed_store_count} 份"],
+                [] if dm01_ready else ["补齐真实门店档案、陈列资格与本次库存。"],
+                "只影响 DM01 文字参考方案。",
+                "不影响内容创作。",
+                "建立门店档案",
+                "members",
+            ),
+            tenant_item(
+                "tenant_platforms",
+                "平台与形式",
+                "ready" if platform_ready else "ready_after_admin_action",
+                ["同一逻辑账号跨平台共享同一画像。"],
+                [] if platform_ready else ["为逻辑账号补充平台与形式目标。"],
+                "影响可选择的平台原生成品形式。",
+                "不改变登录身份或账号画像。",
+                "管理平台目标",
+                "publishing-accounts",
+            ),
+            tenant_item(
+                "tenant_first_creation",
+                "新成员首次创作",
+                "ready" if first_ready else "ready_after_admin_action",
+                ["成员需获得可操作发布账号。"],
+                [] if first_ready else ["创建成员并分配发布账号资格。"],
+                "影响新成员能否从一句话开始创作。",
+                "不影响现有管理员维护资料。",
+                "管理成员",
+                "members",
+            ),
+        ]
+        return {
+            "brand_name": str(inputs["brand_name"]),
+            "software_truth": {
+                "usable": 58,
+                "defective": 0,
+                "placeholder": 0,
+                "not_built": 6,
+                "unproven": 0,
+            },
+            "items": items,
+            "tenant_data_items": tenant_items,
+        }
 
     def brand_expression(self, scope: TenantManagementScope) -> dict[str, object]:
         return self._repository.brand_expression(scope)

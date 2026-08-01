@@ -122,16 +122,23 @@ class _FormalJourney:
 class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
     """Persist every bounded provider stage used by one formal API card."""
 
-    def __init__(self, *, evidence_root: Path, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        evidence_root: Path,
+        allowed_card_ids: frozenset[str] = GATE_C_FINAL_CARD_IDS,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self._evidence_root = evidence_root
+        self._allowed_card_ids = allowed_card_ids
         self._active_card: str | None = None
         self._request_count = 0
         self._responses: list[dict[str, object]] = []
 
     def begin_card(self, card_id: str) -> None:
-        if card_id not in GATE_C_FINAL_CARD_IDS:
-            raise ValueError("unknown Gate C card")
+        if card_id not in self._allowed_card_ids:
+            raise ValueError("unknown bounded final-suite card")
         self._active_card = card_id
         self._request_count = 0
         self._responses = []

@@ -68,6 +68,7 @@ const organizations = [
   }
 ];
 let operators = [];
+let displayStores = [];
 let accounts = [
   {
     id: "33333333-3333-4333-8333-333333333333",
@@ -121,6 +122,23 @@ let brandEntries = [
     scope_organizations: [],
     updated_at: "2026-07-27T00:00:00Z",
     impact: "供当前品牌的创作工作参考"
+  },
+  {
+    id: "66666666-6666-4666-8666-666666666667",
+    category: "reference",
+    title: "笛语品牌身份与内容战略基线",
+    source_note: "源文档 DIYU-BRAND-BASELINE-001；原始状态：待品牌方验收",
+    content: "私有源文档正文只在管理员详情中回读。",
+    version: "V1",
+    status: "active",
+    current_version_id: "source-version-1",
+    visibility_scope: "brand_all",
+    scope_organizations: [],
+    updated_at: "2026-08-01T00:00:00Z",
+    impact: "按稳定语义段和证据等级供相关任务使用",
+    source_document: true,
+    source_digest: "a".repeat(64),
+    activation_status: "brand_user_authorized"
   }
 ];
 let products = [
@@ -139,7 +157,23 @@ let products = [
     status: "active",
     visibility_scope: "organizations",
     scope_organizations: [organizations[1]],
-    updated_at: "2026-07-27T00:00:00Z"
+    updated_at: "2026-07-27T00:00:00Z",
+    field_evidence: [
+      {
+        field_name: "可见颜色",
+        exact_text: "炭灰",
+        evidence_level: "V",
+        allowed_in_product_fact: true,
+        source_digest: "b".repeat(64)
+      },
+      {
+        field_name: "建议价格",
+        exact_text: "仅供候选讨论",
+        evidence_level: "P",
+        allowed_in_product_fact: false,
+        source_digest: "c".repeat(64)
+      }
+    ]
   }
 ];
 let productMediaBindings = [];
@@ -197,6 +231,36 @@ globalThis.fetch = async (input, init = {}) => {
   let value = {};
   if (path === "/api/v1/admin/readiness") {
     value = {
+      brand_name: "笛语",
+      software_truth: {
+        usable: 58,
+        defective: 0,
+        placeholder: 0,
+        not_built: 6,
+        unproven: 0
+      },
+      tenant_data_items: [
+        {
+          id: "tenant-non-product",
+          title: "普通非商品内容",
+          state: "ready_after_admin_action",
+          evidence: ["品牌表达资料与账号画像分开核对"],
+          missing: ["确认一份可操作账号"],
+          impact: "影响品牌日常表达",
+          unaffected: "不影响管理员维护组织和资料",
+          action: { label: "管理发布账号", section: "publishing-accounts" }
+        },
+        {
+          id: "tenant-visual",
+          title: "P5 商品视觉",
+          state: "data_missing",
+          evidence: ["当前没有已选择的真实商品媒体"],
+          missing: ["为两件商品登记真实图片或视频"],
+          impact: "只影响商品视觉成品",
+          unaffected: "不影响 P1—P4 与纯文字内容",
+          action: { label: "补充组织官方素材", section: "brand-library" }
+        }
+      ],
       items: [
         {
           id: "account-expression",
@@ -276,6 +340,67 @@ globalThis.fetch = async (input, init = {}) => {
     value = organizations;
   } else if (path === "/api/v1/tenant-management/control-organizations") {
     value = organizations;
+  } else if (
+    path === "/api/v1/tenant-management/display-stores" &&
+    method === "GET"
+  ) {
+    value = displayStores;
+  } else if (
+    path === "/api/v1/tenant-management/display-stores" &&
+    method === "POST"
+  ) {
+    const store = {
+      id: "99999999-9999-4999-8999-999999999901",
+      name: body.name,
+      enabled: true,
+      control_organization_id: body.control_organization_id,
+      execution_organization_id: body.execution_organization_id,
+      execution_organization:
+        organizations.find(item => item.id === body.execution_organization_id)?.name ?? "",
+      current_profile: {
+        id: "99999999-9999-4999-8999-999999999902",
+        version: 1,
+        label: "V1",
+        rail_profile: {
+          upper_comfort_capacity: body.upper_comfort_capacity,
+          lower_comfort_capacity: body.lower_comfort_capacity
+        }
+      }
+    };
+    displayStores = [store, ...displayStores];
+    value = store;
+  } else if (
+    path.match(/^\/api\/v1\/tenant-management\/display-stores\/[^/]+\/versions$/) &&
+    method === "POST"
+  ) {
+    const storeId = path.split("/").at(-2);
+    displayStores = displayStores.map(item =>
+      item.id === storeId
+        ? {
+            ...item,
+            name: body.name,
+            current_profile: {
+              id: "99999999-9999-4999-8999-999999999903",
+              version: (item.current_profile?.version ?? 0) + 1,
+              label: `V${(item.current_profile?.version ?? 0) + 1}`,
+              rail_profile: {
+                upper_comfort_capacity: body.upper_comfort_capacity,
+                lower_comfort_capacity: body.lower_comfort_capacity
+              }
+            }
+          }
+        : item
+    );
+    value = displayStores.find(item => item.id === storeId);
+  } else if (
+    path.match(/^\/api\/v1\/tenant-management\/display-stores\/[^/]+\/enabled$/) &&
+    method === "PUT"
+  ) {
+    const storeId = path.split("/").at(-2);
+    displayStores = displayStores.map(item =>
+      item.id === storeId ? { ...item, enabled: body.enabled } : item
+    );
+    value = displayStores.find(item => item.id === storeId);
   } else if (path === "/api/v1/tenant-management/publishing-accounts" && method === "GET") {
     value = accounts;
   } else if (path === "/api/v1/tenant-management/onboarding-prefill") {
@@ -591,7 +716,15 @@ globalThis.fetch = async (input, init = {}) => {
         enabled: true,
         capabilities: body.capabilities,
         manages_tenant: body.entry_type === "tenant_admin",
-        account_grants: []
+        maintains_organization_materials: body.grants_material_maintenance,
+        account_grants: [],
+        display_store_grants: displayStores
+          .filter(item => body.display_store_ids?.includes(item.id))
+          .map(item => ({
+            store_id: item.id,
+            store_name: item.name,
+            store_enabled: item.enabled
+          }))
       }
     ];
     value = {
@@ -675,7 +808,7 @@ globalThis.fetch = async (input, init = {}) => {
           }
         ],
         carrier_count: 1,
-        operators: [{ id: body.operator_id, display_name: operators[0]?.display_name ?? "成员" }]
+        operators: []
       }
     ];
     value = accounts[0];

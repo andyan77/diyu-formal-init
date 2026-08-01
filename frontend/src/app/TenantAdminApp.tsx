@@ -47,7 +47,31 @@ type Operator = {
     | Array<"content" | "display">
     | { content: boolean; display: boolean };
   manages_tenant: boolean;
+  maintains_organization_materials: boolean;
   account_grants: AccountGrant[];
+  display_store_grants: Array<{
+    store_id: string;
+    store_name: string;
+    store_enabled: boolean;
+  }>;
+};
+
+type DisplayStore = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  control_organization_id: string;
+  execution_organization_id: string;
+  execution_organization: string;
+  current_profile: {
+    id: string;
+    version: number;
+    label: string;
+    rail_profile: {
+      upper_comfort_capacity?: number;
+      lower_comfort_capacity?: number;
+    };
+  } | null;
 };
 
 type ProfileSegments = {
@@ -187,6 +211,30 @@ type ReadinessItem = {
   evaluated_at: string;
 };
 
+type TenantDataReadiness = {
+  id: string;
+  title: string;
+  state: "ready" | "ready_after_admin_action" | "data_missing" | "not_applicable";
+  evidence: string[];
+  missing: string[];
+  impact: string;
+  unaffected: string;
+  action: { label: string; section: Section };
+};
+
+type ReadinessResponse = {
+  brand_name: string;
+  software_truth: {
+    usable: number;
+    defective: number;
+    placeholder: number;
+    not_built: number;
+    unproven: number;
+  };
+  items: ReadinessItem[];
+  tenant_data_items: TenantDataReadiness[];
+};
+
 type LibraryScope = "brand_all" | "headquarters" | "organizations";
 type LibraryEntry = {
   id: string;
@@ -203,6 +251,9 @@ type LibraryEntry = {
   updated_by: string | null;
   updated_at: string;
   impact: string;
+  source_document?: boolean;
+  source_digest?: string;
+  activation_status?: string;
 };
 
 type ProductFact = {
@@ -232,6 +283,13 @@ type ProductFact = {
   visibility_scope?: LibraryScope;
   scope_organizations?: Organization[];
   updated_at?: string;
+  field_evidence?: Array<{
+    field_name: string;
+    exact_text: string;
+    evidence_level: "V" | "P" | "C" | "R";
+    allowed_in_product_fact: boolean;
+    source_digest: string;
+  }>;
 };
 
 type ProductDraft = {
@@ -737,7 +795,7 @@ function StatusPill({ status }: { status: ReadinessItem["status"] }): JSX.Elemen
 
 function Overview({ onSection }: { onSection: (section: Section) => void }): JSX.Element {
   const usage = useRequest<Usage>("/api/v1/tenant-management/team-usage?window_days=7");
-  const readiness = useRequest<{ items: ReadinessItem[] }>("/api/v1/admin/readiness");
+  const readiness = useRequest<ReadinessResponse>("/api/v1/admin/readiness");
   const actions = (readiness.data?.items ?? [])
     .filter(item => item.status !== "available")
     .slice(0, 3);
@@ -968,11 +1026,22 @@ function Members({
   const accounts = useRequest<PublishingAccount[]>(
     "/api/v1/tenant-management/publishing-accounts"
   );
+  const stores = useRequest<DisplayStore[]>(
+    "/api/v1/tenant-management/display-stores"
+  );
   const [drawer, setDrawer] = useState<"create" | Operator | null>(null);
   const [saving, setSaving] = useState(false);
   const [activationLink, setActivationLink] = useState("");
   const [copyFeedback, setCopyFeedback] = useState<Notice>(null);
   const [confirmingDisable, setConfirmingDisable] = useState(false);
+  const [storeForm, setStoreForm] = useState({
+    name: "",
+    controlOrganizationId: "",
+    executionOrganizationId: "",
+    upperCapacity: 20,
+    lowerCapacity: 20
+  });
+  const [editingStoreId, setEditingStoreId] = useState<string | null>(null);
   const [restoreDisableFocus, setRestoreDisableFocus] = useState(false);
   const disableTrigger = useRef<HTMLButtonElement>(null);
   const confirmDisableButton = useRef<HTMLButtonElement>(null);
@@ -984,8 +1053,10 @@ function Members({
     entryType: "tenant_user" as EntryType,
     content: true,
     display: false,
+    materialMaintenance: false,
     accountIds: [] as string[],
-    maintenanceAccountIds: [] as string[]
+    maintenanceAccountIds: [] as string[],
+    storeIds: [] as string[]
   });
   const [edit, setEdit] = useState({
     displayName: "",
@@ -993,12 +1064,14 @@ function Members({
     entryType: "tenant_user" as EntryType,
     content: false,
     display: false,
+    materialMaintenance: false,
     accountIds: [] as string[],
-    maintenanceAccountIds: [] as string[]
+    maintenanceAccountIds: [] as string[],
+    storeIds: [] as string[]
   });
 
   const refresh = async (): Promise<void> => {
-    await Promise.all([operators.refresh(), accounts.refresh()]);
+    await Promise.all([operators.refresh(), accounts.refresh(), stores.refresh()]);
   };
   useEffect(() => {
     if (confirmingDisable) {
@@ -1049,8 +1122,10 @@ function Members({
       entryType: "tenant_user",
       content: true,
       display: false,
+      materialMaintenance: false,
       accountIds: [],
-      maintenanceAccountIds: []
+      maintenanceAccountIds: [],
+      storeIds: []
     });
     setDrawer("create");
   };
@@ -1084,8 +1159,11 @@ function Members({
                 ? form.maintenanceAccountIds
                 : [],
             grants_tenant_management: form.entryType === "tenant_admin",
-            grants_material_maintenance: false,
-            grants_expression_profile_maintenance: false
+            grants_material_maintenance:
+              form.entryType === "tenant_user" && form.materialMaintenance,
+            grants_expression_profile_maintenance: false,
+            display_store_ids:
+              form.entryType === "tenant_user" && form.display ? form.storeIds : []
           })
         }
       );
@@ -1114,10 +1192,12 @@ function Members({
       entryType: member.entry_type,
       content: hasCapability(member, "content"),
       display: hasCapability(member, "display"),
+      materialMaintenance: member.maintains_organization_materials,
       accountIds: member.account_grants.map(item => item.account_id),
       maintenanceAccountIds: member.account_grants
         .filter(item => item.can_maintain_expression_profile)
-        .map(item => item.account_id)
+        .map(item => item.account_id),
+      storeIds: member.display_store_grants.map(item => item.store_id)
     });
     setDrawer(member);
   };
@@ -1132,7 +1212,39 @@ function Members({
         : value.maintenanceAccountIds
     }));
   };
-  const requestError = operators.error ?? organizations.error ?? accounts.error;
+  const requestError =
+    operators.error ?? organizations.error ?? accounts.error ?? stores.error;
+  const saveStore = (event: FormEvent): void => {
+    event.preventDefault();
+    void run(async () => {
+      await api(
+        editingStoreId
+          ? `/api/v1/tenant-management/display-stores/${editingStoreId}/versions`
+          : "/api/v1/tenant-management/display-stores",
+        {
+        method: "POST",
+        body: JSON.stringify({
+          name: storeForm.name,
+          control_organization_id: storeForm.controlOrganizationId,
+          execution_organization_id: storeForm.executionOrganizationId,
+          upper_comfort_capacity: storeForm.upperCapacity,
+          lower_comfort_capacity: storeForm.lowerCapacity,
+          confirm_as_current: true
+        })
+        }
+      );
+      setEditingStoreId(null);
+      setStoreForm({
+        name: "",
+        controlOrganizationId: "",
+        executionOrganizationId: "",
+        upperCapacity: 20,
+        lowerCapacity: 20
+      });
+    }, editingStoreId
+      ? "门店档案新版本已保存。"
+      : "门店档案已建立，可以为成员分配具体门店陈列资格。");
+  };
   return (
     <section className="tenant-page">
       <header className="tenant-heading split">
@@ -1144,6 +1256,136 @@ function Members({
           添加成员
         </button>
       </header>
+      <details className="tenant-inline-panel">
+        <summary>建立与维护门店档案</summary>
+        <form className="tenant-form" onSubmit={saveStore}>
+          <label>
+            门店名称
+            <input
+              required
+              value={storeForm.name}
+              onChange={event => setStoreForm({ ...storeForm, name: event.target.value })}
+            />
+          </label>
+          <label>
+            负责团队
+            <select
+              required
+              value={storeForm.controlOrganizationId}
+              onChange={event =>
+                setStoreForm({
+                  ...storeForm,
+                  controlOrganizationId: event.target.value
+                })
+              }
+            >
+              <option value="">请选择</option>
+              {organizations.data
+                ?.filter(item => (item.level ?? item.organization_level) === "company")
+                .map(item => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+            </select>
+          </label>
+          <label>
+            执行门店组织
+            <select
+              required
+              value={storeForm.executionOrganizationId}
+              onChange={event =>
+                setStoreForm({
+                  ...storeForm,
+                  executionOrganizationId: event.target.value
+                })
+              }
+            >
+              <option value="">请选择</option>
+              {organizations.data
+                ?.filter(item => (item.level ?? item.organization_level) === "operating_unit")
+                .map(item => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+            </select>
+          </label>
+          <label>
+            上杆舒适容量
+            <input
+              type="number"
+              min={1}
+              max={999}
+              value={storeForm.upperCapacity}
+              onChange={event =>
+                setStoreForm({ ...storeForm, upperCapacity: Number(event.target.value) })
+              }
+            />
+          </label>
+          <label>
+            下杆舒适容量
+            <input
+              type="number"
+              min={1}
+              max={999}
+              value={storeForm.lowerCapacity}
+              onChange={event =>
+                setStoreForm({ ...storeForm, lowerCapacity: Number(event.target.value) })
+              }
+            />
+          </label>
+          <button className="secondary" type="submit" disabled={saving}>
+            {editingStoreId ? "保存门店档案新版本" : "建立门店档案"}
+          </button>
+        </form>
+        {(stores.data ?? []).map(store => (
+          <article key={store.id} className="tenant-compact-row">
+            <div>
+              <span>{store.name} · {store.execution_organization}</span>
+              <small>{store.enabled ? store.current_profile?.label ?? "待确认" : "已停用"}</small>
+            </div>
+            <div>
+              <button
+                className="text-action"
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  setEditingStoreId(store.id);
+                  setStoreForm({
+                    name: store.name,
+                    controlOrganizationId: store.control_organization_id,
+                    executionOrganizationId: store.execution_organization_id,
+                    upperCapacity:
+                      store.current_profile?.rail_profile.upper_comfort_capacity ?? 20,
+                    lowerCapacity:
+                      store.current_profile?.rail_profile.lower_comfort_capacity ?? 20
+                  });
+                }}
+              >
+                保存新版本
+              </button>
+              <button
+                className="text-action"
+                type="button"
+                disabled={saving}
+                onClick={() =>
+                  void run(
+                    async () => {
+                      await api(
+                        `/api/v1/tenant-management/display-stores/${store.id}/enabled`,
+                        {
+                          method: "PUT",
+                          body: JSON.stringify({ enabled: !store.enabled })
+                        }
+                      );
+                    },
+                    store.enabled ? "门店档案已停用。" : "门店档案已恢复。"
+                  )
+                }
+              >
+                {store.enabled ? "停用" : "恢复"}
+              </button>
+            </div>
+          </article>
+        ))}
+      </details>
       {requestError ? (
         <RequestFailure
           message={requestError}
@@ -1151,7 +1393,8 @@ function Members({
             await Promise.all([
               operators.refresh(),
               organizations.refresh(),
-              accounts.refresh()
+              accounts.refresh(),
+              stores.refresh()
             ]);
           }}
         />
@@ -1203,7 +1446,13 @@ function Members({
               <select
                 required
                 value={form.organizationId}
-                onChange={event => setForm({ ...form, organizationId: event.target.value })}
+                onChange={event =>
+                  setForm({
+                    ...form,
+                    organizationId: event.target.value,
+                    storeIds: []
+                  })
+                }
               >
                 <option value="">请选择</option>
                 {organizations.data?.map(item => (
@@ -1226,8 +1475,10 @@ function Members({
                       entryType: "tenant_admin",
                       content: false,
                       display: false,
+                      materialMaintenance: false,
                       accountIds: [],
-                      maintenanceAccountIds: []
+                      maintenanceAccountIds: [],
+                      storeIds: []
                     })
                   }
                 />
@@ -1277,12 +1528,64 @@ function Members({
                       type="checkbox"
                       checked={form.display}
                       onChange={event =>
-                        setForm({ ...form, display: event.target.checked })
+                        setForm({
+                          ...form,
+                          display: event.target.checked,
+                          storeIds: event.target.checked ? form.storeIds : []
+                        })
                       }
                     />
                     陈列搭配
                   </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={form.materialMaintenance}
+                      onChange={event =>
+                        setForm({ ...form, materialMaintenance: event.target.checked })
+                      }
+                    />
+                    维护本组织官方素材
+                  </label>
                 </fieldset>
+                {form.display && (
+                  <fieldset>
+                    <legend>获准使用的门店</legend>
+                    {(stores.data ?? []).filter(
+                      store =>
+                        store.enabled &&
+                        store.execution_organization_id === form.organizationId
+                    ).length === 0 ? (
+                      <p className="tenant-security-note">
+                        当前组织还没有已确认的门店档案。请先关闭成员编辑，再使用本页上方的“建立与维护门店档案”。
+                      </p>
+                    ) : (
+                      (stores.data ?? [])
+                        .filter(
+                          store =>
+                            store.enabled &&
+                            store.execution_organization_id === form.organizationId
+                        )
+                        .map(store => (
+                          <label key={store.id}>
+                            <input
+                              type="checkbox"
+                              checked={form.storeIds.includes(store.id)}
+                              onChange={event =>
+                                setForm(value => ({
+                                  ...value,
+                                  storeIds: event.target.checked
+                                    ? [...value.storeIds, store.id]
+                                    : value.storeIds.filter(item => item !== store.id)
+                                }))
+                              }
+                            />
+                            {store.name}
+                          </label>
+                        ))
+                    )}
+                  </fieldset>
+                )}
                 <fieldset>
                   <legend>获准操作的发布账号</legend>
                   {accounts.data
@@ -1340,7 +1643,10 @@ function Members({
                 saving ||
                 (form.entryType === "tenant_user" &&
                   form.content &&
-                  form.accountIds.length === 0)
+                  form.accountIds.length === 0) ||
+                (form.entryType === "tenant_user" &&
+                  form.display &&
+                  form.storeIds.length === 0)
               }
             >
               创建并生成一次性激活链接
@@ -1417,7 +1723,8 @@ function Members({
                             account?.control_organization?.id ===
                             organizationId
                           );
-                        })
+                        }),
+                      storeIds: []
                     }));
                   }}
                 >
@@ -1445,8 +1752,10 @@ function Members({
                       entryType: "tenant_admin",
                       content: false,
                       display: false,
+                      materialMaintenance: false,
                       accountIds: [],
-                      maintenanceAccountIds: []
+                      maintenanceAccountIds: [],
+                      storeIds: []
                     })
                   }
                 />
@@ -1491,11 +1800,56 @@ function Members({
                       type="checkbox"
                       checked={edit.display}
                       onChange={event =>
-                        setEdit({ ...edit, display: event.target.checked })
+                        setEdit({
+                          ...edit,
+                          display: event.target.checked,
+                          storeIds: event.target.checked ? edit.storeIds : []
+                        })
                       }
                     />
                     陈列搭配
                   </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={edit.materialMaintenance}
+                      onChange={event =>
+                        setEdit({
+                          ...edit,
+                          materialMaintenance: event.target.checked
+                        })
+                      }
+                    />
+                    维护本组织官方素材
+                  </label>
+                  {edit.display && (
+                    <fieldset>
+                      <legend>获准使用的门店</legend>
+                      {(stores.data ?? [])
+                        .filter(
+                          store =>
+                            store.enabled &&
+                            store.execution_organization_id === edit.organizationId
+                        )
+                        .map(store => (
+                          <label key={store.id}>
+                            <input
+                              type="checkbox"
+                              checked={edit.storeIds.includes(store.id)}
+                              onChange={event =>
+                                setEdit(value => ({
+                                  ...value,
+                                  storeIds: event.target.checked
+                                    ? [...value.storeIds, store.id]
+                                    : value.storeIds.filter(item => item !== store.id)
+                                }))
+                              }
+                            />
+                            {store.name}
+                          </label>
+                        ))}
+                    </fieldset>
+                  )}
                   {accounts.data?.map(account => {
                     const alreadyGranted =
                       drawer.account_grants.some(
@@ -1566,7 +1920,10 @@ function Members({
                   drawer.id === currentUserId ||
                   (edit.entryType === "tenant_user" &&
                     edit.content &&
-                    edit.accountIds.length === 0)
+                    edit.accountIds.length === 0) ||
+                  (edit.entryType === "tenant_user" &&
+                    edit.display &&
+                    edit.storeIds.length === 0)
                 }
                 onClick={() =>
                   void run(
@@ -1595,10 +1952,16 @@ function Members({
                           publishing_identity_ids:
                             edit.entryType === "tenant_user" ? edit.accountIds : [],
                           grants_tenant_management: edit.entryType === "tenant_admin",
-                          grants_material_maintenance: false,
+                          grants_material_maintenance:
+                            edit.entryType === "tenant_user" &&
+                            edit.materialMaintenance,
                           expression_profile_maintenance_account_ids:
                             edit.entryType === "tenant_user"
                               ? edit.maintenanceAccountIds
+                              : [],
+                          display_store_ids:
+                            edit.entryType === "tenant_user" && edit.display
+                              ? edit.storeIds
                               : []
                         })
                       });
@@ -1811,7 +2174,6 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
   const onboarding = useRequest<OnboardingPrefill>(
     "/api/v1/tenant-management/onboarding-prefill"
   );
-  const operators = useRequest<Operator[]>("/api/v1/tenant-management/operators");
   const organizations = useRequest<Organization[]>(
     "/api/v1/tenant-management/control-organizations"
   );
@@ -1830,14 +2192,11 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
     role: "",
     speakerKind: "institutional_account" as SpeakerKind,
     organizationId: "",
-    operatorId: "",
     target: "douyin_video" as Target,
-    canMaintainProfile: false,
     profile: emptyProfile()
   });
   const [targetForm, setTargetForm] = useState({
-    target: "xiaohongshu_graphic" as Target,
-    operatorId: ""
+    target: "xiaohongshu_graphic" as Target
   });
   const [settingsForm, setSettingsForm] = useState({
     name: "",
@@ -1891,7 +2250,6 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
   };
   const createAccount = (event: FormEvent): void => {
     event.preventDefault();
-    if (createMaintenanceMismatch) return;
     void run(async () => {
       await api("/api/v1/tenant-management/publishing-accounts", {
         method: "POST",
@@ -1901,24 +2259,14 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
           content_role_name: createForm.role,
           speaker_kind: createForm.speakerKind,
           initial_profile: createForm.profile,
-          operator_id: createForm.operatorId,
           control_organization_id: createForm.organizationId,
-          operator_can_maintain_expression_profile:
-            createForm.canMaintainProfile,
+          operator_can_maintain_expression_profile: false,
           as_synthetic_business_fixture: false
         })
       });
       setDrawer(null);
-    }, "发布账号已建立。平台载体和账号画像会继续归到同一个发布身份。");
+    }, "发布账号已建立。平台与形式目标和账号画像会继续归到同一个发布身份。");
   };
-  const selectedCreateOperator = operators.data?.find(
-    item => item.id === createForm.operatorId
-  );
-  const createMaintenanceMismatch =
-    createForm.canMaintainProfile &&
-    (createForm.organizationId.length === 0 ||
-      !selectedCreateOperator ||
-      selectedCreateOperator.organization_id !== createForm.organizationId);
   const platformCount = new Set(
     (accounts.data ?? []).flatMap(account =>
       account.platform_targets.map(target => target.account_id)
@@ -1930,7 +2278,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
         <div>
           <p className="eyebrow">发布账号与账号画像</p>
           <h1>
-            {accounts.data?.length ?? 0} 个发布账号，{platformCount} 个平台载体
+            {accounts.data?.length ?? 0} 个发布账号，{platformCount} 个平台目标
           </h1>
         </div>
         <button
@@ -1942,9 +2290,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
               role: "",
               speakerKind: "institutional_account",
               organizationId: "",
-              operatorId: "",
               target: "douyin_video",
-              canMaintainProfile: false,
               profile:
                 onboarding.data?.account_profile_candidate ?? emptyProfile()
             });
@@ -2094,8 +2440,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                     onClick={() => {
                       setSelected(account);
                       setTargetForm({
-                        target: "xiaohongshu_graphic",
-                        operatorId: account.operators[0]?.id ?? ""
+                        target: "xiaohongshu_graphic"
                       });
                       setDrawer("target");
                     }}
@@ -2239,11 +2584,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                   const organizationId = event.target.value;
                   setCreateForm(value => ({
                     ...value,
-                    organizationId,
-                    canMaintainProfile:
-                      value.organizationId === organizationId
-                        ? value.canMaintainProfile
-                        : false
+                    organizationId
                   }));
                 }}
               >
@@ -2255,55 +2596,9 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                   ))}
               </select>
             </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={createForm.canMaintainProfile}
-                aria-describedby="create-profile-maintenance-rule"
-                onChange={event =>
-                  setCreateForm({
-                    ...createForm,
-                    canMaintainProfile: event.target.checked
-                  })
-                }
-              />
-              允许这名首位使用者维护五段账号画像
-            </label>
-            <p
-              id="create-profile-maintenance-rule"
-              className={createMaintenanceMismatch ? "inline-error" : "tenant-security-note"}
-            >
-              维护五段画像的成员必须属于账号负责团队；仅使用账号可以跨团队分配。
+            <p className="tenant-security-note">
+              账号和画像先独立建立；实际使用者及画像维护资格请在“成员与资格”中分别授予。
             </p>
-            <label>
-              首位使用者
-              <select
-                required
-                value={createForm.operatorId}
-                onChange={event => {
-                  const operatorId = event.target.value;
-                  setCreateForm(value => ({
-                    ...value,
-                    operatorId,
-                    canMaintainProfile:
-                      value.operatorId === operatorId
-                        ? value.canMaintainProfile
-                        : false
-                  }));
-                }}
-              >
-                <option value="">请选择租户用户</option>
-                {operators.data
-                  ?.filter(
-                    item => item.entry_type === "tenant_user" && item.enabled
-                  )
-                  .map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.display_name}
-                    </option>
-                  ))}
-              </select>
-            </label>
             <label>
               首个平台
               <select
@@ -2341,7 +2636,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
             <button
               className="primary"
               type="submit"
-              disabled={saving || createMaintenanceMismatch}
+              disabled={saving}
             >
               创建发布账号
             </button>
@@ -2361,12 +2656,11 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                     source_account_id: selected.id,
                     name: `${selected.name} · ${targetLabels[targetForm.target]}`,
                     channel: publishingChannelForTarget(targetForm.target),
-                    operator_id: targetForm.operatorId,
                     confirm_internal_carrier: true
                   })
                 });
                 setDrawer(null);
-              }, "平台载体已加入这个发布账号；账号画像没有复制或改变。");
+              }, "平台与形式目标已加入这个发布账号；账号画像没有复制或改变。");
             }}
           >
             <label>
@@ -2394,23 +2688,9 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                   ))}
               </select>
             </label>
-            <label>
-              使用者
-              <select
-                required
-                value={targetForm.operatorId}
-                onChange={event =>
-                  setTargetForm({ ...targetForm, operatorId: event.target.value })
-                }
-              >
-                <option value="">请选择</option>
-                {selected.operators.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.display_name}
-                    </option>
-                  ))}
-              </select>
-            </label>
+            <p className="tenant-security-note">
+              添加平台不会创建成员资格，也不会复制账号画像。
+            </p>
             <button className="primary" type="submit" disabled={saving}>
               添加平台
             </button>
@@ -2890,13 +3170,17 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
       organizationIds: entry.scope_organizations.map(item => item.id)
     });
     setDrawer("reference-detail");
-    void api<LibraryVersion[]>(
-      `/api/v1/tenant-management/brand-library/${entry.id}/versions`
-    )
-      .then(setEntryVersions)
-      .catch(error =>
-        setNotice({ tone: "error", message: readableRequestError(error) })
-      );
+    if (entry.source_document) {
+      setEntryVersions([]);
+    } else {
+      void api<LibraryVersion[]>(
+        `/api/v1/tenant-management/brand-library/${entry.id}/versions`
+      )
+        .then(setEntryVersions)
+        .catch(error =>
+          setNotice({ tone: "error", message: readableRequestError(error) })
+        );
+    }
   };
   const saveEntryVersion = (event: FormEvent): void => {
     event.preventDefault();
@@ -3609,10 +3893,16 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
               当前状态：
               {selectedEntry.status === "active" ? "使用中" : "已停用"}
             </p>
+            {selectedEntry.source_document && (
+              <p className="tenant-security-note">
+                这是可追溯源文档。正文与摘要按本次授权批次保存；创作时只按任务相关的稳定语义段使用。
+              </p>
+            )}
             <label>
               资料名称
               <input
                 required
+                readOnly={selectedEntry.source_document}
                 value={form.title}
                 onChange={event => setForm({ ...form, title: event.target.value })}
               />
@@ -3621,6 +3911,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
               文字内容
               <textarea
                 required
+                readOnly={selectedEntry.source_document}
                 value={form.content}
                 onChange={event => setForm({ ...form, content: event.target.value })}
               />
@@ -3629,21 +3920,22 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
               来源说明
               <textarea
                 required
+                readOnly={selectedEntry.source_document}
                 value={form.sourceNote}
                 onChange={event =>
                   setForm({ ...form, sourceNote: event.target.value })
                 }
               />
             </label>
-            <label>
+            {!selectedEntry.source_document && <label>
               新版本标记
               <input
                 required
                 value={form.version}
                 onChange={event => setForm({ ...form, version: event.target.value })}
               />
-            </label>
-            <label>
+            </label>}
+            {!selectedEntry.source_document && <label>
               可用范围
               <select
                 value={form.visibilityScope}
@@ -3659,8 +3951,8 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                 <option value="headquarters">总部专用</option>
                 <option value="organizations">指定区域</option>
               </select>
-            </label>
-            {form.visibilityScope !== "brand_all" && (
+            </label>}
+            {!selectedEntry.source_document && form.visibilityScope !== "brand_all" && (
               <fieldset>
                 <legend>选择可用组织</legend>
                 {organizations.data
@@ -3685,7 +3977,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                   ))}
               </fieldset>
             )}
-            <button
+            {!selectedEntry.source_document && <button
               className="primary"
               type="submit"
               disabled={
@@ -3695,16 +3987,16 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
               }
             >
               保存新版本
-            </button>
-            <button
+            </button>}
+            {!selectedEntry.source_document && <button
               type="button"
               className="text-action"
               disabled={saving}
               onClick={() => setEntryEnabled(selectedEntry.status !== "active")}
             >
               {selectedEntry.status === "active" ? "停用资料" : "恢复资料"}
-            </button>
-            <section className="version-history">
+            </button>}
+            {!selectedEntry.source_document && <section className="version-history">
               <h3>历史版本</h3>
               <ol>
                 {entryVersions.map(version => (
@@ -3719,7 +4011,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                   </li>
                 ))}
               </ol>
-            </section>
+            </section>}
           </form>
         </Drawer>
       )}
@@ -3810,6 +4102,21 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                     ))}
                   </ol>
                 </section>
+                {(selectedProduct.field_evidence ?? []).length > 0 && (
+                  <section className="version-history" aria-labelledby="product-evidence-title">
+                    <h3 id="product-evidence-title">字段依据</h3>
+                    <p>V 为品牌授权的可观察资料；P/C/R 只保留为参考或待补，不进入商品硬事实。</p>
+                    <ol>
+                      {(selectedProduct.field_evidence ?? []).map((field, index) => (
+                        <li key={`${field.field_name}-${field.evidence_level}-${index}`}>
+                          <strong>{field.field_name} · {field.evidence_level}</strong>
+                          <span>{field.exact_text}</span>
+                          <small>{field.allowed_in_product_fact ? "可进入当前商品事实" : "不作为客观商品事实"}</small>
+                        </li>
+                      ))}
+                    </ol>
+                  </section>
+                )}
               </>
             )}
             <p>
@@ -4391,7 +4698,13 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
 }
 
 function Readiness({ onSection }: { onSection: (section: Section) => void }): JSX.Element {
-  const readiness = useRequest<{ items: ReadinessItem[] }>("/api/v1/admin/readiness");
+  const readiness = useRequest<ReadinessResponse>("/api/v1/admin/readiness");
+  const tenantStateLabel: Record<TenantDataReadiness["state"], string> = {
+    ready: "资料已可用",
+    ready_after_admin_action: "完成管理动作后可用",
+    data_missing: "当前缺资料",
+    not_applicable: "当前不适用"
+  };
   return (
     <section className="tenant-page">
       <header className="tenant-heading">
@@ -4403,6 +4716,30 @@ function Readiness({ onSection }: { onSection: (section: Section) => void }): JS
       ) : readiness.error ? (
         <RequestFailure message={readiness.error} onRetry={readiness.refresh} />
       ) : (
+        <>
+        <section aria-labelledby="tenant-data-readiness-title">
+          <h2 id="tenant-data-readiness-title">
+            {readiness.data?.brand_name ?? "当前品牌"}资料就绪度
+          </h2>
+          <p>这里说明当前品牌资料是否足够；它不等于系统软件是否具备这项能力。</p>
+          <div className="readiness-list">
+            {readiness.data?.tenant_data_items.map(item => (
+              <article key={item.id}>
+                <header><h3>{item.title}</h3><span className={`readiness-status ${item.state}`}>{tenantStateLabel[item.state]}</span></header>
+                <dl>
+                  <div><dt>已有依据</dt><dd>{item.evidence.join("；")}</dd></div>
+                  <div><dt>缺什么</dt><dd>{item.missing.join("；") || "没有当前资料缺口"}</dd></div>
+                  <div><dt>影响</dt><dd>{item.impact}</dd></div>
+                  <div><dt>不影响</dt><dd>{item.unaffected}</dd></div>
+                </dl>
+                {item.state !== "ready" && item.state !== "not_applicable" && <button type="button" className="text-action" onClick={() => onSection(item.action.section)}>{item.action.label}</button>}
+              </article>
+            ))}
+          </div>
+        </section>
+        <section aria-labelledby="software-readiness-title">
+          <h2 id="software-readiness-title">软件能力诊断</h2>
+          <p>当前功能真值：{readiness.data?.software_truth.usable ?? 58} 项真实可用；资料缺口不会把整套系统写成不可用。</p>
         <div className="readiness-list">
           {readiness.data?.items.map(item => (
             <article key={item.id}>
@@ -4465,6 +4802,8 @@ function Readiness({ onSection }: { onSection: (section: Section) => void }): JS
             </article>
           ))}
         </div>
+        </section>
+        </>
       )}
     </section>
   );

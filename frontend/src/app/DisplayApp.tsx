@@ -71,10 +71,16 @@ export default function DisplayApp({
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [mobileView, setMobileView] = useState<"conversation" | "plan">("conversation");
+  const storeId = new URLSearchParams(window.location.search).get("store_id");
+  const displayPath = (path: string): string => {
+    if (!storeId) return path;
+    const separator = path.includes("?") ? "&" : "?";
+    return `${path}${separator}store_id=${encodeURIComponent(storeId)}`;
+  };
 
   const loadRecent = async (): Promise<void> => {
     try {
-      const value = await api<RecentDisplay[]>("/api/v1/display/tasks");
+      const value = await api<RecentDisplay[]>(displayPath("/api/v1/display/tasks"));
       setRecent(value);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "暂时无法读取历史方案。");
@@ -82,13 +88,15 @@ export default function DisplayApp({
   };
 
   const loadVersions = async (artifact: DisplayVersion): Promise<void> => {
-    const value = await api<DisplayVersion[]>(`/api/v1/display/tasks/${artifact.task_id}/versions`);
+    const value = await api<DisplayVersion[]>(
+      displayPath(`/api/v1/display/tasks/${artifact.task_id}/versions`)
+    );
     setVersions(value);
   };
 
   useEffect(() => {
     void loadRecent();
-    void api<AvailableProduct[]>("/api/v1/display/products")
+    void api<AvailableProduct[]>(displayPath("/api/v1/display/products"))
       .then(setProducts)
       .catch(error =>
         setNotice(error instanceof Error ? error.message : "暂时无法读取本店商品。")
@@ -125,7 +133,7 @@ export default function DisplayApp({
     setNotice("");
     try {
       await accept(
-        await api<DisplayVersion | DisplayQuestion>("/api/v1/display", {
+        await api<DisplayVersion | DisplayQuestion>(displayPath("/api/v1/display"), {
           method: "POST",
           body: JSON.stringify({
             inventory_text: inventoryNote.trim(),
@@ -150,7 +158,7 @@ export default function DisplayApp({
     setNotice("");
     try {
       const value = await api<DisplayVersion | DisplayQuestion>(
-        `/api/v1/display-tasks/${current.task_id}/revisions`,
+        displayPath(`/api/v1/display-tasks/${current.task_id}/revisions`),
         { method: "POST", body: JSON.stringify({ feedback: feedback.trim() }) }
       );
       await accept(value);
@@ -167,7 +175,7 @@ export default function DisplayApp({
     setNotice("");
     try {
       const value = await api<DisplayVersion>(
-        `/api/v1/display-tasks/${item.task_id}/versions/${item.version}`
+        displayPath(`/api/v1/display-tasks/${item.task_id}/versions/${item.version}`)
       );
       setCurrent(value);
       setViewed(value);

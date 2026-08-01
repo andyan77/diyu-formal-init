@@ -29,6 +29,7 @@ from src.shared.product_value import (
     product_value_contract_document,
 )
 from src.shared.types import (
+    BrandContextPacketV1,
     ContentControlContext,
     CreativeDirection,
     DirectionSelection,
@@ -471,6 +472,7 @@ def snapshot_document(
     media_capability_envelope: MediaCapabilityEnvelope | None = None,
     media_program: MediaProgramSelectionV1 | None = None,
     product_value_contract: ProductValueContract | None = None,
+    brand_context_packet: BrandContextPacketV1 | None = None,
 ) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
@@ -535,6 +537,29 @@ def snapshot_document(
         ),
         "business_data_kind": business_data_kind,
         "brand_reference_context": list(brand_reference_context),
+        "brand_context_packet": (
+            {
+                "packet_version": brand_context_packet.packet_version,
+                "packet_digest": brand_context_packet.packet_digest,
+                "segments": [
+                    {
+                        "segment_id": segment.segment_id,
+                        "source_document_id": segment.source_document_id,
+                        "source_document_version_id": segment.source_document_version_id,
+                        "source_id": segment.source_id,
+                        "source_version": segment.source_version,
+                        "semantic_kind": segment.semantic_kind,
+                        "evidence_level": segment.evidence_level,
+                        "visibility_scope": segment.visibility_scope,
+                        "digest": segment.digest,
+                        "exact_text": segment.exact_text,
+                    }
+                    for segment in brand_context_packet.segments
+                ],
+            }
+            if brand_context_packet is not None
+            else None
+        ),
         "user_premise": user_premise,
         "creative_plan_v2": (creative_plan_document(creative_plan) if creative_plan is not None else None),
         "creation_commitment": (commitment_document(creation_commitment) if creation_commitment is not None else None),
@@ -601,6 +626,10 @@ def snapshot_document(
                 "source_note": item.source_note,
                 "fact_version": item.fact_version,
                 "applicability": item.applicability,
+                "product_id": str(item.product_id) if item.product_id else None,
+                "product_version_id": (
+                    str(item.product_version_id) if item.product_version_id else None
+                ),
             }
             for item in products
         ],

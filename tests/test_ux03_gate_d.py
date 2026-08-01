@@ -124,7 +124,7 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
         revision = revision_row[0]
         constraint_validated = constraint_row[0]
         force_rls = force_rls_row[0]
-        assert revision == "20260810_37"
+        assert revision == "20260812_39"
         assert constraint_validated is True
         assert force_rls is True
     finally:
@@ -363,6 +363,14 @@ def _cleanup(database_url: str, tenant_id: UUID, operator_id: UUID) -> None:
         "organizations",
     )
     with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        # The whole tenant is a disposable test fixture but intentionally uses
+        # the formal product path. Classify only its organizations for the exact
+        # guarded teardown after every assertion has completed.
+        cursor.execute(
+            "UPDATE organizations SET business_data_kind = "
+            "'synthetic_business_fixture' WHERE tenant_id = %s",
+            (tenant_id,),
+        )
         cursor.execute(
             "SELECT id FROM display_artifact_versions WHERE tenant_id=%s ORDER BY id",
             (tenant_id,),
@@ -383,6 +391,29 @@ def _cleanup(database_url: str, tenant_id: UUID, operator_id: UUID) -> None:
             cursor.execute(
                 "DELETE FROM display_artifact_versions WHERE tenant_id=%s AND id=%s",
                 (tenant_id, version_id),
+            )
+        cursor.execute(
+            "DELETE FROM display_store_access_grants WHERE tenant_id=%s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "UPDATE display_stores SET current_profile_version_id=NULL "
+            "WHERE tenant_id=%s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "ALTER TABLE display_store_profile_versions "
+            "DISABLE TRIGGER display_store_profile_versions_immutable"
+        )
+        try:
+            cursor.execute(
+                "DELETE FROM display_store_profile_versions WHERE tenant_id=%s",
+                (tenant_id,),
+            )
+        finally:
+            cursor.execute(
+                "ALTER TABLE display_store_profile_versions "
+                "ENABLE TRIGGER display_store_profile_versions_immutable"
             )
         for table in (
             "display_artifacts",
@@ -1138,7 +1169,6 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                     "name": "Gate D 区域",
                     "organization_level": "region",
                     "parent_organization_id": headquarters["id"],
-                    "as_synthetic_business_fixture": True,
                 },
             ).json()
             store = admin.post(
@@ -1147,7 +1177,6 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                     "name": "Gate D 门店",
                     "organization_level": "operating_unit",
                     "parent_organization_id": region["id"],
-                    "as_synthetic_business_fixture": True,
                 },
             ).json()
             sibling_region = admin.post(
@@ -1156,7 +1185,6 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                     "name": "Gate D 兄弟区域",
                     "organization_level": "region",
                     "parent_organization_id": headquarters["id"],
-                    "as_synthetic_business_fixture": True,
                 },
             ).json()
             member = admin.post(
@@ -1197,7 +1225,6 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                         "source_note": "Gate D synthetic 管理员确认",
                         "applicability": "Gate D 门店陈列",
                         "confirm_as_current_brand_fact": True,
-                        "as_synthetic_business_fixture": True,
                         "visibility_scope": "organizations",
                         "organization_ids": [region["id"]],
                     },
@@ -1217,7 +1244,6 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                     "source_note": "Gate D synthetic 兄弟区域",
                     "applicability": "仅兄弟区域",
                     "confirm_as_current_brand_fact": True,
-                    "as_synthetic_business_fixture": True,
                     "visibility_scope": "organizations",
                     "organization_ids": [sibling_region["id"]],
                 },
@@ -1237,7 +1263,6 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                     "source_note": "Gate D synthetic 停用商品",
                     "applicability": "Gate D 门店",
                     "confirm_as_current_brand_fact": True,
-                    "as_synthetic_business_fixture": True,
                     "visibility_scope": "organizations",
                     "organization_ids": [region["id"]],
                 },
@@ -1275,7 +1300,28 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                     "products": [{"sku": "LEGACY-BAIT", "name": "不得消费", "quantity": 1}],
                 },
             }
+            formal_store = admin.post(
+                "/api/v1/tenant-management/display-stores",
+                json={
+                    "name": record["store_name"],
+                    "control_organization_id": headquarters["id"],
+                    "execution_organization_id": store["id"],
+                    "upper_comfort_capacity": 4,
+                    "lower_comfort_capacity": 4,
+                    "confirm_as_current": True,
+                },
+            )
+            assert formal_store.status_code == 201, formal_store.text
             DM01StoreSeedWriter(migrator_database_url).seed(record)
+            stores = admin.get(
+                "/api/v1/tenant-management/display-stores"
+            )
+            assert stores.status_code == 200, stores.text
+            display_store_id = next(
+                item["id"]
+                for item in stores.json()
+                if item["name"] == record["store_name"]
+            )
             grant = admin.patch(
                 f"/api/v1/tenant-management/users/{member.json()['user_id']}/grants",
                 json={
@@ -1283,6 +1329,7 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                     "capabilities": ["display"],
                     "publishing_identity_ids": [],
                     "expression_profile_maintenance_account_ids": [],
+                    "display_store_ids": [display_store_id],
                 },
             )
             assert grant.status_code == 200, grant.text
@@ -1297,6 +1344,19 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             assert visible.status_code == 200
             assert {item["sku"] for item in visible.json()} == {sku for sku, _, _, _ in product_payloads}
             visible_by_sku = {str(item["sku"]): item for item in visible.json()}
+            session_token = str(user.cookies.get("diyu_session") or "")
+            session_identity = auth.load_tenant_session(session_token)
+            assert session_identity is not None
+            resolved_display_scope = auth.display_scope(session_identity)
+            assert PostgresDisplayRepository(app_database_url).load_context(
+                resolved_display_scope,
+                product_version_inventory=(
+                    (
+                        UUID(str(visible_by_sku["abc-123"]["product_version_id"])),
+                        1,
+                    ),
+                ),
+            ) is not None
 
             before = _counts(app_database_url, tenant_id)
             inactive = user.post(
@@ -1310,7 +1370,7 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                     ]
                 },
             )
-            assert inactive.status_code == 422
+            assert inactive.status_code == 422, inactive.text
             assert _counts(app_database_url, tenant_id) == before
             sibling = user.post(
                 "/api/v1/display",
@@ -1472,7 +1532,6 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                         "source_note": "Gate D synthetic 后续版本",
                         "applicability": "后续新任务",
                         "confirm_as_current_brand_fact": True,
-                        "as_synthetic_business_fixture": True,
                         "visibility_scope": "organizations",
                         "organization_ids": [region["id"]],
                     },
@@ -1645,7 +1704,6 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                         "source_note": "Gate D synthetic 编译失败反证",
                         "applicability": "后续新任务",
                         "confirm_as_current_brand_fact": True,
-                        "as_synthetic_business_fixture": True,
                         "visibility_scope": "organizations",
                         "organization_ids": [region["id"]],
                     },

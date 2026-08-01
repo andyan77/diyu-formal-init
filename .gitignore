@@ -34,3 +34,7 @@ Thumbs.db
 *.pid
 tmp/
 temp/
+
+# TENANT-01 private brand sources are imported from an external, tenant-owned
+# directory and must never become Git or CI input.
+/笛语品牌数据库知识数据/

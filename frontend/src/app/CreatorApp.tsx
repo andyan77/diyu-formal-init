@@ -112,6 +112,16 @@ function contentLocation(identityId: string, target?: Target): string {
   return `/content?${query.toString()}`;
 }
 
+function draftStorageKey(
+  context: BootstrapContext,
+  publishingIdentityId: string
+): string {
+  const identity = context.identity ?? {};
+  const person = identity.operator_id ?? identity.operator ?? "unknown-person";
+  const brand = identity.brand ?? "unknown-brand";
+  return `diyu-content-draft:${person}:${brand}:${publishingIdentityId}`;
+}
+
 function targetOf(version: ContentVersion, fallback: Target): Target {
   return version.target_key ?? version.target ?? fallback;
 }
@@ -728,6 +738,28 @@ function ArtifactPane({
       {viewed.translation_notice && (
         <p className="translation-notice">{viewed.translation_notice}</p>
       )}
+      {viewed.context_basis && (
+        <details className="artifact-context-basis">
+          <summary>本次依据</summary>
+          <dl>
+            <div><dt>当前账号</dt><dd>{viewed.context_basis.account}</dd></div>
+            <div><dt>平台和形式</dt><dd>{viewed.context_basis.platform_and_format}</dd></div>
+            <div>
+              <dt>品牌资料</dt>
+              <dd>
+                {viewed.context_basis.brand_material_categories.length
+                  ? viewed.context_basis.brand_material_categories.join("、")
+                  : "本次没有使用品牌资料"}
+              </dd>
+            </div>
+            <div><dt>商品资料</dt><dd>{viewed.context_basis.has_product_facts ? "已使用" : "本次未使用"}</dd></div>
+            <div><dt>制作素材</dt><dd>{viewed.context_basis.selected_material_count ? `已选择 ${viewed.context_basis.selected_material_count} 份` : "本次未选择"}</dd></div>
+            {viewed.context_basis.gaps.length > 0 && (
+              <div><dt>当前缺口</dt><dd>{viewed.context_basis.gaps.join("；")}</dd></div>
+            )}
+          </dl>
+        </details>
+      )}
       <ArtifactBody value={viewed.body} />
       {viewed.ai_generated && viewed.aigc_label && viewed.aigc_release_reminder && (
         <footer className="aigc-note">
@@ -972,24 +1004,29 @@ export default function CreatorApp({
   }, [toolOpen]);
 
   useEffect(() => {
-    const draft = window.sessionStorage.getItem("diyu-content-draft");
+    const draftKey = draftStorageKey(context, currentPublishingIdentityId);
+    const draft = window.sessionStorage.getItem(draftKey);
     if (draft) {
       setSeed(draft);
-      window.sessionStorage.removeItem("diyu-content-draft");
+      window.sessionStorage.removeItem(draftKey);
     }
-  }, []);
+  }, [context, currentPublishingIdentityId]);
 
   useEffect(() => {
+    const draftKey = draftStorageKey(context, currentPublishingIdentityId);
     if (seed) {
-      window.sessionStorage.setItem("diyu-content-draft", seed);
+      window.sessionStorage.setItem(draftKey, seed);
     } else {
-      window.sessionStorage.removeItem("diyu-content-draft");
+      window.sessionStorage.removeItem(draftKey);
     }
-  }, [seed]);
+  }, [context, currentPublishingIdentityId, seed]);
 
   const navigateWithDraft = (location: string, draft = seed): void => {
     if (draft.trim()) {
-      window.sessionStorage.setItem("diyu-content-draft", draft);
+      window.sessionStorage.setItem(
+        draftStorageKey(context, currentPublishingIdentityId),
+        draft
+      );
     }
     window.location.assign(location);
   };
@@ -1773,6 +1810,16 @@ export default function CreatorApp({
                   {materialIds.length > 0 && <span>参考素材 {materialIds.length} 份</span>}
                 </div>
               )}
+              <details className="composer-context-basis">
+                <summary>本次依据</summary>
+                <dl>
+                  <div><dt>当前账号</dt><dd>{currentPublishingIdentity.name}</dd></div>
+                  <div><dt>平台和形式</dt><dd>{currentTargetMetadata.platform_label} · {currentTargetMetadata.format_label}</dd></div>
+                  <div><dt>品牌资料</dt><dd>系统会按这次题材选择相关资料，不会加载整库</dd></div>
+                  <div><dt>商品资料</dt><dd>只有本次明确商品才会进入</dd></div>
+                  <div><dt>制作素材</dt><dd>{materialIds.length ? `已选择 ${materialIds.length} 份` : "本次未选择"}</dd></div>
+                </dl>
+              </details>
               <button
                 ref={directionToggleRef}
                 className="direction-toggle"

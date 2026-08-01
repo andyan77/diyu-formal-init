@@ -1270,6 +1270,87 @@ a {
   font-size: 0.72rem;
 }
 
+.composer-context-basis {
+  margin-top: 8px;
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+}
+
+.composer-context-basis summary {
+  min-height: 44px;
+  cursor: pointer;
+  line-height: 44px;
+}
+
+.composer-context-basis dl {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--stone-100);
+  border-radius: 10px;
+  background: var(--stone-50);
+}
+
+.composer-context-basis dl > div {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.composer-context-basis dt { color: var(--stone-400); }
+.composer-context-basis dd { margin: 0; line-height: 1.55; }
+
+.artifact-context-basis {
+  margin: 0 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--surface-soft);
+}
+
+.artifact-context-basis summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.artifact-context-basis dl {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.artifact-context-basis dl > div {
+  display: grid;
+  grid-template-columns: minmax(88px, 0.32fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.artifact-context-basis dt,
+.artifact-context-basis dd {
+  margin: 0;
+}
+
+.artifact-context-basis dt { color: var(--stone-400); }
+
+.access-recovery {
+  display: grid;
+  width: min(100% - 48px, 520px);
+  min-height: 100vh;
+  margin: 0 auto;
+  align-content: center;
+  justify-items: start;
+  gap: 16px;
+}
+
+.access-recovery h1 {
+  margin: 18px 0 0;
+  font-family: var(--serif);
+  font-size: clamp(2rem, 5vw, 3rem);
+}
+
+.access-recovery p { margin: 0; color: var(--ink-soft); line-height: 1.7; }
+
 /* Identity drawer */
 .drawer-layer {
   position: fixed;

@@ -4,6 +4,7 @@ import type { JSX } from "react";
 import { createRoot } from "react-dom/client";
 import DisplayApp from "../src/app/DisplayApp";
 import { MaterialsPanel } from "../src/app/MaterialsPanel";
+import OrganizationMaterialsApp from "../src/app/OrganizationMaterialsApp";
 import { SeriesPanel } from "../src/app/SeriesPanel";
 import type { SeriesSelection } from "../src/app/SeriesPanel";
 
@@ -160,10 +161,62 @@ async function materialsJourney(): Promise<void> {
   await act(async () => root.unmount());
 }
 
+async function organizationMaterialsJourney(): Promise<void> {
+  const root = await render(
+    <OrganizationMaterialsApp
+      context={{
+        application: "tenant_user",
+        identity: { operator: "总部素材维护者", organization: "总部团队" },
+        capabilities: ["materials"]
+      }}
+    />
+  );
+  assert.match(document.body.textContent ?? "", /维护组织官方素材/);
+  assert.match(document.body.textContent ?? "", /总部官方版式参考/);
+  await click(find("button", "查看与修改"));
+  await settle();
+  assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /V1 · 当前/);
+  await input(
+    document.querySelector(".tenant-drawer input") as HTMLInputElement,
+    "总部官方版式参考 V2"
+  );
+  await input(
+    document.querySelector(".tenant-drawer textarea") as HTMLTextAreaElement,
+    "继续只记录版式与留白，并保留来源边界。"
+  );
+  await click(find(".tenant-drawer button", "保存新版本"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /已保存一个新的说明版本/);
+  const versionWrite = requests.find(
+    item =>
+      item.method === "POST" &&
+      item.path === "/api/v1/user/organization-materials/om1/versions"
+  );
+  assert.deepEqual(versionWrite?.body, {
+    title: "总部官方版式参考 V2",
+    reference_note: "继续只记录版式与留白，并保留来源边界。",
+    visibility_scope: "organizations",
+    organization_ids: ["org-hq"]
+  });
+  assert.doesNotMatch(
+    JSON.stringify(versionWrite?.body ?? {}),
+    /tenant_id|brand_id|account_id/,
+    "组织素材维护者不能从客户端提交租户、品牌或账号权限边界"
+  );
+  await click(
+    document.querySelector('.tenant-drawer button[aria-label="关闭"]') as HTMLButtonElement
+  );
+  await click(find("button", "停用"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /已停用/);
+  await act(async () => root.unmount());
+}
+
 async function main(): Promise<void> {
   await displayJourney();
   await seriesJourney();
   await materialsJourney();
+  await organizationMaterialsJourney();
   process.stdout.write("UI-04 user-path interaction checks passed\n");
 }
 

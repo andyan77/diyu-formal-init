@@ -29,6 +29,56 @@ from src.shared.product_value import (
 )
 from src.shared.types import ProductFact, SeriesContext, SeriesEntry
 
+_CONTEXT_CATEGORY_LABELS = {
+    "brand_fact": "品牌已确认资料",
+    "expression_constraint": "品牌表达边界",
+    "creative_method": "品牌创作方法",
+    "candidate_product_guidance": "候选商品参考",
+    "source_catalog_only": "来源目录",
+}
+
+
+def visible_context_basis(
+    snapshot: Mapping[str, object] | None,
+    *,
+    account_name: str,
+    channel: str,
+    media_format: str,
+) -> dict[str, object]:
+    """Project frozen task inputs in product language without internal IDs."""
+
+    snapshot = snapshot or {}
+    packet = snapshot.get("brand_context_packet")
+    raw_segments = packet.get("segments") if isinstance(packet, dict) else None
+    categories: list[str] = []
+    if isinstance(raw_segments, list):
+        for segment in raw_segments:
+            if not isinstance(segment, dict):
+                continue
+            label = _CONTEXT_CATEGORY_LABELS.get(str(segment.get("semantic_kind")))
+            if label and label not in categories:
+                categories.append(label)
+    raw_products = snapshot.get("product_facts")
+    has_products = isinstance(raw_products, list) and bool(raw_products)
+    raw_materials = snapshot.get("material_snapshots")
+    material_count = len(raw_materials) if isinstance(raw_materials, list) else 0
+    format_label = "图文" if media_format == "graphic" else "视频"
+    return {
+        "account": account_name,
+        "platform_and_format": f"{channel} · {format_label}",
+        "brand_material_categories": categories,
+        "has_product_facts": has_products,
+        "selected_material_count": material_count,
+        "gaps": [
+            label
+            for missing, label in (
+                (not has_products, "本次没有使用具体商品资料"),
+                (material_count == 0, "本次没有选择制作素材"),
+            )
+            if missing
+        ],
+    }
+
 
 def frozen_narrative_frame(
     snapshot: Mapping[str, object],
@@ -149,6 +199,16 @@ def frozen_product_facts(snapshot: Mapping[str, object]) -> tuple[ProductFact, .
                 source_note=str(raw.get("source_note") or ""),
                 fact_version=version,
                 applicability=str(raw.get("applicability") or ""),
+                product_id=(
+                    UUID(str(raw["product_id"]))
+                    if raw.get("product_id")
+                    else None
+                ),
+                product_version_id=(
+                    UUID(str(raw["product_version_id"]))
+                    if raw.get("product_version_id")
+                    else None
+                ),
             )
         )
     return tuple(products)

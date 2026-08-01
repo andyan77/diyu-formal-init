@@ -267,6 +267,7 @@ def test_ui04_production_product_seams_are_human_scoped_and_atomic(
                 "account_ids": [str(ACCOUNT_ID)],
                 "tenant_management": False,
                 "display_access": False,
+                "display_store_ids": [],
                 "material_maintenance": True,
                 "expression_profile_maintenance": True,
             }

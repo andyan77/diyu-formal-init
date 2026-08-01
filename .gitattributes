@@ -13,6 +13,10 @@
 # Migrated design-source Markdown intentionally uses hard line breaks.
 docs/前端UI架构/*.md whitespace=-trailing-space
 
+# Historical TENANT-01 private source copies are removed from the current tree;
+# never render their contents in a Git diff while that removal is propagated.
+笛语品牌数据库知识数据/** -diff
+
 *.docx binary
 *.pdf binary
 *.png binary

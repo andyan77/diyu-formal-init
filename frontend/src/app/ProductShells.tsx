@@ -7,6 +7,8 @@ export function UserHome({ context }: { context: BootstrapContext }): JSX.Elemen
   const capabilities = new Set(context.capabilities ?? ["content"]);
   const canCreateContent = capabilities.has("content");
   const canPlanDisplay = capabilities.has("display");
+  const canMaintainMaterials = capabilities.has("materials");
+  const displayStores = context.display_stores ?? [];
   return (
     <main className="user-home">
       <header>
@@ -31,13 +33,37 @@ export function UserHome({ context }: { context: BootstrapContext }): JSX.Elemen
               开始创作
             </a>
           )}
-          {canPlanDisplay && (
+          {canPlanDisplay && displayStores.length <= 1 && (
             <a className={canCreateContent ? "button task-secondary" : "button primary"} href="/display">
               做陈列搭配
             </a>
           )}
+          {canMaintainMaterials && (
+            <a
+              className={canCreateContent || canPlanDisplay ? "button task-secondary" : "button primary"}
+              href="/organization-materials"
+            >
+              维护组织官方素材
+            </a>
+          )}
         </div>
-        {!canCreateContent && !canPlanDisplay && (
+        {canPlanDisplay && displayStores.length > 1 && (
+          <section aria-labelledby="display-store-choice">
+            <h2 id="display-store-choice">选择本次陈列门店</h2>
+            <div className="user-task-choices">
+              {displayStores.map(store => (
+                <a
+                  key={store.id}
+                  className="button task-secondary"
+                  href={`/display?store_id=${encodeURIComponent(store.id)}`}
+                >
+                  {store.name}
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+        {!canCreateContent && !canPlanDisplay && !canMaintainMaterials && (
           <p className="user-home-recovery">
             当前账号还没有可用的工作入口，请联系品牌管理员调整资格。
           </p>

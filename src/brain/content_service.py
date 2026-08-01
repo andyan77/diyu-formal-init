@@ -77,6 +77,8 @@ from src.shared.types import (
     AccountExpression,
     ActiveAsset,
     BrandContext,
+    BrandContextPacketV1,
+    BrandContextSegment,
     ContentControlContext,
     ContentProduct,
     ContentTarget,
@@ -266,6 +268,13 @@ class ContentService:
                 "kind": "question",
                 "message": self._product_media_selection_question(),
             }
+        context = self._repository.select_brand_context_for_task(
+            scope,
+            context,
+            sanitized_seed,
+            primary_product,
+            products,
+        )
         assets = self._repository.load_active_assets(
             scope, primary_product, sanitized_seed, products, target, is_recompile
         )
@@ -284,8 +293,10 @@ class ContentService:
             target,
             direction.media_format,
         )
-        frozen_frame = narrative_frame or legacy_frame(
-            tuple(record.fact_id for product in products for record in product_fact_records(product))
+        frozen_frame = self._frame_with_brand_facts(
+            narrative_frame,
+            products,
+            context,
         )
         try:
             media_envelope, media_program = self._new_media_contract(
@@ -335,6 +346,7 @@ class ContentService:
                 media_capability_envelope=media_envelope,
                 media_program=media_program,
                 product_value_contract=product_value_contract,
+                brand_context_packet=context.context_packet,
             ),
             series_context,
             client_request_id=client_request_id,
@@ -366,6 +378,24 @@ class ContentService:
         )
 
     @staticmethod
+    def _frame_with_brand_facts(
+        frame: NarrativeFrame | None,
+        products: tuple[ProductFact, ...],
+        context: BrandContext,
+    ) -> NarrativeFrame:
+        product_ids = tuple(record.fact_id for product in products for record in product_fact_records(product))
+        brand_ids = tuple(record.fact_id for record in brand_fact_records(context.brand_reference_context))
+        if frame is None:
+            return new_frame("general_observation", (), product_ids, brand_ids)
+        return new_frame(
+            frame.narrative_mode,
+            tuple(fact.exact_text for fact in frame.user_facts),
+            product_ids,
+            brand_ids,
+            user_fact_source_ids=tuple(fact.source_id for fact in frame.user_facts),
+        )
+
+    @staticmethod
     def _bound_products(
         control: ContentControlContext,
     ) -> tuple[ProductFact, ...]:
@@ -380,26 +410,29 @@ class ContentService:
         controls: RequestedControls | None,
     ) -> bool:
         """Separate an explicit P5 route request from trusted media capability."""
+        return bool(controls and controls.product_media_intent) or (
+            ContentService._has_complete_product_media_pair(control, controls)
+        )
+
+    @staticmethod
+    def _has_complete_product_media_pair(
+        control: ContentControlContext,
+        controls: RequestedControls | None,
+    ) -> bool:
         requested_ids = () if controls is None else controls.material_ids
         records = control.bound_product_media
         return (
-            bool(controls and controls.product_media_intent)
-            or (
-                len(requested_ids) == 2
-                and len(set(requested_ids)) == 2
-                and len(records) == 2
-                and {record.asset_id for record in records} == set(requested_ids)
-                and len({record.product_id for record in records}) == 2
-                and len({record.binding_id for record in records}) == 2
-            )
+            len(requested_ids) == 2
+            and len(set(requested_ids)) == 2
+            and len(records) == 2
+            and {record.asset_id for record in records} == set(requested_ids)
+            and len({record.product_id for record in records}) == 2
+            and len({record.binding_id for record in records}) == 2
         )
 
     @staticmethod
     def _product_media_selection_question() -> str:
-        return (
-            "当前可用于制作的登记商品素材不足。"
-            "这条视觉内容需要选择两件不同商品，并为每件选择一份已登记图片。"
-        )
+        return "当前可用于制作的登记商品素材不足。这条视觉内容需要选择两件不同商品，并为每件选择一份已登记图片。"
 
     def respond_to_conversation(
         self,
@@ -456,6 +489,25 @@ class ContentService:
             scope,
             combined_text,
         )
+        visual_product_requested = self._requests_visual_product_story(
+            control,
+            controls,
+        )
+        if visual_product_requested:
+            if not self._has_complete_product_media_pair(control, controls):
+                return {
+                    "kind": "question",
+                    "message": self._product_media_selection_question(),
+                }
+            bound_products = self._bound_products(control)
+            named_skus = {product.sku for product in products}
+            bound_skus = {product.sku for product in bound_products}
+            if named_skus and not named_skus <= bound_skus:
+                return {
+                    "kind": "question",
+                    "message": "你提到的商品与本次选择的登记素材不一致，请保留对应素材或重新选择商品。",
+                }
+            products = bound_products
         selected_direction = ""
         if control.direction is not None:
             selected_direction = "；".join(
@@ -525,7 +577,7 @@ class ContentService:
         primary_product = decision.primary_product
         narrative_mode = decision.narrative_mode
         creative_plan = decision.creative_plan
-        if self._requests_visual_product_story(control, controls):
+        if visual_product_requested:
             primary_product = "visual_styling_story"
             creative_plan = replace(
                 creative_plan,
@@ -537,13 +589,6 @@ class ContentService:
                 return {
                     "kind": "question",
                     "message": self._product_media_selection_question(),
-                }
-            named_skus = {product.sku for product in products}
-            bound_skus = {product.sku for product in bound_products}
-            if named_skus and not named_skus <= bound_skus:
-                return {
-                    "kind": "question",
-                    "message": "你提到的商品与本次选择的登记素材不一致，请保留对应素材或重新选择商品。",
                 }
             products = bound_products
         if sanitized_message not in decision.user_premises or any(
@@ -839,15 +884,88 @@ class ContentService:
             if isinstance(raw_references, list)
             else context.brand_reference_context
         )
+        frozen_packet = ContentService._brand_context_packet_from_snapshot(snapshot)
+        frozen_constraints = (
+            tuple(
+                segment.exact_text
+                for segment in frozen_packet.segments
+                if segment.semantic_kind == "expression_constraint"
+            )
+            if frozen_packet is not None
+            else context.expression_constraint_context
+        )
+        frozen_methods = (
+            tuple(
+                segment.exact_text for segment in frozen_packet.segments if segment.semantic_kind == "creative_method"
+            )
+            if frozen_packet is not None
+            else context.creative_method_context
+        )
+        frozen_product_guidance = (
+            tuple(
+                segment.exact_text
+                for segment in frozen_packet.segments
+                if segment.semantic_kind == "candidate_product_guidance"
+            )
+            if frozen_packet is not None
+            else context.candidate_product_guidance_context
+        )
         if not control.content_role:
-            return replace(context, brand_reference_context=frozen_references)
+            return replace(
+                context,
+                brand_reference_context=frozen_references,
+                expression_constraint_context=frozen_constraints,
+                creative_method_context=frozen_methods,
+                candidate_product_guidance_context=frozen_product_guidance,
+                context_packet=frozen_packet,
+            )
         return replace(
             context,
             content_role_name=control.content_role,
             content_role_boundary=control.content_role_boundary or context.content_role_boundary,
             brand_reference_context=frozen_references,
+            expression_constraint_context=frozen_constraints,
+            creative_method_context=frozen_methods,
+            candidate_product_guidance_context=frozen_product_guidance,
+            context_packet=frozen_packet,
             speaker_kind=control.speaker_kind,
         )
+
+    @staticmethod
+    def _brand_context_packet_from_snapshot(
+        snapshot: dict[str, object] | None,
+    ) -> BrandContextPacketV1 | None:
+        if snapshot is None:
+            return None
+        raw = snapshot.get("brand_context_packet")
+        if not isinstance(raw, dict) or raw.get("packet_version") != "brand-context-packet-v1":
+            return None
+        raw_segments = raw.get("segments")
+        if not isinstance(raw_segments, list):
+            raise DomainError("内容任务冻结的品牌资料包无效")
+        segments: list[BrandContextSegment] = []
+        for item in raw_segments:
+            if not isinstance(item, dict):
+                raise DomainError("内容任务冻结的品牌资料包无效")
+            required = (
+                "segment_id",
+                "source_document_id",
+                "source_document_version_id",
+                "source_id",
+                "source_version",
+                "semantic_kind",
+                "evidence_level",
+                "visibility_scope",
+                "digest",
+                "exact_text",
+            )
+            if any(not isinstance(item.get(key), str) for key in required):
+                raise DomainError("内容任务冻结的品牌资料包无效")
+            segments.append(BrandContextSegment(**{key: str(item[key]) for key in required}))
+        digest = raw.get("packet_digest")
+        if not isinstance(digest, str):
+            raise DomainError("内容任务冻结的品牌资料包无效")
+        return BrandContextPacketV1("brand-context-packet-v1", digest, tuple(segments))
 
     @staticmethod
     def _requires_confirmed_product(seed: str, brand_name: str) -> bool:
@@ -1179,6 +1297,7 @@ class ContentService:
                 media_capability_envelope=media_envelope,
                 media_program=media_program,
                 product_value_contract=product_value_contract,
+                brand_context_packet=context.context_packet,
             ),
             None,
         )
@@ -1373,6 +1492,31 @@ class ContentService:
             raise GenerationFailed("内容版本提交回读数据无效")
         aigc_label, aigc_release_reminder = aigc_disclosure(artifact.model)
         creative = control.direction if control else None
+        material_categories = {
+            "brand_fact": "品牌已确认资料",
+            "expression_constraint": "品牌表达边界",
+            "creative_method": "品牌创作方法",
+            "candidate_product_guidance": "候选商品参考",
+            "source_catalog_only": "来源目录",
+        }
+        packet_segments = context.context_packet.segments if context.context_packet is not None else ()
+        context_basis = {
+            "account": context.account_name,
+            "platform_and_format": f"{context.platform} · {context.media_format}",
+            "brand_material_categories": list(
+                dict.fromkeys(material_categories.get(segment.semantic_kind, "品牌资料") for segment in packet_segments)
+            ),
+            "has_product_facts": bool(products),
+            "selected_material_count": len(control.materials) if control else 0,
+            "gaps": [
+                label
+                for missing, label in (
+                    (not products, "本次没有使用具体商品资料"),
+                    (not (control and control.materials), "本次没有选择制作素材"),
+                )
+                if missing
+            ],
+        }
         return completed | {
             "kind": "content",
             "outline": visible_outline,
@@ -1386,6 +1530,7 @@ class ContentService:
             # Shown before the artifact, never inside it, and never a review report.
             "translation_notice": creative.translation_notice if creative else None,
             "applied_direction": ([item.applied_label for item in creative.selections] if creative else []),
+            "context_basis": context_basis,
         }
 
     def _series_context(

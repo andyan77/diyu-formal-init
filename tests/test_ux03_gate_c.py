@@ -177,8 +177,10 @@ class _P5IntakeRegressionGenerator(DeterministicContentGenerator):
 
     def __init__(self) -> None:
         self.force_non_visual_intake = False
+        self.collaborate_calls = 0
 
     def collaborate(self, request: ConversationInput) -> ConversationDecision:
+        self.collaborate_calls += 1
         decision = super().collaborate(request)
         if (
             self.force_non_visual_intake
@@ -1162,7 +1164,6 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     "name": "Gate C 华东区域",
                     "organization_level": "region",
                     "parent_organization_id": organization["id"],
-                    "as_synthetic_business_fixture": True,
                 },
             )
             assert east_region.status_code == 201, east_region.text
@@ -1172,7 +1173,6 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     "name": "Gate C 华南区域",
                     "organization_level": "region",
                     "parent_organization_id": organization["id"],
-                    "as_synthetic_business_fixture": True,
                 },
             )
             assert south_region.status_code == 201, south_region.text
@@ -1214,7 +1214,6 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                         "content_territories": "商品关系与穿衣选择",
                         "default_production_conditions": "一人低成本制作",
                     },
-                    "as_synthetic_business_fixture": True,
                 },
             )
             assert account.status_code == 201, account.text
@@ -1236,7 +1235,6 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                         "content_territories": "品牌日常与商品选择",
                         "default_production_conditions": "一人低成本制作",
                     },
-                    "as_synthetic_business_fixture": True,
                 },
             )
             assert headquarters_account.status_code == 201, headquarters_account.text
@@ -1296,7 +1294,6 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                         "source_note": "Gate C synthetic 品牌确认记录",
                         "applicability": "本次视觉关系测试",
                         "confirm_as_current_brand_fact": True,
-                        "as_synthetic_business_fixture": True,
                         "visibility_scope": "brand_all",
                         "organization_ids": [],
                     },
@@ -1382,7 +1379,6 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                         "source_note": "Gate C synthetic 资料不足反证",
                         "applicability": "只验证任务前退出",
                         "confirm_as_current_brand_fact": True,
-                        "as_synthetic_business_fixture": True,
                         "visibility_scope": "brand_all",
                         "organization_ids": [],
                     },
@@ -1443,7 +1439,6 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     "source_note": "Gate C synthetic 兄弟区域诱饵",
                     "applicability": "仅华南区域",
                     "confirm_as_current_brand_fact": True,
-                    "as_synthetic_business_fixture": True,
                     "visibility_scope": "organizations",
                     "organization_ids": [south_region.json()["id"]],
                 },
@@ -1490,7 +1485,6 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                             "source_note": ("正式浏览器 synthetic 品牌确认记录"),
                             "applicability": "浏览器 P5 纵向",
                             "confirm_as_current_brand_fact": True,
-                            "as_synthetic_business_fixture": True,
                             "visibility_scope": "brand_all",
                             "organization_ids": [],
                         },
@@ -1588,6 +1582,39 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
             ) == ()
             linked = {UUID(str(item["id"])): item["product_media"] for item in materials.json()}
             assert all(len(linked[asset_id]) == 1 for asset_id in asset_ids)
+            no_media_collaborate_calls = generator.collaborate_calls
+            no_media = creator.post(
+                "/api/v1/content/stream",
+                json={
+                    "message": "请用两件商品做一条商品视觉关系图文。",
+                    "conversation": [],
+                    "publishing_identity_id": str(account_id),
+                    "target": "xiaohongshu_graphic",
+                    "material_ids": [],
+                    "product_media_intent": True,
+                    "interaction_mode": "generate",
+                    "direct_generate": True,
+                    "request_id": str(uuid4()),
+                },
+            )
+            no_media_events = [
+                json.loads(line)
+                for line in no_media.text.splitlines()
+                if line.strip()
+            ]
+            assert any(
+                item["event"] == "conversation"
+                and item["kind"] == "question"
+                and "选择两件不同商品" in item["message"]
+                for item in no_media_events
+            ), no_media_events
+            assert not any(item["event"] == "completed" for item in no_media_events)
+            assert generator.collaborate_calls == no_media_collaborate_calls
+            assert _tenant_persistence_counts(
+                migrator_database_url,
+                tenant_id,
+            ) == before
+            time.sleep(2.05)
             for invalid_material_ids in (
                 (asset_ids[0], unbound_asset_id),
                 (asset_ids[0], same_product_asset_id),
@@ -1611,7 +1638,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 assert any(
                     item["event"] == "conversation" and item["kind"] == "question" and "两件不同商品" in item["message"]
                     for item in rejected_events
-                )
+                ), rejected_events
                 assert (
                     _tenant_persistence_counts(
                         migrator_database_url,
@@ -2468,6 +2495,32 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
     assert "resource:original_composition" not in prompt
     assert "resource:creator_expression" not in prompt
     assert "其他租户诱饵前情" not in prompt
+
+
+def test_writer_prompt_consumes_selected_brand_methods_without_fact_upgrade() -> None:
+    request = _generation_input()
+    request = replace(
+        request,
+        brand=replace(
+            request.brand,
+            expression_constraint_context=("只给出有条件的穿衣选择。",),
+            creative_method_context=("从一个可观察的细节推进到判断。",),
+            candidate_product_guidance_context=("候选取舍只可作为一般选择参考。",),
+        ),
+    )
+    kernel = _filled_kernel(request)
+
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, cast(Any, kernel), {})
+
+    assert "只给出有条件的穿衣选择" in prompt
+    assert "从一个可观察的细节推进到判断" in prompt
+    assert "候选取舍只可作为一般选择参考" in prompt
+    assert "它们均不是品牌、商品、人物、门店" in prompt
+    assert "只有服务端预分配的 trusted_fact 单元能作为现实事实" in prompt
 
 
 def test_p2_writer_receives_only_controlled_product_semantics_without_media_rights() -> None:

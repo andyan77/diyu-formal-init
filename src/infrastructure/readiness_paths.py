@@ -31,12 +31,14 @@ def readiness_path_state(
             ON root.tenant_id = params.tenant_id
            AND root.brand_id = params.brand_id
            AND root.enabled = true
+           AND root.business_data_kind = 'formal_business_data'
            AND root.carrier_of_account_id IS NULL
           JOIN content_accounts physical
             ON physical.tenant_id = root.tenant_id
            AND physical.brand_id = root.brand_id
            AND physical.enabled = true
            AND physical.platform_enabled = true
+           AND physical.business_data_kind = 'formal_business_data'
            AND (
              physical.id = root.id
              OR physical.carrier_of_account_id = root.id
@@ -77,9 +79,11 @@ def readiness_path_state(
            AND account.carrier_of_account_id IS NULL
            AND account.control_organization_id IS NOT NULL
            AND account.current_expression_profile_id IS NOT NULL
+           AND account.business_data_kind = 'formal_business_data'
           JOIN organizations control_organization
             ON control_organization.tenant_id = account.tenant_id
            AND control_organization.id = account.control_organization_id
+           AND control_organization.business_data_kind = 'formal_business_data'
           JOIN account_content_roles account_role
             ON account_role.tenant_id = account.tenant_id
            AND account_role.account_id = account.id
@@ -101,6 +105,7 @@ def readiness_path_state(
            AND operator.id = grant_record.user_id
            AND operator.enabled = true
            AND operator.entry_kind = 'tenant_user'
+           AND operator.business_data_kind = 'formal_business_data'
           LEFT JOIN target_counts
             ON target_counts.account_id = account.id
           ORDER BY account.id, operator.display_name, operator.id
@@ -124,6 +129,7 @@ def readiness_path_state(
            AND product.source_kind <> ''
            AND product.source_note <> ''
            AND product.facts <> '{}'::jsonb
+           AND product.business_data_kind = 'formal_business_data'
           JOIN brand_product_versions version
             ON version.tenant_id = product.tenant_id
            AND version.product_id = product.id
@@ -171,6 +177,7 @@ def readiness_path_state(
            AND entry.brand_id = params.brand_id
            AND entry.status = 'active'
            AND entry.current_version_id IS NOT NULL
+           AND entry.business_data_kind = 'formal_business_data'
           JOIN brand_library_entry_versions version
             ON version.tenant_id = entry.tenant_id
            AND version.entry_id = entry.id
@@ -212,6 +219,7 @@ def readiness_path_state(
             ON series.tenant_id = params.tenant_id
            AND series.brand_id = params.brand_id
            AND series.logical_account_id = path.account_id
+           AND series.business_data_kind = 'formal_business_data'
         ),
         display_paths AS (
           SELECT DISTINCT ON (store.id)
@@ -230,9 +238,12 @@ def readiness_path_state(
           JOIN display_stores store
             ON store.tenant_id = params.tenant_id
            AND store.brand_id = params.brand_id
+           AND store.enabled = true
+           AND store.business_data_kind = 'formal_business_data'
           JOIN organizations execution_organization
             ON execution_organization.tenant_id = store.tenant_id
            AND execution_organization.id = store.execution_organization_id
+           AND execution_organization.business_data_kind = 'formal_business_data'
           JOIN display_access_grants display_grant
             ON display_grant.tenant_id = store.tenant_id
            AND display_grant.enabled = true
@@ -243,6 +254,7 @@ def readiness_path_state(
            AND display_user.entry_kind = 'tenant_user'
            AND display_user.organization_id =
                store.execution_organization_id
+           AND display_user.business_data_kind = 'formal_business_data'
           JOIN brand_products product
             ON product.tenant_id = params.tenant_id
            AND product.brand_id = params.brand_id
@@ -251,6 +263,7 @@ def readiness_path_state(
            AND product.source_kind <> ''
            AND product.source_note <> ''
            AND product.facts ? 'display_family'
+           AND product.business_data_kind = 'formal_business_data'
           JOIN brand_product_versions version
             ON version.tenant_id = product.tenant_id
            AND version.product_id = product.id

@@ -189,6 +189,8 @@ def _provider_rejection_state(
     if 500 <= status_code < 600 or status_code == 408:
         return "unavailable"
     return None
+
+
 _REVIEW_TOKEN_HARD_LIMIT = 16384
 _CLOSED_REVIEW_BATCH_CLAUSES = 8
 
@@ -218,14 +220,12 @@ _CONTRACT_FIELDS: dict[ContentProduct, tuple[str, str, str]] = {
 _PRODUCT_VALUE: dict[ContentProduct, str] = {
     "dressing_decision": "帮助受众完成有条件、有边界的穿衣选择",
     "product_truth": (
-        "在不知道当前对象身份或属性的前提下，提供一套先读已确认信息、"
-        "再比较明确可见差异并保留个人判断的顺序"
+        "在不知道当前对象身份或属性的前提下，提供一套先读已确认信息、再比较明确可见差异并保留个人判断的顺序"
     ),
     "brand_life_narrative": "让受众认识这个账号怎样观察、判断和待人",
     "local_response": "从近场信号给未参与者一份关系回应",
     "visual_styling_story": (
-        "在不知道两个当前对象身份或属性的前提下，提供一套观察两个已确认"
-        "视觉锚点之间关系、比较差异并保留个人判断的顺序"
+        "在不知道两个当前对象身份或属性的前提下，提供一套观察两个已确认视觉锚点之间关系、比较差异并保留个人判断的顺序"
     ),
 }
 _MODE_BLOCK_TYPE: dict[NarrativeMode, NarrativeBlockType] = {
@@ -382,10 +382,7 @@ class BoundaryContext:
             tuple(
                 (
                     resource.resource_id,
-                    (
-                        "服务端冻结媒体资源；只供确定性媒体程序使用，"
-                        "不授权 Writer 写拍摄、道具、场地或声音说明"
-                    ),
+                    ("服务端冻结媒体资源；只供确定性媒体程序使用，不授权 Writer 写拍摄、道具、场地或声音说明"),
                 )
                 for resource in request.media_capability_envelope.resources
             )
@@ -393,8 +390,7 @@ class BoundaryContext:
             else (
                 (
                     _CREATOR_EXPRESSION_RESOURCE_ID,
-                    "创作者本人可选择口播、旁白、手势或不出镜表达；"
-                    "不证明其具有题材中的家庭、职业或经历身份",
+                    "创作者本人可选择口播、旁白、手势或不出镜表达；不证明其具有题材中的家庭、职业或经历身份",
                 ),
                 (
                     _ORIGINAL_COMPOSITION_RESOURCE_ID,
@@ -456,6 +452,17 @@ class BoundaryContext:
                 else ()
             ),
             *("方法资料（不证明现实对象存在）：" + asset.body for asset in request.active_domain_assets),
+            *(
+                "品牌创作方法（只调整表达方法，不是现实事实）：" + text
+                for text in request.brand.creative_method_context
+            ),
+            *(
+                (
+                    "候选商品判断参考（只能形成一般选择取舍；不得写成当前商品的"
+                    "价格、材质、功能、效果、体验或设计动机事实）：" + text
+                )
+                for text in request.brand.candidate_product_guidance_context
+            ),
         ]
         brand_text = (
             f"品牌：{request.brand.brand_name}；组织：{request.brand.organization_name}；"
@@ -464,6 +471,9 @@ class BoundaryContext:
             f"定位：{request.brand.positioning}；判断顺序：{request.brand.decision_order}；"
             f"语气：{request.brand.tone}。这些只支持当前立场，不证明任何经历、案例、"
             "门店做法或经营历史已经发生。"
+            + "".join(
+                "\n品牌表达约束（不能作为事实引用）：" + text for text in request.brand.expression_constraint_context
+            )
         )
         return cls(
             fact_registry=fact_registry,
@@ -480,9 +490,7 @@ class BoundaryContext:
             if any(
                 resource.capability_id == "creator_expression"
                 for resource in (
-                    request.media_capability_envelope.resources
-                    if request.media_capability_envelope is not None
-                    else ()
+                    request.media_capability_envelope.resources if request.media_capability_envelope is not None else ()
                 )
             )
             or request.media_capability_envelope is None
@@ -658,25 +666,14 @@ class DeepSeekGenerator(ContentGenerator):
             prior_kernel=request.prior_creative_kernel,
             revision_instruction=request.revision_instruction,
         )
-        if (
-            request.delivery_compiler_version
-            == DUAL_TRACK_DELIVERY_COMPILER_VERSION
-        ):
+        if request.delivery_compiler_version == DUAL_TRACK_DELIVERY_COMPILER_VERSION:
             kernel_version = DUAL_TRACK_KERNEL_VERSION
-        elif (
-            request.delivery_compiler_version
-            == MEDIA_NATIVE_DELIVERY_COMPILER_VERSION
-        ):
+        elif request.delivery_compiler_version == MEDIA_NATIVE_DELIVERY_COMPILER_VERSION:
             kernel_version = MEDIA_NATIVE_KERNEL_VERSION
         else:
             kernel_version = KERNEL_VERSION
-            if (
-                request.media_capability_envelope is None
-                or request.media_program is None
-            ):
-                raise GenerationFailed(
-                    "新内容生成缺少冻结媒体能力包或媒体程序"
-                )
+            if request.media_capability_envelope is None or request.media_program is None:
+                raise GenerationFailed("新内容生成缺少冻结媒体能力包或媒体程序")
             assert_media_program_allowed(
                 request.media_capability_envelope,
                 request.media_program,
@@ -721,16 +718,12 @@ class DeepSeekGenerator(ContentGenerator):
             allowed_resource_ids=context.resource_ids,
             immutable_fact_blocks=context.product_fact_blocks,
             trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
-            media_capability_envelope=(
-                request.media_capability_envelope
-            ),
+            media_capability_envelope=(request.media_capability_envelope),
             media_program=request.media_program,
             product_value_contract=request.product_value_contract,
         )
         compiler_texts = (
-            compiler_owned_unit_texts(request.primary_product)
-            if kernel_version == DUAL_TRACK_KERNEL_VERSION
-            else {}
+            compiler_owned_unit_texts(request.primary_product) if kernel_version == DUAL_TRACK_KERNEL_VERSION else {}
         )
         writer_payload, writer_retries = self._request(
             "你是笛语 CreativeKernel Writer。只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。",
@@ -776,9 +769,7 @@ class DeepSeekGenerator(ContentGenerator):
                         kernel,
                         frame,
                     ),
-                    expression_controls=(
-                        self._deidentified_writer_controls(request)
-                    ),
+                    expression_controls=(self._deidentified_writer_controls(request)),
                     platform=request.target,
                     media_format=request.media_format,
                 ),
@@ -790,15 +781,7 @@ class DeepSeekGenerator(ContentGenerator):
                 kernel = repair_kernel_units(
                     kernel=kernel,
                     affected_unit_ids=affected_product_units,
-                    raw=json.loads(
-                        self._json_content(
-                            str(
-                                repair_payload["choices"][0]["message"][
-                                    "content"
-                                ]
-                            )
-                        )
-                    ),
+                    raw=json.loads(self._json_content(str(repair_payload["choices"][0]["message"]["content"]))),
                     allowed_claim_ids=context.product_fact_packet.fact_ids,
                     media_format=request.media_format,
                 )
@@ -809,9 +792,7 @@ class DeepSeekGenerator(ContentGenerator):
                 ValueError,
                 json.JSONDecodeError,
             ) as exc:
-                raise GenerationFailed(
-                    "CreativeKernelV1 商品事实 affected-unit 修复格式不完整"
-                ) from exc
+                raise GenerationFailed("CreativeKernelV1 商品事实 affected-unit 修复格式不完整") from exc
             receipts = tuple(
                 FactRepairReceipt(
                     field=unit_id,
@@ -826,24 +807,16 @@ class DeepSeekGenerator(ContentGenerator):
                 kernel,
             )
         except (KeyError, ValueError) as exc:
-            raise GenerationFailed(
-                "CreativeKernelV1 商品事实边界无法在一次 affected-unit 修复内满足"
-            ) from exc
+            raise GenerationFailed("CreativeKernelV1 商品事实边界无法在一次 affected-unit 修复内满足") from exc
         missing_account_spans = self._missing_p3_account_link_spans(
             request,
             kernel,
         )
         if missing_account_spans:
             if affected_product_units:
-                raise GenerationFailed(
-                    "账号表达路径无法与商品事实修复共享第二次修复调用"
-                )
+                raise GenerationFailed("账号表达路径无法与商品事实修复共享第二次修复调用")
             guide_unit = next(
-                (
-                    unit
-                    for unit in kernel.writable_units
-                    if unit.purpose == "natural_guide"
-                ),
+                (unit for unit in kernel.writable_units if unit.purpose == "natural_guide"),
                 None,
             )
             if guide_unit is None:
@@ -863,15 +836,7 @@ class DeepSeekGenerator(ContentGenerator):
                 kernel = repair_kernel_units(
                     kernel=kernel,
                     affected_unit_ids=frozenset({guide_unit.unit_id}),
-                    raw=json.loads(
-                        self._json_content(
-                            str(
-                                repair_payload["choices"][0]["message"][
-                                    "content"
-                                ]
-                            )
-                        )
-                    ),
+                    raw=json.loads(self._json_content(str(repair_payload["choices"][0]["message"]["content"]))),
                     allowed_claim_ids=context.product_fact_packet.fact_ids,
                     media_format=request.media_format,
                     preserve_claim_refs=True,
@@ -883,9 +848,7 @@ class DeepSeekGenerator(ContentGenerator):
                 ValueError,
                 json.JSONDecodeError,
             ) as exc:
-                raise GenerationFailed(
-                    "CreativeKernelV1 账号表达路径 affected-unit 修复格式不完整"
-                ) from exc
+                raise GenerationFailed("CreativeKernelV1 账号表达路径 affected-unit 修复格式不完整") from exc
         self._assert_p3_account_link(request, kernel)
         if request.revision_instruction and request.prior_creative_kernel:
             before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
@@ -947,40 +910,28 @@ class DeepSeekGenerator(ContentGenerator):
                 "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
                 "delivery_resource_refs": list(compiled.resource_refs),
                 "media_capability_envelope": (
-                    media_envelope_document(
-                        request.media_capability_envelope
-                    )
+                    media_envelope_document(request.media_capability_envelope)
                     if request.media_capability_envelope is not None
                     else None
                 ),
                 "media_capability_envelope_digest": (
-                    media_envelope_digest(
-                        request.media_capability_envelope
-                    )
+                    media_envelope_digest(request.media_capability_envelope)
                     if request.media_capability_envelope is not None
                     else None
                 ),
                 "media_program": (
-                    media_program_document(request.media_program)
-                    if request.media_program is not None
-                    else None
+                    media_program_document(request.media_program) if request.media_program is not None else None
                 ),
                 "media_program_digest": (
-                    media_program_digest(request.media_program)
-                    if request.media_program is not None
-                    else None
+                    media_program_digest(request.media_program) if request.media_program is not None else None
                 ),
                 "product_value_contract": (
-                    product_value_contract_document(
-                        request.product_value_contract
-                    )
+                    product_value_contract_document(request.product_value_contract)
                     if request.product_value_contract is not None
                     else None
                 ),
                 "product_value_contract_digest": (
-                    product_value_contract_digest(
-                        request.product_value_contract
-                    )
+                    product_value_contract_digest(request.product_value_contract)
                     if request.product_value_contract is not None
                     else None
                 ),
@@ -1514,9 +1465,7 @@ class DeepSeekGenerator(ContentGenerator):
         )
         product_value_projection: object = None
         if request.product_value_contract is not None:
-            projection = product_value_contract_document(
-                request.product_value_contract
-            )
+            projection = product_value_contract_document(request.product_value_contract)
             projection.pop("resource_refs", None)
             product_value_projection = projection
         product_fact_projection: object = (
@@ -1530,9 +1479,7 @@ class DeepSeekGenerator(ContentGenerator):
                 for item in context.product_fact_packet.facts
                 if item.fact_id
                 in (
-                    request.product_value_contract.source_fact_ids
-                    if request.product_value_contract is not None
-                    else ()
+                    request.product_value_contract.source_fact_ids if request.product_value_contract is not None else ()
                 )
             ]
             if request.product_value_contract is not None
@@ -1547,8 +1494,7 @@ class DeepSeekGenerator(ContentGenerator):
 可以替换到任意商品的通用方法，也不能补充价格、库存、性能、用途、效果、体验或设计动机。"""
             if request.product_value_contract is not None
             else (
-                "可信事实块和登记资源已由服务端冻结；Writer 不得选择、引用、复述或"
-                "扩写其正文。"
+                "可信事实块和登记资源已由服务端冻结；Writer 不得选择、引用、复述或扩写其正文。"
                 if server_selected_product_facts
                 else ""
             )
@@ -1578,9 +1524,7 @@ class DeepSeekGenerator(ContentGenerator):
         )
         blocks_projection: object = [] if server_selected_product_facts else immutable_fact_blocks_document(fact_blocks)
         account_link_projection: object = (
-            self._deidentified_account_link(request)
-            if request.primary_product == "brand_life_narrative"
-            else None
+            self._deidentified_account_link(request) if request.primary_product == "brand_life_narrative" else None
         )
         account_link_rule = (
             """本篇必须让受众从作品本身读出当前账号为什么会说这段话。标题、正文、媒体组织
@@ -1592,6 +1536,15 @@ class DeepSeekGenerator(ContentGenerator):
             if request.primary_product == "brand_life_narrative"
             else ""
         )
+        brand_context_projection = {
+            "expression_constraints": list(
+                request.brand.expression_constraint_context
+            ),
+            "creative_methods": list(request.brand.creative_method_context),
+            "candidate_product_guidance": list(
+                request.brand.candidate_product_guidance_context
+            ),
+        }
         output_contract = (
             """根对象必须恰好只有 units；每个 unit 必须恰好只有 unit_id、text。商品事实块
 已由服务端冻结，禁止返回 fact_block_refs、claim_refs 或任何商品事实正文。"""
@@ -1612,8 +1565,7 @@ Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creati
                 f"媒体程序 {request.media_program.program_id} 确定性生成。"
                 "你不得返回任何媒体单元、资源引用、拍摄、摆放、出镜、道具、"
                 "场地或声音绑定。"
-                if skeleton.kernel_version == KERNEL_VERSION
-                and request.media_program is not None
+                if skeleton.kernel_version == KERNEL_VERSION and request.media_program is not None
                 else (
                     "服务端已经预分配标题、观看回报、核心正文、媒体开头、"
                     "媒体推进、字幕策略（视频）、制作提示和发布配文；"
@@ -1652,10 +1604,7 @@ Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creati
                 "复制完整正文；production_note 只使用本次已登记制作条件与资源，写声音、"
                 "拍摄、排版或剪辑要点；release_caption 是可直接发布的配文。"
             )
-            media_instruction = (
-                "媒体制作单元只能使用本次已登记制作条件，不得新增人物、地点、商品、"
-                "道具或声音资源。"
-            )
+            media_instruction = "媒体制作单元只能使用本次已登记制作条件，不得新增人物、地点、商品、道具或声音资源。"
         return f"""完成一个可直接交付的 CreativeKernel。你只负责“说什么、怎样表达”，不负责
 创建或改变 scene、actor、resource、track、mode、unit_id、事实、来源或语义合同。
 {supporting_copy_rule}
@@ -1673,6 +1622,11 @@ Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creati
 {json.dumps(account_link_projection, ensure_ascii=False)}
 平台与形式：{request.target} / {request.media_format}
 去标识化表达控制：{controls}
+服务端按本任务选择并冻结的品牌资料方法域：
+{json.dumps(brand_context_projection, ensure_ascii=False)}
+上述 expression_constraints 只限制怎样说，creative_methods 只提供创作方法，
+candidate_product_guidance 只能形成一般选择取舍；它们均不是品牌、商品、人物、门店、
+经历或媒体资源的事实许可证。只有服务端预分配的 trusted_fact 单元能作为现实事实。
 本次修改要求：{request.revision_instruction or "（首次生成）"}
 此前可写内核（首次生成时为空；只用于修改，不是事实来源）：
 {json.dumps(prior, ensure_ascii=False)}
@@ -2345,10 +2299,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             request.brand.decision_order,
             request.brand.tone,
             *(
-                tuple(
-                    selection.applied_label
-                    for selection in request.creative_direction.selections
-                )
+                tuple(selection.applied_label for selection in request.creative_direction.selections)
                 if request.creative_direction is not None
                 else ()
             ),
@@ -2361,10 +2312,13 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             request.brand.operator_name,
             request.brand.content_role_name,
         )
-        return DeepSeekGenerator._deidentify_text(
-            value,
-            protected,
-        ) or "自然、清楚、不过度下结论"
+        return (
+            DeepSeekGenerator._deidentify_text(
+                value,
+                protected,
+            )
+            or "自然、清楚、不过度下结论"
+        )
 
     @staticmethod
     def _deidentified_account_link(
@@ -2375,25 +2329,17 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         expression = request.account_expression
         values = {
             "editorial_position": (
-                expression.identity_position
-                if expression is not None
-                else request.brand.content_role_name
+                expression.identity_position if expression is not None else request.brand.content_role_name
             ),
             "audience_relationship": (
-                expression.audience_relationship
-                if expression is not None
-                else request.brand.audience_description
+                expression.audience_relationship if expression is not None else request.brand.audience_description
             ),
             "content_territories": (
-                expression.content_territories
-                if expression is not None
-                else request.brand.positioning
+                expression.content_territories if expression is not None else request.brand.positioning
             ),
             "decision_order": request.brand.decision_order,
             "authority_boundary": (
-                expression.authority_boundary
-                if expression is not None
-                else request.brand.content_role_boundary
+                expression.authority_boundary if expression is not None else request.brand.content_role_boundary
             ),
         }
         protected = (
@@ -2403,13 +2349,9 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             request.brand.operator_name,
         )
         projection: dict[str, object] = {
-            key: DeepSeekGenerator._deidentify_text(value, protected)
-            for key, value in values.items()
-            if value.strip()
+            key: DeepSeekGenerator._deidentify_text(value, protected) for key, value in values.items() if value.strip()
         }
-        projection["required_visible_spans"] = list(
-            DeepSeekGenerator._required_account_link_spans(request)
-        )
+        projection["required_visible_spans"] = list(DeepSeekGenerator._required_account_link_spans(request))
         return projection
 
     @staticmethod
@@ -2444,13 +2386,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 protected,
             ),
         )
-        return tuple(
-            dict.fromkeys(
-                value.rstrip("。！？!?")
-                for value in values
-                if value.rstrip("。！？!?")
-            )
-        )
+        return tuple(dict.fromkeys(value.rstrip("。！？!?") for value in values if value.rstrip("。！？!?")))
 
     @classmethod
     def _assert_p3_account_link(
@@ -2458,10 +2394,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         request: GenerationInput,
         kernel: CreativeKernelV1,
     ) -> None:
-        if (
-            request.primary_product != "brand_life_narrative"
-            or kernel.kernel_version != KERNEL_VERSION
-        ):
+        if request.primary_product != "brand_life_narrative" or kernel.kernel_version != KERNEL_VERSION:
             return
         required = cls._required_account_link_spans(request)
         if not required:
@@ -2475,10 +2408,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         request: GenerationInput,
         kernel: CreativeKernelV1,
     ) -> tuple[str, ...]:
-        if (
-            request.primary_product != "brand_life_narrative"
-            or kernel.kernel_version != KERNEL_VERSION
-        ):
+        if request.primary_product != "brand_life_narrative" or kernel.kernel_version != KERNEL_VERSION:
             return ()
         required = cls._required_account_link_spans(request)
         visible = "\n".join(unit.text for unit in kernel.writable_units)
@@ -3682,9 +3612,7 @@ CreativePlanV2：{
                         raise GenerationFailed("模型服务拒绝当前请求")
                     if retries >= self._max_retries:
                         if self._status_tracker is not None:
-                            self._status_tracker.record(
-                                "degraded" if response.status_code == 429 else "unavailable"
-                            )
+                            self._status_tracker.record("degraded" if response.status_code == 429 else "unavailable")
                         raise GenerationFailed("模型服务暂时不可用")
                     delay = self._retry_delay(response.headers.get("Retry-After"), retries)
                 except httpx.TransportError as exc:

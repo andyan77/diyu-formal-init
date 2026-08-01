@@ -880,6 +880,7 @@ def test_ui05_d_brand_library_scopes_filter_before_context_and_private_materials
         ("brand_all", [], f"UI05-BRAND-{suffix}"),
         ("headquarters", [str(ORG_ID)], f"UI05-HQ-{suffix}"),
     )
+    entry_ids: list[UUID] = []
     with TestClient(_app(app_database_url, monkeypatch), base_url="https://diyuai.cc") as client:
         client.cookies.set("diyu_session", admin_token)
         for visibility_scope, organization_ids, title in entries:
@@ -898,6 +899,7 @@ def test_ui05_d_brand_library_scopes_filter_before_context_and_private_materials
                 },
             )
             assert saved.status_code == 201, saved.text
+            entry_ids.append(UUID(str(saved.json()["id"])))
         for operating_unit_id in (STORE_ORG_ID, EXTERNAL_OPERATOR_ORG_ID):
             invalid_region_scope = client.post(
                 "/api/v1/tenant-management/brand-library",
@@ -932,6 +934,42 @@ def test_ui05_d_brand_library_scopes_filter_before_context_and_private_materials
     assert f"UI05-HQ-{suffix}" in headquarters_refs
     assert f"UI05-BRAND-{suffix}" in store_refs
     assert f"UI05-HQ-{suffix}" not in store_refs
+
+    # These brand-library rows are only visibility fixtures.  Remove them before
+    # later content tests so a prior test cannot become an accidental brand-fact
+    # source for an unrelated task.
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+        cursor.execute(
+            "DELETE FROM activity_events WHERE tenant_id = %s "
+            "AND entity_type = 'brand_library_entry' AND entity_id = ANY(%s)",
+            (TENANT_ID, entry_ids),
+        )
+        cursor.execute(
+            "UPDATE brand_library_entries SET current_version_id = NULL "
+            "WHERE tenant_id = %s AND id = ANY(%s)",
+            (TENANT_ID, entry_ids),
+        )
+        cursor.execute(
+            "ALTER TABLE brand_library_entry_versions "
+            "DISABLE TRIGGER brand_library_entry_versions_immutable"
+        )
+        try:
+            cursor.execute(
+                "DELETE FROM brand_library_entry_versions "
+                "WHERE tenant_id = %s AND entry_id = ANY(%s)",
+                (TENANT_ID, entry_ids),
+            )
+        finally:
+            cursor.execute(
+                "ALTER TABLE brand_library_entry_versions "
+                "ENABLE TRIGGER brand_library_entry_versions_immutable"
+            )
+        cursor.execute(
+            "DELETE FROM brand_library_entries "
+            "WHERE tenant_id = %s AND id = ANY(%s)",
+            (TENANT_ID, entry_ids),
+        )
 
     with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (BAIT_TENANT_ID,))

@@ -312,6 +312,10 @@ try {
       `location.pathname === ${JSON.stringify(loginPath)}`,
       "激活后登录入口"
     );
+    await page.waitFor(
+      "document.querySelector('input[name=username]') !== null",
+      "登录表单"
+    );
     await page.fill('input[name="username"]', username);
     await page.fill('input[name="password"]', password);
     await page.click('button[type="submit"]', "登录");
@@ -375,6 +379,48 @@ try {
   });
 
   await admin.click("nav button", "品牌资料库");
+  await admin.waitFor(
+    "document.querySelectorAll('.library-list article').length===21 && document.querySelectorAll('.product-list article').length===14",
+    "21 份源文档与 14 个候选商品正式回读"
+  );
+  ensure(
+    await admin.evaluate(
+      "[...document.querySelectorAll('.library-list article')].every(node=>node.innerText.includes('源文档'))"
+    ),
+    "授权批次没有以可追溯源文档呈现"
+  );
+  record("TENANT-01 授权源资料与候选商品回读", {
+    source_documents: 21,
+    candidate_products: 14,
+    private_text_logged: false
+  });
+  await admin.click("nav button", "当前可用与待补");
+  await admin.waitFor(
+    `(() => {
+      const item=[...document.querySelectorAll('[aria-labelledby="tenant-data-readiness-title"] .readiness-list article')]
+        .find(node=>node.innerText.includes('P5 商品视觉'));
+      return item?.innerText.includes('当前缺资料') &&
+        item?.innerText.includes('至少为两件不同商品登记并明确选择真实图片或视频') &&
+        item?.innerText.includes('不影响 P1—P4 与纯文字内容');
+    })()`,
+    "P5 无真实媒体的局部资料缺口"
+  );
+  ensure(
+    await admin.evaluate(
+      "document.querySelector('[aria-labelledby=software-readiness-title]')?.innerText.includes('58 项真实可用')"
+    ),
+    "资料缺口错误降低了软件功能真值"
+  );
+  record("软件能力与笛语服饰资料就绪度分离", {
+    software_truth: "58/0/0/6/0",
+    p5: "data_missing",
+    p5_scope: "只影响商品视觉"
+  });
+  await admin.click("nav button", "品牌资料库");
+  await admin.waitFor(
+    "document.querySelectorAll('.library-list article').length===21",
+    "返回品牌资料库"
+  );
   await admin.click("button", "新增资料");
   await admin.waitFor(
     "document.querySelector('.tenant-drawer')?.innerText.includes('新增品牌资料')",
@@ -472,9 +518,7 @@ try {
     name,
     role,
     organization,
-    operator,
-    target,
-    maintenance
+    target
   }) => {
     await admin.click("nav button", "发布账号与账号画像");
     await admin.click("button", "创建发布账号");
@@ -484,33 +528,13 @@ try {
     );
     await admin.labeledControl("发布账号名称", "input", name);
     await admin.labeledControl("账号类型短标签", "input", role);
-    if (maintenance) {
-      await admin.labeledControl("负责团队", "select", companyName);
-      await admin.labeledControl("首位使用者", "select", operator);
-      await admin.toggleLabeledCheckbox("允许这名首位使用者维护");
-      ensure(
-        await admin.evaluate(`(() => {
-          const drawer=document.querySelector('.tenant-drawer');
-          const submit=drawer?.querySelector('button[type=submit]');
-          return submit?.disabled===true &&
-            drawer?.innerText.includes('维护五段画像的成员必须属于账号负责团队');
-        })()`),
-        "跨组织画像维护权没有在正式 React 中失败关闭"
-      );
-      await admin.labeledControl("负责团队", "select", organization);
-      ensure(
-        await admin.evaluate(`(() => {
-          const label=[...document.querySelectorAll('.tenant-drawer label')]
-            .find(node=>node.textContent.includes('允许这名首位使用者维护'));
-          return label?.querySelector('input[type=checkbox]')?.checked===false;
-        })()`),
-        "更改负责团队后仍保留了失效的画像维护勾选"
-      );
-      await admin.toggleLabeledCheckbox("允许这名首位使用者维护");
-    } else {
-      await admin.labeledControl("负责团队", "select", organization);
-      await admin.labeledControl("首位使用者", "select", operator);
-    }
+    await admin.labeledControl("负责团队", "select", organization);
+    ensure(
+      !(await admin.evaluate(
+        "document.querySelector('.tenant-drawer')?.innerText.includes('首位使用者')"
+      )),
+      "创建发布账号不应静默绑定成员或画像维护资格"
+    );
     await admin.labeledControl("首个平台", "select", target);
     const profileValues = await admin.evaluate(`(() => {
       const fields=[...document.querySelectorAll('.tenant-drawer fieldset textarea')];
@@ -531,17 +555,13 @@ try {
     name: hqAccountName,
     role: "总部品牌表达",
     organization: companyName,
-    operator: hqDisplayName,
-    target: "抖音 · 视频",
-    maintenance: false
+    target: "抖音 · 视频"
   });
   await createAccount({
     name: storeAccountName,
     role: "门店内容表达",
     organization: storeOrganizationName,
-    operator: storeDisplayName,
-    target: "小红书 · 图文 / 视频",
-    maintenance: true
+    target: "小红书 · 图文 / 视频"
   });
 
   const addPlatform = async (accountName, target) => {
@@ -555,7 +575,12 @@ try {
       "添加平台抽屉"
     );
     await admin.labeledControl("平台及其可用形式", "select", target);
-    await admin.labeledControl("使用者", "select", hqDisplayName);
+    ensure(
+      !(await admin.evaluate(
+        "document.querySelector('.tenant-drawer')?.innerText.includes('使用者')"
+      )),
+      "添加平台不应改变成员资格"
+    );
     await admin.click(".tenant-drawer button.primary", "添加平台");
     await admin.waitFor(
       "!document.querySelector('.tenant-drawer')",
@@ -954,11 +979,18 @@ try {
     // Best-effort browser teardown only.
   }
   chrome.kill("SIGTERM");
-  await Promise.race([
-    new Promise(resolvePromise => chrome.once("exit", resolvePromise)),
-    wait(2000)
+  const exited = chrome.exitCode !== null || await Promise.race([
+    new Promise(resolvePromise => chrome.once("exit", () => resolvePromise(true))),
+    wait(5000).then(() => false)
   ]);
-  rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  if (!exited && chrome.exitCode === null) {
+    chrome.kill("SIGKILL");
+    await Promise.race([
+      new Promise(resolvePromise => chrome.once("exit", resolvePromise)),
+      wait(2000)
+    ]);
+  }
+  rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
 }
 
 console.log(JSON.stringify({ results, failures }, null, 2));

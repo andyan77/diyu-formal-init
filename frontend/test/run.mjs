@@ -42,7 +42,15 @@ const v1 = {
   aigc_label: "AI 辅助生成",
   aigc_release_reminder: "发布前请使用平台 AI 内容声明功能。",
   target_key: "xiaohongshu_graphic",
-  applied_direction: ["幽默玩梗"]
+  applied_direction: ["幽默玩梗"],
+  context_basis: {
+    account: "总部品牌内容运营",
+    platform_and_format: "小红书 · 图文",
+    brand_material_categories: ["品牌已确认资料", "品牌表达边界"],
+    has_product_facts: true,
+    selected_material_count: 2,
+    gaps: []
+  }
 };
 const v2 = {
   ...v1,
@@ -139,6 +147,7 @@ dom.window.__DIYU_BOOTSTRAP__ = {
   generator_mode: "deepseek",
   formal_runtime: true,
   identity: {
+    operator_id: "user-hq",
     operator: "总部内容运营甲",
     organization: "笛语服饰管理组织",
     account: "总部品牌内容运营",
@@ -188,7 +197,11 @@ globalThis.fetch = async (input, init = {}) => {
   let payload = {};
   let ok = true;
   let status = 200;
-  if (path === "/api/v1/status" && publicStatusRequestFails) {
+  if (path === "/api/v1/test-session-invalid") {
+    ok = false;
+    status = 401;
+    payload = { detail: "当前登录已经失效" };
+  } else if (path === "/api/v1/status" && publicStatusRequestFails) {
     ok = false;
     status = 503;
     payload = { detail: "状态暂不可用" };

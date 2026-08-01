@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
@@ -23,6 +24,9 @@ from src.gateway.api.contracts import (
 )
 from src.gateway.api.settings import Settings
 from src.infrastructure.production_auth import ProductionAuthRepository
+from src.infrastructure.tenant_source_importer import TenantSourceImporter
+from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
+from src.shared.types import TenantManagementScope
 
 _FRONTEND_ADMIN = (
     Path(__file__).resolve().parents[1] / "frontend" / "src" / "app" / "TenantAdminApp.tsx"
@@ -34,8 +38,6 @@ _PROFILE = {
     "content_territories": "长期解释品牌选择、生活观察与穿着关系。",
     "default_production_conditions": "一名创作者、一部手机和普通室内条件。",
 }
-
-
 def _settings(database_url: str) -> Settings:
     return Settings.model_validate(
         {
@@ -100,6 +102,22 @@ def _create_test_operator(
     return operator_id, secret
 
 
+def _content_persistence_counts(database_url: str, tenant_id: UUID) -> tuple[int, int, int]:
+    """Count the append-only content rows owned by one bounded tenant."""
+
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        counts: list[int] = []
+        for table in ("business_tasks", "generation_runs", "content_versions"):
+            cursor.execute(
+                f"SELECT count(*) FROM {table} WHERE tenant_id = %s",  # noqa: S608 - fixed allowlist
+                (tenant_id,),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            counts.append(int(row[0]))
+    return counts[0], counts[1], counts[2]
+
+
 def _delete_gate_a_fixture(
     database_url: str,
     tenant_id: UUID,
@@ -108,6 +126,13 @@ def _delete_gate_a_fixture(
     """Remove exactly the tenant and operator created by this bounded test."""
 
     with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        for table in (
+            "brand_product_field_evidence",
+            "brand_product_versions",
+            "brand_source_segments",
+            "brand_source_document_versions",
+        ):
+            cursor.execute(f"ALTER TABLE {table} DISABLE TRIGGER USER")  # noqa: S608
         cursor.execute(
             "DELETE FROM activity_events WHERE tenant_id = %s",
             (tenant_id,),
@@ -117,7 +142,21 @@ def _delete_gate_a_fixture(
             "WHERE tenant_id = %s",
             (tenant_id,),
         )
+        cursor.execute(
+            "UPDATE brand_products SET current_version_id = NULL WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        cursor.execute(
+            "UPDATE brand_source_documents SET current_version_id = NULL WHERE tenant_id = %s",
+            (tenant_id,),
+        )
         for table in (
+            "brand_product_field_evidence",
+            "brand_product_versions",
+            "brand_products",
+            "brand_source_segments",
+            "brand_source_document_versions",
+            "brand_source_documents",
             "account_expression_profile_versions",
             "account_content_roles",
             "auth_grants",
@@ -139,6 +178,13 @@ def _delete_gate_a_fixture(
                 f"DELETE FROM {table} WHERE tenant_id = %s",  # noqa: S608 - fixed allowlist
                 (tenant_id,),
             )
+        for table in (
+            "brand_product_field_evidence",
+            "brand_product_versions",
+            "brand_source_segments",
+            "brand_source_document_versions",
+        ):
+            cursor.execute(f"ALTER TABLE {table} ENABLE TRIGGER USER")  # noqa: S608
         cursor.execute(
             "DELETE FROM ops_tenant_registry WHERE tenant_id = %s",
             (tenant_id,),
@@ -168,6 +214,12 @@ def _assert_gate_a_fixture_absent(
 
     tenant_tables = (
         "activity_events",
+        "brand_product_field_evidence",
+        "brand_product_versions",
+        "brand_products",
+        "brand_source_segments",
+        "brand_source_document_versions",
+        "brand_source_documents",
         "account_expression_profile_versions",
         "account_content_roles",
         "auth_grants",
@@ -192,12 +244,11 @@ def _assert_gate_a_fixture_absent(
                 (tenant_id,),
             )
             assert cursor.fetchone() == (0,), table
-        for table in ("ops_tenant_registry",):
-            cursor.execute(
-                f"SELECT count(*) FROM {table} WHERE tenant_id = %s",  # noqa: S608 - fixed allowlist
-                (tenant_id,),
-            )
-            assert cursor.fetchone() == (0,), table
+        cursor.execute(
+            "SELECT count(*) FROM ops_tenant_registry WHERE tenant_id = %s",
+            (tenant_id,),
+        )
+        assert cursor.fetchone() == (0,), "ops_tenant_registry"
         cursor.execute("SELECT count(*) FROM tenants WHERE id = %s", (tenant_id,))
         assert cursor.fetchone() == (0,), "tenants"
         for table in (
@@ -211,6 +262,40 @@ def _assert_gate_a_fixture_absent(
                 (operator_id,),
             )
             assert cursor.fetchone() == (0,), table
+
+
+def _import_tenant01_sources(
+    app_database_url: str,
+    migrator_database_url: str,
+    tenant: dict[str, object],
+) -> TenantManagementScope:
+    tenant_id = UUID(str(tenant["tenant_id"]))
+    source_root_value = os.environ.get("DIYU_TENANT01_SOURCE_ROOT")
+    assert source_root_value, "explicit TENANT-01 browser run requires its private source root"
+    source_root = Path(source_root_value)
+    assert source_root.is_dir()
+    with psycopg.connect(
+        migrator_database_url
+    ) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT id FROM brands WHERE tenant_id = %s", (tenant_id,))
+        brand_row = cursor.fetchone()
+        assert brand_row is not None
+        brand_id = UUID(str(brand_row[0]))
+    import_scope = TenantManagementScope(
+        tenant_id,
+        UUID(str(tenant["administrator_id"])),
+        brand_id,
+    )
+    tenant_importer = TenantSourceImporter(app_database_url)
+    import_result = tenant_importer.apply(
+        tenant_importer.dry_run(import_scope, source_root)
+    )
+    assert import_result["inserted_documents"] == 21
+    assert import_result["inserted_products"] == 14
+    imported_workbench = PostgresWorkbenchRepository(app_database_url)
+    assert len(imported_workbench.brand_library_entries(import_scope)) == 21
+    assert len(imported_workbench.management_products(import_scope)) == 14
+    return import_scope
 
 
 def test_publishing_account_and_platform_contracts_are_strict() -> None:
@@ -285,6 +370,141 @@ def test_publishing_account_and_platform_contracts_are_strict() -> None:
     assert "expression_profile_maintenance_account_ids" in explicit_user.model_fields_set
 
 
+def test_zero_tenant_users_can_prepare_one_identity_with_four_targets(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    repository = ProductionAuthRepository(app_database_url)
+    suffix = uuid4().hex[:10]
+    ops_username = f"tenant01-zero-users-ops-{suffix}"
+    ops_password = "tenant01-zero-users-ops-password"
+    operator_id, secret = _create_test_operator(
+        migrator_database_url,
+        repository,
+        ops_username,
+        ops_password,
+    )
+    app = create_app(_settings(app_database_url))
+    tenant_id: UUID | None = None
+    try:
+        with TestClient(app, base_url="https://diyu.example") as ops:
+            login = ops.post(
+                "/ops/login",
+                content=(
+                    f"username={ops_username}&password={ops_password}"
+                    f"&totp_code={repository._totp_code(secret, int(time.time() // 30))}"
+                ),
+                follow_redirects=False,
+            )
+            assert login.status_code == 303
+            created = ops.post(
+                "/api/v1/ops/tenants",
+                json={
+                    "tenant_name": f"TENANT-01 零用户租户 {suffix}",
+                    "administrator_name": "首位管理员",
+                    "administrator_username": f"tenant01-admin-{suffix}",
+                },
+            )
+            assert created.status_code == 201
+            tenant = created.json()
+            tenant_id = UUID(tenant["tenant_id"])
+
+        with TestClient(app, base_url="https://diyu.example") as admin:
+            admin_password = "tenant01-zero-users-admin-password"
+            _activate(admin, tenant["activation_url"], admin_password)
+            _login(admin, tenant["username"], admin_password, "/tenant-admin/login")
+            baseline = admin.get("/api/v1/admin/brand-expression").json()
+            confirmed = admin.post(
+                "/api/v1/admin/brand-expression/confirm",
+                json={"draft": f"{baseline['draft']}\n由品牌管理员确认。"},
+            )
+            assert confirmed.status_code == 200
+            company = admin.get("/api/v1/tenant-management/organizations").json()[0]
+            account = admin.post(
+                "/api/v1/tenant-management/publishing-accounts",
+                json={
+                    "name": "正式官方逻辑发布账号",
+                    "channel": "抖音",
+                    "content_role_name": "品牌官方表达身份",
+                    "speaker_kind": "institutional_account",
+                    "control_organization_id": company["id"],
+                    "operator_can_maintain_expression_profile": False,
+                    "initial_profile": _PROFILE,
+                },
+            )
+            assert account.status_code == 201
+            account_id = account.json()["id"]
+            for channel in ("小红书", "微信视频号"):
+                target = admin.post(
+                    "/api/v1/tenant-management/platform-carriers",
+                    json={
+                        "source_account_id": account_id,
+                        "name": f"正式官方逻辑发布账号 · {channel}",
+                        "channel": channel,
+                        "confirm_internal_carrier": True,
+                    },
+                )
+                assert target.status_code == 201
+                assert target.json()["operator_id"] is None
+            listed = admin.get(
+                "/api/v1/tenant-management/publishing-accounts"
+            ).json()
+            assert len(listed) == 1
+            assert {
+                target["target"] for target in listed[0]["platform_targets"]
+            } == {
+                "douyin_video",
+                "xiaohongshu_graphic",
+                "xiaohongshu_video",
+                "wechat_channels_video",
+            }
+            user_count_before = admin.get(
+                "/api/v1/tenant-management/users"
+            ).json()
+            unavailable_store = admin.post(
+                "/api/v1/tenant-management/users",
+                json={
+                    "display_name": "无正式门店的陈列用户",
+                    "username": f"tenant01-display-{suffix}",
+                    "organization_id": company["id"],
+                    "entry_type": "tenant_user",
+                    "capabilities": ["display"],
+                    "publishing_identity_ids": [],
+                    "expression_profile_maintenance_account_ids": [],
+                    "display_store_ids": [str(uuid4())],
+                },
+            )
+            assert unavailable_store.status_code == 422
+            assert "门店" in unavailable_store.json()["detail"]
+            assert admin.get("/api/v1/tenant-management/users").json() == user_count_before
+
+        assert tenant_id is not None
+        with psycopg.connect(
+            migrator_database_url
+        ) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT count(*) FROM users WHERE tenant_id = %s AND entry_kind = 'tenant_user'",
+                (tenant_id,),
+            )
+            assert cursor.fetchone() == (0,)
+            cursor.execute(
+                "SELECT count(*) FROM auth_grants WHERE tenant_id = %s",
+                (tenant_id,),
+            )
+            assert cursor.fetchone() == (0,)
+            cursor.execute(
+                "SELECT count(*) FILTER (WHERE carrier_of_account_id IS NULL), "
+                "count(*) FILTER (WHERE enabled AND platform_enabled), "
+                "count(DISTINCT current_expression_profile_id) "
+                "FROM content_accounts WHERE tenant_id = %s",
+                (tenant_id,),
+            )
+            assert cursor.fetchone() == (1, 3, 1)
+    finally:
+        if tenant_id is not None:
+            _delete_gate_a_fixture(migrator_database_url, tenant_id, operator_id)
+
+
 def test_new_tenant_identity_account_and_platform_journey(
     app_database_url: str,
     migrator_database_url: str,
@@ -357,7 +577,6 @@ def test_new_tenant_identity_account_and_platform_journey(
                 json={
                     "name": f"UX03 门店 {suffix}",
                     "organization_level": "operating_unit",
-                    "as_synthetic_business_fixture": True,
                 },
             )
             assert store.status_code == 201
@@ -399,7 +618,6 @@ def test_new_tenant_identity_account_and_platform_journey(
                 "control_organization_id": company["id"],
                 "operator_can_maintain_expression_profile": False,
                 "initial_profile": _PROFILE,
-                "as_synthetic_business_fixture": True,
             }
             refused = admin.post(
                 "/api/v1/tenant-management/publishing-accounts",
@@ -430,7 +648,6 @@ def test_new_tenant_identity_account_and_platform_journey(
                 "control_organization_id": company["id"],
                 "operator_can_maintain_expression_profile": True,
                 "initial_profile": _PROFILE,
-                "as_synthetic_business_fixture": True,
             }
             mismatched_maintenance = admin.post(
                 "/api/v1/tenant-management/publishing-accounts",
@@ -506,7 +723,6 @@ def test_new_tenant_identity_account_and_platform_journey(
                     "control_organization_id": store["id"],
                     "operator_can_maintain_expression_profile": True,
                     "initial_profile": store_profile,
-                    "as_synthetic_business_fixture": True,
                 },
             )
             assert store_account_response.status_code == 201
@@ -551,7 +767,7 @@ def test_new_tenant_identity_account_and_platform_journey(
             accounts = {
                 item["id"]: item
                 for item in admin.get(
-                    "/api/v1/tenant-management/publishing-accounts"
+                    "/api/v1/tenant-management/publishing-accounts?include_archived=true"
                 ).json()
             }
             assert accounts[hq_account_id]["profile"]["version"] == 1
@@ -586,7 +802,7 @@ def test_new_tenant_identity_account_and_platform_journey(
             operators = {
                 item["id"]: item
                 for item in admin.get(
-                    "/api/v1/tenant-management/operators"
+                    "/api/v1/tenant-management/operators?include_archived=true"
                 ).json()
             }
             hq_grant = operators[hq_member["user_id"]]["account_grants"][0]
@@ -643,7 +859,7 @@ def test_new_tenant_identity_account_and_platform_journey(
             hq_operator = next(
                 item
                 for item in admin.get(
-                    "/api/v1/tenant-management/operators"
+                    "/api/v1/tenant-management/operators?include_archived=true"
                 ).json()
                 if item["id"] == hq_member["user_id"]
             )
@@ -704,7 +920,7 @@ def test_new_tenant_identity_account_and_platform_journey(
             moved_operator = next(
                 item
                 for item in admin.get(
-                    "/api/v1/tenant-management/operators"
+                    "/api/v1/tenant-management/operators?include_archived=true"
                 ).json()
                 if item["id"] == store_member["user_id"]
             )
@@ -846,7 +1062,6 @@ def test_new_tenant_identity_account_and_platform_journey(
                     "control_organization_id": company["id"],
                     "operator_can_maintain_expression_profile": False,
                     "initial_profile": _PROFILE,
-                    "as_synthetic_business_fixture": True,
                 },
             )
             assert cross_organization_usage.status_code == 201
@@ -854,7 +1069,7 @@ def test_new_tenant_identity_account_and_platform_journey(
             accounts = {
                 item["id"]: item
                 for item in admin.get(
-                    "/api/v1/tenant-management/publishing-accounts"
+                    "/api/v1/tenant-management/publishing-accounts?include_archived=true"
                 ).json()
             }
             wechat = next(
@@ -984,6 +1199,8 @@ def test_formal_react_new_tenant_gate_a_journey(
             tenant = created.json()
             tenant_id = UUID(tenant["tenant_id"])
 
+        _import_tenant01_sources(app_database_url, migrator_database_url, tenant)
+
         with socket.socket() as port_socket:
             port_socket.bind(("127.0.0.1", 0))
             port = int(port_socket.getsockname()[1])
@@ -1054,6 +1271,63 @@ def test_formal_react_new_tenant_gate_a_journey(
             f"formal Chrome journey failed:\n{browser.stdout}\n{browser.stderr}"
         )
         assert '"failures": []' in browser.stdout
+
+        with psycopg.connect(
+            migrator_database_url
+        ) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM content_accounts "
+                "WHERE tenant_id = %s AND carrier_of_account_id IS NULL "
+                "AND name = %s",
+                (tenant_id, f"总部逻辑发布账号 {suffix}"),
+            )
+            account_row = cursor.fetchone()
+            assert account_row is not None
+            headquarters_account_id = UUID(str(account_row[0]))
+
+        before_visual_preflight = _content_persistence_counts(
+            migrator_database_url,
+            tenant_id,
+        )
+        with TestClient(app, base_url="https://diyu.example") as creator:
+            _login(
+                creator,
+                f"ux03-browser-hq-{suffix}",
+                f"UX03-browser-HQ-{suffix}-password",
+                "/login",
+            )
+            visual = creator.post(
+                "/api/v1/content/stream",
+                json={
+                    "message": "请用两件商品做一条商品视觉关系图文。",
+                    "conversation": [],
+                    "publishing_identity_id": str(headquarters_account_id),
+                    "target": "xiaohongshu_graphic",
+                    "material_ids": [],
+                    "product_media_intent": True,
+                    "interaction_mode": "generate",
+                    "direct_generate": True,
+                    "request_id": str(uuid4()),
+                },
+            )
+            assert visual.status_code == 200
+            events = [
+                json.loads(line)
+                for line in visual.text.splitlines()
+                if line.strip()
+            ]
+            assert any(
+                event["event"] == "conversation"
+                and event["kind"] == "question"
+                and "选择两件不同商品" in event["message"]
+                and "已登记图片" in event["message"]
+                for event in events
+            )
+            assert not any(event["event"] == "completed" for event in events)
+        assert _content_persistence_counts(
+            migrator_database_url,
+            tenant_id,
+        ) == before_visual_preflight
 
         with psycopg.connect(
             migrator_database_url

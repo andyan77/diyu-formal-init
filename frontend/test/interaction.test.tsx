@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import Root from "../src/app/Root";
+import { api } from "../src/services/api";
 
 // Cross-milestone UI contracts retained by this formal interaction journey:
 // 空态不应常驻巨大成品面板；首屏只展开题材、风格、形式；
@@ -193,7 +194,9 @@ async function main(): Promise<void> {
     "今天店里忙了一天，回家因为洗碗拌了两句，帮我发条小红书。"
   );
   assert.equal(
-    window.sessionStorage.getItem("diyu-content-draft"),
+    window.sessionStorage.getItem(
+      "diyu-content-draft:user-hq:笛语服饰:identity-hq"
+    ),
     "今天店里忙了一天，回家因为洗碗拌了两句，帮我发条小红书。",
     "未提交输入必须保存在当前浏览器会话"
   );
@@ -218,6 +221,16 @@ async function main(): Promise<void> {
     "两件已关联组织商品素材必须显式选择 P5 路由，但不能自行授予资源"
   );
   assert.match(document.querySelector(".creator-artifact")?.textContent ?? "", /当前版本 · V1/);
+  const contextBasis = document.querySelector(".artifact-context-basis");
+  assert.ok(contextBasis, "完整成品必须回读服务端冻结的本次依据");
+  assert.match(contextBasis.textContent ?? "", /总部品牌内容运营/);
+  assert.match(contextBasis.textContent ?? "", /小红书 · 图文/);
+  assert.match(contextBasis.textContent ?? "", /品牌已确认资料/);
+  assert.doesNotMatch(
+    contextBasis.textContent ?? "",
+    /segment[_ -]?id|schema|fact[_ -]?id|Prompt|规则名/i,
+    "普通页面不得泄漏内部资料标识或工程语言"
+  );
   await click(find("button", "另起一条"));
 
   await send("你好");
@@ -475,6 +488,22 @@ async function main(): Promise<void> {
       ?.body?.request_id,
     failedStreamRequest?.body?.request_id,
     "生成失败重试必须复用同一个幂等请求 ID"
+  );
+
+  await act(async () => {
+    await api("/api/v1/test-session-invalid").catch(() => undefined);
+  });
+  await settle();
+  assert.match(document.body.textContent ?? "", /当前登录已经失效/);
+  assert.equal(
+    document.querySelector(".creator-shell"),
+    null,
+    "会话撤销后的首个 401 必须立即收起旧正文和资料投影"
+  );
+  assert.equal(
+    document.querySelector<HTMLAnchorElement>(".access-recovery a")?.getAttribute("href"),
+    "/login",
+    "租户用户会话失效后应回到正确登录入口"
   );
 
   await act(async () => root.unmount());

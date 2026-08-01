@@ -1,0 +1,84 @@
+{
+  "suite_version": "TENANT-01-GOLDEN-V1",
+  "provider": {
+    "model": "deepseek-v4-flash",
+    "temperature": 0,
+    "max_retries": 0
+  },
+  "cards": [
+    {
+      "card_id": "coffee",
+      "message": "今天喝了一直喝的蓝山咖啡，居然是甜的",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "card_id": "zero_topic",
+      "message": "今天不知道发什么，帮我做一条小红书。",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "card_id": "family_relationship",
+      "message": "帮我写条婆媳主题的小红书，别狗血，也别把任何一方写成反派。",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "card_id": "daily_complaint",
+      "message": "今天事情一件接一件，回到家才发现自己连水都忘了喝，帮我发一条。",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "card_id": "P1",
+      "message": "早上有点凉，中午又热，我不想带太多东西，今天怎么穿更稳妥？",
+      "target": "douyin_video"
+    },
+    {
+      "card_id": "P2",
+      "message": "请围绕 {p2_sku} 已确认的可见信息，做一篇有选择价值的小红书。",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "card_id": "P4_series1",
+      "message": "今天店里有人只想自己看看。请回应这种状态，不补写顾客身份、对白或结果。",
+      "target": "xiaohongshu_graphic",
+      "series_position": 1
+    },
+    {
+      "card_id": "cross_platform_xhs",
+      "message": "今天整理衣服时，突然觉得少一点也能让选择更清楚。",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "card_id": "cross_platform_douyin",
+      "message": "今天整理衣服时，突然觉得少一点也能让选择更清楚。",
+      "target": "douyin_video"
+    },
+    {
+      "card_id": "series2",
+      "message": "沿着第一篇的不打扰，继续第二篇：怎样在对方愿意时给出回应。",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "card_id": "series3",
+      "message": "继续第三篇：回应之后，怎样把最后的选择留给对方。",
+      "target": "xiaohongshu_graphic"
+    }
+  ],
+  "preflight_cards": [
+    {
+      "card_id": "P5_no_media",
+      "message": "请用两件商品做一条商品视觉关系图文。",
+      "target": "xiaohongshu_graphic",
+      "expected_persistence_delta": [0, 0, 0],
+      "expected_provider_calls": 0
+    }
+  ],
+  "review_dimensions": [
+    "brand_relation",
+    "account_voice",
+    "viewer_value",
+    "platform_fit",
+    "completeness",
+    "natural_language",
+    "local_revision_consistency"
+  ]
+}
