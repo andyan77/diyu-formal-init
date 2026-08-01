@@ -88,6 +88,7 @@ values = (
     counts["successful_content_versions"],
     counts["active_assets"],
     counts["complete_content_chains"],
+    counts.get("recoverable_publishing_identity_chains", 0),
     counts["objects"],
 )
 print("|".join(str(value) for value in values))
@@ -144,6 +145,28 @@ restored_database_manifest="$(
           ON version_record.tenant_id = run_record.tenant_id
          AND version_record.run_id = run_record.id
         WHERE baseline.status = 'confirmed'
+      ),
+      (
+        SELECT count(DISTINCT account_record.id)
+        FROM brand_expression_baselines baseline
+        JOIN content_accounts account_record
+          ON account_record.tenant_id = baseline.tenant_id
+         AND account_record.brand_id = baseline.brand_id
+         AND account_record.enabled = true
+         AND account_record.carrier_of_account_id IS NULL
+         AND account_record.business_data_kind = 'formal_business_data'
+        JOIN account_content_roles account_role
+          ON account_role.tenant_id = account_record.tenant_id
+         AND account_role.account_id = account_record.id
+        JOIN content_roles role_record
+          ON role_record.tenant_id = account_role.tenant_id
+         AND role_record.id = account_role.content_role_id
+         AND role_record.brand_id = baseline.brand_id
+        JOIN account_expression_profile_versions profile_record
+          ON profile_record.tenant_id = account_record.tenant_id
+         AND profile_record.account_id = account_record.id
+         AND profile_record.id = account_record.current_expression_profile_id
+        WHERE baseline.status = 'confirmed'
       );
   "
 )"
@@ -152,9 +175,10 @@ if [[ "${restored_database_manifest}|${restored_object_count}" != "$expected_man
   echo "Restored database or object counts do not match the snapshot manifest." >&2
   exit 1
 fi
-IFS="|" read -r _ _ _ _ _ _ _ _ _ _ complete_content_chain_count _ <<<"$expected_manifest"
-if (( complete_content_chain_count < 1 )); then
-  echo "Snapshot does not contain a complete confirmed-brand content relationship chain." >&2
+IFS="|" read -r _ _ _ _ _ _ _ _ _ _ complete_content_chain_count \
+  recoverable_publishing_identity_count _ <<<"$expected_manifest"
+if (( complete_content_chain_count < 1 && recoverable_publishing_identity_count < 1 )); then
+  echo "Snapshot contains neither a complete content chain nor a recoverable formal publishing identity." >&2
   exit 1
 fi
 

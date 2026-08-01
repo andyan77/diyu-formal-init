@@ -486,6 +486,7 @@ def test_backup_restore_scripts_use_snapshot_manifest_and_a_real_application_rol
     restore = Path("deploy/restore_verify.sh").read_text(encoding="utf-8")
     assert "manifest.json" in backup
     assert '"complete_content_chains"' in backup
+    assert '"recoverable_publishing_identity_chains"' in backup
     assert 'sha256sum "$snapshot/manifest.json"' in backup
     assert "umask 077" in backup
     host_umask = backup.index("umask 077")
@@ -497,7 +498,10 @@ def test_backup_restore_scripts_use_snapshot_manifest_and_a_real_application_rol
     assert object_directory < container_umask < object_mirror
     assert '"41"' not in restore
     assert "NOBYPASSRLS" in restore
-    assert "complete_content_chain_count < 1" in restore
+    assert (
+        "complete_content_chain_count < 1 && recoverable_publishing_identity_count < 1"
+        in restore
+    )
 
 
 def test_deploy_and_rollback_restore_git_modes_before_non_root_build() -> None:

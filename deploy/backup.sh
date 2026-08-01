@@ -100,13 +100,35 @@ database_manifest="$(
             ON version_record.tenant_id = run_record.tenant_id
            AND version_record.run_id = run_record.id
           WHERE baseline.status = '\''confirmed'\''
+        ),
+        (
+          SELECT count(DISTINCT account_record.id)
+          FROM brand_expression_baselines baseline
+          JOIN content_accounts account_record
+            ON account_record.tenant_id = baseline.tenant_id
+           AND account_record.brand_id = baseline.brand_id
+           AND account_record.enabled = true
+           AND account_record.carrier_of_account_id IS NULL
+           AND account_record.business_data_kind = '\''formal_business_data'\''
+          JOIN account_content_roles account_role
+            ON account_role.tenant_id = account_record.tenant_id
+           AND account_role.account_id = account_record.id
+          JOIN content_roles role_record
+            ON role_record.tenant_id = account_role.tenant_id
+           AND role_record.id = account_role.content_role_id
+           AND role_record.brand_id = baseline.brand_id
+          JOIN account_expression_profile_versions profile_record
+            ON profile_record.tenant_id = account_record.tenant_id
+           AND profile_record.account_id = account_record.id
+           AND profile_record.id = account_record.current_expression_profile_id
+          WHERE baseline.status = '\''confirmed'\''
         );
     "
   '
 )"
 IFS="|" read -r schema_version tenant_count brand_count enabled_user_count publishing_account_count \
   content_role_count active_grant_count confirmed_brand_version_count successful_content_version_count \
-  active_asset_count complete_content_chain_count <<<"$database_manifest"
+  active_asset_count complete_content_chain_count recoverable_publishing_identity_count <<<"$database_manifest"
 manifest_numbers=(
   "$tenant_count"
   "$brand_count"
@@ -118,6 +140,7 @@ manifest_numbers=(
   "$successful_content_version_count"
   "$active_asset_count"
   "$complete_content_chain_count"
+  "$recoverable_publishing_identity_count"
 )
 if [[ ! "$schema_version" =~ ^[0-9A-Za-z_]+$ ]]; then
   echo "Backup manifest schema version is invalid." >&2
@@ -134,7 +157,8 @@ python3 - "$snapshot/manifest.json" \
   "$schema_version" "$tenant_count" "$brand_count" "$enabled_user_count" \
   "$publishing_account_count" "$content_role_count" "$active_grant_count" \
   "$confirmed_brand_version_count" "$successful_content_version_count" \
-  "$active_asset_count" "$complete_content_chain_count" "$object_count" <<'PY'
+  "$active_asset_count" "$complete_content_chain_count" \
+  "$recoverable_publishing_identity_count" "$object_count" <<'PY'
 import json
 import sys
 
@@ -151,10 +175,11 @@ import sys
     successful_content_version_count,
     active_asset_count,
     complete_content_chain_count,
+    recoverable_publishing_identity_count,
     object_count,
 ) = sys.argv[1:]
 manifest = {
-    "manifest_version": 1,
+    "manifest_version": 2,
     "schema_version": schema_version,
     "counts": {
         "tenants": int(tenant_count),
@@ -167,6 +192,9 @@ manifest = {
         "successful_content_versions": int(successful_content_version_count),
         "active_assets": int(active_asset_count),
         "complete_content_chains": int(complete_content_chain_count),
+        "recoverable_publishing_identity_chains": int(
+            recoverable_publishing_identity_count
+        ),
         "objects": int(object_count),
     },
 }
