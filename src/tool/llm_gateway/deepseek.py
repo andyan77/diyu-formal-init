@@ -2444,7 +2444,13 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 protected,
             ),
         )
-        return tuple(dict.fromkeys(value for value in values if value))
+        return tuple(
+            dict.fromkeys(
+                value.rstrip("。！？!?")
+                for value in values
+                if value.rstrip("。！？!?")
+            )
+        )
 
     @classmethod
     def _assert_p3_account_link(
@@ -2476,7 +2482,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             return ()
         required = cls._required_account_link_spans(request)
         visible = "\n".join(unit.text for unit in kernel.writable_units)
-        return tuple(span for span in required if span not in visible)
+        return () if any(span in visible for span in required) else required
 
     @staticmethod
     def _account_link_repair_prompt(
