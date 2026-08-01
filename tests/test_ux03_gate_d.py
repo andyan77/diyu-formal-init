@@ -115,18 +115,26 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
             constraint_row = connection.execute(
                 "SELECT convalidated FROM pg_constraint WHERE conname = 'organizations_parent_same_tenant'"
             ).fetchone()
-            force_rls_row = connection.execute(
-                "SELECT relforcerowsecurity FROM pg_class WHERE oid = 'organizations'::regclass"
-            ).fetchone()
+            force_rls_rows = connection.execute(
+                "SELECT relname, relforcerowsecurity FROM pg_class "
+                "WHERE oid IN ("
+                "'organizations'::regclass, "
+                "'brand_source_documents'::regclass, "
+                "'brand_source_document_versions'::regclass, "
+                "'brand_source_segments'::regclass, "
+                "'brand_product_field_evidence'::regclass, "
+                "'display_store_access_grants'::regclass, "
+                "'display_store_profile_versions'::regclass"
+                ")"
+            ).fetchall()
         assert revision_row is not None
         assert constraint_row is not None
-        assert force_rls_row is not None
         revision = revision_row[0]
         constraint_validated = constraint_row[0]
-        force_rls = force_rls_row[0]
         assert revision == "20260812_39"
         assert constraint_validated is True
-        assert force_rls is True
+        assert len(force_rls_rows) == 7
+        assert all(bool(row[1]) for row in force_rls_rows)
     finally:
         monkeypatch.setenv("DIYU_MIGRATOR_DATABASE_URL", migrator_database_url)
         with psycopg.connect(migrator_database_url, autocommit=True) as admin_connection:

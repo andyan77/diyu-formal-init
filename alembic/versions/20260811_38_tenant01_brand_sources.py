@@ -57,6 +57,23 @@ def _immutable(table: str) -> None:
     )
 
 
+def _add_validated_fk_as_owner(statement: str, tables: tuple[str, ...]) -> None:
+    """Let a non-BYPASSRLS table owner validate a new cross-table FK.
+
+    Production migrations run as the table owner without BYPASSRLS.  PostgreSQL
+    validates an ALTER TABLE foreign key with an internal SELECT, so FORCE RLS
+    would require an application tenant context even though this is a global DDL
+    invariant.  ENABLE RLS remains in force for the application role throughout;
+    only the owning migration role bypasses policies inside this transaction.
+    """
+
+    for table in tables:
+        op.execute(f"ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY")
+    op.execute(statement)
+    for table in tables:
+        op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
+
+
 def _data_kind(table: str) -> None:
     op.execute(
         f"ALTER TABLE {table} ADD COLUMN business_data_kind text NOT NULL "
@@ -162,11 +179,12 @@ def upgrade() -> None:
     )
     _tenant_rls("brand_source_document_versions", "SELECT, INSERT")
     _immutable("brand_source_document_versions")
-    op.execute(
+    _add_validated_fk_as_owner(
         "ALTER TABLE brand_source_documents ADD CONSTRAINT "
         "brand_source_documents_current_version_fk "
         "FOREIGN KEY (tenant_id, current_version_id) "
-        "REFERENCES brand_source_document_versions(tenant_id, id)"
+        "REFERENCES brand_source_document_versions(tenant_id, id)",
+        ("brand_source_documents", "brand_source_document_versions"),
     )
 
     op.execute(
@@ -238,11 +256,12 @@ def upgrade() -> None:
     op.execute(
         "ALTER TABLE brand_library_entries ADD COLUMN source_document_id uuid"
     )
-    op.execute(
+    _add_validated_fk_as_owner(
         "ALTER TABLE brand_library_entries ADD CONSTRAINT "
         "brand_library_entries_source_document_fk "
         "FOREIGN KEY (tenant_id, source_document_id) "
-        "REFERENCES brand_source_documents(tenant_id, id)"
+        "REFERENCES brand_source_documents(tenant_id, id)",
+        ("brand_library_entries", "brand_source_documents"),
     )
 
     op.execute(
@@ -314,10 +333,11 @@ def upgrade() -> None:
         "ALTER TABLE display_stores ADD CONSTRAINT display_stores_tenant_id_id_key "
         "UNIQUE (tenant_id, id)"
     )
-    op.execute(
+    _add_validated_fk_as_owner(
         "ALTER TABLE display_stores ADD CONSTRAINT display_stores_current_profile_fk "
         "FOREIGN KEY (tenant_id, current_profile_version_id) "
-        "REFERENCES display_store_profile_versions(tenant_id, id)"
+        "REFERENCES display_store_profile_versions(tenant_id, id)",
+        ("display_stores", "display_store_profile_versions"),
     )
     op.execute(
         """

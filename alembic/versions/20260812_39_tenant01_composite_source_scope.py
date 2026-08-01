@@ -17,6 +17,25 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # The production migrator owns these tables but intentionally does not have
+    # BYPASSRLS.  FK validation is a global DDL operation and must not depend on
+    # an application tenant GUC.  Keeping RLS enabled protects diyu_app while
+    # NO FORCE gives only the owner its normal validation view for this atomic
+    # migration transaction; FORCE is restored before commit.
+    validation_tables = (
+        "brands",
+        "users",
+        "brand_products",
+        "brand_product_versions",
+        "brand_source_documents",
+        "brand_source_document_versions",
+        "brand_source_segments",
+        "brand_product_field_evidence",
+        "display_store_access_grants",
+        "display_stores",
+    )
+    for table in validation_tables:
+        op.execute(f"ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY")
     for statement in (
         "ALTER TABLE brands ADD CONSTRAINT brands_tenant_id_id_key UNIQUE (tenant_id, id)",
         "ALTER TABLE users ADD CONSTRAINT users_tenant_id_id_key UNIQUE (tenant_id, id)",
@@ -85,6 +104,8 @@ def upgrade() -> None:
         "REFERENCES display_stores(tenant_id, id)",
     ):
         op.execute(statement)
+    for table in validation_tables:
+        op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
 
 
 def downgrade() -> None:
