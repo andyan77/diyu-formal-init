@@ -179,11 +179,20 @@ def _is_document_metadata(exact_text: str) -> bool:
     }
 
 
-def _semantic_kind(
+def classify_source_segment(
     source_id: str,
     heading_path: tuple[str, ...],
     exact_text: str = "",
 ) -> SemanticKind:
+    """Return the consumer-facing semantic kind from immutable source structure.
+
+    The stored source text remains byte-for-byte provenance.  Headings that
+    describe the product's own content taxonomy are operating constraints,
+    not institutional facts that may be inserted verbatim into an artifact.
+    Keeping this decision here lets a current consumer safely project records
+    imported by an older parser without rewriting their immutable rows.
+    """
+
     if exact_text and _is_document_metadata(exact_text):
         return "source_catalog_only"
     if source_id in _TEMPLATE_DOCUMENTS:
@@ -201,7 +210,17 @@ def _semantic_kind(
         # The heading, not free prose or a model, decides whether the segment can
         # be licensed as an immutable brand fact.
         joined = "/".join(heading_path)
-        if any(marker in joined for marker in ("待补", "评审", "示例", "候选", "不是什么")):
+        if any(
+            marker in joined
+            for marker in (
+                "待补",
+                "评审",
+                "示例",
+                "候选",
+                "不是什么",
+                "内容产品",
+            )
+        ):
             return "expression_constraint"
         return "brand_fact"
     return "expression_constraint"
@@ -255,7 +274,7 @@ def _segment_blocks(source_id: str, source_version: str, lines: list[str]) -> tu
         digest = sha256(exact_text.encode("utf-8")).hexdigest()
         locator = f"line:{start}" if start == end else f"line:{start}-{end}"
         key = f"{source_id}:{source_version}:{locator}:{digest[:16]}"
-        kind = _semantic_kind(source_id, heading_path, exact_text)
+        kind = classify_source_segment(source_id, heading_path, exact_text)
         evidence = {
             "brand_fact": "brand_user_authorized",
             "expression_constraint": "brand_user_authorized_constraint",
@@ -399,7 +418,7 @@ def parse_source_document(path: Path) -> SourceDocumentDraft:
         source_size=stat.st_size,
         source_mtime_ns=stat.st_mtime_ns,
         normalized_content=normalized,
-        semantic_kind=_semantic_kind(source_id, ()),
+        semantic_kind=classify_source_segment(source_id, ()),
         segments=segments,
         products=(
             _product_candidates(lines, segments)

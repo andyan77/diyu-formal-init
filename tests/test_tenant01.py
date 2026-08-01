@@ -19,6 +19,7 @@ from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.content_snapshot import visible_context_basis
 from src.shared.errors import DomainError
 from src.shared.tenant_brand_sources import (
+    classify_source_segment,
     freeze_source_batch,
     parse_source_document,
 )
@@ -213,6 +214,21 @@ def test_tenant01_freezes_twenty_one_sources_and_fourteen_products(tmp_path: Pat
         for document in documents
         for segment in document.segments
     )
+
+
+def test_tenant01_content_product_taxonomy_is_not_an_insertable_brand_fact() -> None:
+    heading = ("十二、五类内容产品与受众价值",)
+
+    assert classify_source_segment(
+        "DIYU-AUDIENCE-PROFILE-001",
+        heading,
+        "内部内容产品分类只用于决定怎样表达。",
+    ) == "expression_constraint"
+    assert classify_source_segment(
+        "DIYU-AUDIENCE-PROFILE-001",
+        ("稳定目标人群",),
+        "面向需要日常穿衣选择帮助的人。",
+    ) == "brand_fact"
 
 
 def test_source_identity_uses_embedded_metadata_not_filename(tmp_path: Path) -> None:
@@ -472,11 +488,39 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
 ) -> None:
     management_scope, organization_id = _import_scope(migrator_database_url)
     account_id = uuid4()
+    legacy_taxonomy_segment_id = uuid4()
     importer = TenantSourceImporter(app_database_url)
     try:
         _write_source_batch(tmp_path)
         importer.apply(importer.dry_run(management_scope, tmp_path))
         with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id, current_version_id FROM brand_source_documents "
+                "WHERE tenant_id = %s AND source_id = 'DIYU-AUDIENCE-PROFILE-001'",
+                (management_scope.tenant_id,),
+            )
+            source_row = cursor.fetchone()
+            assert source_row is not None
+            legacy_text = "P3 只是内部内容产品标签，不是可插入成品的品牌事实。"
+            cursor.execute(
+                "INSERT INTO brand_source_segments "
+                "(id, tenant_id, brand_id, document_id, document_version_id, "
+                " segment_key, heading_path, source_locator, exact_text, "
+                " semantic_kind, evidence_level, applicability, digest) "
+                "VALUES (%s, %s, %s, %s, %s, 'legacy-taxonomy', %s, "
+                " 'line:999', %s, 'brand_fact', 'brand_user_authorized', "
+                " '只用于测试旧解析器记录的安全投影', %s)",
+                (
+                    legacy_taxonomy_segment_id,
+                    management_scope.tenant_id,
+                    management_scope.brand_id,
+                    source_row[0],
+                    source_row[1],
+                    ["十二、五类内容产品与受众价值"],
+                    legacy_text,
+                    sha256(legacy_text.encode()).hexdigest(),
+                ),
+            )
             cursor.execute(
                 "INSERT INTO content_accounts "
                 "(id, tenant_id, brand_id, name, channel, control_organization_id, "
@@ -525,14 +569,14 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
         selected = repository.select_brand_context_for_task(
             scope,
             context,
-            "解释 DIYU-CSPU-14 的可见选择",
+            "解释 DIYU-CSPU-14 的可见选择，同时保持内容产品边界",
             "product_truth",
             (product,),
         )
         repeated = repository.select_brand_context_for_task(
             scope,
             context,
-            "解释 DIYU-CSPU-14 的可见选择",
+            "解释 DIYU-CSPU-14 的可见选择，同时保持内容产品边界",
             "product_truth",
             (product,),
         )
@@ -558,6 +602,14 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
         assert selected.brand_reference_context == tuple(
             item.exact_text for item in selected.context_packet.segments if item.semantic_kind == "brand_fact"
         )
+        legacy_segment = next(
+            item
+            for item in selected.context_packet.segments
+            if item.segment_id == str(legacy_taxonomy_segment_id)
+        )
+        assert legacy_segment.semantic_kind == "expression_constraint"
+        assert legacy_segment.exact_text in selected.expression_constraint_context
+        assert legacy_segment.exact_text not in selected.brand_reference_context
         assert all(item.semantic_kind != "template_only" for item in selected.context_packet.segments)
     finally:
         _delete_import_scope(migrator_database_url, management_scope)

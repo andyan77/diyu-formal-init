@@ -26,6 +26,7 @@ from src.shared.delivery_compiler import (
 )
 from src.shared.errors import DomainError
 from src.shared.narrative import visible_digest
+from src.shared.tenant_brand_sources import classify_source_segment
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
@@ -406,6 +407,20 @@ class PostgresContentRepository(ContentRepository):
         product_matches = sum(1 for marker in product_markers if marker in text)
         return base + matches * 18 + product_matches * 12 + (360 if explicit_product_match else 0)
 
+    @staticmethod
+    def _effective_segment_kind(row: Mapping[str, object]) -> str:
+        raw_heading_path = row.get("heading_path")
+        heading_path = (
+            tuple(str(value) for value in raw_heading_path)
+            if isinstance(raw_heading_path, list)
+            else ()
+        )
+        return classify_source_segment(
+            str(row["source_id"]),
+            heading_path,
+            str(row["exact_text"]),
+        )
+
     def select_brand_context_for_task(
         self,
         scope: TrustedScope,
@@ -423,6 +438,7 @@ class PostgresContentRepository(ContentRepository):
                        segment.evidence_level, segment.visibility_scope,
                        segment.digest, segment.exact_text,
                        segment.applicability, source.embedded_title,
+                       segment.heading_path,
                        segment.segment_key
                   FROM brand_source_segments segment
                   JOIN brand_source_documents source
@@ -475,8 +491,15 @@ class PostgresContentRepository(ContentRepository):
         explicit_product_terms = frozenset(
             term.casefold() for product in products for term in (product.sku, product.display_name) if term.strip()
         )
+        effective_rows = tuple(
+            {
+                **row,
+                "semantic_kind": self._effective_segment_kind(row),
+            }
+            for row in rows
+        )
         ranked = sorted(
-            rows,
+            effective_rows,
             key=lambda row: (
                 -self._segment_score(
                     row,

@@ -1620,7 +1620,7 @@ Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creati
 旧证据兼容用 ImmutableFactBlock 候选（新双轨主链为空；正文始终由服务端原样插入）：
 {json.dumps(blocks_projection, ensure_ascii=False)}
 本篇受众价值：{_PRODUCT_VALUE[request.primary_product]}
-本篇账号关联路径（仅 P3 使用；是表达视角，不是现实事实许可证）：
+本篇账号关联路径（仅品牌生活叙事使用；是表达视角，不是现实事实许可证）：
 {json.dumps(account_link_projection, ensure_ascii=False)}
 平台与形式：{request.target} / {request.media_format}
 去标识化表达控制：{controls}
