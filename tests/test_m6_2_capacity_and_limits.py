@@ -498,6 +498,11 @@ def test_backup_restore_scripts_use_snapshot_manifest_and_a_real_application_rol
     assert object_directory < container_umask < object_mirror
     assert '"41"' not in restore
     assert "NOBYPASSRLS" in restore
+    assert "REVOKE UPDATE, DELETE ON content_versions FROM diyu_app" in restore
+    assert (
+        "REVOKE UPDATE, DELETE ON display_artifact_versions FROM diyu_app"
+        in restore
+    )
     assert (
         "complete_content_chain_count < 1 && recoverable_publishing_identity_count < 1"
         in restore
