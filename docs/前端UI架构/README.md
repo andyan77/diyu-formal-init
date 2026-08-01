@@ -67,9 +67,12 @@ mutation 和两审通过。主控其后独立复现 DM01 冻结商品引用仍�
 SKU 原值／完整商品名称字面绑定，casefold 只做唯一比较，任一未解析或歧义片段都会使整句在
 task／run／version 前自然澄清。Gate D 定向 `63 passed`、Golden/OpenAPI
 `558 passed, 2 skipped`、Ruff、mypy 和两份极小复核通过；正式前端和 API 契约无差异，
-复用 `28e19b0…` 已通过的前端与 Chrome 证据。UX-03 现为 `REVIEW`，Gate A—D 均已完成，64 项真值为
-`58/0/0/6/0`；仍未
-push、CI、部署或连接生产。
+复用 `28e19b0…` 已通过的前端与 Chrome 证据。主控最终独立终审 `PASS` 后，最终生产运行
+实现前向冻结为 `1f6aafee584fa5e2832be20c12534d9493691bda`，权威 CI `30684531999`
+为 `success`；schema `20260810_37`、新鲜备份恢复、同 SHA Gate A—D 生产验收、上一健康
+镜像不降级回退和 synthetic 精确清理均通过。UX-03 现为 `CLOSED`，Gate A—D 均为
+`COMPLETE / PASS`，64 项真值为 `58/0/0/6/0`。生产镜像不证明真实采用、发布或市场效果；
+不创建或启动 UX-04。
 
 UI-04 已于 2026-07-27（UTC）通过主控独立终审
 并保持 `CLOSED`；创始人真实使用后出现的产品语义新证据由 successor UI-05 单独承接。
@@ -176,6 +179,6 @@ V1.0、评审意见和 PNG 预览同样只作历史参考；`prototype_verified`
   均由 UI-12 承接；UI-12 当前用前置双轨与确定性 Compiler 取代概率 Reviewer 的生产
   放行并已 `CLOSED`。关闭不证明前端用户体验已经产品化；UX-01 已作为独立产品定义
   里程碑在有界返工和主控重审后 `CLOSED`。UX-02 已将该定义工程化并完成生产默认前端替换，
-  经主控最终独立终审 `PASS` 后为 `CLOSED`。UX-03 后由用户独立启动；当前 Gate A—C
-  已主控 `PASS`，Gate D 已完成本地有界返工并等待主控最终独立终审；以根目录
-  `MILESTONE.md` 为当前状态真源。
+  经主控最终独立终审 `PASS` 后为 `CLOSED`。UX-03 后由用户独立启动，现已完成 Gate A—D、
+  唯一权威 CI、生产部署、备份恢复、回退往返和 synthetic 清理，并经主控最终独立终审
+  `PASS` 后为 `CLOSED`；以根目录 `MILESTONE.md` 为当前状态真源。
