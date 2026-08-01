@@ -281,7 +281,7 @@ def _run_formal_p5_browser(
                 raise RuntimeError("formal P5 browser server exited early")
             try:
                 if _loopback_status(
-                    f"{base_url}/status",
+                    f"{base_url}/health/live",
                     timeout=0.2,
                 ) == 200:
                     break
