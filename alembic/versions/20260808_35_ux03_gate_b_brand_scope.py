@@ -65,12 +65,19 @@ def upgrade() -> None:
         "ADD CONSTRAINT organizations_parent_not_self "
         "CHECK (parent_organization_id IS NULL OR parent_organization_id <> id)"
     )
+    # Production migrations run as the non-BYPASSRLS table owner.  Validating a
+    # self-referencing foreign key scans the referenced table; FORCE RLS would
+    # otherwise evaluate the tenant policy without an application tenant GUC.
+    # NO FORCE affects only the owner (the app role remains subject to RLS), is
+    # transactional, and is restored before this migration can commit.
+    op.execute("ALTER TABLE organizations NO FORCE ROW LEVEL SECURITY")
     op.execute(
         "ALTER TABLE organizations "
         "ADD CONSTRAINT organizations_parent_same_tenant "
         "FOREIGN KEY (tenant_id, parent_organization_id) "
         "REFERENCES organizations(tenant_id, id)"
     )
+    op.execute("ALTER TABLE organizations FORCE ROW LEVEL SECURITY")
     op.execute(
         """
         CREATE FUNCTION reject_organization_cycle()

@@ -14,17 +14,19 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 from urllib.request import urlopen
 from uuid import UUID, uuid4
 
 import httpx
 import psycopg
 import pytest
+from alembic.config import Config
 from fastapi.testclient import TestClient
 from httpx import Response
 from psycopg import sql
 
+from alembic import command
 from src.brain.display_contract import assert_display_complete
 from src.brain.display_service import DisplayService
 from src.brain.dm01_display_compiler import (
@@ -53,6 +55,85 @@ from src.shared.service_status import (
 )
 from src.shared.types import DisplayContext, DisplayGenerationInput, DisplayScope
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
+
+
+def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner(
+    migrator_database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parsed = urlsplit(migrator_database_url)
+    role_name = f"diyu_migration_test_{uuid4().hex}"
+    database_name = f"diyu_migration_test_{uuid4().hex}"
+    current_database: str
+    server_address: object
+    with psycopg.connect(migrator_database_url, autocommit=True) as admin_connection:
+        server_row = admin_connection.execute("SELECT current_database(), inet_server_addr()").fetchone()
+        assert server_row is not None
+        current_database, server_address = server_row
+        if current_database != "diyu_m3" or server_address is not None:
+            pytest.skip("historical migration regression runs only on the isolated local cluster")
+        admin_connection.execute(sql.SQL("CREATE ROLE {} LOGIN SUPERUSER").format(sql.Identifier(role_name)))
+        admin_connection.execute(
+            sql.SQL("CREATE DATABASE {} OWNER {}").format(
+                sql.Identifier(database_name),
+                sql.Identifier(role_name),
+            )
+        )
+
+    _, separator, host = parsed.netloc.rpartition("@")
+    assert separator == "@"
+    test_database_url = urlunsplit(parsed._replace(netloc=f"{role_name}@{host}", path=f"/{database_name}"))
+    tenant_id = uuid4()
+    organization_id = uuid4()
+    try:
+        monkeypatch.setenv("DIYU_MIGRATOR_DATABASE_URL", test_database_url)
+        alembic_config = Config("alembic.ini")
+        # Bootstrap the historical schema as a local cluster administrator, then
+        # remove that capability before replaying the exact production 33→head
+        # upgrade as the table-owning, non-BYPASSRLS migrator role.
+        command.upgrade(alembic_config, "20260806_33")
+        with psycopg.connect(test_database_url) as connection:
+            connection.execute(
+                "INSERT INTO tenants (id, name) VALUES (%s, %s)",
+                (tenant_id, "历史迁移既有租户"),
+            )
+            connection.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant_id),))
+            connection.execute(
+                "INSERT INTO organizations (id, tenant_id, name) VALUES (%s, %s, %s)",
+                (organization_id, tenant_id, "历史迁移既有组织"),
+            )
+        with psycopg.connect(migrator_database_url, autocommit=True) as admin_connection:
+            admin_connection.execute(
+                sql.SQL("ALTER ROLE {} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS").format(
+                    sql.Identifier(role_name)
+                )
+            )
+
+        command.upgrade(alembic_config, "head")
+        with psycopg.connect(test_database_url) as connection:
+            revision_row = connection.execute("SELECT version_num FROM alembic_version").fetchone()
+            constraint_row = connection.execute(
+                "SELECT convalidated FROM pg_constraint WHERE conname = 'organizations_parent_same_tenant'"
+            ).fetchone()
+            force_rls_row = connection.execute(
+                "SELECT relforcerowsecurity FROM pg_class WHERE oid = 'organizations'::regclass"
+            ).fetchone()
+        assert revision_row is not None
+        assert constraint_row is not None
+        assert force_rls_row is not None
+        revision = revision_row[0]
+        constraint_validated = constraint_row[0]
+        force_rls = force_rls_row[0]
+        assert revision == "20260810_37"
+        assert constraint_validated is True
+        assert force_rls is True
+    finally:
+        monkeypatch.setenv("DIYU_MIGRATOR_DATABASE_URL", migrator_database_url)
+        with psycopg.connect(migrator_database_url, autocommit=True) as admin_connection:
+            admin_connection.execute(
+                sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(database_name))
+            )
+            admin_connection.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(sql.Identifier(role_name)))
 
 
 def test_demo_seed_materializes_current_product_versions_after_migrations(
