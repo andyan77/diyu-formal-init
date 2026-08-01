@@ -40,13 +40,25 @@ EOF
 
 docker run -d --name "$postgres_name" --env-file "$postgres_env" -p "127.0.0.1:${postgres_port}:5432" \
   "$postgres_image" >/dev/null
-for _ in $(seq 1 30); do
-  if docker exec "$postgres_name" pg_isready -U "$restore_admin" -d diyu_m5_4 >/dev/null 2>&1; then
+final_postgres_ready=0
+for _ in $(seq 1 60); do
+  # The official image briefly starts a temporary PostgreSQL server while its
+  # entrypoint initializes a new volume.  That server can answer pg_isready,
+  # then deliberately stops before PID 1 execs the final server.  Restoring in
+  # that gap is a false green followed by a missing socket.  Require both the
+  # final PID 1 process and database readiness before pg_restore.
+  if docker exec "$postgres_name" sh -ec \
+    'test "$(cat /proc/1/comm)" = postgres' >/dev/null 2>&1 \
+    && docker exec "$postgres_name" pg_isready -U "$restore_admin" -d diyu_m5_4 >/dev/null 2>&1; then
+    final_postgres_ready=1
     break
   fi
-  sleep 1
+  sleep 0.5
 done
-docker exec "$postgres_name" pg_isready -U "$restore_admin" -d diyu_m5_4 >/dev/null
+if [[ "$final_postgres_ready" != "1" ]]; then
+  echo "Isolated final PostgreSQL server did not become ready." >&2
+  exit 1
+fi
 docker exec -i "$postgres_name" pg_restore -U "$restore_admin" -d diyu_m5_4 --no-owner --no-acl \
   <"$snapshot/database.dump"
 docker exec "$postgres_name" psql -U "$restore_admin" -d diyu_m5_4 -v ON_ERROR_STOP=1 -c \
