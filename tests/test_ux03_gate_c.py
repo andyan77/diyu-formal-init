@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 from dataclasses import replace
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
@@ -136,6 +137,7 @@ from src.tool.llm_gateway.stub import DeterministicContentGenerator
 from src.tool.run_gate_c_final_suite import (
     _artifact_document,
     _EvidenceDeepSeekGenerator,
+    _loopback_status,
     _reviews_from_file,
     _write_evidence_projection,
 )
@@ -4021,6 +4023,36 @@ def test_gate_c_final_runner_cannot_manufacture_registered_product_resources() -
     assert 'verdict="PASS"' not in source
     assert "review-file" in source
     assert '"/api/v1/content/stream"' in source
+
+
+def test_gate_c_final_runner_loopback_readiness_ignores_provider_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class StatusHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, format: str, *args: object) -> None:
+            del format, args
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), StatusHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:1")
+    try:
+        assert (
+            _loopback_status(
+                f"http://127.0.0.1:{server.server_port}/status",
+                timeout=1.0,
+            )
+            == 200
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_gate_c_final_runner_binds_all_formal_provider_stages(

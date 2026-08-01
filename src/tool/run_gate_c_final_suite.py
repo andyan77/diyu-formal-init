@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
-from urllib.request import urlopen
+from urllib.request import ProxyHandler, build_opener
 from uuid import UUID, uuid4
 
 import psycopg
@@ -47,6 +47,14 @@ from src.tool.llm_gateway.deepseek import DeepSeekGenerator
 _MODEL = "deepseek-v4-flash"
 _SUITE_VERSION = "ux03-gate-c-formal-final-suite-v3"
 _CARDS = ("P1", "P2", "P3", "P4", "P5", "series2", "series3")
+
+
+def _loopback_status(url: str, *, timeout: float) -> int:
+    """Read a local readiness URL without inheriting provider proxies."""
+
+    opener = build_opener(ProxyHandler({}))
+    with opener.open(url, timeout=timeout) as response:
+        return int(response.status)
 
 
 @dataclass(frozen=True)
@@ -272,9 +280,11 @@ def _run_formal_p5_browser(
             if not thread.is_alive():
                 raise RuntimeError("formal P5 browser server exited early")
             try:
-                with urlopen(f"{base_url}/status", timeout=0.2) as response:
-                    if response.status == 200:
-                        break
+                if _loopback_status(
+                    f"{base_url}/status",
+                    timeout=0.2,
+                ) == 200:
+                    break
             except OSError:
                 time.sleep(0.1)
         else:
