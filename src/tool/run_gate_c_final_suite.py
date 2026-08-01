@@ -587,6 +587,11 @@ def _generate(args: argparse.Namespace) -> None:
         object_store,
     )
     app = create_app(settings)
+    # The formal P5 browser owns an independent ASGI lifespan.  Reusing the
+    # TestClient application below would start the same FastAPI instance a
+    # second time while its first lifespan is still active, so its loopback
+    # readiness could never become authoritative.
+    p5_browser_app = create_app(settings)
     _write_private_json(
         evidence_root / "suite-config.json",
         {
@@ -630,7 +635,7 @@ def _generate(args: argparse.Namespace) -> None:
                 generator.begin_card("P5")
                 try:
                     task_id = _run_formal_p5_browser(
-                        app,
+                        p5_browser_app,
                         journey,
                         evidence_root=evidence_root,
                     )
