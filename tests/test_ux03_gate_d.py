@@ -38,6 +38,8 @@ from src.gateway.api.settings import Settings
 from src.infrastructure.display_repository import PostgresDisplayRepository
 from src.infrastructure.dm01_store_seed import DM01StoreSeedWriter
 from src.infrastructure.production_auth import ProductionAuthRepository
+from src.infrastructure.seed_demo import BRAND_ID as DEMO_BRAND_ID
+from src.infrastructure.seed_demo import TENANT_ID as DEMO_TENANT_ID
 from src.shared.display_integrity import (
     assert_display_artifact_integrity,
     attach_display_artifact_audit,
@@ -51,6 +53,41 @@ from src.shared.service_status import (
 )
 from src.shared.types import DisplayContext, DisplayGenerationInput, DisplayScope
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
+
+
+def test_demo_seed_materializes_current_product_versions_after_migrations(
+    migrator_database_url: str,
+) -> None:
+    expected_skus = {
+        "ZX-C218",
+        "ZX-S104",
+        "ZX-K126",
+        "ZX-P211",
+        "ZX-V113",
+        "ZX-Q117",
+    }
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(DEMO_TENANT_ID),))
+        cursor.execute(
+            """
+            SELECT product.sku, product.current_version_id, version.id,
+                   product.display_name = version.display_name,
+                   product.facts = version.facts,
+                   product.fact_version = version.version_number
+              FROM brand_products product
+              LEFT JOIN brand_product_versions version
+                ON version.tenant_id = product.tenant_id
+               AND version.product_id = product.id
+               AND version.id = product.current_version_id
+             WHERE product.tenant_id = %s AND product.brand_id = %s
+               AND product.sku = ANY(%s)
+            """,
+            (DEMO_TENANT_ID, DEMO_BRAND_ID, sorted(expected_skus)),
+        )
+        rows = cursor.fetchall()
+    assert {str(row[0]) for row in rows} == expected_skus
+    assert all(row[1] is not None and row[1] == row[2] for row in rows)
+    assert all(bool(row[3]) and bool(row[4]) and bool(row[5]) for row in rows)
 
 
 def _production_settings(database_url: str, material_root: Path) -> Settings:

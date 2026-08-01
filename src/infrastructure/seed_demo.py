@@ -248,6 +248,7 @@ def seed_demo() -> None:
                 "is_long": False,
             },
         }.items():
+            product_id = uuid.uuid5(uuid.NAMESPACE_URL, sku)
             cursor.execute(
                 """
                 INSERT INTO brand_products
@@ -258,13 +259,53 @@ def seed_demo() -> None:
                     facts = EXCLUDED.facts
                 """,
                 (
-                    uuid.uuid5(uuid.NAMESPACE_URL, sku),
+                    product_id,
                     TENANT_ID,
                     BRAND_ID,
                     sku,
                     str(facts["name"]),
                     Jsonb(facts),
                 ),
+            )
+            # Fresh installations migrate before this demo fixture is seeded.  The
+            # version tables therefore already exist, so the projection row above
+            # must gain the same immutable V1/current-pointer contract as rows that
+            # were present when migration 35 backfilled them.  Existing current
+            # versions are never replaced.
+            version_id = uuid.uuid5(uuid.NAMESPACE_URL, f"diyu-demo-product:{sku}:v1")
+            cursor.execute(
+                """
+                INSERT INTO brand_product_versions
+                    (id, tenant_id, brand_id, product_id, version_number,
+                     display_name, facts, source_kind, source_note, applicability,
+                     visibility_scope, scope_organization_ids, created_by, created_at)
+                SELECT %s, product.tenant_id, product.brand_id, product.id,
+                       product.fact_version, product.display_name, product.facts,
+                       product.source_kind, product.source_note, product.applicability,
+                       product.visibility_scope, '{}', product.updated_by,
+                       product.updated_at
+                  FROM brand_products product
+                 WHERE product.tenant_id = %s
+                   AND product.brand_id = %s
+                   AND product.id = %s
+                ON CONFLICT (tenant_id, product_id, version_number) DO NOTHING
+                """,
+                (version_id, TENANT_ID, BRAND_ID, product_id),
+            )
+            cursor.execute(
+                """
+                UPDATE brand_products product
+                   SET current_version_id = version.id
+                  FROM brand_product_versions version
+                 WHERE product.tenant_id = %s
+                   AND product.brand_id = %s
+                   AND product.id = %s
+                   AND product.current_version_id IS NULL
+                   AND version.tenant_id = product.tenant_id
+                   AND version.product_id = product.id
+                   AND version.version_number = product.fact_version
+                """,
+                (TENANT_ID, BRAND_ID, product_id),
             )
         cursor.execute(
             """
