@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import cast
 
 from src.ports.display_generator import DisplayGenerator
@@ -12,18 +13,24 @@ from src.shared.types import DisplayContext, DisplayGenerationInput, GeneratedDi
 
 _POSITIONS = ("left", "center", "right")
 _REDUCTION_MARKERS = ("减少", "少挂", "拿掉", "撤下", "太挤", "挂不下", "遮挡", "难取", "不好拿")
-_HARD_MARKERS = ("必须", "务必", "固定", "不可改变", "不能改", "不得更换")
 _SENTENCE = re.compile(r"[。；;.\n]")
 _RAIL_TEXT = {"upper": "上杆", "lower": "下杆"}
 _REFERENCE_SEPARATORS = frozenset(" \t\r\n，,。；;、：:（）()【】[]“”‘’\"'!?！？/")
-_REFERENCE_ATTACHED_HARD_SUFFIXES = tuple(
-    suffix.casefold()
-    for suffix in ("必须保留", "务必保留", "固定", "不可改变", "不能改", "不得更换", "保留")
-)
-_REFERENCE_ATTACHED_REVISION_SUFFIXES = tuple(
-    suffix.casefold() for suffix in ("太挤", "挂不下", "遮挡", "难取", "不好拿")
-)
-_REFERENCE_CONJUNCTIONS = tuple(token.casefold() for token in ("与", "和", "及"))
+_REFERENCE_LIST_SEPARATORS = frozenset(("、", "，", ",", "与", "和", "及"))
+_HARD_REFERENCE_ACTIONS = ("必须保留", "务必保留")
+_HARD_TRAILING_ACTIONS = ("不得更换", "不可改变", "不能改", "固定", "必须", "务必")
+_RAIL_REFERENCE_MARKERS = ("上杆", "上层", "下杆", "下层")
+
+
+@dataclass(frozen=True)
+class _ProductReferenceResolution:
+    resolved_skus: frozenset[str]
+    unresolved_segments: tuple[str, ...]
+    ambiguous_segments: tuple[str, ...]
+
+    @property
+    def is_complete(self) -> bool:
+        return bool(self.resolved_skus) and not self.unresolved_segments and not self.ambiguous_segments
 
 
 def parse_hard_requirements(
@@ -33,27 +40,47 @@ def parse_hard_requirements(
     """Resolve mandatory products only against the already frozen product identities."""
     marked: set[str] = set()
     for sentence in _SENTENCE.split(text):
-        if _has_hard_instruction(sentence):
-            resolved, ambiguous = _resolve_product_references(sentence, context)
-            if ambiguous:
+        reference_phrase = _hard_reference_phrase(sentence)
+        if reference_phrase is not None:
+            resolution = _resolve_product_references(reference_phrase, context)
+            if resolution.ambiguous_segments:
                 return (
                     frozenset(),
                     "这条必须保留的要求可能对应多件本次商品，请改用商品编号或完整商品名称再说明一次。",
                 )
-            if not resolved:
+            if not resolution.is_complete:
                 return (
                     frozenset(),
                     "我还不能确定这条必须保留的要求指哪件本次商品，请改用商品编号或完整商品名称再说明一次。",
                 )
-            marked.update(resolved)
+            marked.update(resolution.resolved_skus)
     return frozenset(marked), None
 
 
-def _has_hard_instruction(sentence: str) -> bool:
-    if any(marker in sentence for marker in _HARD_MARKERS):
-        return True
-    _, separator, remainder = sentence.partition("请把")
-    return bool(separator and "保留" in remainder)
+def _hard_reference_phrase(sentence: str) -> str | None:
+    stripped = sentence.strip("".join(_REFERENCE_SEPARATORS))
+    before_polite, polite_marker, after_polite = stripped.partition("请把")
+    if polite_marker and not before_polite.strip() and "保留" in after_polite:
+        reference_phrase, _, trailing = after_polite.rpartition("保留")
+        if not trailing.strip("".join(_REFERENCE_SEPARATORS)):
+            return reference_phrase
+    for marker in _HARD_REFERENCE_ACTIONS:
+        before, matched, after = stripped.partition(marker)
+        if not matched:
+            continue
+        left = before.strip("".join(_REFERENCE_SEPARATORS))
+        right = after.strip("".join(_REFERENCE_SEPARATORS))
+        if left and right:
+            return f"{left}、{right}"
+        return left or right
+    for marker in _HARD_TRAILING_ACTIONS:
+        before, matched, after = stripped.partition(marker)
+        if not matched:
+            continue
+        left = before.strip("".join(_REFERENCE_SEPARATORS))
+        right = after.strip("".join(_REFERENCE_SEPARATORS))
+        return left or right
+    return None
 
 
 def required_inventory_gap(
@@ -93,7 +120,8 @@ def parse_revision_target(
     normalized = feedback.casefold()
     if not any(marker in normalized for marker in _REDUCTION_MARKERS):
         return None
-    matched_products, ambiguous = _resolve_product_references(feedback, context)
+    reference_phrase = _revision_reference_phrase(feedback)
+    resolution = _resolve_product_references(reference_phrase or "", context)
     positions = [
         position
         for position, markers in {
@@ -108,16 +136,30 @@ def parse_revision_target(
         for rail, markers in {"upper": ("上杆", "上层"), "lower": ("下杆", "下层")}.items()
         if any(marker in normalized for marker in markers)
     ]
-    if ambiguous or len(matched_products) != 1 or len(positions) != 1 or len(rails) != 1:
+    if not resolution.is_complete or len(resolution.resolved_skus) != 1 or len(positions) != 1 or len(rails) != 1:
         return None
-    return next(iter(matched_products)), positions[0], rails[0]
+    return next(iter(resolution.resolved_skus)), positions[0], rails[0]
+
+
+def _revision_reference_phrase(feedback: str) -> str | None:
+    rail_matches = [(feedback.find(marker), marker) for marker in _RAIL_REFERENCE_MARKERS if feedback.find(marker) >= 0]
+    if not rail_matches:
+        return None
+    rail_start, rail_marker = min(rail_matches, key=lambda match: match[0])
+    remainder = feedback[rail_start + len(rail_marker) :].lstrip("".join(_REFERENCE_SEPARATORS))
+    if remainder.startswith("的"):
+        remainder = remainder[1:].lstrip("".join(_REFERENCE_SEPARATORS))
+    reduction_starts = [remainder.find(marker) for marker in _REDUCTION_MARKERS if remainder.find(marker) >= 0]
+    if not reduction_starts:
+        return None
+    return remainder[: min(reduction_starts)].strip("".join(_REFERENCE_SEPARATORS))
 
 
 def _resolve_product_references(
-    text: str,
+    reference_phrase: str,
     context: DisplayContext,
-) -> tuple[frozenset[str], bool]:
-    """Match literal frozen SKU/name aliases and return original database SKU values.
+) -> _ProductReferenceResolution:
+    """Resolve every explicit list segment against literal frozen SKU/name aliases.
 
     Case folding is used only to compare the person's words. No normalization, SKU grammar,
     prefix match or similarity rule is allowed to mint a product identity.
@@ -128,59 +170,40 @@ def _resolve_product_references(
             if label:
                 aliases.setdefault(label.casefold(), set()).add(sku)
 
-    normalized = text.casefold()
-    candidates: list[tuple[int, int, frozenset[str]]] = []
-    for alias, skus in aliases.items():
-        start = normalized.find(alias)
-        while start >= 0:
-            end = start + len(alias)
-            if _is_complete_product_reference(normalized, start, end):
-                candidates.append((start, end, frozenset(skus)))
-            start = normalized.find(alias, start + 1)
-
-    selected: list[tuple[int, int, frozenset[str]]] = []
-    for candidate in sorted(candidates, key=lambda item: (item[0], -(item[1] - item[0]))):
-        start, end, _ = candidate
-        if any(start < chosen_end and end > chosen_start for chosen_start, chosen_end, _ in selected):
-            continue
-        selected.append(candidate)
-
     resolved: set[str] = set()
-    ambiguous = False
-    for _, _, frozen_skus in selected:
-        if len(frozen_skus) != 1:
-            ambiguous = True
+    unresolved: list[str] = []
+    ambiguous: list[str] = []
+    for segment in _split_reference_phrase(reference_phrase, aliases):
+        frozen_skus = aliases.get(segment.casefold())
+        if frozen_skus is None:
+            unresolved.append(segment)
+        elif len(frozen_skus) != 1:
+            ambiguous.append(segment)
         else:
             resolved.update(frozen_skus)
-    return frozenset(resolved), ambiguous
-
-
-def _is_complete_product_reference(text: str, start: int, end: int) -> bool:
-    """Accept an exact frozen alias only at a visible natural-language boundary.
-
-    The immediate action suffix supports ordinary Chinese such as ``abc-123必须保留``
-    without turning a longer identifier or product name into a prefix match. Delimiters are an
-    explicit visible set so invisible format characters cannot manufacture a boundary.
-    """
-    left_is_bounded = start == 0 or text[start - 1] in _REFERENCE_SEPARATORS
-    if not left_is_bounded:
-        return False
-    if end == len(text) or text[end] in _REFERENCE_SEPARATORS:
-        return True
-    return any(
-        text.startswith(suffix, end) and _has_reference_boundary(text, end + len(suffix))
-        for suffix in _REFERENCE_ATTACHED_HARD_SUFFIXES
-    ) or any(
-        text.startswith(suffix, end) and _has_reference_boundary(text, end + len(suffix))
-        for suffix in _REFERENCE_ATTACHED_REVISION_SUFFIXES
-    ) or any(
-        text.startswith(conjunction, end) and _has_reference_boundary(text, end + len(conjunction))
-        for conjunction in _REFERENCE_CONJUNCTIONS
+    return _ProductReferenceResolution(
+        resolved_skus=frozenset(resolved),
+        unresolved_segments=tuple(unresolved),
+        ambiguous_segments=tuple(ambiguous),
     )
 
 
-def _has_reference_boundary(text: str, index: int) -> bool:
-    return index == len(text) or text[index] in _REFERENCE_SEPARATORS
+def _split_reference_phrase(reference_phrase: str, aliases: dict[str, set[str]]) -> tuple[str, ...]:
+    stripped = reference_phrase.strip("".join(_REFERENCE_SEPARATORS))
+    if not stripped:
+        return ("",)
+    if stripped.casefold() in aliases:
+        return (stripped,)
+    segments: list[str] = []
+    current: list[str] = []
+    for character in stripped:
+        if character in _REFERENCE_LIST_SEPARATORS:
+            segments.append("".join(current).strip("".join(_REFERENCE_SEPARATORS)))
+            current = []
+        else:
+            current.append(character)
+    segments.append("".join(current).strip("".join(_REFERENCE_SEPARATORS)))
+    return tuple(segments)
 
 
 class DM01DisplayCompiler(DisplayGenerator):

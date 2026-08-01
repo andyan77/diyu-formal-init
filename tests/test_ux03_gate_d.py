@@ -250,9 +250,7 @@ def _cleanup(database_url: str, tenant_id: UUID, operator_id: UUID) -> None:
             (tenant_id,),
         )
         for (version_id,) in cursor.fetchall():
-            cursor.execute(
-                "SELECT set_config('diyu.display_version_maintenance', 'delete_synthetic_fixture', true)"
-            )
+            cursor.execute("SELECT set_config('diyu.display_version_maintenance', 'delete_synthetic_fixture', true)")
             cursor.execute(
                 "SELECT set_config('diyu.display_version_maintenance_transaction_id', pg_current_xact_id()::text, true)"
             )
@@ -381,9 +379,7 @@ def _reject_display_finalize(database_url: str, failure: str) -> Iterator[None]:
                     sql.Identifier(table),
                 )
             )
-            cursor.execute(
-                sql.SQL("DROP FUNCTION IF EXISTS {}()").format(sql.Identifier(function_name))
-            )
+            cursor.execute(sql.SQL("DROP FUNCTION IF EXISTS {}()").format(sql.Identifier(function_name)))
 
 
 def test_public_status_requires_a_fresh_real_provider_observation() -> None:
@@ -742,9 +738,7 @@ def test_inventory_conservation_and_formal_rail_are_checked(app_database_url: st
     bundle = PostgresDisplayRepository(app_database_url).load_rule_bundle()
     context = _minimal_context(bundle)
     inventory = (("UP-01", 2), ("LOW-01", 2))
-    artifact = DM01DisplayCompiler().generate(
-        DisplayGenerationInput(uuid4(), uuid4(), inventory, context, ())
-    )
+    artifact = DM01DisplayCompiler().generate(DisplayGenerationInput(uuid4(), uuid4(), inventory, context, ()))
     assert_display_complete(artifact, inventory, product_facts=dict(context.products))
 
     missing_proof = deepcopy(artifact.plan)
@@ -797,7 +791,10 @@ def _minimal_context(rule_bundle: DM01RuleBundleV1) -> DisplayContext:
             "golden_sight": "视线中心",
             "constraints": ["保持通道"],
         },
-        (("UP-01", {"name": "上装", "display_family": "upper"}), ("LOW-01", {"name": "下装", "display_family": "lower"})),
+        (
+            ("UP-01", {"name": "上装", "display_family": "upper"}),
+            ("LOW-01", {"name": "下装", "display_family": "lower"}),
+        ),
         rule_bundle=rule_bundle,
     )
 
@@ -865,9 +862,18 @@ def test_hard_requirements_accept_multiple_explicit_products_and_close_ambiguity
     (
         ("abc-123 必须保留。", frozenset({"abc-123"})),
         ("abc-123必须保留。", frozenset({"abc-123"})),
+        ("abc-123 必须留在主焦点。", frozenset({"abc-123"})),
+        ("ABC123 必须保留。", frozenset({"ABC123"})),
+        ("123456 必须保留。", frozenset({"123456"})),
+        ("款号一必须保留。", frozenset({"款号一"})),
+        ("GD-UP-01 不得更换。", frozenset({"GD-UP-01"})),
         ("请把 abc-123 保留。", frozenset({"abc-123"})),
         ("中文编号商品务必保留。", frozenset({"款号一"})),
         ("abc-123 与 中文编号商品务必保留。", frozenset({"abc-123", "款号一"})),
+        ("abc-123、ABC123必须保留。", frozenset({"abc-123", "ABC123"})),
+        ("abc-123与中文编号商品务必保留。", frozenset({"abc-123", "款号一"})),
+        ("款号一及GD-UP-01必须保留。", frozenset({"款号一", "GD-UP-01"})),
+        ("请把 abc-123 和 ABC123 保留。", frozenset({"abc-123", "ABC123"})),
         ("ABC-123 必须保留。", frozenset({"abc-123"})),
     ),
 )
@@ -906,6 +912,26 @@ def test_hard_requirements_reject_neighbouring_or_non_unique_references(
     assert clarification is not None and "商品编号或完整商品名称" in clarification
 
 
+@pytest.mark.parametrize(
+    "text",
+    (
+        "abc-123、完全未知商品必须保留。",
+        "完全未知商品、abc-123必须保留。",
+        "abc-123 与 重复名称必须保留。",
+        "abc-123 与 ABC123X 必须保留。",
+        "abc-123、中文编号商品升级款必须保留。",
+    ),
+)
+def test_hard_requirements_reject_the_whole_mixed_reference_clause(
+    app_database_url: str,
+    text: str,
+) -> None:
+    context = _product_reference_context(PostgresDisplayRepository(app_database_url).load_rule_bundle())
+    requirements, clarification = parse_hard_requirements(text, context)
+    assert requirements == frozenset()
+    assert clarification is not None and "商品编号或完整商品名称" in clarification
+
+
 def test_revision_target_reuses_frozen_product_identity_without_sku_rules(
     app_database_url: str,
 ) -> None:
@@ -934,6 +960,10 @@ def test_revision_target_reuses_frozen_product_identity_without_sku_rules(
         "中间上杆 升级款小写编号商品太挤，请减少一件。",
         "中间上杆 小写编号商品保留款太挤，请减少一件。",
         "中间上杆 完全未知商品太挤，请减少一件。",
+        "中间上杆 abc-123 和 完全未知商品太挤，请减少一件。",
+        "中间上杆 完全未知商品 和 abc-123 太挤，请减少一件。",
+        "中间上杆 abc-123 和 重复名称太挤，请减少一件。",
+        "中间上杆 abc-123 和 ABC123 太挤，请减少一件。",
     ):
         assert parse_revision_target(text, context) is None
 
@@ -1031,8 +1061,9 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                 ("款号一", "中文编号商品", "lower", 1),
                 ("GD-UP-01", "既有编号商品", "upper", 2),
                 ("GD-PENDING-01", "资料待补商品", None, 1),
+                ("DUP-01", "重复名称", "upper", 1),
+                ("DUP-02", "重复名称", "lower", 1),
             )
-            products: list[dict[str, object]] = []
             for sku, name, family, _ in product_payloads:
                 response = admin.put(
                     "/api/v1/tenant-management/brand-products",
@@ -1054,7 +1085,6 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                     },
                 )
                 assert response.status_code == 200, response.text
-                products.append(response.json())
             sibling_product = admin.put(
                 "/api/v1/tenant-management/brand-products",
                 json={
@@ -1240,6 +1270,11 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                 "ABC123X 必须保留。",
                 "小写编号商品升级款必须保留。",
                 "升级款小写编号商品必须保留。",
+                "abc-123、完全未知商品必须保留。",
+                "完全未知商品、abc-123必须保留。",
+                "abc-123 与 重复名称必须保留。",
+                "abc-123 与 ABC123X 必须保留。",
+                "abc-123、中文编号商品升级款必须保留。",
             ):
                 rejected = user.post(
                     "/api/v1/display",
@@ -1291,9 +1326,7 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             assert run[3] is None and run[4] == "dm01-rule-compiler-v1"
             assert len(run[2]) == 11
             assert len(run[1]["product_snapshots"]) == len(product_payloads)
-            assert [item["sku"] for item in run[1]["product_snapshots"]] == [
-                sku for sku, _, _, _ in product_payloads
-            ]
+            assert [item["sku"] for item in run[1]["product_snapshots"]] == [sku for sku, _, _, _ in product_payloads]
             assert len(run[1]["rule_bundle"]["revision_assets"]) == 13
             assert all(item["snapshot_digest"] for item in run[1]["product_snapshots"])
             expected_hard_requirements = {"abc-123", "ABC123", "123456", "款号一", "GD-UP-01"}
@@ -1301,13 +1334,16 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             assert set(task_row[0]["hard_requirements"]) == expected_hard_requirements
             assert set(plan_row[0]["hard_requirements"]) == expected_hard_requirements
             assert plan_row[0]["artifact_audit"]["artifact_digest"]
+            frozen_v1_body = v1["body"]
+            frozen_v1_plan = deepcopy(plan_row[0])
+            frozen_task_snapshot = deepcopy(task_row[0])
 
             with TestClient(app, base_url="https://diyu.example") as current_admin:
                 _login(current_admin, tenant["username"], admin_password, "/tenant-admin/login")
                 changed_product = current_admin.put(
                     "/api/v1/tenant-management/brand-products",
                     json={
-                            "sku": "abc-123",
+                        "sku": "abc-123",
                         "display_name": "后来改动的商品名称",
                         "category": "服装",
                         "colors": [],
@@ -1352,23 +1388,40 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                 "中间上杆 abc-1234 太挤，请减少一件。",
                 "中间上杆 ABC123X 太挤，请减少一件。",
                 "中间上杆 小写编号商品升级款太挤，请减少一件。",
+                "中间上杆 abc-123 和 完全未知商品太挤，请减少一件。",
+                "中间上杆 完全未知商品 和 abc-123 太挤，请减少一件。",
+                "中间上杆 abc-123 和 重复名称太挤，请减少一件。",
+                "中间上杆 abc-123 和 ABC123 太挤，请减少一件。",
             ):
                 rejected_revision = user.post(
                     f"/api/v1/display-tasks/{v1['task_id']}/revisions",
                     json={"feedback": invalid_feedback},
                 )
+                assert _counts(app_database_url, tenant_id) == vague_before
                 assert rejected_revision.status_code == 201
                 assert rejected_revision.json()["kind"] == "question"
                 assert "task_id" not in rejected_revision.json()
-                assert _counts(app_database_url, tenant_id) == vague_before
-                assert user.get(
-                    f"/api/v1/display-tasks/{v1['task_id']}/versions/1"
-                ).json()["body"] == v1["body"]
+                assert user.get(f"/api/v1/display-tasks/{v1['task_id']}/versions/1").json()["body"] == frozen_v1_body
+                with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
+                    cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant_id),))
+                    cursor.execute(
+                        "SELECT plan FROM display_artifact_versions "
+                        "WHERE tenant_id=%s AND task_id=%s AND version_number=1",
+                        (tenant_id, v1["task_id"]),
+                    )
+                    unchanged_plan = cursor.fetchone()
+                    cursor.execute(
+                        "SELECT context_snapshot FROM display_tasks WHERE tenant_id=%s AND id=%s",
+                        (tenant_id, v1["task_id"]),
+                    )
+                    unchanged_task = cursor.fetchone()
+                assert unchanged_plan is not None and unchanged_plan[0] == frozen_v1_plan
+                assert unchanged_task is not None and unchanged_task[0] == frozen_task_snapshot
 
             with _without_rule_activation(migrator_database_url, "G-REV-003"):
                 v2_response = user.post(
                     f"/api/v1/display-tasks/{v1['task_id']}/revisions",
-                        json={"feedback": "右侧上杆 abc-123 太挤，请减少一件；其他内容不变。"},
+                    json={"feedback": "右侧上杆 abc-123 太挤，请减少一件；其他内容不变。"},
                 )
             assert v2_response.status_code == 201, v2_response.text
             v2 = v2_response.json()
@@ -1385,8 +1438,7 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
                 )
                 revised_run = cursor.fetchone()
                 cursor.execute(
-                    "SELECT plan FROM display_artifact_versions "
-                    "WHERE tenant_id=%s AND task_id=%s AND version_number=2",
+                    "SELECT plan FROM display_artifact_versions WHERE tenant_id=%s AND task_id=%s AND version_number=2",
                     (tenant_id, v1["task_id"]),
                 )
                 v2_plan_row = cursor.fetchone()
