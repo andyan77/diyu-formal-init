@@ -29,6 +29,7 @@ from src.shared.types import (
     TenantManagementScope,
     TrustedScope,
 )
+from src.tool.run_tenant01_golden_suite import _assert_p2_product_ready
 from src.tool.tenant01_evidence import (
     TENANT01_CARD_IDS,
     TENANT01_HARD_BOUNDARIES,
@@ -867,3 +868,26 @@ def test_tenant01_evidence_rejects_review_not_grounded_in_artifact(tmp_path: Pat
             p5_preflight_file="p5-no-media.json",
             dm01_file="dm01.json",
         )
+
+
+def test_tenant01_golden_p2_preflight_requires_product_specific_value() -> None:
+    with pytest.raises(RuntimeError, match="product-specific value contract"):
+        _assert_p2_product_ready(
+            (
+                ProductFact(
+                    "SKU-ONE-COLOR",
+                    {"category": "上装", "colors": ["炭灰"]},
+                    display_name="单一颜色候选商品",
+                ),
+            )
+        )
+
+    _assert_p2_product_ready(
+        (
+            ProductFact(
+                "SKU-TWO-COLORS",
+                {"category": "上装", "colors": ["炭灰", "深绿"]},
+                display_name="两种可见颜色候选商品",
+            ),
+        )
+    )

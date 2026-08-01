@@ -21,8 +21,12 @@ from src.infrastructure.content_control_repository import (
 )
 from src.infrastructure.local_object_store import LocalObjectStore
 from src.infrastructure.postgres_repository import PostgresContentRepository
+from src.infrastructure.production_auth import ProductionAuthRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
+from src.shared.errors import GenerationFailed
 from src.shared.narrative import visible_digest
+from src.shared.product_value import build_product_value_contract
+from src.shared.types import ContentTarget, ProductFact
 from src.tool.run_gate_c_final_suite import (
     _current_head,
     _EvidenceDeepSeekGenerator,
@@ -107,6 +111,50 @@ def _config_cards(config_path: Path, *, p2_sku: str) -> tuple[_Card, ...]:
     ):
         raise ValueError("TENANT-01 golden card coverage drifted")
     return tuple(cards)
+
+
+def _assert_p2_product_ready(products: tuple[ProductFact, ...]) -> None:
+    """Reject an ineligible golden P2 fixture before the first provider call."""
+    try:
+        contract = build_product_value_contract(
+            primary_product="product_truth",
+            products=products,
+        )
+    except GenerationFailed as exc:
+        raise RuntimeError(
+            "TENANT-01 P2 fixture lacks a frozen product-specific value contract"
+        ) from exc
+    if contract is None:
+        raise RuntimeError("TENANT-01 P2 fixture did not produce a product value contract")
+
+
+def _preflight_p2_product(
+    database_url: str,
+    journey: _Journey,
+    cards: tuple[_Card, ...],
+) -> None:
+    p2_cards = tuple(card for card in cards if card.card_id == "P2")
+    if len(p2_cards) != 1:
+        raise RuntimeError("TENANT-01 golden suite requires exactly one P2 card")
+    card = p2_cards[0]
+    if card.target != "xiaohongshu_graphic":
+        raise RuntimeError("TENANT-01 P2 target drifted")
+    auth_repository = ProductionAuthRepository(database_url)
+    identity = auth_repository.load_tenant_session(journey.session_token)
+    if identity is None or identity.tenant_id != journey.tenant_id:
+        raise RuntimeError("TENANT-01 P2 formal session is unavailable")
+    scope = auth_repository.content_scope(
+        identity,
+        cast(ContentTarget, card.target),
+        journey.publishing_identity_id,
+    )
+    products = PostgresContentRepository(database_url).load_product_facts(
+        scope,
+        card.message,
+    )
+    if len(products) != 1 or products[0].sku != journey.p2_sku:
+        raise RuntimeError("TENANT-01 P2 fixture does not resolve one frozen product")
+    _assert_p2_product_ready(products)
 
 
 def _persistence_counts(database_url: str, tenant_id: UUID) -> tuple[int, int, int]:
@@ -265,6 +313,8 @@ def _generate(args: argparse.Namespace) -> None:
     database_url = os.environ.get("DIYU_APP_DATABASE_URL", "")
     if not database_url:
         raise RuntimeError("formal application database is unavailable")
+    cards = _config_cards(Path(args.config).resolve(), p2_sku=journey.p2_sku)
+    _preflight_p2_product(database_url, journey, cards)
     root.mkdir(mode=0o700, parents=True)
     root.chmod(0o700)
     object_store_root = root / "object-store"
@@ -297,7 +347,6 @@ def _generate(args: argparse.Namespace) -> None:
         object_store,
     )
     app = create_app(settings)
-    cards = _config_cards(Path(args.config).resolve(), p2_sku=journey.p2_sku)
     with TestClient(app, base_url="https://diyu.example") as client:
         client.cookies.set("diyu_session", journey.session_token)
         series_response = client.post(

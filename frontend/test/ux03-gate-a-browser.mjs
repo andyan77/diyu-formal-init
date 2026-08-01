@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const required = name => {
   const value = process.env[name];
@@ -25,7 +25,7 @@ const storeDisplayName = `门店内容用户 ${suffix}`;
 const storeOrganizationName = `UX03 浏览器门店 ${suffix}`;
 const hqAccountName = `总部逻辑发布账号 ${suffix}`;
 const storeAccountName = `门店逻辑发布账号 ${suffix}`;
-const repo = resolve(new URL("../..", import.meta.url).pathname);
+const repo = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const chromeCandidates = [
   process.env.UX03_CHROME,
   "/usr/bin/google-chrome",
@@ -990,7 +990,19 @@ try {
       wait(2000)
     ]);
   }
-  rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  let profileRemoved = false;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      rmSync(profile, { recursive: true, force: true });
+      profileRemoved = true;
+      break;
+    } catch (error) {
+      const code = error && typeof error === "object" ? error.code : "";
+      if (!new Set(["EBUSY", "ENOTEMPTY", "EPERM"]).has(code)) throw error;
+      await wait(250);
+    }
+  }
+  if (!profileRemoved) failures.push("隔离 Chrome 目录未能在有界等待内清理");
 }
 
 console.log(JSON.stringify({ results, failures }, null, 2));
