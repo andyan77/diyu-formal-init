@@ -45,6 +45,7 @@ USER_DEFAULT_PERSONA_ID = UUID("00000000-0000-0000-0000-000000000095")
 DUAL_DEFAULT_PERSONA_ID = UUID("00000000-0000-0000-0000-000000000096")
 EXTERNAL_DEFAULT_PERSONA_ID = UUID("00000000-0000-0000-0000-000000000097")
 STORE_DISPLAY_ACCESS_GRANT_ID = UUID("00000000-0000-0000-0000-000000000098")
+STORE_EXACT_ACCESS_GRANT_ID = UUID("00000000-0000-0000-0000-000000000099")
 
 
 def seed_demo() -> None:
@@ -476,6 +477,19 @@ def seed_demo() -> None:
             "ON CONFLICT (tenant_id, user_id) DO UPDATE "
             "SET enabled = EXCLUDED.enabled",
             (STORE_DISPLAY_ACCESS_GRANT_ID, TENANT_ID, STORE_USER_ID),
+        )
+        # Migration 38 backfills exact store grants for rows that already exist.
+        # Fresh test installations seed the demo only after all migrations, so the
+        # same compatibility projection must be inserted here as well.  This does
+        # not broaden the user's display scope: it names the one trusted store that
+        # the legacy organization-bound fixture already represented.
+        cursor.execute(
+            "INSERT INTO display_store_access_grants "
+            "(id, tenant_id, user_id, store_id, enabled) "
+            "VALUES (%s, %s, %s, %s, true) "
+            "ON CONFLICT (tenant_id, user_id, store_id) DO UPDATE "
+            "SET enabled = EXCLUDED.enabled",
+            (STORE_EXACT_ACCESS_GRANT_ID, TENANT_ID, STORE_USER_ID, STORE_ID),
         )
         for persona_id, user_id, name, boundary in (
             (
