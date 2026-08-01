@@ -2461,8 +2461,10 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         """Bind P3 copy to the frozen role and audience relationship.
 
         This is positive source binding, not semantic classification: the
-        service requires exact, deidentified spans that already belong to the
-        current account profile and never infers an account link from prose.
+        service requires deidentified spans that already belong to the current
+        account profile and never infers an account link from prose. Visible
+        whitespace is presentation-only (for example around ``/``), so matching
+        ignores whitespace without rewriting either the frozen span or output.
         """
 
         relationship = (
@@ -2511,8 +2513,20 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         if request.primary_product != "brand_life_narrative" or kernel.kernel_version != KERNEL_VERSION:
             return ()
         required = cls._required_account_link_spans(request)
-        visible = "\n".join(unit.text for unit in kernel.writable_units)
-        return () if any(span in visible for span in required) else required
+        visible = cls._account_link_match_view(
+            "\n".join(unit.text for unit in kernel.writable_units)
+        )
+        return (
+            ()
+            if any(cls._account_link_match_view(span) in visible for span in required)
+            else required
+        )
+
+    @staticmethod
+    def _account_link_match_view(value: str) -> str:
+        """Ignore whitespace separators without Unicode or semantic rewriting."""
+
+        return "".join(character for character in value if not character.isspace())
 
     @staticmethod
     def _account_link_repair_prompt(

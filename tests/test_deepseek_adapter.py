@@ -1714,6 +1714,20 @@ def test_writer_repetition_repair_fails_closed_when_repeated_block_remains() -> 
     assert len(FakeClient.requests) == 2
 
 
+def test_account_link_binding_ignores_only_presentation_whitespace() -> None:
+    spaced = DeepSeekGenerator._account_link_match_view(
+        "品牌官方 / 品牌定义者"
+    )
+    compact = DeepSeekGenerator._account_link_match_view(
+        "品牌官方/品牌定义者"
+    )
+
+    assert spaced == compact
+    assert spaced != DeepSeekGenerator._account_link_match_view(
+        "品牌官方／品牌定义者"
+    )
+
+
 def test_ui12_writer_cannot_return_compiler_owned_visible_fields() -> None:
     request = _kernel_request()
     raw = _kernel_writer()
