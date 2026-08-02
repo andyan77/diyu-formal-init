@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import uuid
 from uuid import UUID
 
 import psycopg
 from psycopg.types.json import Jsonb
+
+from src.shared.brand_publication import publication_projection_digest
 
 TENANT_ID = UUID("00000000-0000-0000-0000-000000000001")
 ORG_ID = UUID("00000000-0000-0000-0000-000000000010")
@@ -38,6 +41,8 @@ HEADQUARTERS_WECHAT_CHANNELS_ACCOUNT_ROLE_ID = UUID("00000000-0000-0000-0000-000
 STORE_ID = UUID("00000000-0000-0000-0000-000000000081")
 POLICY_ID = UUID("00000000-0000-0000-0000-000000000082")
 BRAND_EXPRESSION_BASELINE_ID = UUID("00000000-0000-0000-0000-000000000091")
+BRAND_PUBLICATION_PROJECTION_ID = UUID("00000000-0000-0000-0000-000000000191")
+BRAND_PUBLICATION_ITEM_ID = UUID("00000000-0000-0000-0000-000000000192")
 MATERIAL_MAINTAINER_ID = UUID("00000000-0000-0000-0000-000000000092")
 TENANT_ADMIN_GRANT_ID = UUID("00000000-0000-0000-0000-000000000093")
 DUAL_TENANT_ADMIN_GRANT_ID = UUID("00000000-0000-0000-0000-000000000094")
@@ -140,6 +145,10 @@ def seed_demo() -> None:
             "UPDATE brands SET strategy_version = %s WHERE tenant_id = %s AND id = %s",
             ("V1.0-first-phase-data-ready", TENANT_ID, BRAND_ID),
         )
+        baseline_draft = (
+            "我们先把真实穿衣处境和商品取舍讲清楚：成熟、平等、具体，有生活温度，"
+            "不利用身体、年龄或身份焦虑，也不把没有证据的故事说成事实。"
+        )
         cursor.execute(
             """
             INSERT INTO brand_expression_baselines (id, tenant_id, brand_id, version, draft, status)
@@ -149,8 +158,93 @@ def seed_demo() -> None:
                 BRAND_EXPRESSION_BASELINE_ID,
                 TENANT_ID,
                 BRAND_ID,
-                "我们先把真实穿衣处境和商品取舍讲清楚：成熟、平等、具体，有生活温度，"
-                "不利用身体、年龄或身份焦虑，也不把没有证据的故事说成事实。",
+                baseline_draft,
+            ),
+        )
+        # Fresh test installations run all migrations before the demo fixture.
+        # Mirror the migration's compatibility projection here so the legacy
+        # demo remains a complete, explicitly confirmed publishing fixture.
+        # Formal new tenants still create this boundary only through the admin
+        # confirmation path, and neither path falls back to raw source text.
+        publication_item = {
+            "position": 1,
+            "publication_role": "expression_constraint",
+            "published_text": baseline_draft,
+            "applicability": [],
+            "source_kind": "brand_expression_baseline",
+            "source_ref": str(BRAND_EXPRESSION_BASELINE_ID),
+            "source_version": "1",
+            "source_digest": hashlib.sha256(baseline_draft.encode()).hexdigest(),
+        }
+        cursor.execute(
+            """
+            INSERT INTO brand_publication_projections
+                (id, tenant_id, brand_id, version_number, status, digest,
+                 created_by, confirmed_by, confirmed_at)
+            SELECT %s, %s, %s, 1, 'confirmed', %s, %s, %s, now()
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM brand_publication_projections
+                  WHERE tenant_id = %s AND brand_id = %s AND status = 'confirmed'
+             )
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (
+                BRAND_PUBLICATION_PROJECTION_ID,
+                TENANT_ID,
+                BRAND_ID,
+                publication_projection_digest((publication_item,)),
+                USER_ID,
+                USER_ID,
+                TENANT_ID,
+                BRAND_ID,
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO brand_publication_projection_items
+                (id, tenant_id, brand_id, projection_id, position,
+                 publication_role, published_text, applicability, source_kind,
+                 source_ref, source_version, source_digest)
+            SELECT %s, %s, %s, %s, 1, 'expression_constraint', %s, '{}',
+                   'brand_expression_baseline', %s, '1', %s
+             WHERE EXISTS (
+                 SELECT 1 FROM brand_publication_projections
+                  WHERE tenant_id = %s AND brand_id = %s AND id = %s
+             )
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (
+                BRAND_PUBLICATION_ITEM_ID,
+                TENANT_ID,
+                BRAND_ID,
+                BRAND_PUBLICATION_PROJECTION_ID,
+                baseline_draft,
+                str(BRAND_EXPRESSION_BASELINE_ID),
+                publication_item["source_digest"],
+                TENANT_ID,
+                BRAND_ID,
+                BRAND_PUBLICATION_PROJECTION_ID,
+            ),
+        )
+        cursor.execute(
+            """
+            UPDATE brands
+               SET current_publication_projection_id = %s
+             WHERE tenant_id = %s AND id = %s
+               AND current_publication_projection_id IS NULL
+               AND EXISTS (
+                   SELECT 1 FROM brand_publication_projections
+                    WHERE tenant_id = %s AND brand_id = %s AND id = %s
+                      AND status = 'confirmed'
+               )
+            """,
+            (
+                BRAND_PUBLICATION_PROJECTION_ID,
+                TENANT_ID,
+                BRAND_ID,
+                TENANT_ID,
+                BRAND_ID,
+                BRAND_PUBLICATION_PROJECTION_ID,
             ),
         )
         cursor.execute(
