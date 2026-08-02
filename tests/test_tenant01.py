@@ -55,6 +55,7 @@ from src.shared.types import (
 from src.tool.llm_gateway.deepseek import (
     _body_editorial_responsibility,
     _claim_bounded_body_responsibility,
+    _claim_bounded_editorial_responsibility,
 )
 from src.tool.run_tenant01_golden_suite import _assert_p2_product_ready
 from src.tool.tenant01_evidence import (
@@ -467,6 +468,34 @@ def test_general_p3_body_units_receive_closed_non_bearing_claim_jobs() -> None:
     assert "不总结关系规律或预告行动效果" in responsibilities[
         "unit:body-closing"
     ]
+
+    title = _claim_bounded_editorial_responsibility(
+        unit_id="unit:title",
+        purpose="title",
+        base_responsibility=base,
+        series_position=None,
+        primary_product="brand_life_narrative",
+        narrative_mode="general_observation",
+    )
+    guide = _claim_bounded_editorial_responsibility(
+        unit_id="unit:natural-guide",
+        purpose="natural_guide",
+        base_responsibility=base,
+        series_position=None,
+        primary_product="brand_life_narrative",
+        narrative_mode="general_observation",
+    )
+    release = _claim_bounded_editorial_responsibility(
+        unit_id="unit:release-caption",
+        purpose="release_caption",
+        base_responsibility=base,
+        series_position=None,
+        primary_product="brand_life_narrative",
+        narrative_mode="general_observation",
+    )
+    assert "不得给人物添加感受、偏好、期待" in title
+    assert "不得把感受、偏好、让步、需要" in guide
+    assert "不总结人物、关系或行动效果" in release
 
 
 def test_account_editorial_lens_historical_v1_remains_readable_without_upgrade() -> None:

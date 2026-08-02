@@ -257,6 +257,47 @@ def _claim_bounded_body_responsibility(
     return f"{responsibility}{unit_boundary}"
 
 
+def _claim_bounded_editorial_responsibility(
+    *,
+    unit_id: str,
+    purpose: str,
+    base_responsibility: str,
+    series_position: int | None,
+    primary_product: ContentProduct,
+    narrative_mode: str,
+) -> str:
+    """Apply the same closed claim boundary to every Writer-visible purpose."""
+
+    if purpose == "body":
+        return _claim_bounded_body_responsibility(
+            unit_id=unit_id,
+            base_responsibility=base_responsibility,
+            series_position=series_position,
+            primary_product=primary_product,
+            narrative_mode=narrative_mode,
+        )
+    if (
+        primary_product != "brand_life_narrative"
+        or narrative_mode != "general_observation"
+        or series_position is not None
+    ):
+        return base_responsibility
+    purpose_boundary = {
+        "title": (
+            "标题只命名两个可观察动作或选择之间的张力；不得给人物添加感受、偏好、期待，"
+            "也不得预告关系或结果变化。"
+        ),
+        "natural_guide": (
+            "导读只承诺读者能比较哪两个可观察动作；不得把感受、偏好、让步、需要或关系"
+            "结果写成观看回报。"
+        ),
+        "release_caption": (
+            "配文只回到两个可观察选择，不总结人物、关系或行动效果。"
+        ),
+    }.get(purpose, "")
+    return f"{base_responsibility}{purpose_boundary}"
+
+
 def _non_bearing_claim_contract(
     *,
     primary_product: ContentProduct,
@@ -1806,15 +1847,14 @@ class DeepSeekGenerator(ContentGenerator):
                     responsibility = f"{responsibility}{actuality_by_purpose[unit.purpose]}"
                 responsibility = f"{non_bearing_boundary}{responsibility}"
                 account_unit_responsibilities[unit.unit_id] = (
-                    _claim_bounded_body_responsibility(
+                    _claim_bounded_editorial_responsibility(
                         unit_id=unit.unit_id,
+                        purpose=unit.purpose,
                         base_responsibility=responsibility,
                         series_position=series_position,
                         primary_product=request.primary_product,
                         narrative_mode=request.narrative_frame.narrative_mode,
                     )
-                    if unit.purpose == "body"
-                    else responsibility
                 )
         p1_unit_responsibilities = (
             {
@@ -3310,8 +3350,9 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                     responsibility = f"{responsibility}{actuality_by_purpose[unit.purpose]}"
                 responsibility = f"{non_bearing_boundary}{responsibility}"
                 editorial_responsibilities[unit.unit_id] = (
-                    _claim_bounded_body_responsibility(
+                    _claim_bounded_editorial_responsibility(
                         unit_id=unit.unit_id,
+                        purpose=unit.purpose,
                         base_responsibility=responsibility,
                         series_position=series_position,
                         primary_product=request.primary_product,
@@ -3321,8 +3362,6 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                             else "general_observation"
                         ),
                     )
-                    if unit.purpose == "body"
-                    else responsibility
                 )
         unit_briefs = [
             {
