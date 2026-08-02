@@ -805,6 +805,11 @@ def _graphic_observation_sequence(
     """Paginate one closed observation program from the visible text shape."""
 
     if len(body_units) >= 3:
+        if all(len(unit.text.strip()) <= 80 for unit in body_units):
+            return (
+                "第 1 页给作品标题和观看回报；第 2 页并置本篇判断与条件片段；"
+                "第 3 页只留下一项可执行动作；末页用发布配文收束。"
+            )
         return (
             "第 1 页给作品标题和观看回报；第 2 页提出本篇判断；"
             "第 3 页用一个条件片段检验判断；第 4 页只留下一项可执行动作；末页用发布配文收束。"

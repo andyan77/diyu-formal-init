@@ -793,19 +793,27 @@ def test_observation_program_paginates_distinct_visible_text_shapes() -> None:
     lines = _graphic_observation_sequence(
         (replace(body, text="先观察。\n再选择。\n最后行动。"),)
     )
-    structured = _graphic_observation_sequence(
+    compact = _graphic_observation_sequence(
         (
             replace(body, unit_id="unit:body-opening", text="先观察。"),
             replace(body, unit_id="unit:hypothetical-example", text="再检验。"),
             replace(body, unit_id="unit:body-closing", text="最后行动。"),
         )
     )
+    expanded = _graphic_observation_sequence(
+        (
+            replace(body, unit_id="unit:body-opening", text="观察" * 41),
+            replace(body, unit_id="unit:hypothetical-example", text="检验" * 41),
+            replace(body, unit_id="unit:body-closing", text="行动" * 41),
+        )
+    )
 
-    assert len({continuous, paragraphs, lines, structured}) == 4
+    assert len({continuous, paragraphs, lines, compact, expanded}) == 5
     assert "停在本篇反差" in continuous
     assert "每个段落各占一页" in paragraphs
     assert "依照正文换行" in lines
-    assert "一个条件片段" in structured
+    assert "并置本篇判断与条件片段" in compact
+    assert "一个条件片段" in expanded
 
 
 def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:
