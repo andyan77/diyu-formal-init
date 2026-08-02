@@ -52,7 +52,10 @@ from src.shared.types import (
     TenantManagementScope,
     TrustedScope,
 )
-from src.tool.llm_gateway.deepseek import _body_editorial_responsibility
+from src.tool.llm_gateway.deepseek import (
+    _body_editorial_responsibility,
+    _claim_bounded_body_responsibility,
+)
 from src.tool.run_tenant01_golden_suite import _assert_p2_product_ready
 from src.tool.tenant01_evidence import (
     TENANT01_CARD_IDS,
@@ -436,6 +439,34 @@ def test_writer_body_units_receive_distinct_progression_responsibilities() -> No
     assert "不复用第二篇的判断信号或动作" in series3[1]
     assert "把下一步选择明确交还对方" in series3[2]
     assert series2 != series3
+
+
+def test_general_p3_body_units_receive_closed_non_bearing_claim_jobs() -> None:
+    base = "只写非承重自然表达。"
+    responsibilities = {
+        unit_id: _claim_bounded_body_responsibility(
+            unit_id=unit_id,
+            base_responsibility=base,
+            series_position=None,
+            primary_product="brand_life_narrative",
+            narrative_mode="general_observation",
+        )
+        for unit_id in (
+            "unit:body-opening",
+            "unit:hypothetical-example",
+            "unit:body-closing",
+        )
+    }
+
+    assert "不得陈述某个选择会决定或改变关系" in responsibilities[
+        "unit:body-opening"
+    ]
+    assert "不得说明任一做法会产生什么关系" in responsibilities[
+        "unit:hypothetical-example"
+    ]
+    assert "不总结关系规律或预告行动效果" in responsibilities[
+        "unit:body-closing"
+    ]
 
 
 def test_account_editorial_lens_historical_v1_remains_readable_without_upgrade() -> None:

@@ -220,6 +220,43 @@ def _body_editorial_responsibility(
     return base_responsibility
 
 
+def _claim_bounded_body_responsibility(
+    *,
+    unit_id: str,
+    base_responsibility: str,
+    series_position: int | None,
+    primary_product: ContentProduct,
+    narrative_mode: str,
+) -> str:
+    """Keep new non-bearing prose inside one unit-specific claim job."""
+
+    responsibility = _body_editorial_responsibility(
+        unit_id=unit_id,
+        base_responsibility=base_responsibility,
+        series_position=series_position,
+    )
+    if (
+        primary_product != "brand_life_narrative"
+        or narrative_mode != "general_observation"
+        or series_position is not None
+    ):
+        return responsibility
+    unit_boundary = {
+        "unit:body-opening": (
+            "本单元只提出一个本题可观察的问题或差异；不得陈述某个选择会决定或改变关系、"
+            "人物及结果。"
+        ),
+        "unit:hypothetical-example": (
+            "本单元只在明确“如果”条件下并列两个可选做法；不得说明任一做法会产生什么"
+            "关系、人物或结果变化。"
+        ),
+        "unit:body-closing": (
+            "本单元只留下下一次可自行决定的观察动作；不总结关系规律或预告行动效果。"
+        ),
+    }.get(unit_id, "")
+    return f"{responsibility}{unit_boundary}"
+
+
 def _non_bearing_claim_contract(
     *,
     primary_product: ContentProduct,
@@ -1769,10 +1806,12 @@ class DeepSeekGenerator(ContentGenerator):
                     responsibility = f"{responsibility}{actuality_by_purpose[unit.purpose]}"
                 responsibility = f"{non_bearing_boundary}{responsibility}"
                 account_unit_responsibilities[unit.unit_id] = (
-                    _body_editorial_responsibility(
+                    _claim_bounded_body_responsibility(
                         unit_id=unit.unit_id,
                         base_responsibility=responsibility,
                         series_position=series_position,
+                        primary_product=request.primary_product,
+                        narrative_mode=request.narrative_frame.narrative_mode,
                     )
                     if unit.purpose == "body"
                     else responsibility
@@ -3271,10 +3310,16 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                     responsibility = f"{responsibility}{actuality_by_purpose[unit.purpose]}"
                 responsibility = f"{non_bearing_boundary}{responsibility}"
                 editorial_responsibilities[unit.unit_id] = (
-                    _body_editorial_responsibility(
+                    _claim_bounded_body_responsibility(
                         unit_id=unit.unit_id,
                         base_responsibility=responsibility,
                         series_position=series_position,
+                        primary_product=request.primary_product,
+                        narrative_mode=(
+                            request.narrative_frame.narrative_mode
+                            if request.narrative_frame is not None
+                            else "general_observation"
+                        ),
                     )
                     if unit.purpose == "body"
                     else responsibility
