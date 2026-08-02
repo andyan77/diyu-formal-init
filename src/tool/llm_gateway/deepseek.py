@@ -2160,6 +2160,58 @@ Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creati
                 "拍摄、排版或剪辑要点；release_caption 是可直接发布的配文。"
             )
             media_instruction = "媒体制作单元只能使用本次已登记制作条件，不得新增人物、地点、商品、道具或声音资源。"
+        if (
+            skeleton.kernel_version == KERNEL_VERSION
+            and request.primary_product in {"brand_life_narrative", "local_response"}
+            and non_bearing_claim_contract is not None
+        ):
+            return f"""完成一篇可直接发布的品牌账号作品。服务端已经拥有全部承重事实、现实
+片段、媒体结构和可见范围；Writer 只负责非承重自然表达，不得另行解释事实或创造事实。
+
+按以下顺序执行同一份闭集协议：
+1. 每个可见完整句必须且只能落入 claim_contract.allowed_claims 之一；任何
+prohibited_claims 都是硬失败，不是写作建议。
+2. 现实原句由服务端另行逐字插入。不得复述、改写或补全原句，也不要另造观察维度、人物
+状态、原因、结果或后续事件。
+3. 账号关系只通过本题的观察取舍和受众回报自然体现；不要复制账号定义、品牌口号或资料
+方法原句，也不要硬插品牌名、账号名、商品或服饰结论。
+4. 有系列前情时只推进当前 position 的新判断和新动作，不复述前篇完整句段。
+5. 只填写服务端列出的 unit_id。媒体说明、资源、事实、范围标识和结构标签均由服务端处理。
+
+本次受众价值：{_PRODUCT_VALUE[request.primary_product]}
+平台与形式：{request.target} / {request.media_format}
+受控 topic：
+{json.dumps(topic_projection, ensure_ascii=False)}
+本篇账号关联路径（去标识化编辑视角）：
+{json.dumps(account_link_projection, ensure_ascii=False)}
+去标识化表达控制：{controls}
+已确认发布方法域（只能影响怎样写，不能复制或升级为事实）：
+{json.dumps(brand_context_projection, ensure_ascii=False)}
+其中表达约束、创作方法和候选取舍；它们均不是品牌、商品、人物、门店、经历或媒体资源的事实
+许可证。它们只能影响怎样写，不能成为成品中的资料复述。只有服务端预分配的 trusted_fact 单元能作为现实事实。
+冻结系列前情：
+{json.dumps(series_projection, ensure_ascii=False)}
+本次修改要求：{request.revision_instruction or "（首次生成）"}
+此前可写内核（首次生成时为空；只用于修改）：
+{json.dumps(prior, ensure_ascii=False)}
+
+服务端可写 unit skeleton：
+{json.dumps(writable, ensure_ascii=False)}
+
+{supporting_copy_rule}
+{account_link_rule}
+{non_bearing_claim_rule}
+{resource_instruction}
+{unit_instruction}
+{media_instruction}
+
+只返回：
+{json.dumps(template, ensure_ascii=False)}
+
+根对象必须恰好只有 units；每个 unit 必须恰好只有 unit_id、text，并恰好一次覆盖全部既定
+unit_id。每个 text 只填写该单元的自然内容，从自然成品第一字开始，不写字段名、Markdown、规则说明、claim_type、purpose
+或其他内部标签。正式标题、正文、字幕、制作提示和发布配文的结构只由 DeliveryCompiler
+根据 unit_id 确定性组装。不要返回事实、来源、媒体单元、资源引用或解释。"""
         return f"""完成一个可直接交付的 CreativeKernel。你只负责“说什么、怎样表达”，不负责
 创建或改变 scene、actor、resource、track、mode、unit_id、事实、来源或语义合同。
 {supporting_copy_rule}

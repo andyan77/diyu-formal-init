@@ -3106,9 +3106,10 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert '"wrapper_owner": "delivery_compiler"' in prompt
     assert '"text": ""' in prompt
     assert "填写 media_opening 的完整可见文字" not in prompt
-    assert "purpose 只说明下游消费用途" in prompt
-    assert "创作表达必须与冻结现实保持因果独立" in prompt
-    assert "不得解释、诊断、否定或纠正" in prompt
+    assert "purpose\n或其他内部标签" in prompt
+    assert '"contract_version": "non-bearing-writer-claim-v2"' in prompt
+    assert '"claim_type": "cause_or_result"' in prompt
+    assert "任何\nprohibited_claims 都是硬失败" in prompt
 
     compiled = compile_delivery(
         _compile_input(request),
