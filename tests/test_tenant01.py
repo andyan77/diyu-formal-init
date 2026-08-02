@@ -19,8 +19,11 @@ from src.infrastructure.tenant_source_importer import TenantSourceImporter
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.account_editorial_lens import (
     ACCOUNT_EDITORIAL_LENS_VERSION,
+    ACCOUNT_EDITORIAL_LENS_V1_VERSION,
+    AccountEditorialLensV1,
     account_editorial_lens_digest,
     account_editorial_lens_document,
+    account_editorial_lens_from_document,
     build_account_editorial_lens,
 )
 from src.shared.brand_publication import brand_context_packet_digest
@@ -361,6 +364,33 @@ def test_account_editorial_lens_freezes_profile_and_publication_without_copying_
     assert "不应复制" not in serialized
     assert "题材没有商品、服饰或门店时" in serialized
     assert "不能无损替换到另一件生活琐事" in serialized
+    assert "不得猜测" in serialized
+    assert "互相复述" in serialized
+
+
+def test_account_editorial_lens_historical_v1_remains_readable_without_upgrade() -> None:
+    historical = AccountEditorialLensV1(
+        contract_version=ACCOUNT_EDITORIAL_LENS_V1_VERSION,
+        primary_product="brand_life_narrative",
+        source_profile_id="55555555-5555-4555-8555-555555555555",
+        source_profile_version=2,
+        publication_projection_id="44444444-4444-4444-8444-444444444444",
+        publication_projection_version=1,
+        publication_projection_digest="a" * 64,
+        brand_context_packet_digest="b" * 64,
+        relationship_principle="历史关系",
+        topic_fidelity="历史题材",
+        fact_boundary="历史事实边界",
+        viewer_value_requirement="历史观看回报",
+        closure_boundary="历史收束",
+    )
+
+    parsed = account_editorial_lens_from_document(
+        account_editorial_lens_document(historical)
+    )
+
+    assert parsed == historical
+    assert parsed.contract_version == ACCOUNT_EDITORIAL_LENS_V1_VERSION
 
 
 def test_tenant01_content_product_taxonomy_is_not_an_insertable_brand_fact() -> None:

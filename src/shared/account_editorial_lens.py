@@ -12,7 +12,8 @@ from src.shared.types import (
     ContentProduct,
 )
 
-ACCOUNT_EDITORIAL_LENS_VERSION = "account-editorial-lens-v1"
+ACCOUNT_EDITORIAL_LENS_V1_VERSION = "account-editorial-lens-v1"
+ACCOUNT_EDITORIAL_LENS_VERSION = "account-editorial-lens-v2"
 _LENS_PRODUCTS = frozenset({"brand_life_narrative", "local_response"})
 
 
@@ -41,12 +42,33 @@ class AccountEditorialLensV1:
     closure_boundary: str
 
 
+@dataclass(frozen=True)
+class AccountEditorialLensV2(AccountEditorialLensV1):
+    """Current per-unit editorial responsibility for demonstrable P3/P4 work.
+
+    V1 froze provenance and the overall account relationship.  V2 also makes
+    every Writer-owned visible unit responsible for a different part of the
+    finished work.  This prevents a profile slogan or a generic conclusion
+    from satisfying the relationship contract in every field at once.
+    """
+
+    title_responsibility: str
+    natural_guide_responsibility: str
+    body_responsibility: str
+    release_caption_responsibility: str
+    actuality_response_boundary: str
+    series_progression_boundary: str
+
+
+AccountEditorialLens = AccountEditorialLensV1 | AccountEditorialLensV2
+
+
 def build_account_editorial_lens(
     *,
     primary_product: ContentProduct,
     account_expression: AccountExpression | None,
     brand_context_packet: BrandContextPacket | None,
-) -> AccountEditorialLensV1 | None:
+) -> AccountEditorialLensV2 | None:
     """Build the one auditable editorial lens for new P3/P4 tasks.
 
     Legacy packets and incomplete draft identities keep their historical path;
@@ -63,7 +85,7 @@ def build_account_editorial_lens(
         or not isinstance(brand_context_packet, BrandContextPacketV2)
     ):
         return None
-    return AccountEditorialLensV1(
+    return AccountEditorialLensV2(
         contract_version=ACCOUNT_EDITORIAL_LENS_VERSION,
         primary_product=primary_product,
         source_profile_id=str(account_expression.profile_id),
@@ -92,16 +114,39 @@ def build_account_editorial_lens(
             "收束回本次具体变化或选择，不把个别片段升级为放之四海皆准的人生道理，"
             "也不粘贴账号定义或品牌口号。"
         ),
+        title_responsibility=(
+            "只命名本次输入中可见的变化、冲突或选择，不抢先解释原因，也不把题材改成"
+            "账号、品牌或商品介绍。"
+        ),
+        natural_guide_responsibility=(
+            "用一句自然文字说明读完能看清的本题判断，不介绍文章结构、创作方法或账号定义。"
+        ),
+        body_responsibility=(
+            "沿本题独有的可观察变化推进：先指出值得停留之处，再给有限判断，最后把一个"
+            "不依赖新增现实事实的观察动作留给受众；三步不得互相复述。"
+        ),
+        release_caption_responsibility=(
+            "用一至两句回到本题的具体变化或选择；不重复正文结论，不粘贴口号，也不强制互动。"
+        ),
+        actuality_response_boundary=(
+            "若存在服务端冻结的用户现实原句，只回应原句中直接可见的反差或选择；不得猜测、"
+            "罗列或暗示对象变化、感受变化或事件发生的原因，也不得把单次片段概括成人类、"
+            "生活或关系的一般规律。"
+        ),
+        series_progression_boundary=(
+            "若存在冻结系列前情，本篇必须推进一个新的判断或受众动作；不能复述前篇结论，"
+            "也不能只替换比喻、标题或互动句。"
+        ),
     )
 
 
 def account_editorial_lens_document(
-    lens: AccountEditorialLensV1,
+    lens: AccountEditorialLens,
 ) -> dict[str, object]:
     return cast(dict[str, object], asdict(lens))
 
 
-def account_editorial_lens_digest(lens: AccountEditorialLensV1) -> str:
+def account_editorial_lens_digest(lens: AccountEditorialLens) -> str:
     return hashlib.sha256(
         json.dumps(
             account_editorial_lens_document(lens),
@@ -110,3 +155,16 @@ def account_editorial_lens_digest(lens: AccountEditorialLensV1) -> str:
             sort_keys=True,
         ).encode()
     ).hexdigest()
+
+
+def account_editorial_lens_from_document(
+    value: dict[str, object],
+) -> AccountEditorialLens:
+    """Parse current and historical frozen lens snapshots without upgrading."""
+
+    version = value.get("contract_version")
+    if version == ACCOUNT_EDITORIAL_LENS_VERSION:
+        return AccountEditorialLensV2(**value)  # type: ignore[arg-type]
+    if version == ACCOUNT_EDITORIAL_LENS_V1_VERSION:
+        return AccountEditorialLensV1(**value)  # type: ignore[arg-type]
+    raise TypeError("account editorial lens version is unsupported")

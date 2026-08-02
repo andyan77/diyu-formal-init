@@ -1470,6 +1470,25 @@ class DeepSeekGenerator(ContentGenerator):
             unit_contracts=trusted_contracts,
         )
         policy_by_unit = {policy.unit_id: policy for policy in policies}
+        account_editorial_lens = build_account_editorial_lens(
+            primary_product=request.primary_product,
+            account_expression=request.account_expression,
+            brand_context_packet=request.brand.context_packet,
+        )
+        account_unit_responsibilities = (
+            {
+                "title": account_editorial_lens.title_responsibility,
+                "natural_guide": (
+                    account_editorial_lens.natural_guide_responsibility
+                ),
+                "body": account_editorial_lens.body_responsibility,
+                "release_caption": (
+                    account_editorial_lens.release_caption_responsibility
+                ),
+            }
+            if account_editorial_lens is not None
+            else {}
+        )
         expression_requirement_by_mode = {
             "general_observation": (
                 "只写不绑定当前用户、品牌、员工、顾客或门店的一般命题；不续写本次事实中的"
@@ -1533,6 +1552,15 @@ class DeepSeekGenerator(ContentGenerator):
                 **(
                     {"expression_requirement": expression_requirement_by_mode[unit.mode]}
                     if unit.mode in expression_requirement_by_mode
+                    else {}
+                ),
+                **(
+                    {
+                        "editorial_responsibility": (
+                            account_unit_responsibilities[unit.purpose]
+                        )
+                    }
+                    if unit.purpose in account_unit_responsibilities
                     else {}
                 ),
             }
@@ -1674,11 +1702,14 @@ class DeepSeekGenerator(ContentGenerator):
             else None
         )
         account_link_rule = (
-            """本篇必须让受众从作品本身读出当前账号为什么会说这段话。标题、正文、媒体组织
-和发布配文应共同沿同一条编辑视角展开；至少 natural_guide 或 body 要自然体现下方的表达
-位置与受众关系，不能只在元数据中存在。把它们转化为本篇的观察方式、选择取舍或给受众的
-具体回报；不得逐字照抄画像标签，不得硬插商品、账号名或品牌名，也不得把表达位置写成
-真实职业履历、机构事实或已经发生的经历。"""
+            """本篇必须让受众从作品本身读出当前账号为什么会说这段话。每个可写 unit 都有
+互不替代的 editorial_responsibility，必须分别完成；不能用同一句账号定义、品牌口号或
+泛化结论同时填满标题、导读、正文和配文。把冻结编辑视角转化为本题独有的观察方式、有限
+判断和受众回报；不得逐字照抄画像标签，不得硬插商品、账号名或品牌名，也不得把表达位置
+写成真实职业履历、机构事实或已经发生的经历。若存在用户现实原句，必须服从
+actuality_response_boundary：作品可以回应直接可见的反差或选择，但不能解释原因、罗列
+可能成因，或把一次片段概括成生活、人类及关系的普遍规律。若存在系列前情，还必须服从
+series_progression_boundary，产生新的判断或受众动作。"""
             if request.primary_product in {"brand_life_narrative", "local_response"}
             else ""
         )

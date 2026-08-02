@@ -3089,9 +3089,11 @@ def test_p3_writer_uses_versioned_editorial_lens_without_profile_copy_or_topic_s
         "deepseek-test",
     )._kernel_writer_prompt(request, kernel, {})
 
-    assert "account-editorial-lens-v1" in prompt
+    assert "account-editorial-lens-v2" in prompt
     assert "题材没有商品、服饰或门店时" in prompt
     assert "不能无损替换到另一件生活琐事" in prompt
+    assert "editorial_responsibility" in prompt
+    assert "不能解释原因、罗列" in prompt
     assert "不应复制" not in prompt
     assert "去标识化表达控制：使用已冻结账号编辑视角" in prompt
     assert prompt.count(constraint) == 1

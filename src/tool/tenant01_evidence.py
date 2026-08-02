@@ -10,8 +10,8 @@ from uuid import UUID
 
 from src.shared.account_editorial_lens import (
     ACCOUNT_EDITORIAL_LENS_VERSION,
-    AccountEditorialLensV1,
     account_editorial_lens_digest,
+    account_editorial_lens_from_document,
 )
 from src.shared.brand_publication import brand_context_packet_digest
 from src.shared.narrative import visible_digest
@@ -212,7 +212,7 @@ def _artifact_binding(
         if not isinstance(raw_lens, dict) or not _sha256_text(lens_digest):
             raise Tenant01EvidenceError(f"{card_id} 缺少冻结账号编辑视角。")
         try:
-            lens = AccountEditorialLensV1(**raw_lens)
+            lens = account_editorial_lens_from_document(raw_lens)
         except TypeError as exc:
             raise Tenant01EvidenceError(
                 f"{card_id} 冻结账号编辑视角结构无效。"
