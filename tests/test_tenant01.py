@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, replace
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
 from typing import cast
@@ -120,9 +122,11 @@ from src.shared.types import (
 )
 from src.tool import run_tenant01_golden_suite as tenant01_runner
 from src.tool.run_tenant01_golden_suite import (
+    _assert_final_suite_session_lease,
     _assert_formal_publication_summary,
     _assert_p2_product_ready,
     _FormalPublicationSummary,
+    _Journey,
 )
 from src.tool.tenant01_evidence import (
     TENANT01_CARD_IDS,
@@ -829,6 +833,60 @@ def _tenant01_finalize_args(root: Path, implementation_sha: str) -> argparse.Nam
         image_digest="sha256:" + "b" * 64,
         source_manifest_digest="e" * 64,
     )
+
+
+def test_final_suite_session_must_outlive_the_complete_run(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    raw_token = f"tenant01-final-session-{uuid4()}"
+    token_digest = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    session_id = uuid4()
+    with (
+        psycopg.connect(migrator_database_url) as connection,
+        connection.cursor() as cursor,
+    ):
+        cursor.execute("SELECT tenant_id, id FROM users ORDER BY id LIMIT 1")
+        user = cursor.fetchone()
+        assert user is not None
+        tenant_id = UUID(str(user[0]))
+        user_id = UUID(str(user[1]))
+        cursor.execute(
+            """
+            INSERT INTO tenant_sessions
+                (id, tenant_id, user_id, audience, token_digest, expires_at)
+            VALUES (%s, %s, %s, 'tenant-user', %s, %s)
+            """,
+            (
+                session_id,
+                tenant_id,
+                user_id,
+                token_digest,
+                datetime.now(timezone.utc) + timedelta(minutes=5),
+            ),
+        )
+    journey = _Journey(tenant_id, raw_token, uuid4(), "LEASE-TEST")
+    try:
+        with pytest.raises(RuntimeError, match="fresh tenant-user session lease"):
+            _assert_final_suite_session_lease(app_database_url, journey)
+        with (
+            psycopg.connect(migrator_database_url) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute(
+                "UPDATE tenant_sessions SET expires_at = %s WHERE id = %s",
+                (
+                    datetime.now(timezone.utc) + timedelta(minutes=30),
+                    session_id,
+                ),
+            )
+        _assert_final_suite_session_lease(app_database_url, journey)
+    finally:
+        with (
+            psycopg.connect(migrator_database_url) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute("DELETE FROM tenant_sessions WHERE id = %s", (session_id,))
 
 
 def _write_tenant01_fixture_evidence(

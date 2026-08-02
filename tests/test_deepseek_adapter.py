@@ -1155,6 +1155,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
     assert "你不得返回或选择该字段" in prompt
     assert "primary_value 是本篇给受众的主要回报，不是 narrative_mode" in prompt
     assert "没有选题但要求生成”\n  通常选 brand_life_narrative" in prompt
+    assert "门店或本地服务中的可观察片段并要求回应时，选 local_response" in prompt
     FakeClient.responses = [
         _completion(
             {

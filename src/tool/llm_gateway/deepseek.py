@@ -1685,10 +1685,13 @@ class DeepSeekGenerator(ContentGenerator):
         actuality_note = (
             "这些原句由服务端另行展示。只写接在它们之后的创作表达，不复述、改写或解释原句。"
             "原句即使只是很短的条件或状态，也不能复制到 Writer 单元；直接给出回应，不再重述前提。"
-            "只把原句用于找到作品的具体张力。"
+            "只把原句用于找到作品的具体张力；原句没有提供的成因、对象状态与后续保持未知。"
             "建议只能是尚未发生、读者可自行选择的动作，不能承诺动作带来的身体、心理或现实结果。"
             if actuality_context
-            else "本篇没有需要 Writer 处理的现实原句。"
+            else (
+                "本篇没有现实原句。形成一般观察或条件建议，不用第一人称、品牌或账号的既成经历"
+                "模拟现实开头。"
+            )
         )
         dressing_note = (
             "这是一般穿衣选择，不是商品评价。只使用服装类别之间的组合、穿脱动作和层次关系来"
@@ -1700,10 +1703,16 @@ class DeepSeekGenerator(ContentGenerator):
         product_note = (
             "以下三点是编辑目标，不是成品句子。商品是什么只由服务端事实块说明；创作文字只"
             "负责把已确认差异转成受众的条件化选择。用“本次选择／你希望形成的观看重点”承担"
-            "判断，不给商品、任一选项或颜色补充气质、风格、适用性、优劣和效果。把这个选择角度"
-            "适用的前提自然融入正文，不能照抄计划或新增价格、库存、属性、性能、用途、"
+            "判断，只讨论整体已确认差异是否成为本次观看重点，不替任一颜色或选项命名气质、场景、"
+            "适用性、优劣和效果。把这个选择角度适用的前提自然融入正文，不能照抄计划或新增价格、库存、属性、性能、用途、"
             "体验和设计动机。"
             if product_goals
+            else ""
+        )
+        local_response_note = (
+            "本篇回应本地观察：只给服务原则和未执行的条件建议；不拟写顾客、员工或账号的对白，"
+            "不补充来店目的、现场动作、身份、原因或结果。"
+            if contract.primary_product == "local_response"
             else ""
         )
         return f"""完成一篇可以直接交付给用户的作品。事实、来源、账号权限、平台、系列前情、
@@ -1717,6 +1726,7 @@ class DeepSeekGenerator(ContentGenerator):
 现实原句（只读）：{json.dumps(actuality_context, ensure_ascii=False)}
 {actuality_note}
 {dressing_note}
+{local_response_note}
 
 商品编辑目标：{json.dumps(product_goals, ensure_ascii=False)}
 {product_note}
@@ -3866,6 +3876,8 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   general_observation／actuality_reflection／hypothesis／dramatization。只有商品请求选
   product_truth 或其他确有商品前提的商品价值；开放题材、生活种子和“没有选题但要求生成”
   通常选 brand_life_narrative，由系统自主形成安全主线和账号观看回报。
+- 用户明确提供门店或本地服务中的可观察片段并要求回应时，选 local_response；只把服务端候选中的
+  现实原句标为 observable_actuality，不把人物目的、对白、动作或结果补进计划。
 - 商品硬事实只来自当前可用商品；没有资料不猜。
 - user_premises 必须包含本轮用户消息且只能逐字复制用户消息；普通聊天不带入。
 - tone_ids 只能从 {json.dumps(request.allowed_tone_ids, ensure_ascii=False)} 选择，至少一个。

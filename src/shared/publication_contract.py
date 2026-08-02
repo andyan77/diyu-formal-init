@@ -19,8 +19,8 @@ IntakeSpanRole: TypeAlias = Literal[
 
 NEGATIVE_SAFETY_RULES: dict[str, str] = {
     "no_user_actuality_rewrite": (
-        "不新增、改写或补全用户现实事实，也不替现实人物、对象或事件判定"
-        "未提供的原因、内部状态、变化或结果"
+        "不新增、改写或补全用户现实事实、未提供的真人或品牌经历及具体事件，也不替现实人物、"
+        "对象或事件判定未提供的原因、内部状态、变化或结果"
     ),
     "no_product_fact_or_effect": "不新增商品硬事实或具体商品效果",
     "no_method_as_fact": "不把品牌约束、方法或机构信息升级为现实事实",
@@ -34,9 +34,9 @@ NEGATIVE_SAFETY_RULE_IDS = tuple(NEGATIVE_SAFETY_RULES)
 def negative_safety_contract_text() -> str:
     """Render the single shared negative contract for Writer consumers."""
 
-    return "；".join(
-        NEGATIVE_SAFETY_RULES[rule_id]
-        for rule_id in NEGATIVE_SAFETY_RULE_IDS
+    return "\n".join(
+        f"{index}. {NEGATIVE_SAFETY_RULES[rule_id]}"
+        for index, rule_id in enumerate(NEGATIVE_SAFETY_RULE_IDS, start=1)
     )
 
 

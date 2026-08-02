@@ -216,6 +216,8 @@ def assert_writer_visible_text_safe(text: str) -> None:
 
     if any(character in _BIDIRECTIONAL_CONTROL_CHARACTERS for character in text):
         raise ValueError("writer visible text contains bidirectional control characters")
+    if any(pair in text for pair in ('""', "''", "“”", "‘’")):
+        raise ValueError("writer visible text contains an empty quotation wrapper")
     for line in text.splitlines():
         candidate = _security_match_view(line).lstrip()
         structural_candidate = _without_leading_structural_decoration(candidate)

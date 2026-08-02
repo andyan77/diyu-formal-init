@@ -46,7 +46,10 @@ from src.shared.types import (
     ProductFact,
     VideoProductionBundle,
 )
-from src.shared.visible_structure import v3_compiler_visible_heading
+from src.shared.visible_structure import (
+    assert_writer_visible_text_safe,
+    v3_compiler_visible_heading,
+)
 
 DeliveryMedia: TypeAlias = Literal["video", "graphic"]
 
@@ -248,11 +251,18 @@ def suppress_exact_writer_fact_duplicates(
         if normalized_bytes == raw_bytes:
             deduplicated_units.append(unit)
             continue
+        normalized_text = normalized_bytes.decode("utf-8")
+        try:
+            assert_writer_visible_text_safe(normalized_text)
+        except ValueError as exc:
+            raise GenerationFailed(
+                "Writer 逐字事实副本去重后留下了无效可见结构"
+            ) from exc
         changed = True
         deduplicated_units.append(
             replace(
                 unit,
-                text=normalized_bytes.decode("utf-8"),
+                text=normalized_text,
             )
         )
     if not changed:

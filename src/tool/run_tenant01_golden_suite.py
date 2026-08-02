@@ -60,6 +60,7 @@ _SUITE_VERSION = TENANT01_SUITE_VERSION
 _MODEL = TENANT01_PROVIDER_MODEL
 _FINAL_OUTPUT_FILES = ("human-review.json", "manifest.json", "SHA256SUMS")
 _FAILURE_MARKER_FILES = ("suite-failure.json", "human-review-failure.json")
+_MINIMUM_FINAL_SUITE_SESSION_LEASE_SECONDS = 15 * 60
 
 
 def _canonical_digest(value: object) -> str:
@@ -154,6 +155,35 @@ class _Journey:
             session_token=session_token,
             publishing_identity_id=UUID(str(document["publishing_identity_id"])),
             p2_sku=p2_sku,
+        )
+
+
+def _assert_final_suite_session_lease(
+    database_url: str,
+    journey: _Journey,
+) -> None:
+    token_digest = hashlib.sha256(journey.session_token.encode("utf-8")).hexdigest()
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT 1
+              FROM tenant_sessions
+             WHERE tenant_id = %s
+               AND token_digest = %s
+               AND audience = 'tenant-user'
+               AND revoked_at IS NULL
+               AND expires_at >= now() + make_interval(secs => %s)
+            """,
+            (
+                journey.tenant_id,
+                token_digest,
+                _MINIMUM_FINAL_SUITE_SESSION_LEASE_SECONDS,
+            ),
+        )
+        row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError(
+            "TENANT-01 final suite requires a fresh tenant-user session lease"
         )
 
 
@@ -669,6 +699,7 @@ def _generate(args: argparse.Namespace) -> None:
     database_url = os.environ.get("DIYU_APP_DATABASE_URL", "")
     if not database_url:
         raise RuntimeError("formal application database is unavailable")
+    _assert_final_suite_session_lease(database_url, journey)
     cards = _config_cards(Path(args.config).resolve(), p2_sku=journey.p2_sku)
     _preflight_p2_product(database_url, journey, cards)
     root.mkdir(mode=0o700, parents=True)

@@ -3238,6 +3238,7 @@ def test_actuality_writer_receives_one_frozen_fact_without_duplicate_instruction
     ) == 1
     assert "这些原句由服务端另行展示" in prompt
     assert "只把原句用于找到作品的具体张力" in prompt
+    assert "原句没有提供的成因、对象状态与后续保持未知" in prompt
     assert "注意力分配或可见选择" not in prompt
     assert "服务端事实绑定" not in prompt
     assert "帮我发一条" not in prompt
@@ -3304,7 +3305,8 @@ def test_product_writer_receives_semantic_plan_without_product_fact_literals() -
     assert "同一件商品的两种完整可见选择" in prompt
     assert "商品是什么只由服务端事实块说明" in prompt
     assert "用“本次选择／你希望形成的观看重点”承担" in prompt
-    assert "不给商品、任一选项或颜色补充气质、风格、适用性、优劣和效果" in prompt
+    assert "只讨论整体已确认差异是否成为本次观看重点" in prompt
+    assert "不替任一颜色或选项命名气质、场景" in prompt
     for private_literal in (
         product.sku,
         product.display_name,
@@ -3422,6 +3424,28 @@ def test_compiler_suppresses_complete_writer_unit_but_not_replayed_unit() -> Non
         _compile_input(request),
         replayed_kernel,
     ).unit("unit:body").text == fact
+
+
+def test_compiler_rechecks_visible_structure_after_exact_fact_suppression() -> None:
+    request = _p3_account_link_request()
+    assert request.narrative_frame is not None
+    fact = request.narrative_frame.user_facts[0].exact_text
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    wrapped_fact_kernel = replace(
+        kernel,
+        units=tuple(
+            replace(unit, text=f"“{fact}”这句话不应留下空引号。")
+            if unit.purpose == "body"
+            else unit
+            for unit in kernel.units
+        ),
+    )
+
+    with pytest.raises(GenerationFailed, match="留下了无效可见结构"):
+        suppress_exact_writer_fact_duplicates(
+            _compile_input(request),
+            wrapped_fact_kernel,
+        )
 
 
 def test_publication_writer_cannot_return_or_replace_a_frozen_fact_unit(
@@ -4127,6 +4151,8 @@ def test_explicit_local_response_does_not_receive_the_account_topic_domain() -> 
     assert "从穿衣编辑的位置重新看熟悉事物" in prompt
     assert "陪正在重新选择日常节奏的人看清取舍" in prompt
     assert "不硬插品牌名、商品或服饰" in prompt
+    assert "只给服务原则和未执行的条件建议" in prompt
+    assert "不拟写顾客、员工或账号的对白" in prompt
 
 
 def test_system_selected_account_topic_receives_the_frozen_topic_domain() -> None:
@@ -4165,6 +4191,7 @@ def test_system_selected_account_topic_receives_the_frozen_topic_domain() -> Non
     assert "穿衣选择、熟悉事物被重新看见的时刻" in prompt
     assert "自主选择一个具体生活题材" in prompt
     assert "topic_origin" not in prompt
+    assert "不用第一人称、品牌或账号的既成经历模拟现实开头" in prompt
 
 
 def _current_publication_packet() -> tuple[BrandContextPacketV2, str]:
