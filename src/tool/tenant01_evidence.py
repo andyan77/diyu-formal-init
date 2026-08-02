@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Final, cast
 from uuid import UUID
 
+from src.shared.account_editorial_lens import (
+    ACCOUNT_EDITORIAL_LENS_VERSION,
+    AccountEditorialLensV1,
+    account_editorial_lens_digest,
+)
 from src.shared.brand_publication import brand_context_packet_digest
 from src.shared.narrative import visible_digest
 
@@ -194,6 +199,33 @@ def _artifact_binding(
         segments=packet_segments,
     ):
         raise Tenant01EvidenceError(f"{card_id} 品牌上下文摘要无法复算。")
+    if card_id in {
+        "coffee",
+        "family_relationship",
+        "daily_complaint",
+        "P4_series1",
+        "series2",
+        "series3",
+    }:
+        raw_lens = snapshot.get("account_editorial_lens")
+        lens_digest = snapshot.get("account_editorial_lens_digest")
+        if not isinstance(raw_lens, dict) or not _sha256_text(lens_digest):
+            raise Tenant01EvidenceError(f"{card_id} 缺少冻结账号编辑视角。")
+        try:
+            lens = AccountEditorialLensV1(**raw_lens)
+        except TypeError as exc:
+            raise Tenant01EvidenceError(
+                f"{card_id} 冻结账号编辑视角结构无效。"
+            ) from exc
+        if (
+            lens.contract_version != ACCOUNT_EDITORIAL_LENS_VERSION
+            or lens.publication_projection_id != projection_id
+            or lens.publication_projection_version != projection_version
+            or lens.publication_projection_digest != projection_digest
+            or lens.brand_context_packet_digest != packet_digest
+            or account_editorial_lens_digest(lens) != lens_digest
+        ):
+            raise Tenant01EvidenceError(f"{card_id} 账号编辑视角来源或摘要无效。")
     return (
         document,
         persistence,

@@ -7,6 +7,11 @@ from functools import lru_cache
 from pathlib import Path
 
 from src.brain.creation_intent_gate import CreationCommitment, commitment_document
+from src.shared.account_editorial_lens import (
+    account_editorial_lens_digest,
+    account_editorial_lens_document,
+    build_account_editorial_lens,
+)
 from src.shared.brand_publication import brand_context_packet_document
 from src.shared.creative_plan import CreativePlanV2, creative_plan_document
 from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
@@ -488,6 +493,15 @@ def snapshot_document(
         products,
         allowed_fact_ids=(narrative_frame.allowed_product_fact_ids if narrative_frame is not None else None),
     )
+    account_editorial_lens = (
+        build_account_editorial_lens(
+            primary_product=creative_plan.primary_value,
+            account_expression=control.account_expression,
+            brand_context_packet=brand_context_packet,
+        )
+        if creative_plan is not None
+        else None
+    )
     return {
         "schema": SNAPSHOT_SCHEMA,
         "catalog_version": control.catalog_version,
@@ -535,6 +549,16 @@ def snapshot_document(
         ),
         "account_expression_profile_version": (
             control.account_expression.version if control.account_expression else None
+        ),
+        "account_editorial_lens": (
+            account_editorial_lens_document(account_editorial_lens)
+            if account_editorial_lens is not None
+            else None
+        ),
+        "account_editorial_lens_digest": (
+            account_editorial_lens_digest(account_editorial_lens)
+            if account_editorial_lens is not None
+            else None
         ),
         "business_data_kind": business_data_kind,
         "brand_reference_context": list(brand_reference_context),

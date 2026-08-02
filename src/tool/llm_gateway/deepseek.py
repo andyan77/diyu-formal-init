@@ -13,6 +13,10 @@ import httpx
 
 from src.ports.content_generator import ContentGenerator
 from src.ports.reviewer_provider import ReviewerProvider
+from src.shared.account_editorial_lens import (
+    account_editorial_lens_document,
+    build_account_editorial_lens,
+)
 from src.shared.clause_license import (
     CLAUSE_LICENSE_REVIEW_VERSION,
     CLAUSE_LICENSE_TOOL_NAME,
@@ -118,6 +122,7 @@ from src.shared.review_evidence import (
 )
 from src.shared.service_status import ProviderState, ProviderStatusTracker
 from src.shared.types import (
+    BrandContextPacketV2,
     ContentProduct,
     ContentProductionBundle,
     ContentSemanticContract,
@@ -1664,7 +1669,9 @@ class DeepSeekGenerator(ContentGenerator):
         )
         blocks_projection: object = [] if server_selected_product_facts else immutable_fact_blocks_document(fact_blocks)
         account_link_projection: object = (
-            self._deidentified_account_link(request) if request.primary_product == "brand_life_narrative" else None
+            self._deidentified_account_link(request)
+            if request.primary_product in {"brand_life_narrative", "local_response"}
+            else None
         )
         account_link_rule = (
             """本篇必须让受众从作品本身读出当前账号为什么会说这段话。标题、正文、媒体组织
@@ -1672,10 +1679,20 @@ class DeepSeekGenerator(ContentGenerator):
 位置与受众关系，不能只在元数据中存在。把它们转化为本篇的观察方式、选择取舍或给受众的
 具体回报；不得逐字照抄画像标签，不得硬插商品、账号名或品牌名，也不得把表达位置写成
 真实职业履历、机构事实或已经发生的经历。"""
-            if request.primary_product == "brand_life_narrative"
+            if request.primary_product in {"brand_life_narrative", "local_response"}
             else ""
         )
         brand_context_projection = {
+            "contract_version": "writer-publication-brief-v1",
+            "publication_projection": (
+                {
+                    "id": request.brand.context_packet.publication_projection_id,
+                    "version": request.brand.context_packet.publication_projection_version,
+                    "digest": request.brand.context_packet.publication_projection_digest,
+                }
+                if isinstance(request.brand.context_packet, BrandContextPacketV2)
+                else None
+            ),
             "expression_constraints": list(
                 request.brand.expression_constraint_context
             ),
@@ -2407,30 +2424,50 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
     @staticmethod
     def _deidentified_writer_controls(request: GenerationInput) -> str:
         expression = request.account_expression
+        relationship_product = (
+            build_account_editorial_lens(
+                primary_product=request.primary_product,
+                account_expression=request.account_expression,
+                brand_context_packet=request.brand.context_packet,
+            )
+            is not None
+        )
         expression_parts = (
-            (expression.authority_boundary, expression.audience_relationship)
-            if expression is not None
-            and request.primary_product == "brand_life_narrative"
+            ()
+            if relationship_product
             else (
-                (
-                    expression.identity_position,
-                    expression.authority_boundary,
-                    expression.audience_relationship,
-                    expression.content_territories,
-                    expression.default_production_conditions,
-                )
+                (expression.authority_boundary, expression.audience_relationship)
                 if expression is not None
+                and request.primary_product == "brand_life_narrative"
                 else (
-                    request.brand.content_role_name,
-                    request.brand.content_role_boundary,
-                    request.brand.audience_description,
+                    (
+                        expression.identity_position,
+                        expression.authority_boundary,
+                        expression.audience_relationship,
+                        expression.content_territories,
+                        expression.default_production_conditions,
+                    )
+                    if expression is not None
+                    else (
+                        request.brand.content_role_name,
+                        request.brand.content_role_boundary,
+                        request.brand.audience_description,
+                    )
                 )
             )
         )
         parts = [
             *expression_parts,
-            *request.brand.expression_constraint_context,
-            *request.brand.creative_method_context,
+            *(
+                ()
+                if relationship_product
+                else request.brand.expression_constraint_context
+            ),
+            *(
+                ()
+                if relationship_product
+                else request.brand.creative_method_context
+            ),
             *(
                 tuple(selection.applied_label for selection in request.creative_direction.selections)
                 if request.creative_direction is not None
@@ -2453,6 +2490,8 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         ):
             if identifier:
                 value = value.replace(identifier, "当前表达方")
+        if relationship_product:
+            return value[:600] or "使用已冻结账号编辑视角；不粘贴画像或发布投影原句"
         return value[:600] or "自然、清楚、不过度下结论"
 
     @staticmethod
@@ -2504,6 +2543,14 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         request: GenerationInput,
     ) -> dict[str, object]:
         """Project one trusted editorial lens without tenant/account identifiers."""
+
+        lens = build_account_editorial_lens(
+            primary_product=request.primary_product,
+            account_expression=request.account_expression,
+            brand_context_packet=request.brand.context_packet,
+        )
+        if lens is not None:
+            return account_editorial_lens_document(lens)
 
         expression = request.account_expression
         values = {

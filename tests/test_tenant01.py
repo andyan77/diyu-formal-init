@@ -17,6 +17,12 @@ from src.infrastructure.tenant_lifecycle import (
 )
 from src.infrastructure.tenant_source_importer import TenantSourceImporter
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
+from src.shared.account_editorial_lens import (
+    ACCOUNT_EDITORIAL_LENS_VERSION,
+    account_editorial_lens_digest,
+    account_editorial_lens_document,
+    build_account_editorial_lens,
+)
 from src.shared.brand_publication import brand_context_packet_digest
 from src.shared.content_snapshot import visible_context_basis
 from src.shared.errors import DomainError
@@ -26,8 +32,11 @@ from src.shared.tenant_brand_sources import (
     parse_source_document,
 )
 from src.shared.types import (
+    AccountExpression,
     BrandContext,
     BrandContextPacketV2,
+    BrandContextSegment,
+    ContentProduct,
     ProductFact,
     TenantManagementScope,
     TrustedScope,
@@ -147,6 +156,48 @@ def _tenant01_evidence_inputs(
                 "source_digest": sha256(f"{card_id} 不可变来源".encode()).hexdigest(),
             }
         ]
+        packet_digest = brand_context_packet_digest(
+            projection_id=projection_id,
+            projection_version=1,
+            projection_digest=projection_digest,
+            segments=packet_segments,
+        )
+        lens_product: ContentProduct | None = None
+        if card_id in {"coffee", "family_relationship", "daily_complaint", "series2", "series3"}:
+            lens_product = "brand_life_narrative"
+        elif card_id == "P4_series1":
+            lens_product = "local_response"
+        lens_document: dict[str, object] | None = None
+        lens_digest: str | None = None
+        if lens_product is not None:
+            segment = BrandContextSegment(
+                **packet_segments[0],
+            )
+            packet = BrandContextPacketV2(
+                "brand-context-packet-v2",
+                packet_digest,
+                projection_id,
+                1,
+                projection_digest,
+                (segment,),
+            )
+            lens = build_account_editorial_lens(
+                primary_product=lens_product,
+                account_expression=AccountExpression(
+                    UUID("44444444-4444-4444-8444-444444444444"),
+                    2,
+                    "测试表达身份",
+                    "不补造事实",
+                    "尊重受众选择",
+                    "本次题材",
+                    "低成本单人制作",
+                    False,
+                ),
+                brand_context_packet=packet,
+            )
+            assert lens is not None
+            lens_document = account_editorial_lens_document(lens)
+            lens_digest = account_editorial_lens_digest(lens)
         _write_private_json(
             root / artifact_file,
             {
@@ -163,17 +214,14 @@ def _tenant01_evidence_inputs(
                 "formal_snapshot": {
                     "brand_context_packet": {
                         "packet_version": "brand-context-packet-v2",
-                        "packet_digest": brand_context_packet_digest(
-                            projection_id=projection_id,
-                            projection_version=1,
-                            projection_digest=projection_digest,
-                            segments=packet_segments,
-                        ),
+                        "packet_digest": packet_digest,
                         "publication_projection_id": projection_id,
                         "publication_projection_version": 1,
                         "publication_projection_digest": projection_digest,
                         "segments": packet_segments,
-                    }
+                    },
+                    "account_editorial_lens": lens_document,
+                    "account_editorial_lens_digest": lens_digest,
                 },
             },
         )
@@ -261,6 +309,58 @@ def test_tenant01_freezes_twenty_one_sources_and_fourteen_products(tmp_path: Pat
         for document in documents
         for segment in document.segments
     )
+
+
+def test_account_editorial_lens_freezes_profile_and_publication_without_copying_prose() -> None:
+    segment_text = "先回应具体处境，再给出克制而明确的判断。"
+    segment = BrandContextSegment(
+        segment_id="11111111-1111-4111-8111-111111111111",
+        source_document_id="22222222-2222-4222-8222-222222222222",
+        source_document_version_id="33333333-3333-4333-8333-333333333333",
+        source_id="brand_source_segment:test",
+        source_version="V1",
+        semantic_kind="expression_constraint",
+        evidence_level="confirmed_publication",
+        visibility_scope="brand_all",
+        digest=sha256(segment_text.encode()).hexdigest(),
+        exact_text=segment_text,
+        source_digest="a" * 64,
+    )
+    packet = BrandContextPacketV2(
+        "brand-context-packet-v2",
+        "b" * 64,
+        "44444444-4444-4444-8444-444444444444",
+        3,
+        "c" * 64,
+        (segment,),
+    )
+    expression = AccountExpression(
+        UUID("55555555-5555-4555-8555-555555555555"),
+        7,
+        "不应复制的身份原句",
+        "不应复制的权威边界",
+        "不应复制的受众原句",
+        "不应复制的内容领地",
+        "不应复制的制作条件",
+        False,
+    )
+
+    lens = build_account_editorial_lens(
+        primary_product="brand_life_narrative",
+        account_expression=expression,
+        brand_context_packet=packet,
+    )
+
+    assert lens is not None
+    document = account_editorial_lens_document(lens)
+    assert document["contract_version"] == ACCOUNT_EDITORIAL_LENS_VERSION
+    assert document["source_profile_version"] == 7
+    assert document["publication_projection_version"] == 3
+    assert len(account_editorial_lens_digest(lens)) == 64
+    serialized = json.dumps(document, ensure_ascii=False)
+    assert "不应复制" not in serialized
+    assert "题材没有商品、服饰或门店时" in serialized
+    assert "不能无损替换到另一件生活琐事" in serialized
 
 
 def test_tenant01_content_product_taxonomy_is_not_an_insertable_brand_fact() -> None:
@@ -1295,6 +1395,31 @@ def test_tenant01_evidence_rejects_review_not_grounded_in_artifact(tmp_path: Pat
             source_manifest_digest="e" * 64,
             artifacts=artifacts,
             reviews=(invalid, *reviews[1:]),
+            p5_preflight_file="p5-no-media.json",
+            dm01_file="dm01.json",
+        )
+
+
+def test_tenant01_evidence_rejects_missing_editorial_lens(tmp_path: Path) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, reviews = _tenant01_evidence_inputs(tmp_path)
+    coffee = next(item for item in artifacts if item.card_id == "coffee")
+    path = tmp_path / coffee.artifact_file
+    document = json.loads(path.read_text(encoding="utf-8"))
+    snapshot = document["formal_snapshot"]
+    del snapshot["account_editorial_lens"]
+    del snapshot["account_editorial_lens_digest"]
+    _write_private_json(path, document)
+
+    with pytest.raises(Tenant01EvidenceError, match="缺少冻结账号编辑视角"):
+        write_tenant01_evidence(
+            tmp_path,
+            implementation_sha="a" * 40,
+            schema_revision="20260813_40",
+            image_digest="sha256:" + "b" * 64,
+            source_manifest_digest="e" * 64,
+            artifacts=artifacts,
+            reviews=reviews,
             p5_preflight_file="p5-no-media.json",
             dm01_file="dm01.json",
         )

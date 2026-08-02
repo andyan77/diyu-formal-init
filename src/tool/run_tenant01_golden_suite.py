@@ -249,6 +249,8 @@ def _artifact(
             key: snapshot.get(key)
             for key in (
                 "brand_context_packet",
+                "account_editorial_lens",
+                "account_editorial_lens_digest",
                 "profile_version",
                 "content_role",
                 "publishing_target",

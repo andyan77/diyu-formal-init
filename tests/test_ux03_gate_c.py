@@ -50,6 +50,7 @@ from src.infrastructure.seed_demo import (
     USER_ID,
 )
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
+from src.shared.brand_publication import brand_context_packet_digest
 from src.shared.content_snapshot import (
     frozen_media_contract,
     frozen_product_value_contract,
@@ -101,6 +102,8 @@ from src.shared.types import (
     AccountExpression,
     BoundProductMedia,
     BrandContext,
+    BrandContextPacketV2,
+    BrandContextSegment,
     ContentControlContext,
     ConversationDecision,
     ConversationInput,
@@ -3010,6 +3013,113 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
         "不催人下结论，先看熟悉感被意外打断后，人会怎样重新注意日常。"
     )
     assert compiled.semantic_contract.brand_account_link in compiled.body
+
+
+def test_p3_writer_uses_versioned_editorial_lens_without_profile_copy_or_topic_switch() -> None:
+    base = _p3_account_link_request()
+    constraint = "先回应本次具体处境，再给出克制而明确的判断。"
+    method = "围绕本次输入中一个可感知的变化展开，不复述资料标签。"
+    segments = tuple(
+        BrandContextSegment(
+            segment_id=f"91000000-0000-4000-8000-00000000000{index}",
+            source_document_id=f"92000000-0000-4000-8000-00000000000{index}",
+            source_document_version_id=f"93000000-0000-4000-8000-00000000000{index}",
+            source_id=f"brand_source_segment:{index}",
+            source_version="V2",
+            semantic_kind=kind,
+            evidence_level="confirmed_publication",
+            visibility_scope="brand_all",
+            digest=hashlib.sha256(text.encode()).hexdigest(),
+            exact_text=text,
+            source_digest=f"{index}" * 64,
+        )
+        for index, (kind, text) in enumerate(
+            (
+                ("expression_constraint", constraint),
+                ("creative_method", method),
+            ),
+            start=1,
+        )
+    )
+    projection_id = "94000000-0000-4000-8000-000000000001"
+    projection_digest = "a" * 64
+    packet_documents = [
+        {
+            "segment_id": segment.segment_id,
+            "source_document_id": segment.source_document_id,
+            "source_document_version_id": segment.source_document_version_id,
+            "source_id": segment.source_id,
+            "source_version": segment.source_version,
+            "semantic_kind": segment.semantic_kind,
+            "evidence_level": segment.evidence_level,
+            "visibility_scope": segment.visibility_scope,
+            "digest": segment.digest,
+            "exact_text": segment.exact_text,
+            "source_digest": segment.source_digest,
+        }
+        for segment in segments
+    ]
+    packet = BrandContextPacketV2(
+        "brand-context-packet-v2",
+        brand_context_packet_digest(
+            projection_id=projection_id,
+            projection_version=2,
+            projection_digest=projection_digest,
+            segments=packet_documents,
+        ),
+        projection_id,
+        2,
+        projection_digest,
+        segments,
+    )
+    request = replace(
+        base,
+        brand=replace(
+            base.brand,
+            expression_constraint_context=(constraint,),
+            creative_method_context=(method,),
+            context_packet=packet,
+        ),
+    )
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, kernel, {})
+
+    assert "account-editorial-lens-v1" in prompt
+    assert "题材没有商品、服饰或门店时" in prompt
+    assert "不能无损替换到另一件生活琐事" in prompt
+    assert "不应复制" not in prompt
+    assert "去标识化表达控制：使用已冻结账号编辑视角" in prompt
+    assert prompt.count(constraint) == 1
+    assert prompt.count(method) == 1
+
+    snapshot = snapshot_document(
+        ContentControlContext(
+            catalog_version=None,
+            direction=None,
+            account_expression=request.account_expression,
+            materials=(),
+            preference_mode="absent",
+            preference_version=None,
+            content_role=request.brand.content_role_name,
+            content_role_boundary=request.brand.content_role_boundary,
+            speaker_kind=request.brand.speaker_kind,
+        ),
+        request.brand.content_role_name,
+        narrative_frame=request.narrative_frame,
+        user_premise=request.weak_seed,
+        creative_plan=request.creative_plan,
+        brand_context_packet=packet,
+    )
+    assert snapshot["account_editorial_lens_digest"]
+    frozen_lens = snapshot["account_editorial_lens"]
+    assert isinstance(frozen_lens, dict)
+    assert frozen_lens["source_profile_id"] == str(request.account_expression.profile_id)
+    assert frozen_lens["publication_projection_id"] == projection_id
 
 
 def _p3_account_link_request() -> GenerationInput:
