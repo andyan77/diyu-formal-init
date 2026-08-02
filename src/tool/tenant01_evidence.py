@@ -30,7 +30,7 @@ from src.shared.delivery_compiler import (
     compile_delivery,
 )
 from src.shared.errors import DomainError, GenerationFailed
-from src.shared.factual_basis import ImmutableFactBlock
+from src.shared.factual_basis import ImmutableFactBlock, build_product_fact_packet
 from src.shared.narrative import (
     frame_from_document,
     user_fact_candidates,
@@ -376,13 +376,19 @@ def _compile_bound_delivery(
         or envelope.platform_shape != expected_platform_shape
     ):
         raise Tenant01EvidenceError(f"{card_id} 冻结媒体合同没有绑定发布目标。")
-    trusted_fact_texts: list[tuple[str, str]] = []
+    trusted_fact_text_by_id = {
+        fact.fact_id: fact.canonical_text
+        for fact in build_product_fact_packet(products).facts
+        if fact.fact_id in publication.frozen_fact_refs
+    }
     for unit in kernel.units:
         if unit.track != "trusted_fact":
             continue
         if len(unit.fact_refs) != 1:
             raise Tenant01EvidenceError(f"{card_id} 冻结可信事实单元无效。")
-        trusted_fact_texts.append((unit.fact_refs[0], unit.text))
+        existing = trusted_fact_text_by_id.setdefault(unit.fact_refs[0], unit.text)
+        if existing != unit.text:
+            raise Tenant01EvidenceError(f"{card_id} 冻结可信事实正文漂移。")
     try:
         return compile_delivery(
             DeliveryCompileInput(
@@ -394,7 +400,7 @@ def _compile_bound_delivery(
                 ),
                 allowed_resource_ids=envelope.resource_ids,
                 immutable_fact_blocks=blocks,
-                trusted_fact_texts=tuple(trusted_fact_texts),
+                trusted_fact_texts=tuple(sorted(trusted_fact_text_by_id.items())),
                 media_capability_envelope=envelope,
                 media_program=media_program,
                 product_value_contract=product_value,

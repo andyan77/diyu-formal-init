@@ -132,6 +132,7 @@ from src.tool.tenant01_evidence import (
     Tenant01ArtifactInput,
     Tenant01EvidenceError,
     Tenant01HumanReview,
+    compile_tenant01_snapshot_delivery,
     sha256_file,
     write_tenant01_evidence,
 )
@@ -2070,6 +2071,50 @@ def test_tenant01_evidence_binds_artifacts_reviews_and_persistence(tmp_path: Pat
     assert "overall_average" not in human_review
     assert all("average_score" not in record for record in human_review["reviews"])
     assert all(not path.stat().st_mode & 0o077 for path in tmp_path.iterdir())
+
+
+def test_tenant01_snapshot_recompile_keeps_unselected_product_facts_in_registry(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, _ = _tenant01_evidence_inputs(tmp_path)
+    artifact = next(item for item in artifacts if item.card_id == "P2")
+    document = json.loads(
+        (tmp_path / artifact.artifact_file).read_text(encoding="utf-8")
+    )
+    snapshot = cast(dict[str, object], document["formal_snapshot"])
+    raw_kernel = cast(dict[str, object], snapshot["creative_kernel_v2"])
+    units = cast(list[dict[str, object]], raw_kernel["units"])
+    dropped = next(unit for unit in units if unit["track"] == "trusted_fact")
+    dropped_ref = cast(list[str], dropped["fact_refs"])[0]
+    dropped_text = str(dropped["text"])
+    raw_kernel["units"] = [unit for unit in units if unit is not dropped]
+    blocks = cast(
+        list[dict[str, object]], snapshot["immutable_product_fact_blocks"]
+    )
+    dropped_block_id = next(
+        str(block["fact_block_id"])
+        for block in blocks
+        if block["fact_id"] == dropped_ref
+    )
+    raw_kernel["selected_fact_block_ids"] = [
+        value
+        for value in cast(list[str], raw_kernel["selected_fact_block_ids"])
+        if value != dropped_block_id
+    ]
+    kernel = kernel_from_document(raw_kernel)
+    snapshot["expression_plan_digest"] = kernel_digest(kernel)
+    snapshot["reviewed_kernel_digest"] = kernel_digest(kernel)
+    snapshot["reviewed_creative_digest"] = creative_units_digest(kernel)
+
+    publication = cast(dict[str, object], snapshot["publication_contract"])
+    assert dropped_ref in cast(list[str], publication["frozen_fact_refs"])
+    assert all(
+        dropped_ref not in cast(list[str], unit["fact_refs"])
+        for unit in cast(list[dict[str, object]], raw_kernel["units"])
+    )
+    compiled = compile_tenant01_snapshot_delivery(snapshot, card_id="P2")
+    assert dropped_text not in compiled.body
 
 
 @pytest.mark.parametrize("field", ("artifact_sha256", "visible_digest"))
