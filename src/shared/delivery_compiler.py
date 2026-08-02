@@ -799,6 +799,15 @@ def _graphic_media_program_text(
             "只使用本次冻结的两份登记商品素材与抽象排版；主视觉始终先出现、居中且较大，"
             "辅助视觉随后出现、侧置且较小，不交换角色，不增加其他实物。",
         )
+    if (
+        program.program_id == "graphic_observation_progression_v1"
+        and program.series_position == 1
+    ):
+        return (
+            "首图用标题和一条起始线建立本系列的第一个观察，不预告尚未形成的后续内容。",
+            "第 1 页交代本篇具体处境；中间页依次展开本篇判断和可选动作；末页留下下一篇可以继续回应的问题。",
+            "用文字层级、单一色块、线条和留白区分处境、判断与动作；不要求现实人物、商品、照片、家具、场地或道具。",
+        )
     by_program: dict[str, tuple[str, str, str]] = {
         "graphic_fact_guided_v1": (
             "首图用标题与两块克制色块建立“已知信息／选择判断”的阅读入口。",

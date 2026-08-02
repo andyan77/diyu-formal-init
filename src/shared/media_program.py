@@ -554,7 +554,7 @@ def select_media_program(
         program_id = "graphic_choice_contrast_v1"
     else:
         program_id = "graphic_observation_progression_v1"
-        if primary_product == "brand_life_narrative":
+        if primary_product == "brand_life_narrative" and series_position is None:
             optional_suggestion = "optional-current-subject-capture-v1"
     if program_id not in envelope.allowed_program_ids:
         raise GenerationFailed("当前媒体能力不能执行服务端选择的成品程序")

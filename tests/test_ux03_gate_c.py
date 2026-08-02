@@ -1984,6 +1984,20 @@ def test_series_positions_receive_distinct_closed_media_programs() -> None:
         platform_shape="小红书图文完整成品",
         media_format="graphic",
     )
+    standalone = select_media_program(
+        primary_product="brand_life_narrative",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=None,
+        fact_count=0,
+    )
+    series1 = select_media_program(
+        primary_product="brand_life_narrative",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=1,
+        fact_count=0,
+    )
     series2 = select_media_program(
         primary_product="brand_life_narrative",
         envelope=envelope,
@@ -1999,8 +2013,17 @@ def test_series_positions_receive_distinct_closed_media_programs() -> None:
         fact_count=0,
     )
 
+    assert standalone.program_id == "graphic_observation_progression_v1"
+    assert standalone.optional_capture_suggestion_id == "optional-current-subject-capture-v1"
+    assert series1.program_id == "graphic_observation_progression_v1"
+    assert series1.optional_capture_suggestion_id is None
     assert series2.program_id == "graphic_series_response_v1"
     assert series3.program_id == "graphic_series_choice_v1"
+    request1 = replace(
+        _generation_input(series_context=replace(_series_context(), target_position=1)),
+        media_capability_envelope=envelope,
+        media_program=series1,
+    )
     request2 = replace(
         _generation_input(series_context=replace(_series_context(), target_position=2)),
         media_capability_envelope=envelope,
@@ -2010,6 +2033,10 @@ def test_series_positions_receive_distinct_closed_media_programs() -> None:
         _generation_input(series_context=_series_context()),
         media_capability_envelope=envelope,
         media_program=series3,
+    )
+    compiled1 = compile_delivery(
+        _compile_input(request1),
+        cast(Any, _filled_kernel(request1)),
     )
     compiled2 = compile_delivery(
         _compile_input(request2),
@@ -2022,6 +2049,10 @@ def test_series_positions_receive_distinct_closed_media_programs() -> None:
     assert isinstance(compiled2.production, GraphicProductionBundle)
     assert isinstance(compiled3.production, GraphicProductionBundle)
     assert compiled2.production.hero_image != compiled3.production.hero_image
+    assert "本系列的第一个观察" in compiled1.production.hero_image
+    assert "下一篇可以继续回应的问题" in compiled1.production.image_sequence
+    assert compiled1.production.optional_capture_suggestion is None
+    assert compiled1.production.image_sequence != compiled2.production.image_sequence
     assert compiled2.production.image_sequence != compiled3.production.image_sequence
 
 
