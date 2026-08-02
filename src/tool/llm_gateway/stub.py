@@ -265,6 +265,8 @@ class DeterministicContentGenerator(ContentGenerator):
             release_caption = subtitles + _control_sections(request)
             title = _outline(request.primary_product)
         else:
+            if request.primary_product == "dressing_decision":
+                guide = _deterministic_p1_writer_guide(request, guide)
             if request.primary_product == "visual_styling_story" and any(
                 phrase in request.weak_seed for phrase in ("无口播", "无对白", "无解说", "不讲")
             ):
@@ -663,6 +665,37 @@ def _control_sections(request: GenerationInput) -> str:
     if request.reference_materials:
         parts.append("\n\n本次参考：" + "、".join(item.title for item in request.reference_materials))
     return "".join(parts)
+
+
+def _deterministic_p1_writer_guide(
+    request: GenerationInput,
+    base_guide: str,
+) -> str:
+    """Project test inputs through the P1 Writer-owned, non-bearing guide.
+
+    The real P1 choice, boundary, action and release caption remain owned by the
+    server-bearing contract.  This offline double only makes frozen controls and
+    a de-identified input emphasis observable to API and history regressions.
+    """
+    if any(word in request.weak_seed for word in ("雨", "骑车", "湿")):
+        input_emphasis = "本次先观察移动和天气条件，再决定哪些部分需要调整。"
+    else:
+        input_emphasis = "本次先观察场合切换和实际动作，再决定哪些部分需要调整。"
+
+    parts = [base_guide, input_emphasis]
+    direction = request.creative_direction
+    if direction is not None:
+        applied = "、".join(selection.applied_label for selection in direction.selections)
+        controls = "、".join(value for value in (applied, direction.custom_text) if value)
+        if controls:
+            parts.append("本次表达会采用" + controls + "。")
+    if request.account_expression is not None:
+        parts.append("这次从这个账号一贯的表达位置展开：" + request.account_expression.identity_position)
+    if request.reference_materials:
+        parts.append("本次只参考已明确选择的" + "、".join(item.title for item in request.reference_materials) + "。")
+    if request.revision_instruction:
+        parts.append("这次修改只调整非承重表达，原选择依据和边界保持不变。")
+    return "\n\n".join(parts)
 
 
 def _ordinary_chat(text: str) -> bool:
