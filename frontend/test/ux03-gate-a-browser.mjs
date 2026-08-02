@@ -170,7 +170,14 @@ try {
       const location = await evaluate(
         "location.pathname + location.search"
       );
-      throw new Error(`等待超时：${label}；当前 ${location}；页面：${body}`);
+      const diagnostics = await evaluate(`JSON.stringify({
+        libraryItems: document.querySelectorAll('.library-list article').length,
+        productItems: document.querySelectorAll('.product-list article').length,
+        requestFailures: document.querySelectorAll('.request-failure').length
+      })`);
+      throw new Error(
+        `等待超时：${label}；当前 ${location}；计数：${diagnostics}；页面：${body}`
+      );
     };
     const navigate = async path => {
       await send(
@@ -380,12 +387,12 @@ try {
 
   await admin.click("nav button", "品牌资料库");
   await admin.waitFor(
-    "document.querySelectorAll('.library-list article').length===21 && document.querySelectorAll('.product-list article').length===14",
+    "document.querySelectorAll('.library-list:not(.publication-list) article').length===21 && document.querySelectorAll('.product-list article').length===14",
     "21 份源文档与 14 个候选商品正式回读"
   );
   ensure(
     await admin.evaluate(
-      "[...document.querySelectorAll('.library-list article')].every(node=>node.innerText.includes('源文档'))"
+      "[...document.querySelectorAll('.library-list:not(.publication-list) article')].every(node=>node.innerText.includes('源文档'))"
     ),
     "授权批次没有以可追溯源文档呈现"
   );
@@ -418,7 +425,7 @@ try {
   });
   await admin.click("nav button", "品牌资料库");
   await admin.waitFor(
-    "document.querySelectorAll('.library-list article').length===21",
+    "document.querySelectorAll('.library-list:not(.publication-list) article').length===21",
     "返回品牌资料库"
   );
   await admin.click("button", "新增资料");
