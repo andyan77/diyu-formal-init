@@ -197,6 +197,21 @@ class _FormalPublicationSummary:
     publication_roles: frozenset[str]
 
 
+@dataclass(frozen=True)
+class _FormalAccountSummary:
+    logical_account_id: UUID
+    account_name: str
+    business_data_kind: str
+    enabled: bool
+    control_organization_declared: bool
+    content_role: str
+    profile_id: UUID
+    profile_version: int
+    complete_segment_count: int
+    profile_confirmed_after_publication: bool
+    profile_confirmed_by_enabled_manager: bool
+
+
 def _assert_formal_publication_summary(
     summary: _FormalPublicationSummary,
 ) -> None:
@@ -284,6 +299,113 @@ def _formal_publication_summary(
     )
 
 
+def _assert_formal_account_summary(summary: _FormalAccountSummary) -> None:
+    if (
+        not summary.account_name.strip()
+        or summary.business_data_kind != "formal_business_data"
+        or not summary.enabled
+        or not summary.control_organization_declared
+        or not summary.content_role.strip()
+        or summary.profile_version < 1
+        or summary.complete_segment_count != 5
+        or not summary.profile_confirmed_after_publication
+        or not summary.profile_confirmed_by_enabled_manager
+    ):
+        raise RuntimeError(
+            "TENANT-01 final suite requires a current administrator-confirmed "
+            "formal logical-account profile"
+        )
+
+
+def _formal_account_summary(
+    database_url: str,
+    *,
+    tenant_id: UUID,
+    brand_id: UUID,
+    publishing_identity_id: UUID,
+) -> _FormalAccountSummary:
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT set_config('app.tenant_id', %s, true)",
+            (str(tenant_id),),
+        )
+        cursor.execute(
+            """
+            SELECT root.id, root.name, root.business_data_kind, root.enabled,
+                   (root.control_organization_id IS NOT NULL
+                    AND root.control_organization_source = 'declared'),
+                   role.name, profile.id, profile.version,
+                   (CASE WHEN btrim(profile.identity_position) <> '' THEN 1 ELSE 0 END
+                    + CASE WHEN btrim(profile.authority_boundary) <> '' THEN 1 ELSE 0 END
+                    + CASE WHEN btrim(profile.audience_relationship) <> '' THEN 1 ELSE 0 END
+                    + CASE WHEN btrim(profile.content_territories) <> '' THEN 1 ELSE 0 END
+                    + CASE WHEN btrim(profile.default_production_conditions) <> '' THEN 1 ELSE 0 END),
+                   profile.created_at >= projection.confirmed_at,
+                   EXISTS (
+                       SELECT 1
+                         FROM tenant_management_grants management_grant
+                         JOIN users manager
+                           ON manager.tenant_id = management_grant.tenant_id
+                          AND manager.id = management_grant.user_id
+                          AND manager.enabled = true
+                        WHERE management_grant.tenant_id = root.tenant_id
+                          AND management_grant.user_id = profile.created_by
+                          AND management_grant.enabled = true
+                   )
+              FROM content_accounts selected
+              JOIN content_accounts root
+                ON root.tenant_id = selected.tenant_id
+               AND root.id = COALESCE(selected.carrier_of_account_id, selected.id)
+              JOIN brands brand
+                ON brand.tenant_id = root.tenant_id
+               AND brand.id = root.brand_id
+              JOIN brand_publication_projections projection
+                ON projection.tenant_id = brand.tenant_id
+               AND projection.brand_id = brand.id
+               AND projection.id = brand.current_publication_projection_id
+               AND projection.status = 'confirmed'
+              JOIN account_expression_profile_versions profile
+                ON profile.tenant_id = root.tenant_id
+               AND profile.account_id = root.id
+               AND profile.id = root.current_expression_profile_id
+              JOIN account_content_roles account_role
+                ON account_role.tenant_id = root.tenant_id
+               AND account_role.account_id = root.id
+              JOIN content_roles role
+                ON role.tenant_id = account_role.tenant_id
+               AND role.id = account_role.content_role_id
+             WHERE selected.tenant_id = %s
+               AND selected.brand_id = %s
+               AND selected.id = %s
+               AND selected.enabled = true
+               AND selected.platform_enabled = true
+               AND selected.business_data_kind = 'formal_business_data'
+               AND root.brand_id = %s
+               AND root.carrier_of_account_id IS NULL
+            """,
+            (tenant_id, brand_id, publishing_identity_id, brand_id),
+        )
+        rows = cursor.fetchall()
+    if len(rows) != 1:
+        raise RuntimeError(
+            "TENANT-01 final suite requires one formal logical-account identity"
+        )
+    row = rows[0]
+    return _FormalAccountSummary(
+        logical_account_id=UUID(str(row[0])),
+        account_name=str(row[1]),
+        business_data_kind=str(row[2]),
+        enabled=bool(row[3]),
+        control_organization_declared=bool(row[4]),
+        content_role=str(row[5]),
+        profile_id=UUID(str(row[6])),
+        profile_version=int(row[7]),
+        complete_segment_count=int(row[8]),
+        profile_confirmed_after_publication=bool(row[9]),
+        profile_confirmed_by_enabled_manager=bool(row[10]),
+    )
+
+
 @dataclass(frozen=True)
 class _Card:
     card_id: str
@@ -358,6 +480,14 @@ def _preflight_p2_product(
             database_url,
             tenant_id=journey.tenant_id,
             brand_id=scope.brand_id,
+        )
+    )
+    _assert_formal_account_summary(
+        _formal_account_summary(
+            database_url,
+            tenant_id=journey.tenant_id,
+            brand_id=scope.brand_id,
+            publishing_identity_id=journey.publishing_identity_id,
         )
     )
     products = PostgresContentRepository(database_url).load_product_facts(

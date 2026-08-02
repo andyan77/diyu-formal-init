@@ -123,8 +123,10 @@ from src.shared.types import (
 from src.tool import run_tenant01_golden_suite as tenant01_runner
 from src.tool.run_tenant01_golden_suite import (
     _assert_final_suite_session_lease,
+    _assert_formal_account_summary,
     _assert_formal_publication_summary,
     _assert_p2_product_ready,
+    _FormalAccountSummary,
     _FormalPublicationSummary,
     _Journey,
 )
@@ -887,6 +889,33 @@ def test_final_suite_session_must_outlive_the_complete_run(
             connection.cursor() as cursor,
         ):
             cursor.execute("DELETE FROM tenant_sessions WHERE id = %s", (session_id,))
+
+
+def test_final_suite_requires_current_formal_account_profile() -> None:
+    valid = _FormalAccountSummary(
+        logical_account_id=uuid4(),
+        account_name="笛语·穿衣编辑",
+        business_data_kind="formal_business_data",
+        enabled=True,
+        control_organization_declared=True,
+        content_role="穿衣编辑",
+        profile_id=uuid4(),
+        profile_version=2,
+        complete_segment_count=5,
+        profile_confirmed_after_publication=True,
+        profile_confirmed_by_enabled_manager=True,
+    )
+
+    _assert_formal_account_summary(valid)
+    for invalid in (
+        replace(valid, business_data_kind="synthetic_business_fixture"),
+        replace(valid, control_organization_declared=False),
+        replace(valid, complete_segment_count=4),
+        replace(valid, profile_confirmed_after_publication=False),
+        replace(valid, profile_confirmed_by_enabled_manager=False),
+    ):
+        with pytest.raises(RuntimeError, match="administrator-confirmed"):
+            _assert_formal_account_summary(invalid)
 
 
 def _write_tenant01_fixture_evidence(

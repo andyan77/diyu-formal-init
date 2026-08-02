@@ -3316,7 +3316,7 @@ def test_product_writer_receives_semantic_plan_without_product_fact_literals() -
         assert private_literal not in prompt
 
 
-def test_compiler_suppresses_only_byte_exact_writer_fact_duplicate(
+def test_compiler_rejects_byte_exact_fact_embedded_in_creative_sentence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _p3_account_link_request()
@@ -3340,13 +3340,12 @@ def test_compiler_suppresses_only_byte_exact_writer_fact_duplicate(
         return {"choices": [{"message": {"content": json.dumps({"units": units}, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
-    artifact = DeepSeekGenerator(
-        "https://example.invalid",
-        "not-a-real-key",
-        "deepseek-test",
-    ).generate(request)
-    assert artifact.body.count(fact) == 1
-    assert "保留开头。保留结尾。" in artifact.body
+    with pytest.raises(GenerationFailed, match="不得把服务端逐字事实嵌入创作句"):
+        DeepSeekGenerator(
+            "https://example.invalid",
+            "not-a-real-key",
+            "deepseek-test",
+        ).generate(request)
     assert request_count == 1
 
 
@@ -3426,6 +3425,29 @@ def test_compiler_suppresses_complete_writer_unit_but_not_replayed_unit() -> Non
     ).unit("unit:body").text == fact
 
 
+def test_compiler_suppresses_standalone_fact_line_without_changing_other_bytes() -> None:
+    request = _p3_account_link_request()
+    assert request.narrative_frame is not None
+    fact = request.narrative_frame.user_facts[0].exact_text
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    writer_kernel = replace(
+        kernel,
+        units=tuple(
+            replace(unit, text=f"保留开头。\n{fact}\n保留 emoji：☕️。")
+            if unit.purpose == "body"
+            else unit
+            for unit in kernel.units
+        ),
+    )
+
+    normalized = suppress_exact_writer_fact_duplicates(
+        _compile_input(request),
+        writer_kernel,
+    )
+
+    assert normalized.unit("unit:body").text.encode() == "保留开头。\n\n保留 emoji：☕️。".encode()
+
+
 def test_compiler_rechecks_visible_structure_after_exact_fact_suppression() -> None:
     request = _p3_account_link_request()
     assert request.narrative_frame is not None
@@ -3434,7 +3456,7 @@ def test_compiler_rechecks_visible_structure_after_exact_fact_suppression() -> N
     wrapped_fact_kernel = replace(
         kernel,
         units=tuple(
-            replace(unit, text=f"“{fact}”这句话不应留下空引号。")
+            replace(unit, text=f"{fact}\n“”")
             if unit.purpose == "body"
             else unit
             for unit in kernel.units
