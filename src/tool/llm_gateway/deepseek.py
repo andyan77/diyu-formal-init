@@ -249,7 +249,7 @@ def _non_bearing_claim_contract(
                 "claim_type": "observable_difference_or_choice",
                 "meaning": (
                     "只写本题已经明示的可观察差异，或把两个可选做法并列交给受众判断；"
-                    "不得另造观察维度。"
+                    "不得另造观察维度，也不得说明这些做法会让关系、人物或结果如何变化。"
                 ),
             },
             {
@@ -281,7 +281,7 @@ def _non_bearing_claim_contract(
             "已经成立的一般判断。"
         )
     return {
-        "contract_version": "non-bearing-writer-claim-v2",
+        "contract_version": "non-bearing-writer-claim-v3",
         "claim_weight": "non_bearing",
         "all_visible_sentences_must_match_one_allowed_claim": True,
         "allowed_claims": allowed,
