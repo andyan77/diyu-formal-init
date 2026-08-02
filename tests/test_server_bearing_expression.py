@@ -15,6 +15,7 @@ from src.shared.errors import DomainError
 from src.shared.factual_basis import FrozenFactRecord
 from src.shared.narrative import new_frame
 from src.shared.server_bearing_expression import (
+    P1_RELEASE_CAPTION,
     P1_SELECTION_UNIT_ID,
     assert_server_bearing_expression_matches,
     build_server_bearing_expression_contract,
@@ -80,8 +81,9 @@ def test_p1_contract_owns_the_choice_body_and_keeps_non_bearing_writer_expressio
     assert {unit.purpose for unit in kernel.writable_units} == {
         "title",
         "natural_guide",
-        "release_caption",
     }
+    assert kernel.unit("unit:release-caption").text == P1_RELEASE_CAPTION
+    assert kernel.unit("unit:release-caption").text_source == "server_compiler"
     assert P1_SELECTION_UNIT_ID not in {unit.unit_id for unit in kernel.writable_units}
 
 

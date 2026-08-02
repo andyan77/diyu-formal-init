@@ -13,6 +13,9 @@ from src.shared.types import ContentProduct, MediaFormat
 
 SERVER_BEARING_EXPRESSION_VERSION = "server-bearing-expression-v1"
 P1_SELECTION_UNIT_ID = "unit:p1-selection-skeleton"
+P1_RELEASE_CAPTION = (
+    "这次不用同时解决所有变化；先认清自己最不能妥协的一个条件，再作取舍。"
+)
 
 _P1_SELECTION_SKELETON = (
     "先在已经给出的条件里选出最不能妥协的一项，再只保留一个需要兼顾的变化。"
@@ -62,6 +65,12 @@ def build_server_bearing_expression_contract(
                 purpose="body",
                 mode="recommendation",
                 text=_P1_SELECTION_SKELETON,
+            ),
+            ServerBearingExpressionUnitV1(
+                unit_id="unit:release-caption",
+                purpose="release_caption",
+                mode="general_observation",
+                text=P1_RELEASE_CAPTION,
             ),
         )
     elif (

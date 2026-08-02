@@ -104,6 +104,7 @@ from src.shared.product_value import (
 )
 from src.shared.review_evidence import unit_contracts_v2
 from src.shared.server_bearing_expression import (
+    P1_RELEASE_CAPTION,
     P1_SELECTION_UNIT_ID,
     build_server_bearing_expression_contract,
 )
@@ -3384,10 +3385,22 @@ def test_current_p1_writer_brief_is_bounded_and_does_not_license_product_perform
     assert "没有 ProductFact" in prompt
     assert "decision_responsibility" in prompt
     assert P1_SELECTION_UNIT_ID in prompt
-    assert "只邀请受众回到自己的已知条件作判断" in prompt
     assert "不得再提出第二套选择" in prompt
     assert "视频观看回报只承诺沿时间顺序拆开已有条件" in prompt
     assert "不提前概括怎样穿、能获得什么" in prompt
+    assert kernel.unit("unit:release-caption").text == P1_RELEASE_CAPTION
+    assert "unit:release-caption" not in {
+        unit.unit_id for unit in kernel.writable_units
+    }
+    repair_prompt = DeepSeekGenerator._account_link_naturalization_prompt(
+        request=request,
+        kernel=kernel,
+        affected_unit_ids=frozenset({"unit:natural-guide"}),
+        source_spans=("冻结的账号关系",),
+        forbid_attributed_dialogue=False,
+    )
+    assert "选择骨架和发布收束已经由服务端冻结" in repair_prompt
+    assert "不得新增服装类别、穿法、选择标准" in repair_prompt
     assert P1_SELECTION_UNIT_ID not in {
         unit.unit_id for unit in kernel.writable_units
     }
@@ -3441,10 +3454,6 @@ def test_p1_runtime_freezes_one_server_choice_body_and_only_requests_non_bearing
                                         "unit_id": "unit:natural-guide",
                                         "text": "把这次取舍拆成一个能落地的顺序。",
                                     },
-                                    {
-                                        "unit_id": "unit:release-caption",
-                                        "text": "不用把每个变化都一次解决。",
-                                    },
                                 ]
                             },
                             ensure_ascii=False,
@@ -3463,6 +3472,7 @@ def test_p1_runtime_freezes_one_server_choice_body_and_only_requests_non_bearing
 
     assert "先在已经给出的条件里选出最不能妥协的一项" in artifact.body
     assert "不预设某件单品一定有效" in artifact.body
+    assert P1_RELEASE_CAPTION in artifact.body
     assert "body-opening" not in artifact.body
     assert artifact.completion_snapshot_patch is not None
     contract = artifact.completion_snapshot_patch[
