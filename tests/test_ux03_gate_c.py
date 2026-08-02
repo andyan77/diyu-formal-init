@@ -2641,7 +2641,7 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
     assert '"subject_scope": "generic_only"' in prompt
     assert '"actual_event_or_result"' in prompt
     assert '"allowed_resources": []' in prompt
-    assert '"contract_version": "non-bearing-writer-claim-v3"' in prompt
+    assert '"contract_version": "non-bearing-writer-claim-v4"' in prompt
     assert '"all_visible_sentences_must_match_one_allowed_claim": true' in prompt
     assert '"claim_type": "health_or_body_improvement"' in prompt
     assert '"claim_type": "source_subject_reassignment"' in prompt
@@ -3142,7 +3142,7 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert '"text": ""' in prompt
     assert "填写 media_opening 的完整可见文字" not in prompt
     assert "purpose\n或其他内部标签" in prompt
-    assert '"contract_version": "non-bearing-writer-claim-v3"' in prompt
+    assert '"contract_version": "non-bearing-writer-claim-v4"' in prompt
     assert '"claim_type": "cause_or_result"' in prompt
     assert "不得说明这些做法会让关系、人物或结果如何变化" in prompt
     assert "任何\nprohibited_claims 都是硬失败" in prompt
@@ -3344,6 +3344,10 @@ def test_system_selected_account_topic_receives_the_frozen_topic_domain() -> Non
 
     assert "system_selected_topic_domain" in prompt
     assert "穿衣选择、熟悉事物被重新看见的时刻" in prompt
+    assert '"contract_version": "system-selected-audience-topic-v2"' in prompt
+    assert '"subject_scope": "one_person_observable_action_or_external_condition"' in prompt
+    assert "another_person_relationship_feeling_preference_expectation_or_reaction" in prompt
+    assert '"allowed": "observable_action_or_external_condition_only"' in prompt
 
 
 def _current_publication_packet() -> tuple[BrandContextPacketV2, str]:

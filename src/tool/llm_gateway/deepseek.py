@@ -379,9 +379,15 @@ def _non_bearing_claim_contract(
             "已经成立的一般判断。"
         )
     return {
-        "contract_version": "non-bearing-writer-claim-v3",
+        "contract_version": "non-bearing-writer-claim-v4",
         "claim_weight": "non_bearing",
         "all_visible_sentences_must_match_one_allowed_claim": True,
+        "choice_basis": {
+            "allowed": "observable_action_or_external_condition_only",
+            "prohibited": (
+                "feeling_preference_expectation_inner_state_or_another_person_reaction"
+            ),
+        },
         "allowed_claims": allowed,
         "prohibited_claims": [
             {"claim_type": "product_effect", "meaning": "具体商品效果、体验或用途"},
@@ -2150,10 +2156,14 @@ class DeepSeekGenerator(ContentGenerator):
             }
         elif request.creative_plan.topic_origin == "system_selected":
             topic_projection = {
-                "contract_version": "system-selected-audience-topic-v1",
+                "contract_version": "system-selected-audience-topic-v2",
                 "topic_origin": "system_selected",
                 "selection_basis": "current_account_content_territories",
                 "user_request_is_topic_evidence": False,
+                "subject_scope": "one_person_observable_action_or_external_condition",
+                "prohibited_subjects": (
+                    "another_person_relationship_feeling_preference_expectation_or_reaction"
+                ),
             }
         else:
             topic_projection = request.creative_plan.topic_spans
