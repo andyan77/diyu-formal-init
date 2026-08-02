@@ -650,15 +650,17 @@ def _compile_delivery_v4(
             ),
         ),
     }
-    optional_suggestion = _optional_capture_suggestion(program)
+    optional_suggestion = _optional_capture_suggestion(program, title)
     if optional_suggestion is not None:
         provenance["optional_capture_suggestion"] = (
             f"compiler:optional-capture-suggestion:{program.optional_capture_suggestion_id}",
+            singleton["title"].unit_id,
         )
     production: ContentProductionBundle
     if request.media_format == "graphic":
-        opening, sequence, production_note = _graphic_media_program_text(
-            program,
+        opening, sequence, production_note = _bind_graphic_program_to_title(
+            title,
+            _graphic_media_program_text(program),
         )
         production = GraphicProductionBundle(
             natural_guide=guide,
@@ -671,9 +673,14 @@ def _compile_delivery_v4(
         )
         provenance.update(
             {
-                "hero_image": (program_source, envelope_source),
+                "hero_image": (
+                    program_source,
+                    envelope_source,
+                    singleton["title"].unit_id,
+                ),
                 "image_sequence": (
                     program_source,
+                    singleton["title"].unit_id,
                     *content_sources,
                     *resource_sources,
                 ),
@@ -681,6 +688,7 @@ def _compile_delivery_v4(
                 "layout_and_production": (
                     program_source,
                     envelope_source,
+                    singleton["title"].unit_id,
                 ),
             }
         )
@@ -691,9 +699,12 @@ def _compile_delivery_v4(
             spoken,
             subtitles,
             production_note,
-        ) = _video_media_program_text(
-            program,
-            full_body,
+        ) = _bind_video_program_to_title(
+            title,
+            _video_media_program_text(
+                program,
+                full_body,
+            ),
         )
         production = VideoProductionBundle(
             natural_guide=guide,
@@ -715,9 +726,11 @@ def _compile_delivery_v4(
                 "cover_or_first_frame": (
                     program_source,
                     envelope_source,
+                    singleton["title"].unit_id,
                 ),
                 "viewing_flow": (
                     program_source,
+                    singleton["title"].unit_id,
                     *content_sources,
                     *resource_sources,
                 ),
@@ -727,6 +740,7 @@ def _compile_delivery_v4(
                 ),
                 "visual_actions": (
                     program_source,
+                    singleton["title"].unit_id,
                     *resource_sources,
                 ),
                 "subtitles": (
@@ -736,6 +750,7 @@ def _compile_delivery_v4(
                 "sound_and_production": (
                     program_source,
                     envelope_source,
+                    singleton["title"].unit_id,
                 ),
                 "natural_duration": ("compiler:duration",),
             }
@@ -762,18 +777,45 @@ def _compile_delivery_v4(
 
 def _optional_capture_suggestion(
     program: MediaProgramSelectionV1,
+    title: str,
 ) -> str | None:
     if program.optional_capture_suggestion_id == "optional-current-product-capture-v1":
         return (
-            "如果刚才提到的商品仍在手边，而且你愿意补拍，可以另加一张整体照片；"
+            f"如果《{title}》提到的商品仍在手边，而且你愿意补拍，可以另加一张整体照片；"
             "没有也不影响，当前版本可直接用文字、色块和留白完成。"
         )
     if program.optional_capture_suggestion_id == "optional-current-subject-capture-v1":
         return (
-            "如果刚才提到的事物仍在手边，而且你愿意补拍，可以另加一张照片；"
+            f"如果《{title}》提到的事物仍在手边，而且你愿意补拍，可以另加一张照片；"
             "没有也不影响，当前版本可直接用文字、色块和留白完成。"
         )
     return None
+
+
+def _bind_graphic_program_to_title(
+    title: str,
+    texts: tuple[str, str, str],
+) -> tuple[str, str, str]:
+    opening, sequence, production_note = texts
+    return (
+        f"{opening} 本篇首图只承接《{title}》这个具体切口。",
+        f"{sequence} 页面转折只承接《{title}》与本篇已审正文。",
+        f"{production_note} 排版只承接《{title}》和本篇已审文字。",
+    )
+
+
+def _bind_video_program_to_title(
+    title: str,
+    texts: tuple[str, str, str, str, str],
+) -> tuple[str, str, str, str, str]:
+    opening, sequence, spoken, subtitles, production_note = texts
+    return (
+        f"{opening} 本篇首帧只承接《{title}》这个具体切口。",
+        f"{sequence} 观看链只承接《{title}》与本篇已审正文。",
+        spoken,
+        subtitles,
+        f"{production_note} 制作只承接《{title}》和本篇已审文字。",
+    )
 
 
 def _graphic_media_program_text(

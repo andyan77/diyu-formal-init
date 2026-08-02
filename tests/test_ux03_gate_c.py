@@ -763,6 +763,34 @@ def test_media_native_units_compile_one_scope_and_distinct_platform_parts() -> N
         )
 
 
+def test_closed_media_program_binds_each_artifact_to_its_reviewed_title() -> None:
+    request = _generation_input()
+    first_kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    second_kernel = replace(
+        first_kernel,
+        units=tuple(
+            replace(unit, text="另一篇不可交换的标题")
+            if unit.purpose == "title"
+            else unit
+            for unit in first_kernel.units
+        ),
+    )
+
+    first = compile_delivery(_compile_input(request), first_kernel)
+    second = compile_delivery(_compile_input(request), second_kernel)
+
+    assert isinstance(first.production, GraphicProductionBundle)
+    assert isinstance(second.production, GraphicProductionBundle)
+    assert first.production.hero_image != second.production.hero_image
+    assert first.production.image_sequence != second.production.image_sequence
+    assert first.production.layout_and_production != second.production.layout_and_production
+    assert "甜味把熟悉的一天叫醒了" in first.production.hero_image
+    assert "另一篇不可交换的标题" in second.production.hero_image
+    assert first.production.optional_capture_suggestion is not None
+    assert "甜味把熟悉的一天叫醒了" in first.production.optional_capture_suggestion
+    assert "unit:title" in first.visible_provenance["hero_image"]
+    assert "unit:title" in first.visible_provenance["optional_capture_suggestion"]
+
 def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:
     request = _generation_input(media_format="video")
     assert request.narrative_frame is not None
