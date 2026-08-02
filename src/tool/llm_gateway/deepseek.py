@@ -1732,6 +1732,12 @@ class DeepSeekGenerator(ContentGenerator):
             and bool(actuality_context)
         )
         if actuality_topic_fidelity:
+            account_identity = (
+                "当前账号的编辑回应位置；只用已确认的判断尺度回应本次具体处境"
+            )
+            account_audience = (
+                "希望从本次具体片段获得清楚回应、同时保留自己判断的人"
+            )
             account_attention = (
                 "只采用当前账号把具体处境讲清楚、尊重受众判断的回应方式；"
                 "账号所属行业和内容领地不是本篇题材。"
@@ -1741,6 +1747,8 @@ class DeepSeekGenerator(ContentGenerator):
                 "不得借账号身份另行引入原句中没有的行业对象、行业类比或行业结论。"
             )
         elif continuing_series:
+            account_identity = contract.account_identity
+            account_audience = contract.account_audience
             account_attention = (
                 "只沿冻结系列主线与前情推进新的判断或受众动作；"
                 "账号内容领地不能替换本篇系列主题。"
@@ -1750,6 +1758,8 @@ class DeepSeekGenerator(ContentGenerator):
                 "不得另选一个仅与账号内容领地有关、却与系列主线无关的题材。"
             )
         else:
+            account_identity = contract.account_identity
+            account_audience = contract.account_audience
             account_attention = contract.account_attention
             topic_fidelity_note = (
                 "题材保真：账号资料只提供编辑许可，不提供必须照抄的题材、观点或收束。"
@@ -1771,8 +1781,8 @@ class DeepSeekGenerator(ContentGenerator):
 {product_note}
 
 账号编辑许可：
-- 观察身份（只说明回应位置，不是题材指令）：{contract.account_identity}
-- 面向的人：{contract.account_audience}
+- 观察身份（只说明回应位置，不是题材指令）：{account_identity}
+- 面向的人：{account_audience}
 - 习惯先看：{account_attention}
 - 回应边界：{contract.account_response_boundary}
 这些内容只决定观察顺序、判断尺度和回应姿态，不得照抄成账号定义、口号或职业经历。

@@ -4109,6 +4109,15 @@ def test_p2_exact_fact_repetition_gets_one_bounded_affected_unit_repair(
 
 def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     request = _p3_account_link_request()
+    assert request.publication_contract is not None
+    assert (
+        request.publication_contract.account_identity
+        == "从穿衣编辑的位置重新看熟悉事物"
+    )
+    assert (
+        request.publication_contract.account_audience
+        == "陪正在重新选择日常节奏的人看清取舍。"
+    )
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
     prompt = DeepSeekGenerator(
         "https://example.invalid",
@@ -4117,9 +4126,11 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     )._kernel_writer_prompt(request, kernel, {})
 
     assert "账号编辑许可" in prompt
-    assert "陪正在重新选择日常节奏的人看清取舍" in prompt
-    assert "从穿衣编辑的位置重新看熟悉事物" in prompt
+    assert "陪正在重新选择日常节奏的人看清取舍" not in prompt
+    assert "从穿衣编辑的位置重新看熟悉事物" not in prompt
     assert "穿衣选择、熟悉事物被重新看见的时刻" not in prompt
+    assert "当前账号的编辑回应位置" in prompt
+    assert "希望从本次具体片段获得清楚回应" in prompt
     assert "现实原句是本篇唯一内容主语" in prompt
     assert "行业和内容领地不是本篇题材" in prompt
     assert "不得照抄成账号定义、口号或职业经历" in prompt
