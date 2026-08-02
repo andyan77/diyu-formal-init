@@ -85,6 +85,9 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
     test_database_url = urlunsplit(parsed._replace(netloc=f"{role_name}@{host}", path=f"/{database_name}"))
     tenant_id = uuid4()
     organization_id = uuid4()
+    brand_id = uuid4()
+    user_id = uuid4()
+    baseline_id = uuid4()
     try:
         monkeypatch.setenv("DIYU_MIGRATOR_DATABASE_URL", test_database_url)
         alembic_config = Config("alembic.ini")
@@ -102,6 +105,24 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
                 "INSERT INTO organizations (id, tenant_id, name) VALUES (%s, %s, %s)",
                 (organization_id, tenant_id, "历史迁移既有组织"),
             )
+            connection.execute(
+                "INSERT INTO users (id, tenant_id, organization_id, display_name) "
+                "VALUES (%s, %s, %s, %s)",
+                (user_id, tenant_id, organization_id, "历史迁移确认人"),
+            )
+            connection.execute(
+                "INSERT INTO brands "
+                "(id, tenant_id, name, positioning, decision_order, tone) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (brand_id, tenant_id, "历史迁移品牌", "已确认定位", "先事实后表达", "克制"),
+            )
+            connection.execute(
+                "INSERT INTO brand_expression_baselines "
+                "(id, tenant_id, brand_id, version, draft, status, "
+                " confirmed_by, confirmed_at) "
+                "VALUES (%s, %s, %s, 1, %s, 'confirmed', %s, now())",
+                (baseline_id, tenant_id, brand_id, "历史已确认品牌表达", user_id),
+            )
         with psycopg.connect(migrator_database_url, autocommit=True) as admin_connection:
             admin_connection.execute(
                 sql.SQL("ALTER ROLE {} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS").format(
@@ -111,6 +132,10 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
 
         command.upgrade(alembic_config, "head")
         with psycopg.connect(test_database_url) as connection:
+            connection.execute(
+                "SELECT set_config('app.tenant_id', %s, true)",
+                (str(tenant_id),),
+            )
             revision_row = connection.execute("SELECT version_num FROM alembic_version").fetchone()
             constraint_row = connection.execute(
                 "SELECT convalidated FROM pg_constraint WHERE conname = 'organizations_parent_same_tenant'"
@@ -129,6 +154,20 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
                 "'brand_publication_projection_items'::regclass"
                 ")"
             ).fetchall()
+            compatibility_projection = connection.execute(
+                "SELECT projection.status, item.source_kind, item.source_ref "
+                "FROM brands brand "
+                "JOIN brand_publication_projections projection "
+                "  ON projection.tenant_id = brand.tenant_id "
+                " AND projection.brand_id = brand.id "
+                " AND projection.id = brand.current_publication_projection_id "
+                "JOIN brand_publication_projection_items item "
+                "  ON item.tenant_id = projection.tenant_id "
+                " AND item.brand_id = projection.brand_id "
+                " AND item.projection_id = projection.id "
+                "WHERE brand.tenant_id = %s AND brand.id = %s",
+                (tenant_id, brand_id),
+            ).fetchone()
         assert revision_row is not None
         assert constraint_row is not None
         revision = revision_row[0]
@@ -137,6 +176,11 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
         assert constraint_validated is True
         assert len(force_rls_rows) == 9
         assert all(bool(row[1]) for row in force_rls_rows)
+        assert compatibility_projection == (
+            "confirmed",
+            "brand_expression_baseline",
+            str(baseline_id),
+        )
     finally:
         monkeypatch.setenv("DIYU_MIGRATOR_DATABASE_URL", migrator_database_url)
         with psycopg.connect(migrator_database_url, autocommit=True) as admin_connection:

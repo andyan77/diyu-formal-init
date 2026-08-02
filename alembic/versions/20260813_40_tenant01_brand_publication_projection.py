@@ -54,7 +54,6 @@ def upgrade() -> None:
         )
         """
     )
-    _tenant_rls("brand_publication_projections")
     op.execute(
         "CREATE UNIQUE INDEX brand_publication_one_confirmed "
         "ON brand_publication_projections (tenant_id, brand_id) "
@@ -121,7 +120,6 @@ def upgrade() -> None:
         )
         """
     )
-    _tenant_rls("brand_publication_projection_items")
     op.execute(
         """
         CREATE FUNCTION reject_brand_publication_projection_item_mutation()
@@ -202,6 +200,12 @@ def upgrade() -> None:
         REFERENCES brand_publication_projections(tenant_id, brand_id, id)
         """
     )
+    # The production migrator is deliberately NOBYPASSRLS and this migration
+    # backfills every tenant in one transaction.  Enable and force tenant RLS
+    # only after the cross-tenant compatibility backfill has completed; the
+    # new tables are not visible to application sessions before commit.
+    _tenant_rls("brand_publication_projections")
+    _tenant_rls("brand_publication_projection_items")
 
 
 def downgrade() -> None:
