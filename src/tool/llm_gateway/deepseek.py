@@ -1612,7 +1612,19 @@ class DeepSeekGenerator(ContentGenerator):
             for span in contract.intake_spans
             if span.role == "observable_actuality"
         ]
-        if contract.topic_origin == "system_selected":
+        series_context = request.series_context
+        continuing_series = (
+            series_context is not None
+            and series_context.target_position > 1
+            and bool(series_context.prior_entries)
+        )
+        if continuing_series and series_context is not None:
+            writer_topic = (
+                "只推进冻结系列主线："
+                f"{series_context.premise}"
+                f"（第 {series_context.target_position} 篇）"
+            )
+        elif contract.topic_origin == "system_selected":
             writer_topic = contract.topic
         elif actuality_context:
             # The exact actuality appears once below.  This task-facing label
@@ -1715,6 +1727,33 @@ class DeepSeekGenerator(ContentGenerator):
             if contract.primary_product == "local_response"
             else ""
         )
+        actuality_topic_fidelity = (
+            contract.primary_product == "brand_life_narrative"
+            and bool(actuality_context)
+        )
+        if actuality_topic_fidelity:
+            account_attention = (
+                "只采用当前账号把具体处境讲清楚、尊重受众判断的回应方式；"
+                "账号所属行业和内容领地不是本篇题材。"
+            )
+            topic_fidelity_note = (
+                "题材保真：现实原句是本篇唯一内容主语。账号身份只影响观察尺度和回应姿态，"
+                "不得借账号身份另行引入原句中没有的行业对象、行业类比或行业结论。"
+            )
+        elif continuing_series:
+            account_attention = (
+                "只沿冻结系列主线与前情推进新的判断或受众动作；"
+                "账号内容领地不能替换本篇系列主题。"
+            )
+            topic_fidelity_note = (
+                "系列保真：本篇必须让读者自然读出对冻结前情的承接与推进，"
+                "不得另选一个仅与账号内容领地有关、却与系列主线无关的题材。"
+            )
+        else:
+            account_attention = contract.account_attention
+            topic_fidelity_note = (
+                "题材保真：账号资料只提供编辑许可，不提供必须照抄的题材、观点或收束。"
+            )
         return f"""完成一篇可以直接交付给用户的作品。事实、来源、账号权限、平台、系列前情、
 媒体程序和资源已由服务端冻结；你只写非事实性的中心判断、条件建议、自然正文与发布配文。
 
@@ -1732,11 +1771,12 @@ class DeepSeekGenerator(ContentGenerator):
 {product_note}
 
 账号编辑许可：
-- 观察身份：{contract.account_identity}
+- 观察身份（只说明回应位置，不是题材指令）：{contract.account_identity}
 - 面向的人：{contract.account_audience}
-- 习惯先看：{contract.account_attention}
+- 习惯先看：{account_attention}
 - 回应边界：{contract.account_response_boundary}
 这些内容只决定观察顺序、判断尺度和回应姿态，不得照抄成账号定义、口号或职业经历。
+{topic_fidelity_note}
 
 冻结系列前情（有则推进，不机械复述）：
 {json.dumps(series, ensure_ascii=False)}

@@ -4119,7 +4119,9 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert "账号编辑许可" in prompt
     assert "陪正在重新选择日常节奏的人看清取舍" in prompt
     assert "从穿衣编辑的位置重新看熟悉事物" in prompt
-    assert "穿衣选择、熟悉事物被重新看见的时刻" in prompt
+    assert "穿衣选择、熟悉事物被重新看见的时刻" not in prompt
+    assert "现实原句是本篇唯一内容主语" in prompt
+    assert "行业和内容领地不是本篇题材" in prompt
     assert "不得照抄成账号定义、口号或职业经历" in prompt
     assert "Writer 不拥有媒体单元" in prompt
     assert "media_opening" not in prompt
@@ -4214,6 +4216,47 @@ def test_system_selected_account_topic_receives_the_frozen_topic_domain() -> Non
     assert "自主选择一个具体生活题材" in prompt
     assert "topic_origin" not in prompt
     assert "不用第一人称、品牌或账号的既成经历模拟现实开头" in prompt
+
+
+def test_continuing_series_uses_frozen_series_premise_instead_of_account_topic_domain() -> None:
+    base = _p3_account_link_request()
+    packet, constraint = _current_publication_packet()
+    request = _with_publication_contract(
+        replace(
+            base,
+            brand=replace(
+                base.brand,
+                context_packet=packet,
+                expression_constraint_context=(constraint,),
+            ),
+            weak_seed="今天不知道发什么，帮我做一条。",
+            narrative_frame=new_frame("general_observation", (), ()),
+            creative_plan=build_creative_plan(
+                topic_spans=(),
+                primary_value="brand_life_narrative",
+                tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+                mechanism_id=None,
+                target_shape="小红书图文完整成品",
+                topic_origin="system_selected",
+            ),
+            series_context=_series_context(),
+        ),
+        roles=("creation_instruction", "creation_instruction"),
+    )
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, kernel, {})
+
+    assert "只推进冻结系列主线" in prompt
+    assert _series_context().premise in prompt
+    assert "第 3 篇" in prompt
+    assert "穿衣选择、熟悉事物被重新看见的时刻" not in prompt
+    assert "账号内容领地不能替换本篇系列主题" in prompt
+    assert "必须让读者自然读出对冻结前情的承接与推进" in prompt
 
 
 def _current_publication_packet() -> tuple[BrandContextPacketV2, str]:
