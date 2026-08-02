@@ -2667,7 +2667,43 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             brand_context_packet=request.brand.context_packet,
         )
         if lens is not None:
-            return account_editorial_lens_document(lens)
+            frozen_lens = account_editorial_lens_document(lens)
+            writer_fields = (
+                "contract_version",
+                "primary_product",
+                "relationship_principle",
+                "topic_fidelity",
+                "fact_boundary",
+                "viewer_value_requirement",
+                "closure_boundary",
+                "title_responsibility",
+                "natural_guide_responsibility",
+                "body_responsibility",
+                "release_caption_responsibility",
+                "actuality_response_boundary",
+                "series_progression_boundary",
+            )
+            writer_projection = {field: frozen_lens[field] for field in writer_fields}
+            writer_projection["speaker_scope"] = (
+                "以当前组织表达资格回应，不冒充个人经历"
+                if request.brand.speaker_kind == "institutional_account"
+                else "以当前个人表达资格回应，不冒充未冻结经历"
+            )
+            if (
+                request.creative_plan is not None
+                and request.creative_plan.topic_origin == "system_selected"
+                and request.account_expression is not None
+            ):
+                writer_projection["system_selected_topic_domain"] = DeepSeekGenerator._deidentify_text(
+                    request.account_expression.content_territories,
+                    (
+                        request.brand.brand_name,
+                        request.brand.organization_name,
+                        request.brand.account_name,
+                        request.brand.operator_name,
+                    ),
+                )
+            return writer_projection
 
         expression = request.account_expression
         values = {

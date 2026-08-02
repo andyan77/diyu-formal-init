@@ -3071,8 +3071,9 @@ def test_p3_writer_uses_versioned_editorial_lens_without_profile_copy_or_topic_s
     )._kernel_writer_prompt(request, kernel, {})
 
     assert "account-editorial-lens-v3" in prompt
-    assert "从穿衣编辑的位置重新看熟悉事物" in prompt
-    assert "陪正在重新选择日常节奏的人看清取舍" in prompt
+    assert "从穿衣编辑的位置重新看熟悉事物" not in prompt
+    assert "陪正在重新选择日常节奏的人看清取舍" not in prompt
+    assert "穿衣选择、熟悉事物被重新看见的时刻" not in prompt
     assert "题材没有商品、服饰或门店时" in prompt
     assert "不能无损替换到另一件生活琐事" in prompt
     assert "editorial_responsibility" in prompt
@@ -3106,6 +3107,125 @@ def test_p3_writer_uses_versioned_editorial_lens_without_profile_copy_or_topic_s
     assert request.account_expression is not None
     assert frozen_lens["source_profile_id"] == str(request.account_expression.profile_id)
     assert frozen_lens["publication_projection_id"] == projection_id
+
+
+def test_explicit_local_response_does_not_receive_the_account_topic_domain() -> None:
+    base = _p3_account_link_request()
+    packet, constraint = _current_publication_packet()
+    fact = "今天店里有人只想自己看看。"
+    request = replace(
+        base,
+        brand=replace(
+            base.brand,
+            context_packet=packet,
+            expression_constraint_context=(constraint,),
+        ),
+        weak_seed=fact,
+        primary_product="local_response",
+        narrative_frame=new_frame("actuality_reflection", (fact,), ()),
+        creative_plan=build_creative_plan(
+            topic_spans=(fact,),
+            primary_value="local_response",
+            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            mechanism_id=None,
+            target_shape="小红书图文完整成品",
+        ),
+    )
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, kernel, {})
+
+    assert fact in prompt
+    assert "题材没有商品、服饰或门店时" in prompt
+    assert "从穿衣编辑的位置重新看熟悉事物" not in prompt
+    assert "陪正在重新选择日常节奏的人看清取舍" not in prompt
+    assert "穿衣选择、熟悉事物被重新看见的时刻" not in prompt
+    assert "system_selected_topic_domain" not in prompt
+
+
+def test_system_selected_account_topic_receives_the_frozen_topic_domain() -> None:
+    base = _p3_account_link_request()
+    packet, constraint = _current_publication_packet()
+    request = replace(
+        base,
+        brand=replace(
+            base.brand,
+            context_packet=packet,
+            expression_constraint_context=(constraint,),
+        ),
+        weak_seed="今天不知道发什么，帮我做一条。",
+        narrative_frame=new_frame("general_observation", (), ()),
+        creative_plan=build_creative_plan(
+            topic_spans=(),
+            primary_value="brand_life_narrative",
+            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            mechanism_id=None,
+            target_shape="小红书图文完整成品",
+            topic_origin="system_selected",
+        ),
+    )
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, kernel, {})
+
+    assert "system_selected_topic_domain" in prompt
+    assert "穿衣选择、熟悉事物被重新看见的时刻" in prompt
+
+
+def _current_publication_packet() -> tuple[BrandContextPacketV2, str]:
+    text = "先回应本次具体处境，再给出克制而明确的判断。"
+    segment = BrandContextSegment(
+        segment_id="95000000-0000-4000-8000-000000000001",
+        source_document_id="95000000-0000-4000-8000-000000000002",
+        source_document_version_id="95000000-0000-4000-8000-000000000003",
+        source_id="brand_source_segment:current",
+        source_version="V1",
+        semantic_kind="expression_constraint",
+        evidence_level="confirmed_publication",
+        visibility_scope="brand_all",
+        digest=hashlib.sha256(text.encode()).hexdigest(),
+        exact_text=text,
+        source_digest="b" * 64,
+    )
+    projection_id = "95000000-0000-4000-8000-000000000004"
+    projection_digest = "c" * 64
+    segment_document = {
+        "segment_id": segment.segment_id,
+        "source_document_id": segment.source_document_id,
+        "source_document_version_id": segment.source_document_version_id,
+        "source_id": segment.source_id,
+        "source_version": segment.source_version,
+        "semantic_kind": segment.semantic_kind,
+        "evidence_level": segment.evidence_level,
+        "visibility_scope": segment.visibility_scope,
+        "digest": segment.digest,
+        "exact_text": segment.exact_text,
+        "source_digest": segment.source_digest,
+    }
+    return (
+        BrandContextPacketV2(
+            "brand-context-packet-v2",
+            brand_context_packet_digest(
+                projection_id=projection_id,
+                projection_version=1,
+                projection_digest=projection_digest,
+                segments=(segment_document,),
+            ),
+            projection_id,
+            1,
+            projection_digest,
+            (segment,),
+        ),
+        text,
+    )
 
 
 def _p3_account_link_request() -> GenerationInput:
