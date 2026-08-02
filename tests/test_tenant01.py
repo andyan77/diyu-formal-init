@@ -129,6 +129,7 @@ from src.tool.run_tenant01_golden_suite import (
     _FormalAccountSummary,
     _FormalPublicationSummary,
     _Journey,
+    _next_evidence_series_title,
 )
 from src.tool.tenant01_evidence import (
     TENANT01_CARD_IDS,
@@ -916,6 +917,33 @@ def test_final_suite_requires_current_formal_account_profile() -> None:
     ):
         with pytest.raises(RuntimeError, match="administrator-confirmed"):
             _assert_formal_account_summary(invalid)
+
+
+def test_final_suite_series_title_is_natural_and_unique_per_creator(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT tenant_id, id FROM users ORDER BY id LIMIT 1")
+        row = cursor.fetchone()
+        assert row is not None
+        tenant_id = UUID(str(row[0]))
+        user_id = UUID(str(row[1]))
+        cursor.execute(
+            "SELECT count(*) FROM content_series WHERE tenant_id = %s AND created_by = %s",
+            (tenant_id, user_id),
+        )
+        count_row = cursor.fetchone()
+        assert count_row is not None
+        before = int(count_row[0])
+
+    title = _next_evidence_series_title(
+        app_database_url,
+        tenant_id=tenant_id,
+        created_by=user_id,
+    )
+
+    assert title == f"把选择留给人的三篇观察 · 第{before + 1}组"
 
 
 def _write_tenant01_fixture_evidence(

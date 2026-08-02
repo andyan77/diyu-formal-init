@@ -61,6 +61,7 @@ _MODEL = TENANT01_PROVIDER_MODEL
 _FINAL_OUTPUT_FILES = ("human-review.json", "manifest.json", "SHA256SUMS")
 _FAILURE_MARKER_FILES = ("suite-failure.json", "human-review-failure.json")
 _MINIMUM_FINAL_SUITE_SESSION_LEASE_SECONDS = 15 * 60
+_EVIDENCE_SERIES_TITLE = "把选择留给人的三篇观察"
 
 
 def _canonical_digest(value: object) -> str:
@@ -515,6 +516,29 @@ def _persistence_counts(database_url: str, tenant_id: UUID) -> tuple[int, int, i
     return int(row[0]), int(row[1]), int(row[2])
 
 
+def _next_evidence_series_title(
+    database_url: str,
+    *,
+    tenant_id: UUID,
+    created_by: UUID,
+) -> str:
+    """Keep failed-suite series immutable while choosing a natural unique title."""
+
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT set_config('app.tenant_id', %s, true)",
+            (str(tenant_id),),
+        )
+        cursor.execute(
+            "SELECT count(*) FROM content_series WHERE tenant_id = %s AND created_by = %s",
+            (tenant_id, created_by),
+        )
+        row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError("TENANT-01 evidence series count is unavailable")
+    return f"{_EVIDENCE_SERIES_TITLE} · 第{int(row[0]) + 1}组"
+
+
 def _stream_card(
     client: TestClient,
     generator: _EvidenceDeepSeekGenerator,
@@ -830,6 +854,11 @@ def _generate(args: argparse.Namespace) -> None:
     if not database_url:
         raise RuntimeError("formal application database is unavailable")
     _assert_final_suite_session_lease(database_url, journey)
+    identity = ProductionAuthRepository(database_url).load_tenant_session(
+        journey.session_token
+    )
+    if identity is None or identity.tenant_id != journey.tenant_id:
+        raise RuntimeError("TENANT-01 final suite formal session is unavailable")
     cards = _config_cards(Path(args.config).resolve(), p2_sku=journey.p2_sku)
     _preflight_p2_product(database_url, journey, cards)
     root.mkdir(mode=0o700, parents=True)
@@ -873,7 +902,11 @@ def _generate(args: argparse.Namespace) -> None:
                 "publishing_identity_id": str(journey.publishing_identity_id),
             },
             json={
-                "title": f"把选择留给人的三篇观察 · {implementation_sha[:12]}",
+                "title": _next_evidence_series_title(
+                    database_url,
+                    tenant_id=journey.tenant_id,
+                    created_by=identity.user_id,
+                ),
                 "premise": "从不打扰，推进到回应，再推进到留出选择。",
             },
         )
