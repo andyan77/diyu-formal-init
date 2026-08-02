@@ -2641,10 +2641,13 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
     assert '"subject_scope": "generic_only"' in prompt
     assert '"actual_event_or_result"' in prompt
     assert '"allowed_resources": []' in prompt
-    assert '"contract_version": "non-bearing-writer-claim-v1"' in prompt
-    assert '"health_or_body_improvement"' in prompt
-    assert '"source_subject_reassignment"' in prompt
+    assert '"contract_version": "non-bearing-writer-claim-v2"' in prompt
+    assert '"all_visible_sentences_must_match_one_allowed_claim": true' in prompt
+    assert '"claim_type": "health_or_body_improvement"' in prompt
+    assert '"claim_type": "source_subject_reassignment"' in prompt
     assert '"advice_mood": "conditional_or_optional_only"' in prompt
+    assert "每一个可见完整句都必须且只能落入 allowed_claims 之一" in prompt
+    assert "allowed_claims 不是正文标签" in prompt
     assert "媒体程序 graphic_series_choice_v1 确定性生成" in prompt
     assert "不得返回任何媒体单元、资源引用" in prompt
     assert "resource:original_composition" not in prompt

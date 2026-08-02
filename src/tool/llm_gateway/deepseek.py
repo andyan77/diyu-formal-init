@@ -230,25 +230,62 @@ def _non_bearing_claim_contract(
     if primary_product not in {"brand_life_narrative", "local_response"}:
         return None
     allowed = [
-        "observable_difference_or_choice",
-        "conditional_future_action",
-        "audience_can_decide",
+        {
+            "claim_type": "observable_difference_or_choice",
+            "meaning": "只写本题明示的可观察差异，或把两个可选做法并列交给受众判断。",
+        },
+        {
+            "claim_type": "conditional_future_action",
+            "meaning": "只写以“如果／可以／不妨”等条件或可选语态成立的未来观察动作。",
+        },
+        {
+            "claim_type": "audience_can_decide",
+            "meaning": "只把最终取舍留给受众，不替任何人说明心理、需要、意图或原因。",
+        },
     ]
     if frame.narrative_mode == "actuality_reflection":
-        allowed.append("record_or_compare_the_visible_change")
+        allowed.append(
+            {
+                "claim_type": "record_or_compare_the_visible_change",
+                "meaning": (
+                    "现实原句由服务端另行逐字插入；Writer 只能建议以后记录或比较原句中"
+                    "已经可见的差异，不得补写身体、环境、人物或后续事件。"
+                ),
+            }
+        )
+        subject_boundary = (
+            "不得复述服务端事实；不得把原句里的第三方改写成读者、账号、家人、顾客或"
+            "其他身份。"
+        )
+    else:
+        subject_boundary = (
+            "只能写明确条件下的假设选择；不得把人物关系、感受、需要、意图或原因写成"
+            "已经成立的一般判断。"
+        )
     return {
-        "contract_version": "non-bearing-writer-claim-v1",
+        "contract_version": "non-bearing-writer-claim-v2",
         "claim_weight": "non_bearing",
-        "allowed": allowed,
-        "prohibited": [
-            "product_effect",
-            "health_or_body_improvement",
-            "mental_state_or_unspoken_need",
-            "cause_or_result",
-            "new_actual_event",
-            "source_subject_reassignment",
+        "all_visible_sentences_must_match_one_allowed_claim": True,
+        "allowed_claims": allowed,
+        "prohibited_claims": [
+            {"claim_type": "product_effect", "meaning": "具体商品效果、体验或用途"},
+            {
+                "claim_type": "health_or_body_improvement",
+                "meaning": "健康、饮水、休息、身体信号或身体改善建议",
+            },
+            {
+                "claim_type": "mental_state_or_unspoken_need",
+                "meaning": "心理、情绪、委屈、需要、意图或未说出口的期待",
+            },
+            {"claim_type": "cause_or_result", "meaning": "原因、因果、效果或结果"},
+            {"claim_type": "new_actual_event", "meaning": "任何新增现实事件或现实动作"},
+            {
+                "claim_type": "source_subject_reassignment",
+                "meaning": "把原句主体改写成读者、账号、家人、顾客或其他身份",
+            },
         ],
         "advice_mood": "conditional_or_optional_only",
+        "subject_boundary": subject_boundary,
     }
 
 
@@ -302,8 +339,12 @@ _CONTRACT_FIELDS: dict[ContentProduct, tuple[str, str, str]] = {
 _PRODUCT_VALUE: dict[ContentProduct, str] = {
     "dressing_decision": "帮助受众完成有条件、有边界的穿衣选择",
     "product_truth": "围绕本件商品已确认的可见关系，解释一项专属选择价值、相伴取舍和成立条件",
-    "brand_life_narrative": "让受众认识这个账号怎样观察、判断和待人",
-    "local_response": "从近场信号给未参与者一份关系回应",
+    "brand_life_narrative": (
+        "只围绕本题可观察的一处差异，给受众一个有条件、可自行决定的观察选择"
+    ),
+    "local_response": (
+        "只回应本次明示的近场信号，给未参与者一个有条件且不替任何人下结论的选择"
+    ),
     "visual_styling_story": (
         "在不知道两个当前对象身份或属性的前提下，提供一套观察两个已确认视觉锚点之间关系、比较差异并保留个人判断的顺序"
     ),
@@ -1772,6 +1813,14 @@ class DeepSeekGenerator(ContentGenerator):
             primary_product=request.primary_product,
             frame=request.narrative_frame,
         )
+        non_bearing_claim_rule = (
+            "每个可写 unit 的 text_contract.claim_contract 是服务端闭集协议：每一个可见完整"
+            "句都必须且只能落入 allowed_claims 之一，并同时避开全部 prohibited_claims。"
+            "allowed_claims 不是正文标签，不能把 claim_type 或 meaning 抄进成品；如果一句"
+            "话无法在闭集内成立，就不要输出该句。"
+            if non_bearing_claim_contract is not None
+            else ""
+        )
         writable = [
             {
                 "unit_id": unit.unit_id,
@@ -2129,6 +2178,7 @@ allowed_resources 都由服务端在写作前冻结；每个单元必须逐项�
 {product_creative_rule}
 {account_link_rule}
 {dressing_decision_rule}
+{non_bearing_claim_rule}
 
 topic 投影是服务端给 Writer 的受控任务边界。actuality-writer-brief-v2 中的现实片段已经
 由服务端逐字冻结，并会由 Compiler 另行插入一次。Writer 只用它确定本篇实际观察对象，
