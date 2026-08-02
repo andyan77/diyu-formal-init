@@ -3204,7 +3204,7 @@ def test_actuality_writer_receives_one_frozen_fact_without_duplicate_instruction
     )._kernel_writer_prompt(request, kernel, {})
 
     assert prompt.count(fact) == 1
-    assert '"contract_version": "publication-contract-v2"' in prompt
+    assert "publication-contract-v2" not in prompt
     assert sum(
         span.role == "observable_actuality"
         for span in request.publication_contract.intake_spans
@@ -3213,8 +3213,8 @@ def test_actuality_writer_receives_one_frozen_fact_without_duplicate_instruction
         span.role == "creation_instruction"
         for span in request.publication_contract.intake_spans
     ) == 1
-    assert "成品会由服务端逐字插入一次" in prompt
-    assert "事实正文不会交给 Writer" in prompt
+    assert "这些原句由服务端另行展示" in prompt
+    assert "服务端事实绑定" not in prompt
     assert "帮我发一条" not in prompt
 
 
@@ -3436,6 +3436,34 @@ def test_p2_formal_observable_and_colors_share_one_product_value_path() -> None:
     assert "确实会在这两套完整外观之间切换" in contract.validity_condition
     assert all(label not in contract.visible_text for label in ("专属新增理解", "相伴取舍", "成立条件"))
     assert len(contract.source_fact_ids) == 3
+
+
+def test_p2_color_only_value_is_a_consumer_tradeoff_not_a_safety_notice() -> None:
+    contract = build_product_value_contract(
+        primary_product="product_truth",
+        products=(
+            ProductFact(
+                sku="COLOR-ONLY-01",
+                display_name="双色候选商品",
+                facts={"colors": ["深色", "亮色"]},
+                source_kind="synthetic_confirmed_product_record",
+            ),
+        ),
+    )
+
+    assert isinstance(contract, P2ProductValueContractV1)
+    assert "想让哪一种颜色先被看见" in contract.product_insight
+    assert "暂时放下另一种颜色的视觉重点" in contract.tradeoff_or_limit
+    assert "颜色不是决定因素" in contract.validity_condition
+    assert all(
+        phrase not in contract.visible_text
+        for phrase in (
+            "尚未确认",
+            "不能证明",
+            "判断依据",
+            "内容只能",
+        )
+    )
 
 
 @pytest.mark.parametrize(
@@ -3990,7 +4018,7 @@ def test_explicit_local_response_does_not_receive_the_account_topic_domain() -> 
     )._kernel_writer_prompt(request, kernel, {})
 
     assert fact in prompt
-    assert '"topic_origin": "explicit_user"' in prompt
+    assert "topic_origin" not in prompt
     assert "从穿衣编辑的位置重新看熟悉事物" in prompt
     assert "陪正在重新选择日常节奏的人看清取舍" in prompt
     assert "不硬插品牌名、商品或服饰" in prompt
@@ -4028,10 +4056,10 @@ def test_system_selected_account_topic_receives_the_frozen_topic_domain() -> Non
         "deepseek-test",
     )._kernel_writer_prompt(request, kernel, {})
 
-    assert '"topic_origin": "system_selected"' in prompt
+    assert "本篇题材：由 Writer 从当前账号已确认内容领地自主选择一个具体题材" in prompt
     assert "穿衣选择、熟悉事物被重新看见的时刻" in prompt
     assert "自主选择一个具体生活题材" in prompt
-    assert "不能把选题、问题或二选一重新交给用户" in prompt
+    assert "topic_origin" not in prompt
 
 
 def _current_publication_packet() -> tuple[BrandContextPacketV2, str]:
@@ -4325,7 +4353,8 @@ def test_publication_actuality_prompt_keeps_reality_dialogue_in_negative_boundar
         "deepseek-test",
     )._kernel_writer_prompt(request, kernel, {})
 
-    assert "不新增人物身份、对白、健康、心理、因果、后续事件或结果" in prompt
+    assert "不要推断健康、心理、人物关系、后续事件或结果" in prompt
+    assert prompt.count("唯一负向安全合同") == 1
     assert "独立 Reviewer" not in prompt
     assert "不得再使用中文或 ASCII 引号" not in prompt
 

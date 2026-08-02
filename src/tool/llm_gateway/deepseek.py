@@ -115,7 +115,6 @@ from src.shared.product_value import (
     product_value_contract_document,
 )
 from src.shared.publication_contract import (
-    NEGATIVE_SAFETY_RULES,
     IntakeSpanRole,
     publication_contract_digest,
     publication_contract_document,
@@ -1579,14 +1578,6 @@ class DeepSeekGenerator(ContentGenerator):
         contract = request.publication_contract
         if contract is None:
             raise GenerationFailed("新内容缺少发布责任合同")
-        fact_bindings = [
-            {
-                "unit_id": unit.unit_id,
-                "fact_refs": list(unit.fact_refs),
-            }
-            for unit in skeleton.units
-            if unit.track == "trusted_fact"
-        ]
         writable = [
             {
                 "unit_id": unit.unit_id,
@@ -1621,26 +1612,7 @@ class DeepSeekGenerator(ContentGenerator):
             writer_topic = "围绕本次冻结商品事实完成具体选择解释"
         else:
             writer_topic = contract.topic
-        creative_brief = {
-            "contract_version": contract.contract_version,
-            "primary_product": contract.primary_product,
-            "topic": writer_topic,
-            "topic_origin": contract.topic_origin,
-            "central_job": contract.central_job,
-            "audience_payoff": contract.audience_payoff,
-            "allowed_general_advice_scope": list(
-                contract.allowed_general_advice_scope
-            ),
-        }
-        account_permission = {
-            "identity": contract.account_identity,
-            "audience": contract.account_audience,
-            "attention": contract.account_attention,
-            "response_boundary": contract.account_response_boundary,
-            "refusals": contract.account_refusals,
-            "allowed_editorial_stance": contract.allowed_editorial_stance,
-        }
-        product_plan: object = None
+        product_goals: tuple[str, ...] = ()
         if request.product_value_contract is not None:
             raw_plan = product_value_contract_document(
                 request.product_value_contract
@@ -1655,16 +1627,15 @@ class DeepSeekGenerator(ContentGenerator):
                     result = result.replace(literal, "本次冻结事实")
                 return result
 
-            product_plan = {
-                key: writer_goal(raw_plan[key])
+            product_goals = tuple(
+                str(writer_goal(raw_plan[key]))
                 for key in (
                     "product_insight",
                     "tradeoff_or_limit",
                     "validity_condition",
-                    "source_fact_ids",
                 )
                 if key in raw_plan
-            }
+            )
         prior = (
             [
                 {
@@ -1689,40 +1660,6 @@ class DeepSeekGenerator(ContentGenerator):
             if request.series_context is not None
             else []
         )
-        safety = [
-            {
-                "rule_id": rule_id,
-                "boundary": NEGATIVE_SAFETY_RULES[rule_id],
-            }
-            for rule_id in contract.prohibited_reality_or_product_claims
-        ]
-        product_rule = (
-            "内部商品计划只说明本篇应让受众获得的理解、取舍和成立条件，不是可见文案。"
-            "根据逐字事实写出自然、商品专属的选择解释；不得复制内部字段或安全说明，"
-            "不得新增价格、库存、属性、性能、用途、效果、体验或设计动机。"
-            if product_plan is not None
-            else ""
-        )
-        p1_rule = (
-            "直接回答怎么穿：正文必须给出一条明确的一般穿衣建议、一个真实取舍和一个"
-            "出门前检查动作。可以使用可脱外层、可单穿内层、分层等一般类别；建议保持"
-            "条件语态，不声称具体商品具有任何效果，也不要把主要选择退回用户。"
-            if request.primary_product == "dressing_decision"
-            else ""
-        )
-        actuality_rule = (
-            "observable_actuality 会由服务端逐字插入一次。作品要回应其中的具体张力，"
-            "但 Writer 不复述、改写、补全或解释原因，也不新增人物身份、对白、健康、"
-            "心理、因果、后续事件或结果。creation/style 指令绝不能写成现实事实。"
-            if any(span.role == "observable_actuality" for span in contract.intake_spans)
-            else ""
-        )
-        zero_topic_rule = (
-            "用户没有提供题材。你必须从账号允许的内容领地自主选择一个具体题材，形成"
-            "可陈述的中心判断并完成作品；不能把选题、问题或二选一重新交给用户。"
-            if contract.topic_origin == "system_selected"
-            else ""
-        )
         platform_rule = (
             "这是视频：body 是可直接口播的完整台词，段落有自然节奏；title 能承担首帧，"
             "natural_guide 给观看承诺，release_caption 是独立发布配文而不是台词复印。"
@@ -1730,23 +1667,38 @@ class DeepSeekGenerator(ContentGenerator):
             else "这是图文：正文要有清楚段落推进，标题适合首图，导读给观看回报，发布配文"
             "与正文互补而不机械复述。"
         )
-        return f"""完成一篇可以直接交付给用户的作品。服务端已经冻结事实、来源、账号权限、
-平台、系列前情、媒体程序和资源；你只负责非事实性的中心判断、自然表达、条件建议与发布配文。
+        actuality_note = (
+            "这些原句由服务端另行展示。只写接在它们之后的观点或建议；不要复述、改写、"
+            "解释成因，也不要推断健康、心理、人物关系、后续事件或结果。"
+            if actuality_context
+            else "本篇没有需要 Writer 处理的现实原句。"
+        )
+        product_note = (
+            "以下三点是编辑目标，不是成品句子。用自然平台语言写出其选择价值，不能照抄，"
+            "也不能新增价格、库存、属性、性能、用途、效果、体验或设计动机。"
+            if product_goals
+            else ""
+        )
+        return f"""完成一篇可以直接交付给用户的作品。事实、来源、账号权限、平台、系列前情、
+媒体程序和资源已由服务端冻结；你只写非事实性的中心判断、条件建议、自然正文与发布配文。
 
-CreativeBrief（唯一任务简报；内部字段不得进入成品）：
-{json.dumps(creative_brief, ensure_ascii=False)}
+本篇题材：{writer_topic}
+本篇任务：{contract.central_job}
+给读者的回报：{contract.audience_payoff}
+可以使用的一般建议：{json.dumps(contract.allowed_general_advice_scope, ensure_ascii=False)}
 
-服务端冻结现实片段（只出现于此；成品会由服务端逐字插入一次，Writer 不复述、改写或解释原因）：
-{json.dumps(actuality_context, ensure_ascii=False)}
+现实原句（只读）：{json.dumps(actuality_context, ensure_ascii=False)}
+{actuality_note}
 
-服务端事实绑定（只有标识；事实正文不会交给 Writer，成品由服务端插入）：
-{json.dumps(fact_bindings, ensure_ascii=False)}
+商品编辑目标：{json.dumps(product_goals, ensure_ascii=False)}
+{product_note}
 
-账号编辑许可（只决定观察顺序、判断尺度和回应姿态；不得照抄成账号定义、口号或职业经历）：
-{json.dumps(account_permission, ensure_ascii=False)}
-
-内部商品语义计划（只用于形成自然选择价值，不得复制字段或防越界说明）：
-{json.dumps(product_plan, ensure_ascii=False)}
+账号编辑许可：
+- 观察身份：{contract.account_identity}
+- 面向的人：{contract.account_audience}
+- 习惯先看：{contract.account_attention}
+- 回应边界：{contract.account_response_boundary}
+这些内容只决定观察顺序、判断尺度和回应姿态，不得照抄成账号定义、口号或职业经历。
 
 冻结系列前情（有则推进，不机械复述）：
 {json.dumps(series, ensure_ascii=False)}
@@ -1755,27 +1707,19 @@ CreativeBrief（唯一任务简报；内部字段不得进入成品）：
 此前可写单元（只在修订时使用）：
 {json.dumps(prior, ensure_ascii=False)}
 
-唯一负向安全合同（所有可写单元共同适用）：
-{json.dumps(safety, ensure_ascii=False)}
+唯一负向安全合同：不得新增、改写或补全用户现实、商品硬事实、具体商品效果、人物关系、
+品牌机构主张、健康／法律／交易结论或未登记媒体资源；一般建议必须保持建议、条件或假设身份。
 
 写作责任：
 - title 是作品标题；natural_guide 是自然导读；所有 body 单元共同形成完整中心判断；
   release_caption 是可直接发布且与正文互补的配文。
-- 可以形成观点、非事实创作观察、条件建议、真实取舍和不绑定现实主体的假设；没有规定问句、
-  二选一、固定收束或唯一句型。不要写内部合同、字段、验证、防越界或资料说明。
+- 可以形成观点、非事实创作观察、条件建议、真实取舍和不绑定现实主体的假设；不要写内部合同、
+  字段、验证、防越界或资料说明，也不要把本篇任务或编辑目标换一种说法写进正文。
 - 品牌和账号关系通过本题的观察取舍、受众关系和回应姿态自然体现；不硬插品牌名、商品或服饰
   结论，也不删除账号立场而退化为通用文案。
 - Writer 不拥有媒体单元、MediaProgram 或资源。不要写拍摄、摆放、出镜、场地、道具、图片、
   商品实物或声音指令；Compiler 只会把你完成的内容绑定到预先冻结的槽位。
-{p1_rule}
-{product_rule}
-{actuality_rule}
-{zero_topic_rule}
 {platform_rule}
-
-本篇中心任务：{contract.central_job}
-给受众的回报：{contract.audience_payoff}
-允许的一般建议范围：{json.dumps(contract.allowed_general_advice_scope, ensure_ascii=False)}
 
 服务端可写 unit：
 {json.dumps(writable, ensure_ascii=False)}

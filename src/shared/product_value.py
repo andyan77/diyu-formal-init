@@ -242,16 +242,16 @@ def _build_p2_contract(
     elif len(colors) >= 2:
         source_keys = ("display_name", "colors")
         insight = (
-            f"{product.display_name}已确认的{colors[0]}与{colors[1]}"
-            "提供了不同的可见重心，选择应落在本次想让哪一种颜色先被看见。"
+            f"{product.display_name}的{colors[0]}与{colors[1]}提供了不同的可见重心，"
+            "选择应落在本次想让哪一种颜色先被看见。"
         )
         tradeoff = (
-            "突出一种颜色会暂时弱化其他颜色的可见存在；这不等于"
-            "颜色已经证明用途、效果或穿着体验。"
+            "先突出一种颜色，就会暂时放下另一种颜色的视觉重点；一次选择不能同时让"
+            "两种颜色都成为主角。"
         )
         condition = (
-            "只有本次选择确实依赖颜色差异时，这个判断才成立；如果选择并不取决于颜色，"
-            "这组颜色就不能替代其他尚未确认的判断依据。"
+            "只有本次选择确实依赖颜色差异时，这项价值才成立；如果颜色不是决定因素，"
+            "这组差异就不必承担本次选择。"
         )
     elif structure and silhouette:
         structure_key = (
