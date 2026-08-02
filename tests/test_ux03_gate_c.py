@@ -2891,7 +2891,7 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert "从穿衣编辑的位置重新看熟悉事物" in prompt
     assert "陪正在重新选择日常节奏的人看清取舍" in prompt
     assert '"required_visible_spans"' not in prompt
-    assert '"总部穿衣编辑"' in prompt
+    assert '"总部穿衣编辑"' not in prompt
     assert "为什么会说这段话" in prompt
     assert "折线衣间" not in prompt
     assert "每个 text 只填写该单元的自然内容" in prompt
@@ -2901,6 +2901,8 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert '"text": ""' in prompt
     assert "填写 media_opening 的完整可见文字" not in prompt
     assert "purpose 只说明下游消费用途" in prompt
+    assert "创作表达必须与冻结现实保持因果独立" in prompt
+    assert "不得解释、诊断、否定或纠正" in prompt
 
     compiled = compile_delivery(
         _compile_input(request),
