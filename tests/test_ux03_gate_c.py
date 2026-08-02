@@ -838,6 +838,7 @@ def test_publication_p1_keeps_all_visible_expression_writer_owned(
         assert "唯一负向安全合同" in system
         assert "现实片段中的人物、对象与事件只存在于服务端事实块" in system
         assert "不替它们判定原因、内部状态、变化或结果" in system
+        assert "注意力分配或可见选择" not in prompt
         assert "不能给商品或选项补充未确认属性" in system
         return {
             "choices": [
@@ -981,6 +982,24 @@ def test_publication_product_content_requires_product_fact_before_writer(
         ),
         roles=("creation_instruction", "creation_instruction"),
     )
+    frame = request.narrative_frame
+    assert frame is not None
+    context = BoundaryContext.from_request(request, frame)
+    skeleton = build_kernel_skeleton(
+        frame=frame,
+        fact_registry=context.fact_registry,
+        constraint_refs=tuple(context.constraint_ids),
+        program_id=select_kernel_program(frame=frame),
+        media_format=request.media_format,
+        kernel_version=KERNEL_VERSION,
+        primary_product=request.primary_product,
+    )
+    prompt = DeepSeekGenerator._publication_v2_writer_prompt(
+        request,
+        skeleton,
+    )
+    assert "成立条件必须" not in prompt
+    assert "适用的前提自然融入正文" in prompt
 
     def unexpected(*args: object, **kwargs: object) -> NoReturn:
         del args, kwargs
@@ -3218,8 +3237,8 @@ def test_actuality_writer_receives_one_frozen_fact_without_duplicate_instruction
         for span in request.publication_contract.intake_spans
     ) == 1
     assert "这些原句由服务端另行展示" in prompt
-    assert "不特指任何人的外部条件、注意力分配或可见选择" in prompt
-    assert "不能解释当前人物为什么如此、处于什么内部状态、之后会怎样" in prompt
+    assert "只把原句用于找到作品的具体张力" in prompt
+    assert "注意力分配或可见选择" not in prompt
     assert "服务端事实绑定" not in prompt
     assert "帮我发一条" not in prompt
 
@@ -4440,7 +4459,8 @@ def test_publication_actuality_prompt_keeps_reality_dialogue_in_negative_boundar
     )._kernel_writer_prompt(request, kernel, {})
 
     assert "很短的条件或状态，也不能复制" in prompt
-    assert "中心判断必须停在不特指任何人的外部条件、注意力分配或可见选择上" in prompt
+    assert "只把原句用于找到作品的具体张力" in prompt
+    assert "注意力分配或可见选择" not in prompt
     assert prompt.count("唯一负向安全合同") == 1
     assert "低风险一般观察属于 creative_expression，不是事实" in prompt
     assert "独立 Reviewer" not in prompt
