@@ -298,9 +298,25 @@ def _assert_cross_card_distinct(
     for artifact in artifacts:
         card_id = str(artifact["card_id"])
         body = str(artifact["body"])
+        frozen_fact_lines: set[str] = set()
+        snapshot = artifact.get("formal_snapshot")
+        if isinstance(snapshot, dict):
+            frame = snapshot.get("narrative_frame")
+            if isinstance(frame, dict):
+                raw_user_facts = frame.get("user_facts")
+                if isinstance(raw_user_facts, list):
+                    for raw_fact in raw_user_facts:
+                        if isinstance(raw_fact, dict):
+                            exact_text = raw_fact.get("exact_text")
+                            if isinstance(exact_text, str) and exact_text.strip():
+                                frozen_fact_lines.add(f"你提到：“{exact_text.strip()}”")
         for raw_line in body.splitlines():
             line = " ".join(raw_line.strip().lstrip("#*- ").split())
-            if len(line) < 24 or line.startswith(("AIGC", "发布提醒", "事实范围", "创作范围", "表达范围")):
+            if (
+                len(line) < 24
+                or line in frozen_fact_lines
+                or line.startswith(("AIGC", "发布提醒", "事实范围", "创作范围", "表达范围"))
+            ):
                 continue
             previous = owners.get(line)
             if previous is not None and previous != card_id:

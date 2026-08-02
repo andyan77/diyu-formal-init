@@ -246,15 +246,27 @@ _P1_PUBLICATION_BRIEF: dict[str, str] = {
     ),
     "release_caption": "用一句自然文字保留本次条件和下一动作，不重复正文或承诺效果。",
 }
-_PLATFORM_NATIVE_GUIDE_RESPONSIBILITY: dict[str, str] = {
-    "graphic": (
-        "这是图文的阅读回报：用一句自然文字说明读者沿首图和不可交换的图序，最终能看清"
-        "哪条本题判断；不要写成视频观看预告，也不要介绍创作方法或文章结构。"
-    ),
-    "video": (
-        "这是短视频的观看回报：用一句自然文字说明观众从首帧、时间推进到收束，最终能看清"
-        "哪条本题判断；不要写成翻页导读，也不要介绍创作方法或脚本结构。"
-    ),
+_PLATFORM_NATIVE_UNIT_RESPONSIBILITY: dict[str, dict[str, str]] = {
+    "graphic": {
+        "title": (
+            "这是图文封面标题：用一句适合停留阅读和收藏的具体判断或选择张力命名本题，"
+            "不写成视频开场口播，也不只复述用户原句。"
+        ),
+        "natural_guide": (
+            "这是图文的阅读回报：用一句自然文字说明读者沿首图和不可交换的图序，最终能看清"
+            "哪条本题判断；不要写成视频观看预告，也不要介绍创作方法或文章结构。"
+        ),
+    },
+    "video": {
+        "title": (
+            "这是短视频首帧标题：用一句口语化转折或即时悬念启动时间推进，让受众想继续看"
+            "下一拍；不写成图文收藏标题，也不只复述用户原句。"
+        ),
+        "natural_guide": (
+            "这是短视频的观看回报：用一句自然文字说明观众从首帧、时间推进到收束，最终能看清"
+            "哪条本题判断；不要写成翻页导读，也不要介绍创作方法或脚本结构。"
+        ),
+    },
 }
 _MODE_BLOCK_TYPE: dict[NarrativeMode, NarrativeBlockType] = {
     "actuality_reflection": "general_observation",
@@ -1620,10 +1632,10 @@ class DeepSeekGenerator(ContentGenerator):
                 **(
                     {
                         "platform_native_responsibility": (
-                            _PLATFORM_NATIVE_GUIDE_RESPONSIBILITY[request.media_format]
+                            _PLATFORM_NATIVE_UNIT_RESPONSIBILITY[request.media_format][unit.purpose]
                         )
                     }
-                    if unit.purpose == "natural_guide"
+                    if unit.purpose in {"title", "natural_guide"}
                     else {}
                 ),
             }

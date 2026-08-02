@@ -258,6 +258,7 @@ def _artifact(
                 "media_capability_envelope",
                 "media_program",
                 "series_context",
+                "narrative_frame",
             )
         },
     }

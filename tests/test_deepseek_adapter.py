@@ -1943,8 +1943,12 @@ def test_writer_natural_guide_has_distinct_graphic_and_video_responsibilities() 
 
     assert "沿首图和不可交换的图序" in graphic_prompt
     assert "从首帧、时间推进到收束" not in graphic_prompt
+    assert "适合停留阅读和收藏" in graphic_prompt
+    assert "口语化转折或即时悬念" not in graphic_prompt
     assert "从首帧、时间推进到收束" in video_prompt
     assert "沿首图和不可交换的图序" not in video_prompt
+    assert "口语化转折或即时悬念" in video_prompt
+    assert "适合停留阅读和收藏" not in video_prompt
 
 
 def test_creative_plan_v3_freezes_topic_origin_and_reads_v2_without_upgrade() -> None:

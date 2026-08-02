@@ -229,6 +229,13 @@ def _tenant01_evidence_inputs(
                     },
                     "account_editorial_lens": lens_document,
                     "account_editorial_lens_digest": lens_digest,
+                    "narrative_frame": {
+                        "frame_version": "narrative-frame-v1",
+                        "narrative_mode": "actuality_reflection",
+                        "user_facts": [],
+                        "allowed_brand_fact_ids": [],
+                        "allowed_product_fact_ids": [],
+                    },
                 },
             },
         )
@@ -1576,6 +1583,40 @@ def test_tenant01_evidence_rejects_repeated_nonessential_account_definition(
             p5_preflight_file="p5-no-media.json",
             dm01_file="dm01.json",
         )
+
+
+def test_tenant01_evidence_allows_only_snapshot_bound_repeated_user_fact(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, reviews = _tenant01_evidence_inputs(tmp_path)
+    repeated_fact = "今天整理衣服时，突然觉得少一点也能让选择更清楚。"
+    target_cards = ("cross_platform_xhs", "cross_platform_douyin")
+    for card_id in target_cards:
+        item = next(record for record in artifacts if record.card_id == card_id)
+        path = tmp_path / item.artifact_file
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["formal_snapshot"]["narrative_frame"]["user_facts"] = [
+            {"source_id": "user-fact:shared", "exact_text": repeated_fact}
+        ]
+        document["body"] = f"{document['body']}\n你提到：“{repeated_fact}”"
+        document["visible_digest"] = __import__(
+            "src.shared.narrative",
+            fromlist=["visible_digest"],
+        ).visible_digest(document["outline"], document["body"])
+        _write_private_json(path, document)
+
+    write_tenant01_evidence(
+        tmp_path,
+        implementation_sha="a" * 40,
+        schema_revision="20260813_40",
+        image_digest="sha256:" + "b" * 64,
+        source_manifest_digest="e" * 64,
+        artifacts=artifacts,
+        reviews=reviews,
+        p5_preflight_file="p5-no-media.json",
+        dm01_file="dm01.json",
+    )
 
 
 def test_tenant01_golden_p2_preflight_requires_product_specific_value() -> None:
