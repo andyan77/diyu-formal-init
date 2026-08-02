@@ -2440,6 +2440,7 @@ def test_actuality_writer_receives_one_frozen_fact_as_read_only_topic_anchor() -
     assert '"contract_version": "actuality-writer-brief-v2"' in prompt
     assert '"source_id": "source:user_actuality:1"' in prompt
     assert '"writer_relation": "respond_without_repeating_or_explaining_cause"' in prompt
+    assert "preserve_source_roles_without_reassigning_a_third_party" in prompt
     assert "不得复述、改写或补全原句" in prompt
 
 

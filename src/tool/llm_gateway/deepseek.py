@@ -1916,6 +1916,9 @@ class DeepSeekGenerator(ContentGenerator):
                     for fact in request.narrative_frame.user_facts
                 ],
                 "writer_relation": "respond_without_repeating_or_explaining_cause",
+                "writer_subject_boundary": (
+                    "preserve_source_roles_without_reassigning_a_third_party_to_the_reader_or_account"
+                ),
             }
         elif request.creative_plan.topic_origin == "system_selected":
             topic_projection = {
@@ -3664,6 +3667,13 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             if request.indispensable_fact_question_allowed
             else ""
         )
+        series_intake_rule = (
+            """- 当前存在冻结系列前情。要求承接前篇、指定本篇位置、说明本篇要讨论什么或"
+            "询问下一篇怎样展开，都是 creation_instruction，不是已经发生的现实。只有单独"
+            "陈述且具有可观察动作、事件、对白或结果的完整候选句，才可标为 observable_actuality。"""
+            if request.prior_series_summary
+            else ""
+        )
         return f"""编译本轮创作条件。服务端已经独立判断是否存在创作承诺；你只能提议，不能授权
 创建任务。只返回以下一种 JSON：
 {{"kind":"chat","message":"自然回复","creation_proposal":false,"intent_span":""}}
@@ -3703,6 +3713,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   保留整句为 observable_actuality，不得裁剪；相邻独立指令句绝不能冒充真人事实。
 - 显式模式为 dramatization 时必须使用它；没有明确演绎要求不得升级为剧情。
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
+{series_intake_rule}
 - CreativePlanV3 只能选择上述结构字段。topic_spans 必须逐字来自用户消息；禁止写人物设定、
   事件、对白、动机、因果、品牌立场、门店事实、用户履历、标题、主张或故事梗概。
 - 只有用户给出了面向受众的具体题材时 topic_origin 才能是 explicit_user；“没有题材、

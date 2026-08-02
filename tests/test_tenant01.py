@@ -380,6 +380,7 @@ def test_account_editorial_lens_freezes_distinct_profile_inputs_and_publication(
     assert "不把它写成原因、诊断" in serialized
     assert "不得升级为生活的一般教训" in serialized
     assert "健康、身体改善、心理、需要、意图、原因、因果或结果" in serialized
+    assert "第三方改写成读者、账号、家人、顾客或其他新身份" in serialized
 
 
 def test_writer_body_units_receive_distinct_progression_responsibilities() -> None:

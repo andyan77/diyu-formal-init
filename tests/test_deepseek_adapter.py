@@ -1516,6 +1516,27 @@ def test_committed_low_seed_cannot_be_returned_as_an_unnecessary_question() -> N
         _generator().collaborate(request)
 
 
+def test_series_intake_does_not_turn_continuation_instruction_into_actuality() -> None:
+    request = ConversationInput(
+        message="继续下一篇：怎样在对方明确回应时接住话题。",
+        history=(),
+        brand=_brand(),
+        products=(),
+        target="xiaohongshu_graphic",
+        prior_series_summary="系列第 2 个位置；已有 1 条必要前情。",
+        creation_committed=True,
+        allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        platform_shape="xiaohongshu_graphic:graphic",
+    )
+
+    prompt = _generator()._conversation_prompt(request)
+
+    assert "当前存在冻结系列前情" in prompt
+    assert "都是 creation_instruction，不是已经发生的现实" in prompt
+    assert "只有单独" in prompt
+    assert "陈述且具有可观察动作、事件、对白或结果" in prompt
+
+
 def test_conversation_rejects_synthetic_or_mode_drifted_spans() -> None:
     message = "帮我写条婆媳主题的小红书。"
     FakeClient.responses = [
