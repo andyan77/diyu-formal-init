@@ -123,6 +123,7 @@ from src.shared.review_evidence import (
     writer_clause_contexts_v2,
 )
 from src.shared.server_bearing_expression import (
+    P1_SELECTION_UNIT_ID,
     ServerBearingExpressionContractV1,
     assert_server_bearing_expression_matches,
     build_server_bearing_expression_contract,
@@ -287,13 +288,32 @@ _P1_PUBLICATION_BRIEF: dict[str, str] = {
     "release_caption": "用一句自然文字保留本次条件和下一动作，不重复正文或承诺效果。",
 }
 _P1_NON_BEARING_WRITER_BRIEF: dict[str, str] = {
-    "title": "只为服务端已经冻结的选择骨架取一个自然标题，不新增条件、建议、商品或结果承诺。",
-    "natural_guide": "只说明读者会看到一条有条件的选择路径，不新增选择标准、因果或效果。",
+    "title": (
+        "只用用户已经给出的条件命名这次矛盾，采用尚未回答的问题式标题；不写答案、建议、"
+        "商品或结果承诺。"
+    ),
+    "natural_guide": (
+        "只说明接下来会把已有条件拆开再作取舍；不提前概括怎样穿、能获得什么，也不新增"
+        "选择标准、因果或效果。"
+    ),
     "body": (
         "服务端已经写入本篇唯一承重的选择骨架。这里只用不超过四十个可见字符做自然承接，"
         "不得新增服装类别、阈值、效果、体验、因果或另一条选择建议。"
     ),
-    "release_caption": "只自然收束服务端已有选择，不新增条件、下一动作、商品效果或现实判断。",
+    "release_caption": (
+        "只邀请受众回到自己的已知条件作判断；不总结怎样穿、哪种更好或能得到什么，不新增"
+        "条件、下一动作、商品效果或现实判断。"
+    ),
+}
+_P1_NON_BEARING_PLATFORM_RESPONSIBILITY: dict[str, dict[str, str]] = {
+    "graphic": {
+        "title": "图文封面只提出用户已经给出的条件冲突，不替服务端选择骨架回答问题。",
+        "natural_guide": "图文导读只承诺逐页看清已有条件和取舍顺序，不承诺穿着结果。",
+    },
+    "video": {
+        "title": "视频首帧只提出用户已经给出的条件冲突，不替服务端选择骨架回答问题。",
+        "natural_guide": "视频观看回报只承诺沿时间顺序拆开已有条件，不承诺穿着结果。",
+    },
 }
 _PLATFORM_NATIVE_UNIT_RESPONSIBILITY: dict[str, dict[str, str]] = {
     "graphic": {
@@ -1755,7 +1775,17 @@ class DeepSeekGenerator(ContentGenerator):
                 **(
                     {
                         "platform_native_responsibility": (
-                            _PLATFORM_NATIVE_UNIT_RESPONSIBILITY[request.media_format][unit.purpose]
+                            _P1_NON_BEARING_PLATFORM_RESPONSIBILITY[
+                                request.media_format
+                            ][unit.purpose]
+                            if (
+                                request.primary_product == "dressing_decision"
+                                and P1_SELECTION_UNIT_ID
+                                in resolved_compiler_texts
+                            )
+                            else _PLATFORM_NATIVE_UNIT_RESPONSIBILITY[
+                                request.media_format
+                            ][unit.purpose]
                         )
                     }
                     if unit.purpose in {"title", "natural_guide"}

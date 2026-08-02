@@ -3384,8 +3384,10 @@ def test_current_p1_writer_brief_is_bounded_and_does_not_license_product_perform
     assert "没有 ProductFact" in prompt
     assert "decision_responsibility" in prompt
     assert P1_SELECTION_UNIT_ID in prompt
-    assert "只自然收束服务端已有选择" in prompt
+    assert "只邀请受众回到自己的已知条件作判断" in prompt
     assert "不得再提出第二套选择" in prompt
+    assert "视频观看回报只承诺沿时间顺序拆开已有条件" in prompt
+    assert "不提前概括怎样穿、能获得什么" in prompt
     assert P1_SELECTION_UNIT_ID not in {
         unit.unit_id for unit in kernel.writable_units
     }
