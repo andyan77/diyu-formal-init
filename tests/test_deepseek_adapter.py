@@ -310,6 +310,24 @@ def _intake_plan(message: str) -> dict[str, object]:
     )
 
 
+def _sentence_roles(
+    message: str,
+    fact_ids: tuple[str, ...] = (),
+) -> list[dict[str, str]]:
+    fact_set = frozenset(fact_ids)
+    return [
+        {
+            "sentence_id": candidate.source_id,
+            "role": (
+                "observable_actuality"
+                if candidate.source_id in fact_set
+                else "creation_instruction"
+            ),
+        }
+        for candidate in user_fact_candidates((message,))
+    ]
+
+
 def _mode_text(mode: str, value: str) -> str:
     if mode == "hypothesis":
         return f"如果先停十秒，{value}也许会换一种走向。"
@@ -1122,6 +1140,10 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
                 "user_instruction_sentence_ids": list(
                     instruction_candidates
                 ),
+                "user_sentence_roles": _sentence_roles(
+                    message,
+                    (fact_candidate.source_id,),
+                ),
                 "narrative_mode": "general_observation",
                 "creative_plan": _intake_plan(message),
             }
@@ -1163,6 +1185,10 @@ def test_conversation_intake_freezes_the_whole_negated_sentence() -> None:
                 "user_fact_sentence_ids": [negated.source_id],
                 "user_instruction_sentence_ids": list(
                     instruction_candidates
+                ),
+                "user_sentence_roles": _sentence_roles(
+                    message,
+                    (negated.source_id,),
                 ),
                 "creative_plan": _intake_plan(message),
             }
@@ -1236,6 +1262,10 @@ def test_conversation_intake_keeps_creation_instruction_out_of_frozen_actuality(
                 "user_instruction_sentence_ids": [
                     instruction.source_id
                 ],
+                "user_sentence_roles": _sentence_roles(
+                    message,
+                    (fact.source_id,),
+                ),
                 "creative_plan": _intake_plan(message),
             }
         )
@@ -1286,6 +1316,7 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
                     candidate.source_id
                     for candidate in user_fact_candidates((message,))
                 ],
+                "user_sentence_roles": _sentence_roles(message),
                 "narrative_mode": mode,
                 "creative_plan": _intake_plan(message),
             }
@@ -1375,6 +1406,7 @@ def test_conversation_rejects_synthetic_or_mode_drifted_spans() -> None:
                     candidate.source_id
                     for candidate in user_fact_candidates((message,))
                 ],
+                "user_sentence_roles": _sentence_roles(message),
                 "narrative_mode": "actuality_reflection",
                 "creative_plan": _intake_plan(message),
             }

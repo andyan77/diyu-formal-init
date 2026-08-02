@@ -612,15 +612,12 @@ class DeepSeekGenerator(ContentGenerator):
             )
         raw_premises = document.get("user_premises")
         raw_fact_ids = document.get("user_fact_sentence_ids")
-        raw_instruction_ids = document.get("user_instruction_sentence_ids")
+        raw_sentence_roles = document.get("user_sentence_roles")
         raw_plan = document.get("creative_plan")
         if (
             not isinstance(raw_premises, list)
             or not isinstance(raw_fact_ids, list)
-            or (
-                raw_instruction_ids is not None
-                and not isinstance(raw_instruction_ids, list)
-            )
+            or not isinstance(raw_sentence_roles, list)
         ):
             raise GenerationFailed("模型协作返回格式不完整")
         premises = self._exact_string_list(raw_premises)
@@ -629,28 +626,39 @@ class DeepSeekGenerator(ContentGenerator):
         candidates = request.user_fact_candidates or user_fact_candidates(available_user_turns)
         candidate_by_id = {candidate.source_id: candidate.exact_text for candidate in candidates}
         fact_source_ids = self._exact_string_list(raw_fact_ids)
-        instruction_source_ids = (
-            self._exact_string_list(raw_instruction_ids)
-            if isinstance(raw_instruction_ids, list)
-            else tuple(
-                source_id
-                for source_id in candidate_by_id
-                if source_id not in fact_source_ids
-            )
+        sentence_roles: dict[str, str] = {}
+        for raw_role in raw_sentence_roles:
+            if not isinstance(raw_role, dict) or set(raw_role) != {
+                "sentence_id",
+                "role",
+            }:
+                raise GenerationFailed("用户句子角色投影格式不完整")
+            sentence_id = raw_role.get("sentence_id")
+            role = raw_role.get("role")
+            if (
+                not isinstance(sentence_id, str)
+                or sentence_id in sentence_roles
+                or sentence_id not in candidate_by_id
+                or role not in {"observable_actuality", "creation_instruction"}
+            ):
+                raise GenerationFailed("用户句子角色投影超出冻结候选")
+            sentence_roles[sentence_id] = role
+        if tuple(sentence_roles) != tuple(candidate_by_id):
+            raise GenerationFailed("用户句子角色没有按候选顺序完整冻结")
+        role_fact_ids = tuple(
+            source_id
+            for source_id, role in sentence_roles.items()
+            if role == "observable_actuality"
+        )
+        instruction_source_ids = tuple(
+            source_id
+            for source_id, role in sentence_roles.items()
+            if role == "creation_instruction"
         )
         if any(source_id not in candidate_by_id for source_id in fact_source_ids):
             raise GenerationFailed("模型返回的用户事实句标识不存在")
-        if any(
-            source_id not in candidate_by_id
-            for source_id in instruction_source_ids
-        ):
-            raise GenerationFailed("模型返回的创作指令句标识不存在")
-        if (
-            set(fact_source_ids) & set(instruction_source_ids)
-            or set(fact_source_ids) | set(instruction_source_ids)
-            != set(candidate_by_id)
-        ):
-            raise GenerationFailed("用户句子角色没有完整且互斥地冻结")
+        if fact_source_ids != role_fact_ids:
+            raise GenerationFailed("现实事实数组与句子角色投影不一致")
         facts = tuple(candidate_by_id[source_id] for source_id in fact_source_ids)
         premise_text = "\n".join(premises)
         if any(fact not in premise_text for fact in facts):
@@ -3258,13 +3266,18 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         candidate_document = [
             {"sentence_id": candidate.source_id, "exact_text": candidate.exact_text} for candidate in candidates
         ]
+        question_shape = (
+            """\n{\"kind\":\"question\",\"message\":\"一个具体事实问题\",\"missing_fact_span\":\"逐字复制用户明确要求依赖的真实经历片段\",\n\"creation_proposal\":true,\"intent_span\":\"候选用户原话跨度\"}"""
+            if request.indispensable_fact_question_allowed
+            else ""
+        )
         return f"""编译本轮创作条件。服务端已经独立判断是否存在创作承诺；你只能提议，不能授权
 创建任务。只返回以下一种 JSON：
 {{"kind":"chat","message":"自然回复","creation_proposal":false,"intent_span":""}}
-{{"kind":"question","message":"一个具体事实问题","missing_fact_span":"逐字复制用户明确要求依赖的真实经历片段",
-"creation_proposal":true,"intent_span":"候选用户原话跨度"}}
+{question_shape}
 {{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制实际使用的用户消息"],
 "user_fact_sentence_ids":["只能选择服务端候选 sentence_id，不能返回或裁剪事实正文"],
+"user_sentence_roles":[{{"sentence_id":"按服务端候选顺序逐项返回","role":"observable_actuality|creation_instruction"}}],
 "creative_plan":{{"plan_version":"creative-plan-v2","topic_spans":["只能逐字截取用户消息"],
 "primary_value":"dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story",
 "tone_ids":["只选允许 id"],"mechanism_id":null,"platform_shape":"{request.platform_shape}",
@@ -3289,11 +3302,11 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   actuality_reflection，并只选择完整服务端事实句 ID，不得裁剪、概括或改写；明确条件推演
   与明确故事／短剧／情境演绎不属于现实事实，user_fact_sentence_ids 必须为空。narrative_mode 由
   服务端根据显式形式与完整事实句选择派生，你不得返回或选择该字段。
-- ready 时，只把直接陈述可观察现实的完整候选放入 user_fact_sentence_ids。只要求生成、规定
-  写法、限定不得补写什么或表达题材偏好的独立完整句绝不能冒充真人事实；服务端会把所有未选
-  候选确定性冻结为创作指令。一个完整候选同时含有现实片段和创作命令时，保留整句为现实事实，
-  不得裁剪；相邻的独立指令句必须留在未选集合。你可以额外返回
-  user_instruction_sentence_ids 作为完整互斥证明；若返回，必须恰好等于未选候选集合。
+- ready 时，user_sentence_roles 必须按下方服务端候选顺序逐项返回且完整覆盖；直接陈述可观察
+  现实的完整句标为 observable_actuality，只要求生成、规定写法、限定不得补写什么或表达题材
+  偏好的独立完整句标为 creation_instruction。user_fact_sentence_ids 必须恰好等于所有
+  observable_actuality 的 sentence_id，顺序一致。一个完整候选同时含现实片段和创作命令时，
+  保留整句为 observable_actuality，不得裁剪；相邻独立指令句绝不能冒充真人事实。
 - 显式模式为 dramatization 时必须使用它；没有明确演绎要求不得升级为剧情。
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
 - CreativePlanV2 只能选择上述结构字段。topic_spans 必须逐字来自用户消息；禁止写人物设定、
