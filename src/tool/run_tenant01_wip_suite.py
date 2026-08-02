@@ -107,6 +107,7 @@ def _run(args: argparse.Namespace) -> None:
         object_store,
     )
     app = create_app(settings)
+    failures: list[dict[str, str]] = []
     with TestClient(app, base_url="https://diyu.example") as client:
         client.cookies.set("diyu_session", journey.session_token)
         series_id: UUID | None = None
@@ -130,32 +131,40 @@ def _run(args: argparse.Namespace) -> None:
                 raise RuntimeError("TENANT-01 WIP formal series could not be created")
             series_id = UUID(str(response.json()["id"]))
         for card in cards:
-            result = _stream_card(
-                client,
-                generator,
-                card,
-                publishing_identity_id=journey.publishing_identity_id,
-                series_id=series_id or uuid4(),
-            )
-            task_id = UUID(str(result["task_id"]))
-            version_number = int(cast(int, result["version"]))
-            run_id, version_id = _persistence_ids(
-                database_url,
-                journey.tenant_id,
-                task_id,
-                version_number,
-            )
-            snapshot = _task_snapshot(database_url, journey.tenant_id, task_id)
-            _write_private_json(
-                root / f"{card.card_id}.artifact.json",
-                _artifact(
+            try:
+                result = _stream_card(
+                    client,
+                    generator,
                     card,
-                    result,
-                    snapshot,
-                    run_id=run_id,
-                    version_id=version_id,
-                ),
-            )
+                    publishing_identity_id=journey.publishing_identity_id,
+                    series_id=series_id or uuid4(),
+                )
+                task_id = UUID(str(result["task_id"]))
+                version_number = int(cast(int, result["version"]))
+                run_id, version_id = _persistence_ids(
+                    database_url,
+                    journey.tenant_id,
+                    task_id,
+                    version_number,
+                )
+                snapshot = _task_snapshot(database_url, journey.tenant_id, task_id)
+                _write_private_json(
+                    root / f"{card.card_id}.artifact.json",
+                    _artifact(
+                        card,
+                        result,
+                        snapshot,
+                        run_id=run_id,
+                        version_id=version_id,
+                    ),
+                )
+            except (KeyError, RuntimeError, TypeError, ValueError) as exc:
+                failures.append(
+                    {
+                        "card_id": card.card_id,
+                        "failure": str(exc),
+                    }
+                )
     _write_private_json(
         root / "suite-config.json",
         {
@@ -168,8 +177,14 @@ def _run(args: argparse.Namespace) -> None:
                 "max_retries": 0,
             },
             "cards": [card.card_id for card in cards],
+            "failures": failures,
         },
     )
+    if failures:
+        failed_ids = ", ".join(item["card_id"] for item in failures)
+        raise RuntimeError(
+            f"TENANT-01 WIP cards did not all commit: {failed_ids}"
+        )
 
 
 def main() -> None:

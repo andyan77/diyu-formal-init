@@ -4362,6 +4362,7 @@ def test_publication_actuality_prompt_keeps_reality_dialogue_in_negative_boundar
 
     assert "不指向当前用户的一般观察" in prompt
     assert "不能用“你／你的”给当前用户补充身体、心理、动机、原因、结果或后续经历" in prompt
+    assert "很短的条件或状态，也不能复制" in prompt
     assert prompt.count("唯一负向安全合同") == 1
     assert "低风险一般观察属于 creative_expression，不是事实" in prompt
     assert "独立 Reviewer" not in prompt
