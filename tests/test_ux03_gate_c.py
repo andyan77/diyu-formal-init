@@ -2046,6 +2046,7 @@ def test_series_positions_receive_distinct_closed_media_programs() -> None:
         _compile_input(request3),
         cast(Any, _filled_kernel(request3)),
     )
+    assert isinstance(compiled1.production, GraphicProductionBundle)
     assert isinstance(compiled2.production, GraphicProductionBundle)
     assert isinstance(compiled3.production, GraphicProductionBundle)
     assert compiled2.production.hero_image != compiled3.production.hero_image
@@ -3175,6 +3176,7 @@ def test_p3_writer_uses_versioned_editorial_lens_without_profile_copy_or_topic_s
     assert snapshot["account_editorial_lens_digest"]
     frozen_lens = snapshot["account_editorial_lens"]
     assert isinstance(frozen_lens, dict)
+    assert request.account_expression is not None
     assert frozen_lens["source_profile_id"] == str(request.account_expression.profile_id)
     assert frozen_lens["publication_projection_id"] == projection_id
 
