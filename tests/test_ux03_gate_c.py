@@ -835,8 +835,9 @@ def test_publication_p1_keeps_all_visible_expression_writer_owned(
         assert "unit:p1-selection-skeleton" not in prompt
         assert "先认清自己最不能妥协" not in prompt
         assert "你拥有非事实中心判断、一般观察、条件建议、比喻" in system
-        assert "健康心理因果和媒体资源均由服务端拥有" in system
-        assert "当前人物只存在于服务端事实块" in system
+        assert "唯一负向安全合同" in system
+        assert "现实片段中的人物、对象与事件只存在于服务端事实块" in system
+        assert "不替它们判定原因、内部状态、变化或结果" in system
         assert "不能给商品或选项补充未确认属性" in system
         return {
             "choices": [
