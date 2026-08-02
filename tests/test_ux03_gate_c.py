@@ -2641,11 +2641,62 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
     assert '"subject_scope": "generic_only"' in prompt
     assert '"actual_event_or_result"' in prompt
     assert '"allowed_resources": []' in prompt
+    assert '"contract_version": "non-bearing-writer-claim-v1"' in prompt
+    assert '"health_or_body_improvement"' in prompt
+    assert '"source_subject_reassignment"' in prompt
+    assert '"advice_mood": "conditional_or_optional_only"' in prompt
     assert "媒体程序 graphic_series_choice_v1 确定性生成" in prompt
     assert "不得返回任何媒体单元、资源引用" in prompt
     assert "resource:original_composition" not in prompt
     assert "resource:creator_expression" not in prompt
     assert "其他租户诱饵前情" not in prompt
+
+
+def test_series_writer_rejects_one_long_clause_copied_from_frozen_prior_entry() -> None:
+    repeated_clause = (
+        "当对方给出一个明确回应时，只接住其中一个具体点，不再追加第二层解释。"
+    )
+    base_series = _series_context()
+    prior_entries = (
+        base_series.prior_entries[0],
+        replace(base_series.prior_entries[1], body=repeated_clause),
+    )
+    request = _generation_input(
+        series_context=replace(base_series, prior_entries=prior_entries),
+    )
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    repeated_kernel = replace(
+        kernel,
+        units=tuple(
+            replace(unit, text=repeated_clause)
+            if unit.unit_id == "unit:body-opening"
+            else unit
+            for unit in kernel.units
+        ),
+    )
+
+    with pytest.raises(GenerationFailed, match="没有形成新的推进"):
+        DeepSeekGenerator._assert_series_writer_progression(
+            request,
+            repeated_kernel,
+        )
+
+    progressed_kernel = replace(
+        repeated_kernel,
+        units=tuple(
+            replace(
+                unit,
+                text="这次停在回应之后，把下一步选择留给对方，不再继续加码。",
+            )
+            if unit.unit_id == "unit:body-opening"
+            else unit
+            for unit in repeated_kernel.units
+        ),
+    )
+    DeepSeekGenerator._assert_series_writer_progression(
+        request,
+        progressed_kernel,
+    )
 
 
 def test_writer_prompt_consumes_selected_brand_methods_without_fact_upgrade() -> None:

@@ -194,27 +194,62 @@ def _body_editorial_responsibility(
     """Give each preallocated body unit one non-overlapping editorial job."""
 
     if unit_id == "unit:body-opening":
-        specific = (
-            "只承接前情尚未解决的问题，并提出一个新的可观察判断标准；"
-            if series_position is not None and series_position >= 2
-            else "只提出本题独有、可以直接观察的一处张力或差异；"
-        )
+        if series_position is not None and series_position >= 3:
+            specific = "只比较前两篇已经推进到哪里，并命名本篇新增的可观察边界；"
+        elif series_position == 2:
+            specific = "只承接第一篇尚未解决的问题，并提出第二篇的新可观察判断标准；"
+        else:
+            specific = "只提出本题独有、可以直接观察的一处张力或差异；"
         return base_responsibility + specific + "本单元不列并行选项，不给行动建议，也不提前收束。"
     if unit_id == "unit:hypothetical-example":
-        specific = (
-            "只用一个条件化片段检验本篇新增判断，不复述前篇或本篇开头；"
-            if series_position is not None and series_position >= 2
-            else "只用一个清楚的条件化片段检验上一单元的观察；"
-        )
+        if series_position is not None and series_position >= 3:
+            specific = "只用一个条件化选择检验第三篇的新边界，不复用第二篇的判断信号或动作；"
+        elif series_position == 2:
+            specific = "只用一个条件化选择检验第二篇新增判断，不复述第一篇或本篇开头；"
+        else:
+            specific = "只用一个清楚的条件化片段检验上一单元的观察；"
         return base_responsibility + specific + "本单元不再提出第二组选择，也不代替结尾给行动。"
     if unit_id == "unit:body-closing":
-        specific = (
-            "只给出相较前篇真正推进的一项回应或把选择留给受众的一项动作；"
-            if series_position is not None and series_position >= 2
-            else "只给受众一个下一次可以直接使用的有限动作或问题；"
-        )
+        if series_position is not None and series_position >= 3:
+            specific = "只完成第三篇的推进：回应之后停止加码，把下一步选择明确交还对方；"
+        elif series_position == 2:
+            specific = "只完成第二篇的推进：在对方给出明确回应时，接住其中一个具体点；"
+        else:
+            specific = "只给受众一个下一次可以直接使用的有限动作或问题；"
         return base_responsibility + specific + "不总结前两单元，不再次列举两种做法。"
     return base_responsibility
+
+
+def _non_bearing_claim_contract(
+    *,
+    primary_product: ContentProduct,
+    frame: NarrativeFrame,
+) -> dict[str, object] | None:
+    """Expose one closed claim budget without authoring the Writer's prose."""
+
+    if primary_product not in {"brand_life_narrative", "local_response"}:
+        return None
+    allowed = [
+        "observable_difference_or_choice",
+        "conditional_future_action",
+        "audience_can_decide",
+    ]
+    if frame.narrative_mode == "actuality_reflection":
+        allowed.append("record_or_compare_the_visible_change")
+    return {
+        "contract_version": "non-bearing-writer-claim-v1",
+        "claim_weight": "non_bearing",
+        "allowed": allowed,
+        "prohibited": [
+            "product_effect",
+            "health_or_body_improvement",
+            "mental_state_or_unspoken_need",
+            "cause_or_result",
+            "new_actual_event",
+            "source_subject_reassignment",
+        ],
+        "advice_mood": "conditional_or_optional_only",
+    }
 
 
 def _provider_rejection_state(
@@ -1085,6 +1120,7 @@ class DeepSeekGenerator(ContentGenerator):
         self._assert_p3_account_link_natural(request, kernel)
         self._assert_no_unfrozen_actuality_dialogue(request, kernel)
         self._assert_p1_publication_shape(request, kernel)
+        self._assert_series_writer_progression(request, kernel)
         if request.revision_instruction and request.prior_creative_kernel:
             before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
             after = tuple(unit.text for unit in kernel.writable_units)
@@ -1732,6 +1768,10 @@ class DeepSeekGenerator(ContentGenerator):
                     resource_id,
                     description,
                 )
+        non_bearing_claim_contract = _non_bearing_claim_contract(
+            primary_product=request.primary_product,
+            frame=request.narrative_frame,
+        )
         writable = [
             {
                 "unit_id": unit.unit_id,
@@ -1743,6 +1783,11 @@ class DeepSeekGenerator(ContentGenerator):
                 "text_contract": {
                     "shape": "content_only",
                     "wrapper_owner": "delivery_compiler",
+                    **(
+                        {"claim_contract": non_bearing_claim_contract}
+                        if non_bearing_claim_contract is not None
+                        else {}
+                    ),
                 },
                 **(
                     {
@@ -3001,6 +3046,23 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             visible_length = sum(len("".join(unit.text.split())) for unit in kernel.units if unit.purpose == purpose)
             if visible_length > limit:
                 raise GenerationFailed("本次穿衣选择没有在可直接观看的长度内完成")
+
+    @staticmethod
+    def _assert_series_writer_progression(
+        request: GenerationInput,
+        kernel: CreativeKernelV1,
+    ) -> None:
+        series = request.series_context
+        if series is None or series.target_position < 2:
+            return
+        prior_visible = "".join(
+            "".join(entry.body.split()) for entry in series.prior_entries
+        )
+        for unit in kernel.writable_units:
+            for clause in re.split(r"(?<=[。！？!?；;])|\n+", unit.text):
+                normalized = "".join(clause.split())
+                if len(normalized) >= 24 and normalized in prior_visible:
+                    raise GenerationFailed("系列续写重复了前篇的完整表达，没有形成新的推进")
 
     @classmethod
     def _copied_account_profile_units(

@@ -398,7 +398,19 @@ def test_writer_body_units_receive_distinct_progression_responsibilities() -> No
             "unit:body-closing",
         )
     )
-    series = tuple(
+    series2 = tuple(
+        _body_editorial_responsibility(
+            unit_id=unit_id,
+            base_responsibility=base,
+            series_position=2,
+        )
+        for unit_id in (
+            "unit:body-opening",
+            "unit:hypothetical-example",
+            "unit:body-closing",
+        )
+    )
+    series3 = tuple(
         _body_editorial_responsibility(
             unit_id=unit_id,
             base_responsibility=base,
@@ -413,13 +425,17 @@ def test_writer_body_units_receive_distinct_progression_responsibilities() -> No
 
     assert len(set(standalone)) == 3
     assert all(base in responsibility for responsibility in standalone)
-    assert all(base in responsibility for responsibility in series)
+    assert all(base in responsibility for responsibility in series2)
+    assert all(base in responsibility for responsibility in series3)
     assert "不列并行选项" in standalone[0]
     assert "不再提出第二组选择" in standalone[1]
     assert "不再次列举两种做法" in standalone[2]
-    assert "承接前情尚未解决的问题" in series[0]
-    assert "不复述前篇" in series[1]
-    assert "相较前篇真正推进" in series[2]
+    assert "第二篇的新可观察判断标准" in series2[0]
+    assert "接住其中一个具体点" in series2[2]
+    assert "比较前两篇已经推进到哪里" in series3[0]
+    assert "不复用第二篇的判断信号或动作" in series3[1]
+    assert "把下一步选择明确交还对方" in series3[2]
+    assert series2 != series3
 
 
 def test_account_editorial_lens_historical_v1_remains_readable_without_upgrade() -> None:
