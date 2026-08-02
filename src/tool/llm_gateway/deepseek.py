@@ -2597,7 +2597,8 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         return f"""只修复照抄账号画像标签的创作 unit。保留每个 unit 原来的观看回报和主题，
 把账号关系转化为自然的观察方式、选择取舍或受众回报；不得逐字复制下列来源标签，不得写成
 职业履历、机构事实或已发生经历。{(
-    '同时删除由 Writer 新增的具名对话或被归因给现实人物的直接引语；可以保留不归因给人物的短概念标签。'
+    '同时删除 Writer 新增的全部引号内容；受影响 unit 不得再使用中文或 ASCII 引号，'
+    '不得把引语改成无引号的人物转述。'
     if forbid_attributed_dialogue else ''
 )}
 只能改写下列来源标签对应的表达方式：
@@ -2624,7 +2625,6 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         frame = request.narrative_frame
         if frame is None or frame.narrative_mode != "actuality_reflection":
             return frozenset()
-        speech_markers = ("说", "问", "答", "喊", "告诉", "表示", "写道")
         quote_pairs = (("“", "”"), ('"', '"'), ("‘", "’"))
         affected: set[str] = set()
         for unit in kernel.writable_units:
@@ -2634,11 +2634,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                     end = unit.text.find(closing, start + 1)
                     if end < 0:
                         break
-                    prefix = unit.text[max(0, start - 10) : start]
-                    if prefix.rstrip().endswith(("：", ":")) or any(
-                        marker in prefix for marker in speech_markers
-                    ):
-                        affected.add(unit.unit_id)
+                    affected.add(unit.unit_id)
                     start = unit.text.find(opening, end + 1)
         return frozenset(affected)
 

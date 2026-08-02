@@ -3232,10 +3232,11 @@ def test_actuality_writer_fails_when_the_single_dialogue_repair_remains_unsafe(
         ).generate(request)
 
 
-def test_actuality_writer_can_use_a_non_attributed_concept_label(
+def test_actuality_writer_removes_even_a_non_attributed_concept_label(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _p3_account_link_request()
+    request_count = 0
 
     def respond(
         self: DeepSeekGenerator,
@@ -3246,31 +3247,33 @@ def test_actuality_writer_can_use_a_non_attributed_concept_label(
         thinking_disabled: bool = True,
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
-        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        nonlocal request_count
+        request_count += 1
+        del self, system, max_tokens, thinking_disabled, timeout_seconds
+        if request_count == 2:
+            assert "不得再使用中文或 ASCII 引号" in prompt
+            content = {
+                "units": [
+                    {
+                        "unit_id": "unit:body",
+                        "text": "熟悉有时只是暂时没有再看一眼。",
+                    }
+                ]
+            }
+        else:
+            content = {
+                "units": [
+                    {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
+                    {"unit_id": "unit:natural-guide", "text": "重新注意一次熟悉的日常。"},
+                    {"unit_id": "unit:body", "text": "所谓“熟悉”，有时只是暂时没有再看一眼。"},
+                    {"unit_id": "unit:release-caption", "text": "今天也重新看见熟悉的味道。"},
+                ]
+            }
         return {
             "choices": [
                 {
                     "message": {
-                        "content": json.dumps(
-                            {
-                                "units": [
-                                    {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
-                                    {
-                                        "unit_id": "unit:natural-guide",
-                                        "text": "重新注意一次熟悉的日常。",
-                                    },
-                                    {
-                                        "unit_id": "unit:body",
-                                        "text": "所谓“熟悉”，有时只是暂时没有再看一眼。",
-                                    },
-                                    {
-                                        "unit_id": "unit:release-caption",
-                                        "text": "今天也重新看见了熟悉的味道。",
-                                    },
-                                ]
-                            },
-                            ensure_ascii=False,
-                        )
+                        "content": json.dumps(content, ensure_ascii=False)
                     }
                 }
             ]
@@ -3282,7 +3285,10 @@ def test_actuality_writer_can_use_a_non_attributed_concept_label(
         "not-a-real-key",
         "deepseek-test",
     ).generate(request)
-    assert "所谓“熟悉”" in artifact.body
+    assert "熟悉有时只是" in artifact.body
+    assert "所谓“熟悉”" not in artifact.body
+    assert "你提到：“" in artifact.body
+    assert request_count == 2
 
 
 def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() -> None:
