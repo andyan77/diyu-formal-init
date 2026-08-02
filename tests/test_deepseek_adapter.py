@@ -1892,6 +1892,7 @@ def test_writer_owns_audience_topic_when_user_has_not_supplied_one() -> None:
 def test_writer_natural_guide_has_distinct_graphic_and_video_responsibilities() -> None:
     graphic_request = _kernel_request()
     assert graphic_request.narrative_frame is not None
+    assert graphic_request.creative_plan is not None
     graphic_context = BoundaryContext.from_request(
         graphic_request,
         graphic_request.narrative_frame,
