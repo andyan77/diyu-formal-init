@@ -15,6 +15,10 @@ from src.shared.narrative import (
     ReviewerObservation,
 )
 from src.shared.product_value import ProductValueContract
+from src.shared.server_bearing_expression import (
+    P1_SELECTION_UNIT_ID,
+    ServerBearingExpressionContractV1,
+)
 from src.shared.types import ContentProduct, MediaFormat
 from src.shared.visible_structure import (
     WRITER_WRAPPER_NORMALIZATION_CONTRACT_VERSION,
@@ -649,6 +653,70 @@ def freeze_prior_revision_units(
     )
 
 
+def apply_server_bearing_expression_contract(
+    skeleton: CreativeKernelV1,
+    contract: ServerBearingExpressionContractV1 | None,
+) -> CreativeKernelV1:
+    """Attach the narrow, frozen server-owned expression units to a v4 kernel."""
+
+    if contract is None:
+        return skeleton
+    if skeleton.kernel_version != KERNEL_VERSION:
+        raise ValueError("server bearing expression requires creative-kernel-v4")
+    replacements = {unit.unit_id: unit for unit in skeleton.units}
+    for contract_unit in contract.units:
+        if contract_unit.unit_id == P1_SELECTION_UNIT_ID:
+            if contract.primary_product != "dressing_decision" or contract_unit.purpose != "body":
+                raise ValueError("P1 server bearing unit is invalid")
+            if contract_unit.unit_id in replacements:
+                raise ValueError("P1 server bearing unit is duplicated")
+            body_unit = next(
+                (unit for unit in skeleton.units if unit.purpose == "body"),
+                None,
+            )
+            if body_unit is None:
+                raise ValueError("P1 server bearing unit has no writer body")
+            replacements = {
+                unit_id: unit
+                for unit_id, unit in replacements.items()
+                if unit.purpose != "body"
+            }
+            replacements[contract_unit.unit_id] = CreativeKernelUnit(
+                unit_id=contract_unit.unit_id,
+                purpose="body",
+                allowed_observation_types=("abstract_principle",),
+                fact_refs=(),
+                constraint_refs=body_unit.constraint_refs,
+                visible_order=85,
+                text=contract_unit.text,
+                track="creative_expression",
+                mode="recommendation",
+                scope_id="scope:recommendation-v1",
+                allowed_resource_ids=(),
+                text_source="server_compiler",
+            )
+            continue
+        current = replacements.get(contract_unit.unit_id)
+        if (
+            current is None
+            or current.purpose != contract_unit.purpose
+            or current.mode != contract_unit.mode
+            or current.track != "creative_expression"
+            or current.fact_refs
+            or current.allowed_resource_ids
+        ):
+            raise ValueError("server bearing expression unit does not match the skeleton")
+        replacements[contract_unit.unit_id] = replace(
+            current,
+            text=contract_unit.text,
+            text_source="server_compiler",
+        )
+    return replace(
+        skeleton,
+        units=tuple(sorted(replacements.values(), key=lambda unit: unit.visible_order)),
+    )
+
+
 def parse_writer_kernel(
     raw: object,
     skeleton: CreativeKernelV1,
@@ -658,6 +726,7 @@ def parse_writer_kernel(
     require_claim_refs: bool = False,
     required_fact_block_ids: tuple[str, ...] | None = None,
     compiler_owned_text_by_id: Mapping[str, str] | None = None,
+    server_bearing_expression_contract: ServerBearingExpressionContractV1 | None = None,
     media_format: MediaFormat | None = None,
 ) -> CreativeKernelV1:
     product_contract = bool(fact_blocks)
@@ -697,7 +766,15 @@ def parse_writer_kernel(
     raw_units = raw.get("units")
     if not isinstance(raw_units, list) or not raw_units:
         raise TypeError("writer units are incomplete")
-    compiler_texts = dict(compiler_owned_text_by_id or {})
+    legacy_compiler_texts = dict(compiler_owned_text_by_id or {})
+    bearing_compiler_texts = (
+        server_bearing_expression_contract.unit_text_by_id
+        if server_bearing_expression_contract is not None
+        else {}
+    )
+    if legacy_compiler_texts and bearing_compiler_texts:
+        raise ValueError("compiler-owned unit contracts cannot be combined")
+    compiler_texts = legacy_compiler_texts or bearing_compiler_texts
     unit_by_id = {unit.unit_id: unit for unit in skeleton.units}
     writable_by_id = {unit.unit_id: unit for unit in skeleton.writable_units}
     compiler_ids = set(compiler_texts)
@@ -723,9 +800,18 @@ def parse_writer_kernel(
         MEDIA_NATIVE_KERNEL_VERSION,
         KERNEL_VERSION,
     }:
-        invalid_compiler_contract = (
-            invalid_compiler_contract
-            or bool(compiler_ids)
+        expected_bearing_ids = set(bearing_compiler_texts)
+        invalid_compiler_contract = invalid_compiler_contract or (
+            bool(compiler_ids)
+            and (
+                skeleton.kernel_version != KERNEL_VERSION
+                or compiler_ids != expected_bearing_ids
+                or any(
+                    unit_by_id[unit_id].text_source != "server_compiler"
+                    or unit_by_id[unit_id].text != text
+                    for unit_id, text in bearing_compiler_texts.items()
+                )
+            )
         )
     if invalid_compiler_contract:
         raise ValueError("compiler-owned unit contract is invalid")

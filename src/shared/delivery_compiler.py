@@ -31,6 +31,7 @@ from src.shared.product_value import (
     P5ProductValueContractV1,
     ProductValueContract,
 )
+from src.shared.server_bearing_expression import ServerBearingExpressionContractV1
 from src.shared.types import (
     ContentProduct,
     ContentProductionBundle,
@@ -122,6 +123,7 @@ class DeliveryCompileInput:
     media_capability_envelope: MediaCapabilityEnvelope | None = None
     media_program: MediaProgramSelectionV1 | None = None
     product_value_contract: ProductValueContract | None = None
+    server_bearing_expression_contract: ServerBearingExpressionContractV1 | None = None
 
 
 @dataclass(frozen=True)
@@ -301,6 +303,14 @@ def _assert_expression_plan(
     fact_text_by_id = dict(request.trusted_fact_texts)
     if len(fact_text_by_id) != len(request.trusted_fact_texts):
         raise GenerationFailed("可信事实轨来源重复")
+    bearing_contract = request.server_bearing_expression_contract
+    bearing_text_by_id = bearing_contract.unit_text_by_id if bearing_contract is not None else {}
+    if bearing_contract is not None and (
+        bearing_contract.primary_product != request.primary_product
+        or bearing_contract.media_format != request.media_format
+        or any(source_id not in fact_text_by_id for source_id in bearing_contract.fact_source_ids)
+    ):
+        raise GenerationFailed("服务端承重表达合同与成品输入不一致")
     for unit in kernel.units:
         if unit.track == "trusted_fact":
             if (
@@ -337,6 +347,12 @@ def _assert_expression_plan(
                 or unit.text != request.product_value_contract.visible_text
             ):
                 raise GenerationFailed("商品价值合同可见单元漂移")
+        elif unit.unit_id in bearing_text_by_id:
+            if (
+                unit.text_source != "server_compiler"
+                or unit.text != bearing_text_by_id[unit.unit_id]
+            ):
+                raise GenerationFailed("服务端承重表达单元漂移")
         elif unit.text_source not in {"writer", "prior_version"}:
             raise GenerationFailed("创作表达文字来源漂移")
         if kernel.kernel_version == KERNEL_VERSION and unit.allowed_resource_ids:
@@ -354,6 +370,17 @@ def _assert_expression_plan(
             raise GenerationFailed("无商品价值合同的成品包含商品价值单元")
     elif len(value_units) != 1 or request.product_value_contract.primary_product != request.primary_product:
         raise GenerationFailed("商品价值合同与成品产品不一致")
+    actual_bearing_ids = (
+        {
+            unit.unit_id
+            for unit in kernel.units
+            if unit.text_source == "server_compiler" and unit.unit_id != PRODUCT_VALUE_UNIT_ID
+        }
+        if kernel.kernel_version == KERNEL_VERSION
+        else set()
+    )
+    if kernel.kernel_version == KERNEL_VERSION and actual_bearing_ids != set(bearing_text_by_id):
+        raise GenerationFailed("服务端承重表达单元覆盖漂移")
 
 
 def _compile_delivery(

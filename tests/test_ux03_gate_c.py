@@ -62,6 +62,7 @@ from src.shared.creative_kernel import (
     MEDIA_NATIVE_KERNEL_VERSION,
     CreativeKernelUnit,
     CreativeKernelV1,
+    apply_server_bearing_expression_contract,
     build_kernel_skeleton,
     normalize_writer_unit_text,
     parse_writer_kernel,
@@ -102,6 +103,10 @@ from src.shared.product_value import (
     build_product_value_contract,
 )
 from src.shared.review_evidence import unit_contracts_v2
+from src.shared.server_bearing_expression import (
+    P1_SELECTION_UNIT_ID,
+    build_server_bearing_expression_contract,
+)
 from src.shared.types import (
     AccountExpression,
     BoundProductMedia,
@@ -2459,16 +2464,11 @@ def test_actuality_writer_cannot_repeat_the_frozen_fact(
         del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
         units = (
             [
-                {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
                 {
                     "unit_id": "unit:natural-guide",
                     "text": "一次小变化，也能让日常重新被看见。",
                 },
                 {"unit_id": "unit:body", "text": fact},
-                {
-                    "unit_id": "unit:release-caption",
-                    "text": "熟悉的日常，也会突然提醒人停一下。",
-                },
             ]
             if request_count == 1
             else [
@@ -3343,7 +3343,7 @@ def test_current_actuality_account_body_is_prospective_not_causal_explanation() 
 
 
 def test_current_p1_writer_brief_is_bounded_and_does_not_license_product_performance() -> None:
-    request = _generation_input()
+    request = _generation_input(media_format="video")
     request = replace(
         request,
         primary_product="dressing_decision",
@@ -3365,16 +3365,30 @@ def test_current_p1_writer_brief_is_bounded_and_does_not_license_product_perform
         kernel_version=KERNEL_VERSION,
         primary_product="dressing_decision",
     )
+    contract = build_server_bearing_expression_contract(
+        primary_product="dressing_decision",
+        media_format="video",
+        frame=request.narrative_frame,
+        series_position=None,
+    )
+    assert contract is not None
+    kernel = apply_server_bearing_expression_contract(kernel, contract)
     prompt = DeepSeekGenerator(
         "https://example.invalid",
         "not-a-real-key",
         "deepseek-test",
-    )._kernel_writer_prompt(request, kernel, {})
+    )._kernel_writer_prompt(request, kernel, contract.unit_text_by_id)
 
     assert "dressing-decision-publication-brief-v1" in prompt
     assert "二百二十字符是硬上限" in prompt
     assert "没有 ProductFact" in prompt
     assert "decision_responsibility" in prompt
+    assert P1_SELECTION_UNIT_ID in prompt
+    assert "只自然收束服务端已有选择" in prompt
+    assert "不得再提出第二套选择" in prompt
+    assert P1_SELECTION_UNIT_ID not in {
+        unit.unit_id for unit in kernel.writable_units
+    }
 
     too_long = replace(
         kernel,
@@ -3385,6 +3399,76 @@ def test_current_p1_writer_brief_is_bounded_and_does_not_license_product_perform
     )
     with pytest.raises(GenerationFailed, match="可直接观看的长度"):
         DeepSeekGenerator._assert_p1_publication_shape(request, too_long)
+
+
+def test_p1_runtime_freezes_one_server_choice_body_and_only_requests_non_bearing_copy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = replace(
+        _generation_input(media_format="video"),
+        primary_product="dressing_decision",
+        products=(),
+    )
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        del self, system, max_tokens, thinking_disabled, timeout_seconds
+        assert P1_SELECTION_UNIT_ID in prompt
+        assert '"unit_id": "unit:body-opening"' not in prompt
+        assert '"unit_id": "unit:hypothetical-example"' not in prompt
+        assert '"unit_id": "unit:body-closing"' not in prompt
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "units": [
+                                    {
+                                        "unit_id": "unit:title",
+                                        "text": "今天只先保住一个条件",
+                                    },
+                                    {
+                                        "unit_id": "unit:natural-guide",
+                                        "text": "把这次取舍拆成一个能落地的顺序。",
+                                    },
+                                    {
+                                        "unit_id": "unit:release-caption",
+                                        "text": "不用把每个变化都一次解决。",
+                                    },
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    artifact = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    ).generate(request)
+
+    assert "先在已经给出的条件里选出最不能妥协的一项" in artifact.body
+    assert "不预设某件单品一定有效" in artifact.body
+    assert "body-opening" not in artifact.body
+    assert artifact.completion_snapshot_patch is not None
+    contract = artifact.completion_snapshot_patch[
+        "server_bearing_expression_contract"
+    ]
+    assert isinstance(contract, dict)
+    assert contract["contract_version"] == "server-bearing-expression-v1"
+    assert artifact.completion_snapshot_patch["server_bearing_expression_digest"]
 
 
 @pytest.mark.parametrize("copies_profile", (False, True))
@@ -3421,13 +3505,8 @@ def test_p3_writer_must_naturalize_the_frozen_account_link(
         body = "陪正在重新选择日常节奏的人看清取舍。" if copies_profile else "熟悉的味道偶尔也会让人重新发现日常。"
         content = {
             "units": [
-                {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
                 {"unit_id": "unit:natural-guide", "text": guide},
                 {"unit_id": "unit:body", "text": body},
-                {
-                    "unit_id": "unit:release-caption",
-                    "text": "今天也重新看见了熟悉的味道。",
-                },
             ]
         }
         return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
@@ -3442,6 +3521,15 @@ def test_p3_writer_must_naturalize_the_frozen_account_link(
     assert "总部穿衣编辑" not in artifact.body
     assert "陪正在重新选择日常节奏的人看清取舍。" not in artifact.body
     assert "重新" in artifact.body
+    assert artifact.outline == "今天喝了一直喝的蓝山咖啡：居然是甜的"
+    assert "这次先停在“居然是甜的”上" in artifact.body
+    assert artifact.completion_snapshot_patch is not None
+    bearing_contract = artifact.completion_snapshot_patch[
+        "server_bearing_expression_contract"
+    ]
+    assert isinstance(bearing_contract, dict)
+    assert bearing_contract["contract_version"] == "server-bearing-expression-v1"
+    assert artifact.completion_snapshot_patch["server_bearing_expression_digest"]
     assert request_count == (2 if copies_profile else 1)
 
 
@@ -3476,16 +3564,11 @@ def test_p3_writer_must_naturalize_confirmed_publication_method_copy(
         )
         units = (
             [
-                {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
                 {
                     "unit_id": "unit:natural-guide",
                     "text": "一次小变化，也能让日常重新被看见。",
                 },
                 {"unit_id": "unit:body", "text": body},
-                {
-                    "unit_id": "unit:release-caption",
-                    "text": "今天也重新看了一眼习以为常的事。",
-                },
             ]
             if request_count == 1
             else [{"unit_id": "unit:body", "text": body}]
@@ -3535,7 +3618,6 @@ def test_p3_one_frozen_account_path_is_sufficient_without_terminal_punctuation(
         del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
         content = {
             "units": [
-                {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
                 {
                     "unit_id": "unit:natural-guide",
                     "text": "陪读者从一次小变化里重新辨认自己的日常选择。",
@@ -3543,10 +3625,6 @@ def test_p3_one_frozen_account_path_is_sufficient_without_terminal_punctuation(
                 {
                     "unit_id": "unit:body",
                     "text": "熟悉的味道偶尔也会让人重新发现日常。",
-                },
-                {
-                    "unit_id": "unit:release-caption",
-                    "text": "今天也重新看见了熟悉的味道。",
                 },
             ]
         }
@@ -3595,7 +3673,6 @@ def test_actuality_writer_repairs_one_new_dialogue_then_rechecks_the_full_unit(
         else:
             content = {
                 "units": [
-                    {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
                     {
                         "unit_id": "unit:natural-guide",
                         "text": "重新注意一次熟悉的日常。",
@@ -3603,10 +3680,6 @@ def test_actuality_writer_repairs_one_new_dialogue_then_rechecks_the_full_unit(
                     {
                         "unit_id": "unit:body",
                         "text": "当一个人说“今天怎么是甜的”时，熟悉感被打断了。",
-                    },
-                    {
-                        "unit_id": "unit:release-caption",
-                        "text": "今天也重新看见了熟悉的味道。",
                     },
                 ]
             }
@@ -3650,10 +3723,8 @@ def test_actuality_writer_fails_when_the_single_dialogue_repair_remains_unsafe(
         else:
             content = {
                 "units": [
-                    {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
                     {"unit_id": "unit:natural-guide", "text": "重新注意一次熟悉的日常。"},
                     {"unit_id": "unit:body", "text": "她说“今天怎么是甜的”。"},
-                    {"unit_id": "unit:release-caption", "text": "今天也重新看见熟悉的味道。"},
                 ]
             }
         return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
@@ -3700,10 +3771,8 @@ def test_actuality_writer_removes_even_a_non_attributed_concept_label(
         else:
             content = {
                 "units": [
-                    {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
                     {"unit_id": "unit:natural-guide", "text": "重新注意一次熟悉的日常。"},
                     {"unit_id": "unit:body", "text": "所谓“熟悉”，有时只是暂时没有再看一眼。"},
-                    {"unit_id": "unit:release-caption", "text": "今天也重新看见熟悉的味道。"},
                 ]
             }
         return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0

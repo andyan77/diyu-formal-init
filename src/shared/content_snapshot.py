@@ -27,6 +27,11 @@ from src.shared.product_value import (
     product_value_contract_digest,
     product_value_contract_from_document,
 )
+from src.shared.server_bearing_expression import (
+    ServerBearingExpressionContractV1,
+    server_bearing_expression_digest,
+    server_bearing_expression_from_document,
+)
 from src.shared.types import ProductFact, SeriesContext, SeriesEntry
 
 _CONTEXT_CATEGORY_LABELS = {
@@ -150,6 +155,21 @@ def frozen_product_value_contract(
     contract = product_value_contract_from_document(value)
     if product_value_contract_digest(contract) != digest:
         raise DomainError("内容任务冻结的商品价值合同摘要不一致")
+    return contract
+
+
+def frozen_server_bearing_expression_contract(
+    snapshot: Mapping[str, object],
+) -> ServerBearingExpressionContractV1 | None:
+    value = snapshot.get("server_bearing_expression_contract")
+    digest = snapshot.get("server_bearing_expression_digest")
+    if value is None and digest is None:
+        return None
+    if value is None or not isinstance(digest, str):
+        raise DomainError("内容任务冻结的服务端承重表达合同不完整")
+    contract = server_bearing_expression_from_document(value)
+    if server_bearing_expression_digest(contract) != digest:
+        raise DomainError("内容任务冻结的服务端承重表达合同摘要不一致")
     return contract
 
 

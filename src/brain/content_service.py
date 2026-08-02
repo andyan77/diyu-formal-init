@@ -37,6 +37,7 @@ from src.shared.content_snapshot import (
     frozen_narrative_frame,
     frozen_product_value_contract,
     frozen_series_context,
+    frozen_server_bearing_expression_contract,
     frozen_user_premise,
 )
 from src.shared.creative_kernel import CreativeKernelV1
@@ -72,6 +73,10 @@ from src.shared.narrative import (
 from src.shared.product_value import (
     ProductValueContract,
     build_product_value_contract,
+)
+from src.shared.server_bearing_expression import (
+    ServerBearingExpressionContractV1,
+    build_server_bearing_expression_contract,
 )
 from src.shared.service_status import ProviderStatusTracker
 from src.shared.types import (
@@ -379,6 +384,7 @@ class ContentService:
             media_envelope,
             media_program,
             product_value_contract,
+            None,
         )
 
     @staticmethod
@@ -1125,6 +1131,9 @@ class ContentService:
         prior_creative_kernel = frozen_creative_kernel(snapshot)
         media_envelope, media_program = frozen_media_contract(snapshot)
         product_value_contract = frozen_product_value_contract(snapshot)
+        server_bearing_expression_contract = (
+            frozen_server_bearing_expression_contract(snapshot)
+        )
         if delivery_compiler_version is not None and (
             delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
@@ -1199,6 +1208,7 @@ class ContentService:
             media_envelope,
             media_program,
             product_value_contract,
+            server_bearing_expression_contract,
         )
 
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:
@@ -1238,6 +1248,9 @@ class ContentService:
         prior_creative_kernel = frozen_creative_kernel(snapshot)
         source_media_envelope, _ = frozen_media_contract(snapshot)
         product_value_contract = frozen_product_value_contract(snapshot)
+        source_bearing_expression_contract = (
+            frozen_server_bearing_expression_contract(snapshot)
+        )
         if delivery_compiler_version is not None and (
             delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
@@ -1279,6 +1292,20 @@ class ContentService:
                 )
         if delivery_compiler_version is None:
             delivery_compiler_version = DELIVERY_COMPILER_VERSION
+        server_bearing_expression_contract = (
+            build_server_bearing_expression_contract(
+                primary_product=source.primary_product,
+                media_format=direction.media_format,
+                frame=frame,
+                series_position=(
+                    series_context.target_position
+                    if series_context is not None
+                    else None
+                ),
+            )
+            if source_bearing_expression_contract is not None
+            else None
+        )
         self._validate_plan(
             creative_plan,
             (source_premise,),
@@ -1415,6 +1442,7 @@ class ContentService:
             media_envelope,
             media_program,
             product_value_contract,
+            server_bearing_expression_contract,
         )
 
     def identity_summary(self, scope: TrustedScope, target: ContentTarget = "douyin_video") -> dict[str, str]:
@@ -1491,6 +1519,7 @@ class ContentService:
         media_capability_envelope: MediaCapabilityEnvelope | None = None,
         media_program: MediaProgramSelectionV1 | None = None,
         product_value_contract: ProductValueContract | None = None,
+        server_bearing_expression_contract: ServerBearingExpressionContractV1 | None = None,
     ) -> dict[str, object]:
         try:
             # The run is already durable here. Keep the first generation event
@@ -1525,6 +1554,9 @@ class ContentService:
                     media_capability_envelope=media_capability_envelope,
                     media_program=media_program,
                     product_value_contract=product_value_contract,
+                    server_bearing_expression_contract=(
+                        server_bearing_expression_contract
+                    ),
                 )
             )
             if progress is not None:

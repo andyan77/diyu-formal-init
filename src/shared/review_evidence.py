@@ -18,6 +18,7 @@ from src.shared.creative_kernel import (
 )
 from src.shared.factual_basis import FrozenFactRecord
 from src.shared.narrative import NarrativeFrame, NarrativeIssue
+from src.shared.server_bearing_expression import P1_SELECTION_UNIT_ID
 from src.shared.types import SpeakerKind
 
 ImplicitSubject: TypeAlias = Literal[
@@ -1033,7 +1034,20 @@ def unit_contracts_v2(
     if not required_fact_refs <= visible_fact_refs or not visible_fact_refs <= frame.allowed_fact_ids:
         raise ValueError("frozen fact unit mapping drifted from frame")
 
-    if kernel.program_id == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM:
+    p1_selection = next(
+        (unit for unit in kernel.units if unit.unit_id == P1_SELECTION_UNIT_ID),
+        None,
+    )
+    if p1_selection is not None:
+        if (
+            p1_selection.purpose != "body"
+            or p1_selection.mode != "recommendation"
+            or p1_selection.text_source != "server_compiler"
+            or any(unit.purpose == "body" for unit in kernel.units if unit is not p1_selection)
+        ):
+            raise ValueError("P1 server bearing unit mapping drifted")
+        contracts[P1_SELECTION_UNIT_ID] = "recommendation"
+    elif kernel.program_id == OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM:
         if frame.narrative_mode != "general_observation" or fact_units:
             raise ValueError("hypothetical example program drifted from frame")
         contracts.update(

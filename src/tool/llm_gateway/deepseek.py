@@ -50,6 +50,7 @@ from src.shared.creative_kernel import (
     MAX_PRODUCT_FACT_BLOCKS,
     MEDIA_NATIVE_KERNEL_VERSION,
     CreativeKernelV1,
+    apply_server_bearing_expression_contract,
     build_kernel_skeleton,
     compiler_owned_unit_source,
     compiler_owned_unit_texts,
@@ -120,6 +121,13 @@ from src.shared.review_evidence import (
     unit_contracts_v2,
     validate_server_owned_contexts_v2,
     writer_clause_contexts_v2,
+)
+from src.shared.server_bearing_expression import (
+    ServerBearingExpressionContractV1,
+    assert_server_bearing_expression_matches,
+    build_server_bearing_expression_contract,
+    server_bearing_expression_digest,
+    server_bearing_expression_document,
 )
 from src.shared.service_status import ProviderState, ProviderStatusTracker
 from src.shared.types import (
@@ -277,6 +285,15 @@ _P1_PUBLICATION_BRIEF: dict[str, str] = {
         "显瘦、易收纳等属性或效果，也不增加天气、行程、背包和穿着体验事实。"
     ),
     "release_caption": "用一句自然文字保留本次条件和下一动作，不重复正文或承诺效果。",
+}
+_P1_NON_BEARING_WRITER_BRIEF: dict[str, str] = {
+    "title": "只为服务端已经冻结的选择骨架取一个自然标题，不新增条件、建议、商品或结果承诺。",
+    "natural_guide": "只说明读者会看到一条有条件的选择路径，不新增选择标准、因果或效果。",
+    "body": (
+        "服务端已经写入本篇唯一承重的选择骨架。这里只用不超过四十个可见字符做自然承接，"
+        "不得新增服装类别、阈值、效果、体验、因果或另一条选择建议。"
+    ),
+    "release_caption": "只自然收束服务端已有选择，不新增条件、下一动作、商品效果或现实判断。",
 }
 _PLATFORM_NATIVE_UNIT_RESPONSIBILITY: dict[str, dict[str, str]] = {
     "graphic": {
@@ -806,6 +823,28 @@ class DeepSeekGenerator(ContentGenerator):
                 request.media_capability_envelope,
                 request.media_program,
             )
+        series_position = request.series_context.target_position if request.series_context is not None else None
+        bearing_contract: ServerBearingExpressionContractV1 | None = None
+        if kernel_version == KERNEL_VERSION:
+            bearing_contract = request.server_bearing_expression_contract
+            if bearing_contract is None and request.prior_creative_kernel is None:
+                bearing_contract = build_server_bearing_expression_contract(
+                    primary_product=request.primary_product,
+                    media_format=request.media_format,
+                    frame=frame,
+                    series_position=series_position,
+                )
+            if bearing_contract is not None:
+                try:
+                    assert_server_bearing_expression_matches(
+                        bearing_contract,
+                        primary_product=request.primary_product,
+                        media_format=request.media_format,
+                        frame=frame,
+                        series_position=series_position,
+                    )
+                except DomainError as exc:
+                    raise GenerationFailed(str(exc)) from exc
         skeleton = build_kernel_skeleton(
             frame=frame,
             fact_registry=context.fact_registry,
@@ -821,6 +860,13 @@ class DeepSeekGenerator(ContentGenerator):
             skeleton,
             request.prior_creative_kernel,
         )
+        try:
+            skeleton = apply_server_bearing_expression_contract(
+                skeleton,
+                bearing_contract,
+            )
+        except ValueError as exc:
+            raise GenerationFailed("服务端承重表达合同无法应用") from exc
         required_fact_block_ids = (
             self._prior_fact_block_ids(
                 request.prior_creative_kernel,
@@ -849,6 +895,7 @@ class DeepSeekGenerator(ContentGenerator):
             media_capability_envelope=(request.media_capability_envelope),
             media_program=request.media_program,
             product_value_contract=request.product_value_contract,
+            server_bearing_expression_contract=bearing_contract,
         )
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product) if kernel_version == DUAL_TRACK_KERNEL_VERSION else {}
@@ -858,7 +905,7 @@ class DeepSeekGenerator(ContentGenerator):
             self._kernel_writer_prompt(
                 request,
                 skeleton,
-                compiler_texts,
+                (bearing_contract.unit_text_by_id if bearing_contract is not None else compiler_texts),
             ),
             4096,
         )
@@ -872,6 +919,7 @@ class DeepSeekGenerator(ContentGenerator):
                 allowed_claim_ids=context.product_fact_packet.fact_ids,
                 required_fact_block_ids=required_fact_block_ids,
                 compiler_owned_text_by_id=compiler_texts,
+                server_bearing_expression_contract=bearing_contract,
                 media_format=request.media_format,
             )
         except (
@@ -1075,6 +1123,12 @@ class DeepSeekGenerator(ContentGenerator):
                 "used_product_fact_block_ids": list(kernel.selected_fact_block_ids),
                 "product_fact_renderer_version": (
                     context.product_fact_blocks[0].renderer_version if context.product_fact_blocks else None
+                ),
+                "server_bearing_expression_contract": (
+                    server_bearing_expression_document(bearing_contract) if bearing_contract is not None else None
+                ),
+                "server_bearing_expression_digest": (
+                    server_bearing_expression_digest(bearing_contract) if bearing_contract is not None else None
                 ),
                 "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
                 "delivery_resource_refs": list(compiled.resource_refs),
@@ -1586,27 +1640,17 @@ class DeepSeekGenerator(ContentGenerator):
             }
             actuality_by_purpose = {
                 "title": account_editorial_lens.actuality_title_responsibility,
-                "natural_guide": (
-                    account_editorial_lens.actuality_natural_guide_responsibility
-                ),
+                "natural_guide": (account_editorial_lens.actuality_natural_guide_responsibility),
                 "body": account_editorial_lens.actuality_body_responsibility,
-                "release_caption": (
-                    account_editorial_lens.actuality_release_caption_responsibility
-                ),
+                "release_caption": (account_editorial_lens.actuality_release_caption_responsibility),
             }
-            series_position = (
-                request.series_context.target_position
-                if request.series_context is not None
-                else None
-            )
+            series_position = request.series_context.target_position if request.series_context is not None else None
             for unit in writer_units:
                 responsibility = by_purpose.get(unit.purpose)
                 if responsibility is None:
                     continue
                 if actuality_reflection:
-                    responsibility = (
-                        f"{responsibility}{actuality_by_purpose[unit.purpose]}"
-                    )
+                    responsibility = f"{responsibility}{actuality_by_purpose[unit.purpose]}"
                 account_unit_responsibilities[unit.unit_id] = (
                     _body_editorial_responsibility(
                         unit_id=unit.unit_id,
@@ -1618,7 +1662,11 @@ class DeepSeekGenerator(ContentGenerator):
                 )
         p1_unit_responsibilities = (
             {
-                purpose: _P1_PUBLICATION_BRIEF[purpose]
+                purpose: (
+                    _P1_NON_BEARING_WRITER_BRIEF[purpose]
+                    if "unit:p1-selection-skeleton" in resolved_compiler_texts
+                    else _P1_PUBLICATION_BRIEF[purpose]
+                )
                 for purpose in (
                     "title",
                     "natural_guide",
@@ -1871,11 +1919,11 @@ series_progression_boundary，产生新的判断或受众动作。"""
             else ""
         )
         dressing_decision_rule = (
-            """本篇必须逐项遵守 dressing-decision-publication-brief-v1。四个可见 unit 各自承担
-不同责任，body 的二百二十字符是硬上限，不得用更多段落、同义复述或性能形容词换取完整感。
+            """本篇必须逐项遵守 dressing-decision-publication-brief-v1。服务端承重单元已经给出
+成立条件、少带与增加调节层次的取舍以及出门前动作；Writer 只能把剩余可写单元写得自然，
+不得再提出第二套选择、具体阈值、服装效果或体验结论。body 的二百二十字符是硬上限。
 这是一般穿衣选择帮助，不是某件商品的事实说明；没有 ProductFact 就不能把一种服装类别
-写成具有特定面料、版型、功能或效果。选择必须同时说清成立条件、少带东西带来的取舍和
-一个可执行下一动作，不能只堆叠单品清单。"""
+写成具有特定面料、版型、功能或效果。"""
             if request.primary_product == "dressing_decision"
             else ""
         )
@@ -1907,18 +1955,26 @@ Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creati
         )
         supporting_copy_rule = (
             "自然导读和发布配文由 DeliveryCompiler 使用版本化中性短语生成。"
-            if resolved_compiler_texts
+            if skeleton.kernel_version == DUAL_TRACK_KERNEL_VERSION
             else (
-                "服务端已经预分配标题、观看回报、核心正文和发布配文；"
-                "首图／首帧、图序／观看链、字幕、声音和制作提示由服务端冻结的"
-                f"媒体程序 {request.media_program.program_id} 确定性生成。"
-                "你不得返回任何媒体单元、资源引用、拍摄、摆放、出镜、道具、"
-                "场地或声音绑定。"
-                if skeleton.kernel_version == KERNEL_VERSION and request.media_program is not None
+                (
+                    "服务端已冻结这些承重表达单元，Writer 不得返回、改写或另写替代版本："
+                    + "、".join(sorted(resolved_compiler_texts))
+                    + "。其余可写单元仍由 Writer 负责自然表达。"
+                )
+                if resolved_compiler_texts
                 else (
-                    "服务端已经预分配标题、观看回报、核心正文、媒体开头、"
-                    "媒体推进、字幕策略（视频）、制作提示和发布配文；"
-                    "你只能填写这些既定单元。"
+                    "服务端已经预分配标题、观看回报、核心正文和发布配文；"
+                    "首图／首帧、图序／观看链、字幕、声音和制作提示由服务端冻结的"
+                    f"媒体程序 {request.media_program.program_id} 确定性生成。"
+                    "你不得返回任何媒体单元、资源引用、拍摄、摆放、出镜、道具、"
+                    "场地或声音绑定。"
+                    if skeleton.kernel_version == KERNEL_VERSION and request.media_program is not None
+                    else (
+                        "服务端已经预分配标题、观看回报、核心正文、媒体开头、"
+                        "媒体推进、字幕策略（视频）、制作提示和发布配文；"
+                        "你只能填写这些既定单元。"
+                    )
                 )
             )
         )
@@ -2972,32 +3028,20 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             }
             actuality_by_purpose = {
                 "title": editorial_lens.actuality_title_responsibility,
-                "natural_guide": (
-                    editorial_lens.actuality_natural_guide_responsibility
-                ),
+                "natural_guide": (editorial_lens.actuality_natural_guide_responsibility),
                 "body": editorial_lens.actuality_body_responsibility,
-                "release_caption": (
-                    editorial_lens.actuality_release_caption_responsibility
-                ),
+                "release_caption": (editorial_lens.actuality_release_caption_responsibility),
             }
             actuality_reflection = (
-                request.narrative_frame is not None
-                and request.narrative_frame.narrative_mode
-                == "actuality_reflection"
+                request.narrative_frame is not None and request.narrative_frame.narrative_mode == "actuality_reflection"
             )
-            series_position = (
-                request.series_context.target_position
-                if request.series_context is not None
-                else None
-            )
+            series_position = request.series_context.target_position if request.series_context is not None else None
             for unit in kernel.writable_units:
                 responsibility = by_purpose.get(unit.purpose)
                 if responsibility is None:
                     continue
                 if actuality_reflection:
-                    responsibility = (
-                        f"{responsibility}{actuality_by_purpose[unit.purpose]}"
-                    )
+                    responsibility = f"{responsibility}{actuality_by_purpose[unit.purpose]}"
                 editorial_responsibilities[unit.unit_id] = (
                     _body_editorial_responsibility(
                         unit_id=unit.unit_id,
@@ -4389,11 +4433,7 @@ CreativePlanV2：{
             except json.JSONDecodeError:
                 return stripped
             trailing = stripped[end:].strip()
-            if (
-                isinstance(document, dict)
-                and trailing
-                and re.fullmatch(r'[\]}"]+', trailing) is not None
-            ):
+            if isinstance(document, dict) and trailing and re.fullmatch(r'[\]}"]+', trailing) is not None:
                 return stripped[:end]
         return stripped
 

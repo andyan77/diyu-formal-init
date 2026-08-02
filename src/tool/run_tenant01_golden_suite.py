@@ -259,6 +259,8 @@ def _artifact(
                 "media_program",
                 "series_context",
                 "narrative_frame",
+                "server_bearing_expression_contract",
+                "server_bearing_expression_digest",
             )
         },
     }
