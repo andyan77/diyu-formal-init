@@ -4337,6 +4337,20 @@ CreativePlanV2：{
                 flags=re.IGNORECASE,
             )
             stripped = re.sub(r"\s*```$", "", stripped, count=1)
+        try:
+            json.loads(stripped)
+        except json.JSONDecodeError:
+            try:
+                document, end = json.JSONDecoder().raw_decode(stripped)
+            except json.JSONDecodeError:
+                return stripped
+            trailing = stripped[end:].strip()
+            if (
+                isinstance(document, dict)
+                and trailing
+                and re.fullmatch(r'[\]}"]+', trailing) is not None
+            ):
+                return stripped[:end]
         return stripped
 
     @staticmethod

@@ -112,6 +112,23 @@ class FakeClient:
         return self.responses.pop(0)
 
 
+def test_json_content_accepts_only_unmatched_trailing_closers() -> None:
+    valid = '{"kind":"ready","message":"可以开始"}'
+    duplicated_closers = f'{valid}"}}"'
+
+    assert json.loads(DeepSeekGenerator._json_content(duplicated_closers)) == {
+        "kind": "ready",
+        "message": "可以开始",
+    }
+    for unsafe in (
+        f'{valid}{{"kind":"chat"}}',
+        f"{valid}ignored",
+        '{"kind":"ready",',
+    ):
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(DeepSeekGenerator._json_content(unsafe))
+
+
 class FakeReviewerProvider(ReviewerProvider):
     @property
     def provider_name(self) -> str:
