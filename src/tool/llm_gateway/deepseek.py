@@ -2388,8 +2388,11 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
     @staticmethod
     def _deidentified_writer_controls(request: GenerationInput) -> str:
         expression = request.account_expression
-        parts = [
-            *(
+        expression_parts = (
+            (expression.authority_boundary, expression.audience_relationship)
+            if expression is not None
+            and request.primary_product == "brand_life_narrative"
+            else (
                 (
                     expression.identity_position,
                     expression.authority_boundary,
@@ -2403,7 +2406,10 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                     request.brand.content_role_boundary,
                     request.brand.audience_description,
                 )
-            ),
+            )
+        )
+        parts = [
+            *expression_parts,
             *request.brand.expression_constraint_context,
             *request.brand.creative_method_context,
             *(
@@ -2482,14 +2488,8 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 
         expression = request.account_expression
         values = {
-            "editorial_position": (
-                expression.identity_position if expression is not None else request.brand.content_role_name
-            ),
             "audience_relationship": (
                 expression.audience_relationship if expression is not None else request.brand.audience_description
-            ),
-            "content_territories": (
-                expression.content_territories if expression is not None else ""
             ),
             "authority_boundary": (
                 expression.authority_boundary if expression is not None else request.brand.content_role_boundary
@@ -2510,7 +2510,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
     def _account_profile_source_spans(
         request: GenerationInput,
     ) -> tuple[str, ...]:
-        """Return trusted labels that guide expression but must not become copy."""
+        """Return P3 expression controls that guide writing but must not become copy."""
 
         expression = request.account_expression
         protected = (
@@ -2521,16 +2521,19 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
         values = (
             DeepSeekGenerator._deidentify_text(
-                expression.identity_position if expression is not None else request.brand.content_role_name,
-                protected,
-            ),
-            DeepSeekGenerator._deidentify_text(
                 expression.audience_relationship if expression is not None else request.brand.audience_description,
                 protected,
             ),
             DeepSeekGenerator._deidentify_text(
-                expression.content_territories if expression is not None else "",
+                expression.authority_boundary if expression is not None else request.brand.content_role_boundary,
                 protected,
+            ),
+            *(
+                DeepSeekGenerator._deidentify_text(value, protected)
+                for value in (
+                    *request.brand.expression_constraint_context,
+                    *request.brand.creative_method_context,
+                )
             ),
         )
         return tuple(

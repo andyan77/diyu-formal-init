@@ -2918,8 +2918,9 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     )._kernel_writer_prompt(request, kernel, {})
 
     assert "本篇账号关联路径" in prompt
-    assert "从穿衣编辑的位置重新看熟悉事物" in prompt
     assert "陪正在重新选择日常节奏的人看清取舍" in prompt
+    assert "从穿衣编辑的位置重新看熟悉事物" not in prompt
+    assert "穿衣选择、熟悉事物被重新看见的时刻" not in prompt
     assert '"required_visible_spans"' not in prompt
     assert '"总部穿衣编辑"' not in prompt
     assert "为什么会说这段话" in prompt
@@ -3054,6 +3055,76 @@ def test_p3_writer_must_naturalize_the_frozen_account_link(
     assert "陪正在重新选择日常节奏的人看清取舍。" not in artifact.body
     assert "重新" in artifact.body
     assert request_count == (2 if copies_profile else 1)
+
+
+def test_p3_writer_must_naturalize_confirmed_publication_method_copy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = replace(
+        _p3_account_link_request(),
+        brand=replace(
+            _p3_account_link_request().brand,
+            creative_method_context=("围绕一个可感知的变化，给出一条清楚选择。",),
+        ),
+    )
+    request_count = 0
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        nonlocal request_count
+        request_count += 1
+        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        body = (
+            "围绕一个可感知的变化，给出一条清楚选择。"
+            if request_count == 1
+            else "熟悉感偶尔被打断，也值得停一下，重新看看自己的判断。"
+        )
+        units = (
+            [
+                {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
+                {
+                    "unit_id": "unit:natural-guide",
+                    "text": "一次小变化，也能让日常重新被看见。",
+                },
+                {"unit_id": "unit:body", "text": body},
+                {
+                    "unit_id": "unit:release-caption",
+                    "text": "今天也重新看了一眼习以为常的事。",
+                },
+            ]
+            if request_count == 1
+            else [{"unit_id": "unit:body", "text": body}]
+        )
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {"units": units},
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    artifact = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    ).generate(request)
+
+    assert "围绕一个可感知的变化" not in artifact.body
+    assert "重新看看自己的判断" in artifact.body
+    assert request_count == 2
 
 
 def test_p3_one_frozen_account_path_is_sufficient_without_terminal_punctuation(
