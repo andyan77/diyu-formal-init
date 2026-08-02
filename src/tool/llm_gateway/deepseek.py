@@ -878,7 +878,8 @@ class DeepSeekGenerator(ContentGenerator):
         writer_system = (
             "你是笛语 CreativeKernel Writer。你拥有非事实中心判断、一般观察、条件建议、比喻、"
             "节奏和自然表达；用户现实、商品与品牌事实、人物关系、健康心理因果和媒体资源均由"
-            "服务端拥有。不要复述、改写、补全或诊断这些承重内容。一般观察不能反向解释当前用户；"
+            "服务端拥有。不要复述、改写、补全或诊断这些承重内容。现实片段中的当前人物只存在于"
+            "服务端事实块；Writer 只能写不归因于该人物的一般观察或尚未发生的可选做法。"
             "商品选择建议只能描述受众在什么条件下怎样看、怎样选，不能给商品或选项补充未确认属性。"
             "只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。"
             if publication_v2
@@ -1671,11 +1672,18 @@ class DeepSeekGenerator(ContentGenerator):
         actuality_note = (
             "这些原句由服务端另行展示。只写接在它们之后的创作表达，不复述、改写或解释原句。"
             "原句即使只是很短的条件或状态，也不能复制到 Writer 单元；直接给出回应，不再重述前提。"
-            "观点必须保持为不指向当前用户的一般观察；可以写某类日常节奏下常见的取舍，但不能用"
-            "“你／你的”给当前用户补充身体、心理、动机、原因、结果或后续经历。建议只能是读者"
-            "可以选择的下一步，不能把原片段诊断成信号、需要或问题。"
+            "只把原句用于找到作品的具体张力。中心判断必须停在不特指任何人的外部条件、注意力"
+            "分配或可见选择上，不能解释当前人物为什么如此、处于什么内部状态、之后会怎样。"
+            "建议只能是尚未发生、读者可自行选择的动作，不能承诺动作带来的身体、心理或现实结果。"
             if actuality_context
             else "本篇没有需要 Writer 处理的现实原句。"
+        )
+        dressing_note = (
+            "这是一般穿衣选择，不是商品评价。只使用服装类别之间的组合、穿脱动作和层次关系来"
+            "回答怎么穿；取舍落在少带一件与保留调节层次之间，检查动作只观察出门时的外部条件和"
+            "各层能否独立使用。不得给任何服装类别补充未经冻结的属性、功能或效果。"
+            if contract.primary_product == "dressing_decision"
+            else ""
         )
         product_note = (
             "以下三点是编辑目标，不是成品句子。商品是什么只由服务端事实块说明；创作文字只"
@@ -1696,6 +1704,7 @@ class DeepSeekGenerator(ContentGenerator):
 
 现实原句（只读）：{json.dumps(actuality_context, ensure_ascii=False)}
 {actuality_note}
+{dressing_note}
 
 商品编辑目标：{json.dumps(product_goals, ensure_ascii=False)}
 {product_note}

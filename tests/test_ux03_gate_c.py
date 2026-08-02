@@ -835,7 +835,7 @@ def test_publication_p1_keeps_all_visible_expression_writer_owned(
         assert "先认清自己最不能妥协" not in prompt
         assert "你拥有非事实中心判断、一般观察、条件建议、比喻" in system
         assert "健康心理因果和媒体资源均由服务端拥有" in system
-        assert "一般观察不能反向解释当前用户" in system
+        assert "当前人物只存在于服务端事实块" in system
         assert "不能给商品或选项补充未确认属性" in system
         return {
             "choices": [
@@ -3216,8 +3216,8 @@ def test_actuality_writer_receives_one_frozen_fact_without_duplicate_instruction
         for span in request.publication_contract.intake_spans
     ) == 1
     assert "这些原句由服务端另行展示" in prompt
-    assert "不指向当前用户的一般观察" in prompt
-    assert "不能把原片段诊断成信号、需要或问题" in prompt
+    assert "不特指任何人的外部条件、注意力分配或可见选择" in prompt
+    assert "不能解释当前人物为什么如此、处于什么内部状态、之后会怎样" in prompt
     assert "服务端事实绑定" not in prompt
     assert "帮我发一条" not in prompt
 
@@ -4360,9 +4360,8 @@ def test_publication_actuality_prompt_keeps_reality_dialogue_in_negative_boundar
         "deepseek-test",
     )._kernel_writer_prompt(request, kernel, {})
 
-    assert "不指向当前用户的一般观察" in prompt
-    assert "不能用“你／你的”给当前用户补充身体、心理、动机、原因、结果或后续经历" in prompt
     assert "很短的条件或状态，也不能复制" in prompt
+    assert "中心判断必须停在不特指任何人的外部条件、注意力分配或可见选择上" in prompt
     assert prompt.count("唯一负向安全合同") == 1
     assert "低风险一般观察属于 creative_expression，不是事实" in prompt
     assert "独立 Reviewer" not in prompt
