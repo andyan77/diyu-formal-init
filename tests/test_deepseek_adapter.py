@@ -1156,6 +1156,44 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
     assert decision.narrative_mode == "actuality_reflection"
 
 
+def test_single_turn_intake_keeps_the_server_owned_premise_when_the_model_paraphrases() -> None:
+    message = "店里有个人只想自己看看，不想被打扰。请给一条尚未执行的回应建议。"
+    candidates = user_fact_candidates((message,))
+    fact_candidate = next(
+        candidate for candidate in candidates if candidate.exact_text == "店里有个人只想自己看看，不想被打扰。"
+    )
+    request = ConversationInput(
+        message=message,
+        history=(),
+        brand=_brand(),
+        products=(),
+        target="xiaohongshu_graphic",
+        creation_committed=True,
+        allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        platform_shape="xiaohongshu_graphic:graphic",
+    )
+    FakeClient.responses = [
+        _completion(
+            {
+                "kind": "ready",
+                "message": "好，我保留事实边界并直接完成。",
+                "user_premises": ["有人只想安静看看，请给一条回应建议。"],
+                "user_fact_sentence_ids": [fact_candidate.source_id],
+                "user_sentence_roles": _sentence_roles(
+                    message,
+                    (fact_candidate.source_id,),
+                ),
+                "creative_plan": _intake_plan(message),
+            }
+        )
+    ]
+
+    decision = _generator().collaborate(request)
+
+    assert decision.user_premises == (message,)
+    assert decision.user_fact_spans == (fact_candidate.exact_text,)
+
+
 def test_conversation_intake_freezes_system_selected_topic_origin() -> None:
     message = "今天不知道发什么，帮我做条小红书。"
     candidates = user_fact_candidates((message,))

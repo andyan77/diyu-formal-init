@@ -654,9 +654,17 @@ class DeepSeekGenerator(ContentGenerator):
             or not isinstance(raw_sentence_roles, list)
         ):
             raise GenerationFailed("模型协作返回格式不完整")
-        premises = self._exact_string_list(raw_premises)
-        if request.message not in premises or any(premise not in available_user_turns for premise in premises):
-            raise GenerationFailed("模型没有逐字保留本次用户前提")
+        model_premises = self._exact_string_list(raw_premises)
+        premises: tuple[str, ...]
+        if len(available_user_turns) == 1:
+            # A one-turn formal generation already has one unambiguous source
+            # premise.  The model may classify its complete sentence IDs, but
+            # it never owns or retypes the source text itself.
+            premises = available_user_turns
+        else:
+            premises = model_premises
+            if request.message not in premises or any(premise not in available_user_turns for premise in premises):
+                raise GenerationFailed("模型没有逐字保留本次用户前提")
         candidates = request.user_fact_candidates or user_fact_candidates(available_user_turns)
         candidate_by_id = {candidate.source_id: candidate.exact_text for candidate in candidates}
         fact_source_ids = self._exact_string_list(raw_fact_ids)
