@@ -51,6 +51,7 @@ from src.gateway.api.contracts import (
     BrandLibraryEntryRequest,
     BrandLibraryPreviewRequest,
     BrandLibraryVersionRequest,
+    BrandPublicationProjectionCandidateRequest,
     ChangePasswordRequest,
     ContentPlanRequest,
     ContentQuestionResponse,
@@ -1457,6 +1458,52 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             scope,
             entry_id,
             payload.enabled,
+        )
+
+    @app.get(
+        "/api/v1/tenant-management/brand-publication",
+        responses=business_failures,
+    )
+    def management_brand_publication(
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.brand_publication_projection(scope)
+
+    @app.get(
+        "/api/v1/tenant-management/brand-publication/sources",
+        responses=business_failures,
+    )
+    def management_brand_publication_sources(
+        query: str = "",
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> list[dict[str, object]]:
+        return workbench_service.publication_source_options(scope, query)
+
+    @app.post(
+        "/api/v1/tenant-management/brand-publication/candidates",
+        status_code=status.HTTP_201_CREATED,
+        responses=business_failures,
+    )
+    def create_management_brand_publication_candidate(
+        payload: BrandPublicationProjectionCandidateRequest,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.create_brand_publication_candidate(
+            scope,
+            tuple(item.model_dump() for item in payload.items),
+        )
+
+    @app.post(
+        "/api/v1/tenant-management/brand-publication/{projection_id}/confirm",
+        responses=business_failures,
+    )
+    def confirm_management_brand_publication(
+        projection_id: UUID,
+        scope: TenantManagementScope = Depends(management_scope_from_request),
+    ) -> dict[str, object]:
+        return workbench_service.confirm_brand_publication_projection(
+            scope,
+            projection_id,
         )
 
     @app.get("/api/v1/tenant-management/brand-products", responses=business_failures)

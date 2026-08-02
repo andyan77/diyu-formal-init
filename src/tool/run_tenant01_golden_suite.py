@@ -38,6 +38,8 @@ from src.tool.run_gate_c_final_suite import (
 )
 from src.tool.tenant01_evidence import (
     TENANT01_CARD_IDS,
+    TENANT01_COMPARISON_FIELDS,
+    TENANT01_DEMONSTRATION_CHECKS,
     TENANT01_HARD_BOUNDARIES,
     TENANT01_REVIEW_DIMENSIONS,
     Tenant01ArtifactInput,
@@ -423,8 +425,12 @@ def _reviews(path: Path) -> tuple[Tenant01HumanReview, ...]:
         scores = raw.get("scores")
         excerpts = raw.get("excerpts")
         boundaries = raw.get("hard_boundaries")
+        demonstration_checks = raw.get("demonstration_checks")
+        comparison = raw.get("comparison")
         if not isinstance(scores, dict) or not isinstance(excerpts, dict) or not isinstance(
             boundaries, dict
+        ) or not isinstance(demonstration_checks, dict) or not isinstance(
+            comparison, dict
         ):
             raise ValueError("TENANT-01 human review evidence is incomplete")
         if set(scores) != set(TENANT01_REVIEW_DIMENSIONS) or any(
@@ -439,6 +445,14 @@ def _reviews(path: Path) -> tuple[Tenant01HumanReview, ...]:
             not isinstance(value, str) for value in excerpts.values()
         ):
             raise ValueError("TENANT-01 human review excerpts are invalid")
+        if set(demonstration_checks) != set(TENANT01_DEMONSTRATION_CHECKS) or any(
+            type(value) is not bool for value in demonstration_checks.values()
+        ):
+            raise ValueError("TENANT-01 demonstration checks are invalid")
+        if set(comparison) != set(TENANT01_COMPARISON_FIELDS) or any(
+            not isinstance(value, str) for value in comparison.values()
+        ):
+            raise ValueError("TENANT-01 cross-card comparison is invalid")
         reviews.append(
             Tenant01HumanReview(
                 card_id=str(raw.get("card_id", "")),
@@ -446,6 +460,13 @@ def _reviews(path: Path) -> tuple[Tenant01HumanReview, ...]:
                 scores={str(key): cast(int, value) for key, value in scores.items()},
                 excerpts={str(key): str(value) for key, value in excerpts.items()},
                 hard_boundaries={str(key): cast(bool, value) for key, value in boundaries.items()},
+                demonstration_checks={
+                    str(key): cast(bool, value)
+                    for key, value in demonstration_checks.items()
+                },
+                comparison={str(key): str(value) for key, value in comparison.items()},
+                brand_basis=str(raw.get("brand_basis", "")),
+                verdict=str(raw.get("verdict", "")),
                 notes=str(raw.get("notes", "")),
             )
         )
@@ -462,6 +483,7 @@ def _finalize(args: argparse.Namespace) -> None:
         implementation_sha=implementation_sha,
         schema_revision=args.schema_revision,
         image_digest=args.image_digest,
+        source_manifest_digest=args.source_manifest_digest,
         artifacts=tuple(
             Tenant01ArtifactInput(
                 card_id,
@@ -500,6 +522,7 @@ def _parser() -> argparse.ArgumentParser:
     finalize.add_argument("--review-file", required=True)
     finalize.add_argument("--schema-revision", required=True)
     finalize.add_argument("--image-digest", required=True)
+    finalize.add_argument("--source-manifest-digest", required=True)
     finalize.set_defaults(action=_finalize)
     return parser
 

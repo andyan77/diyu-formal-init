@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Final, cast
 from uuid import UUID
 
+from src.shared.brand_publication import brand_context_packet_digest
 from src.shared.narrative import visible_digest
 
 TENANT01_CARD_IDS: Final[frozenset[str]] = frozenset(
@@ -40,6 +41,20 @@ TENANT01_HARD_BOUNDARIES: Final[tuple[str, ...]] = (
     "person_facts",
     "media_resources",
 )
+TENANT01_DEMONSTRATION_CHECKS: Final[tuple[str, ...]] = (
+    "scaffolding_free",
+    "natural_brand_relation",
+    "directly_publishable",
+    "cross_card_distinct",
+    "series_progression",
+)
+TENANT01_COMPARISON_FIELDS: Final[tuple[str, ...]] = (
+    "title_angle",
+    "central_judgment",
+    "structure",
+    "closure",
+    "brand_relation",
+)
 
 
 class Tenant01EvidenceError(ValueError):
@@ -60,6 +75,10 @@ class Tenant01HumanReview:
     scores: dict[str, int]
     excerpts: dict[str, str]
     hard_boundaries: dict[str, bool]
+    demonstration_checks: dict[str, bool]
+    comparison: dict[str, str]
+    brand_basis: str
+    verdict: str
     notes: str
 
 
@@ -98,7 +117,7 @@ def _artifact_binding(
     path: Path,
     *,
     card_id: str,
-) -> tuple[dict[str, object], dict[str, str]]:
+) -> tuple[dict[str, object], dict[str, str], dict[str, object]]:
     document = _json_object(path)
     if document.get("card_id") != card_id:
         raise Tenant01EvidenceError(f"{card_id} 成品文件绑定到了另一张卡。")
@@ -115,7 +134,83 @@ def _artifact_binding(
         field: _uuid_text(document.get(field), label=f"{card_id} {field}")
         for field in ("task_id", "run_id", "version_id")
     }
-    return document, persistence
+    snapshot = document.get("formal_snapshot")
+    if not isinstance(snapshot, dict):
+        raise Tenant01EvidenceError(f"{card_id} 缺少正式任务快照。")
+    packet = snapshot.get("brand_context_packet")
+    if (
+        not isinstance(packet, dict)
+        or packet.get("packet_version") != "brand-context-packet-v2"
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 没有绑定当前品牌发布投影。")
+    projection_id = _uuid_text(
+        packet.get("publication_projection_id"),
+        label=f"{card_id} publication_projection_id",
+    )
+    projection_version = packet.get("publication_projection_version")
+    projection_digest = packet.get("publication_projection_digest")
+    packet_digest = packet.get("packet_digest")
+    raw_segments = packet.get("segments")
+    if (
+        not isinstance(projection_version, int)
+        or projection_version < 1
+        or not _sha256_text(projection_digest)
+        or not _sha256_text(packet_digest)
+        or not isinstance(raw_segments, list)
+        or not raw_segments
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 发布投影版本或摘要无效。")
+    packet_segments: list[dict[str, object]] = []
+    for raw_segment in raw_segments:
+        if not isinstance(raw_segment, dict):
+            raise Tenant01EvidenceError(f"{card_id} 发布投影来源无效。")
+        segment = cast(dict[str, object], raw_segment)
+        for field in (
+            "segment_id",
+            "source_document_id",
+            "source_document_version_id",
+        ):
+            _uuid_text(segment.get(field), label=f"{card_id} {field}")
+        exact_text = segment.get("exact_text")
+        if (
+            not isinstance(exact_text, str)
+            or not exact_text.strip()
+            or segment.get("semantic_kind")
+            not in {"brand_fact", "expression_constraint", "creative_method"}
+            or segment.get("evidence_level") != "confirmed_publication"
+            or not str(segment.get("source_id", "")).strip()
+            or not str(segment.get("source_version", "")).strip()
+            or not str(segment.get("visibility_scope", "")).strip()
+            or segment.get("digest")
+            != hashlib.sha256(exact_text.encode()).hexdigest()
+        ):
+            raise Tenant01EvidenceError(f"{card_id} 发布投影来源或正文摘要无效。")
+        packet_segments.append(segment)
+    if packet_digest != brand_context_packet_digest(
+        projection_id=projection_id,
+        projection_version=projection_version,
+        projection_digest=str(projection_digest),
+        segments=packet_segments,
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 品牌上下文摘要无法复算。")
+    return (
+        document,
+        persistence,
+        {
+            "projection_id": projection_id,
+            "projection_version": projection_version,
+            "projection_digest": projection_digest,
+            "brand_context_packet_digest": packet_digest,
+        },
+    )
+
+
+def _sha256_text(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 def _validate_review(
@@ -127,7 +222,7 @@ def _validate_review(
         raise Tenant01EvidenceError(f"{review.card_id} 人工评分维度不完整。")
     if any(not isinstance(score, int) or not 1 <= score <= 5 for score in review.scores.values()):
         raise Tenant01EvidenceError(f"{review.card_id} 人工评分必须为 1—5。")
-    for dimension in ("brand_relation", "account_voice", "platform_fit", "completeness"):
+    for dimension in TENANT01_REVIEW_DIMENSIONS:
         if review.scores[dimension] < 4:
             raise Tenant01EvidenceError(f"{review.card_id} 未通过 {dimension} 硬门。")
     if set(review.hard_boundaries) != set(TENANT01_HARD_BOUNDARIES) or not all(
@@ -146,6 +241,18 @@ def _validate_review(
             raise Tenant01EvidenceError(
                 f"{review.card_id} {field} 引用不在最终 artifact 中。"
             )
+    if review.verdict != "PASS":
+        raise Tenant01EvidenceError(f"{review.card_id} 人工二元结论不是 PASS。")
+    if set(review.demonstration_checks) != set(
+        TENANT01_DEMONSTRATION_CHECKS
+    ) or not all(review.demonstration_checks.values()):
+        raise Tenant01EvidenceError(f"{review.card_id} 可演示成品检查未通过。")
+    if set(review.comparison) != set(TENANT01_COMPARISON_FIELDS) or any(
+        not value.strip() for value in review.comparison.values()
+    ):
+        raise Tenant01EvidenceError(f"{review.card_id} 跨卡比较依据不完整。")
+    if not review.brand_basis.strip():
+        raise Tenant01EvidenceError(f"{review.card_id} 缺少品牌或账号关系来源。")
     if not review.notes.strip():
         raise Tenant01EvidenceError(f"{review.card_id} 人工审阅结论为空。")
     return {
@@ -158,8 +265,33 @@ def _validate_review(
         ),
         "excerpts": review.excerpts,
         "hard_boundaries": review.hard_boundaries,
+        "demonstration_checks": review.demonstration_checks,
+        "comparison": review.comparison,
+        "brand_basis": review.brand_basis,
+        "verdict": review.verdict,
         "notes": review.notes,
     }
+
+
+def _assert_cross_card_distinct(
+    artifacts: list[dict[str, object]],
+) -> None:
+    owners: dict[str, str] = {}
+    for artifact in artifacts:
+        card_id = str(artifact["card_id"])
+        body = str(artifact["body"])
+        for raw_line in body.splitlines():
+            line = " ".join(raw_line.strip().lstrip("#*- ").split())
+            if len(line) < 48 or line.startswith(
+                ("AIGC", "发布提醒", "事实范围", "创作范围")
+            ):
+                continue
+            previous = owners.get(line)
+            if previous is not None and previous != card_id:
+                raise Tenant01EvidenceError(
+                    f"{previous} 与 {card_id} 存在非必要完整句段重复。"
+                )
+            owners[line] = card_id
 
 
 def _assert_preflight(path: Path) -> dict[str, object]:
@@ -208,6 +340,7 @@ def write_tenant01_evidence(
     implementation_sha: str,
     schema_revision: str,
     image_digest: str,
+    source_manifest_digest: str,
     artifacts: tuple[Tenant01ArtifactInput, ...],
     reviews: tuple[Tenant01HumanReview, ...],
     p5_preflight_file: str,
@@ -215,7 +348,11 @@ def write_tenant01_evidence(
 ) -> None:
     if len(implementation_sha) != 40 or any(character not in "0123456789abcdef" for character in implementation_sha):
         raise Tenant01EvidenceError("实现 SHA 无效。")
-    if not schema_revision or not image_digest.startswith("sha256:"):
+    if (
+        not schema_revision
+        or not image_digest.startswith("sha256:")
+        or not _sha256_text(source_manifest_digest)
+    ):
         raise Tenant01EvidenceError("schema 或镜像 digest 未冻结。")
     if root.stat().st_mode & 0o077:
         raise Tenant01EvidenceError("证据目录权限必须为 0700。")
@@ -230,10 +367,12 @@ def write_tenant01_evidence(
     artifact_records: list[dict[str, object]] = []
     review_records: list[dict[str, object]] = []
     review_averages: list[float] = []
+    bound_artifacts: list[dict[str, object]] = []
+    projection_bindings: list[dict[str, object]] = []
     for item in artifacts:
         artifact_path = _private_child(root, item.artifact_file)
         raw_path = _private_child(root, item.raw_response_file)
-        artifact, persistence = _artifact_binding(
+        artifact, persistence, projection = _artifact_binding(
             artifact_path,
             card_id=item.card_id,
         )
@@ -245,6 +384,8 @@ def write_tenant01_evidence(
         if not isinstance(average_score, float):
             raise Tenant01EvidenceError(f"{item.card_id} 人工评分摘要无效。")
         review_averages.append(average_score)
+        bound_artifacts.append(artifact)
+        projection_bindings.append(projection)
         artifact_records.append(
             {
                 "card_id": item.card_id,
@@ -253,12 +394,25 @@ def write_tenant01_evidence(
                 "raw_response_file": item.raw_response_file,
                 "raw_response_sha256": sha256_file(raw_path),
                 "visible_digest": artifact["visible_digest"],
+                "publication_projection": projection,
                 **persistence,
             }
         )
         validated_review["artifact_sha256"] = sha256_file(artifact_path)
         validated_review["visible_digest"] = artifact["visible_digest"]
         review_records.append(validated_review)
+
+    _assert_cross_card_distinct(bound_artifacts)
+    projection_keys = {
+        (
+            str(item["projection_id"]),
+            int(cast(int, item["projection_version"])),
+            str(item["projection_digest"]),
+        )
+        for item in projection_bindings
+    }
+    if len(projection_keys) != 1:
+        raise Tenant01EvidenceError("十一张卡没有使用同一个已确认品牌发布投影。")
 
     p5_path = _private_child(root, p5_preflight_file)
     dm01_path = _private_child(root, dm01_file)
@@ -274,6 +428,8 @@ def write_tenant01_evidence(
                 3,
             ),
             "hard_boundary_violations": 0,
+            "all_cards_binary_pass": True,
+            "all_dimensions_at_least_four": True,
         },
     )
     _write_private_json(
@@ -283,6 +439,12 @@ def write_tenant01_evidence(
             "implementation_sha": implementation_sha,
             "schema_revision": schema_revision,
             "image_digest": image_digest,
+            "source_manifest_digest": source_manifest_digest,
+            "publication_projection": {
+                "id": next(iter(projection_keys))[0],
+                "version": next(iter(projection_keys))[1],
+                "digest": next(iter(projection_keys))[2],
+            },
             "provider_config": {
                 "model": "deepseek-v4-flash",
                 "temperature": 0,

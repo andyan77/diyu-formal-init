@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -12,10 +13,12 @@ from psycopg.types.json import Jsonb
 
 from src.infrastructure.readiness_paths import readiness_path_state
 from src.ports.workbench_repository import WorkbenchRepository
+from src.shared.brand_publication import publication_projection_digest
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.content_snapshot import visible_context_basis, visible_direction
 from src.shared.display_integrity import assert_display_artifact_integrity
 from src.shared.errors import DomainError
+from src.shared.tenant_brand_sources import classify_source_segment
 from src.shared.types import (
     DisplayScope,
     SpeakerKind,
@@ -206,6 +209,16 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     WHERE source.tenant_id = %s AND source.brand_id = %s
                       AND source.status = 'active'
                       AND source.activation_status = 'brand_user_authorized') AS source_documents,
+                  EXISTS (
+                    SELECT 1
+                      FROM brands brand
+                      JOIN brand_publication_projections projection
+                        ON projection.tenant_id = brand.tenant_id
+                       AND projection.brand_id = brand.id
+                       AND projection.id = brand.current_publication_projection_id
+                       AND projection.status = 'confirmed'
+                     WHERE brand.tenant_id = %s AND brand.id = %s
+                  ) AS publication_confirmed,
                   (SELECT count(DISTINCT binding.product_id)
                      FROM product_media_bindings binding
                      JOIN brand_products product
@@ -237,6 +250,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                     scope.brand_id,
                     scope.tenant_id,
                     scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
                     scope.brand_id,
                     scope.tenant_id,
                     scope.tenant_id,
@@ -247,6 +262,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         return {
             "brand_name": str(row["brand_name"]),
             "source_documents": self._integer(row["source_documents"]),
+            "publication_confirmed": bool(row["publication_confirmed"]),
             "product_media_products": self._integer(row["product_media_products"]),
             "confirmed_stores": self._integer(row["confirmed_stores"]),
         }
@@ -1555,6 +1571,435 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "status": str(row["status"]),
             "current_version_id": (str(row["current_version_id"]) if row["current_version_id"] is not None else None),
             "updated_at": self._time(row["updated_at"]),
+        }
+
+    def brand_publication_projection(
+        self,
+        scope: TenantManagementScope,
+    ) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT projection.id, projection.version_number,
+                       projection.status, projection.digest,
+                       projection.created_at, projection.confirmed_at,
+                       creator.display_name AS created_by,
+                       confirmer.display_name AS confirmed_by,
+                       projection.id = brand.current_publication_projection_id AS is_current
+                  FROM brand_publication_projections projection
+                  JOIN brands brand
+                    ON brand.tenant_id = projection.tenant_id
+                   AND brand.id = projection.brand_id
+                  JOIN users creator
+                    ON creator.tenant_id = projection.tenant_id
+                   AND creator.id = projection.created_by
+                  LEFT JOIN users confirmer
+                    ON confirmer.tenant_id = projection.tenant_id
+                   AND confirmer.id = projection.confirmed_by
+                 WHERE projection.tenant_id = %s
+                   AND projection.brand_id = %s
+                 ORDER BY projection.version_number DESC
+                """,
+                (scope.tenant_id, scope.brand_id),
+            )
+            rows = cursor.fetchall()
+            projection_ids = [row["id"] for row in rows]
+            items_by_projection: dict[str, list[dict[str, object]]] = {}
+            if projection_ids:
+                cursor.execute(
+                    """
+                    SELECT item.projection_id, item.id, item.position,
+                           item.publication_role, item.published_text,
+                           item.applicability, item.source_kind,
+                           item.source_ref, item.source_version,
+                           item.source_digest, source.embedded_title
+                      FROM brand_publication_projection_items item
+                      LEFT JOIN brand_source_segments segment
+                        ON segment.tenant_id = item.tenant_id
+                       AND segment.brand_id = item.brand_id
+                       AND segment.id = item.source_segment_id
+                      LEFT JOIN brand_source_documents source
+                        ON source.tenant_id = segment.tenant_id
+                       AND source.brand_id = segment.brand_id
+                       AND source.id = segment.document_id
+                     WHERE item.tenant_id = %s
+                       AND item.brand_id = %s
+                       AND item.projection_id = ANY(%s)
+                     ORDER BY item.projection_id, item.position
+                    """,
+                    (scope.tenant_id, scope.brand_id, projection_ids),
+                )
+                for item in cursor.fetchall():
+                    items_by_projection.setdefault(str(item["projection_id"]), []).append(
+                        {
+                            "id": str(item["id"]),
+                            "position": self._integer(item["position"]),
+                            "publication_role": str(item["publication_role"]),
+                            "published_text": str(item["published_text"]),
+                            "applicability": [
+                                str(value)
+                                for value in (
+                                    item["applicability"]
+                                    if isinstance(item["applicability"], list)
+                                    else []
+                                )
+                            ],
+                            "source_kind": str(item["source_kind"]),
+                            "source_label": (
+                                str(item["embedded_title"])
+                                if item["embedded_title"] is not None
+                                else "已确认品牌表达基线"
+                            ),
+                            "source_version": str(item["source_version"]),
+                            "source_digest": str(item["source_digest"]),
+                        }
+                    )
+        history = [
+            {
+                "id": str(row["id"]),
+                "version": self._integer(row["version_number"]),
+                "status": str(row["status"]),
+                "digest": str(row["digest"]),
+                "created_by": str(row["created_by"]),
+                "created_at": self._time(row["created_at"]),
+                "confirmed_by": (
+                    str(row["confirmed_by"])
+                    if row["confirmed_by"] is not None
+                    else None
+                ),
+                "confirmed_at": (
+                    self._time(row["confirmed_at"])
+                    if row["confirmed_at"] is not None
+                    else None
+                ),
+                "is_current": bool(row["is_current"]),
+                "items": items_by_projection.get(str(row["id"]), []),
+            }
+            for row in rows
+        ]
+        return {
+            "contract_version": "brand-publication-projection-v1",
+            "current": next((item for item in history if item["is_current"]), None),
+            "history": history,
+        }
+
+    def publication_source_options(
+        self,
+        scope: TenantManagementScope,
+        query: str,
+    ) -> list[dict[str, object]]:
+        pattern = f"%{query}%" if query else "%"
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT segment.id, segment.exact_text, segment.heading_path,
+                       segment.digest, version_record.source_version,
+                       source.embedded_title, source.source_id
+                  FROM brand_source_segments segment
+                  JOIN brand_source_documents source
+                    ON source.tenant_id = segment.tenant_id
+                   AND source.brand_id = segment.brand_id
+                   AND source.id = segment.document_id
+                   AND source.current_version_id = segment.document_version_id
+                   AND source.status = 'active'
+                   AND source.activation_status = 'brand_user_authorized'
+                  JOIN brand_source_document_versions version_record
+                    ON version_record.tenant_id = segment.tenant_id
+                   AND version_record.brand_id = segment.brand_id
+                   AND version_record.id = segment.document_version_id
+                 WHERE segment.tenant_id = %s
+                   AND segment.brand_id = %s
+                   AND segment.semantic_kind IN (
+                       'brand_fact', 'expression_constraint', 'creative_method'
+                   )
+                   AND (
+                       source.embedded_title ILIKE %s
+                       OR segment.exact_text ILIKE %s
+                   )
+                 ORDER BY source.embedded_title, segment.source_locator
+                 LIMIT 240
+                """,
+                (scope.tenant_id, scope.brand_id, pattern, pattern),
+            )
+            rows = cursor.fetchall()
+        options: list[dict[str, object]] = []
+        for row in rows:
+            heading_path = row["heading_path"]
+            if not isinstance(heading_path, list):
+                raise DomainError("品牌来源标题路径无效。")
+            semantic_kind = classify_source_segment(
+                str(row["source_id"]),
+                tuple(str(value) for value in heading_path),
+                str(row["exact_text"]),
+            )
+            if semantic_kind not in {
+                "brand_fact",
+                "expression_constraint",
+                "creative_method",
+            }:
+                continue
+            options.append({
+                "source_segment_id": str(row["id"]),
+                "source_title": str(row["embedded_title"]),
+                "source_version": str(row["source_version"]),
+                "source_digest": str(row["digest"]),
+                "semantic_kind": semantic_kind,
+                "source_text": str(row["exact_text"]),
+            })
+            if len(options) >= 80:
+                break
+        return options
+
+    def create_brand_publication_candidate(
+        self,
+        scope: TenantManagementScope,
+        items: tuple[dict[str, object], ...],
+    ) -> dict[str, object]:
+        if not items or len(items) > 64:
+            raise DomainError("品牌发布表达需要 1 到 64 条经过核对的内容。")
+        source_ids = [UUID(str(item["source_segment_id"])) for item in items]
+        if len(set(source_ids)) != len(source_ids):
+            raise DomainError("同一个来源片段不能在一个发布版本中重复使用。")
+        allowed_products = {
+            "dressing_decision",
+            "product_truth",
+            "brand_life_narrative",
+            "local_response",
+            "visual_styling_story",
+        }
+        projection_id = uuid4()
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                "SELECT id FROM brands WHERE tenant_id = %s AND id = %s FOR UPDATE",
+                (scope.tenant_id, scope.brand_id),
+            )
+            self._one(cursor, "找不到当前品牌")
+            cursor.execute(
+                """
+                SELECT segment.id, segment.document_version_id,
+                       segment.semantic_kind, segment.digest,
+                       segment.exact_text, segment.heading_path,
+                       version_record.source_version, source.source_id
+                  FROM brand_source_segments segment
+                  JOIN brand_source_documents source
+                    ON source.tenant_id = segment.tenant_id
+                   AND source.brand_id = segment.brand_id
+                   AND source.id = segment.document_id
+                   AND source.current_version_id = segment.document_version_id
+                   AND source.status = 'active'
+                   AND source.activation_status = 'brand_user_authorized'
+                  JOIN brand_source_document_versions version_record
+                    ON version_record.tenant_id = segment.tenant_id
+                   AND version_record.brand_id = segment.brand_id
+                   AND version_record.id = segment.document_version_id
+                 WHERE segment.tenant_id = %s
+                   AND segment.brand_id = %s
+                   AND segment.id = ANY(%s)
+                """,
+                (scope.tenant_id, scope.brand_id, source_ids),
+            )
+            sources = {UUID(str(row["id"])): row for row in cursor.fetchall()}
+            if set(sources) != set(source_ids):
+                raise DomainError("只能引用当前品牌正在使用的源资料。")
+            digest_items: list[dict[str, object]] = []
+            stored_items: list[dict[str, object]] = []
+            for position, item in enumerate(items, start=1):
+                source_id = UUID(str(item["source_segment_id"]))
+                source = sources[source_id]
+                role = str(item["publication_role"])
+                text = str(item["published_text"]).strip()
+                raw_applicability = item.get("applicability", ())
+                if not isinstance(raw_applicability, (list, tuple)):
+                    raise DomainError("发布表达的适用内容无效。")
+                applicability = tuple(
+                    dict.fromkeys(str(value) for value in raw_applicability)
+                )
+                if any(value not in allowed_products for value in applicability):
+                    raise DomainError("发布表达包含未知内容用途。")
+                source_heading_path = source["heading_path"]
+                if not isinstance(source_heading_path, list):
+                    raise DomainError("品牌来源标题路径无效。")
+                effective_kind = classify_source_segment(
+                    str(source["source_id"]),
+                    tuple(str(value) for value in source_heading_path),
+                    str(source["exact_text"]),
+                )
+                allowed_roles = {
+                    "brand_fact": {"public_brand_fact", "expression_constraint", "internal_only"},
+                    "expression_constraint": {"expression_constraint", "internal_only"},
+                    "creative_method": {"creative_method", "internal_only"},
+                }.get(effective_kind, {"internal_only"})
+                if role not in allowed_roles:
+                    raise DomainError("这个来源的证据等级不能承担所选发布用途。")
+                record = {
+                    "position": position,
+                    "publication_role": role,
+                    "published_text": text,
+                    "applicability": list(applicability),
+                    "source_kind": "brand_source_segment",
+                    "source_ref": str(source_id),
+                    "source_version": str(source["source_version"]),
+                    "source_digest": str(source["digest"]),
+                }
+                digest_items.append(record)
+                stored_items.append(record | {"source_segment_id": source_id})
+            if not any(
+                item["publication_role"] != "internal_only"
+                for item in stored_items
+            ):
+                raise DomainError("至少需要一条可供创作端使用的品牌表达。")
+            cursor.execute(
+                """
+                SELECT COALESCE(max(version_number), 0) + 1 AS next_version
+                  FROM brand_publication_projections
+                 WHERE tenant_id = %s AND brand_id = %s
+                """,
+                (scope.tenant_id, scope.brand_id),
+            )
+            version = self._integer(
+                self._one(cursor, "无法计算发布版本")["next_version"]
+            )
+            digest = publication_projection_digest(digest_items)
+            cursor.execute(
+                """
+                INSERT INTO brand_publication_projections
+                    (id, tenant_id, brand_id, version_number, status,
+                     digest, created_by)
+                VALUES (%s, %s, %s, %s, 'candidate', %s, %s)
+                """,
+                (
+                    projection_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                    version,
+                    digest,
+                    scope.user_id,
+                ),
+            )
+            for record in stored_items:
+                cursor.execute(
+                    """
+                    INSERT INTO brand_publication_projection_items
+                        (id, tenant_id, brand_id, projection_id, position,
+                         publication_role, published_text, applicability,
+                         source_kind, source_segment_id, source_ref,
+                         source_version, source_digest)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
+                            'brand_source_segment', %s, %s, %s, %s)
+                    """,
+                    (
+                        uuid4(),
+                        scope.tenant_id,
+                        scope.brand_id,
+                        projection_id,
+                        record["position"],
+                        record["publication_role"],
+                        record["published_text"],
+                        record["applicability"],
+                        record["source_segment_id"],
+                        record["source_ref"],
+                        record["source_version"],
+                        record["source_digest"],
+                    ),
+                )
+            self._event(
+                cursor,
+                scope,
+                "brand_publication.candidate_created",
+                "brand_publication_projection",
+                projection_id,
+            )
+        return {
+            "id": str(projection_id),
+            "version": version,
+            "status": "candidate",
+            "digest": digest,
+            "item_count": len(stored_items),
+        }
+
+    def confirm_brand_publication_projection(
+        self,
+        scope: TenantManagementScope,
+        projection_id: UUID,
+    ) -> dict[str, object]:
+        with self._management_tx(scope) as cursor:
+            cursor.execute(
+                """
+                SELECT current_publication_projection_id
+                  FROM brands
+                 WHERE tenant_id = %s AND id = %s
+                 FOR UPDATE
+                """,
+                (scope.tenant_id, scope.brand_id),
+            )
+            brand = self._one(cursor, "找不到当前品牌")
+            cursor.execute(
+                """
+                SELECT id, version_number, status, digest
+                  FROM brand_publication_projections
+                 WHERE tenant_id = %s AND brand_id = %s AND id = %s
+                 FOR UPDATE
+                """,
+                (scope.tenant_id, scope.brand_id, projection_id),
+            )
+            candidate = self._one(cursor, "找不到当前品牌的候选发布版本")
+            if str(candidate["status"]) != "candidate":
+                raise DomainError("只有尚未确认的候选版本可以设为当前版本。")
+            cursor.execute(
+                """
+                SELECT count(*) AS item_count,
+                       count(*) FILTER (
+                           WHERE publication_role <> 'internal_only'
+                       ) AS writer_item_count
+                  FROM brand_publication_projection_items
+                 WHERE tenant_id = %s AND brand_id = %s AND projection_id = %s
+                """,
+                (scope.tenant_id, scope.brand_id, projection_id),
+            )
+            counts = self._one(cursor, "无法核对候选发布版本")
+            if self._integer(counts["writer_item_count"]) == 0:
+                raise DomainError("候选版本没有可供创作端使用的内容。")
+            current = brand["current_publication_projection_id"]
+            if current is not None:
+                cursor.execute(
+                    """
+                    UPDATE brand_publication_projections
+                       SET status = 'retired'
+                     WHERE tenant_id = %s AND brand_id = %s
+                       AND id = %s AND status = 'confirmed'
+                    """,
+                    (scope.tenant_id, scope.brand_id, current),
+                )
+            cursor.execute(
+                """
+                UPDATE brand_publication_projections
+                   SET status = 'confirmed', confirmed_by = %s,
+                       confirmed_at = now()
+                 WHERE tenant_id = %s AND brand_id = %s AND id = %s
+                """,
+                (scope.user_id, scope.tenant_id, scope.brand_id, projection_id),
+            )
+            cursor.execute(
+                """
+                UPDATE brands
+                   SET current_publication_projection_id = %s
+                 WHERE tenant_id = %s AND id = %s
+                """,
+                (projection_id, scope.tenant_id, scope.brand_id),
+            )
+            self._event(
+                cursor,
+                scope,
+                "brand_publication.confirmed",
+                "brand_publication_projection",
+                projection_id,
+            )
+        return {
+            "id": str(projection_id),
+            "version": self._integer(candidate["version_number"]),
+            "status": "confirmed",
+            "digest": str(candidate["digest"]),
+            "item_count": self._integer(counts["item_count"]),
         }
 
     def create_management_organization_material(
@@ -4236,7 +4681,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         library_paths = self._mapping_list(path_state["library_paths"])
         series_paths = self._mapping_list(path_state["series_paths"])
         display_paths = self._mapping_list(path_state["display_paths"])
-        expression_confirmed = str(path_state["baseline_status"]) == "confirmed"
+        expression_confirmed = str(path_state["publication_status"]) == "confirmed"
         root_accounts = self._integer(state["root_accounts"])
         expression_accounts = len(expression_paths)
         product_components = self._integer(state["product_facts"])
@@ -4438,54 +4883,130 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         with self._management_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT version, status, draft
+                SELECT id, version, status, draft
                 FROM brand_expression_baselines
                 WHERE tenant_id = %s AND brand_id = %s
                 """,
                 (scope.tenant_id, scope.brand_id),
             )
             current = self._one(cursor, "当前品牌尚无表达草案")
-            if str(current["status"]) == "confirmed" and str(current["draft"]) == draft:
-                return {
-                    "version": self._integer(current["version"]),
-                    "status": "confirmed",
-                    "draft": draft,
-                }
+            unchanged = (
+                str(current["status"]) == "confirmed"
+                and str(current["draft"]) == draft
+            )
             version = self._integer(current["version"])
-            if str(current["status"]) == "confirmed":
+            if not unchanged and str(current["status"]) == "confirmed":
                 version += 1
+            if unchanged:
+                row = current
+            else:
+                cursor.execute(
+                    """
+                    UPDATE brand_expression_baselines
+                    SET draft = %s, version = %s, status = 'confirmed',
+                        confirmed_by = %s, confirmed_at = now(), updated_at = now()
+                    WHERE tenant_id = %s AND brand_id = %s
+                    RETURNING id, version, status, draft
+                    """,
+                    (
+                        draft,
+                        version,
+                        scope.user_id,
+                        scope.tenant_id,
+                        scope.brand_id,
+                    ),
+                )
+                row = self._one(cursor, "当前品牌表达草案没有确认成功")
+                cursor.execute(
+                    """
+                    UPDATE brands
+                    SET positioning = %s,
+                        tone = '以当前已确认品牌表达版本为准。',
+                        strategy_version = %s
+                    WHERE tenant_id = %s AND id = %s
+                    """,
+                    (
+                        draft,
+                        f"brand-expression-v{version}",
+                        scope.tenant_id,
+                        scope.brand_id,
+                    ),
+                )
             cursor.execute(
-                """
-                UPDATE brand_expression_baselines
-                SET draft = %s, version = %s, status = 'confirmed',
-                    confirmed_by = %s, confirmed_at = now(), updated_at = now()
-                WHERE tenant_id = %s AND brand_id = %s
-                RETURNING version, status, draft
-                """,
-                (
-                    draft,
-                    version,
-                    scope.user_id,
-                    scope.tenant_id,
-                    scope.brand_id,
-                ),
+                "SELECT current_publication_projection_id FROM brands "
+                "WHERE tenant_id = %s AND id = %s FOR UPDATE",
+                (scope.tenant_id, scope.brand_id),
             )
-            row = self._one(cursor, "当前品牌表达草案没有确认成功")
-            cursor.execute(
-                """
-                UPDATE brands
-                SET positioning = %s,
-                    tone = '以当前已确认品牌表达版本为准。',
-                    strategy_version = %s
-                WHERE tenant_id = %s AND id = %s
-                """,
-                (
-                    draft,
-                    f"brand-expression-v{version}",
-                    scope.tenant_id,
-                    scope.brand_id,
-                ),
-            )
+            brand = self._one(cursor, "找不到当前品牌")
+            if brand["current_publication_projection_id"] is None:
+                cursor.execute(
+                    "SELECT COALESCE(max(version_number), 0) + 1 AS next_version "
+                    "FROM brand_publication_projections "
+                    "WHERE tenant_id = %s AND brand_id = %s",
+                    (scope.tenant_id, scope.brand_id),
+                )
+                projection_version = self._integer(
+                    self._one(cursor, "无法计算发布版本")["next_version"]
+                )
+                projection_id = uuid4()
+                baseline_id = str(row["id"])
+                source_digest = hashlib.sha256(draft.encode()).hexdigest()
+                projection_digest = publication_projection_digest(
+                    (
+                        {
+                            "position": 1,
+                            "publication_role": "expression_constraint",
+                            "published_text": draft,
+                            "applicability": [],
+                            "source_kind": "brand_expression_baseline",
+                            "source_ref": baseline_id,
+                            "source_version": str(version),
+                            "source_digest": source_digest,
+                        },
+                    )
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO brand_publication_projections
+                        (id, tenant_id, brand_id, version_number, status,
+                         digest, created_by, confirmed_by, confirmed_at)
+                    VALUES (%s, %s, %s, %s, 'confirmed', %s, %s, %s, now())
+                    """,
+                    (
+                        projection_id,
+                        scope.tenant_id,
+                        scope.brand_id,
+                        projection_version,
+                        projection_digest,
+                        scope.user_id,
+                        scope.user_id,
+                    ),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO brand_publication_projection_items
+                        (id, tenant_id, brand_id, projection_id, position,
+                         publication_role, published_text, applicability,
+                         source_kind, source_ref, source_version, source_digest)
+                    VALUES (%s, %s, %s, %s, 1, 'expression_constraint', %s,
+                            '{}', 'brand_expression_baseline', %s, %s, %s)
+                    """,
+                    (
+                        uuid4(),
+                        scope.tenant_id,
+                        scope.brand_id,
+                        projection_id,
+                        draft,
+                        baseline_id,
+                        str(version),
+                        source_digest,
+                    ),
+                )
+                cursor.execute(
+                    "UPDATE brands SET current_publication_projection_id = %s "
+                    "WHERE tenant_id = %s AND id = %s",
+                    (projection_id, scope.tenant_id, scope.brand_id),
+                )
             self._event(
                 cursor,
                 scope,
@@ -5090,17 +5611,17 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         path: dict[str, object] | None,
     ) -> list[dict[str, object]]:
         evidence: list[dict[str, object]] = []
-        if path_state["baseline_id"] is not None:
+        if path_state["publication_id"] is not None:
             evidence.append(
                 {
-                    "source": "当前品牌表达基线",
-                    "resource_id": str(path_state["baseline_id"]),
-                    "version": f"V{self._integer(path_state['baseline_version'])}",
-                    "version_id": None,
+                    "source": "当前已确认品牌发布表达",
+                    "resource_id": str(path_state["publication_id"]),
+                    "version": f"V{self._integer(path_state['publication_version'])}",
+                    "version_id": str(path_state["publication_id"]),
                     "scope": "当前品牌",
                     "updated_at": (
-                        self._evidence_time(path_state["baseline_updated_at"])
-                        if path_state["baseline_updated_at"] is not None
+                        self._evidence_time(path_state["publication_updated_at"])
+                        if path_state["publication_updated_at"] is not None
                         else None
                     ),
                     "updated_at_label": "当前对象未记录更新时间",

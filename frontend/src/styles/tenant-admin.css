@@ -388,6 +388,59 @@
 .readiness-list article > .text-action {
   margin-top: 14px;
 }
+
+.publication-list ul,
+.publication-source-list {
+  display: grid;
+  gap: 10px;
+}
+
+.publication-list ul {
+  margin: 16px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.publication-list li,
+.publication-source-list > label,
+.publication-draft {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.publication-list li span,
+.publication-list li small,
+.publication-source-list small {
+  display: block;
+  margin-top: 5px;
+  line-height: 1.55;
+}
+
+.publication-source-list {
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+}
+
+.publication-source-list > label {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  min-height: 44px;
+}
+
+.publication-source-list input {
+  width: 20px;
+  height: 20px;
+}
+
+.publication-draft {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
 .tenant-inline-panel {
   margin: 0 0 28px;
   padding: 0 20px 20px;

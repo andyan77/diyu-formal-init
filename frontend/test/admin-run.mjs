@@ -141,6 +141,47 @@ let brandEntries = [
     activation_status: "brand_user_authorized"
   }
 ];
+const publicationSources = [
+  {
+    source_segment_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    source_title: "笛语品牌身份与内容战略基线",
+    source_version: "V1",
+    source_digest: "a".repeat(64),
+    semantic_kind: "brand_fact",
+    source_text: "品牌面向需要清楚日常穿衣选择的人。"
+  },
+  {
+    source_segment_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    source_title: "笛语内容角色",
+    source_version: "V1",
+    source_digest: "b".repeat(64),
+    semantic_kind: "expression_constraint",
+    source_text: "先回应具体处境，再给明确判断。"
+  }
+];
+let publicationProjection = {
+  contract_version: "brand-publication-projection-v1",
+  current: {
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    version: 1,
+    status: "confirmed",
+    digest: "c".repeat(64),
+    created_at: "2026-08-01T00:00:00Z",
+    confirmed_at: "2026-08-01T00:00:00Z",
+    is_current: true,
+    items: [
+      {
+        position: 1,
+        publication_role: "public_brand_fact",
+        published_text: "笛语面向需要清楚日常穿衣选择的人。",
+        source_label: "笛语品牌身份与内容战略基线",
+        source_version: "V1"
+      }
+    ]
+  },
+  history: []
+};
+publicationProjection.history = [publicationProjection.current];
 let products = [
   {
     id: "77777777-7777-4777-8777-777777777701",
@@ -414,6 +455,60 @@ globalThis.fetch = async (input, init = {}) => {
       },
       account_profile_candidate_source: "确定性冷启动候选，保存前必须纠正。"
     };
+  } else if (path === "/api/v1/tenant-management/brand-publication" && method === "GET") {
+    value = publicationProjection;
+  } else if (
+    path === "/api/v1/tenant-management/brand-publication/sources" &&
+    method === "GET"
+  ) {
+    value = publicationSources;
+  } else if (
+    path === "/api/v1/tenant-management/brand-publication/candidates" &&
+    method === "POST"
+  ) {
+    const candidate = {
+      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      version: 2,
+      status: "candidate",
+      digest: "d".repeat(64),
+      created_at: "2026-08-02T00:00:00Z",
+      confirmed_at: null,
+      is_current: false,
+      items: body.items.map((item, index) => ({
+        position: index + 1,
+        publication_role: item.publication_role,
+        published_text: item.published_text,
+        source_label: publicationSources.find(
+          source => source.source_segment_id === item.source_segment_id
+        )?.source_title ?? "已确认来源",
+        source_version: "V1"
+      }))
+    };
+    publicationProjection = {
+      ...publicationProjection,
+      history: [candidate, ...publicationProjection.history]
+    };
+    value = candidate;
+  } else if (
+    path.match(/^\/api\/v1\/tenant-management\/brand-publication\/[^/]+\/confirm$/) &&
+    method === "POST"
+  ) {
+    const projectionId = path.split("/").at(-2);
+    const confirmed = publicationProjection.history.find(
+      item => item.id === projectionId
+    );
+    publicationProjection = {
+      ...publicationProjection,
+      current: confirmed,
+      history: publicationProjection.history.map(item => ({
+        ...item,
+        status: item.id === projectionId ? "confirmed" : "retired",
+        is_current: item.id === projectionId,
+        confirmed_at:
+          item.id === projectionId ? "2026-08-02T00:00:00Z" : item.confirmed_at
+      }))
+    };
+    value = confirmed;
   } else if (path === "/api/v1/tenant-management/brand-library" && method === "GET") {
     value = brandEntries;
   } else if (

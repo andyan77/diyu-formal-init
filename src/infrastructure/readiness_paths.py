@@ -17,12 +17,18 @@ def readiness_path_state(
         WITH params AS (
           SELECT %s::uuid AS tenant_id, %s::uuid AS brand_id
         ),
-        baseline AS (
-          SELECT value.id, value.version, value.status, value.updated_at
-          FROM brand_expression_baselines value
-          JOIN params
-            ON params.tenant_id = value.tenant_id
-           AND params.brand_id = value.brand_id
+        publication AS (
+          SELECT projection.id, projection.version_number AS version,
+                 projection.status, projection.confirmed_at AS updated_at
+          FROM params
+          JOIN brands brand
+            ON brand.tenant_id = params.tenant_id
+           AND brand.id = params.brand_id
+          JOIN brand_publication_projections projection
+            ON projection.tenant_id = brand.tenant_id
+           AND projection.brand_id = brand.id
+           AND projection.id = brand.current_publication_projection_id
+           AND projection.status = 'confirmed'
         ),
         target_channels AS (
           SELECT DISTINCT root.id AS account_id, physical.channel
@@ -297,10 +303,10 @@ def readiness_path_state(
           ORDER BY store.id, display_user.display_name, product.display_name
         )
         SELECT
-          (SELECT id FROM baseline) AS baseline_id,
-          (SELECT version FROM baseline) AS baseline_version,
-          COALESCE((SELECT status FROM baseline), 'missing') AS baseline_status,
-          (SELECT updated_at FROM baseline) AS baseline_updated_at,
+          (SELECT id FROM publication) AS publication_id,
+          (SELECT version FROM publication) AS publication_version,
+          COALESCE((SELECT status FROM publication), 'missing') AS publication_status,
+          (SELECT updated_at FROM publication) AS publication_updated_at,
           COALESCE(
             (SELECT jsonb_agg(to_jsonb(path) ORDER BY path.account_name)
              FROM expression_paths path),

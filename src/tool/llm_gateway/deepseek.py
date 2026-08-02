@@ -363,7 +363,10 @@ class BoundaryContext:
         fact_registry = (*user_records, *product_records, *brand_records)
         product_facts_text = "\n".join(f"- {record.fact_id}：{record.exact_text}" for record in product_records)
         constraint_registry = (
-            ("source:brand_baseline", "当前品牌定位、判断顺序与语气"),
+            (
+                "source:brand-publication",
+                "当前已确认发布投影中的表达约束与创作方法",
+            ),
             ("source:role_boundary", "当前发布账号的表达身份与资格边界"),
             (
                 "source:organization",
@@ -464,15 +467,21 @@ class BoundaryContext:
                 for text in request.brand.candidate_product_guidance_context
             ),
         ]
+        expression = request.account_expression
         brand_text = (
             f"品牌：{request.brand.brand_name}；组织：{request.brand.organization_name}；"
-            f"账号：{request.brand.account_name}；表达身份：{request.brand.content_role_name}；"
-            f"资格边界：{request.brand.content_role_boundary}；"
-            f"定位：{request.brand.positioning}；判断顺序：{request.brand.decision_order}；"
-            f"语气：{request.brand.tone}。这些只支持当前立场，不证明任何经历、案例、"
-            "门店做法或经营历史已经发生。"
+            f"账号：{request.brand.account_name}；表达身份："
+            f"{expression.identity_position if expression is not None else request.brand.content_role_name}；"
+            f"资格边界："
+            f"{expression.authority_boundary if expression is not None else request.brand.content_role_boundary}；"
+            f"受众关系："
+            f"{expression.audience_relationship if expression is not None else request.brand.audience_description}；"
+            f"内容领地：{expression.content_territories if expression is not None else ''}。"
+            "这些是当前账号与已确认发布投影的表达控制，不是可照抄的账号介绍，"
+            "也不证明任何经历、案例、门店做法或经营历史已经发生。"
             + "".join(
-                "\n品牌表达约束（不能作为事实引用）：" + text for text in request.brand.expression_constraint_context
+                "\n已确认表达约束（不能作为事实引用）：" + text
+                for text in request.brand.expression_constraint_context
             )
         )
         return cls(
@@ -2359,12 +2368,25 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 
     @staticmethod
     def _deidentified_writer_controls(request: GenerationInput) -> str:
+        expression = request.account_expression
         parts = [
-            request.brand.positioning,
-            request.brand.decision_order,
-            request.brand.audience_description,
-            request.brand.tone,
-            request.brand.content_role_boundary,
+            *(
+                (
+                    expression.identity_position,
+                    expression.authority_boundary,
+                    expression.audience_relationship,
+                    expression.content_territories,
+                    expression.default_production_conditions,
+                )
+                if expression is not None
+                else (
+                    request.brand.content_role_name,
+                    request.brand.content_role_boundary,
+                    request.brand.audience_description,
+                )
+            ),
+            *request.brand.expression_constraint_context,
+            *request.brand.creative_method_context,
             *(
                 tuple(selection.applied_label for selection in request.creative_direction.selections)
                 if request.creative_direction is not None
@@ -2396,8 +2418,21 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         """Preserve expression controls without leaking product semantics."""
 
         parts = [
-            request.brand.decision_order,
-            request.brand.tone,
+            *(
+                (
+                    request.account_expression.authority_boundary,
+                    request.account_expression.audience_relationship,
+                    request.account_expression.content_territories,
+                )
+                if request.account_expression is not None
+                else (
+                    request.brand.content_role_name,
+                    request.brand.content_role_boundary,
+                    request.brand.audience_description,
+                )
+            ),
+            *request.brand.expression_constraint_context,
+            *request.brand.creative_method_context,
             *(
                 tuple(selection.applied_label for selection in request.creative_direction.selections)
                 if request.creative_direction is not None
@@ -2435,9 +2470,8 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 expression.audience_relationship if expression is not None else request.brand.audience_description
             ),
             "content_territories": (
-                expression.content_territories if expression is not None else request.brand.positioning
+                expression.content_territories if expression is not None else ""
             ),
-            "decision_order": request.brand.decision_order,
             "authority_boundary": (
                 expression.authority_boundary if expression is not None else request.brand.content_role_boundary
             ),

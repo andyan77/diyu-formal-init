@@ -27,6 +27,7 @@ from src.brain.p1_contract import assert_content_complete
 from src.brain.platform_directions import direction_for
 from src.ports.content_generator import ContentGenerator
 from src.ports.content_repository import ContentRepository
+from src.shared.brand_publication import brand_context_packet_digest
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.content_snapshot import (
     frozen_creative_kernel,
@@ -77,7 +78,9 @@ from src.shared.types import (
     AccountExpression,
     ActiveAsset,
     BrandContext,
+    BrandContextPacket,
     BrandContextPacketV1,
+    BrandContextPacketV2,
     BrandContextSegment,
     ContentControlContext,
     ContentProduct,
@@ -938,11 +941,14 @@ class ContentService:
     @staticmethod
     def _brand_context_packet_from_snapshot(
         snapshot: dict[str, object] | None,
-    ) -> BrandContextPacketV1 | None:
+    ) -> BrandContextPacket | None:
         if snapshot is None:
             return None
         raw = snapshot.get("brand_context_packet")
-        if not isinstance(raw, dict) or raw.get("packet_version") != "brand-context-packet-v1":
+        if not isinstance(raw, dict) or raw.get("packet_version") not in {
+            "brand-context-packet-v1",
+            "brand-context-packet-v2",
+        }:
             return None
         raw_segments = raw.get("segments")
         if not isinstance(raw_segments, list):
@@ -969,7 +975,51 @@ class ContentService:
         digest = raw.get("packet_digest")
         if not isinstance(digest, str):
             raise DomainError("内容任务冻结的品牌资料包无效")
-        return BrandContextPacketV1("brand-context-packet-v1", digest, tuple(segments))
+        if raw.get("packet_version") == "brand-context-packet-v1":
+            return BrandContextPacketV1(
+                "brand-context-packet-v1",
+                digest,
+                tuple(segments),
+            )
+        projection_id = raw.get("publication_projection_id")
+        projection_version = raw.get("publication_projection_version")
+        projection_digest = raw.get("publication_projection_digest")
+        if (
+            not isinstance(projection_id, str)
+            or not isinstance(projection_version, int)
+            or not isinstance(projection_digest, str)
+        ):
+            raise DomainError("内容任务冻结的品牌发布版本无效")
+        segment_documents = [
+            {
+                "segment_id": segment.segment_id,
+                "source_document_id": segment.source_document_id,
+                "source_document_version_id": segment.source_document_version_id,
+                "source_id": segment.source_id,
+                "source_version": segment.source_version,
+                "semantic_kind": segment.semantic_kind,
+                "evidence_level": segment.evidence_level,
+                "visibility_scope": segment.visibility_scope,
+                "digest": segment.digest,
+                "exact_text": segment.exact_text,
+            }
+            for segment in segments
+        ]
+        if brand_context_packet_digest(
+            projection_id=projection_id,
+            projection_version=projection_version,
+            projection_digest=projection_digest,
+            segments=segment_documents,
+        ) != digest:
+            raise DomainError("内容任务冻结的品牌发布版本摘要无效")
+        return BrandContextPacketV2(
+            "brand-context-packet-v2",
+            digest,
+            projection_id,
+            projection_version,
+            projection_digest,
+            tuple(segments),
+        )
 
     @staticmethod
     def _requires_confirmed_product(seed: str, brand_name: str) -> bool:

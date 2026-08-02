@@ -132,6 +132,46 @@ type BrandExpressionBaseline = {
   draft: string;
 };
 
+type PublicationRole =
+  | "public_brand_fact"
+  | "expression_constraint"
+  | "creative_method";
+type PublicationSource = {
+  source_segment_id: string;
+  source_title: string;
+  source_version: string;
+  source_digest: string;
+  semantic_kind: "brand_fact" | "expression_constraint" | "creative_method";
+  source_text: string;
+};
+type PublicationItem = {
+  position: number;
+  publication_role: PublicationRole | "internal_only";
+  published_text: string;
+  source_label: string;
+  source_version: string;
+};
+type PublicationVersion = {
+  id: string;
+  version: number;
+  status: "candidate" | "confirmed" | "retired";
+  digest: string;
+  created_at: string;
+  confirmed_at: string | null;
+  is_current: boolean;
+  items: PublicationItem[];
+};
+type PublicationProjection = {
+  contract_version: "brand-publication-projection-v1";
+  current: PublicationVersion | null;
+  history: PublicationVersion[];
+};
+type PublicationDraft = {
+  source: PublicationSource;
+  role: PublicationRole;
+  text: string;
+};
+
 type OnboardingPrefill = {
   account_profile_candidate: ProfileSegments;
   account_profile_candidate_source: string;
@@ -2873,6 +2913,12 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
 
 function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.Element {
   const entries = useRequest<LibraryEntry[]>("/api/v1/tenant-management/brand-library");
+  const publication = useRequest<PublicationProjection>(
+    "/api/v1/tenant-management/brand-publication"
+  );
+  const publicationSources = useRequest<PublicationSource[]>(
+    "/api/v1/tenant-management/brand-publication/sources"
+  );
   const organizations = useRequest<Organization[]>("/api/v1/tenant-management/organizations");
   const products = useRequest<ProductFact[]>("/api/v1/tenant-management/brand-products");
   const materials = useRequest<OrganizationMaterial[]>(
@@ -2888,9 +2934,14 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
     | "material"
     | "material-detail"
     | "organization"
+    | "publication"
     | null
   >(null);
   const [saving, setSaving] = useState(false);
+  const [publicationQuery, setPublicationQuery] = useState("");
+  const [publicationDrafts, setPublicationDrafts] = useState<
+    PublicationDraft[]
+  >([]);
   const [referencePreview, setReferencePreview] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<LibraryEntry | null>(null);
   const [entryVersions, setEntryVersions] = useState<LibraryVersion[]>([]);
@@ -3452,6 +3503,89 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
       )
       .finally(() => setSaving(false));
   };
+  const defaultPublicationRole = (
+    source: PublicationSource
+  ): PublicationRole => {
+    if (source.semantic_kind === "brand_fact") return "public_brand_fact";
+    if (source.semantic_kind === "creative_method") return "creative_method";
+    return "expression_constraint";
+  };
+  const togglePublicationSource = (source: PublicationSource): void => {
+    setPublicationDrafts(current => {
+      if (current.some(item => item.source.source_segment_id === source.source_segment_id)) {
+        return current.filter(
+          item => item.source.source_segment_id !== source.source_segment_id
+        );
+      }
+      return [
+        ...current,
+        { source, role: defaultPublicationRole(source), text: "" }
+      ];
+    });
+  };
+  const savePublicationCandidate = (event: FormEvent): void => {
+    event.preventDefault();
+    if (
+      publicationDrafts.length === 0 ||
+      publicationDrafts.some(item => !item.text.trim())
+    ) {
+      setNotice({
+        tone: "error",
+        message: "请选择来源，并把每条内容改写成可直接用于品牌表达的自然文字。"
+      });
+      return;
+    }
+    setSaving(true);
+    void api("/api/v1/tenant-management/brand-publication/candidates", {
+      method: "POST",
+      body: JSON.stringify({
+        items: publicationDrafts.map(item => ({
+          source_segment_id: item.source.source_segment_id,
+          publication_role: item.role,
+          published_text: item.text.trim(),
+          applicability: []
+        }))
+      })
+    })
+      .then(async () => {
+        await publication.refresh();
+        setDrawer(null);
+        setPublicationDrafts([]);
+        setNotice({
+          tone: "success",
+          message: "候选品牌表达已保存。确认前不会进入新的创作任务。"
+        });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
+  };
+  const confirmPublication = (projectionId: string): void => {
+    setSaving(true);
+    void api(
+      `/api/v1/tenant-management/brand-publication/${projectionId}/confirm`,
+      { method: "POST" }
+    )
+      .then(async () => {
+        await publication.refresh();
+        setNotice({
+          tone: "success",
+          message: "当前品牌表达已确认；之后的新任务会使用这个版本。"
+        });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
+  };
+  const filteredPublicationSources = (publicationSources.data ?? []).filter(
+    source =>
+      !publicationQuery.trim() ||
+      `${source.source_title}\n${source.source_text}`
+        .toLocaleLowerCase()
+        .includes(publicationQuery.trim().toLocaleLowerCase())
+  );
   return (
     <section className="tenant-page">
       <header className="tenant-heading split">
@@ -3502,6 +3636,17 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
           type="button"
           className="text-action"
           onClick={() => {
+            setPublicationDrafts([]);
+            setPublicationQuery("");
+            setDrawer("publication");
+          }}
+        >
+          核对创作端品牌表达
+        </button>
+        <button
+          type="button"
+          className="text-action"
+          onClick={() => {
             setProductRows([emptyProduct()]);
             setConfirmProducts(false);
             setProductPreviewSignature(null);
@@ -3534,6 +3679,80 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
         <RequestFailure message={entries.error} onRetry={entries.refresh} />
       ) : (
         <>
+          <section className="tenant-subsection" aria-labelledby="brand-publication-title">
+            <header>
+              <h2 id="brand-publication-title">创作端品牌表达</h2>
+              <span>
+                {publication.data?.current
+                  ? `当前 V${publication.data.current.version}`
+                  : "尚未确认"}
+              </span>
+            </header>
+            <p className="tenant-help">
+              原始资料保持不变；只有你核对并确认的自然表达会进入之后的新内容。
+            </p>
+            {publication.error ? (
+              <RequestFailure
+                message={publication.error}
+                onRetry={publication.refresh}
+              />
+            ) : publication.loading ? (
+              <p className="tenant-empty">正在读取当前品牌表达…</p>
+            ) : (
+              <div className="library-list publication-list">
+                {publication.data?.history.map(version => (
+                  <article key={version.id}>
+                    <header>
+                      <div>
+                        <h2>品牌表达 V{version.version}</h2>
+                        <span>
+                          {version.is_current
+                            ? "当前使用"
+                            : version.status === "candidate"
+                              ? "等待确认"
+                              : "历史版本"}
+                        </span>
+                      </div>
+                    </header>
+                    <ul>
+                      {version.items
+                        .filter(item => item.publication_role !== "internal_only")
+                        .map(item => (
+                          <li key={`${version.id}-${item.position}`}>
+                            <strong>
+                              {item.publication_role === "public_brand_fact"
+                                ? "公开品牌信息"
+                                : item.publication_role === "creative_method"
+                                  ? "创作方法"
+                                  : "表达边界"}
+                            </strong>
+                            <span>{item.published_text}</span>
+                            <small>
+                              来源：{item.source_label} · {item.source_version}
+                            </small>
+                          </li>
+                        ))}
+                    </ul>
+                    {version.status === "candidate" && (
+                      <button
+                        type="button"
+                        className="text-action"
+                        disabled={saving}
+                        onClick={() => confirmPublication(version.id)}
+                      >
+                        确认作为当前品牌表达
+                      </button>
+                    )}
+                  </article>
+                ))}
+                {!publication.data?.history.length && (
+                  <p className="tenant-empty">
+                    请先从已有资料中形成并确认一版创作端品牌表达。
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
           <section className="tenant-subsection">
             <header>
               <h2>品牌表达与参考资料</h2>
@@ -3693,6 +3912,108 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
             )}
           </section>
         </>
+      )}
+      {drawer === "publication" && (
+        <Drawer title="核对创作端品牌表达" onClose={() => setDrawer(null)}>
+          <form className="tenant-form publication-form" onSubmit={savePublicationCandidate}>
+            <p>
+              选择来源后，请写成面向创作的自然表达。目录、表格、验收问题和采集说明不会自动进入。
+            </p>
+            <label>
+              查找已有来源
+              <input
+                value={publicationQuery}
+                onChange={event => setPublicationQuery(event.target.value)}
+                placeholder="按资料名称或内容查找"
+              />
+            </label>
+            <fieldset className="publication-source-list">
+              <legend>选择来源</legend>
+              {filteredPublicationSources.map(source => {
+                const checked = publicationDrafts.some(
+                  item =>
+                    item.source.source_segment_id === source.source_segment_id
+                );
+                return (
+                  <label key={source.source_segment_id}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => togglePublicationSource(source)}
+                    />
+                    <span>
+                      <strong>{source.source_title}</strong>
+                      <small>{source.source_text}</small>
+                    </span>
+                  </label>
+                );
+              })}
+              {!publicationSources.loading && filteredPublicationSources.length === 0 && (
+                <p className="tenant-empty">没有找到可用于核对的来源。</p>
+              )}
+            </fieldset>
+            {publicationDrafts.map((draft, index) => (
+              <fieldset
+                className="publication-draft"
+                key={draft.source.source_segment_id}
+              >
+                <legend>{draft.source.source_title}</legend>
+                <label>
+                  在创作中的作用
+                  <select
+                    value={draft.role}
+                    onChange={event =>
+                      setPublicationDrafts(current =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? {
+                                ...item,
+                                role: event.target.value as PublicationRole
+                              }
+                            : item
+                        )
+                      )
+                    }
+                  >
+                    {draft.source.semantic_kind === "brand_fact" && (
+                      <option value="public_brand_fact">公开品牌信息</option>
+                    )}
+                    {draft.source.semantic_kind !== "creative_method" && (
+                      <option value="expression_constraint">表达边界</option>
+                    )}
+                    {draft.source.semantic_kind === "creative_method" && (
+                      <option value="creative_method">创作方法</option>
+                    )}
+                  </select>
+                </label>
+                <label>
+                  核对后的自然表达
+                  <textarea
+                    value={draft.text}
+                    maxLength={1200}
+                    onChange={event =>
+                      setPublicationDrafts(current =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, text: event.target.value }
+                            : item
+                        )
+                      )
+                    }
+                    placeholder="只写确认可公开或可用于表达控制的内容"
+                  />
+                </label>
+              </fieldset>
+            ))}
+            <button
+              type="submit"
+              className="primary"
+              disabled={saving || publicationDrafts.length === 0}
+            >
+              保存为待确认版本
+            </button>
+          </form>
+        </Drawer>
       )}
       {drawer === "reference" && (
         <Drawer title="新增品牌资料" onClose={() => setDrawer(null)}>

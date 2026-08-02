@@ -311,6 +311,73 @@
         "title": "BrandLibraryVersionRequest",
         "type": "object"
       },
+      "BrandPublicationProjectionCandidateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BrandPublicationProjectionItemRequest"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "BrandPublicationProjectionCandidateRequest",
+        "type": "object"
+      },
+      "BrandPublicationProjectionItemRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "applicability": {
+            "items": {
+              "enum": [
+                "dressing_decision",
+                "product_truth",
+                "brand_life_narrative",
+                "local_response",
+                "visual_styling_story"
+              ],
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Applicability",
+            "type": "array"
+          },
+          "publication_role": {
+            "enum": [
+              "public_brand_fact",
+              "expression_constraint",
+              "creative_method",
+              "internal_only"
+            ],
+            "title": "Publication Role",
+            "type": "string"
+          },
+          "published_text": {
+            "maxLength": 1200,
+            "minLength": 1,
+            "title": "Published Text",
+            "type": "string"
+          },
+          "source_segment_id": {
+            "format": "uuid",
+            "title": "Source Segment Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_segment_id",
+          "publication_role",
+          "published_text"
+        ],
+        "title": "BrandPublicationProjectionItemRequest",
+        "type": "object"
+      },
       "ChangePasswordRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5102,6 +5169,179 @@
           }
         ],
         "summary": "Management Product Versions"
+      }
+    },
+    "/api/v1/tenant-management/brand-publication": {
+      "get": {
+        "operationId": "management_brand_publication_api_v1_tenant_management_brand_publication_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Management Brand Publication Api V1 Tenant Management Brand Publication Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Brand Publication"
+      }
+    },
+    "/api/v1/tenant-management/brand-publication/candidates": {
+      "post": {
+        "operationId": "create_management_brand_publication_candidate_api_v1_tenant_management_brand_publication_candidates_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandPublicationProjectionCandidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Management Brand Publication Candidate Api V1 Tenant Management Brand Publication Candidates Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Management Brand Publication Candidate"
+      }
+    },
+    "/api/v1/tenant-management/brand-publication/sources": {
+      "get": {
+        "operationId": "management_brand_publication_sources_api_v1_tenant_management_brand_publication_sources_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Query",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Management Brand Publication Sources Api V1 Tenant Management Brand Publication Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Management Brand Publication Sources"
+      }
+    },
+    "/api/v1/tenant-management/brand-publication/{projection_id}/confirm": {
+      "post": {
+        "operationId": "confirm_management_brand_publication_api_v1_tenant_management_brand_publication__projection_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Projection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Confirm Management Brand Publication Api V1 Tenant Management Brand Publication  Projection Id  Confirm Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Confirm Management Brand Publication"
       }
     },
     "/api/v1/tenant-management/control-organizations": {

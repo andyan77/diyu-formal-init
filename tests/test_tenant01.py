@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -16,6 +17,7 @@ from src.infrastructure.tenant_lifecycle import (
 )
 from src.infrastructure.tenant_source_importer import TenantSourceImporter
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
+from src.shared.brand_publication import brand_context_packet_digest
 from src.shared.content_snapshot import visible_context_basis
 from src.shared.errors import DomainError
 from src.shared.tenant_brand_sources import (
@@ -25,6 +27,7 @@ from src.shared.tenant_brand_sources import (
 )
 from src.shared.types import (
     BrandContext,
+    BrandContextPacketV2,
     ProductFact,
     TenantManagementScope,
     TrustedScope,
@@ -32,6 +35,8 @@ from src.shared.types import (
 from src.tool.run_tenant01_golden_suite import _assert_p2_product_ready
 from src.tool.tenant01_evidence import (
     TENANT01_CARD_IDS,
+    TENANT01_COMPARISON_FIELDS,
+    TENANT01_DEMONSTRATION_CHECKS,
     TENANT01_HARD_BOUNDARIES,
     TENANT01_REVIEW_DIMENSIONS,
     Tenant01ArtifactInput,
@@ -125,6 +130,22 @@ def _tenant01_evidence_inputs(
         )
         artifact_file = f"{card_id}.artifact.json"
         raw_file = f"{card_id}.raw.json"
+        projection_id = "11111111-1111-4111-8111-111111111111"
+        projection_digest = "d" * 64
+        packet_segments = [
+            {
+                "segment_id": str(uuid4()),
+                "source_document_id": "22222222-2222-4222-8222-222222222222",
+                "source_document_version_id": "33333333-3333-4333-8333-333333333333",
+                "source_id": "brand_source_segment:test",
+                "source_version": "V1",
+                "semantic_kind": "expression_constraint",
+                "evidence_level": "confirmed_publication",
+                "visibility_scope": "brand_all",
+                "digest": sha256(f"{card_id} 已确认表达约束".encode()).hexdigest(),
+                "exact_text": f"{card_id} 已确认表达约束",
+            }
+        ]
         _write_private_json(
             root / artifact_file,
             {
@@ -138,6 +159,21 @@ def _tenant01_evidence_inputs(
                     "src.shared.narrative",
                     fromlist=["visible_digest"],
                 ).visible_digest(outline, body),
+                "formal_snapshot": {
+                    "brand_context_packet": {
+                        "packet_version": "brand-context-packet-v2",
+                        "packet_digest": brand_context_packet_digest(
+                            projection_id=projection_id,
+                            projection_version=1,
+                            projection_digest=projection_digest,
+                            segments=packet_segments,
+                        ),
+                        "publication_projection_id": projection_id,
+                        "publication_projection_version": 1,
+                        "publication_projection_digest": projection_digest,
+                        "segments": packet_segments,
+                    }
+                },
             },
         )
         _write_private_json(root / raw_file, {"card_id": card_id, "response": "private"})
@@ -154,6 +190,15 @@ def _tenant01_evidence_inputs(
                     "caption": f"{card_id} 发布配文证据",
                 },
                 hard_boundaries={boundary: True for boundary in TENANT01_HARD_BOUNDARIES},
+                demonstration_checks={
+                    check: True for check in TENANT01_DEMONSTRATION_CHECKS
+                },
+                comparison={
+                    field: f"{card_id} {field} 独立比较结论"
+                    for field in TENANT01_COMPARISON_FIELDS
+                },
+                brand_basis=f"projection:test / profile:{card_id}",
+                verdict="PASS",
                 notes="已逐字阅读最终可见成品，与评分引用一致。",
             )
         )
@@ -366,6 +411,7 @@ def _delete_import_scope(database_url: str, scope: TenantManagementScope) -> Non
     with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(scope.tenant_id),))
         for table in (
+            "brand_publication_projection_items",
             "brand_product_field_evidence",
             "brand_product_versions",
             "brand_source_segments",
@@ -381,7 +427,13 @@ def _delete_import_scope(database_url: str, scope: TenantManagementScope) -> Non
                 "UPDATE brand_products SET current_version_id = NULL WHERE tenant_id = %s",
                 (scope.tenant_id,),
             )
+            cursor.execute(
+                "UPDATE brands SET current_publication_projection_id = NULL WHERE tenant_id = %s",
+                (scope.tenant_id,),
+            )
             for table in (
+                "brand_publication_projection_items",
+                "brand_publication_projections",
                 "brand_product_field_evidence",
                 "brand_product_versions",
                 "brand_products",
@@ -399,6 +451,7 @@ def _delete_import_scope(database_url: str, scope: TenantManagementScope) -> Non
             cursor.execute("DELETE FROM tenants WHERE id = %s", (scope.tenant_id,))
         finally:
             for table in (
+                "brand_publication_projection_items",
                 "brand_product_field_evidence",
                 "brand_product_versions",
                 "brand_source_segments",
@@ -560,6 +613,72 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
                     organization_id,
                 ),
             )
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT segment.id, source.source_id "
+                "FROM brand_source_segments segment "
+                "JOIN brand_source_documents source "
+                "ON source.tenant_id = segment.tenant_id AND source.id = segment.document_id "
+                "WHERE segment.tenant_id = %s "
+                "AND segment.exact_text LIKE '这是 %%' "
+                "AND source.source_id = ANY(%s)",
+                (
+                    management_scope.tenant_id,
+                    [
+                        "DIYU-BRAND-BASELINE-001",
+                        "DIYU-CONTENT-ROLE-001",
+                        "DIYU-DISPLAY-EXPRESSION-001",
+                    ],
+                ),
+            )
+            source_ids = {str(row[1]): UUID(str(row[0])) for row in cursor.fetchall()}
+        assert set(source_ids) == {
+            "DIYU-BRAND-BASELINE-001",
+            "DIYU-CONTENT-ROLE-001",
+            "DIYU-DISPLAY-EXPRESSION-001",
+        }
+        publication = PostgresWorkbenchRepository(
+            app_database_url
+        ).create_brand_publication_candidate(
+            management_scope,
+            (
+                {
+                    "source_segment_id": source_ids["DIYU-BRAND-BASELINE-001"],
+                    "publication_role": "public_brand_fact",
+                    "published_text": "笛语面向需要清楚日常穿衣选择的人。",
+                    "applicability": [],
+                },
+                {
+                    "source_segment_id": source_ids["DIYU-CONTENT-ROLE-001"],
+                    "publication_role": "expression_constraint",
+                    "published_text": "先回应具体处境，再给出克制而明确的判断。",
+                    "applicability": [],
+                },
+                {
+                    "source_segment_id": source_ids["DIYU-DISPLAY-EXPRESSION-001"],
+                    "publication_role": "creative_method",
+                    "published_text": "围绕一个可感知的变化展开，不复述资料标签。",
+                    "applicability": ["product_truth", "brand_life_narrative"],
+                },
+                {
+                    "source_segment_id": legacy_taxonomy_segment_id,
+                    "publication_role": "internal_only",
+                    "published_text": legacy_text,
+                    "applicability": [],
+                },
+                {
+                    "source_segment_id": legacy_acceptance_segment_id,
+                    "publication_role": "internal_only",
+                    "published_text": acceptance_text,
+                    "applicability": [],
+                },
+            ),
+        )
+        projection_id = UUID(str(publication["id"]))
+        PostgresWorkbenchRepository(
+            app_database_url
+        ).confirm_brand_publication_projection(management_scope, projection_id)
+
         scope = TrustedScope(
             management_scope.tenant_id,
             management_scope.user_id,
@@ -616,37 +735,304 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
         assert all(
             sha256(item.exact_text.encode()).hexdigest() == item.digest for item in selected.context_packet.segments
         )
-        assert any(len(item.exact_text) > 1_200 for item in selected.context_packet.segments)
-        product_segments = tuple(
-            item
-            for item in selected.context_packet.segments
-            if "可观察品类 14" in item.exact_text or "可观察颜色 14" in item.exact_text
-        )
-        assert product_segments
-        assert all(item.semantic_kind == "candidate_product_guidance" for item in product_segments)
-        assert any("可观察品类 14" in text for text in selected.candidate_product_guidance_context)
-        assert all("可观察品类 14" not in text for text in selected.brand_reference_context)
+        assert selected.context_packet.packet_version == "brand-context-packet-v2"
+        assert isinstance(selected.context_packet, BrandContextPacketV2)
+        assert selected.context_packet.publication_projection_id == str(projection_id)
+        assert selected.context_packet.publication_projection_digest == publication["digest"]
+        assert selected.candidate_product_guidance_context == ()
         assert selected.brand_reference_context == tuple(
             item.exact_text for item in selected.context_packet.segments if item.semantic_kind == "brand_fact"
         )
-        legacy_segment = next(
-            item
-            for item in selected.context_packet.segments
-            if item.segment_id == str(legacy_taxonomy_segment_id)
+        visible_text = "\n".join(
+            item.exact_text for item in selected.context_packet.segments
         )
-        assert legacy_segment.semantic_kind == "expression_constraint"
-        assert legacy_segment.exact_text in selected.expression_constraint_context
-        assert legacy_segment.exact_text not in selected.brand_reference_context
+        assert "笛语面向需要清楚日常穿衣选择的人" in visible_text
+        assert "先回应具体处境" in visible_text
+        assert "围绕一个可感知的变化" in visible_text
+        assert legacy_text not in visible_text
+        assert acceptance_text not in visible_text
+        assert "可观察品类 14" not in visible_text
         assert all(
-            item.segment_id != str(legacy_acceptance_segment_id)
+            item.semantic_kind
+            in {"brand_fact", "expression_constraint", "creative_method"}
             for item in selected.context_packet.segments
         )
-        assert all(
-            item.semantic_kind not in {"template_only", "source_catalog_only"}
-            for item in selected.context_packet.segments
-        )
+
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE brands SET current_publication_projection_id = NULL "
+                "WHERE tenant_id = %s AND id = %s",
+                (management_scope.tenant_id, management_scope.brand_id),
+            )
+        with pytest.raises(DomainError, match="品牌管理员确认"):
+            repository.select_brand_context_for_task(
+                scope,
+                context,
+                "没有发布投影时不能读取原始资料",
+                "brand_life_narrative",
+                (),
+            )
     finally:
         _delete_import_scope(migrator_database_url, management_scope)
+
+
+def test_brand_publication_confirmation_is_scoped_atomic_and_serialized(
+    app_database_url: str,
+    migrator_database_url: str,
+    tmp_path: Path,
+) -> None:
+    scope, _ = _import_scope(migrator_database_url)
+    bait_scope, _ = _import_scope(migrator_database_url)
+    repository = PostgresWorkbenchRepository(app_database_url)
+    trigger_name = f"tenant01_projection_fail_{uuid4().hex}"
+    function_name = f"{trigger_name}_fn"
+    try:
+        source_root = tmp_path / "source"
+        bait_root = tmp_path / "bait"
+        source_root.mkdir()
+        bait_root.mkdir()
+        _write_source_batch(source_root)
+        _write_source_batch(bait_root)
+        TenantSourceImporter(app_database_url).apply(
+            TenantSourceImporter(app_database_url).dry_run(scope, source_root)
+        )
+        TenantSourceImporter(app_database_url).apply(
+            TenantSourceImporter(app_database_url).dry_run(bait_scope, bait_root)
+        )
+        with psycopg.connect(
+            migrator_database_url
+        ) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT segment.id
+                  FROM brand_source_segments segment
+                  JOIN brand_source_documents source
+                    ON source.tenant_id = segment.tenant_id
+                   AND source.id = segment.document_id
+                 WHERE segment.tenant_id = %s
+                   AND source.source_id = 'DIYU-BRAND-BASELINE-001'
+                   AND segment.exact_text LIKE '这是 %%'
+                 ORDER BY segment.source_locator
+                 LIMIT 1
+                """,
+                (scope.tenant_id,),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            source_segment_id = UUID(str(row[0]))
+            other_brand_id = uuid4()
+            other_document_id = uuid4()
+            other_version_id = uuid4()
+            other_segment_id = uuid4()
+            other_text = "另一品牌的来源不能进入当前品牌投影。"
+            cursor.execute(
+                "INSERT INTO brands "
+                "(id, tenant_id, name, positioning, decision_order, tone) "
+                "VALUES (%s, %s, '同租户另一品牌', '独立', '独立', '独立')",
+                (other_brand_id, scope.tenant_id),
+            )
+            cursor.execute(
+                """
+                INSERT INTO brand_source_documents
+                    (id, tenant_id, brand_id, source_id, embedded_title,
+                     provenance_filename, source_version, original_status,
+                     activation_status, authorization_source,
+                     authorization_at, status, current_version_id, created_by)
+                VALUES (%s, %s, %s, 'OTHER-BRAND-SOURCE-001',
+                        '另一品牌来源', 'other-private.md', 'V1', '已确认',
+                        'brand_user_authorized', 'bounded_test', now(),
+                        'active', NULL, %s)
+                """,
+                (other_document_id, scope.tenant_id, other_brand_id, scope.user_id),
+            )
+            cursor.execute(
+                """
+                INSERT INTO brand_source_document_versions
+                    (id, tenant_id, brand_id, document_id, source_version,
+                     embedded_title, provenance_filename, original_status,
+                     activation_status, authorization_source,
+                     authorization_at, raw_sha256, normalized_sha256,
+                     source_size, source_mtime_ns, content, created_by)
+                VALUES (%s, %s, %s, %s, 'V1', '另一品牌来源',
+                        'other-private.md', '已确认', 'brand_user_authorized',
+                        'bounded_test', now(), %s, %s, %s, 1, %s, %s)
+                """,
+                (
+                    other_version_id,
+                    scope.tenant_id,
+                    other_brand_id,
+                    other_document_id,
+                    sha256(other_text.encode()).hexdigest(),
+                    sha256(other_text.encode()).hexdigest(),
+                    len(other_text.encode()),
+                    other_text,
+                    scope.user_id,
+                ),
+            )
+            cursor.execute(
+                "UPDATE brand_source_documents SET current_version_id = %s "
+                "WHERE tenant_id = %s AND id = %s",
+                (other_version_id, scope.tenant_id, other_document_id),
+            )
+            cursor.execute(
+                """
+                INSERT INTO brand_source_segments
+                    (id, tenant_id, brand_id, document_id,
+                     document_version_id, segment_key, heading_path,
+                     source_locator, exact_text, semantic_kind,
+                     evidence_level, applicability, digest)
+                VALUES (%s, %s, %s, %s, %s, 'other-brand-line',
+                        ARRAY['稳定品牌信息'], 'line:1', %s, 'brand_fact',
+                        'brand_user_authorized', '另一品牌', %s)
+                """,
+                (
+                    other_segment_id,
+                    scope.tenant_id,
+                    other_brand_id,
+                    other_document_id,
+                    other_version_id,
+                    other_text,
+                    sha256(other_text.encode()).hexdigest(),
+                ),
+            )
+
+        def candidate(text: str) -> dict[str, object]:
+            return repository.create_brand_publication_candidate(
+                scope,
+                (
+                    {
+                        "source_segment_id": source_segment_id,
+                        "publication_role": "public_brand_fact",
+                        "published_text": text,
+                        "applicability": [],
+                    },
+                ),
+            )
+
+        with pytest.raises(DomainError, match="当前品牌正在使用"):
+            PostgresWorkbenchRepository(
+                app_database_url
+            ).create_brand_publication_candidate(
+                bait_scope,
+                (
+                    {
+                        "source_segment_id": source_segment_id,
+                        "publication_role": "public_brand_fact",
+                        "published_text": "跨租户来源不得成为候选。",
+                        "applicability": [],
+                    },
+                ),
+            )
+        with pytest.raises(DomainError, match="当前品牌正在使用"):
+            repository.create_brand_publication_candidate(
+                scope,
+                (
+                    {
+                        "source_segment_id": other_segment_id,
+                        "publication_role": "public_brand_fact",
+                        "published_text": "同租户另一品牌也必须失败关闭。",
+                        "applicability": [],
+                    },
+                ),
+            )
+
+        first = candidate("第一版公开品牌定位。")
+        first_id = UUID(str(first["id"]))
+        repository.confirm_brand_publication_projection(scope, first_id)
+        failed = candidate("事务失败时不得替换当前版本。")
+        failed_id = UUID(str(failed["id"]))
+
+        with psycopg.connect(
+            migrator_database_url
+        ) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                f"""
+                CREATE FUNCTION {function_name}() RETURNS trigger
+                LANGUAGE plpgsql AS $$
+                BEGIN
+                  IF NEW.current_publication_projection_id = '{failed_id}'::uuid THEN
+                    RAISE EXCEPTION 'bounded pointer failure';
+                  END IF;
+                  RETURN NEW;
+                END
+                $$
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE TRIGGER {trigger_name}
+                BEFORE UPDATE ON brands FOR EACH ROW
+                EXECUTE FUNCTION {function_name}()
+                """
+            )
+        try:
+            with pytest.raises(psycopg.Error, match="bounded pointer failure"):
+                repository.confirm_brand_publication_projection(scope, failed_id)
+        finally:
+            with psycopg.connect(
+                migrator_database_url
+            ) as connection, connection.cursor() as cursor:
+                cursor.execute(f"DROP TRIGGER {trigger_name} ON brands")
+                cursor.execute(f"DROP FUNCTION {function_name}()")
+
+        with psycopg.connect(
+            migrator_database_url
+        ) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT current_publication_projection_id FROM brands "
+                "WHERE tenant_id = %s AND id = %s",
+                (scope.tenant_id, scope.brand_id),
+            )
+            assert cursor.fetchone() == (first_id,)
+            cursor.execute(
+                "SELECT status FROM brand_publication_projections "
+                "WHERE tenant_id = %s AND id = %s",
+                (scope.tenant_id, failed_id),
+            )
+            assert cursor.fetchone() == ("candidate",)
+
+        concurrent_ids = (
+            UUID(str(candidate("并发确认候选甲。")["id"])),
+            UUID(str(candidate("并发确认候选乙。")["id"])),
+        )
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = tuple(
+                executor.map(
+                    lambda projection_id: PostgresWorkbenchRepository(
+                        app_database_url
+                    ).confirm_brand_publication_projection(scope, projection_id),
+                    concurrent_ids,
+                )
+            )
+        assert {result["status"] for result in results} == {"confirmed"}
+        with psycopg.connect(
+            migrator_database_url
+        ) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT count(*) FILTER (WHERE status = 'confirmed'),
+                       count(*) FILTER (
+                         WHERE status = 'confirmed'
+                           AND id = (
+                             SELECT current_publication_projection_id
+                               FROM brands
+                              WHERE tenant_id = %s AND id = %s
+                           )
+                       )
+                  FROM brand_publication_projections
+                 WHERE tenant_id = %s AND brand_id = %s
+                """,
+                (
+                    scope.tenant_id,
+                    scope.brand_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                ),
+            )
+            assert cursor.fetchone() == (1, 1)
+    finally:
+        _delete_import_scope(migrator_database_url, bait_scope)
+        _delete_import_scope(migrator_database_url, scope)
 
 
 def test_tenant01_source_provenance_rejects_cross_tenant_brand_reference(
@@ -829,6 +1215,7 @@ def test_tenant01_evidence_binds_artifacts_reviews_and_persistence(tmp_path: Pat
         implementation_sha="a" * 40,
         schema_revision="20260812_39",
         image_digest="sha256:" + "b" * 64,
+        source_manifest_digest="e" * 64,
         artifacts=artifacts,
         reviews=reviews,
         p5_preflight_file="p5-no-media.json",
@@ -854,6 +1241,10 @@ def test_tenant01_evidence_rejects_review_not_grounded_in_artifact(tmp_path: Pat
         scores=first.scores,
         excerpts={**first.excerpts, "body": "只复述任务快照，不在成品中"},
         hard_boundaries=first.hard_boundaries,
+        demonstration_checks=first.demonstration_checks,
+        comparison=first.comparison,
+        brand_basis=first.brand_basis,
+        verdict=first.verdict,
         notes=first.notes,
     )
 
@@ -863,8 +1254,96 @@ def test_tenant01_evidence_rejects_review_not_grounded_in_artifact(tmp_path: Pat
             implementation_sha="a" * 40,
             schema_revision="20260812_39",
             image_digest="sha256:" + "b" * 64,
+            source_manifest_digest="e" * 64,
             artifacts=artifacts,
             reviews=(invalid, *reviews[1:]),
+            p5_preflight_file="p5-no-media.json",
+            dm01_file="dm01.json",
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("low_natural_language", "natural_language"),
+        ("missing_media_reference", "media 引用为空"),
+        ("false_demonstration_check", "可演示成品检查未通过"),
+    ),
+)
+def test_tenant01_evidence_rejects_average_score_and_bare_pass_false_greens(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, reviews = _tenant01_evidence_inputs(tmp_path)
+    first = reviews[0]
+    scores = dict(first.scores)
+    excerpts = dict(first.excerpts)
+    checks = dict(first.demonstration_checks)
+    if mutation == "low_natural_language":
+        scores["natural_language"] = 3
+    elif mutation == "missing_media_reference":
+        excerpts["media"] = ""
+    else:
+        checks["scaffolding_free"] = False
+    invalid = Tenant01HumanReview(
+        card_id=first.card_id,
+        artifact_file=first.artifact_file,
+        scores=scores,
+        excerpts=excerpts,
+        hard_boundaries=first.hard_boundaries,
+        demonstration_checks=checks,
+        comparison=first.comparison,
+        brand_basis=first.brand_basis,
+        verdict="PASS",
+        notes=first.notes,
+    )
+    with pytest.raises(Tenant01EvidenceError, match=message):
+        write_tenant01_evidence(
+            tmp_path,
+            implementation_sha="a" * 40,
+            schema_revision="20260813_40",
+            image_digest="sha256:" + "b" * 64,
+            source_manifest_digest="e" * 64,
+            artifacts=artifacts,
+            reviews=(invalid, *reviews[1:]),
+            p5_preflight_file="p5-no-media.json",
+            dm01_file="dm01.json",
+        )
+
+
+def test_tenant01_evidence_rejects_repeated_nonessential_account_definition(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, reviews = _tenant01_evidence_inputs(tmp_path)
+    repeated = (
+        "当前账号面向同一类人反复粘贴一整段完全相同且并非必要的定义说明，"
+        "这段说明与本篇具体题材、判断和观看回报都没有直接关系。"
+    )
+    for item in artifacts[:2]:
+        path = tmp_path / item.artifact_file
+        document = json.loads(path.read_text(encoding="utf-8"))
+        document["body"] = f"{document['body']}\n{repeated}"
+        document["visible_digest"] = __import__(
+            "src.shared.narrative",
+            fromlist=["visible_digest"],
+        ).visible_digest(document["outline"], document["body"])
+        path.write_text(
+            json.dumps(document, ensure_ascii=False, sort_keys=True),
+            encoding="utf-8",
+        )
+        path.chmod(0o600)
+    with pytest.raises(Tenant01EvidenceError, match="非必要完整句段重复"):
+        write_tenant01_evidence(
+            tmp_path,
+            implementation_sha="a" * 40,
+            schema_revision="20260813_40",
+            image_digest="sha256:" + "b" * 64,
+            source_manifest_digest="e" * 64,
+            artifacts=artifacts,
+            reviews=reviews,
             p5_preflight_file="p5-no-media.json",
             dm01_file="dm01.json",
         )

@@ -544,6 +544,35 @@ async function main(): Promise<void> {
   assert.match(document.body.textContent ?? "", /按稳定语义段和证据等级/);
   assert.match(document.body.textContent ?? "", /浙江区域门店拍摄说明/);
   assert.match(document.body.textContent ?? "", /shooting-note.txt/);
+  assert.match(document.body.textContent ?? "", /创作端品牌表达/);
+  assert.match(document.body.textContent ?? "", /当前 V1/);
+  await click(find("button", "核对创作端品牌表达"));
+  await settle();
+  const publicationSource = find(
+    ".tenant-drawer label",
+    "笛语品牌身份与内容战略基线"
+  ).querySelector("input") as HTMLInputElement;
+  await click(publicationSource);
+  const publicationText = find(
+    ".tenant-drawer label",
+    "核对后的自然表达"
+  ).querySelector("textarea") as HTMLTextAreaElement;
+  await input(publicationText, "笛语帮助人们看清日常穿衣选择。 ");
+  await click(find(".tenant-drawer button", "保存为待确认版本"));
+  await settle();
+  assert.ok(
+    requests.some(
+      item =>
+        item.path ===
+          "/api/v1/tenant-management/brand-publication/candidates" &&
+        item.method === "POST" &&
+        (
+          item.body?.items as Array<Record<string, unknown>> | undefined
+        )?.[0]?.published_text ===
+          "笛语帮助人们看清日常穿衣选择。"
+    ),
+    "创作端只能消费管理员核对后保存的发布表达"
+  );
   await click(find(".library-list button", "查看版本与维护"));
   await settle();
   assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /历史版本/);

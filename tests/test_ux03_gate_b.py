@@ -278,6 +278,8 @@ def _delete_gate_b_fixture(
 
     tenant_tables = (
         "product_media_bindings",
+        "brand_publication_projection_items",
+        "brand_publication_projections",
         "activity_events",
         "account_expression_profile_versions",
         "account_content_roles",
@@ -413,7 +415,14 @@ def _delete_gate_b_fixture(
             "UPDATE content_accounts SET current_expression_profile_id = NULL WHERE tenant_id = %s",
             (tenant_id,),
         )
+        cursor.execute(
+            "UPDATE brands SET current_publication_projection_id = NULL WHERE tenant_id = %s",
+            (tenant_id,),
+        )
         immutable_triggers = {
+            "brand_publication_projection_items": (
+                "brand_publication_projection_items_immutable"
+            ),
             "brand_library_entry_versions": ("brand_library_entry_versions_immutable"),
             "brand_product_versions": "brand_product_versions_immutable",
             "material_asset_versions": "material_asset_versions_immutable",

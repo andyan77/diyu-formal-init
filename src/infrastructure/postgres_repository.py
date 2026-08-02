@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
-import re
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
@@ -14,6 +12,12 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from src.ports.content_repository import ContentRepository
+from src.shared.brand_publication import (
+    BRAND_CONTEXT_PACKET_VERSION,
+    brand_context_packet_digest,
+    brand_context_packet_document,
+    publication_projection_digest,
+)
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
 from src.shared.content_snapshot import (
     frozen_product_facts,
@@ -26,11 +30,10 @@ from src.shared.delivery_compiler import (
 )
 from src.shared.errors import DomainError
 from src.shared.narrative import visible_digest
-from src.shared.tenant_brand_sources import classify_source_segment
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
-    BrandContextPacketV1,
+    BrandContextPacketV2,
     BrandContextSegment,
     ContentControlContext,
     ContentProduct,
@@ -55,7 +58,6 @@ from src.shared.version_integrity import (
 
 
 class PostgresContentRepository(ContentRepository):
-    _BRAND_PACKET_VERSION = "brand-context-packet-v1"
     _BRAND_PACKET_CHARACTER_BUDGET = 12_000
     _BRAND_PACKET_SEGMENT_LIMIT = 24
     _PRODUCT_VALUE_COMPLETION_KEYS = frozenset(
@@ -366,61 +368,6 @@ class PostgresContentRepository(ContentRepository):
             speaker_kind=cast(SpeakerKind, str(row["speaker_kind"])),
         )
 
-    @staticmethod
-    def _task_terms(*values: str) -> frozenset[str]:
-        terms: set[str] = set()
-        for value in values:
-            folded = value.casefold()
-            terms.update(re.findall(r"[a-z0-9][a-z0-9_-]{1,}", folded))
-            for run in re.findall(r"[\u4e00-\u9fff]{2,}", folded):
-                terms.add(run)
-                terms.update(run[index : index + 2] for index in range(len(run) - 1))
-                terms.update(run[index : index + 3] for index in range(max(0, len(run) - 2)))
-        return frozenset(term for term in terms if len(term) >= 2)
-
-    @classmethod
-    def _segment_score(
-        cls,
-        row: Mapping[str, object],
-        terms: frozenset[str],
-        explicit_product_terms: frozenset[str],
-        primary_product: ContentProduct,
-    ) -> int:
-        kind = str(row["semantic_kind"])
-        base = {
-            "brand_fact": 120,
-            "expression_constraint": 105,
-            "creative_method": 70,
-            "candidate_product_guidance": 25,
-            "source_catalog_only": 5,
-        }.get(kind, 0)
-        text = (str(row["exact_text"]) + " " + str(row["applicability"]) + " " + str(row["embedded_title"])).casefold()
-        matches = sum(1 for term in terms if term in text)
-        explicit_product_match = any(term in text for term in explicit_product_terms)
-        product_markers = {
-            "dressing_decision": ("穿衣", "选择", "搭配", "人群"),
-            "product_truth": ("商品", "产品", "款", "事实"),
-            "brand_life_narrative": ("生活", "声纹", "账号", "表达"),
-            "local_response": ("门店", "本地", "服务", "关系"),
-            "visual_styling_story": ("视觉", "造型", "画面", "商品"),
-        }[primary_product]
-        product_matches = sum(1 for marker in product_markers if marker in text)
-        return base + matches * 18 + product_matches * 12 + (360 if explicit_product_match else 0)
-
-    @staticmethod
-    def _effective_segment_kind(row: Mapping[str, object]) -> str:
-        raw_heading_path = row.get("heading_path")
-        heading_path = (
-            tuple(str(value) for value in raw_heading_path)
-            if isinstance(raw_heading_path, list)
-            else ()
-        )
-        return classify_source_segment(
-            str(row["source_id"]),
-            heading_path,
-            str(row["exact_text"]),
-        )
-
     def select_brand_context_for_task(
         self,
         scope: TrustedScope,
@@ -429,122 +376,135 @@ class PostgresContentRepository(ContentRepository):
         primary_product: ContentProduct,
         products: tuple[ProductFact, ...],
     ) -> BrandContext:
+        del weak_seed, products
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT segment.id, segment.document_id,
-                       segment.document_version_id, source.source_id,
-                       version_record.source_version, segment.semantic_kind,
-                       segment.evidence_level, segment.visibility_scope,
-                       segment.digest, segment.exact_text,
-                       segment.applicability, source.embedded_title,
-                       segment.heading_path,
-                       segment.segment_key
-                  FROM brand_source_segments segment
-                  JOIN brand_source_documents source
-                    ON source.tenant_id = segment.tenant_id
-                   AND source.id = segment.document_id
-                   AND source.current_version_id = segment.document_version_id
-                   AND source.status = 'active'
-                   AND source.activation_status = 'brand_user_authorized'
-                  JOIN brand_source_document_versions version_record
-                    ON version_record.tenant_id = segment.tenant_id
-                   AND version_record.id = segment.document_version_id
+                SELECT projection.id AS projection_id,
+                       projection.version_number AS projection_version,
+                       projection.digest AS projection_digest,
+                       item.id AS item_id, item.position,
+                       item.publication_role, item.published_text,
+                       item.applicability, item.source_kind,
+                       item.source_ref, item.source_version,
+                       item.source_digest,
+                       segment.document_id, segment.document_version_id
+                  FROM brands brand
                   JOIN content_accounts target_account
-                    ON target_account.tenant_id = segment.tenant_id
+                    ON target_account.tenant_id = brand.tenant_id
+                   AND target_account.brand_id = brand.id
                    AND target_account.id = %s
+                   AND target_account.enabled = true
                   JOIN content_accounts root_account
                     ON root_account.tenant_id = target_account.tenant_id
+                   AND root_account.brand_id = target_account.brand_id
                    AND root_account.id = COALESCE(
                        target_account.carrier_of_account_id,
                        target_account.id
                    )
-                 WHERE segment.tenant_id = %s
-                   AND segment.brand_id = %s
-                   AND segment.semantic_kind <> 'template_only'
-                   AND (
-                     segment.visibility_scope = 'brand_all'
-                     OR (
-                       segment.visibility_scope = 'headquarters'
-                       AND EXISTS (
-                         SELECT 1 FROM organizations organization
-                          WHERE organization.tenant_id = segment.tenant_id
-                            AND organization.id = root_account.control_organization_id
-                            AND organization.organization_level = 'company'
-                       )
-                     )
-                   )
+                   AND root_account.enabled = true
+                  JOIN brand_publication_projections projection
+                    ON projection.tenant_id = brand.tenant_id
+                   AND projection.brand_id = brand.id
+                   AND projection.id = brand.current_publication_projection_id
+                   AND projection.status = 'confirmed'
+                  JOIN brand_publication_projection_items item
+                    ON item.tenant_id = projection.tenant_id
+                   AND item.brand_id = projection.brand_id
+                   AND item.projection_id = projection.id
+                  LEFT JOIN brand_source_segments segment
+                    ON segment.tenant_id = item.tenant_id
+                   AND segment.brand_id = item.brand_id
+                   AND segment.id = item.source_segment_id
+                 WHERE brand.tenant_id = %s
+                   AND brand.id = %s
+                 ORDER BY item.position
                 """,
                 (scope.account_id, scope.tenant_id, scope.brand_id),
             )
             rows = cursor.fetchall()
         if not rows:
-            return context
-        terms = self._task_terms(
-            weak_seed,
-            context.account_name,
-            context.content_role_name,
-            context.platform,
-            *(product.sku for product in products),
-            *(product.display_name for product in products),
-        )
-        explicit_product_terms = frozenset(
-            term.casefold() for product in products for term in (product.sku, product.display_name) if term.strip()
-        )
-        effective_rows = tuple(
+            raise DomainError("请先由品牌管理员确认创作端可用的品牌表达。")
+        projection_id = str(rows[0]["projection_id"])
+        projection_version = self._integer(rows[0]["projection_version"])
+        projection_digest = str(rows[0]["projection_digest"])
+        digest_items = [
             {
-                **row,
-                "semantic_kind": effective_kind,
+                "position": self._integer(row["position"]),
+                "publication_role": str(row["publication_role"]),
+                "published_text": str(row["published_text"]),
+                "applicability": [
+                    str(value)
+                    for value in (
+                        row["applicability"]
+                        if isinstance(row["applicability"], list)
+                        else []
+                    )
+                ],
+                "source_kind": str(row["source_kind"]),
+                "source_ref": str(row["source_ref"]),
+                "source_version": str(row["source_version"]),
+                "source_digest": str(row["source_digest"]),
             }
             for row in rows
-            if (effective_kind := self._effective_segment_kind(row))
-            not in {"source_catalog_only", "template_only"}
+        ]
+        # Expand-only compatibility projections are derived from the already
+        # confirmed expression baseline by the migration.  Their migration
+        # digest proves that baseline source, while source-bound projections
+        # use the application contract digest and must be recomputable here.
+        source_bound = any(
+            str(item["source_kind"]) == "brand_source_segment"
+            for item in digest_items
         )
-        ranked = sorted(
-            effective_rows,
-            key=lambda row: (
-                -self._segment_score(
-                    row,
-                    terms,
-                    explicit_product_terms,
-                    primary_product,
-                ),
-                str(row["source_id"]),
-                str(row["segment_key"]),
-            ),
-        )
+        if source_bound and publication_projection_digest(digest_items) != projection_digest:
+            raise DomainError("当前品牌发布版本摘要校验失败。")
+        applicable_rows = [
+            row
+            for row in rows
+            if str(row["publication_role"]) != "internal_only"
+            and (
+                not isinstance(row["applicability"], list)
+                or not row["applicability"]
+                or primary_product in row["applicability"]
+            )
+        ]
         selected: list[Mapping[str, object]] = []
-        document_counts: dict[str, int] = {}
         character_count = 0
-        for pass_number in (1, 2):
-            for row in ranked:
-                if row in selected:
-                    continue
-                document_id = str(row["document_id"])
-                if pass_number == 1 and document_counts.get(document_id, 0) >= 2:
-                    continue
-                text = str(row["exact_text"])
-                if not text or character_count + len(text) > self._BRAND_PACKET_CHARACTER_BUDGET:
-                    continue
-                selected.append(row)
-                document_counts[document_id] = document_counts.get(document_id, 0) + 1
-                character_count += len(text)
-                if len(selected) >= self._BRAND_PACKET_SEGMENT_LIMIT:
-                    break
+        for row in applicable_rows:
+            text = str(row["published_text"])
+            if character_count + len(text) > self._BRAND_PACKET_CHARACTER_BUDGET:
+                continue
+            selected.append(row)
+            character_count += len(text)
             if len(selected) >= self._BRAND_PACKET_SEGMENT_LIMIT:
                 break
+        role_to_kind = {
+            "public_brand_fact": "brand_fact",
+            "expression_constraint": "expression_constraint",
+            "creative_method": "creative_method",
+        }
         segments = tuple(
             BrandContextSegment(
-                segment_id=str(row["id"]),
-                source_document_id=str(row["document_id"]),
-                source_document_version_id=str(row["document_version_id"]),
-                source_id=str(row["source_id"]),
+                segment_id=str(row["item_id"]),
+                source_document_id=(
+                    str(row["document_id"])
+                    if row["document_id"] is not None
+                    else str(row["source_ref"])
+                ),
+                source_document_version_id=(
+                    str(row["document_version_id"])
+                    if row["document_version_id"] is not None
+                    else str(row["source_ref"])
+                ),
+                source_id=f"{str(row['source_kind'])}:{str(row['source_ref'])}",
                 source_version=str(row["source_version"]),
-                semantic_kind=str(row["semantic_kind"]),
-                evidence_level=str(row["evidence_level"]),
-                visibility_scope=str(row["visibility_scope"]),
-                digest=str(row["digest"]),
-                exact_text=str(row["exact_text"]),
+                semantic_kind=role_to_kind[str(row["publication_role"])],
+                evidence_level="confirmed_publication",
+                visibility_scope="brand_all",
+                digest=hashlib.sha256(
+                    str(row["published_text"]).encode()
+                ).hexdigest(),
+                exact_text=str(row["published_text"]),
             )
             for row in selected
         )
@@ -563,17 +523,18 @@ class PostgresContentRepository(ContentRepository):
             }
             for segment in segments
         ]
-        packet_digest = hashlib.sha256(
-            json.dumps(
-                packet_document,
-                ensure_ascii=False,
-                separators=(",", ":"),
-                sort_keys=True,
-            ).encode()
-        ).hexdigest()
-        packet = BrandContextPacketV1(
-            self._BRAND_PACKET_VERSION,
+        packet_digest = brand_context_packet_digest(
+            projection_id=projection_id,
+            projection_version=projection_version,
+            projection_digest=projection_digest,
+            segments=packet_document,
+        )
+        packet = BrandContextPacketV2(
+            BRAND_CONTEXT_PACKET_VERSION,
             packet_digest,
+            projection_id,
+            projection_version,
+            projection_digest,
             segments,
         )
         return replace(
@@ -587,9 +548,7 @@ class PostgresContentRepository(ContentRepository):
             creative_method_context=tuple(
                 segment.exact_text for segment in segments if segment.semantic_kind == "creative_method"
             ),
-            candidate_product_guidance_context=tuple(
-                segment.exact_text for segment in segments if segment.semantic_kind == "candidate_product_guidance"
-            ),
+            candidate_product_guidance_context=(),
             context_packet=packet,
         )
 
@@ -1785,24 +1744,10 @@ class PostgresContentRepository(ContentRepository):
             "business_data_kind": context.business_data_kind,
             "brand_reference_context": list(context.brand_reference_context),
             "brand_context_packet": (
-                {
-                    "packet_version": context.context_packet.packet_version,
-                    "packet_digest": context.context_packet.packet_digest,
-                    "segments": [
-                        {
-                            "segment_id": segment.segment_id,
-                            "source_document_id": segment.source_document_id,
-                            "source_document_version_id": segment.source_document_version_id,
-                            "source_id": segment.source_id,
-                            "source_version": segment.source_version,
-                            "semantic_kind": segment.semantic_kind,
-                            "evidence_level": segment.evidence_level,
-                            "visibility_scope": segment.visibility_scope,
-                            "digest": segment.digest,
-                        }
-                        for segment in context.context_packet.segments
-                    ],
-                }
+                brand_context_packet_document(
+                    context.context_packet,
+                    include_text=False,
+                )
                 if context.context_packet is not None
                 else None
             ),

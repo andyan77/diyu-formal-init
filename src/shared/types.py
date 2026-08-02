@@ -87,6 +87,19 @@ class BrandContextPacketV1:
 
 
 @dataclass(frozen=True)
+class BrandContextPacketV2:
+    packet_version: str
+    packet_digest: str
+    publication_projection_id: str
+    publication_projection_version: int
+    publication_projection_digest: str
+    segments: tuple[BrandContextSegment, ...]
+
+
+BrandContextPacket: TypeAlias = BrandContextPacketV1 | BrandContextPacketV2
+
+
+@dataclass(frozen=True)
 class BrandContext:
     brand_name: str
     positioning: str
@@ -108,7 +121,7 @@ class BrandContext:
     expression_constraint_context: tuple[str, ...] = ()
     creative_method_context: tuple[str, ...] = ()
     candidate_product_guidance_context: tuple[str, ...] = ()
-    context_packet: BrandContextPacketV1 | None = None
+    context_packet: BrandContextPacket | None = None
 
 
 @dataclass(frozen=True)

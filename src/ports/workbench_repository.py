@@ -120,6 +120,37 @@ class WorkbenchRepository(ABC):
         enabled: bool,
     ) -> dict[str, object]: ...
 
+    def brand_publication_projection(
+        self,
+        scope: TenantManagementScope,
+    ) -> dict[str, object]:
+        del scope
+        return {"current": None, "history": []}
+
+    def publication_source_options(
+        self,
+        scope: TenantManagementScope,
+        query: str,
+    ) -> list[dict[str, object]]:
+        del scope, query
+        return []
+
+    def create_brand_publication_candidate(
+        self,
+        scope: TenantManagementScope,
+        items: tuple[dict[str, object], ...],
+    ) -> dict[str, object]:
+        del scope, items
+        raise NotImplementedError
+
+    def confirm_brand_publication_projection(
+        self,
+        scope: TenantManagementScope,
+        projection_id: UUID,
+    ) -> dict[str, object]:
+        del scope, projection_id
+        raise NotImplementedError
+
     @abstractmethod
     def create_management_organization_material(
         self,

@@ -221,6 +221,66 @@ class WorkbenchService:
             enabled,
         )
 
+    def brand_publication_projection(
+        self,
+        scope: TenantManagementScope,
+    ) -> dict[str, object]:
+        return self._repository.brand_publication_projection(scope)
+
+    def publication_source_options(
+        self,
+        scope: TenantManagementScope,
+        query: str,
+    ) -> list[dict[str, object]]:
+        return self._repository.publication_source_options(scope, query.strip())
+
+    def create_brand_publication_candidate(
+        self,
+        scope: TenantManagementScope,
+        items: tuple[dict[str, object], ...],
+    ) -> dict[str, object]:
+        normalized: list[dict[str, object]] = []
+        for item in items:
+            text = str(item.get("published_text", "")).strip()
+            role = str(item.get("publication_role", ""))
+            source_segment_id = item.get("source_segment_id")
+            raw_applicability = item.get("applicability", ())
+            if not text or source_segment_id is None:
+                raise DomainError("每条发布表达都需要明确文字和来源。")
+            if len(text) > 1200:
+                raise DomainError("单条发布表达请控制在 1200 字以内。")
+            if role not in {
+                "public_brand_fact",
+                "expression_constraint",
+                "creative_method",
+                "internal_only",
+            }:
+                raise DomainError("发布表达的用途无效。")
+            if not isinstance(raw_applicability, (list, tuple)):
+                raise DomainError("发布表达的适用内容无效。")
+            normalized.append(
+                {
+                    "source_segment_id": UUID(str(source_segment_id)),
+                    "publication_role": role,
+                    "published_text": text,
+                    "applicability": tuple(dict.fromkeys(str(value) for value in raw_applicability)),
+                }
+            )
+        return self._repository.create_brand_publication_candidate(
+            scope,
+            tuple(normalized),
+        )
+
+    def confirm_brand_publication_projection(
+        self,
+        scope: TenantManagementScope,
+        projection_id: UUID,
+    ) -> dict[str, object]:
+        return self._repository.confirm_brand_publication_projection(
+            scope,
+            projection_id,
+        )
+
     def add_management_organization_material(
         self,
         scope: TenantManagementScope,
@@ -837,9 +897,10 @@ class WorkbenchService:
         by_id = {str(item["id"]): item for item in items}
         inputs = self._repository.tenant_readiness_inputs(scope)
         source_document_count = inputs.get("source_documents")
+        publication_confirmed = inputs.get("publication_confirmed")
         product_media_count = inputs.get("product_media_products")
         confirmed_store_count = inputs.get("confirmed_stores")
-        if not all(
+        if not isinstance(publication_confirmed, bool) or not all(
             isinstance(value, int)
             for value in (
                 source_document_count,
@@ -880,7 +941,8 @@ class WorkbenchService:
         series_ready = str(by_id.get("continuous_series", {}).get("status")) == "available"
         first_ready = str(by_id.get("first_creation", {}).get("status")) == "available"
         dm01_ready = str(by_id.get("dm01_display", {}).get("status")) == "available"
-        source_ready = source_document_count > 0
+        source_ready = source_document_count > 0 and publication_confirmed
+        product_status = str(by_id.get("product_facts", {}).get("status"))
         visual_ready = product_media_count >= 2
         tenant_items = [
             tenant_item(
@@ -897,9 +959,21 @@ class WorkbenchService:
             tenant_item(
                 "tenant_product_content",
                 "商品承重 P1 / P2",
-                "ready" if product_ready else "data_missing",
+                (
+                    "ready"
+                    if product_ready
+                    else "ready_after_admin_action"
+                    if product_status == "conditional"
+                    else "data_missing"
+                ),
                 ["只使用当前商品版本中获准进入事实包的字段。"],
-                [] if product_ready else ["补充至少一件有 V 级可观察依据的商品。"],
+                (
+                    []
+                    if product_ready
+                    else ["创建内容成员并分配同组织的发布账号资格。"]
+                    if product_status == "conditional"
+                    else ["补充至少一件有 V 级可观察依据的商品。"]
+                ),
                 "只影响需要具体商品承担判断或解释的内容。",
                 "不影响非商品内容。",
                 "查看商品资料",

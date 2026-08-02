@@ -898,7 +898,10 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert "body 用二至四个短 clause" in prompt
     assert "release_caption 留下一个可以直接回答" in prompt
     assert "xiaohongshu_graphic / graphic" in prompt
-    assert "真实、克制、有依据" in prompt
+    assert request.brand.content_role_boundary in prompt
+    assert request.brand.positioning not in prompt
+    assert request.brand.decision_order not in prompt
+    assert request.brand.tone not in prompt
 
 
 def test_product_fact_ownership_repair_rewrites_one_coherent_creative_set() -> None:
@@ -1627,8 +1630,10 @@ def test_dual_track_writer_receives_only_deidentified_preassigned_units() -> Non
     assert request.brand.brand_name not in writer_prompt
     assert request.brand.organization_name not in writer_prompt
     assert request.brand.account_name not in writer_prompt
-    assert request.brand.positioning in writer_prompt
-    assert request.brand.decision_order in writer_prompt
+    assert request.brand.positioning not in writer_prompt
+    assert request.brand.decision_order not in writer_prompt
+    assert request.brand.tone not in writer_prompt
+    assert request.brand.content_role_boundary in writer_prompt
     assert request.brand.audience_description in writer_prompt
     assert request.active_domain_assets[0].body not in writer_prompt
     assert "resource:original_composition" not in writer_prompt

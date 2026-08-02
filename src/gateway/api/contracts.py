@@ -556,6 +556,35 @@ class BrandLibraryVersionRequest(BaseModel):
     organization_ids: list[UUID] = Field(default_factory=list, max_length=20)
 
 
+class BrandPublicationProjectionItemRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_segment_id: UUID
+    publication_role: Literal[
+        "public_brand_fact",
+        "expression_constraint",
+        "creative_method",
+        "internal_only",
+    ]
+    published_text: str = Field(min_length=1, max_length=1200)
+    applicability: list[Literal[
+        "dressing_decision",
+        "product_truth",
+        "brand_life_narrative",
+        "local_response",
+        "visual_styling_story",
+    ]] = Field(default_factory=list, max_length=5)
+
+
+class BrandPublicationProjectionCandidateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[BrandPublicationProjectionItemRequest] = Field(
+        min_length=1,
+        max_length=64,
+    )
+
+
 class MaterialMetadataVersionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

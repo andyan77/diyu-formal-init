@@ -127,6 +127,7 @@ def _delete_gate_a_fixture(
 
     with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
         for table in (
+            "brand_publication_projection_items",
             "brand_product_field_evidence",
             "brand_product_versions",
             "brand_source_segments",
@@ -150,7 +151,13 @@ def _delete_gate_a_fixture(
             "UPDATE brand_source_documents SET current_version_id = NULL WHERE tenant_id = %s",
             (tenant_id,),
         )
+        cursor.execute(
+            "UPDATE brands SET current_publication_projection_id = NULL WHERE tenant_id = %s",
+            (tenant_id,),
+        )
         for table in (
+            "brand_publication_projection_items",
+            "brand_publication_projections",
             "brand_product_field_evidence",
             "brand_product_versions",
             "brand_products",
@@ -179,6 +186,7 @@ def _delete_gate_a_fixture(
                 (tenant_id,),
             )
         for table in (
+            "brand_publication_projection_items",
             "brand_product_field_evidence",
             "brand_product_versions",
             "brand_source_segments",
@@ -458,6 +466,128 @@ def test_zero_tenant_users_can_prepare_one_identity_with_four_targets(
                 "xiaohongshu_video",
                 "wechat_channels_video",
             }
+            assert tenant_id is not None
+            with psycopg.connect(
+                migrator_database_url
+            ) as source_connection, source_connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id FROM brands WHERE tenant_id = %s",
+                    (tenant_id,),
+                )
+                brand_row = cursor.fetchone()
+                assert brand_row is not None
+                source_document_id = uuid4()
+                cursor.execute(
+                    """
+                    INSERT INTO brand_source_documents
+                        (id, tenant_id, brand_id, source_id, embedded_title,
+                         provenance_filename, source_version, original_status,
+                         activation_status, authorization_source,
+                         authorization_at, status, created_by)
+                    VALUES (%s, %s, %s, 'TENANT01-READINESS-001',
+                            '就绪度正式来源', 'private-readiness-source.md',
+                            'V1', '待品牌方验收', 'brand_user_authorized',
+                            'bounded_test', now(), 'active', %s)
+                    """,
+                    (
+                        source_document_id,
+                        tenant_id,
+                        brand_row[0],
+                        UUID(str(tenant["administrator_id"])),
+                    ),
+                )
+            product = admin.put(
+                "/api/v1/tenant-management/brand-products",
+                json={
+                    "sku": "TENANT01-READY-01",
+                    "display_name": "就绪度正式商品",
+                    "category": "服装",
+                    "colors": ["深色"],
+                    "source_note": "品牌管理员确认的可观察资料",
+                    "applicability": "当前品牌商品内容",
+                    "confirm_as_current_brand_fact": True,
+                    "visibility_scope": "brand_all",
+                    "organization_ids": [],
+                },
+            )
+            assert product.status_code == 200, product.text
+
+            before_user = admin.get("/api/v1/admin/readiness")
+            assert before_user.status_code == 200, before_user.text
+            before_states = {
+                item["id"]: item["state"]
+                for item in before_user.json()["tenant_data_items"]
+            }
+            assert {
+                before_states[item_id]
+                for item_id in (
+                    "tenant_non_product",
+                    "tenant_product_content",
+                    "tenant_life_content",
+                    "tenant_series",
+                    "tenant_platforms",
+                    "tenant_first_creation",
+                )
+            } == {"ready_after_admin_action"}
+            assert before_states["tenant_local_content"] == "data_missing"
+            assert before_states["tenant_visual_content"] == "data_missing"
+            assert before_states["tenant_dm01"] == "data_missing"
+
+            content_member = admin.post(
+                "/api/v1/tenant-management/users",
+                json={
+                    "display_name": "就绪度内容用户",
+                    "username": f"tenant01-ready-user-{suffix}",
+                    "organization_id": company["id"],
+                    "entry_type": "tenant_user",
+                    "capabilities": ["content"],
+                    "publishing_identity_ids": [account_id],
+                    "expression_profile_maintenance_account_ids": [],
+                },
+            )
+            assert content_member.status_code == 201, content_member.text
+            with TestClient(app, base_url="https://diyu.example") as member:
+                _activate(
+                    member,
+                    content_member.json()["activation_url"],
+                    "tenant01-ready-user-password",
+                )
+            after_user = admin.get("/api/v1/admin/readiness")
+            assert after_user.status_code == 200, after_user.text
+            after_states = {
+                item["id"]: item["state"]
+                for item in after_user.json()["tenant_data_items"]
+            }
+            for item_id in (
+                "tenant_non_product",
+                "tenant_product_content",
+                "tenant_life_content",
+                "tenant_series",
+                "tenant_platforms",
+                "tenant_first_creation",
+            ):
+                assert after_states[item_id] == "ready"
+
+            disabled_member = admin.post(
+                "/api/v1/tenant-management/users/"
+                f"{content_member.json()['user_id']}/disable"
+            )
+            assert disabled_member.status_code == 200, disabled_member.text
+            after_disable = admin.get("/api/v1/admin/readiness")
+            assert after_disable.status_code == 200, after_disable.text
+            disabled_states = {
+                item["id"]: item["state"]
+                for item in after_disable.json()["tenant_data_items"]
+            }
+            for item_id in (
+                "tenant_non_product",
+                "tenant_product_content",
+                "tenant_life_content",
+                "tenant_series",
+                "tenant_platforms",
+                "tenant_first_creation",
+            ):
+                assert disabled_states[item_id] == "ready_after_admin_action"
             user_count_before = admin.get(
                 "/api/v1/tenant-management/users"
             ).json()
@@ -486,12 +616,13 @@ def test_zero_tenant_users_can_prepare_one_identity_with_four_targets(
                 "SELECT count(*) FROM users WHERE tenant_id = %s AND entry_kind = 'tenant_user'",
                 (tenant_id,),
             )
-            assert cursor.fetchone() == (0,)
+            assert cursor.fetchone() == (1,)
             cursor.execute(
-                "SELECT count(*) FROM auth_grants WHERE tenant_id = %s",
+                "SELECT count(*), count(*) FILTER (WHERE enabled) "
+                "FROM auth_grants WHERE tenant_id = %s",
                 (tenant_id,),
             )
-            assert cursor.fetchone() == (0,)
+            assert cursor.fetchone() == (3, 0)
             cursor.execute(
                 "SELECT count(*) FILTER (WHERE carrier_of_account_id IS NULL), "
                 "count(*) FILTER (WHERE enabled AND platform_enabled), "

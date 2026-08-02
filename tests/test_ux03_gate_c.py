@@ -1673,7 +1673,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 and item["kind"] == "question"
                 and "还不足以形成具体造型关系" in item["message"]
                 for item in insufficient_events
-            )
+            ), insufficient_events
             assert not any(
                 item["event"] == "completed"
                 for item in insufficient_events

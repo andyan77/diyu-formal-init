@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from src.brain.creation_intent_gate import CreationCommitment, commitment_document
+from src.shared.brand_publication import brand_context_packet_document
 from src.shared.creative_plan import CreativePlanV2, creative_plan_document
 from src.shared.delivery_compiler import DELIVERY_COMPILER_VERSION
 from src.shared.errors import DomainError
@@ -29,7 +30,7 @@ from src.shared.product_value import (
     product_value_contract_document,
 )
 from src.shared.types import (
-    BrandContextPacketV1,
+    BrandContextPacket,
     ContentControlContext,
     CreativeDirection,
     DirectionSelection,
@@ -472,7 +473,7 @@ def snapshot_document(
     media_capability_envelope: MediaCapabilityEnvelope | None = None,
     media_program: MediaProgramSelectionV1 | None = None,
     product_value_contract: ProductValueContract | None = None,
-    brand_context_packet: BrandContextPacketV1 | None = None,
+    brand_context_packet: BrandContextPacket | None = None,
 ) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
@@ -538,25 +539,10 @@ def snapshot_document(
         "business_data_kind": business_data_kind,
         "brand_reference_context": list(brand_reference_context),
         "brand_context_packet": (
-            {
-                "packet_version": brand_context_packet.packet_version,
-                "packet_digest": brand_context_packet.packet_digest,
-                "segments": [
-                    {
-                        "segment_id": segment.segment_id,
-                        "source_document_id": segment.source_document_id,
-                        "source_document_version_id": segment.source_document_version_id,
-                        "source_id": segment.source_id,
-                        "source_version": segment.source_version,
-                        "semantic_kind": segment.semantic_kind,
-                        "evidence_level": segment.evidence_level,
-                        "visibility_scope": segment.visibility_scope,
-                        "digest": segment.digest,
-                        "exact_text": segment.exact_text,
-                    }
-                    for segment in brand_context_packet.segments
-                ],
-            }
+            brand_context_packet_document(
+                brand_context_packet,
+                include_text=True,
+            )
             if brand_context_packet is not None
             else None
         ),
