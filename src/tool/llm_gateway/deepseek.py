@@ -2692,6 +2692,41 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
         return tuple(dict.fromkeys(value.rstrip("。！？!?") for value in values if len(value.rstrip("。！？!?")) >= 4))
 
+    @staticmethod
+    def _account_profile_match_spans(
+        request: GenerationInput,
+    ) -> tuple[str, ...]:
+        """Match confirmed source spelling as well as its deidentified prompt view."""
+
+        expression = request.account_expression
+        original_values = (
+            (
+                expression.identity_position,
+                expression.audience_relationship,
+                expression.authority_boundary,
+                expression.content_territories,
+            )
+            if expression is not None
+            else (
+                request.brand.content_role_name,
+                request.brand.audience_description,
+                request.brand.content_role_boundary,
+                "",
+            )
+        )
+        return tuple(
+            dict.fromkeys(
+                value.rstrip("。！？!?")
+                for value in (
+                    *DeepSeekGenerator._account_profile_source_spans(request),
+                    *original_values,
+                    *request.brand.expression_constraint_context,
+                    *request.brand.creative_method_context,
+                )
+                if len(value.rstrip("。！？!?")) >= 4
+            )
+        )
+
     @classmethod
     def _assert_p3_account_link_natural(
         cls,
@@ -2731,7 +2766,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
     ) -> frozenset[str]:
         if kernel.kernel_version != KERNEL_VERSION:
             return frozenset()
-        source_views = tuple(cls._account_link_match_view(span) for span in cls._account_profile_source_spans(request))
+        source_views = tuple(cls._account_link_match_view(span) for span in cls._account_profile_match_spans(request))
         return frozenset(
             unit.unit_id
             for unit in kernel.writable_units

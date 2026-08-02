@@ -1915,7 +1915,7 @@ def test_creative_plan_v3_freezes_topic_origin_and_reads_v2_without_upgrade() ->
 
 
 def test_v3_copy_guard_applies_to_non_p3_publication_constraints() -> None:
-    publication_sentence = "当前表达方提供日常选择内容，并把最终判断留给受众"
+    publication_sentence = "笛语服饰提供日常选择内容，并把最终判断留给受众"
     request = replace(
         _kernel_request(),
         primary_product="dressing_decision",
