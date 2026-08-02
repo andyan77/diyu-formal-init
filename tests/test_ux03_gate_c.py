@@ -78,6 +78,7 @@ from src.shared.delivery_compiler import (
     ORIGINAL_COMPOSITION_RESOURCE_ID,
     DeliveryCompileInput,
     _graphic_media_program_text,
+    _graphic_observation_sequence,
     _visible_unit,
     compile_delivery,
     compiler_owned_media_unit_texts,
@@ -778,6 +779,33 @@ def test_closed_media_program_binds_title_once_without_repeating_wrappers() -> N
     assert "甜味把熟悉的一天叫醒了" not in first.production.layout_and_production
     assert first.production.optional_capture_suggestion is None
     assert "unit:title" in first.visible_provenance["hero_image"]
+
+
+def test_observation_program_paginates_distinct_visible_text_shapes() -> None:
+    request = _generation_input()
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    body = next(unit for unit in kernel.units if unit.purpose == "body")
+
+    continuous = _graphic_observation_sequence((replace(body, text="一段连续观察。再给一个有限选择。"),))
+    paragraphs = _graphic_observation_sequence(
+        (replace(body, text="先观察。\n\n再选择。\n\n最后行动。"),)
+    )
+    lines = _graphic_observation_sequence(
+        (replace(body, text="先观察。\n再选择。\n最后行动。"),)
+    )
+    structured = _graphic_observation_sequence(
+        (
+            replace(body, unit_id="unit:body-opening", text="先观察。"),
+            replace(body, unit_id="unit:hypothetical-example", text="再检验。"),
+            replace(body, unit_id="unit:body-closing", text="最后行动。"),
+        )
+    )
+
+    assert len({continuous, paragraphs, lines, structured}) == 4
+    assert "停在本篇反差" in continuous
+    assert "每个段落各占一页" in paragraphs
+    assert "依照正文换行" in lines
+    assert "一个条件片段" in structured
 
 
 def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:

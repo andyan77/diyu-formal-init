@@ -642,6 +642,8 @@ def _compile_delivery_v4(
         opening, sequence, production_note = _bind_graphic_program_to_title(
             title,
             _graphic_media_program_text(program),
+            program=program,
+            body_units=body_units,
         )
         production = GraphicProductionBundle(
             natural_guide=guide,
@@ -780,12 +782,49 @@ def _optional_capture_suggestion(
 def _bind_graphic_program_to_title(
     title: str,
     texts: tuple[str, str, str],
+    *,
+    program: MediaProgramSelectionV1,
+    body_units: tuple[CreativeKernelUnit, ...],
 ) -> tuple[str, str, str]:
     opening, sequence, production_note = texts
+    if (
+        program.program_id == "graphic_observation_progression_v1"
+        and program.series_position is None
+    ):
+        sequence = _graphic_observation_sequence(body_units)
     return (
         opening.replace("标题", f"作品标题《{title}》", 1),
         sequence,
         production_note,
+    )
+
+
+def _graphic_observation_sequence(
+    body_units: tuple[CreativeKernelUnit, ...],
+) -> str:
+    """Paginate one closed observation program from the visible text shape."""
+
+    if len(body_units) >= 3:
+        return (
+            "第 1 页给作品标题和观看回报；第 2 页提出本篇判断；"
+            "第 3 页用一个条件片段检验判断；第 4 页只留下一项可执行动作；末页用发布配文收束。"
+        )
+    body = "\n".join(unit.text.strip() for unit in body_units if unit.text.strip())
+    paragraphs = tuple(part.strip() for part in body.split("\n\n") if part.strip())
+    if len(paragraphs) >= 3:
+        return (
+            "第 1 页给作品标题；第 2 页保留本次真实片段；"
+            "随后让正文每个段落各占一页，分别承接观察、选择和动作；末页只留发布配文。"
+        )
+    lines = tuple(line.strip() for line in body.splitlines() if line.strip())
+    if len(lines) >= 3:
+        return (
+            "第 1 页给作品标题；第 2 页保留本次真实片段；"
+            "后三页依照正文换行逐步推进，每页只承担一步；末页回到发布配文。"
+        )
+    return (
+        "第 1 页给作品标题；第 2 页保留本次真实片段；"
+        "第 3 页停在本篇反差，第 4 页展开有限选择；末页留下观察动作和发布配文。"
     )
 
 
