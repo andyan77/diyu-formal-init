@@ -123,6 +123,10 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
                 "VALUES (%s, %s, %s, 1, %s, 'confirmed', %s, now())",
                 (baseline_id, tenant_id, brand_id, "历史已确认品牌表达", user_id),
             )
+            connection.execute("ALTER TABLE brands FORCE ROW LEVEL SECURITY")
+            connection.execute(
+                "ALTER TABLE brand_expression_baselines FORCE ROW LEVEL SECURITY"
+            )
         with psycopg.connect(migrator_database_url, autocommit=True) as admin_connection:
             admin_connection.execute(
                 sql.SQL("ALTER ROLE {} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS").format(
@@ -143,7 +147,9 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
             force_rls_rows = connection.execute(
                 "SELECT relname, relforcerowsecurity FROM pg_class "
                 "WHERE oid IN ("
-                "'organizations'::regclass, "
+                    "'organizations'::regclass, "
+                    "'brands'::regclass, "
+                    "'brand_expression_baselines'::regclass, "
                 "'brand_source_documents'::regclass, "
                 "'brand_source_document_versions'::regclass, "
                 "'brand_source_segments'::regclass, "
@@ -174,7 +180,7 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
         constraint_validated = constraint_row[0]
         assert revision == "20260813_40"
         assert constraint_validated is True
-        assert len(force_rls_rows) == 9
+        assert len(force_rls_rows) == 11
         assert all(bool(row[1]) for row in force_rls_rows)
         assert compatibility_projection == (
             "confirmed",

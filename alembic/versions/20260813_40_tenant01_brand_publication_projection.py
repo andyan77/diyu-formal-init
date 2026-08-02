@@ -140,6 +140,14 @@ def upgrade() -> None:
 
     op.execute("ALTER TABLE brands ADD COLUMN current_publication_projection_id uuid")
 
+    # Production owns these pre-existing FORCE-RLS tables with the deliberately
+    # non-BYPASSRLS migrator role.  The compatibility backfill is a global DDL
+    # operation, so let only the owning role see every tenant inside this
+    # transaction.  ENABLE RLS remains active for the application role, and
+    # FORCE is restored before the migration can commit.
+    op.execute("ALTER TABLE brand_expression_baselines NO FORCE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE brands NO FORCE ROW LEVEL SECURITY")
+
     # Confirmed baseline content already had a user-confirmed source and was
     # consumed by the old image.  Preserve that capability without inventing
     # raw-source facts; it is an expression constraint until an administrator
@@ -200,6 +208,8 @@ def upgrade() -> None:
         REFERENCES brand_publication_projections(tenant_id, brand_id, id)
         """
     )
+    op.execute("ALTER TABLE brands FORCE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE brand_expression_baselines FORCE ROW LEVEL SECURITY")
     # The production migrator is deliberately NOBYPASSRLS and this migration
     # backfills every tenant in one transaction.  Enable and force tenant RLS
     # only after the cross-tenant compatibility backfill has completed; the
