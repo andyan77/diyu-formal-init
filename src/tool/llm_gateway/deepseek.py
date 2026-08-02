@@ -2588,12 +2588,23 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         frame = request.narrative_frame
         if frame is None or frame.narrative_mode != "actuality_reflection":
             return
-        quote_characters = frozenset({'"', "“", "”", "‘", "’"})
-        if any(
-            quote_characters.intersection(unit.text)
-            for unit in kernel.writable_units
-        ):
-            raise GenerationFailed("Writer 不得把用户现实片段扩写成新的直接引语")
+        speech_markers = ("说", "问", "答", "喊", "告诉", "表示", "写道")
+        quote_pairs = (("“", "”"), ('"', '"'), ("‘", "’"))
+        for unit in kernel.writable_units:
+            for opening, closing in quote_pairs:
+                start = unit.text.find(opening)
+                while start >= 0:
+                    end = unit.text.find(closing, start + 1)
+                    if end < 0:
+                        break
+                    prefix = unit.text[max(0, start - 10) : start]
+                    if prefix.rstrip().endswith(("：", ":")) or any(
+                        marker in prefix for marker in speech_markers
+                    ):
+                        raise GenerationFailed(
+                            "Writer 不得把用户现实片段扩写成新的直接引语"
+                        )
+                    start = unit.text.find(opening, end + 1)
 
     @staticmethod
     def _deidentify_text(

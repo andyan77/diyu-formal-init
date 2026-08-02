@@ -3135,6 +3135,59 @@ def test_actuality_writer_cannot_turn_an_observation_into_new_dialogue(
         ).generate(request)
 
 
+def test_actuality_writer_can_use_a_non_attributed_concept_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _p3_account_link_request()
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "units": [
+                                    {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
+                                    {
+                                        "unit_id": "unit:natural-guide",
+                                        "text": "重新注意一次熟悉的日常。",
+                                    },
+                                    {
+                                        "unit_id": "unit:body",
+                                        "text": "所谓“熟悉”，有时只是暂时没有再看一眼。",
+                                    },
+                                    {
+                                        "unit_id": "unit:release-caption",
+                                        "text": "今天也重新看见了熟悉的味道。",
+                                    },
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    artifact = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    ).generate(request)
+    assert "所谓“熟悉”" in artifact.body
+
+
 def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() -> None:
     products = (
         ProductFact(
