@@ -1367,7 +1367,13 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 frozen_snapshot = frozen_row[0]
             assert frozen_snapshot["product_facts"][0]["fact_version"] == 2
             assert frozen_snapshot["material_snapshots"][0]["reference_version"] == 2
-            assert "版本记录" in frozen_snapshot["brand_reference_context"][0]
+            assert frozen_snapshot["brand_reference_context"] == []
+            assert frozen_snapshot["brand_context_packet"]["packet_version"] == "brand-context-packet-v2"
+            assert frozen_snapshot["brand_context_packet"]["publication_projection_id"]
+            assert any(
+                item["semantic_kind"] == "expression_constraint"
+                for item in frozen_snapshot["brand_context_packet"]["segments"]
+            )
 
             reference_v3 = admin.post(
                 f"/api/v1/tenant-management/brand-library/{reference_id}/versions",

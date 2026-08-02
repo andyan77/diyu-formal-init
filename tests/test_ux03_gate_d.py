@@ -124,16 +124,18 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
                 "'brand_source_segments'::regclass, "
                 "'brand_product_field_evidence'::regclass, "
                 "'display_store_access_grants'::regclass, "
-                "'display_store_profile_versions'::regclass"
+                "'display_store_profile_versions'::regclass, "
+                "'brand_publication_projections'::regclass, "
+                "'brand_publication_projection_items'::regclass"
                 ")"
             ).fetchall()
         assert revision_row is not None
         assert constraint_row is not None
         revision = revision_row[0]
         constraint_validated = constraint_row[0]
-        assert revision == "20260812_39"
+        assert revision == "20260813_40"
         assert constraint_validated is True
-        assert len(force_rls_rows) == 7
+        assert len(force_rls_rows) == 9
         assert all(bool(row[1]) for row in force_rls_rows)
     finally:
         monkeypatch.setenv("DIYU_MIGRATOR_DATABASE_URL", migrator_database_url)

@@ -4896,44 +4896,47 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 str(current["status"]) == "confirmed"
                 and str(current["draft"]) == draft
             )
-            version = self._integer(current["version"])
-            if not unchanged and str(current["status"]) == "confirmed":
-                version += 1
             if unchanged:
-                row = current
-            else:
-                cursor.execute(
-                    """
-                    UPDATE brand_expression_baselines
-                    SET draft = %s, version = %s, status = 'confirmed',
-                        confirmed_by = %s, confirmed_at = now(), updated_at = now()
-                    WHERE tenant_id = %s AND brand_id = %s
-                    RETURNING id, version, status, draft
-                    """,
-                    (
-                        draft,
-                        version,
-                        scope.user_id,
-                        scope.tenant_id,
-                        scope.brand_id,
-                    ),
-                )
-                row = self._one(cursor, "当前品牌表达草案没有确认成功")
-                cursor.execute(
-                    """
-                    UPDATE brands
-                    SET positioning = %s,
-                        tone = '以当前已确认品牌表达版本为准。',
-                        strategy_version = %s
-                    WHERE tenant_id = %s AND id = %s
-                    """,
-                    (
-                        draft,
-                        f"brand-expression-v{version}",
-                        scope.tenant_id,
-                        scope.brand_id,
-                    ),
-                )
+                return {
+                    "version": self._integer(current["version"]),
+                    "status": "confirmed",
+                    "draft": draft,
+                }
+            version = self._integer(current["version"])
+            if str(current["status"]) == "confirmed":
+                version += 1
+            cursor.execute(
+                """
+                UPDATE brand_expression_baselines
+                SET draft = %s, version = %s, status = 'confirmed',
+                    confirmed_by = %s, confirmed_at = now(), updated_at = now()
+                WHERE tenant_id = %s AND brand_id = %s
+                RETURNING id, version, status, draft
+                """,
+                (
+                    draft,
+                    version,
+                    scope.user_id,
+                    scope.tenant_id,
+                    scope.brand_id,
+                ),
+            )
+            row = self._one(cursor, "当前品牌表达草案没有确认成功")
+            cursor.execute(
+                """
+                UPDATE brands
+                SET positioning = %s,
+                    tone = '以当前已确认品牌表达版本为准。',
+                    strategy_version = %s
+                WHERE tenant_id = %s AND id = %s
+                """,
+                (
+                    draft,
+                    f"brand-expression-v{version}",
+                    scope.tenant_id,
+                    scope.brand_id,
+                ),
+            )
             cursor.execute(
                 "SELECT current_publication_projection_id FROM brands "
                 "WHERE tenant_id = %s AND id = %s FOR UPDATE",

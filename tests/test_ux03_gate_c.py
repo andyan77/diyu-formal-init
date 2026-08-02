@@ -677,7 +677,7 @@ def _filled_kernel(request: GenerationInput) -> object:
     text_by_purpose = {
         "title": "甜味把熟悉的一天叫醒了",
         "natural_guide": (
-            "门店生活观察者看一次熟悉感被意外打断后，人会怎样重新注意日常。"
+            "不催人下结论，先看熟悉感被意外打断后，人会怎样重新注意日常。"
         ),
         "media_opening": "首图只放咖啡杯边缘和一句“今天怎么是甜的？”",
         "media_sequence": "第一张给意外，第二张拆开熟悉感，第三张留下一次重新注意。",
@@ -686,7 +686,7 @@ def _filled_kernel(request: GenerationInput) -> object:
         "body": (
             "一直喝的味道突然变甜，最先被打断的不是判断，而是那种不用再看一眼的熟悉。"
             "偶尔被日常叫醒一下，也会重新发现自己究竟在意什么。"
-            "把空间留给想按自己节奏看的人。"
+            "别急着替别人下结论，先把那一点变化看清楚。"
         ),
         "release_caption": "熟悉的东西突然变了一点，你会先怀疑味道，还是先重新看它一眼？",
     }
@@ -2910,7 +2910,7 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     )
     assert isinstance(compiled.semantic_contract, P3SemanticContract)
     assert compiled.semantic_contract.brand_account_link == (
-        "门店生活观察者看一次熟悉感被意外打断后，人会怎样重新注意日常。"
+        "不催人下结论，先看熟悉感被意外打断后，人会怎样重新注意日常。"
     )
     assert compiled.semantic_contract.brand_account_link in compiled.body
 
