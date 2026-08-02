@@ -858,11 +858,19 @@ class DeepSeekGenerator(ContentGenerator):
             request,
             kernel,
         )
+        copied_actuality_units = self._copied_actuality_fact_units(
+            request,
+            kernel,
+        )
         attributed_dialogue_units = self._unfrozen_actuality_dialogue_units(
             request,
             kernel,
         )
-        relationship_units = copied_account_units | attributed_dialogue_units
+        relationship_units = (
+            copied_account_units
+            | copied_actuality_units
+            | attributed_dialogue_units
+        )
         if relationship_units:
             if affected_product_units:
                 raise GenerationFailed("关系表达路径无法与商品事实修复共享第二次修复调用")
@@ -874,7 +882,10 @@ class DeepSeekGenerator(ContentGenerator):
                         for unit in kernel.writable_units
                         if unit.unit_id in relationship_units
                     ),
-                    source_spans=self._account_profile_source_spans(request),
+                    source_spans=(
+                        *self._account_profile_source_spans(request),
+                        *self._actuality_fact_source_spans(request),
+                    ),
                     forbid_attributed_dialogue=bool(attributed_dialogue_units),
                 ),
                 1024,
@@ -1630,10 +1641,16 @@ class DeepSeekGenerator(ContentGenerator):
             }
         elif actuality_reflection:
             topic_projection = {
-                "contract_version": "actuality-writer-brief-v1",
+                "contract_version": "actuality-writer-brief-v2",
                 "task": _PRODUCT_VALUE[request.primary_product],
-                "frozen_user_fact_count": len(request.narrative_frame.user_facts),
-                "writer_relation": "independent_reflection_only",
+                "frozen_user_facts": [
+                    {
+                        "source_id": fact.source_id,
+                        "exact_text": fact.exact_text,
+                    }
+                    for fact in request.narrative_frame.user_facts
+                ],
+                "writer_relation": "respond_without_repeating_or_explaining_cause",
             }
         else:
             topic_projection = request.creative_plan.topic_spans
@@ -1762,8 +1779,10 @@ allowed_resources 都由服务端在写作前冻结；每个单元必须逐项�
 {product_creative_rule}
 {account_link_rule}
 
-topic 投影是服务端给 Writer 的受控任务边界。actuality-writer-brief-v1 只告知已有现实
-片段由服务端另行逐字插入，Writer 看不到原句，也不得解释其原因或结果。其他 topic_spans
+topic 投影是服务端给 Writer 的受控任务边界。actuality-writer-brief-v2 中的现实片段已经
+由服务端逐字冻结，并会由 Compiler 另行插入一次。Writer 只用它确定本篇实际观察对象，
+不得复述、改写或补全原句，不得猜测形成原因、后续结果或其他现实细节，也不得离开这条
+实际观察去讲表达方法、协作原则或不相关的内容领地。其他 topic_spans
 是用户原话证据，可能同时包含创作命令、控制要求或“尚未想到题材”的状态，不等于
 必须逐字充当成品题目。若其中没有面向受众的实际题材，系统应根据本篇受众价值、账号边界与
 平台自主选择一个安全、可直接发布的生活观察主线；不得把“如何找选题、如何发内容、缺少
@@ -2579,6 +2598,34 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
 
     @staticmethod
+    def _actuality_fact_source_spans(
+        request: GenerationInput,
+    ) -> tuple[str, ...]:
+        frame = request.narrative_frame
+        if frame is None or frame.narrative_mode != "actuality_reflection":
+            return ()
+        return tuple(fact.exact_text for fact in frame.user_facts)
+
+    @classmethod
+    def _copied_actuality_fact_units(
+        cls,
+        request: GenerationInput,
+        kernel: CreativeKernelV1,
+    ) -> frozenset[str]:
+        source_views = tuple(
+            cls._account_link_match_view(span)
+            for span in cls._actuality_fact_source_spans(request)
+        )
+        return frozenset(
+            unit.unit_id
+            for unit in kernel.writable_units
+            if any(
+                source in cls._account_link_match_view(unit.text)
+                for source in source_views
+            )
+        )
+
+    @staticmethod
     def _account_link_match_view(value: str) -> str:
         """Ignore whitespace separators without Unicode or semantic rewriting."""
 
@@ -2597,14 +2644,14 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 for unit_id, _ in affected
             ]
         }
-        return f"""只修复照抄账号画像标签的创作 unit。保留每个 unit 原来的观看回报和主题，
-把账号关系转化为自然的观察方式、选择取舍或受众回报；不得逐字复制下列来源标签，不得写成
+        return f"""只修复照抄表达控制或已冻结现实原句的创作 unit。保留每个 unit 原来的观看回报和主题，
+把账号关系转化为自然的观察方式、选择取舍或受众回报；不得逐字复制下列来源文字，不得写成
 职业履历、机构事实或已发生经历。{(
     '同时删除 Writer 新增的全部引号内容；受影响 unit 不得再使用中文或 ASCII 引号，'
     '不得把引语改成无引号的人物转述。'
     if forbid_attributed_dialogue else ''
 )}
-只能改写下列来源标签对应的表达方式：
+只能改写下列来源文字对应的表达方式：
 {json.dumps(source_spans, ensure_ascii=False)}
 待修复 unit：{json.dumps([{"unit_id": unit_id, "text": text} for unit_id, text in affected], ensure_ascii=False)}
 根对象只能有 units，且必须严格返回这些 unit_id；每项只能有 unit_id、text：

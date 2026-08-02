@@ -2338,7 +2338,7 @@ def test_actuality_life_units_are_preallocated_as_disclosed_hypothesis() -> None
     assert "其余是创作性推演，不作为这段经历的事实补充" in compiled.body
 
 
-def test_actuality_writer_receives_only_a_fact_count_not_the_reality_text() -> None:
+def test_actuality_writer_receives_one_frozen_fact_as_read_only_topic_anchor() -> None:
     fact = "今天喝了一直喝的蓝山咖啡，居然是甜的。"
     frame = new_frame("actuality_reflection", (fact,), ())
     request = replace(
@@ -2360,12 +2360,78 @@ def test_actuality_writer_receives_only_a_fact_count_not_the_reality_text() -> N
         "deepseek-test",
     )._kernel_writer_prompt(request, kernel, {})
 
-    assert fact not in prompt
+    assert fact in prompt
     assert request.weak_seed not in prompt
-    assert '"contract_version": "actuality-writer-brief-v1"' in prompt
-    assert '"frozen_user_fact_count": 1' in prompt
-    assert '"writer_relation": "independent_reflection_only"' in prompt
-    assert "Writer 看不到原句" in prompt
+    assert '"contract_version": "actuality-writer-brief-v2"' in prompt
+    assert '"source_id": "source:user_actuality:1"' in prompt
+    assert (
+        '"writer_relation": "respond_without_repeating_or_explaining_cause"'
+        in prompt
+    )
+    assert "不得复述、改写或补全原句" in prompt
+
+
+def test_actuality_writer_cannot_repeat_the_frozen_fact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _p3_account_link_request()
+    assert request.narrative_frame is not None
+    fact = request.narrative_frame.user_facts[0].exact_text
+    request_count = 0
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        nonlocal request_count
+        request_count += 1
+        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        units = (
+            [
+                {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
+                {
+                    "unit_id": "unit:natural-guide",
+                    "text": "一次小变化，也能让日常重新被看见。",
+                },
+                {"unit_id": "unit:body", "text": fact},
+                {
+                    "unit_id": "unit:release-caption",
+                    "text": "熟悉的日常，也会突然提醒人停一下。",
+                },
+            ]
+            if request_count == 1
+            else [
+                {
+                    "unit_id": "unit:body",
+                    "text": "熟悉感被打断的那一刻，先停一下，也许就够了。",
+                }
+            ]
+        )
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps({"units": units}, ensure_ascii=False)
+                    }
+                }
+            ]
+        }, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    artifact = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    ).generate(request)
+
+    assert artifact.body.count(fact) == 1
+    assert "先停一下" in artifact.body
+    assert request_count == 2
 
 
 def test_p2_server_selects_only_the_three_frozen_product_facts() -> None:
