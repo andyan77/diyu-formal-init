@@ -988,7 +988,7 @@ def test_optional_capture_is_visible_but_never_a_required_resource() -> None:
 
     assert compiled.resource_refs == (ORIGINAL_COMPOSITION_RESOURCE_ID,)
     assert "可选补拍建议：" in compiled.body
-    assert "如果刚才提到的事物仍在手边" in compiled.body
+    assert "如果《甜味把熟悉的一天叫醒了》提到的事物仍在手边" in compiled.body
     assert "没有也不影响" in compiled.body
     assert isinstance(compiled.production, GraphicProductionBundle)
     assert compiled.production.optional_capture_suggestion is not None
