@@ -3123,7 +3123,7 @@ def test_p3_writer_uses_versioned_editorial_lens_without_profile_copy_or_topic_s
         "deepseek-test",
     )._kernel_writer_prompt(request, kernel, {})
 
-    assert "account-editorial-lens-v3" in prompt
+    assert "account-editorial-lens-v4" in prompt
     assert "从穿衣编辑的位置重新看熟悉事物" not in prompt
     assert "陪正在重新选择日常节奏的人看清取舍" not in prompt
     assert "穿衣选择、熟悉事物被重新看见的时刻" not in prompt
@@ -3131,6 +3131,9 @@ def test_p3_writer_uses_versioned_editorial_lens_without_profile_copy_or_topic_s
     assert "不能无损替换到另一件生活琐事" in prompt
     assert "editorial_responsibility" in prompt
     assert "不能解释原因、罗列" in prompt
+    assert prompt.count("不把它写成原因、诊断") == 2
+    assert prompt.count("不得升级为生活的一般教训") == 2
+    assert prompt.count("不把一次片段收束成适用于所有人的口号") == 2
     assert "不应复制" not in prompt
     assert "去标识化表达控制：使用已冻结账号编辑视角" in prompt
     assert prompt.count(constraint) == 1

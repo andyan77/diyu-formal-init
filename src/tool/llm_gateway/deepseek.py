@@ -1584,6 +1584,16 @@ class DeepSeekGenerator(ContentGenerator):
                 "body": account_editorial_lens.body_responsibility,
                 "release_caption": account_editorial_lens.release_caption_responsibility,
             }
+            actuality_by_purpose = {
+                "title": account_editorial_lens.actuality_title_responsibility,
+                "natural_guide": (
+                    account_editorial_lens.actuality_natural_guide_responsibility
+                ),
+                "body": account_editorial_lens.actuality_body_responsibility,
+                "release_caption": (
+                    account_editorial_lens.actuality_release_caption_responsibility
+                ),
+            }
             series_position = (
                 request.series_context.target_position
                 if request.series_context is not None
@@ -1593,6 +1603,10 @@ class DeepSeekGenerator(ContentGenerator):
                 responsibility = by_purpose.get(unit.purpose)
                 if responsibility is None:
                     continue
+                if actuality_reflection:
+                    responsibility = (
+                        f"{responsibility}{actuality_by_purpose[unit.purpose]}"
+                    )
                 account_unit_responsibilities[unit.unit_id] = (
                     _body_editorial_responsibility(
                         unit_id=unit.unit_id,
@@ -2737,6 +2751,10 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 "release_caption_responsibility",
                 "actuality_response_boundary",
                 "series_progression_boundary",
+                "actuality_title_responsibility",
+                "actuality_natural_guide_responsibility",
+                "actuality_body_responsibility",
+                "actuality_release_caption_responsibility",
             )
             writer_projection = {field: frozen_lens[field] for field in writer_fields}
             writer_projection["speaker_scope"] = (
@@ -2952,6 +2970,21 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 "body": editorial_lens.body_responsibility,
                 "release_caption": editorial_lens.release_caption_responsibility,
             }
+            actuality_by_purpose = {
+                "title": editorial_lens.actuality_title_responsibility,
+                "natural_guide": (
+                    editorial_lens.actuality_natural_guide_responsibility
+                ),
+                "body": editorial_lens.actuality_body_responsibility,
+                "release_caption": (
+                    editorial_lens.actuality_release_caption_responsibility
+                ),
+            }
+            actuality_reflection = (
+                request.narrative_frame is not None
+                and request.narrative_frame.narrative_mode
+                == "actuality_reflection"
+            )
             series_position = (
                 request.series_context.target_position
                 if request.series_context is not None
@@ -2961,6 +2994,10 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 responsibility = by_purpose.get(unit.purpose)
                 if responsibility is None:
                     continue
+                if actuality_reflection:
+                    responsibility = (
+                        f"{responsibility}{actuality_by_purpose[unit.purpose]}"
+                    )
                 editorial_responsibilities[unit.unit_id] = (
                     _body_editorial_responsibility(
                         unit_id=unit.unit_id,
