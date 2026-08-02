@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 import psycopg
 import pytest
 
+from src.brain.content_service import ContentService
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.tenant_lifecycle import (
     TENANT_LIFECYCLE_CONTRACT_VERSION,
@@ -31,6 +32,7 @@ from src.shared.account_editorial_lens import (
 from src.shared.brand_publication import brand_context_packet_digest
 from src.shared.content_snapshot import visible_context_basis
 from src.shared.errors import DomainError
+from src.shared.factual_basis import brand_fact_records
 from src.shared.tenant_brand_sources import (
     classify_source_segment,
     freeze_source_batch,
@@ -415,6 +417,45 @@ def test_account_editorial_lens_historical_v2_remains_readable_without_upgrade()
 
     assert parsed == historical
     assert parsed.contract_version == ACCOUNT_EDITORIAL_LENS_V2_VERSION
+
+
+def test_visible_brand_fact_requires_brand_to_be_the_explicit_subject() -> None:
+    exact_fact = "笛语提供面向日常穿衣选择的品牌内容。"
+    context = BrandContext(
+        brand_name="笛语",
+        positioning="清楚表达",
+        decision_order="先条件后选择",
+        tone="克制",
+        account_name="笛语编辑",
+        operator_name="编辑",
+        organization_name="总部",
+        content_role_name="穿衣编辑",
+        content_role_boundary="不代替受众决定",
+        audience_description="需要日常选择的人",
+        strategy_version="v1",
+        platform="小红书",
+        media_format="图文",
+        production_conditions="抽象编排",
+        brand_reference_context=(exact_fact,),
+    )
+
+    ordinary = ContentService._frame_with_brand_facts(
+        None,
+        (),
+        context,
+        "早上凉、中午热，今天怎么穿更稳妥？",
+    )
+    explicit = ContentService._frame_with_brand_facts(
+        None,
+        (),
+        context,
+        "笛语为什么把日常穿衣选择讲得这么克制？",
+    )
+
+    assert ordinary.allowed_brand_fact_ids == ()
+    assert explicit.allowed_brand_fact_ids == tuple(
+        record.fact_id for record in brand_fact_records((exact_fact,))
+    )
 
 
 def test_tenant01_content_product_taxonomy_is_not_an_insertable_brand_fact() -> None:

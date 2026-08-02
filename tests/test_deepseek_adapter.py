@@ -1889,6 +1889,64 @@ def test_writer_owns_audience_topic_when_user_has_not_supplied_one() -> None:
     assert "不得把“如何找选题、如何发内容、缺少\n灵感”本身写成" in prompt
 
 
+def test_writer_natural_guide_has_distinct_graphic_and_video_responsibilities() -> None:
+    graphic_request = _kernel_request()
+    assert graphic_request.narrative_frame is not None
+    graphic_context = BoundaryContext.from_request(
+        graphic_request,
+        graphic_request.narrative_frame,
+    )
+    graphic_skeleton = build_kernel_skeleton(
+        frame=graphic_request.narrative_frame,
+        fact_registry=graphic_context.fact_registry,
+        constraint_refs=tuple(graphic_context.constraint_ids),
+        program_id=select_kernel_program(frame=graphic_request.narrative_frame),
+        media_format="graphic",
+        kernel_version=KERNEL_VERSION,
+        primary_product=graphic_request.primary_product,
+    )
+    video_request = replace(
+        graphic_request,
+        target="douyin_video",
+        media_format="video",
+        platform_direction=direction_for("douyin_video"),
+        creative_plan=replace(
+            graphic_request.creative_plan,
+            platform_shape="douyin_video:video",
+        ),
+        brand=replace(
+            graphic_request.brand,
+            platform="抖音",
+            media_format="视频",
+        ),
+    )
+    video_skeleton = build_kernel_skeleton(
+        frame=graphic_request.narrative_frame,
+        fact_registry=graphic_context.fact_registry,
+        constraint_refs=tuple(graphic_context.constraint_ids),
+        program_id=select_kernel_program(frame=graphic_request.narrative_frame),
+        media_format="video",
+        kernel_version=KERNEL_VERSION,
+        primary_product=video_request.primary_product,
+    )
+
+    graphic_prompt = _generator()._kernel_writer_prompt(
+        graphic_request,
+        graphic_skeleton,
+        {},
+    )
+    video_prompt = _generator()._kernel_writer_prompt(
+        video_request,
+        video_skeleton,
+        {},
+    )
+
+    assert "沿首图和不可交换的图序" in graphic_prompt
+    assert "从首帧、时间推进到收束" not in graphic_prompt
+    assert "从首帧、时间推进到收束" in video_prompt
+    assert "沿首图和不可交换的图序" not in video_prompt
+
+
 def test_creative_plan_v3_freezes_topic_origin_and_reads_v2_without_upgrade() -> None:
     current = build_creative_plan(
         topic_spans=("今天不知道发什么",),

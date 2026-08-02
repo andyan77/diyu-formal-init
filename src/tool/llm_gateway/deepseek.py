@@ -246,6 +246,16 @@ _P1_PUBLICATION_BRIEF: dict[str, str] = {
     ),
     "release_caption": "用一句自然文字保留本次条件和下一动作，不重复正文或承诺效果。",
 }
+_PLATFORM_NATIVE_GUIDE_RESPONSIBILITY: dict[str, str] = {
+    "graphic": (
+        "这是图文的阅读回报：用一句自然文字说明读者沿首图和不可交换的图序，最终能看清"
+        "哪条本题判断；不要写成视频观看预告，也不要介绍创作方法或文章结构。"
+    ),
+    "video": (
+        "这是短视频的观看回报：用一句自然文字说明观众从首帧、时间推进到收束，最终能看清"
+        "哪条本题判断；不要写成翻页导读，也不要介绍创作方法或脚本结构。"
+    ),
+}
 _MODE_BLOCK_TYPE: dict[NarrativeMode, NarrativeBlockType] = {
     "actuality_reflection": "general_observation",
     "general_observation": "general_observation",
@@ -1605,6 +1615,15 @@ class DeepSeekGenerator(ContentGenerator):
                 **(
                     {"decision_responsibility": (p1_unit_responsibilities[unit.purpose])}
                     if unit.purpose in p1_unit_responsibilities
+                    else {}
+                ),
+                **(
+                    {
+                        "platform_native_responsibility": (
+                            _PLATFORM_NATIVE_GUIDE_RESPONSIBILITY[request.media_format]
+                        )
+                    }
+                    if unit.purpose == "natural_guide"
                     else {}
                 ),
             }

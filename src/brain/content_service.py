@@ -300,6 +300,7 @@ class ContentService:
             narrative_frame,
             products,
             context,
+            sanitized_seed,
         )
         try:
             media_envelope, media_program = self._new_media_contract(
@@ -385,9 +386,17 @@ class ContentService:
         frame: NarrativeFrame | None,
         products: tuple[ProductFact, ...],
         context: BrandContext,
+        user_premise: str,
     ) -> NarrativeFrame:
         product_ids = tuple(record.fact_id for product in products for record in product_fact_records(product))
-        brand_ids = tuple(record.fact_id for record in brand_fact_records(context.brand_reference_context))
+        # A confirmed publication packet remains frozen in the task snapshot,
+        # but a public brand fact is not automatically the subject of every
+        # piece of content.  Only an explicit reference to the current brand
+        # makes those exact facts visible.  ContentRole, profile and the
+        # confirmed expression/method projection still constrain every task.
+        # This is a positive subject binding, not a keyword/after-the-fact
+        # content filter.
+        brand_ids = ContentService._visible_brand_fact_ids(context, user_premise)
         if frame is None:
             return new_frame("general_observation", (), product_ids, brand_ids)
         return new_frame(
@@ -396,6 +405,18 @@ class ContentService:
             product_ids,
             brand_ids,
             user_fact_source_ids=tuple(fact.source_id for fact in frame.user_facts),
+        )
+
+    @staticmethod
+    def _visible_brand_fact_ids(
+        context: BrandContext,
+        user_premise: str,
+    ) -> tuple[str, ...]:
+        if not context.brand_name.strip() or context.brand_name.casefold() not in user_premise.casefold():
+            return ()
+        return tuple(
+            record.fact_id
+            for record in brand_fact_records(context.brand_reference_context)
         )
 
     @staticmethod
@@ -1115,7 +1136,7 @@ class ContentService:
                 (frame.narrative_mode if frame is not None else "general_observation"),
                 (tuple(fact.exact_text for fact in frame.user_facts) if frame is not None else ()),
                 tuple(record.fact_id for product in products for record in product_fact_records(product)),
-                tuple(record.fact_id for record in brand_fact_records(context.brand_reference_context)),
+                self._visible_brand_fact_ids(context, weak_seed),
             )
             creative_plan = self._default_creative_plan(
                 weak_seed,
@@ -1226,7 +1247,7 @@ class ContentService:
                 (frame.narrative_mode if frame is not None else "general_observation"),
                 (tuple(fact.exact_text for fact in frame.user_facts) if frame is not None else ()),
                 tuple(record.fact_id for product in source.products for record in product_fact_records(product)),
-                tuple(record.fact_id for record in brand_fact_records(context.brand_reference_context)),
+                self._visible_brand_fact_ids(context, source_premise),
             )
             creative_plan = self._default_creative_plan(
                 source_premise,
