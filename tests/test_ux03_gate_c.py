@@ -2338,6 +2338,36 @@ def test_actuality_life_units_are_preallocated_as_disclosed_hypothesis() -> None
     assert "其余是创作性推演，不作为这段经历的事实补充" in compiled.body
 
 
+def test_actuality_writer_receives_only_a_fact_count_not_the_reality_text() -> None:
+    fact = "今天喝了一直喝的蓝山咖啡，居然是甜的。"
+    frame = new_frame("actuality_reflection", (fact,), ())
+    request = replace(
+        _generation_input(),
+        weak_seed=fact + "帮我发一条。",
+        narrative_frame=frame,
+        creative_plan=build_creative_plan(
+            topic_spans=(fact,),
+            primary_value="brand_life_narrative",
+            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            mechanism_id=None,
+            target_shape="小红书图文完整成品",
+        ),
+    )
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, kernel, {})
+
+    assert fact not in prompt
+    assert request.weak_seed not in prompt
+    assert '"contract_version": "actuality-writer-brief-v1"' in prompt
+    assert '"frozen_user_fact_count": 1' in prompt
+    assert '"writer_relation": "independent_reflection_only"' in prompt
+    assert "Writer 看不到原句" in prompt
+
+
 def test_p2_server_selects_only_the_three_frozen_product_facts() -> None:
     product = ProductFact(
         sku="ZX-C218",

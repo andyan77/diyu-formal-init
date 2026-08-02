@@ -1408,7 +1408,10 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("CreativeKernelV1 缺少 CreativePlanV2")
         if request.narrative_frame is None:
             raise GenerationFailed("CreativeKernelV1 缺少冻结叙事框架")
-        fact_units = [
+        actuality_reflection = (
+            request.narrative_frame.narrative_mode == "actuality_reflection"
+        )
+        fact_units = [] if actuality_reflection else [
             {
                 "unit_id": unit.unit_id,
                 "text": unit.text,
@@ -1625,6 +1628,13 @@ class DeepSeekGenerator(ContentGenerator):
                 "contract_version": "deidentified-product-writer-brief-v1",
                 "task": _PRODUCT_VALUE[request.primary_product],
             }
+        elif actuality_reflection:
+            topic_projection = {
+                "contract_version": "actuality-writer-brief-v1",
+                "task": _PRODUCT_VALUE[request.primary_product],
+                "frozen_user_fact_count": len(request.narrative_frame.user_facts),
+                "writer_relation": "independent_reflection_only",
+            }
         else:
             topic_projection = request.creative_plan.topic_spans
         packet_projection: object = (
@@ -1752,7 +1762,9 @@ allowed_resources 都由服务端在写作前冻结；每个单元必须逐项�
 {product_creative_rule}
 {account_link_rule}
 
-topic_spans 是用户原话证据，可能同时包含创作命令、控制要求或“尚未想到题材”的状态，不等于
+topic 投影是服务端给 Writer 的受控任务边界。actuality-writer-brief-v1 只告知已有现实
+片段由服务端另行逐字插入，Writer 看不到原句，也不得解释其原因或结果。其他 topic_spans
+是用户原话证据，可能同时包含创作命令、控制要求或“尚未想到题材”的状态，不等于
 必须逐字充当成品题目。若其中没有面向受众的实际题材，系统应根据本篇受众价值、账号边界与
 平台自主选择一个安全、可直接发布的生活观察主线；不得把“如何找选题、如何发内容、缺少
 灵感”本身写成面向受众的元内容，也不得要求用户补交观点或结构。
