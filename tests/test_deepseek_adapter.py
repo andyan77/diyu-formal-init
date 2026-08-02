@@ -1103,6 +1103,11 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
         for candidate in candidates
         if candidate.exact_text == "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
     )
+    instruction_candidates = tuple(
+        candidate.source_id
+        for candidate in candidates
+        if candidate.source_id != fact_candidate.source_id
+    )
     assert "narrative_mode 由\n  服务端根据显式形式与完整事实句选择派生" in prompt
     assert "你不得返回或选择该字段" in prompt
     assert "primary_value 是本篇给受众的主要回报，不是 narrative_mode" in prompt
@@ -1114,6 +1119,9 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
                 "message": "好，我保留这段原话，其他由我来完成。",
                 "user_premises": [message],
                 "user_fact_sentence_ids": [fact_candidate.source_id],
+                "user_instruction_sentence_ids": list(
+                    instruction_candidates
+                ),
                 "narrative_mode": "general_observation",
                 "creative_plan": _intake_plan(message),
             }
@@ -1131,6 +1139,11 @@ def test_conversation_intake_freezes_the_whole_negated_sentence() -> None:
     message = "我没有和婆婆吵架。帮我写条小红书。"
     candidates = user_fact_candidates((message,))
     negated = next(candidate for candidate in candidates if candidate.exact_text == "我没有和婆婆吵架。")
+    instruction_candidates = tuple(
+        candidate.source_id
+        for candidate in candidates
+        if candidate.source_id != negated.source_id
+    )
     request = ConversationInput(
         message=message,
         history=(),
@@ -1148,6 +1161,9 @@ def test_conversation_intake_freezes_the_whole_negated_sentence() -> None:
                 "message": "好，我会保留完整原话。",
                 "user_premises": [message],
                 "user_fact_sentence_ids": [negated.source_id],
+                "user_instruction_sentence_ids": list(
+                    instruction_candidates
+                ),
                 "creative_plan": _intake_plan(message),
             }
         )
@@ -1187,6 +1203,53 @@ def test_conversation_intake_rejects_model_selected_fact_substrings() -> None:
         )
 
 
+def test_conversation_intake_keeps_creation_instruction_out_of_frozen_actuality() -> None:
+    message = "今天店里有人只想自己看看。请回应这种状态，不补写顾客身份、对白或结果。"
+    candidates = user_fact_candidates((message,))
+    fact = next(
+        candidate
+        for candidate in candidates
+        if candidate.exact_text == "今天店里有人只想自己看看。"
+    )
+    instruction = next(
+        candidate
+        for candidate in candidates
+        if candidate.source_id != fact.source_id
+    )
+    request = ConversationInput(
+        message=message,
+        history=(),
+        brand=_brand(),
+        products=(),
+        target="xiaohongshu_graphic",
+        allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        platform_shape="xiaohongshu_graphic:graphic",
+        user_fact_candidates=candidates,
+    )
+    FakeClient.responses = [
+        _completion(
+            {
+                "kind": "ready",
+                "message": "好，我只保留实际观察。",
+                "user_premises": [message],
+                "user_fact_sentence_ids": [fact.source_id],
+                "user_instruction_sentence_ids": [
+                    instruction.source_id
+                ],
+                "creative_plan": _intake_plan(message),
+            }
+        )
+    ]
+
+    decision = _generator().collaborate(request)
+
+    assert decision.user_fact_spans == (fact.exact_text,)
+    assert decision.user_fact_source_ids == (fact.source_id,)
+    assert decision.user_instruction_source_ids == (
+        instruction.source_id,
+    )
+
+
 @pytest.mark.parametrize(
     ("message", "mode", "facts"),
     (
@@ -1219,6 +1282,10 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
                 "message": "可以，直接开始。",
                 "user_premises": [message],
                 "user_fact_sentence_ids": facts,
+                "user_instruction_sentence_ids": [
+                    candidate.source_id
+                    for candidate in user_fact_candidates((message,))
+                ],
                 "narrative_mode": mode,
                 "creative_plan": _intake_plan(message),
             }
@@ -1304,6 +1371,10 @@ def test_conversation_rejects_synthetic_or_mode_drifted_spans() -> None:
                 "message": "开始。",
                 "user_premises": [message],
                 "user_fact_sentence_ids": ["source:user_actuality:invented"],
+                "user_instruction_sentence_ids": [
+                    candidate.source_id
+                    for candidate in user_fact_candidates((message,))
+                ],
                 "narrative_mode": "actuality_reflection",
                 "creative_plan": _intake_plan(message),
             }

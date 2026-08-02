@@ -612,8 +612,13 @@ class DeepSeekGenerator(ContentGenerator):
             )
         raw_premises = document.get("user_premises")
         raw_fact_ids = document.get("user_fact_sentence_ids")
+        raw_instruction_ids = document.get("user_instruction_sentence_ids")
         raw_plan = document.get("creative_plan")
-        if not isinstance(raw_premises, list) or not isinstance(raw_fact_ids, list):
+        if (
+            not isinstance(raw_premises, list)
+            or not isinstance(raw_fact_ids, list)
+            or not isinstance(raw_instruction_ids, list)
+        ):
             raise GenerationFailed("模型协作返回格式不完整")
         premises = self._exact_string_list(raw_premises)
         if request.message not in premises or any(premise not in available_user_turns for premise in premises):
@@ -621,8 +626,20 @@ class DeepSeekGenerator(ContentGenerator):
         candidates = request.user_fact_candidates or user_fact_candidates(available_user_turns)
         candidate_by_id = {candidate.source_id: candidate.exact_text for candidate in candidates}
         fact_source_ids = self._exact_string_list(raw_fact_ids)
+        instruction_source_ids = self._exact_string_list(raw_instruction_ids)
         if any(source_id not in candidate_by_id for source_id in fact_source_ids):
             raise GenerationFailed("模型返回的用户事实句标识不存在")
+        if any(
+            source_id not in candidate_by_id
+            for source_id in instruction_source_ids
+        ):
+            raise GenerationFailed("模型返回的创作指令句标识不存在")
+        if (
+            set(fact_source_ids) & set(instruction_source_ids)
+            or set(fact_source_ids) | set(instruction_source_ids)
+            != set(candidate_by_id)
+        ):
+            raise GenerationFailed("用户句子角色没有完整且互斥地冻结")
         facts = tuple(candidate_by_id[source_id] for source_id in fact_source_ids)
         premise_text = "\n".join(premises)
         if any(fact not in premise_text for fact in facts):
@@ -652,6 +669,7 @@ class DeepSeekGenerator(ContentGenerator):
             user_premises=premises,
             user_fact_spans=facts,
             user_fact_source_ids=fact_source_ids,
+            user_instruction_source_ids=instruction_source_ids,
             narrative_mode=narrative_mode,
             creative_plan=plan,
             primary_product=plan.primary_value,
@@ -3236,6 +3254,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 "creation_proposal":true,"intent_span":"候选用户原话跨度"}}
 {{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制实际使用的用户消息"],
 "user_fact_sentence_ids":["只能选择服务端候选 sentence_id，不能返回或裁剪事实正文"],
+"user_instruction_sentence_ids":["只控制创作动作、写法或边界的完整候选 sentence_id"],
 "creative_plan":{{"plan_version":"creative-plan-v2","topic_spans":["只能逐字截取用户消息"],
 "primary_value":"dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story",
 "tone_ids":["只选允许 id"],"mechanism_id":null,"platform_shape":"{request.platform_shape}",
@@ -3260,6 +3279,10 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   actuality_reflection，并只选择完整服务端事实句 ID，不得裁剪、概括或改写；明确条件推演
   与明确故事／短剧／情境演绎不属于现实事实，user_fact_sentence_ids 必须为空。narrative_mode 由
   服务端根据显式形式与完整事实句选择派生，你不得返回或选择该字段。
+- ready 时必须把每个服务端候选 sentence_id 恰好归入一类：直接陈述可观察现实的完整句进入
+  user_fact_sentence_ids；只要求生成、规定写法、限定不得补写什么或表达题材偏好的完整句进入
+  user_instruction_sentence_ids。两组不能重叠、不能漏项。一个完整候选同时含有现实片段和创作
+  命令时，保留整句为现实事实，不得裁剪；相邻的独立指令句绝不能冒充真人事实。
 - 显式模式为 dramatization 时必须使用它；没有明确演绎要求不得升级为剧情。
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
 - CreativePlanV2 只能选择上述结构字段。topic_spans 必须逐字来自用户消息；禁止写人物设定、

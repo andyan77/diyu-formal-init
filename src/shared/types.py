@@ -340,6 +340,7 @@ class ConversationDecision:
     user_premises: tuple[str, ...] = ()
     user_fact_spans: tuple[str, ...] = ()
     user_fact_source_ids: tuple[str, ...] = ()
+    user_instruction_source_ids: tuple[str, ...] = ()
     narrative_mode: NarrativeMode | None = None
     creative_plan: CreativePlanV2 | None = None
     primary_product: ContentProduct | None = None
