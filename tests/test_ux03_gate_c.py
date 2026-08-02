@@ -3188,6 +3188,55 @@ def test_current_actuality_account_body_is_prospective_not_causal_explanation() 
     )
 
 
+def test_current_p1_writer_brief_is_bounded_and_does_not_license_product_performance() -> None:
+    request = _generation_input()
+    request = replace(
+        request,
+        primary_product="dressing_decision",
+        products=(),
+    )
+    assert request.narrative_frame is not None
+    context = BoundaryContext.from_request(request, request.narrative_frame)
+    kernel = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=context.fact_registry,
+        constraint_refs=tuple(
+            identifier for identifier, _ in context.constraint_registry
+        ),
+        program_id=select_kernel_program(
+            frame=request.narrative_frame,
+            prior_kernel=None,
+            revision_instruction=None,
+        ),
+        allowed_resource_ids=(),
+        media_format="video",
+        kernel_version=KERNEL_VERSION,
+        primary_product="dressing_decision",
+    )
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, kernel, {})
+
+    assert "dressing-decision-publication-brief-v1" in prompt
+    assert "二百二十字符是硬上限" in prompt
+    assert "没有 ProductFact" in prompt
+    assert "decision_responsibility" in prompt
+
+    too_long = replace(
+        kernel,
+        units=tuple(
+            replace(unit, text=("选择。" * 80))
+            if unit.unit_id == "unit:body"
+            else replace(unit, text="自然文字")
+            for unit in kernel.units
+        ),
+    )
+    with pytest.raises(GenerationFailed, match="可直接观看的长度"):
+        DeepSeekGenerator._assert_p1_publication_shape(request, too_long)
+
+
 @pytest.mark.parametrize("copies_profile", (False, True))
 def test_p3_writer_must_naturalize_the_frozen_account_link(
     monkeypatch: pytest.MonkeyPatch,

@@ -233,6 +233,18 @@ _PRODUCT_VALUE: dict[ContentProduct, str] = {
         "在不知道两个当前对象身份或属性的前提下，提供一套观察两个已确认视觉锚点之间关系、比较差异并保留个人判断的顺序"
     ),
 }
+_P1_PUBLICATION_BRIEF: dict[str, str] = {
+    "contract_version": "dressing-decision-publication-brief-v1",
+    "title": "只呈现本次两个以上已知条件之间的选择张力，不承诺结果。",
+    "natural_guide": "一句话告诉受众将得到哪条具体选择路径，不复述标题。",
+    "body": (
+        "在二百二十个可见字符内完成：先给一条最小选择，再说明少带与细分调节之间的取舍，"
+        "最后给一个出门前可执行的判断动作。只可使用用户已给条件和一般服装类别；没有"
+        "ProductFact 时，不声称任何面料、版型或单品具有透气、吸汗、防风、保暖、舒适、"
+        "显瘦、易收纳等属性或效果，也不增加天气、行程、背包和穿着体验事实。"
+    ),
+    "release_caption": "用一句自然文字保留本次条件和下一动作，不重复正文或承诺效果。",
+}
 _MODE_BLOCK_TYPE: dict[NarrativeMode, NarrativeBlockType] = {
     "actuality_reflection": "general_observation",
     "general_observation": "general_observation",
@@ -953,6 +965,7 @@ class DeepSeekGenerator(ContentGenerator):
                 raise GenerationFailed("CreativeKernelV1 关系表达修复格式不完整") from exc
         self._assert_p3_account_link_natural(request, kernel)
         self._assert_no_unfrozen_actuality_dialogue(request, kernel)
+        self._assert_p1_publication_shape(request, kernel)
         if request.revision_instruction and request.prior_creative_kernel:
             before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
             after = tuple(unit.text for unit in kernel.writable_units)
@@ -1526,6 +1539,19 @@ class DeepSeekGenerator(ContentGenerator):
             if account_editorial_lens is not None
             else {}
         )
+        p1_unit_responsibilities = (
+            {
+                purpose: _P1_PUBLICATION_BRIEF[purpose]
+                for purpose in (
+                    "title",
+                    "natural_guide",
+                    "body",
+                    "release_caption",
+                )
+            }
+            if request.primary_product == "dressing_decision"
+            else {}
+        )
         expression_requirement_by_mode = {
             "general_observation": (
                 "只写不绑定当前用户、品牌、员工、顾客或门店的一般命题；不续写本次事实中的"
@@ -1598,6 +1624,15 @@ class DeepSeekGenerator(ContentGenerator):
                         )
                     }
                     if unit.purpose in account_unit_responsibilities
+                    else {}
+                ),
+                **(
+                    {
+                        "decision_responsibility": (
+                            p1_unit_responsibilities[unit.purpose]
+                        )
+                    }
+                    if unit.purpose in p1_unit_responsibilities
                     else {}
                 ),
             }
@@ -1750,6 +1785,15 @@ series_progression_boundary，产生新的判断或受众动作。"""
             if request.primary_product in {"brand_life_narrative", "local_response"}
             else ""
         )
+        dressing_decision_rule = (
+            """本篇必须逐项遵守 dressing-decision-publication-brief-v1。四个可见 unit 各自承担
+不同责任，body 的二百二十字符是硬上限，不得用更多段落、同义复述或性能形容词换取完整感。
+这是一般穿衣选择帮助，不是某件商品的事实说明；没有 ProductFact 就不能把一种服装类别
+写成具有特定面料、版型、功能或效果。选择必须同时说清成立条件、少带东西带来的取舍和
+一个可执行下一动作，不能只堆叠单品清单。"""
+            if request.primary_product == "dressing_decision"
+            else ""
+        )
         brand_context_projection = {
             "contract_version": "writer-publication-brief-v1",
             "publication_projection": (
@@ -1863,6 +1907,7 @@ allowed_resources 都由服务端在写作前冻结；每个单元必须逐项�
 
 {product_creative_rule}
 {account_link_rule}
+{dressing_decision_rule}
 
 topic 投影是服务端给 Writer 的受控任务边界。actuality-writer-brief-v2 中的现实片段已经
 由服务端逐字冻结，并会由 Compiler 另行插入一次。Writer 只用它确定本篇实际观察对象，
@@ -2690,6 +2735,29 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             raise GenerationFailed("当前账号缺少可冻结的账号表达路径")
         if cls._copied_account_profile_units(request, kernel):
             raise GenerationFailed("Writer 成品仍在照抄账号画像标签")
+
+    @staticmethod
+    def _assert_p1_publication_shape(
+        request: GenerationInput,
+        kernel: CreativeKernelV1,
+    ) -> None:
+        if (
+            request.primary_product != "dressing_decision"
+            or kernel.kernel_version != KERNEL_VERSION
+        ):
+            return
+        limits = {
+            "unit:title": 36,
+            "unit:natural-guide": 64,
+            "unit:body": 220,
+            "unit:release-caption": 80,
+        }
+        for unit_id, limit in limits.items():
+            visible_length = len("".join(kernel.unit(unit_id).text.split()))
+            if visible_length > limit:
+                raise GenerationFailed(
+                    "本次穿衣选择没有在可直接观看的长度内完成"
+                )
 
     @classmethod
     def _copied_account_profile_units(
