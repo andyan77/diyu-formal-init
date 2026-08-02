@@ -83,6 +83,7 @@ from src.shared.delivery_compiler import (
     _visible_unit,
     compile_delivery,
     compiler_owned_media_unit_texts,
+    suppress_exact_writer_fact_duplicates,
 )
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import (
@@ -3293,7 +3294,7 @@ def test_product_writer_receives_semantic_plan_without_product_fact_literals() -
         assert private_literal not in prompt
 
 
-def test_actuality_writer_cannot_repeat_the_frozen_fact(
+def test_compiler_suppresses_only_byte_exact_writer_fact_duplicate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _p3_account_link_request()
@@ -3313,17 +3314,94 @@ def test_actuality_writer_cannot_repeat_the_frozen_fact(
         nonlocal request_count
         request_count += 1
         del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
-        units = _publication_writer_units(body=fact)
+        units = _publication_writer_units(body=f"保留开头。{fact}保留结尾。")
         return {"choices": [{"message": {"content": json.dumps({"units": units}, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
-    with pytest.raises(GenerationFailed, match="不得复述冻结现实"):
-        DeepSeekGenerator(
-            "https://example.invalid",
-            "not-a-real-key",
-            "deepseek-test",
-        ).generate(request)
+    artifact = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    ).generate(request)
+    assert artifact.body.count(fact) == 1
+    assert "保留开头。保留结尾。" in artifact.body
     assert request_count == 1
+
+
+def test_compiler_does_not_normalize_or_fuzz_near_fact_copy() -> None:
+    request = _p3_account_link_request()
+    assert request.narrative_frame is not None
+    fact = request.narrative_frame.user_facts[0].exact_text
+    near_copy = fact[:-1]
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    kernel = replace(
+        kernel,
+        units=tuple(
+            replace(unit, text=f"前文。{near_copy}后文。")
+            if unit.purpose == "body"
+            else unit
+            for unit in kernel.units
+        ),
+    )
+
+    normalized = suppress_exact_writer_fact_duplicates(
+        _compile_input(request),
+        kernel,
+    )
+
+    assert normalized.unit("unit:body").text == f"前文。{near_copy}后文。"
+
+    compatibility_request = replace(
+        _compile_input(request),
+        trusted_fact_texts=(("fact:compatibility", "ＡＢＣ"),),
+    )
+    compatibility_kernel = replace(
+        kernel,
+        units=tuple(
+            replace(unit, text="ABC")
+            if unit.purpose == "body"
+            else unit
+            for unit in kernel.units
+        ),
+    )
+    assert suppress_exact_writer_fact_duplicates(
+        compatibility_request,
+        compatibility_kernel,
+    ).unit("unit:body").text == "ABC"
+
+
+def test_compiler_suppresses_complete_writer_unit_but_not_replayed_unit() -> None:
+    request = _p3_account_link_request()
+    assert request.narrative_frame is not None
+    fact = request.narrative_frame.user_facts[0].exact_text
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    writer_kernel = replace(
+        kernel,
+        units=tuple(
+            replace(unit, text=fact)
+            if unit.purpose == "body"
+            else unit
+            for unit in kernel.units
+        ),
+    )
+    replayed_kernel = replace(
+        writer_kernel,
+        units=tuple(
+            replace(unit, text_source="prior_version")
+            if unit.purpose == "body"
+            else unit
+            for unit in writer_kernel.units
+        ),
+    )
+
+    assert suppress_exact_writer_fact_duplicates(
+        _compile_input(request),
+        writer_kernel,
+    ).unit("unit:body").text == ""
+    assert suppress_exact_writer_fact_duplicates(
+        _compile_input(request),
+        replayed_kernel,
+    ).unit("unit:body").text == fact
 
 
 def test_publication_writer_cannot_return_or_replace_a_frozen_fact_unit(

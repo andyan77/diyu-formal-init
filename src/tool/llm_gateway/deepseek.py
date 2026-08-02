@@ -75,6 +75,7 @@ from src.shared.delivery_compiler import (
     DeliveryCompileInput,
     assert_compiled_delivery,
     compile_delivery,
+    suppress_exact_writer_fact_duplicates,
 )
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import (
@@ -914,6 +915,10 @@ class DeepSeekGenerator(ContentGenerator):
             json.JSONDecodeError,
         ) as exc:
             raise GenerationFailed("CreativeKernelV1 Writer 返回格式不完整") from exc
+        kernel = suppress_exact_writer_fact_duplicates(
+            delivery_input,
+            kernel,
+        )
         receipts: tuple[FactRepairReceipt, ...] = ()
         affected_product_units = self._product_fact_repetition_units(
             context,

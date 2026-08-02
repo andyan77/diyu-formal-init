@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal, TypeAlias
 
 from src.shared.creative_kernel import (
@@ -206,9 +206,58 @@ def compile_delivery(
     request: DeliveryCompileInput,
     kernel: CreativeKernelV1,
 ) -> CompiledDelivery:
+    kernel = suppress_exact_writer_fact_duplicates(request, kernel)
     compiled = _compile_delivery(request, kernel)
     assert_compiled_delivery(request, kernel, compiled)
     return compiled
+
+
+def suppress_exact_writer_fact_duplicates(
+    request: DeliveryCompileInput,
+    kernel: CreativeKernelV1,
+) -> CreativeKernelV1:
+    """Remove only byte-exact frozen-fact copies from new Writer units.
+
+    The trusted fact unit remains the sole visible owner of the source text.
+    This intentionally performs no Unicode normalization, whitespace folding,
+    similarity matching or semantic rewriting.  Historical and replayed units
+    are left byte-for-byte unchanged.
+    """
+
+    if request.publication_contract is None:
+        return kernel
+    frozen_bytes = tuple(
+        dict.fromkeys(
+            exact_text.encode("utf-8")
+            for _, exact_text in request.trusted_fact_texts
+            if exact_text
+        )
+    )
+    if not frozen_bytes:
+        return kernel
+    changed = False
+    deduplicated_units: list[CreativeKernelUnit] = []
+    for unit in kernel.units:
+        if unit.track != "creative_expression" or unit.text_source != "writer":
+            deduplicated_units.append(unit)
+            continue
+        raw_bytes = unit.text.encode("utf-8")
+        normalized_bytes = raw_bytes
+        for frozen_text in frozen_bytes:
+            normalized_bytes = normalized_bytes.replace(frozen_text, b"")
+        if normalized_bytes == raw_bytes:
+            deduplicated_units.append(unit)
+            continue
+        changed = True
+        deduplicated_units.append(
+            replace(
+                unit,
+                text=normalized_bytes.decode("utf-8"),
+            )
+        )
+    if not changed:
+        return kernel
+    return replace(kernel, units=tuple(deduplicated_units))
 
 
 def assert_compiled_delivery(
@@ -216,6 +265,7 @@ def assert_compiled_delivery(
     kernel: CreativeKernelV1,
     compiled: CompiledDelivery,
 ) -> None:
+    kernel = suppress_exact_writer_fact_duplicates(request, kernel)
     _assert_immutable_fact_blocks(request, kernel)
     _assert_expression_plan(request, kernel)
     expected = _compile_delivery(request, kernel)
