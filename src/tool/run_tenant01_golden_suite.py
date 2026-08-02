@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
@@ -40,15 +41,90 @@ from src.tool.tenant01_evidence import (
     TENANT01_CARD_IDS,
     TENANT01_COMPARISON_FIELDS,
     TENANT01_DEMONSTRATION_CHECKS,
+    TENANT01_GENERATION_LEDGER_FILE,
+    TENANT01_GENERATION_LEDGER_VERSION,
     TENANT01_HARD_BOUNDARIES,
+    TENANT01_PROVIDER_MODEL,
+    TENANT01_RAW_BUNDLE_VERSION,
     TENANT01_REVIEW_DIMENSIONS,
+    TENANT01_SUITE_VERSION,
     Tenant01ArtifactInput,
+    Tenant01EvidenceError,
     Tenant01HumanReview,
+    compile_tenant01_snapshot_delivery,
+    sha256_file,
     write_tenant01_evidence,
 )
 
-_SUITE_VERSION = "TENANT-01-GOLDEN-V1"
-_MODEL = "deepseek-v4-flash"
+_SUITE_VERSION = TENANT01_SUITE_VERSION
+_MODEL = TENANT01_PROVIDER_MODEL
+_FINAL_OUTPUT_FILES = ("human-review.json", "manifest.json", "SHA256SUMS")
+_FAILURE_MARKER_FILES = ("suite-failure.json", "human-review-failure.json")
+
+
+def _canonical_digest(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+
+
+def _is_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+class _Tenant01EvidenceGenerator(_EvidenceDeepSeekGenerator):
+    """Add stage and request bindings to the inherited raw provider trace."""
+
+    def _request(
+        self,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        payload, retries = super()._request(
+            system,
+            prompt,
+            max_tokens,
+            thinking_disabled=thinking_disabled,
+            timeout_seconds=timeout_seconds,
+        )
+        request_index = len(self._responses)
+        if request_index not in {1, 2} or payload.get("model") != _MODEL:
+            raise RuntimeError("TENANT-01 provider stage or model drifted")
+        stages = ("intake", "writer")
+        request_payload: dict[str, object] = {
+            "model": _MODEL,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.0,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+        }
+        if thinking_disabled:
+            request_payload["thinking"] = {"type": "disabled"}
+        self._responses[-1].update(
+            {
+                "stage": stages[request_index - 1],
+                "model": _MODEL,
+                "request_sha256": _canonical_digest(request_payload),
+                "response_sha256": _canonical_digest(payload),
+            }
+        )
+        return payload, retries
 
 
 @dataclass(frozen=True)
@@ -231,6 +307,69 @@ def _artifact(
         raise RuntimeError(f"{card.card_id}: visible title is unavailable")
     if not isinstance(body, str) or not body.strip():
         raise RuntimeError(f"{card.card_id}: visible body is unavailable")
+    formal_snapshot = {
+        key: snapshot.get(key)
+        for key in (
+            "brand_context_packet",
+            "account_expression_profile_id",
+            "account_expression_profile_version",
+            "account_expression",
+            "original_direction",
+            "user_premise",
+            "content_role",
+            "product_facts",
+            "product_value_contract",
+            "product_value_contract_digest",
+            "publication_contract",
+            "publication_contract_digest",
+            "delivery_compiler_version",
+            "writer_model",
+            "immutable_product_fact_blocks",
+            "visible_provenance",
+            "delivery_resource_refs",
+            "media_capability_envelope",
+            "media_capability_envelope_digest",
+            "media_program",
+            "media_program_digest",
+            "series_context",
+            "narrative_frame",
+            "creative_plan_v2",
+            "creative_kernel_v2",
+            "expression_plan_digest",
+            "reviewed_kernel_digest",
+            "reviewed_creative_digest",
+        )
+    }
+    formal_snapshot["publishing_target"] = card.target
+    if formal_snapshot.get("user_premise") != card.message:
+        raise RuntimeError(
+            f"{card.card_id}: frozen premise drifted from the golden card"
+        )
+    try:
+        compiled = compile_tenant01_snapshot_delivery(
+            formal_snapshot,
+            card_id=card.card_id,
+        )
+    except Tenant01EvidenceError as exc:
+        raise RuntimeError(
+            f"{card.card_id}: frozen snapshot cannot rebuild production"
+        ) from exc
+    if compiled.outline != outline or compiled.body != body:
+        raise RuntimeError(
+            f"{card.card_id}: API result drifted from deterministic delivery"
+        )
+    expected_provenance = {
+        field: list(sources)
+        for field, sources in compiled.visible_provenance.items()
+    }
+    if (
+        formal_snapshot.get("visible_provenance") != expected_provenance
+        or formal_snapshot.get("delivery_resource_refs")
+        != list(compiled.resource_refs)
+    ):
+        raise RuntimeError(
+            f"{card.card_id}: persisted delivery bindings drifted from compilation"
+        )
     return {
         "suite_version": _SUITE_VERSION,
         "card_id": card.card_id,
@@ -241,29 +380,135 @@ def _artifact(
         "outline": outline,
         "body": body,
         "visible_digest": visible_digest(outline, body),
-        "production": result.get("production"),
+        "production": asdict(compiled.production),
         "ai_generated": result.get("ai_generated"),
         "aigc_label": result.get("aigc_label"),
         "aigc_release_reminder": result.get("aigc_release_reminder"),
-        "formal_snapshot": {
-            key: snapshot.get(key)
-            for key in (
-                "brand_context_packet",
-                "account_editorial_lens",
-                "account_editorial_lens_digest",
-                "profile_version",
-                "content_role",
-                "publishing_target",
-                "product_facts",
-                "media_capability_envelope",
-                "media_program",
-                "series_context",
-                "narrative_frame",
-                "server_bearing_expression_contract",
-                "server_bearing_expression_digest",
-            )
-        },
+        "formal_snapshot": formal_snapshot,
     }
+
+
+def _write_generation_ledger(
+    root: Path,
+    *,
+    implementation_sha: str,
+    cards: tuple[_Card, ...],
+) -> str:
+    records: list[dict[str, object]] = []
+    identifiers: dict[str, list[str]] = {
+        "task_id": [],
+        "run_id": [],
+        "version_id": [],
+    }
+    for card in cards:
+        artifact_file = f"{card.card_id}.artifact.json"
+        raw_response_file = f"{card.card_id}.raw.json"
+        artifact_path = root / artifact_file
+        raw_path = root / raw_response_file
+        artifact = _json_object(artifact_path)
+        raw = _json_object(raw_path)
+        version = artifact.get("version")
+        responses = raw.get("responses")
+        if (
+            artifact.get("suite_version") != _SUITE_VERSION
+            or artifact.get("card_id") != card.card_id
+            or raw.get("raw_bundle_version") != TENANT01_RAW_BUNDLE_VERSION
+            or raw.get("card_id") != card.card_id
+            or type(version) is not int
+            or version < 1
+            or not _is_sha256(artifact.get("visible_digest"))
+            or type(raw.get("request_count")) is not int
+            or not isinstance(responses, list)
+            or raw.get("request_count") != len(responses)
+            or len(responses) != 2
+        ):
+            raise RuntimeError(f"{card.card_id}: cannot freeze generation ledger")
+        for field in identifiers:
+            value = str(UUID(str(artifact.get(field))))
+            identifiers[field].append(value)
+        stages: list[str] = []
+        request_hashes: list[str] = []
+        response_hashes: list[str] = []
+        expected_stages = ("intake", "writer")
+        for request_index, response in enumerate(responses, start=1):
+            payload = response.get("response") if isinstance(response, dict) else None
+            if (
+                not isinstance(response, dict)
+                or set(response)
+                != {
+                    "request_index",
+                    "transport_retries",
+                    "stage",
+                    "model",
+                    "request_sha256",
+                    "response_sha256",
+                    "response",
+                }
+                or response.get("request_index") != request_index
+                or response.get("transport_retries") != 0
+                or response.get("stage")
+                != expected_stages[request_index - 1]
+                or response.get("model") != _MODEL
+                or not _is_sha256(response.get("request_sha256"))
+                or not _is_sha256(response.get("response_sha256"))
+                or not isinstance(payload, dict)
+                or not payload
+                or payload.get("model") != _MODEL
+                or _canonical_digest(payload) != response.get("response_sha256")
+            ):
+                raise RuntimeError(f"{card.card_id}: raw stage cannot enter generation ledger")
+            choices = payload.get("choices")
+            first_choice = choices[0] if isinstance(choices, list) and choices else None
+            message = (
+                first_choice.get("message")
+                if isinstance(first_choice, dict)
+                else None
+            )
+            if (
+                not isinstance(message, dict)
+                or not isinstance(message.get("content"), str)
+                or not str(message["content"]).strip()
+            ):
+                raise RuntimeError(
+                    f"{card.card_id}: empty raw response cannot enter generation ledger"
+                )
+            stages.append(str(response.get("stage", "")))
+            request_hashes.append(str(response.get("request_sha256", "")))
+            response_hashes.append(str(response.get("response_sha256", "")))
+        records.append(
+            {
+                "card_id": card.card_id,
+                **{field: values[-1] for field, values in identifiers.items()},
+                "version": version,
+                "artifact_file": artifact_file,
+                "artifact_sha256": sha256_file(artifact_path),
+                "visible_digest": artifact.get("visible_digest"),
+                "raw_response_file": raw_response_file,
+                "raw_response_sha256": sha256_file(raw_path),
+                "provider_stages": stages,
+                "request_hashes": request_hashes,
+                "response_hashes": response_hashes,
+            }
+        )
+    if any(len(set(values)) != len(values) for values in identifiers.values()):
+        raise RuntimeError("TENANT-01 generation reused persistence identifiers")
+    ledger_path = root / TENANT01_GENERATION_LEDGER_FILE
+    _write_private_json(
+        ledger_path,
+        {
+            "ledger_version": TENANT01_GENERATION_LEDGER_VERSION,
+            "suite_version": _SUITE_VERSION,
+            "implementation_sha": implementation_sha,
+            "provider_config": {
+                "model": _MODEL,
+                "temperature": 0,
+                "max_retries": 0,
+            },
+            "cards": records,
+        },
+    )
+    ledger_path.chmod(0o400)
+    return sha256_file(ledger_path)
 
 
 def _p5_preflight(
@@ -331,7 +576,7 @@ def _generate(args: argparse.Namespace) -> None:
         PostgresContentControlRepository(database_url),
         object_store,
     )
-    generator = _EvidenceDeepSeekGenerator(
+    generator = _Tenant01EvidenceGenerator(
         evidence_root=root,
         allowed_card_ids=TENANT01_CARD_IDS,
         api_base_url=cast(str, settings.deepseek_api_base_url),
@@ -401,6 +646,11 @@ def _generate(args: argparse.Namespace) -> None:
             root / "p5-no-media.json",
             _p5_preflight(client, database_url=database_url, journey=journey),
         )
+    ledger_sha256 = _write_generation_ledger(
+        root,
+        implementation_sha=implementation_sha,
+        cards=cards,
+    )
     _write_private_json(
         root / "suite-config.json",
         {
@@ -412,6 +662,10 @@ def _generate(args: argparse.Namespace) -> None:
                 "max_retries": 0,
             },
             "cards": [card.card_id for card in cards],
+            "generation_ledger": {
+                "file": TENANT01_GENERATION_LEDGER_FILE,
+                "sha256": ledger_sha256,
+            },
         },
     )
 
@@ -458,10 +712,18 @@ def _reviews(path: Path) -> tuple[Tenant01HumanReview, ...]:
             not isinstance(value, str) for value in comparison.values()
         ):
             raise ValueError("TENANT-01 cross-card comparison is invalid")
+        artifact_sha256 = raw.get("artifact_sha256")
+        visible_digest_value = raw.get("visible_digest")
+        if not _is_sha256(artifact_sha256) or not _is_sha256(
+            visible_digest_value
+        ):
+            raise ValueError("TENANT-01 human review is not artifact-bound")
         reviews.append(
             Tenant01HumanReview(
                 card_id=str(raw.get("card_id", "")),
                 artifact_file=str(raw.get("artifact_file", "")),
+                artifact_sha256=cast(str, artifact_sha256),
+                visible_digest=cast(str, visible_digest_value),
                 scores={str(key): cast(int, value) for key, value in scores.items()},
                 excerpts={str(key): str(value) for key, value in excerpts.items()},
                 hard_boundaries={str(key): cast(bool, value) for key, value in boundaries.items()},
@@ -478,11 +740,81 @@ def _reviews(path: Path) -> tuple[Tenant01HumanReview, ...]:
     return tuple(reviews)
 
 
+def _assert_finalizable_evidence_root(
+    root: Path,
+    *,
+    implementation_sha: str,
+) -> None:
+    if not root.is_dir() or root.stat().st_mode & 0o077:
+        raise RuntimeError("TENANT-01 evidence root is unavailable or not private")
+    failure_markers = sorted(
+        {
+            *(path.name for path in root.glob("*.failed.raw.json")),
+            *(filename for filename in _FAILURE_MARKER_FILES if (root / filename).exists()),
+        }
+    )
+    if failure_markers:
+        raise RuntimeError("TENANT-01 failed evidence root is immutable and cannot be finalized")
+    if any((root / filename).exists() for filename in _FINAL_OUTPUT_FILES):
+        raise RuntimeError("TENANT-01 final evidence outputs already exist")
+    config_path = root / "suite-config.json"
+    if not config_path.is_file():
+        raise RuntimeError("TENANT-01 final suite config is unavailable")
+    config = _json_object(config_path)
+    if config.get("evidence_kind") is not None:
+        raise RuntimeError("TENANT-01 WIP evidence cannot be finalized")
+    if set(config) != {
+        "suite_version",
+        "implementation_sha",
+        "provider_config",
+        "cards",
+        "generation_ledger",
+    }:
+        raise RuntimeError("TENANT-01 final suite config fields drifted")
+    provider = config.get("provider_config")
+    cards = config.get("cards")
+    ledger = config.get("generation_ledger")
+    if (
+        config.get("suite_version") != _SUITE_VERSION
+        or config.get("implementation_sha") != implementation_sha
+        or not isinstance(provider, dict)
+        or set(provider) != {"model", "temperature", "max_retries"}
+        or provider.get("model") != _MODEL
+        or type(provider.get("temperature")) is not int
+        or provider.get("temperature") != 0
+        or type(provider.get("max_retries")) is not int
+        or provider.get("max_retries") != 0
+        or not isinstance(cards, list)
+        or any(not isinstance(card_id, str) for card_id in cards)
+        or set(cards) != TENANT01_CARD_IDS
+        or len(cards) != len(TENANT01_CARD_IDS)
+        or not isinstance(ledger, dict)
+        or set(ledger) != {"file", "sha256"}
+        or ledger.get("file") != TENANT01_GENERATION_LEDGER_FILE
+        or not _is_sha256(ledger.get("sha256"))
+    ):
+        raise RuntimeError("TENANT-01 final suite config is not authoritative")
+    ledger_path = root / TENANT01_GENERATION_LEDGER_FILE
+    if (
+        not ledger_path.is_file()
+        or ledger_path.stat().st_mode & 0o077
+        or ledger_path.stat().st_mode & 0o222
+        or sha256_file(ledger_path) != ledger["sha256"]
+    ):
+        raise RuntimeError("TENANT-01 generation ledger is unavailable or mutable")
+
+
 def _finalize(args: argparse.Namespace) -> None:
     root = Path(args.evidence_root).resolve()
     implementation_sha = _current_head()
     if implementation_sha != args.implementation_sha:
         raise RuntimeError("current HEAD is not the frozen implementation SHA")
+    if _git_status():
+        raise RuntimeError("TENANT-01 finalization requires a clean worktree")
+    _assert_finalizable_evidence_root(
+        root,
+        implementation_sha=implementation_sha,
+    )
     write_tenant01_evidence(
         root,
         implementation_sha=implementation_sha,

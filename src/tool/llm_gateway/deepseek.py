@@ -49,8 +49,8 @@ from src.shared.creative_kernel import (
     LEGACY_KERNEL_VERSION,
     MAX_PRODUCT_FACT_BLOCKS,
     MEDIA_NATIVE_KERNEL_VERSION,
+    OBSERVATION_ONLY_PROGRAM,
     CreativeKernelV1,
-    apply_server_bearing_expression_contract,
     build_kernel_skeleton,
     compiler_owned_unit_source,
     compiler_owned_unit_texts,
@@ -114,6 +114,12 @@ from src.shared.product_value import (
     product_value_contract_digest,
     product_value_contract_document,
 )
+from src.shared.publication_contract import (
+    NEGATIVE_SAFETY_RULES,
+    IntakeSpanRole,
+    publication_contract_digest,
+    publication_contract_document,
+)
 from src.shared.review_evidence import (
     ClauseContextV2,
     UnitContractV2,
@@ -121,14 +127,6 @@ from src.shared.review_evidence import (
     unit_contracts_v2,
     validate_server_owned_contexts_v2,
     writer_clause_contexts_v2,
-)
-from src.shared.server_bearing_expression import (
-    P1_SELECTION_UNIT_ID,
-    ServerBearingExpressionContractV1,
-    assert_server_bearing_expression_matches,
-    build_server_bearing_expression_contract,
-    server_bearing_expression_digest,
-    server_bearing_expression_document,
 )
 from src.shared.service_status import ProviderState, ProviderStatusTracker
 from src.shared.types import (
@@ -183,232 +181,6 @@ _REQUEST_SCOPED_ERROR_CODES = frozenset(
         "invalid_response_format",
     }
 )
-
-
-def _body_editorial_responsibility(
-    *,
-    unit_id: str,
-    base_responsibility: str,
-    series_position: int | None,
-) -> str:
-    """Give each preallocated body unit one non-overlapping editorial job."""
-
-    if unit_id == "unit:body-opening":
-        if series_position is not None and series_position >= 3:
-            specific = "只比较前两篇已经推进到哪里，并命名本篇新增的可观察边界；"
-        elif series_position == 2:
-            specific = "只承接第一篇尚未解决的问题，并提出第二篇的新可观察判断标准；"
-        else:
-            specific = "只提出本题独有、可以直接观察的一处张力或差异；"
-        return base_responsibility + specific + "本单元不列并行选项，不给行动建议，也不提前收束。"
-    if unit_id == "unit:hypothetical-example":
-        if series_position is not None and series_position >= 3:
-            specific = "只用一个条件化选择检验第三篇的新边界，不复用第二篇的判断信号或动作；"
-        elif series_position == 2:
-            specific = "只用一个条件化选择检验第二篇新增判断，不复述第一篇或本篇开头；"
-        else:
-            specific = "只用一个清楚的条件化片段检验上一单元的观察；"
-        return base_responsibility + specific + "本单元不再提出第二组选择，也不代替结尾给行动。"
-    if unit_id == "unit:body-closing":
-        if series_position is not None and series_position >= 3:
-            specific = "只完成第三篇的推进：回应之后停止加码，把下一步选择明确交还对方；"
-        elif series_position == 2:
-            specific = "只完成第二篇的推进：在对方给出明确回应时，接住其中一个具体点；"
-        else:
-            specific = "只给受众一个下一次可以直接使用的有限动作或问题；"
-        return base_responsibility + specific + "不总结前两单元，不再次列举两种做法。"
-    return base_responsibility
-
-
-def _claim_bounded_body_responsibility(
-    *,
-    unit_id: str,
-    base_responsibility: str,
-    series_position: int | None,
-    primary_product: ContentProduct,
-    narrative_mode: str,
-) -> str:
-    """Keep new non-bearing prose inside one unit-specific claim job."""
-
-    responsibility = _body_editorial_responsibility(
-        unit_id=unit_id,
-        base_responsibility=base_responsibility,
-        series_position=series_position,
-    )
-    if (
-        primary_product != "brand_life_narrative"
-        or narrative_mode != "general_observation"
-        or series_position is not None
-    ):
-        return responsibility
-    unit_boundary = {
-        "unit:body-opening": (
-            "本单元必须只写一句以中文问号结尾的直接选择问题；问号前不得先写陈述结论。"
-            "不得陈述某个选择会决定或改变关系、人物及结果。"
-        ),
-        "unit:hypothetical-example": (
-            "本单元只在明确“如果”条件下并列两个可选做法；不得说明任一做法会产生什么"
-            "关系、人物或结果变化。"
-        ),
-        "unit:body-closing": (
-            "本单元只留下下一次可自行决定的观察动作；不总结关系规律或预告行动效果。"
-        ),
-    }.get(unit_id, "")
-    return f"{responsibility}{unit_boundary}"
-
-
-def _non_bearing_unit_text_shape(
-    *,
-    unit_id: str,
-    primary_product: ContentProduct,
-    narrative_mode: str,
-    series_position: int | None,
-) -> str | None:
-    if (
-        primary_product != "brand_life_narrative"
-        or narrative_mode != "general_observation"
-        or series_position is not None
-    ):
-        return None
-    return {
-        "unit:body-opening": "one_direct_choice_question_ending_with_？",
-        "unit:hypothetical-example": "one_if_condition_with_two_optional_actions",
-        "unit:body-closing": "one_optional_observation_action_without_result_claim",
-    }.get(unit_id)
-
-
-def _claim_bounded_editorial_responsibility(
-    *,
-    unit_id: str,
-    purpose: str,
-    base_responsibility: str,
-    series_position: int | None,
-    primary_product: ContentProduct,
-    narrative_mode: str,
-) -> str:
-    """Apply the same closed claim boundary to every Writer-visible purpose."""
-
-    if purpose == "body":
-        return _claim_bounded_body_responsibility(
-            unit_id=unit_id,
-            base_responsibility=base_responsibility,
-            series_position=series_position,
-            primary_product=primary_product,
-            narrative_mode=narrative_mode,
-        )
-    if (
-        primary_product != "brand_life_narrative"
-        or narrative_mode != "general_observation"
-        or series_position is not None
-    ):
-        return base_responsibility
-    purpose_boundary = {
-        "title": (
-            "标题只命名两个可观察动作或选择之间的张力；不得给人物添加感受、偏好、期待，"
-            "也不得预告关系或结果变化。"
-        ),
-        "natural_guide": (
-            "导读只承诺读者能比较哪两个可观察动作；不得把感受、偏好、让步、需要或关系"
-            "结果写成观看回报。"
-        ),
-        "release_caption": (
-            "配文只回到两个可观察选择，不总结人物、关系或行动效果。"
-        ),
-    }.get(purpose, "")
-    return f"{base_responsibility}{purpose_boundary}"
-
-
-def _non_bearing_claim_contract(
-    *,
-    primary_product: ContentProduct,
-    frame: NarrativeFrame,
-) -> dict[str, object] | None:
-    """Expose one closed claim budget without authoring the Writer's prose."""
-
-    if primary_product not in {"brand_life_narrative", "local_response"}:
-        return None
-    if primary_product == "local_response":
-        allowed = [
-            {
-                "claim_type": "conditional_response_to_explicit_signal",
-                "meaning": (
-                    "只在再次收到原句已经明示的同一种信号时，条件化地给出留出空间或提出"
-                    "一个中性问题的选择；不得从位置、距离、时长、动作或语气推断状态。"
-                ),
-            },
-            {
-                "claim_type": "audience_can_decide",
-                "meaning": "只把是否回应以及选择哪种回应留给受众。",
-            },
-        ]
-    else:
-        allowed = [
-            {
-                "claim_type": "observable_difference_or_choice",
-                "meaning": (
-                    "只写本题已经明示的可观察差异，或把两个可选做法并列交给受众判断；"
-                    "不得另造观察维度，也不得说明这些做法会让关系、人物或结果如何变化。"
-                ),
-            },
-            {
-                "claim_type": "conditional_future_action",
-                "meaning": "只写以“如果／可以／不妨”等条件或可选语态成立的未来观察动作。",
-            },
-            {
-                "claim_type": "audience_can_decide",
-                "meaning": "只把最终取舍留给受众，不替任何人说明心理、需要、意图或原因。",
-            },
-        ]
-    if frame.narrative_mode == "actuality_reflection":
-        allowed.append(
-            {
-                "claim_type": "record_or_compare_the_visible_change",
-                "meaning": (
-                    "现实原句由服务端另行逐字插入；Writer 只能建议以后记录或比较原句中"
-                    "已经可见的差异，不得补写身体、环境、人物或后续事件。"
-                ),
-            }
-        )
-        subject_boundary = (
-            "不得复述服务端事实；不得新增原句没有明示的观察维度、身体或情绪状态，也不得"
-            "把原句里的第三方改写成读者、账号、家人、顾客或其他身份。"
-        )
-    else:
-        subject_boundary = (
-            "只能写明确条件下的假设选择；不得把人物关系、感受、需要、意图或原因写成"
-            "已经成立的一般判断。"
-        )
-    return {
-        "contract_version": "non-bearing-writer-claim-v4",
-        "claim_weight": "non_bearing",
-        "all_visible_sentences_must_match_one_allowed_claim": True,
-        "choice_basis": {
-            "allowed": "observable_action_or_external_condition_only",
-            "prohibited": (
-                "feeling_preference_expectation_inner_state_or_another_person_reaction"
-            ),
-        },
-        "allowed_claims": allowed,
-        "prohibited_claims": [
-            {"claim_type": "product_effect", "meaning": "具体商品效果、体验或用途"},
-            {
-                "claim_type": "health_or_body_improvement",
-                "meaning": "健康、饮水、休息、身体信号或身体改善建议",
-            },
-            {
-                "claim_type": "mental_state_or_unspoken_need",
-                "meaning": "心理、情绪、委屈、需要、意图或未说出口的期待",
-            },
-            {"claim_type": "cause_or_result", "meaning": "原因、因果、效果或结果"},
-            {"claim_type": "new_actual_event", "meaning": "任何新增现实事件或现实动作"},
-            {
-                "claim_type": "source_subject_reassignment",
-                "meaning": "把原句主体改写成读者、账号、家人、顾客或其他身份",
-            },
-        ],
-        "advice_mood": "conditional_or_optional_only",
-        "subject_boundary": subject_boundary,
-    }
 
 
 def _provider_rejection_state(
@@ -482,34 +254,6 @@ _P1_PUBLICATION_BRIEF: dict[str, str] = {
         "显瘦、易收纳等属性或效果，也不增加天气、行程、背包和穿着体验事实。"
     ),
     "release_caption": "用一句自然文字保留本次条件和下一动作，不重复正文或承诺效果。",
-}
-_P1_NON_BEARING_WRITER_BRIEF: dict[str, str] = {
-    "title": (
-        "只用用户已经给出的条件命名这次矛盾，采用尚未回答的问题式标题；不写答案、建议、"
-        "商品或结果承诺。"
-    ),
-    "natural_guide": (
-        "只说明接下来会把已有条件拆开再作取舍；不提前概括怎样穿、能获得什么，也不新增"
-        "选择标准、因果或效果。"
-    ),
-    "body": (
-        "服务端已经写入本篇唯一承重的选择骨架。这里只用不超过四十个可见字符做自然承接，"
-        "不得新增服装类别、阈值、效果、体验、因果或另一条选择建议。"
-    ),
-    "release_caption": (
-        "只邀请受众回到自己的已知条件作判断；不总结怎样穿、哪种更好或能得到什么，不新增"
-        "条件、下一动作、商品效果或现实判断。"
-    ),
-}
-_P1_NON_BEARING_PLATFORM_RESPONSIBILITY: dict[str, dict[str, str]] = {
-    "graphic": {
-        "title": "图文封面只提出用户已经给出的条件冲突，不替服务端选择骨架回答问题。",
-        "natural_guide": "图文导读只承诺逐页看清已有条件和取舍顺序，不承诺穿着结果。",
-    },
-    "video": {
-        "title": "视频首帧只提出用户已经给出的条件冲突，不替服务端选择骨架回答问题。",
-        "natural_guide": "视频观看回报只承诺沿时间顺序拆开已有条件，不承诺穿着结果。",
-    },
 }
 _PLATFORM_NATIVE_UNIT_RESPONSIBILITY: dict[str, dict[str, str]] = {
     "graphic": {
@@ -934,6 +678,19 @@ class DeepSeekGenerator(ContentGenerator):
                 raise GenerationFailed("模型没有逐字保留本次用户前提")
         candidates = request.user_fact_candidates or user_fact_candidates(available_user_turns)
         candidate_by_id = {candidate.source_id: candidate.exact_text for candidate in candidates}
+        for candidate in candidates:
+            try:
+                source_turn = available_user_turns[candidate.turn_index - 1]
+            except IndexError as exc:
+                raise GenerationFailed("用户原文跨度不属于本次输入") from exc
+            source_bytes = source_turn.encode("utf-8")
+            if (
+                source_turn[candidate.start_offset : candidate.end_offset]
+                != candidate.exact_text
+                or source_bytes[candidate.start_byte : candidate.end_byte].decode("utf-8")
+                != candidate.exact_text
+            ):
+                raise GenerationFailed("用户原文跨度地址与正文不一致")
         fact_source_ids = self._exact_string_list(raw_fact_ids)
         sentence_roles: dict[str, str] = {}
         for raw_role in raw_sentence_roles:
@@ -948,7 +705,12 @@ class DeepSeekGenerator(ContentGenerator):
                 not isinstance(sentence_id, str)
                 or sentence_id in sentence_roles
                 or sentence_id not in candidate_by_id
-                or role not in {"observable_actuality", "creation_instruction"}
+                or role
+                not in {
+                    "observable_actuality",
+                    "creation_instruction",
+                    "style_or_revision_instruction",
+                }
             ):
                 raise GenerationFailed("用户句子角色投影超出冻结候选")
             sentence_roles[sentence_id] = role
@@ -956,7 +718,9 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("用户句子角色没有按候选顺序完整冻结")
         role_fact_ids = tuple(source_id for source_id, role in sentence_roles.items() if role == "observable_actuality")
         instruction_source_ids = tuple(
-            source_id for source_id, role in sentence_roles.items() if role == "creation_instruction"
+            source_id
+            for source_id, role in sentence_roles.items()
+            if role in {"creation_instruction", "style_or_revision_instruction"}
         )
         if any(source_id not in candidate_by_id for source_id in fact_source_ids):
             raise GenerationFailed("模型返回的用户事实句标识不存在")
@@ -999,6 +763,10 @@ class DeepSeekGenerator(ContentGenerator):
             user_fact_spans=facts,
             user_fact_source_ids=fact_source_ids,
             user_instruction_source_ids=instruction_source_ids,
+            user_span_roles=tuple(
+                (source_id, cast(IntakeSpanRole, role))
+                for source_id, role in sentence_roles.items()
+            ),
             narrative_mode=narrative_mode,
             creative_plan=plan,
             primary_product=plan.primary_value,
@@ -1024,10 +792,27 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("CreativeKernelV1 缺少冻结计划或叙事框架")
         frame = request.narrative_frame
         context = BoundaryContext.from_request(request, frame)
-        program_id = select_kernel_program(
-            frame=frame,
-            prior_kernel=request.prior_creative_kernel,
-            revision_instruction=request.revision_instruction,
+        publication_v2 = request.publication_contract is not None
+        if publication_v2 and request.primary_product in {
+            "product_truth",
+            "visual_styling_story",
+        } and (
+            request.product_value_contract is None
+            or not context.product_fact_packet.facts
+        ):
+            raise GenerationFailed(
+                "商品承重内容缺少冻结 ProductFact 与内部商品语义计划"
+            )
+        program_id = (
+            request.prior_creative_kernel.program_id
+            if publication_v2 and request.prior_creative_kernel is not None
+            else OBSERVATION_ONLY_PROGRAM
+            if publication_v2
+            else select_kernel_program(
+                frame=frame,
+                prior_kernel=request.prior_creative_kernel,
+                revision_instruction=request.revision_instruction,
+            )
         )
         if request.delivery_compiler_version == DUAL_TRACK_DELIVERY_COMPILER_VERSION:
             kernel_version = DUAL_TRACK_KERNEL_VERSION
@@ -1041,28 +826,6 @@ class DeepSeekGenerator(ContentGenerator):
                 request.media_capability_envelope,
                 request.media_program,
             )
-        series_position = request.series_context.target_position if request.series_context is not None else None
-        bearing_contract: ServerBearingExpressionContractV1 | None = None
-        if kernel_version == KERNEL_VERSION:
-            bearing_contract = request.server_bearing_expression_contract
-            if bearing_contract is None and request.prior_creative_kernel is None:
-                bearing_contract = build_server_bearing_expression_contract(
-                    primary_product=request.primary_product,
-                    media_format=request.media_format,
-                    frame=frame,
-                    series_position=series_position,
-                )
-            if bearing_contract is not None:
-                try:
-                    assert_server_bearing_expression_matches(
-                        bearing_contract,
-                        primary_product=request.primary_product,
-                        media_format=request.media_format,
-                        frame=frame,
-                        series_position=series_position,
-                    )
-                except DomainError as exc:
-                    raise GenerationFailed(str(exc)) from exc
         skeleton = build_kernel_skeleton(
             frame=frame,
             fact_registry=context.fact_registry,
@@ -1072,19 +835,14 @@ class DeepSeekGenerator(ContentGenerator):
             media_format=request.media_format,
             kernel_version=kernel_version,
             primary_product=request.primary_product,
-            product_value_contract=request.product_value_contract,
+            product_value_contract=(
+                None if publication_v2 else request.product_value_contract
+            ),
         )
         skeleton = freeze_prior_revision_units(
             skeleton,
             request.prior_creative_kernel,
         )
-        try:
-            skeleton = apply_server_bearing_expression_contract(
-                skeleton,
-                bearing_contract,
-            )
-        except ValueError as exc:
-            raise GenerationFailed("服务端承重表达合同无法应用") from exc
         required_fact_block_ids = (
             self._prior_fact_block_ids(
                 request.prior_creative_kernel,
@@ -1113,7 +871,7 @@ class DeepSeekGenerator(ContentGenerator):
             media_capability_envelope=(request.media_capability_envelope),
             media_program=request.media_program,
             product_value_contract=request.product_value_contract,
-            server_bearing_expression_contract=bearing_contract,
+            publication_contract=request.publication_contract,
         )
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product) if kernel_version == DUAL_TRACK_KERNEL_VERSION else {}
@@ -1123,7 +881,7 @@ class DeepSeekGenerator(ContentGenerator):
             self._kernel_writer_prompt(
                 request,
                 skeleton,
-                (bearing_contract.unit_text_by_id if bearing_contract is not None else compiler_texts),
+                compiler_texts,
             ),
             4096,
         )
@@ -1137,7 +895,6 @@ class DeepSeekGenerator(ContentGenerator):
                 allowed_claim_ids=context.product_fact_packet.fact_ids,
                 required_fact_block_ids=required_fact_block_ids,
                 compiler_owned_text_by_id=compiler_texts,
-                server_bearing_expression_contract=bearing_contract,
                 media_format=request.media_format,
             )
         except (
@@ -1153,6 +910,8 @@ class DeepSeekGenerator(ContentGenerator):
             context,
             kernel,
         )
+        if affected_product_units and publication_v2:
+            raise GenerationFailed("Writer 不得复述或改写服务端冻结的商品事实")
         if affected_product_units:
             repair_payload, repair_retries = self._request(
                 "你是笛语 CreativeKernel Writer。只返回一次受影响 unit 修复 JSON，不展示推理或事实正文。",
@@ -1203,6 +962,8 @@ class DeepSeekGenerator(ContentGenerator):
         except (KeyError, ValueError) as exc:
             raise GenerationFailed("CreativeKernelV1 商品事实边界无法在一次 affected-unit 修复内满足") from exc
         repeated_units = self._mechanically_repeated_writer_units(kernel)
+        if repeated_units and publication_v2:
+            raise GenerationFailed("Writer 返回了机械重复的正文")
         if repeated_units:
             repair_payload, repair_retries = self._request(
                 "你是笛语 CreativeKernel Writer。只返回一次受影响 unit 修复 JSON，不展示推理或内部规则。",
@@ -1241,11 +1002,17 @@ class DeepSeekGenerator(ContentGenerator):
             request,
             kernel,
         )
-        attributed_dialogue_units = self._unfrozen_actuality_dialogue_units(
-            request,
-            kernel,
+        attributed_dialogue_units = (
+            frozenset()
+            if publication_v2
+            else self._unfrozen_actuality_dialogue_units(
+                request,
+                kernel,
+            )
         )
         relationship_units = copied_account_units | copied_actuality_units | attributed_dialogue_units
+        if relationship_units and publication_v2:
+            raise GenerationFailed("Writer 不得复述冻结现实或账号资料原句")
         if relationship_units:
             if affected_product_units:
                 raise GenerationFailed("关系表达路径无法与商品事实修复共享第二次修复调用")
@@ -1283,9 +1050,15 @@ class DeepSeekGenerator(ContentGenerator):
             ) as exc:
                 raise GenerationFailed("CreativeKernelV1 关系表达修复格式不完整") from exc
         self._assert_p3_account_link_natural(request, kernel)
-        self._assert_no_unfrozen_actuality_dialogue(request, kernel)
+        if not publication_v2:
+            # Historical v1-v4 generation used a blanket quotation guard.
+            # publication-contract-v2 keeps reality safety in the frozen span
+            # boundary instead: software can prove exact fact ownership, but
+            # cannot prove that every quoted creative phrase is a real-world
+            # dialogue without reintroducing a semantic Reviewer.
+            self._assert_no_unfrozen_actuality_dialogue(request, kernel)
         self._assert_p1_publication_shape(request, kernel)
-        self._assert_non_bearing_writer_shape(request, kernel)
+        self._assert_zero_topic_has_statement(request, kernel)
         self._assert_series_writer_progression(request, kernel)
         if request.revision_instruction and request.prior_creative_kernel:
             before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
@@ -1344,12 +1117,6 @@ class DeepSeekGenerator(ContentGenerator):
                 "product_fact_renderer_version": (
                     context.product_fact_blocks[0].renderer_version if context.product_fact_blocks else None
                 ),
-                "server_bearing_expression_contract": (
-                    server_bearing_expression_document(bearing_contract) if bearing_contract is not None else None
-                ),
-                "server_bearing_expression_digest": (
-                    server_bearing_expression_digest(bearing_contract) if bearing_contract is not None else None
-                ),
                 "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
                 "delivery_resource_refs": list(compiled.resource_refs),
                 "media_capability_envelope": (
@@ -1376,6 +1143,16 @@ class DeepSeekGenerator(ContentGenerator):
                 "product_value_contract_digest": (
                     product_value_contract_digest(request.product_value_contract)
                     if request.product_value_contract is not None
+                    else None
+                ),
+                "publication_contract": (
+                    publication_contract_document(request.publication_contract)
+                    if request.publication_contract is not None
+                    else None
+                ),
+                "publication_contract_digest": (
+                    publication_contract_digest(request.publication_contract)
+                    if request.publication_contract is not None
                     else None
                 ),
             },
@@ -1787,12 +1564,197 @@ class DeepSeekGenerator(ContentGenerator):
 不同、不能仍由两个完全相同的多段块组成。只返回：
 {json.dumps(template, ensure_ascii=False)}"""
 
+    @staticmethod
+    def _publication_v2_writer_prompt(
+        request: GenerationInput,
+        skeleton: CreativeKernelV1,
+    ) -> str:
+        contract = request.publication_contract
+        if contract is None:
+            raise GenerationFailed("新内容缺少发布责任合同")
+        fact_units = [
+            {
+                "unit_id": unit.unit_id,
+                "exact_text": unit.text,
+                "fact_refs": list(unit.fact_refs),
+            }
+            for unit in skeleton.units
+            if unit.track == "trusted_fact"
+        ]
+        writable = [
+            {
+                "unit_id": unit.unit_id,
+                "purpose": unit.purpose,
+                "visible_order": unit.visible_order,
+            }
+            for unit in skeleton.writable_units
+        ]
+        template = {
+            "units": [
+                {"unit_id": unit["unit_id"], "text": "完整自然文字"}
+                for unit in writable
+            ]
+        }
+        intake = [
+            {
+                "role": span.role,
+                "exact_text": span.exact_text,
+            }
+            for span in contract.intake_spans
+        ]
+        account_permission = {
+            "identity": contract.account_identity,
+            "audience": contract.account_audience,
+            "attention": contract.account_attention,
+            "response_boundary": contract.account_response_boundary,
+            "refusals": contract.account_refusals,
+            "allowed_editorial_stance": contract.allowed_editorial_stance,
+        }
+        product_plan: object = None
+        if request.product_value_contract is not None:
+            raw_plan = product_value_contract_document(
+                request.product_value_contract
+            )
+            product_plan = {
+                key: raw_plan[key]
+                for key in (
+                    "product_insight",
+                    "tradeoff_or_limit",
+                    "validity_condition",
+                    "source_fact_ids",
+                )
+                if key in raw_plan
+            }
+        prior = (
+            [
+                {
+                    "unit_id": unit.unit_id,
+                    "purpose": unit.purpose,
+                    "text": unit.text,
+                }
+                for unit in request.prior_creative_kernel.writable_units
+            ]
+            if request.prior_creative_kernel is not None
+            else []
+        )
+        series = (
+            [
+                {
+                    "position": entry.position,
+                    "outline": entry.outline,
+                    "body": entry.body,
+                }
+                for entry in request.series_context.prior_entries
+            ]
+            if request.series_context is not None
+            else []
+        )
+        safety = [
+            {
+                "rule_id": rule_id,
+                "boundary": NEGATIVE_SAFETY_RULES[rule_id],
+            }
+            for rule_id in contract.prohibited_reality_or_product_claims
+        ]
+        product_rule = (
+            "内部商品计划只说明本篇应让受众获得的理解、取舍和成立条件，不是可见文案。"
+            "根据逐字事实写出自然、商品专属的选择解释；不得复制内部字段或安全说明，"
+            "不得新增价格、库存、属性、性能、用途、效果、体验或设计动机。"
+            if product_plan is not None
+            else ""
+        )
+        p1_rule = (
+            "直接回答怎么穿：正文必须给出一条明确的一般穿衣建议、一个真实取舍和一个"
+            "出门前检查动作。可以使用可脱外层、可单穿内层、分层等一般类别；建议保持"
+            "条件语态，不声称具体商品具有任何效果，也不要把主要选择退回用户。"
+            if request.primary_product == "dressing_decision"
+            else ""
+        )
+        actuality_rule = (
+            "observable_actuality 会由服务端逐字插入一次。作品要回应其中的具体张力，"
+            "但 Writer 不复述、改写、补全或解释原因，也不新增人物身份、对白、健康、"
+            "心理、因果、后续事件或结果。creation/style 指令绝不能写成现实事实。"
+            if any(span.role == "observable_actuality" for span in contract.intake_spans)
+            else ""
+        )
+        zero_topic_rule = (
+            "用户没有提供题材。你必须从账号允许的内容领地自主选择一个具体题材，形成"
+            "可陈述的中心判断并完成作品；不能把选题、问题或二选一重新交给用户。"
+            if contract.topic_origin == "system_selected"
+            else ""
+        )
+        platform_rule = (
+            "这是视频：body 是可直接口播的完整台词，段落有自然节奏；title 能承担首帧，"
+            "natural_guide 给观看承诺，release_caption 是独立发布配文而不是台词复印。"
+            if request.media_format == "video"
+            else "这是图文：正文要有清楚段落推进，标题适合首图，导读给观看回报，发布配文"
+            "与正文互补而不机械复述。"
+        )
+        return f"""完成一篇可以直接交付给用户的作品。服务端已经冻结事实、来源、账号权限、
+平台、系列前情、媒体程序和资源；你只负责非事实性的中心判断、自然表达、条件建议与发布配文。
+
+CreativeBrief（内部，不得把字段名或说明写进成品）：
+{json.dumps(publication_contract_document(contract), ensure_ascii=False)}
+
+输入跨度及角色（只有 observable_actuality 是现实事实）：
+{json.dumps(intake, ensure_ascii=False)}
+
+服务端逐字事实单元（只读，成品会由服务端插入；不得复述或改写）：
+{json.dumps(fact_units, ensure_ascii=False)}
+
+账号编辑许可（只决定观察顺序、判断尺度和回应姿态；不得照抄成账号定义、口号或职业经历）：
+{json.dumps(account_permission, ensure_ascii=False)}
+
+内部商品语义计划（只用于形成自然选择价值，不得复制字段或防越界说明）：
+{json.dumps(product_plan, ensure_ascii=False)}
+
+冻结系列前情（有则推进，不机械复述）：
+{json.dumps(series, ensure_ascii=False)}
+
+本次修改：{request.revision_instruction or "（首次生成）"}
+此前可写单元（只在修订时使用）：
+{json.dumps(prior, ensure_ascii=False)}
+
+唯一负向安全合同：
+{json.dumps(safety, ensure_ascii=False)}
+
+写作责任：
+- title 是作品标题；natural_guide 是自然导读；所有 body 单元共同形成完整中心判断；
+  release_caption 是可直接发布且与正文互补的配文。
+- 可以形成观点、非事实创作观察、条件建议、真实取舍和不绑定现实主体的假设；没有规定问句、
+  二选一、固定收束或唯一句型。不要写内部合同、字段、验证、防越界或资料说明。
+- 品牌和账号关系通过本题的观察取舍、受众关系和回应姿态自然体现；不硬插品牌名、商品或服饰
+  结论，也不删除账号立场而退化为通用文案。
+- Writer 不拥有媒体单元、MediaProgram 或资源。不要写拍摄、摆放、出镜、场地、道具、图片、
+  商品实物或声音指令；Compiler 只会把你完成的内容绑定到预先冻结的槽位。
+{p1_rule}
+{product_rule}
+{actuality_rule}
+{zero_topic_rule}
+{platform_rule}
+
+本篇中心任务：{contract.central_job}
+给受众的回报：{contract.audience_payoff}
+允许的一般建议范围：{json.dumps(contract.allowed_general_advice_scope, ensure_ascii=False)}
+
+服务端可写 unit：
+{json.dumps(writable, ensure_ascii=False)}
+
+只返回：
+{json.dumps(template, ensure_ascii=False)}
+
+根对象必须恰好只有 units；必须恰好一次覆盖全部 unit_id；每项只能有 unit_id、text。text 从
+自然成品第一字开始，不写字段名、Markdown 标题、purpose、规则、来源、事实正文、claim、资源或
+解释。各单元围绕同一中心但承担不同作用，不机械重复。"""
+
     def _kernel_writer_prompt(
         self,
         request: GenerationInput,
         skeleton: CreativeKernelV1,
         compiler_texts: Mapping[str, str] | None = None,
     ) -> str:
+        if request.publication_contract is not None:
+            return self._publication_v2_writer_prompt(request, skeleton)
         if request.creative_plan is None:
             raise GenerationFailed("CreativeKernelV1 缺少 CreativePlanV2")
         if request.narrative_frame is None:
@@ -1852,52 +1814,26 @@ class DeepSeekGenerator(ContentGenerator):
         )
         account_unit_responsibilities: dict[str, str] = {}
         if account_editorial_lens is not None:
-            non_bearing_boundary = (
-                account_editorial_lens.non_bearing_expression_boundary
-            )
             by_purpose = {
                 "title": account_editorial_lens.title_responsibility,
                 "natural_guide": account_editorial_lens.natural_guide_responsibility,
                 "body": account_editorial_lens.body_responsibility,
                 "release_caption": account_editorial_lens.release_caption_responsibility,
             }
-            actuality_by_purpose = {
-                "title": account_editorial_lens.actuality_title_responsibility,
-                "natural_guide": (account_editorial_lens.actuality_natural_guide_responsibility),
-                "body": account_editorial_lens.actuality_body_responsibility,
-                "release_caption": (account_editorial_lens.actuality_release_caption_responsibility),
-            }
-            series_position = request.series_context.target_position if request.series_context is not None else None
             for unit in writer_units:
                 responsibility = by_purpose.get(unit.purpose)
                 if responsibility is None:
                     continue
                 if actuality_reflection:
-                    responsibility = f"{responsibility}{actuality_by_purpose[unit.purpose]}"
-                responsibility = f"{non_bearing_boundary}{responsibility}"
-                account_unit_responsibilities[unit.unit_id] = (
-                    _claim_bounded_editorial_responsibility(
-                        unit_id=unit.unit_id,
-                        purpose=unit.purpose,
-                        base_responsibility=responsibility,
-                        series_position=series_position,
-                        primary_product=request.primary_product,
-                        narrative_mode=request.narrative_frame.narrative_mode,
+                    responsibility = (
+                        f"{responsibility}"
+                        f"{account_editorial_lens.actuality_response_boundary}"
                     )
-                )
+                account_unit_responsibilities[unit.unit_id] = responsibility
         p1_unit_responsibilities = (
             {
-                purpose: (
-                    _P1_NON_BEARING_WRITER_BRIEF[purpose]
-                    if "unit:p1-selection-skeleton" in resolved_compiler_texts
-                    else _P1_PUBLICATION_BRIEF[purpose]
-                )
-                for purpose in (
-                    "title",
-                    "natural_guide",
-                    "body",
-                    "release_caption",
-                )
+                purpose: _P1_PUBLICATION_BRIEF[purpose]
+                for purpose in ("title", "natural_guide", "body", "release_caption")
             }
             if request.primary_product == "dressing_decision"
             else {}
@@ -1935,18 +1871,6 @@ class DeepSeekGenerator(ContentGenerator):
                     resource_id,
                     description,
                 )
-        non_bearing_claim_contract = _non_bearing_claim_contract(
-            primary_product=request.primary_product,
-            frame=request.narrative_frame,
-        )
-        non_bearing_claim_rule = (
-            "每个可写 unit 的 text_contract.claim_contract 是服务端闭集协议：每一个可见完整"
-            "句都必须且只能落入 allowed_claims 之一，并同时避开全部 prohibited_claims。"
-            "allowed_claims 不是正文标签，不能把 claim_type 或 meaning 抄进成品；如果一句"
-            "话无法在闭集内成立，就不要输出该句。"
-            if non_bearing_claim_contract is not None
-            else ""
-        )
         writable = [
             {
                 "unit_id": unit.unit_id,
@@ -1958,27 +1882,6 @@ class DeepSeekGenerator(ContentGenerator):
                 "text_contract": {
                     "shape": "content_only",
                     "wrapper_owner": "delivery_compiler",
-                    **(
-                        {"sentence_shape": sentence_shape}
-                        if (
-                            sentence_shape := _non_bearing_unit_text_shape(
-                                unit_id=unit.unit_id,
-                                primary_product=request.primary_product,
-                                narrative_mode=request.narrative_frame.narrative_mode,
-                                series_position=(
-                                    request.series_context.target_position
-                                    if request.series_context is not None
-                                    else None
-                                ),
-                            )
-                        )
-                        else {}
-                    ),
-                    **(
-                        {"claim_contract": non_bearing_claim_contract}
-                        if non_bearing_claim_contract is not None
-                        else {}
-                    ),
                 },
                 **(
                     {
@@ -2015,15 +1918,7 @@ class DeepSeekGenerator(ContentGenerator):
                 **(
                     {
                         "platform_native_responsibility": (
-                            _P1_NON_BEARING_PLATFORM_RESPONSIBILITY[
-                                request.media_format
-                            ][unit.purpose]
-                            if (
-                                request.primary_product == "dressing_decision"
-                                and P1_SELECTION_UNIT_ID
-                                in resolved_compiler_texts
-                            )
-                            else _PLATFORM_NATIVE_UNIT_RESPONSIBILITY[
+                            _PLATFORM_NATIVE_UNIT_RESPONSIBILITY[
                                 request.media_format
                             ][unit.purpose]
                         )
@@ -2288,58 +2183,6 @@ Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creati
                 "拍摄、排版或剪辑要点；release_caption 是可直接发布的配文。"
             )
             media_instruction = "媒体制作单元只能使用本次已登记制作条件，不得新增人物、地点、商品、道具或声音资源。"
-        if (
-            skeleton.kernel_version == KERNEL_VERSION
-            and request.primary_product in {"brand_life_narrative", "local_response"}
-            and non_bearing_claim_contract is not None
-        ):
-            return f"""完成一篇可直接发布的品牌账号作品。服务端已经拥有全部承重事实、现实
-片段、媒体结构和可见范围；Writer 只负责非承重自然表达，不得另行解释事实或创造事实。
-
-按以下顺序执行同一份闭集协议：
-1. 每个可见完整句必须且只能落入 claim_contract.allowed_claims 之一；任何
-prohibited_claims 都是硬失败，不是写作建议。
-2. 现实原句由服务端另行逐字插入。不得复述、改写或补全原句，也不要另造观察维度、人物
-状态、原因、结果或后续事件。
-3. 账号关系只通过本题的观察取舍和受众回报自然体现；不要复制账号定义、品牌口号或资料
-方法原句，也不要硬插品牌名、账号名、商品或服饰结论。
-4. 有系列前情时只推进当前 position 的新判断和新动作，不复述前篇完整句段。
-5. 只填写服务端列出的 unit_id。媒体说明、资源、事实、范围标识和结构标签均由服务端处理。
-
-本次受众价值：{_PRODUCT_VALUE[request.primary_product]}
-平台与形式：{request.target} / {request.media_format}
-受控 topic：
-{json.dumps(topic_projection, ensure_ascii=False)}
-本篇账号关联路径（去标识化编辑视角）：
-{json.dumps(account_link_projection, ensure_ascii=False)}
-去标识化表达控制：{controls}
-已确认发布方法域（只能影响怎样写，不能复制或升级为事实）：
-{json.dumps(brand_context_projection, ensure_ascii=False)}
-其中表达约束、创作方法和候选取舍；它们均不是品牌、商品、人物、门店、经历或媒体资源的事实
-许可证。它们只能影响怎样写，不能成为成品中的资料复述。只有服务端预分配的 trusted_fact 单元能作为现实事实。
-冻结系列前情：
-{json.dumps(series_projection, ensure_ascii=False)}
-本次修改要求：{request.revision_instruction or "（首次生成）"}
-此前可写内核（首次生成时为空；只用于修改）：
-{json.dumps(prior, ensure_ascii=False)}
-
-服务端可写 unit skeleton：
-{json.dumps(writable, ensure_ascii=False)}
-
-{supporting_copy_rule}
-{account_link_rule}
-{non_bearing_claim_rule}
-{resource_instruction}
-{unit_instruction}
-{media_instruction}
-
-只返回：
-{json.dumps(template, ensure_ascii=False)}
-
-根对象必须恰好只有 units；每个 unit 必须恰好只有 unit_id、text，并恰好一次覆盖全部既定
-unit_id。每个 text 只填写该单元的自然内容，从自然成品第一字开始，不写字段名、Markdown、规则说明、claim_type、purpose
-或其他内部标签。正式标题、正文、字幕、制作提示和发布配文的结构只由 DeliveryCompiler
-根据 unit_id 确定性组装。不要返回事实、来源、媒体单元、资源引用或解释。"""
         return f"""完成一个可直接交付的 CreativeKernel。你只负责“说什么、怎样表达”，不负责
 创建或改变 scene、actor、resource、track、mode、unit_id、事实、来源或语义合同。
 {supporting_copy_rule}
@@ -2376,7 +2219,6 @@ allowed_resources 都由服务端在写作前冻结；每个单元必须逐项�
 {product_creative_rule}
 {account_link_rule}
 {dressing_decision_rule}
-{non_bearing_claim_rule}
 
 topic 投影是服务端给 Writer 的受控任务边界。actuality-writer-brief-v2 中的现实片段已经
 由服务端逐字冻结，并会由 Compiler 另行插入一次。Writer 只用它确定本篇实际观察对象，
@@ -3141,11 +2983,6 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 "release_caption_responsibility",
                 "actuality_response_boundary",
                 "series_progression_boundary",
-                "actuality_title_responsibility",
-                "actuality_natural_guide_responsibility",
-                "actuality_body_responsibility",
-                "actuality_release_caption_responsibility",
-                "non_bearing_expression_boundary",
             )
             writer_projection = {field: frozen_lens[field] for field in writer_fields}
             writer_projection["speaker_scope"] = (
@@ -3296,25 +3133,27 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 raise GenerationFailed("本次穿衣选择没有在可直接观看的长度内完成")
 
     @staticmethod
-    def _assert_non_bearing_writer_shape(
+    def _assert_zero_topic_has_statement(
         request: GenerationInput,
         kernel: CreativeKernelV1,
     ) -> None:
         if (
-            kernel.kernel_version != KERNEL_VERSION
-            or request.primary_product != "brand_life_narrative"
-            or request.narrative_frame is None
-            or request.narrative_frame.narrative_mode != "general_observation"
-            or request.series_context is not None
+            request.publication_contract is None
+            or request.publication_contract.topic_origin != "system_selected"
         ):
             return
-        opening = kernel.unit("unit:body-opening").text.strip()
-        if (
-            not opening.endswith("？")
-            or opening.count("？") != 1
-            or any(mark in opening[:-1] for mark in "。！?")
-        ):
-            raise GenerationFailed("非承重观察开头没有保持为一个直接选择问题")
+        body_text = "\n".join(
+            unit.text.strip()
+            for unit in kernel.writable_units
+            if unit.purpose == "body"
+        )
+        clauses = tuple(
+            clause.strip()
+            for clause in re.split(r"(?<=[。！？!?；;])|\n+", body_text)
+            if clause.strip()
+        )
+        if not clauses or all(clause.rstrip().endswith(("？", "?")) for clause in clauses):
+            raise GenerationFailed("系统自主选题没有形成可陈述的中心判断")
 
     @staticmethod
     def _assert_series_writer_progression(
@@ -3393,46 +3232,25 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
         editorial_responsibilities: dict[str, str] = {}
         if editorial_lens is not None:
-            non_bearing_boundary = (
-                editorial_lens.non_bearing_expression_boundary
-            )
             by_purpose = {
                 "title": editorial_lens.title_responsibility,
                 "natural_guide": editorial_lens.natural_guide_responsibility,
                 "body": editorial_lens.body_responsibility,
                 "release_caption": editorial_lens.release_caption_responsibility,
             }
-            actuality_by_purpose = {
-                "title": editorial_lens.actuality_title_responsibility,
-                "natural_guide": (editorial_lens.actuality_natural_guide_responsibility),
-                "body": editorial_lens.actuality_body_responsibility,
-                "release_caption": (editorial_lens.actuality_release_caption_responsibility),
-            }
             actuality_reflection = (
                 request.narrative_frame is not None and request.narrative_frame.narrative_mode == "actuality_reflection"
             )
-            series_position = request.series_context.target_position if request.series_context is not None else None
             for unit in kernel.writable_units:
                 responsibility = by_purpose.get(unit.purpose)
                 if responsibility is None:
                     continue
                 if actuality_reflection:
-                    responsibility = f"{responsibility}{actuality_by_purpose[unit.purpose]}"
-                responsibility = f"{non_bearing_boundary}{responsibility}"
-                editorial_responsibilities[unit.unit_id] = (
-                    _claim_bounded_editorial_responsibility(
-                        unit_id=unit.unit_id,
-                        purpose=unit.purpose,
-                        base_responsibility=responsibility,
-                        series_position=series_position,
-                        primary_product=request.primary_product,
-                        narrative_mode=(
-                            request.narrative_frame.narrative_mode
-                            if request.narrative_frame is not None
-                            else "general_observation"
-                        ),
+                    responsibility = (
+                        f"{responsibility}"
+                        f"{editorial_lens.actuality_response_boundary}"
                     )
-                )
+                editorial_responsibilities[unit.unit_id] = responsibility
         unit_briefs = [
             {
                 "unit_id": unit.unit_id,
@@ -3446,12 +3264,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 ),
                 **(
                     {
-                        "decision_responsibility": (
-                            _P1_NON_BEARING_WRITER_BRIEF[unit.purpose]
-                            if P1_SELECTION_UNIT_ID
-                            in {item.unit_id for item in kernel.units}
-                            else _P1_PUBLICATION_BRIEF[unit.purpose]
-                        )
+                        "decision_responsibility": _P1_PUBLICATION_BRIEF[unit.purpose]
                     }
                     if request.primary_product == "dressing_decision"
                     and unit.purpose in _P1_PUBLICATION_BRIEF
@@ -3460,15 +3273,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 **(
                     {
                         "platform_native_responsibility": (
-                            _P1_NON_BEARING_PLATFORM_RESPONSIBILITY[
-                                request.media_format
-                            ][unit.purpose]
-                            if (
-                                request.primary_product == "dressing_decision"
-                                and P1_SELECTION_UNIT_ID
-                                in {item.unit_id for item in kernel.units}
-                            )
-                            else _PLATFORM_NATIVE_UNIT_RESPONSIBILITY[
+                            _PLATFORM_NATIVE_UNIT_RESPONSIBILITY[
                                 request.media_format
                             ][unit.purpose]
                         )
@@ -3480,13 +3285,6 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             for unit in kernel.writable_units
             if unit.unit_id in affected_unit_ids
         ]
-        p1_repair_boundary = (
-            "本篇选择骨架和发布收束已经由服务端冻结；只修复自然关系，不得新增服装类别、"
-            "穿法、选择标准、阈值、效果、体验、因果、下一动作或第二套建议。"
-            if request.primary_product == "dressing_decision"
-            and P1_SELECTION_UNIT_ID in {item.unit_id for item in kernel.units}
-            else ""
-        )
         template = {"units": [{"unit_id": str(unit["unit_id"]), "text": ""} for unit in unit_briefs]}
         return f"""只修复照抄表达控制或已冻结现实原句的创作 unit。服务端不会把
 已判定不安全的原 unit 正文再交给修复路径；必须仅根据冻结职责重新写一份完整文字。
@@ -3499,7 +3297,6 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 else ""
             )
         }
-{p1_repair_boundary}
 只能改写下列来源文字对应的表达方式：
 {json.dumps(source_spans, ensure_ascii=False)}
 待修复 unit 的冻结职责：{json.dumps(unit_briefs, ensure_ascii=False)}
@@ -3996,7 +3793,16 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
         candidates = request.user_fact_candidates or user_fact_candidates(available_user_turns)
         candidate_document = [
-            {"sentence_id": candidate.source_id, "exact_text": candidate.exact_text} for candidate in candidates
+            {
+                "sentence_id": candidate.source_id,
+                "exact_text": candidate.exact_text,
+                "turn_index": candidate.turn_index,
+                "start_offset": candidate.start_offset,
+                "end_offset": candidate.end_offset,
+                "start_byte": candidate.start_byte,
+                "end_byte": candidate.end_byte,
+            }
+            for candidate in candidates
         ]
         chat_shape = (
             ""
@@ -4021,7 +3827,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 {question_shape}
 {{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制实际使用的用户消息"],
 "user_fact_sentence_ids":["只能选择服务端候选 sentence_id，不能返回或裁剪事实正文"],
-"user_sentence_roles":[{{"sentence_id":"按服务端候选顺序逐项返回","role":"observable_actuality|creation_instruction"}}],
+"user_sentence_roles":[{{"sentence_id":"按服务端候选顺序逐项返回","role":"observable_actuality|creation_instruction|style_or_revision_instruction"}}],
 "creative_plan":{{"plan_version":"{PLAN_VERSION}","topic_spans":["只能逐字截取用户消息"],
 "topic_origin":"explicit_user|system_selected",
 "primary_value":"dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story",
@@ -4047,11 +3853,13 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   actuality_reflection，并只选择完整服务端事实句 ID，不得裁剪、概括或改写；明确条件推演
   与明确故事／短剧／情境演绎不属于现实事实，user_fact_sentence_ids 必须为空。narrative_mode 由
   服务端根据显式形式与完整事实句选择派生，你不得返回或选择该字段。
-- ready 时，user_sentence_roles 必须按下方服务端候选顺序逐项返回且完整覆盖；直接陈述可观察
-  现实的完整句标为 observable_actuality，只要求生成、规定写法、限定不得补写什么或表达题材
-  偏好的独立完整句标为 creation_instruction。user_fact_sentence_ids 必须恰好等于所有
-  observable_actuality 的 sentence_id，顺序一致。一个完整候选同时含现实片段和创作命令时，
-  保留整句为 observable_actuality，不得裁剪；相邻独立指令句绝不能冒充真人事实。
+- ready 时，user_sentence_roles 必须按下方服务端候选顺序逐项返回且完整覆盖。直接陈述可观察
+  现实的完整跨度标为 observable_actuality；要求生成或平台成品的跨度标为 creation_instruction；
+  只规定风格、修改方式或不得怎样写的跨度标为 style_or_revision_instruction。
+  user_fact_sentence_ids 必须恰好等于所有 observable_actuality 的 sentence_id，顺序一致。
+  服务端已经用可见标点把候选冻结成原始 offset；不得把相邻跨度拼接，也不得把指令升级成现实。
+  若单个候选仍同时含事实与命令且无法按既有边界安全分开，该候选不得标为 observable_actuality；
+  可以作为创作种子或控制，但不能冒充逐字现实引用。
 - 显式模式为 dramatization 时必须使用它；没有明确演绎要求不得升级为剧情。
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
 {series_intake_rule}

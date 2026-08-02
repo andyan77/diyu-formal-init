@@ -14,7 +14,7 @@ from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import import_module
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 from urllib.request import urlopen
 from uuid import UUID, uuid4
 
@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
 
 import src.infrastructure.postgres_repository as repository_module
+import src.shared.delivery_compiler as delivery_compiler_module
 from src.brain.content_control_service import ContentControlService
 from src.brain.content_expression import (
     direction_from_snapshot,
@@ -62,7 +63,6 @@ from src.shared.creative_kernel import (
     MEDIA_NATIVE_KERNEL_VERSION,
     CreativeKernelUnit,
     CreativeKernelV1,
-    apply_server_bearing_expression_contract,
     build_kernel_skeleton,
     normalize_writer_unit_text,
     parse_writer_kernel,
@@ -91,23 +91,29 @@ from src.shared.factual_basis import (
     select_product_fact_block_ids,
 )
 from src.shared.media_program import (
+    MediaCapabilityEnvelope,
+    MediaProgramId,
+    MediaResourceV1,
     assert_media_program_allowed,
     build_media_capability_envelope,
     build_media_capability_envelope_v2,
+    media_envelope_digest,
+    media_program_digest,
     select_media_program,
 )
-from src.shared.narrative import new_frame, visible_digest
+from src.shared.narrative import new_frame, user_fact_candidates, visible_digest
 from src.shared.product_value import (
     P2ProductValueContractV1,
     P5ProductValueContractV1,
+    ProductValueContract,
     build_product_value_contract,
+    product_value_contract_digest,
+)
+from src.shared.publication_contract import (
+    PublicationInputSpanV1,
+    build_publication_contract,
 )
 from src.shared.review_evidence import unit_contracts_v2
-from src.shared.server_bearing_expression import (
-    P1_RELEASE_CAPTION,
-    P1_SELECTION_UNIT_ID,
-    build_server_bearing_expression_contract,
-)
 from src.shared.types import (
     AccountExpression,
     BoundProductMedia,
@@ -115,6 +121,7 @@ from src.shared.types import (
     BrandContextPacketV2,
     BrandContextSegment,
     ContentControlContext,
+    ContentProduct,
     ConversationDecision,
     ConversationInput,
     CreativeDirection,
@@ -182,6 +189,20 @@ _RESOURCES = frozenset(
         ORIGINAL_COMPOSITION_RESOURCE_ID,
         CREATOR_EXPRESSION_RESOURCE_ID,
     }
+)
+_PUBLICATION_MEDIA_PROGRAM_IDS: tuple[MediaProgramId, ...] = (
+    "graphic_fact_guided_v1",
+    "graphic_observation_progression_v1",
+    "graphic_choice_contrast_v1",
+    "graphic_series_response_v1",
+    "graphic_series_choice_v1",
+    "graphic_registered_product_relation_v1",
+    "graphic_selected_asset_sequence_v1",
+    "video_dynamic_text_v1",
+    "video_creator_expression_v1",
+    "video_registered_product_display_v1",
+    "video_condition_choice_v1",
+    "video_selected_asset_sequence_v1",
 )
 
 
@@ -607,6 +628,8 @@ def _generation_input(
         mechanism_id=None,
         target_shape="小红书图文完整成品",
     )
+
+
     envelope = build_media_capability_envelope(
         platform_shape=("小红书图文完整成品" if media_format == "graphic" else "抖音短视频完整成品"),
         media_format=cast(Any, media_format),
@@ -652,18 +675,337 @@ def _generation_input(
     )
 
 
+def _with_publication_contract(
+    request: GenerationInput,
+    *,
+    roles: tuple[str, ...] | None = None,
+) -> GenerationInput:
+    """Attach the one new-task contract without upgrading legacy fixtures.
+
+    Tests that exercise ``publication-contract-v2`` must freeze exact input
+    spans. Older Gate C fixtures deliberately remain contract-free so their
+    historical compiler output can still be compared byte-for-byte.
+    """
+
+    candidates = user_fact_candidates((request.weak_seed,))
+    resolved_roles = roles or tuple("creation_instruction" for _ in candidates)
+    assert len(resolved_roles) == len(candidates)
+    spans = tuple(
+        PublicationInputSpanV1(
+            source_id=candidate.source_id,
+            role=cast(Any, role),
+            exact_text=candidate.exact_text,
+            turn_index=candidate.turn_index,
+            start_offset=candidate.start_offset,
+            end_offset=candidate.end_offset,
+            start_byte=candidate.start_byte,
+            end_byte=candidate.end_byte,
+        )
+        for candidate, role in zip(candidates, resolved_roles, strict=True)
+    )
+    frame = request.narrative_frame
+    assert frame is not None
+    actuality = tuple(
+        span for span in spans if span.role == "observable_actuality"
+    )
+    frozen_frame = new_frame(
+        "actuality_reflection" if actuality else frame.narrative_mode,
+        tuple(span.exact_text for span in actuality),
+        frame.allowed_product_fact_ids,
+        frame.allowed_brand_fact_ids,
+        user_fact_source_ids=tuple(span.source_id for span in actuality),
+    )
+    expression = request.account_expression
+    plan = request.creative_plan
+    assert plan is not None
+    contract = build_publication_contract(
+        primary_product=request.primary_product,
+        topic_spans=plan.topic_spans,
+        topic_origin=plan.topic_origin,
+        known_conditions=tuple(span.exact_text for span in actuality),
+        frozen_fact_refs=tuple(sorted(frozen_frame.allowed_fact_ids)),
+        intake_spans=spans,
+        account_identity=(
+            expression.identity_position
+            if expression is not None
+            else request.brand.content_role_name
+        ),
+        account_audience=(
+            expression.audience_relationship
+            if expression is not None
+            else request.brand.audience_description
+        ),
+        account_attention=(
+            expression.content_territories if expression is not None else ""
+        ),
+        account_response_boundary=(
+            expression.authority_boundary
+            if expression is not None
+            else request.brand.content_role_boundary
+        ),
+        source_profile_id=(
+            str(expression.profile_id)
+            if expression is not None and expression.profile_id is not None
+            else None
+        ),
+        source_profile_version=(expression.version if expression is not None else None),
+        publication_projection_id=None,
+        publication_projection_version=None,
+        publication_projection_digest=None,
+        product_value_contract_digest=(
+            product_value_contract_digest(request.product_value_contract)
+            if request.product_value_contract is not None
+            else None
+        ),
+    )
+    return replace(
+        request,
+        narrative_frame=frozen_frame,
+        publication_contract=contract,
+    )
+
+
+def _publication_writer_units(**overrides: str) -> list[dict[str, str]]:
+    text_by_purpose = {
+        "title": "熟悉里突然多出一点意外",
+        "natural_guide": "一件小事，也能让人重新看见习以为常的部分。",
+        "body": "熟悉并不等于永远不变；偶尔停一下，能看清这次真正值得回应的变化。",
+        "release_caption": "这次先把注意力留给那一点意外。",
+    }
+    text_by_purpose.update(overrides)
+    return [
+        {"unit_id": f"unit:{purpose.replace('_', '-')}", "text": text}
+        for purpose, text in text_by_purpose.items()
+    ]
+
+
+def _p1_publication_request() -> GenerationInput:
+    base = _generation_input()
+    plan = build_creative_plan(
+        topic_spans=("早晚温差大，但不想多带东西",),
+        primary_value="dressing_decision",
+        tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        mechanism_id=None,
+        target_shape="小红书图文完整成品",
+    )
+    assert base.media_capability_envelope is not None
+    request = replace(
+        base,
+        weak_seed="早晚温差大，但不想多带东西，帮我写一条。",
+        primary_product="dressing_decision",
+        narrative_frame=new_frame("general_observation", (), ()),
+        creative_plan=plan,
+        media_program=select_media_program(
+            primary_product="dressing_decision",
+            envelope=base.media_capability_envelope,
+            mechanism_id=None,
+            series_position=None,
+            fact_count=0,
+        ),
+    )
+    return _with_publication_contract(
+        request,
+        roles=(
+            "observable_actuality",
+            "observable_actuality",
+            "creation_instruction",
+        ),
+    )
+
+
+def test_publication_p1_keeps_all_visible_expression_writer_owned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _p1_publication_request()
+    calls = 0
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        nonlocal calls
+        calls += 1
+        del self, system, max_tokens, thinking_disabled, timeout_seconds
+        assert "unit:p1-selection-skeleton" not in prompt
+        assert "先认清自己最不能妥协" not in prompt
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "units": _publication_writer_units(
+                                    title="先把一天里的变化留给一层",
+                                    natural_guide="一套穿法兼顾早晚，不必把备用衣物全带上。",
+                                    body=(
+                                        "可以先穿可单穿的内层，再加一件能随温度脱下的外层。"
+                                        "取舍是中午要暂时拿着外层，换来早晚不用硬扛温差。"
+                                        "出门前抬手、坐下各试一次，确认两层都不妨碍活动。"
+                                    ),
+                                    release_caption="先让一层负责变化，再决定今天要不要多带一件。",
+                                )
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    artifact = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    ).generate(request)
+
+    assert calls == 1
+    assert "可单穿的内层" in artifact.body
+    assert "中午要暂时拿着外层" in artifact.body
+    assert "抬手、坐下各试一次" in artifact.body
+    assert "先认清自己最不能妥协" not in artifact.body
+
+
+def test_publication_zero_topic_rejects_questions_without_a_central_statement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = _generation_input()
+    plan = build_creative_plan(
+        topic_spans=(),
+        primary_value="brand_life_narrative",
+        tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        mechanism_id=None,
+        target_shape="小红书图文完整成品",
+        topic_origin="system_selected",
+    )
+    request = _with_publication_contract(
+        replace(
+            base,
+            weak_seed="今天不知道发什么，帮我做一条。",
+            narrative_frame=new_frame("general_observation", (), ()),
+            creative_plan=plan,
+        ),
+        roles=("creation_instruction", "creation_instruction"),
+    )
+    calls = 0
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        nonlocal calls
+        calls += 1
+        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "units": _publication_writer_units(
+                                    body="今天想聊穿衣，还是聊生活？你更在意变化，还是稳定？",
+                                )
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    with pytest.raises(GenerationFailed, match="没有形成可陈述的中心判断"):
+        DeepSeekGenerator(
+            "https://example.invalid",
+            "not-a-real-key",
+            "deepseek-test",
+        ).generate(request)
+    assert calls == 1
+
+
+def test_publication_product_content_requires_product_fact_before_writer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = _generation_input()
+    assert base.media_capability_envelope is not None
+    plan = build_creative_plan(
+        topic_spans=("解释这件商品",),
+        primary_value="product_truth",
+        tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        mechanism_id=None,
+        target_shape="小红书图文完整成品",
+    )
+    reference_product = ProductFact(
+        sku="REFERENCE-ONLY",
+        display_name="只用于构造内部计划的参考商品",
+        facts={"category": "短外套", "colors": ["炭灰", "深绿"]},
+        source_kind="synthetic_confirmed_product_record",
+    )
+    internal_plan = build_product_value_contract(
+        primary_product="product_truth",
+        products=(reference_product,),
+    )
+    assert internal_plan is not None
+    request = _with_publication_contract(
+        replace(
+            base,
+            weak_seed="解释这件商品，帮我写一条。",
+            primary_product="product_truth",
+            narrative_frame=new_frame("general_observation", (), ()),
+            creative_plan=plan,
+            media_program=select_media_program(
+                primary_product="product_truth",
+                envelope=base.media_capability_envelope,
+                mechanism_id=None,
+                series_position=None,
+                fact_count=0,
+            ),
+            products=(),
+            product_value_contract=internal_plan,
+        ),
+        roles=("creation_instruction", "creation_instruction"),
+    )
+
+    def unexpected(*args: object, **kwargs: object) -> NoReturn:
+        del args, kwargs
+        raise AssertionError("Writer must not run without ProductFact")
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", unexpected)
+    with pytest.raises(GenerationFailed, match="缺少冻结 ProductFact"):
+        DeepSeekGenerator(
+            "https://example.invalid",
+            "not-a-real-key",
+            "deepseek-test",
+        ).generate(request)
+
+
 def _compile_input(request: GenerationInput) -> DeliveryCompileInput:
     assert request.media_capability_envelope is not None
     assert request.media_program is not None
+    assert request.narrative_frame is not None
+    context = BoundaryContext.from_request(request, request.narrative_frame)
     return DeliveryCompileInput(
         primary_product=request.primary_product,
         media_format=request.media_format,
         products=request.products,
         production_conditions=request.brand.production_conditions,
         allowed_resource_ids=request.media_capability_envelope.resource_ids,
+        immutable_fact_blocks=context.product_fact_blocks,
+        trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
         media_capability_envelope=request.media_capability_envelope,
         media_program=request.media_program,
         product_value_contract=request.product_value_contract,
+        publication_contract=request.publication_contract,
     )
 
 
@@ -708,6 +1050,402 @@ def _filled_kernel(request: GenerationInput) -> object:
         raw,
         skeleton,
     )
+
+
+def _publication_media_case(
+    program_id: MediaProgramId,
+) -> tuple[DeliveryCompileInput, CreativeKernelV1]:
+    media_format = cast(Any, "graphic" if program_id.startswith("graphic_") else "video")
+    primary_product: ContentProduct = (
+        "product_truth"
+        if program_id == "graphic_fact_guided_v1"
+        else "dressing_decision"
+        if program_id
+        in {
+            "graphic_choice_contrast_v1",
+            "video_condition_choice_v1",
+        }
+        else "visual_styling_story"
+        if program_id
+        in {
+            "graphic_registered_product_relation_v1",
+            "video_registered_product_display_v1",
+        }
+        else "brand_life_narrative"
+    )
+    series_position = (
+        2
+        if program_id == "graphic_series_response_v1"
+        else 3
+        if program_id == "graphic_series_choice_v1"
+        else None
+    )
+    selected_materials = (
+        (
+            ReferenceMaterial(
+                UUID("85000000-0000-0000-0000-000000000001"),
+                "冻结素材一",
+                "image" if media_format == "graphic" else "video",
+                1,
+            ),
+            ReferenceMaterial(
+                UUID("85000000-0000-0000-0000-000000000002"),
+                "冻结素材二",
+                "image" if media_format == "graphic" else "video",
+                2,
+            ),
+        )
+        if program_id
+        in {
+            "graphic_selected_asset_sequence_v1",
+            "video_selected_asset_sequence_v1",
+        }
+        else ()
+    )
+    envelope: MediaCapabilityEnvelope
+    if program_id in {
+        "graphic_registered_product_relation_v1",
+        "video_registered_product_display_v1",
+    }:
+        envelope = build_media_capability_envelope_v2(
+            platform_shape="publication-v2-test",
+            media_format=media_format,
+            bound_product_media=tuple(
+                _bound_product_media(index=index) for index in (1, 2)
+            ),
+        )
+    else:
+        registered_resources = (
+            (
+                MediaResourceV1(
+                    resource_id=CREATOR_EXPRESSION_RESOURCE_ID,
+                    resource_version="creator-expression-v1",
+                    media_type="video",
+                    source_ref="creator:test",
+                    capability_id="creator_expression",
+                ),
+            )
+            if program_id == "video_creator_expression_v1"
+            else ()
+        )
+        envelope = build_media_capability_envelope(
+            platform_shape="publication-v2-test",
+            media_format=media_format,
+            selected_materials=selected_materials,
+            registered_resources=registered_resources,
+        )
+    program = select_media_program(
+        primary_product=primary_product,
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=series_position,
+        fact_count=0,
+        topic_origin=(
+            "system_selected"
+            if program_id == "graphic_choice_contrast_v1"
+            else "explicit_user"
+        ),
+    )
+    assert program.program_id == program_id
+    frame = new_frame("general_observation", (), ())
+    skeleton = build_kernel_skeleton(
+        frame=frame,
+        fact_registry=(),
+        constraint_refs=("constraint:publication-contract-v2",),
+        allowed_resource_ids=(),
+        media_format=media_format,
+        kernel_version=KERNEL_VERSION,
+        primary_product=primary_product,
+    )
+    writer_text = {
+        "title": "中性标题",
+        "natural_guide": "中性导读。",
+        "body": "第一段正文。\n\n第二段正文。",
+        "release_caption": "独立发布配文。",
+    }
+    kernel = replace(
+        skeleton,
+        units=tuple(
+            replace(unit, text=writer_text[unit.purpose])
+            if unit.text_source == "writer"
+            else unit
+            for unit in skeleton.units
+        ),
+    )
+    publication_contract = build_publication_contract(
+        primary_product=primary_product,
+        topic_spans=("本次明确题材",),
+        topic_origin="explicit_user",
+        known_conditions=(),
+        frozen_fact_refs=(),
+        intake_spans=(),
+        account_identity="测试账号表达身份",
+        account_audience="测试受众",
+        account_attention="只使用本次正文",
+        account_response_boundary="不补造现实事实",
+        source_profile_id=None,
+        source_profile_version=None,
+        publication_projection_id=None,
+        publication_projection_version=None,
+        publication_projection_digest=None,
+        product_value_contract_digest=None,
+    )
+    return (
+        DeliveryCompileInput(
+            primary_product=primary_product,
+            media_format=media_format,
+            products=(),
+            production_conditions="只使用冻结媒体资源。",
+            allowed_resource_ids=envelope.resource_ids,
+            trusted_fact_texts=(),
+            media_capability_envelope=envelope,
+            media_program=program,
+            publication_contract=publication_contract,
+        ),
+        kernel,
+    )
+
+
+@pytest.mark.parametrize("program_id", _PUBLICATION_MEDIA_PROGRAM_IDS)
+def test_publication_v2_projects_every_media_program_without_legacy_copy(
+    monkeypatch: pytest.MonkeyPatch,
+    program_id: MediaProgramId,
+) -> None:
+    request, kernel = _publication_media_case(program_id)
+
+    def reject_legacy(*args: object, **kwargs: object) -> NoReturn:
+        del args, kwargs
+        raise AssertionError("publication-contract-v2 called a legacy projection")
+
+    monkeypatch.setattr(
+        delivery_compiler_module,
+        "_graphic_media_program_text",
+        reject_legacy,
+    )
+    monkeypatch.setattr(
+        delivery_compiler_module,
+        "_graphic_observation_sequence",
+        reject_legacy,
+    )
+    monkeypatch.setattr(
+        delivery_compiler_module,
+        "_video_media_program_text",
+        reject_legacy,
+    )
+
+    compiled = compile_delivery(request, kernel)
+
+    assert request.media_program is not None
+    assert request.media_capability_envelope is not None
+    assert compiled.resource_refs == request.media_program.required_resource_ids
+    assert (
+        f"media-program:{media_program_digest(request.media_program)}"
+        in compiled.visible_provenance["media_program"]
+    )
+    assert (
+        f"media-envelope:{media_envelope_digest(request.media_capability_envelope)}"
+        in compiled.visible_provenance["media_program"]
+    )
+    assert "作品作品标题" not in compiled.body
+    assert all(
+        phrase not in compiled.body
+        for phrase in (
+            "判断与取舍",
+            "两组条件",
+            "下一步动作",
+            "共同问题",
+            "本篇取舍",
+            "开放选择",
+            "正文转折",
+            "末页回到",
+            "最后回到",
+            "发布配文收束",
+        )
+    )
+    if program_id.startswith("graphic_"):
+        assert isinstance(compiled.production, GraphicProductionBundle)
+        assert compiled.production.release_caption_and_interaction not in (
+            compiled.production.image_sequence
+        )
+        assert "发布配文" not in compiled.production.image_sequence
+    else:
+        assert isinstance(compiled.production, VideoProductionBundle)
+        assert compiled.production.release_caption_and_interaction not in (
+            compiled.production.viewing_flow
+        )
+        assert "发布配文" not in compiled.production.viewing_flow
+    if request.media_program.series_position is not None:
+        assert f"系列第 {request.media_program.series_position} 篇" in compiled.body
+    if (
+        request.media_program.primary_resource_id
+        and request.media_program.secondary_resource_id
+    ):
+        assert (
+            f"media-role:primary:{request.media_program.primary_resource_id}"
+            in compiled.visible_provenance["media_program"]
+        )
+        assert (
+            f"media-role:secondary:{request.media_program.secondary_resource_id}"
+            in compiled.visible_provenance["media_program"]
+        )
+
+
+@pytest.mark.parametrize(
+    ("program_id", "legacy_phrase"),
+    (
+        ("graphic_choice_contrast_v1", "两组条件与边界"),
+        ("graphic_registered_product_relation_v1", "末页回到本篇选择"),
+        ("graphic_selected_asset_sequence_v1", "每页只承担一个正文转折"),
+        ("video_condition_choice_v1", "两组条件交替进入"),
+        ("video_registered_product_display_v1", "最后回到两者的一主一辅关系"),
+        ("video_selected_asset_sequence_v1", "每个素材只承接一个正文转折"),
+    ),
+)
+def test_publication_v2_projection_does_not_rewrite_legacy_output(
+    program_id: MediaProgramId,
+    legacy_phrase: str,
+) -> None:
+    request, kernel = _publication_media_case(program_id)
+
+    publication = compile_delivery(request, kernel)
+    legacy = compile_delivery(
+        replace(request, publication_contract=None),
+        kernel,
+    )
+
+    assert legacy_phrase in legacy.body
+    assert legacy_phrase not in publication.body
+    assert publication.resource_refs == legacy.resource_refs
+    assert publication.visible_provenance["media_program"] == (
+        legacy.visible_provenance["media_program"]
+    )
+
+
+def test_publication_v2_compiler_requires_exact_facts_and_product_digest() -> None:
+    request, kernel = _publication_media_case("graphic_observation_progression_v1")
+    assert request.publication_contract is not None
+
+    fact_drift = replace(
+        request,
+        trusted_fact_texts=(("fact:outside-publication-contract", "额外事实"),),
+    )
+    missing_fact = replace(
+        request,
+        publication_contract=replace(
+            request.publication_contract,
+            frozen_fact_refs=("fact:missing",),
+        ),
+    )
+    product_digest_without_contract = replace(
+        request,
+        publication_contract=replace(
+            request.publication_contract,
+            product_value_contract_digest="a" * 64,
+        ),
+    )
+
+    for invalid in (fact_drift, missing_fact):
+        with pytest.raises(GenerationFailed, match="发布责任合同与冻结事实轨不一致"):
+            compile_delivery(invalid, kernel)
+    with pytest.raises(GenerationFailed, match="无商品价值合同"):
+        compile_delivery(product_digest_without_contract, kernel)
+
+
+@pytest.mark.parametrize(
+    "program_id",
+    (
+        "graphic_fact_guided_v1",
+        "graphic_registered_product_relation_v1",
+    ),
+)
+def test_publication_v2_keeps_product_plan_internal_and_rejects_exact_copy(
+    program_id: MediaProgramId,
+) -> None:
+    request, kernel = _publication_media_case(program_id)
+    assert request.publication_contract is not None
+    assert request.media_program is not None
+    contract: ProductValueContract
+    internal_plan: tuple[str, str, str]
+    if program_id == "graphic_fact_guided_v1":
+        contract = P2ProductValueContractV1(
+            contract_version="product-value-contract-v1",
+            primary_product="product_truth",
+            product_insight="内部商品理解全文，不进入可见正文。",
+            tradeoff_or_limit="内部商品取舍全文，不进入可见正文。",
+            validity_condition="内部成立条件全文，不进入可见正文。",
+            source_fact_ids=(),
+            source_packet_digest="b" * 64,
+        )
+        internal_plan = (
+            contract.product_insight,
+            contract.tradeoff_or_limit,
+            contract.validity_condition,
+        )
+    else:
+        assert request.media_program.primary_resource_id is not None
+        assert request.media_program.secondary_resource_id is not None
+        contract = P5ProductValueContractV1(
+            contract_version="product-value-contract-v1",
+            primary_product="visual_styling_story",
+            real_product_anchor="内部商品锚点全文，不进入可见正文。",
+            visible_styling_proposition="内部视觉命题全文，不进入可见正文。",
+            visual_dependency="内部视觉依赖全文，不进入可见正文。",
+            relation_kind="color_hierarchy",
+            source_fact_ids=(),
+            source_packet_digest="c" * 64,
+            resource_refs=(
+                request.media_program.primary_resource_id,
+                request.media_program.secondary_resource_id,
+            ),
+        )
+        internal_plan = (
+            contract.real_product_anchor,
+            contract.visible_styling_proposition,
+            contract.visual_dependency,
+        )
+    request = replace(
+        request,
+        product_value_contract=contract,
+        publication_contract=replace(
+            request.publication_contract,
+            product_value_contract_digest=product_value_contract_digest(contract),
+        ),
+    )
+
+    compiled = compile_delivery(request, kernel)
+
+    assert isinstance(compiled.production, GraphicProductionBundle)
+    assert compiled.production.full_body == "第一段正文。\n\n第二段正文。"
+    assert all(text not in compiled.body for text in internal_plan)
+    if isinstance(contract, P2ProductValueContractV1):
+        assert isinstance(compiled.semantic_contract, P2SemanticContract)
+        assert (
+            compiled.semantic_contract.product_insight,
+            compiled.semantic_contract.tradeoff_or_limit,
+            compiled.semantic_contract.validity_condition,
+        ) == internal_plan
+    else:
+        assert isinstance(compiled.semantic_contract, P5SemanticContract)
+        assert (
+            compiled.semantic_contract.real_product_anchor,
+            compiled.semantic_contract.visible_styling_proposition,
+            compiled.semantic_contract.visual_dependency,
+        ) == internal_plan
+    for copied_text in internal_plan:
+        copied_kernel = replace(
+            kernel,
+            units=tuple(
+                replace(unit, text=copied_text)
+                if unit.purpose == "body"
+                else unit
+                for unit in kernel.units
+            ),
+        )
+        with pytest.raises(
+            GenerationFailed,
+            match="Writer 不得完整复制内部商品语义计划",
+        ):
+            compile_delivery(request, copied_kernel)
 
 
 def test_media_native_units_compile_one_scope_and_distinct_platform_parts() -> None:
@@ -1815,7 +2553,9 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
             assert value_document["primary_product"] == ("visual_styling_story")
             assert value_document["relation_kind"] == "color_hierarchy"
             assert set(value_document["resource_refs"]) == {item["resource_id"] for item in resources}
-            assert value_document["visible_styling_proposition"] in result["body"]
+            assert value_document["visible_styling_proposition"] not in result["body"]
+            assert "主视觉" in result["body"]
+            assert "辅助视觉" in result["body"]
             assert frozen_product_value_contract(snapshot) is not None
 
             with TestClient(
@@ -1984,6 +2724,42 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 tenant_id,
                 operator_id,
             )
+
+
+@pytest.mark.parametrize(
+    ("media_format", "legacy_program", "publication_program"),
+    (
+        ("graphic", "graphic_choice_contrast_v1", "graphic_observation_progression_v1"),
+        ("video", "video_condition_choice_v1", "video_dynamic_text_v1"),
+    ),
+)
+def test_publication_p1_does_not_inherit_the_legacy_two_choice_media_shape(
+    media_format: str,
+    legacy_program: str,
+    publication_program: str,
+) -> None:
+    envelope = build_media_capability_envelope(
+        platform_shape="publication-p1-test",
+        media_format=cast(Any, media_format),
+    )
+    legacy = select_media_program(
+        primary_product="dressing_decision",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=None,
+        fact_count=0,
+    )
+    publication = select_media_program(
+        primary_product="dressing_decision",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=None,
+        fact_count=0,
+        publication_contract=True,
+    )
+
+    assert legacy.program_id == legacy_program
+    assert publication.program_id == publication_program
 
 
 def test_series_positions_receive_distinct_closed_media_programs() -> None:
@@ -2414,20 +3190,10 @@ def test_current_confirmed_brand_fact_uses_the_single_artifact_scope() -> None:
 
 
 def test_actuality_writer_receives_one_frozen_fact_as_read_only_topic_anchor() -> None:
-    fact = "今天喝了一直喝的蓝山咖啡，居然是甜的。"
-    frame = new_frame("actuality_reflection", (fact,), ())
-    request = replace(
-        _generation_input(),
-        weak_seed=fact + "帮我发一条。",
-        narrative_frame=frame,
-        creative_plan=build_creative_plan(
-            topic_spans=(fact,),
-            primary_value="brand_life_narrative",
-            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
-            mechanism_id=None,
-            target_shape="小红书图文完整成品",
-        ),
-    )
+    request = _p3_account_link_request()
+    assert request.publication_contract is not None
+    assert request.narrative_frame is not None
+    fact = request.narrative_frame.user_facts[0].exact_text
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
     prompt = DeepSeekGenerator(
         "https://example.invalid",
@@ -2436,12 +3202,18 @@ def test_actuality_writer_receives_one_frozen_fact_as_read_only_topic_anchor() -
     )._kernel_writer_prompt(request, kernel, {})
 
     assert fact in prompt
-    assert request.weak_seed not in prompt
-    assert '"contract_version": "actuality-writer-brief-v2"' in prompt
-    assert '"source_id": "source:user_actuality:1"' in prompt
-    assert '"writer_relation": "respond_without_repeating_or_explaining_cause"' in prompt
-    assert "preserve_source_roles_without_reassigning_a_third_party" in prompt
-    assert "不得复述、改写或补全原句" in prompt
+    assert '"contract_version": "publication-contract-v2"' in prompt
+    assert sum(
+        span.role == "observable_actuality"
+        for span in request.publication_contract.intake_spans
+    ) == 2
+    assert sum(
+        span.role == "creation_instruction"
+        for span in request.publication_contract.intake_spans
+    ) == 1
+    assert "observable_actuality 会由服务端逐字插入一次" in prompt
+    assert "creation/style 指令绝不能写成现实事实" in prompt
+    assert "帮我发一条" in prompt
 
 
 def test_actuality_writer_cannot_repeat_the_frozen_fact(
@@ -2464,34 +3236,77 @@ def test_actuality_writer_cannot_repeat_the_frozen_fact(
         nonlocal request_count
         request_count += 1
         del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
-        units = (
-            [
-                {
-                    "unit_id": "unit:natural-guide",
-                    "text": "一次小变化，也能让日常重新被看见。",
-                },
-                {"unit_id": "unit:body", "text": fact},
-            ]
-            if request_count == 1
-            else [
-                {
-                    "unit_id": "unit:body",
-                    "text": "熟悉感被打断的那一刻，先停一下，也许就够了。",
-                }
-            ]
-        )
+        units = _publication_writer_units(body=fact)
         return {"choices": [{"message": {"content": json.dumps({"units": units}, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
-    artifact = DeepSeekGenerator(
-        "https://example.invalid",
-        "not-a-real-key",
-        "deepseek-test",
-    ).generate(request)
+    with pytest.raises(GenerationFailed, match="不得复述冻结现实"):
+        DeepSeekGenerator(
+            "https://example.invalid",
+            "not-a-real-key",
+            "deepseek-test",
+        ).generate(request)
+    assert request_count == 1
 
-    assert artifact.body.count(fact) == 1
-    assert "先停一下" in artifact.body
-    assert request_count == 2
+
+def test_publication_writer_cannot_return_or_replace_a_frozen_fact_unit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _p3_account_link_request()
+    assert request.narrative_frame is not None
+    facts = request.narrative_frame.user_facts
+    request_count = 0
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        nonlocal request_count
+        request_count += 1
+        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        units: list[dict[str, str]] = [*_publication_writer_units()]
+        units.extend(
+            {
+                "unit_id": f"unit:frozen-fact:{index}",
+                "text": f"被 Writer 改写的事实：{fact.exact_text}",
+            }
+            for index, fact in enumerate(facts, start=1)
+        )
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {"units": units},
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+
+    def compilation_must_not_start(*args: object, **kwargs: object) -> NoReturn:
+        del args, kwargs
+        raise AssertionError("Writer-owned parsing reached compilation with a frozen fact")
+
+    monkeypatch.setattr(
+        "src.tool.llm_gateway.deepseek.compile_delivery",
+        compilation_must_not_start,
+    )
+    with pytest.raises(GenerationFailed, match="Writer 返回格式不完整"):
+        DeepSeekGenerator(
+            "https://example.invalid",
+            "not-a-real-key",
+            "deepseek-test",
+        ).generate(request)
+    assert request_count == 1
 
 
 def test_p2_server_selects_only_the_three_frozen_product_facts() -> None:
@@ -2641,13 +3456,6 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
     assert '"subject_scope": "generic_only"' in prompt
     assert '"actual_event_or_result"' in prompt
     assert '"allowed_resources": []' in prompt
-    assert '"contract_version": "non-bearing-writer-claim-v4"' in prompt
-    assert '"all_visible_sentences_must_match_one_allowed_claim": true' in prompt
-    assert '"claim_type": "health_or_body_improvement"' in prompt
-    assert '"claim_type": "source_subject_reassignment"' in prompt
-    assert '"advice_mood": "conditional_or_optional_only"' in prompt
-    assert "每一个可见完整句都必须且只能落入 allowed_claims 之一" in prompt
-    assert "allowed_claims 不是正文标签" in prompt
     assert "媒体程序 graphic_series_choice_v1 确定性生成" in prompt
     assert "不得返回任何媒体单元、资源引用" in prompt
     assert "resource:original_composition" not in prompt
@@ -2700,57 +3508,6 @@ def test_series_writer_rejects_one_long_clause_copied_from_frozen_prior_entry() 
         request,
         progressed_kernel,
     )
-
-
-def test_p4_writer_claim_budget_only_responds_to_the_explicit_signal() -> None:
-    base = _p3_account_link_request()
-    request = replace(base, primary_product="local_response")
-    kernel = cast(CreativeKernelV1, _filled_kernel(request))
-    prompt = DeepSeekGenerator(
-        "https://example.invalid",
-        "not-a-real-key",
-        "deepseek-test",
-    )._kernel_writer_prompt(request, kernel, {})
-
-    assert '"claim_type": "conditional_response_to_explicit_signal"' in prompt
-    assert "留出空间或提出一个中性问题" in prompt
-    assert "不得从位置、距离、时长、动作或语气推断状态" in prompt
-    assert "不得新增原句没有明示的观察维度、身体或情绪状态" in prompt
-
-
-def test_general_p3_writer_opening_is_one_direct_non_bearing_question() -> None:
-    request = _generation_input()
-    kernel = cast(CreativeKernelV1, _filled_kernel(request))
-    valid = replace(
-        kernel,
-        units=tuple(
-            replace(unit, text="这次先观察动作，还是先保留选择？")
-            if unit.unit_id == "unit:body-opening"
-            else unit
-            for unit in kernel.units
-        ),
-    )
-    DeepSeekGenerator._assert_non_bearing_writer_shape(request, valid)
-
-    for invalid_text in (
-        "某个选择会改变关系。",
-        "先作结论。然后观察哪一个动作？",
-        "观察动作还是选择",
-    ):
-        invalid = replace(
-            valid,
-            units=tuple(
-                replace(unit, text=invalid_text)
-                if unit.unit_id == "unit:body-opening"
-                else unit
-                for unit in valid.units
-            ),
-        )
-        with pytest.raises(GenerationFailed, match="直接选择问题"):
-            DeepSeekGenerator._assert_non_bearing_writer_shape(
-                request,
-                invalid,
-            )
 
 
 def test_writer_prompt_consumes_selected_brand_methods_without_fact_upgrade() -> None:
@@ -3102,24 +3859,7 @@ def test_p2_exact_fact_repetition_gets_one_bounded_affected_unit_repair(
 
 
 def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
-    request = replace(
-        _generation_input(),
-        brand=replace(
-            _generation_input().brand,
-            account_name="折线衣间·总部穿衣编辑",
-            content_role_name="总部穿衣编辑",
-        ),
-        account_expression=AccountExpression(
-            UUID("83000000-0000-0000-0000-000000000020"),
-            3,
-            "从穿衣编辑的位置重新看熟悉事物",
-            "不把表达位置写成真实职业履历或机构事实。",
-            "陪正在重新选择日常节奏的人看清取舍。",
-            "穿衣选择、熟悉事物被重新看见的时刻。",
-            "一人一部手机，普通室内环境。",
-            False,
-        ),
-    )
+    request = _p3_account_link_request()
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
     prompt = DeepSeekGenerator(
         "https://example.invalid",
@@ -3127,159 +3867,31 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
         "deepseek-test",
     )._kernel_writer_prompt(request, kernel, {})
 
-    assert "本篇账号关联路径" in prompt
+    assert "账号编辑许可" in prompt
     assert "陪正在重新选择日常节奏的人看清取舍" in prompt
-    assert "从穿衣编辑的位置重新看熟悉事物" not in prompt
-    assert "穿衣选择、熟悉事物被重新看见的时刻" not in prompt
-    assert '"required_visible_spans"' not in prompt
-    assert '"总部穿衣编辑"' not in prompt
-    assert "为什么会说这段话" in prompt
-    assert "折线衣间" not in prompt
-    assert "每个 text 只填写该单元的自然内容" in prompt
-    assert "正式标题、正文、字幕、制作提示和发布配文的结构只由" in prompt
-    assert '"shape": "content_only"' in prompt
-    assert '"wrapper_owner": "delivery_compiler"' in prompt
-    assert '"text": ""' in prompt
-    assert "填写 media_opening 的完整可见文字" not in prompt
-    assert "purpose\n或其他内部标签" in prompt
-    assert '"contract_version": "non-bearing-writer-claim-v4"' in prompt
-    assert '"claim_type": "cause_or_result"' in prompt
-    assert "不得说明这些做法会让关系、人物或结果如何变化" in prompt
-    assert "任何\nprohibited_claims 都是硬失败" in prompt
-
+    assert "从穿衣编辑的位置重新看熟悉事物" in prompt
+    assert "穿衣选择、熟悉事物被重新看见的时刻" in prompt
+    assert "不得照抄成账号定义、口号或职业经历" in prompt
+    assert "Writer 不拥有媒体单元" in prompt
+    assert "media_opening" not in prompt
+    assert "必须是问句" not in prompt
+    assert "必须二选一" not in prompt
+    assert "下次观察" not in prompt
     compiled = compile_delivery(
         _compile_input(request),
         kernel,
     )
     assert isinstance(compiled.semantic_contract, P3SemanticContract)
-    assert compiled.semantic_contract.brand_account_link == (
-        "不催人下结论，先看熟悉感被意外打断后，人会怎样重新注意日常。"
-    )
+    assert compiled.semantic_contract.brand_account_link == compiled.production.natural_guide
     assert compiled.semantic_contract.brand_account_link in compiled.body
-
-
-def test_p3_writer_uses_versioned_editorial_lens_without_profile_copy_or_topic_switch() -> None:
-    base = _p3_account_link_request()
-    constraint = "先回应本次具体处境，再给出克制而明确的判断。"
-    method = "围绕本次输入中一个可感知的变化展开，不复述资料标签。"
-    segments = tuple(
-        BrandContextSegment(
-            segment_id=f"91000000-0000-4000-8000-00000000000{index}",
-            source_document_id=f"92000000-0000-4000-8000-00000000000{index}",
-            source_document_version_id=f"93000000-0000-4000-8000-00000000000{index}",
-            source_id=f"brand_source_segment:{index}",
-            source_version="V2",
-            semantic_kind=kind,
-            evidence_level="confirmed_publication",
-            visibility_scope="brand_all",
-            digest=hashlib.sha256(text.encode()).hexdigest(),
-            exact_text=text,
-            source_digest=f"{index}" * 64,
-        )
-        for index, (kind, text) in enumerate(
-            (
-                ("expression_constraint", constraint),
-                ("creative_method", method),
-            ),
-            start=1,
-        )
-    )
-    projection_id = "94000000-0000-4000-8000-000000000001"
-    projection_digest = "a" * 64
-    packet_documents = [
-        {
-            "segment_id": segment.segment_id,
-            "source_document_id": segment.source_document_id,
-            "source_document_version_id": segment.source_document_version_id,
-            "source_id": segment.source_id,
-            "source_version": segment.source_version,
-            "semantic_kind": segment.semantic_kind,
-            "evidence_level": segment.evidence_level,
-            "visibility_scope": segment.visibility_scope,
-            "digest": segment.digest,
-            "exact_text": segment.exact_text,
-            "source_digest": segment.source_digest,
-        }
-        for segment in segments
-    ]
-    packet = BrandContextPacketV2(
-        "brand-context-packet-v2",
-        brand_context_packet_digest(
-            projection_id=projection_id,
-            projection_version=2,
-            projection_digest=projection_digest,
-            segments=packet_documents,
-        ),
-        projection_id,
-        2,
-        projection_digest,
-        segments,
-    )
-    request = replace(
-        base,
-        brand=replace(
-            base.brand,
-            expression_constraint_context=(constraint,),
-            creative_method_context=(method,),
-            context_packet=packet,
-        ),
-    )
-    kernel = cast(CreativeKernelV1, _filled_kernel(request))
-
-    prompt = DeepSeekGenerator(
-        "https://example.invalid",
-        "not-a-real-key",
-        "deepseek-test",
-    )._kernel_writer_prompt(request, kernel, {})
-
-    assert "account-editorial-lens-v5" in prompt
-    assert "从穿衣编辑的位置重新看熟悉事物" not in prompt
-    assert "陪正在重新选择日常节奏的人看清取舍" not in prompt
-    assert "穿衣选择、熟悉事物被重新看见的时刻" not in prompt
-    assert "题材没有商品、服饰或门店时" in prompt
-    assert "不能无损替换到另一件生活琐事" in prompt
-    assert "editorial_responsibility" in prompt
-    assert "不能解释原因、罗列" in prompt
-    assert prompt.count("不把它写成原因、诊断") == 2
-    assert prompt.count("不得升级为生活的一般教训") == 2
-    assert "健康、身体改善、心理、需要、意图、原因、因果或结果" in prompt
-    assert prompt.count("不把一次片段收束成适用于所有人的口号") == 2
-    assert "不应复制" not in prompt
-    assert "去标识化表达控制：使用已冻结账号编辑视角" in prompt
-    assert prompt.count(constraint) == 1
-    assert prompt.count(method) == 1
-
-    snapshot = snapshot_document(
-        ContentControlContext(
-            catalog_version=None,
-            direction=None,
-            account_expression=request.account_expression,
-            materials=(),
-            preference_mode="absent",
-            preference_version=None,
-            content_role=request.brand.content_role_name,
-            content_role_boundary=request.brand.content_role_boundary,
-            speaker_kind=request.brand.speaker_kind,
-        ),
-        request.brand.content_role_name,
-        narrative_frame=request.narrative_frame,
-        user_premise=request.weak_seed,
-        creative_plan=request.creative_plan,
-        brand_context_packet=packet,
-    )
-    assert snapshot["account_editorial_lens_digest"]
-    frozen_lens = snapshot["account_editorial_lens"]
-    assert isinstance(frozen_lens, dict)
-    assert request.account_expression is not None
-    assert frozen_lens["source_profile_id"] == str(request.account_expression.profile_id)
-    assert frozen_lens["publication_projection_id"] == projection_id
 
 
 def test_explicit_local_response_does_not_receive_the_account_topic_domain() -> None:
     base = _p3_account_link_request()
     packet, constraint = _current_publication_packet()
     fact = "今天店里有人只想自己看看。"
-    request = replace(
+    request = _with_publication_contract(
+        replace(
         base,
         brand=replace(
             base.brand,
@@ -3288,7 +3900,7 @@ def test_explicit_local_response_does_not_receive_the_account_topic_domain() -> 
         ),
         weak_seed=fact,
         primary_product="local_response",
-        narrative_frame=new_frame("actuality_reflection", (fact,), ()),
+        narrative_frame=new_frame("general_observation", (), ()),
         creative_plan=build_creative_plan(
             topic_spans=(fact,),
             primary_value="local_response",
@@ -3296,6 +3908,8 @@ def test_explicit_local_response_does_not_receive_the_account_topic_domain() -> 
             mechanism_id=None,
             target_shape="小红书图文完整成品",
         ),
+        ),
+        roles=("observable_actuality",),
     )
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
 
@@ -3306,17 +3920,17 @@ def test_explicit_local_response_does_not_receive_the_account_topic_domain() -> 
     )._kernel_writer_prompt(request, kernel, {})
 
     assert fact in prompt
-    assert "题材没有商品、服饰或门店时" in prompt
-    assert "从穿衣编辑的位置重新看熟悉事物" not in prompt
-    assert "陪正在重新选择日常节奏的人看清取舍" not in prompt
-    assert "穿衣选择、熟悉事物被重新看见的时刻" not in prompt
-    assert "system_selected_topic_domain" not in prompt
+    assert '"topic_origin": "explicit_user"' in prompt
+    assert "从穿衣编辑的位置重新看熟悉事物" in prompt
+    assert "陪正在重新选择日常节奏的人看清取舍" in prompt
+    assert "不硬插品牌名、商品或服饰" in prompt
 
 
 def test_system_selected_account_topic_receives_the_frozen_topic_domain() -> None:
     base = _p3_account_link_request()
     packet, constraint = _current_publication_packet()
-    request = replace(
+    request = _with_publication_contract(
+        replace(
         base,
         brand=replace(
             base.brand,
@@ -3333,6 +3947,8 @@ def test_system_selected_account_topic_receives_the_frozen_topic_domain() -> Non
             target_shape="小红书图文完整成品",
             topic_origin="system_selected",
         ),
+        ),
+        roles=("creation_instruction", "creation_instruction"),
     )
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
 
@@ -3342,12 +3958,10 @@ def test_system_selected_account_topic_receives_the_frozen_topic_domain() -> Non
         "deepseek-test",
     )._kernel_writer_prompt(request, kernel, {})
 
-    assert "system_selected_topic_domain" in prompt
+    assert '"topic_origin": "system_selected"' in prompt
     assert "穿衣选择、熟悉事物被重新看见的时刻" in prompt
-    assert '"contract_version": "system-selected-audience-topic-v2"' in prompt
-    assert '"subject_scope": "one_person_observable_action_or_external_condition"' in prompt
-    assert "another_person_relationship_feeling_preference_expectation_or_reaction" in prompt
-    assert '"allowed": "observable_action_or_external_condition_only"' in prompt
+    assert "自主选择一个具体生活题材" in prompt
+    assert "不能把选题、问题或二选一重新交给用户" in prompt
 
 
 def _current_publication_packet() -> tuple[BrandContextPacketV2, str]:
@@ -3400,8 +4014,8 @@ def _current_publication_packet() -> tuple[BrandContextPacketV2, str]:
 
 def _p3_account_link_request() -> GenerationInput:
     base_request = _generation_input()
-    fact = "今天喝了一直喝的蓝山咖啡，居然是甜的，帮我发一条。"
-    return replace(
+    premise = "今天喝了一直喝的蓝山咖啡，居然是甜的，帮我发一条。"
+    request = replace(
         base_request,
         brand=replace(
             base_request.brand,
@@ -3418,15 +4032,23 @@ def _p3_account_link_request() -> GenerationInput:
             "一人一部手机，普通室内环境。",
             False,
         ),
-        weak_seed=fact,
+        weak_seed=premise,
         primary_product="brand_life_narrative",
-        narrative_frame=new_frame("actuality_reflection", (fact,), ()),
+        narrative_frame=new_frame("general_observation", (), ()),
         creative_plan=build_creative_plan(
-            topic_spans=(fact,),
+            topic_spans=("今天喝了一直喝的蓝山咖啡，居然是甜的",),
             primary_value="brand_life_narrative",
             tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
             mechanism_id=None,
             target_shape="小红书图文完整成品",
+        ),
+    )
+    return _with_publication_contract(
+        request,
+        roles=(
+            "observable_actuality",
+            "observable_actuality",
+            "creation_instruction",
         ),
     )
 
@@ -3456,146 +4078,6 @@ def test_current_actuality_account_body_is_prospective_not_causal_explanation() 
     assert unit_contracts_v2(kernel, request.narrative_frame)["unit:body"] == "recommendation"
 
 
-def test_current_p1_writer_brief_is_bounded_and_does_not_license_product_performance() -> None:
-    request = _generation_input(media_format="video")
-    request = replace(
-        request,
-        primary_product="dressing_decision",
-        products=(),
-    )
-    assert request.narrative_frame is not None
-    context = BoundaryContext.from_request(request, request.narrative_frame)
-    kernel = build_kernel_skeleton(
-        frame=request.narrative_frame,
-        fact_registry=context.fact_registry,
-        constraint_refs=tuple(identifier for identifier, _ in context.constraint_registry),
-        program_id=select_kernel_program(
-            frame=request.narrative_frame,
-            prior_kernel=None,
-            revision_instruction=None,
-        ),
-        allowed_resource_ids=(),
-        media_format="video",
-        kernel_version=KERNEL_VERSION,
-        primary_product="dressing_decision",
-    )
-    contract = build_server_bearing_expression_contract(
-        primary_product="dressing_decision",
-        media_format="video",
-        frame=request.narrative_frame,
-        series_position=None,
-    )
-    assert contract is not None
-    kernel = apply_server_bearing_expression_contract(kernel, contract)
-    prompt = DeepSeekGenerator(
-        "https://example.invalid",
-        "not-a-real-key",
-        "deepseek-test",
-    )._kernel_writer_prompt(request, kernel, contract.unit_text_by_id)
-
-    assert "dressing-decision-publication-brief-v1" in prompt
-    assert "二百二十字符是硬上限" in prompt
-    assert "没有 ProductFact" in prompt
-    assert "decision_responsibility" in prompt
-    assert P1_SELECTION_UNIT_ID in prompt
-    assert "不得再提出第二套选择" in prompt
-    assert "视频观看回报只承诺沿时间顺序拆开已有条件" in prompt
-    assert "不提前概括怎样穿、能获得什么" in prompt
-    assert kernel.unit("unit:release-caption").text == P1_RELEASE_CAPTION
-    assert "unit:release-caption" not in {
-        unit.unit_id for unit in kernel.writable_units
-    }
-    repair_prompt = DeepSeekGenerator._account_link_naturalization_prompt(
-        request=request,
-        kernel=kernel,
-        affected_unit_ids=frozenset({"unit:natural-guide"}),
-        source_spans=("冻结的账号关系",),
-        forbid_attributed_dialogue=False,
-    )
-    assert "选择骨架和发布收束已经由服务端冻结" in repair_prompt
-    assert "不得新增服装类别、穿法、选择标准" in repair_prompt
-    assert P1_SELECTION_UNIT_ID not in {
-        unit.unit_id for unit in kernel.writable_units
-    }
-
-    too_long = replace(
-        kernel,
-        units=tuple(
-            replace(unit, text=("选择。" * 80)) if unit.purpose == "body" else replace(unit, text="自然文字")
-            for unit in kernel.units
-        ),
-    )
-    with pytest.raises(GenerationFailed, match="可直接观看的长度"):
-        DeepSeekGenerator._assert_p1_publication_shape(request, too_long)
-
-
-def test_p1_runtime_freezes_one_server_choice_body_and_only_requests_non_bearing_copy(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    request = replace(
-        _generation_input(media_format="video"),
-        primary_product="dressing_decision",
-        products=(),
-    )
-
-    def respond(
-        self: DeepSeekGenerator,
-        system: str,
-        prompt: str,
-        max_tokens: int,
-        *,
-        thinking_disabled: bool = True,
-        timeout_seconds: float | None = None,
-    ) -> tuple[dict[str, Any], int]:
-        del self, system, max_tokens, thinking_disabled, timeout_seconds
-        assert P1_SELECTION_UNIT_ID in prompt
-        assert '"unit_id": "unit:body-opening"' not in prompt
-        assert '"unit_id": "unit:hypothetical-example"' not in prompt
-        assert '"unit_id": "unit:body-closing"' not in prompt
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(
-                            {
-                                "units": [
-                                    {
-                                        "unit_id": "unit:title",
-                                        "text": "今天只先保住一个条件",
-                                    },
-                                    {
-                                        "unit_id": "unit:natural-guide",
-                                        "text": "把这次取舍拆成一个能落地的顺序。",
-                                    },
-                                ]
-                            },
-                            ensure_ascii=False,
-                        )
-                    }
-                }
-            ]
-        }, 0
-
-    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
-    artifact = DeepSeekGenerator(
-        "https://example.invalid",
-        "not-a-real-key",
-        "deepseek-test",
-    ).generate(request)
-
-    assert "先在已经给出的条件里选出最不能妥协的一项" in artifact.body
-    assert "不预设某件单品一定有效" in artifact.body
-    assert P1_RELEASE_CAPTION in artifact.body
-    assert "body-opening" not in artifact.body
-    assert artifact.completion_snapshot_patch is not None
-    contract = artifact.completion_snapshot_patch[
-        "server_bearing_expression_contract"
-    ]
-    assert isinstance(contract, dict)
-    assert contract["contract_version"] == "server-bearing-expression-v1"
-    assert artifact.completion_snapshot_patch["server_bearing_expression_digest"]
-
-
 @pytest.mark.parametrize("copies_profile", (False, True))
 def test_p3_writer_must_naturalize_the_frozen_account_link(
     monkeypatch: pytest.MonkeyPatch,
@@ -3616,24 +4098,12 @@ def test_p3_writer_must_naturalize_the_frozen_account_link(
         nonlocal request_count
         request_count += 1
         del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
-        if copies_profile and request_count == 2:
-            content = {
-                "units": [
-                    {
-                        "unit_id": "unit:body",
-                        "text": "一次意外把熟悉感打断，也给读者留下重新判断日常的空间。",
-                    }
-                ]
-            }
-            return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
-        guide = "重新注意一次熟悉的日常，也看见这次变化给选择带来的新角度。"
-        body = "陪正在重新选择日常节奏的人看清取舍。" if copies_profile else "熟悉的味道偶尔也会让人重新发现日常。"
-        content = {
-            "units": [
-                {"unit_id": "unit:natural-guide", "text": guide},
-                {"unit_id": "unit:body", "text": body},
-            ]
-        }
+        body = (
+            "陪正在重新选择日常节奏的人看清取舍。"
+            if copies_profile
+            else "熟悉的味道突然出现变化，会让人重新发现自己原本忽略的判断。"
+        )
+        content = {"units": _publication_writer_units(body=body)}
         return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
@@ -3642,20 +4112,14 @@ def test_p3_writer_must_naturalize_the_frozen_account_link(
         "not-a-real-key",
         "deepseek-test",
     )
-    artifact = generator.generate(request)
-    assert "总部穿衣编辑" not in artifact.body
-    assert "陪正在重新选择日常节奏的人看清取舍。" not in artifact.body
-    assert "重新" in artifact.body
-    assert artifact.outline == "今天喝了一直喝的蓝山咖啡：居然是甜的"
-    assert "这次先停在“居然是甜的”上" in artifact.body
-    assert artifact.completion_snapshot_patch is not None
-    bearing_contract = artifact.completion_snapshot_patch[
-        "server_bearing_expression_contract"
-    ]
-    assert isinstance(bearing_contract, dict)
-    assert bearing_contract["contract_version"] == "server-bearing-expression-v1"
-    assert artifact.completion_snapshot_patch["server_bearing_expression_digest"]
-    assert request_count == (2 if copies_profile else 1)
+    if copies_profile:
+        with pytest.raises(GenerationFailed, match="不得复述冻结现实或账号资料原句"):
+            generator.generate(request)
+    else:
+        artifact = generator.generate(request)
+        assert "陪正在重新选择日常节奏的人看清取舍。" not in artifact.body
+        assert "重新发现" in artifact.body
+    assert request_count == 1
 
 
 def test_p3_writer_must_naturalize_confirmed_publication_method_copy(
@@ -3682,21 +4146,8 @@ def test_p3_writer_must_naturalize_confirmed_publication_method_copy(
         nonlocal request_count
         request_count += 1
         del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
-        body = (
-            "围绕一个可感知的变化，给出一条清楚选择。"
-            if request_count == 1
-            else "熟悉感偶尔被打断，也值得停一下，重新看看自己的判断。"
-        )
-        units = (
-            [
-                {
-                    "unit_id": "unit:natural-guide",
-                    "text": "一次小变化，也能让日常重新被看见。",
-                },
-                {"unit_id": "unit:body", "text": body},
-            ]
-            if request_count == 1
-            else [{"unit_id": "unit:body", "text": body}]
+        units = _publication_writer_units(
+            body="围绕一个可感知的变化，给出一条清楚选择。",
         )
         return {
             "choices": [
@@ -3712,15 +4163,13 @@ def test_p3_writer_must_naturalize_confirmed_publication_method_copy(
         }, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
-    artifact = DeepSeekGenerator(
-        "https://example.invalid",
-        "not-a-real-key",
-        "deepseek-test",
-    ).generate(request)
-
-    assert "围绕一个可感知的变化" not in artifact.body
-    assert "重新看看自己的判断" in artifact.body
-    assert request_count == 2
+    with pytest.raises(GenerationFailed, match="不得复述冻结现实或账号资料原句"):
+        DeepSeekGenerator(
+            "https://example.invalid",
+            "not-a-real-key",
+            "deepseek-test",
+        ).generate(request)
+    assert request_count == 1
 
 
 def test_p3_one_frozen_account_path_is_sufficient_without_terminal_punctuation(
@@ -3742,16 +4191,10 @@ def test_p3_one_frozen_account_path_is_sufficient_without_terminal_punctuation(
         request_count += 1
         del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
         content = {
-            "units": [
-                {
-                    "unit_id": "unit:natural-guide",
-                    "text": "陪读者从一次小变化里重新辨认自己的日常选择。",
-                },
-                {
-                    "unit_id": "unit:body",
-                    "text": "熟悉的味道偶尔也会让人重新发现日常。",
-                },
-            ]
+            "units": _publication_writer_units(
+                natural_guide="陪读者从一次小变化里重新辨认自己的日常选择。",
+                body="熟悉的味道偶尔也会让人重新发现日常。",
+            )
         }
         return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
 
@@ -3768,7 +4211,7 @@ def test_p3_one_frozen_account_path_is_sufficient_without_terminal_punctuation(
     assert request_count == 1
 
 
-def test_actuality_writer_repairs_one_new_dialogue_then_rechecks_the_full_unit(
+def test_publication_actuality_uses_one_writer_call_without_semantic_repair(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _p3_account_link_request()
@@ -3786,28 +4229,11 @@ def test_actuality_writer_repairs_one_new_dialogue_then_rechecks_the_full_unit(
         nonlocal request_count
         request_count += 1
         del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
-        if request_count == 2:
-            content = {
-                "units": [
-                    {
-                        "unit_id": "unit:body",
-                        "text": "熟悉感被打断后，先留意那一点变化就够了。",
-                    }
-                ]
-            }
-        else:
-            content = {
-                "units": [
-                    {
-                        "unit_id": "unit:natural-guide",
-                        "text": "重新注意一次熟悉的日常。",
-                    },
-                    {
-                        "unit_id": "unit:body",
-                        "text": "当一个人说“今天怎么是甜的”时，熟悉感被打断了。",
-                    },
-                ]
-            }
+        content = {
+            "units": _publication_writer_units(
+                body="熟悉感被打断后，可以先留意这次真正发生变化的部分。",
+            )
+        }
         return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
@@ -3816,54 +4242,25 @@ def test_actuality_writer_repairs_one_new_dialogue_then_rechecks_the_full_unit(
         "not-a-real-key",
         "deepseek-test",
     ).generate(request)
-    assert "先留意那一点变化" in artifact.body
-    assert "今天怎么是甜的" not in artifact.body
-    assert request_count == 2
+    assert "真正发生变化的部分" in artifact.body
+    assert request_count == 1
 
 
-def test_actuality_writer_fails_when_the_single_dialogue_repair_remains_unsafe(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_publication_actuality_prompt_keeps_reality_dialogue_in_negative_boundary() -> None:
     request = _p3_account_link_request()
-    request_count = 0
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, kernel, {})
 
-    def respond(
-        self: DeepSeekGenerator,
-        system: str,
-        prompt: str,
-        max_tokens: int,
-        *,
-        thinking_disabled: bool = True,
-        timeout_seconds: float | None = None,
-    ) -> tuple[dict[str, Any], int]:
-        nonlocal request_count
-        request_count += 1
-        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
-        if request_count == 2:
-            content = {
-                "units": [
-                    {"unit_id": "unit:body", "text": "她说“这杯今天怎么是甜的”。"},
-                ]
-            }
-        else:
-            content = {
-                "units": [
-                    {"unit_id": "unit:natural-guide", "text": "重新注意一次熟悉的日常。"},
-                    {"unit_id": "unit:body", "text": "她说“今天怎么是甜的”。"},
-                ]
-            }
-        return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
-
-    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
-    with pytest.raises(GenerationFailed, match="新的直接引语"):
-        DeepSeekGenerator(
-            "https://example.invalid",
-            "not-a-real-key",
-            "deepseek-test",
-        ).generate(request)
+    assert "不新增人物身份、对白、健康、心理、因果、后续事件或结果" in prompt
+    assert "独立 Reviewer" not in prompt
+    assert "不得再使用中文或 ASCII 引号" not in prompt
 
 
-def test_actuality_writer_removes_even_a_non_attributed_concept_label(
+def test_publication_allows_non_attributed_quoted_concept_label(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _p3_account_link_request()
@@ -3881,25 +4278,12 @@ def test_actuality_writer_removes_even_a_non_attributed_concept_label(
         nonlocal request_count
         request_count += 1
         del self, system, max_tokens, thinking_disabled, timeout_seconds
-        if request_count == 2:
-            assert "不得再使用中文或 ASCII 引号" in prompt
-            assert "所谓“熟悉”" not in prompt
-            assert "待修复 unit 的冻结职责" in prompt
-            content = {
-                "units": [
-                    {
-                        "unit_id": "unit:body",
-                        "text": "熟悉有时只是暂时没有再看一眼。",
-                    }
-                ]
-            }
-        else:
-            content = {
-                "units": [
-                    {"unit_id": "unit:natural-guide", "text": "重新注意一次熟悉的日常。"},
-                    {"unit_id": "unit:body", "text": "所谓“熟悉”，有时只是暂时没有再看一眼。"},
-                ]
-            }
+        del prompt
+        content = {
+            "units": _publication_writer_units(
+                body="所谓“熟悉”，有时只是暂时没有再看一眼。",
+            )
+        }
         return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
@@ -3908,10 +4292,8 @@ def test_actuality_writer_removes_even_a_non_attributed_concept_label(
         "not-a-real-key",
         "deepseek-test",
     ).generate(request)
-    assert "熟悉有时只是" in artifact.body
-    assert "所谓“熟悉”" not in artifact.body
-    assert "你提到：“" in artifact.body
-    assert request_count == 2
+    assert "所谓“熟悉”" in artifact.body
+    assert request_count == 1
 
 
 def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() -> None:

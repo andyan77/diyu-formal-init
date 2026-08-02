@@ -30,6 +30,7 @@ from src.shared.creative_plan import (
 )
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.narrative import NarrativeFrame, frame_document, visible_digest
+from src.shared.publication_contract import IntakeSpanRole
 from src.shared.types import (
     ConversationDecision,
     ConversationInput,
@@ -44,6 +45,7 @@ _G2 = "ZX-C218，帮我生成一篇小红书文案。"
 _G3 = "帮我写条婆媳主题的小红书，别狗血，也不要把任何一方写成反派。"
 _G4 = "今天店里忙了一天，回家还因为谁洗碗拌了两句。帮我发条小红书。"
 _G4_FACT = "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
+_G4_FACT_SPANS = ("今天店里忙了一天，", "回家还因为谁洗碗拌了两句。")
 _G5 = "今天不知道发什么，帮我做条小红书。"
 _G6 = "把我去年创业最困难的那个月写出来。"
 _G7 = "别讲道理，荒诞一点。"
@@ -117,15 +119,27 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
                 primary_product="brand_life_narrative",
             )
         selected_facts = tuple(
-            candidate for candidate in request.user_fact_candidates if candidate.exact_text == _G4_FACT
+            candidate
+            for candidate in request.user_fact_candidates
+            if request.message == _G4 and candidate.exact_text in _G4_FACT_SPANS
         )
         fact_spans = tuple(candidate.exact_text for candidate in selected_facts)
+        span_roles: tuple[tuple[str, IntakeSpanRole], ...] = tuple(
+            (
+                candidate.source_id,
+                "observable_actuality"
+                if candidate in selected_facts
+                else "creation_instruction",
+            )
+            for candidate in request.user_fact_candidates
+        )
         return ConversationDecision(
             "ready",
             "可以，我直接完成。",
             user_premises=(request.message,),
             user_fact_spans=fact_spans,
             user_fact_source_ids=tuple(candidate.source_id for candidate in selected_facts),
+            user_span_roles=span_roles,
             narrative_mode=(
                 "actuality_reflection" if fact_spans else request.explicit_narrative_mode or "general_observation"
             ),
@@ -397,11 +411,11 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             if card == "G4":
                 g4_body = str(result["body"])
             time.sleep(2.05)
-        assert _G4_FACT in g4_body
+        assert all(fact_span in g4_body for fact_span in _G4_FACT_SPANS)
         g3_snapshot = _snapshot(app_database_url, task_ids["G3"])
         g3_kernel = g3_snapshot["creative_kernel_v2"]
         assert isinstance(g3_kernel, dict)
-        assert g3_kernel["program_id"] == "observation_with_hypothetical_example_v2"
+        assert g3_kernel["program_id"] == "observation_only_v1"
 
         g6_before = _counts(app_database_url)
         g6 = _events(client, _G6)
@@ -416,9 +430,20 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert frame["frame_version"] == "narrative-frame-v1"
         assert frame["narrative_mode"] == "actuality_reflection"
         assert isinstance(frame["user_facts"], list)
-        assert len(frame["user_facts"]) == 1
-        assert frame["user_facts"][0]["exact_text"] == _G4_FACT
+        assert len(frame["user_facts"]) == 2
+        assert [fact["exact_text"] for fact in frame["user_facts"]] == list(
+            _G4_FACT_SPANS
+        )
         assert str(frame["user_facts"][0]["source_id"]).startswith("source:user_actuality:turn-1:clause-1:")
+        assert str(frame["user_facts"][1]["source_id"]).startswith("source:user_actuality:turn-1:clause-2:")
+        publication_contract = snapshot["publication_contract"]
+        assert isinstance(publication_contract, dict)
+        assert [span["role"] for span in publication_contract["intake_spans"]] == [
+            "observable_actuality",
+            "observable_actuality",
+            "creation_instruction",
+        ]
+        assert publication_contract["known_conditions"] == list(_G4_FACT_SPANS)
         assert frame["allowed_brand_fact_ids"] == []
         assert snapshot["creation_commitment"] == {
             "gate_version": "creation-intent-gate-v1",
@@ -472,8 +497,8 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert revision.status_code == 201, revision.text
         v2 = revision.json()
         assert v2["version"] == 2
-        assert _G4_FACT in v2["body"]
-        assert "小剧场为情景演绎，不对应现实经历" in v2["body"]
+        assert all(fact_span in v2["body"] for fact_span in _G4_FACT_SPANS)
+        assert "这次按你的修改要求改变了允许调整的表达" in v2["body"]
         revision_counts = _counts(app_database_url)
         revision_calls = dict(_CALLS)
         replayed_revision = client.post(
@@ -504,7 +529,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         revised_kernel = revised_snapshot["creative_kernel_v2"]
         assert isinstance(revised_kernel, dict)
         assert revised_kernel != kernel_v1
-        assert revised_kernel["program_id"] == "actuality_with_disclosed_dramatization_v1"
+        assert revised_kernel["program_id"] == kernel_v1["program_id"]
         original_units = kernel_v1["units"]
         revised_units = revised_kernel["units"]
         assert isinstance(original_units, list)

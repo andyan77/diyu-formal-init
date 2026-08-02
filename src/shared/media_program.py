@@ -494,6 +494,7 @@ def select_media_program(
     series_position: int | None,
     fact_count: int,
     topic_origin: str = "explicit_user",
+    publication_contract: bool = False,
 ) -> MediaProgramSelectionV1:
     """Select one closed deterministic media program before Writer runs."""
 
@@ -533,7 +534,7 @@ def select_media_program(
             else "video_selected_asset_sequence_v1"
         )
     elif envelope.media_format == "video":
-        if primary_product == "dressing_decision":
+        if primary_product == "dressing_decision" and not publication_contract:
             program_id = "video_condition_choice_v1"
         elif creator_resources:
             program_id = "video_creator_expression_v1"
@@ -549,8 +550,10 @@ def select_media_program(
         program_id = "graphic_fact_guided_v1"
         if primary_product == "product_truth":
             optional_suggestion = "optional-current-product-capture-v1"
-    elif primary_product in {"dressing_decision", "local_response"} or (
+    elif not publication_contract and (
+        primary_product in {"dressing_decision", "local_response"} or (
         primary_product == "brand_life_narrative" and topic_origin == "system_selected"
+        )
     ):
         program_id = "graphic_choice_contrast_v1"
     else:

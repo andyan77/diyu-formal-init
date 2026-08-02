@@ -30,6 +30,31 @@ P5 在建任务前自然提示且差分 `0/0/0`；软件功能真值与租户资
   将产品审阅改为十一卡逐卡、逐维度均不低于 4 的二元门并绑定最终全文引用；让租户资料就绪度
   取决于同一条启用用户、账号、画像、平台及商品路径。
 - 返工完成前，旧十一卡不得继续作为当前通过结论，TENANT-01 保持 `ACTIVE / BOUNDED_REWORK`。
+- 共享责任纠偏的直接失败基线为 `0fa063645d8ee6f3b68b93af1ae071dbb2c7c234`：该 SHA 的
+  十一卡人工初审为 4 PASS／7 FAIL；对应 raw、artifact 与逐卡结论永久作为失败候选保留，
+  不删除、不改写，也不拼接进后续候选。
+
+### 本轮共享责任合同与直接消费者清单
+
+当前落盘候选只保留 `publication-contract-v2` 这一份新任务负向安全合同；它不是句式 DSL，
+也不替代既有事实轨、资源包或版本合同。字段生产与消费关系如下：
+
+| 合同内容 | 唯一生产者 | 直接消费者 | 用户可见 | 保留方式 |
+| --- | --- | --- | --- | --- |
+| 精确输入跨度及现实／创作／风格角色 | `CreationIntentGate` 结果经 `ContentService` 绑定原始 offset | `NarrativeFrame`、任务快照、Writer brief、证据 finalizer | 现实原句仅由 Compiler 逐字插入；角色标签不可见 | 新任务冻结；修订重放 |
+| `topic`、中心任务、受众回报和一般建议范围 | `ContentService` 按内容产品与已确认上下文构造 | Writer、证据 finalizer | 只显示 Writer 的自然成品，不显示字段名 | 新任务冻结 |
+| 六条负向安全边界 | `publication_contract` 单一常量 | Writer、快照校验、证据 finalizer | 不可见 | 新任务冻结 |
+| 账号观察身份、受众、关注顺序和回应边界 | 已确认五段画像／当前发布投影，经 `ContentService` 投影 | Writer、任务快照、证据 finalizer | 只通过自然视角体现，不得照抄画像 | 版本和 digest 冻结 |
+| `ProductValueContract` 内部计划 digest | 已确认 ProductFact 的确定性投影 | Writer 的选择目标、Compiler／finalizer 绑定 | 内部字段和防越界说明不可见；事实块仍逐字插入 | 新任务冻结 |
+| MediaProgram、槽位和资源引用 | 服务端在 Writer 前确定 | Writer 只知内容职责；Compiler 绑定槽位；finalizer 复算 | 只显示最终媒体编排 | Envelope／Program／资源版本冻结 |
+| Writer 四类自然表达单元 | Writer | Compiler、快照、证据 finalizer | 标题、导读、正文、发布配文 | 追加式版本冻结 |
+
+已删除或停止供新任务消费的重复层包括：固定 P1 正文骨架与发布配文、AccountEditorialLens
+V4／V5 的逐单元句式职责、全句 `claim allowlist`、`sentence_shape`／`text_shape`、强制问句、
+强制二选一、强制“下次观察”收束，以及 Compiler 固定创意观点。历史 V1—V3 Lens 与既有
+artifact 继续只读；失败候选中的 WIP 合同只保留在 Git／证据历史，不建设新的生产兼容层。
+新发布路径检测到冻结事实复述、账号资料整句复制或机械整段重复时直接失败关闭，不进入旧的
+语义 repair；finalizer 只接受 `intake → writer` 两次模型调用证据。
 
 ## 冻结业务与安全边界
 

@@ -71,10 +71,15 @@ class FrozenUserFact:
 
 @dataclass(frozen=True)
 class UserFactCandidate:
-    """One server-segmented clause that intake may select only by stable ID."""
+    """One exact source span that intake may classify only by stable ID."""
 
     source_id: str
     exact_text: str
+    turn_index: int = 1
+    start_offset: int = 0
+    end_offset: int = 0
+    start_byte: int = 0
+    end_byte: int = 0
 
 
 @dataclass(frozen=True)
@@ -237,41 +242,83 @@ def new_frame(
 
 
 def user_fact_candidates(user_turns: Sequence[str]) -> tuple[UserFactCandidate, ...]:
-    """Segment exact user clauses before intake so a model cannot reverse meaning by slicing text."""
+    """Freeze exact, addressable source spans before semantic intake.
 
-    endings = frozenset("。！？!?；;\n")
+    Visible punctuation is the only segmentation authority.  The model may
+    classify a span, but it cannot invent, trim or splice one.  Commas are
+    included because a reality clause followed by a creation instruction is a
+    common natural input shape.
+    """
+
+    endings = frozenset("，,。！？!?；;\n")
     candidates: list[UserFactCandidate] = []
     for turn_index, turn in enumerate(user_turns, start=1):
-        buffer: list[str] = []
+        span_start = 0
         clause_index = 0
         for index, character in enumerate(turn):
-            buffer.append(character)
             next_character = turn[index + 1] if index + 1 < len(turn) else ""
             if character not in endings or next_character in endings:
                 continue
-            exact_text = "".join(buffer).strip()
-            buffer = []
-            if not exact_text:
-                continue
-            clause_index += 1
-            digest = hashlib.sha256(exact_text.encode("utf-8")).hexdigest()[:12]
-            candidates.append(
-                UserFactCandidate(
-                    f"source:user_actuality:turn-{turn_index}:clause-{clause_index}:{digest}",
-                    exact_text,
-                )
+            clause_index = _append_user_fact_candidate(
+                candidates,
+                turn=turn,
+                turn_index=turn_index,
+                clause_index=clause_index,
+                start=span_start,
+                end=index + 1,
             )
-        exact_text = "".join(buffer).strip()
-        if exact_text:
-            clause_index += 1
-            digest = hashlib.sha256(exact_text.encode("utf-8")).hexdigest()[:12]
-            candidates.append(
-                UserFactCandidate(
-                    f"source:user_actuality:turn-{turn_index}:clause-{clause_index}:{digest}",
-                    exact_text,
-                )
-            )
+            span_start = index + 1
+        _append_user_fact_candidate(
+            candidates,
+            turn=turn,
+            turn_index=turn_index,
+            clause_index=clause_index,
+            start=span_start,
+            end=len(turn),
+        )
     return tuple(candidates)
+
+
+def _append_user_fact_candidate(
+    candidates: list[UserFactCandidate],
+    *,
+    turn: str,
+    turn_index: int,
+    clause_index: int,
+    start: int,
+    end: int,
+) -> int:
+    raw = turn[start:end]
+    left = len(raw) - len(raw.lstrip())
+    right = len(raw.rstrip())
+    exact_start = start + left
+    exact_end = start + right
+    if exact_end <= exact_start:
+        return clause_index
+    exact_text = turn[exact_start:exact_end]
+    next_index = clause_index + 1
+    start_byte = len(turn[:exact_start].encode("utf-8"))
+    end_byte = len(turn[:exact_end].encode("utf-8"))
+    identity = (
+        f"{turn_index}:{start_byte}:{end_byte}:".encode()
+        + exact_text.encode("utf-8")
+    )
+    digest = hashlib.sha256(identity).hexdigest()[:12]
+    candidates.append(
+        UserFactCandidate(
+            source_id=(
+                f"source:user_actuality:turn-{turn_index}:clause-{next_index}:"
+                f"{start_byte}-{end_byte}:{digest}"
+            ),
+            exact_text=exact_text,
+            turn_index=turn_index,
+            start_offset=exact_start,
+            end_offset=exact_end,
+            start_byte=start_byte,
+            end_byte=end_byte,
+        )
+    )
+    return next_index
 
 
 def legacy_frame(product_fact_ids: Sequence[str] = ()) -> NarrativeFrame:

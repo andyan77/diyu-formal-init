@@ -34,6 +34,11 @@ from src.shared.product_value import (
     product_value_contract_digest,
     product_value_contract_document,
 )
+from src.shared.publication_contract import (
+    PublicationContractV2,
+    publication_contract_digest,
+    publication_contract_document,
+)
 from src.shared.types import (
     BrandContextPacket,
     ContentControlContext,
@@ -479,6 +484,7 @@ def snapshot_document(
     media_program: MediaProgramSelectionV1 | None = None,
     product_value_contract: ProductValueContract | None = None,
     brand_context_packet: BrandContextPacket | None = None,
+    publication_contract: PublicationContractV2 | None = None,
 ) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
@@ -499,7 +505,7 @@ def snapshot_document(
             account_expression=control.account_expression,
             brand_context_packet=brand_context_packet,
         )
-        if creative_plan is not None
+        if creative_plan is not None and publication_contract is None
         else None
     )
     return {
@@ -558,6 +564,16 @@ def snapshot_document(
         "account_editorial_lens_digest": (
             account_editorial_lens_digest(account_editorial_lens)
             if account_editorial_lens is not None
+            else None
+        ),
+        "publication_contract": (
+            publication_contract_document(publication_contract)
+            if publication_contract is not None
+            else None
+        ),
+        "publication_contract_digest": (
+            publication_contract_digest(publication_contract)
+            if publication_contract is not None
             else None
         ),
         "business_data_kind": business_data_kind,

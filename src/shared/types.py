@@ -6,6 +6,10 @@ from uuid import UUID
 
 from src.shared.creative_plan import CreativePlanV2
 from src.shared.narrative import NarrativeFrame, NarrativeMode, UserFactCandidate
+from src.shared.publication_contract import (
+    IntakeSpanRole,
+    PublicationContractV2,
+)
 
 if TYPE_CHECKING:
     from src.shared.creative_kernel import CreativeKernelV1
@@ -15,7 +19,6 @@ if TYPE_CHECKING:
         MediaProgramSelectionV1,
     )
     from src.shared.product_value import ProductValueContract
-    from src.shared.server_bearing_expression import ServerBearingExpressionContractV1
 
 ContentProduct: TypeAlias = Literal[
     "dressing_decision",
@@ -342,6 +345,7 @@ class ConversationDecision:
     user_fact_spans: tuple[str, ...] = ()
     user_fact_source_ids: tuple[str, ...] = ()
     user_instruction_source_ids: tuple[str, ...] = ()
+    user_span_roles: tuple[tuple[str, IntakeSpanRole], ...] = ()
     narrative_mode: NarrativeMode | None = None
     creative_plan: CreativePlanV2 | None = None
     primary_product: ContentProduct | None = None
@@ -493,7 +497,7 @@ class GenerationInput:
     media_capability_envelope: MediaCapabilityEnvelope | None = None
     media_program: MediaProgramSelectionV1 | None = None
     product_value_contract: ProductValueContract | None = None
-    server_bearing_expression_contract: ServerBearingExpressionContractV1 | None = None
+    publication_contract: PublicationContractV2 | None = None
 
 
 @dataclass(frozen=True)

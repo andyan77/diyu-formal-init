@@ -27,10 +27,10 @@ from src.shared.product_value import (
     product_value_contract_digest,
     product_value_contract_from_document,
 )
-from src.shared.server_bearing_expression import (
-    ServerBearingExpressionContractV1,
-    server_bearing_expression_digest,
-    server_bearing_expression_from_document,
+from src.shared.publication_contract import (
+    PublicationContractV2,
+    publication_contract_digest,
+    publication_contract_from_document,
 )
 from src.shared.types import ProductFact, SeriesContext, SeriesEntry
 
@@ -158,18 +158,18 @@ def frozen_product_value_contract(
     return contract
 
 
-def frozen_server_bearing_expression_contract(
+def frozen_publication_contract(
     snapshot: Mapping[str, object],
-) -> ServerBearingExpressionContractV1 | None:
-    value = snapshot.get("server_bearing_expression_contract")
-    digest = snapshot.get("server_bearing_expression_digest")
+) -> PublicationContractV2 | None:
+    value = snapshot.get("publication_contract")
+    digest = snapshot.get("publication_contract_digest")
     if value is None and digest is None:
         return None
     if value is None or not isinstance(digest, str):
-        raise DomainError("内容任务冻结的服务端承重表达合同不完整")
-    contract = server_bearing_expression_from_document(value)
-    if server_bearing_expression_digest(contract) != digest:
-        raise DomainError("内容任务冻结的服务端承重表达合同摘要不一致")
+        raise DomainError("内容任务冻结的发布责任合同不完整")
+    contract = publication_contract_from_document(value)
+    if publication_contract_digest(contract) != digest:
+        raise DomainError("内容任务冻结的发布责任合同摘要不一致")
     return contract
 
 

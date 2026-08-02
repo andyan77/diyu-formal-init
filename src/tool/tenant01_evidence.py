@@ -3,19 +3,59 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final, cast
 from uuid import UUID
 
-from src.shared.account_editorial_lens import (
-    ACCOUNT_EDITORIAL_LENS_VERSION,
-    account_editorial_lens_digest,
-    account_editorial_lens_from_document,
-)
 from src.shared.brand_publication import brand_context_packet_digest
-from src.shared.narrative import visible_digest
+from src.shared.content_snapshot import frozen_media_contract, frozen_product_facts
+from src.shared.creative_kernel import (
+    CreativeKernelV1,
+    creative_units_digest,
+    kernel_digest,
+    kernel_from_document,
+)
+from src.shared.creative_plan import (
+    ACCOUNT_BASELINE_TONE_ID,
+    PLAN_VERSION,
+    creative_plan_from_document,
+    platform_shape,
+    validate_creative_plan,
+)
+from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_VERSION,
+    CompiledDelivery,
+    DeliveryCompileInput,
+    compile_delivery,
+)
+from src.shared.errors import DomainError, GenerationFailed
+from src.shared.factual_basis import ImmutableFactBlock
+from src.shared.narrative import (
+    frame_from_document,
+    user_fact_candidates,
+    visible_digest,
+)
+from src.shared.product_value import (
+    ProductValueContract,
+    product_value_contract_digest,
+    product_value_contract_from_document,
+)
+from src.shared.publication_contract import (
+    PUBLICATION_CONTRACT_VERSION,
+    PublicationContractV2,
+    build_publication_contract,
+    publication_contract_digest,
+    publication_contract_document,
+    publication_contract_from_document,
+)
+from src.shared.types import ContentProduct, ContentTarget, MediaFormat
 
+TENANT01_SUITE_VERSION: Final[str] = "TENANT-01-GOLDEN-V1"
+TENANT01_RAW_BUNDLE_VERSION: Final[str] = "ux03-gate-c-provider-stages-v1"
+TENANT01_GENERATION_LEDGER_VERSION: Final[str] = "tenant01-generation-ledger-v1"
+TENANT01_GENERATION_LEDGER_FILE: Final[str] = "generation-ledger.json"
+TENANT01_PROVIDER_MODEL: Final[str] = "deepseek-v4-flash"
 TENANT01_CARD_IDS: Final[frozenset[str]] = frozenset(
     {
         "coffee",
@@ -77,6 +117,8 @@ class Tenant01ArtifactInput:
 class Tenant01HumanReview:
     card_id: str
     artifact_file: str
+    artifact_sha256: str
+    visible_digest: str
     scores: dict[str, int]
     excerpts: dict[str, str]
     hard_boundaries: dict[str, bool]
@@ -100,7 +142,7 @@ def _private_child(root: Path, filename: str) -> Path:
     if path.parent != root.resolve() or path.name != filename:
         raise Tenant01EvidenceError("证据文件必须直接位于私有证据目录。")
     if not path.is_file() or path.stat().st_mode & 0o077:
-        raise Tenant01EvidenceError(f"{filename} 不存在或权限不是 0600。")
+        raise Tenant01EvidenceError(f"{filename} 不存在或不是私有文件。")
     return path
 
 
@@ -118,13 +160,335 @@ def _uuid_text(value: object, *, label: str) -> str:
         raise Tenant01EvidenceError(f"{label} 缺少真实 UUID。") from exc
 
 
+def _canonical_digest(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+
+
+def _raw_binding(path: Path, *, card_id: str) -> dict[str, object]:
+    document = _json_object(path)
+    if set(document) != {
+        "raw_bundle_version",
+        "card_id",
+        "request_count",
+        "responses",
+    }:
+        raise Tenant01EvidenceError(f"{card_id} 原始模型证据结构漂移。")
+    if document.get("raw_bundle_version") != TENANT01_RAW_BUNDLE_VERSION or document.get("card_id") != card_id:
+        raise Tenant01EvidenceError(f"{card_id} 原始模型证据绑定到了另一张卡或版本。")
+    request_count = document.get("request_count")
+    responses = document.get("responses")
+    if (
+        type(request_count) is not int
+        or request_count != 2
+        or not isinstance(responses, list)
+        or len(responses) != request_count
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 原始模型调用阶段不完整。")
+    expected_stages = ("intake", "writer")
+    request_hashes: list[str] = []
+    response_hashes: list[str] = []
+    for request_index, raw_response in enumerate(responses, start=1):
+        if (
+            not isinstance(raw_response, dict)
+            or set(raw_response)
+            != {
+                "request_index",
+                "transport_retries",
+                "stage",
+                "model",
+                "request_sha256",
+                "response_sha256",
+                "response",
+            }
+            or type(raw_response.get("request_index")) is not int
+            or raw_response.get("request_index") != request_index
+            or type(raw_response.get("transport_retries")) is not int
+            or raw_response.get("transport_retries") != 0
+            or raw_response.get("stage") != expected_stages[request_index - 1]
+            or raw_response.get("model") != TENANT01_PROVIDER_MODEL
+        ):
+            raise Tenant01EvidenceError(f"{card_id} 原始模型调用顺序或重试证据无效。")
+        request_digest = raw_response.get("request_sha256")
+        response_digest = raw_response.get("response_sha256")
+        response = raw_response.get("response")
+        if (
+            not _sha256_text(request_digest)
+            or not _sha256_text(response_digest)
+            or not isinstance(response, dict)
+            or not response
+            or response.get("model") != TENANT01_PROVIDER_MODEL
+            or _canonical_digest(response) != response_digest
+        ):
+            raise Tenant01EvidenceError(f"{card_id} 原始模型请求或响应摘要无效。")
+        choices = response.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise Tenant01EvidenceError(f"{card_id} 原始模型响应为空。")
+        first_choice = choices[0]
+        message = first_choice.get("message") if isinstance(first_choice, dict) else None
+        if (
+            not isinstance(message, dict)
+            or not isinstance(message.get("content"), str)
+            or not str(message["content"]).strip()
+        ):
+            raise Tenant01EvidenceError(f"{card_id} 原始模型响应为空。")
+        request_hashes.append(str(request_digest))
+        response_hashes.append(str(response_digest))
+    return {
+        "raw_bundle_version": TENANT01_RAW_BUNDLE_VERSION,
+        "provider_request_count": request_count,
+        "provider_model": TENANT01_PROVIDER_MODEL,
+        "provider_stages": list(expected_stages),
+        "request_hashes": request_hashes,
+        "response_hashes": response_hashes,
+    }
+
+
+def _target_contract(card_id: str) -> tuple[ContentTarget, MediaFormat]:
+    if card_id in {"P1", "cross_platform_douyin"}:
+        return "douyin_video", "video"
+    return "xiaohongshu_graphic", "graphic"
+
+
+def _primary_product_contract(card_id: str) -> ContentProduct:
+    if card_id == "P1":
+        return "dressing_decision"
+    if card_id == "P2":
+        return "product_truth"
+    if card_id == "P4_series1":
+        return "local_response"
+    return "brand_life_narrative"
+
+
+def _plan_allowlists(
+    snapshot: dict[str, object],
+    *,
+    card_id: str,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    raw_direction = snapshot.get("original_direction")
+    raw_selections = raw_direction.get("selections") if isinstance(raw_direction, dict) else None
+    if not isinstance(raw_selections, list):
+        raise Tenant01EvidenceError(f"{card_id} 缺少冻结创作选择范围。")
+    tones: list[str] = [ACCOUNT_BASELINE_TONE_ID]
+    mechanisms: list[str] = []
+    for raw_selection in raw_selections:
+        if not isinstance(raw_selection, dict):
+            raise Tenant01EvidenceError(f"{card_id} 冻结创作选择范围无效。")
+        axis = raw_selection.get("axis")
+        stable_id = raw_selection.get("stable_id")
+        if not isinstance(axis, str) or not isinstance(stable_id, str) or not stable_id:
+            raise Tenant01EvidenceError(f"{card_id} 冻结创作选择范围无效。")
+        if axis == "style":
+            tones.append(stable_id)
+        elif axis == "mechanism":
+            mechanisms.append(stable_id)
+    return tuple(dict.fromkeys(tones)), tuple(dict.fromkeys(mechanisms))
+
+
+def _immutable_fact_blocks(
+    snapshot: dict[str, object],
+    *,
+    card_id: str,
+) -> tuple[ImmutableFactBlock, ...]:
+    raw_blocks = snapshot.get("immutable_product_fact_blocks")
+    if not isinstance(raw_blocks, list):
+        raise Tenant01EvidenceError(f"{card_id} 缺少冻结商品事实块。")
+    blocks: list[ImmutableFactBlock] = []
+    for raw_block in raw_blocks:
+        if not isinstance(raw_block, dict) or set(raw_block) != {
+            "fact_block_id",
+            "fact_id",
+            "canonical_text",
+            "renderer_version",
+            "visible_order",
+        }:
+            raise Tenant01EvidenceError(f"{card_id} 冻结商品事实块结构无效。")
+        visible_order = raw_block.get("visible_order")
+        if (
+            not all(
+                isinstance(raw_block.get(field), str)
+                and bool(str(raw_block[field]).strip())
+                for field in (
+                    "fact_block_id",
+                    "fact_id",
+                    "canonical_text",
+                    "renderer_version",
+                )
+            )
+            or type(visible_order) is not int
+            or visible_order < 1
+        ):
+            raise Tenant01EvidenceError(f"{card_id} 冻结商品事实块字段无效。")
+        blocks.append(
+            ImmutableFactBlock(
+                fact_block_id=str(raw_block["fact_block_id"]),
+                fact_id=str(raw_block["fact_id"]),
+                canonical_text=str(raw_block["canonical_text"]),
+                renderer_version=str(raw_block["renderer_version"]),
+                visible_order=visible_order,
+            )
+        )
+    if len({block.fact_block_id for block in blocks}) != len(blocks):
+        raise Tenant01EvidenceError(f"{card_id} 冻结商品事实块重复。")
+    return tuple(blocks)
+
+
+def _compile_bound_delivery(
+    snapshot: dict[str, object],
+    *,
+    card_id: str,
+    primary_product: ContentProduct,
+    kernel: CreativeKernelV1,
+    publication: PublicationContractV2,
+    product_value: ProductValueContract | None,
+    expected_media_format: MediaFormat,
+) -> CompiledDelivery:
+    raw_account = snapshot.get("account_expression")
+    if not isinstance(raw_account, dict) or not isinstance(
+        raw_account.get("default_production_conditions"),
+        str,
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 缺少冻结制作条件。")
+    try:
+        envelope, media_program = frozen_media_contract(snapshot)
+        products = frozen_product_facts(snapshot)
+        blocks = _immutable_fact_blocks(snapshot, card_id=card_id)
+    except (DomainError, GenerationFailed, TypeError, ValueError) as exc:
+        raise Tenant01EvidenceError(
+            f"{card_id} 冻结媒体或商品编译输入无效。"
+        ) from exc
+    expected_target, _ = _target_contract(card_id)
+    expected_platform_shape = platform_shape(
+        expected_target,
+        expected_media_format,
+    )
+    if (
+        envelope is None
+        or media_program is None
+        or products is None
+        or envelope.media_format != expected_media_format
+        or envelope.platform_shape != expected_platform_shape
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 冻结媒体合同没有绑定发布目标。")
+    trusted_fact_texts: list[tuple[str, str]] = []
+    for unit in kernel.units:
+        if unit.track != "trusted_fact":
+            continue
+        if len(unit.fact_refs) != 1:
+            raise Tenant01EvidenceError(f"{card_id} 冻结可信事实单元无效。")
+        trusted_fact_texts.append((unit.fact_refs[0], unit.text))
+    try:
+        return compile_delivery(
+            DeliveryCompileInput(
+                primary_product=primary_product,
+                media_format=envelope.media_format,
+                products=products,
+                production_conditions=str(
+                    raw_account["default_production_conditions"]
+                ),
+                allowed_resource_ids=envelope.resource_ids,
+                immutable_fact_blocks=blocks,
+                trusted_fact_texts=tuple(trusted_fact_texts),
+                media_capability_envelope=envelope,
+                media_program=media_program,
+                product_value_contract=product_value,
+                publication_contract=publication,
+            ),
+            kernel,
+        )
+    except (DomainError, GenerationFailed, TypeError, ValueError) as exc:
+        raise Tenant01EvidenceError(
+            f"{card_id} 无法从冻结输入重编译成品。"
+        ) from exc
+
+
+def compile_tenant01_snapshot_delivery(
+    snapshot: dict[str, object],
+    *,
+    card_id: str,
+) -> CompiledDelivery:
+    """Deterministically rebuild one golden-card artifact from its snapshot."""
+
+    if (
+        snapshot.get("delivery_compiler_version")
+        != DELIVERY_COMPILER_VERSION
+        or snapshot.get("writer_model") != TENANT01_PROVIDER_MODEL
+    ):
+        raise Tenant01EvidenceError(
+            f"{card_id} 编译器或 Writer 模型版本漂移。"
+        )
+    raw_publication = snapshot.get("publication_contract")
+    try:
+        plan = creative_plan_from_document(snapshot.get("creative_plan_v2"))
+        publication = publication_contract_from_document(raw_publication)
+        kernel = kernel_from_document(snapshot.get("creative_kernel_v2"))
+    except (DomainError, TypeError, ValueError) as exc:
+        raise Tenant01EvidenceError(
+            f"{card_id} 冻结编译合同结构无效。"
+        ) from exc
+    computed_kernel_digest = kernel_digest(kernel)
+    if (
+        publication_contract_digest(publication)
+        != snapshot.get("publication_contract_digest")
+        or _canonical_digest(raw_publication)
+        != snapshot.get("publication_contract_digest")
+        or computed_kernel_digest != snapshot.get("expression_plan_digest")
+        or computed_kernel_digest != snapshot.get("reviewed_kernel_digest")
+        or creative_units_digest(kernel)
+        != snapshot.get("reviewed_creative_digest")
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 冻结编译合同摘要无效。")
+    raw_product_value = snapshot.get("product_value_contract")
+    raw_product_digest = snapshot.get("product_value_contract_digest")
+    product_value: ProductValueContract | None = None
+    if raw_product_value is None and raw_product_digest is not None:
+        raise Tenant01EvidenceError(f"{card_id} 商品语义计划结构无效。")
+    if raw_product_value is not None:
+        if not _sha256_text(raw_product_digest):
+            raise Tenant01EvidenceError(f"{card_id} 商品语义计划结构无效。")
+        try:
+            product_value = product_value_contract_from_document(
+                raw_product_value
+            )
+        except DomainError as exc:
+            raise Tenant01EvidenceError(
+                f"{card_id} 商品语义计划结构无效。"
+            ) from exc
+        if (
+            product_value_contract_digest(product_value)
+            != raw_product_digest
+        ):
+            raise Tenant01EvidenceError(f"{card_id} 商品语义计划摘要无效。")
+    _, expected_media_format = _target_contract(card_id)
+    return _compile_bound_delivery(
+        snapshot,
+        card_id=card_id,
+        primary_product=plan.primary_value,
+        kernel=kernel,
+        publication=publication,
+        product_value=product_value,
+        expected_media_format=expected_media_format,
+    )
+
+
 def _artifact_binding(
     path: Path,
     *,
     card_id: str,
-) -> tuple[dict[str, object], dict[str, str], dict[str, object]]:
+) -> tuple[
+    dict[str, object],
+    dict[str, object],
+    dict[str, object],
+    dict[str, str],
+]:
     document = _json_object(path)
-    if document.get("card_id") != card_id:
+    if document.get("suite_version") != TENANT01_SUITE_VERSION or document.get("card_id") != card_id:
         raise Tenant01EvidenceError(f"{card_id} 成品文件绑定到了另一张卡。")
     outline = document.get("outline")
     body = document.get("body")
@@ -135,13 +499,20 @@ def _artifact_binding(
     expected_visible = visible_digest(outline, body)
     if document.get("visible_digest") != expected_visible:
         raise Tenant01EvidenceError(f"{card_id} visible_digest 无法复算。")
-    persistence = {
+    persistence: dict[str, object] = {
         field: _uuid_text(document.get(field), label=f"{card_id} {field}")
         for field in ("task_id", "run_id", "version_id")
     }
+    version = document.get("version")
+    if type(version) is not int or version < 1:
+        raise Tenant01EvidenceError(f"{card_id} version 缺少正式正整数版本。")
+    persistence["version"] = version
     snapshot = document.get("formal_snapshot")
     if not isinstance(snapshot, dict):
         raise Tenant01EvidenceError(f"{card_id} 缺少正式任务快照。")
+    user_premise = snapshot.get("user_premise")
+    if not isinstance(user_premise, str) or not user_premise.strip():
+        raise Tenant01EvidenceError(f"{card_id} 缺少冻结用户原始输入。")
     packet = snapshot.get("brand_context_packet")
     if not isinstance(packet, dict) or packet.get("packet_version") != "brand-context-packet-v2":
         raise Tenant01EvidenceError(f"{card_id} 没有绑定当前品牌发布投影。")
@@ -154,7 +525,7 @@ def _artifact_binding(
     packet_digest = packet.get("packet_digest")
     raw_segments = packet.get("segments")
     if (
-        not isinstance(projection_version, int)
+        type(projection_version) is not int
         or projection_version < 1
         or not _sha256_text(projection_digest)
         or not _sha256_text(packet_digest)
@@ -194,31 +565,288 @@ def _artifact_binding(
         segments=packet_segments,
     ):
         raise Tenant01EvidenceError(f"{card_id} 品牌上下文摘要无法复算。")
-    if card_id in {
-        "coffee",
-        "family_relationship",
-        "daily_complaint",
-        "P4_series1",
-        "series2",
-        "series3",
-    }:
-        raw_lens = snapshot.get("account_editorial_lens")
-        lens_digest = snapshot.get("account_editorial_lens_digest")
-        if not isinstance(raw_lens, dict) or not _sha256_text(lens_digest):
-            raise Tenant01EvidenceError(f"{card_id} 缺少冻结账号编辑视角。")
-        try:
-            lens = account_editorial_lens_from_document(raw_lens)
-        except TypeError as exc:
-            raise Tenant01EvidenceError(f"{card_id} 冻结账号编辑视角结构无效。") from exc
+    raw_publication = snapshot.get("publication_contract")
+    publication_digest = snapshot.get("publication_contract_digest")
+    if not isinstance(raw_publication, dict) or not _sha256_text(publication_digest):
+        raise Tenant01EvidenceError(f"{card_id} 缺少冻结发布责任合同。")
+    try:
+        publication = publication_contract_from_document(raw_publication)
+    except DomainError as exc:
+        raise Tenant01EvidenceError(f"{card_id} 冻结发布责任合同结构无效。") from exc
+    if (
+        publication.contract_version != PUBLICATION_CONTRACT_VERSION
+        or publication_contract_digest(publication) != publication_digest
+        or _canonical_digest(raw_publication) != publication_digest
+        or publication.publication_projection_id != projection_id
+        or publication.publication_projection_version != projection_version
+        or publication.publication_projection_digest != projection_digest
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 发布责任合同来源或摘要无效。")
+    raw_plan = snapshot.get("creative_plan_v2")
+    if not isinstance(raw_plan, dict):
+        raise Tenant01EvidenceError(f"{card_id} 缺少冻结创作计划。")
+    try:
+        plan = creative_plan_from_document(raw_plan)
+    except DomainError as exc:
+        raise Tenant01EvidenceError(f"{card_id} 冻结创作计划结构无效。") from exc
+    expected_target, expected_media_format = _target_contract(card_id)
+    expected_platform_shape = platform_shape(
+        expected_target,
+        expected_media_format,
+    )
+    if snapshot.get("publishing_target") != expected_target:
+        raise Tenant01EvidenceError(f"{card_id} 发布目标没有绑定黄金卡。")
+    allowed_tones, allowed_mechanisms = _plan_allowlists(
+        snapshot,
+        card_id=card_id,
+    )
+    try:
+        validate_creative_plan(
+            plan,
+            user_turns=(user_premise,),
+            allowed_tone_ids=allowed_tones,
+            allowed_mechanism_ids=allowed_mechanisms,
+            expected_primary_value=_primary_product_contract(card_id),
+            expected_platform_shape=expected_platform_shape,
+        )
+    except DomainError as exc:
+        raise Tenant01EvidenceError(f"{card_id} 冻结创作计划没有绑定正式选择范围。") from exc
+    expected_topic = "\n".join(item.strip() for item in plan.topic_spans if item.strip())
+    if (
+        plan.plan_version != PLAN_VERSION
+        or publication.primary_product != plan.primary_value
+        or publication.topic_origin != plan.topic_origin
+        or any(topic not in user_premise for topic in plan.topic_spans)
+        or (plan.topic_origin == "explicit_user" and publication.topic != expected_topic)
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 发布责任合同没有绑定当前创作计划。")
+    source_candidates = user_fact_candidates((user_premise,))
+    if len(publication.intake_spans) != len(source_candidates) or any(
+        (
+            span.source_id,
+            span.exact_text,
+            span.turn_index,
+            span.start_offset,
+            span.end_offset,
+            span.start_byte,
+            span.end_byte,
+        )
+        != (
+            candidate.source_id,
+            candidate.exact_text,
+            candidate.turn_index,
+            candidate.start_offset,
+            candidate.end_offset,
+            candidate.start_byte,
+            candidate.end_byte,
+        )
+        for span, candidate in zip(
+            publication.intake_spans,
+            source_candidates,
+            strict=True,
+        )
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 发布责任合同输入跨度没有绑定用户原文。")
+    profile_id = snapshot.get("account_expression_profile_id")
+    profile_version = snapshot.get("account_expression_profile_version")
+    if (
+        _uuid_text(profile_id, label=f"{card_id} source_profile_id") != publication.source_profile_id
+        or type(profile_version) is not int
+        or profile_version < 1
+        or profile_version != publication.source_profile_version
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 发布责任合同没有绑定当前画像版本。")
+    raw_account = snapshot.get("account_expression")
+    if not isinstance(raw_account, dict):
+        raise Tenant01EvidenceError(f"{card_id} 缺少冻结账号表达来源。")
+    account_fields = (
+        "identity_position",
+        "audience_relationship",
+        "content_territories",
+        "authority_boundary",
+        "default_production_conditions",
+    )
+    if (
+        _uuid_text(raw_account.get("profile_id"), label=f"{card_id} account profile_id")
+        != publication.source_profile_id
+        or type(raw_account.get("version")) is not int
+        or raw_account.get("version") != publication.source_profile_version
+        or any(
+            not isinstance(raw_account.get(field), str)
+            or not str(raw_account[field]).strip()
+            for field in account_fields
+        )
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 冻结账号表达来源无效。")
+    raw_frame = snapshot.get("narrative_frame")
+    try:
+        frame = frame_from_document(raw_frame)
+    except DomainError as exc:
+        raise Tenant01EvidenceError(f"{card_id} 冻结事实轨结构无效。") from exc
+    user_fact_by_id = {fact.source_id: fact.exact_text for fact in frame.user_facts}
+    actuality_spans = {
+        span.source_id: span.exact_text for span in publication.intake_spans if span.role == "observable_actuality"
+    }
+    if (
+        set(publication.frozen_fact_refs) != set(frame.allowed_fact_ids)
+        or actuality_spans != user_fact_by_id
+        or tuple(publication.known_conditions) != tuple(dict.fromkeys(user_fact_by_id.values()))
+        or any(
+            span.role
+            != (
+                "observable_actuality"
+                if span.source_id in user_fact_by_id
+                else "creation_instruction"
+            )
+            for span in publication.intake_spans
+        )
+        or any(
+            span.source_id in user_fact_by_id
+            for span in publication.intake_spans
+            if span.role != "observable_actuality"
+        )
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 现实事实与创作指令边界漂移。")
+    product_value = None
+    raw_product_value = snapshot.get("product_value_contract")
+    product_value_digest = snapshot.get("product_value_contract_digest")
+    if raw_product_value is None and product_value_digest is None:
         if (
-            lens.contract_version != ACCOUNT_EDITORIAL_LENS_VERSION
-            or lens.publication_projection_id != projection_id
-            or lens.publication_projection_version != projection_version
-            or lens.publication_projection_digest != projection_digest
-            or lens.brand_context_packet_digest != packet_digest
-            or account_editorial_lens_digest(lens) != lens_digest
+            publication.primary_product in {"product_truth", "visual_styling_story"}
+            or publication.product_value_contract_digest is not None
         ):
-            raise Tenant01EvidenceError(f"{card_id} 账号编辑视角来源或摘要无效。")
+            raise Tenant01EvidenceError(f"{card_id} 商品语义计划绑定漂移。")
+    elif not isinstance(raw_product_value, dict) or not _sha256_text(product_value_digest):
+        raise Tenant01EvidenceError(f"{card_id} 商品语义计划结构无效。")
+    else:
+        try:
+            product_value = product_value_contract_from_document(raw_product_value)
+        except DomainError as exc:
+            raise Tenant01EvidenceError(f"{card_id} 商品语义计划结构无效。") from exc
+        if (
+            product_value_contract_digest(product_value) != product_value_digest
+            or publication.product_value_contract_digest != product_value_digest
+            or product_value.primary_product != publication.primary_product
+        ):
+            raise Tenant01EvidenceError(f"{card_id} 商品语义计划摘要无效。")
+    expected_publication = build_publication_contract(
+        primary_product=plan.primary_value,
+        topic_spans=plan.topic_spans,
+        topic_origin=plan.topic_origin,
+        known_conditions=tuple(fact.exact_text for fact in frame.user_facts),
+        frozen_fact_refs=tuple(frame.allowed_fact_ids),
+        intake_spans=publication.intake_spans,
+        account_identity=str(raw_account["identity_position"]),
+        account_audience=str(raw_account["audience_relationship"]),
+        account_attention=str(raw_account["content_territories"]),
+        account_response_boundary=str(raw_account["authority_boundary"]),
+        source_profile_id=str(raw_account["profile_id"]),
+        source_profile_version=cast(int, raw_account["version"]),
+        publication_projection_id=projection_id,
+        publication_projection_version=projection_version,
+        publication_projection_digest=str(projection_digest),
+        product_value_contract_digest=(
+            product_value_contract_digest(product_value)
+            if product_value is not None
+            else None
+        ),
+    )
+    if _canonical_digest(
+        publication_contract_document(expected_publication)
+    ) != _canonical_digest(raw_publication):
+        raise Tenant01EvidenceError(f"{card_id} 发布责任合同语义没有绑定冻结输入。")
+    raw_kernel = snapshot.get("creative_kernel_v2")
+    expression_plan_digest = snapshot.get("expression_plan_digest")
+    reviewed_kernel_digest = snapshot.get("reviewed_kernel_digest")
+    reviewed_creative_digest = snapshot.get("reviewed_creative_digest")
+    if (
+        not isinstance(raw_kernel, dict)
+        or not _sha256_text(expression_plan_digest)
+        or not _sha256_text(reviewed_kernel_digest)
+        or not _sha256_text(reviewed_creative_digest)
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 缺少冻结创作单元。")
+    try:
+        kernel = kernel_from_document(raw_kernel)
+    except (DomainError, TypeError, ValueError) as exc:
+        raise Tenant01EvidenceError(f"{card_id} 冻结创作单元无效。") from exc
+    computed_kernel_digest = kernel_digest(kernel)
+    if (
+        computed_kernel_digest != expression_plan_digest
+        or computed_kernel_digest != reviewed_kernel_digest
+        or creative_units_digest(kernel) != reviewed_creative_digest
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 冻结创作单元摘要无效。")
+    for unit in kernel.writable_units:
+        haystack = outline if unit.purpose == "title" else body
+        if unit.text not in haystack:
+            raise Tenant01EvidenceError(f"{card_id} 最终成品没有绑定冻结 Writer 单元。")
+    if (
+        snapshot.get("delivery_compiler_version") != DELIVERY_COMPILER_VERSION
+        or snapshot.get("writer_model") != TENANT01_PROVIDER_MODEL
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 编译器或 Writer 模型版本漂移。")
+    compiled = _compile_bound_delivery(
+        snapshot,
+        card_id=card_id,
+        primary_product=plan.primary_value,
+        kernel=kernel,
+        publication=publication,
+        product_value=product_value,
+        expected_media_format=expected_media_format,
+    )
+    expected_production = asdict(compiled.production)
+    expected_provenance = {
+        field: list(sources)
+        for field, sources in compiled.visible_provenance.items()
+    }
+    if (
+        compiled.outline != outline
+        or compiled.body != body
+        or document.get("production") != expected_production
+        or snapshot.get("visible_provenance") != expected_provenance
+        or snapshot.get("delivery_resource_refs")
+        != list(compiled.resource_refs)
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 最终 artifact 不是冻结输入的确定性编译结果。")
+    if expected_media_format == "video":
+        body_region = "\n".join(
+            (
+                str(expected_production["natural_guide"]),
+                str(expected_production["spoken_lines"]),
+            )
+        )
+        media_fields: tuple[str, ...] = (
+            "cover_or_first_frame",
+            "viewing_flow",
+            "visual_actions",
+            "subtitles",
+            "sound_and_production",
+        )
+    else:
+        body_region = "\n".join(
+            (
+                str(expected_production["natural_guide"]),
+                str(expected_production["full_body"]),
+            )
+        )
+        media_fields = (
+            "hero_image",
+            "image_sequence",
+            "layout_and_production",
+        )
+    media_region = "\n".join(
+        str(expected_production[field]) for field in media_fields
+    )
+    optional_capture = expected_production.get("optional_capture_suggestion")
+    if isinstance(optional_capture, str) and optional_capture:
+        media_region = f"{media_region}\n{optional_capture}"
+    review_regions = {
+        "title": outline,
+        "body": body_region,
+        "media": media_region,
+        "caption": str(expected_production["release_caption_and_interaction"]),
+    }
     return (
         document,
         persistence,
@@ -227,7 +855,16 @@ def _artifact_binding(
             "projection_version": projection_version,
             "projection_digest": projection_digest,
             "brand_context_packet_digest": packet_digest,
+            "creative_plan_version": plan.plan_version,
+            "publication_contract_version": publication.contract_version,
+            "publication_contract_digest": publication_digest,
+            "expression_plan_digest": expression_plan_digest,
+            "reviewed_kernel_digest": reviewed_kernel_digest,
+            "reviewed_creative_digest": reviewed_creative_digest,
+            "source_profile_id": publication.source_profile_id,
+            "source_profile_version": publication.source_profile_version,
         },
+        review_regions,
     )
 
 
@@ -238,35 +875,53 @@ def _sha256_text(value: object) -> bool:
 def _validate_review(
     review: Tenant01HumanReview,
     *,
-    artifact: dict[str, object],
+    artifact_sha256: str,
+    visible_digest_value: str,
+    review_regions: dict[str, str],
 ) -> dict[str, object]:
+    if (
+        review.artifact_sha256 != artifact_sha256
+        or review.visible_digest != visible_digest_value
+    ):
+        raise Tenant01EvidenceError(f"{review.card_id} 人工审阅没有预先绑定当前 artifact。")
     if set(review.scores) != set(TENANT01_REVIEW_DIMENSIONS):
         raise Tenant01EvidenceError(f"{review.card_id} 人工评分维度不完整。")
-    if any(not isinstance(score, int) or not 1 <= score <= 5 for score in review.scores.values()):
+    if any(type(score) is not int or not 1 <= score <= 5 for score in review.scores.values()):
         raise Tenant01EvidenceError(f"{review.card_id} 人工评分必须为 1—5。")
     for dimension in TENANT01_REVIEW_DIMENSIONS:
         if review.scores[dimension] < 4:
             raise Tenant01EvidenceError(f"{review.card_id} 未通过 {dimension} 硬门。")
-    if set(review.hard_boundaries) != set(TENANT01_HARD_BOUNDARIES) or not all(review.hard_boundaries.values()):
+    if set(review.hard_boundaries) != set(TENANT01_HARD_BOUNDARIES) or any(
+        value is not True for value in review.hard_boundaries.values()
+    ):
         raise Tenant01EvidenceError(f"{review.card_id} 事实或资源硬边界未通过。")
     if set(review.excerpts) != {"title", "body", "media", "caption"}:
         raise Tenant01EvidenceError(f"{review.card_id} 人工审阅引用不完整。")
-    outline = str(artifact["outline"])
-    body = str(artifact["body"])
+    normalized_excerpts: list[str] = []
     for field, excerpt in review.excerpts.items():
-        if not excerpt.strip():
-            raise Tenant01EvidenceError(f"{review.card_id} {field} 引用为空。")
-        haystack = outline if field == "title" else body
-        if excerpt not in haystack:
-            raise Tenant01EvidenceError(f"{review.card_id} {field} 引用不在最终 artifact 中。")
+        if not isinstance(excerpt, str):
+            raise Tenant01EvidenceError(f"{review.card_id} {field} 引用缺少有意义文本。")
+        normalized = "".join(
+            character.casefold()
+            for character in excerpt
+            if character.isalnum()
+        )
+        if len(normalized) < 6:
+            raise Tenant01EvidenceError(f"{review.card_id} {field} 引用缺少有意义文本。")
+        if excerpt not in review_regions[field]:
+            raise Tenant01EvidenceError(f"{review.card_id} {field} 引用不在对应成品分区中。")
+        normalized_excerpts.append(normalized)
+    if len(set(normalized_excerpts)) != len(normalized_excerpts):
+        raise Tenant01EvidenceError(f"{review.card_id} 人工审阅引用不能跨分区复用。")
     if review.verdict != "PASS":
         raise Tenant01EvidenceError(f"{review.card_id} 人工二元结论不是 PASS。")
-    if set(review.demonstration_checks) != set(TENANT01_DEMONSTRATION_CHECKS) or not all(
-        review.demonstration_checks.values()
+    if set(review.demonstration_checks) != set(TENANT01_DEMONSTRATION_CHECKS) or any(
+        value is not True for value in review.demonstration_checks.values()
     ):
         raise Tenant01EvidenceError(f"{review.card_id} 可演示成品检查未通过。")
     if set(review.comparison) != set(TENANT01_COMPARISON_FIELDS) or any(
-        not value.strip() for value in review.comparison.values()
+        not isinstance(value, str) or not value.strip()
+        for value in review.comparison.values()
     ):
         raise Tenant01EvidenceError(f"{review.card_id} 跨卡比较依据不完整。")
     if not review.brand_basis.strip():
@@ -276,11 +931,9 @@ def _validate_review(
     return {
         "card_id": review.card_id,
         "artifact_file": review.artifact_file,
+        "artifact_sha256": review.artifact_sha256,
+        "visible_digest": review.visible_digest,
         "scores": review.scores,
-        "average_score": round(
-            sum(review.scores.values()) / len(review.scores),
-            3,
-        ),
         "excerpts": review.excerpts,
         "hard_boundaries": review.hard_boundaries,
         "demonstration_checks": review.demonstration_checks,
@@ -297,31 +950,42 @@ def _assert_cross_card_distinct(
     owners: dict[str, str] = {}
     for artifact in artifacts:
         card_id = str(artifact["card_id"])
-        body = str(artifact["body"])
-        frozen_fact_lines: set[str] = set()
         snapshot = artifact.get("formal_snapshot")
-        if isinstance(snapshot, dict):
-            frame = snapshot.get("narrative_frame")
-            if isinstance(frame, dict):
-                raw_user_facts = frame.get("user_facts")
-                if isinstance(raw_user_facts, list):
-                    for raw_fact in raw_user_facts:
-                        if isinstance(raw_fact, dict):
-                            exact_text = raw_fact.get("exact_text")
-                            if isinstance(exact_text, str) and exact_text.strip():
-                                frozen_fact_lines.add(f"你提到：“{exact_text.strip()}”")
-        for raw_line in body.splitlines():
-            line = " ".join(raw_line.strip().lstrip("#*- ").split())
-            if (
-                len(line) < 24
-                or line in frozen_fact_lines
-                or line.startswith(("AIGC", "发布提醒", "事实范围", "创作范围", "表达范围"))
-            ):
+        if not isinstance(snapshot, dict):
+            raise Tenant01EvidenceError(f"{card_id} 缺少正式任务快照。")
+        raw_kernel = snapshot.get("creative_kernel_v2")
+        raw_publication = snapshot.get("publication_contract")
+        if not isinstance(raw_kernel, dict) or not isinstance(raw_publication, dict):
+            raise Tenant01EvidenceError(f"{card_id} 缺少发布创作证据。")
+        try:
+            kernel = kernel_from_document(raw_kernel)
+            publication = publication_contract_from_document(raw_publication)
+        except (DomainError, TypeError, ValueError) as exc:
+            raise Tenant01EvidenceError(f"{card_id} 发布创作证据无效。") from exc
+        protected_account_texts = tuple(
+            "".join(value.split())
+            for value in (
+                publication.account_identity,
+                publication.account_audience,
+                publication.account_attention,
+                publication.account_response_boundary,
+            )
+            if len("".join(value.split())) >= 12
+        )
+        for unit in kernel.writable_units:
+            if unit.text_source != "writer":
                 continue
-            previous = owners.get(line)
-            if previous is not None and previous != card_id:
-                raise Tenant01EvidenceError(f"{previous} 与 {card_id} 存在非必要完整句段重复。")
-            owners[line] = card_id
+            normalized_unit = "".join(unit.text.split())
+            if any(source in normalized_unit for source in protected_account_texts):
+                raise Tenant01EvidenceError(f"{card_id} 把账号编辑许可原句复制进了成品。")
+            for paragraph in unit.text.split("\n\n"):
+                line = " ".join(paragraph.split())
+                if len(line) < 32:
+                    continue
+                previous = owners.get(line)
+                if previous is not None and previous != card_id:
+                    raise Tenant01EvidenceError(f"{previous} 与 {card_id} 存在非必要 Writer 完整段落重复。")
+                owners[line] = card_id
 
 
 def _assert_preflight(path: Path) -> dict[str, object]:
@@ -364,6 +1028,89 @@ def _assert_dm01(path: Path) -> dict[str, object]:
     return document
 
 
+def _generation_ledger(
+    path: Path,
+    *,
+    implementation_sha: str,
+) -> dict[str, dict[str, object]]:
+    if path.stat().st_mode & 0o222:
+        raise Tenant01EvidenceError("生成账本必须在 generate 阶段封为只读。")
+    document = _json_object(path)
+    if set(document) != {
+        "ledger_version",
+        "suite_version",
+        "implementation_sha",
+        "provider_config",
+        "cards",
+    }:
+        raise Tenant01EvidenceError("生成账本结构漂移。")
+    provider = document.get("provider_config")
+    raw_cards = document.get("cards")
+    if (
+        document.get("ledger_version") != TENANT01_GENERATION_LEDGER_VERSION
+        or document.get("suite_version") != TENANT01_SUITE_VERSION
+        or document.get("implementation_sha") != implementation_sha
+        or provider
+        != {
+            "model": TENANT01_PROVIDER_MODEL,
+            "temperature": 0,
+            "max_retries": 0,
+        }
+        or not isinstance(raw_cards, list)
+    ):
+        raise Tenant01EvidenceError("生成账本没有绑定当前实现或 provider。")
+    records: dict[str, dict[str, object]] = {}
+    required_fields = {
+        "card_id",
+        "task_id",
+        "run_id",
+        "version_id",
+        "version",
+        "artifact_file",
+        "artifact_sha256",
+        "visible_digest",
+        "raw_response_file",
+        "raw_response_sha256",
+        "provider_stages",
+        "request_hashes",
+        "response_hashes",
+    }
+    for raw_record in raw_cards:
+        if not isinstance(raw_record, dict) or set(raw_record) != required_fields:
+            raise Tenant01EvidenceError("生成账本逐卡结构漂移。")
+        card_id = raw_record.get("card_id")
+        version = raw_record.get("version")
+        stages = raw_record.get("provider_stages")
+        request_hashes = raw_record.get("request_hashes")
+        response_hashes = raw_record.get("response_hashes")
+        if (
+            not isinstance(card_id, str)
+            or card_id not in TENANT01_CARD_IDS
+            or card_id in records
+            or type(version) is not int
+            or version < 1
+            or raw_record.get("artifact_file") != f"{card_id}.artifact.json"
+            or raw_record.get("raw_response_file") != f"{card_id}.raw.json"
+            or not _sha256_text(raw_record.get("artifact_sha256"))
+            or not _sha256_text(raw_record.get("visible_digest"))
+            or not _sha256_text(raw_record.get("raw_response_sha256"))
+            or not isinstance(stages, list)
+            or tuple(stages) != ("intake", "writer")
+            or not isinstance(request_hashes, list)
+            or not isinstance(response_hashes, list)
+            or len(request_hashes) != len(stages)
+            or len(response_hashes) != len(stages)
+            or any(not _sha256_text(value) for value in (*request_hashes, *response_hashes))
+        ):
+            raise Tenant01EvidenceError(f"{card_id} 生成账本字段无效。")
+        for field in ("task_id", "run_id", "version_id"):
+            _uuid_text(raw_record.get(field), label=f"{card_id} ledger {field}")
+        records[card_id] = cast(dict[str, object], raw_record)
+    if set(records) != TENANT01_CARD_IDS:
+        raise Tenant01EvidenceError("生成账本黄金卡覆盖不完整。")
+    return records
+
+
 def write_tenant01_evidence(
     root: Path,
     *,
@@ -389,45 +1136,70 @@ def write_tenant01_evidence(
     review_by_card = {review.card_id: review for review in reviews}
     if set(review_by_card) != TENANT01_CARD_IDS or len(review_by_card) != len(reviews):
         raise Tenant01EvidenceError("人工审阅覆盖不完整或重复。")
+    ledger_path = _private_child(root, TENANT01_GENERATION_LEDGER_FILE)
+    ledger_by_card = _generation_ledger(
+        ledger_path,
+        implementation_sha=implementation_sha,
+    )
 
     artifact_records: list[dict[str, object]] = []
     review_records: list[dict[str, object]] = []
-    review_averages: list[float] = []
     bound_artifacts: list[dict[str, object]] = []
     projection_bindings: list[dict[str, object]] = []
     for item in artifacts:
         artifact_path = _private_child(root, item.artifact_file)
         raw_path = _private_child(root, item.raw_response_file)
-        artifact, persistence, projection = _artifact_binding(
+        raw_binding = _raw_binding(raw_path, card_id=item.card_id)
+        artifact, persistence, projection, review_regions = _artifact_binding(
             artifact_path,
             card_id=item.card_id,
         )
+        artifact_sha256 = sha256_file(artifact_path)
+        raw_response_sha256 = sha256_file(raw_path)
         review = review_by_card[item.card_id]
         if review.artifact_file != item.artifact_file:
             raise Tenant01EvidenceError(f"{item.card_id} 人工审阅引用了另一文件。")
-        validated_review = _validate_review(review, artifact=artifact)
-        average_score = validated_review["average_score"]
-        if not isinstance(average_score, float):
-            raise Tenant01EvidenceError(f"{item.card_id} 人工评分摘要无效。")
-        review_averages.append(average_score)
+        validated_review = _validate_review(
+            review,
+            artifact_sha256=artifact_sha256,
+            visible_digest_value=str(artifact["visible_digest"]),
+            review_regions=review_regions,
+        )
+        expected_ledger_record = {
+            "card_id": item.card_id,
+            **persistence,
+            "artifact_file": item.artifact_file,
+            "artifact_sha256": artifact_sha256,
+            "visible_digest": artifact["visible_digest"],
+            "raw_response_file": item.raw_response_file,
+            "raw_response_sha256": raw_response_sha256,
+            "provider_stages": raw_binding["provider_stages"],
+            "request_hashes": raw_binding["request_hashes"],
+            "response_hashes": raw_binding["response_hashes"],
+        }
+        if ledger_by_card[item.card_id] != expected_ledger_record:
+            raise Tenant01EvidenceError(f"{item.card_id} 文件不再匹配只读生成账本。")
         bound_artifacts.append(artifact)
         projection_bindings.append(projection)
         artifact_records.append(
             {
                 "card_id": item.card_id,
                 "artifact_file": item.artifact_file,
-                "artifact_sha256": sha256_file(artifact_path),
+                "artifact_sha256": artifact_sha256,
                 "raw_response_file": item.raw_response_file,
-                "raw_response_sha256": sha256_file(raw_path),
+                "raw_response_sha256": raw_response_sha256,
+                **raw_binding,
                 "visible_digest": artifact["visible_digest"],
                 "publication_projection": projection,
                 **persistence,
             }
         )
-        validated_review["artifact_sha256"] = sha256_file(artifact_path)
-        validated_review["visible_digest"] = artifact["visible_digest"]
         review_records.append(validated_review)
 
+    for field in ("task_id", "run_id", "version_id"):
+        values = [str(record[field]) for record in artifact_records]
+        if len(set(values)) != len(values):
+            raise Tenant01EvidenceError(f"十一张卡复用了同一个 {field}。")
     _assert_cross_card_distinct(bound_artifacts)
     projection_keys = {
         (
@@ -449,10 +1221,6 @@ def write_tenant01_evidence(
         {
             "review_contract": "TENANT-01-HUMAN-REVIEW-V1",
             "reviews": review_records,
-            "overall_average": round(
-                sum(review_averages) / len(review_averages),
-                3,
-            ),
             "hard_boundary_violations": 0,
             "all_cards_binary_pass": True,
             "all_dimensions_at_least_four": True,
@@ -466,13 +1234,17 @@ def write_tenant01_evidence(
             "schema_revision": schema_revision,
             "image_digest": image_digest,
             "source_manifest_digest": source_manifest_digest,
+            "generation_ledger": {
+                "file": TENANT01_GENERATION_LEDGER_FILE,
+                "sha256": sha256_file(ledger_path),
+            },
             "publication_projection": {
                 "id": next(iter(projection_keys))[0],
                 "version": next(iter(projection_keys))[1],
                 "digest": next(iter(projection_keys))[2],
             },
             "provider_config": {
-                "model": "deepseek-v4-flash",
+                "model": TENANT01_PROVIDER_MODEL,
                 "temperature": 0,
                 "max_retries": 0,
             },

@@ -36,8 +36,8 @@ from src.shared.content_snapshot import (
     frozen_media_contract,
     frozen_narrative_frame,
     frozen_product_value_contract,
+    frozen_publication_contract,
     frozen_series_context,
-    frozen_server_bearing_expression_contract,
     frozen_user_premise,
 )
 from src.shared.creative_kernel import CreativeKernelV1
@@ -73,10 +73,12 @@ from src.shared.narrative import (
 from src.shared.product_value import (
     ProductValueContract,
     build_product_value_contract,
+    product_value_contract_digest,
 )
-from src.shared.server_bearing_expression import (
-    ServerBearingExpressionContractV1,
-    build_server_bearing_expression_contract,
+from src.shared.publication_contract import (
+    PublicationContractV2,
+    PublicationInputSpanV1,
+    build_publication_contract,
 )
 from src.shared.service_status import ProviderStatusTracker
 from src.shared.types import (
@@ -167,6 +169,7 @@ class ContentService:
         creation_commitment: CreationCommitment | None = None,
         explicit_ui: bool = True,
         client_request_id: UUID | None = None,
+        intake_spans: tuple[PublicationInputSpanV1, ...] = (),
     ) -> dict[str, object]:
         if client_request_id is not None:
             completed = self._repository.completed_request(scope, client_request_id)
@@ -307,6 +310,17 @@ class ContentService:
             context,
             sanitized_seed,
         )
+        publication_spans = (
+            intake_spans
+            or self._default_publication_spans(
+                sanitized_seed,
+                frozen_frame,
+            )
+        )
+        frozen_frame = self._frame_with_publication_spans(
+            frozen_frame,
+            publication_spans,
+        )
         try:
             media_envelope, media_program = self._new_media_contract(
                 control=control,
@@ -316,6 +330,7 @@ class ContentService:
                 creative_plan=plan,
                 series_context=series_context,
                 fact_count=len(frozen_frame.allowed_fact_ids),
+                publication_contract=True,
             )
             product_value_contract = build_product_value_contract(
                 primary_product=primary_product,
@@ -326,6 +341,15 @@ class ContentService:
             )
         except GenerationFailed as exc:
             return {"kind": "question", "message": str(exc)}
+        publication_contract = self._new_publication_contract(
+            primary_product=primary_product,
+            plan=plan,
+            frame=frozen_frame,
+            control=control,
+            context=context,
+            product_value_contract=product_value_contract,
+            intake_spans=publication_spans,
+        )
         task_id, run_id, prior_body = self._repository.create_task_and_running_run(
             scope,
             sanitized_seed,
@@ -355,6 +379,7 @@ class ContentService:
                 media_capability_envelope=media_envelope,
                 media_program=media_program,
                 product_value_contract=product_value_contract,
+                publication_contract=publication_contract,
                 brand_context_packet=context.context_packet,
             ),
             series_context,
@@ -384,7 +409,114 @@ class ContentService:
             media_envelope,
             media_program,
             product_value_contract,
-            None,
+            publication_contract,
+        )
+
+    @staticmethod
+    def _default_publication_spans(
+        weak_seed: str,
+        frame: NarrativeFrame,
+    ) -> tuple[PublicationInputSpanV1, ...]:
+        fact_texts = {fact.exact_text for fact in frame.user_facts}
+        return tuple(
+            PublicationInputSpanV1(
+                source_id=candidate.source_id,
+                role=(
+                    "observable_actuality"
+                    if candidate.exact_text in fact_texts
+                    else "creation_instruction"
+                ),
+                exact_text=candidate.exact_text,
+                turn_index=candidate.turn_index,
+                start_offset=candidate.start_offset,
+                end_offset=candidate.end_offset,
+                start_byte=candidate.start_byte,
+                end_byte=candidate.end_byte,
+            )
+            for candidate in user_fact_candidates((weak_seed,))
+        )
+
+    @staticmethod
+    def _frame_with_publication_spans(
+        frame: NarrativeFrame,
+        spans: tuple[PublicationInputSpanV1, ...],
+    ) -> NarrativeFrame:
+        actuality = tuple(
+            span for span in spans if span.role == "observable_actuality"
+        )
+        if tuple(span.exact_text for span in actuality) != tuple(
+            fact.exact_text for fact in frame.user_facts
+        ):
+            raise DomainError("用户现实事实与冻结输入跨度不一致")
+        return new_frame(
+            frame.narrative_mode,
+            tuple(span.exact_text for span in actuality),
+            frame.allowed_product_fact_ids,
+            frame.allowed_brand_fact_ids,
+            user_fact_source_ids=tuple(span.source_id for span in actuality),
+        )
+
+    @staticmethod
+    def _new_publication_contract(
+        *,
+        primary_product: ContentProduct,
+        plan: CreativePlanV2,
+        frame: NarrativeFrame,
+        control: ContentControlContext,
+        context: BrandContext,
+        product_value_contract: ProductValueContract | None,
+        intake_spans: tuple[PublicationInputSpanV1, ...],
+    ) -> PublicationContractV2:
+        expression = control.account_expression
+        packet = context.context_packet
+        projection_id: str | None = None
+        projection_version: int | None = None
+        projection_digest: str | None = None
+        if isinstance(packet, BrandContextPacketV2):
+            projection_id = packet.publication_projection_id
+            projection_version = packet.publication_projection_version
+            projection_digest = packet.publication_projection_digest
+        return build_publication_contract(
+            primary_product=primary_product,
+            topic_spans=plan.topic_spans,
+            topic_origin=plan.topic_origin,
+            known_conditions=tuple(fact.exact_text for fact in frame.user_facts),
+            frozen_fact_refs=tuple(frame.allowed_fact_ids),
+            intake_spans=intake_spans,
+            account_identity=(
+                expression.identity_position
+                if expression is not None
+                else context.content_role_name
+            ),
+            account_audience=(
+                expression.audience_relationship
+                if expression is not None
+                else context.audience_description
+            ),
+            account_attention=(
+                expression.content_territories if expression is not None else ""
+            ),
+            account_response_boundary=(
+                expression.authority_boundary
+                if expression is not None
+                else context.content_role_boundary
+            ),
+            source_profile_id=(
+                str(expression.profile_id)
+                if expression is not None and expression.profile_id is not None
+                else None
+            ),
+            source_profile_version=(
+                expression.version if expression is not None else None
+            ),
+            publication_projection_id=projection_id,
+            publication_projection_version=projection_version,
+            publication_projection_digest=projection_digest,
+            product_value_contract_digest=(
+                product_value_contract_digest(product_value_contract)
+                if product_value_contract is not None
+                else None
+            ),
         )
 
     @staticmethod
@@ -638,6 +770,31 @@ class ContentService:
             )
         ):
             raise GenerationFailed("模型返回的用户事实句标识不存在或原文漂移")
+        role_by_id = dict(decision.user_span_roles)
+        if not role_by_id:
+            role_by_id = {
+                candidate.source_id: (
+                    "observable_actuality"
+                    if candidate.source_id in decision.user_fact_source_ids
+                    else "creation_instruction"
+                )
+                for candidate in fact_candidates
+            }
+        if tuple(role_by_id) != tuple(candidate_by_id):
+            raise GenerationFailed("模型返回的用户输入角色没有完整覆盖冻结跨度")
+        publication_spans = tuple(
+            PublicationInputSpanV1(
+                source_id=candidate.source_id,
+                role=role_by_id[candidate.source_id],
+                exact_text=candidate.exact_text,
+                turn_index=candidate.turn_index,
+                start_offset=candidate.start_offset,
+                end_offset=candidate.end_offset,
+                start_byte=candidate.start_byte,
+                end_byte=candidate.end_byte,
+            )
+            for candidate in fact_candidates
+        )
         premise = "\n".join(decision.user_premises)
         self._validate_plan(
             creative_plan,
@@ -670,6 +827,7 @@ class ContentService:
             creative_plan=creative_plan,
             creation_commitment=commitment,
             client_request_id=client_request_id,
+            intake_spans=publication_spans,
         )
         return result | {"conversation_message": decision.message}
 
@@ -1131,9 +1289,7 @@ class ContentService:
         prior_creative_kernel = frozen_creative_kernel(snapshot)
         media_envelope, media_program = frozen_media_contract(snapshot)
         product_value_contract = frozen_product_value_contract(snapshot)
-        server_bearing_expression_contract = (
-            frozen_server_bearing_expression_contract(snapshot)
-        )
+        publication_contract = frozen_publication_contract(snapshot)
         if delivery_compiler_version is not None and (
             delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
@@ -1208,7 +1364,7 @@ class ContentService:
             media_envelope,
             media_program,
             product_value_contract,
-            server_bearing_expression_contract,
+            publication_contract,
         )
 
     def fetch_version(self, scope: TrustedScope, task_id: UUID, version: int) -> dict[str, object]:
@@ -1248,9 +1404,7 @@ class ContentService:
         prior_creative_kernel = frozen_creative_kernel(snapshot)
         source_media_envelope, _ = frozen_media_contract(snapshot)
         product_value_contract = frozen_product_value_contract(snapshot)
-        source_bearing_expression_contract = (
-            frozen_server_bearing_expression_contract(snapshot)
-        )
+        publication_contract = frozen_publication_contract(snapshot)
         if delivery_compiler_version is not None and (
             delivery_compiler_version not in SUPPORTED_DELIVERY_COMPILER_VERSIONS or prior_creative_kernel is None
         ):
@@ -1292,20 +1446,6 @@ class ContentService:
                 )
         if delivery_compiler_version is None:
             delivery_compiler_version = DELIVERY_COMPILER_VERSION
-        server_bearing_expression_contract = (
-            build_server_bearing_expression_contract(
-                primary_product=source.primary_product,
-                media_format=direction.media_format,
-                frame=frame,
-                series_position=(
-                    series_context.target_position
-                    if series_context is not None
-                    else None
-                ),
-            )
-            if source_bearing_expression_contract is not None
-            else None
-        )
         self._validate_plan(
             creative_plan,
             (source_premise,),
@@ -1359,6 +1499,7 @@ class ContentService:
                         topic_origin=creative_plan.topic_origin,
                         series_position=(series_context.target_position if series_context is not None else None),
                         fact_count=(len(frame.allowed_fact_ids) if frame is not None else 0),
+                        publication_contract=publication_contract is not None,
                     )
                 else:
                     media_envelope, media_program = self._new_media_contract(
@@ -1369,6 +1510,7 @@ class ContentService:
                         creative_plan=creative_plan,
                         series_context=series_context,
                         fact_count=(len(frame.allowed_fact_ids) if frame is not None else 0),
+                        publication_contract=publication_contract is not None,
                     )
             except GenerationFailed as exc:
                 return {"kind": "question", "message": str(exc)}
@@ -1414,6 +1556,7 @@ class ContentService:
                 media_capability_envelope=media_envelope,
                 media_program=media_program,
                 product_value_contract=product_value_contract,
+                publication_contract=publication_contract,
                 brand_context_packet=context.context_packet,
             ),
             None,
@@ -1442,7 +1585,7 @@ class ContentService:
             media_envelope,
             media_program,
             product_value_contract,
-            server_bearing_expression_contract,
+            publication_contract,
         )
 
     def identity_summary(self, scope: TrustedScope, target: ContentTarget = "douyin_video") -> dict[str, str]:
@@ -1472,6 +1615,7 @@ class ContentService:
         creative_plan: CreativePlanV2,
         series_context: SeriesContext | None,
         fact_count: int,
+        publication_contract: bool,
     ) -> tuple[MediaCapabilityEnvelope, MediaProgramSelectionV1]:
         if media_format not in {"graphic", "video"}:
             raise GenerationFailed("当前内容形式没有可用的媒体程序")
@@ -1491,6 +1635,7 @@ class ContentService:
             topic_origin=creative_plan.topic_origin,
             series_position=(series_context.target_position if series_context is not None else None),
             fact_count=fact_count,
+            publication_contract=publication_contract,
         )
         return envelope, program
 
@@ -1519,7 +1664,7 @@ class ContentService:
         media_capability_envelope: MediaCapabilityEnvelope | None = None,
         media_program: MediaProgramSelectionV1 | None = None,
         product_value_contract: ProductValueContract | None = None,
-        server_bearing_expression_contract: ServerBearingExpressionContractV1 | None = None,
+        publication_contract: PublicationContractV2 | None = None,
     ) -> dict[str, object]:
         try:
             # The run is already durable here. Keep the first generation event
@@ -1554,9 +1699,7 @@ class ContentService:
                     media_capability_envelope=media_capability_envelope,
                     media_program=media_program,
                     product_value_contract=product_value_contract,
-                    server_bearing_expression_contract=(
-                        server_bearing_expression_contract
-                    ),
+                    publication_contract=publication_contract,
                 )
             )
             if progress is not None:

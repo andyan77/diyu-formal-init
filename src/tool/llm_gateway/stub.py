@@ -8,7 +8,7 @@ from src.shared.creative_kernel import (
     KERNEL_VERSION,
     MAX_PRODUCT_FACT_BLOCKS,
     MEDIA_NATIVE_KERNEL_VERSION,
-    apply_server_bearing_expression_contract,
+    OBSERVATION_ONLY_PROGRAM,
     build_kernel_skeleton,
     compiler_owned_unit_texts,
     creative_units_digest,
@@ -50,11 +50,9 @@ from src.shared.product_value import (
     product_value_contract_digest,
     product_value_contract_document,
 )
-from src.shared.server_bearing_expression import (
-    assert_server_bearing_expression_matches,
-    build_server_bearing_expression_contract,
-    server_bearing_expression_digest,
-    server_bearing_expression_document,
+from src.shared.publication_contract import (
+    publication_contract_digest,
+    publication_contract_document,
 )
 from src.shared.types import (
     ContentProduct,
@@ -206,56 +204,33 @@ class DeterministicContentGenerator(ContentGenerator):
                 }
             )
         )
+        publication_v2 = request.publication_contract is not None
         skeleton = build_kernel_skeleton(
             frame=frame,
             fact_registry=facts,
             constraint_refs=("constraint:deterministic-test-stub",),
-            program_id=select_kernel_program(
-                frame=frame,
-                prior_kernel=request.prior_creative_kernel,
-                revision_instruction=request.revision_instruction,
+            program_id=(
+                request.prior_creative_kernel.program_id
+                if publication_v2 and request.prior_creative_kernel is not None
+                else OBSERVATION_ONLY_PROGRAM
+                if publication_v2
+                else select_kernel_program(
+                    frame=frame,
+                    prior_kernel=request.prior_creative_kernel,
+                    revision_instruction=request.revision_instruction,
+                )
             ),
             allowed_resource_ids=tuple(sorted(allowed_resources)),
             media_format=request.media_format,
             kernel_version=kernel_version,
             primary_product=request.primary_product,
-            product_value_contract=request.product_value_contract,
+            product_value_contract=(
+                None if publication_v2 else request.product_value_contract
+            ),
         )
         skeleton = freeze_prior_revision_units(
             skeleton,
             request.prior_creative_kernel,
-        )
-        bearing_contract = request.server_bearing_expression_contract
-        if (
-            kernel_version == KERNEL_VERSION
-            and bearing_contract is None
-            and request.prior_creative_kernel is None
-        ):
-            bearing_contract = build_server_bearing_expression_contract(
-                primary_product=request.primary_product,
-                media_format=request.media_format,
-                frame=frame,
-                series_position=(
-                    request.series_context.target_position
-                    if request.series_context is not None
-                    else None
-                ),
-            )
-        if bearing_contract is not None:
-            assert_server_bearing_expression_matches(
-                bearing_contract,
-                primary_product=request.primary_product,
-                media_format=request.media_format,
-                frame=frame,
-                series_position=(
-                    request.series_context.target_position
-                    if request.series_context is not None
-                    else None
-                ),
-            )
-        skeleton = apply_server_bearing_expression_contract(
-            skeleton,
-            bearing_contract,
         )
         _, guide, spoken, _, subtitles, _ = self._parts(request)
         if kernel_version == DUAL_TRACK_KERNEL_VERSION:
@@ -339,7 +314,7 @@ class DeterministicContentGenerator(ContentGenerator):
             media_capability_envelope=request.media_capability_envelope,
             media_program=request.media_program,
             product_value_contract=request.product_value_contract,
-            server_bearing_expression_contract=bearing_contract,
+            publication_contract=request.publication_contract,
         )
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product)
@@ -388,7 +363,6 @@ class DeterministicContentGenerator(ContentGenerator):
             allowed_claim_ids=product_packet.fact_ids,
             required_fact_block_ids=required_fact_block_ids,
             compiler_owned_text_by_id=compiler_texts,
-            server_bearing_expression_contract=bearing_contract,
             media_format=request.media_format,
         )
         compiled = compile_delivery(
@@ -427,16 +401,6 @@ class DeterministicContentGenerator(ContentGenerator):
                 "used_product_fact_ids": [block.fact_id for block in selected_blocks],
                 "used_product_fact_block_ids": list(kernel.selected_fact_block_ids),
                 "product_fact_renderer_version": (fact_blocks[0].renderer_version if fact_blocks else None),
-                "server_bearing_expression_contract": (
-                    server_bearing_expression_document(bearing_contract)
-                    if bearing_contract is not None
-                    else None
-                ),
-                "server_bearing_expression_digest": (
-                    server_bearing_expression_digest(bearing_contract)
-                    if bearing_contract is not None
-                    else None
-                ),
                 "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
                 "delivery_resource_refs": list(compiled.resource_refs),
                 "media_capability_envelope": (
@@ -475,6 +439,16 @@ class DeterministicContentGenerator(ContentGenerator):
                         request.product_value_contract
                     )
                     if request.product_value_contract is not None
+                    else None
+                ),
+                "publication_contract": (
+                    publication_contract_document(request.publication_contract)
+                    if request.publication_contract is not None
+                    else None
+                ),
+                "publication_contract_digest": (
+                    publication_contract_digest(request.publication_contract)
+                    if request.publication_contract is not None
                     else None
                 ),
             },

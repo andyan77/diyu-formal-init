@@ -74,10 +74,10 @@ class PostgresContentRepository(ContentRepository):
             "media_program_digest",
         }
     )
-    _SERVER_BEARING_COMPLETION_KEYS = frozenset(
+    _PUBLICATION_COMPLETION_KEYS = frozenset(
         {
-            "server_bearing_expression_contract",
-            "server_bearing_expression_digest",
+            "publication_contract",
+            "publication_contract_digest",
         }
     )
     _DUAL_TRACK_COMPLETION_KEYS = frozenset(
@@ -104,17 +104,20 @@ class PostgresContentRepository(ContentRepository):
             "media_program_digest",
             "product_value_contract",
             "product_value_contract_digest",
-            "server_bearing_expression_contract",
-            "server_bearing_expression_digest",
+            "publication_contract",
+            "publication_contract_digest",
         }
     )
-    _PRE_SERVER_BEARING_COMPLETION_KEYS = (
-        _DUAL_TRACK_COMPLETION_KEYS - _SERVER_BEARING_COMPLETION_KEYS
+    _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS = (
+        _DUAL_TRACK_COMPLETION_KEYS - _PUBLICATION_COMPLETION_KEYS
     )
     _MEDIA_NATIVE_COMPLETION_KEYS = (
-        _PRE_SERVER_BEARING_COMPLETION_KEYS - _PRODUCT_VALUE_COMPLETION_KEYS
+        _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS
+        - _PRODUCT_VALUE_COMPLETION_KEYS
     )
-    _LEGACY_DUAL_TRACK_COMPLETION_KEYS = _MEDIA_NATIVE_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
+    _LEGACY_DUAL_TRACK_COMPLETION_KEYS = (
+        _MEDIA_NATIVE_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
+    )
     _REVISION_IMMUTABLE_SNAPSHOT_KEYS = frozenset(
         {
             "creation_commitment",
@@ -133,8 +136,8 @@ class PostgresContentRepository(ContentRepository):
             "media_program_digest",
             "product_value_contract",
             "product_value_contract_digest",
-            "server_bearing_expression_contract",
-            "server_bearing_expression_digest",
+            "publication_contract",
+            "publication_contract_digest",
         }
     )
     _VERSION_AUDIT_KEYS = (
@@ -161,8 +164,8 @@ class PostgresContentRepository(ContentRepository):
         "media_program_digest",
         "product_value_contract",
         "product_value_contract_digest",
-        "server_bearing_expression_contract",
-        "server_bearing_expression_digest",
+        "publication_contract",
+        "publication_contract_digest",
     )
 
     def __init__(
@@ -205,7 +208,7 @@ class PostgresContentRepository(ContentRepository):
         if compiler_version == DELIVERY_COMPILER_VERSION:
             expected_key_sets = (
                 cls._DUAL_TRACK_COMPLETION_KEYS,
-                cls._PRE_SERVER_BEARING_COMPLETION_KEYS,
+                cls._PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS,
             )
         elif compiler_version == MEDIA_NATIVE_DELIVERY_COMPILER_VERSION:
             # Historical v3 writers existed both before and after the media
