@@ -3084,10 +3084,11 @@ def test_p3_one_frozen_account_path_is_sufficient_without_terminal_punctuation(
     assert request_count == 1
 
 
-def test_actuality_writer_cannot_turn_an_observation_into_new_dialogue(
+def test_actuality_writer_repairs_one_new_dialogue_then_rechecks_the_full_unit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _p3_account_link_request()
+    request_count = 0
 
     def respond(
         self: DeepSeekGenerator,
@@ -3098,31 +3099,95 @@ def test_actuality_writer_cannot_turn_an_observation_into_new_dialogue(
         thinking_disabled: bool = True,
         timeout_seconds: float | None = None,
     ) -> tuple[dict[str, Any], int]:
+        nonlocal request_count
+        request_count += 1
         del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        if request_count == 2:
+            content = {
+                "units": [
+                    {
+                        "unit_id": "unit:body",
+                        "text": "熟悉感被打断后，先留意那一点变化就够了。",
+                    }
+                ]
+            }
+        else:
+            content = {
+                "units": [
+                    {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
+                    {
+                        "unit_id": "unit:natural-guide",
+                        "text": "重新注意一次熟悉的日常。",
+                    },
+                    {
+                        "unit_id": "unit:body",
+                        "text": "当一个人说“今天怎么是甜的”时，熟悉感被打断了。",
+                    },
+                    {
+                        "unit_id": "unit:release-caption",
+                        "text": "今天也重新看见了熟悉的味道。",
+                    },
+                ]
+            }
         return {
             "choices": [
                 {
                     "message": {
-                        "content": json.dumps(
-                            {
-                                "units": [
-                                    {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
-                                    {
-                                        "unit_id": "unit:natural-guide",
-                                        "text": "重新注意一次熟悉的日常。",
-                                    },
-                                    {
-                                        "unit_id": "unit:body",
-                                        "text": "当一个人说“今天怎么是甜的”时，熟悉感被打断了。",
-                                    },
-                                    {
-                                        "unit_id": "unit:release-caption",
-                                        "text": "今天也重新看见了熟悉的味道。",
-                                    },
-                                ]
-                            },
-                            ensure_ascii=False,
-                        )
+                        "content": json.dumps(content, ensure_ascii=False)
+                    }
+                }
+            ]
+        }, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    artifact = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    ).generate(request)
+    assert "先留意那一点变化" in artifact.body
+    assert "今天怎么是甜的" not in artifact.body
+    assert request_count == 2
+
+
+def test_actuality_writer_fails_when_the_single_dialogue_repair_remains_unsafe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _p3_account_link_request()
+    request_count = 0
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        nonlocal request_count
+        request_count += 1
+        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        if request_count == 2:
+            content = {
+                "units": [
+                    {"unit_id": "unit:body", "text": "她说“这杯今天怎么是甜的”。"},
+                ]
+            }
+        else:
+            content = {
+                "units": [
+                    {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
+                    {"unit_id": "unit:natural-guide", "text": "重新注意一次熟悉的日常。"},
+                    {"unit_id": "unit:body", "text": "她说“今天怎么是甜的”。"},
+                    {"unit_id": "unit:release-caption", "text": "今天也重新看见熟悉的味道。"},
+                ]
+            }
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(content, ensure_ascii=False)
                     }
                 }
             ]

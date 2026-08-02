@@ -858,18 +858,24 @@ class DeepSeekGenerator(ContentGenerator):
             request,
             kernel,
         )
-        if copied_account_units:
+        attributed_dialogue_units = self._unfrozen_actuality_dialogue_units(
+            request,
+            kernel,
+        )
+        relationship_units = copied_account_units | attributed_dialogue_units
+        if relationship_units:
             if affected_product_units:
-                raise GenerationFailed("账号表达路径无法与商品事实修复共享第二次修复调用")
+                raise GenerationFailed("关系表达路径无法与商品事实修复共享第二次修复调用")
             repair_payload, repair_retries = self._request(
                 "你是笛语 CreativeKernel Writer。只返回一次受影响 unit 修复 JSON，不展示推理或内部规则。",
                 self._account_link_naturalization_prompt(
                     affected=tuple(
                         (unit.unit_id, unit.text)
                         for unit in kernel.writable_units
-                        if unit.unit_id in copied_account_units
+                        if unit.unit_id in relationship_units
                     ),
                     source_spans=self._account_profile_source_spans(request),
+                    forbid_attributed_dialogue=bool(attributed_dialogue_units),
                 ),
                 1024,
             )
@@ -878,7 +884,7 @@ class DeepSeekGenerator(ContentGenerator):
             try:
                 kernel = repair_kernel_units(
                     kernel=kernel,
-                    affected_unit_ids=copied_account_units,
+                    affected_unit_ids=relationship_units,
                     raw=json.loads(self._json_content(str(repair_payload["choices"][0]["message"]["content"]))),
                     allowed_claim_ids=context.product_fact_packet.fact_ids,
                     media_format=request.media_format,
@@ -891,7 +897,7 @@ class DeepSeekGenerator(ContentGenerator):
                 ValueError,
                 json.JSONDecodeError,
             ) as exc:
-                raise GenerationFailed("CreativeKernelV1 账号表达自然化修复格式不完整") from exc
+                raise GenerationFailed("CreativeKernelV1 关系表达修复格式不完整") from exc
         self._assert_p3_account_link_natural(request, kernel)
         self._assert_no_unfrozen_actuality_dialogue(request, kernel)
         if request.revision_instruction and request.prior_creative_kernel:
@@ -2568,6 +2574,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         *,
         affected: tuple[tuple[str, str], ...],
         source_spans: tuple[str, ...],
+        forbid_attributed_dialogue: bool,
     ) -> str:
         template = {
             "units": [
@@ -2577,7 +2584,11 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         }
         return f"""只修复照抄账号画像标签的创作 unit。保留每个 unit 原来的观看回报和主题，
 把账号关系转化为自然的观察方式、选择取舍或受众回报；不得逐字复制下列来源标签，不得写成
-职业履历、机构事实或已发生经历：
+职业履历、机构事实或已发生经历。{(
+    '同时删除由 Writer 新增的具名对话或被归因给现实人物的直接引语；可以保留不归因给人物的短概念标签。'
+    if forbid_attributed_dialogue else ''
+)}
+只能改写下列来源标签对应的表达方式：
 {json.dumps(source_spans, ensure_ascii=False)}
 待修复 unit：{json.dumps([{"unit_id": unit_id, "text": text} for unit_id, text in affected], ensure_ascii=False)}
 根对象只能有 units，且必须严格返回这些 unit_id；每项只能有 unit_id、text：
@@ -2588,11 +2599,22 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         request: GenerationInput,
         kernel: CreativeKernelV1,
     ) -> None:
+        if DeepSeekGenerator._unfrozen_actuality_dialogue_units(request, kernel):
+            raise GenerationFailed(
+                "Writer 不得把用户现实片段扩写成新的直接引语"
+            )
+
+    @staticmethod
+    def _unfrozen_actuality_dialogue_units(
+        request: GenerationInput,
+        kernel: CreativeKernelV1,
+    ) -> frozenset[str]:
         frame = request.narrative_frame
         if frame is None or frame.narrative_mode != "actuality_reflection":
-            return
+            return frozenset()
         speech_markers = ("说", "问", "答", "喊", "告诉", "表示", "写道")
         quote_pairs = (("“", "”"), ('"', '"'), ("‘", "’"))
+        affected: set[str] = set()
         for unit in kernel.writable_units:
             for opening, closing in quote_pairs:
                 start = unit.text.find(opening)
@@ -2604,10 +2626,9 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                     if prefix.rstrip().endswith(("：", ":")) or any(
                         marker in prefix for marker in speech_markers
                     ):
-                        raise GenerationFailed(
-                            "Writer 不得把用户现实片段扩写成新的直接引语"
-                        )
+                        affected.add(unit.unit_id)
                     start = unit.text.find(opening, end + 1)
+        return frozenset(affected)
 
     @staticmethod
     def _deidentify_text(
