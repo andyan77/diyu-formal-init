@@ -13,7 +13,8 @@ from src.shared.types import (
 )
 
 ACCOUNT_EDITORIAL_LENS_V1_VERSION = "account-editorial-lens-v1"
-ACCOUNT_EDITORIAL_LENS_VERSION = "account-editorial-lens-v2"
+ACCOUNT_EDITORIAL_LENS_V2_VERSION = "account-editorial-lens-v2"
+ACCOUNT_EDITORIAL_LENS_VERSION = "account-editorial-lens-v3"
 _LENS_PRODUCTS = frozenset({"brand_life_narrative", "local_response"})
 
 
@@ -60,7 +61,26 @@ class AccountEditorialLensV2(AccountEditorialLensV1):
     series_progression_boundary: str
 
 
-AccountEditorialLens = AccountEditorialLensV1 | AccountEditorialLensV2
+@dataclass(frozen=True)
+class AccountEditorialLensV3(AccountEditorialLensV2):
+    """Current confirmed profile inputs that must influence, never become, copy.
+
+    V2 made each visible unit accountable but still gave every account the same
+    generic editorial lens.  V3 freezes the four confirmed profile fields that
+    distinguish one logical publishing identity from another.  They remain
+    expression constraints, not brand facts or reality claims, and the Writer
+    copy guard rejects their verbatim reuse in visible units.
+    """
+
+    identity_position_input: str
+    authority_boundary_input: str
+    audience_relationship_input: str
+    content_territories_input: str
+
+
+AccountEditorialLens = (
+    AccountEditorialLensV1 | AccountEditorialLensV2 | AccountEditorialLensV3
+)
 
 
 def build_account_editorial_lens(
@@ -68,7 +88,7 @@ def build_account_editorial_lens(
     primary_product: ContentProduct,
     account_expression: AccountExpression | None,
     brand_context_packet: BrandContextPacket | None,
-) -> AccountEditorialLensV2 | None:
+) -> AccountEditorialLensV3 | None:
     """Build the one auditable editorial lens for new P3/P4 tasks.
 
     Legacy packets and incomplete draft identities keep their historical path;
@@ -85,7 +105,7 @@ def build_account_editorial_lens(
         or not isinstance(brand_context_packet, BrandContextPacketV2)
     ):
         return None
-    return AccountEditorialLensV2(
+    return AccountEditorialLensV3(
         contract_version=ACCOUNT_EDITORIAL_LENS_VERSION,
         primary_product=primary_product,
         source_profile_id=str(account_expression.profile_id),
@@ -138,6 +158,10 @@ def build_account_editorial_lens(
             "若存在冻结系列前情，本篇必须推进一个新的判断或受众动作；不能复述前篇结论，"
             "也不能只替换比喻、标题或互动句。"
         ),
+        identity_position_input=account_expression.identity_position,
+        authority_boundary_input=account_expression.authority_boundary,
+        audience_relationship_input=account_expression.audience_relationship,
+        content_territories_input=account_expression.content_territories,
     )
 
 
@@ -165,6 +189,8 @@ def account_editorial_lens_from_document(
 
     version = value.get("contract_version")
     if version == ACCOUNT_EDITORIAL_LENS_VERSION:
+        return AccountEditorialLensV3(**value)  # type: ignore[arg-type]
+    if version == ACCOUNT_EDITORIAL_LENS_V2_VERSION:
         return AccountEditorialLensV2(**value)  # type: ignore[arg-type]
     if version == ACCOUNT_EDITORIAL_LENS_V1_VERSION:
         return AccountEditorialLensV1(**value)  # type: ignore[arg-type]

@@ -18,9 +18,11 @@ from src.infrastructure.tenant_lifecycle import (
 from src.infrastructure.tenant_source_importer import TenantSourceImporter
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.account_editorial_lens import (
-    ACCOUNT_EDITORIAL_LENS_VERSION,
     ACCOUNT_EDITORIAL_LENS_V1_VERSION,
+    ACCOUNT_EDITORIAL_LENS_V2_VERSION,
+    ACCOUNT_EDITORIAL_LENS_VERSION,
     AccountEditorialLensV1,
+    AccountEditorialLensV2,
     account_editorial_lens_digest,
     account_editorial_lens_document,
     account_editorial_lens_from_document,
@@ -314,7 +316,7 @@ def test_tenant01_freezes_twenty_one_sources_and_fourteen_products(tmp_path: Pat
     )
 
 
-def test_account_editorial_lens_freezes_profile_and_publication_without_copying_prose() -> None:
+def test_account_editorial_lens_freezes_distinct_profile_inputs_and_publication() -> None:
     segment_text = "先回应具体处境，再给出克制而明确的判断。"
     segment = BrandContextSegment(
         segment_id="11111111-1111-4111-8111-111111111111",
@@ -361,7 +363,9 @@ def test_account_editorial_lens_freezes_profile_and_publication_without_copying_
     assert document["publication_projection_version"] == 3
     assert len(account_editorial_lens_digest(lens)) == 64
     serialized = json.dumps(document, ensure_ascii=False)
-    assert "不应复制" not in serialized
+    assert "不应复制的身份原句" in serialized
+    assert "不应复制的受众原句" in serialized
+    assert "不应复制的内容领地" in serialized
     assert "题材没有商品、服饰或门店时" in serialized
     assert "不能无损替换到另一件生活琐事" in serialized
     assert "不得猜测" in serialized
@@ -391,6 +395,37 @@ def test_account_editorial_lens_historical_v1_remains_readable_without_upgrade()
 
     assert parsed == historical
     assert parsed.contract_version == ACCOUNT_EDITORIAL_LENS_V1_VERSION
+
+
+def test_account_editorial_lens_historical_v2_remains_readable_without_upgrade() -> None:
+    historical = AccountEditorialLensV2(
+        contract_version=ACCOUNT_EDITORIAL_LENS_V2_VERSION,
+        primary_product="brand_life_narrative",
+        source_profile_id="55555555-5555-4555-8555-555555555555",
+        source_profile_version=2,
+        publication_projection_id="44444444-4444-4444-8444-444444444444",
+        publication_projection_version=1,
+        publication_projection_digest="a" * 64,
+        brand_context_packet_digest="b" * 64,
+        relationship_principle="历史关系",
+        topic_fidelity="历史题材",
+        fact_boundary="历史事实边界",
+        viewer_value_requirement="历史观看回报",
+        closure_boundary="历史收束",
+        title_responsibility="历史标题职责",
+        natural_guide_responsibility="历史导读职责",
+        body_responsibility="历史正文职责",
+        release_caption_responsibility="历史配文职责",
+        actuality_response_boundary="历史现实回应边界",
+        series_progression_boundary="历史系列推进边界",
+    )
+
+    parsed = account_editorial_lens_from_document(
+        account_editorial_lens_document(historical)
+    )
+
+    assert parsed == historical
+    assert parsed.contract_version == ACCOUNT_EDITORIAL_LENS_V2_VERSION
 
 
 def test_tenant01_content_product_taxonomy_is_not_an_insertable_brand_fact() -> None:

@@ -84,7 +84,7 @@ _PHRASES: dict[str, str] = {
     "phrase:video-sound": "不要求环境声；可静音或使用创作者本人旁白，不模拟未登记现场声音。",
     "phrase:video-silent": "无口播、无对白、无解说；完整已审文字由文字卡和字幕承担。",
     "phrase:scope-user-fact": "你提到：",
-    "phrase:scope-brand-fact": "已确认的品牌信息：",
+    "phrase:scope-brand-fact": "",
     "phrase:scope-product-fact": "已确认的商品信息：",
     "phrase:scope-general": "下面是创作性的生活观察，不对应真实人物或经历：",
     "phrase:scope-recommendation": "不妨试试：",

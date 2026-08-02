@@ -60,6 +60,7 @@ from src.shared.creative_kernel import (
     KERNEL_VERSION,
     LEGACY_KERNEL_VERSION,
     MEDIA_NATIVE_KERNEL_VERSION,
+    CreativeKernelUnit,
     CreativeKernelV1,
     build_kernel_skeleton,
     normalize_writer_unit_text,
@@ -77,6 +78,7 @@ from src.shared.delivery_compiler import (
     ORIGINAL_COMPOSITION_RESOURCE_ID,
     DeliveryCompileInput,
     _graphic_media_program_text,
+    _visible_unit,
     compile_delivery,
     compiler_owned_media_unit_texts,
 )
@@ -2342,6 +2344,25 @@ def test_current_actuality_life_units_are_preallocated_as_recommendation() -> No
     assert "其余为可选择建议，不表示已经执行" in compiled.body
 
 
+def test_current_confirmed_brand_fact_uses_the_single_artifact_scope() -> None:
+    unit = CreativeKernelUnit(
+        unit_id="unit:frozen-fact:1",
+        purpose="frozen_fact",
+        allowed_observation_types=("institutional_assertion",),
+        fact_refs=("brand-fact:test",),
+        constraint_refs=(),
+        visible_order=50,
+        text="笛语提供面向日常穿衣选择的品牌内容。",
+        track="trusted_fact",
+        mode="trusted_fact",
+        scope_id="scope:trusted-fact-v1",
+        text_source="server_fact",
+    )
+
+    assert _visible_unit(unit) == unit.text
+    assert "已确认的品牌信息" not in _visible_unit(unit)
+
+
 def test_actuality_writer_receives_one_frozen_fact_as_read_only_topic_anchor() -> None:
     fact = "今天喝了一直喝的蓝山咖啡，居然是甜的。"
     frame = new_frame("actuality_reflection", (fact,), ())
@@ -3090,7 +3111,9 @@ def test_p3_writer_uses_versioned_editorial_lens_without_profile_copy_or_topic_s
         "deepseek-test",
     )._kernel_writer_prompt(request, kernel, {})
 
-    assert "account-editorial-lens-v2" in prompt
+    assert "account-editorial-lens-v3" in prompt
+    assert "从穿衣编辑的位置重新看熟悉事物" in prompt
+    assert "陪正在重新选择日常节奏的人看清取舍" in prompt
     assert "题材没有商品、服饰或门店时" in prompt
     assert "不能无损替换到另一件生活琐事" in prompt
     assert "editorial_responsibility" in prompt

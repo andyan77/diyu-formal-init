@@ -2700,11 +2700,19 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
         values = (
             DeepSeekGenerator._deidentify_text(
+                expression.identity_position if expression is not None else request.brand.content_role_name,
+                protected,
+            ),
+            DeepSeekGenerator._deidentify_text(
                 expression.audience_relationship if expression is not None else request.brand.audience_description,
                 protected,
             ),
             DeepSeekGenerator._deidentify_text(
                 expression.authority_boundary if expression is not None else request.brand.content_role_boundary,
+                protected,
+            ),
+            DeepSeekGenerator._deidentify_text(
+                expression.content_territories if expression is not None else "",
                 protected,
             ),
             *(
