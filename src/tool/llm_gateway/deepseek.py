@@ -199,21 +199,21 @@ def _body_editorial_responsibility(
             if series_position is not None and series_position >= 2
             else "只提出本题独有、可以直接观察的一处张力或差异；"
         )
-        return specific + "本单元不列并行选项，不给行动建议，也不提前收束。"
+        return base_responsibility + specific + "本单元不列并行选项，不给行动建议，也不提前收束。"
     if unit_id == "unit:hypothetical-example":
         specific = (
             "只用一个条件化片段检验本篇新增判断，不复述前篇或本篇开头；"
             if series_position is not None and series_position >= 2
             else "只用一个清楚的条件化片段检验上一单元的观察；"
         )
-        return specific + "本单元不再提出第二组选择，也不代替结尾给行动。"
+        return base_responsibility + specific + "本单元不再提出第二组选择，也不代替结尾给行动。"
     if unit_id == "unit:body-closing":
         specific = (
             "只给出相较前篇真正推进的一项回应或把选择留给受众的一项动作；"
             if series_position is not None and series_position >= 2
             else "只给受众一个下一次可以直接使用的有限动作或问题；"
         )
-        return specific + "不总结前两单元，不再次列举两种做法。"
+        return base_responsibility + specific + "不总结前两单元，不再次列举两种做法。"
     return base_responsibility
 
 
@@ -266,9 +266,7 @@ _CONTRACT_FIELDS: dict[ContentProduct, tuple[str, str, str]] = {
 }
 _PRODUCT_VALUE: dict[ContentProduct, str] = {
     "dressing_decision": "帮助受众完成有条件、有边界的穿衣选择",
-    "product_truth": (
-        "在不知道当前对象身份或属性的前提下，提供一套先读已确认信息、再比较明确可见差异并保留个人判断的顺序"
-    ),
+    "product_truth": "围绕本件商品已确认的可见关系，解释一项专属选择价值、相伴取舍和成立条件",
     "brand_life_narrative": "让受众认识这个账号怎样观察、判断和待人",
     "local_response": "从近场信号给未参与者一份关系回应",
     "visual_styling_story": (
@@ -1652,6 +1650,9 @@ class DeepSeekGenerator(ContentGenerator):
         )
         account_unit_responsibilities: dict[str, str] = {}
         if account_editorial_lens is not None:
+            non_bearing_boundary = (
+                account_editorial_lens.non_bearing_expression_boundary
+            )
             by_purpose = {
                 "title": account_editorial_lens.title_responsibility,
                 "natural_guide": account_editorial_lens.natural_guide_responsibility,
@@ -1671,6 +1672,7 @@ class DeepSeekGenerator(ContentGenerator):
                     continue
                 if actuality_reflection:
                     responsibility = f"{responsibility}{actuality_by_purpose[unit.purpose]}"
+                responsibility = f"{non_bearing_boundary}{responsibility}"
                 account_unit_responsibilities[unit.unit_id] = (
                     _body_editorial_responsibility(
                         unit_id=unit.unit_id,
@@ -1703,12 +1705,14 @@ class DeepSeekGenerator(ContentGenerator):
                 "人物动作、对白、动机、原因、结果或商品属性。"
             ),
             "recommendation": (
-                "只写面向一般受众、尚未发生的可选做法或判断步骤；不得写成当前人物、品牌、"
-                "员工、顾客或门店已经执行的做法，也不得补充当前商品属性或效果。"
+                "只写面向一般受众、尚未发生的可选做法或判断步骤；每条建议都必须带明确的"
+                "条件或可选语态，不得写成当前人物、品牌、员工、顾客或门店已经执行的做法；"
+                "不得补充商品效果、健康或身体改善、心理或需要判断、因果结果及新的现实事件。"
             ),
             "hypothesis": (
-                "只写条件成立时才可能出现的推演，不续写服务端冻结事实；具体动作、对白、"
-                "心理、原因或结果必须处于条件语态，Compiler 会统一添加假设范围。"
+                "只写条件成立时才可能出现的可见选择，不续写服务端冻结事实；不得新增商品"
+                "效果、健康或身体改善、人物心理或需要、因果结果及新的现实事件。Compiler "
+                "会统一添加假设范围。"
             ),
             "disclosed_dramatization": (
                 "写成完整虚构情境，包含场景推进、角色行动或对白以及可见收束；不能写成观点文章。"
@@ -1944,7 +1948,8 @@ class DeepSeekGenerator(ContentGenerator):
 写成真实职业履历、机构事实或已经发生的经历。若存在用户现实原句，必须服从
 actuality_response_boundary：作品可以回应直接可见的反差或选择，但不能解释原因、罗列
 可能成因，或把一次片段概括成生活、人类及关系的普遍规律。若存在系列前情，还必须服从
-series_progression_boundary，产生新的判断或受众动作。"""
+series_progression_boundary，产生新的判断或受众动作。所有建议继续服从同一条非承重表达
+边界：用条件或可选语态，只谈可观察选择，不新增健康、心理、需要、因果、结果或现实事件。"""
             if request.primary_product in {"brand_life_narrative", "local_response"}
             else ""
         )
@@ -2612,14 +2617,14 @@ actuality_reflection 已因现实扩写／具体情境失败，本次不要再�
 claim_refs、scene、actor、resource、action、sound、production_note、来源、约束或合同。
 有 prior_reviewed_text 时，新 text 必须与它实质不同。所有 text 都必须遵守服务端给定的
 unit_contract：
-- actuality_reflection：只写一至两句抽象关系判断、价值判断或不落到现实场景的比喻；不得
-  复述真人事实、安排已发生事件、现实对白、具体时间地点或任何具体关系身份。可以写明确泛指
-  的原因、需要、建议或条件，但不得把它们绑定为当前用户、当前机构或冻结事实已经发生的
-  心理、因果与结果。
+- actuality_reflection：只写一至两句围绕可见差异或明确选择的非承重自然表达；不得复述
+  真人事实、安排已发生事件、现实对白、具体时间地点或任何具体关系身份。一般建议必须使用
+  明确的条件或可选语态；不得新增健康、身体改善、心理、需要、意图、原因、因果或结果。
 - audience_guidance：只写中性的观看主线、阅读邀请或带清楚语态的泛指建议；不得绑定当前
   用户、机构、现实事件或任何具体关系身份。
 - abstract_observation：只写抽象状态、关系理解或价值判断，不写人物微事件或建议。
-- recommendation：每个 clause 都用清楚建议、条件或意愿语态，不写已经发生的事件。
+- recommendation：每个 clause 都用清楚条件或可选语态，不写已经发生的事件，也不承诺
+  健康、心理或因果结果。
 
 同时保持完整平台成品职责：title 是自然、有张力但不改写事实的标题；natural_guide 用一句
 话说明观看回报；body 用三至五个短 clause 形成一条有推进的泛指观察与可选建议，不能只写
@@ -2683,8 +2688,10 @@ unit_contract：
 平台与形式：{platform} / {media_format}
 去标识化表达控制：{expression_controls}
 
-这是面向最终读者的创意表达层，不是资料说明、方法论讲解或内部审查说明。每个 clause 的
-判断对象只能是泛指读者如何看、如何选、如何保留自己的判断，或本篇能带来的阅读价值；
+这是面向最终读者的创意表达层，不是资料说明、方法论讲解或内部审查说明。每个 clause 必须
+围绕服务端已经冻结的本件商品价值关系，帮助受众理解这项可见选择的专属价值、相伴取舍和
+成立条件；不能退回适用于任意商品的阅读步骤。判断对象只能是泛指读者如何看、如何选、
+如何保留自己的判断，或本篇能带来的阅读价值；
 不得对底层对象、其所属品类、设计、结构、属性、用途、效果、形成原因或现实体验作任何
 主张。底层对象、其类别以及“它／这件对象”不得成为创意文字的主语、宾语或指代对象。
 使用自然第二人称直接和受众说话，不把“读者”“文章”“本文”或阅读学习过程当作表达
@@ -2692,7 +2699,8 @@ unit_contract：
 把受众带到同一选择主线；body 用二至四个短 clause 依次帮助受众确定优先项、排除无关
 干扰并保留自己的判断；release_caption 留下一个可以直接回答、且没有预设答案的选择
 问题。四个 unit 必须围绕同一条具体主线、各自承担不同作用，不能重复解释文章、方法或
-承诺受众会变得更明智。所有文字必须在不知道底层对象名称、类别和任何属性时仍然成立。
+承诺受众会变得更明智。文字不能出现商品名称、编号或改写硬属性，但必须能和服务端插入的
+商品价值命题自然接合；去掉这条价值命题后不应仍可无损套用到任意商品。
 不得输出“抽象原则”等内部合同语言，不写举例对白、引号口号或虚构场景。每个 unit 必须
 逐条服从其唯一
 unit_contract 和 required_expression，不得因为 purpose 或写作习惯换成建议、假设、演绎
@@ -2841,6 +2849,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 "actuality_natural_guide_responsibility",
                 "actuality_body_responsibility",
                 "actuality_release_caption_responsibility",
+                "non_bearing_expression_boundary",
             )
             writer_projection = {field: frozen_lens[field] for field in writer_fields}
             writer_projection["speaker_scope"] = (
@@ -3050,6 +3059,9 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
         editorial_responsibilities: dict[str, str] = {}
         if editorial_lens is not None:
+            non_bearing_boundary = (
+                editorial_lens.non_bearing_expression_boundary
+            )
             by_purpose = {
                 "title": editorial_lens.title_responsibility,
                 "natural_guide": editorial_lens.natural_guide_responsibility,
@@ -3072,6 +3084,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                     continue
                 if actuality_reflection:
                     responsibility = f"{responsibility}{actuality_by_purpose[unit.purpose]}"
+                responsibility = f"{non_bearing_boundary}{responsibility}"
                 editorial_responsibilities[unit.unit_id] = (
                     _body_editorial_responsibility(
                         unit_id=unit.unit_id,

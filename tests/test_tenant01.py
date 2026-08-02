@@ -22,10 +22,12 @@ from src.shared.account_editorial_lens import (
     ACCOUNT_EDITORIAL_LENS_V1_VERSION,
     ACCOUNT_EDITORIAL_LENS_V2_VERSION,
     ACCOUNT_EDITORIAL_LENS_V3_VERSION,
+    ACCOUNT_EDITORIAL_LENS_V4_VERSION,
     ACCOUNT_EDITORIAL_LENS_VERSION,
     AccountEditorialLensV1,
     AccountEditorialLensV2,
     AccountEditorialLensV3,
+    AccountEditorialLensV4,
     account_editorial_lens_digest,
     account_editorial_lens_document,
     account_editorial_lens_from_document,
@@ -377,6 +379,7 @@ def test_account_editorial_lens_freezes_distinct_profile_inputs_and_publication(
     assert "互相复述" in serialized
     assert "不把它写成原因、诊断" in serialized
     assert "不得升级为生活的一般教训" in serialized
+    assert "健康、身体改善、心理、需要、意图、原因、因果或结果" in serialized
 
 
 def test_writer_body_units_receive_distinct_progression_responsibilities() -> None:
@@ -408,6 +411,8 @@ def test_writer_body_units_receive_distinct_progression_responsibilities() -> No
     )
 
     assert len(set(standalone)) == 3
+    assert all(base in responsibility for responsibility in standalone)
+    assert all(base in responsibility for responsibility in series)
     assert "不列并行选项" in standalone[0]
     assert "不再提出第二组选择" in standalone[1]
     assert "不再次列举两种做法" in standalone[2]
@@ -501,6 +506,45 @@ def test_account_editorial_lens_historical_v3_remains_readable_without_upgrade()
 
     assert parsed == historical
     assert parsed.contract_version == ACCOUNT_EDITORIAL_LENS_V3_VERSION
+
+
+def test_account_editorial_lens_historical_v4_remains_readable_without_upgrade() -> None:
+    historical = AccountEditorialLensV4(
+        contract_version=ACCOUNT_EDITORIAL_LENS_V4_VERSION,
+        primary_product="brand_life_narrative",
+        source_profile_id="55555555-5555-4555-8555-555555555555",
+        source_profile_version=7,
+        publication_projection_id="44444444-4444-4444-8444-444444444444",
+        publication_projection_version=3,
+        publication_projection_digest="a" * 64,
+        brand_context_packet_digest="b" * 64,
+        relationship_principle="历史关系",
+        topic_fidelity="历史题材",
+        fact_boundary="历史事实边界",
+        viewer_value_requirement="历史观看回报",
+        closure_boundary="历史收束",
+        title_responsibility="历史标题职责",
+        natural_guide_responsibility="历史导读职责",
+        body_responsibility="历史正文职责",
+        release_caption_responsibility="历史配文职责",
+        actuality_response_boundary="历史现实回应边界",
+        series_progression_boundary="历史系列推进边界",
+        identity_position_input="历史身份",
+        authority_boundary_input="历史权限",
+        audience_relationship_input="历史受众",
+        content_territories_input="历史内容领地",
+        actuality_title_responsibility="历史现实标题",
+        actuality_natural_guide_responsibility="历史现实导读",
+        actuality_body_responsibility="历史现实正文",
+        actuality_release_caption_responsibility="历史现实配文",
+    )
+
+    parsed = account_editorial_lens_from_document(
+        account_editorial_lens_document(historical)
+    )
+
+    assert parsed == historical
+    assert parsed.contract_version == ACCOUNT_EDITORIAL_LENS_V4_VERSION
 
 
 def test_visible_brand_fact_requires_brand_to_be_the_explicit_subject() -> None:

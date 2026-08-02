@@ -810,8 +810,9 @@ def test_actuality_revision_repair_replays_reviewed_unit_not_failed_draft() -> N
     assert "洗碗池" not in prompt
     assert "今天店里忙了一天" not in prompt
     assert "本次表达要求：别讲道理，荒诞一点。" in prompt
-    assert "可以写明确泛指\n  的原因、需要、建议或条件" in prompt
-    assert "不得把它们绑定为当前用户、当前机构或冻结事实已经发生" in prompt
+    assert "一般建议必须使用\n  明确的条件或可选语态" in prompt
+    assert "健康、身体改善、心理、需要、意图、原因、因果或结果" in prompt
+    assert "不得复述\n  真人事实、安排已发生事件" in prompt
 
 
 def test_first_actuality_repair_does_not_replay_fact_or_failed_draft() -> None:
@@ -924,7 +925,8 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert '"current_text"' not in prompt
     assert '"claim_refs": []' in prompt
     assert "你看不到、也不需要复述、解释或推断这些事实" in prompt
-    assert "判断对象只能是泛指读者如何看、如何选、如何保留自己的判断" in prompt
+    assert "围绕服务端已经冻结的本件商品价值关系" in prompt
+    assert "不能退回适用于任意商品的阅读步骤" in prompt
     assert "claim_refs 必须\n是空数组" in prompt
     assert '"unit_contract": "audience_guidance"' in prompt
     assert "只写一至两句与已插入事实配套的观看回报" in prompt
@@ -932,8 +934,8 @@ def test_product_fact_repair_does_not_replay_offending_fact_text() -> None:
     assert "只谈读者如何看、如何选、如何保留判断" in prompt
     assert "不得输出“抽象原则”等内部合同语言" in prompt
     assert "不得成为创意文字的主语、宾语或指代对象" in prompt
-    assert "所有文字必须在不知道底层对象名称、类别" in prompt
-    assert "和任何属性时仍然成立" in prompt
+    assert "文字不能出现商品名称、编号或改写硬属性" in prompt
+    assert "去掉这条价值命题后不应仍可无损套用到任意商品" in prompt
     assert "使用自然第二人称直接和受众说话" in prompt
     assert "body 用二至四个短 clause" in prompt
     assert "release_caption 留下一个可以直接回答" in prompt

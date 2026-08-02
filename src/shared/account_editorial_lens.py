@@ -15,7 +15,8 @@ from src.shared.types import (
 ACCOUNT_EDITORIAL_LENS_V1_VERSION = "account-editorial-lens-v1"
 ACCOUNT_EDITORIAL_LENS_V2_VERSION = "account-editorial-lens-v2"
 ACCOUNT_EDITORIAL_LENS_V3_VERSION = "account-editorial-lens-v3"
-ACCOUNT_EDITORIAL_LENS_VERSION = "account-editorial-lens-v4"
+ACCOUNT_EDITORIAL_LENS_V4_VERSION = "account-editorial-lens-v4"
+ACCOUNT_EDITORIAL_LENS_VERSION = "account-editorial-lens-v5"
 _LENS_PRODUCTS = frozenset({"brand_life_narrative", "local_response"})
 
 
@@ -95,11 +96,26 @@ class AccountEditorialLensV4(AccountEditorialLensV3):
     actuality_release_caption_responsibility: str
 
 
+@dataclass(frozen=True)
+class AccountEditorialLensV5(AccountEditorialLensV4):
+    """Freeze the non-bearing Writer boundary used by current P3/P4 work.
+
+    Service-owned actuality text carries the real-world claim.  Writer prose
+    may make the piece natural and useful, but it cannot create a second claim
+    about a product, body, mental state, cause, result, or event.  This is one
+    shared responsibility contract for first-pass and repair prompts, not a
+    phrase blacklist or a server-authored article template.
+    """
+
+    non_bearing_expression_boundary: str
+
+
 AccountEditorialLens = (
     AccountEditorialLensV1
     | AccountEditorialLensV2
     | AccountEditorialLensV3
     | AccountEditorialLensV4
+    | AccountEditorialLensV5
 )
 
 
@@ -108,7 +124,7 @@ def build_account_editorial_lens(
     primary_product: ContentProduct,
     account_expression: AccountExpression | None,
     brand_context_packet: BrandContextPacket | None,
-) -> AccountEditorialLensV4 | None:
+) -> AccountEditorialLensV5 | None:
     """Build the one auditable editorial lens for new P3/P4 tasks.
 
     Legacy packets and incomplete draft identities keep their historical path;
@@ -125,7 +141,7 @@ def build_account_editorial_lens(
         or not isinstance(brand_context_packet, BrandContextPacketV2)
     ):
         return None
-    return AccountEditorialLensV4(
+    return AccountEditorialLensV5(
         contract_version=ACCOUNT_EDITORIAL_LENS_VERSION,
         primary_product=primary_product,
         source_profile_id=str(account_expression.profile_id),
@@ -198,6 +214,12 @@ def build_account_editorial_lens(
             "只回到本次原句的具体反差或选择；不把一次片段收束成适用于所有人的口号、"
             "教训或账号定义。"
         ),
+        non_bearing_expression_boundary=(
+            "Writer 只负责非承重的自然表达：围绕可见差异、明确选择和受众下一次可以自行"
+            "决定的观察动作组织文字。一般建议必须写成清楚的条件或可选语态；不得新增具体"
+            "商品效果、健康、身体改善、心理、需要、意图、原因、因果或结果，也不得新增一"
+            "件现实事件。已有现实片段只由服务端事实单元逐字承重。"
+        ),
     )
 
 
@@ -225,6 +247,8 @@ def account_editorial_lens_from_document(
 
     version = value.get("contract_version")
     if version == ACCOUNT_EDITORIAL_LENS_VERSION:
+        return AccountEditorialLensV5(**value)  # type: ignore[arg-type]
+    if version == ACCOUNT_EDITORIAL_LENS_V4_VERSION:
         return AccountEditorialLensV4(**value)  # type: ignore[arg-type]
     if version == ACCOUNT_EDITORIAL_LENS_V3_VERSION:
         return AccountEditorialLensV3(**value)  # type: ignore[arg-type]
