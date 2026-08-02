@@ -118,7 +118,11 @@ from src.shared.types import (
     TrustedScope,
 )
 from src.tool import run_tenant01_golden_suite as tenant01_runner
-from src.tool.run_tenant01_golden_suite import _assert_p2_product_ready
+from src.tool.run_tenant01_golden_suite import (
+    _assert_formal_publication_summary,
+    _assert_p2_product_ready,
+    _FormalPublicationSummary,
+)
 from src.tool.tenant01_evidence import (
     TENANT01_CARD_IDS,
     TENANT01_COMPARISON_FIELDS,
@@ -214,6 +218,29 @@ def _tenant01_json_digest(value: object) -> str:
             sort_keys=True,
         ).encode()
     ).hexdigest()
+
+
+def test_tenant01_final_suite_requires_confirmed_source_bound_publication() -> None:
+    valid = _FormalPublicationSummary(
+        public_brand_name="笛语",
+        projection_status="confirmed",
+        source_document_count=21,
+        source_segment_count=5_046,
+        source_bound_writer_item_count=3,
+        publication_roles=frozenset(
+            {"public_brand_fact", "expression_constraint", "creative_method"}
+        ),
+    )
+    _assert_formal_publication_summary(valid)
+
+    for invalid in (
+        replace(valid, source_bound_writer_item_count=0),
+        replace(valid, publication_roles=frozenset({"expression_constraint"})),
+        replace(valid, projection_status="candidate"),
+        replace(valid, public_brand_name="通用浏览器租户"),
+    ):
+        with pytest.raises(RuntimeError, match="source-bound"):
+            _assert_formal_publication_summary(invalid)
 
 
 def _tenant01_evidence_inputs(

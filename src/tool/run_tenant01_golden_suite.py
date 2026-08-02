@@ -158,6 +158,103 @@ class _Journey:
 
 
 @dataclass(frozen=True)
+class _FormalPublicationSummary:
+    public_brand_name: str
+    projection_status: str
+    source_document_count: int
+    source_segment_count: int
+    source_bound_writer_item_count: int
+    publication_roles: frozenset[str]
+
+
+def _assert_formal_publication_summary(
+    summary: _FormalPublicationSummary,
+) -> None:
+    required_roles = frozenset(
+        {"public_brand_fact", "expression_constraint", "creative_method"}
+    )
+    if (
+        summary.public_brand_name != "笛语"
+        or summary.projection_status != "confirmed"
+        or summary.source_document_count != 21
+        or summary.source_segment_count != 5_046
+        or summary.source_bound_writer_item_count < len(required_roles)
+        or not required_roles.issubset(summary.publication_roles)
+    ):
+        raise RuntimeError(
+            "TENANT-01 final suite requires the confirmed source-bound "
+            "笛语 publication projection"
+        )
+
+
+def _formal_publication_summary(
+    database_url: str,
+    *,
+    tenant_id: UUID,
+    brand_id: UUID,
+) -> _FormalPublicationSummary:
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT set_config('app.tenant_id', %s, true)",
+            (str(tenant_id),),
+        )
+        cursor.execute(
+            """
+            SELECT brand.public_name, projection.status,
+                   (SELECT count(*)
+                     FROM brand_source_documents source
+                     WHERE source.tenant_id = brand.tenant_id
+                       AND source.brand_id = brand.id
+                       AND source.status = 'active'),
+                   (SELECT count(*)
+                      FROM brand_source_segments segment
+                      JOIN brand_source_documents source
+                        ON source.tenant_id = segment.tenant_id
+                       AND source.brand_id = segment.brand_id
+                       AND source.id = segment.document_id
+                       AND source.current_version_id = segment.document_version_id
+                       AND source.status = 'active'
+                     WHERE segment.tenant_id = brand.tenant_id
+                       AND segment.brand_id = brand.id),
+                   count(*) FILTER (
+                       WHERE item.source_kind = 'brand_source_segment'
+                         AND item.publication_role <> 'internal_only'
+                   ),
+                   array_agg(DISTINCT item.publication_role) FILTER (
+                       WHERE item.publication_role <> 'internal_only'
+                   )
+              FROM brands brand
+              JOIN brand_publication_projections projection
+                ON projection.tenant_id = brand.tenant_id
+               AND projection.brand_id = brand.id
+               AND projection.id = brand.current_publication_projection_id
+              LEFT JOIN brand_publication_projection_items item
+                ON item.tenant_id = projection.tenant_id
+               AND item.brand_id = projection.brand_id
+               AND item.projection_id = projection.id
+             WHERE brand.tenant_id = %s AND brand.id = %s
+             GROUP BY brand.tenant_id, brand.id, brand.public_name,
+                      projection.id, projection.status
+            """,
+            (tenant_id, brand_id),
+        )
+        row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError(
+            "TENANT-01 final suite requires a current publication projection"
+        )
+    roles = row[5] if isinstance(row[5], list) else []
+    return _FormalPublicationSummary(
+        public_brand_name=str(row[0] or ""),
+        projection_status=str(row[1]),
+        source_document_count=int(row[2]),
+        source_segment_count=int(row[3]),
+        source_bound_writer_item_count=int(row[4]),
+        publication_roles=frozenset(str(value) for value in roles),
+    )
+
+
+@dataclass(frozen=True)
 class _Card:
     card_id: str
     message: str
@@ -225,6 +322,13 @@ def _preflight_p2_product(
         identity,
         cast(ContentTarget, card.target),
         journey.publishing_identity_id,
+    )
+    _assert_formal_publication_summary(
+        _formal_publication_summary(
+            database_url,
+            tenant_id=journey.tenant_id,
+            brand_id=scope.brand_id,
+        )
     )
     products = PostgresContentRepository(database_url).load_product_facts(
         scope,
