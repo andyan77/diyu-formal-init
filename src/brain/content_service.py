@@ -545,8 +545,7 @@ class ContentService:
                 prior_series_summary=series_summary,
                 creation_committed=commitment.committed,
                 indispensable_fact_question_allowed=(
-                    commitment.committed
-                    and requires_indispensable_user_fact(commitment.intent_span)
+                    commitment.committed and requires_indispensable_user_fact(commitment.intent_span)
                 ),
                 allowed_tone_ids=self._allowed_tone_ids(control),
                 allowed_mechanism_ids=self._allowed_mechanism_ids(control),
@@ -1015,12 +1014,15 @@ class ContentService:
             if segment.source_digest is not None:
                 segment_document["source_digest"] = segment.source_digest
             segment_documents.append(segment_document)
-        if brand_context_packet_digest(
-            projection_id=projection_id,
-            projection_version=projection_version,
-            projection_digest=projection_digest,
-            segments=segment_documents,
-        ) != digest:
+        if (
+            brand_context_packet_digest(
+                projection_id=projection_id,
+                projection_version=projection_version,
+                projection_digest=projection_digest,
+                segments=segment_documents,
+            )
+            != digest
+        ):
             raise DomainError("内容任务冻结的品牌发布版本摘要无效")
         return BrandContextPacketV2(
             "brand-context-packet-v2",
@@ -1247,6 +1249,8 @@ class ContentService:
                     else (allowed_mechanisms[0] if allowed_mechanisms else None)
                 ),
                 target_shape=platform_shape(target, direction.media_format),
+                topic_origin=creative_plan.topic_origin,
+                plan_version=creative_plan.plan_version,
             )
             if frame is None:
                 frame = legacy_frame(

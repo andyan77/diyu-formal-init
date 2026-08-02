@@ -62,6 +62,7 @@ from src.shared.creative_kernel import (
     select_kernel_program,
 )
 from src.shared.creative_plan import (
+    PLAN_VERSION,
     creative_plan_document,
     creative_plan_from_document,
     validate_creative_plan,
@@ -497,8 +498,7 @@ class BoundaryContext:
             "这些是当前账号与已确认发布投影的表达控制，不是可照抄的账号介绍，"
             "也不证明任何经历、案例、门店做法或经营历史已经发生。"
             + "".join(
-                "\n已确认表达约束（不能作为事实引用）：" + text
-                for text in request.brand.expression_constraint_context
+                "\n已确认表达约束（不能作为事实引用）：" + text for text in request.brand.expression_constraint_context
             )
         )
         return cls(
@@ -657,15 +657,9 @@ class DeepSeekGenerator(ContentGenerator):
             sentence_roles[sentence_id] = role
         if tuple(sentence_roles) != tuple(candidate_by_id):
             raise GenerationFailed("用户句子角色没有按候选顺序完整冻结")
-        role_fact_ids = tuple(
-            source_id
-            for source_id, role in sentence_roles.items()
-            if role == "observable_actuality"
-        )
+        role_fact_ids = tuple(source_id for source_id, role in sentence_roles.items() if role == "observable_actuality")
         instruction_source_ids = tuple(
-            source_id
-            for source_id, role in sentence_roles.items()
-            if role == "creation_instruction"
+            source_id for source_id, role in sentence_roles.items() if role == "creation_instruction"
         )
         if any(source_id not in candidate_by_id for source_id in fact_source_ids):
             raise GenerationFailed("模型返回的用户事实句标识不存在")
@@ -889,11 +883,7 @@ class DeepSeekGenerator(ContentGenerator):
                 kernel = repair_kernel_units(
                     kernel=kernel,
                     affected_unit_ids=repeated_units,
-                    raw=json.loads(
-                        self._json_content(
-                            str(repair_payload["choices"][0]["message"]["content"])
-                        )
-                    ),
+                    raw=json.loads(self._json_content(str(repair_payload["choices"][0]["message"]["content"]))),
                     allowed_claim_ids=context.product_fact_packet.fact_ids,
                     media_format=request.media_format,
                     preserve_claim_refs=True,
@@ -920,11 +910,7 @@ class DeepSeekGenerator(ContentGenerator):
             request,
             kernel,
         )
-        relationship_units = (
-            copied_account_units
-            | copied_actuality_units
-            | attributed_dialogue_units
-        )
+        relationship_units = copied_account_units | copied_actuality_units | attributed_dialogue_units
         if relationship_units:
             if affected_product_units:
                 raise GenerationFailed("关系表达路径无法与商品事实修复共享第二次修复调用")
@@ -1417,11 +1403,7 @@ class DeepSeekGenerator(ContentGenerator):
         for unit in kernel.writable_units:
             if compiler_owned_unit_source(unit.unit_id, unit.text) is not None:
                 continue
-            paragraphs = tuple(
-                paragraph.strip()
-                for paragraph in unit.text.split("\n\n")
-                if paragraph.strip()
-            )
+            paragraphs = tuple(paragraph.strip() for paragraph in unit.text.split("\n\n") if paragraph.strip())
             if len(paragraphs) < 4 or len(paragraphs) % 2:
                 continue
             midpoint = len(paragraphs) // 2
@@ -1474,28 +1456,30 @@ class DeepSeekGenerator(ContentGenerator):
             raise GenerationFailed("CreativeKernelV1 缺少 CreativePlanV2")
         if request.narrative_frame is None:
             raise GenerationFailed("CreativeKernelV1 缺少冻结叙事框架")
-        actuality_reflection = (
-            request.narrative_frame.narrative_mode == "actuality_reflection"
-        )
-        fact_units = [] if actuality_reflection else [
-            {
-                "unit_id": unit.unit_id,
-                "text": unit.text,
-            }
-            for unit in skeleton.units
-            if unit.track == "trusted_fact"
-            and (
-                request.narrative_frame is None
-                or not any(
-                    fact_ref
-                    in {
-                        *request.narrative_frame.allowed_brand_fact_ids,
-                        *request.narrative_frame.allowed_product_fact_ids,
-                    }
-                    for fact_ref in unit.fact_refs
+        actuality_reflection = request.narrative_frame.narrative_mode == "actuality_reflection"
+        fact_units = (
+            []
+            if actuality_reflection
+            else [
+                {
+                    "unit_id": unit.unit_id,
+                    "text": unit.text,
+                }
+                for unit in skeleton.units
+                if unit.track == "trusted_fact"
+                and (
+                    request.narrative_frame is None
+                    or not any(
+                        fact_ref
+                        in {
+                            *request.narrative_frame.allowed_brand_fact_ids,
+                            *request.narrative_frame.allowed_product_fact_ids,
+                        }
+                        for fact_ref in unit.fact_refs
+                    )
                 )
-            )
-        ]
+            ]
+        )
         product_fact_packet = build_product_fact_packet(
             request.products,
             allowed_fact_ids=(request.narrative_frame.allowed_product_fact_ids),
@@ -1528,13 +1512,9 @@ class DeepSeekGenerator(ContentGenerator):
         account_unit_responsibilities = (
             {
                 "title": account_editorial_lens.title_responsibility,
-                "natural_guide": (
-                    account_editorial_lens.natural_guide_responsibility
-                ),
+                "natural_guide": (account_editorial_lens.natural_guide_responsibility),
                 "body": account_editorial_lens.body_responsibility,
-                "release_caption": (
-                    account_editorial_lens.release_caption_responsibility
-                ),
+                "release_caption": (account_editorial_lens.release_caption_responsibility),
             }
             if account_editorial_lens is not None
             else {}
@@ -1618,20 +1598,12 @@ class DeepSeekGenerator(ContentGenerator):
                     else {}
                 ),
                 **(
-                    {
-                        "editorial_responsibility": (
-                            account_unit_responsibilities[unit.purpose]
-                        )
-                    }
+                    {"editorial_responsibility": (account_unit_responsibilities[unit.purpose])}
                     if unit.purpose in account_unit_responsibilities
                     else {}
                 ),
                 **(
-                    {
-                        "decision_responsibility": (
-                            p1_unit_responsibilities[unit.purpose]
-                        )
-                    }
+                    {"decision_responsibility": (p1_unit_responsibilities[unit.purpose])}
                     if unit.purpose in p1_unit_responsibilities
                     else {}
                 ),
@@ -1757,6 +1729,13 @@ class DeepSeekGenerator(ContentGenerator):
                 ],
                 "writer_relation": "respond_without_repeating_or_explaining_cause",
             }
+        elif request.creative_plan.topic_origin == "system_selected":
+            topic_projection = {
+                "contract_version": "system-selected-audience-topic-v1",
+                "topic_origin": "system_selected",
+                "selection_basis": "current_account_content_territories",
+                "user_request_is_topic_evidence": False,
+            }
         else:
             topic_projection = request.creative_plan.topic_spans
         packet_projection: object = (
@@ -1805,13 +1784,9 @@ series_progression_boundary，产生新的判断或受众动作。"""
                 if isinstance(request.brand.context_packet, BrandContextPacketV2)
                 else None
             ),
-            "expression_constraints": list(
-                request.brand.expression_constraint_context
-            ),
+            "expression_constraints": list(request.brand.expression_constraint_context),
             "creative_methods": list(request.brand.creative_method_context),
-            "candidate_product_guidance": list(
-                request.brand.candidate_product_guidance_context
-            ),
+            "candidate_product_guidance": list(request.brand.candidate_product_guidance_context),
         }
         output_contract = (
             """根对象必须恰好只有 units；每个 unit 必须恰好只有 unit_id、text。商品事实块
@@ -1894,7 +1869,8 @@ Packet 的 fact_id；不能把硬属性、数字或 canonical_text 写进 creati
 {json.dumps(brand_context_projection, ensure_ascii=False)}
 上述 expression_constraints 只限制怎样说，creative_methods 只提供创作方法，
 candidate_product_guidance 只能形成一般选择取舍；它们均不是品牌、商品、人物、门店、
-经历或媒体资源的事实许可证。只有服务端预分配的 trusted_fact 单元能作为现实事实。
+经历或媒体资源的事实许可证，也不得逐字复制到任何可见 unit。它们必须转化为本题独有的
+观察方式、判断取舍或受众回报。只有服务端预分配的 trusted_fact 单元能作为现实事实。
 本次修改要求：{request.revision_instruction or "（首次生成）"}
 此前可写内核（首次生成时为空；只用于修改，不是事实来源）：
 {json.dumps(prior, ensure_ascii=False)}
@@ -2550,8 +2526,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             if relationship_product
             else (
                 (expression.authority_boundary, expression.audience_relationship)
-                if expression is not None
-                and request.primary_product == "brand_life_narrative"
+                if expression is not None and request.primary_product == "brand_life_narrative"
                 else (
                     (
                         expression.identity_position,
@@ -2571,16 +2546,8 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
         parts = [
             *expression_parts,
-            *(
-                ()
-                if relationship_product
-                else request.brand.expression_constraint_context
-            ),
-            *(
-                ()
-                if relationship_product
-                else request.brand.creative_method_context
-            ),
+            *(() if relationship_product else request.brand.expression_constraint_context),
+            *(() if relationship_product else request.brand.creative_method_context),
             *(
                 tuple(selection.applied_label for selection in request.creative_direction.selections)
                 if request.creative_direction is not None
@@ -2723,13 +2690,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 )
             ),
         )
-        return tuple(
-            dict.fromkeys(
-                value.rstrip("。！？!?")
-                for value in values
-                if len(value.rstrip("。！？!?")) >= 4
-            )
-        )
+        return tuple(dict.fromkeys(value.rstrip("。！？!?") for value in values if len(value.rstrip("。！？!?")) >= 4))
 
     @classmethod
     def _assert_p3_account_link_natural(
@@ -2737,22 +2698,19 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         request: GenerationInput,
         kernel: CreativeKernelV1,
     ) -> None:
-        if request.primary_product != "brand_life_narrative" or kernel.kernel_version != KERNEL_VERSION:
+        if kernel.kernel_version != KERNEL_VERSION:
             return
-        if not cls._account_profile_source_spans(request):
+        if request.primary_product == "brand_life_narrative" and not cls._account_profile_source_spans(request):
             raise GenerationFailed("当前账号缺少可冻结的账号表达路径")
         if cls._copied_account_profile_units(request, kernel):
-            raise GenerationFailed("Writer 成品仍在照抄账号画像标签")
+            raise GenerationFailed("Writer 成品仍在照抄账号画像或发布投影原句")
 
     @staticmethod
     def _assert_p1_publication_shape(
         request: GenerationInput,
         kernel: CreativeKernelV1,
     ) -> None:
-        if (
-            request.primary_product != "dressing_decision"
-            or kernel.kernel_version != KERNEL_VERSION
-        ):
+        if request.primary_product != "dressing_decision" or kernel.kernel_version != KERNEL_VERSION:
             return
         limits = {
             "title": 36,
@@ -2761,15 +2719,9 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             "release_caption": 80,
         }
         for purpose, limit in limits.items():
-            visible_length = sum(
-                len("".join(unit.text.split()))
-                for unit in kernel.units
-                if unit.purpose == purpose
-            )
+            visible_length = sum(len("".join(unit.text.split())) for unit in kernel.units if unit.purpose == purpose)
             if visible_length > limit:
-                raise GenerationFailed(
-                    "本次穿衣选择没有在可直接观看的长度内完成"
-                )
+                raise GenerationFailed("本次穿衣选择没有在可直接观看的长度内完成")
 
     @classmethod
     def _copied_account_profile_units(
@@ -2777,19 +2729,13 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         request: GenerationInput,
         kernel: CreativeKernelV1,
     ) -> frozenset[str]:
-        if request.primary_product != "brand_life_narrative" or kernel.kernel_version != KERNEL_VERSION:
+        if kernel.kernel_version != KERNEL_VERSION:
             return frozenset()
-        source_views = tuple(
-            cls._account_link_match_view(span)
-            for span in cls._account_profile_source_spans(request)
-        )
+        source_views = tuple(cls._account_link_match_view(span) for span in cls._account_profile_source_spans(request))
         return frozenset(
             unit.unit_id
             for unit in kernel.writable_units
-            if any(
-                source in cls._account_link_match_view(unit.text)
-                for source in source_views
-            )
+            if any(source in cls._account_link_match_view(unit.text) for source in source_views)
         )
 
     @staticmethod
@@ -2807,17 +2753,11 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         request: GenerationInput,
         kernel: CreativeKernelV1,
     ) -> frozenset[str]:
-        source_views = tuple(
-            cls._account_link_match_view(span)
-            for span in cls._actuality_fact_source_spans(request)
-        )
+        source_views = tuple(cls._account_link_match_view(span) for span in cls._actuality_fact_source_spans(request))
         return frozenset(
             unit.unit_id
             for unit in kernel.writable_units
-            if any(
-                source in cls._account_link_match_view(unit.text)
-                for source in source_views
-            )
+            if any(source in cls._account_link_match_view(unit.text) for source in source_views)
         )
 
     @staticmethod
@@ -2833,19 +2773,17 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         source_spans: tuple[str, ...],
         forbid_attributed_dialogue: bool,
     ) -> str:
-        template = {
-            "units": [
-                {"unit_id": unit_id, "text": ""}
-                for unit_id, _ in affected
-            ]
-        }
+        template = {"units": [{"unit_id": unit_id, "text": ""} for unit_id, _ in affected]}
         return f"""只修复照抄表达控制或已冻结现实原句的创作 unit。保留每个 unit 原来的观看回报和主题，
 把账号关系转化为自然的观察方式、选择取舍或受众回报；不得逐字复制下列来源文字，不得写成
-职业履历、机构事实或已发生经历。{(
-    '同时删除 Writer 新增的全部引号内容；受影响 unit 不得再使用中文或 ASCII 引号，'
-    '不得把引语改成无引号的人物转述。'
-    if forbid_attributed_dialogue else ''
-)}
+职业履历、机构事实或已发生经历。{
+            (
+                "同时删除 Writer 新增的全部引号内容；受影响 unit 不得再使用中文或 ASCII 引号，"
+                "不得把引语改成无引号的人物转述。"
+                if forbid_attributed_dialogue
+                else ""
+            )
+        }
 只能改写下列来源文字对应的表达方式：
 {json.dumps(source_spans, ensure_ascii=False)}
 待修复 unit：{json.dumps([{"unit_id": unit_id, "text": text} for unit_id, text in affected], ensure_ascii=False)}
@@ -2858,9 +2796,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         kernel: CreativeKernelV1,
     ) -> None:
         if DeepSeekGenerator._unfrozen_actuality_dialogue_units(request, kernel):
-            raise GenerationFailed(
-                "Writer 不得把用户现实片段扩写成新的直接引语"
-            )
+            raise GenerationFailed("Writer 不得把用户现实片段扩写成新的直接引语")
 
     @staticmethod
     def _unfrozen_actuality_dialogue_units(
@@ -3358,7 +3294,8 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 {{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制实际使用的用户消息"],
 "user_fact_sentence_ids":["只能选择服务端候选 sentence_id，不能返回或裁剪事实正文"],
 "user_sentence_roles":[{{"sentence_id":"按服务端候选顺序逐项返回","role":"observable_actuality|creation_instruction"}}],
-"creative_plan":{{"plan_version":"creative-plan-v2","topic_spans":["只能逐字截取用户消息"],
+"creative_plan":{{"plan_version":"{PLAN_VERSION}","topic_spans":["只能逐字截取用户消息"],
+"topic_origin":"explicit_user|system_selected",
 "primary_value":"dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story",
 "tone_ids":["只选允许 id"],"mechanism_id":null,"platform_shape":"{request.platform_shape}",
 "prohibited_bindings":["no_situated_event","no_institutional_assertion",
@@ -3389,8 +3326,11 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   保留整句为 observable_actuality，不得裁剪；相邻独立指令句绝不能冒充真人事实。
 - 显式模式为 dramatization 时必须使用它；没有明确演绎要求不得升级为剧情。
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
-- CreativePlanV2 只能选择上述结构字段。topic_spans 必须逐字来自用户消息；禁止写人物设定、
+- CreativePlanV3 只能选择上述结构字段。topic_spans 必须逐字来自用户消息；禁止写人物设定、
   事件、对白、动机、因果、品牌立场、门店事实、用户履历、标题、主张或故事梗概。
+- 只有用户给出了面向受众的具体题材时 topic_origin 才能是 explicit_user；“没有题材、
+  不知道发什么、请系统决定”的请求必须是 system_selected。system_selected 只授权系统从
+  当前账号已确认内容领地自主选一个具体主线，不把缺少题材或创作请求本身当作作品主题。
 - primary_value 是本篇给受众的主要回报，不是 narrative_mode，也不能填写
   general_observation／actuality_reflection／hypothesis／dramatization。只有商品请求选
   product_truth 或其他确有商品前提的商品价值；开放题材、生活种子和“没有选题但要求生成”

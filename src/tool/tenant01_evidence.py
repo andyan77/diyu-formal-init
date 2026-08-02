@@ -143,10 +143,7 @@ def _artifact_binding(
     if not isinstance(snapshot, dict):
         raise Tenant01EvidenceError(f"{card_id} 缺少正式任务快照。")
     packet = snapshot.get("brand_context_packet")
-    if (
-        not isinstance(packet, dict)
-        or packet.get("packet_version") != "brand-context-packet-v2"
-    ):
+    if not isinstance(packet, dict) or packet.get("packet_version") != "brand-context-packet-v2":
         raise Tenant01EvidenceError(f"{card_id} 没有绑定当前品牌发布投影。")
     projection_id = _uuid_text(
         packet.get("publication_projection_id"),
@@ -180,15 +177,13 @@ def _artifact_binding(
         if (
             not isinstance(exact_text, str)
             or not exact_text.strip()
-            or segment.get("semantic_kind")
-            not in {"brand_fact", "expression_constraint", "creative_method"}
+            or segment.get("semantic_kind") not in {"brand_fact", "expression_constraint", "creative_method"}
             or segment.get("evidence_level") != "confirmed_publication"
             or not str(segment.get("source_id", "")).strip()
             or not str(segment.get("source_version", "")).strip()
             or not str(segment.get("visibility_scope", "")).strip()
             or not _sha256_text(segment.get("source_digest"))
-            or segment.get("digest")
-            != hashlib.sha256(exact_text.encode()).hexdigest()
+            or segment.get("digest") != hashlib.sha256(exact_text.encode()).hexdigest()
         ):
             raise Tenant01EvidenceError(f"{card_id} 发布投影来源或正文摘要无效。")
         packet_segments.append(segment)
@@ -214,9 +209,7 @@ def _artifact_binding(
         try:
             lens = account_editorial_lens_from_document(raw_lens)
         except TypeError as exc:
-            raise Tenant01EvidenceError(
-                f"{card_id} 冻结账号编辑视角结构无效。"
-            ) from exc
+            raise Tenant01EvidenceError(f"{card_id} 冻结账号编辑视角结构无效。") from exc
         if (
             lens.contract_version != ACCOUNT_EDITORIAL_LENS_VERSION
             or lens.publication_projection_id != projection_id
@@ -239,11 +232,7 @@ def _artifact_binding(
 
 
 def _sha256_text(value: object) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 64
-        and all(character in "0123456789abcdef" for character in value)
-    )
+    return isinstance(value, str) and len(value) == 64 and all(character in "0123456789abcdef" for character in value)
 
 
 def _validate_review(
@@ -258,9 +247,7 @@ def _validate_review(
     for dimension in TENANT01_REVIEW_DIMENSIONS:
         if review.scores[dimension] < 4:
             raise Tenant01EvidenceError(f"{review.card_id} 未通过 {dimension} 硬门。")
-    if set(review.hard_boundaries) != set(TENANT01_HARD_BOUNDARIES) or not all(
-        review.hard_boundaries.values()
-    ):
+    if set(review.hard_boundaries) != set(TENANT01_HARD_BOUNDARIES) or not all(review.hard_boundaries.values()):
         raise Tenant01EvidenceError(f"{review.card_id} 事实或资源硬边界未通过。")
     if set(review.excerpts) != {"title", "body", "media", "caption"}:
         raise Tenant01EvidenceError(f"{review.card_id} 人工审阅引用不完整。")
@@ -271,14 +258,12 @@ def _validate_review(
             raise Tenant01EvidenceError(f"{review.card_id} {field} 引用为空。")
         haystack = outline if field == "title" else body
         if excerpt not in haystack:
-            raise Tenant01EvidenceError(
-                f"{review.card_id} {field} 引用不在最终 artifact 中。"
-            )
+            raise Tenant01EvidenceError(f"{review.card_id} {field} 引用不在最终 artifact 中。")
     if review.verdict != "PASS":
         raise Tenant01EvidenceError(f"{review.card_id} 人工二元结论不是 PASS。")
-    if set(review.demonstration_checks) != set(
-        TENANT01_DEMONSTRATION_CHECKS
-    ) or not all(review.demonstration_checks.values()):
+    if set(review.demonstration_checks) != set(TENANT01_DEMONSTRATION_CHECKS) or not all(
+        review.demonstration_checks.values()
+    ):
         raise Tenant01EvidenceError(f"{review.card_id} 可演示成品检查未通过。")
     if set(review.comparison) != set(TENANT01_COMPARISON_FIELDS) or any(
         not value.strip() for value in review.comparison.values()
@@ -315,15 +300,11 @@ def _assert_cross_card_distinct(
         body = str(artifact["body"])
         for raw_line in body.splitlines():
             line = " ".join(raw_line.strip().lstrip("#*- ").split())
-            if len(line) < 48 or line.startswith(
-                ("AIGC", "发布提醒", "事实范围", "创作范围")
-            ):
+            if len(line) < 24 or line.startswith(("AIGC", "发布提醒", "事实范围", "创作范围", "表达范围")):
                 continue
             previous = owners.get(line)
             if previous is not None and previous != card_id:
-                raise Tenant01EvidenceError(
-                    f"{previous} 与 {card_id} 存在非必要完整句段重复。"
-                )
+                raise Tenant01EvidenceError(f"{previous} 与 {card_id} 存在非必要完整句段重复。")
             owners[line] = card_id
 
 
@@ -381,11 +362,7 @@ def write_tenant01_evidence(
 ) -> None:
     if len(implementation_sha) != 40 or any(character not in "0123456789abcdef" for character in implementation_sha):
         raise Tenant01EvidenceError("实现 SHA 无效。")
-    if (
-        not schema_revision
-        or not image_digest.startswith("sha256:")
-        or not _sha256_text(source_manifest_digest)
-    ):
+    if not schema_revision or not image_digest.startswith("sha256:") or not _sha256_text(source_manifest_digest):
         raise Tenant01EvidenceError("schema 或镜像 digest 未冻结。")
     if root.stat().st_mode & 0o077:
         raise Tenant01EvidenceError("证据目录权限必须为 0700。")
@@ -491,11 +468,7 @@ def write_tenant01_evidence(
             "dm01": {"file": dm01_file, "sha256": sha256_file(dm01_path)},
         },
     )
-    files = sorted(
-        path
-        for path in root.iterdir()
-        if path.is_file() and path.name != "SHA256SUMS"
-    )
+    files = sorted(path for path in root.iterdir() if path.is_file() and path.name != "SHA256SUMS")
     checksum = "".join(f"{sha256_file(path)}  {path.name}\n" for path in files)
     _write_private_bytes(root / "SHA256SUMS", checksum.encode())
 

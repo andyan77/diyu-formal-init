@@ -188,11 +188,7 @@ class _P5IntakeRegressionGenerator(DeterministicContentGenerator):
     def collaborate(self, request: ConversationInput) -> ConversationDecision:
         self.collaborate_calls += 1
         decision = super().collaborate(request)
-        if (
-            self.force_non_visual_intake
-            and decision.disposition == "ready"
-            and decision.creative_plan is not None
-        ):
+        if self.force_non_visual_intake and decision.disposition == "ready" and decision.creative_plan is not None:
             return replace(
                 decision,
                 primary_product="brand_life_narrative",
@@ -405,9 +401,7 @@ def _run_product_media_browser(
                 "UX03_PRODUCT_MEDIA_PRODUCT_2": product_names[1],
                 "UX03_PRODUCT_MEDIA_MATERIAL_1": material_titles[0],
                 "UX03_PRODUCT_MEDIA_MATERIAL_2": material_titles[1],
-                "UX03_PRODUCT_MEDIA_FORBIDDEN_MATERIAL": (
-                    forbidden_material_title
-                ),
+                "UX03_PRODUCT_MEDIA_FORBIDDEN_MATERIAL": (forbidden_material_title),
             },
             capture_output=True,
             text=True,
@@ -682,9 +676,7 @@ def _filled_kernel(request: GenerationInput) -> object:
     )
     text_by_purpose = {
         "title": "甜味把熟悉的一天叫醒了",
-        "natural_guide": (
-            "不催人下结论，先看熟悉感被意外打断后，人会怎样重新注意日常。"
-        ),
+        "natural_guide": ("不催人下结论，先看熟悉感被意外打断后，人会怎样重新注意日常。"),
         "media_opening": "首图只放咖啡杯边缘和一句“今天怎么是甜的？”",
         "media_sequence": "第一张给意外，第二张拆开熟悉感，第三张留下一次重新注意。",
         "subtitle_strategy": "只保留“熟悉”和“重新注意”两个转折，不复写整段台词。",
@@ -758,9 +750,7 @@ def test_media_native_units_compile_one_scope_and_distinct_platform_parts() -> N
     )
     assert_content_complete(fact_artifact)
     with pytest.raises(GenerationFailed, match="内部产品标识"):
-        assert_content_complete(
-            replace(fact_artifact, body=f"{fact_artifact.body}\nP5")
-        )
+        assert_content_complete(replace(fact_artifact, body=f"{fact_artifact.body}\nP5"))
 
 
 def test_closed_media_program_binds_each_artifact_to_its_reviewed_title() -> None:
@@ -769,9 +759,7 @@ def test_closed_media_program_binds_each_artifact_to_its_reviewed_title() -> Non
     second_kernel = replace(
         first_kernel,
         units=tuple(
-            replace(unit, text="另一篇不可交换的标题")
-            if unit.purpose == "title"
-            else unit
+            replace(unit, text="另一篇不可交换的标题") if unit.purpose == "title" else unit
             for unit in first_kernel.units
         ),
     )
@@ -790,6 +778,7 @@ def test_closed_media_program_binds_each_artifact_to_its_reviewed_title() -> Non
     assert "甜味把熟悉的一天叫醒了" in first.production.optional_capture_suggestion
     assert "unit:title" in first.visible_provenance["hero_image"]
     assert "unit:title" in first.visible_provenance["optional_capture_suggestion"]
+
 
 def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:
     request = _generation_input(media_format="video")
@@ -989,6 +978,7 @@ def test_optional_capture_is_visible_but_never_a_required_resource() -> None:
     assert compiled.resource_refs == (ORIGINAL_COMPOSITION_RESOURCE_ID,)
     assert "可选补拍建议：" in compiled.body
     assert "如果《甜味把熟悉的一天叫醒了》提到的事物仍在手边" in compiled.body
+    assert "另加一张只承接本篇标题的静态照片" in compiled.body
     assert "没有也不影响" in compiled.body
     assert isinstance(compiled.production, GraphicProductionBundle)
     assert compiled.production.optional_capture_suggestion is not None
@@ -997,6 +987,14 @@ def test_optional_capture_is_visible_but_never_a_required_resource() -> None:
         source.startswith("compiler:optional-capture-suggestion:")
         for source in compiled.visible_provenance["optional_capture_suggestion"]
     )
+
+    video_request = _generation_input(media_format="video")
+    video_compiled = compile_delivery(
+        _compile_input(video_request),
+        cast(Any, _filled_kernel(video_request)),
+    )
+    assert "另加一段只承接本篇标题的短视频" in video_compiled.body
+    assert compiled.production.optional_capture_suggestion != video_compiled.production.optional_capture_suggestion
 
 
 def test_p5_requires_two_frozen_registered_product_resources() -> None:
@@ -1027,10 +1025,7 @@ def test_p5_requires_two_frozen_registered_product_resources() -> None:
     )
     assert program.program_id == "video_registered_product_display_v1"
     assert set(program.required_resource_ids) == envelope.resource_ids
-    insufficient_media = tuple(
-        _bound_product_media(index=index)
-        for index in (1, 2)
-    )
+    insufficient_media = tuple(_bound_product_media(index=index) for index in (1, 2))
     with pytest.raises(
         GenerationFailed,
         match="还不足以形成具体造型关系",
@@ -1272,9 +1267,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 },
             )
             assert headquarters_account.status_code == 201, headquarters_account.text
-            headquarters_account_id = UUID(
-                str(headquarters_account.json()["id"])
-            )
+            headquarters_account_id = UUID(str(headquarters_account.json()["id"]))
             granted = admin.patch(
                 f"/api/v1/tenant-management/users/{member.json()['user_id']}/grants",
                 json={
@@ -1297,9 +1290,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     "title": headquarters_material_title,
                     "filename": "headquarters-only.png",
                     "content_type": "image/png",
-                    "content_base64": base64.b64encode(
-                        b"synthetic-headquarters-only-media"
-                    ).decode(),
+                    "content_base64": base64.b64encode(b"synthetic-headquarters-only-media").decode(),
                     "declares_identifiable_minor": False,
                     "reference_note": "仅精确公司控制组织可见",
                     "visibility_scope": "headquarters",
@@ -1307,9 +1298,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 },
             )
             assert headquarters_material.status_code == 201, headquarters_material.text
-            headquarters_material_id = UUID(
-                str(headquarters_material.json()["id"])
-            )
+            headquarters_material_id = UUID(str(headquarters_material.json()["id"]))
 
             product_ids: list[UUID] = []
             asset_ids: list[UUID] = []
@@ -1398,13 +1387,8 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 insufficient_product = admin.put(
                     "/api/v1/tenant-management/brand-products",
                     json={
-                        "sku": (
-                            f"ZX-GC-INSUFFICIENT-{suffix}-"
-                            f"{insufficient_index}"
-                        ),
-                        "display_name": (
-                            f"造型关系资料不足商品 {insufficient_index}"
-                        ),
+                        "sku": (f"ZX-GC-INSUFFICIENT-{suffix}-{insufficient_index}"),
+                        "display_name": (f"造型关系资料不足商品 {insufficient_index}"),
                         "category": "服饰商品",
                         "colors": [],
                         "material_or_structure": "",
@@ -1422,16 +1406,11 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     "/api/v1/tenant-management/organization-materials",
                     json={
                         "organization_id": organization["id"],
-                        "title": (
-                            f"造型资料不足商品 {insufficient_index} 官方图片"
-                        ),
+                        "title": (f"造型资料不足商品 {insufficient_index} 官方图片"),
                         "filename": f"insufficient-{insufficient_index}.png",
                         "content_type": "image/png",
                         "content_base64": base64.b64encode(
-                            (
-                                "synthetic-insufficient-product-media-"
-                                f"{insufficient_index}"
-                            ).encode()
+                            (f"synthetic-insufficient-product-media-{insufficient_index}").encode()
                         ).decode(),
                         "declares_identifiable_minor": False,
                         "reference_note": "只证明正式媒体绑定",
@@ -1440,16 +1419,11 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     },
                 )
                 assert insufficient_material.status_code == 201
-                insufficient_asset_id = UUID(
-                    str(insufficient_material.json()["id"])
-                )
+                insufficient_asset_id = UUID(str(insufficient_material.json()["id"]))
                 insufficient_asset_ids.append(insufficient_asset_id)
                 insufficient_binding = admin.post(
-                    "/api/v1/tenant-management/organization-materials/"
-                    f"{insufficient_asset_id}/product-bindings",
-                    json={
-                        "product_id": str(insufficient_product.json()["id"])
-                    },
+                    f"/api/v1/tenant-management/organization-materials/{insufficient_asset_id}/product-bindings",
+                    json={"product_id": str(insufficient_product.json()["id"])},
                 )
                 assert insufficient_binding.status_code == 201
             forged_binding = admin.post(
@@ -1508,11 +1482,7 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                             "sku": (f"ZX-BROWSER-{suffix}-{browser_index + 1}"),
                             "display_name": browser_product_names[browser_index],
                             "category": "服饰商品",
-                            "colors": (
-                                ["海军蓝"]
-                                if browser_index == 0
-                                else ["浅沙色"]
-                            ),
+                            "colors": (["海军蓝"] if browser_index == 0 else ["浅沙色"]),
                             "material_or_structure": "",
                             "silhouette": "",
                             "observable_features": (f"浏览器登记商品 {browser_index + 1} 完整外观"),
@@ -1593,27 +1563,25 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
             headquarters_materials = creator.get(
                 "/api/v1/materials",
                 params={
-                    "publishing_identity_id": str(
-                        headquarters_account_id
-                    ),
+                    "publishing_identity_id": str(headquarters_account_id),
                     "target": "xiaohongshu_graphic",
                 },
             )
             assert headquarters_materials.status_code == 200
-            assert headquarters_material_id in {
-                UUID(str(item["id"]))
-                for item in headquarters_materials.json()
-            }
+            assert headquarters_material_id in {UUID(str(item["id"])) for item in headquarters_materials.json()}
             creator_scope = TrustedScope(
                 tenant_id=tenant_id,
                 user_id=UUID(str(member.json()["user_id"])),
                 brand_id=brand_id,
                 account_id=account_id,
             )
-            assert control_repository.selected_product_media(
-                creator_scope,
-                (south_asset_id,),
-            ) == ()
+            assert (
+                control_repository.selected_product_media(
+                    creator_scope,
+                    (south_asset_id,),
+                )
+                == ()
+            )
             linked = {UUID(str(item["id"])): item["product_media"] for item in materials.json()}
             assert all(len(linked[asset_id]) == 1 for asset_id in asset_ids)
             no_media_collaborate_calls = generator.collaborate_calls
@@ -1631,23 +1599,20 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     "request_id": str(uuid4()),
                 },
             )
-            no_media_events = [
-                json.loads(line)
-                for line in no_media.text.splitlines()
-                if line.strip()
-            ]
+            no_media_events = [json.loads(line) for line in no_media.text.splitlines() if line.strip()]
             assert any(
-                item["event"] == "conversation"
-                and item["kind"] == "question"
-                and "选择两件不同商品" in item["message"]
+                item["event"] == "conversation" and item["kind"] == "question" and "选择两件不同商品" in item["message"]
                 for item in no_media_events
             ), no_media_events
             assert not any(item["event"] == "completed" for item in no_media_events)
             assert generator.collaborate_calls == no_media_collaborate_calls
-            assert _tenant_persistence_counts(
-                migrator_database_url,
-                tenant_id,
-            ) == before
+            assert (
+                _tenant_persistence_counts(
+                    migrator_database_url,
+                    tenant_id,
+                )
+                == before
+            )
             time.sleep(2.05)
             for invalid_material_ids in (
                 (asset_ids[0], unbound_asset_id),
@@ -1688,30 +1653,21 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                     "conversation": [],
                     "publishing_identity_id": str(account_id),
                     "target": "xiaohongshu_graphic",
-                    "material_ids": [
-                        str(item) for item in insufficient_asset_ids
-                    ],
+                    "material_ids": [str(item) for item in insufficient_asset_ids],
                     "product_media_intent": True,
                     "interaction_mode": "generate",
                     "direct_generate": True,
                     "request_id": str(uuid4()),
                 },
             )
-            insufficient_events = [
-                json.loads(line)
-                for line in insufficient_value.text.splitlines()
-                if line.strip()
-            ]
+            insufficient_events = [json.loads(line) for line in insufficient_value.text.splitlines() if line.strip()]
             assert any(
                 item["event"] == "conversation"
                 and item["kind"] == "question"
                 and "还不足以形成具体造型关系" in item["message"]
                 for item in insufficient_events
             ), insufficient_events
-            assert not any(
-                item["event"] == "completed"
-                for item in insufficient_events
-            )
+            assert not any(item["event"] == "completed" for item in insufficient_events)
             assert (
                 _tenant_persistence_counts(
                     migrator_database_url,
@@ -1735,15 +1691,10 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 },
             )
             assert sibling_scope_rejected.status_code == 200
-            sibling_events = [
-                json.loads(line)
-                for line in sibling_scope_rejected.text.splitlines()
-                if line.strip()
-            ]
+            sibling_events = [json.loads(line) for line in sibling_scope_rejected.text.splitlines() if line.strip()]
             assert not any(item["event"] == "completed" for item in sibling_events)
             assert any(
-                item.get("event") == "failed"
-                and "可靠的成品" in str(item.get("message") or "")
+                item.get("event") == "failed" and "可靠的成品" in str(item.get("message") or "")
                 for item in sibling_events
             ), sibling_events
             assert (
@@ -1811,28 +1762,14 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 for item in envelope["resources"]
                 if item["capability_id"] in {"abstract_composition", "registered_product_display"}
             }
-            resource_by_asset = {
-                UUID(item["asset_id"]): item["resource_id"]
-                for item in resources
-            }
-            assert snapshot["media_program"]["primary_resource_id"] == (
-                resource_by_asset[asset_ids[0]]
-            )
-            assert snapshot["media_program"]["secondary_resource_id"] == (
-                resource_by_asset[asset_ids[1]]
-            )
+            resource_by_asset = {UUID(item["asset_id"]): item["resource_id"] for item in resources}
+            assert snapshot["media_program"]["primary_resource_id"] == (resource_by_asset[asset_ids[0]])
+            assert snapshot["media_program"]["secondary_resource_id"] == (resource_by_asset[asset_ids[1]])
             value_document = snapshot["product_value_contract"]
-            assert value_document["primary_product"] == (
-                "visual_styling_story"
-            )
+            assert value_document["primary_product"] == ("visual_styling_story")
             assert value_document["relation_kind"] == "color_hierarchy"
-            assert set(value_document["resource_refs"]) == {
-                item["resource_id"] for item in resources
-            }
-            assert (
-                value_document["visible_styling_proposition"]
-                in result["body"]
-            )
+            assert set(value_document["resource_refs"]) == {item["resource_id"] for item in resources}
+            assert value_document["visible_styling_proposition"] in result["body"]
             assert frozen_product_value_contract(snapshot) is not None
 
             with TestClient(
@@ -1900,12 +1837,8 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
                 assert revised_row is not None
                 revised_snapshot = revised_row[0]
             assert revised_snapshot["media_capability_envelope"] == envelope
-            assert revised_snapshot["product_value_contract"] == (
-                value_document
-            )
-            assert revised_snapshot["product_value_contract_digest"] == (
-                snapshot["product_value_contract_digest"]
-            )
+            assert revised_snapshot["product_value_contract"] == (value_document)
+            assert revised_snapshot["product_value_contract_digest"] == (snapshot["product_value_contract_digest"])
             stable_counts = _tenant_persistence_counts(
                 migrator_database_url,
                 tenant_id,
@@ -2320,9 +2253,7 @@ def test_account_text_repair_preserves_frozen_claim_refs_without_requiring_them_
     kernel = CreativeKernelV1(
         kernel_version=filled.kernel_version,
         units=tuple(
-            replace(unit, claim_refs=(claim_id,))
-            if unit.unit_id == "unit:natural-guide"
-            else unit
+            replace(unit, claim_refs=(claim_id,)) if unit.unit_id == "unit:natural-guide" else unit
             for unit in filled.units
         ),
         program_id=filled.program_id,
@@ -2449,10 +2380,7 @@ def test_actuality_writer_receives_one_frozen_fact_as_read_only_topic_anchor() -
     assert request.weak_seed not in prompt
     assert '"contract_version": "actuality-writer-brief-v2"' in prompt
     assert '"source_id": "source:user_actuality:1"' in prompt
-    assert (
-        '"writer_relation": "respond_without_repeating_or_explaining_cause"'
-        in prompt
-    )
+    assert '"writer_relation": "respond_without_repeating_or_explaining_cause"' in prompt
     assert "不得复述、改写或补全原句" in prompt
 
 
@@ -2497,15 +2425,7 @@ def test_actuality_writer_cannot_repeat_the_frozen_fact(
                 }
             ]
         )
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps({"units": units}, ensure_ascii=False)
-                    }
-                }
-            ]
-        }, 0
+        return {"choices": [{"message": {"content": json.dumps({"units": units}, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
     artifact = DeepSeekGenerator(
@@ -2546,9 +2466,7 @@ def test_p2_server_selects_only_the_three_frozen_product_facts() -> None:
 
     prefixed_name = replace(product, display_name="ZX-C218 双面短外套")
     prefixed_packet = build_product_fact_packet((prefixed_name,))
-    display_fact = next(
-        item for item in prefixed_packet.facts if item.fact_key == "display_name"
-    )
+    display_fact = next(item for item in prefixed_packet.facts if item.fact_key == "display_name")
     assert display_fact.structured_value == "ZX-C218 双面短外套"
     assert display_fact.canonical_text == "ZX-C218 是一件双面短外套。"
 
@@ -2576,10 +2494,7 @@ def test_p2_formal_observable_and_colors_share_one_product_value_path() -> None:
     assert "先让哪一面成为整件商品的视觉重心" in contract.product_insight
     assert "暂时退到看不见的位置" in contract.tradeoff_or_limit
     assert "确实会在这两套完整外观之间切换" in contract.validity_condition
-    assert all(
-        label not in contract.visible_text
-        for label in ("专属新增理解", "相伴取舍", "成立条件")
-    )
+    assert all(label not in contract.visible_text for label in ("专属新增理解", "相伴取舍", "成立条件"))
     assert len(contract.source_fact_ids) == 3
 
 
@@ -2826,9 +2741,7 @@ def test_p2_writer_receives_only_controlled_product_semantics_without_media_righ
             production_conditions=request.brand.production_conditions,
             allowed_resource_ids=context.resource_ids,
             immutable_fact_blocks=context.product_fact_blocks,
-            trusted_fact_texts=tuple(
-                sorted(context.fact_text_by_id.items())
-            ),
+            trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
             media_capability_envelope=request.media_capability_envelope,
             media_program=media_program,
             product_value_contract=value_contract,
@@ -2836,18 +2749,13 @@ def test_p2_writer_receives_only_controlled_product_semantics_without_media_righ
         kernel,
     )
     assert isinstance(compiled.semantic_contract, P2SemanticContract)
-    assert compiled.semantic_contract.product_insight == (
-        value_contract.product_insight
-    )
+    assert compiled.semantic_contract.product_insight == (value_contract.product_insight)
     assert value_contract.product_insight in compiled.body
     assert value_contract.tradeoff_or_limit in compiled.body
     assert value_contract.validity_condition in compiled.body
     assert "先看信息，再自己判断" not in compiled.body
     assert compiled.body.count("已确认的商品信息：") == 1
-    assert all(
-        label not in compiled.body
-        for label in ("专属新增理解", "相伴取舍", "成立条件")
-    )
+    assert all(label not in compiled.body for label in ("专属新增理解", "相伴取舍", "成立条件"))
     assert all(
         phrase not in value_contract.tradeoff_or_limit
         for phrase in (
@@ -2860,9 +2768,7 @@ def test_p2_writer_receives_only_controlled_product_semantics_without_media_righ
     bad_writer_kernel = replace(
         kernel,
         units=tuple(
-            replace(unit, text="专属新增理解：照着合同写。")
-            if unit.writable and unit.purpose == "body"
-            else unit
+            replace(unit, text="专属新增理解：照着合同写。") if unit.writable and unit.purpose == "body" else unit
             for unit in kernel.units
         ),
     )
@@ -2892,9 +2798,7 @@ def test_p2_writer_receives_only_controlled_product_semantics_without_media_righ
                     production_conditions=request.brand.production_conditions,
                     allowed_resource_ids=context.resource_ids,
                     immutable_fact_blocks=context.product_fact_blocks,
-                    trusted_fact_texts=tuple(
-                        sorted(context.fact_text_by_id.items())
-                    ),
+                    trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
                     media_capability_envelope=request.media_capability_envelope,
                     media_program=media_program,
                     product_value_contract=value_contract,
@@ -2954,10 +2858,7 @@ def test_p2_exact_fact_repetition_gets_one_bounded_affected_unit_repair(
         narrative_frame=new_frame(
             "general_observation",
             (),
-            tuple(
-                item.fact_id
-                for item in build_product_fact_packet((product,)).facts
-            ),
+            tuple(item.fact_id for item in build_product_fact_packet((product,)).facts),
         ),
         creative_plan=build_creative_plan(
             topic_spans=("ZX-C218，帮我解释这个商品",),
@@ -3018,9 +2919,7 @@ def test_p2_exact_fact_repetition_gets_one_bounded_affected_unit_repair(
                     }
                 ]
             }
-        return {
-            "choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]
-        }, 0
+        return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
     artifact = DeepSeekGenerator(
@@ -3249,9 +3148,7 @@ def test_current_actuality_account_body_is_prospective_not_causal_explanation() 
     kernel = build_kernel_skeleton(
         frame=request.narrative_frame,
         fact_registry=context.fact_registry,
-        constraint_refs=tuple(
-            identifier for identifier, _ in context.constraint_registry
-        ),
+        constraint_refs=tuple(identifier for identifier, _ in context.constraint_registry),
         program_id=select_kernel_program(
             frame=request.narrative_frame,
             prior_kernel=None,
@@ -3266,10 +3163,7 @@ def test_current_actuality_account_body_is_prospective_not_causal_explanation() 
     body = kernel.unit("unit:body")
     assert body.mode == "recommendation"
     assert body.scope_id == "scope:recommendation-v1"
-    assert (
-        unit_contracts_v2(kernel, request.narrative_frame)["unit:body"]
-        == "recommendation"
-    )
+    assert unit_contracts_v2(kernel, request.narrative_frame)["unit:body"] == "recommendation"
 
 
 def test_current_p1_writer_brief_is_bounded_and_does_not_license_product_performance() -> None:
@@ -3284,9 +3178,7 @@ def test_current_p1_writer_brief_is_bounded_and_does_not_license_product_perform
     kernel = build_kernel_skeleton(
         frame=request.narrative_frame,
         fact_registry=context.fact_registry,
-        constraint_refs=tuple(
-            identifier for identifier, _ in context.constraint_registry
-        ),
+        constraint_refs=tuple(identifier for identifier, _ in context.constraint_registry),
         program_id=select_kernel_program(
             frame=request.narrative_frame,
             prior_kernel=None,
@@ -3311,9 +3203,7 @@ def test_current_p1_writer_brief_is_bounded_and_does_not_license_product_perform
     too_long = replace(
         kernel,
         units=tuple(
-            replace(unit, text=("选择。" * 80))
-            if unit.purpose == "body"
-            else replace(unit, text="自然文字")
+            replace(unit, text=("选择。" * 80)) if unit.purpose == "body" else replace(unit, text="自然文字")
             for unit in kernel.units
         ),
     )
@@ -3350,21 +3240,9 @@ def test_p3_writer_must_naturalize_the_frozen_account_link(
                     }
                 ]
             }
-            return {
-                "choices": [
-                    {
-                        "message": {
-                            "content": json.dumps(content, ensure_ascii=False)
-                        }
-                    }
-                ]
-            }, 0
+            return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
         guide = "重新注意一次熟悉的日常，也看见这次变化给选择带来的新角度。"
-        body = (
-            "陪正在重新选择日常节奏的人看清取舍。"
-            if copies_profile
-            else "熟悉的味道偶尔也会让人重新发现日常。"
-        )
+        body = "陪正在重新选择日常节奏的人看清取舍。" if copies_profile else "熟悉的味道偶尔也会让人重新发现日常。"
         content = {
             "units": [
                 {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
@@ -3376,15 +3254,7 @@ def test_p3_writer_must_naturalize_the_frozen_account_link(
                 },
             ]
         }
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(content, ensure_ascii=False)
-                    }
-                }
-            ]
-        }, 0
+        return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
     generator = DeepSeekGenerator(
@@ -3504,15 +3374,7 @@ def test_p3_one_frozen_account_path_is_sufficient_without_terminal_punctuation(
                 },
             ]
         }
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(content, ensure_ascii=False)
-                    }
-                }
-            ]
-        }, 0
+        return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
     generator = DeepSeekGenerator(
@@ -3572,15 +3434,7 @@ def test_actuality_writer_repairs_one_new_dialogue_then_rechecks_the_full_unit(
                     },
                 ]
             }
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(content, ensure_ascii=False)
-                    }
-                }
-            ]
-        }, 0
+        return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
     artifact = DeepSeekGenerator(
@@ -3626,15 +3480,7 @@ def test_actuality_writer_fails_when_the_single_dialogue_repair_remains_unsafe(
                     {"unit_id": "unit:release-caption", "text": "今天也重新看见熟悉的味道。"},
                 ]
             }
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(content, ensure_ascii=False)
-                    }
-                }
-            ]
-        }, 0
+        return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
     with pytest.raises(GenerationFailed, match="新的直接引语"):
@@ -3682,15 +3528,7 @@ def test_actuality_writer_removes_even_a_non_attributed_concept_label(
                     {"unit_id": "unit:release-caption", "text": "今天也重新看见熟悉的味道。"},
                 ]
             }
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": json.dumps(content, ensure_ascii=False)
-                    }
-                }
-            ]
-        }, 0
+        return {"choices": [{"message": {"content": json.dumps(content, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
     artifact = DeepSeekGenerator(
@@ -3729,8 +3567,7 @@ def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() ->
     )
     fact_ids = tuple(fact.fact_id for product in products for fact in build_product_fact_packet((product,)).facts)
     bound_media = tuple(
-        _bound_product_media(index=index, product=product)
-        for index, product in enumerate(products, start=1)
+        _bound_product_media(index=index, product=product) for index, product in enumerate(products, start=1)
     )
     envelope = build_media_capability_envelope_v2(
         platform_shape="抖音短视频完整成品",
@@ -3753,9 +3590,7 @@ def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() ->
     )
     assert isinstance(value_contract, P5ProductValueContractV1)
     registered_resources = tuple(
-        resource
-        for resource in envelope.resources
-        if resource.capability_id == "registered_product_display"
+        resource for resource in envelope.resources if resource.capability_id == "registered_product_display"
     )
     assert media_program.primary_resource_id == registered_resources[0].resource_id
     assert media_program.secondary_resource_id == registered_resources[1].resource_id
@@ -3843,9 +3678,7 @@ def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() ->
             production_conditions=request.brand.production_conditions,
             allowed_resource_ids=envelope.resource_ids,
             immutable_fact_blocks=context.product_fact_blocks,
-            trusted_fact_texts=tuple(
-                sorted(context.fact_text_by_id.items())
-            ),
+            trusted_fact_texts=tuple(sorted(context.fact_text_by_id.items())),
             media_capability_envelope=envelope,
             media_program=media_program,
             product_value_contract=value_contract,
@@ -3853,9 +3686,7 @@ def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() ->
         kernel,
     )
     assert isinstance(compiled.semantic_contract, P5SemanticContract)
-    assert compiled.semantic_contract.visible_styling_proposition == (
-        value_contract.visible_styling_proposition
-    )
+    assert compiled.semantic_contract.visible_styling_proposition == (value_contract.visible_styling_proposition)
     assert value_contract.visible_styling_proposition in compiled.body
     assert "先放两个锚点，再比较差异" not in compiled.body
     assert set(value_contract.resource_refs) == {
@@ -3919,10 +3750,7 @@ def test_p5_visual_roles_are_invariant_to_uuid_recreation() -> None:
 
     original = cast(
         tuple[BoundProductMedia, BoundProductMedia],
-        tuple(
-            _bound_product_media(index=index, product=product)
-            for index, product in enumerate(products, start=1)
-        ),
+        tuple(_bound_product_media(index=index, product=product) for index, product in enumerate(products, start=1)),
     )
     recreated = (
         replace(
@@ -3997,10 +3825,7 @@ def test_p5_media_program_requires_and_renders_frozen_resource_roles() -> None:
             source_kind="synthetic_confirmed_product_record",
         ),
     )
-    media = tuple(
-        _bound_product_media(index=index, product=product)
-        for index, product in enumerate(products, start=1)
-    )
+    media = tuple(_bound_product_media(index=index, product=product) for index, product in enumerate(products, start=1))
     envelope = build_media_capability_envelope_v2(
         platform_shape="小红书图文完整成品",
         media_format="graphic",
@@ -4020,9 +3845,7 @@ def test_p5_media_program_requires_and_renders_frozen_resource_roles() -> None:
     assert "主视觉素材" in sequence and "辅助视觉素材" in sequence
     assert "主视觉始终先出现、居中且较大" in production_note
     assert "辅助视觉随后出现、侧置且较小" in production_note
-    assert "同一尺度并列" not in "\n".join(
-        (opening, sequence, production_note)
-    )
+    assert "同一尺度并列" not in "\n".join((opening, sequence, production_note))
 
     with pytest.raises(GenerationFailed, match="主视觉与辅助视觉角色"):
         assert_media_program_allowed(
@@ -4148,15 +3971,9 @@ def _write_gate_c_evidence_fixture(
     ):
         title = f"{card_id} 的自然标题"
         p2_contract_values = {
-            "product_specific_understanding": (
-                "双面短外套的两面完整外观，让选择落在两套完整呈现之间。"
-            ),
-            "tradeoff_or_limit": (
-                "选定一面，就会暂时放下另一面的视觉重点。"
-            ),
-            "validity_condition": (
-                "只有确实需要在两种完整外观之间切换时，这项价值才成立。"
-            ),
+            "product_specific_understanding": ("双面短外套的两面完整外观，让选择落在两套完整呈现之间。"),
+            "tradeoff_or_limit": ("选定一面，就会暂时放下另一面的视觉重点。"),
+            "validity_condition": ("只有确实需要在两种完整外观之间切换时，这项价值才成立。"),
         }
         p2_values = {
             "artifact_title_quote": title,
@@ -4166,9 +3983,7 @@ def _write_gate_c_evidence_fixture(
         }
         primary_ref = "resource:registered-product:one"
         secondary_ref = "resource:registered-product:two"
-        p5_contract_proposition = (
-            "第一件登记商品承担主色，第二件登记商品作为回应色，形成清楚的一主一辅关系。"
-        )
+        p5_contract_proposition = "第一件登记商品承担主色，第二件登记商品作为回应色，形成清楚的一主一辅关系。"
         p5_values: dict[str, object] = {
             "artifact_title_quote": title,
             "concrete_visual_proposition": "形成清楚的一主一辅关系",
@@ -4198,9 +4013,7 @@ def _write_gate_c_evidence_fixture(
         product_value_contract: dict[str, object] | None = None
         if card_id == "P2":
             product_value_contract = {
-                "product_insight": p2_contract_values[
-                    "product_specific_understanding"
-                ],
+                "product_insight": p2_contract_values["product_specific_understanding"],
                 "tradeoff_or_limit": p2_contract_values["tradeoff_or_limit"],
                 "validity_condition": p2_contract_values["validity_condition"],
             }
@@ -4213,20 +4026,13 @@ def _write_gate_c_evidence_fixture(
         artifact.write_text(
             json.dumps(
                 {
-                    "task_id": str(
-                        UUID(f"85000000-0000-0000-0001-{index:012d}")
-                    ),
-                    "run_id": str(
-                        UUID(f"85000000-0000-0000-0002-{index:012d}")
-                    ),
-                    "version_id": str(
-                        UUID(f"85000000-0000-0000-0003-{index:012d}")
-                    ),
+                    "task_id": str(UUID(f"85000000-0000-0000-0001-{index:012d}")),
+                    "run_id": str(UUID(f"85000000-0000-0000-0002-{index:012d}")),
+                    "version_id": str(UUID(f"85000000-0000-0000-0003-{index:012d}")),
                     "outline": title,
                     "body": (
                         f"标题：{title}\n\n"
-                        "完整正文：服务端事实原句与一般判断各自保留边界。"
-                        + (f"\n{value_lines}" if value_lines else "")
+                        "完整正文：服务端事实原句与一般判断各自保留边界。" + (f"\n{value_lines}" if value_lines else "")
                     ),
                     "formal_snapshot": {
                         "product_value_contract": product_value_contract,
@@ -4243,9 +4049,7 @@ def _write_gate_c_evidence_fixture(
                                 [
                                     {
                                         "resource_id": resource_id,
-                                        "capability_id": (
-                                            "registered_product_display"
-                                        ),
+                                        "capability_id": ("registered_product_display"),
                                     }
                                     for resource_id in (primary_ref, secondary_ref)
                                 ]
@@ -4292,9 +4096,7 @@ def _write_gate_c_evidence_fixture(
             criteria["fact_and_resource_boundary"] = fact_boundary
         value_evidence: dict[str, object] | None = None
         if card_id == "P2":
-            value_evidence = {
-                key: value for key, value in p2_values.items()
-            }
+            value_evidence = {key: value for key, value in p2_values.items()}
         elif card_id == "P5":
             value_evidence = dict(p5_values)
         artifacts.append(
@@ -4390,14 +4192,10 @@ def test_gate_c_public_projection_is_an_honest_self_checking_index(
 
     _write_evidence_projection(root, projection)
 
-    index = json.loads(
-        (projection / "EVIDENCE_INDEX.json").read_text(encoding="utf-8")
-    )
+    index = json.loads((projection / "EVIDENCE_INDEX.json").read_text(encoding="utf-8"))
     assert index["projection_kind"] == "index"
     assert index["private_evidence_root"] == str(root.resolve())
-    assert index["private_sha256sums_sha256"] == sha256_file(
-        root / "SHA256SUMS"
-    )
+    assert index["private_sha256sums_sha256"] == sha256_file(root / "SHA256SUMS")
     checked = subprocess.run(
         ["sha256sum", "-c", "SHA256SUMS"],
         cwd=projection,
@@ -4470,11 +4268,7 @@ def test_gate_c_evidence_rejects_persistence_identifier_tamper(
     sums_path = root / "SHA256SUMS"
     sums_path.write_text(
         "".join(
-            (
-                f"{sha256_file(manifest_path)}  manifest.json\n"
-                if line.endswith("  manifest.json")
-                else f"{line}\n"
-            )
+            (f"{sha256_file(manifest_path)}  manifest.json\n" if line.endswith("  manifest.json") else f"{line}\n")
             for line in sums_path.read_text(encoding="utf-8").splitlines()
         ),
         encoding="utf-8",
@@ -4495,9 +4289,7 @@ def test_gate_c_evidence_rejects_all_pass_without_product_value_details(
     root = _write_gate_c_evidence_fixture(tmp_path)
     review_path = root / "human-review.json"
     review = json.loads(review_path.read_text(encoding="utf-8"))
-    target = next(
-        item for item in review["reviews"] if item["card_id"] == card_id
-    )
+    target = next(item for item in review["reviews"] if item["card_id"] == card_id)
     assert target["verdict"] == "PASS"
     target["value_evidence"] = None
     review_path.write_text(
@@ -4528,15 +4320,11 @@ def test_gate_c_evidence_rejects_snapshot_only_p2_review_text(
     tmp_path: Path,
 ) -> None:
     root = _write_gate_c_evidence_fixture(tmp_path)
-    artifact = json.loads(
-        (root / "P2-artifact.json").read_text(encoding="utf-8")
-    )
+    artifact = json.loads((root / "P2-artifact.json").read_text(encoding="utf-8"))
     contract = artifact["formal_snapshot"]["product_value_contract"]
     review_path = root / "human-review.json"
     review = json.loads(review_path.read_text(encoding="utf-8"))
-    target = next(
-        item for item in review["reviews"] if item["card_id"] == "P2"
-    )
+    target = next(item for item in review["reviews"] if item["card_id"] == "P2")
     target["value_evidence"] = {
         "artifact_title_quote": artifact["outline"],
         "product_specific_understanding": contract["product_insight"],
@@ -4657,9 +4445,7 @@ def test_gate_c_artifact_binds_formal_aigc_disclosure() -> None:
     result: dict[str, object] = {
         "task_id": str(UUID("85000000-0000-0000-0001-000000000001")),
         "run_id": str(UUID("85000000-0000-0000-0002-000000000001")),
-        "version_id": str(
-            UUID("85000000-0000-0000-0003-000000000001")
-        ),
+        "version_id": str(UUID("85000000-0000-0000-0003-000000000001")),
         "version": 1,
         "outline": "标题",
         "body": "正文",
@@ -4803,9 +4589,7 @@ def test_gate_c_final_runner_preserves_failed_provider_stages(
     generator._request("intake", "one", 100)
     generator.abort_card(event_names=("received", "conversation"))
 
-    bundle = json.loads(
-        (root / "P1.failed.raw.json").read_text(encoding="utf-8")
-    )
+    bundle = json.loads((root / "P1.failed.raw.json").read_text(encoding="utf-8"))
     assert bundle["raw_bundle_version"] == "ux03-gate-c-provider-failure-v1"
     assert bundle["request_count"] == 1
     assert bundle["event_names"] == ["received", "conversation"]

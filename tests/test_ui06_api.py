@@ -117,9 +117,7 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
                 primary_product="brand_life_narrative",
             )
         selected_facts = tuple(
-            candidate
-            for candidate in request.user_fact_candidates
-            if candidate.exact_text == _G4_FACT
+            candidate for candidate in request.user_fact_candidates if candidate.exact_text == _G4_FACT
         )
         fact_spans = tuple(candidate.exact_text for candidate in selected_facts)
         return ConversationDecision(
@@ -311,9 +309,7 @@ def _force_version_body_for_integrity_test(
         )
         trigger_disabled = False
         try:
-            cursor.execute(
-                "ALTER TABLE content_versions DISABLE TRIGGER content_versions_append_only"
-            )
+            cursor.execute("ALTER TABLE content_versions DISABLE TRIGGER content_versions_append_only")
             trigger_disabled = True
             with connection.transaction():
                 cursor.execute(
@@ -322,9 +318,7 @@ def _force_version_body_for_integrity_test(
                 )
         finally:
             if trigger_disabled:
-                cursor.execute(
-                    "ALTER TABLE content_versions ENABLE TRIGGER content_versions_append_only"
-                )
+                cursor.execute("ALTER TABLE content_versions ENABLE TRIGGER content_versions_append_only")
         cursor.execute(
             """
             SELECT trigger_record.tgenabled
@@ -424,9 +418,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert isinstance(frame["user_facts"], list)
         assert len(frame["user_facts"]) == 1
         assert frame["user_facts"][0]["exact_text"] == _G4_FACT
-        assert str(frame["user_facts"][0]["source_id"]).startswith(
-            "source:user_actuality:turn-1:clause-1:"
-        )
+        assert str(frame["user_facts"][0]["source_id"]).startswith("source:user_actuality:turn-1:clause-1:")
         assert frame["allowed_brand_fact_ids"] == []
         assert snapshot["creation_commitment"] == {
             "gate_version": "creation-intent-gate-v1",
@@ -439,7 +431,8 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert snapshot["speaker_kind"] == "institutional_account"
         plan = snapshot["creative_plan_v2"]
         assert isinstance(plan, dict)
-        assert plan["plan_version"] == "creative-plan-v2"
+        assert plan["plan_version"] == "creative-plan-v3"
+        assert plan["topic_origin"] == "explicit_user"
         assert "system_creative_plan" not in snapshot
         kernel_v1 = snapshot["creative_kernel_v2"]
         assert isinstance(kernel_v1, dict)
@@ -574,10 +567,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         v2_audit = cast(dict[str, object], audits[1]["version_audit_snapshot"])
         assert v1_audit["creative_kernel_v2"] == kernel_v1
         assert v2_audit["creative_kernel_v2"] == revised_kernel
-        assert (
-            v1_audit["narrative_frame"]
-            == v2_audit["narrative_frame"]
-        )
+        assert v1_audit["narrative_frame"] == v2_audit["narrative_frame"]
         with (
             psycopg.connect(app_database_url) as connection,
             connection.cursor() as cursor,

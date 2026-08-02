@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import httpx
@@ -27,6 +27,7 @@ from src.shared.closed_review import (
     build_closed_review_questions,
 )
 from src.shared.creative_kernel import (
+    KERNEL_VERSION,
     OBSERVATION_WITH_HYPOTHETICAL_EXAMPLE_PROGRAM_V2,
     CreativeKernelV1,
     build_kernel_skeleton,
@@ -36,8 +37,11 @@ from src.shared.creative_kernel import (
 )
 from src.shared.creative_plan import (
     ACCOUNT_BASELINE_TONE_ID,
+    LEGACY_PLAN_VERSION,
+    PLAN_VERSION,
     build_creative_plan,
     creative_plan_document,
+    creative_plan_from_document,
 )
 from src.shared.delivery_compiler import (
     DUAL_TRACK_DELIVERY_COMPILER_VERSION,
@@ -298,7 +302,11 @@ def _strict_tool_completion(
     return FakeResponse(200, payload)
 
 
-def _intake_plan(message: str) -> dict[str, object]:
+def _intake_plan(
+    message: str,
+    *,
+    topic_origin: str = "explicit_user",
+) -> dict[str, object]:
     return creative_plan_document(
         build_creative_plan(
             topic_spans=(message,),
@@ -306,6 +314,7 @@ def _intake_plan(message: str) -> dict[str, object]:
             tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
             mechanism_id=None,
             target_shape="xiaohongshu_graphic:graphic",
+            topic_origin=cast(Any, topic_origin),
         )
     )
 
@@ -318,11 +327,7 @@ def _sentence_roles(
     return [
         {
             "sentence_id": candidate.source_id,
-            "role": (
-                "observable_actuality"
-                if candidate.source_id in fact_set
-                else "creation_instruction"
-            ),
+            "role": ("observable_actuality" if candidate.source_id in fact_set else "creation_instruction"),
         }
         for candidate in user_fact_candidates((message,))
     ]
@@ -1117,14 +1122,10 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
     prompt = _generator()._conversation_prompt(request)
     candidates = user_fact_candidates((message,))
     fact_candidate = next(
-        candidate
-        for candidate in candidates
-        if candidate.exact_text == "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
+        candidate for candidate in candidates if candidate.exact_text == "今天店里忙了一天，回家还因为谁洗碗拌了两句。"
     )
     instruction_candidates = tuple(
-        candidate.source_id
-        for candidate in candidates
-        if candidate.source_id != fact_candidate.source_id
+        candidate.source_id for candidate in candidates if candidate.source_id != fact_candidate.source_id
     )
     assert "narrative_mode 由\n  服务端根据显式形式与完整事实句选择派生" in prompt
     assert "你不得返回或选择该字段" in prompt
@@ -1137,9 +1138,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
                 "message": "好，我保留这段原话，其他由我来完成。",
                 "user_premises": [message],
                 "user_fact_sentence_ids": [fact_candidate.source_id],
-                "user_instruction_sentence_ids": list(
-                    instruction_candidates
-                ),
+                "user_instruction_sentence_ids": list(instruction_candidates),
                 "user_sentence_roles": _sentence_roles(
                     message,
                     (fact_candidate.source_id,),
@@ -1157,14 +1156,50 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
     assert decision.narrative_mode == "actuality_reflection"
 
 
+def test_conversation_intake_freezes_system_selected_topic_origin() -> None:
+    message = "今天不知道发什么，帮我做条小红书。"
+    candidates = user_fact_candidates((message,))
+    request = ConversationInput(
+        message=message,
+        history=(),
+        brand=_brand(),
+        products=(),
+        target="xiaohongshu_graphic",
+        creation_committed=True,
+        allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        platform_shape="xiaohongshu_graphic:graphic",
+        user_fact_candidates=candidates,
+    )
+    FakeClient.responses = [
+        _completion(
+            {
+                "kind": "ready",
+                "message": "好，我会从当前账号内容领地选择一个具体主线。",
+                "user_premises": [message],
+                "user_fact_sentence_ids": [],
+                "user_sentence_roles": _sentence_roles(message),
+                "creative_plan": _intake_plan(
+                    message,
+                    topic_origin="system_selected",
+                ),
+                "creation_proposal": True,
+            }
+        )
+    ]
+
+    decision = _generator().collaborate(request)
+
+    assert decision.creative_plan is not None
+    assert decision.creative_plan.plan_version == PLAN_VERSION
+    assert decision.creative_plan.topic_origin == "system_selected"
+
+
 def test_conversation_intake_freezes_the_whole_negated_sentence() -> None:
     message = "我没有和婆婆吵架。帮我写条小红书。"
     candidates = user_fact_candidates((message,))
     negated = next(candidate for candidate in candidates if candidate.exact_text == "我没有和婆婆吵架。")
     instruction_candidates = tuple(
-        candidate.source_id
-        for candidate in candidates
-        if candidate.source_id != negated.source_id
+        candidate.source_id for candidate in candidates if candidate.source_id != negated.source_id
     )
     request = ConversationInput(
         message=message,
@@ -1183,9 +1218,7 @@ def test_conversation_intake_freezes_the_whole_negated_sentence() -> None:
                 "message": "好，我会保留完整原话。",
                 "user_premises": [message],
                 "user_fact_sentence_ids": [negated.source_id],
-                "user_instruction_sentence_ids": list(
-                    instruction_candidates
-                ),
+                "user_instruction_sentence_ids": list(instruction_candidates),
                 "user_sentence_roles": _sentence_roles(
                     message,
                     (negated.source_id,),
@@ -1232,16 +1265,8 @@ def test_conversation_intake_rejects_model_selected_fact_substrings() -> None:
 def test_conversation_intake_keeps_creation_instruction_out_of_frozen_actuality() -> None:
     message = "今天店里有人只想自己看看。请回应这种状态，不补写顾客身份、对白或结果。"
     candidates = user_fact_candidates((message,))
-    fact = next(
-        candidate
-        for candidate in candidates
-        if candidate.exact_text == "今天店里有人只想自己看看。"
-    )
-    instruction = next(
-        candidate
-        for candidate in candidates
-        if candidate.source_id != fact.source_id
-    )
+    fact = next(candidate for candidate in candidates if candidate.exact_text == "今天店里有人只想自己看看。")
+    instruction = next(candidate for candidate in candidates if candidate.source_id != fact.source_id)
     request = ConversationInput(
         message=message,
         history=(),
@@ -1259,9 +1284,7 @@ def test_conversation_intake_keeps_creation_instruction_out_of_frozen_actuality(
                 "message": "好，我只保留实际观察。",
                 "user_premises": [message],
                 "user_fact_sentence_ids": [fact.source_id],
-                "user_instruction_sentence_ids": [
-                    instruction.source_id
-                ],
+                "user_instruction_sentence_ids": [instruction.source_id],
                 "user_sentence_roles": _sentence_roles(
                     message,
                     (fact.source_id,),
@@ -1275,9 +1298,7 @@ def test_conversation_intake_keeps_creation_instruction_out_of_frozen_actuality(
 
     assert decision.user_fact_spans == (fact.exact_text,)
     assert decision.user_fact_source_ids == (fact.source_id,)
-    assert decision.user_instruction_source_ids == (
-        instruction.source_id,
-    )
+    assert decision.user_instruction_source_ids == (instruction.source_id,)
 
 
 @pytest.mark.parametrize(
@@ -1313,8 +1334,7 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
                 "user_premises": [message],
                 "user_fact_sentence_ids": facts,
                 "user_instruction_sentence_ids": [
-                    candidate.source_id
-                    for candidate in user_fact_candidates((message,))
+                    candidate.source_id for candidate in user_fact_candidates((message,))
                 ],
                 "user_sentence_roles": _sentence_roles(message),
                 "narrative_mode": mode,
@@ -1403,8 +1423,7 @@ def test_conversation_rejects_synthetic_or_mode_drifted_spans() -> None:
                 "user_premises": [message],
                 "user_fact_sentence_ids": ["source:user_actuality:invented"],
                 "user_instruction_sentence_ids": [
-                    candidate.source_id
-                    for candidate in user_fact_candidates((message,))
+                    candidate.source_id for candidate in user_fact_candidates((message,))
                 ],
                 "user_sentence_roles": _sentence_roles(message),
                 "narrative_mode": "actuality_reflection",
@@ -1715,10 +1734,7 @@ def test_dual_track_writer_receives_only_deidentified_preassigned_units() -> Non
     artifact = _generator().generate(request)
 
     assert artifact.completion_snapshot_patch is not None
-    assert (
-        artifact.completion_snapshot_patch["delivery_compiler_version"]
-        == DUAL_TRACK_DELIVERY_COMPILER_VERSION
-    )
+    assert artifact.completion_snapshot_patch["delivery_compiler_version"] == DUAL_TRACK_DELIVERY_COMPILER_VERSION
     assert artifact.completion_snapshot_patch["writer_model"] == "deepseek-test"
     assert artifact.completion_snapshot_patch["version_authorization"] == ("deterministic-dual-track-v1")
     assert isinstance(artifact.completion_snapshot_patch["claim_inventory_v1"], list)
@@ -1759,12 +1775,7 @@ def test_dual_track_writer_receives_only_deidentified_preassigned_units() -> Non
 
 def test_writer_full_paragraph_block_repetition_is_repaired_once() -> None:
     request = _kernel_request()
-    paragraph_block = (
-        "先承认彼此的位置。\n\n"
-        "再说明可以怎样回应。\n\n"
-        "先承认彼此的位置。\n\n"
-        "再说明可以怎样回应。"
-    )
+    paragraph_block = "先承认彼此的位置。\n\n再说明可以怎样回应。\n\n先承认彼此的位置。\n\n再说明可以怎样回应。"
     raw = _kernel_writer(body=paragraph_block)
     repaired_text = "先承认彼此的位置。\n\n再说明可以怎样回应，并把选择留给对方。"
     FakeClient.responses = [
@@ -1790,9 +1801,7 @@ def test_writer_full_paragraph_block_repetition_is_repaired_once() -> None:
     units = kernel_document["units"]
     assert isinstance(units, list)
     repaired_unit = next(
-        unit
-        for unit in units
-        if isinstance(unit, dict) and unit.get("unit_id") == "unit:body-opening"
+        unit for unit in units if isinstance(unit, dict) and unit.get("unit_id") == "unit:body-opening"
     )
     assert repaired_unit["text"] == repaired_text
     assert "逐段完全相同的重复块" in _payload_prompts()[1]
@@ -1823,17 +1832,11 @@ def test_writer_repetition_repair_fails_closed_when_repeated_block_remains() -> 
 
 
 def test_account_link_binding_ignores_only_presentation_whitespace() -> None:
-    spaced = DeepSeekGenerator._account_link_match_view(
-        "品牌官方 / 品牌定义者"
-    )
-    compact = DeepSeekGenerator._account_link_match_view(
-        "品牌官方/品牌定义者"
-    )
+    spaced = DeepSeekGenerator._account_link_match_view("品牌官方 / 品牌定义者")
+    compact = DeepSeekGenerator._account_link_match_view("品牌官方/品牌定义者")
 
     assert spaced == compact
-    assert spaced != DeepSeekGenerator._account_link_match_view(
-        "品牌官方／品牌定义者"
-    )
+    assert spaced != DeepSeekGenerator._account_link_match_view("品牌官方／品牌定义者")
 
 
 def test_ui12_writer_cannot_return_compiler_owned_visible_fields() -> None:
@@ -1859,16 +1862,75 @@ def test_ui12_writer_cannot_return_compiler_owned_visible_fields() -> None:
 
 
 def test_writer_owns_audience_topic_when_user_has_not_supplied_one() -> None:
-    request = _kernel_request()
+    missing_topic = "今天不知道发什么，帮我做条小红书。"
+    request = replace(
+        _kernel_request(),
+        weak_seed=missing_topic,
+        creative_plan=build_creative_plan(
+            topic_spans=(missing_topic,),
+            primary_value="brand_life_narrative",
+            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+            mechanism_id=None,
+            target_shape="xiaohongshu_graphic:graphic",
+            topic_origin="system_selected",
+        ),
+    )
     prompt = _generator()._kernel_writer_prompt(
         request,
         _parsed_kernel(request, _kernel_writer()),
     )
 
+    assert '"topic_origin": "system_selected"' in prompt
+    assert '"user_request_is_topic_evidence": false' in prompt
+    assert missing_topic not in prompt
     assert "topic_spans 是用户原话证据" in prompt
     assert "若其中没有面向受众的实际题材" in prompt
     assert "自主选择一个安全、可直接发布的生活观察主线" in prompt
     assert "不得把“如何找选题、如何发内容、缺少\n灵感”本身写成" in prompt
+
+
+def test_creative_plan_v3_freezes_topic_origin_and_reads_v2_without_upgrade() -> None:
+    current = build_creative_plan(
+        topic_spans=("今天不知道发什么",),
+        primary_value="brand_life_narrative",
+        tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        mechanism_id=None,
+        target_shape="xiaohongshu_graphic:graphic",
+        topic_origin="system_selected",
+    )
+    assert current.plan_version == PLAN_VERSION
+    assert creative_plan_from_document(creative_plan_document(current)) == current
+
+    legacy = build_creative_plan(
+        topic_spans=("婆媳主题",),
+        primary_value="brand_life_narrative",
+        tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        mechanism_id=None,
+        target_shape="xiaohongshu_graphic:graphic",
+        plan_version=LEGACY_PLAN_VERSION,
+    )
+    legacy_document = creative_plan_document(legacy)
+    assert "topic_origin" not in legacy_document
+    assert creative_plan_from_document(legacy_document) == legacy
+
+
+def test_v3_copy_guard_applies_to_non_p3_publication_constraints() -> None:
+    publication_sentence = "当前表达方提供日常选择内容，并把最终判断留给受众"
+    request = replace(
+        _kernel_request(),
+        primary_product="dressing_decision",
+        brand=replace(
+            _brand(),
+            expression_constraint_context=(publication_sentence,),
+        ),
+    )
+    kernel = _parsed_kernel(
+        request,
+        _kernel_writer(body=publication_sentence),
+    )
+    kernel = replace(kernel, kernel_version=KERNEL_VERSION)
+
+    assert DeepSeekGenerator._copied_account_profile_units(request, kernel)
 
 
 def test_dramatization_writer_receives_a_complete_scene_requirement() -> None:
@@ -2011,10 +2073,7 @@ def test_general_writer_text_is_compiled_inside_a_visible_non_fact_scope() -> No
     artifact = _generator().generate(request)
 
     assert isinstance(artifact.production, GraphicProductionBundle)
-    assert (
-        "下面是创作性的生活观察，不对应真实人物或经历：饭桌上"
-        in artifact.production.full_body
-    )
+    assert "下面是创作性的生活观察，不对应真实人物或经历：饭桌上" in artifact.production.full_body
     assert len(FakeClient.requests) == 1
 
 

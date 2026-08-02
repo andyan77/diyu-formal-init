@@ -240,19 +240,16 @@ def assert_compiled_delivery(
             (
                 f"media-envelope:{media_envelope_digest(request.media_capability_envelope)}",
                 f"media-program:{media_program_digest(request.media_program)}",
-                    f"media-program:{request.media_program.program_id}",
-                    *(f"media-resource:{resource_id}" for resource_id in request.media_program.required_resource_ids),
-                    *(
-                        (
-                            "media-role:primary:"
-                            f"{request.media_program.primary_resource_id}",
-                            "media-role:secondary:"
-                            f"{request.media_program.secondary_resource_id}",
-                        )
-                        if request.media_program.primary_resource_id
-                        and request.media_program.secondary_resource_id
-                        else ()
-                    ),
+                f"media-program:{request.media_program.program_id}",
+                *(f"media-resource:{resource_id}" for resource_id in request.media_program.required_resource_ids),
+                *(
+                    (
+                        f"media-role:primary:{request.media_program.primary_resource_id}",
+                        f"media-role:secondary:{request.media_program.secondary_resource_id}",
+                    )
+                    if request.media_program.primary_resource_id and request.media_program.secondary_resource_id
+                    else ()
+                ),
                 *(
                     (f"compiler:optional-capture-suggestion:{request.media_program.optional_capture_suggestion_id}",)
                     if request.media_program.optional_capture_suggestion_id
@@ -351,17 +348,11 @@ def _assert_expression_plan(
             "disclosed_dramatization",
         }:
             raise GenerationFailed("创作表达轨语态无效")
-    value_units = tuple(
-        unit for unit in kernel.units if unit.unit_id == PRODUCT_VALUE_UNIT_ID
-    )
+    value_units = tuple(unit for unit in kernel.units if unit.unit_id == PRODUCT_VALUE_UNIT_ID)
     if request.product_value_contract is None:
         if value_units:
             raise GenerationFailed("无商品价值合同的成品包含商品价值单元")
-    elif (
-        len(value_units) != 1
-        or request.product_value_contract.primary_product
-        != request.primary_product
-    ):
+    elif len(value_units) != 1 or request.product_value_contract.primary_product != request.primary_product:
         raise GenerationFailed("商品价值合同与成品产品不一致")
 
 
@@ -552,15 +543,8 @@ def _compile_delivery_v4(
     if not body_units or any(not unit.text.strip() for unit in (*singleton.values(), *body_units)):
         raise GenerationFailed("创作内核包含空的可见创作单元")
     if isinstance(request.product_value_contract, P2ProductValueContractV1):
-        writer_visible_text = "\n".join(
-            unit.text
-            for unit in kernel.units
-            if unit.text_source == "writer"
-        )
-        if any(
-            label in writer_visible_text
-            for label in ("专属新增理解", "相伴取舍", "成立条件")
-        ):
+        writer_visible_text = "\n".join(unit.text for unit in kernel.units if unit.text_source == "writer")
+        if any(label in writer_visible_text for label in ("专属新增理解", "相伴取舍", "成立条件")):
             raise GenerationFailed("Writer 把内部商品语义标签写进了成品")
         if any(
             phrase in request.product_value_contract.tradeoff_or_limit
@@ -614,9 +598,7 @@ def _compile_delivery_v4(
         )
     else:
         content_units = (*fact_units, *body_units)
-        full_body = "\n\n".join(
-            _visible_unit_v3(unit) for unit in content_units
-        )
+        full_body = "\n\n".join(_visible_unit_v3(unit) for unit in content_units)
     envelope_source = f"media-envelope:{media_envelope_digest(envelope)}"
     program_digest_source = f"media-program:{media_program_digest(program)}"
     program_source = f"media-program:{program.program_id}"
@@ -644,8 +626,7 @@ def _compile_delivery_v4(
                     f"media-role:primary:{program.primary_resource_id}",
                     f"media-role:secondary:{program.secondary_resource_id}",
                 )
-                if program.primary_resource_id
-                and program.secondary_resource_id
+                if program.primary_resource_id and program.secondary_resource_id
                 else ()
             ),
         ),
@@ -779,14 +760,17 @@ def _optional_capture_suggestion(
     program: MediaProgramSelectionV1,
     title: str,
 ) -> str | None:
+    optional_medium = (
+        "一段只承接本篇标题的短视频" if program.program_id.startswith("video_") else "一张只承接本篇标题的静态照片"
+    )
     if program.optional_capture_suggestion_id == "optional-current-product-capture-v1":
         return (
-            f"如果《{title}》提到的商品仍在手边，而且你愿意补拍，可以另加一张整体照片；"
+            f"如果《{title}》提到的商品仍在手边，而且你愿意补拍，可以另加{optional_medium}；"
             "没有也不影响，当前版本可直接用文字、色块和留白完成。"
         )
     if program.optional_capture_suggestion_id == "optional-current-subject-capture-v1":
         return (
-            f"如果《{title}》提到的事物仍在手边，而且你愿意补拍，可以另加一张照片；"
+            f"如果《{title}》提到的事物仍在手边，而且你愿意补拍，可以另加{optional_medium}；"
             "没有也不影响，当前版本可直接用文字、色块和留白完成。"
         )
     return None
@@ -841,10 +825,7 @@ def _graphic_media_program_text(
             "只使用本次冻结的两份登记商品素材与抽象排版；主视觉始终先出现、居中且较大，"
             "辅助视觉随后出现、侧置且较小，不交换角色，不增加其他实物。",
         )
-    if (
-        program.program_id == "graphic_observation_progression_v1"
-        and program.series_position == 1
-    ):
+    if program.program_id == "graphic_observation_progression_v1" and program.series_position == 1:
         return (
             "首图用标题和一条起始线建立本系列的第一个观察，不预告尚未形成的后续内容。",
             "第 1 页交代本篇具体处境；中间页依次展开本篇判断和可选动作；末页留下下一篇可以继续回应的问题。",

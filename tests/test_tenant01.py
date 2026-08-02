@@ -244,13 +244,8 @@ def _tenant01_evidence_inputs(
                     "caption": f"{card_id} 发布配文证据",
                 },
                 hard_boundaries={boundary: True for boundary in TENANT01_HARD_BOUNDARIES},
-                demonstration_checks={
-                    check: True for check in TENANT01_DEMONSTRATION_CHECKS
-                },
-                comparison={
-                    field: f"{card_id} {field} 独立比较结论"
-                    for field in TENANT01_COMPARISON_FIELDS
-                },
+                demonstration_checks={check: True for check in TENANT01_DEMONSTRATION_CHECKS},
+                comparison={field: f"{card_id} {field} 独立比较结论" for field in TENANT01_COMPARISON_FIELDS},
                 brand_basis=f"projection:test / profile:{card_id}",
                 verdict="PASS",
                 notes="已逐字阅读最终可见成品，与评分引用一致。",
@@ -310,9 +305,7 @@ def test_tenant01_freezes_twenty_one_sources_and_fourteen_products(tmp_path: Pat
     assert all(field.allowed_in_product_fact == (field.evidence_levels == ("V",)) for field in evidence)
     assert sum(len(document.segments) for document in documents) > len(documents)
     assert all(
-        segment.exact_text != document.normalized_content
-        for document in documents
-        for segment in document.segments
+        segment.exact_text != document.normalized_content for document in documents for segment in document.segments
     )
 
 
@@ -389,9 +382,7 @@ def test_account_editorial_lens_historical_v1_remains_readable_without_upgrade()
         closure_boundary="历史收束",
     )
 
-    parsed = account_editorial_lens_from_document(
-        account_editorial_lens_document(historical)
-    )
+    parsed = account_editorial_lens_from_document(account_editorial_lens_document(historical))
 
     assert parsed == historical
     assert parsed.contract_version == ACCOUNT_EDITORIAL_LENS_V1_VERSION
@@ -420,9 +411,7 @@ def test_account_editorial_lens_historical_v2_remains_readable_without_upgrade()
         series_progression_boundary="历史系列推进边界",
     )
 
-    parsed = account_editorial_lens_from_document(
-        account_editorial_lens_document(historical)
-    )
+    parsed = account_editorial_lens_from_document(account_editorial_lens_document(historical))
 
     assert parsed == historical
     assert parsed.contract_version == ACCOUNT_EDITORIAL_LENS_V2_VERSION
@@ -431,21 +420,30 @@ def test_account_editorial_lens_historical_v2_remains_readable_without_upgrade()
 def test_tenant01_content_product_taxonomy_is_not_an_insertable_brand_fact() -> None:
     heading = ("十二、五类内容产品与受众价值",)
 
-    assert classify_source_segment(
-        "DIYU-AUDIENCE-PROFILE-001",
-        heading,
-        "内部内容产品分类只用于决定怎样表达。",
-    ) == "expression_constraint"
-    assert classify_source_segment(
-        "DIYU-AUDIENCE-PROFILE-001",
-        ("稳定目标人群",),
-        "面向需要日常穿衣选择帮助的人。",
-    ) == "brand_fact"
-    assert classify_source_segment(
-        "DIYU-AUDIENCE-PROFILE-001",
-        ("十八、本批验收项",),
-        "验收目录只用于核对资料覆盖。",
-    ) == "source_catalog_only"
+    assert (
+        classify_source_segment(
+            "DIYU-AUDIENCE-PROFILE-001",
+            heading,
+            "内部内容产品分类只用于决定怎样表达。",
+        )
+        == "expression_constraint"
+    )
+    assert (
+        classify_source_segment(
+            "DIYU-AUDIENCE-PROFILE-001",
+            ("稳定目标人群",),
+            "面向需要日常穿衣选择帮助的人。",
+        )
+        == "brand_fact"
+    )
+    assert (
+        classify_source_segment(
+            "DIYU-AUDIENCE-PROFILE-001",
+            ("十八、本批验收项",),
+            "验收目录只用于核对资料覆盖。",
+        )
+        == "source_catalog_only"
+    )
 
 
 def test_source_identity_uses_embedded_metadata_not_filename(tmp_path: Path) -> None:
@@ -803,9 +801,7 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
             "DIYU-CONTENT-ROLE-001",
             "DIYU-DISPLAY-EXPRESSION-001",
         }
-        publication = PostgresWorkbenchRepository(
-            app_database_url
-        ).create_brand_publication_candidate(
+        publication = PostgresWorkbenchRepository(app_database_url).create_brand_publication_candidate(
             management_scope,
             (
                 {
@@ -847,9 +843,9 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
             ),
         )
         projection_id = UUID(str(publication["id"]))
-        PostgresWorkbenchRepository(
-            app_database_url
-        ).confirm_brand_publication_projection(management_scope, projection_id)
+        PostgresWorkbenchRepository(app_database_url).confirm_brand_publication_projection(
+            management_scope, projection_id
+        )
 
         scope = TrustedScope(
             management_scope.tenant_id,
@@ -916,9 +912,7 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
         assert selected.brand_reference_context == tuple(
             item.exact_text for item in selected.context_packet.segments if item.semantic_kind == "brand_fact"
         )
-        visible_text = "\n".join(
-            item.exact_text for item in selected.context_packet.segments
-        )
+        visible_text = "\n".join(item.exact_text for item in selected.context_packet.segments)
         assert "笛语面向需要清楚日常穿衣选择的人" in visible_text
         assert "先回应具体处境" in visible_text
         assert "围绕一个可感知的变化" in visible_text
@@ -926,8 +920,7 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
         assert acceptance_text not in visible_text
         assert "可观察品类 14" not in visible_text
         assert all(
-            item.semantic_kind
-            in {"brand_fact", "expression_constraint", "creative_method"}
+            item.semantic_kind in {"brand_fact", "expression_constraint", "creative_method"}
             for item in selected.context_packet.segments
         )
 
@@ -940,18 +933,14 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
         )
         assert life_selected.context_packet is not None
         assert life_selected.brand_reference_context == ()
-        assert all(
-            item.semantic_kind != "brand_fact"
-            for item in life_selected.context_packet.segments
-        )
+        assert all(item.semantic_kind != "brand_fact" for item in life_selected.context_packet.segments)
         assert "笛语面向需要清楚日常穿衣选择的人" not in "\n".join(
             item.exact_text for item in life_selected.context_packet.segments
         )
 
         with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
             cursor.execute(
-                "UPDATE brands SET current_publication_projection_id = NULL "
-                "WHERE tenant_id = %s AND id = %s",
+                "UPDATE brands SET current_publication_projection_id = NULL WHERE tenant_id = %s AND id = %s",
                 (management_scope.tenant_id, management_scope.brand_id),
             )
         with pytest.raises(DomainError, match="品牌管理员确认"):
@@ -983,15 +972,11 @@ def test_brand_publication_confirmation_is_scoped_atomic_and_serialized(
         bait_root.mkdir()
         _write_source_batch(source_root)
         _write_source_batch(bait_root)
-        TenantSourceImporter(app_database_url).apply(
-            TenantSourceImporter(app_database_url).dry_run(scope, source_root)
-        )
+        TenantSourceImporter(app_database_url).apply(TenantSourceImporter(app_database_url).dry_run(scope, source_root))
         TenantSourceImporter(app_database_url).apply(
             TenantSourceImporter(app_database_url).dry_run(bait_scope, bait_root)
         )
-        with psycopg.connect(
-            migrator_database_url
-        ) as connection, connection.cursor() as cursor:
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT segment.id
@@ -1060,8 +1045,7 @@ def test_brand_publication_confirmation_is_scoped_atomic_and_serialized(
                 ),
             )
             cursor.execute(
-                "UPDATE brand_source_documents SET current_version_id = %s "
-                "WHERE tenant_id = %s AND id = %s",
+                "UPDATE brand_source_documents SET current_version_id = %s WHERE tenant_id = %s AND id = %s",
                 (other_version_id, scope.tenant_id, other_document_id),
             )
             cursor.execute(
@@ -1100,9 +1084,7 @@ def test_brand_publication_confirmation_is_scoped_atomic_and_serialized(
             )
 
         with pytest.raises(DomainError, match="当前品牌正在使用"):
-            PostgresWorkbenchRepository(
-                app_database_url
-            ).create_brand_publication_candidate(
+            PostgresWorkbenchRepository(app_database_url).create_brand_publication_candidate(
                 bait_scope,
                 (
                     {
@@ -1145,9 +1127,7 @@ def test_brand_publication_confirmation_is_scoped_atomic_and_serialized(
         failed = candidate("事务失败时不得替换当前版本。")
         failed_id = UUID(str(failed["id"]))
 
-        with psycopg.connect(
-            migrator_database_url
-        ) as connection, connection.cursor() as cursor:
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
             cursor.execute(
                 f"""
                 CREATE FUNCTION {function_name}() RETURNS trigger
@@ -1172,24 +1152,18 @@ def test_brand_publication_confirmation_is_scoped_atomic_and_serialized(
             with pytest.raises(psycopg.Error, match="bounded pointer failure"):
                 repository.confirm_brand_publication_projection(scope, failed_id)
         finally:
-            with psycopg.connect(
-                migrator_database_url
-            ) as connection, connection.cursor() as cursor:
+            with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
                 cursor.execute(f"DROP TRIGGER {trigger_name} ON brands")
                 cursor.execute(f"DROP FUNCTION {function_name}()")
 
-        with psycopg.connect(
-            migrator_database_url
-        ) as connection, connection.cursor() as cursor:
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
             cursor.execute(
-                "SELECT current_publication_projection_id FROM brands "
-                "WHERE tenant_id = %s AND id = %s",
+                "SELECT current_publication_projection_id FROM brands WHERE tenant_id = %s AND id = %s",
                 (scope.tenant_id, scope.brand_id),
             )
             assert cursor.fetchone() == (first_id,)
             cursor.execute(
-                "SELECT status FROM brand_publication_projections "
-                "WHERE tenant_id = %s AND id = %s",
+                "SELECT status FROM brand_publication_projections WHERE tenant_id = %s AND id = %s",
                 (scope.tenant_id, failed_id),
             )
             assert cursor.fetchone() == ("candidate",)
@@ -1208,9 +1182,7 @@ def test_brand_publication_confirmation_is_scoped_atomic_and_serialized(
                 )
             )
         assert {result["status"] for result in results} == {"confirmed"}
-        with psycopg.connect(
-            migrator_database_url
-        ) as connection, connection.cursor() as cursor:
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT count(*) FILTER (WHERE status = 'confirmed'),
@@ -1363,8 +1335,7 @@ def test_exact_preimage_classification_is_atomic_and_revokes_hidden_access(
         with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
             cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(scope.tenant_id),))
             cursor.execute(
-                "SELECT id, business_data_kind, enabled FROM users "
-                "WHERE tenant_id = %s AND id = ANY(%s) ORDER BY id",
+                "SELECT id, business_data_kind, enabled FROM users WHERE tenant_id = %s AND id = ANY(%s) ORDER BY id",
                 (scope.tenant_id, [synthetic_user_id, legacy_user_id]),
             )
             users = {UUID(str(row[0])): (str(row[1]), bool(row[2])) for row in cursor.fetchall()}
@@ -1384,23 +1355,15 @@ def test_exact_preimage_classification_is_atomic_and_revokes_hidden_access(
             assert cursor.fetchone() == (False, False, "synthetic_business_fixture")
         repository = PostgresWorkbenchRepository(app_database_url)
         visible_people = repository.management_operators(scope)
-        assert synthetic_user_id not in {
-            UUID(str(person["id"])) for person in visible_people
-        }
-        assert legacy_user_id not in {
-            UUID(str(person["id"])) for person in visible_people
-        }
+        assert synthetic_user_id not in {UUID(str(person["id"])) for person in visible_people}
+        assert legacy_user_id not in {UUID(str(person["id"])) for person in visible_people}
         archived_people = repository.management_operators(
             scope,
             include_archived=True,
         )
-        assert {synthetic_user_id, legacy_user_id} <= {
-            UUID(str(person["id"])) for person in archived_people
-        }
+        assert {synthetic_user_id, legacy_user_id} <= {UUID(str(person["id"])) for person in archived_people}
         visible_accounts = repository.management_accounts(scope)
-        assert synthetic_account_id not in {
-            UUID(str(account["id"])) for account in visible_accounts
-        }
+        assert synthetic_account_id not in {UUID(str(account["id"])) for account in visible_accounts}
     finally:
         with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
             cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(scope.tenant_id),))
@@ -1546,10 +1509,7 @@ def test_tenant01_evidence_rejects_repeated_nonessential_account_definition(
 ) -> None:
     tmp_path.chmod(0o700)
     artifacts, reviews = _tenant01_evidence_inputs(tmp_path)
-    repeated = (
-        "当前账号面向同一类人反复粘贴一整段完全相同且并非必要的定义说明，"
-        "这段说明与本篇具体题材、判断和观看回报都没有直接关系。"
-    )
+    repeated = "当前账号提供日常选择内容，并把最终判断留给受众自己的判断。"
     for item in artifacts[:2]:
         path = tmp_path / item.artifact_file
         document = json.loads(path.read_text(encoding="utf-8"))
