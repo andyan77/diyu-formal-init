@@ -170,7 +170,16 @@ type PublicationDraft = {
   source: PublicationSource;
   role: PublicationRole;
   text: string;
+  applicability: string[];
 };
+
+const publicationContentOptions = [
+  ["dressing_decision", "穿衣选择"],
+  ["product_truth", "商品解释"],
+  ["brand_life_narrative", "生活与账号内容"],
+  ["local_response", "本地观察回应"],
+  ["visual_styling_story", "商品视觉内容"]
+] as const;
 
 type OnboardingPrefill = {
   account_profile_candidate: ProfileSegments;
@@ -3519,7 +3528,12 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
       }
       return [
         ...current,
-        { source, role: defaultPublicationRole(source), text: "" }
+        {
+          source,
+          role: defaultPublicationRole(source),
+          text: "",
+          applicability: []
+        }
       ];
     });
   };
@@ -3527,11 +3541,13 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
     event.preventDefault();
     if (
       publicationDrafts.length === 0 ||
-      publicationDrafts.some(item => !item.text.trim())
+      publicationDrafts.some(
+        item => !item.text.trim() || item.applicability.length === 0
+      )
     ) {
       setNotice({
         tone: "error",
-        message: "请选择来源，并把每条内容改写成可直接用于品牌表达的自然文字。"
+        message: "请选择来源、适用内容，并把每条内容改写成可直接用于品牌表达的自然文字。"
       });
       return;
     }
@@ -3543,7 +3559,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
           source_segment_id: item.source.source_segment_id,
           publication_role: item.role,
           published_text: item.text.trim(),
-          applicability: []
+          applicability: item.applicability
         }))
       })
     })
@@ -4003,6 +4019,32 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                     placeholder="只写确认可公开或可用于表达控制的内容"
                   />
                 </label>
+                <fieldset className="publication-applicability">
+                  <legend>适用内容</legend>
+                  {publicationContentOptions.map(([value, label]) => (
+                    <label key={value}>
+                      <input
+                        type="checkbox"
+                        checked={draft.applicability.includes(value)}
+                        onChange={() =>
+                          setPublicationDrafts(current =>
+                            current.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? {
+                                    ...item,
+                                    applicability: item.applicability.includes(value)
+                                      ? item.applicability.filter(entry => entry !== value)
+                                      : [...item.applicability, value]
+                                  }
+                                : item
+                            )
+                          )
+                        }
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </fieldset>
               </fieldset>
             ))}
             <button

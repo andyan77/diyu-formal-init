@@ -1816,6 +1816,8 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 )
                 if any(value not in allowed_products for value in applicability):
                     raise DomainError("发布表达包含未知内容用途。")
+                if role != "internal_only" and not applicability:
+                    raise DomainError("请明确这条品牌表达适用于哪些内容。")
                 source_heading_path = source["heading_path"]
                 if not isinstance(source_heading_path, list):
                     raise DomainError("品牌来源标题路径无效。")

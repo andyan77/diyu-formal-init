@@ -647,13 +647,19 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
                     "source_segment_id": source_ids["DIYU-BRAND-BASELINE-001"],
                     "publication_role": "public_brand_fact",
                     "published_text": "笛语面向需要清楚日常穿衣选择的人。",
-                    "applicability": [],
+                    "applicability": ["product_truth"],
                 },
                 {
                     "source_segment_id": source_ids["DIYU-CONTENT-ROLE-001"],
                     "publication_role": "expression_constraint",
                     "published_text": "先回应具体处境，再给出克制而明确的判断。",
-                    "applicability": [],
+                    "applicability": [
+                        "dressing_decision",
+                        "product_truth",
+                        "brand_life_narrative",
+                        "local_response",
+                        "visual_styling_story",
+                    ],
                 },
                 {
                     "source_segment_id": source_ids["DIYU-DISPLAY-EXPRESSION-001"],
@@ -758,6 +764,23 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
             item.semantic_kind
             in {"brand_fact", "expression_constraint", "creative_method"}
             for item in selected.context_packet.segments
+        )
+
+        life_selected = repository.select_brand_context_for_task(
+            scope,
+            context,
+            "今天喝了一直喝的咖啡，忽然觉得味道有点不一样。",
+            "brand_life_narrative",
+            (),
+        )
+        assert life_selected.context_packet is not None
+        assert life_selected.brand_reference_context == ()
+        assert all(
+            item.semantic_kind != "brand_fact"
+            for item in life_selected.context_packet.segments
+        )
+        assert "笛语面向需要清楚日常穿衣选择的人" not in "\n".join(
+            item.exact_text for item in life_selected.context_packet.segments
         )
 
         with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
@@ -906,7 +929,7 @@ def test_brand_publication_confirmation_is_scoped_atomic_and_serialized(
                         "source_segment_id": source_segment_id,
                         "publication_role": "public_brand_fact",
                         "published_text": text,
-                        "applicability": [],
+                        "applicability": ["brand_life_narrative"],
                     },
                 ),
             )
@@ -921,7 +944,7 @@ def test_brand_publication_confirmation_is_scoped_atomic_and_serialized(
                         "source_segment_id": source_segment_id,
                         "publication_role": "public_brand_fact",
                         "published_text": "跨租户来源不得成为候选。",
-                        "applicability": [],
+                        "applicability": ["brand_life_narrative"],
                     },
                 ),
             )
@@ -933,6 +956,19 @@ def test_brand_publication_confirmation_is_scoped_atomic_and_serialized(
                         "source_segment_id": other_segment_id,
                         "publication_role": "public_brand_fact",
                         "published_text": "同租户另一品牌也必须失败关闭。",
+                        "applicability": ["brand_life_narrative"],
+                    },
+                ),
+            )
+
+        with pytest.raises(DomainError, match="明确这条品牌表达适用于"):
+            repository.create_brand_publication_candidate(
+                scope,
+                (
+                    {
+                        "source_segment_id": source_segment_id,
+                        "publication_role": "public_brand_fact",
+                        "published_text": "不能作为所有内容的无条件固定段落。",
                         "applicability": [],
                     },
                 ),

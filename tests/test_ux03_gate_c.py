@@ -2890,7 +2890,7 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert "本篇账号关联路径" in prompt
     assert "从穿衣编辑的位置重新看熟悉事物" in prompt
     assert "陪正在重新选择日常节奏的人看清取舍" in prompt
-    assert '"required_visible_spans"' in prompt
+    assert '"required_visible_spans"' not in prompt
     assert '"总部穿衣编辑"' in prompt
     assert "为什么会说这段话" in prompt
     assert "折线衣间" not in prompt
@@ -2946,10 +2946,10 @@ def _p3_account_link_request() -> GenerationInput:
     )
 
 
-@pytest.mark.parametrize("include_link", (False, True))
-def test_p3_writer_copy_must_bind_the_frozen_account_link(
+@pytest.mark.parametrize("copies_profile", (False, True))
+def test_p3_writer_must_naturalize_the_frozen_account_link(
     monkeypatch: pytest.MonkeyPatch,
-    include_link: bool,
+    copies_profile: bool,
 ) -> None:
     request = _p3_account_link_request()
     request_count = 0
@@ -2966,14 +2966,12 @@ def test_p3_writer_copy_must_bind_the_frozen_account_link(
         nonlocal request_count
         request_count += 1
         del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
-        if not include_link and request_count == 2:
+        if copies_profile and request_count == 2:
             content = {
                 "units": [
                     {
-                        "unit_id": "unit:natural-guide",
-                        "text": (
-                            "总部穿衣编辑陪正在重新选择日常节奏的人看清取舍。"
-                        ),
+                        "unit_id": "unit:body",
+                        "text": "一次意外把熟悉感打断，也给读者留下重新判断日常的空间。",
                     }
                 ]
             }
@@ -2986,14 +2984,10 @@ def test_p3_writer_copy_must_bind_the_frozen_account_link(
                     }
                 ]
             }, 0
-        guide = (
-            "总部穿衣编辑也会重新看一次熟悉的日常。"
-            if include_link
-            else "重新注意一次熟悉的日常。"
-        )
+        guide = "重新注意一次熟悉的日常，也看见这次变化给选择带来的新角度。"
         body = (
             "陪正在重新选择日常节奏的人看清取舍。"
-            if include_link
+            if copies_profile
             else "熟悉的味道偶尔也会让人重新发现日常。"
         )
         content = {
@@ -3024,9 +3018,10 @@ def test_p3_writer_copy_must_bind_the_frozen_account_link(
         "deepseek-test",
     )
     artifact = generator.generate(request)
-    assert "总部穿衣编辑" in artifact.body
-    assert "陪正在重新选择日常节奏的人看清取舍。" in artifact.body
-    assert request_count == (1 if include_link else 2)
+    assert "总部穿衣编辑" not in artifact.body
+    assert "陪正在重新选择日常节奏的人看清取舍。" not in artifact.body
+    assert "重新" in artifact.body
+    assert request_count == (2 if copies_profile else 1)
 
 
 def test_p3_one_frozen_account_path_is_sufficient_without_terminal_punctuation(
@@ -3052,7 +3047,7 @@ def test_p3_one_frozen_account_path_is_sufficient_without_terminal_punctuation(
                 {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
                 {
                     "unit_id": "unit:natural-guide",
-                    "text": "像平常一样，陪正在重新选择日常节奏的人看清取舍，再看看这次小变化。",
+                    "text": "陪读者从一次小变化里重新辨认自己的日常选择。",
                 },
                 {
                     "unit_id": "unit:body",
@@ -3082,8 +3077,62 @@ def test_p3_one_frozen_account_path_is_sufficient_without_terminal_punctuation(
     )
     artifact = generator.generate(request)
 
-    assert "陪正在重新选择日常节奏的人看清取舍" in artifact.body
+    assert "重新辨认自己的日常选择" in artifact.body
+    assert "陪正在重新选择日常节奏的人看清取舍" not in artifact.body
     assert request_count == 1
+
+
+def test_actuality_writer_cannot_turn_an_observation_into_new_dialogue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _p3_account_link_request()
+
+    def respond(
+        self: DeepSeekGenerator,
+        system: str,
+        prompt: str,
+        max_tokens: int,
+        *,
+        thinking_disabled: bool = True,
+        timeout_seconds: float | None = None,
+    ) -> tuple[dict[str, Any], int]:
+        del self, system, prompt, max_tokens, thinking_disabled, timeout_seconds
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "units": [
+                                    {"unit_id": "unit:title", "text": "熟悉里的一点意外"},
+                                    {
+                                        "unit_id": "unit:natural-guide",
+                                        "text": "重新注意一次熟悉的日常。",
+                                    },
+                                    {
+                                        "unit_id": "unit:body",
+                                        "text": "当一个人说“今天怎么是甜的”时，熟悉感被打断了。",
+                                    },
+                                    {
+                                        "unit_id": "unit:release-caption",
+                                        "text": "今天也重新看见了熟悉的味道。",
+                                    },
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }, 0
+
+    monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
+    with pytest.raises(GenerationFailed, match="新的直接引语"):
+        DeepSeekGenerator(
+            "https://example.invalid",
+            "not-a-real-key",
+            "deepseek-test",
+        ).generate(request)
 
 
 def test_p5_writer_receives_controlled_visible_facts_but_no_media_resources() -> None:

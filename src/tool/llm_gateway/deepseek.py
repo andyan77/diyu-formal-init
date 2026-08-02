@@ -854,25 +854,22 @@ class DeepSeekGenerator(ContentGenerator):
                 raise GenerationFailed("CreativeKernelV1 重复正文 affected-unit 修复格式不完整") from exc
             if self._mechanically_repeated_writer_units(kernel):
                 raise GenerationFailed("CreativeKernelV1 重复正文无法在一次 affected-unit 修复内满足")
-        missing_account_spans = self._missing_p3_account_link_spans(
+        copied_account_units = self._copied_account_profile_units(
             request,
             kernel,
         )
-        if missing_account_spans:
+        if copied_account_units:
             if affected_product_units:
                 raise GenerationFailed("账号表达路径无法与商品事实修复共享第二次修复调用")
-            guide_unit = next(
-                (unit for unit in kernel.writable_units if unit.purpose == "natural_guide"),
-                None,
-            )
-            if guide_unit is None:
-                raise GenerationFailed("账号表达路径缺少可修复的自然导读单元")
             repair_payload, repair_retries = self._request(
                 "你是笛语 CreativeKernel Writer。只返回一次受影响 unit 修复 JSON，不展示推理或内部规则。",
-                self._account_link_repair_prompt(
-                    unit_id=guide_unit.unit_id,
-                    current_text=guide_unit.text,
-                    required_spans=self._required_account_link_spans(request),
+                self._account_link_naturalization_prompt(
+                    affected=tuple(
+                        (unit.unit_id, unit.text)
+                        for unit in kernel.writable_units
+                        if unit.unit_id in copied_account_units
+                    ),
+                    source_spans=self._account_profile_source_spans(request),
                 ),
                 1024,
             )
@@ -881,7 +878,7 @@ class DeepSeekGenerator(ContentGenerator):
             try:
                 kernel = repair_kernel_units(
                     kernel=kernel,
-                    affected_unit_ids=frozenset({guide_unit.unit_id}),
+                    affected_unit_ids=copied_account_units,
                     raw=json.loads(self._json_content(str(repair_payload["choices"][0]["message"]["content"]))),
                     allowed_claim_ids=context.product_fact_packet.fact_ids,
                     media_format=request.media_format,
@@ -894,8 +891,9 @@ class DeepSeekGenerator(ContentGenerator):
                 ValueError,
                 json.JSONDecodeError,
             ) as exc:
-                raise GenerationFailed("CreativeKernelV1 账号表达路径 affected-unit 修复格式不完整") from exc
-        self._assert_p3_account_link(request, kernel)
+                raise GenerationFailed("CreativeKernelV1 账号表达自然化修复格式不完整") from exc
+        self._assert_p3_account_link_natural(request, kernel)
+        self._assert_no_unfrozen_actuality_dialogue(request, kernel)
         if request.revision_instruction and request.prior_creative_kernel:
             before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
             after = tuple(unit.text for unit in kernel.writable_units)
@@ -1638,10 +1636,9 @@ class DeepSeekGenerator(ContentGenerator):
         account_link_rule = (
             """本篇必须让受众从作品本身读出当前账号为什么会说这段话。标题、正文、媒体组织
 和发布配文应共同沿同一条编辑视角展开；至少 natural_guide 或 body 要自然体现下方的表达
-位置与受众关系，不能只在元数据中存在。不要照抄画像标签，不要硬插商品、账号名或品牌名，
-不要把表达位置写成真实职业履历、机构事实或已经发生的经历。required_visible_spans 中的
-每个冻结字面都必须在 natural_guide、body 与 release_caption 的整体可见文字里原样出现
-至少一次；这些字面只绑定本账号的表达位置与受众关系，不授予新的现实事实。"""
+位置与受众关系，不能只在元数据中存在。把它们转化为本篇的观察方式、选择取舍或给受众的
+具体回报；不得逐字照抄画像标签，不得硬插商品、账号名或品牌名，也不得把表达位置写成
+真实职业履历、机构事实或已经发生的经历。"""
             if request.primary_product == "brand_life_narrative"
             else ""
         )
@@ -1783,7 +1780,8 @@ track 与 mode 是服务端在写作前冻结的唯一表达轨；你不能返�
 已执行做法。actuality_reflection 对应的用户现实原文
 已由服务端 frozen fact 单元逐字插入；Writer 只能写不复述该事实的抽象关系反思，或带清楚
 建议／条件语态的泛指做法，不能复制、概括或扩写人物、动作、对白、动机、原因、结果、时间、
-地点与现实细节。修订时，未出现在可写 skeleton 中的 prior_version 单元已经由服务端冻结，
+地点与现实细节，也不能用引号把用户观察改造成某个人说过的话。修订时，未出现在可写
+skeleton 中的 prior_version 单元已经由服务端冻结，
 不得索取、复述或改写。
 title 也属于服务端预分配的 creative_expression。Compiler 只为整篇插入一次自然范围说明，
 不会替你创作标题前缀、概要、互动句、图序或固定文字卡。
@@ -2485,27 +2483,15 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         projection: dict[str, object] = {
             key: DeepSeekGenerator._deidentify_text(value, protected) for key, value in values.items() if value.strip()
         }
-        projection["required_visible_spans"] = list(DeepSeekGenerator._required_account_link_spans(request))
         return projection
 
     @staticmethod
-    def _required_account_link_spans(
+    def _account_profile_source_spans(
         request: GenerationInput,
     ) -> tuple[str, ...]:
-        """Bind P3 copy to the frozen role and audience relationship.
+        """Return trusted labels that guide expression but must not become copy."""
 
-        This is positive source binding, not semantic classification: the
-        service requires deidentified spans that already belong to the current
-        account profile and never infers an account link from prose. Visible
-        whitespace is presentation-only (for example around ``/``), so matching
-        ignores whitespace without rewriting either the frozen span or output.
-        """
-
-        relationship = (
-            request.account_expression.audience_relationship
-            if request.account_expression is not None
-            else request.brand.audience_description
-        )
+        expression = request.account_expression
         protected = (
             request.brand.brand_name,
             request.brand.organization_name,
@@ -2514,46 +2500,58 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
         values = (
             DeepSeekGenerator._deidentify_text(
-                request.brand.content_role_name,
+                expression.identity_position if expression is not None else request.brand.content_role_name,
                 protected,
             ),
             DeepSeekGenerator._deidentify_text(
-                relationship,
+                expression.audience_relationship if expression is not None else request.brand.audience_description,
+                protected,
+            ),
+            DeepSeekGenerator._deidentify_text(
+                expression.content_territories if expression is not None else "",
                 protected,
             ),
         )
-        return tuple(dict.fromkeys(value.rstrip("。！？!?") for value in values if value.rstrip("。！？!?")))
+        return tuple(
+            dict.fromkeys(
+                value.rstrip("。！？!?")
+                for value in values
+                if len(value.rstrip("。！？!?")) >= 4
+            )
+        )
 
     @classmethod
-    def _assert_p3_account_link(
+    def _assert_p3_account_link_natural(
         cls,
         request: GenerationInput,
         kernel: CreativeKernelV1,
     ) -> None:
         if request.primary_product != "brand_life_narrative" or kernel.kernel_version != KERNEL_VERSION:
             return
-        required = cls._required_account_link_spans(request)
-        if not required:
+        if not cls._account_profile_source_spans(request):
             raise GenerationFailed("当前账号缺少可冻结的账号表达路径")
-        if cls._missing_p3_account_link_spans(request, kernel):
-            raise GenerationFailed("Writer 成品未绑定当前账号表达路径")
+        if cls._copied_account_profile_units(request, kernel):
+            raise GenerationFailed("Writer 成品仍在照抄账号画像标签")
 
     @classmethod
-    def _missing_p3_account_link_spans(
+    def _copied_account_profile_units(
         cls,
         request: GenerationInput,
         kernel: CreativeKernelV1,
-    ) -> tuple[str, ...]:
+    ) -> frozenset[str]:
         if request.primary_product != "brand_life_narrative" or kernel.kernel_version != KERNEL_VERSION:
-            return ()
-        required = cls._required_account_link_spans(request)
-        visible = cls._account_link_match_view(
-            "\n".join(unit.text for unit in kernel.writable_units)
+            return frozenset()
+        source_views = tuple(
+            cls._account_link_match_view(span)
+            for span in cls._account_profile_source_spans(request)
         )
-        return (
-            ()
-            if any(cls._account_link_match_view(span) in visible for span in required)
-            else required
+        return frozenset(
+            unit.unit_id
+            for unit in kernel.writable_units
+            if any(
+                source in cls._account_link_match_view(unit.text)
+                for source in source_views
+            )
         )
 
     @staticmethod
@@ -2563,18 +2561,39 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         return "".join(character for character in value if not character.isspace())
 
     @staticmethod
-    def _account_link_repair_prompt(
+    def _account_link_naturalization_prompt(
         *,
-        unit_id: str,
-        current_text: str,
-        required_spans: tuple[str, ...],
+        affected: tuple[tuple[str, str], ...],
+        source_spans: tuple[str, ...],
     ) -> str:
-        return f"""只修复一个自然导读 unit。根对象只能有 units；units 只能有一个元素，
-该元素只能有 unit_id、text。unit_id 必须逐字为 {json.dumps(unit_id, ensure_ascii=False)}。
-在保留原导读观看回报的前提下，把下列已经冻结、去标识的账号表达 span 各逐字使用一次，
-写成一句自然中文；不得把它们扩写成真实职业履历、机构事实或已经发生的经历：
-{json.dumps(required_spans, ensure_ascii=False)}
-原导读：{json.dumps(current_text, ensure_ascii=False)}"""
+        template = {
+            "units": [
+                {"unit_id": unit_id, "text": ""}
+                for unit_id, _ in affected
+            ]
+        }
+        return f"""只修复照抄账号画像标签的创作 unit。保留每个 unit 原来的观看回报和主题，
+把账号关系转化为自然的观察方式、选择取舍或受众回报；不得逐字复制下列来源标签，不得写成
+职业履历、机构事实或已发生经历：
+{json.dumps(source_spans, ensure_ascii=False)}
+待修复 unit：{json.dumps([{"unit_id": unit_id, "text": text} for unit_id, text in affected], ensure_ascii=False)}
+根对象只能有 units，且必须严格返回这些 unit_id；每项只能有 unit_id、text：
+{json.dumps(template, ensure_ascii=False)}"""
+
+    @staticmethod
+    def _assert_no_unfrozen_actuality_dialogue(
+        request: GenerationInput,
+        kernel: CreativeKernelV1,
+    ) -> None:
+        frame = request.narrative_frame
+        if frame is None or frame.narrative_mode != "actuality_reflection":
+            return
+        quote_characters = frozenset({'"', "“", "”", "‘", "’"})
+        if any(
+            quote_characters.intersection(unit.text)
+            for unit in kernel.writable_units
+        ):
+            raise GenerationFailed("Writer 不得把用户现实片段扩写成新的直接引语")
 
     @staticmethod
     def _deidentify_text(

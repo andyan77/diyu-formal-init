@@ -441,6 +441,23 @@
   gap: 12px;
   margin: 0;
 }
+
+.publication-applicability {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+
+.publication-applicability legend {
+  grid-column: 1 / -1;
+}
+
+.publication-applicability label {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-height: 44px;
+}
 .tenant-inline-panel {
   margin: 0 0 28px;
   padding: 0 20px 20px;

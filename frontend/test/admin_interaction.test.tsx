@@ -558,19 +558,22 @@ async function main(): Promise<void> {
     "核对后的自然表达"
   ).querySelector("textarea") as HTMLTextAreaElement;
   await input(publicationText, "笛语帮助人们看清日常穿衣选择。 ");
+  await click(find(".publication-applicability label", "穿衣选择"));
   await click(find(".tenant-drawer button", "保存为待确认版本"));
   await settle();
+  const publicationRequest = requests.find(
+    item =>
+      item.path ===
+        "/api/v1/tenant-management/brand-publication/candidates" &&
+      item.method === "POST"
+  );
+  const publicationItems = publicationRequest?.body?.items as
+    | Array<{ published_text: string; applicability: string[] }>
+    | undefined;
   assert.ok(
-    requests.some(
-      item =>
-        item.path ===
-          "/api/v1/tenant-management/brand-publication/candidates" &&
-        item.method === "POST" &&
-        (
-          item.body?.items as Array<Record<string, unknown>> | undefined
-        )?.[0]?.published_text ===
-          "笛语帮助人们看清日常穿衣选择。"
-    ),
+    publicationItems?.[0]?.published_text ===
+      "笛语帮助人们看清日常穿衣选择。" &&
+      publicationItems[0].applicability.includes("dressing_decision"),
     "创作端只能消费管理员核对后保存的发布表达"
   );
   await click(find(".library-list button", "查看版本与维护"));
