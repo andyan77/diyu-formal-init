@@ -1249,6 +1249,52 @@ def test_conversation_intake_freezes_system_selected_topic_origin() -> None:
     assert decision.creative_plan.topic_origin == "system_selected"
 
 
+def test_conversation_intake_keeps_frozen_actuality_as_the_explicit_topic() -> None:
+    message = "今天事情一件接一件，回到家才发现自己连水都忘了喝，帮我发一条。"
+    candidates = user_fact_candidates((message,))
+    actuality = candidates[0]
+    request = ConversationInput(
+        message=message,
+        history=(),
+        brand=_brand(),
+        products=(),
+        target="xiaohongshu_graphic",
+        creation_committed=True,
+        allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        platform_shape="xiaohongshu_graphic:graphic",
+        user_fact_candidates=candidates,
+    )
+    FakeClient.responses = [
+        _completion(
+            {
+                "kind": "ready",
+                "message": "好，我会回应这段具体生活片段。",
+                "user_premises": [message],
+                "user_fact_sentence_ids": [actuality.source_id],
+                "user_sentence_roles": _sentence_roles(
+                    message,
+                    (actuality.source_id,),
+                ),
+                # This is the exact bad model projection seen in the WIP
+                # suite.  The server must not let it grant account-domain
+                # topic selection once actuality has been frozen.
+                "creative_plan": _intake_plan(
+                    message,
+                    topic_origin="system_selected",
+                ),
+                "creation_proposal": True,
+            }
+        )
+    ]
+
+    decision = _generator().collaborate(request)
+
+    assert decision.user_fact_spans == (message,)
+    assert decision.narrative_mode == "actuality_reflection"
+    assert decision.creative_plan is not None
+    assert decision.creative_plan.topic_origin == "explicit_user"
+
+
 def test_conversation_intake_freezes_the_whole_negated_sentence() -> None:
     message = "我没有和婆婆吵架。帮我写条小红书。"
     candidates = user_fact_candidates((message,))

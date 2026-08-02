@@ -740,6 +740,13 @@ class DeepSeekGenerator(ContentGenerator):
             narrative_mode = "actuality_reflection" if facts else "general_observation"
         try:
             plan = creative_plan_from_document(raw_plan)
+            if facts and plan.topic_origin == "system_selected":
+                # The server, not the model, owns whether the user supplied
+                # the work's subject.  Once an exact user actuality has been
+                # frozen, account content territories may shape the response
+                # but must not replace that subject with a system-selected
+                # topic.
+                plan = replace(plan, topic_origin="explicit_user")
             validate_creative_plan(
                 plan,
                 user_turns=available_user_turns,
