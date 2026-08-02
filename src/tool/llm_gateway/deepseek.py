@@ -884,6 +884,8 @@ class DeepSeekGenerator(ContentGenerator):
         raw_intent_span = document.get("intent_span")
         proposed_intent_span = raw_intent_span.strip() if isinstance(raw_intent_span, str) else ""
         if kind == "chat":
+            if request.creation_committed:
+                raise GenerationFailed("已确认的生成请求不能退回普通交流")
             return ConversationDecision(
                 "chat",
                 message.strip(),
@@ -3996,6 +3998,11 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         candidate_document = [
             {"sentence_id": candidate.source_id, "exact_text": candidate.exact_text} for candidate in candidates
         ]
+        chat_shape = (
+            ""
+            if request.creation_committed
+            else '{"kind":"chat","message":"自然回复","creation_proposal":false,"intent_span":""}'
+        )
         question_shape = (
             """\n{\"kind\":\"question\",\"message\":\"一个具体事实问题\",\"missing_fact_span\":\"逐字复制用户明确要求依赖的真实经历片段\",\n\"creation_proposal\":true,\"intent_span\":\"候选用户原话跨度\"}"""
             if request.indispensable_fact_question_allowed
@@ -4010,7 +4017,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         )
         return f"""编译本轮创作条件。服务端已经独立判断是否存在创作承诺；你只能提议，不能授权
 创建任务。只返回以下一种 JSON：
-{{"kind":"chat","message":"自然回复","creation_proposal":false,"intent_span":""}}
+{chat_shape}
 {question_shape}
 {{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制实际使用的用户消息"],
 "user_fact_sentence_ids":["只能选择服务端候选 sentence_id，不能返回或裁剪事实正文"],

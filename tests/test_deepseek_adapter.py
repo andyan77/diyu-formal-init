@@ -1516,6 +1516,38 @@ def test_committed_low_seed_cannot_be_returned_as_an_unnecessary_question() -> N
         _generator().collaborate(request)
 
 
+def test_committed_generation_cannot_be_returned_as_ordinary_chat() -> None:
+    message = "早上有点凉，中午又热，我不想带太多东西，今天怎么穿更稳妥？"
+    request = ConversationInput(
+        message=message,
+        history=(),
+        brand=_brand(),
+        products=(),
+        target="douyin_video",
+        creation_committed=True,
+        indispensable_fact_question_allowed=False,
+        allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        platform_shape="douyin_video:video",
+    )
+
+    prompt = _generator()._conversation_prompt(request)
+    assert '{"kind":"chat"' not in prompt
+    assert '{"kind":"ready"' in prompt
+    FakeClient.responses = [
+        _completion(
+            {
+                "kind": "chat",
+                "message": "可以先说说你今天更在意什么。",
+                "creation_proposal": False,
+                "intent_span": "",
+            }
+        )
+    ]
+
+    with pytest.raises(GenerationFailed, match="不能退回普通交流"):
+        _generator().collaborate(request)
+
+
 def test_series_intake_does_not_turn_continuation_instruction_into_actuality() -> None:
     request = ConversationInput(
         message="继续下一篇：怎样在对方明确回应时接住话题。",
