@@ -93,12 +93,12 @@ from src.shared.media_program import (
     select_media_program,
 )
 from src.shared.narrative import new_frame, visible_digest
-from src.shared.review_evidence import unit_contracts_v2
 from src.shared.product_value import (
     P2ProductValueContractV1,
     P5ProductValueContractV1,
     build_product_value_contract,
 )
+from src.shared.review_evidence import unit_contracts_v2
 from src.shared.types import (
     AccountExpression,
     BoundProductMedia,
@@ -2306,7 +2306,7 @@ def test_account_text_repair_preserves_frozen_claim_refs_without_requiring_them_
     assert repaired.unit("unit:natural-guide").text == raw["units"][0]["text"]
 
 
-def test_actuality_life_units_are_preallocated_as_disclosed_hypothesis() -> None:
+def test_current_actuality_life_units_are_preallocated_as_recommendation() -> None:
     fact = "今天喝了一直喝的蓝山咖啡，居然是甜的。"
     frame = new_frame("actuality_reflection", (fact,), ())
     request = replace(
@@ -2323,7 +2323,7 @@ def test_actuality_life_units_are_preallocated_as_disclosed_hypothesis() -> None
     )
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
 
-    assert kernel.unit("unit:body").mode == "hypothesis"
+    assert kernel.unit("unit:body").mode == "recommendation"
     compiled = compile_delivery(
         replace(
             _compile_input(request),
@@ -2339,7 +2339,7 @@ def test_actuality_life_units_are_preallocated_as_disclosed_hypothesis() -> None
 
     assert f"你提到：“{fact}”" in compiled.body
     assert compiled.body.count("表达范围：") == 1
-    assert "其余是创作性推演，不作为这段经历的事实补充" in compiled.body
+    assert "其余为可选择建议，不表示已经执行" in compiled.body
 
 
 def test_actuality_writer_receives_one_frozen_fact_as_read_only_topic_anchor() -> None:
@@ -2512,7 +2512,7 @@ def test_p2_formal_observable_and_colors_share_one_product_value_path() -> None:
         ("brand_life_narrative", "actuality_reflection", "hypothesis"),
     ),
 )
-def test_v3_body_license_is_preallocated_from_the_content_value(
+def test_legacy_v3_body_license_is_preallocated_from_the_content_value(
     primary_product: str,
     frame_mode: str,
     expected_mode: str,
@@ -2525,7 +2525,7 @@ def test_v3_body_license_is_preallocated_from_the_content_value(
         ),
         fact_registry=(),
         constraint_refs=(),
-        kernel_version=KERNEL_VERSION,
+        kernel_version=MEDIA_NATIVE_KERNEL_VERSION,
         primary_product=cast(Any, primary_product),
     )
 
@@ -3228,7 +3228,7 @@ def test_current_p1_writer_brief_is_bounded_and_does_not_license_product_perform
         kernel,
         units=tuple(
             replace(unit, text=("选择。" * 80))
-            if unit.unit_id == "unit:body"
+            if unit.purpose == "body"
             else replace(unit, text="自然文字")
             for unit in kernel.units
         ),

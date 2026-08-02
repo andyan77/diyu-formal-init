@@ -266,7 +266,7 @@ def build_kernel_skeleton(
         "visual_styling_story",
     }
     product_hypothesis_body = (
-        kernel_version in _WRITER_SUPPORTING_COPY_KERNEL_VERSIONS
+        kernel_version == MEDIA_NATIVE_KERNEL_VERSION
         and primary_product == "brand_life_narrative"
         and frame.narrative_mode == "actuality_reflection"
     )

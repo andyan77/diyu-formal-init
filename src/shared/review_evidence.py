@@ -1056,7 +1056,9 @@ def unit_contracts_v2(
     elif kernel.program_id == OBSERVATION_ONLY_PROGRAM:
         body_contract: UnitContractV2
         body_unit = kernel.unit("unit:body")
-        if body_unit.mode == "hypothesis":
+        if body_unit.mode == "recommendation":
+            body_contract = "recommendation"
+        elif body_unit.mode == "hypothesis":
             body_contract = "hypothetical_example"
         elif frame.narrative_mode == "actuality_reflection":
             body_contract = "actuality_reflection"
@@ -1072,11 +1074,14 @@ def unit_contracts_v2(
     elif kernel.program_id == ACTUALITY_WITH_DISCLOSED_DRAMATIZATION_PROGRAM:
         if frame.narrative_mode != "actuality_reflection":
             raise ValueError("local dramatization program drifted from frame")
-        reflection_contract: UnitContractV2 = (
-            "hypothetical_example"
-            if kernel.unit("unit:body").mode == "hypothesis"
-            else "actuality_reflection"
-        )
+        body_mode = kernel.unit("unit:body").mode
+        reflection_contract: UnitContractV2
+        if body_mode == "recommendation":
+            reflection_contract = "recommendation"
+        elif body_mode == "hypothesis":
+            reflection_contract = "hypothetical_example"
+        else:
+            reflection_contract = "actuality_reflection"
         contracts.update(
             {
                 "unit:body": reflection_contract,

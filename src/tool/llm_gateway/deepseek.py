@@ -2747,13 +2747,17 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         ):
             return
         limits = {
-            "unit:title": 36,
-            "unit:natural-guide": 64,
-            "unit:body": 220,
-            "unit:release-caption": 80,
+            "title": 36,
+            "natural_guide": 64,
+            "body": 220,
+            "release_caption": 80,
         }
-        for unit_id, limit in limits.items():
-            visible_length = len("".join(kernel.unit(unit_id).text.split()))
+        for purpose, limit in limits.items():
+            visible_length = sum(
+                len("".join(unit.text.split()))
+                for unit in kernel.units
+                if unit.purpose == purpose
+            )
             if visible_length > limit:
                 raise GenerationFailed(
                     "本次穿衣选择没有在可直接观看的长度内完成"
