@@ -462,6 +462,9 @@ def test_general_p3_body_units_receive_closed_non_bearing_claim_jobs() -> None:
     assert "不得陈述某个选择会决定或改变关系" in responsibilities[
         "unit:body-opening"
     ]
+    assert "一句以中文问号结尾的直接选择问题" in responsibilities[
+        "unit:body-opening"
+    ]
     assert "不得说明任一做法会产生什么关系" in responsibilities[
         "unit:hypothetical-example"
     ]

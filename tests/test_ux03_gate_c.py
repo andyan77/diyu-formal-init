@@ -2718,6 +2718,41 @@ def test_p4_writer_claim_budget_only_responds_to_the_explicit_signal() -> None:
     assert "不得新增原句没有明示的观察维度、身体或情绪状态" in prompt
 
 
+def test_general_p3_writer_opening_is_one_direct_non_bearing_question() -> None:
+    request = _generation_input()
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    valid = replace(
+        kernel,
+        units=tuple(
+            replace(unit, text="这次先观察动作，还是先保留选择？")
+            if unit.unit_id == "unit:body-opening"
+            else unit
+            for unit in kernel.units
+        ),
+    )
+    DeepSeekGenerator._assert_non_bearing_writer_shape(request, valid)
+
+    for invalid_text in (
+        "某个选择会改变关系。",
+        "先作结论。然后观察哪一个动作？",
+        "观察动作还是选择",
+    ):
+        invalid = replace(
+            valid,
+            units=tuple(
+                replace(unit, text=invalid_text)
+                if unit.unit_id == "unit:body-opening"
+                else unit
+                for unit in valid.units
+            ),
+        )
+        with pytest.raises(GenerationFailed, match="直接选择问题"):
+            DeepSeekGenerator._assert_non_bearing_writer_shape(
+                request,
+                invalid,
+            )
+
+
 def test_writer_prompt_consumes_selected_brand_methods_without_fact_upgrade() -> None:
     request = _generation_input()
     request = replace(

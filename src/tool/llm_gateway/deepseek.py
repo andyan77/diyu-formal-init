@@ -243,8 +243,8 @@ def _claim_bounded_body_responsibility(
         return responsibility
     unit_boundary = {
         "unit:body-opening": (
-            "本单元只提出一个本题可观察的问题或差异；不得陈述某个选择会决定或改变关系、"
-            "人物及结果。"
+            "本单元必须只写一句以中文问号结尾的直接选择问题；问号前不得先写陈述结论。"
+            "不得陈述某个选择会决定或改变关系、人物及结果。"
         ),
         "unit:hypothetical-example": (
             "本单元只在明确“如果”条件下并列两个可选做法；不得说明任一做法会产生什么"
@@ -255,6 +255,26 @@ def _claim_bounded_body_responsibility(
         ),
     }.get(unit_id, "")
     return f"{responsibility}{unit_boundary}"
+
+
+def _non_bearing_unit_text_shape(
+    *,
+    unit_id: str,
+    primary_product: ContentProduct,
+    narrative_mode: str,
+    series_position: int | None,
+) -> str | None:
+    if (
+        primary_product != "brand_life_narrative"
+        or narrative_mode != "general_observation"
+        or series_position is not None
+    ):
+        return None
+    return {
+        "unit:body-opening": "one_direct_choice_question_ending_with_？",
+        "unit:hypothetical-example": "one_if_condition_with_two_optional_actions",
+        "unit:body-closing": "one_optional_observation_action_without_result_claim",
+    }.get(unit_id)
 
 
 def _claim_bounded_editorial_responsibility(
@@ -1257,6 +1277,7 @@ class DeepSeekGenerator(ContentGenerator):
         self._assert_p3_account_link_natural(request, kernel)
         self._assert_no_unfrozen_actuality_dialogue(request, kernel)
         self._assert_p1_publication_shape(request, kernel)
+        self._assert_non_bearing_writer_shape(request, kernel)
         self._assert_series_writer_progression(request, kernel)
         if request.revision_instruction and request.prior_creative_kernel:
             before = tuple(unit.text for unit in request.prior_creative_kernel.writable_units)
@@ -1929,6 +1950,22 @@ class DeepSeekGenerator(ContentGenerator):
                 "text_contract": {
                     "shape": "content_only",
                     "wrapper_owner": "delivery_compiler",
+                    **(
+                        {"sentence_shape": sentence_shape}
+                        if (
+                            sentence_shape := _non_bearing_unit_text_shape(
+                                unit_id=unit.unit_id,
+                                primary_product=request.primary_product,
+                                narrative_mode=request.narrative_frame.narrative_mode,
+                                series_position=(
+                                    request.series_context.target_position
+                                    if request.series_context is not None
+                                    else None
+                                ),
+                            )
+                        )
+                        else {}
+                    ),
                     **(
                         {"claim_contract": non_bearing_claim_contract}
                         if non_bearing_claim_contract is not None
@@ -3245,6 +3282,27 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             visible_length = sum(len("".join(unit.text.split())) for unit in kernel.units if unit.purpose == purpose)
             if visible_length > limit:
                 raise GenerationFailed("本次穿衣选择没有在可直接观看的长度内完成")
+
+    @staticmethod
+    def _assert_non_bearing_writer_shape(
+        request: GenerationInput,
+        kernel: CreativeKernelV1,
+    ) -> None:
+        if (
+            kernel.kernel_version != KERNEL_VERSION
+            or request.primary_product != "brand_life_narrative"
+            or request.narrative_frame is None
+            or request.narrative_frame.narrative_mode != "general_observation"
+            or request.series_context is not None
+        ):
+            return
+        opening = kernel.unit("unit:body-opening").text.strip()
+        if (
+            not opening.endswith("？")
+            or opening.count("？") != 1
+            or any(mark in opening[:-1] for mark in "。！?")
+        ):
+            raise GenerationFailed("非承重观察开头没有保持为一个直接选择问题")
 
     @staticmethod
     def _assert_series_writer_progression(
