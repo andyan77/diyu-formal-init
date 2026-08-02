@@ -77,6 +77,7 @@ class BrandContextSegment:
     visibility_scope: str
     digest: str
     exact_text: str
+    source_digest: str | None = None
 
 
 @dataclass(frozen=True)

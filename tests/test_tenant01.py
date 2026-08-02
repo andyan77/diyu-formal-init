@@ -144,6 +144,7 @@ def _tenant01_evidence_inputs(
                 "visibility_scope": "brand_all",
                 "digest": sha256(f"{card_id} 已确认表达约束".encode()).hexdigest(),
                 "exact_text": f"{card_id} 已确认表达约束",
+                "source_digest": sha256(f"{card_id} 不可变来源".encode()).hexdigest(),
             }
         ]
         _write_private_json(
@@ -735,6 +736,7 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
         assert all(
             sha256(item.exact_text.encode()).hexdigest() == item.digest for item in selected.context_packet.segments
         )
+        assert all(item.source_digest is not None for item in selected.context_packet.segments)
         assert selected.context_packet.packet_version == "brand-context-packet-v2"
         assert isinstance(selected.context_packet, BrandContextPacketV2)
         assert selected.context_packet.publication_projection_id == str(projection_id)

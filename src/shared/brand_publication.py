@@ -90,6 +90,8 @@ def brand_context_packet_document(
             "visibility_scope": segment.visibility_scope,
             "digest": segment.digest,
         }
+        if segment.source_digest is not None:
+            document["source_digest"] = segment.source_digest
         if include_text:
             document["exact_text"] = segment.exact_text
         segments.append(document)

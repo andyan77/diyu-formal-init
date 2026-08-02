@@ -505,6 +505,7 @@ class PostgresContentRepository(ContentRepository):
                     str(row["published_text"]).encode()
                 ).hexdigest(),
                 exact_text=str(row["published_text"]),
+                source_digest=str(row["source_digest"]),
             )
             for row in selected
         )
@@ -520,6 +521,7 @@ class PostgresContentRepository(ContentRepository):
                 "visibility_scope": segment.visibility_scope,
                 "digest": segment.digest,
                 "exact_text": segment.exact_text,
+                "source_digest": segment.source_digest,
             }
             for segment in segments
         ]

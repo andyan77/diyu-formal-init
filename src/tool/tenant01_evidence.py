@@ -181,6 +181,7 @@ def _artifact_binding(
             or not str(segment.get("source_id", "")).strip()
             or not str(segment.get("source_version", "")).strip()
             or not str(segment.get("visibility_scope", "")).strip()
+            or not _sha256_text(segment.get("source_digest"))
             or segment.get("digest")
             != hashlib.sha256(exact_text.encode()).hexdigest()
         ):

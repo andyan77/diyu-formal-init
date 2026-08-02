@@ -971,7 +971,15 @@ class ContentService:
             )
             if any(not isinstance(item.get(key), str) for key in required):
                 raise DomainError("内容任务冻结的品牌资料包无效")
-            segments.append(BrandContextSegment(**{key: str(item[key]) for key in required}))
+            source_digest = item.get("source_digest")
+            if source_digest is not None and not isinstance(source_digest, str):
+                raise DomainError("内容任务冻结的品牌资料包无效")
+            segments.append(
+                BrandContextSegment(
+                    **{key: str(item[key]) for key in required},
+                    source_digest=source_digest,
+                )
+            )
         digest = raw.get("packet_digest")
         if not isinstance(digest, str):
             raise DomainError("内容任务冻结的品牌资料包无效")
@@ -990,8 +998,9 @@ class ContentService:
             or not isinstance(projection_digest, str)
         ):
             raise DomainError("内容任务冻结的品牌发布版本无效")
-        segment_documents = [
-            {
+        segment_documents: list[dict[str, object]] = []
+        for segment in segments:
+            segment_document: dict[str, object] = {
                 "segment_id": segment.segment_id,
                 "source_document_id": segment.source_document_id,
                 "source_document_version_id": segment.source_document_version_id,
@@ -1003,8 +1012,9 @@ class ContentService:
                 "digest": segment.digest,
                 "exact_text": segment.exact_text,
             }
-            for segment in segments
-        ]
+            if segment.source_digest is not None:
+                segment_document["source_digest"] = segment.source_digest
+            segment_documents.append(segment_document)
         if brand_context_packet_digest(
             projection_id=projection_id,
             projection_version=projection_version,
