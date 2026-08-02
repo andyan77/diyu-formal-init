@@ -833,8 +833,10 @@ def test_publication_p1_keeps_all_visible_expression_writer_owned(
         del self, max_tokens, thinking_disabled, timeout_seconds
         assert "unit:p1-selection-skeleton" not in prompt
         assert "先认清自己最不能妥协" not in prompt
-        assert "你只拥有非事实观点、条件建议、假设和自然表达" in system
+        assert "你拥有非事实中心判断、一般观察、条件建议、比喻" in system
         assert "健康心理因果和媒体资源均由服务端拥有" in system
+        assert "一般观察不能反向解释当前用户" in system
+        assert "不能给商品或选项补充未确认属性" in system
         return {
             "choices": [
                 {
@@ -3214,6 +3216,8 @@ def test_actuality_writer_receives_one_frozen_fact_without_duplicate_instruction
         for span in request.publication_contract.intake_spans
     ) == 1
     assert "这些原句由服务端另行展示" in prompt
+    assert "不指向当前用户的一般观察" in prompt
+    assert "不能把原片段诊断成信号、需要或问题" in prompt
     assert "服务端事实绑定" not in prompt
     assert "帮我发一条" not in prompt
 
@@ -3277,6 +3281,9 @@ def test_product_writer_receives_semantic_plan_without_product_fact_literals() -
     )._kernel_writer_prompt(request, kernel, {})
 
     assert "同一件商品的两种完整可见选择" in prompt
+    assert "商品是什么只由服务端事实块说明" in prompt
+    assert "用“本次选择／你希望形成的观看重点”承担" in prompt
+    assert "不给商品、任一选项或颜色补充气质、风格、适用性、优劣和效果" in prompt
     for private_literal in (
         product.sku,
         product.display_name,
@@ -4353,8 +4360,10 @@ def test_publication_actuality_prompt_keeps_reality_dialogue_in_negative_boundar
         "deepseek-test",
     )._kernel_writer_prompt(request, kernel, {})
 
-    assert "不要推断健康、心理、人物关系、后续事件或结果" in prompt
+    assert "不指向当前用户的一般观察" in prompt
+    assert "不能用“你／你的”给当前用户补充身体、心理、动机、原因、结果或后续经历" in prompt
     assert prompt.count("唯一负向安全合同") == 1
+    assert "低风险一般观察属于 creative_expression，不是事实" in prompt
     assert "独立 Reviewer" not in prompt
     assert "不得再使用中文或 ASCII 引号" not in prompt
 
