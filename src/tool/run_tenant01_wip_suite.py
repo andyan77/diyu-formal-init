@@ -111,6 +111,7 @@ def _run(args: argparse.Namespace) -> None:
         client.cookies.set("diyu_session", journey.session_token)
         series_id: UUID | None = None
         if any(card.card_id in {"P4_series1", "series2", "series3"} for card in cards):
+            wip_run_id = uuid4()
             response = client.post(
                 "/api/v1/content/series",
                 params={
@@ -118,7 +119,10 @@ def _run(args: argparse.Namespace) -> None:
                     "publishing_identity_id": str(journey.publishing_identity_id),
                 },
                 json={
-                    "title": f"TENANT-01 WIP 连续观察 · {args.implementation_sha[:12]}",
+                    "title": (
+                        "TENANT-01 WIP 连续观察 · "
+                        f"{args.implementation_sha[:12]} · {str(wip_run_id)[:8]}"
+                    ),
                     "premise": "从不打扰，推进到回应，再推进到留出选择。",
                 },
             )
