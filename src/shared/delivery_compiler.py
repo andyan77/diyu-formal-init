@@ -631,7 +631,7 @@ def _compile_delivery_v4(
             ),
         ),
     }
-    optional_suggestion = _optional_capture_suggestion(program, title)
+    optional_suggestion = _optional_capture_suggestion(program)
     if optional_suggestion is not None:
         provenance["optional_capture_suggestion"] = (
             f"compiler:optional-capture-suggestion:{program.optional_capture_suggestion_id}",
@@ -758,19 +758,20 @@ def _compile_delivery_v4(
 
 def _optional_capture_suggestion(
     program: MediaProgramSelectionV1,
-    title: str,
 ) -> str | None:
     optional_medium = (
-        "一段只承接本篇标题的短视频" if program.program_id.startswith("video_") else "一张只承接本篇标题的静态照片"
+        "一段与当前主题直接相关的短视频"
+        if program.program_id.startswith("video_")
+        else "一张与当前主题直接相关的静态照片"
     )
     if program.optional_capture_suggestion_id == "optional-current-product-capture-v1":
         return (
-            f"如果《{title}》提到的商品仍在手边，而且你愿意补拍，可以另加{optional_medium}；"
+            f"如果本次商品仍在手边，而且你愿意补拍，可以另加{optional_medium}；"
             "没有也不影响，当前版本可直接用文字、色块和留白完成。"
         )
     if program.optional_capture_suggestion_id == "optional-current-subject-capture-v1":
         return (
-            f"如果《{title}》提到的事物仍在手边，而且你愿意补拍，可以另加{optional_medium}；"
+            f"如果刚才提到的事物仍在手边，而且你愿意补拍，可以另加{optional_medium}；"
             "没有也不影响，当前版本可直接用文字、色块和留白完成。"
         )
     return None
@@ -782,9 +783,9 @@ def _bind_graphic_program_to_title(
 ) -> tuple[str, str, str]:
     opening, sequence, production_note = texts
     return (
-        f"{opening} 本篇首图只承接《{title}》这个具体切口。",
-        f"{sequence} 页面转折只承接《{title}》与本篇已审正文。",
-        f"{production_note} 排版只承接《{title}》和本篇已审文字。",
+        opening.replace("标题", f"作品标题《{title}》", 1),
+        sequence,
+        production_note,
     )
 
 
@@ -794,11 +795,11 @@ def _bind_video_program_to_title(
 ) -> tuple[str, str, str, str, str]:
     opening, sequence, spoken, subtitles, production_note = texts
     return (
-        f"{opening} 本篇首帧只承接《{title}》这个具体切口。",
-        f"{sequence} 观看链只承接《{title}》与本篇已审正文。",
+        opening.replace("标题", f"作品标题《{title}》", 1),
+        sequence,
         spoken,
         subtitles,
-        f"{production_note} 制作只承接《{title}》和本篇已审文字。",
+        production_note,
     )
 
 

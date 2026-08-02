@@ -176,6 +176,38 @@ _REQUEST_SCOPED_ERROR_CODES = frozenset(
 )
 
 
+def _body_editorial_responsibility(
+    *,
+    unit_id: str,
+    base_responsibility: str,
+    series_position: int | None,
+) -> str:
+    """Give each preallocated body unit one non-overlapping editorial job."""
+
+    if unit_id == "unit:body-opening":
+        specific = (
+            "只承接前情尚未解决的问题，并提出一个新的可观察判断标准；"
+            if series_position is not None and series_position >= 2
+            else "只提出本题独有、可以直接观察的一处张力或差异；"
+        )
+        return specific + "本单元不列并行选项，不给行动建议，也不提前收束。"
+    if unit_id == "unit:hypothetical-example":
+        specific = (
+            "只用一个条件化片段检验本篇新增判断，不复述前篇或本篇开头；"
+            if series_position is not None and series_position >= 2
+            else "只用一个清楚的条件化片段检验上一单元的观察；"
+        )
+        return specific + "本单元不再提出第二组选择，也不代替结尾给行动。"
+    if unit_id == "unit:body-closing":
+        specific = (
+            "只给出相较前篇真正推进的一项回应或把选择留给受众的一项动作；"
+            if series_position is not None and series_position >= 2
+            else "只给受众一个下一次可以直接使用的有限动作或问题；"
+        )
+        return specific + "不总结前两单元，不再次列举两种做法。"
+    return base_responsibility
+
+
 def _provider_rejection_state(
     status_code: int,
     error_code: str,
@@ -1537,16 +1569,32 @@ class DeepSeekGenerator(ContentGenerator):
             account_expression=request.account_expression,
             brand_context_packet=request.brand.context_packet,
         )
-        account_unit_responsibilities = (
-            {
+        account_unit_responsibilities: dict[str, str] = {}
+        if account_editorial_lens is not None:
+            by_purpose = {
                 "title": account_editorial_lens.title_responsibility,
-                "natural_guide": (account_editorial_lens.natural_guide_responsibility),
+                "natural_guide": account_editorial_lens.natural_guide_responsibility,
                 "body": account_editorial_lens.body_responsibility,
-                "release_caption": (account_editorial_lens.release_caption_responsibility),
+                "release_caption": account_editorial_lens.release_caption_responsibility,
             }
-            if account_editorial_lens is not None
-            else {}
-        )
+            series_position = (
+                request.series_context.target_position
+                if request.series_context is not None
+                else None
+            )
+            for unit in writer_units:
+                responsibility = by_purpose.get(unit.purpose)
+                if responsibility is None:
+                    continue
+                account_unit_responsibilities[unit.unit_id] = (
+                    _body_editorial_responsibility(
+                        unit_id=unit.unit_id,
+                        base_responsibility=responsibility,
+                        series_position=series_position,
+                    )
+                    if unit.purpose == "body"
+                    else responsibility
+                )
         p1_unit_responsibilities = (
             {
                 purpose: _P1_PUBLICATION_BRIEF[purpose]
@@ -1626,8 +1674,8 @@ class DeepSeekGenerator(ContentGenerator):
                     else {}
                 ),
                 **(
-                    {"editorial_responsibility": (account_unit_responsibilities[unit.purpose])}
-                    if unit.purpose in account_unit_responsibilities
+                    {"editorial_responsibility": account_unit_responsibilities[unit.unit_id]}
+                    if unit.unit_id in account_unit_responsibilities
                     else {}
                 ),
                 **(
@@ -2889,16 +2937,32 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             account_expression=request.account_expression,
             brand_context_packet=request.brand.context_packet,
         )
-        editorial_responsibilities = (
-            {
+        editorial_responsibilities: dict[str, str] = {}
+        if editorial_lens is not None:
+            by_purpose = {
                 "title": editorial_lens.title_responsibility,
                 "natural_guide": editorial_lens.natural_guide_responsibility,
                 "body": editorial_lens.body_responsibility,
                 "release_caption": editorial_lens.release_caption_responsibility,
             }
-            if editorial_lens is not None
-            else {}
-        )
+            series_position = (
+                request.series_context.target_position
+                if request.series_context is not None
+                else None
+            )
+            for unit in kernel.writable_units:
+                responsibility = by_purpose.get(unit.purpose)
+                if responsibility is None:
+                    continue
+                editorial_responsibilities[unit.unit_id] = (
+                    _body_editorial_responsibility(
+                        unit_id=unit.unit_id,
+                        base_responsibility=responsibility,
+                        series_position=series_position,
+                    )
+                    if unit.purpose == "body"
+                    else responsibility
+                )
         unit_briefs = [
             {
                 "unit_id": unit.unit_id,
@@ -2906,8 +2970,8 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
                 "mode": unit.mode,
                 "primary_value": _PRODUCT_VALUE[request.primary_product],
                 **(
-                    {"editorial_responsibility": editorial_responsibilities[unit.purpose]}
-                    if unit.purpose in editorial_responsibilities
+                    {"editorial_responsibility": editorial_responsibilities[unit.unit_id]}
+                    if unit.unit_id in editorial_responsibilities
                     else {}
                 ),
                 **(

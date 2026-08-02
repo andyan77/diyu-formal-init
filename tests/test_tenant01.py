@@ -48,6 +48,7 @@ from src.shared.types import (
     TenantManagementScope,
     TrustedScope,
 )
+from src.tool.llm_gateway.deepseek import _body_editorial_responsibility
 from src.tool.run_tenant01_golden_suite import _assert_p2_product_ready
 from src.tool.tenant01_evidence import (
     TENANT01_CARD_IDS,
@@ -372,6 +373,43 @@ def test_account_editorial_lens_freezes_distinct_profile_inputs_and_publication(
     assert "不能无损替换到另一件生活琐事" in serialized
     assert "不得猜测" in serialized
     assert "互相复述" in serialized
+
+
+def test_writer_body_units_receive_distinct_progression_responsibilities() -> None:
+    base = "先观察，再给有限选择，最后留下一个动作；三步不得互相复述。"
+
+    standalone = tuple(
+        _body_editorial_responsibility(
+            unit_id=unit_id,
+            base_responsibility=base,
+            series_position=None,
+        )
+        for unit_id in (
+            "unit:body-opening",
+            "unit:hypothetical-example",
+            "unit:body-closing",
+        )
+    )
+    series = tuple(
+        _body_editorial_responsibility(
+            unit_id=unit_id,
+            base_responsibility=base,
+            series_position=3,
+        )
+        for unit_id in (
+            "unit:body-opening",
+            "unit:hypothetical-example",
+            "unit:body-closing",
+        )
+    )
+
+    assert len(set(standalone)) == 3
+    assert "不列并行选项" in standalone[0]
+    assert "不再提出第二组选择" in standalone[1]
+    assert "不再次列举两种做法" in standalone[2]
+    assert "承接前情尚未解决的问题" in series[0]
+    assert "不复述前篇" in series[1]
+    assert "相较前篇真正推进" in series[2]
 
 
 def test_account_editorial_lens_historical_v1_remains_readable_without_upgrade() -> None:

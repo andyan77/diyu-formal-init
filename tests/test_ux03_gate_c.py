@@ -753,7 +753,7 @@ def test_media_native_units_compile_one_scope_and_distinct_platform_parts() -> N
         assert_content_complete(replace(fact_artifact, body=f"{fact_artifact.body}\nP5"))
 
 
-def test_closed_media_program_binds_each_artifact_to_its_reviewed_title() -> None:
+def test_closed_media_program_binds_title_once_without_repeating_wrappers() -> None:
     request = _generation_input()
     first_kernel = cast(CreativeKernelV1, _filled_kernel(request))
     second_kernel = replace(
@@ -770,14 +770,14 @@ def test_closed_media_program_binds_each_artifact_to_its_reviewed_title() -> Non
     assert isinstance(first.production, GraphicProductionBundle)
     assert isinstance(second.production, GraphicProductionBundle)
     assert first.production.hero_image != second.production.hero_image
-    assert first.production.image_sequence != second.production.image_sequence
-    assert first.production.layout_and_production != second.production.layout_and_production
+    assert first.production.image_sequence == second.production.image_sequence
+    assert first.production.layout_and_production == second.production.layout_and_production
     assert "甜味把熟悉的一天叫醒了" in first.production.hero_image
     assert "另一篇不可交换的标题" in second.production.hero_image
-    assert first.production.optional_capture_suggestion is not None
-    assert "甜味把熟悉的一天叫醒了" in first.production.optional_capture_suggestion
+    assert "甜味把熟悉的一天叫醒了" not in first.production.image_sequence
+    assert "甜味把熟悉的一天叫醒了" not in first.production.layout_and_production
+    assert first.production.optional_capture_suggestion is None
     assert "unit:title" in first.visible_provenance["hero_image"]
-    assert "unit:title" in first.visible_provenance["optional_capture_suggestion"]
 
 
 def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:
@@ -962,12 +962,16 @@ def test_media_program_rejects_unlisted_program_and_outside_resource() -> None:
 def test_optional_capture_is_visible_but_never_a_required_resource() -> None:
     base = _generation_input()
     assert base.media_capability_envelope is not None
-    program = select_media_program(
+    selected = select_media_program(
         primary_product="brand_life_narrative",
         envelope=base.media_capability_envelope,
         mechanism_id=None,
         series_position=None,
         fact_count=1,
+    )
+    program = replace(
+        selected,
+        optional_capture_suggestion_id="optional-current-subject-capture-v1",
     )
     request = replace(base, media_program=program)
     compiled = compile_delivery(
@@ -977,8 +981,8 @@ def test_optional_capture_is_visible_but_never_a_required_resource() -> None:
 
     assert compiled.resource_refs == (ORIGINAL_COMPOSITION_RESOURCE_ID,)
     assert "可选补拍建议：" in compiled.body
-    assert "如果《甜味把熟悉的一天叫醒了》提到的事物仍在手边" in compiled.body
-    assert "另加一张只承接本篇标题的静态照片" in compiled.body
+    assert "如果刚才提到的事物仍在手边" in compiled.body
+    assert "另加一张与当前主题直接相关的静态照片" in compiled.body
     assert "没有也不影响" in compiled.body
     assert isinstance(compiled.production, GraphicProductionBundle)
     assert compiled.production.optional_capture_suggestion is not None
@@ -988,12 +992,20 @@ def test_optional_capture_is_visible_but_never_a_required_resource() -> None:
         for source in compiled.visible_provenance["optional_capture_suggestion"]
     )
 
-    video_request = _generation_input(media_format="video")
+    raw_video_request = _generation_input(media_format="video")
+    assert raw_video_request.media_program is not None
+    video_request = replace(
+        raw_video_request,
+        media_program=replace(
+            raw_video_request.media_program,
+            optional_capture_suggestion_id="optional-current-subject-capture-v1",
+        ),
+    )
     video_compiled = compile_delivery(
         _compile_input(video_request),
         cast(Any, _filled_kernel(video_request)),
     )
-    assert "另加一段只承接本篇标题的短视频" in video_compiled.body
+    assert "另加一段与当前主题直接相关的短视频" in video_compiled.body
     assert compiled.production.optional_capture_suggestion != video_compiled.production.optional_capture_suggestion
 
 
@@ -1975,7 +1987,7 @@ def test_series_positions_receive_distinct_closed_media_programs() -> None:
     )
 
     assert standalone.program_id == "graphic_observation_progression_v1"
-    assert standalone.optional_capture_suggestion_id == "optional-current-subject-capture-v1"
+    assert standalone.optional_capture_suggestion_id is None
     assert series1.program_id == "graphic_observation_progression_v1"
     assert series1.optional_capture_suggestion_id is None
     assert series2.program_id == "graphic_series_response_v1"
@@ -2016,6 +2028,10 @@ def test_series_positions_receive_distinct_closed_media_programs() -> None:
     assert compiled1.production.optional_capture_suggestion is None
     assert compiled1.production.image_sequence != compiled2.production.image_sequence
     assert compiled2.production.image_sequence != compiled3.production.image_sequence
+    for compiled in (compiled1, compiled2, compiled3):
+        assert "本篇首图只承接" not in compiled.body
+        assert "页面转折只承接" not in compiled.body
+        assert "排版只承接" not in compiled.body
 
 
 def test_media_envelope_and_program_are_frozen_and_digest_bound() -> None:
