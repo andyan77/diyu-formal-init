@@ -939,11 +939,9 @@ class DeepSeekGenerator(ContentGenerator):
             repair_payload, repair_retries = self._request(
                 "你是笛语 CreativeKernel Writer。只返回一次受影响 unit 修复 JSON，不展示推理或内部规则。",
                 self._account_link_naturalization_prompt(
-                    affected=tuple(
-                        (unit.unit_id, unit.text)
-                        for unit in kernel.writable_units
-                        if unit.unit_id in relationship_units
-                    ),
+                    request=request,
+                    kernel=kernel,
+                    affected_unit_ids=relationship_units,
                     source_spans=(
                         *self._account_profile_source_spans(request),
                         *self._actuality_fact_source_spans(request),
@@ -2835,12 +2833,60 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
     @staticmethod
     def _account_link_naturalization_prompt(
         *,
-        affected: tuple[tuple[str, str], ...],
+        request: GenerationInput,
+        kernel: CreativeKernelV1,
+        affected_unit_ids: frozenset[str],
         source_spans: tuple[str, ...],
         forbid_attributed_dialogue: bool,
     ) -> str:
-        template = {"units": [{"unit_id": unit_id, "text": ""} for unit_id, _ in affected]}
-        return f"""只修复照抄表达控制或已冻结现实原句的创作 unit。保留每个 unit 原来的观看回报和主题，
+
+        editorial_lens = build_account_editorial_lens(
+            primary_product=request.primary_product,
+            account_expression=request.account_expression,
+            brand_context_packet=request.brand.context_packet,
+        )
+        editorial_responsibilities = (
+            {
+                "title": editorial_lens.title_responsibility,
+                "natural_guide": editorial_lens.natural_guide_responsibility,
+                "body": editorial_lens.body_responsibility,
+                "release_caption": editorial_lens.release_caption_responsibility,
+            }
+            if editorial_lens is not None
+            else {}
+        )
+        unit_briefs = [
+            {
+                "unit_id": unit.unit_id,
+                "purpose": unit.purpose,
+                "mode": unit.mode,
+                "primary_value": _PRODUCT_VALUE[request.primary_product],
+                **(
+                    {"editorial_responsibility": editorial_responsibilities[unit.purpose]}
+                    if unit.purpose in editorial_responsibilities
+                    else {}
+                ),
+                **(
+                    {"decision_responsibility": _P1_PUBLICATION_BRIEF[unit.purpose]}
+                    if request.primary_product == "dressing_decision" and unit.purpose in _P1_PUBLICATION_BRIEF
+                    else {}
+                ),
+                **(
+                    {
+                        "platform_native_responsibility": (
+                            _PLATFORM_NATIVE_UNIT_RESPONSIBILITY[request.media_format][unit.purpose]
+                        )
+                    }
+                    if unit.purpose in {"title", "natural_guide"}
+                    else {}
+                ),
+            }
+            for unit in kernel.writable_units
+            if unit.unit_id in affected_unit_ids
+        ]
+        template = {"units": [{"unit_id": str(unit["unit_id"]), "text": ""} for unit in unit_briefs]}
+        return f"""只修复照抄表达控制或已冻结现实原句的创作 unit。服务端不会把
+已判定不安全的原 unit 正文再交给修复路径；必须仅根据冻结职责重新写一份完整文字。
 把账号关系转化为自然的观察方式、选择取舍或受众回报；不得逐字复制下列来源文字，不得写成
 职业履历、机构事实或已发生经历。{
             (
@@ -2852,7 +2898,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         }
 只能改写下列来源文字对应的表达方式：
 {json.dumps(source_spans, ensure_ascii=False)}
-待修复 unit：{json.dumps([{"unit_id": unit_id, "text": text} for unit_id, text in affected], ensure_ascii=False)}
+待修复 unit 的冻结职责：{json.dumps(unit_briefs, ensure_ascii=False)}
 根对象只能有 units，且必须严格返回这些 unit_id；每项只能有 unit_id、text：
 {json.dumps(template, ensure_ascii=False)}"""
 

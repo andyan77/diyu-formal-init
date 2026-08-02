@@ -3511,6 +3511,8 @@ def test_actuality_writer_removes_even_a_non_attributed_concept_label(
         del self, system, max_tokens, thinking_disabled, timeout_seconds
         if request_count == 2:
             assert "不得再使用中文或 ASCII 引号" in prompt
+            assert "所谓“熟悉”" not in prompt
+            assert "待修复 unit 的冻结职责" in prompt
             content = {
                 "units": [
                     {
