@@ -830,9 +830,11 @@ def test_publication_p1_keeps_all_visible_expression_writer_owned(
     ) -> tuple[dict[str, Any], int]:
         nonlocal calls
         calls += 1
-        del self, system, max_tokens, thinking_disabled, timeout_seconds
+        del self, max_tokens, thinking_disabled, timeout_seconds
         assert "unit:p1-selection-skeleton" not in prompt
         assert "先认清自己最不能妥协" not in prompt
+        assert "你只拥有非事实观点、条件建议、假设和自然表达" in system
+        assert "健康心理因果和媒体资源均由服务端拥有" in system
         return {
             "choices": [
                 {
@@ -3189,7 +3191,7 @@ def test_current_confirmed_brand_fact_uses_the_single_artifact_scope() -> None:
     assert "已确认的品牌信息" not in _visible_unit(unit)
 
 
-def test_actuality_writer_receives_one_frozen_fact_as_read_only_topic_anchor() -> None:
+def test_actuality_writer_receives_one_frozen_fact_without_duplicate_instruction_text() -> None:
     request = _p3_account_link_request()
     assert request.publication_contract is not None
     assert request.narrative_frame is not None
@@ -3201,7 +3203,7 @@ def test_actuality_writer_receives_one_frozen_fact_as_read_only_topic_anchor() -
         "deepseek-test",
     )._kernel_writer_prompt(request, kernel, {})
 
-    assert fact in prompt
+    assert prompt.count(fact) == 1
     assert '"contract_version": "publication-contract-v2"' in prompt
     assert sum(
         span.role == "observable_actuality"
@@ -3211,9 +3213,77 @@ def test_actuality_writer_receives_one_frozen_fact_as_read_only_topic_anchor() -
         span.role == "creation_instruction"
         for span in request.publication_contract.intake_spans
     ) == 1
-    assert "observable_actuality 会由服务端逐字插入一次" in prompt
-    assert "creation/style 指令绝不能写成现实事实" in prompt
-    assert "帮我发一条" in prompt
+    assert "成品会由服务端逐字插入一次" in prompt
+    assert "事实正文不会交给 Writer" in prompt
+    assert "帮我发一条" not in prompt
+
+
+def test_product_writer_receives_semantic_plan_without_product_fact_literals() -> None:
+    base = _generation_input()
+    product = ProductFact(
+        sku="PRIVATE-SKU-001",
+        display_name="私有双面测试商品",
+        facts={
+            "colors": ["炭灰测试色", "深绿测试色"],
+            "both_sides_complete": True,
+        },
+        source_kind="confirmed-test-source",
+        source_note="受控测试来源",
+    )
+    value_contract = build_product_value_contract(
+        primary_product="product_truth",
+        products=(product,),
+    )
+    assert isinstance(value_contract, P2ProductValueContractV1)
+    plan = build_creative_plan(
+        topic_spans=("请围绕 PRIVATE-SKU-001 完成一篇商品选择内容。",),
+        primary_value="product_truth",
+        tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        mechanism_id=None,
+        target_shape="小红书图文完整成品",
+    )
+    assert base.media_capability_envelope is not None
+    request = _with_publication_contract(
+        replace(
+            base,
+            weak_seed="请围绕 PRIVATE-SKU-001 完成一篇商品选择内容。",
+            primary_product="product_truth",
+            products=(product,),
+            narrative_frame=new_frame(
+                "general_observation",
+                (),
+                tuple(
+                    item.fact_id
+                    for item in build_product_fact_packet((product,)).facts
+                ),
+            ),
+            creative_plan=plan,
+            product_value_contract=value_contract,
+            media_program=select_media_program(
+                primary_product="product_truth",
+                envelope=base.media_capability_envelope,
+                mechanism_id=None,
+                series_position=None,
+                fact_count=len(build_product_fact_packet((product,)).facts),
+            ),
+        ),
+        roles=("creation_instruction",),
+    )
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, kernel, {})
+
+    assert "同一件商品的两种完整可见选择" in prompt
+    for private_literal in (
+        product.sku,
+        product.display_name,
+        "炭灰测试色",
+        "深绿测试色",
+    ):
+        assert private_literal not in prompt
 
 
 def test_actuality_writer_cannot_repeat_the_frozen_fact(

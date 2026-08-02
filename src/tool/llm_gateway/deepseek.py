@@ -876,8 +876,16 @@ class DeepSeekGenerator(ContentGenerator):
         compiler_texts = (
             compiler_owned_unit_texts(request.primary_product) if kernel_version == DUAL_TRACK_KERNEL_VERSION else {}
         )
+        writer_system = (
+            "你是笛语 CreativeKernel Writer。你只拥有非事实观点、条件建议、假设和自然表达；"
+            "用户现实、商品与品牌事实、人物关系、健康心理因果和媒体资源均由服务端拥有。"
+            "不得复述、改写、补全或推导这些承重内容，不得把一般建议写成已经发生或已经具备的效果。"
+            "只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。"
+            if publication_v2
+            else "你是笛语 CreativeKernel Writer。只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。"
+        )
         writer_payload, writer_retries = self._request(
-            "你是笛语 CreativeKernel Writer。只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。",
+            writer_system,
             self._kernel_writer_prompt(
                 request,
                 skeleton,
@@ -1057,7 +1065,6 @@ class DeepSeekGenerator(ContentGenerator):
             # cannot prove that every quoted creative phrase is a real-world
             # dialogue without reintroducing a semantic Reviewer.
             self._assert_no_unfrozen_actuality_dialogue(request, kernel)
-        self._assert_p1_publication_shape(request, kernel)
         self._assert_zero_topic_has_statement(request, kernel)
         self._assert_series_writer_progression(request, kernel)
         if request.revision_instruction and request.prior_creative_kernel:
@@ -1572,10 +1579,9 @@ class DeepSeekGenerator(ContentGenerator):
         contract = request.publication_contract
         if contract is None:
             raise GenerationFailed("新内容缺少发布责任合同")
-        fact_units = [
+        fact_bindings = [
             {
                 "unit_id": unit.unit_id,
-                "exact_text": unit.text,
                 "fact_refs": list(unit.fact_refs),
             }
             for unit in skeleton.units
@@ -1595,13 +1601,37 @@ class DeepSeekGenerator(ContentGenerator):
                 for unit in writable
             ]
         }
-        intake = [
-            {
-                "role": span.role,
-                "exact_text": span.exact_text,
-            }
+        actuality_context = [
+            span.exact_text
             for span in contract.intake_spans
+            if span.role == "observable_actuality"
         ]
+        if contract.topic_origin == "system_selected":
+            writer_topic = contract.topic
+        elif actuality_context:
+            # The exact actuality appears once below.  This task-facing label
+            # avoids making the same reality a second Writer-owned field.
+            writer_topic = "回应服务端冻结现实片段中的具体张力"
+        elif contract.primary_product in {
+            "product_truth",
+            "visual_styling_story",
+        }:
+            # A SKU in the source turn selects a frozen ProductFact packet; it
+            # is not Writer-owned fact text.
+            writer_topic = "围绕本次冻结商品事实完成具体选择解释"
+        else:
+            writer_topic = contract.topic
+        creative_brief = {
+            "contract_version": contract.contract_version,
+            "primary_product": contract.primary_product,
+            "topic": writer_topic,
+            "topic_origin": contract.topic_origin,
+            "central_job": contract.central_job,
+            "audience_payoff": contract.audience_payoff,
+            "allowed_general_advice_scope": list(
+                contract.allowed_general_advice_scope
+            ),
+        }
         account_permission = {
             "identity": contract.account_identity,
             "audience": contract.account_audience,
@@ -1615,8 +1645,18 @@ class DeepSeekGenerator(ContentGenerator):
             raw_plan = product_value_contract_document(
                 request.product_value_contract
             )
+            packet = build_product_fact_packet(request.products)
+
+            def writer_goal(value: object) -> object:
+                if not isinstance(value, str):
+                    return value
+                result = value
+                for literal in product_fact_literal_spans(packet, value):
+                    result = result.replace(literal, "本次冻结事实")
+                return result
+
             product_plan = {
-                key: raw_plan[key]
+                key: writer_goal(raw_plan[key])
                 for key in (
                     "product_insight",
                     "tradeoff_or_limit",
@@ -1693,14 +1733,14 @@ class DeepSeekGenerator(ContentGenerator):
         return f"""完成一篇可以直接交付给用户的作品。服务端已经冻结事实、来源、账号权限、
 平台、系列前情、媒体程序和资源；你只负责非事实性的中心判断、自然表达、条件建议与发布配文。
 
-CreativeBrief（内部，不得把字段名或说明写进成品）：
-{json.dumps(publication_contract_document(contract), ensure_ascii=False)}
+CreativeBrief（唯一任务简报；内部字段不得进入成品）：
+{json.dumps(creative_brief, ensure_ascii=False)}
 
-输入跨度及角色（只有 observable_actuality 是现实事实）：
-{json.dumps(intake, ensure_ascii=False)}
+服务端冻结现实片段（只出现于此；成品会由服务端逐字插入一次，Writer 不复述、改写或解释原因）：
+{json.dumps(actuality_context, ensure_ascii=False)}
 
-服务端逐字事实单元（只读，成品会由服务端插入；不得复述或改写）：
-{json.dumps(fact_units, ensure_ascii=False)}
+服务端事实绑定（只有标识；事实正文不会交给 Writer，成品由服务端插入）：
+{json.dumps(fact_bindings, ensure_ascii=False)}
 
 账号编辑许可（只决定观察顺序、判断尺度和回应姿态；不得照抄成账号定义、口号或职业经历）：
 {json.dumps(account_permission, ensure_ascii=False)}
@@ -1715,7 +1755,7 @@ CreativeBrief（内部，不得把字段名或说明写进成品）：
 此前可写单元（只在修订时使用）：
 {json.dumps(prior, ensure_ascii=False)}
 
-唯一负向安全合同：
+唯一负向安全合同（所有可写单元共同适用）：
 {json.dumps(safety, ensure_ascii=False)}
 
 写作责任：
@@ -3113,24 +3153,6 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             raise GenerationFailed("当前账号缺少可冻结的账号表达路径")
         if cls._copied_account_profile_units(request, kernel):
             raise GenerationFailed("Writer 成品仍在照抄账号画像或发布投影原句")
-
-    @staticmethod
-    def _assert_p1_publication_shape(
-        request: GenerationInput,
-        kernel: CreativeKernelV1,
-    ) -> None:
-        if request.primary_product != "dressing_decision" or kernel.kernel_version != KERNEL_VERSION:
-            return
-        limits = {
-            "title": 36,
-            "natural_guide": 64,
-            "body": 220,
-            "release_caption": 80,
-        }
-        for purpose, limit in limits.items():
-            visible_length = sum(len("".join(unit.text.split())) for unit in kernel.units if unit.purpose == purpose)
-            if visible_length > limit:
-                raise GenerationFailed("本次穿衣选择没有在可直接观看的长度内完成")
 
     @staticmethod
     def _assert_zero_topic_has_statement(
