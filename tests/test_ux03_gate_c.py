@@ -93,6 +93,7 @@ from src.shared.media_program import (
     select_media_program,
 )
 from src.shared.narrative import new_frame, visible_digest
+from src.shared.review_evidence import unit_contracts_v2
 from src.shared.product_value import (
     P2ProductValueContractV1,
     P5ProductValueContractV1,
@@ -3154,6 +3155,36 @@ def _p3_account_link_request() -> GenerationInput:
             mechanism_id=None,
             target_shape="小红书图文完整成品",
         ),
+    )
+
+
+def test_current_actuality_account_body_is_prospective_not_causal_explanation() -> None:
+    request = _p3_account_link_request()
+    assert request.narrative_frame is not None
+    context = BoundaryContext.from_request(request, request.narrative_frame)
+    kernel = build_kernel_skeleton(
+        frame=request.narrative_frame,
+        fact_registry=context.fact_registry,
+        constraint_refs=tuple(
+            identifier for identifier, _ in context.constraint_registry
+        ),
+        program_id=select_kernel_program(
+            frame=request.narrative_frame,
+            prior_kernel=None,
+            revision_instruction=None,
+        ),
+        allowed_resource_ids=(),
+        media_format=request.media_format,
+        kernel_version=KERNEL_VERSION,
+        primary_product=request.primary_product,
+    )
+
+    body = kernel.unit("unit:body")
+    assert body.mode == "recommendation"
+    assert body.scope_id == "scope:recommendation-v1"
+    assert (
+        unit_contracts_v2(kernel, request.narrative_frame)["unit:body"]
+        == "recommendation"
     )
 
 

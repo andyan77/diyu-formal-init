@@ -525,6 +525,17 @@ def build_kernel_skeleton(
         elif product_recommendation_body:
             body_mode = "recommendation"
             body_scope = "scope:recommendation-v1"
+        elif (
+            kernel_version == KERNEL_VERSION
+            and frame.narrative_mode == "actuality_reflection"
+            and primary_product in {"brand_life_narrative", "local_response"}
+        ):
+            # The actuality itself is already an immutable server unit.  The
+            # current publication body owns only a prospective audience
+            # response, never a free explanation of why that actuality
+            # happened.  Historical kernel versions retain their old mode.
+            body_mode = "recommendation"
+            body_scope = "scope:recommendation-v1"
         elif frame.narrative_mode == "dramatization":
             body_mode = "disclosed_dramatization"
             body_scope = "scope:disclosed-dramatization-v1"
