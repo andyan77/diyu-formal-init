@@ -493,6 +493,7 @@ def select_media_program(
     mechanism_id: str | None,
     series_position: int | None,
     fact_count: int,
+    topic_origin: str = "explicit_user",
 ) -> MediaProgramSelectionV1:
     """Select one closed deterministic media program before Writer runs."""
 
@@ -548,7 +549,9 @@ def select_media_program(
         program_id = "graphic_fact_guided_v1"
         if primary_product == "product_truth":
             optional_suggestion = "optional-current-product-capture-v1"
-    elif primary_product in {"dressing_decision", "local_response"}:
+    elif primary_product in {"dressing_decision", "local_response"} or (
+        primary_product == "brand_life_narrative" and topic_origin == "system_selected"
+    ):
         program_id = "graphic_choice_contrast_v1"
     else:
         program_id = "graphic_observation_progression_v1"

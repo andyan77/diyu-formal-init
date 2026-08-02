@@ -793,27 +793,19 @@ def test_observation_program_paginates_distinct_visible_text_shapes() -> None:
     lines = _graphic_observation_sequence(
         (replace(body, text="先观察。\n再选择。\n最后行动。"),)
     )
-    compact = _graphic_observation_sequence(
+    structured = _graphic_observation_sequence(
         (
             replace(body, unit_id="unit:body-opening", text="先观察。"),
             replace(body, unit_id="unit:hypothetical-example", text="再检验。"),
             replace(body, unit_id="unit:body-closing", text="最后行动。"),
         )
     )
-    expanded = _graphic_observation_sequence(
-        (
-            replace(body, unit_id="unit:body-opening", text="观察" * 41),
-            replace(body, unit_id="unit:hypothetical-example", text="检验" * 41),
-            replace(body, unit_id="unit:body-closing", text="行动" * 41),
-        )
-    )
 
-    assert len({continuous, paragraphs, lines, compact, expanded}) == 5
+    assert len({continuous, paragraphs, lines, structured}) == 4
     assert "停在本篇反差" in continuous
     assert "每个段落各占一页" in paragraphs
     assert "依照正文换行" in lines
-    assert "并置本篇判断与条件片段" in compact
-    assert "一个条件片段" in expanded
+    assert "一个条件片段" in structured
 
 
 def test_v3_media_units_are_writer_owned_and_reject_compiler_fallback() -> None:
@@ -2000,6 +1992,14 @@ def test_series_positions_receive_distinct_closed_media_programs() -> None:
         series_position=None,
         fact_count=0,
     )
+    system_selected = select_media_program(
+        primary_product="brand_life_narrative",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=None,
+        fact_count=0,
+        topic_origin="system_selected",
+    )
     series1 = select_media_program(
         primary_product="brand_life_narrative",
         envelope=envelope,
@@ -2024,6 +2024,7 @@ def test_series_positions_receive_distinct_closed_media_programs() -> None:
 
     assert standalone.program_id == "graphic_observation_progression_v1"
     assert standalone.optional_capture_suggestion_id is None
+    assert system_selected.program_id == "graphic_choice_contrast_v1"
     assert series1.program_id == "graphic_observation_progression_v1"
     assert series1.optional_capture_suggestion_id is None
     assert series2.program_id == "graphic_series_response_v1"

@@ -1329,6 +1329,7 @@ class ContentService:
                         primary_product=source.primary_product,
                         envelope=media_envelope,
                         mechanism_id=creative_plan.mechanism_id,
+                        topic_origin=creative_plan.topic_origin,
                         series_position=(series_context.target_position if series_context is not None else None),
                         fact_count=(len(frame.allowed_fact_ids) if frame is not None else 0),
                     )
@@ -1459,6 +1460,7 @@ class ContentService:
             primary_product=primary_product,
             envelope=envelope,
             mechanism_id=creative_plan.mechanism_id,
+            topic_origin=creative_plan.topic_origin,
             series_position=(series_context.target_position if series_context is not None else None),
             fact_count=fact_count,
         )
