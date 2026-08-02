@@ -117,6 +117,7 @@ from src.shared.product_value import (
 )
 from src.shared.publication_contract import (
     IntakeSpanRole,
+    negative_safety_contract_text,
     publication_contract_digest,
     publication_contract_document,
 )
@@ -877,12 +878,7 @@ class DeepSeekGenerator(ContentGenerator):
             compiler_owned_unit_texts(request.primary_product) if kernel_version == DUAL_TRACK_KERNEL_VERSION else {}
         )
         writer_system = (
-            "你是笛语 CreativeKernel Writer。你拥有非事实中心判断、一般观察、条件建议、比喻、"
-            "节奏和自然表达；用户现实、商品与品牌事实、人物关系、健康心理因果和媒体资源均由"
-            "服务端拥有。不要复述、改写、补全或诊断这些承重内容。现实片段中的当前人物只存在于"
-            "服务端事实块；Writer 只能写不归因于该人物的一般观察或尚未发生的可选做法。"
-            "商品选择建议只能描述受众在什么条件下怎样看、怎样选，不能给商品或选项补充未确认属性。"
-            "只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。"
+            self._publication_v2_writer_system()
             if publication_v2
             else "你是笛语 CreativeKernel Writer。只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。"
         )
@@ -1578,6 +1574,18 @@ class DeepSeekGenerator(ContentGenerator):
 {json.dumps(template, ensure_ascii=False)}"""
 
     @staticmethod
+    def _publication_v2_writer_system() -> str:
+        return (
+            "你是笛语 CreativeKernel Writer。你拥有非事实中心判断、一般观察、条件建议、比喻、"
+            "节奏和自然表达；事实、来源、权限、资源、Frame、版本和 digest 均由服务端拥有。"
+            f"唯一负向安全合同：{negative_safety_contract_text()}。"
+            "现实片段中的人物、对象与事件只存在于服务端事实块；Writer 只能写不替它们判定"
+            "原因、内部状态、变化或结果的一般观察，或尚未发生的可选做法。"
+            "商品选择建议只能描述受众在什么条件下怎样看、怎样选，不能给商品或选项补充未确认属性。"
+            "只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。"
+        )
+
+    @staticmethod
     def _publication_v2_writer_prompt(
         request: GenerationInput,
         skeleton: CreativeKernelV1,
@@ -1728,8 +1736,7 @@ class DeepSeekGenerator(ContentGenerator):
 此前可写单元（只在修订时使用）：
 {json.dumps(prior, ensure_ascii=False)}
 
-唯一负向安全合同：不得新增、改写或补全用户现实、商品硬事实、具体商品效果、人物关系、
-品牌机构主张、健康／法律／交易结论或未登记媒体资源；一般建议必须保持建议、条件或假设身份。
+唯一负向安全合同：{negative_safety_contract_text()}。
 低风险一般观察属于 creative_expression，不是事实；不得把它写回当前用户、商品或品牌主体。
 
 写作责任：

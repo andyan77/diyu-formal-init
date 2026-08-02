@@ -61,6 +61,7 @@ from src.shared.narrative import (
     user_fact_candidates,
     visible_digest,
 )
+from src.shared.publication_contract import negative_safety_contract_text
 from src.shared.review_evidence import (
     REVIEW_EVIDENCE_V2_VERSION,
     build_clause_contexts_v2,
@@ -1907,6 +1908,14 @@ def test_writer_prompt_keeps_private_steering_out_of_fact_sources() -> None:
     assert request.collaboration_note in prompt
     assert "成品中不得出现它的原文、转述或对它的解释" in prompt
     assert all(request.collaboration_note not in description for _, description in context.constraint_registry)
+
+
+def test_publication_writer_consumes_the_single_negative_safety_contract() -> None:
+    system = _generator()._publication_v2_writer_system()
+
+    assert negative_safety_contract_text() in system
+    assert "不替现实人物、对象或事件判定未提供的原因、内部状态、变化或结果" in system
+    assert "必须二选一" not in system
 
 
 def test_dual_track_writer_receives_only_deidentified_preassigned_units() -> None:

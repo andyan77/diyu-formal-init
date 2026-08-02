@@ -18,7 +18,10 @@ IntakeSpanRole: TypeAlias = Literal[
 ]
 
 NEGATIVE_SAFETY_RULES: dict[str, str] = {
-    "no_user_actuality_rewrite": "不新增、改写或补全用户现实事实",
+    "no_user_actuality_rewrite": (
+        "不新增、改写或补全用户现实事实，也不替现实人物、对象或事件判定"
+        "未提供的原因、内部状态、变化或结果"
+    ),
     "no_product_fact_or_effect": "不新增商品硬事实或具体商品效果",
     "no_method_as_fact": "不把品牌约束、方法或机构信息升级为现实事实",
     "no_unregistered_media": "不使用未登记的人物、场地、道具、商品或媒体资源",
@@ -26,6 +29,15 @@ NEGATIVE_SAFETY_RULES: dict[str, str] = {
     "no_high_risk_reality_claim": "不新增健康、法律、交易或其他高风险现实结论",
 }
 NEGATIVE_SAFETY_RULE_IDS = tuple(NEGATIVE_SAFETY_RULES)
+
+
+def negative_safety_contract_text() -> str:
+    """Render the single shared negative contract for Writer consumers."""
+
+    return "；".join(
+        NEGATIVE_SAFETY_RULES[rule_id]
+        for rule_id in NEGATIVE_SAFETY_RULE_IDS
+    )
 
 
 @dataclass(frozen=True)
