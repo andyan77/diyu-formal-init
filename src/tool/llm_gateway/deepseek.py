@@ -229,20 +229,38 @@ def _non_bearing_claim_contract(
 
     if primary_product not in {"brand_life_narrative", "local_response"}:
         return None
-    allowed = [
-        {
-            "claim_type": "observable_difference_or_choice",
-            "meaning": "只写本题明示的可观察差异，或把两个可选做法并列交给受众判断。",
-        },
-        {
-            "claim_type": "conditional_future_action",
-            "meaning": "只写以“如果／可以／不妨”等条件或可选语态成立的未来观察动作。",
-        },
-        {
-            "claim_type": "audience_can_decide",
-            "meaning": "只把最终取舍留给受众，不替任何人说明心理、需要、意图或原因。",
-        },
-    ]
+    if primary_product == "local_response":
+        allowed = [
+            {
+                "claim_type": "conditional_response_to_explicit_signal",
+                "meaning": (
+                    "只在再次收到原句已经明示的同一种信号时，条件化地给出留出空间或提出"
+                    "一个中性问题的选择；不得从位置、距离、时长、动作或语气推断状态。"
+                ),
+            },
+            {
+                "claim_type": "audience_can_decide",
+                "meaning": "只把是否回应以及选择哪种回应留给受众。",
+            },
+        ]
+    else:
+        allowed = [
+            {
+                "claim_type": "observable_difference_or_choice",
+                "meaning": (
+                    "只写本题已经明示的可观察差异，或把两个可选做法并列交给受众判断；"
+                    "不得另造观察维度。"
+                ),
+            },
+            {
+                "claim_type": "conditional_future_action",
+                "meaning": "只写以“如果／可以／不妨”等条件或可选语态成立的未来观察动作。",
+            },
+            {
+                "claim_type": "audience_can_decide",
+                "meaning": "只把最终取舍留给受众，不替任何人说明心理、需要、意图或原因。",
+            },
+        ]
     if frame.narrative_mode == "actuality_reflection":
         allowed.append(
             {
@@ -254,8 +272,8 @@ def _non_bearing_claim_contract(
             }
         )
         subject_boundary = (
-            "不得复述服务端事实；不得把原句里的第三方改写成读者、账号、家人、顾客或"
-            "其他身份。"
+            "不得复述服务端事实；不得新增原句没有明示的观察维度、身体或情绪状态，也不得"
+            "把原句里的第三方改写成读者、账号、家人、顾客或其他身份。"
         )
     else:
         subject_boundary = (

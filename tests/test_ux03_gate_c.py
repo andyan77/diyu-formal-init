@@ -2702,6 +2702,22 @@ def test_series_writer_rejects_one_long_clause_copied_from_frozen_prior_entry() 
     )
 
 
+def test_p4_writer_claim_budget_only_responds_to_the_explicit_signal() -> None:
+    base = _p3_account_link_request()
+    request = replace(base, primary_product="local_response")
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, kernel, {})
+
+    assert '"claim_type": "conditional_response_to_explicit_signal"' in prompt
+    assert "留出空间或提出一个中性问题" in prompt
+    assert "不得从位置、距离、时长、动作或语气推断状态" in prompt
+    assert "不得新增原句没有明示的观察维度、身体或情绪状态" in prompt
+
+
 def test_writer_prompt_consumes_selected_brand_methods_without_fact_upgrade() -> None:
     request = _generation_input()
     request = replace(
