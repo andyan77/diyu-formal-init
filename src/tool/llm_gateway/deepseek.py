@@ -842,7 +842,9 @@ class DeepSeekGenerator(ContentGenerator):
         writer_payload, retries = self._request(
             (
                 "你是笛语 Writer。你只负责非事实创作表达，并且只返回一个 JSON。"
-                "不要输出推理、内部合同、事实块、媒体指令或字段说明。"
+                "不要输出推理、内部合同、事实块、媒体指令或字段说明。\n"
+                "唯一负向安全合同：\n"
+                + negative_safety_contract_text()
             ),
             self._writer_request_v3_prompt(writer_request),
             4096,
@@ -965,7 +967,7 @@ class DeepSeekGenerator(ContentGenerator):
             "只返回 title、natural_guide、creative_body、publication_caption 四个字符串字段。\n"
             "服务端会在正文中逐字插入 actuality_context；四个字段须从事实之后的新判断开始，任何字段都不得再次叙述、复制、改写或补全这些原句。\n"
             "account_editorial_permission 只决定观察顺序与回应姿态，不能替换用户题材，也不能把生活题材转向服饰、商品或品牌宣讲。\n"
-            "product_decision_basis 是机器计划：只自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子，也不添加情绪、社交、外观效果或使用体验。\n"
+            "product_decision_basis 是穷尽式机器计划：只自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子，也不得把同一商品内部配色写成多个款式，或添加计划外的商品维度、客观评价和使用结果。\n"
             "你可以形成中心判断、一般观察、条件建议、比喻、节奏、幽默和留白；建议与假设须保持该身份。\n"
             "一般观察不得反向断言当前用户的身体、心理、原因或结果；不得新增真人现实、商品硬事实/功效/体验、品牌机构事实或未登记资源，也不得输出媒体制作指令。\n"
             "topic_origin 为 system_selected 时须自主形成明确主线和完整成品，不把选题责任退回用户。\n"

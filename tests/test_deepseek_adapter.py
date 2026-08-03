@@ -92,7 +92,11 @@ from src.shared.types import (
     ProductFact,
     RoutingInput,
 )
-from src.shared.writer_request import WRITER_OUTPUT_VERSION, WriterOutputV3
+from src.shared.writer_request import (
+    WRITER_OUTPUT_VERSION,
+    WriterOutputV3,
+    build_writer_request_v3,
+)
 from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
 
 
@@ -665,8 +669,10 @@ def test_publication_v3_uses_one_writer_call_without_legacy_repair_or_reviewer()
     assert "必须二选一" not in prompt
     assert "不能替换用户题材" in prompt
     assert "不得反向断言当前用户的身体、心理、原因或结果" in prompt
-    assert "不添加情绪、社交、外观效果或使用体验" in prompt
+    assert "不得把同一商品内部配色写成多个款式" in prompt
     assert request.active_domain_assets[0].body not in prompt
+    system = str(FakeClient.requests[0]["json"]["messages"][0]["content"])
+    assert negative_safety_contract_text() in system
 
 
 def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
@@ -704,6 +710,16 @@ def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
             user_fact_source_ids=(actuality.source_id,),
         ),
         publication_contract=contract,
+    )
+    writer_request = build_writer_request_v3(
+        contract,
+        product_decision_basis=None,
+        prior_output=None,
+        revision_instruction=None,
+    )
+    assert actuality.exact_text not in writer_request.topic
+    assert writer_request.actuality_context == (
+        (actuality.source_id, actuality.exact_text),
     )
     FakeClient.responses = [
         _completion(

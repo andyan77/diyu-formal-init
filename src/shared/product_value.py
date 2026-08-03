@@ -170,7 +170,7 @@ def _build_p2_decision_basis_v2(
         condition = "只有本次选择确实取决于这些已确认的可见差异时，这项价值才成立。"
     elif len(colors) >= 2:
         source_keys = ("display_name", "colors")
-        understanding = "同一件商品已确认的多种颜色共同形成一个可见的颜色关系，可以成为具体选择维度。"
+        understanding = "同一件商品内部已确认的多种颜色共同形成一个可见的拼色关系；这不是多个颜色款式。"
         tradeoff = "把这组颜色关系作为选择重点，就意味着接受颜色先被看见；如果不希望颜色成为重点，它就不应承担本次选择。"
         condition = "只有本次选择确实依赖这组已确认的颜色关系时，这项价值才成立。"
     elif structure and silhouette:

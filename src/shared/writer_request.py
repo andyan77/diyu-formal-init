@@ -76,17 +76,24 @@ def build_writer_request_v3(
     permission = contract.account_editorial_permission
     series = contract.series_delta
     platform = contract.platform_direction
+    actuality_context = tuple(
+        (span.source_id, span.exact_text)
+        for span in contract.input_roles
+        if span.role == "observable_actuality"
+    )
     request = WriterRequestV3(
         request_version=WRITER_REQUEST_VERSION,
         publication_contract_digest=publication_contract_digest(contract),
         topic_origin=contract.topic_origin,
-        topic=contract.topic,
+        topic=(
+            "现实片段已由服务端冻结并会另行展示；请从事实之后直接形成中心判断"
+            if actuality_context
+            else contract.topic
+        ),
         content_product=contract.content_product,
         central_job=contract.central_job,
         audience_payoff=contract.audience_payoff,
-        actuality_context=tuple(
-            (span.source_id, span.exact_text) for span in contract.input_roles if span.role == "observable_actuality"
-        ),
+        actuality_context=actuality_context,
         explicit_user_controls=contract.explicit_user_controls,
         account_editorial_permission={
             "identity": permission.identity,
