@@ -28,7 +28,7 @@ from src.shared.errors import GenerationFailed
 from src.shared.narrative import visible_digest
 from src.shared.product_value import build_product_decision_basis_v2
 from src.shared.types import ContentTarget, ProductFact
-from src.tool.execution_control import verify_runtime_action
+from src.tool.execution_control import ExecutionControl, verify_runtime_action
 from src.tool.run_gate_c_final_suite import (
     _current_head,
     _EvidenceDeepSeekGenerator,
@@ -67,6 +67,8 @@ _FAILURE_MARKER_FILES = ("suite-failure.json", "human-review-failure.json")
 _MINIMUM_FINAL_SUITE_SESSION_LEASE_SECONDS = 15 * 60
 _EVIDENCE_SERIES_TITLE = "把选择留给人的三篇观察"
 _PROTECTED_PROJECT_MEMORY_STATUS = " M docs/项目记忆.md"
+_ACCEPTANCE_SUITE_ID = "tenant01-golden-11-v1"
+_ACCEPTANCE_CHECKPOINT_FILE = "acceptance-checkpoint.json"
 
 
 def _canonical_digest(value: object) -> str:
@@ -816,8 +818,6 @@ def _generate(args: argparse.Namespace) -> None:
         raise RuntimeError("current HEAD is not the frozen implementation SHA")
     if _has_disallowed_worktree_change(_git_status()):
         raise RuntimeError("TENANT-01 final suite requires a clean worktree")
-    if root.exists():
-        raise RuntimeError("TENANT-01 evidence directory already exists")
     database_url = os.environ.get("DIYU_APP_DATABASE_URL", "")
     if not database_url:
         raise RuntimeError("formal application database is unavailable")
@@ -827,8 +827,30 @@ def _generate(args: argparse.Namespace) -> None:
         raise RuntimeError("TENANT-01 final suite formal session is unavailable")
     cards = _config_cards(Path(args.config).resolve(), p2_sku=journey.p2_sku)
     _preflight_p2_product(database_url, journey, cards)
-    root.mkdir(mode=0o700, parents=True)
-    root.chmod(0o700)
+    if args.resume_unreceived:
+        if not root.is_dir() or root.stat().st_mode & 0o077:
+            raise RuntimeError("TENANT-01 resume evidence root is unavailable")
+    elif root.exists():
+        raise RuntimeError("TENANT-01 evidence directory already exists")
+    control = ExecutionControl(Path.cwd())
+    control.begin_acceptance_suite(
+        candidate_sha=implementation_sha,
+        suite_id=_ACCEPTANCE_SUITE_ID,
+        acceptance_run_id=str(args.acceptance_run_id),
+        config_digest=sha256_file(Path(args.config).resolve()),
+        sample_ids=tuple(card.card_id for card in cards),
+        allow_resume=bool(args.resume_unreceived),
+    )
+    pending = set(
+        control.acceptance_pending_samples(
+            candidate_sha=implementation_sha,
+            suite_id=_ACCEPTANCE_SUITE_ID,
+            acceptance_run_id=str(args.acceptance_run_id),
+        )
+    )
+    if not args.resume_unreceived:
+        root.mkdir(mode=0o700, parents=True)
+        root.chmod(0o700)
     object_store_root = root / "object-store"
     settings = _settings(database_url=database_url, object_store_root=object_store_root)
     object_store = LocalObjectStore(str(object_store_root))
@@ -861,32 +883,68 @@ def _generate(args: argparse.Namespace) -> None:
     app = create_app(settings)
     with TestClient(app, base_url="https://diyu.example") as client:
         client.cookies.set("diyu_session", journey.session_token)
-        series_response = client.post(
-            "/api/v1/content/series",
-            params={
-                "target": "xiaohongshu_graphic",
-                "publishing_identity_id": str(journey.publishing_identity_id),
-            },
-            json={
-                "title": _next_evidence_series_title(
-                    database_url,
-                    tenant_id=journey.tenant_id,
-                    created_by=identity.user_id,
-                ),
-                "premise": "从不打扰，推进到回应，再推进到留出选择。",
-            },
-        )
-        if series_response.status_code != 201:
-            raise RuntimeError("TENANT-01 formal series could not be created")
-        series_id = UUID(str(series_response.json()["id"]))
-        for card in cards:
-            result = _stream_card(
-                client,
-                generator,
-                card,
-                publishing_identity_id=journey.publishing_identity_id,
-                series_id=series_id,
+        checkpoint_path = root / _ACCEPTANCE_CHECKPOINT_FILE
+        if args.resume_unreceived:
+            checkpoint = _json_object(checkpoint_path)
+            if checkpoint.get("acceptance_run_id") != args.acceptance_run_id:
+                raise RuntimeError("TENANT-01 acceptance checkpoint drifted")
+            series_id = UUID(str(checkpoint["series_id"]))
+        else:
+            series_response = client.post(
+                "/api/v1/content/series",
+                params={
+                    "target": "xiaohongshu_graphic",
+                    "publishing_identity_id": str(journey.publishing_identity_id),
+                },
+                json={
+                    "title": _next_evidence_series_title(
+                        database_url,
+                        tenant_id=journey.tenant_id,
+                        created_by=identity.user_id,
+                    ),
+                    "premise": "从不打扰，推进到回应，再推进到留出选择。",
+                },
             )
+            if series_response.status_code != 201:
+                raise RuntimeError("TENANT-01 formal series could not be created")
+            series_id = UUID(str(series_response.json()["id"]))
+            _write_private_json(
+                checkpoint_path,
+                {
+                    "acceptance_run_id": args.acceptance_run_id,
+                    "candidate_sha": implementation_sha,
+                    "series_id": str(series_id),
+                },
+            )
+        for card in cards:
+            if card.card_id not in pending:
+                continue
+            try:
+                result = _stream_card(
+                    client,
+                    generator,
+                    card,
+                    publishing_identity_id=journey.publishing_identity_id,
+                    series_id=series_id,
+                )
+            except (KeyError, RuntimeError, TypeError, ValueError):
+                failed_raw = root / f"{card.card_id}.failed.raw.json"
+                if failed_raw.is_file():
+                    failure = _json_object(failed_raw)
+                    request_count = int(cast(int, failure.get("request_count", 0)))
+                    control.record_acceptance_sample(
+                        candidate_sha=implementation_sha,
+                        suite_id=_ACCEPTANCE_SUITE_ID,
+                        acceptance_run_id=str(args.acceptance_run_id),
+                        sample_id=card.card_id,
+                        provider_response_received=request_count > 0,
+                        request_count=request_count,
+                        artifact_digest=sha256_file(failed_raw),
+                        final_status=(
+                            "transport_failed_no_response" if request_count == 0 else "delivery_uncertain"
+                        ),
+                    )
+                raise
             task_id = UUID(str(result["task_id"]))
             version_number = int(cast(int, result["version"]))
             run_id, version_id = _persistence_ids(
@@ -896,8 +954,9 @@ def _generate(args: argparse.Namespace) -> None:
                 version_number,
             )
             snapshot = _task_snapshot(database_url, journey.tenant_id, task_id)
+            artifact_path = root / f"{card.card_id}.artifact.json"
             _write_private_json(
-                root / f"{card.card_id}.artifact.json",
+                artifact_path,
                 _artifact(
                     card,
                     result,
@@ -906,10 +965,23 @@ def _generate(args: argparse.Namespace) -> None:
                     version_id=version_id,
                 ),
             )
-        _write_private_json(
-            root / "p5-no-media.json",
-            _p5_preflight(client, database_url=database_url, journey=journey),
-        )
+            raw = _json_object(root / f"{card.card_id}.raw.json")
+            request_count = int(cast(int, raw["request_count"]))
+            control.record_acceptance_sample(
+                candidate_sha=implementation_sha,
+                suite_id=_ACCEPTANCE_SUITE_ID,
+                acceptance_run_id=str(args.acceptance_run_id),
+                sample_id=card.card_id,
+                provider_response_received=True,
+                request_count=request_count,
+                artifact_digest=sha256_file(artifact_path),
+                final_status="artifact_ready",
+            )
+        if not (root / "p5-no-media.json").is_file():
+            _write_private_json(
+                root / "p5-no-media.json",
+                _p5_preflight(client, database_url=database_url, journey=journey),
+            )
     ledger_sha256 = _write_generation_ledger(
         root,
         implementation_sha=implementation_sha,
@@ -920,6 +992,7 @@ def _generate(args: argparse.Namespace) -> None:
         {
             "suite_version": _SUITE_VERSION,
             "implementation_sha": implementation_sha,
+            "acceptance_run_id": args.acceptance_run_id,
             "provider_config": {
                 "model": _MODEL,
                 "temperature": 0,
@@ -931,6 +1004,11 @@ def _generate(args: argparse.Namespace) -> None:
                 "sha256": ledger_sha256,
             },
         },
+    )
+    control.complete_acceptance_suite(
+        candidate_sha=implementation_sha,
+        suite_id=_ACCEPTANCE_SUITE_ID,
+        acceptance_run_id=str(args.acceptance_run_id),
     )
 
 
@@ -1127,6 +1205,7 @@ def _assert_finalizable_evidence_root(
     if set(config) != {
         "suite_version",
         "implementation_sha",
+        "acceptance_run_id",
         "provider_config",
         "cards",
         "generation_ledger",
@@ -1138,6 +1217,7 @@ def _assert_finalizable_evidence_root(
     if (
         config.get("suite_version") != _SUITE_VERSION
         or config.get("implementation_sha") != implementation_sha
+        or not str(config.get("acceptance_run_id", "")).strip()
         or not isinstance(provider, dict)
         or set(provider) != {"model", "temperature", "max_retries"}
         or provider.get("model") != _MODEL
@@ -1179,6 +1259,26 @@ def _finalize(args: argparse.Namespace) -> None:
     generalization_config = Path(args.generalization_config).resolve()
     if sha256_file(generalization_config) != TENANT01_GENERALIZATION_CONFIG_SHA256:
         raise RuntimeError("TENANT-01 frozen generalization regression set drifted")
+    reviews = _reviews(Path(args.review_file).resolve())
+    generalization_reviews = _generalization_reviews(
+        Path(args.generalization_review_file).resolve()
+    )
+    golden_config = _json_object(root / "suite-config.json")
+    generalization_suite_config = _json_object(root / "generalization-suite-config.json")
+    acceptance_run_id = str(golden_config.get("acceptance_run_id", ""))
+    if not acceptance_run_id or generalization_suite_config.get("acceptance_run_id") != acceptance_run_id:
+        raise RuntimeError("TENANT-01 acceptance run binding drifted")
+    control = ExecutionControl(Path.cwd())
+    acceptance_runs = cast(dict[str, dict[str, object]], control.status()["acceptance_runs"])
+    for suite_id in (_ACCEPTANCE_SUITE_ID, "tenant01-generalization-15-v1"):
+        key = f"{implementation_sha}:{suite_id}"
+        run = acceptance_runs.get(key)
+        if (
+            run is None
+            or run.get("acceptance_run_id") != acceptance_run_id
+            or run.get("status") != "GENERATED"
+        ):
+            raise RuntimeError("TENANT-01 candidate-scoped suite ledger is incomplete")
     write_tenant01_evidence(
         root,
         implementation_sha=implementation_sha,
@@ -1193,13 +1293,33 @@ def _finalize(args: argparse.Namespace) -> None:
             )
             for card_id in sorted(TENANT01_CARD_IDS)
         ),
-        reviews=_reviews(Path(args.review_file).resolve()),
-        generalization_reviews=_generalization_reviews(
-            Path(args.generalization_review_file).resolve()
-        ),
+        reviews=reviews,
+        generalization_reviews=generalization_reviews,
         p5_preflight_file="p5-no-media.json",
         dm01_file="dm01.json",
     )
+    for review in reviews:
+        control.review_acceptance_sample(
+            candidate_sha=implementation_sha,
+            suite_id=_ACCEPTANCE_SUITE_ID,
+            acceptance_run_id=acceptance_run_id,
+            sample_id=review.card_id,
+            hard_boundary=review.hard_boundary,
+            structure_complete="PASS",
+            product_usable=review.product_usable,
+            review_digest=_canonical_digest(asdict(review)),
+        )
+    for generalization_review in generalization_reviews:
+        control.review_acceptance_sample(
+            candidate_sha=implementation_sha,
+            suite_id="tenant01-generalization-15-v1",
+            acceptance_run_id=acceptance_run_id,
+            sample_id=generalization_review.case_id,
+            hard_boundary=generalization_review.hard_boundary,
+            structure_complete=generalization_review.structure_complete,
+            product_usable=generalization_review.product_usable,
+            review_digest=_canonical_digest(asdict(generalization_review)),
+        )
 
 
 def _json_object(
@@ -1222,6 +1342,8 @@ def _parser() -> argparse.ArgumentParser:
     generate.add_argument("--implementation-sha", required=True)
     generate.add_argument("--evidence-root", required=True)
     generate.add_argument("--journey-file", required=True)
+    generate.add_argument("--acceptance-run-id", required=True)
+    generate.add_argument("--resume-unreceived", action="store_true")
     generate.add_argument("--config", default="config/tenant01/golden-v1.json")
     generate.set_defaults(action=_generate)
     finalize = subparsers.add_parser("finalize")
@@ -1244,7 +1366,7 @@ def main() -> None:
     os.umask(0o077)
     args = _parser().parse_args()
     verify_runtime_action(
-        "model_runner" if args.command == "generate" else "evidence_finalizer"
+        "acceptance_runner" if args.command == "generate" else "evidence_finalizer"
     )
     cast(Any, args.action)(args)
 

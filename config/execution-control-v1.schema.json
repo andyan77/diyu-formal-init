@@ -26,6 +26,8 @@
     "last_completed_at",
     "failure_class",
     "failure_count_by_class",
+    "governance_version",
+    "acceptance_runs",
     "evidence_paths",
     "approved_next_action",
     "executor_id",
@@ -54,6 +56,24 @@
     "last_completed_at": {"type": ["string", "null"]},
     "failure_class": {"type": ["string", "null"]},
     "failure_count_by_class": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+    "governance_version": {"type": "string", "minLength": 1},
+    "acceptance_runs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "candidate_sha",
+          "suite_id",
+          "acceptance_run_id",
+          "config_digest",
+          "status",
+          "started_at",
+          "completed_at",
+          "samples",
+          "failure_count_by_class"
+        ]
+      }
+    },
     "evidence_paths": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
     "approved_next_action": {"type": ["string", "null"]},
     "executor_id": {"type": "string", "minLength": 1},

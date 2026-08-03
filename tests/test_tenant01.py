@@ -1240,6 +1240,7 @@ def _write_tenant01_suite_config(
     document: dict[str, object] = {
         "suite_version": TENANT01_SUITE_VERSION,
         "implementation_sha": implementation_sha,
+        "acceptance_run_id": "tenant01-acceptance-test",
         "provider_config": {
             "model": TENANT01_PROVIDER_MODEL,
             "temperature": 0,
@@ -1435,6 +1436,7 @@ def _tenant01_generalization_reviews(
         {
             "suite_version": "TENANT-01-FROZEN-GENERALIZATION-V1",
             "implementation_sha": "a" * 40,
+            "acceptance_run_id": "tenant01-acceptance-test",
             "source_config": {
                 "file": "config/tenant01/semantic-holdout-v1.json",
                 "sha256": "e773158aef2a22e3d4344f20c80bdf90b5bd9d19c0d3012b4f5fd0b00d1dcda7",
@@ -2812,10 +2814,13 @@ def test_tenant01_evidence_binds_artifacts_reviews_and_persistence(tmp_path: Pat
     )
     assert human_review["hard_boundary_violations"] == 0
     assert human_review["machine_hard_gate_passed"] == 26
+    assert human_review["human_high_risk_boundary_gate_passed"] == 26
     assert human_review["structure_gate_passed"] == 26
     assert human_review["first_draft_usable"] == 26
     assert human_review["first_draft_usable_minimum"] == 23
     assert human_review["sample_count"] == 26
+    assert manifest["acceptance_run_id"] == "tenant01-acceptance-test"
+    assert manifest["acceptance"]["human_high_risk_boundary_gate_passed"] == 26
     assert all(record["excerpts"]["body"] for record in human_review["reviews"])
     assert "overall_average" not in human_review
     assert all("average_score" not in record for record in human_review["reviews"])

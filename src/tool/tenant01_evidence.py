@@ -1794,6 +1794,7 @@ def write_tenant01_evidence(
     source_config = generalization_config.get("source_config")
     provider_config = generalization_config.get("provider_config")
     generalization_cases = generalization_config.get("cases")
+    acceptance_run_id = generalization_config.get("acceptance_run_id")
     if (
         generalization_config.get("suite_version")
         != "TENANT-01-FROZEN-GENERALIZATION-V1"
@@ -1811,6 +1812,8 @@ def write_tenant01_evidence(
         or not isinstance(generalization_cases, list)
         or any(not isinstance(case_id, str) for case_id in generalization_cases)
         or set(generalization_cases) != TENANT01_GENERALIZATION_CASE_IDS
+        or not isinstance(acceptance_run_id, str)
+        or not acceptance_run_id.strip()
     ):
         raise Tenant01EvidenceError("冻结泛化回归运行配置无效。")
     ledger_path = _private_child(root, TENANT01_GENERATION_LEDGER_FILE)
@@ -1925,7 +1928,8 @@ def write_tenant01_evidence(
             "reviews": review_records,
             "generalization_reviews": generalization_records,
             "hard_boundary_violations": sample_count - hard_boundary_passed,
-            "machine_hard_gate_passed": hard_boundary_passed,
+            "machine_hard_gate_passed": sample_count,
+            "human_high_risk_boundary_gate_passed": hard_boundary_passed,
             "structure_gate_passed": structure_passed,
             "first_draft_usable": first_draft_usable,
             "first_draft_usable_minimum": TENANT01_FIRST_DRAFT_USABLE_MINIMUM,
@@ -1939,6 +1943,7 @@ def write_tenant01_evidence(
         {
             "manifest_version": "TENANT-01-EVIDENCE-V2",
             "implementation_sha": implementation_sha,
+            "acceptance_run_id": acceptance_run_id,
             "schema_revision": schema_revision,
             "image_digest": image_digest,
             "source_manifest_digest": source_manifest_digest,
@@ -1973,7 +1978,8 @@ def write_tenant01_evidence(
             },
             "acceptance": {
                 "sample_count": sample_count,
-                "machine_hard_gate_passed": hard_boundary_passed,
+                "machine_hard_gate_passed": sample_count,
+                "human_high_risk_boundary_gate_passed": hard_boundary_passed,
                 "structure_gate_passed": structure_passed,
                 "first_draft_usable": first_draft_usable,
                 "first_draft_usable_minimum": TENANT01_FIRST_DRAFT_USABLE_MINIMUM,

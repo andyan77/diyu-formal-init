@@ -13,6 +13,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
+from src.tool.execution_acceptance import (
+    GOVERNANCE_VERSION,
+    AcceptanceLedgerError,
+    begin_acceptance_run,
+    complete_generation,
+    pending_samples,
+    record_human_review,
+    record_sample_attempt,
+    validate_acceptance_runs,
+)
+
 STATE_VERSION = "TENANT-01-EXECUTION-CONTROL-V1"
 MILESTONE = "TENANT-01"
 DEFAULT_RUNTIME_ROOT = Path("var/execution-control/TENANT-01")
@@ -24,8 +35,10 @@ NORMAL_STATES = frozenset(
         "CONTRACT_FROZEN",
         "STRUCTURAL_IMPLEMENTATION",
         "DETERMINISTIC_GATE",
+        "MODEL_READINESS",
         "MODEL_PREFLIGHT",
         "GENERALIZATION_EVAL",
+        "INDEPENDENT_AUDIT",
         "AWAITING_CONTROLLER_AUDIT",
         "CANDIDATE_REVIEW",
         "CI_READY",
@@ -51,6 +64,7 @@ FAILURE_CLASSES = (
     "product_contract_conflict",
     "provider_transport_failure",
     "provider_semantic_failure",
+    "hard_semantic_boundary_failure",
     "security_or_isolation_failure",
 )
 _TRANSITIONS: Mapping[str, frozenset[str]] = {
@@ -60,7 +74,16 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
         {"DETERMINISTIC_GATE", "NEEDS_DIAGNOSIS", "NEEDS_CONTROLLER_RULING", "FAILED_SAFE"}
     ),
     "DETERMINISTIC_GATE": frozenset(
-        {"MODEL_PREFLIGHT", "STRUCTURAL_IMPLEMENTATION", "NEEDS_DIAGNOSIS", "FAILED_SAFE"}
+        {
+            "MODEL_READINESS",
+            "MODEL_PREFLIGHT",
+            "STRUCTURAL_IMPLEMENTATION",
+            "NEEDS_DIAGNOSIS",
+            "FAILED_SAFE",
+        }
+    ),
+    "MODEL_READINESS": frozenset(
+        {"GENERALIZATION_EVAL", "NEEDS_DIAGNOSIS", "ENVIRONMENT_RESTRICTED", "FAILED_SAFE"}
     ),
     "MODEL_PREFLIGHT": frozenset(
         {
@@ -73,6 +96,7 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
     ),
     "GENERALIZATION_EVAL": frozenset(
         {
+            "INDEPENDENT_AUDIT",
             "AWAITING_CONTROLLER_AUDIT",
             "NEEDS_DIAGNOSIS",
             "NEEDS_ARCHITECTURE_REVIEW",
@@ -81,6 +105,7 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
             "FAILED_SAFE",
         }
     ),
+    "INDEPENDENT_AUDIT": frozenset({"CANDIDATE_REVIEW", "NEEDS_DIAGNOSIS", "FAILED_SAFE"}),
     "AWAITING_CONTROLLER_AUDIT": frozenset({"CANDIDATE_REVIEW", "NEEDS_CONTROLLER_RULING", "FAILED_SAFE"}),
     "CANDIDATE_REVIEW": frozenset({"CI_READY", "NEEDS_DIAGNOSIS", "FAILED_SAFE"}),
     "CI_READY": frozenset({"DEPLOY_READY", "NEEDS_DIAGNOSIS", "FAILED_SAFE"}),
@@ -88,7 +113,9 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
     "NEEDS_DIAGNOSIS": frozenset({"STRUCTURAL_IMPLEMENTATION", "DETERMINISTIC_GATE", "FAILED_SAFE"}),
     "NEEDS_ARCHITECTURE_REVIEW": frozenset({"STRUCTURAL_IMPLEMENTATION", "NEEDS_CONTROLLER_RULING"}),
     "NEEDS_CONTROLLER_RULING": frozenset({"STRUCTURAL_IMPLEMENTATION", "FAILED_SAFE"}),
-    "ENVIRONMENT_RESTRICTED": frozenset({"MODEL_PREFLIGHT", "GENERALIZATION_EVAL", "DEPLOY_READY", "FAILED_SAFE"}),
+    "ENVIRONMENT_RESTRICTED": frozenset(
+        {"MODEL_READINESS", "MODEL_PREFLIGHT", "GENERALIZATION_EVAL", "DEPLOY_READY", "FAILED_SAFE"}
+    ),
     "FAILED_SAFE": frozenset(),
     "REVIEW": frozenset(),
 }
@@ -115,6 +142,8 @@ _STATE_FIELDS = frozenset(
         "last_completed_at",
         "failure_class",
         "failure_count_by_class",
+        "governance_version",
+        "acceptance_runs",
         "evidence_paths",
         "approved_next_action",
         "executor_id",
@@ -122,6 +151,7 @@ _STATE_FIELDS = frozenset(
         "last_event_hash",
     }
 )
+_LEGACY_STATE_FIELDS = _STATE_FIELDS - {"governance_version", "acceptance_runs"}
 
 
 class ExecutionControlError(RuntimeError):
@@ -241,12 +271,31 @@ class ExecutionControl:
 
     def _state(self) -> dict[str, object]:
         state = _read_object(self.state_path)
-        if set(state) != _STATE_FIELDS:
+        if set(state) == _LEGACY_STATE_FIELDS:
+            state = {
+                **state,
+                "governance_version": "legacy-global-failure-count-v1",
+                "acceptance_runs": {},
+            }
+        elif set(state) != _STATE_FIELDS:
             raise ExecutionControlError("execution-control state fields drifted")
         if state["state_version"] != STATE_VERSION or state["milestone"] != MILESTONE:
             raise ExecutionControlError("execution-control state identity drifted")
         if state["current_state"] not in STATES:
             raise ExecutionControlError("execution-control state is unknown")
+        raw_counts = state["failure_count_by_class"]
+        if not isinstance(raw_counts, dict) or not set(raw_counts) <= set(FAILURE_CLASSES):
+            raise ExecutionControlError("execution-control failure counts drifted")
+        typed_counts = cast(dict[str, object], raw_counts)
+        if any(type(value) is not int or value < 0 for value in typed_counts.values()):
+            raise ExecutionControlError("execution-control failure counts are invalid")
+        state["failure_count_by_class"] = {
+            name: cast(int, typed_counts.get(name, 0)) for name in FAILURE_CLASSES
+        }
+        try:
+            validate_acceptance_runs(state["acceptance_runs"])
+        except AcceptanceLedgerError as exc:
+            raise ExecutionControlError(str(exc)) from exc
         return state
 
     def _verify_event_chain(self, state: Mapping[str, object]) -> None:
@@ -328,6 +377,8 @@ class ExecutionControl:
             "active_pid": state["active_pid"],
             "heartbeat_at": state["heartbeat_at"],
             "failure_class": state["failure_class"],
+            "governance_version": state["governance_version"],
+            "acceptance_runs": state["acceptance_runs"],
             "completed_gates": state["completed_gates"],
             "approved_next_action": state["approved_next_action"],
             "evidence_paths": state["evidence_paths"],
@@ -368,6 +419,8 @@ class ExecutionControl:
                 "last_completed_at": None,
                 "failure_class": None,
                 "failure_count_by_class": {name: 0 for name in FAILURE_CLASSES},
+                "governance_version": GOVERNANCE_VERSION,
+                "acceptance_runs": {},
                 "evidence_paths": [],
                 "approved_next_action": "freeze_contract",
                 "executor_id": executor_id,
@@ -393,10 +446,19 @@ class ExecutionControl:
 
     def record_history(self, summary_path: Path) -> dict[str, object]:
         summary = _read_object(summary_path)
-        if set(summary) != {"summary_version", "counts_as_current_attempt", "diagnostic_candidates", "golden_diagnostic"}:
+        required = {"summary_version", "counts_as_current_attempt", "diagnostic_candidates", "golden_diagnostic"}
+        if not required <= set(summary) or set(summary) - required != ({"model_diagnostics"} & set(summary)):
             raise ExecutionControlError("historical execution summary fields drifted")
         if summary["counts_as_current_attempt"] is not False:
             raise ExecutionControlError("historical attempts must not enter current attempt counters")
+        model_diagnostics = summary.get("model_diagnostics", [])
+        if not isinstance(model_diagnostics, list) or any(
+            not isinstance(item, dict)
+            or item.get("evidence_role") != "historical_diagnostic"
+            or item.get("counts_as_current_acceptance_attempt") is not False
+            for item in model_diagnostics
+        ):
+            raise ExecutionControlError("historical model diagnostic roles are invalid")
         with self._lock():
             state = self._state()
             self._verify_event_chain(state)
@@ -411,9 +473,241 @@ class ExecutionControl:
                 {
                     "summary_digest": _file_digest(summary_path),
                     "diagnostic_candidate_count": len(cast(list[object], summary["diagnostic_candidates"])),
+                    "model_diagnostic_count": len(model_diagnostics),
                     "counts_as_current_attempt": False,
                 },
             )
+
+    def adopt_ruling(self, decision_source: Path) -> dict[str, object]:
+        """Replace the pending controller decision without rewriting event history."""
+        decision = _read_object(decision_source)
+        if set(decision) != {"decision_version", "milestone", "objective", "contract", "audit"}:
+            raise ExecutionControlError("controller ruling fields drifted")
+        contract = decision.get("contract")
+        if (
+            decision.get("milestone") != MILESTONE
+            or not isinstance(contract, dict)
+            or contract.get("ruling_id") != "TENANT01-CONTROLLER-RULING-20260803-FINAL"
+        ):
+            raise ExecutionControlError("final TENANT-01 controller ruling is invalid")
+        with self._lock():
+            state = self._state()
+            self._verify_event_chain(state)
+            self._verify_decision(state)
+            if state["current_state"] != "STRUCTURAL_IMPLEMENTATION":
+                raise ExecutionControlError("controller ruling can only be adopted during structural implementation")
+            if cast(dict[str, object], state["acceptance_runs"]):
+                raise ExecutionControlError("controller ruling cannot replace an active acceptance ledger")
+            if _protected_digest(self.repository, self.protected_path) != state["protected_user_change_digest"]:
+                raise ExecutionControlError("protected user change digest drifted")
+            previous_contract_digest = str(state["contract_digest"])
+            _atomic_private_json(self.decision_path, decision)
+            state.update(
+                {
+                    "objective_digest": _digest(decision["objective"]),
+                    "contract_digest": _digest(contract),
+                    "controller_decision_digest": _file_digest(self.decision_path),
+                    "governance_version": GOVERNANCE_VERSION,
+                    "acceptance_runs": {},
+                    "worktree_digest": _worktree_digest(self.repository),
+                    "heartbeat_at": _now(),
+                    "failure_class": None,
+                }
+            )
+            return self._commit(
+                state,
+                "controller_ruling_adopted",
+                {
+                    "ruling_id": contract["ruling_id"],
+                    "previous_contract_digest": previous_contract_digest,
+                    "contract_digest": state["contract_digest"],
+                    "historical_failure_counts_retained": True,
+                    "historical_counts_govern_current_acceptance": False,
+                },
+            )
+
+    def begin_acceptance_suite(
+        self,
+        *,
+        candidate_sha: str,
+        suite_id: str,
+        acceptance_run_id: str,
+        config_digest: str,
+        sample_ids: tuple[str, ...],
+        allow_resume: bool = False,
+    ) -> dict[str, object]:
+        with self._lock():
+            state = self._state()
+            self._verify_static(state)
+            if state["current_state"] != "GENERALIZATION_EVAL":
+                raise ExecutionControlError("formal acceptance can only start in GENERALIZATION_EVAL")
+            if candidate_sha != state["head_sha"]:
+                raise ExecutionControlError("acceptance candidate SHA differs from the frozen state")
+            try:
+                runs, resumed = begin_acceptance_run(
+                    validate_acceptance_runs(state["acceptance_runs"]),
+                    candidate_sha=candidate_sha,
+                    suite_id=suite_id,
+                    acceptance_run_id=acceptance_run_id,
+                    config_digest=config_digest,
+                    sample_ids=sample_ids,
+                    allow_resume=allow_resume,
+                )
+            except AcceptanceLedgerError as exc:
+                raise ExecutionControlError(str(exc)) from exc
+            state["acceptance_runs"] = runs
+            state["heartbeat_at"] = _now()
+            return self._commit(
+                state,
+                "acceptance_suite_resumed" if resumed else "acceptance_suite_started",
+                {
+                    "candidate_sha": candidate_sha,
+                    "suite_id": suite_id,
+                    "acceptance_run_id": acceptance_run_id,
+                    "config_digest": config_digest,
+                    "sample_count": len(sample_ids),
+                },
+            )
+
+    def record_acceptance_sample(
+        self,
+        *,
+        candidate_sha: str,
+        suite_id: str,
+        acceptance_run_id: str,
+        sample_id: str,
+        provider_response_received: bool,
+        request_count: int,
+        artifact_digest: str | None,
+        final_status: str,
+    ) -> dict[str, object]:
+        with self._lock():
+            state = self._state()
+            self._verify_static(state)
+            try:
+                state["acceptance_runs"] = record_sample_attempt(
+                    validate_acceptance_runs(state["acceptance_runs"]),
+                    candidate_sha=candidate_sha,
+                    suite_id=suite_id,
+                    acceptance_run_id=acceptance_run_id,
+                    sample_id=sample_id,
+                    provider_response_received=provider_response_received,
+                    request_count=request_count,
+                    artifact_digest=artifact_digest,
+                    final_status=final_status,
+                )
+            except AcceptanceLedgerError as exc:
+                raise ExecutionControlError(str(exc)) from exc
+            state["heartbeat_at"] = _now()
+            return self._commit(
+                state,
+                "acceptance_sample_recorded",
+                {
+                    "candidate_sha": candidate_sha,
+                    "suite_id": suite_id,
+                    "acceptance_run_id": acceptance_run_id,
+                    "sample_id": sample_id,
+                    "provider_response_received": provider_response_received,
+                    "request_count": request_count,
+                    "artifact_digest": artifact_digest,
+                    "final_status": final_status,
+                },
+            )
+
+    def complete_acceptance_suite(
+        self,
+        *,
+        candidate_sha: str,
+        suite_id: str,
+        acceptance_run_id: str,
+    ) -> dict[str, object]:
+        with self._lock():
+            state = self._state()
+            self._verify_static(state)
+            try:
+                state["acceptance_runs"] = complete_generation(
+                    validate_acceptance_runs(state["acceptance_runs"]),
+                    candidate_sha=candidate_sha,
+                    suite_id=suite_id,
+                    acceptance_run_id=acceptance_run_id,
+                )
+            except AcceptanceLedgerError as exc:
+                raise ExecutionControlError(str(exc)) from exc
+            state["heartbeat_at"] = _now()
+            return self._commit(
+                state,
+                "acceptance_suite_generated",
+                {
+                    "candidate_sha": candidate_sha,
+                    "suite_id": suite_id,
+                    "acceptance_run_id": acceptance_run_id,
+                },
+            )
+
+    def review_acceptance_sample(
+        self,
+        *,
+        candidate_sha: str,
+        suite_id: str,
+        acceptance_run_id: str,
+        sample_id: str,
+        hard_boundary: str,
+        structure_complete: str,
+        product_usable: str,
+        review_digest: str,
+    ) -> dict[str, object]:
+        with self._lock():
+            state = self._state()
+            self._verify_static(state)
+            try:
+                state["acceptance_runs"] = record_human_review(
+                    validate_acceptance_runs(state["acceptance_runs"]),
+                    candidate_sha=candidate_sha,
+                    suite_id=suite_id,
+                    acceptance_run_id=acceptance_run_id,
+                    sample_id=sample_id,
+                    hard_boundary=hard_boundary,
+                    structure_complete=structure_complete,
+                    product_usable=product_usable,
+                    review_digest=review_digest,
+                )
+            except AcceptanceLedgerError as exc:
+                raise ExecutionControlError(str(exc)) from exc
+            state["heartbeat_at"] = _now()
+            return self._commit(
+                state,
+                "acceptance_sample_reviewed",
+                {
+                    "candidate_sha": candidate_sha,
+                    "suite_id": suite_id,
+                    "acceptance_run_id": acceptance_run_id,
+                    "sample_id": sample_id,
+                    "hard_boundary": hard_boundary,
+                    "structure_complete": structure_complete,
+                    "product_usable": product_usable,
+                    "review_digest": review_digest,
+                },
+            )
+
+    def acceptance_pending_samples(
+        self,
+        *,
+        candidate_sha: str,
+        suite_id: str,
+        acceptance_run_id: str,
+    ) -> tuple[str, ...]:
+        with self._lock():
+            state = self._state()
+            self._verify_static(state)
+            try:
+                return pending_samples(
+                    validate_acceptance_runs(state["acceptance_runs"]),
+                    candidate_sha=candidate_sha,
+                    suite_id=suite_id,
+                    acceptance_run_id=acceptance_run_id,
+                )
+            except AcceptanceLedgerError as exc:
+                raise ExecutionControlError(str(exc)) from exc
 
     def transition(self, expected_state: str, expected_head: str, contract_digest: str, target: str) -> dict[str, object]:
         with self._lock():
@@ -428,11 +722,18 @@ class ExecutionControl:
                 raise ExecutionControlError(f"transition {expected_state} -> {target} is not allowed")
             if _protected_digest(self.repository, self.protected_path) != state["protected_user_change_digest"]:
                 raise ExecutionControlError("protected user change digest drifted")
-            if target == "CANDIDATE_REVIEW" and state["approved_next_action"] != "candidate_review":
-                raise ExecutionControlError("controller audit PASS is required before candidate review")
+            if (
+                target == "CANDIDATE_REVIEW"
+                and expected_state == "AWAITING_CONTROLLER_AUDIT"
+                and state["approved_next_action"] != "candidate_review"
+            ):
+                raise ExecutionControlError("legacy controller audit PASS is required before candidate review")
             completed = set(cast(list[str], state["completed_gates"]))
-            if target == "CI_READY" and not {"controller_audit", "product_review", "engineering_review"} <= completed:
-                raise ExecutionControlError("controller audit and both bounded reviews are required before CI")
+            review_gates = {"acceptance_finalized", "product_review", "engineering_review"}
+            if target == "CANDIDATE_REVIEW" and expected_state == "INDEPENDENT_AUDIT" and not review_gates <= completed:
+                raise ExecutionControlError("finalized acceptance and both bounded reviews are required")
+            if target == "CI_READY" and not review_gates <= completed:
+                raise ExecutionControlError("finalized acceptance and both bounded reviews are required before CI")
             if target == "DEPLOY_READY" and "ci_success" not in completed:
                 raise ExecutionControlError("a successful authoritative CI is required before deployment")
             if target == "REVIEW" and not {
@@ -443,11 +744,13 @@ class ExecutionControl:
             } <= completed:
                 raise ExecutionControlError("production proof and cleanup are required before REVIEW")
             previous = str(state["current_state"])
+            previous_head = str(state["head_sha"])
+            next_head = _git_sha(self.repository, "HEAD")
             state.update(
                 {
                     "previous_state": previous,
                     "current_state": target,
-                    "head_sha": _git_sha(self.repository, "HEAD"),
+                    "head_sha": next_head,
                     "origin_sha": _git_sha(self.repository, "origin/main"),
                     "worktree_digest": _worktree_digest(self.repository),
                     "heartbeat_at": _now(),
@@ -455,7 +758,20 @@ class ExecutionControl:
                     "failure_class": None,
                 }
             )
-            return self._commit(state, "transitioned", {"from": previous, "to": target})
+            gates_invalidated = next_head != previous_head
+            if gates_invalidated:
+                state["completed_gates"] = []
+            return self._commit(
+                state,
+                "transitioned",
+                {
+                    "from": previous,
+                    "to": target,
+                    "previous_head": previous_head,
+                    "head_sha": next_head,
+                    "completed_gates_invalidated": gates_invalidated,
+                },
+            )
 
     def begin(self, gate: str, command: str, run_id: str | None, pid: int) -> dict[str, object]:
         with self._lock():
@@ -568,10 +884,8 @@ class ExecutionControl:
                 target = "NEEDS_CONTROLLER_RULING"
             elif failure_class == "environment_restriction":
                 target = "ENVIRONMENT_RESTRICTED"
-            elif failure_class == "security_or_isolation_failure":
+            elif failure_class in {"hard_semantic_boundary_failure", "security_or_isolation_failure"}:
                 target = "FAILED_SAFE"
-            elif failure_class == "provider_semantic_failure" and counts[failure_class] >= 2:
-                target = "NEEDS_ARCHITECTURE_REVIEW"
             elif failure_class == "implementation_defect":
                 target = "NEEDS_DIAGNOSIS"
             if failure_document["allowed_next_state"] != target:
@@ -629,24 +943,28 @@ class ExecutionControl:
             state = self._state()
             self._verify_static(state)
             current = str(state["current_state"])
-            counts = cast(dict[str, int], state["failure_count_by_class"])
             completed = set(cast(list[str], state["completed_gates"]))
             if action == "model_runner":
-                if current not in {"MODEL_PREFLIGHT", "GENERALIZATION_EVAL"}:
+                if current not in {"MODEL_READINESS", "MODEL_PREFLIGHT", "GENERALIZATION_EVAL"}:
                     raise ExecutionControlError("model runner is not allowed in the current state")
-                if counts["provider_semantic_failure"] >= 2:
-                    raise ExecutionControlError("third provider semantic attempt is forbidden")
             elif action == "generalization_runner":
                 if current != "GENERALIZATION_EVAL":
                     raise ExecutionControlError("generalization runner is not allowed in the current state")
+            elif action == "acceptance_runner":
+                if current != "GENERALIZATION_EVAL" or state["governance_version"] != GOVERNANCE_VERSION:
+                    raise ExecutionControlError("formal acceptance runner is not authorized")
             elif action == "evidence_finalizer":
-                if current != "GENERALIZATION_EVAL":
+                if current not in {"GENERALIZATION_EVAL", "INDEPENDENT_AUDIT"}:
                     raise ExecutionControlError("evidence finalizer is not allowed in the current state")
             elif action == "ci":
-                if current != "CI_READY" or not {"controller_audit", "product_review", "engineering_review"} <= completed:
+                if current != "CI_READY" or not {
+                    "acceptance_finalized",
+                    "product_review",
+                    "engineering_review",
+                } <= completed:
                     raise ExecutionControlError("CI is not authorized")
             elif action == "deploy":
-                if current != "DEPLOY_READY" or not {"controller_audit", "ci_success", "backup_restore"} <= completed:
+                if current != "DEPLOY_READY" or not {"ci_success", "backup_restore"} <= completed:
                     raise ExecutionControlError("deployment is not authorized")
             else:
                 raise ExecutionControlError("unknown execution-control action")
@@ -715,6 +1033,8 @@ def _parser() -> argparse.ArgumentParser:
     commands.add_parser("status")
     history = commands.add_parser("record-history")
     history.add_argument("--summary-file", type=Path, required=True)
+    ruling = commands.add_parser("adopt-ruling")
+    ruling.add_argument("--decision-source", type=Path, required=True)
     begin = commands.add_parser("begin")
     begin.add_argument("--gate", required=True)
     begin.add_argument("--controlled-command", required=True)
@@ -741,10 +1061,46 @@ def _parser() -> argparse.ArgumentParser:
     transition.add_argument("--contract-digest", required=True)
     transition.add_argument("--to", choices=sorted(STATES), required=True)
     commands.add_parser("approve")
+    acceptance_begin = commands.add_parser("acceptance-begin")
+    acceptance_begin.add_argument("--candidate-sha", required=True)
+    acceptance_begin.add_argument("--suite-id", required=True)
+    acceptance_begin.add_argument("--acceptance-run-id", required=True)
+    acceptance_begin.add_argument("--config-digest", required=True)
+    acceptance_begin.add_argument("--sample-id", action="append", required=True)
+    acceptance_begin.add_argument("--resume-unreceived", action="store_true")
+    acceptance_record = commands.add_parser("acceptance-record")
+    acceptance_record.add_argument("--candidate-sha", required=True)
+    acceptance_record.add_argument("--suite-id", required=True)
+    acceptance_record.add_argument("--acceptance-run-id", required=True)
+    acceptance_record.add_argument("--sample-id", required=True)
+    acceptance_record.add_argument("--provider-response-received", choices=("true", "false"), required=True)
+    acceptance_record.add_argument("--request-count", type=int, required=True)
+    acceptance_record.add_argument("--artifact-digest")
+    acceptance_record.add_argument("--final-status", required=True)
+    acceptance_complete = commands.add_parser("acceptance-complete")
+    acceptance_complete.add_argument("--candidate-sha", required=True)
+    acceptance_complete.add_argument("--suite-id", required=True)
+    acceptance_complete.add_argument("--acceptance-run-id", required=True)
+    acceptance_review = commands.add_parser("acceptance-review")
+    acceptance_review.add_argument("--candidate-sha", required=True)
+    acceptance_review.add_argument("--suite-id", required=True)
+    acceptance_review.add_argument("--acceptance-run-id", required=True)
+    acceptance_review.add_argument("--sample-id", required=True)
+    acceptance_review.add_argument("--hard-boundary", choices=("PASS", "FAIL"), required=True)
+    acceptance_review.add_argument("--structure-complete", choices=("PASS", "FAIL"), required=True)
+    acceptance_review.add_argument("--product-usable", choices=("PASS", "FAIL"), required=True)
+    acceptance_review.add_argument("--review-digest", required=True)
     verify = commands.add_parser("verify")
     verify.add_argument(
         "--action",
-        choices=("model_runner", "generalization_runner", "evidence_finalizer", "ci", "deploy"),
+        choices=(
+            "model_runner",
+            "generalization_runner",
+            "acceptance_runner",
+            "evidence_finalizer",
+            "ci",
+            "deploy",
+        ),
         required=True,
     )
     return parser
@@ -761,6 +1117,8 @@ def main() -> None:
         state = control.status()
     elif command == "record-history":
         state = control.record_history(arguments.summary_file)
+    elif command == "adopt-ruling":
+        state = control.adopt_ruling(arguments.decision_source)
     elif command == "begin":
         state = control.begin(str(arguments.gate), str(arguments.controlled_command), arguments.run_id, int(arguments.pid))
     elif command == "heartbeat":
@@ -794,6 +1152,43 @@ def main() -> None:
         )
     elif command == "approve":
         state = control.approve()
+    elif command == "acceptance-begin":
+        state = control.begin_acceptance_suite(
+            candidate_sha=str(arguments.candidate_sha),
+            suite_id=str(arguments.suite_id),
+            acceptance_run_id=str(arguments.acceptance_run_id),
+            config_digest=str(arguments.config_digest),
+            sample_ids=tuple(str(value) for value in arguments.sample_id),
+            allow_resume=bool(arguments.resume_unreceived),
+        )
+    elif command == "acceptance-record":
+        state = control.record_acceptance_sample(
+            candidate_sha=str(arguments.candidate_sha),
+            suite_id=str(arguments.suite_id),
+            acceptance_run_id=str(arguments.acceptance_run_id),
+            sample_id=str(arguments.sample_id),
+            provider_response_received=arguments.provider_response_received == "true",
+            request_count=int(arguments.request_count),
+            artifact_digest=arguments.artifact_digest,
+            final_status=str(arguments.final_status),
+        )
+    elif command == "acceptance-complete":
+        state = control.complete_acceptance_suite(
+            candidate_sha=str(arguments.candidate_sha),
+            suite_id=str(arguments.suite_id),
+            acceptance_run_id=str(arguments.acceptance_run_id),
+        )
+    elif command == "acceptance-review":
+        state = control.review_acceptance_sample(
+            candidate_sha=str(arguments.candidate_sha),
+            suite_id=str(arguments.suite_id),
+            acceptance_run_id=str(arguments.acceptance_run_id),
+            sample_id=str(arguments.sample_id),
+            hard_boundary=str(arguments.hard_boundary),
+            structure_complete=str(arguments.structure_complete),
+            product_usable=str(arguments.product_usable),
+            review_digest=str(arguments.review_digest),
+        )
     elif command == "verify":
         state = control.verify(str(arguments.action))
     else:

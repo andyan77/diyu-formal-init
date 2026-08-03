@@ -95,6 +95,14 @@ def _reach_model_preflight(fixture: _ControlFixture) -> None:
     _transition(fixture, "DETERMINISTIC_GATE", "MODEL_PREFLIGHT")
 
 
+def _reach_generalization(fixture: _ControlFixture) -> None:
+    _transition(fixture, "BOOTSTRAP", "CONTRACT_FROZEN")
+    _transition(fixture, "CONTRACT_FROZEN", "STRUCTURAL_IMPLEMENTATION")
+    _transition(fixture, "STRUCTURAL_IMPLEMENTATION", "DETERMINISTIC_GATE")
+    _transition(fixture, "DETERMINISTIC_GATE", "MODEL_READINESS")
+    _transition(fixture, "MODEL_READINESS", "GENERALIZATION_EVAL")
+
+
 def _failure(failure_class: str, allowed_next_state: str) -> dict[str, object]:
     return {
         "failure_class": failure_class,
@@ -192,16 +200,146 @@ def test_verify_refuses_head_contract_and_protected_change_drift(
         protected.verify("model_runner")
 
 
-def test_second_provider_semantic_failure_blocks_third_model_attempt(control_fixture: _ControlFixture) -> None:
+def test_quality_variance_and_historical_provider_semantics_do_not_block_acceptance(
+    control_fixture: _ControlFixture,
+) -> None:
     _reach_model_preflight(control_fixture)
     first = control_fixture.control.classify(_failure("provider_semantic_failure", "MODEL_PREFLIGHT"))
     assert first["current_state"] == "MODEL_PREFLIGHT"
-    second = control_fixture.control.classify(
-        _failure("provider_semantic_failure", "NEEDS_ARCHITECTURE_REVIEW")
+    second = control_fixture.control.classify(_failure("provider_semantic_failure", "MODEL_PREFLIGHT"))
+    assert second["current_state"] == "MODEL_PREFLIGHT"
+    first_quality = control_fixture.control.classify(_failure("product_quality_variance", "MODEL_PREFLIGHT"))
+    second_quality = control_fixture.control.classify(_failure("product_quality_variance", "MODEL_PREFLIGHT"))
+    counts = cast(dict[str, int], second_quality["failure_count_by_class"])
+    assert counts["provider_semantic_failure"] == 2
+    assert counts["product_quality_variance"] == 2
+    assert first_quality["current_state"] == "MODEL_PREFLIGHT"
+    assert control_fixture.control.verify("model_runner")["current_state"] == "MODEL_PREFLIGHT"
+
+
+def test_candidate_scoped_acceptance_starts_once_and_ignores_historical_diagnostics(
+    control_fixture: _ControlFixture,
+) -> None:
+    summary_path = control_fixture.runtime_root / "historical-diagnostics.json"
+    _write_private_json(
+        summary_path,
+        {
+            "summary_version": "tenant01-historical-diagnostics-v1",
+            "counts_as_current_attempt": False,
+            "diagnostic_candidates": ["old-tricard-1", "old-tricard-2"],
+            "golden_diagnostic": {"provider_semantic_failure": 2},
+        },
     )
-    assert second["current_state"] == "NEEDS_ARCHITECTURE_REVIEW"
-    with pytest.raises(ExecutionControlError, match="not allowed|third provider"):
-        control_fixture.control.verify("model_runner")
+    control_fixture.control.record_history(summary_path)
+    _reach_generalization(control_fixture)
+    candidate = control_fixture.initial_head
+    started = control_fixture.control.begin_acceptance_suite(
+        candidate_sha=candidate,
+        suite_id="tenant01-final-26",
+        acceptance_run_id="acceptance-20260803-final",
+        config_digest="a" * 64,
+        sample_ids=("P1", "P2", "daily_complaint"),
+    )
+    runs = cast(dict[str, dict[str, object]], started["acceptance_runs"])
+    assert len(runs) == 1
+    with pytest.raises(ExecutionControlError, match="already started"):
+        control_fixture.control.begin_acceptance_suite(
+            candidate_sha=candidate,
+            suite_id="tenant01-final-26",
+            acceptance_run_id="acceptance-20260803-final",
+            config_digest="a" * 64,
+            sample_ids=("P1", "P2", "daily_complaint"),
+        )
+
+
+def test_acceptance_only_resumes_unreceived_transport_samples(control_fixture: _ControlFixture) -> None:
+    _reach_generalization(control_fixture)
+    candidate = control_fixture.initial_head
+    control_fixture.control.begin_acceptance_suite(
+        candidate_sha=candidate,
+        suite_id="tenant01-golden-11",
+        acceptance_run_id="acceptance-final",
+        config_digest="b" * 64,
+        sample_ids=("P1", "P2"),
+    )
+    control_fixture.control.record_acceptance_sample(
+        candidate_sha=candidate,
+        suite_id="tenant01-golden-11",
+        acceptance_run_id="acceptance-final",
+        sample_id="P1",
+        provider_response_received=False,
+        request_count=0,
+        artifact_digest=None,
+        final_status="transport_failed_no_response",
+    )
+    resumed = control_fixture.control.begin_acceptance_suite(
+        candidate_sha=candidate,
+        suite_id="tenant01-golden-11",
+        acceptance_run_id="acceptance-final",
+        config_digest="b" * 64,
+        sample_ids=("P1", "P2"),
+        allow_resume=True,
+    )
+    assert resumed["current_state"] == "GENERALIZATION_EVAL"
+    control_fixture.control.record_acceptance_sample(
+        candidate_sha=candidate,
+        suite_id="tenant01-golden-11",
+        acceptance_run_id="acceptance-final",
+        sample_id="P1",
+        provider_response_received=True,
+        request_count=2,
+        artifact_digest="c" * 64,
+        final_status="artifact_ready",
+    )
+    with pytest.raises(ExecutionControlError, match="terminal result"):
+        control_fixture.control.record_acceptance_sample(
+            candidate_sha=candidate,
+            suite_id="tenant01-golden-11",
+            acceptance_run_id="acceptance-final",
+            sample_id="P1",
+            provider_response_received=True,
+            request_count=2,
+            artifact_digest="c" * 64,
+            final_status="artifact_ready",
+        )
+
+
+def test_hard_semantic_and_contract_failures_are_the_only_controller_or_safe_stops(
+    control_fixture: _ControlFixture,
+) -> None:
+    _reach_model_preflight(control_fixture)
+    implementation = control_fixture.control.classify(
+        _failure("implementation_defect", "NEEDS_DIAGNOSIS")
+    )
+    assert implementation["current_state"] == "NEEDS_DIAGNOSIS"
+
+    second_root = control_fixture.runtime_root.parent / "hard-boundary-control"
+    hard = ExecutionControl(control_fixture.repository, second_root)
+    hard.initialize(control_fixture.runtime_root / "controller-decision.json", "test-executor")
+    hard_fixture = _ControlFixture(
+        control_fixture.repository,
+        second_root,
+        hard,
+        control_fixture.initial_head,
+        str(hard.status()["contract_digest"]),
+    )
+    _reach_model_preflight(hard_fixture)
+    failed = hard.classify(_failure("hard_semantic_boundary_failure", "FAILED_SAFE"))
+    assert failed["current_state"] == "FAILED_SAFE"
+
+    third_root = control_fixture.runtime_root.parent / "contract-control"
+    contract = ExecutionControl(control_fixture.repository, third_root)
+    contract.initialize(control_fixture.runtime_root / "controller-decision.json", "test-executor")
+    contract_fixture = _ControlFixture(
+        control_fixture.repository,
+        third_root,
+        contract,
+        control_fixture.initial_head,
+        str(contract.status()["contract_digest"]),
+    )
+    _reach_model_preflight(contract_fixture)
+    ruling = contract.classify(_failure("product_contract_conflict", "NEEDS_CONTROLLER_RULING"))
+    assert ruling["current_state"] == "NEEDS_CONTROLLER_RULING"
 
 
 def test_ci_and_deploy_require_controller_audit_and_recorded_gates(control_fixture: _ControlFixture) -> None:
@@ -218,7 +356,7 @@ def test_ci_and_deploy_require_controller_audit_and_recorded_gates(control_fixtu
     approved = control_fixture.control.approve()
     assert approved["approved_next_action"] == "candidate_review"
     _transition(control_fixture, "AWAITING_CONTROLLER_AUDIT", "CANDIDATE_REVIEW")
-    for gate in ("product_review", "engineering_review"):
+    for gate in ("acceptance_finalized", "product_review", "engineering_review"):
         control_fixture.control.begin(gate, f"review {gate}", None, os.getpid())
         control_fixture.control.complete(gate, f"evidence/{gate}.json")
     _transition(control_fixture, "CANDIDATE_REVIEW", "CI_READY")
@@ -279,3 +417,67 @@ def test_failed_controlled_command_requires_explicit_classification(
     )
     assert classified["current_state"] == "NEEDS_DIAGNOSIS"
     assert classified["active_command"] is None
+
+
+def test_final_controller_ruling_updates_contract_without_rewriting_history(
+    control_fixture: _ControlFixture,
+) -> None:
+    _transition(control_fixture, "BOOTSTRAP", "CONTRACT_FROZEN")
+    _transition(control_fixture, "CONTRACT_FROZEN", "STRUCTURAL_IMPLEMENTATION")
+    before = (control_fixture.runtime_root / "events.jsonl").read_bytes()
+    source = control_fixture.runtime_root / "final-ruling.json"
+    _write_private_json(
+        source,
+        {
+            "decision_version": "TENANT01-CONTROLLER-RULING-20260803-FINAL",
+            "milestone": "TENANT-01",
+            "objective": {"terminal_state": "REVIEW"},
+            "contract": {
+                "ruling_id": "TENANT01-CONTROLLER-RULING-20260803-FINAL",
+                "machine_hard_gate": "26/26",
+                "structure_complete": "26/26",
+                "human_high_risk_boundary_gate": "26/26",
+                "first_draft_product_usable_minimum": "23/26",
+            },
+            "audit": {"status": "PREAUTHORIZED"},
+        },
+    )
+    adopted = control_fixture.control.adopt_ruling(source)
+    assert adopted["governance_version"] == "candidate-scoped-acceptance-v2"
+    assert adopted["contract_digest"] != control_fixture.contract_digest
+    assert (control_fixture.runtime_root / "events.jsonl").read_bytes().startswith(before)
+    assert adopted["event_count"] == len(before.splitlines()) + 1
+
+
+def test_state_schema_lists_candidate_scoped_governance_fields() -> None:
+    schema = json.loads(Path("config/execution-control-v1.schema.json").read_text(encoding="utf-8"))
+    required = set(cast(list[str], schema["required"]))
+    properties = cast(dict[str, object], schema["properties"])
+    assert {"governance_version", "acceptance_runs"} <= required
+    assert {"governance_version", "acceptance_runs"} <= set(properties)
+
+
+def test_head_change_invalidates_completed_gates_without_rewriting_events(
+    control_fixture: _ControlFixture,
+) -> None:
+    _transition(control_fixture, "BOOTSTRAP", "CONTRACT_FROZEN")
+    _transition(control_fixture, "CONTRACT_FROZEN", "STRUCTURAL_IMPLEMENTATION")
+    control_fixture.control.begin("old_sha_gate", "true", None, os.getpid())
+    control_fixture.control.complete("old_sha_gate", "evidence/old-sha.json")
+    before = (control_fixture.runtime_root / "events.jsonl").read_bytes()
+
+    marker = control_fixture.repository / "implementation.txt"
+    marker.write_text("new candidate\n", encoding="utf-8")
+    _git(control_fixture.repository, "add", "implementation.txt")
+    _git(control_fixture.repository, "commit", "-m", "new candidate")
+    state = control_fixture.control.status()
+    transitioned = control_fixture.control.transition(
+        "STRUCTURAL_IMPLEMENTATION",
+        str(state["head_sha"]),
+        control_fixture.contract_digest,
+        "DETERMINISTIC_GATE",
+    )
+
+    assert transitioned["head_sha"] != control_fixture.initial_head
+    assert transitioned["completed_gates"] == []
+    assert (control_fixture.runtime_root / "events.jsonl").read_bytes().startswith(before)

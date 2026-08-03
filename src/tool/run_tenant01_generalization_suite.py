@@ -21,7 +21,7 @@ from src.infrastructure.content_control_repository import (
 from src.infrastructure.local_object_store import LocalObjectStore
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
-from src.tool.execution_control import verify_runtime_action
+from src.tool.execution_control import ExecutionControl, verify_runtime_action
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
 from src.tool.run_gate_c_final_suite import (
     _current_head,
@@ -47,6 +47,7 @@ from src.tool.tenant01_evidence import (
 )
 
 _SUITE_VERSION = "TENANT-01-FROZEN-GENERALIZATION-V1"
+_ACCEPTANCE_SUITE_ID = "tenant01-generalization-15-v1"
 _BASELINE_REVISION_MESSAGE = (
     "今天临时改变了原来的安排，计划没有继续。请写成一条完整的小红书。"
 )
@@ -622,6 +623,28 @@ def _assert_result_shape(case: _Case, outcomes: list[dict[str, object]]) -> None
             raise RuntimeError(f"{case.case_id}: unknown result kind")
 
 
+def _raw_evidence_files(value: object) -> tuple[str, ...]:
+    files: list[str] = []
+    if isinstance(value, dict):
+        raw_file = value.get("raw_file")
+        if isinstance(raw_file, str):
+            files.append(raw_file)
+        for nested in value.values():
+            files.extend(_raw_evidence_files(nested))
+    elif isinstance(value, list):
+        for nested in value:
+            files.extend(_raw_evidence_files(nested))
+    return tuple(dict.fromkeys(files))
+
+
+def _provider_request_count(root: Path, outcomes: list[dict[str, object]]) -> int:
+    total = 0
+    for filename in _raw_evidence_files(outcomes):
+        document = _json_object(root / filename)
+        total += int(cast(int, document.get("request_count", 0)))
+    return total
+
+
 def _run(args: argparse.Namespace) -> None:
     os.umask(0o077)
     root = Path(args.evidence_root).resolve()
@@ -634,6 +657,22 @@ def _run(args: argparse.Namespace) -> None:
         raise RuntimeError("generalization suite requires the frozen worktree")
     journey = _Journey.from_file(Path(args.journey_file).resolve())
     cases = _config(Path(args.config).resolve(), journey)
+    control = ExecutionControl(Path.cwd())
+    control.begin_acceptance_suite(
+        candidate_sha=implementation_sha,
+        suite_id=_ACCEPTANCE_SUITE_ID,
+        acceptance_run_id=str(args.acceptance_run_id),
+        config_digest=sha256_file(Path(args.config).resolve()),
+        sample_ids=tuple(case.case_id for case in cases),
+        allow_resume=bool(args.resume_unreceived),
+    )
+    pending = set(
+        control.acceptance_pending_samples(
+            candidate_sha=implementation_sha,
+            suite_id=_ACCEPTANCE_SUITE_ID,
+            acceptance_run_id=str(args.acceptance_run_id),
+        )
+    )
     database_url = os.environ.get("DIYU_APP_DATABASE_URL", "")
     if not database_url:
         raise RuntimeError("formal application database is unavailable")
@@ -676,18 +715,47 @@ def _run(args: argparse.Namespace) -> None:
         primary.cookies.set("diyu_session", journey.session_token)
         secondary.cookies.set("diyu_session", journey.secondary_session_token)
         for case in cases:
-            outcomes = _case_outcomes(
-                primary,
-                secondary,
-                generator,
-                root=root,
-                database_url=database_url,
-                journey=journey,
-                case=case,
-            )
+            if case.case_id not in pending:
+                continue
+            before_raw = set(root.glob(f"generalization-{case.case_id}*.raw.json"))
+            try:
+                outcomes = _case_outcomes(
+                    primary,
+                    secondary,
+                    generator,
+                    root=root,
+                    database_url=database_url,
+                    journey=journey,
+                    case=case,
+                )
+            except (KeyError, RuntimeError, TypeError, ValueError):
+                after_raw = set(root.glob(f"generalization-{case.case_id}*.raw.json"))
+                new_raw = sorted(after_raw - before_raw)
+                request_count = sum(
+                    int(cast(int, _json_object(path).get("request_count", 0)))
+                    for path in new_raw
+                )
+                control.record_acceptance_sample(
+                    candidate_sha=implementation_sha,
+                    suite_id=_ACCEPTANCE_SUITE_ID,
+                    acceptance_run_id=str(args.acceptance_run_id),
+                    sample_id=case.case_id,
+                    provider_response_received=request_count > 0,
+                    request_count=request_count,
+                    artifact_digest=(
+                        _canonical_digest([sha256_file(path) for path in new_raw])
+                        if new_raw
+                        else None
+                    ),
+                    final_status=(
+                        "transport_failed_no_response" if request_count == 0 else "delivery_uncertain"
+                    ),
+                )
+                raise
             _assert_result_shape(case, outcomes)
+            result_path = root / f"generalization-{case.case_id}.result.json"
             _write_private_json(
-                root / f"generalization-{case.case_id}.result.json",
+                result_path,
                 {
                     "suite_version": _SUITE_VERSION,
                     "case_id": case.case_id,
@@ -697,11 +765,25 @@ def _run(args: argparse.Namespace) -> None:
                     "outcomes": outcomes,
                 },
             )
+            request_count = _provider_request_count(root, outcomes)
+            control.record_acceptance_sample(
+                candidate_sha=implementation_sha,
+                suite_id=_ACCEPTANCE_SUITE_ID,
+                acceptance_run_id=str(args.acceptance_run_id),
+                sample_id=case.case_id,
+                provider_response_received=request_count > 0,
+                request_count=request_count,
+                artifact_digest=sha256_file(result_path),
+                final_status=(
+                    "artifact_ready" if request_count > 0 else "deterministic_preflight_pass"
+                ),
+            )
     _write_private_json(
         root / "generalization-suite-config.json",
         {
             "suite_version": _SUITE_VERSION,
             "implementation_sha": implementation_sha,
+            "acceptance_run_id": args.acceptance_run_id,
             "source_config": {
                 "file": "config/tenant01/semantic-holdout-v1.json",
                 "sha256": TENANT01_GENERALIZATION_CONFIG_SHA256,
@@ -714,6 +796,11 @@ def _run(args: argparse.Namespace) -> None:
             },
             "cases": [case.case_id for case in cases],
         },
+    )
+    control.complete_acceptance_suite(
+        candidate_sha=implementation_sha,
+        suite_id=_ACCEPTANCE_SUITE_ID,
+        acceptance_run_id=str(args.acceptance_run_id),
     )
 
 
@@ -733,12 +820,14 @@ def main() -> None:
     parser.add_argument("--implementation-sha", required=True)
     parser.add_argument("--evidence-root", required=True)
     parser.add_argument("--journey-file", required=True)
+    parser.add_argument("--acceptance-run-id", required=True)
+    parser.add_argument("--resume-unreceived", action="store_true")
     parser.add_argument(
         "--config",
         default="config/tenant01/semantic-holdout-v1.json",
     )
     arguments = parser.parse_args()
-    verify_runtime_action("generalization_runner")
+    verify_runtime_action("acceptance_runner")
     _run(arguments)
 
 
