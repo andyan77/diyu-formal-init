@@ -82,6 +82,7 @@ from src.shared.factual_basis import (
 )
 from src.shared.media_program import (
     build_media_capability_envelope,
+    build_media_capability_envelope_v2,
     media_envelope_digest,
     media_envelope_document,
     media_program_digest,
@@ -97,6 +98,8 @@ from src.shared.narrative import (
 )
 from src.shared.product_value import (
     P2ProductDecisionBasisV2,
+    P5ProductDecisionBasisV2,
+    P5ProductValueContractV1,
     build_product_decision_basis_v2,
     build_product_value_contract,
     product_value_contract_digest,
@@ -126,6 +129,7 @@ from src.shared.tenant_brand_sources import (
 )
 from src.shared.types import (
     AccountExpression,
+    BoundProductMedia,
     BrandContext,
     BrandContextPacketV2,
     BrandContextPacketV3,
@@ -1015,6 +1019,112 @@ def test_product_decision_basis_v2_treats_multiple_colors_as_one_relation_not_va
     assert "颜色关系" in machine_plan
     assert "强对比" in machine_plan
     assert all(marker not in machine_plan for marker in ("两种颜色", "两种可见选择", "其中一种颜色"))
+
+
+@pytest.mark.parametrize(
+    ("facts_a", "facts_b", "relation_marker"),
+    (
+        (
+            {"colors": ["专属石青色"]},
+            {"colors": ["专属暖金色"]},
+            "颜色主辅关系",
+        ),
+        (
+            {"silhouette": "专属短直轮廓"},
+            {"silhouette": "专属长弧轮廓"},
+            "轮廓主辅关系",
+        ),
+    ),
+)
+def test_p5_product_decision_basis_v2_hides_canonical_atoms_from_writer_plan(
+    facts_a: dict[str, object],
+    facts_b: dict[str, object],
+    relation_marker: str,
+) -> None:
+    products = (
+        ProductFact(
+            sku="PRIVATE-P5-A",
+            display_name="专属主视觉商品名",
+            facts=facts_a,
+            source_kind="synthetic_confirmed_product_record",
+        ),
+        ProductFact(
+            sku="PRIVATE-P5-B",
+            display_name="专属辅助视觉商品名",
+            facts=facts_b,
+            source_kind="synthetic_confirmed_product_record",
+        ),
+    )
+    media = tuple(
+        BoundProductMedia(
+            binding_id=UUID(f"85000000-0000-0000-0000-{index:012d}"),
+            product_id=UUID(f"85000000-0000-0000-0001-{index:012d}"),
+            product_version_id=UUID(f"85000000-0000-0000-0002-{index:012d}"),
+            product=product,
+            asset_id=UUID(f"85000000-0000-0000-0003-{index:012d}"),
+            asset_version_id=UUID(f"85000000-0000-0000-0004-{index:012d}"),
+            asset_version=1,
+            media_type="image",
+            source_ref=f"synthetic-product-media:{index}",
+            source_checksum_sha256=f"{index:064x}",
+            root_account_id=UUID("85000000-0000-0000-0005-000000000001"),
+            control_organization_id=UUID("85000000-0000-0000-0006-000000000001"),
+        )
+        for index, product in enumerate(products, start=1)
+    )
+    envelope = build_media_capability_envelope_v2(
+        platform_shape="小红书图文完整成品",
+        media_format="graphic",
+        bound_product_media=media,
+    )
+    program = select_media_program(
+        primary_product="visual_styling_story",
+        envelope=envelope,
+        mechanism_id=None,
+        series_position=None,
+        fact_count=4,
+    )
+
+    legacy = build_product_value_contract(
+        primary_product="visual_styling_story",
+        products=products,
+        bound_product_media=media,
+        media_envelope=envelope,
+        media_program=program,
+    )
+    basis = build_product_decision_basis_v2(
+        primary_product="visual_styling_story",
+        products=products,
+        bound_product_media=media,
+        media_envelope=envelope,
+        media_program=program,
+    )
+
+    assert isinstance(legacy, P5ProductValueContractV1)
+    assert isinstance(basis, P5ProductDecisionBasisV2)
+    legacy_plan = legacy.visible_text
+    writer_plan = json.dumps(
+        product_value_contract_document(basis),
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    canonical_atoms = tuple(
+        value
+        for product in products
+        for value in (
+            product.sku,
+            product.display_name,
+            *(str(item) for raw in product.facts.values() for item in (raw if isinstance(raw, list) else (raw,))),
+        )
+        if value
+    )
+    assert any(atom in legacy_plan for atom in canonical_atoms)
+    assert all(atom not in writer_plan for atom in canonical_atoms)
+    assert relation_marker in basis.product_specific_understanding
+    assert basis.supporting_fact_refs == legacy.source_fact_ids
+    assert basis.source_packet_digest == legacy.source_packet_digest
+    assert basis.resource_refs == legacy.resource_refs
+    assert product_value_contract_from_document(product_value_contract_document(basis)) == basis
 
 
 def _write_tenant01_generation_ledger(

@@ -144,17 +144,37 @@ def build_product_decision_basis_v2(
         media_program=media_program,
     )
     if isinstance(legacy, P5ProductValueContractV1):
-        return P5ProductDecisionBasisV2(
+        if legacy.relation_kind == "color_hierarchy":
+            understanding = (
+                "本题采用已经冻结的颜色主辅关系：由主视觉先定调，辅助视觉随后回应。"
+            )
+            condition = (
+                "只有两份登记素材都清楚，且主辅角色在图序和版面中保持一致时，"
+                "这项颜色关系才成立。"
+            )
+        else:
+            understanding = (
+                "本题采用已经冻结的轮廓主辅关系：由主视觉先定形，辅助视觉随后回应。"
+            )
+            condition = (
+                "只有两份登记素材都清楚，且主辅角色在图序和版面中保持一致时，"
+                "这项轮廓关系才成立。"
+            )
+        result = P5ProductDecisionBasisV2(
             contract_version=PRODUCT_DECISION_BASIS_VERSION,
             primary_product="visual_styling_story",
-            product_specific_understanding=legacy.visible_styling_proposition,
-            tradeoff=legacy.real_product_anchor,
-            condition_of_validity=legacy.visual_dependency,
+            product_specific_understanding=understanding,
+            tradeoff=(
+                "两份登记素材不能平均承担视觉重心；突出主视觉时，辅助视觉应退居次位。"
+            ),
+            condition_of_validity=condition,
             supporting_fact_refs=legacy.source_fact_ids,
             source_packet_digest=legacy.source_packet_digest,
             relation_kind=legacy.relation_kind,
             resource_refs=legacy.resource_refs,
         )
+        assert_product_decision_basis_v2(result)
+        return result
     return None
 
 
