@@ -840,15 +840,18 @@ class DeepSeekGenerator(ContentGenerator):
             revision_instruction=request.revision_instruction,
         )
         writer_scope = []
-        if writer_request.actuality_fact_refs:
+        if writer_request.actuality_fact_refs and writer_request.content_product in {
+            "brand_life_narrative",
+            "local_response",
+        }:
             writer_scope.append(
-                "现实类任务只允许形成不绑定当前用户的一般判断或条件建议；不得使用第一人称补写经历，"
-                "不得新建具体场景、动作、物件或对白，也不得解释身体、心理、动机、原因、后果或健康变化。"
+                "只围绕 read_only_actuality_context 已呈现的可见张力形成一条一般观察；不重复事实，"
+                "不补写场景，也不解释用户的身体、心理、动机、原因、后果或健康变化。"
             )
         if writer_request.product_decision_basis is not None:
             writer_scope.append(
-                "商品类任务只能以用户是否把 decision_axis 作为本次选择重点为主语；不得描述商品未冻结的"
-                "属性、适用场景或对穿着者和旁观者产生的结果，也不得借其他商品维度作对照。"
+                "product_specific_understanding、tradeoff 和 condition_of_validity 穷尽本题商品语义；"
+                "只把这三项自然表达成一项选择，不介绍、对比或评价任何其他商品维度，也不推演使用结果。"
             )
         writer_payload, retries = self._request(
             (

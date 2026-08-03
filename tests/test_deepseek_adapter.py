@@ -753,9 +753,9 @@ def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
         _generator().generate(request)
 
     system = _payload_system_prompts()[0]
-    assert "现实类任务只允许形成不绑定当前用户的一般判断或条件建议" in system
-    assert "不得使用第一人称补写经历" in system
-    assert "不得解释身体、心理、动机、原因、后果或健康变化" in system
+    assert "只围绕 read_only_actuality_context 已呈现的可见张力" in system
+    assert "不重复事实" in system
+    assert "不解释用户的身体、心理、动机、原因、后果或健康变化" in system
 
 
 @pytest.mark.parametrize(
