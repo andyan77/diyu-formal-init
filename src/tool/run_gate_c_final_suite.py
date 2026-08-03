@@ -923,7 +923,7 @@ def _git_status() -> str:
         check=True,
         capture_output=True,
         text=True,
-    ).stdout.strip()
+    ).stdout.rstrip("\r\n")
 
 
 def _parser() -> argparse.ArgumentParser:

@@ -8,7 +8,7 @@ from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import psycopg
@@ -146,6 +146,7 @@ from src.shared.writer_request import (
     writer_request_digest,
     writer_request_document,
 )
+from src.tool import run_gate_c_final_suite as gate_c_runner
 from src.tool import run_tenant01_generalization_suite as generalization_runner
 from src.tool import run_tenant01_golden_suite as tenant01_runner
 from src.tool.run_tenant01_golden_suite import (
@@ -3704,6 +3705,27 @@ def test_tenant01_finalizer_rejects_dirty_worktree_without_writing(
         tenant01_runner._finalize(_tenant01_finalize_args(tmp_path, implementation_sha))
 
     assert _tenant01_file_state(tmp_path) == before
+
+
+def test_tenant01_git_status_preserves_index_and_worktree_columns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Result:
+        stdout = " M docs/项目记忆.md\n"
+
+    monkeypatch.setattr(
+        cast(Any, gate_c_runner).subprocess,
+        "run",
+        lambda *args, **kwargs: _Result(),
+    )
+
+    status = gate_c_runner._git_status()
+
+    assert status == " M docs/项目记忆.md"
+    assert not tenant01_runner._has_disallowed_worktree_change(status)
+    assert tenant01_runner._has_disallowed_worktree_change(
+        "M  docs/项目记忆.md"
+    )
 
 
 def test_tenant01_human_review_v2_parses_every_required_field(
