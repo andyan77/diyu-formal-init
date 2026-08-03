@@ -837,7 +837,8 @@ def test_publication_p1_keeps_all_visible_expression_writer_owned(
         assert "你拥有非事实中心判断、一般观察、条件建议、比喻" in system
         assert "唯一负向安全合同" in system
         assert "现实片段中的人物、对象与事件只存在于服务端事实块" in system
-        assert "不替它们判定原因、内部状态、变化或结果" in system
+        assert "原因、内部状态、谁或什么发生了变化、以及结果保持未决" in system
+        assert "不列举候选解释" in system
         assert "注意力分配或可见选择" not in prompt
         assert "不能给商品或选项补充未确认属性" in system
         return {
