@@ -11,9 +11,7 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _SUCCESS_STATUSES = frozenset({"artifact_ready", "deterministic_preflight_pass"})
 _RETRYABLE_STATUS = "transport_failed_no_response"
-_TERMINAL_FAILURE_STATUSES = frozenset(
-    {"delivery_uncertain", "hard_boundary_failed", "structure_failed"}
-)
+_TERMINAL_FAILURE_STATUSES = frozenset({"delivery_uncertain", "hard_boundary_failed", "structure_failed"})
 _REVIEW_STATUSES = frozenset({"PASS", "FAIL"})
 _SAMPLE_FINAL_STATUSES = (
     _SUCCESS_STATUSES
@@ -163,6 +161,7 @@ def begin_acceptance_run(
     config_digest: str,
     sample_ids: Sequence[str],
     allow_resume: bool = False,
+    allow_pristine_resume: bool = False,
 ) -> tuple[dict[str, dict[str, object]], bool]:
     key = acceptance_key(candidate_sha, suite_id)
     run_id = _identifier(acceptance_run_id, "acceptance run ID")
@@ -172,6 +171,8 @@ def begin_acceptance_run(
         raise AcceptanceLedgerError("acceptance sample coverage is empty or duplicated")
     current = dict(runs)
     existing = current.get(key)
+    if allow_resume and existing is None:
+        raise AcceptanceLedgerError("candidate suite has no formal acceptance run to resume")
     if existing is not None:
         existing_samples = cast(dict[str, dict[str, object]], existing["samples"])
         if (
@@ -182,8 +183,14 @@ def begin_acceptance_run(
             raise AcceptanceLedgerError("candidate suite already belongs to another acceptance run")
         if existing["status"] != "RUNNING" or not allow_resume:
             raise AcceptanceLedgerError("candidate suite formal acceptance already started")
-        if not any(sample["final_status"] == _RETRYABLE_STATUS for sample in existing_samples.values()):
-            raise AcceptanceLedgerError("candidate suite has no unreceived transport failure to resume")
+        retryable = any(sample["final_status"] == _RETRYABLE_STATUS for sample in existing_samples.values())
+        pristine_pending = tuple(sample for sample in existing_samples.values() if sample["final_status"] == "PENDING")
+        if any(cast(list[object], sample["attempts"]) for sample in pristine_pending):
+            raise AcceptanceLedgerError("pending acceptance sample has an unexpected attempt history")
+        if not retryable and not (allow_pristine_resume and pristine_pending):
+            raise AcceptanceLedgerError(
+                "candidate suite has no unreceived transport failure or recovered pristine interruption to resume"
+            )
         return current, True
     for run in current.values():
         if run["candidate_sha"] == candidate_sha and run["acceptance_run_id"] != run_id:
@@ -301,10 +308,15 @@ def record_human_review(
     key = acceptance_key(candidate_sha, suite_id)
     current = dict(runs)
     run = dict(current.get(key) or {})
-    if not run or run.get("acceptance_run_id") != acceptance_run_id or run.get("status") not in {
-        "GENERATED",
-        "REVIEWED",
-    }:
+    if (
+        not run
+        or run.get("acceptance_run_id") != acceptance_run_id
+        or run.get("status")
+        not in {
+            "GENERATED",
+            "REVIEWED",
+        }
+    ):
         raise AcceptanceLedgerError("acceptance review run is unavailable")
     values = {hard_boundary, structure_complete, product_usable}
     if not values <= _REVIEW_STATUSES:
@@ -334,8 +346,7 @@ def record_human_review(
     samples[sample_id] = sample
     run["samples"] = samples
     if run["status"] != "FAILED" and all(
-        bool(cast(dict[str, object], item)["human_review"])
-        for item in samples.values()
+        bool(cast(dict[str, object], item)["human_review"]) for item in samples.values()
     ):
         run["status"] = "REVIEWED"
     current[key] = run
@@ -354,7 +365,5 @@ def pending_samples(
         raise AcceptanceLedgerError("acceptance run is unavailable")
     samples = cast(dict[str, dict[str, object]], run["samples"])
     return tuple(
-        sample_id
-        for sample_id, sample in samples.items()
-        if sample["final_status"] in {"PENDING", _RETRYABLE_STATUS}
+        sample_id for sample_id, sample in samples.items() if sample["final_status"] in {"PENDING", _RETRYABLE_STATUS}
     )

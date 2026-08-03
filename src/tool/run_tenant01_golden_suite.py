@@ -28,7 +28,11 @@ from src.shared.errors import GenerationFailed
 from src.shared.narrative import visible_digest
 from src.shared.product_value import build_product_decision_basis_v2
 from src.shared.types import ContentTarget, ProductFact
-from src.tool.execution_control import ExecutionControl, verify_runtime_action
+from src.tool.execution_control import (
+    ACCEPTANCE_CHECKPOINT_VERSION,
+    ExecutionControl,
+    verify_runtime_action,
+)
 from src.tool.run_gate_c_final_suite import (
     _current_head,
     _EvidenceDeepSeekGenerator,
@@ -825,11 +829,19 @@ def _generate(args: argparse.Namespace) -> None:
     identity = ProductionAuthRepository(database_url).load_tenant_session(journey.session_token)
     if identity is None or identity.tenant_id != journey.tenant_id:
         raise RuntimeError("TENANT-01 final suite formal session is unavailable")
-    cards = _config_cards(Path(args.config).resolve(), p2_sku=journey.p2_sku)
+    config_path = Path(args.config).resolve()
+    cards = _config_cards(config_path, p2_sku=journey.p2_sku)
+    config_digest = sha256_file(config_path)
+    sample_ids = tuple(card.card_id for card in cards)
     _preflight_p2_product(database_url, journey, cards)
+    checkpoint_path = root / _ACCEPTANCE_CHECKPOINT_FILE
+    checkpoint: dict[str, object] | None = None
+    checkpoint_digest: str | None = None
     if args.resume_unreceived:
         if not root.is_dir() or root.stat().st_mode & 0o077:
             raise RuntimeError("TENANT-01 resume evidence root is unavailable")
+        checkpoint = _json_object(checkpoint_path)
+        checkpoint_digest = sha256_file(checkpoint_path)
     elif root.exists():
         raise RuntimeError("TENANT-01 evidence directory already exists")
     control = ExecutionControl(Path.cwd())
@@ -837,10 +849,13 @@ def _generate(args: argparse.Namespace) -> None:
         candidate_sha=implementation_sha,
         suite_id=_ACCEPTANCE_SUITE_ID,
         acceptance_run_id=str(args.acceptance_run_id),
-        config_digest=sha256_file(Path(args.config).resolve()),
-        sample_ids=tuple(card.card_id for card in cards),
+        config_digest=config_digest,
+        sample_ids=sample_ids,
         allow_resume=bool(args.resume_unreceived),
+        resume_checkpoint_path=(checkpoint_path if args.resume_unreceived else None),
     )
+    if checkpoint_digest is not None and sha256_file(checkpoint_path) != checkpoint_digest:
+        raise RuntimeError("TENANT-01 acceptance checkpoint changed during resume authorization")
     pending = set(
         control.acceptance_pending_samples(
             candidate_sha=implementation_sha,
@@ -883,11 +898,9 @@ def _generate(args: argparse.Namespace) -> None:
     app = create_app(settings)
     with TestClient(app, base_url="https://diyu.example") as client:
         client.cookies.set("diyu_session", journey.session_token)
-        checkpoint_path = root / _ACCEPTANCE_CHECKPOINT_FILE
         if args.resume_unreceived:
-            checkpoint = _json_object(checkpoint_path)
-            if checkpoint.get("acceptance_run_id") != args.acceptance_run_id:
-                raise RuntimeError("TENANT-01 acceptance checkpoint drifted")
+            if checkpoint is None:
+                raise RuntimeError("TENANT-01 acceptance checkpoint is unavailable")
             series_id = UUID(str(checkpoint["series_id"]))
         else:
             series_response = client.post(
@@ -911,8 +924,12 @@ def _generate(args: argparse.Namespace) -> None:
             _write_private_json(
                 checkpoint_path,
                 {
+                    "checkpoint_version": ACCEPTANCE_CHECKPOINT_VERSION,
                     "acceptance_run_id": args.acceptance_run_id,
                     "candidate_sha": implementation_sha,
+                    "suite_id": _ACCEPTANCE_SUITE_ID,
+                    "config_digest": config_digest,
+                    "sample_ids": list(sample_ids),
                     "series_id": str(series_id),
                 },
             )
@@ -940,9 +957,7 @@ def _generate(args: argparse.Namespace) -> None:
                         provider_response_received=request_count > 0,
                         request_count=request_count,
                         artifact_digest=sha256_file(failed_raw),
-                        final_status=(
-                            "transport_failed_no_response" if request_count == 0 else "delivery_uncertain"
-                        ),
+                        final_status=("transport_failed_no_response" if request_count == 0 else "delivery_uncertain"),
                     )
                 raise
             task_id = UUID(str(result["task_id"]))
@@ -1260,9 +1275,7 @@ def _finalize(args: argparse.Namespace) -> None:
     if sha256_file(generalization_config) != TENANT01_GENERALIZATION_CONFIG_SHA256:
         raise RuntimeError("TENANT-01 frozen generalization regression set drifted")
     reviews = _reviews(Path(args.review_file).resolve())
-    generalization_reviews = _generalization_reviews(
-        Path(args.generalization_review_file).resolve()
-    )
+    generalization_reviews = _generalization_reviews(Path(args.generalization_review_file).resolve())
     golden_config = _json_object(root / "suite-config.json")
     generalization_suite_config = _json_object(root / "generalization-suite-config.json")
     acceptance_run_id = str(golden_config.get("acceptance_run_id", ""))
@@ -1273,11 +1286,7 @@ def _finalize(args: argparse.Namespace) -> None:
     for suite_id in (_ACCEPTANCE_SUITE_ID, "tenant01-generalization-15-v1"):
         key = f"{implementation_sha}:{suite_id}"
         run = acceptance_runs.get(key)
-        if (
-            run is None
-            or run.get("acceptance_run_id") != acceptance_run_id
-            or run.get("status") != "GENERATED"
-        ):
+        if run is None or run.get("acceptance_run_id") != acceptance_run_id or run.get("status") != "GENERATED":
             raise RuntimeError("TENANT-01 candidate-scoped suite ledger is incomplete")
     write_tenant01_evidence(
         root,
@@ -1365,9 +1374,7 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> None:
     os.umask(0o077)
     args = _parser().parse_args()
-    verify_runtime_action(
-        "acceptance_runner" if args.command == "generate" else "evidence_finalizer"
-    )
+    verify_runtime_action("acceptance_runner" if args.command == "generate" else "evidence_finalizer")
     cast(Any, args.action)(args)
 
 

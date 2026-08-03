@@ -10,6 +10,7 @@ from typing import cast
 import pytest
 
 from src.tool.execution_control import (
+    ACCEPTANCE_CHECKPOINT_VERSION,
     ExecutionControl,
     ExecutionControlError,
     run_controlled_command,
@@ -115,6 +116,69 @@ def _failure(failure_class: str, allowed_next_state: str) -> dict[str, object]:
         "why_not_case_patch": "验证共享执行门",
         "allowed_next_state": allowed_next_state,
     }
+
+
+def _acceptance_checkpoint(
+    fixture: _ControlFixture,
+    *,
+    candidate_sha: str,
+    suite_id: str,
+    acceptance_run_id: str,
+    config_digest: str,
+    sample_ids: tuple[str, ...],
+) -> Path:
+    root = fixture.runtime_root.parent / "private-evidence"
+    root.mkdir(mode=0o700)
+    root.chmod(0o700)
+    checkpoint = root / "acceptance-checkpoint.json"
+    _write_private_json(
+        checkpoint,
+        {
+            "checkpoint_version": ACCEPTANCE_CHECKPOINT_VERSION,
+            "candidate_sha": candidate_sha,
+            "suite_id": suite_id,
+            "acceptance_run_id": acceptance_run_id,
+            "config_digest": config_digest,
+            "sample_ids": list(sample_ids),
+            "series_id": "adfd1032-6d2f-4bb1-b966-2bd04bff1271",
+        },
+    )
+    return checkpoint
+
+
+def _start_interrupted_acceptance(
+    fixture: _ControlFixture,
+    *,
+    pid: int = 999_999_999,
+) -> tuple[str, str, str, tuple[str, ...], Path]:
+    _reach_generalization(fixture)
+    candidate = fixture.initial_head
+    suite_id = "tenant01-golden-11-v1"
+    acceptance_run_id = "acceptance-interrupted"
+    config_digest = "b" * 64
+    sample_ids = ("P1", "P2")
+    fixture.control.begin(
+        "acceptance-golden-11",
+        "generate the frozen acceptance suite once",
+        acceptance_run_id,
+        pid,
+    )
+    fixture.control.begin_acceptance_suite(
+        candidate_sha=candidate,
+        suite_id=suite_id,
+        acceptance_run_id=acceptance_run_id,
+        config_digest=config_digest,
+        sample_ids=sample_ids,
+    )
+    checkpoint = _acceptance_checkpoint(
+        fixture,
+        candidate_sha=candidate,
+        suite_id=suite_id,
+        acceptance_run_id=acceptance_run_id,
+        config_digest=config_digest,
+        sample_ids=sample_ids,
+    )
+    return candidate, suite_id, acceptance_run_id, sample_ids, checkpoint
 
 
 def test_execution_control_initializes_private_non_pass_projection(control_fixture: _ControlFixture) -> None:
@@ -306,13 +370,192 @@ def test_acceptance_only_resumes_unreceived_transport_samples(control_fixture: _
         )
 
 
+def test_interrupted_pristine_acceptance_recovery_is_bound_and_consumed_once(
+    control_fixture: _ControlFixture,
+) -> None:
+    candidate, suite_id, run_id, sample_ids, checkpoint = _start_interrupted_acceptance(control_fixture)
+    before = (control_fixture.runtime_root / "events.jsonl").read_bytes()
+    ledger_before = cast(
+        dict[str, object],
+        control_fixture.control.status()["acceptance_runs"],
+    )
+
+    recovered = control_fixture.control.recover_interrupted_acceptance(
+        candidate_sha=candidate,
+        suite_id=suite_id,
+        acceptance_run_id=run_id,
+        config_digest="b" * 64,
+        sample_ids=sample_ids,
+        checkpoint_path=checkpoint,
+        expected_pid=999_999_999,
+        expected_gate="acceptance-golden-11",
+    )
+
+    assert recovered["active_pid"] is None
+    assert recovered["active_command"] is None
+    assert recovered["acceptance_runs"] == ledger_before
+    assert (control_fixture.runtime_root / "events.jsonl").read_bytes().startswith(before)
+    resumed = control_fixture.control.begin_acceptance_suite(
+        candidate_sha=candidate,
+        suite_id=suite_id,
+        acceptance_run_id=run_id,
+        config_digest="b" * 64,
+        sample_ids=sample_ids,
+        allow_resume=True,
+        resume_checkpoint_path=checkpoint,
+    )
+    assert (
+        control_fixture.control.acceptance_pending_samples(
+            candidate_sha=candidate,
+            suite_id=suite_id,
+            acceptance_run_id=run_id,
+        )
+        == sample_ids
+    )
+    events = (control_fixture.runtime_root / "events.jsonl").read_text(encoding="utf-8")
+    assert '"provider_attempt_fabricated":false' in events
+    assert '"history_rewritten":false' in events
+    assert resumed["acceptance_runs"] == ledger_before
+    with pytest.raises(ExecutionControlError, match="no unreceived transport failure"):
+        control_fixture.control.begin_acceptance_suite(
+            candidate_sha=candidate,
+            suite_id=suite_id,
+            acceptance_run_id=run_id,
+            config_digest="b" * 64,
+            sample_ids=sample_ids,
+            allow_resume=True,
+            resume_checkpoint_path=checkpoint,
+        )
+
+
+def test_checkpoint_alone_cannot_resume_all_pending_acceptance(
+    control_fixture: _ControlFixture,
+) -> None:
+    candidate, suite_id, run_id, sample_ids, checkpoint = _start_interrupted_acceptance(control_fixture)
+    with pytest.raises(ExecutionControlError, match="no unreceived transport failure"):
+        control_fixture.control.begin_acceptance_suite(
+            candidate_sha=candidate,
+            suite_id=suite_id,
+            acceptance_run_id=run_id,
+            config_digest="b" * 64,
+            sample_ids=sample_ids,
+            allow_resume=True,
+            resume_checkpoint_path=checkpoint,
+        )
+
+
+def test_interrupted_acceptance_recovery_refuses_live_pid(control_fixture: _ControlFixture) -> None:
+    candidate, suite_id, run_id, sample_ids, checkpoint = _start_interrupted_acceptance(
+        control_fixture,
+        pid=os.getpid(),
+    )
+    with pytest.raises(ExecutionControlError, match="still alive"):
+        control_fixture.control.recover_interrupted_acceptance(
+            candidate_sha=candidate,
+            suite_id=suite_id,
+            acceptance_run_id=run_id,
+            config_digest="b" * 64,
+            sample_ids=sample_ids,
+            checkpoint_path=checkpoint,
+            expected_pid=os.getpid(),
+            expected_gate="acceptance-golden-11",
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("candidate", "run", "config", "checkpoint", "duplicate_sample"),
+)
+def test_interrupted_acceptance_recovery_mutations_fail_closed(
+    control_fixture: _ControlFixture,
+    mutation: str,
+) -> None:
+    candidate, suite_id, run_id, sample_ids, checkpoint = _start_interrupted_acceptance(control_fixture)
+    arguments: dict[str, object] = {
+        "candidate_sha": candidate,
+        "suite_id": suite_id,
+        "acceptance_run_id": run_id,
+        "config_digest": "b" * 64,
+        "sample_ids": sample_ids,
+        "checkpoint_path": checkpoint,
+        "expected_pid": 999_999_999,
+        "expected_gate": "acceptance-golden-11",
+    }
+    if mutation == "candidate":
+        arguments["candidate_sha"] = "f" * 40
+    elif mutation == "run":
+        arguments["acceptance_run_id"] = "another-acceptance-run"
+    elif mutation == "config":
+        arguments["config_digest"] = "c" * 64
+    elif mutation == "checkpoint":
+        document = json.loads(checkpoint.read_text(encoding="utf-8"))
+        document["unexpected"] = "tampered"
+        _write_private_json(checkpoint, document)
+    elif mutation == "duplicate_sample":
+        arguments["sample_ids"] = ("P1", "P1")
+    with pytest.raises(ExecutionControlError):
+        control_fixture.control.recover_interrupted_acceptance(**arguments)  # type: ignore[arg-type]
+    state = control_fixture.control.status()
+    assert state["active_pid"] == 999_999_999
+    assert state["active_gate"] == "acceptance-golden-11"
+
+
+def test_recovered_pending_samples_never_replay_terminal_provider_responses(
+    control_fixture: _ControlFixture,
+) -> None:
+    candidate, suite_id, run_id, sample_ids, checkpoint = _start_interrupted_acceptance(control_fixture)
+    control_fixture.control.record_acceptance_sample(
+        candidate_sha=candidate,
+        suite_id=suite_id,
+        acceptance_run_id=run_id,
+        sample_id="P1",
+        provider_response_received=True,
+        request_count=1,
+        artifact_digest="c" * 64,
+        final_status="artifact_ready",
+    )
+    control_fixture.control.recover_interrupted_acceptance(
+        candidate_sha=candidate,
+        suite_id=suite_id,
+        acceptance_run_id=run_id,
+        config_digest="b" * 64,
+        sample_ids=sample_ids,
+        checkpoint_path=checkpoint,
+        expected_pid=999_999_999,
+        expected_gate="acceptance-golden-11",
+    )
+    control_fixture.control.begin_acceptance_suite(
+        candidate_sha=candidate,
+        suite_id=suite_id,
+        acceptance_run_id=run_id,
+        config_digest="b" * 64,
+        sample_ids=sample_ids,
+        allow_resume=True,
+        resume_checkpoint_path=checkpoint,
+    )
+    assert control_fixture.control.acceptance_pending_samples(
+        candidate_sha=candidate,
+        suite_id=suite_id,
+        acceptance_run_id=run_id,
+    ) == ("P2",)
+    with pytest.raises(ExecutionControlError, match="terminal result"):
+        control_fixture.control.record_acceptance_sample(
+            candidate_sha=candidate,
+            suite_id=suite_id,
+            acceptance_run_id=run_id,
+            sample_id="P1",
+            provider_response_received=True,
+            request_count=1,
+            artifact_digest="d" * 64,
+            final_status="artifact_ready",
+        )
+
+
 def test_hard_semantic_and_contract_failures_are_the_only_controller_or_safe_stops(
     control_fixture: _ControlFixture,
 ) -> None:
     _reach_model_preflight(control_fixture)
-    implementation = control_fixture.control.classify(
-        _failure("implementation_defect", "NEEDS_DIAGNOSIS")
-    )
+    implementation = control_fixture.control.classify(_failure("implementation_defect", "NEEDS_DIAGNOSIS"))
     assert implementation["current_state"] == "NEEDS_DIAGNOSIS"
 
     second_root = control_fixture.runtime_root.parent / "hard-boundary-control"
@@ -455,9 +698,7 @@ def test_controller_ruling_recovers_failed_safe_without_erasing_acceptance_histo
     control_fixture: _ControlFixture,
 ) -> None:
     _reach_model_preflight(control_fixture)
-    failed = control_fixture.control.classify(
-        _failure("hard_semantic_boundary_failure", "FAILED_SAFE")
-    )
+    failed = control_fixture.control.classify(_failure("hard_semantic_boundary_failure", "FAILED_SAFE"))
     assert failed["current_state"] == "FAILED_SAFE"
     historical_key = f"{control_fixture.initial_head}:tenant01-golden-11-v1"
     failed["acceptance_runs"] = {

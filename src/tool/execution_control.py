@@ -12,10 +12,12 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
+from uuid import UUID
 
 from src.tool.execution_acceptance import (
     GOVERNANCE_VERSION,
     AcceptanceLedgerError,
+    acceptance_key,
     begin_acceptance_run,
     complete_generation,
     pending_samples,
@@ -28,6 +30,7 @@ STATE_VERSION = "TENANT-01-EXECUTION-CONTROL-V1"
 MILESTONE = "TENANT-01"
 DEFAULT_RUNTIME_ROOT = Path("var/execution-control/TENANT-01")
 DEFAULT_PROTECTED_PATH = Path("docs/项目记忆.md")
+ACCEPTANCE_CHECKPOINT_VERSION = "tenant01-acceptance-checkpoint-v2"
 
 NORMAL_STATES = frozenset(
     {
@@ -82,9 +85,7 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
             "FAILED_SAFE",
         }
     ),
-    "MODEL_READINESS": frozenset(
-        {"GENERALIZATION_EVAL", "NEEDS_DIAGNOSIS", "ENVIRONMENT_RESTRICTED", "FAILED_SAFE"}
-    ),
+    "MODEL_READINESS": frozenset({"GENERALIZATION_EVAL", "NEEDS_DIAGNOSIS", "ENVIRONMENT_RESTRICTED", "FAILED_SAFE"}),
     "MODEL_PREFLIGHT": frozenset(
         {
             "GENERALIZATION_EVAL",
@@ -175,6 +176,108 @@ def _digest(value: object) -> str:
 
 def _file_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _pid_is_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _acceptance_checkpoint_binding(
+    path: Path,
+    *,
+    candidate_sha: str,
+    suite_id: str,
+    acceptance_run_id: str,
+    config_digest: str,
+    sample_ids: tuple[str, ...],
+) -> tuple[dict[str, object], str]:
+    resolved = path.resolve()
+    if (
+        path.is_symlink()
+        or resolved.name != "acceptance-checkpoint.json"
+        or not resolved.is_file()
+        or resolved.stat().st_mode & 0o077
+        or resolved.parent.stat().st_mode & 0o077
+    ):
+        raise ExecutionControlError("acceptance recovery checkpoint is unavailable or not private")
+    checkpoint_bytes = resolved.read_bytes()
+    raw_checkpoint = json.loads(checkpoint_bytes)
+    if not isinstance(raw_checkpoint, dict):
+        raise ExecutionControlError("acceptance recovery checkpoint is not an object")
+    checkpoint = cast(dict[str, object], raw_checkpoint)
+    required = {
+        "checkpoint_version",
+        "candidate_sha",
+        "suite_id",
+        "acceptance_run_id",
+        "config_digest",
+        "sample_ids",
+        "series_id",
+    }
+    raw_samples = checkpoint.get("sample_ids")
+    if (
+        set(checkpoint) != required
+        or checkpoint.get("checkpoint_version") != ACCEPTANCE_CHECKPOINT_VERSION
+        or checkpoint.get("candidate_sha") != candidate_sha
+        or checkpoint.get("suite_id") != suite_id
+        or checkpoint.get("acceptance_run_id") != acceptance_run_id
+        or checkpoint.get("config_digest") != config_digest
+        or not isinstance(raw_samples, list)
+        or any(not isinstance(value, str) for value in raw_samples)
+        or len(raw_samples) != len(set(cast(list[str], raw_samples)))
+        or tuple(cast(list[str], raw_samples)) != sample_ids
+    ):
+        raise ExecutionControlError("acceptance recovery checkpoint identity drifted")
+    try:
+        UUID(str(checkpoint.get("series_id")))
+    except (TypeError, ValueError) as exc:
+        raise ExecutionControlError("acceptance recovery checkpoint series ID is invalid") from exc
+    return checkpoint, hashlib.sha256(checkpoint_bytes).hexdigest()
+
+
+def _pristine_recovery_authorized(
+    events_path: Path,
+    *,
+    candidate_sha: str,
+    suite_id: str,
+    acceptance_run_id: str,
+    config_digest: str,
+    checkpoint_digest: str,
+) -> bool:
+    """Return whether the matching recovery event exists and remains unconsumed."""
+
+    identity = {
+        "candidate_sha": candidate_sha,
+        "suite_id": suite_id,
+        "acceptance_run_id": acceptance_run_id,
+        "config_digest": config_digest,
+    }
+    authorized = False
+    for line in events_path.read_text(encoding="utf-8").splitlines():
+        raw_event = json.loads(line)
+        if not isinstance(raw_event, dict):
+            raise ExecutionControlError("execution-control event is not an object")
+        data = raw_event.get("data")
+        if not isinstance(data, dict) or any(data.get(key) != value for key, value in identity.items()):
+            continue
+        event_type = raw_event.get("event_type")
+        if event_type == "interrupted_acceptance_recovered":
+            authorized = (
+                data.get("checkpoint_digest") == checkpoint_digest
+                and data.get("provider_attempt_fabricated") is False
+                and data.get("history_rewritten") is False
+            )
+        elif event_type in {"acceptance_suite_resumed", "acceptance_suite_generated"}:
+            authorized = False
+    return authorized
 
 
 def _git(repository: Path, *arguments: str) -> bytes:
@@ -292,9 +395,7 @@ class ExecutionControl:
         typed_counts = cast(dict[str, object], raw_counts)
         if any(type(value) is not int or value < 0 for value in typed_counts.values()):
             raise ExecutionControlError("execution-control failure counts are invalid")
-        state["failure_count_by_class"] = {
-            name: cast(int, typed_counts.get(name, 0)) for name in FAILURE_CLASSES
-        }
+        state["failure_count_by_class"] = {name: cast(int, typed_counts.get(name, 0)) for name in FAILURE_CLASSES}
         try:
             validate_acceptance_runs(state["acceptance_runs"])
         except AcceptanceLedgerError as exc:
@@ -560,6 +661,7 @@ class ExecutionControl:
         config_digest: str,
         sample_ids: tuple[str, ...],
         allow_resume: bool = False,
+        resume_checkpoint_path: Path | None = None,
     ) -> dict[str, object]:
         with self._lock():
             state = self._state()
@@ -568,6 +670,27 @@ class ExecutionControl:
                 raise ExecutionControlError("formal acceptance can only start in GENERALIZATION_EVAL")
             if candidate_sha != state["head_sha"]:
                 raise ExecutionControlError("acceptance candidate SHA differs from the frozen state")
+            checkpoint_digest: str | None = None
+            pristine_recovery_authorized = False
+            if resume_checkpoint_path is not None:
+                if not allow_resume:
+                    raise ExecutionControlError("acceptance checkpoint is only valid for an explicit resume")
+                _, checkpoint_digest = _acceptance_checkpoint_binding(
+                    resume_checkpoint_path,
+                    candidate_sha=candidate_sha,
+                    suite_id=suite_id,
+                    acceptance_run_id=acceptance_run_id,
+                    config_digest=config_digest,
+                    sample_ids=sample_ids,
+                )
+                pristine_recovery_authorized = _pristine_recovery_authorized(
+                    self.events_path,
+                    candidate_sha=candidate_sha,
+                    suite_id=suite_id,
+                    acceptance_run_id=acceptance_run_id,
+                    config_digest=config_digest,
+                    checkpoint_digest=checkpoint_digest,
+                )
             try:
                 runs, resumed = begin_acceptance_run(
                     validate_acceptance_runs(state["acceptance_runs"]),
@@ -577,6 +700,7 @@ class ExecutionControl:
                     config_digest=config_digest,
                     sample_ids=sample_ids,
                     allow_resume=allow_resume,
+                    allow_pristine_resume=pristine_recovery_authorized,
                 )
             except AcceptanceLedgerError as exc:
                 raise ExecutionControlError(str(exc)) from exc
@@ -591,6 +715,103 @@ class ExecutionControl:
                     "acceptance_run_id": acceptance_run_id,
                     "config_digest": config_digest,
                     "sample_count": len(sample_ids),
+                    "checkpoint_digest": checkpoint_digest,
+                    "pristine_recovery_authorized": pristine_recovery_authorized,
+                },
+            )
+
+    def recover_interrupted_acceptance(
+        self,
+        *,
+        candidate_sha: str,
+        suite_id: str,
+        acceptance_run_id: str,
+        config_digest: str,
+        sample_ids: tuple[str, ...],
+        checkpoint_path: Path,
+        expected_pid: int,
+        expected_gate: str,
+    ) -> dict[str, object]:
+        """Clear a proven-dead acceptance command without inventing an attempt."""
+
+        with self._lock():
+            state = self._state()
+            self._verify_static(state)
+            if state["current_state"] != "GENERALIZATION_EVAL":
+                raise ExecutionControlError("interrupted acceptance recovery is not allowed in the current state")
+            if (
+                state["active_pid"] != expected_pid
+                or state["active_gate"] != expected_gate
+                or state["active_run_id"] != acceptance_run_id
+                or state["active_command"] is None
+            ):
+                raise ExecutionControlError("interrupted acceptance command identity drifted")
+            if _pid_is_alive(expected_pid):
+                raise ExecutionControlError("interrupted acceptance PID is still alive")
+            _, checkpoint_digest = _acceptance_checkpoint_binding(
+                checkpoint_path,
+                candidate_sha=candidate_sha,
+                suite_id=suite_id,
+                acceptance_run_id=acceptance_run_id,
+                config_digest=config_digest,
+                sample_ids=sample_ids,
+            )
+            runs = validate_acceptance_runs(state["acceptance_runs"])
+            run = runs.get(acceptance_key(candidate_sha, suite_id))
+            if (
+                run is None
+                or run.get("candidate_sha") != candidate_sha
+                or run.get("suite_id") != suite_id
+                or run.get("acceptance_run_id") != acceptance_run_id
+                or run.get("config_digest") != config_digest
+                or run.get("status") != "RUNNING"
+            ):
+                raise ExecutionControlError("interrupted acceptance ledger identity drifted")
+            samples = cast(dict[str, dict[str, object]], run["samples"])
+            if set(samples) != set(sample_ids) or len(sample_ids) != len(set(sample_ids)):
+                raise ExecutionControlError("interrupted acceptance sample coverage drifted")
+            pristine = tuple(
+                sample_id
+                for sample_id, sample in samples.items()
+                if sample["final_status"] == "PENDING"
+                and not cast(list[object], sample["attempts"])
+                and not cast(dict[str, object], sample["human_review"])
+            )
+            if not pristine or any(
+                sample["final_status"] == "PENDING"
+                and (cast(list[object], sample["attempts"]) or cast(dict[str, object], sample["human_review"]))
+                for sample in samples.values()
+            ):
+                raise ExecutionControlError("interrupted acceptance has no pristine unreceived sample to recover")
+            interrupted_command = str(state["active_command"])
+            state.update(
+                {
+                    "active_gate": None,
+                    "active_run_id": None,
+                    "active_command": None,
+                    "active_pid": None,
+                    "heartbeat_at": _now(),
+                }
+            )
+            evidence = list(cast(list[str], state["evidence_paths"]))
+            resolved_checkpoint = str(checkpoint_path.resolve())
+            if resolved_checkpoint not in evidence:
+                evidence.append(resolved_checkpoint)
+            state["evidence_paths"] = evidence
+            return self._commit(
+                state,
+                "interrupted_acceptance_recovered",
+                {
+                    "candidate_sha": candidate_sha,
+                    "suite_id": suite_id,
+                    "acceptance_run_id": acceptance_run_id,
+                    "config_digest": config_digest,
+                    "checkpoint_digest": checkpoint_digest,
+                    "pristine_sample_count": len(pristine),
+                    "stale_pid": expected_pid,
+                    "interrupted_command": interrupted_command,
+                    "provider_attempt_fabricated": False,
+                    "history_rewritten": False,
                 },
             )
 
@@ -734,7 +955,9 @@ class ExecutionControl:
             except AcceptanceLedgerError as exc:
                 raise ExecutionControlError(str(exc)) from exc
 
-    def transition(self, expected_state: str, expected_head: str, contract_digest: str, target: str) -> dict[str, object]:
+    def transition(
+        self, expected_state: str, expected_head: str, contract_digest: str, target: str
+    ) -> dict[str, object]:
         with self._lock():
             state = self._state()
             self._verify_event_chain(state)
@@ -761,12 +984,16 @@ class ExecutionControl:
                 raise ExecutionControlError("finalized acceptance and both bounded reviews are required before CI")
             if target == "DEPLOY_READY" and "ci_success" not in completed:
                 raise ExecutionControlError("a successful authoritative CI is required before deployment")
-            if target == "REVIEW" and not {
-                "backup_restore",
-                "production_deploy",
-                "rollback_roundtrip",
-                "synthetic_cleanup",
-            } <= completed:
+            if (
+                target == "REVIEW"
+                and not {
+                    "backup_restore",
+                    "production_deploy",
+                    "rollback_roundtrip",
+                    "synthetic_cleanup",
+                }
+                <= completed
+            ):
                 raise ExecutionControlError("production proof and cleanup are required before REVIEW")
             previous = str(state["current_state"])
             previous_head = str(state["head_sha"])
@@ -982,11 +1209,15 @@ class ExecutionControl:
                 if current not in {"GENERALIZATION_EVAL", "INDEPENDENT_AUDIT"}:
                     raise ExecutionControlError("evidence finalizer is not allowed in the current state")
             elif action == "ci":
-                if current != "CI_READY" or not {
-                    "acceptance_finalized",
-                    "product_review",
-                    "engineering_review",
-                } <= completed:
+                if (
+                    current != "CI_READY"
+                    or not {
+                        "acceptance_finalized",
+                        "product_review",
+                        "engineering_review",
+                    }
+                    <= completed
+                ):
                     raise ExecutionControlError("CI is not authorized")
             elif action == "deploy":
                 if current != "DEPLOY_READY" or not {"ci_success", "backup_restore"} <= completed:
@@ -1093,6 +1324,16 @@ def _parser() -> argparse.ArgumentParser:
     acceptance_begin.add_argument("--config-digest", required=True)
     acceptance_begin.add_argument("--sample-id", action="append", required=True)
     acceptance_begin.add_argument("--resume-unreceived", action="store_true")
+    acceptance_begin.add_argument("--resume-checkpoint", type=Path)
+    acceptance_recover = commands.add_parser("acceptance-recover-interrupted")
+    acceptance_recover.add_argument("--candidate-sha", required=True)
+    acceptance_recover.add_argument("--suite-id", required=True)
+    acceptance_recover.add_argument("--acceptance-run-id", required=True)
+    acceptance_recover.add_argument("--config-digest", required=True)
+    acceptance_recover.add_argument("--sample-id", action="append", required=True)
+    acceptance_recover.add_argument("--checkpoint", type=Path, required=True)
+    acceptance_recover.add_argument("--expected-pid", type=int, required=True)
+    acceptance_recover.add_argument("--expected-gate", required=True)
     acceptance_record = commands.add_parser("acceptance-record")
     acceptance_record.add_argument("--candidate-sha", required=True)
     acceptance_record.add_argument("--suite-id", required=True)
@@ -1145,7 +1386,9 @@ def main() -> None:
     elif command == "adopt-ruling":
         state = control.adopt_ruling(arguments.decision_source)
     elif command == "begin":
-        state = control.begin(str(arguments.gate), str(arguments.controlled_command), arguments.run_id, int(arguments.pid))
+        state = control.begin(
+            str(arguments.gate), str(arguments.controlled_command), arguments.run_id, int(arguments.pid)
+        )
     elif command == "heartbeat":
         state = control.heartbeat()
     elif command == "complete":
@@ -1185,6 +1428,18 @@ def main() -> None:
             config_digest=str(arguments.config_digest),
             sample_ids=tuple(str(value) for value in arguments.sample_id),
             allow_resume=bool(arguments.resume_unreceived),
+            resume_checkpoint_path=arguments.resume_checkpoint,
+        )
+    elif command == "acceptance-recover-interrupted":
+        state = control.recover_interrupted_acceptance(
+            candidate_sha=str(arguments.candidate_sha),
+            suite_id=str(arguments.suite_id),
+            acceptance_run_id=str(arguments.acceptance_run_id),
+            config_digest=str(arguments.config_digest),
+            sample_ids=tuple(str(value) for value in arguments.sample_id),
+            checkpoint_path=arguments.checkpoint,
+            expected_pid=int(arguments.expected_pid),
+            expected_gate=str(arguments.expected_gate),
         )
     elif command == "acceptance-record":
         state = control.record_acceptance_sample(
