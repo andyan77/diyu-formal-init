@@ -4150,6 +4150,41 @@ def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     assert compiled.semantic_contract.brand_account_link in compiled.body
 
 
+def test_explicit_life_topic_does_not_receive_the_account_industry_domain() -> None:
+    base = _p3_account_link_request()
+    seed = "帮我写条婆媳主题的小红书，别狗血，也别把任何一方写成反派。"
+    request = _with_publication_contract(
+        replace(
+            base,
+            weak_seed=seed,
+            primary_product="brand_life_narrative",
+            narrative_frame=new_frame("general_observation", (), ()),
+            creative_plan=build_creative_plan(
+                topic_spans=("婆媳主题",),
+                primary_value="brand_life_narrative",
+                tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+                mechanism_id=None,
+                target_shape="小红书图文完整成品",
+                topic_origin="explicit_user",
+            ),
+        ),
+    )
+    kernel = cast(CreativeKernelV1, _filled_kernel(request))
+
+    prompt = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    )._kernel_writer_prompt(request, kernel, {})
+
+    assert "婆媳主题" in prompt
+    assert "从穿衣编辑的位置重新看熟悉事物" not in prompt
+    assert "穿衣选择、熟悉事物被重新看见的时刻" not in prompt
+    assert "当前账号的编辑回应位置" in prompt
+    assert "用户明确题材是本篇唯一内容主语" in prompt
+    assert "不得借账号身份把题材转向所属行业、商品" in prompt
+
+
 def test_explicit_local_response_does_not_receive_the_account_topic_domain() -> None:
     base = _p3_account_link_request()
     packet, constraint = _current_publication_packet()

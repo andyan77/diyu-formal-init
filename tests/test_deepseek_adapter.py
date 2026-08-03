@@ -1916,6 +1916,8 @@ def test_publication_writer_consumes_the_single_negative_safety_contract() -> No
 
     assert negative_safety_contract_text() in system
     assert "不替现实人物、对象或事件判定未提供的原因、内部状态、变化或结果" in system
+    assert "事实原句不得复制进任何可写单元" in system
+    assert "不列举候选解释" in system
     assert "必须二选一" not in system
 
 

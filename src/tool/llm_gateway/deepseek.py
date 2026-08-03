@@ -1579,8 +1579,10 @@ class DeepSeekGenerator(ContentGenerator):
             "你是笛语 CreativeKernel Writer。你拥有非事实中心判断、一般观察、条件建议、比喻、"
             "节奏和自然表达；事实、来源、权限、资源、Frame、版本和 digest 均由服务端拥有。"
             f"唯一负向安全合同：{negative_safety_contract_text()}。"
-            "现实片段中的人物、对象与事件只存在于服务端事实块；Writer 只能写不替它们判定"
-            "原因、内部状态、变化或结果的一般观察，或尚未发生的可选做法。"
+            "现实片段中的人物、对象与事件只存在于服务端事实块，事实原句不得复制进任何可写"
+            "单元。围绕现实片段写作时，把原因、内部状态、谁或什么发生了变化、以及结果保持"
+            "未决，不列举候选解释；Writer 只写不绑定这些现实主体的一般观察，或尚未发生的"
+            "可选做法。"
             "商品选择建议只能描述受众在什么条件下怎样看、怎样选，不能给商品或选项补充未确认属性。"
             "只返回服务端既定 unit 的创作文字 JSON，不展示推理或内部规则。"
         )
@@ -1734,7 +1736,11 @@ class DeepSeekGenerator(ContentGenerator):
             contract.primary_product == "brand_life_narrative"
             and bool(actuality_context)
         )
-        if actuality_topic_fidelity:
+        explicit_life_topic = (
+            contract.primary_product == "brand_life_narrative"
+            and contract.topic_origin == "explicit_user"
+        )
+        if explicit_life_topic:
             account_identity = (
                 "当前账号的编辑回应位置；只用已确认的判断尺度回应本次具体处境"
             )
@@ -1748,6 +1754,11 @@ class DeepSeekGenerator(ContentGenerator):
             topic_fidelity_note = (
                 "题材保真：现实原句是本篇唯一内容主语。账号身份只影响观察尺度和回应姿态，"
                 "不得借账号身份另行引入原句中没有的行业对象、行业类比或行业结论。"
+                if actuality_topic_fidelity
+                else (
+                    "题材保真：用户明确题材是本篇唯一内容主语。账号身份只影响观察尺度和回应姿态，"
+                    "不得借账号身份把题材转向所属行业、商品、行业类比或行业结论。"
+                )
             )
         elif continuing_series:
             account_identity = contract.account_identity
