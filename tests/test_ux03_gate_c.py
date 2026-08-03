@@ -3497,7 +3497,7 @@ def test_p2_server_selects_only_the_three_frozen_product_facts() -> None:
 
     assert selected == (
         "ZX-C218 是一件双面短外套。",
-        "双面短外套有炭灰纯色、深绿细格纹这些已确认颜色。",
+        "双面短外套已确认的可见颜色信息包括：炭灰纯色、深绿细格纹。",
         "双面短外套两面都以完整外观呈现。",
     )
 

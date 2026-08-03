@@ -96,6 +96,7 @@ from src.shared.writer_request import (
     WRITER_OUTPUT_VERSION,
     WriterOutputV3,
     build_writer_request_v3,
+    writer_request_document,
 )
 from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
 
@@ -668,8 +669,8 @@ def test_publication_v3_uses_one_writer_call_without_legacy_repair_or_reviewer()
     assert "每个可见句" not in prompt
     assert "必须二选一" not in prompt
     assert "不能替换用户题材" in prompt
-    assert "不得反向断言当前用户的身体、心理、原因或结果" in prompt
-    assert "不得把同一商品内部配色写成多个款式" in prompt
+    assert "不得解释任何人的身体或心理状态" in prompt
+    assert "不得添加计划外的购买理由" in prompt
     assert request.active_domain_assets[0].body not in prompt
     system = str(FakeClient.requests[0]["json"]["messages"][0]["content"])
     assert negative_safety_contract_text() in system
@@ -696,7 +697,7 @@ def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
     contract = replace(
         cast(PublicationContractV3, base.publication_contract),
         input_roles=roles,
-        topic=actuality.exact_text,
+        topic="围绕一次日常安排被打断后的停顿形成观察",
         frozen_fact_refs=(actuality.source_id,),
         explicit_user_controls=tuple(span.exact_text for span in roles if span.role != "observable_actuality"),
     )
@@ -717,10 +718,12 @@ def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
         prior_output=None,
         revision_instruction=None,
     )
-    assert actuality.exact_text not in writer_request.topic
-    assert writer_request.actuality_context == (
-        (actuality.source_id, actuality.exact_text),
+    writer_document_json = json.dumps(
+        writer_request_document(writer_request),
+        ensure_ascii=False,
     )
+    assert actuality.exact_text not in writer_document_json
+    assert writer_request.actuality_fact_refs == (actuality.source_id,)
     FakeClient.responses = [
         _completion(
             {
@@ -2075,7 +2078,7 @@ def test_product_claims_are_exact_and_never_nearest_match() -> None:
     claims = DeepSeekGenerator._registered_product_claims(product)
     assert "这件商品的型号是 ZX-C218。" in claims
     assert "双面短外套的材质是棉混纺。" in claims
-    assert "双面短外套有雾蓝、米白这些已确认颜色。" in claims
+    assert "双面短外套已确认的可见颜色信息包括：雾蓝、米白。" in claims
     assert "双面短外套的M 码当前样衣重量是 620 克。" in claims
     fact_ids = tuple(record.fact_id for record in product_fact_records(product))
     frame = new_frame("general_observation", (), fact_ids)

@@ -735,6 +735,11 @@ def _assert_publication_contract_v3(contract: PublicationContractV3) -> None:
         fact_ref for fact_ref in contract.frozen_fact_refs if fact_ref.startswith("source:user_actuality:")
     }:
         raise DomainError("现实事实跨度没有绑定冻结事实")
+    if any(
+        span.role == "observable_actuality" and span.exact_text in contract.topic
+        for span in contract.input_roles
+    ):
+        raise DomainError("Writer 主题不得包含服务端冻结的现实原文")
     available = set(brand_use.available_refs)
     frozen = set(brand_use.frozen_refs)
     consumed = set(brand_use.consumed_refs)

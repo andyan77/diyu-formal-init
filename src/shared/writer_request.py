@@ -30,7 +30,7 @@ class WriterRequestV3:
     content_product: str
     central_job: str
     audience_payoff: str
-    actuality_context: tuple[tuple[str, str], ...]
+    actuality_fact_refs: tuple[str, ...]
     explicit_user_controls: tuple[str, ...]
     account_editorial_permission: dict[str, str]
     product_decision_basis: dict[str, object] | None
@@ -76,8 +76,8 @@ def build_writer_request_v3(
     permission = contract.account_editorial_permission
     series = contract.series_delta
     platform = contract.platform_direction
-    actuality_context = tuple(
-        (span.source_id, span.exact_text)
+    actuality_fact_refs = tuple(
+        span.source_id
         for span in contract.input_roles
         if span.role == "observable_actuality"
     )
@@ -85,15 +85,11 @@ def build_writer_request_v3(
         request_version=WRITER_REQUEST_VERSION,
         publication_contract_digest=publication_contract_digest(contract),
         topic_origin=contract.topic_origin,
-        topic=(
-            "现实片段已由服务端冻结并会另行展示；请从事实之后直接形成中心判断"
-            if actuality_context
-            else contract.topic
-        ),
+        topic=contract.topic,
         content_product=contract.content_product,
         central_job=contract.central_job,
         audience_payoff=contract.audience_payoff,
-        actuality_context=actuality_context,
+        actuality_fact_refs=actuality_fact_refs,
         explicit_user_controls=contract.explicit_user_controls,
         account_editorial_permission={
             "identity": permission.identity,
@@ -147,9 +143,7 @@ def writer_request_document(request: WriterRequestV3) -> dict[str, object]:
         "content_product": request.content_product,
         "central_job": request.central_job,
         "audience_payoff": request.audience_payoff,
-        "actuality_context": [
-            {"source_id": source_id, "exact_text": exact_text} for source_id, exact_text in request.actuality_context
-        ],
+        "actuality_fact_refs": list(request.actuality_fact_refs),
         "explicit_user_controls": list(request.explicit_user_controls),
         "account_editorial_permission": dict(request.account_editorial_permission),
         "product_decision_basis": request.product_decision_basis,

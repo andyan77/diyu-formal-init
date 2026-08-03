@@ -21,7 +21,7 @@ ProductClaimCategory: TypeAlias = Literal[
 ]
 
 PRODUCT_FACT_PACKET_VERSION = "product-fact-packet-v1"
-PRODUCT_FACT_RENDERER_VERSION = "immutable-product-fact-renderer-v2"
+PRODUCT_FACT_RENDERER_VERSION = "immutable-product-fact-renderer-v3"
 _PROHIBITED_PRODUCT_INFERENCES = (
     "performance",
     "efficacy",
@@ -318,7 +318,7 @@ def _product_packet_items(
             (
                 "colors",
                 color_values,
-                f"{subject}有{'、'.join(color_values)}这些已确认颜色。",
+                f"{subject}已确认的可见颜色信息包括：{'、'.join(color_values)}。",
                 ("appearance",),
             )
         )

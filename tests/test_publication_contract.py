@@ -115,7 +115,7 @@ def _contract_v3() -> PublicationContractV3:
     return build_publication_contract_v3(
         input_roles=resolution.spans,
         topic_origin="explicit_user",
-        topic=candidates[0].exact_text,
+        topic="围绕忙碌中遗漏日常步骤的张力形成一条生活观察",
         content_product="brand_life_narrative",
         central_job="围绕用户提供的具体张力形成一条独立判断",
         audience_payoff="让受众从这个生活片段里看到一个值得停留的观察",
@@ -333,14 +333,43 @@ def test_publication_contract_v3_is_the_only_writer_semantic_projection() -> Non
 
     assert restored == contract
     assert publication_contract_digest(restored) == publication_contract_digest(contract)
-    assert request.actuality_context == ((contract.input_roles[0].source_id, contract.input_roles[0].exact_text),)
+    assert request.actuality_fact_refs == (contract.input_roles[0].source_id,)
     assert contract.input_roles[1].exact_text in request.explicit_user_controls
-    assert contract.input_roles[1].exact_text not in "\n".join(text for _, text in request.actuality_context)
+    assert contract.input_roles[0].exact_text not in json.dumps(
+        request_document,
+        ensure_ascii=False,
+    )
     assert "known_conditions" not in request_document
     assert "visible_text" not in json.dumps(
         request_document,
         ensure_ascii=False,
     )
+
+
+def test_publication_contract_v3_rejects_actuality_text_in_writer_topic() -> None:
+    contract = _contract_v3()
+    actuality = next(span for span in contract.input_roles if span.role == "observable_actuality")
+
+    with pytest.raises(DomainError, match="Writer 主题不得包含服务端冻结的现实原文"):
+        build_publication_contract_v3(
+            input_roles=contract.input_roles,
+            topic_origin=contract.topic_origin,
+            topic=actuality.exact_text,
+            content_product=contract.content_product,
+            central_job=contract.central_job,
+            audience_payoff=contract.audience_payoff,
+            explicit_user_controls=contract.explicit_user_controls,
+            account_editorial_permission=contract.account_editorial_permission,
+            frozen_fact_refs=contract.frozen_fact_refs,
+            product_decision_basis=contract.product_decision_basis,
+            series_delta=contract.series_delta,
+            platform_direction=contract.platform_direction,
+            media_capability_ref=contract.media_capability_ref,
+            brand_context_use=contract.brand_context_use,
+            publication_projection_id=contract.publication_projection_id,
+            publication_projection_version=contract.publication_projection_version,
+            publication_projection_digest=contract.publication_projection_digest,
+        )
 
 
 def test_publication_contract_v3_projects_two_brands_without_a_diyu_branch() -> None:

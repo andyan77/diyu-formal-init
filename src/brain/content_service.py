@@ -194,6 +194,7 @@ class ContentService:
         explicit_ui: bool = True,
         client_request_id: UUID | None = None,
         intake_spans: tuple[PublicationInputSpanV1, ...] = (),
+        editorial_focus: str | None = None,
     ) -> dict[str, object]:
         if client_request_id is not None:
             completed = self._repository.completed_request(scope, client_request_id)
@@ -383,6 +384,7 @@ class ContentService:
             direction=direction,
             series_context=series_context,
             media_envelope=media_envelope,
+            editorial_focus=editorial_focus,
         )
         delivery_compiler_version = (
             DELIVERY_COMPILER_V5_VERSION
@@ -501,6 +503,7 @@ class ContentService:
         direction: PlatformDirection,
         series_context: SeriesContext | None,
         media_envelope: MediaCapabilityEnvelope,
+        editorial_focus: str | None,
     ) -> PublicationContract:
         expression = control.account_expression
         packet = context.context_packet
@@ -550,11 +553,22 @@ class ContentService:
                     )
                 )
             )
-            actuality_topic = tuple(span.exact_text for span in intake_spans if span.role == "observable_actuality")
+            actuality_spans = tuple(span for span in intake_spans if span.role == "observable_actuality")
+            safe_editorial_focus = editorial_focus.strip() if editorial_focus else ""
+            if any(span.exact_text in safe_editorial_focus for span in actuality_spans):
+                safe_editorial_focus = ""
             topic = (
                 "由 Writer 从当前账号允许的内容领地自主选择一个具体题材"
                 if plan.topic_origin == "system_selected"
-                else "\n".join(actuality_topic or tuple(item for item in plan.topic_spans if item.strip()))
+                else (
+                    safe_editorial_focus
+                    if actuality_spans and safe_editorial_focus
+                    else (
+                        "围绕服务端已冻结的现实片段完成本题，不解释其未提供的原因、身体、心理或结果"
+                        if actuality_spans
+                        else "\n".join(item for item in plan.topic_spans if item.strip())
+                    )
+                )
             )
             account_attention = (
                 "先完整回应当前生活题材；账号内容领地只决定观察顺序，不能替换题材，也不能强行转向服饰、商品或品牌宣讲"
@@ -809,9 +823,6 @@ class ContentService:
         if raw_history and raw_history[-1].role == "user" and raw_history[-1].content == message:
             raw_history = raw_history[:-1]
         raw_user_turns = tuple(turn.content for turn in raw_history if turn.role == "user") + (message,)
-        explicit_commitment = evaluate_creation_intent(raw_user_turns)
-        if direct_generate and not explicit_commitment.committed and not raw_history and is_natural_chat(message):
-            return {"kind": "chat", "message": natural_reply()}
         commitment = evaluate_creation_intent(
             () if conversation_only else raw_user_turns,
             explicit_ui=direct_generate and not conversation_only,
@@ -824,8 +835,6 @@ class ContentService:
             and sanitized_history[-1].content == sanitized_message
         ):
             sanitized_history = sanitized_history[:-1]
-        if not commitment.committed and not sanitized_history and is_natural_chat(sanitized_message):
-            return {"kind": "chat", "message": natural_reply()}
         if commitment.committed and progress is not None:
             progress("received")
             progress("compiling_context")
@@ -1014,6 +1023,7 @@ class ContentService:
             creation_commitment=commitment,
             client_request_id=client_request_id,
             intake_spans=publication_spans,
+            editorial_focus=decision.message,
         )
         return result | {"conversation_message": decision.message}
 
