@@ -41,6 +41,8 @@ from src.tool.tenant01_evidence import (
     TENANT01_CARD_IDS,
     TENANT01_COMPARISON_FIELDS,
     TENANT01_DEMONSTRATION_CHECKS,
+    TENANT01_GENERALIZATION_CASE_IDS,
+    TENANT01_GENERALIZATION_CONFIG_SHA256,
     TENANT01_GENERATION_LEDGER_FILE,
     TENANT01_GENERATION_LEDGER_VERSION,
     TENANT01_HARD_BOUNDARIES,
@@ -50,6 +52,7 @@ from src.tool.tenant01_evidence import (
     TENANT01_SUITE_VERSION,
     Tenant01ArtifactInput,
     Tenant01EvidenceError,
+    Tenant01GeneralizationReview,
     Tenant01HumanReview,
     compile_tenant01_snapshot_delivery,
     sha256_file,
@@ -1035,6 +1038,68 @@ def _reviews(path: Path) -> tuple[Tenant01HumanReview, ...]:
     return tuple(reviews)
 
 
+def _generalization_reviews(path: Path) -> tuple[Tenant01GeneralizationReview, ...]:
+    document = _json_object(path)
+    if (
+        document.get("review_contract") != "TENANT-01-GENERALIZATION-REVIEW-V1"
+        or document.get("set_kind") != "frozen_generalization_regression"
+    ):
+        raise ValueError("TENANT-01 generalization review contract drifted")
+    raw_reviews = document.get("reviews")
+    if not isinstance(raw_reviews, list):
+        raise ValueError("TENANT-01 generalization reviews are unavailable")
+    reviews: list[Tenant01GeneralizationReview] = []
+    required = {
+        "case_id",
+        "result_file",
+        "result_sha256",
+        "hard_boundary",
+        "structure_complete",
+        "product_usable",
+        "excerpts",
+        "quality_observations",
+        "residual_risks",
+        "reviewer_scope",
+        "reviewer_kind",
+        "reviewed_at",
+    }
+    for raw in raw_reviews:
+        if not isinstance(raw, dict) or set(raw) != required:
+            raise ValueError("TENANT-01 generalization review is invalid")
+        excerpts = raw.get("excerpts")
+        observations = raw.get("quality_observations")
+        residual_risks = raw.get("residual_risks")
+        if (
+            not isinstance(excerpts, dict)
+            or any(not isinstance(key, str) or not isinstance(value, str) for key, value in excerpts.items())
+            or not isinstance(observations, list)
+            or any(not isinstance(value, str) for value in observations)
+            or not isinstance(residual_risks, list)
+            or any(not isinstance(value, str) for value in residual_risks)
+            or not _is_sha256(raw.get("result_sha256"))
+        ):
+            raise ValueError("TENANT-01 generalization review evidence is incomplete")
+        reviews.append(
+            Tenant01GeneralizationReview(
+                case_id=str(raw.get("case_id", "")),
+                result_file=str(raw.get("result_file", "")),
+                result_sha256=cast(str, raw["result_sha256"]),
+                hard_boundary=str(raw.get("hard_boundary", "")),
+                structure_complete=str(raw.get("structure_complete", "")),
+                product_usable=str(raw.get("product_usable", "")),
+                excerpts={str(key): str(value) for key, value in excerpts.items()},
+                quality_observations=tuple(cast(list[str], observations)),
+                residual_risks=tuple(cast(list[str], residual_risks)),
+                reviewer_scope=str(raw.get("reviewer_scope", "")),
+                reviewer_kind=str(raw.get("reviewer_kind", "")),
+                reviewed_at=str(raw.get("reviewed_at", "")),
+            )
+        )
+    if {review.case_id for review in reviews} != TENANT01_GENERALIZATION_CASE_IDS:
+        raise ValueError("TENANT-01 generalization review coverage drifted")
+    return tuple(reviews)
+
+
 def _assert_finalizable_evidence_root(
     root: Path,
     *,
@@ -1110,6 +1175,9 @@ def _finalize(args: argparse.Namespace) -> None:
         root,
         implementation_sha=implementation_sha,
     )
+    generalization_config = Path(args.generalization_config).resolve()
+    if sha256_file(generalization_config) != TENANT01_GENERALIZATION_CONFIG_SHA256:
+        raise RuntimeError("TENANT-01 frozen generalization regression set drifted")
     write_tenant01_evidence(
         root,
         implementation_sha=implementation_sha,
@@ -1125,6 +1193,9 @@ def _finalize(args: argparse.Namespace) -> None:
             for card_id in sorted(TENANT01_CARD_IDS)
         ),
         reviews=_reviews(Path(args.review_file).resolve()),
+        generalization_reviews=_generalization_reviews(
+            Path(args.generalization_review_file).resolve()
+        ),
         p5_preflight_file="p5-no-media.json",
         dm01_file="dm01.json",
     )
@@ -1152,6 +1223,11 @@ def _parser() -> argparse.ArgumentParser:
     finalize.add_argument("--implementation-sha", required=True)
     finalize.add_argument("--evidence-root", required=True)
     finalize.add_argument("--review-file", required=True)
+    finalize.add_argument("--generalization-review-file", required=True)
+    finalize.add_argument(
+        "--generalization-config",
+        default="config/tenant01/semantic-holdout-v1.json",
+    )
     finalize.add_argument("--schema-revision", required=True)
     finalize.add_argument("--image-digest", required=True)
     finalize.add_argument("--source-manifest-digest", required=True)

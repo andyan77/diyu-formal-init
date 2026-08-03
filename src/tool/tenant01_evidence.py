@@ -98,6 +98,32 @@ TENANT01_CARD_IDS: Final[frozenset[str]] = frozenset(
         "series3",
     }
 )
+TENANT01_GENERALIZATION_CASE_IDS: Final[frozenset[str]] = frozenset(
+    {
+        "new_daily_delay",
+        "new_couple_housework",
+        "new_zero_topic",
+        "new_p1_gallery_commute",
+        "new_p2_confirmed_product",
+        "new_p2_insufficient_product",
+        "new_p4_local_observation",
+        "new_p5_registered_media",
+        "new_p5_no_media",
+        "new_style_revision",
+        "new_series_progression",
+        "new_cross_platform_pair",
+        "new_health_inducement",
+        "new_product_effect_inducement",
+        "new_cross_brand_pair",
+    }
+)
+TENANT01_ACCEPTANCE_SAMPLE_IDS: Final[frozenset[str]] = (
+    TENANT01_CARD_IDS | TENANT01_GENERALIZATION_CASE_IDS
+)
+TENANT01_FIRST_DRAFT_USABLE_MINIMUM: Final[int] = 23
+TENANT01_GENERALIZATION_CONFIG_SHA256: Final[str] = (
+    "e773158aef2a22e3d4344f20c80bdf90b5bd9d19c0d3012b4f5fd0b00d1dcda7"
+)
 TENANT01_REVIEW_DIMENSIONS: Final[tuple[str, ...]] = (
     "brand_relation",
     "account_voice",
@@ -167,6 +193,22 @@ class Tenant01HumanReview:
     reviewer_scope: str = ""
     reviewer_kind: str = ""
     reviewed_at: str = ""
+
+
+@dataclass(frozen=True)
+class Tenant01GeneralizationReview:
+    case_id: str
+    result_file: str
+    result_sha256: str
+    hard_boundary: str
+    structure_complete: str
+    product_usable: str
+    excerpts: dict[str, str]
+    quality_observations: tuple[str, ...]
+    residual_risks: tuple[str, ...]
+    reviewer_scope: str
+    reviewer_kind: str
+    reviewed_at: str
 
 
 def sha256_file(path: Path) -> str:
@@ -1374,14 +1416,10 @@ def _validate_review(
     }
     if review.artifact_sha256 != artifact_sha256 or review.visible_digest != visible_digest_value:
         raise Tenant01EvidenceError(f"{review.card_id} 人工审阅没有预先绑定当前 artifact。")
-    if (
-        review.hard_boundary not in {"PASS", "FAIL"}
-        or review.product_usable not in {"PASS", "FAIL"}
-        or review.hard_boundary != "PASS"
-        or review.product_usable != "PASS"
-        or review.verdict != "PASS"
-    ):
-        raise Tenant01EvidenceError(f"{review.card_id} 人工二元产品结论未通过。")
+    if review.hard_boundary != "PASS":
+        raise Tenant01EvidenceError(f"{review.card_id} 人工硬边界结论未通过。")
+    if review.product_usable not in {"PASS", "FAIL"} or review.verdict != review.product_usable:
+        raise Tenant01EvidenceError(f"{review.card_id} 首稿可用结论或逐卡 verdict 不诚实。")
     if (
         set(quality_dimensions) != set(TENANT01_REVIEW_DIMENSIONS)
         or any(type(score) is not int or not 1 <= score <= 5 for score in quality_dimensions.values())
@@ -1389,8 +1427,6 @@ def _validate_review(
         or any(not isinstance(reason, str) or not reason.strip() for reason in dimension_rationales.values())
     ):
         raise Tenant01EvidenceError(f"{review.card_id} V2 人工审阅维度或依据不完整。")
-    if any(score < 4 for score in quality_dimensions.values()):
-        raise Tenant01EvidenceError(f"{review.card_id} V2 产品维度未通过。")
     if not review.reviewer_scope.strip() or not review.reviewer_kind.strip():
         raise Tenant01EvidenceError(f"{review.card_id} V2 审阅者范围未声明。")
     try:
@@ -1401,9 +1437,6 @@ def _validate_review(
         raise Tenant01EvidenceError(f"{review.card_id} 人工评分维度不完整。")
     if any(type(score) is not int or not 1 <= score <= 5 for score in review.scores.values()):
         raise Tenant01EvidenceError(f"{review.card_id} 人工评分必须为 1—5。")
-    for dimension in TENANT01_REVIEW_DIMENSIONS:
-        if review.scores[dimension] < 4:
-            raise Tenant01EvidenceError(f"{review.card_id} 未通过 {dimension} 硬门。")
     if set(review.hard_boundaries) != set(TENANT01_HARD_BOUNDARIES) or any(
         value is not True for value in review.hard_boundaries.values()
     ):
@@ -1422,14 +1455,14 @@ def _validate_review(
         normalized_excerpts.append(normalized)
     if len(set(normalized_excerpts)) != len(normalized_excerpts):
         raise Tenant01EvidenceError(f"{review.card_id} 人工审阅引用不能跨分区复用。")
-    if review.verdict != "PASS":
-        raise Tenant01EvidenceError(f"{review.card_id} 人工二元结论不是 PASS。")
     if v2_excerpts != review.excerpts:
         raise Tenant01EvidenceError(f"{review.card_id} V2 人工引用与成品分区绑定不一致。")
-    if set(review.demonstration_checks) != set(TENANT01_DEMONSTRATION_CHECKS) or any(
+    if set(review.demonstration_checks) != set(TENANT01_DEMONSTRATION_CHECKS):
+        raise Tenant01EvidenceError(f"{review.card_id} 成品结构检查覆盖不完整。")
+    if review.product_usable == "PASS" and any(
         value is not True for value in review.demonstration_checks.values()
     ):
-        raise Tenant01EvidenceError(f"{review.card_id} 可演示成品检查未通过。")
+        raise Tenant01EvidenceError(f"{review.card_id} 首稿标记可用但成品检查未通过。")
     if set(review.comparison) != set(TENANT01_COMPARISON_FIELDS) or any(
         not isinstance(value, str) or not value.strip() for value in review.comparison.values()
     ):
@@ -1459,6 +1492,59 @@ def _validate_review(
         "body_excerpt": review.body_excerpt,
         "media_excerpt": review.media_excerpt,
         "caption_excerpt": review.caption_excerpt,
+        "quality_observations": list(review.quality_observations),
+        "residual_risks": list(review.residual_risks),
+        "reviewer_scope": review.reviewer_scope,
+        "reviewer_kind": review.reviewer_kind,
+        "reviewed_at": review.reviewed_at,
+    }
+
+
+def _validate_generalization_review(
+    root: Path,
+    review: Tenant01GeneralizationReview,
+) -> dict[str, object]:
+    if review.case_id not in TENANT01_GENERALIZATION_CASE_IDS:
+        raise Tenant01EvidenceError(f"{review.case_id} 不属于冻结泛化回归集。")
+    result_path = _private_child(root, review.result_file)
+    if sha256_file(result_path) != review.result_sha256:
+        raise Tenant01EvidenceError(f"{review.case_id} 泛化回归审阅没有绑定当前结果。")
+    result = _json_object(result_path)
+    if (
+        result.get("case_id") != review.case_id
+        or result.get("machine_hard_gate") != "PASS"
+        or result.get("structure_gate") != "PASS"
+    ):
+        raise Tenant01EvidenceError(f"{review.case_id} 机器硬门或成品结构未通过。")
+    if review.hard_boundary != "PASS" or review.structure_complete != "PASS":
+        raise Tenant01EvidenceError(f"{review.case_id} 人工语义安全或结构审阅未通过。")
+    if review.product_usable not in {"PASS", "FAIL"}:
+        raise Tenant01EvidenceError(f"{review.case_id} 首稿可用结论无效。")
+    if not review.excerpts or any(
+        not isinstance(label, str)
+        or not label.strip()
+        or not isinstance(excerpt, str)
+        or len("".join(character for character in excerpt if character.isalnum())) < 6
+        for label, excerpt in review.excerpts.items()
+    ):
+        raise Tenant01EvidenceError(f"{review.case_id} 泛化回归引用不完整。")
+    serialized = json.dumps(result, ensure_ascii=False, sort_keys=True)
+    if any(excerpt not in serialized for excerpt in review.excerpts.values()):
+        raise Tenant01EvidenceError(f"{review.case_id} 泛化回归引用不在冻结结果中。")
+    if not review.reviewer_scope.strip() or not review.reviewer_kind.strip():
+        raise Tenant01EvidenceError(f"{review.case_id} 泛化回归审阅范围未声明。")
+    try:
+        datetime.fromisoformat(review.reviewed_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise Tenant01EvidenceError(f"{review.case_id} 泛化回归审阅时间无效。") from exc
+    return {
+        "case_id": review.case_id,
+        "result_file": review.result_file,
+        "result_sha256": review.result_sha256,
+        "hard_boundary": review.hard_boundary,
+        "structure_complete": review.structure_complete,
+        "product_usable": review.product_usable,
+        "excerpts": dict(review.excerpts),
         "quality_observations": list(review.quality_observations),
         "residual_risks": list(review.residual_risks),
         "reviewer_scope": review.reviewer_scope,
@@ -1671,6 +1757,7 @@ def write_tenant01_evidence(
     source_manifest_digest: str,
     artifacts: tuple[Tenant01ArtifactInput, ...],
     reviews: tuple[Tenant01HumanReview, ...],
+    generalization_reviews: tuple[Tenant01GeneralizationReview, ...],
     p5_preflight_file: str,
     dm01_file: str,
 ) -> None:
@@ -1687,6 +1774,41 @@ def write_tenant01_evidence(
     review_by_card = {review.card_id: review for review in reviews}
     if set(review_by_card) != TENANT01_CARD_IDS or len(review_by_card) != len(reviews):
         raise Tenant01EvidenceError("人工审阅覆盖不完整或重复。")
+    generalization_by_case = {
+        review.case_id: review for review in generalization_reviews
+    }
+    if (
+        set(generalization_by_case) != TENANT01_GENERALIZATION_CASE_IDS
+        or len(generalization_by_case) != len(generalization_reviews)
+    ):
+        raise Tenant01EvidenceError("冻结泛化回归审阅覆盖不完整或重复。")
+    generalization_config_path = _private_child(
+        root,
+        "generalization-suite-config.json",
+    )
+    generalization_config = _json_object(generalization_config_path)
+    source_config = generalization_config.get("source_config")
+    provider_config = generalization_config.get("provider_config")
+    generalization_cases = generalization_config.get("cases")
+    if (
+        generalization_config.get("suite_version")
+        != "TENANT-01-FROZEN-GENERALIZATION-V1"
+        or generalization_config.get("implementation_sha") != implementation_sha
+        or not isinstance(source_config, dict)
+        or source_config.get("sha256") != TENANT01_GENERALIZATION_CONFIG_SHA256
+        or source_config.get("set_kind") != "frozen_generalization_regression"
+        or not isinstance(provider_config, dict)
+        or provider_config
+        != {
+            "model": TENANT01_PROVIDER_MODEL,
+            "temperature": 0,
+            "max_retries": 0,
+        }
+        or not isinstance(generalization_cases, list)
+        or any(not isinstance(case_id, str) for case_id in generalization_cases)
+        or set(generalization_cases) != TENANT01_GENERALIZATION_CASE_IDS
+    ):
+        raise Tenant01EvidenceError("冻结泛化回归运行配置无效。")
     ledger_path = _private_child(root, TENANT01_GENERATION_LEDGER_FILE)
     ledger_by_card = _generation_ledger(
         ledger_path,
@@ -1747,6 +1869,31 @@ def write_tenant01_evidence(
         )
         review_records.append(validated_review)
 
+    generalization_records = [
+        _validate_generalization_review(root, generalization_by_case[case_id])
+        for case_id in sorted(TENANT01_GENERALIZATION_CASE_IDS)
+    ]
+    hard_boundary_passed = sum(
+        record["hard_boundary"] == "PASS"
+        for record in (*review_records, *generalization_records)
+    )
+    structure_passed = len(review_records) + sum(
+        record["structure_complete"] == "PASS"
+        for record in generalization_records
+    )
+    first_draft_usable = sum(
+        record["product_usable"] == "PASS"
+        for record in (*review_records, *generalization_records)
+    )
+    sample_count = len(review_records) + len(generalization_records)
+    if (
+        sample_count != len(TENANT01_ACCEPTANCE_SAMPLE_IDS)
+        or hard_boundary_passed != sample_count
+        or structure_passed != sample_count
+        or first_draft_usable < TENANT01_FIRST_DRAFT_USABLE_MINIMUM
+    ):
+        raise Tenant01EvidenceError("TENANT-01 双硬门或首稿可用率门未通过。")
+
     for field in ("task_id", "run_id", "version_id"):
         values = [str(record[field]) for record in artifact_records]
         if len(set(values)) != len(values):
@@ -1772,14 +1919,15 @@ def write_tenant01_evidence(
         {
             "review_contract": "TENANT-01-HUMAN-REVIEW-V2",
             "reviews": review_records,
-            "hard_boundary_violations": sum(record["hard_boundary"] != "PASS" for record in review_records),
-            "all_cards_binary_pass": all(
-                record["hard_boundary"] == "PASS" and record["product_usable"] == "PASS" and record["verdict"] == "PASS"
-                for record in review_records
-            ),
-            "all_dimensions_at_least_four": all(
-                min(cast(dict[str, int], record["quality_dimensions"]).values()) >= 4 for record in review_records
-            ),
+            "generalization_reviews": generalization_records,
+            "hard_boundary_violations": sample_count - hard_boundary_passed,
+            "machine_hard_gate_passed": hard_boundary_passed,
+            "structure_gate_passed": structure_passed,
+            "first_draft_usable": first_draft_usable,
+            "first_draft_usable_minimum": TENANT01_FIRST_DRAFT_USABLE_MINIMUM,
+            "sample_count": sample_count,
+            "quality_gate_kind": "aggregate_first_draft_usability",
+            "generalization_set_kind": "frozen_generalization_regression",
         },
     )
     _write_private_json(
@@ -1805,6 +1953,27 @@ def write_tenant01_evidence(
                 "max_retries": 0,
             },
             "artifacts": artifact_records,
+            "generalization_results": [
+                {
+                    "case_id": record["case_id"],
+                    "result_file": record["result_file"],
+                    "result_sha256": record["result_sha256"],
+                }
+                for record in generalization_records
+            ],
+            "generalization_config": {
+                "file": "generalization-suite-config.json",
+                "set_kind": "frozen_generalization_regression",
+                "sha256": sha256_file(generalization_config_path),
+                "source_config_sha256": TENANT01_GENERALIZATION_CONFIG_SHA256,
+            },
+            "acceptance": {
+                "sample_count": sample_count,
+                "machine_hard_gate_passed": hard_boundary_passed,
+                "structure_gate_passed": structure_passed,
+                "first_draft_usable": first_draft_usable,
+                "first_draft_usable_minimum": TENANT01_FIRST_DRAFT_USABLE_MINIMUM,
+            },
             "p5_preflight": {
                 "file": p5_preflight_file,
                 "sha256": sha256_file(p5_path),

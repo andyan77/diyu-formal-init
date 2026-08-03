@@ -145,6 +145,7 @@ from src.shared.writer_request import (
     writer_request_digest,
     writer_request_document,
 )
+from src.tool import run_tenant01_generalization_suite as generalization_runner
 from src.tool import run_tenant01_golden_suite as tenant01_runner
 from src.tool.run_tenant01_golden_suite import (
     _assert_final_suite_session_lease,
@@ -160,6 +161,7 @@ from src.tool.tenant01_evidence import (
     TENANT01_CARD_IDS,
     TENANT01_COMPARISON_FIELDS,
     TENANT01_DEMONSTRATION_CHECKS,
+    TENANT01_GENERALIZATION_CASE_IDS,
     TENANT01_GENERATION_LEDGER_FILE,
     TENANT01_GENERATION_LEDGER_VERSION,
     TENANT01_HARD_BOUNDARIES,
@@ -168,6 +170,7 @@ from src.tool.tenant01_evidence import (
     TENANT01_SUITE_VERSION,
     Tenant01ArtifactInput,
     Tenant01EvidenceError,
+    Tenant01GeneralizationReview,
     Tenant01HumanReview,
     _artifact_binding,
     compile_tenant01_snapshot_delivery,
@@ -1231,6 +1234,8 @@ def _tenant01_finalize_args(root: Path, implementation_sha: str) -> argparse.Nam
         evidence_root=str(root),
         implementation_sha=implementation_sha,
         review_file=str(root / "review-input.json"),
+        generalization_review_file=str(root / "generalization-review-input.json"),
+        generalization_config="config/tenant01/semantic-holdout-v1.json",
         schema_revision="20260813_40",
         image_digest="sha256:" + "b" * 64,
         source_manifest_digest="e" * 64,
@@ -1387,9 +1392,71 @@ def _write_tenant01_fixture_evidence(
         source_manifest_digest="e" * 64,
         artifacts=artifacts,
         reviews=reviews,
+        generalization_reviews=_tenant01_generalization_reviews(root),
         p5_preflight_file="p5-no-media.json",
         dm01_file="dm01.json",
     )
+
+
+def _tenant01_generalization_reviews(
+    root: Path,
+    *,
+    failed_product_cases: frozenset[str] = frozenset(),
+) -> tuple[Tenant01GeneralizationReview, ...]:
+    _write_private_json(
+        root / "generalization-suite-config.json",
+        {
+            "suite_version": "TENANT-01-FROZEN-GENERALIZATION-V1",
+            "implementation_sha": "a" * 40,
+            "source_config": {
+                "file": "config/tenant01/semantic-holdout-v1.json",
+                "sha256": "e773158aef2a22e3d4344f20c80bdf90b5bd9d19c0d3012b4f5fd0b00d1dcda7",
+                "set_kind": "frozen_generalization_regression",
+            },
+            "provider_config": {
+                "model": TENANT01_PROVIDER_MODEL,
+                "temperature": 0,
+                "max_retries": 0,
+            },
+            "cases": sorted(TENANT01_GENERALIZATION_CASE_IDS),
+        },
+    )
+    reviews: list[Tenant01GeneralizationReview] = []
+    for case_id in sorted(TENANT01_GENERALIZATION_CASE_IDS):
+        result_file = f"generalization-{case_id}.result.json"
+        excerpt = f"{case_id} 冻结泛化回归可见结果"
+        _write_private_json(
+            root / result_file,
+            {
+                "case_id": case_id,
+                "machine_hard_gate": "PASS",
+                "structure_gate": "PASS",
+                "visible_result": excerpt,
+            },
+        )
+        reviews.append(
+            Tenant01GeneralizationReview(
+                case_id=case_id,
+                result_file=result_file,
+                result_sha256=sha256_file(root / result_file),
+                hard_boundary="PASS",
+                structure_complete="PASS",
+                product_usable=(
+                    "FAIL" if case_id in failed_product_cases else "PASS"
+                ),
+                excerpts={"visible_result": excerpt},
+                quality_observations=(
+                    ("首稿产品质量未达到采用门。",)
+                    if case_id in failed_product_cases
+                    else ()
+                ),
+                residual_risks=(),
+                reviewer_scope="冻结结果的用户可见输出与机器硬门",
+                reviewer_kind="single_execution_product_review",
+                reviewed_at="2026-08-03T12:00:00+00:00",
+            )
+        )
+    return tuple(reviews)
 
 
 def test_tenant01_freezes_twenty_one_sources_and_fourteen_products(tmp_path: Path) -> None:
@@ -2657,6 +2724,7 @@ def test_tenant01_evidence_binds_artifacts_reviews_and_persistence(tmp_path: Pat
         source_manifest_digest="e" * 64,
         artifacts=artifacts,
         reviews=reviews,
+        generalization_reviews=_tenant01_generalization_reviews(tmp_path),
         p5_preflight_file="p5-no-media.json",
         dm01_file="dm01.json",
     )
@@ -2676,6 +2744,11 @@ def test_tenant01_evidence_binds_artifacts_reviews_and_persistence(tmp_path: Pat
         for record in manifest["artifacts"]
     )
     assert human_review["hard_boundary_violations"] == 0
+    assert human_review["machine_hard_gate_passed"] == 26
+    assert human_review["structure_gate_passed"] == 26
+    assert human_review["first_draft_usable"] == 26
+    assert human_review["first_draft_usable_minimum"] == 23
+    assert human_review["sample_count"] == 26
     assert all(record["excerpts"]["body"] for record in human_review["reviews"])
     assert "overall_average" not in human_review
     assert all("average_score" not in record for record in human_review["reviews"])
@@ -2785,6 +2858,7 @@ def test_tenant01_evidence_rejects_review_not_grounded_in_artifact(tmp_path: Pat
             source_manifest_digest="e" * 64,
             artifacts=artifacts,
             reviews=(invalid, *reviews[1:]),
+            generalization_reviews=_tenant01_generalization_reviews(tmp_path),
             p5_preflight_file="p5-no-media.json",
             dm01_file="dm01.json",
         )
@@ -3181,6 +3255,7 @@ def test_tenant01_evidence_rejects_missing_publication_inputs(
             source_manifest_digest="e" * 64,
             artifacts=artifacts,
             reviews=reviews,
+            generalization_reviews=_tenant01_generalization_reviews(tmp_path),
             p5_preflight_file="p5-no-media.json",
             dm01_file="dm01.json",
         )
@@ -3189,9 +3264,8 @@ def test_tenant01_evidence_rejects_missing_publication_inputs(
 @pytest.mark.parametrize(
     ("mutation", "message"),
     (
-        ("low_natural_language", "natural_language"),
         ("missing_media_reference", "media 引用缺少有意义文本"),
-        ("false_demonstration_check", "可演示成品检查未通过"),
+        ("false_demonstration_check", "成品检查未通过"),
     ),
 )
 def test_tenant01_evidence_rejects_dimension_and_binary_false_greens(
@@ -3205,9 +3279,7 @@ def test_tenant01_evidence_rejects_dimension_and_binary_false_greens(
     scores = dict(first.scores)
     excerpts = dict(first.excerpts)
     checks = dict(first.demonstration_checks)
-    if mutation == "low_natural_language":
-        scores["natural_language"] = 3
-    elif mutation == "missing_media_reference":
+    if mutation == "missing_media_reference":
         excerpts["media"] = ""
     else:
         checks["scaffolding_free"] = False
@@ -3227,6 +3299,124 @@ def test_tenant01_evidence_rejects_dimension_and_binary_false_greens(
             source_manifest_digest="e" * 64,
             artifacts=artifacts,
             reviews=(invalid, *reviews[1:]),
+            generalization_reviews=_tenant01_generalization_reviews(tmp_path),
+            p5_preflight_file="p5-no-media.json",
+            dm01_file="dm01.json",
+        )
+
+
+def test_tenant01_evidence_uses_aggregate_first_draft_usability_gate(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, reviews = _tenant01_evidence_inputs(tmp_path)
+    first = reviews[0]
+    quality_dimensions = dict(first.quality_dimensions or {})
+    scores = dict(first.scores)
+    quality_dimensions["natural_language"] = 3
+    scores["natural_language"] = 3
+    reviews_with_one_product_failure = (
+        replace(
+            first,
+            scores=scores,
+            quality_dimensions=quality_dimensions,
+            demonstration_checks={
+                check: False for check in TENANT01_DEMONSTRATION_CHECKS
+            },
+            product_usable="FAIL",
+            verdict="FAIL",
+            quality_observations=("首稿自然度不足，需通过自然反馈形成 V2。",),
+        ),
+        *reviews[1:],
+    )
+    generalization = _tenant01_generalization_reviews(
+        tmp_path,
+        failed_product_cases=frozenset(
+            {"new_daily_delay", "new_couple_housework"}
+        ),
+    )
+
+    write_tenant01_evidence(
+        tmp_path,
+        implementation_sha="a" * 40,
+        schema_revision="20260813_40",
+        image_digest="sha256:" + "b" * 64,
+        source_manifest_digest="e" * 64,
+        artifacts=artifacts,
+        reviews=reviews_with_one_product_failure,
+        generalization_reviews=generalization,
+        p5_preflight_file="p5-no-media.json",
+        dm01_file="dm01.json",
+    )
+
+    human_review = json.loads(
+        (tmp_path / "human-review.json").read_text(encoding="utf-8")
+    )
+    assert human_review["first_draft_usable"] == 23
+
+
+def test_tenant01_evidence_rejects_first_draft_usability_below_threshold(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, reviews = _tenant01_evidence_inputs(tmp_path)
+    generalization = _tenant01_generalization_reviews(
+        tmp_path,
+        failed_product_cases=frozenset(
+            {
+                "new_daily_delay",
+                "new_couple_housework",
+                "new_zero_topic",
+                "new_p1_gallery_commute",
+            }
+        ),
+    )
+
+    with pytest.raises(Tenant01EvidenceError, match="首稿可用率门未通过"):
+        write_tenant01_evidence(
+            tmp_path,
+            implementation_sha="a" * 40,
+            schema_revision="20260813_40",
+            image_digest="sha256:" + "b" * 64,
+            source_manifest_digest="e" * 64,
+            artifacts=artifacts,
+            reviews=reviews,
+            generalization_reviews=generalization,
+            p5_preflight_file="p5-no-media.json",
+            dm01_file="dm01.json",
+        )
+
+
+@pytest.mark.parametrize("gate", ("machine_hard_gate", "structure_gate"))
+def test_tenant01_evidence_requires_both_machine_gates_for_all_samples(
+    tmp_path: Path,
+    gate: str,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, reviews = _tenant01_evidence_inputs(tmp_path)
+    generalization = list(_tenant01_generalization_reviews(tmp_path))
+    first = generalization[0]
+    result_path = tmp_path / first.result_file
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result[gate] = "FAIL"
+    result["revision_product_usable"] = "PASS"
+    result_path.unlink()
+    _write_private_json(result_path, result)
+    generalization[0] = replace(
+        first,
+        result_sha256=sha256_file(result_path),
+    )
+
+    with pytest.raises(Tenant01EvidenceError, match="机器硬门或成品结构未通过"):
+        write_tenant01_evidence(
+            tmp_path,
+            implementation_sha="a" * 40,
+            schema_revision="20260813_40",
+            image_digest="sha256:" + "b" * 64,
+            source_manifest_digest="e" * 64,
+            artifacts=artifacts,
+            reviews=reviews,
+            generalization_reviews=tuple(generalization),
             p5_preflight_file="p5-no-media.json",
             dm01_file="dm01.json",
         )
@@ -3465,6 +3655,86 @@ def test_tenant01_human_review_v2_parses_every_required_field(
     assert all(review.product_usable == "PASS" for review in parsed)
     assert all(review.dimension_rationales for review in parsed)
     assert all(review.reviewer_kind == "single_execution_product_review" for review in parsed)
+
+
+def test_tenant01_frozen_generalization_config_is_complete_and_immutable(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    journey_path = tmp_path / "journey.json"
+    _write_private_json(
+        journey_path,
+        {
+            "tenant_id": str(uuid4()),
+            "session_token": "primary-session",
+            "publishing_identity_id": str(uuid4()),
+            "confirmed_sku": "CONFIRMED-ONE",
+            "insufficient_sku": "INSUFFICIENT-ONE",
+            "registered_media_asset_ids": [str(uuid4()), str(uuid4())],
+            "secondary_tenant_id": str(uuid4()),
+            "secondary_session_token": "secondary-session",
+            "secondary_publishing_identity_id": str(uuid4()),
+        },
+    )
+    journey = generalization_runner._Journey.from_file(journey_path)
+    config_path = Path("config/tenant01/semantic-holdout-v1.json").resolve()
+
+    cases = generalization_runner._config(config_path, journey)
+
+    assert {case.case_id for case in cases} == TENANT01_GENERALIZATION_CASE_IDS
+    assert len(cases) == 15
+    assert len(generalization_runner._run_ids(cases)) == 20
+
+    changed = json.loads(config_path.read_text(encoding="utf-8"))
+    changed["freeze_rule"] = "changed after disclosure"
+    changed_path = tmp_path / "changed-generalization.json"
+    changed_path.write_text(
+        json.dumps(changed, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="drifted"):
+        generalization_runner._config(changed_path, journey)
+
+
+def test_tenant01_generalization_review_parser_keeps_product_failures(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    failed_case = "new_daily_delay"
+    reviews = _tenant01_generalization_reviews(
+        tmp_path,
+        failed_product_cases=frozenset({failed_case}),
+    )
+    review_path = tmp_path / "generalization-review-input.json"
+    _write_private_json(
+        review_path,
+        {
+            "review_contract": "TENANT-01-GENERALIZATION-REVIEW-V1",
+            "set_kind": "frozen_generalization_regression",
+            "reviews": [
+                {
+                    "case_id": review.case_id,
+                    "result_file": review.result_file,
+                    "result_sha256": review.result_sha256,
+                    "hard_boundary": review.hard_boundary,
+                    "structure_complete": review.structure_complete,
+                    "product_usable": review.product_usable,
+                    "excerpts": review.excerpts,
+                    "quality_observations": list(review.quality_observations),
+                    "residual_risks": list(review.residual_risks),
+                    "reviewer_scope": review.reviewer_scope,
+                    "reviewer_kind": review.reviewer_kind,
+                    "reviewed_at": review.reviewed_at,
+                }
+                for review in reviews
+            ],
+        },
+    )
+
+    parsed = tenant01_runner._generalization_reviews(review_path)
+
+    assert len(parsed) == 15
+    assert next(review for review in parsed if review.case_id == failed_case).product_usable == "FAIL"
 
 
 def test_tenant01_human_review_v2_rejects_prefilled_pass_without_artifact_quotes(
