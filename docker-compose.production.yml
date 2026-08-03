@@ -1,9 +1,7 @@
 services:
   app:
-    image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${DIYU_IMAGE_REF:?DIYU_IMAGE_REF is required}
+    pull_policy: never
     env_file:
       - /etc/diyu/app.env
     network_mode: host
@@ -30,7 +28,8 @@ services:
       - --no-access-log
 
   migrate:
-    image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
+    image: ${DIYU_IMAGE_REF:?DIYU_IMAGE_REF is required}
+    pull_policy: never
     env_file:
       - /etc/diyu/migrator.env
     network_mode: host
@@ -41,7 +40,8 @@ services:
     command: ["uv", "run", "--no-sync", "alembic", "upgrade", "head"]
 
   seed:
-    image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
+    image: ${DIYU_IMAGE_REF:?DIYU_IMAGE_REF is required}
+    pull_policy: never
     env_file:
       - /etc/diyu/migrator.env
     network_mode: host
@@ -55,7 +55,8 @@ services:
       - uv run --no-sync python -m src.infrastructure.seed_demo && uv run --no-sync python -m src.infrastructure.system_asset_catalog
 
   bootstrap:
-    image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
+    image: ${DIYU_IMAGE_REF:?DIYU_IMAGE_REF is required}
+    pull_policy: never
     env_file:
       - /etc/diyu/app.env
       - /etc/diyu/bootstrap.env
@@ -69,7 +70,8 @@ services:
     command: ["uv", "run", "--no-sync", "python", "-m", "src.infrastructure.production_bootstrap"]
 
   dm01-store-seed:
-    image: diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}
+    image: ${DIYU_IMAGE_REF:?DIYU_IMAGE_REF is required}
+    pull_policy: never
     env_file:
       - /etc/diyu/migrator.env
     network_mode: host

@@ -9,7 +9,12 @@ fi
 
 postgres_image="$(docker inspect -f '{{.Config.Image}}' "${DIYU_POSTGRES_CONTAINER:-diyu-infra-postgres-1}")"
 minio_image="$(docker inspect -f '{{.Config.Image}}' "${DIYU_MINIO_CONTAINER:-diyu-infra-minio-1}")"
-app_image="diyu-saas:${DIYU_IMAGE_TAG:?DIYU_IMAGE_TAG is required}"
+app_image="${DIYU_IMAGE_DIGEST:?DIYU_IMAGE_DIGEST is required}"
+if [[ ! "$app_image" =~ ^sha256:[0-9a-f]{64}$ ]] \
+  || [[ "$(docker image inspect -f '{{.Id}}' "$app_image")" != "$app_image" ]]; then
+  echo "Restore verification requires an existing sha256 application image." >&2
+  exit 1
+fi
 suffix="$(openssl rand -hex 6)"
 postgres_name="diyu-m5-4-restore-${suffix}"
 app_name="diyu-m5-4-restore-app-${suffix}"

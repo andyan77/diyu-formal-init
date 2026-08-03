@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import subprocess
 import time
 from collections.abc import Iterator
 from concurrent.futures import CancelledError, ThreadPoolExecutor
@@ -324,17 +328,11 @@ def test_capacity_fixture_has_five_tenants_two_hundred_enabled_linked_users_and_
         visible_users = workbench_repository.management_operators(
             TenantManagementScope(tenant.tenant_id, tenant.administrator_id, tenant.brand_id)
         )
-        visible_ids = {
-            UUID(str(user["id"]))
-            for user in visible_users
-            if user["entry_type"] == "tenant_user"
-        }
+        visible_ids = {UUID(str(user["id"])) for user in visible_users if user["entry_type"] == "tenant_user"}
         assert visible_ids == set(tenant.user_ids)
-        assert {
-            UUID(str(user["id"]))
-            for user in visible_users
-            if user["entry_type"] == "tenant_admin"
-        } == {tenant.administrator_id}
+        assert {UUID(str(user["id"])) for user in visible_users if user["entry_type"] == "tenant_admin"} == {
+            tenant.administrator_id
+        }
         tenant_user_sets.append(visible_ids)
         for user_id in tenant.user_ids:
             identity = workbench_repository.content_identity(
@@ -343,17 +341,17 @@ def test_capacity_fixture_has_five_tenants_two_hundred_enabled_linked_users_and_
             assert identity["content_role"].startswith("容量内容角色-")
 
     assert sum(len(users) for users in tenant_user_sets) == 200
-    assert all(left.isdisjoint(right) for index, left in enumerate(tenant_user_sets) for right in tenant_user_sets[index + 1 :])
+    assert all(
+        left.isdisjoint(right) for index, left in enumerate(tenant_user_sets) for right in tenant_user_sets[index + 1 :]
+    )
     with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
         cursor.execute(
-            "SELECT count(*) FROM users "
-            "WHERE tenant_id = ANY(%s) AND enabled = true AND entry_kind = 'tenant_user'",
+            "SELECT count(*) FROM users WHERE tenant_id = ANY(%s) AND enabled = true AND entry_kind = 'tenant_user'",
             ([tenant.tenant_id for tenant in capacity_fixture.tenants],),
         )
         assert cursor.fetchone() == (200,)
         cursor.execute(
-            "SELECT count(*) FROM users "
-            "WHERE tenant_id = ANY(%s) AND enabled = true AND entry_kind = 'tenant_admin'",
+            "SELECT count(*) FROM users WHERE tenant_id = ANY(%s) AND enabled = true AND entry_kind = 'tenant_admin'",
             ([tenant.tenant_id for tenant in capacity_fixture.tenants],),
         )
         assert cursor.fetchone() == (5,)
@@ -368,9 +366,7 @@ def test_capacity_fixture_has_five_tenants_two_hundred_enabled_linked_users_and_
             TrustedScope(first.tenant_id, first.user_ids[0], uuid4(), first.account_id)
         )
     with pytest.raises(DomainError):
-        workbench_repository.content_identity(
-            TrustedScope(first.tenant_id, first.user_ids[0], first.brand_id, uuid4())
-        )
+        workbench_repository.content_identity(TrustedScope(first.tenant_id, first.user_ids[0], first.brand_id, uuid4()))
 
     auth_repository = ProductionAuthRepository(app_database_url)
     unauthorized = auth_repository.create_tenant_user(
@@ -405,7 +401,9 @@ def test_formal_content_api_enforces_global_tenant_user_rate_limits_and_releases
     generator = ControlledGenerator()
     app = _controlled_app(app_database_url, monkeypatch, generator)
     tokens = {
-        (tenant_index, user_index): _session_token(repository, tenants[tenant_index], tenants[tenant_index].user_ids[user_index])
+        (tenant_index, user_index): _session_token(
+            repository, tenants[tenant_index], tenants[tenant_index].user_ids[user_index]
+        )
         for tenant_index in range(3)
         for user_index in range(8)
     }
@@ -499,21 +497,123 @@ def test_backup_restore_scripts_use_snapshot_manifest_and_a_real_application_rol
     assert '"41"' not in restore
     assert "NOBYPASSRLS" in restore
     assert "REVOKE UPDATE, DELETE ON content_versions FROM diyu_app" in restore
-    assert (
-        "REVOKE UPDATE, DELETE ON display_artifact_versions FROM diyu_app"
-        in restore
-    )
-    assert (
-        "complete_content_chain_count < 1 && recoverable_publishing_identity_count < 1"
-        in restore
-    )
+    assert "REVOKE UPDATE, DELETE ON display_artifact_versions FROM diyu_app" in restore
+    assert "complete_content_chain_count < 1 && recoverable_publishing_identity_count < 1" in restore
 
 
-def test_deploy_and_rollback_restore_git_modes_before_non_root_build() -> None:
-    for script_path in ("deploy/deploy.sh", "deploy/rollback.sh"):
-        script = Path(script_path).read_text(encoding="utf-8")
-        safe_umask = script.index("umask 022")
-        checkout = script.index("checkout --detach --quiet")
-        restore_index = script.index("checkout-index --all --force", checkout)
-        build = script.index("docker compose", restore_index)
-        assert safe_umask < checkout < restore_index < build
+def test_release_scripts_build_once_and_activate_only_the_bound_digest() -> None:
+    compose = Path("docker-compose.production.yml").read_text(encoding="utf-8")
+    deploy = Path("deploy/deploy.sh").read_text(encoding="utf-8")
+    rollback = Path("deploy/rollback.sh").read_text(encoding="utf-8")
+    restore = Path("deploy/restore_verify.sh").read_text(encoding="utf-8")
+    build = Path("deploy/build_candidate.sh").read_text(encoding="utf-8")
+
+    assert compose.count("image: ${DIYU_IMAGE_REF:?DIYU_IMAGE_REF is required}") == 5
+    assert compose.count("pull_policy: never") == 5
+    assert "build:" not in compose
+    assert "docker build" in build
+    assert 'build_count": 1' in build
+    assert "refusing a second build" in build
+    assert "cc.diyu.tenant01.implementation_sha" in build
+    for activation_script in (deploy, rollback):
+        assert "docker compose" in activation_script
+        assert "docker compose -f" in activation_script
+        assert " build " not in activation_script
+        assert "resolved_digest" in activation_script
+        assert "running_digest" in activation_script
+        assert 'export DIYU_IMAGE_REF="$image_digest"' in activation_script
+    assert "checkout --detach --quiet" in deploy
+    assert "checkout-index --all --force" in deploy
+    assert "checkout --detach --quiet" not in rollback
+    assert "DIYU_IMAGE_DIGEST is required" in restore
+    assert "DIYU_IMAGE_TAG" not in compose + deploy + rollback + restore
+
+
+def test_candidate_builder_refuses_a_second_image_for_the_same_sha(tmp_path: Path) -> None:
+    repository = tmp_path / "candidate"
+    repository.mkdir()
+    subprocess.run(("git", "init", "-b", "main"), cwd=repository, check=True, capture_output=True)
+    subprocess.run(
+        ("git", "config", "user.name", "Build Once Test"),
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(
+        ("git", "config", "user.email", "build-once@example.invalid"),
+        cwd=repository,
+        check=True,
+    )
+    (repository / "Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+    subprocess.run(("git", "add", "Dockerfile"), cwd=repository, check=True)
+    subprocess.run(("git", "commit", "-m", "candidate"), cwd=repository, check=True, capture_output=True)
+    sha = subprocess.run(
+        ("git", "rev-parse", "HEAD"),
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_id = fake_bin / "id"
+    fake_id.write_text("#!/bin/sh\nprintf '0\\n'\n", encoding="utf-8")
+    fake_id.chmod(0o755)
+    fake_docker = fake_bin / "docker"
+    fake_docker.write_text(
+        """#!/bin/sh
+set -eu
+if [ \"$1 $2\" = \"image inspect\" ]; then
+  if [ ! -f \"$FAKE_DOCKER_STATE/image\" ]; then
+    exit 1
+  fi
+  case \"$3\" in
+    -f)
+      case \"$4\" in
+        *implementation_sha*) printf '%s\\n' \"$FAKE_EXPECTED_SHA\" ;;
+        *) printf '%s\\n' \"$FAKE_IMAGE_DIGEST\" ;;
+      esac
+      ;;
+  esac
+  exit 0
+fi
+if [ \"$1\" = \"build\" ]; then
+  printf 'build\\n' >>\"$FAKE_DOCKER_STATE/calls\"
+  : >\"$FAKE_DOCKER_STATE/image\"
+  exit 0
+fi
+exit 2
+""",
+        encoding="utf-8",
+    )
+    fake_docker.chmod(0o755)
+    state = tmp_path / "docker-state"
+    state.mkdir()
+    release_root = tmp_path / "releases"
+    digest = "sha256:" + "d" * 64
+    environment = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "FAKE_DOCKER_STATE": str(state),
+        "FAKE_EXPECTED_SHA": sha,
+        "FAKE_IMAGE_DIGEST": digest,
+        "DIYU_RELEASE_ROOT": str(release_root),
+        "DIYU_BUILD_LOCK": str(tmp_path / "build.lock"),
+    }
+    command = ("bash", "deploy/build_candidate.sh", sha, str(repository))
+    first = subprocess.run(command, check=True, capture_output=True, text=True, env=environment)
+    second = subprocess.run(command, check=False, capture_output=True, text=True, env=environment)
+
+    assert first.stdout.strip() == digest
+    assert second.returncode != 0
+    assert "refusing a second build" in second.stderr
+    assert (state / "calls").read_text(encoding="utf-8").splitlines() == ["build"]
+    binding_path = release_root / sha / "image-binding.json"
+    binding = json.loads(binding_path.read_text(encoding="utf-8"))
+    assert binding["implementation_sha"] == sha
+    assert binding["image_digest"] == digest
+    assert binding["build_count"] == 1
+    assert binding_path.stat().st_mode & 0o777 == 0o600
+    assert binding_path.parent.stat().st_mode & 0o777 == 0o700
+    checksum = (binding_path.parent / "SHA256SUMS").read_text(encoding="utf-8").split()[0]
+    assert checksum == hashlib.sha256(binding_path.read_bytes()).hexdigest()

@@ -645,6 +645,16 @@ def _tenant01_evidence_inputs(
         artifacts=tuple(artifacts),
         implementation_sha="a" * 40,
     )
+    _write_private_json(
+        root / "image-binding.json",
+        {
+            "binding_version": "tenant01-build-once-v1",
+            "implementation_sha": "a" * 40,
+            "image_digest": "sha256:" + "b" * 64,
+            "built_at": "2026-08-03T12:00:00Z",
+            "build_count": 1,
+        },
+    )
     return tuple(artifacts), tuple(reviews)
 
 
@@ -2821,10 +2831,48 @@ def test_tenant01_evidence_binds_artifacts_reviews_and_persistence(tmp_path: Pat
     assert human_review["sample_count"] == 26
     assert manifest["acceptance_run_id"] == "tenant01-acceptance-test"
     assert manifest["acceptance"]["human_high_risk_boundary_gate_passed"] == 26
+    assert manifest["image_binding"]["file"] == "image-binding.json"
+    assert manifest["image_binding"]["build_count"] == 1
     assert all(record["excerpts"]["body"] for record in human_review["reviews"])
     assert "overall_average" not in human_review
     assert all("average_score" not in record for record in human_review["reviews"])
     assert all(not path.stat().st_mode & 0o077 for path in tmp_path.iterdir())
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("implementation_sha", "f" * 40),
+        ("image_digest", "sha256:" + "c" * 64),
+        ("build_count", 2),
+    ),
+)
+def test_tenant01_evidence_rejects_unbound_or_rebuilt_image(
+    tmp_path: Path,
+    field: str,
+    value: object,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, reviews = _tenant01_evidence_inputs(tmp_path)
+    binding_path = tmp_path / "image-binding.json"
+    binding = json.loads(binding_path.read_text(encoding="utf-8"))
+    binding[field] = value
+    binding_path.unlink()
+    _write_private_json(binding_path, binding)
+
+    with pytest.raises(Tenant01EvidenceError, match="候选镜像没有绑定唯一构建"):
+        write_tenant01_evidence(
+            tmp_path,
+            implementation_sha="a" * 40,
+            schema_revision="20260813_40",
+            image_digest="sha256:" + "b" * 64,
+            source_manifest_digest="e" * 64,
+            artifacts=artifacts,
+            reviews=reviews,
+            generalization_reviews=_tenant01_generalization_reviews(tmp_path),
+            p5_preflight_file="p5-no-media.json",
+            dm01_file="dm01.json",
+        )
 
 
 def test_tenant01_snapshot_recompile_keeps_unselected_product_facts_in_registry(

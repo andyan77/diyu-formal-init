@@ -1767,7 +1767,13 @@ def write_tenant01_evidence(
 ) -> None:
     if len(implementation_sha) != 40 or any(character not in "0123456789abcdef" for character in implementation_sha):
         raise Tenant01EvidenceError("实现 SHA 无效。")
-    if not schema_revision or not image_digest.startswith("sha256:") or not _sha256_text(source_manifest_digest):
+    if (
+        not schema_revision
+        or len(image_digest) != 71
+        or not image_digest.startswith("sha256:")
+        or not _sha256_text(image_digest.removeprefix("sha256:"))
+        or not _sha256_text(source_manifest_digest)
+    ):
         raise Tenant01EvidenceError("schema 或镜像 digest 未冻结。")
     if root.stat().st_mode & 0o077:
         raise Tenant01EvidenceError("证据目录权限必须为 0700。")
@@ -1775,6 +1781,30 @@ def write_tenant01_evidence(
         raise Tenant01EvidenceError("黄金卡覆盖不完整。")
     if len({item.card_id for item in artifacts}) != len(artifacts):
         raise Tenant01EvidenceError("黄金卡重复。")
+    image_binding_path = _private_child(root, "image-binding.json")
+    image_binding = _json_object(image_binding_path)
+    built_at = image_binding.get("built_at")
+    try:
+        parsed_built_at = datetime.fromisoformat(str(built_at).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise Tenant01EvidenceError("候选镜像构建时间无效。") from exc
+    if (
+        set(image_binding)
+        != {
+            "binding_version",
+            "implementation_sha",
+            "image_digest",
+            "built_at",
+            "build_count",
+        }
+        or image_binding.get("binding_version") != "tenant01-build-once-v1"
+        or image_binding.get("implementation_sha") != implementation_sha
+        or image_binding.get("image_digest") != image_digest
+        or type(image_binding.get("build_count")) is not int
+        or image_binding.get("build_count") != 1
+        or parsed_built_at.tzinfo is None
+    ):
+        raise Tenant01EvidenceError("候选镜像没有绑定唯一构建。")
     review_by_card = {review.card_id: review for review in reviews}
     if set(review_by_card) != TENANT01_CARD_IDS or len(review_by_card) != len(reviews):
         raise Tenant01EvidenceError("人工审阅覆盖不完整或重复。")
@@ -1946,6 +1976,11 @@ def write_tenant01_evidence(
             "acceptance_run_id": acceptance_run_id,
             "schema_revision": schema_revision,
             "image_digest": image_digest,
+            "image_binding": {
+                "file": image_binding_path.name,
+                "sha256": sha256_file(image_binding_path),
+                "build_count": 1,
+            },
             "source_manifest_digest": source_manifest_digest,
             "generation_ledger": {
                 "file": TENANT01_GENERATION_LEDGER_FILE,
