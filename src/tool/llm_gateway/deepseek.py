@@ -1696,9 +1696,10 @@ class DeepSeekGenerator(ContentGenerator):
         )
         actuality_note = (
             "这些原句由服务端另行展示。只写接在它们之后的创作表达，不复述、改写或解释原句。"
-            "原句即使只是很短的条件或状态，也不能复制到 Writer 单元；直接给出回应，不再重述前提。"
-            "只把原句用于找到作品的具体张力；原句没有提供的成因、对象状态与后续保持未知。"
-            "建议只能是尚未发生、读者可自行选择的动作，不能承诺动作带来的身体、心理或现实结果。"
+            "只把原句用于找到作品的具体张力。原句没有提供谁或什么发生了变化、为什么变化、"
+            "当前处于什么状态；这些答案必须保持未决，不得选择、排除或断言其中任何一个答案。"
+            "创作表达可以停留在这份意外如何被看见，或给出尚未发生、读者可自行选择的动作；"
+            "不能承诺动作带来的身体、心理或现实结果。"
             if actuality_context
             else (
                 "本篇没有现实原句。形成一般观察或条件建议，不用第一人称、品牌或账号的既成经历"
@@ -1722,8 +1723,9 @@ class DeepSeekGenerator(ContentGenerator):
             else ""
         )
         local_response_note = (
-            "本篇回应本地观察：只给服务原则和未执行的条件建议；不拟写顾客、员工或账号的对白，"
-            "不补充来店目的、现场动作、身份、原因或结果。"
+            "本篇回应本地观察：只写面向一般服务者的服务原则和明确尚未执行的条件建议。"
+            "当前账号或机构不能作为已执行动作的主语，不得声称已经形成某种服务做法；"
+            "不拟写顾客、员工或账号的对白，不补充来店目的、现场动作、身份、原因或结果。"
             if contract.primary_product == "local_response"
             else ""
         )
@@ -1756,6 +1758,17 @@ class DeepSeekGenerator(ContentGenerator):
             topic_fidelity_note = (
                 "系列保真：本篇必须让读者自然读出对冻结前情的承接与推进，"
                 "不得另选一个仅与账号内容领地有关、却与系列主线无关的题材。"
+            )
+        elif contract.primary_product == "local_response":
+            account_identity = (
+                "从一般服务关系观察本次处境；不代表当前账号或机构已经采取任何做法"
+            )
+            account_audience = "正在面对相似服务处境、需要保留自己选择空间的人"
+            account_attention = (
+                "只回应冻结观察中的服务分寸，把所有做法写成尚未执行的可选建议"
+            )
+            topic_fidelity_note = (
+                "服务保真：账号资料只提供回应姿态，不提供当前机构实践、顾客经历或现场事实。"
             )
         else:
             account_identity = contract.account_identity

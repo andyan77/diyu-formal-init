@@ -3238,7 +3238,8 @@ def test_actuality_writer_receives_one_frozen_fact_without_duplicate_instruction
     ) == 1
     assert "这些原句由服务端另行展示" in prompt
     assert "只把原句用于找到作品的具体张力" in prompt
-    assert "原句没有提供的成因、对象状态与后续保持未知" in prompt
+    assert "谁或什么发生了变化、为什么变化" in prompt
+    assert "不得选择、排除或断言其中任何一个答案" in prompt
     assert "注意力分配或可见选择" not in prompt
     assert "服务端事实绑定" not in prompt
     assert "帮我发一条" not in prompt
@@ -4183,10 +4184,13 @@ def test_explicit_local_response_does_not_receive_the_account_topic_domain() -> 
 
     assert fact in prompt
     assert "topic_origin" not in prompt
-    assert "从穿衣编辑的位置重新看熟悉事物" in prompt
-    assert "陪正在重新选择日常节奏的人看清取舍" in prompt
+    assert "从穿衣编辑的位置重新看熟悉事物" not in prompt
+    assert "陪正在重新选择日常节奏的人看清取舍" not in prompt
+    assert "从一般服务关系观察本次处境" in prompt
+    assert "正在面对相似服务处境" in prompt
     assert "不硬插品牌名、商品或服饰" in prompt
-    assert "只给服务原则和未执行的条件建议" in prompt
+    assert "当前账号或机构不能作为已执行动作的主语" in prompt
+    assert "不提供当前机构实践" in prompt
     assert "不拟写顾客、员工或账号的对白" in prompt
 
 
