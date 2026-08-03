@@ -150,7 +150,12 @@ def _clause_has_partial_list(
             match.end == index or match.start == index + 1
             for match in clause_matches
         )
-        if character == "、" or (left_space and right_space) or adjoining_match:
+        # A list marker is identity-bearing only when it actually touches one
+        # resolved alias (or is deliberately whitespace-delimited).  Ordinary
+        # prose after a product may contain unrelated enumerations such as
+        # “无口播、无对白、无解说”; those must not be reinterpreted as a
+        # partially resolved product list.
+        if (left_space and right_space) or adjoining_match:
             connectors.append(index)
     if not connectors:
         return False

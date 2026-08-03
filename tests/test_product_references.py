@@ -75,6 +75,14 @@ def test_complete_reference_list_resolves_every_literal_alias() -> None:
         assert len(resolution.resolved_identities) == 2
 
 
+def test_unrelated_punctuation_list_after_product_is_not_an_unknown_product_list() -> None:
+    text = "ZX-C218 无口播、无对白、无解说，只使用抽象排版。"
+    aliases = alias_index((("ZX-C218", ("ZX-C218", "双面短外套")),))
+    resolution = resolve_literal_mentions(text, aliases)
+    assert resolution.resolved_identities == {"ZX-C218"}
+    assert not has_partial_reference_list(text, resolution.matches)
+
+
 def test_duplicate_full_name_is_ambiguous() -> None:
     aliases = alias_index(
         (

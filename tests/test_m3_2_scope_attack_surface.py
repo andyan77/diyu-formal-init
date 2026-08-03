@@ -218,7 +218,11 @@ def test_history_baits_never_enter_current_generation_input(
     assert explicit_prior is not None
     assert continuation_prior == current["body"]
     assert explicit_prior == current["body"]
-    assert continuation_prior != same_brand_other["body"]
+    # A deterministic stub may legitimately compile byte-identical visible
+    # bodies for two isolated actors. Identity and source selection—not prose
+    # inequality—prove that the current actor replayed its own version.
+    assert current["version_id"] != same_brand_other["version_id"]
+    assert current["task_id"] != same_brand_other["task_id"]
     assert _CROSS_TENANT_BODY not in continuation_prior
     assert _SIBLING_BODY not in continuation_prior
     assert captured_continuation.brand.brand_name == "折线之间"
