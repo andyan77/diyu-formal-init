@@ -544,6 +544,10 @@ def test_frontend_lock_is_portable_and_ci_uses_the_frozen_tree() -> None:
     assert "npm --prefix frontend ci --no-audit --no-fund" in workflow
     assert "npm --prefix frontend install" not in workflow
 
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+    assert "RUN npm ci --ignore-scripts --no-audit --no-fund" in dockerfile
+    assert "RUN npm install" not in dockerfile
+
 
 def test_candidate_builder_refuses_a_second_image_for_the_same_sha(tmp_path: Path) -> None:
     repository = tmp_path / "candidate"
