@@ -31,6 +31,7 @@ class WriterRequestV3:
     central_job: str
     audience_payoff: str
     actuality_fact_refs: tuple[str, ...]
+    read_only_actuality_context: tuple[dict[str, str], ...]
     explicit_user_controls: tuple[str, ...]
     account_editorial_permission: dict[str, str]
     product_decision_basis: dict[str, object] | None
@@ -82,6 +83,14 @@ def build_writer_request_v3(
         for span in contract.input_roles
         if span.role == "observable_actuality"
     )
+    read_only_actuality_context = tuple(
+        {
+            "fact_ref": span.source_id,
+            "exact_text": span.exact_text,
+        }
+        for span in contract.input_roles
+        if span.role == "observable_actuality"
+    )
     request = WriterRequestV3(
         request_version=WRITER_REQUEST_VERSION,
         publication_contract_digest=publication_contract_digest(contract),
@@ -91,6 +100,7 @@ def build_writer_request_v3(
         central_job=contract.central_job,
         audience_payoff=contract.audience_payoff,
         actuality_fact_refs=actuality_fact_refs,
+        read_only_actuality_context=read_only_actuality_context,
         explicit_user_controls=contract.explicit_user_controls,
         account_editorial_permission={
             "identity": permission.identity,
@@ -145,6 +155,7 @@ def writer_request_document(request: WriterRequestV3) -> dict[str, object]:
         "central_job": request.central_job,
         "audience_payoff": request.audience_payoff,
         "actuality_fact_refs": list(request.actuality_fact_refs),
+        "read_only_actuality_context": [dict(item) for item in request.read_only_actuality_context],
         "explicit_user_controls": list(request.explicit_user_controls),
         "account_editorial_permission": dict(request.account_editorial_permission),
         "product_decision_basis": request.product_decision_basis,
@@ -176,6 +187,12 @@ def assert_writer_request_v3(request: WriterRequestV3) -> None:
         or not request.content_product
         or not request.central_job
         or not request.audience_payoff
+        or tuple(item.get("fact_ref") for item in request.read_only_actuality_context)
+        != request.actuality_fact_refs
+        or any(
+            set(item) != {"fact_ref", "exact_text"} or not item["exact_text"]
+            for item in request.read_only_actuality_context
+        )
         or set(request.account_editorial_permission)
         != {
             "identity",

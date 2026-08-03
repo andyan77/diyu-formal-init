@@ -334,11 +334,14 @@ def test_publication_contract_v3_is_the_only_writer_semantic_projection() -> Non
     assert restored == contract
     assert publication_contract_digest(restored) == publication_contract_digest(contract)
     assert request.actuality_fact_refs == (contract.input_roles[0].source_id,)
-    assert contract.input_roles[1].exact_text in request.explicit_user_controls
-    assert contract.input_roles[0].exact_text not in json.dumps(
-        request_document,
-        ensure_ascii=False,
+    assert request.read_only_actuality_context == (
+        {
+            "fact_ref": contract.input_roles[0].source_id,
+            "exact_text": contract.input_roles[0].exact_text,
+        },
     )
+    assert contract.input_roles[1].exact_text in request.explicit_user_controls
+    assert contract.input_roles[0].exact_text not in request.topic
     assert "known_conditions" not in request_document
     assert "visible_text" not in json.dumps(
         request_document,

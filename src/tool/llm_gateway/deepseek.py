@@ -977,7 +977,7 @@ class DeepSeekGenerator(ContentGenerator):
         return (
             "请依据下面唯一业务合同完成一篇可直接修改和采用的内容。\n"
             "只返回 title、natural_guide、creative_body、publication_caption 四个字符串字段。\n"
-            "actuality_fact_refs 只表示服务端另有冻结事实；你看不到也不拥有这些原句。四个字段须直接完成非事实创作，不猜测、复原或补写其内容。\n"
+            "read_only_actuality_context 是服务端将另行插入的逐字事实，只用于理解本题；四个 Writer 字段不能复制、改写、续写或补全这些原句。\n"
             "account_editorial_permission 只决定观察顺序与回应姿态，不能替换用户题材，也不能把生活题材转向服饰、商品或品牌宣讲。\n"
             "product_decision_basis 是穷尽式机器计划：decision_axis 是唯一选择维度；标题、导读、正文和配文须自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子。\n"
             "你可以形成中心判断、一般观察、条件建议、比喻、节奏、幽默和留白；建议与假设须保持该身份。\n"

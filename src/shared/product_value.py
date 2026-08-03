@@ -180,8 +180,8 @@ def _build_p2_decision_basis_v2(
     elif len(colors) >= 2:
         decision_axis = "internal_color_relationship"
         source_keys = ("display_name", "colors")
-        understanding = "同一件商品内部已确认的多种颜色共同形成一个可见的拼色关系；这不是多个颜色款式。"
-        tradeoff = "把这组颜色关系作为选择重点，就意味着接受颜色先被看见；如果不希望颜色成为重点，它就不应承担本次选择。"
+        understanding = "本次唯一商品选择依据，是同一件商品内部已确认的多种颜色及其颜色关系。"
+        tradeoff = "本次可以把已确认的颜色关系作为主要选择依据，也可以不采用这项依据；不能同时作出这两个选择。"
         condition = "只有本次选择确实依赖这组已确认的颜色关系时，这项价值才成立。"
     elif structure and silhouette:
         decision_axis = "confirmed_structure_and_silhouette"

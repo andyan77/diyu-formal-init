@@ -733,8 +733,11 @@ def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
         writer_request_document(writer_request),
         ensure_ascii=False,
     )
-    assert actuality.exact_text not in writer_document_json
+    assert actuality.exact_text in writer_document_json
     assert writer_request.actuality_fact_refs == (actuality.source_id,)
+    assert writer_request.read_only_actuality_context == (
+        {"fact_ref": actuality.source_id, "exact_text": actuality.exact_text},
+    )
     FakeClient.responses = [
         _completion(
             {
