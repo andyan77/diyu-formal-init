@@ -226,6 +226,59 @@ def writer_output_from_response(value: object) -> WriterOutputV3:
     return output
 
 
+def suppress_exact_fact_only_units(
+    output: WriterOutputV3,
+    *,
+    frozen_fact_texts: tuple[str, ...],
+) -> WriterOutputV3:
+    """Remove only byte-exact, fact-only unit copies before compilation.
+
+    The function never normalizes or approximates text. Mixed fact/creative
+    units remain invalid and are rejected by the boundary check.
+    """
+
+    facts = tuple(sorted((text for text in frozen_fact_texts if text), key=len, reverse=True))
+    if not facts:
+        return output
+    if _contains_fact(output.title, facts) or _contains_fact(output.publication_caption, facts):
+        raise GenerationFailed("Writer 不得复制或改写服务端事实块")
+
+    body_paragraphs = tuple(part.strip() for part in output.creative_body.split("\n\n") if part.strip())
+    creative_paragraphs: list[str] = []
+    for paragraph in body_paragraphs:
+        if _contains_fact(paragraph, facts):
+            if not _is_fact_only(paragraph, facts):
+                raise GenerationFailed("Writer 不得复制或改写服务端事实块")
+            continue
+        creative_paragraphs.append(paragraph)
+
+    guide = output.natural_guide
+    if _contains_fact(guide, facts):
+        if not _is_fact_only(guide, facts) or len(creative_paragraphs) < 2:
+            raise GenerationFailed("Writer 不得复制或改写服务端事实块")
+        guide = creative_paragraphs.pop(0)
+    if not creative_paragraphs:
+        raise GenerationFailed("Writer 不得复制或改写服务端事实块")
+    return WriterOutputV3(
+        output_version=output.output_version,
+        title=output.title,
+        natural_guide=guide,
+        creative_body="\n\n".join(creative_paragraphs),
+        publication_caption=output.publication_caption,
+    )
+
+
+def _contains_fact(text: str, facts: tuple[str, ...]) -> bool:
+    return any(fact in text for fact in facts)
+
+
+def _is_fact_only(text: str, facts: tuple[str, ...]) -> bool:
+    remainder = text
+    for fact in facts:
+        remainder = remainder.replace(fact, "")
+    return not remainder.strip(" \t\r\n，。！？；：、,.!?;:'\"“”‘’（）()[]【】")
+
+
 def writer_output_document(output: WriterOutputV3) -> dict[str, object]:
     return {
         "output_version": output.output_version,

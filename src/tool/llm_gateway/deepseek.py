@@ -164,6 +164,7 @@ from src.shared.writer_request import (
     WriterOutputV3,
     WriterRequestV3,
     build_writer_request_v3,
+    suppress_exact_fact_only_units,
     writer_output_digest,
     writer_output_document,
     writer_output_from_response,
@@ -851,7 +852,8 @@ class DeepSeekGenerator(ContentGenerator):
         if writer_request.product_decision_basis is not None:
             writer_scope.append(
                 "product_specific_understanding、tradeoff 和 condition_of_validity 穷尽本题商品语义；"
-                "只把这三项自然表达成一项选择，不介绍、对比或评价任何其他商品维度，也不推演使用结果。"
+                "只把这三项自然表达成一项选择，不解释这组关系会产生何种搭配、观感、使用或穿着结果，"
+                "也不介绍、对比或评价其他商品维度。"
             )
         writer_payload, retries = self._request(
             (
@@ -876,6 +878,10 @@ class DeepSeekGenerator(ContentGenerator):
             json.JSONDecodeError,
         ) as exc:
             raise GenerationFailed("Writer V3 返回结构不完整") from exc
+        output = suppress_exact_fact_only_units(
+            output,
+            frozen_fact_texts=tuple(context.fact_text_by_id.values()),
+        )
         self._assert_writer_output_v3_boundaries(
             output,
             context=context,

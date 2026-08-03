@@ -973,7 +973,7 @@ def test_product_decision_basis_v2_treats_multiple_colors_as_one_relation_not_va
         )
     )
     assert "颜色关系" in machine_plan
-    assert "唯一商品选择依据" in machine_plan
+    assert "强对比" in machine_plan
     assert all(marker not in machine_plan for marker in ("两种颜色", "两种可见选择", "其中一种颜色"))
 
 

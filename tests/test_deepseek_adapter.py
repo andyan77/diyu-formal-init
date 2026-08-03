@@ -96,6 +96,7 @@ from src.shared.writer_request import (
     WRITER_OUTPUT_VERSION,
     WriterOutputV3,
     build_writer_request_v3,
+    suppress_exact_fact_only_units,
     writer_request_document,
 )
 from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
@@ -756,6 +757,80 @@ def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
     assert "只围绕 read_only_actuality_context 已呈现的可见张力" in system
     assert "不重复事实" in system
     assert "不解释用户的身体、心理、动机、原因、后果或健康变化" in system
+
+
+def test_publication_v3_suppresses_only_a_complete_exact_fact_guide() -> None:
+    base = _publication_v3_request()
+    message = "公交刚开走，我拎着快递站在站牌下等了很久。帮我发一条。"
+    candidates = user_fact_candidates((message,))
+    actuality = candidates[0]
+    roles = tuple(
+        PublicationInputSpanV1(
+            source_id=candidate.source_id,
+            role=("observable_actuality" if candidate == actuality else "creation_instruction"),
+            exact_text=candidate.exact_text,
+            turn_index=candidate.turn_index,
+            start_offset=candidate.start_offset,
+            end_offset=candidate.end_offset,
+            start_byte=candidate.start_byte,
+            end_byte=candidate.end_byte,
+        )
+        for candidate in candidates
+    )
+    contract = replace(
+        cast(PublicationContractV3, base.publication_contract),
+        input_roles=roles,
+        topic="围绕只读冻结现实片段的可见张力完成本题",
+        frozen_fact_refs=(actuality.source_id,),
+        explicit_user_controls=tuple(span.exact_text for span in roles if span.role != "observable_actuality"),
+    )
+    request = replace(
+        base,
+        weak_seed=message,
+        narrative_frame=new_frame(
+            "actuality_reflection",
+            (actuality.exact_text,),
+            (),
+            user_fact_source_ids=(actuality.source_id,),
+        ),
+        publication_contract=contract,
+    )
+    first_paragraph = "安排被打断时，先承认节奏已经改变。"
+    second_paragraph = "把下一步缩小到眼前能完成的一件事，选择会更清楚。"
+    FakeClient.responses = [
+        _completion(
+            {
+                "title": "计划外的停顿，也有自己的节奏",
+                "natural_guide": actuality.exact_text + "。",
+                "creative_body": first_paragraph + "\n\n" + second_paragraph,
+                "publication_caption": "先接住眼前这一拍。",
+            }
+        )
+    ]
+
+    artifact = _generator().generate(request)
+
+    assert artifact.completion_snapshot_patch is not None
+    writer_output = cast(dict[str, object], artifact.completion_snapshot_patch["writer_output_v3"])
+    assert writer_output["natural_guide"] == first_paragraph
+    assert writer_output["creative_body"] == second_paragraph
+    assert actuality.exact_text not in str(writer_output)
+
+
+def test_publication_v3_rejects_fact_copy_mixed_with_writer_text() -> None:
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="一次停顿",
+        natural_guide="把这一刻留在原处。",
+        creative_body="公交刚开走，我拎着快递站在站牌下等了很久。于是所有安排都失去了意义。",
+        publication_caption="先停一下。",
+    )
+
+    with pytest.raises(GenerationFailed, match="Writer 不得复制或改写服务端事实块"):
+        suppress_exact_fact_only_units(
+            output,
+            frozen_fact_texts=("公交刚开走，我拎着快递站在站牌下等了很久。",),
+        )
 
 
 @pytest.mark.parametrize(
