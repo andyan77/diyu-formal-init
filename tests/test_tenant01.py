@@ -3762,6 +3762,33 @@ def test_tenant01_frozen_generalization_config_is_complete_and_immutable(
         generalization_runner._config(changed_path, journey)
 
 
+def test_tenant01_git_suite_config_is_public_but_journey_remains_private(
+    tmp_path: Path,
+) -> None:
+    config_path = Path("config/tenant01/golden-v1.json").resolve()
+    assert config_path.stat().st_mode & 0o044
+    cards = tenant01_runner._config_cards(config_path, p2_sku="FORMAL-SKU")
+    assert {card.card_id for card in cards} == TENANT01_CARD_IDS
+
+    journey_path = tmp_path / "journey.json"
+    journey_path.write_text(
+        json.dumps(
+            {
+                "tenant_id": str(uuid4()),
+                "session_token": "private-session",
+                "publishing_identity_id": str(uuid4()),
+                "p2_sku": "FORMAL-SKU",
+            }
+        ),
+        encoding="utf-8",
+    )
+    journey_path.chmod(0o644)
+    with pytest.raises(ValueError, match="must be private"):
+        _Journey.from_file(journey_path)
+    journey_path.chmod(0o600)
+    assert _Journey.from_file(journey_path).p2_sku == "FORMAL-SKU"
+
+
 def test_tenant01_generalization_review_parser_keeps_product_failures(
     tmp_path: Path,
 ) -> None:

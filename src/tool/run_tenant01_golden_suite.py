@@ -406,7 +406,7 @@ class _Card:
 
 
 def _config_cards(config_path: Path, *, p2_sku: str) -> tuple[_Card, ...]:
-    document = _json_object(config_path)
+    document = _json_object(config_path, require_private=False)
     if document.get("suite_version") != _SUITE_VERSION:
         raise ValueError("TENANT-01 golden contract version drifted")
     raw_cards = document.get("cards")
@@ -1202,8 +1202,12 @@ def _finalize(args: argparse.Namespace) -> None:
     )
 
 
-def _json_object(path: Path) -> dict[str, object]:
-    if path.stat().st_mode & 0o077:
+def _json_object(
+    path: Path,
+    *,
+    require_private: bool = True,
+) -> dict[str, object]:
+    if require_private and path.stat().st_mode & 0o077:
         raise ValueError(f"{path.name} must be private")
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
