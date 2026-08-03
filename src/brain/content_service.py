@@ -556,6 +556,15 @@ class ContentService:
                 if plan.topic_origin == "system_selected"
                 else "\n".join(actuality_topic or tuple(item for item in plan.topic_spans if item.strip()))
             )
+            account_attention = (
+                "先完整回应当前生活题材；账号内容领地只决定观察顺序，不能替换题材，也不能强行转向服饰、商品或品牌宣讲"
+                if primary_product in {"brand_life_narrative", "local_response"}
+                else (
+                    expression.content_territories
+                    if expression is not None
+                    else context.decision_order
+                )
+            )
             return build_publication_contract_v3(
                 input_roles=intake_spans,
                 topic_origin=plan.topic_origin,
@@ -573,7 +582,7 @@ class ContentService:
                         "；".join(
                             item
                             for item in (
-                                (expression.content_territories if expression is not None else context.decision_order),
+                                account_attention,
                                 *context.creative_method_context,
                             )
                             if item

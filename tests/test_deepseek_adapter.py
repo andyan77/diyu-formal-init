@@ -663,6 +663,9 @@ def test_publication_v3_uses_one_writer_call_without_legacy_repair_or_reviewer()
     assert '"unit_id"' not in prompt
     assert "每个可见句" not in prompt
     assert "必须二选一" not in prompt
+    assert "不能替换用户题材" in prompt
+    assert "不得反向断言当前用户的身体、心理、原因或结果" in prompt
+    assert "不添加情绪、社交、外观效果或使用体验" in prompt
     assert request.active_domain_assets[0].body not in prompt
 
 

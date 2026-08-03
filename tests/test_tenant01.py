@@ -948,6 +948,31 @@ def test_product_decision_basis_v2_fails_closed_without_a_real_choice_dimension(
         )
 
 
+def test_product_decision_basis_v2_treats_multiple_colors_as_one_relation_not_variants() -> None:
+    product = ProductFact(
+        sku="HOLDOUT-COLOR-RELATION-01",
+        display_name="拼色测试商品",
+        facts={"colors": ["黑色", "红色等强对比"]},
+        source_kind="synthetic_confirmed_product_record",
+    )
+
+    basis = build_product_decision_basis_v2(
+        primary_product="product_truth",
+        products=(product,),
+    )
+
+    assert basis is not None
+    machine_plan = "\n".join(
+        (
+            basis.product_specific_understanding,
+            basis.tradeoff,
+            basis.condition_of_validity,
+        )
+    )
+    assert "颜色关系" in machine_plan
+    assert all(marker not in machine_plan for marker in ("两种颜色", "两种可见选择", "其中一种颜色"))
+
+
 def _write_tenant01_generation_ledger(
     root: Path,
     *,
