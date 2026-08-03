@@ -11,6 +11,8 @@ from src.shared.errors import DomainError
 
 PUBLICATION_CONTRACT_VERSION = "publication-contract-v2"
 PUBLICATION_CONTRACT_V3_VERSION = "publication-contract-v3"
+LEGACY_USER_ACTUALITY_EXPRESSION_POLICY = "user-actuality-read-only-v1"
+USER_ACTUALITY_EXPRESSION_POLICY = "user-actuality-natural-expression-v2"
 
 IntakeSpanRole: TypeAlias = Literal[
     "observable_actuality",
@@ -20,8 +22,8 @@ IntakeSpanRole: TypeAlias = Literal[
 
 NEGATIVE_SAFETY_RULES: dict[str, str] = {
     "no_user_actuality_rewrite": (
-        "不新增、改写或补全用户现实事实、未提供的真人或品牌经历及具体事件，也不替现实人物、"
-        "对象或事件判定未提供的原因、内部状态、变化或结果"
+        "不把 Writer 的自然复述、润色、低风险即时反应、感受、比喻或文学性承接升级为可信事实；"
+        "不创建新的 fact_ref，也不回写用户、商品或品牌事实仓"
     ),
     "no_product_fact_or_effect": "不新增商品硬事实或具体商品效果",
     "no_method_as_fact": "不把品牌约束、方法或机构信息升级为现实事实",
@@ -155,6 +157,7 @@ class PublicationContractV3:
     publication_projection_id: str
     publication_projection_version: int
     publication_projection_digest: str
+    expression_policy_version: str = USER_ACTUALITY_EXPRESSION_POLICY
 
 
 PublicationContract: TypeAlias = PublicationContractV2 | PublicationContractV3
@@ -177,7 +180,7 @@ def publication_contract_document(
         series = contract.series_delta
         platform = contract.platform_direction
         brand_use = contract.brand_context_use
-        return {
+        document: dict[str, object] = {
             "contract_version": contract.contract_version,
             "input_roles": [_span_document(span) for span in contract.input_roles],
             "topic_origin": contract.topic_origin,
@@ -237,6 +240,9 @@ def publication_contract_document(
             "publication_projection_version": (contract.publication_projection_version),
             "publication_projection_digest": (contract.publication_projection_digest),
         }
+        if contract.expression_policy_version != LEGACY_USER_ACTUALITY_EXPRESSION_POLICY:
+            document["expression_policy_version"] = contract.expression_policy_version
+        return document
     return {
         "contract_version": contract.contract_version,
         "primary_product": contract.primary_product,
@@ -693,6 +699,10 @@ def _publication_contract_v3_from_document(
             publication_projection_id=str(value["publication_projection_id"]),
             publication_projection_version=_required_positive_int(value.get("publication_projection_version")),
             publication_projection_digest=_required_sha256(value.get("publication_projection_digest")),
+            expression_policy_version=str(
+                value.get("expression_policy_version")
+                or LEGACY_USER_ACTUALITY_EXPRESSION_POLICY
+            ),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise DomainError("内容任务冻结的发布责任合同无效") from exc
@@ -705,6 +715,11 @@ def _assert_publication_contract_v3(contract: PublicationContractV3) -> None:
     brand_use = contract.brand_context_use
     if (
         contract.contract_version != PUBLICATION_CONTRACT_V3_VERSION
+        or contract.expression_policy_version
+        not in {
+            LEGACY_USER_ACTUALITY_EXPRESSION_POLICY,
+            USER_ACTUALITY_EXPRESSION_POLICY,
+        }
         or contract.topic_origin not in {"explicit_user", "system_selected"}
         or not contract.topic
         or not contract.content_product

@@ -1607,7 +1607,7 @@ def test_publication_contract_is_one_negative_boundary_not_a_sentence_dsl() -> N
     assert contract.contract_version == PUBLICATION_CONTRACT_VERSION
     assert contract.prohibited_reality_or_product_claims == NEGATIVE_SAFETY_RULE_IDS
     safety_contract = negative_safety_contract_text()
-    assert "不替现实人物、对象或事件判定未提供的原因、内部状态、变化或结果" in safety_contract
+    assert "不创建新的 fact_ref，也不回写用户、商品或品牌事实仓" in safety_contract
     assert "一般建议保持建议、条件或假设身份" in safety_contract
     assert contract.topic_origin == "system_selected"
     assert "自主选择一个具体生活题材" in contract.central_job

@@ -18,6 +18,8 @@ from src.shared.delivery_compiler import (
 from src.shared.errors import DomainError
 from src.shared.narrative import UserFactCandidate, user_fact_candidates
 from src.shared.publication_contract import (
+    LEGACY_USER_ACTUALITY_EXPRESSION_POLICY,
+    USER_ACTUALITY_EXPRESSION_POLICY,
     AccountEditorialPermissionV3,
     BrandContextUseV3,
     IntakeSpanRole,
@@ -348,6 +350,28 @@ def test_publication_contract_v3_is_the_only_writer_semantic_projection() -> Non
         request_document,
         ensure_ascii=False,
     )
+    assert document["expression_policy_version"] == USER_ACTUALITY_EXPRESSION_POLICY
+    assert request_document["expression_policy_version"] == USER_ACTUALITY_EXPRESSION_POLICY
+
+
+def test_legacy_v3_snapshot_reads_without_backfilling_expression_policy() -> None:
+    current_document = publication_contract_document(_contract_v3())
+    legacy_document = dict(current_document)
+    legacy_document.pop("expression_policy_version")
+
+    restored = publication_contract_from_document(legacy_document)
+
+    assert isinstance(restored, PublicationContractV3)
+    assert restored.expression_policy_version == LEGACY_USER_ACTUALITY_EXPRESSION_POLICY
+    assert publication_contract_document(restored) == legacy_document
+    legacy_request = build_writer_request_v3(
+        restored,
+        product_decision_basis=None,
+        platform_expression_responsibility="以图文页面形成完整阅读结构",
+        prior_output=None,
+        revision_instruction=None,
+    )
+    assert "expression_policy_version" not in writer_request_document(legacy_request)
 
 
 def test_publication_contract_v3_rejects_actuality_text_in_writer_topic() -> None:

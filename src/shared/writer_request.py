@@ -12,6 +12,8 @@ from src.shared.product_value import (
     ProductDecisionBasisV2,
 )
 from src.shared.publication_contract import (
+    LEGACY_USER_ACTUALITY_EXPRESSION_POLICY,
+    USER_ACTUALITY_EXPRESSION_POLICY,
     PublicationContractV3,
     publication_contract_digest,
 )
@@ -40,6 +42,7 @@ class WriterRequestV3:
     prohibited_bindings: tuple[str, ...]
     prior_output: dict[str, str] | None
     revision_instruction: str | None
+    expression_policy_version: str
 
 
 @dataclass(frozen=True)
@@ -144,13 +147,14 @@ def build_writer_request_v3(
             else None
         ),
         revision_instruction=(revision_instruction.strip() if revision_instruction else None),
+        expression_policy_version=contract.expression_policy_version,
     )
     assert_writer_request_v3(request)
     return request
 
 
 def writer_request_document(request: WriterRequestV3) -> dict[str, object]:
-    return {
+    document: dict[str, object] = {
         "request_version": request.request_version,
         "publication_contract_digest": request.publication_contract_digest,
         "topic_origin": request.topic_origin,
@@ -169,6 +173,9 @@ def writer_request_document(request: WriterRequestV3) -> dict[str, object]:
         "prior_output": request.prior_output,
         "revision_instruction": request.revision_instruction,
     }
+    if request.expression_policy_version != LEGACY_USER_ACTUALITY_EXPRESSION_POLICY:
+        document["expression_policy_version"] = request.expression_policy_version
+    return document
 
 
 def writer_request_digest(request: WriterRequestV3) -> str:
@@ -215,6 +222,11 @@ def assert_writer_request_v3(request: WriterRequestV3) -> None:
             "expression_responsibility",
         }
         or any(not value for value in request.platform_direction.values())
+        or request.expression_policy_version
+        not in {
+            LEGACY_USER_ACTUALITY_EXPRESSION_POLICY,
+            USER_ACTUALITY_EXPRESSION_POLICY,
+        }
     ):
         raise DomainError("Writer 请求没有绑定唯一发布合同")
 
@@ -240,36 +252,41 @@ def writer_output_from_response(value: object) -> WriterOutputV3:
 def suppress_exact_fact_only_units(
     output: WriterOutputV3,
     *,
-    frozen_fact_texts: tuple[str, ...],
+    user_actuality_texts: tuple[str, ...],
+    exclusive_fact_texts: tuple[str, ...],
 ) -> WriterOutputV3:
-    """Remove only byte-exact, fact-only unit copies before compilation.
+    """Deduplicate only a standalone byte-exact user actuality paragraph.
 
-    The function never normalizes or approximates text. Mixed fact/creative
-    units remain invalid and are rejected by the boundary check.
+    User actuality may be quoted, paraphrased or naturally continued in every
+    Writer-owned field.  It never gains fact ownership by doing so.  Canonical
+    product and brand facts remain exclusively server-owned and are rejected
+    here if copied.  No normalization, approximation or semantic matching is
+    performed.
     """
 
-    facts = tuple(sorted((text for text in frozen_fact_texts if text), key=len, reverse=True))
-    if not facts:
-        return output
-    if _contains_fact(output.title, facts) or _contains_fact(output.publication_caption, facts):
+    exclusive_facts = tuple(text for text in exclusive_fact_texts if text)
+    visible = "\n".join(
+        (
+            output.title,
+            output.natural_guide,
+            output.creative_body,
+            output.publication_caption,
+        )
+    )
+    if any(fact in visible for fact in exclusive_facts):
         raise GenerationFailed("Writer 不得复制或改写服务端事实块")
 
+    actuality_facts = frozenset(text for text in user_actuality_texts if text)
+    if not actuality_facts:
+        return output
     body_paragraphs = tuple(part.strip() for part in output.creative_body.split("\n\n") if part.strip())
-    creative_paragraphs: list[str] = []
-    for paragraph in body_paragraphs:
-        if _contains_fact(paragraph, facts):
-            if not _is_fact_only(paragraph, facts):
-                raise GenerationFailed("Writer 不得复制或改写服务端事实块")
-            continue
-        creative_paragraphs.append(paragraph)
+    creative_paragraphs = [paragraph for paragraph in body_paragraphs if paragraph not in actuality_facts]
 
     guide = output.natural_guide
-    if _contains_fact(guide, facts):
-        if not _is_fact_only(guide, facts) or len(creative_paragraphs) < 2:
-            raise GenerationFailed("Writer 不得复制或改写服务端事实块")
+    if guide in actuality_facts and len(creative_paragraphs) >= 2:
         guide = creative_paragraphs.pop(0)
     if not creative_paragraphs:
-        raise GenerationFailed("Writer 不得复制或改写服务端事实块")
+        raise GenerationFailed("Writer 正文不能只重复服务端事实块")
     return WriterOutputV3(
         output_version=output.output_version,
         title=output.title,
@@ -277,25 +294,6 @@ def suppress_exact_fact_only_units(
         creative_body="\n\n".join(creative_paragraphs),
         publication_caption=output.publication_caption,
     )
-
-
-def _contains_fact(text: str, facts: tuple[str, ...]) -> bool:
-    return any(
-        fact in text or fact.rstrip("，。！？；,.!?;") in text
-        for fact in facts
-    )
-
-
-def _is_fact_only(text: str, facts: tuple[str, ...]) -> bool:
-    remainder = text
-    for fact in facts:
-        remainder = remainder.replace(fact, "")
-        delimiter_free_fact = fact.rstrip("，。！？；,.!?;")
-        if delimiter_free_fact != fact:
-            remainder = remainder.replace(delimiter_free_fact, "")
-    return not remainder.strip(" \t\r\n，。！？；：、,.!?;:'\"“”‘’（）()[]【】")
-
-
 def writer_output_document(output: WriterOutputV3) -> dict[str, object]:
     return {
         "output_version": output.output_version,

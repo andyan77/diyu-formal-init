@@ -688,7 +688,7 @@ def test_publication_v3_uses_one_writer_call_without_legacy_repair_or_reviewer()
     assert negative_safety_contract_text() in system
 
 
-def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
+def test_publication_v3_rejects_a_body_with_no_creative_expression_after_exact_deduplication() -> None:
     base = _publication_v3_request()
     message = "公交刚开走，我拎着快递站在站牌下等了很久。帮我发一条。"
     candidates = user_fact_candidates((message,))
@@ -753,16 +753,16 @@ def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
         )
     ]
 
-    with pytest.raises(GenerationFailed, match="Writer 不得复制或改写服务端事实块"):
+    with pytest.raises(GenerationFailed, match="Writer 正文不能只重复服务端事实块"):
         _generator().generate(request)
 
     system = _payload_system_prompts()[0]
-    assert "只围绕 read_only_actuality_context 已呈现的可见张力" in system
-    assert "不重复事实" in system
-    assert "不解释用户的身体、心理、动机、原因、后果或健康变化" in system
+    assert "可以围绕 read_only_actuality_context 自然引用、复述、调整语序" in system
+    assert "始终属于 creative_expression" in system
+    assert "不能创建 fact_ref、回写可信事实" in system
 
 
-def test_publication_v3_suppresses_only_a_complete_exact_fact_guide() -> None:
+def test_publication_v3_suppresses_only_a_standalone_exact_actuality_paragraph() -> None:
     base = _publication_v3_request()
     message = "公交刚开走，我拎着快递站在站牌下等了很久。帮我发一条。"
     candidates = user_fact_candidates((message,))
@@ -804,8 +804,8 @@ def test_publication_v3_suppresses_only_a_complete_exact_fact_guide() -> None:
         _completion(
                 {
                     "title": "计划外的停顿，也有自己的节奏",
-                    "natural_guide": actuality.exact_text.rstrip("，") + "。",
-                "creative_body": first_paragraph + "\n\n" + second_paragraph,
+                    "natural_guide": "先接住这个具体瞬间。",
+                "creative_body": actuality.exact_text + "\n\n" + first_paragraph + "\n\n" + second_paragraph,
                 "publication_caption": "先接住眼前这一拍。",
             }
         )
@@ -815,24 +815,131 @@ def test_publication_v3_suppresses_only_a_complete_exact_fact_guide() -> None:
 
     assert artifact.completion_snapshot_patch is not None
     writer_output = cast(dict[str, object], artifact.completion_snapshot_patch["writer_output_v3"])
-    assert writer_output["natural_guide"] == first_paragraph
-    assert writer_output["creative_body"] == second_paragraph
+    assert writer_output["natural_guide"] == "先接住这个具体瞬间。"
+    assert writer_output["creative_body"] == first_paragraph + "\n\n" + second_paragraph
     assert actuality.exact_text not in str(writer_output)
 
 
-def test_publication_v3_rejects_fact_copy_mixed_with_writer_text() -> None:
+def test_publication_v3_preserves_actuality_inside_natural_writer_fields() -> None:
     output = WriterOutputV3(
         output_version=WRITER_OUTPUT_VERSION,
-        title="一次停顿",
-        natural_guide="把这一刻留在原处。",
-        creative_body="公交刚开走，我拎着快递站在站牌下等了很久。于是所有安排都失去了意义。",
-        publication_caption="先停一下。",
+        title="熟悉的咖啡，今天有点不一样",
+        natural_guide="今天喝了一直喝的蓝山咖啡，居然是甜的。",
+        creative_body=(
+            "今天照常喝那杯蓝山咖啡，入口的瞬间却愣了一下——居然是甜的。\n\n"
+            "不是加了糖的那种甜，是咖啡本身带来的意外。"
+        ),
+        publication_caption="熟悉的蓝山，今天有点甜。",
+    )
+
+    preserved = suppress_exact_fact_only_units(
+        output,
+        user_actuality_texts=("居然是甜的",),
+        exclusive_fact_texts=(),
+    )
+
+    assert preserved == output
+
+
+def test_publication_v3_allows_exact_actuality_in_title_and_caption() -> None:
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="居然是甜的",
+        natural_guide="熟悉的味道也会带来意外。",
+        creative_body="这一口意外，让熟悉的日常多了一次停顿。",
+        publication_caption="居然是甜的",
+    )
+
+    assert suppress_exact_fact_only_units(
+        output,
+        user_actuality_texts=("居然是甜的",),
+        exclusive_fact_texts=(),
+    ) == output
+
+
+def test_publication_v3_coffee_actuality_is_natural_expression_not_fact_ownership() -> None:
+    base = _publication_v3_request()
+    message = "今天喝了一直喝的蓝山咖啡，居然是甜的。帮我发一条。"
+    candidates = user_fact_candidates((message,))
+    assert len(candidates) == 3
+    actuality = candidates[:2]
+    roles = tuple(
+        PublicationInputSpanV1(
+            source_id=candidate.source_id,
+            role=("observable_actuality" if candidate in actuality else "creation_instruction"),
+            exact_text=candidate.exact_text,
+            turn_index=candidate.turn_index,
+            start_offset=candidate.start_offset,
+            end_offset=candidate.end_offset,
+            start_byte=candidate.start_byte,
+            end_byte=candidate.end_byte,
+        )
+        for candidate in candidates
+    )
+    contract = replace(
+        cast(PublicationContractV3, base.publication_contract),
+        input_roles=roles,
+        topic="围绕一杯熟悉咖啡出现意外感受形成自然生活表达",
+        frozen_fact_refs=tuple(candidate.source_id for candidate in actuality),
+        explicit_user_controls=(candidates[2].exact_text,),
+    )
+    request = replace(
+        base,
+        weak_seed=message,
+        narrative_frame=new_frame(
+            "actuality_reflection",
+            tuple(candidate.exact_text for candidate in actuality),
+            (),
+            user_fact_source_ids=tuple(candidate.source_id for candidate in actuality),
+        ),
+        publication_contract=contract,
+    )
+    expected_body = (
+        "今天照常喝那杯蓝山咖啡，入口的瞬间却愣了一下——居然是甜的。\n\n"
+        "不是加了糖的那种甜，是咖啡本身带来的意外。"
+    )
+    FakeClient.responses = [
+        _completion(
+            {
+                "title": "熟悉的咖啡，今天有点不一样",
+                "natural_guide": "一口熟悉的味道，也可能带来意料之外的停顿。",
+                "creative_body": expected_body,
+                "publication_caption": "熟悉的蓝山，今天有点甜。",
+            }
+        )
+    ]
+
+    artifact = _generator().generate(request)
+
+    assert artifact.completion_snapshot_patch is not None
+    writer_output = cast(dict[str, object], artifact.completion_snapshot_patch["writer_output_v3"])
+    assert writer_output["creative_body"] == expected_body
+    kernel = cast(dict[str, object], artifact.completion_snapshot_patch["creative_kernel_v5"])
+    units = cast(list[dict[str, object]], kernel["units"])
+    assert all(unit["fact_refs"] == [] for unit in units if unit["owner"] == "writer")
+    server_units = [unit for unit in units if unit["owner"] == "server_fact"]
+    assert {
+        tuple(cast(list[str], unit["fact_refs"])) for unit in server_units
+    } == {
+        (candidate.source_id,) for candidate in actuality
+    }
+    assert expected_body in artifact.body
+
+
+def test_publication_v3_keeps_canonical_fact_exclusive_to_server() -> None:
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="从确认信息开始",
+        natural_guide="先看已确认内容。",
+        creative_body="这件商品采用双面设计，再决定本次选择。",
+        publication_caption="保留自己的判断。",
     )
 
     with pytest.raises(GenerationFailed, match="Writer 不得复制或改写服务端事实块"):
         suppress_exact_fact_only_units(
             output,
-            frozen_fact_texts=("公交刚开走，我拎着快递站在站牌下等了很久。",),
+            user_actuality_texts=(),
+            exclusive_fact_texts=("这件商品采用双面设计",),
         )
 
 
@@ -2257,7 +2364,7 @@ def test_publication_writer_consumes_the_single_negative_safety_contract() -> No
     system = _generator()._publication_v2_writer_system()
 
     assert negative_safety_contract_text() in system
-    assert "不替现实人物、对象或事件判定未提供的原因、内部状态、变化或结果" in system
+    assert "不创建新的 fact_ref，也不回写用户、商品或品牌事实仓" in system
     assert "事实原句不得复制进任何可写单元" in system
     assert "不列举候选解释" in system
     assert "必须二选一" not in system

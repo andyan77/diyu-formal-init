@@ -451,6 +451,59 @@ def test_final_controller_ruling_updates_contract_without_rewriting_history(
     assert adopted["event_count"] == len(before.splitlines()) + 1
 
 
+def test_controller_ruling_recovers_failed_safe_without_erasing_acceptance_history(
+    control_fixture: _ControlFixture,
+) -> None:
+    _reach_model_preflight(control_fixture)
+    failed = control_fixture.control.classify(
+        _failure("hard_semantic_boundary_failure", "FAILED_SAFE")
+    )
+    assert failed["current_state"] == "FAILED_SAFE"
+    historical_key = f"{control_fixture.initial_head}:tenant01-golden-11-v1"
+    failed["acceptance_runs"] = {
+        historical_key: {
+            "candidate_sha": control_fixture.initial_head,
+            "suite_id": "tenant01-golden-11-v1",
+            "acceptance_run_id": "historical-run",
+            "config_digest": "a" * 64,
+            "status": "FAILED",
+            "started_at": "2026-08-03T00:00:00Z",
+            "completed_at": "2026-08-03T00:01:00Z",
+            "samples": {
+                "coffee": {
+                    "attempts": [],
+                    "human_review": {},
+                    "final_status": "HARD_FAIL",
+                }
+            },
+            "failure_count_by_class": {},
+        }
+    }
+    _write_private_json(control_fixture.runtime_root / "state.json", failed)
+    source = control_fixture.runtime_root / "replacement-ruling.json"
+    _write_private_json(
+        source,
+        {
+            "decision_version": "TENANT01-CONTROLLER-RULING-20260803-FINAL",
+            "milestone": "TENANT-01",
+            "objective": {"terminal_state": "REVIEW"},
+            "contract": {
+                "ruling_id": "TENANT01-CONTROLLER-RULING-20260803-FINAL",
+                "user_actuality_expression_policy": "user-actuality-natural-expression-v2",
+            },
+            "audit": {"status": "PREAUTHORIZED"},
+        },
+    )
+
+    adopted = control_fixture.control.adopt_ruling(source)
+
+    assert adopted["current_state"] == "STRUCTURAL_IMPLEMENTATION"
+    assert adopted["previous_state"] == "FAILED_SAFE"
+    assert historical_key in cast(dict[str, object], adopted["acceptance_runs"])
+    events = (control_fixture.runtime_root / "events.jsonl").read_text(encoding="utf-8")
+    assert "controller_ruling_adopted" in events
+
+
 def test_state_schema_lists_candidate_scoped_governance_fields() -> None:
     schema = json.loads(Path("config/execution-control-v1.schema.json").read_text(encoding="utf-8"))
     required = set(cast(list[str], schema["required"]))

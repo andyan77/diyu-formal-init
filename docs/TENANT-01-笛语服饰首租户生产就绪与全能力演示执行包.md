@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 里程碑：`TENANT-01`
-- 状态：`BLOCKED / FINAL_ACCEPTANCE_HARD_BOUNDARY_FAILURE`
+- 状态：`ACTIVE / CONTRACT_REWORK`
 - 唯一写入执行端：当前 WSL Codex
 - Git 启动基线：`94fa541f4b5a8f9c3fab5de6d826473440b6dd30`
 - UX-03：`CLOSED / PASS`
@@ -12,7 +12,20 @@
 - 工作树保护：`docs/项目记忆.md` 实测 93 行用户未提交内容全部保留，不暂存、不提交
 - 私有资料：仅从用户指定 Windows 目录只读；原文不得进入 Git、CI、公开日志或公开证据
 
-### 2026-08-03 最终正式验收失败结论
+### 2026-08-03 用户现实表达合同纠偏
+
+- `80ed1437e8797829f6eb323adf0d5a04205756cc` 在旧“用户现实字面独占”合同下正确失败；旧
+  raw、artifact、ledger、失败 run、checksum 与清理证据原样保留，不回写成当时没有失败。
+- 主控已裁决旧合同属于产品误杀。当前唯一政策为
+  `user-actuality-natural-expression-v2`：Writer 可在标题、导读、正文和配文中自然引用、复述、
+  调整语序，并补充低风险即时反应、感受、比喻和文学性承接；这些文字始终是未验证
+  `creative_expression`，不能取得 `fact_ref`、回写可信事实或获得权限与媒体资源。
+- 确定性硬门只负责服务端事实原文／引用／所有权、租户与权限、资源、版本、digest、AIGC 和
+  失败原子性。不得再因 Writer 文字包含 `user_actuality` 字面，或包含用户未逐字提供的低风险
+  自然叙事补全而判硬失败；商品／品牌 canonical fact、价格、库存、性能、功效和内部商品计划
+  边界没有放宽。
+
+### 2026-08-03 历史正式验收失败结论（已被上述产品裁决取代）
 
 - 最终运行候选：`80ed1437e8797829f6eb323adf0d5a04205756cc`。该 SHA 的
   `git diff --check`、Ruff、mypy、Golden／OpenAPI `785 passed, 2 skipped`、前端 lint／
@@ -24,9 +37,9 @@
   creative body 中再次写入冻结事实“居然是甜的”，并添加“入口的瞬间却愣了一下”等当前用户
   现实细节。确定性事实所有权校验因此返回“Writer 不得复制或改写服务端事实块”。
 - 数据库结果为 task 1、failed run 1、version 0、artifact 0；没有半版本或永久 running。
-  这是硬边界失败，不属于 `product_quality_variance`，不能通过 V2、随机重跑、继续其余 25 卡、
-  修改 Prompt／规则／oracle 或平均分洗白。执行状态已进入 `FAILED_SAFE`，里程碑诚实标记
-  `BLOCKED`，没有 push、CI、备份、部署或生产变更。
+  旧程序把该结果分类为硬边界失败并进入 `FAILED_SAFE`；这一历史分类与当时执行结果继续保留，
+  但已被本次主控产品裁决取代，不再阻止新 candidate-scoped acceptance run。没有发生 push、
+  CI、备份、部署或生产变更。
 - 完整私有失败包位于
   `/home/faye/.local/share/diyu-tenant01-evidence/80ed1437e8797829f6eb323adf0d5a04205756cc/acceptance-26-v1/`，
   含 checkpoint、两阶段 raw、失败摘要、清理结果和可复算 `SHA256SUMS`。本轮 task 1、run 1、
@@ -35,11 +48,9 @@
 - 只读生产现场保持运行实现 `f77a2e852758b9157425633041aea59d9f2b24da`、镜像
   `sha256:f869aa605f3bc81a429a56a4081b1c4eabaa351587245f5b8aa73fb19f7bb683`、schema
   `20260813_40`，公网／回环 readiness、liveness 与 `/status` 为 200。本轮没有触发生产写入。
-- 共享根因：产品要求 Writer 读取冻结现实以形成完整自然成稿，同时禁止 Writer 复制、改写或
-  补全任何冻结事实；在不增加 Reviewer、语义规则／修复、固定成稿或降低事实所有权硬门的冻结
-  条件下，当前单 Writer 有效响应仍可能把现实原句写回 creative expression。服务端能可靠
-  失败关闭，但该候选不能达到 `machine_hard_gate=26/26`，因此不能进入 REVIEW。
-- 唯一下一动作：停止执行，由主控审阅该合同级失败包；不得创建 successor 或继续生成候选。
+- 历史共享根因是把“creative expression 中出现用户现实字面”等同于“Writer 改写可信事实”。
+  当前修复改以结构化 `fact_kind`、unit owner、fact refs 与 provenance 判断事实所有权，不增加
+  Reviewer、语义词表、固定成稿或 coffee 专属分支。
 
 ## 唯一结果
 

@@ -1,12 +1,14 @@
 # 当前里程碑
 
 - 当前里程碑：`TENANT-01 · 笛语服饰首租户生产就绪与全能力演示`。
-- 状态：`BLOCKED / FINAL_ACCEPTANCE_HARD_BOUNDARY_FAILURE`。最终候选
-  `80ed1437e8797829f6eb323adf0d5a04205756cc` 已完成同 SHA 后端、OpenAPI、前端和显式
-  Chrome Gate A—D 工程门；但唯一正式 26 卡验收在首张 `coffee` 收到 intake／Writer 两个
-  有效供应商响应后，命中“Writer 不得复制或改写服务端事实块”硬门。run 已幂等失败、版本为
-  0，按最终裁决不得重跑、用 V2 洗白、修改 Prompt／oracle 或继续其余样本。既有生产不变，
-  不得创建 TENANT-02、successor 或平行状态文件。
+- 状态：`ACTIVE / CONTRACT_REWORK`。`80ed1437e8797829f6eb323adf0d5a04205756cc`
+  在旧“用户现实字面独占”合同下正确失败，其 raw、artifact、ledger、失败 run 与清理证据继续
+  原样保留；主控现已裁决该合同属于产品误杀并由
+  `user-actuality-natural-expression-v2` 取代。新合同允许 Writer 在 `creative_expression` 中
+  自然引用、复述、调整语序并补充低风险即时反应、感受、比喻和文学性承接；这些文字不得取得
+  `fact_ref`、回写可信事实或获得权限与资源。当前施工只同步收敛 Writer 请求、DeepSeek 后置门、
+  DeliveryCompiler、快照摘要和执行治理，既有生产不变；不得创建 TENANT-02、successor 或平行
+  状态文件。
 - 2026-08-03 主控已作出最终产品裁决，取代下方历史记录中“等待是否改变单 Writer 责任”的
   停止结论：服务端只对可信事实、来源字节、引用、权限、资源、租户隔离、版本、摘要和失败
   原子性提供确定性保证；Writer 的全部文字均标记为未验证 `creative_expression`，不得升级为
@@ -52,13 +54,13 @@
   `b028bbfd5a3b04a213926da3aaea5bb0cc1e9961` 关闭跨候选失败计数与 suite resume 身份接缝；
   序列化稳定性修复 `80ed1437e8797829f6eb323adf0d5a04205756cc` 通过 Ruff、mypy、Golden／
   OpenAPI `785 passed, 2 skipped`、前端四门和显式 Chrome Gate A—D。正式验收的 `coffee`
-  Writer 将冻结事实“居然是甜的”写入混合创作段落，并扩写“入口的瞬间却愣了一下”；服务端
-  正确失败关闭，task／failed run／version 差分为 `1/1/0`，未形成 artifact。私有失败证据与
+  Writer 将冻结事实“居然是甜的”写入混合创作段落，并扩写“入口的瞬间却愣了一下”；旧字面
+  独占合同据此失败关闭，task／failed run／version 差分为 `1/1/0`，未形成 artifact。该程序
+  当时的行为与证据不改写，但主控后续已裁决自然复述和上述低风险承接不是事实轨污染。私有失败证据与
   可复算 checksum 位于
   `/home/faye/.local/share/diyu-tenant01-evidence/80ed1437e8797829f6eb323adf0d5a04205756cc/acceptance-26-v1/`。
   本轮 synthetic task、run、series、activity event 与临时 session 已按精确 UUID 清理，永久
-  running 为 0。唯一下一动作：停止执行，由主控审阅这一合同级失败包；TENANT-01 不进入
-  REVIEW，也不启动下一里程碑。
+  running 为 0。该段只保留历史失败角色，不再作为当前停止线。
 - Gate C 当前运行实现为 `ec3dbe45d485816c7a49f9c801cd2baa2fe58c04`；其后仅有测试 oracle
   前向提交 `6e3cb46b6c18d82f245a92f36c972ab65fa62bde`，没有运行代码变化。当前实现继续保留
   `faa4792538cbbcb54ff7b329dee7d03dd9488a24` 已关闭的总部素材作用域、正式 P5 消费者和

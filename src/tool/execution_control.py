@@ -116,6 +116,9 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
     "ENVIRONMENT_RESTRICTED": frozenset(
         {"MODEL_READINESS", "MODEL_PREFLIGHT", "GENERALIZATION_EVAL", "DEPLOY_READY", "FAILED_SAFE"}
     ),
+    # A controller ruling may replace the contract that caused a safe stop.
+    # The transition itself is performed only by ``adopt_ruling`` so ordinary
+    # callers still cannot escape FAILED_SAFE through the generic CLI.
     "FAILED_SAFE": frozenset(),
     "REVIEW": frozenset(),
 }
@@ -494,35 +497,57 @@ class ExecutionControl:
             state = self._state()
             self._verify_event_chain(state)
             self._verify_decision(state)
-            if state["current_state"] != "STRUCTURAL_IMPLEMENTATION":
-                raise ExecutionControlError("controller ruling can only be adopted during structural implementation")
-            if cast(dict[str, object], state["acceptance_runs"]):
-                raise ExecutionControlError("controller ruling cannot replace an active acceptance ledger")
+            previous_state = str(state["current_state"])
+            if previous_state not in {
+                "STRUCTURAL_IMPLEMENTATION",
+                "NEEDS_CONTROLLER_RULING",
+                "FAILED_SAFE",
+            }:
+                raise ExecutionControlError(
+                    "controller ruling can only be adopted during structural implementation or a controller stop"
+                )
             if _protected_digest(self.repository, self.protected_path) != state["protected_user_change_digest"]:
                 raise ExecutionControlError("protected user change digest drifted")
             previous_contract_digest = str(state["contract_digest"])
+            previous_head = str(state["head_sha"])
+            next_head = _git_sha(self.repository, "HEAD")
             _atomic_private_json(self.decision_path, decision)
             state.update(
                 {
+                    "previous_state": previous_state,
+                    "current_state": "STRUCTURAL_IMPLEMENTATION",
                     "objective_digest": _digest(decision["objective"]),
                     "contract_digest": _digest(contract),
                     "controller_decision_digest": _file_digest(self.decision_path),
                     "governance_version": GOVERNANCE_VERSION,
-                    "acceptance_runs": {},
+                    "head_sha": next_head,
+                    "origin_sha": _git_sha(self.repository, "origin/main"),
                     "worktree_digest": _worktree_digest(self.repository),
                     "heartbeat_at": _now(),
                     "failure_class": None,
+                    "active_gate": None,
+                    "active_run_id": None,
+                    "active_command": None,
+                    "active_pid": None,
+                    "approved_next_action": None,
                 }
             )
+            if next_head != previous_head:
+                state["completed_gates"] = []
             return self._commit(
                 state,
                 "controller_ruling_adopted",
                 {
                     "ruling_id": contract["ruling_id"],
+                    "from_state": previous_state,
+                    "to_state": "STRUCTURAL_IMPLEMENTATION",
+                    "previous_head": previous_head,
+                    "head_sha": next_head,
                     "previous_contract_digest": previous_contract_digest,
                     "contract_digest": state["contract_digest"],
                     "historical_failure_counts_retained": True,
                     "historical_counts_govern_current_acceptance": False,
+                    "historical_acceptance_ledgers_retained": True,
                 },
             )
 

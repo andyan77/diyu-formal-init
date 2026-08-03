@@ -124,6 +124,7 @@ from src.shared.product_value import (
     product_value_contract_document,
 )
 from src.shared.publication_contract import (
+    USER_ACTUALITY_EXPRESSION_POLICY,
     IntakeSpanRole,
     PublicationContractV2,
     PublicationContractV3,
@@ -819,10 +820,8 @@ class DeepSeekGenerator(ContentGenerator):
         if (
             contract.platform_direction.target != request.target
             or contract.platform_direction.media_format != request.media_format
-            or contract.platform_direction.direction_version
-            != request.platform_direction.version
-            or contract.platform_direction.direction_digest
-            != request.platform_direction.direction_digest
+            or contract.platform_direction.direction_version != request.platform_direction.version
+            or contract.platform_direction.direction_digest != request.platform_direction.direction_digest
         ):
             raise GenerationFailed("Writer 平台责任没有绑定冻结平台方向")
         assert_media_program_allowed(
@@ -846,20 +845,24 @@ class DeepSeekGenerator(ContentGenerator):
         writer_request = build_writer_request_v3(
             contract,
             product_decision_basis=product_basis,
-            platform_expression_responsibility=(
-                request.platform_direction.direction
-            ),
+            platform_expression_responsibility=(request.platform_direction.direction),
             prior_output=request.prior_writer_output,
             revision_instruction=request.revision_instruction,
         )
         writer_scope = []
-        if writer_request.actuality_fact_refs and writer_request.content_product in {
-            "brand_life_narrative",
-            "local_response",
-        }:
+        if (
+            writer_request.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
+            and writer_request.actuality_fact_refs
+            and writer_request.content_product
+            in {
+                "brand_life_narrative",
+                "local_response",
+            }
+        ):
             writer_scope.append(
-                "只围绕 read_only_actuality_context 已呈现的可见张力形成一条一般观察；不重复事实，"
-                "不补写场景，也不解释用户的身体、心理、动机、原因、后果或健康变化。"
+                "可以围绕 read_only_actuality_context 自然引用、复述、调整语序，并补充低风险的"
+                "即时反应、感受、比喻或文学性承接；这些文字始终属于 creative_expression，"
+                "不能创建 fact_ref、回写可信事实或获得人物、场地、商品和媒体资源资格。"
             )
         if writer_request.product_decision_basis is not None:
             writer_scope.append(
@@ -890,14 +893,29 @@ class DeepSeekGenerator(ContentGenerator):
             json.JSONDecodeError,
         ) as exc:
             raise GenerationFailed("Writer V3 返回结构不完整") from exc
+        actuality_fact_refs = (
+            {record.fact_id for record in context.fact_registry if record.fact_kind == "user_actuality"}
+            if contract.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
+            else set()
+        )
         output = suppress_exact_fact_only_units(
             output,
-            frozen_fact_texts=tuple(context.fact_text_by_id.values()),
+            user_actuality_texts=tuple(
+                exact_text
+                for fact_ref, exact_text in context.fact_text_by_id.items()
+                if fact_ref in actuality_fact_refs
+            ),
+            exclusive_fact_texts=tuple(
+                exact_text
+                for fact_ref, exact_text in context.fact_text_by_id.items()
+                if fact_ref not in actuality_fact_refs
+            ),
         )
         self._assert_writer_output_v3_boundaries(
             output,
             context=context,
             product_basis=product_basis,
+            expression_policy_version=contract.expression_policy_version,
         )
         supporting_fact_refs = product_basis.supporting_fact_refs if product_basis is not None else ()
         selected_fact_blocks = tuple(
@@ -995,11 +1013,20 @@ class DeepSeekGenerator(ContentGenerator):
     @staticmethod
     def _writer_request_v3_prompt(request: WriterRequestV3) -> str:
         document = writer_request_document(request)
+        actuality_instruction = (
+            "read_only_actuality_context 是服务端冻结的用户现实原文。你可以在四个 Writer 字段中自然引用、复述、调整语序，"
+            "并补充低风险即时反应、感受、比喻或文学性承接；这些文字始终只是 creative_expression，"
+            "不能创建 fact_ref、改写服务端事实块、回写可信事实或取得资源资格。\n"
+            if request.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
+            else (
+                "read_only_actuality_context 是历史只读事实上下文；历史策略下四个 Writer 字段不能复制或改写这些原句。\n"
+            )
+        )
         return (
             "请依据下面唯一业务合同完成一篇可直接修改和采用的内容。\n"
             "只返回 title、natural_guide、creative_body、publication_caption 四个字符串字段。\n"
-            "read_only_actuality_context 是服务端将另行插入的逐字事实，只用于理解本题；四个 Writer 字段不能复制、改写、续写或补全这些原句。\n"
-            "account_editorial_permission 只决定观察顺序与回应姿态，不能替换用户题材，也不能把生活题材转向服饰、商品或品牌宣讲。\n"
+            + actuality_instruction
+            + "account_editorial_permission 只决定观察顺序与回应姿态，不能替换用户题材，也不能把生活题材转向服饰、商品或品牌宣讲。\n"
             "product_decision_basis 是穷尽式机器计划：decision_axis 是唯一选择维度；标题、导读、正文和配文须自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子。\n"
             "你可以形成中心判断、一般观察、条件建议、比喻、节奏、幽默和留白；建议与假设须保持该身份。\n"
             "topic_origin 为 system_selected 时须自主形成明确主线和完整成品，不把选题责任退回用户。\n"
@@ -1013,6 +1040,7 @@ class DeepSeekGenerator(ContentGenerator):
         *,
         context: BoundaryContext,
         product_basis: ProductDecisionBasisV2 | None,
+        expression_policy_version: str = USER_ACTUALITY_EXPRESSION_POLICY,
     ) -> None:
         visible = "\n".join(
             (
@@ -1022,7 +1050,15 @@ class DeepSeekGenerator(ContentGenerator):
                 output.publication_caption,
             )
         )
-        if any(exact_text and exact_text in visible for exact_text in context.fact_text_by_id.values()):
+        actuality_fact_refs = (
+            {record.fact_id for record in context.fact_registry if record.fact_kind == "user_actuality"}
+            if expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
+            else set()
+        )
+        if any(
+            fact_ref not in actuality_fact_refs and exact_text and exact_text in visible
+            for fact_ref, exact_text in context.fact_text_by_id.items()
+        ):
             raise GenerationFailed("Writer 不得复制或改写服务端事实块")
         if product_basis is not None and any(
             internal_text and internal_text in visible

@@ -38,6 +38,7 @@ from src.shared.product_value import (
     product_value_contract_digest,
 )
 from src.shared.publication_contract import (
+    USER_ACTUALITY_EXPRESSION_POLICY,
     PublicationContract,
     PublicationContractV2,
     PublicationContractV3,
@@ -508,7 +509,19 @@ def _compile_delivery_v5(
             output.publication_caption,
         )
     )
-    if any(exact_text and exact_text in writer_text for exact_text in fact_text_by_id.values()):
+    actuality_fact_refs = (
+        {
+            span.source_id
+            for span in contract.input_roles
+            if span.role == "observable_actuality"
+        }
+        if contract.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
+        else set()
+    )
+    if any(
+        fact_ref not in actuality_fact_refs and exact_text and exact_text in writer_text
+        for fact_ref, exact_text in fact_text_by_id.items()
+    ):
         raise GenerationFailed("Writer 不得复制服务端冻结事实块")
 
     visible_facts = tuple(
