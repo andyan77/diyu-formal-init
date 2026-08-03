@@ -3743,6 +3743,86 @@ def test_tenant01_artifact_projects_and_rebuilds_frozen_delivery(
     assert artifact["production"] == source["production"]
 
 
+def test_tenant01_artifact_uses_explicit_target_for_non_golden_card_id(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, _ = _tenant01_evidence_inputs(tmp_path)
+    source = json.loads(
+        (
+            tmp_path
+            / next(
+                item.artifact_file
+                for item in artifacts
+                if item.card_id == "cross_platform_douyin"
+            )
+        ).read_text(encoding="utf-8")
+    )
+    snapshot = cast(dict[str, object], source["formal_snapshot"])
+    user_premise = str(snapshot["user_premise"])
+    card = tenant01_runner._Card(
+        "frozen-generalization-video",
+        user_premise,
+        "douyin_video",
+    )
+
+    artifact = tenant01_runner._artifact(
+        card,
+        {
+            "task_id": source["task_id"],
+            "version": source["version"],
+            "outline": source["outline"],
+            "body": source["body"],
+        },
+        snapshot,
+        run_id=UUID(source["run_id"]),
+        version_id=UUID(source["version_id"]),
+    )
+
+    assert artifact["outline"] == source["outline"]
+    assert artifact["body"] == source["body"]
+    assert cast(dict[str, object], artifact["formal_snapshot"])[
+        "publishing_target"
+    ] == "douyin_video"
+
+
+def test_tenant01_artifact_rejects_explicit_target_mismatch_for_non_golden_card_id(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, _ = _tenant01_evidence_inputs(tmp_path)
+    source = json.loads(
+        (
+            tmp_path
+            / next(
+                item.artifact_file
+                for item in artifacts
+                if item.card_id == "cross_platform_douyin"
+            )
+        ).read_text(encoding="utf-8")
+    )
+    snapshot = cast(dict[str, object], source["formal_snapshot"])
+    card = tenant01_runner._Card(
+        "frozen-generalization-video",
+        str(snapshot["user_premise"]),
+        "xiaohongshu_graphic",
+    )
+
+    with pytest.raises(RuntimeError, match="frozen snapshot cannot rebuild production"):
+        tenant01_runner._artifact(
+            card,
+            {
+                "task_id": source["task_id"],
+                "version": source["version"],
+                "outline": source["outline"],
+                "body": source["body"],
+            },
+            snapshot,
+            run_id=UUID(source["run_id"]),
+            version_id=UUID(source["version_id"]),
+        )
+
+
 def test_tenant01_finalizer_rejects_dirty_worktree_without_writing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -633,6 +633,7 @@ def _artifact(
         compiled = compile_tenant01_snapshot_delivery(
             formal_snapshot,
             card_id=card.card_id,
+            publishing_target=cast(ContentTarget, card.target),
         )
     except Tenant01EvidenceError as exc:
         raise RuntimeError(f"{card.card_id}: frozen snapshot cannot rebuild production") from exc

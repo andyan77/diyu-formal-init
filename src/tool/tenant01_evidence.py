@@ -333,10 +333,23 @@ def _raw_binding(path: Path, *, card_id: str) -> dict[str, object]:
     }
 
 
-def _target_contract(card_id: str) -> tuple[ContentTarget, MediaFormat]:
-    if card_id in {"P1", "cross_platform_douyin"}:
-        return "douyin_video", "video"
-    return "xiaohongshu_graphic", "graphic"
+def _target_contract(
+    card_id: str,
+    *,
+    publishing_target: ContentTarget | None = None,
+) -> tuple[ContentTarget, MediaFormat]:
+    target = publishing_target
+    if target is None:
+        target = (
+            "douyin_video"
+            if card_id in {"P1", "cross_platform_douyin"}
+            else "xiaohongshu_graphic"
+        )
+    if target == "douyin_video":
+        return target, "video"
+    if target == "xiaohongshu_graphic":
+        return target, "graphic"
+    raise Tenant01EvidenceError(f"{card_id} 发布目标无效。")
 
 
 def _primary_product_contract(card_id: str) -> ContentProduct:
@@ -429,6 +442,7 @@ def _compile_bound_delivery(
     kernel: CreativeKernelV1,
     publication: PublicationContractV2,
     product_value: ProductValueContract | None,
+    expected_target: ContentTarget,
     expected_media_format: MediaFormat,
 ) -> CompiledDelivery:
     raw_account = snapshot.get("account_expression")
@@ -443,7 +457,6 @@ def _compile_bound_delivery(
         blocks = _immutable_fact_blocks(snapshot, card_id=card_id)
     except (DomainError, GenerationFailed, TypeError, ValueError) as exc:
         raise Tenant01EvidenceError(f"{card_id} 冻结媒体或商品编译输入无效。") from exc
-    expected_target, _ = _target_contract(card_id)
     expected_platform_shape = platform_shape(
         expected_target,
         expected_media_format,
@@ -498,6 +511,7 @@ def _compile_bound_delivery_v3(
     kernel: CreativeKernelV5,
     publication: PublicationContractV3,
     product_value: ProductValueContract | None,
+    expected_target: ContentTarget,
     expected_media_format: MediaFormat,
 ) -> CompiledDelivery:
     raw_account = snapshot.get("account_expression")
@@ -511,7 +525,6 @@ def _compile_bound_delivery_v3(
         blocks = _immutable_fact_blocks(snapshot, card_id=card_id)
     except (DomainError, GenerationFailed, TypeError, ValueError) as exc:
         raise Tenant01EvidenceError(f"{card_id} V3 冻结编译输入无效。") from exc
-    expected_target, _ = _target_contract(card_id)
     if (
         envelope is None
         or media_program is None
@@ -572,8 +585,9 @@ def compile_tenant01_snapshot_delivery(
     snapshot: dict[str, object],
     *,
     card_id: str,
+    publishing_target: ContentTarget | None = None,
 ) -> CompiledDelivery:
-    """Deterministically rebuild one golden-card artifact from its snapshot."""
+    """Deterministically rebuild one candidate artifact from its snapshot."""
 
     compiler_version = snapshot.get("delivery_compiler_version")
     if (
@@ -623,7 +637,15 @@ def compile_tenant01_snapshot_delivery(
             raise Tenant01EvidenceError(f"{card_id} 商品语义计划结构无效。") from exc
         if product_value_contract_digest(product_value) != raw_product_digest:
             raise Tenant01EvidenceError(f"{card_id} 商品语义计划摘要无效。")
-    _, expected_media_format = _target_contract(card_id)
+    expected_target, expected_media_format = _target_contract(
+        card_id,
+        publishing_target=publishing_target,
+    )
+    if (
+        publishing_target is not None
+        and snapshot.get("publishing_target") != expected_target
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 发布目标没有绑定冻结样本。")
     if isinstance(publication, PublicationContractV3) and isinstance(kernel, CreativeKernelV5):
         return _compile_bound_delivery_v3(
             snapshot,
@@ -632,6 +654,7 @@ def compile_tenant01_snapshot_delivery(
             kernel=kernel,
             publication=publication,
             product_value=product_value,
+            expected_target=expected_target,
             expected_media_format=expected_media_format,
         )
     assert isinstance(publication, PublicationContractV2)
@@ -643,6 +666,7 @@ def compile_tenant01_snapshot_delivery(
         kernel=kernel,
         publication=publication,
         product_value=product_value,
+        expected_target=expected_target,
         expected_media_format=expected_media_format,
     )
 
@@ -972,6 +996,7 @@ def _artifact_binding_v3(
         kernel=kernel,
         publication=publication,
         product_value=product_value,
+        expected_target=expected_target,
         expected_media_format=expected_media_format,
     )
     expected_production = asdict(compiled.production)
@@ -1330,6 +1355,7 @@ def _artifact_binding(
         kernel=kernel,
         publication=publication,
         product_value=product_value,
+        expected_target=expected_target,
         expected_media_format=expected_media_format,
     )
     expected_production = asdict(compiled.production)
