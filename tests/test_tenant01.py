@@ -3917,6 +3917,70 @@ def test_tenant01_frozen_generalization_config_is_complete_and_immutable(
         generalization_runner._config(changed_path, journey)
 
 
+@pytest.mark.parametrize("received_response", (False, True))
+def test_tenant01_generalization_failure_freezes_provider_trace_before_classification(
+    tmp_path: Path,
+    received_response: bool,
+) -> None:
+    tmp_path.chmod(0o700)
+    generator = object.__new__(generalization_runner._GeneralizationGenerator)
+    generator._evidence_root = tmp_path
+    generator._allowed_run_ids = frozenset({"failed-case"})
+    generator._active_run_id = None
+    generator._responses = []
+    generator.begin("failed-case")
+    if received_response:
+        generator._responses.append(
+            {
+                "stage": "intake",
+                "transport_retries": 0,
+                "response": {"choices": [{"message": {"content": "{}"}}]},
+            }
+        )
+
+    raw_files, request_count = generalization_runner._freeze_failure_trace(
+        generator,
+        root=tmp_path,
+        case_id="failed-case",
+        before_raw=set(),
+    )
+
+    assert request_count == int(received_response)
+    assert len(raw_files) == 1
+    trace = json.loads(raw_files[0].read_text(encoding="utf-8"))
+    assert trace["request_count"] == int(received_response)
+    assert len(trace["responses"]) == int(received_response)
+    assert generator.abort() is None
+
+
+def test_tenant01_generalization_failure_rejects_invalid_provider_trace(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    generator = object.__new__(generalization_runner._GeneralizationGenerator)
+    generator._evidence_root = tmp_path
+    generator._allowed_run_ids = frozenset({"failed-case"})
+    generator._active_run_id = None
+    generator._responses = []
+    generator.begin("failed-case")
+    generator._responses.extend(
+        (
+            {"stage": "writer", "transport_retries": 0},
+            {"stage": "intake", "transport_retries": 0},
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="provider trace drifted"):
+        generalization_runner._freeze_failure_trace(
+            generator,
+            root=tmp_path,
+            case_id="failed-case",
+            before_raw=set(),
+        )
+
+    assert not tuple(tmp_path.glob("*.raw.json"))
+
+
 def test_tenant01_git_suite_config_is_public_but_journey_remains_private(
     tmp_path: Path,
 ) -> None:
