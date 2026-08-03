@@ -18,8 +18,6 @@ __pycache__/
 
 # Node and build outputs
 node_modules/
-# The frontend lock was removed in 549f335 as nonportable for the image build.
-frontend/package-lock.json
 dist/
 build/
 coverage/

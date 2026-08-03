@@ -529,6 +529,22 @@ def test_release_scripts_build_once_and_activate_only_the_bound_digest() -> None
     assert "DIYU_IMAGE_TAG" not in compose + deploy + rollback + restore
 
 
+def test_frontend_lock_is_portable_and_ci_uses_the_frozen_tree() -> None:
+    lock = json.loads(Path("frontend/package-lock.json").read_text(encoding="utf-8"))
+    packages = lock["packages"]
+    assert packages["node_modules/react"]["version"] == "19.2.4"
+    assert packages["node_modules/react-dom"]["version"] == "19.2.4"
+    assert packages["node_modules/typescript"]["version"] == "5.9.3"
+    assert packages["node_modules/vite"]["version"] == "5.4.21"
+    assert all(not path.startswith("../") for path in packages)
+    assert all(not metadata.get("link", False) for metadata in packages.values())
+    assert "diyu-agent" not in json.dumps(lock)
+
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "npm --prefix frontend ci --no-audit --no-fund" in workflow
+    assert "npm --prefix frontend install" not in workflow
+
+
 def test_candidate_builder_refuses_a_second_image_for_the_same_sha(tmp_path: Path) -> None:
     repository = tmp_path / "candidate"
     repository.mkdir()
