@@ -219,13 +219,13 @@ def suppress_exact_writer_fact_duplicates(
     request: DeliveryCompileInput,
     kernel: CreativeKernelV1,
 ) -> CreativeKernelV1:
-    """Remove only standalone, byte-exact frozen-fact copies from new Writer units.
+    """Remove only byte-exact frozen-fact spans from new Writer units.
 
     The trusted fact unit remains the sole visible owner of the source text.
     This intentionally performs no Unicode normalization, whitespace folding,
-    similarity matching or semantic rewriting.  A fact embedded inside a
-    creative sentence fails closed instead of being cut out of that sentence.
-    Historical and replayed units are left byte-for-byte unchanged.
+    similarity matching or semantic rewriting.  Bytes outside each complete
+    consecutive fact span are preserved exactly.  Historical and replayed
+    units are left byte-for-byte unchanged.
     """
 
     if request.publication_contract is None:
@@ -251,12 +251,6 @@ def suppress_exact_writer_fact_duplicates(
             while frozen_text in normalized_bytes:
                 start = normalized_bytes.find(frozen_text)
                 end = start + len(frozen_text)
-                starts_line = start == 0 or normalized_bytes[start - 1 : start] == b"\n"
-                ends_line = end == len(normalized_bytes) or normalized_bytes[end : end + 1] == b"\n"
-                if not starts_line or not ends_line:
-                    raise GenerationFailed(
-                        "Writer 不得把服务端逐字事实嵌入创作句；请只保留创作表达"
-                    )
                 normalized_bytes = normalized_bytes[:start] + normalized_bytes[end:]
         if normalized_bytes == raw_bytes:
             deduplicated_units.append(unit)

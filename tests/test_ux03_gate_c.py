@@ -3317,7 +3317,7 @@ def test_product_writer_receives_semantic_plan_without_product_fact_literals() -
         assert private_literal not in prompt
 
 
-def test_compiler_rejects_byte_exact_fact_embedded_in_creative_sentence(
+def test_compiler_suppresses_byte_exact_fact_span_inside_creative_sentence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _p3_account_link_request()
@@ -3341,12 +3341,13 @@ def test_compiler_rejects_byte_exact_fact_embedded_in_creative_sentence(
         return {"choices": [{"message": {"content": json.dumps({"units": units}, ensure_ascii=False)}}]}, 0
 
     monkeypatch.setattr(DeepSeekGenerator, "_request", respond)
-    with pytest.raises(GenerationFailed, match="不得把服务端逐字事实嵌入创作句"):
-        DeepSeekGenerator(
-            "https://example.invalid",
-            "not-a-real-key",
-            "deepseek-test",
-        ).generate(request)
+    artifact = DeepSeekGenerator(
+        "https://example.invalid",
+        "not-a-real-key",
+        "deepseek-test",
+    ).generate(request)
+    assert "保留开头。保留结尾。" in artifact.body
+    assert artifact.body.count(fact) == 1
     assert request_count == 1
 
 
