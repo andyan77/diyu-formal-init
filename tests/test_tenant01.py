@@ -83,6 +83,7 @@ from src.shared.media_program import (
 )
 from src.shared.narrative import (
     frame_document,
+    frame_from_document,
     new_frame,
     user_fact_candidates,
     visible_digest,
@@ -144,6 +145,7 @@ from src.tool.tenant01_evidence import (
     Tenant01ArtifactInput,
     Tenant01EvidenceError,
     Tenant01HumanReview,
+    _artifact_binding,
     compile_tenant01_snapshot_delivery,
     sha256_file,
     write_tenant01_evidence,
@@ -2406,6 +2408,40 @@ def test_tenant01_evidence_rebuilds_rehashed_publication_semantics(
 
     with pytest.raises(Tenant01EvidenceError, match="语义没有绑定冻结输入"):
         _write_tenant01_fixture_evidence(tmp_path, artifacts, reviews)
+
+
+def test_tenant01_evidence_preserves_frozen_fact_reference_order(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, _ = _tenant01_evidence_inputs(tmp_path)
+    path = tmp_path / "P2.artifact.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    snapshot = cast(dict[str, object], document["formal_snapshot"])
+    frame = frame_from_document(snapshot["narrative_frame"])
+    publication_document = cast(
+        dict[str, object], snapshot["publication_contract"]
+    )
+    frozen_refs = cast(list[str], publication_document["frozen_fact_refs"])
+    reordered = [*frozen_refs[1:], frozen_refs[0]]
+    if reordered == list(frame.allowed_fact_ids):
+        reordered = list(reversed(reordered))
+    assert set(reordered) == set(frame.allowed_fact_ids)
+    assert reordered != list(frame.allowed_fact_ids)
+    publication_document["frozen_fact_refs"] = reordered
+    publication = publication_contract_from_document(publication_document)
+    snapshot["publication_contract_digest"] = publication_contract_digest(
+        publication
+    )
+    _write_private_json(path, document)
+
+    rebound, _, _, _ = _artifact_binding(path, card_id="P2")
+
+    rebound_snapshot = cast(dict[str, object], rebound["formal_snapshot"])
+    rebound_publication = cast(
+        dict[str, object], rebound_snapshot["publication_contract"]
+    )
+    assert rebound_publication["frozen_fact_refs"] == reordered
 
 
 @pytest.mark.parametrize(

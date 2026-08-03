@@ -740,7 +740,13 @@ def _artifact_binding(
         topic_spans=plan.topic_spans,
         topic_origin=plan.topic_origin,
         known_conditions=tuple(fact.exact_text for fact in frame.user_facts),
-        frozen_fact_refs=tuple(frame.allowed_fact_ids),
+        # ``allowed_fact_ids`` is a frozenset.  Its iteration order is process
+        # dependent and therefore cannot reconstruct the ordered, digested
+        # contract.  The parsed publication contract already passed the exact
+        # digest check above, while the set equality check proves that it binds
+        # the same frozen facts as the narrative frame.  Preserve that frozen
+        # order for deterministic evidence replay.
+        frozen_fact_refs=publication.frozen_fact_refs,
         intake_spans=publication.intake_spans,
         account_identity=str(raw_account["identity_position"]),
         account_audience=str(raw_account["audience_relationship"]),
