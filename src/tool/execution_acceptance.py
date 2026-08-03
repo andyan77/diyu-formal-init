@@ -173,15 +173,15 @@ def begin_acceptance_run(
     current = dict(runs)
     existing = current.get(key)
     if existing is not None:
+        existing_samples = cast(dict[str, dict[str, object]], existing["samples"])
         if (
             existing["acceptance_run_id"] != run_id
             or existing["config_digest"] != digest
-            or tuple(cast(dict[str, object], existing["samples"])) != normalized_samples
+            or set(existing_samples) != set(normalized_samples)
         ):
             raise AcceptanceLedgerError("candidate suite already belongs to another acceptance run")
         if existing["status"] != "RUNNING" or not allow_resume:
             raise AcceptanceLedgerError("candidate suite formal acceptance already started")
-        existing_samples = cast(dict[str, dict[str, object]], existing["samples"])
         if not any(sample["final_status"] == _RETRYABLE_STATUS for sample in existing_samples.values()):
             raise AcceptanceLedgerError("candidate suite has no unreceived transport failure to resume")
         return current, True

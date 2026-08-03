@@ -260,7 +260,9 @@ def test_acceptance_only_resumes_unreceived_transport_samples(control_fixture: _
         suite_id="tenant01-golden-11",
         acceptance_run_id="acceptance-final",
         config_digest="b" * 64,
-        sample_ids=("P1", "P2"),
+        # Deliberately non-lexical: private JSON is serialized with sorted keys,
+        # while suite identity is exact membership rather than object key order.
+        sample_ids=("P2", "P1"),
     )
     control_fixture.control.record_acceptance_sample(
         candidate_sha=candidate,
@@ -277,7 +279,7 @@ def test_acceptance_only_resumes_unreceived_transport_samples(control_fixture: _
         suite_id="tenant01-golden-11",
         acceptance_run_id="acceptance-final",
         config_digest="b" * 64,
-        sample_ids=("P1", "P2"),
+        sample_ids=("P2", "P1"),
         allow_resume=True,
     )
     assert resumed["current_state"] == "GENERALIZATION_EVAL"
