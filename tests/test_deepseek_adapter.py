@@ -549,6 +549,19 @@ def _payload_prompts() -> list[str]:
     return prompts
 
 
+def _payload_system_prompts() -> list[str]:
+    prompts: list[str] = []
+    for request in FakeClient.requests:
+        payload = request["json"]
+        assert isinstance(payload, dict)
+        messages = payload["messages"]
+        assert isinstance(messages, list)
+        system_message = messages[0]
+        assert isinstance(system_message, dict)
+        prompts.append(str(system_message["content"]))
+    return prompts
+
+
 def _kernel_request(
     frame: NarrativeFrame | None = None,
     *,
@@ -669,10 +682,8 @@ def test_publication_v3_uses_one_writer_call_without_legacy_repair_or_reviewer()
     assert "每个可见句" not in prompt
     assert "必须二选一" not in prompt
     assert "不能替换用户题材" in prompt
-    assert "不得解释任何人的身体或心理状态" in prompt
-    assert "不得添加计划外的购买理由" in prompt
     assert request.active_domain_assets[0].body not in prompt
-    system = str(FakeClient.requests[0]["json"]["messages"][0]["content"])
+    system = _payload_system_prompts()[0]
     assert negative_safety_contract_text() in system
 
 
@@ -737,6 +748,11 @@ def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
 
     with pytest.raises(GenerationFailed, match="Writer 不得复制或改写服务端事实块"):
         _generator().generate(request)
+
+    system = _payload_system_prompts()[0]
+    assert "现实类任务只允许形成不绑定当前用户的一般判断或条件建议" in system
+    assert "不得使用第一人称补写经历" in system
+    assert "不得解释身体、心理、动机、原因、后果或健康变化" in system
 
 
 @pytest.mark.parametrize(
@@ -845,13 +861,15 @@ def _parsed_kernel(
         request,
         request.narrative_frame,
     )
+    prior_kernel = request.prior_creative_kernel
+    assert prior_kernel is None or isinstance(prior_kernel, CreativeKernelV1)
     skeleton = build_kernel_skeleton(
         frame=request.narrative_frame,
         fact_registry=context.fact_registry,
         constraint_refs=tuple(identifier for identifier, _ in context.constraint_registry),
         program_id=select_kernel_program(
             frame=request.narrative_frame,
-            prior_kernel=request.prior_creative_kernel,
+            prior_kernel=prior_kernel,
         ),
     )
     return parse_writer_kernel(
@@ -1415,6 +1433,8 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
     assert "primary_value 是本篇给受众的主要回报，不是 narrative_mode" in prompt
     assert "没有选题但要求生成”\n  通常选 brand_life_narrative" in prompt
     assert "门店或本地服务中的可观察片段并要求回应时，选 local_response" in prompt
+    assert "编辑焦点只能概括原文中可见的外部要素及其" in prompt
+    assert "不得增加身体或心理状态、动机、原因、后果、评价、建议或主题升华" in prompt
     FakeClient.responses = [
         _completion(
             {

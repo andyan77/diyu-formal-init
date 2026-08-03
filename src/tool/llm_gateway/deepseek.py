@@ -839,12 +839,24 @@ class DeepSeekGenerator(ContentGenerator):
             prior_output=request.prior_writer_output,
             revision_instruction=request.revision_instruction,
         )
+        writer_scope = []
+        if writer_request.actuality_fact_refs:
+            writer_scope.append(
+                "现实类任务只允许形成不绑定当前用户的一般判断或条件建议；不得使用第一人称补写经历，"
+                "不得新建具体场景、动作、物件或对白，也不得解释身体、心理、动机、原因、后果或健康变化。"
+            )
+        if writer_request.product_decision_basis is not None:
+            writer_scope.append(
+                "商品类任务只能以用户是否把 decision_axis 作为本次选择重点为主语；不得描述商品未冻结的"
+                "属性、适用场景或对穿着者和旁观者产生的结果，也不得借其他商品维度作对照。"
+            )
         writer_payload, retries = self._request(
             (
                 "你是笛语 Writer。你只负责非事实创作表达，并且只返回一个 JSON。"
                 "不要输出推理、内部合同、事实块、媒体指令或字段说明。\n"
                 "唯一负向安全合同：\n"
                 + negative_safety_contract_text()
+                + ("\n本题创作作用域：\n" + "\n".join(writer_scope) if writer_scope else "")
             ),
             self._writer_request_v3_prompt(writer_request),
             4096,
@@ -967,10 +979,8 @@ class DeepSeekGenerator(ContentGenerator):
             "只返回 title、natural_guide、creative_body、publication_caption 四个字符串字段。\n"
             "actuality_fact_refs 只表示服务端另有冻结事实；你看不到也不拥有这些原句。四个字段须直接完成非事实创作，不猜测、复原或补写其内容。\n"
             "account_editorial_permission 只决定观察顺序与回应姿态，不能替换用户题材，也不能把生活题材转向服饰、商品或品牌宣讲。\n"
-            "product_decision_basis 是穷尽式机器计划：decision_axis 是唯一允许讨论的商品选择维度；标题、导读、正文和配文都只能自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子；不得拿其他商品维度作对照，也不得添加计划外的购买理由、适用场景、人群、耐久、搭配效果、体验或其他商品判断。\n"
+            "product_decision_basis 是穷尽式机器计划：decision_axis 是唯一选择维度；标题、导读、正文和配文须自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子。\n"
             "你可以形成中心判断、一般观察、条件建议、比喻、节奏、幽默和留白；建议与假设须保持该身份。\n"
-            "存在 actuality_fact_refs 时，一般观察必须保持为不绑定当前用户的创作表达；不得解释任何人的身体或心理状态、动机、原因、后果、健康变化，也不得把建议写成已经发生的现实。\n"
-            "不得新增真人现实、商品硬事实/功效/体验、品牌机构事实或未登记资源，也不得输出媒体制作指令。\n"
             "topic_origin 为 system_selected 时须自主形成明确主线和完整成品，不把选题责任退回用户。\n"
             "平台表达要自然适配，但不要创建页面、镜头、字幕或资源槽位。\n"
             "唯一业务合同：\n" + json.dumps(document, ensure_ascii=False, sort_keys=True)
@@ -4113,7 +4123,8 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   可以作为创作种子或控制，但不能冒充逐字现实引用。
 - ready 的 message 同时作为 Writer 的非事实编辑焦点：必须让 Writer 在不读取现实原句时仍能
   知道本题要回应的具体张力；它不能复述、改写或补充现实事实，不能只是“我来整理这段内容”
-  这类无题材承接，也不能另选账号长期内容领地。
+  这类无题材承接，也不能另选账号长期内容领地。编辑焦点只能概括原文中可见的外部要素及其
+  张力，不得增加身体或心理状态、动机、原因、后果、评价、建议或主题升华。
 - 显式模式为 dramatization 时必须使用它；没有明确演绎要求不得升级为剧情。
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
 {series_intake_rule}
