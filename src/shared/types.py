@@ -8,17 +8,18 @@ from src.shared.creative_plan import CreativePlanV2
 from src.shared.narrative import NarrativeFrame, NarrativeMode, UserFactCandidate
 from src.shared.publication_contract import (
     IntakeSpanRole,
-    PublicationContractV2,
+    PublicationContract,
 )
 
 if TYPE_CHECKING:
-    from src.shared.creative_kernel import CreativeKernelV1
+    from src.shared.creative_kernel import CreativeKernel
     from src.shared.dm01_rules import DM01RuleBundleV1
     from src.shared.media_program import (
         MediaCapabilityEnvelope,
         MediaProgramSelectionV1,
     )
     from src.shared.product_value import ProductValueContract
+    from src.shared.writer_request import WriterOutputV3
 
 ContentProduct: TypeAlias = Literal[
     "dressing_decision",
@@ -101,7 +102,21 @@ class BrandContextPacketV2:
     segments: tuple[BrandContextSegment, ...]
 
 
-BrandContextPacket: TypeAlias = BrandContextPacketV1 | BrandContextPacketV2
+@dataclass(frozen=True)
+class BrandContextPacketV3:
+    packet_version: str
+    packet_digest: str
+    publication_projection_id: str
+    publication_projection_version: int
+    publication_projection_digest: str
+    available_segment_refs: tuple[str, ...]
+    frozen_segment_refs: tuple[str, ...]
+    consumed_segment_refs: tuple[str, ...]
+    displayed_segment_refs: tuple[str, ...]
+    segments: tuple[BrandContextSegment, ...]
+
+
+BrandContextPacket: TypeAlias = BrandContextPacketV1 | BrandContextPacketV2 | BrandContextPacketV3
 
 
 @dataclass(frozen=True)
@@ -493,11 +508,12 @@ class GenerationInput:
     narrative_frame: NarrativeFrame | None = None
     creative_plan: CreativePlanV2 | None = None
     delivery_compiler_version: str | None = None
-    prior_creative_kernel: CreativeKernelV1 | None = None
+    prior_creative_kernel: CreativeKernel | None = None
+    prior_writer_output: WriterOutputV3 | None = None
     media_capability_envelope: MediaCapabilityEnvelope | None = None
     media_program: MediaProgramSelectionV1 | None = None
     product_value_contract: ProductValueContract | None = None
-    publication_contract: PublicationContractV2 | None = None
+    publication_contract: PublicationContract | None = None
 
 
 @dataclass(frozen=True)

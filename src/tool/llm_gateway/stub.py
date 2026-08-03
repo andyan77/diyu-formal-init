@@ -2,13 +2,17 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from src.brain.creation_intent_gate import explicit_intent_span
 from src.ports.content_generator import ContentGenerator
 from src.shared.creative_kernel import (
+    CREATIVE_KERNEL_V5_VERSION,
     DUAL_TRACK_KERNEL_VERSION,
     KERNEL_VERSION,
     MAX_PRODUCT_FACT_BLOCKS,
     MEDIA_NATIVE_KERNEL_VERSION,
     OBSERVATION_ONLY_PROGRAM,
+    CreativeKernelV1,
+    build_creative_kernel_v5,
     build_kernel_skeleton,
     compiler_owned_unit_texts,
     creative_units_digest,
@@ -24,6 +28,7 @@ from src.shared.creative_plan import (
     platform_shape,
 )
 from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_V5_VERSION,
     DELIVERY_COMPILER_VERSION,
     DUAL_TRACK_DELIVERY_COMPILER_VERSION,
     MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
@@ -32,6 +37,7 @@ from src.shared.delivery_compiler import (
 )
 from src.shared.factual_basis import (
     FrozenFactRecord,
+    brand_fact_records,
     build_product_fact_packet,
     immutable_fact_blocks_document,
     immutable_product_fact_blocks,
@@ -47,10 +53,17 @@ from src.shared.media_program import (
 )
 from src.shared.narrative import legacy_frame, visible_digest
 from src.shared.product_value import (
+    P2ProductDecisionBasisV2,
+    P2ProductValueContractV1,
+    P5ProductDecisionBasisV2,
+    P5ProductValueContractV1,
     product_value_contract_digest,
     product_value_contract_document,
 )
 from src.shared.publication_contract import (
+    IntakeSpanRole,
+    PublicationContractV2,
+    PublicationContractV3,
     publication_contract_digest,
     publication_contract_document,
 )
@@ -69,6 +82,14 @@ from src.shared.types import (
     P5SemanticContract,
     RoutingInput,
     VideoProductionBundle,
+)
+from src.shared.writer_request import (
+    WriterOutputV3,
+    build_writer_request_v3,
+    writer_output_digest,
+    writer_output_document,
+    writer_request_digest,
+    writer_request_document,
 )
 
 
@@ -129,11 +150,27 @@ class DeterministicContentGenerator(ContentGenerator):
             )
         combined = "\n".join([*(turn.content for turn in request.history), text])
         product = self.route(RoutingInput(combined, request.brand, request.products, None)) or "brand_life_narrative"
+        roles: tuple[tuple[str, IntakeSpanRole], ...] = tuple(
+            (
+                candidate.source_id,
+                (
+                    "creation_instruction"
+                    if explicit_intent_span(candidate.exact_text) is not None
+                    else "observable_actuality"
+                ),
+            )
+            for candidate in request.user_fact_candidates
+        )
+        fact_source_ids = tuple(source_id for source_id, role in roles if role == "observable_actuality")
+        candidate_by_id = {candidate.source_id: candidate.exact_text for candidate in request.user_fact_candidates}
         return ConversationDecision(
             "ready",
             f"好，我按当前选择的{request.brand.platform}{request.brand.media_format}整理。",
             user_premises=(text,),
-            narrative_mode=request.explicit_narrative_mode or "general_observation",
+            narrative_mode=(
+                request.explicit_narrative_mode
+                or ("actuality_reflection" if fact_source_ids else "general_observation")
+            ),
             creative_plan=build_creative_plan(
                 topic_spans=(text,),
                 primary_value=product,
@@ -142,11 +179,17 @@ class DeterministicContentGenerator(ContentGenerator):
                 target_shape=(request.platform_shape or platform_shape(request.target, request.brand.media_format)),
             ),
             primary_product=product,
+            user_fact_spans=tuple(candidate_by_id[source_id] for source_id in fact_source_ids),
+            user_fact_source_ids=fact_source_ids,
+            user_instruction_source_ids=tuple(source_id for source_id, role in roles if role != "observable_actuality"),
+            user_span_roles=roles,
             creation_proposal=True,
             proposed_intent_span=text,
         )
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
+        if isinstance(request.publication_contract, PublicationContractV3):
+            return self._generate_publication_v3(request)
         if request.delivery_compiler_version in {
             DUAL_TRACK_DELIVERY_COMPILER_VERSION,
             MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
@@ -154,6 +197,180 @@ class DeterministicContentGenerator(ContentGenerator):
         }:
             return self._generate_kernel(request)
         return self._generate_legacy(request)
+
+    def _generate_publication_v3(
+        self,
+        request: GenerationInput,
+    ) -> GeneratedArtifact:
+        contract = request.publication_contract
+        if (
+            not isinstance(contract, PublicationContractV3)
+            or request.delivery_compiler_version != DELIVERY_COMPILER_V5_VERSION
+            or request.narrative_frame is None
+            or request.media_capability_envelope is None
+            or request.media_program is None
+        ):
+            raise ValueError("deterministic V3 request is incomplete")
+        frame = request.narrative_frame
+        facts = (
+            *(
+                FrozenFactRecord(
+                    fact.source_id,
+                    fact.exact_text,
+                    "user_actuality",
+                )
+                for fact in frame.user_facts
+            ),
+            *(
+                record
+                for product in request.products
+                for record in product_fact_records(product)
+                if record.fact_id in frame.allowed_product_fact_ids
+            ),
+            *(
+                record
+                for record in brand_fact_records(request.brand.brand_reference_context)
+                if record.fact_id in frame.allowed_brand_fact_ids
+            ),
+        )
+        product_packet = build_product_fact_packet(
+            request.products,
+            allowed_fact_ids=frame.allowed_product_fact_ids,
+        )
+        fact_blocks = immutable_product_fact_blocks(product_packet)
+        product_basis = (
+            request.product_value_contract
+            if isinstance(
+                request.product_value_contract,
+                (P2ProductDecisionBasisV2, P5ProductDecisionBasisV2),
+            )
+            else None
+        )
+        writer_request = build_writer_request_v3(
+            contract,
+            product_decision_basis=product_basis,
+            prior_output=request.prior_writer_output,
+            revision_instruction=request.revision_instruction,
+        )
+        output = self._deterministic_writer_output_v3(request)
+        output_digest = writer_output_digest(output)
+        supporting_refs = product_basis.supporting_fact_refs if product_basis is not None else ()
+        selected_blocks = tuple(block for block in fact_blocks if block.fact_id in supporting_refs)
+        selected_refs = tuple(
+            dict.fromkeys(
+                (
+                    *(
+                        ref
+                        for ref in contract.frozen_fact_refs
+                        if ref.startswith("source:user_actuality:") or ref.startswith("brand:")
+                    ),
+                    *supporting_refs,
+                )
+            )
+        )
+        kernel = build_creative_kernel_v5(
+            writer_output_digest=output_digest,
+            trusted_fact_refs=selected_refs,
+            selected_fact_blocks=selected_blocks,
+            media_program_id=request.media_program.program_id,
+            media_unit_bindings=request.media_program.unit_bindings,
+        )
+        delivery_input = DeliveryCompileInput(
+            primary_product=request.primary_product,
+            media_format=request.media_format,
+            products=request.products,
+            production_conditions=request.brand.production_conditions,
+            allowed_resource_ids=request.media_capability_envelope.resource_ids,
+            immutable_fact_blocks=fact_blocks,
+            trusted_fact_texts=tuple((fact.fact_id, fact.exact_text) for fact in facts),
+            media_capability_envelope=request.media_capability_envelope,
+            media_program=request.media_program,
+            product_value_contract=product_basis,
+            publication_contract=contract,
+            writer_output=output,
+        )
+        compiled = compile_delivery(delivery_input, kernel)
+        checked_digest = kernel_digest(kernel)
+        return GeneratedArtifact(
+            outline=compiled.outline,
+            body=compiled.body,
+            model=self.model_name,
+            latency_ms=0,
+            retry_count=0,
+            provider_usage=None,
+            primary_product=request.primary_product,
+            semantic_contract=compiled.semantic_contract,
+            production=compiled.production,
+            reviewed_digest=visible_digest(compiled.outline, compiled.body),
+            completion_snapshot_patch={
+                "creative_kernel_v5": kernel_document(kernel),
+                "writer_request_v3": writer_request_document(writer_request),
+                "writer_request_v3_digest": writer_request_digest(writer_request),
+                "writer_output_v3": writer_output_document(output),
+                "writer_output_v3_digest": output_digest,
+                "expression_plan_version": CREATIVE_KERNEL_V5_VERSION,
+                "expression_plan_digest": checked_digest,
+                "delivery_compiler_version": DELIVERY_COMPILER_V5_VERSION,
+                "writer_model": self.model_name,
+                "version_authorization": "deterministic-publication-v3",
+                "claim_inventory_v1": [],
+                "deterministic_checked_kernel_digest": checked_digest,
+                "reviewed_creative_digest": output_digest,
+                "product_fact_packet": product_fact_packet_document(product_packet),
+                "immutable_product_fact_blocks": (immutable_fact_blocks_document(selected_blocks)),
+                "used_product_fact_ids": [block.fact_id for block in selected_blocks],
+                "used_product_fact_block_ids": [block.fact_block_id for block in selected_blocks],
+                "product_fact_renderer_version": (selected_blocks[0].renderer_version if selected_blocks else None),
+                "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
+                "delivery_resource_refs": list(compiled.resource_refs),
+                "media_capability_envelope": media_envelope_document(request.media_capability_envelope),
+                "media_capability_envelope_digest": media_envelope_digest(request.media_capability_envelope),
+                "media_program": media_program_document(request.media_program),
+                "media_program_digest": media_program_digest(request.media_program),
+                "product_value_contract": (
+                    product_value_contract_document(product_basis) if product_basis is not None else None
+                ),
+                "product_value_contract_digest": (
+                    product_value_contract_digest(product_basis) if product_basis is not None else None
+                ),
+                "publication_contract": publication_contract_document(contract),
+                "publication_contract_digest": publication_contract_digest(contract),
+            },
+        )
+
+    @staticmethod
+    def _deterministic_writer_output_v3(
+        request: GenerationInput,
+    ) -> WriterOutputV3:
+        body_by_product = {
+            "dressing_decision": (
+                "先用可以独立成立的内层打底，再加一层随时能脱下的外层。"
+                "这样会多一个穿脱动作，却保留了在条件变化时调整的余地；出门前确认每一层单独使用也合适。"
+            ),
+            "product_truth": (
+                "把已确认的差异放回这一次选择：你真正需要哪一种可见重点，决定了取舍。"
+                "只有当这种差异正好回应眼前目标时，它才值得成为选择理由。"
+            ),
+            "brand_life_narrative": (
+                "值得说的往往不是给生活补一个解释，而是把眼前那点具体张力看清。"
+                "留住这个分寸，内容才不会替别人把答案说完。"
+            ),
+            "local_response": (
+                "先给对方保留自己看一看的空间，再在对方需要时提供清楚帮助。"
+                "主动与克制之间的取舍，决定了这次回应是否真正尊重选择。"
+            ),
+            "visual_styling_story": ("让主视觉先建立重心，辅助视觉随后回应；两者的先后与面积共同形成明确关系。"),
+        }
+        return WriterOutputV3(
+            output_version="writer-output-v3",
+            title=_media_native_title(request.primary_product),
+            natural_guide="这一篇把一个具体判断完整说清楚。",
+            creative_body=(
+                body_by_product[request.primary_product]
+                + ("\n\n这次把表达调整得更贴近你的修改，原来的判断仍然清楚。" if request.revision_instruction else "")
+            ),
+            publication_caption="先看清这次真正需要保留的重点，再决定怎样行动。",
+        )
 
     def _generate_kernel(
         self,
@@ -178,15 +395,9 @@ class DeterministicContentGenerator(ContentGenerator):
                 if record.fact_id in frame.allowed_product_fact_ids
             ),
         )
-        if (
-            request.delivery_compiler_version
-            == DUAL_TRACK_DELIVERY_COMPILER_VERSION
-        ):
+        if request.delivery_compiler_version == DUAL_TRACK_DELIVERY_COMPILER_VERSION:
             kernel_version = DUAL_TRACK_KERNEL_VERSION
-        elif (
-            request.delivery_compiler_version
-            == MEDIA_NATIVE_DELIVERY_COMPILER_VERSION
-        ):
+        elif request.delivery_compiler_version == MEDIA_NATIVE_DELIVERY_COMPILER_VERSION:
             kernel_version = MEDIA_NATIVE_KERNEL_VERSION
         else:
             kernel_version = KERNEL_VERSION
@@ -197,26 +408,37 @@ class DeterministicContentGenerator(ContentGenerator):
                 {
                     "resource:original_composition",
                     "resource:creator_expression",
-                    *(
-                        f"resource:product:{product.sku}"
-                        for product in request.products
-                    ),
+                    *(f"resource:product:{product.sku}" for product in request.products),
                 }
             )
         )
-        publication_v2 = request.publication_contract is not None
+        publication_v2 = isinstance(
+            request.publication_contract,
+            PublicationContractV2,
+        )
+        prior_kernel = (
+            request.prior_creative_kernel if isinstance(request.prior_creative_kernel, CreativeKernelV1) else None
+        )
+        legacy_product_contract = (
+            request.product_value_contract
+            if isinstance(
+                request.product_value_contract,
+                (P2ProductValueContractV1, P5ProductValueContractV1),
+            )
+            else None
+        )
         skeleton = build_kernel_skeleton(
             frame=frame,
             fact_registry=facts,
             constraint_refs=("constraint:deterministic-test-stub",),
             program_id=(
-                request.prior_creative_kernel.program_id
-                if publication_v2 and request.prior_creative_kernel is not None
+                prior_kernel.program_id
+                if publication_v2 and prior_kernel is not None
                 else OBSERVATION_ONLY_PROGRAM
                 if publication_v2
                 else select_kernel_program(
                     frame=frame,
-                    prior_kernel=request.prior_creative_kernel,
+                    prior_kernel=prior_kernel,
                     revision_instruction=request.revision_instruction,
                 )
             ),
@@ -224,13 +446,11 @@ class DeterministicContentGenerator(ContentGenerator):
             media_format=request.media_format,
             kernel_version=kernel_version,
             primary_product=request.primary_product,
-            product_value_contract=(
-                None if publication_v2 else request.product_value_contract
-            ),
+            product_value_contract=(None if publication_v2 else legacy_product_contract),
         )
         skeleton = freeze_prior_revision_units(
             skeleton,
-            request.prior_creative_kernel,
+            prior_kernel,
         )
         _, guide, spoken, _, subtitles, _ = self._parts(request)
         if kernel_version == DUAL_TRACK_KERNEL_VERSION:
@@ -285,13 +505,12 @@ class DeterministicContentGenerator(ContentGenerator):
         )
         fact_blocks = immutable_product_fact_blocks(product_packet)
         required_fact_block_ids: tuple[str, ...] | None = None
-        if request.prior_creative_kernel is not None:
-            required_fact_block_ids = request.prior_creative_kernel.selected_fact_block_ids or tuple(
+        if prior_kernel is not None:
+            required_fact_block_ids = prior_kernel.selected_fact_block_ids or tuple(
                 block.fact_block_id
                 for block in fact_blocks
                 if any(
-                    unit.purpose == "frozen_fact" and unit.fact_refs == (block.fact_id,)
-                    for unit in request.prior_creative_kernel.units
+                    unit.purpose == "frozen_fact" and unit.fact_refs == (block.fact_id,) for unit in prior_kernel.units
                 )
             )
         selected_fact_block_ids = required_fact_block_ids or select_product_fact_block_ids(
@@ -317,9 +536,7 @@ class DeterministicContentGenerator(ContentGenerator):
             publication_contract=request.publication_contract,
         )
         compiler_texts = (
-            compiler_owned_unit_texts(request.primary_product)
-            if kernel_version == DUAL_TRACK_KERNEL_VERSION
-            else {}
+            compiler_owned_unit_texts(request.primary_product) if kernel_version == DUAL_TRACK_KERNEL_VERSION else {}
         )
         text_by_id = {
             "unit:title": title,
@@ -404,40 +621,28 @@ class DeterministicContentGenerator(ContentGenerator):
                 "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
                 "delivery_resource_refs": list(compiled.resource_refs),
                 "media_capability_envelope": (
-                    media_envelope_document(
-                        request.media_capability_envelope
-                    )
+                    media_envelope_document(request.media_capability_envelope)
                     if request.media_capability_envelope is not None
                     else None
                 ),
                 "media_capability_envelope_digest": (
-                    media_envelope_digest(
-                        request.media_capability_envelope
-                    )
+                    media_envelope_digest(request.media_capability_envelope)
                     if request.media_capability_envelope is not None
                     else None
                 ),
                 "media_program": (
-                    media_program_document(request.media_program)
-                    if request.media_program is not None
-                    else None
+                    media_program_document(request.media_program) if request.media_program is not None else None
                 ),
                 "media_program_digest": (
-                    media_program_digest(request.media_program)
-                    if request.media_program is not None
-                    else None
+                    media_program_digest(request.media_program) if request.media_program is not None else None
                 ),
                 "product_value_contract": (
-                    product_value_contract_document(
-                        request.product_value_contract
-                    )
+                    product_value_contract_document(request.product_value_contract)
                     if request.product_value_contract is not None
                     else None
                 ),
                 "product_value_contract_digest": (
-                    product_value_contract_digest(
-                        request.product_value_contract
-                    )
+                    product_value_contract_digest(request.product_value_contract)
                     if request.product_value_contract is not None
                     else None
                 ),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from uuid import UUID
 
 import psycopg
@@ -28,7 +29,7 @@ def test_p1_v1_v2_history_save_and_explicit_reuse() -> None:
     with TestClient(create_app(Settings.model_validate({}))) as client:
         assert client.get("/ui/select/content").status_code == 200
         created = client.post("/api/v1/content", json={"weak_seed": _SEED})
-        assert created.status_code == 200
+        assert created.status_code == 200, created.text
         v1 = created.json()
         assert v1["version"] == 1
         assert v1["kind"] == "content"
@@ -127,6 +128,73 @@ def test_natural_chat_does_not_create_task(app_database_url: str) -> None:
     assert all(response.json()["kind"] == "greeting" for response in responses)
     assert all("你好" in response.json()["message"] for response in responses)
     assert before[0] == after[0]
+
+
+def test_direct_and_stream_content_share_exact_input_role_boundary(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    message = "今天事情接连发生，回家才发现连水都忘了喝，帮我发一条小红书。"
+    with TestClient(create_app(Settings.model_validate({}))) as client:
+        client.get("/ui/select/content")
+        direct_response = client.post(
+            "/api/v1/content",
+            json={
+                "weak_seed": message,
+                "publishing_identity_id": str(ACCOUNT_ID),
+                "target": "xiaohongshu_graphic",
+            },
+        )
+        assert direct_response.status_code == 200, direct_response.text
+        direct = direct_response.json()
+        stream_response = client.post(
+            "/api/v1/content/stream",
+            json={
+                "message": message,
+                "conversation": [],
+                "publishing_identity_id": str(ACCOUNT_ID),
+                "target": "xiaohongshu_graphic",
+                "material_ids": [],
+                "interaction_mode": "generate",
+            },
+        )
+        assert stream_response.status_code == 200, stream_response.text
+        events = [json.loads(line) for line in stream_response.text.splitlines() if line.strip()]
+        completed = next(event["result"] for event in events if event.get("event") == "completed")
+    task_ids = tuple(UUID(str(result["task_id"])) for result in (direct, completed))
+    with psycopg.connect(migrator_database_url) as connection:
+        snapshots = tuple(
+            connection.execute(
+                "SELECT content_context_snapshot FROM business_tasks WHERE id = %s",
+                (task_id,),
+            ).fetchone()[0]
+            for task_id in task_ids
+        )
+    role_documents: list[list[dict[str, object]]] = []
+    frame_facts: list[list[str]] = []
+    for snapshot in snapshots:
+        assert snapshot is not None
+        publication = snapshot["publication_contract"]
+        assert isinstance(publication, dict)
+        assert "帮我发一条" not in str(publication["topic"])
+        raw_roles = publication.get(
+            "input_roles",
+            publication.get("intake_spans"),
+        )
+        assert isinstance(raw_roles, list)
+        role_documents.append(raw_roles)
+        frame = snapshot["narrative_frame"]
+        assert isinstance(frame, dict)
+        raw_facts = frame["user_facts"]
+        assert isinstance(raw_facts, list)
+        frame_facts.append([str(fact["exact_text"]) for fact in raw_facts])
+    assert role_documents[0] == role_documents[1]
+    assert frame_facts[0] == frame_facts[1]
+    assert frame_facts[0]
+    assert all("帮我发一条" not in fact for fact in frame_facts[0])
+    assert any(
+        role["role"] == "creation_instruction" and "帮我发一条" in str(role["exact_text"]) for role in role_documents[0]
+    )
 
 
 def test_api_uses_cookie_scope_and_rejects_client_scope_switching() -> None:

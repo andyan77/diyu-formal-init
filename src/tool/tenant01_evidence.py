@@ -4,14 +4,24 @@ import hashlib
 import json
 import os
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Final, cast
 from uuid import UUID
 
-from src.shared.brand_publication import brand_context_packet_digest
-from src.shared.content_snapshot import frozen_media_contract, frozen_product_facts
+from src.shared.brand_publication import (
+    BRAND_CONTEXT_PACKET_V3_VERSION,
+    brand_context_packet_digest,
+    brand_context_packet_v3_digest,
+)
+from src.shared.content_snapshot import (
+    frozen_media_contract,
+    frozen_product_facts,
+    frozen_writer_output,
+)
 from src.shared.creative_kernel import (
     CreativeKernelV1,
+    CreativeKernelV5,
     creative_units_digest,
     kernel_digest,
     kernel_from_document,
@@ -24,32 +34,49 @@ from src.shared.creative_plan import (
     validate_creative_plan,
 )
 from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_V5_VERSION,
     DELIVERY_COMPILER_VERSION,
     CompiledDelivery,
     DeliveryCompileInput,
     compile_delivery,
 )
 from src.shared.errors import DomainError, GenerationFailed
-from src.shared.factual_basis import ImmutableFactBlock, build_product_fact_packet
+from src.shared.factual_basis import (
+    ImmutableFactBlock,
+    brand_fact_records,
+    build_product_fact_packet,
+    product_fact_records,
+)
 from src.shared.narrative import (
     frame_from_document,
     user_fact_candidates,
     visible_digest,
 )
 from src.shared.product_value import (
+    P2ProductDecisionBasisV2,
+    P5ProductDecisionBasisV2,
+    ProductDecisionBasisV2,
     ProductValueContract,
     product_value_contract_digest,
     product_value_contract_from_document,
 )
 from src.shared.publication_contract import (
+    PUBLICATION_CONTRACT_V3_VERSION,
     PUBLICATION_CONTRACT_VERSION,
     PublicationContractV2,
+    PublicationContractV3,
     build_publication_contract,
     publication_contract_digest,
     publication_contract_document,
     publication_contract_from_document,
 )
 from src.shared.types import ContentProduct, ContentTarget, MediaFormat
+from src.shared.writer_request import (
+    build_writer_request_v3,
+    writer_output_digest,
+    writer_request_digest,
+    writer_request_document,
+)
 
 TENANT01_SUITE_VERSION: Final[str] = "TENANT-01-GOLDEN-V1"
 TENANT01_RAW_BUNDLE_VERSION: Final[str] = "ux03-gate-c-provider-stages-v1"
@@ -127,6 +154,19 @@ class Tenant01HumanReview:
     brand_basis: str
     verdict: str
     notes: str
+    hard_boundary: str = ""
+    product_usable: str = ""
+    quality_dimensions: dict[str, int] | None = None
+    dimension_rationales: dict[str, str] | None = None
+    title_excerpt: str = ""
+    body_excerpt: str = ""
+    media_excerpt: str = ""
+    caption_excerpt: str = ""
+    quality_observations: tuple[str, ...] = ()
+    residual_risks: tuple[str, ...] = ()
+    reviewer_scope: str = ""
+    reviewer_kind: str = ""
+    reviewed_at: str = ""
 
 
 def sha256_file(path: Path) -> str:
@@ -312,8 +352,7 @@ def _immutable_fact_blocks(
         visible_order = raw_block.get("visible_order")
         if (
             not all(
-                isinstance(raw_block.get(field), str)
-                and bool(str(raw_block[field]).strip())
+                isinstance(raw_block.get(field), str) and bool(str(raw_block[field]).strip())
                 for field in (
                     "fact_block_id",
                     "fact_id",
@@ -360,9 +399,7 @@ def _compile_bound_delivery(
         products = frozen_product_facts(snapshot)
         blocks = _immutable_fact_blocks(snapshot, card_id=card_id)
     except (DomainError, GenerationFailed, TypeError, ValueError) as exc:
-        raise Tenant01EvidenceError(
-            f"{card_id} 冻结媒体或商品编译输入无效。"
-        ) from exc
+        raise Tenant01EvidenceError(f"{card_id} 冻结媒体或商品编译输入无效。") from exc
     expected_target, _ = _target_contract(card_id)
     expected_platform_shape = platform_shape(
         expected_target,
@@ -395,9 +432,7 @@ def _compile_bound_delivery(
                 primary_product=primary_product,
                 media_format=envelope.media_format,
                 products=products,
-                production_conditions=str(
-                    raw_account["default_production_conditions"]
-                ),
+                production_conditions=str(raw_account["default_production_conditions"]),
                 allowed_resource_ids=envelope.resource_ids,
                 immutable_fact_blocks=blocks,
                 trusted_fact_texts=tuple(sorted(trusted_fact_text_by_id.items())),
@@ -409,9 +444,85 @@ def _compile_bound_delivery(
             kernel,
         )
     except (DomainError, GenerationFailed, TypeError, ValueError) as exc:
-        raise Tenant01EvidenceError(
-            f"{card_id} 无法从冻结输入重编译成品。"
-        ) from exc
+        raise Tenant01EvidenceError(f"{card_id} 无法从冻结输入重编译成品。") from exc
+
+
+def _compile_bound_delivery_v3(
+    snapshot: dict[str, object],
+    *,
+    card_id: str,
+    primary_product: ContentProduct,
+    kernel: CreativeKernelV5,
+    publication: PublicationContractV3,
+    product_value: ProductValueContract | None,
+    expected_media_format: MediaFormat,
+) -> CompiledDelivery:
+    raw_account = snapshot.get("account_expression")
+    if not isinstance(raw_account, dict) or not isinstance(raw_account.get("default_production_conditions"), str):
+        raise Tenant01EvidenceError(f"{card_id} 缺少冻结制作条件。")
+    try:
+        envelope, media_program = frozen_media_contract(snapshot)
+        products = frozen_product_facts(snapshot)
+        writer_output = frozen_writer_output(snapshot)
+        frame = frame_from_document(snapshot.get("narrative_frame"))
+        blocks = _immutable_fact_blocks(snapshot, card_id=card_id)
+    except (DomainError, GenerationFailed, TypeError, ValueError) as exc:
+        raise Tenant01EvidenceError(f"{card_id} V3 冻结编译输入无效。") from exc
+    expected_target, _ = _target_contract(card_id)
+    if (
+        envelope is None
+        or media_program is None
+        or products is None
+        or writer_output is None
+        or envelope.media_format != expected_media_format
+        or envelope.platform_shape != platform_shape(expected_target, expected_media_format)
+    ):
+        raise Tenant01EvidenceError(f"{card_id} V3 媒体或 Writer 合同不完整。")
+    if writer_output_digest(writer_output) != snapshot.get("reviewed_creative_digest"):
+        raise Tenant01EvidenceError(f"{card_id} Writer 成稿摘要无效。")
+    allowed = set(frame.allowed_fact_ids)
+    trusted = {fact.source_id: fact.exact_text for fact in frame.user_facts}
+    trusted.update(
+        {
+            record.fact_id: record.exact_text
+            for product in products
+            for record in product_fact_records(product)
+            if record.fact_id in allowed
+        }
+    )
+    packet = snapshot.get("brand_context_packet")
+    raw_segments = packet.get("segments") if isinstance(packet, dict) else None
+    if not isinstance(raw_segments, list):
+        raise Tenant01EvidenceError(f"{card_id} V3 品牌资料快照无效。")
+    for segment in raw_segments:
+        if not isinstance(segment, dict) or segment.get("semantic_kind") != "brand_fact":
+            continue
+        exact_text = segment.get("exact_text")
+        if not isinstance(exact_text, str):
+            raise Tenant01EvidenceError(f"{card_id} V3 品牌事实正文无效。")
+        record = brand_fact_records((exact_text,))[0]
+        if record.fact_id in allowed:
+            trusted[record.fact_id] = record.exact_text
+    try:
+        return compile_delivery(
+            DeliveryCompileInput(
+                primary_product=primary_product,
+                media_format=envelope.media_format,
+                products=products,
+                production_conditions=str(raw_account["default_production_conditions"]),
+                allowed_resource_ids=envelope.resource_ids,
+                immutable_fact_blocks=blocks,
+                trusted_fact_texts=tuple(trusted.items()),
+                media_capability_envelope=envelope,
+                media_program=media_program,
+                product_value_contract=product_value,
+                publication_contract=publication,
+                writer_output=writer_output,
+            ),
+            kernel,
+        )
+    except (DomainError, GenerationFailed, TypeError, ValueError) as exc:
+        raise Tenant01EvidenceError(f"{card_id} 无法从 V3 冻结输入重编译成品。") from exc
 
 
 def compile_tenant01_snapshot_delivery(
@@ -421,33 +532,38 @@ def compile_tenant01_snapshot_delivery(
 ) -> CompiledDelivery:
     """Deterministically rebuild one golden-card artifact from its snapshot."""
 
+    compiler_version = snapshot.get("delivery_compiler_version")
     if (
-        snapshot.get("delivery_compiler_version")
-        != DELIVERY_COMPILER_VERSION
+        compiler_version not in {DELIVERY_COMPILER_VERSION, DELIVERY_COMPILER_V5_VERSION}
         or snapshot.get("writer_model") != TENANT01_PROVIDER_MODEL
     ):
-        raise Tenant01EvidenceError(
-            f"{card_id} 编译器或 Writer 模型版本漂移。"
-        )
+        raise Tenant01EvidenceError(f"{card_id} 编译器或 Writer 模型版本漂移。")
     raw_publication = snapshot.get("publication_contract")
     try:
         plan = creative_plan_from_document(snapshot.get("creative_plan_v2"))
         publication = publication_contract_from_document(raw_publication)
-        kernel = kernel_from_document(snapshot.get("creative_kernel_v2"))
+        raw_kernel = snapshot.get("creative_kernel_v5") or snapshot.get("creative_kernel_v2")
+        kernel = kernel_from_document(raw_kernel)
     except (DomainError, TypeError, ValueError) as exc:
-        raise Tenant01EvidenceError(
-            f"{card_id} 冻结编译合同结构无效。"
-        ) from exc
+        raise Tenant01EvidenceError(f"{card_id} 冻结编译合同结构无效。") from exc
     computed_kernel_digest = kernel_digest(kernel)
-    if (
-        publication_contract_digest(publication)
-        != snapshot.get("publication_contract_digest")
-        or _canonical_digest(raw_publication)
-        != snapshot.get("publication_contract_digest")
+    if isinstance(publication, PublicationContractV3) and isinstance(kernel, CreativeKernelV5):
+        if (
+            compiler_version != DELIVERY_COMPILER_V5_VERSION
+            or publication_contract_digest(publication) != snapshot.get("publication_contract_digest")
+            or _canonical_digest(raw_publication) != snapshot.get("publication_contract_digest")
+            or computed_kernel_digest != snapshot.get("expression_plan_digest")
+            or computed_kernel_digest != snapshot.get("deterministic_checked_kernel_digest")
+        ):
+            raise Tenant01EvidenceError(f"{card_id} V3 冻结编译摘要无效。")
+    elif not isinstance(publication, PublicationContractV2) or not isinstance(kernel, CreativeKernelV1):
+        raise Tenant01EvidenceError(f"{card_id} 冻结编译版本配对无效。")
+    elif (
+        publication_contract_digest(publication) != snapshot.get("publication_contract_digest")
+        or _canonical_digest(raw_publication) != snapshot.get("publication_contract_digest")
         or computed_kernel_digest != snapshot.get("expression_plan_digest")
         or computed_kernel_digest != snapshot.get("reviewed_kernel_digest")
-        or creative_units_digest(kernel)
-        != snapshot.get("reviewed_creative_digest")
+        or creative_units_digest(kernel) != snapshot.get("reviewed_creative_digest")
     ):
         raise Tenant01EvidenceError(f"{card_id} 冻结编译合同摘要无效。")
     raw_product_value = snapshot.get("product_value_contract")
@@ -459,19 +575,24 @@ def compile_tenant01_snapshot_delivery(
         if not _sha256_text(raw_product_digest):
             raise Tenant01EvidenceError(f"{card_id} 商品语义计划结构无效。")
         try:
-            product_value = product_value_contract_from_document(
-                raw_product_value
-            )
+            product_value = product_value_contract_from_document(raw_product_value)
         except DomainError as exc:
-            raise Tenant01EvidenceError(
-                f"{card_id} 商品语义计划结构无效。"
-            ) from exc
-        if (
-            product_value_contract_digest(product_value)
-            != raw_product_digest
-        ):
+            raise Tenant01EvidenceError(f"{card_id} 商品语义计划结构无效。") from exc
+        if product_value_contract_digest(product_value) != raw_product_digest:
             raise Tenant01EvidenceError(f"{card_id} 商品语义计划摘要无效。")
     _, expected_media_format = _target_contract(card_id)
+    if isinstance(publication, PublicationContractV3) and isinstance(kernel, CreativeKernelV5):
+        return _compile_bound_delivery_v3(
+            snapshot,
+            card_id=card_id,
+            primary_product=cast(ContentProduct, publication.content_product),
+            kernel=kernel,
+            publication=publication,
+            product_value=product_value,
+            expected_media_format=expected_media_format,
+        )
+    assert isinstance(publication, PublicationContractV2)
+    assert isinstance(kernel, CreativeKernelV1)
     return _compile_bound_delivery(
         snapshot,
         card_id=card_id,
@@ -480,6 +601,365 @@ def compile_tenant01_snapshot_delivery(
         publication=publication,
         product_value=product_value,
         expected_media_format=expected_media_format,
+    )
+
+
+def _compiled_review_regions(
+    compiled: CompiledDelivery,
+    *,
+    media_format: MediaFormat,
+) -> dict[str, str]:
+    production = asdict(compiled.production)
+    media_fields: tuple[str, ...]
+    if media_format == "video":
+        body_region = "\n".join(
+            (
+                str(production["natural_guide"]),
+                str(production["spoken_lines"]),
+            )
+        )
+        media_fields = (
+            "cover_or_first_frame",
+            "viewing_flow",
+            "visual_actions",
+            "subtitles",
+            "sound_and_production",
+        )
+    else:
+        body_region = "\n".join(
+            (
+                str(production["natural_guide"]),
+                str(production["full_body"]),
+            )
+        )
+        media_fields = (
+            "hero_image",
+            "image_sequence",
+            "layout_and_production",
+        )
+    media_region = "\n".join(str(production[field]) for field in media_fields)
+    optional_capture = production.get("optional_capture_suggestion")
+    if isinstance(optional_capture, str) and optional_capture:
+        media_region = f"{media_region}\n{optional_capture}"
+    return {
+        "title": compiled.outline,
+        "body": body_region,
+        "media": media_region,
+        "caption": str(production["release_caption_and_interaction"]),
+    }
+
+
+def _artifact_binding_v3(
+    *,
+    document: dict[str, object],
+    snapshot: dict[str, object],
+    card_id: str,
+    outline: str,
+    body: str,
+    persistence: dict[str, object],
+) -> tuple[
+    dict[str, object],
+    dict[str, object],
+    dict[str, object],
+    dict[str, str],
+]:
+    packet = snapshot.get("brand_context_packet")
+    if not isinstance(packet, dict) or packet.get("packet_version") != BRAND_CONTEXT_PACKET_V3_VERSION:
+        raise Tenant01EvidenceError(f"{card_id} 没有绑定 V3 品牌资料使用状态。")
+    projection_id = _uuid_text(
+        packet.get("publication_projection_id"),
+        label=f"{card_id} publication_projection_id",
+    )
+    projection_version = packet.get("publication_projection_version")
+    projection_digest = packet.get("publication_projection_digest")
+    packet_digest = packet.get("packet_digest")
+    raw_segments = packet.get("segments")
+    state_names = (
+        "available_segment_refs",
+        "frozen_segment_refs",
+        "consumed_segment_refs",
+        "displayed_segment_refs",
+    )
+    raw_states = tuple(packet.get(name) for name in state_names)
+    if (
+        type(projection_version) is not int
+        or projection_version < 1
+        or not _sha256_text(projection_digest)
+        or not _sha256_text(packet_digest)
+        or not isinstance(raw_segments, list)
+        or not raw_segments
+        or any(not isinstance(state, list) for state in raw_states)
+    ):
+        raise Tenant01EvidenceError(f"{card_id} V3 品牌资料快照不完整。")
+    states = tuple(tuple(str(item) for item in cast(list[object], state)) for state in raw_states)
+    if any(len(state) != len(set(state)) or any(not item for item in state) for state in states):
+        raise Tenant01EvidenceError(f"{card_id} V3 品牌资料状态引用无效。")
+    available, frozen, consumed, displayed = states
+    if not set(displayed) <= set(consumed) <= set(frozen) <= set(available):
+        raise Tenant01EvidenceError(f"{card_id} V3 品牌资料状态越界。")
+    packet_segments: list[dict[str, object]] = []
+    segment_ids: set[str] = set()
+    for raw_segment in raw_segments:
+        if not isinstance(raw_segment, dict):
+            raise Tenant01EvidenceError(f"{card_id} V3 发布投影来源无效。")
+        segment = cast(dict[str, object], raw_segment)
+        for field in (
+            "segment_id",
+            "source_document_id",
+            "source_document_version_id",
+        ):
+            _uuid_text(segment.get(field), label=f"{card_id} {field}")
+        exact_text = segment.get("exact_text")
+        segment_id = str(segment.get("segment_id") or "")
+        if (
+            not isinstance(exact_text, str)
+            or not exact_text.strip()
+            or segment.get("semantic_kind")
+            not in {
+                "brand_fact",
+                "expression_constraint",
+                "creative_method",
+            }
+            or segment.get("evidence_level") != "confirmed_publication"
+            or not str(segment.get("source_id", "")).strip()
+            or not str(segment.get("source_version", "")).strip()
+            or not str(segment.get("visibility_scope", "")).strip()
+            or not _sha256_text(segment.get("source_digest"))
+            or segment.get("digest") != hashlib.sha256(exact_text.encode()).hexdigest()
+            or not segment_id
+            or segment_id in segment_ids
+        ):
+            raise Tenant01EvidenceError(f"{card_id} V3 发布投影来源或正文摘要无效。")
+        segment_ids.add(segment_id)
+        packet_segments.append(segment)
+    if not set(frozen) <= segment_ids:
+        raise Tenant01EvidenceError(f"{card_id} V3 品牌资料引用不存在。")
+    if packet_digest != brand_context_packet_v3_digest(
+        projection_id=projection_id,
+        projection_version=projection_version,
+        projection_digest=str(projection_digest),
+        available_segment_refs=available,
+        frozen_segment_refs=frozen,
+        consumed_segment_refs=consumed,
+        displayed_segment_refs=displayed,
+        segments=packet_segments,
+    ):
+        raise Tenant01EvidenceError(f"{card_id} V3 品牌上下文摘要无法复算。")
+
+    raw_publication = snapshot.get("publication_contract")
+    publication_digest = snapshot.get("publication_contract_digest")
+    if not isinstance(raw_publication, dict) or not _sha256_text(publication_digest):
+        raise Tenant01EvidenceError(f"{card_id} 缺少 V3 发布责任合同。")
+    try:
+        publication = publication_contract_from_document(raw_publication)
+    except DomainError as exc:
+        raise Tenant01EvidenceError(f"{card_id} V3 发布责任合同结构无效。") from exc
+    if (
+        not isinstance(publication, PublicationContractV3)
+        or publication.contract_version != PUBLICATION_CONTRACT_V3_VERSION
+        or publication_contract_digest(publication) != publication_digest
+        or _canonical_digest(raw_publication) != publication_digest
+        or publication.publication_projection_id != projection_id
+        or publication.publication_projection_version != projection_version
+        or publication.publication_projection_digest != projection_digest
+        or publication.brand_context_use.available_refs != available
+        or publication.brand_context_use.frozen_refs != frozen
+        or publication.brand_context_use.consumed_refs != consumed
+        or publication.brand_context_use.displayed_refs != displayed
+    ):
+        raise Tenant01EvidenceError(f"{card_id} V3 发布责任合同来源、状态或摘要无效。")
+
+    expected_target, expected_media_format = _target_contract(card_id)
+    expected_product = _primary_product_contract(card_id)
+    raw_plan = snapshot.get("creative_plan_v2")
+    if not isinstance(raw_plan, dict):
+        raise Tenant01EvidenceError(f"{card_id} 缺少冻结创作计划。")
+    try:
+        plan = creative_plan_from_document(raw_plan)
+    except DomainError as exc:
+        raise Tenant01EvidenceError(f"{card_id} 冻结创作计划结构无效。") from exc
+    if (
+        publication.content_product != expected_product
+        or publication.content_product != plan.primary_value
+        or publication.topic_origin != plan.topic_origin
+        or publication.platform_direction.target != expected_target
+        or publication.platform_direction.media_format != expected_media_format
+        or snapshot.get("publishing_target") != expected_target
+    ):
+        raise Tenant01EvidenceError(f"{card_id} V3 发布合同没有绑定黄金卡。")
+
+    user_premise = snapshot.get("user_premise")
+    if not isinstance(user_premise, str) or not user_premise.strip():
+        raise Tenant01EvidenceError(f"{card_id} 缺少冻结用户原始输入。")
+    source_bytes = user_premise.encode("utf-8")
+    for span in publication.input_roles:
+        if span.turn_index != 1 or user_premise[span.start_offset : span.end_offset] != span.exact_text:
+            raise Tenant01EvidenceError(f"{card_id} V3 输入角色字符跨度漂移。")
+        try:
+            byte_text = source_bytes[span.start_byte : span.end_byte].decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise Tenant01EvidenceError(f"{card_id} V3 输入角色字节跨度无效。") from exc
+        if byte_text != span.exact_text:
+            raise Tenant01EvidenceError(f"{card_id} V3 输入角色字节跨度漂移。")
+    try:
+        frame = frame_from_document(snapshot.get("narrative_frame"))
+    except DomainError as exc:
+        raise Tenant01EvidenceError(f"{card_id} 冻结事实轨结构无效。") from exc
+    actuality = {
+        span.source_id: span.exact_text for span in publication.input_roles if span.role == "observable_actuality"
+    }
+    user_facts = {fact.source_id: fact.exact_text for fact in frame.user_facts}
+    if (
+        actuality != user_facts
+        or set(publication.frozen_fact_refs) != set(frame.allowed_fact_ids)
+        or any(span.source_id in user_facts for span in publication.input_roles if span.role != "observable_actuality")
+    ):
+        raise Tenant01EvidenceError(f"{card_id} V3 现实事实与创作指令边界漂移。")
+
+    permission = publication.account_editorial_permission
+    profile_id = snapshot.get("account_expression_profile_id")
+    profile_version = snapshot.get("account_expression_profile_version")
+    raw_account = snapshot.get("account_expression")
+    if (
+        not isinstance(raw_account, dict)
+        or _uuid_text(profile_id, label=f"{card_id} source_profile_id") != permission.source_profile_id
+        or type(profile_version) is not int
+        or profile_version != permission.source_profile_version
+        or _uuid_text(
+            raw_account.get("profile_id"),
+            label=f"{card_id} account profile_id",
+        )
+        != permission.source_profile_id
+        or raw_account.get("version") != permission.source_profile_version
+    ):
+        raise Tenant01EvidenceError(f"{card_id} V3 账号画像版本漂移。")
+
+    product_value: ProductDecisionBasisV2 | None = None
+    raw_product_value = snapshot.get("product_value_contract")
+    product_value_digest = snapshot.get("product_value_contract_digest")
+    if raw_product_value is None and product_value_digest is None:
+        if publication.product_decision_basis is not None:
+            raise Tenant01EvidenceError(f"{card_id} V3 商品选择依据缺失。")
+    elif not isinstance(raw_product_value, dict) or not _sha256_text(product_value_digest):
+        raise Tenant01EvidenceError(f"{card_id} V3 商品选择依据结构无效。")
+    else:
+        try:
+            parsed_value = product_value_contract_from_document(raw_product_value)
+        except DomainError as exc:
+            raise Tenant01EvidenceError(f"{card_id} V3 商品选择依据结构无效。") from exc
+        if not isinstance(
+            parsed_value,
+            (P2ProductDecisionBasisV2, P5ProductDecisionBasisV2),
+        ):
+            raise Tenant01EvidenceError(f"{card_id} V3 商品选择依据版本无效。")
+        product_value = parsed_value
+        product_ref = publication.product_decision_basis
+        if (
+            product_value_contract_digest(product_value) != product_value_digest
+            or product_ref is None
+            or product_ref.digest != product_value_digest
+            or product_ref.supporting_fact_refs != product_value.supporting_fact_refs
+        ):
+            raise Tenant01EvidenceError(f"{card_id} V3 商品选择依据摘要无效。")
+
+    raw_writer_request = snapshot.get("writer_request_v3")
+    writer_request_digest_value = snapshot.get("writer_request_v3_digest")
+    expected_writer_request = build_writer_request_v3(
+        publication,
+        product_decision_basis=product_value,
+        prior_output=None,
+        revision_instruction=None,
+    )
+    if (
+        not isinstance(raw_writer_request, dict)
+        or not _sha256_text(writer_request_digest_value)
+        or _canonical_digest(raw_writer_request) != writer_request_digest_value
+        or writer_request_digest(expected_writer_request) != writer_request_digest_value
+        or writer_request_document(expected_writer_request) != raw_writer_request
+    ):
+        raise Tenant01EvidenceError(f"{card_id} Writer 请求没有绑定唯一 V3 发布合同。")
+
+    raw_kernel = snapshot.get("creative_kernel_v5")
+    expression_plan_digest = snapshot.get("expression_plan_digest")
+    checked_kernel_digest = snapshot.get("deterministic_checked_kernel_digest")
+    writer_digest = snapshot.get("writer_output_v3_digest")
+    reviewed_creative_digest = snapshot.get("reviewed_creative_digest")
+    if (
+        not isinstance(raw_kernel, dict)
+        or not _sha256_text(expression_plan_digest)
+        or not _sha256_text(checked_kernel_digest)
+        or not _sha256_text(writer_digest)
+        or reviewed_creative_digest != writer_digest
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 缺少 V5 冻结成稿或内核。")
+    try:
+        kernel = kernel_from_document(raw_kernel)
+        writer_output = frozen_writer_output(snapshot)
+    except (DomainError, GenerationFailed, TypeError, ValueError) as exc:
+        raise Tenant01EvidenceError(f"{card_id} V5 冻结成稿或内核无效。") from exc
+    if (
+        not isinstance(kernel, CreativeKernelV5)
+        or writer_output is None
+        or kernel_digest(kernel) != expression_plan_digest
+        or expression_plan_digest != checked_kernel_digest
+        or writer_output_digest(writer_output) != writer_digest
+        or snapshot.get("delivery_compiler_version") != DELIVERY_COMPILER_V5_VERSION
+        or snapshot.get("writer_model") != TENANT01_PROVIDER_MODEL
+    ):
+        raise Tenant01EvidenceError(f"{card_id} V5 冻结摘要或版本无效。")
+    try:
+        envelope, media_program = frozen_media_contract(snapshot)
+    except (DomainError, GenerationFailed, TypeError, ValueError) as exc:
+        raise Tenant01EvidenceError(f"{card_id} V3 媒体合同无效。") from exc
+    if (
+        envelope is None
+        or media_program is None
+        or publication.media_capability_ref != snapshot.get("media_capability_envelope_digest")
+        or kernel.media_program_id != media_program.program_id
+    ):
+        raise Tenant01EvidenceError(f"{card_id} V3 媒体权限或程序漂移。")
+
+    compiled = _compile_bound_delivery_v3(
+        snapshot,
+        card_id=card_id,
+        primary_product=expected_product,
+        kernel=kernel,
+        publication=publication,
+        product_value=product_value,
+        expected_media_format=expected_media_format,
+    )
+    expected_production = asdict(compiled.production)
+    expected_provenance = {field: list(sources) for field, sources in compiled.visible_provenance.items()}
+    if (
+        compiled.outline != outline
+        or compiled.body != body
+        or document.get("production") != expected_production
+        or snapshot.get("visible_provenance") != expected_provenance
+        or snapshot.get("delivery_resource_refs") != list(compiled.resource_refs)
+    ):
+        raise Tenant01EvidenceError(f"{card_id} 最终 artifact 不是 V3 冻结输入的确定性编译结果。")
+    return (
+        document,
+        persistence,
+        {
+            "projection_id": projection_id,
+            "projection_version": projection_version,
+            "projection_digest": projection_digest,
+            "brand_context_packet_digest": packet_digest,
+            "creative_plan_version": plan.plan_version,
+            "publication_contract_version": publication.contract_version,
+            "publication_contract_digest": publication_digest,
+            "writer_request_digest": writer_request_digest_value,
+            "writer_output_digest": writer_digest,
+            "expression_plan_digest": expression_plan_digest,
+            "deterministic_checked_kernel_digest": checked_kernel_digest,
+            "source_profile_id": permission.source_profile_id,
+            "source_profile_version": permission.source_profile_version,
+        },
+        _compiled_review_regions(
+            compiled,
+            media_format=expected_media_format,
+        ),
     )
 
 
@@ -520,6 +1000,15 @@ def _artifact_binding(
     if not isinstance(user_premise, str) or not user_premise.strip():
         raise Tenant01EvidenceError(f"{card_id} 缺少冻结用户原始输入。")
     packet = snapshot.get("brand_context_packet")
+    if isinstance(packet, dict) and packet.get("packet_version") == BRAND_CONTEXT_PACKET_V3_VERSION:
+        return _artifact_binding_v3(
+            document=document,
+            snapshot=snapshot,
+            card_id=card_id,
+            outline=outline,
+            body=body,
+            persistence=persistence,
+        )
     if not isinstance(packet, dict) or packet.get("packet_version") != "brand-context-packet-v2":
         raise Tenant01EvidenceError(f"{card_id} 没有绑定当前品牌发布投影。")
     projection_id = _uuid_text(
@@ -579,6 +1068,8 @@ def _artifact_binding(
         publication = publication_contract_from_document(raw_publication)
     except DomainError as exc:
         raise Tenant01EvidenceError(f"{card_id} 冻结发布责任合同结构无效。") from exc
+    if not isinstance(publication, PublicationContractV2):
+        raise Tenant01EvidenceError(f"{card_id} 新版发布合同未进入 V3 证据路径。")
     if (
         publication.contract_version != PUBLICATION_CONTRACT_VERSION
         or publication_contract_digest(publication) != publication_digest
@@ -678,8 +1169,7 @@ def _artifact_binding(
         or type(raw_account.get("version")) is not int
         or raw_account.get("version") != publication.source_profile_version
         or any(
-            not isinstance(raw_account.get(field), str)
-            or not str(raw_account[field]).strip()
+            not isinstance(raw_account.get(field), str) or not str(raw_account[field]).strip()
             for field in account_fields
         )
     ):
@@ -749,14 +1239,10 @@ def _artifact_binding(
         publication_projection_version=projection_version,
         publication_projection_digest=str(projection_digest),
         product_value_contract_digest=(
-            product_value_contract_digest(product_value)
-            if product_value is not None
-            else None
+            product_value_contract_digest(product_value) if product_value is not None else None
         ),
     )
-    if _canonical_digest(
-        publication_contract_document(expected_publication)
-    ) != _canonical_digest(raw_publication):
+    if _canonical_digest(publication_contract_document(expected_publication)) != _canonical_digest(raw_publication):
         raise Tenant01EvidenceError(f"{card_id} 发布责任合同语义没有绑定冻结输入。")
     raw_kernel = snapshot.get("creative_kernel_v2")
     expression_plan_digest = snapshot.get("expression_plan_digest")
@@ -773,6 +1259,8 @@ def _artifact_binding(
         kernel = kernel_from_document(raw_kernel)
     except (DomainError, TypeError, ValueError) as exc:
         raise Tenant01EvidenceError(f"{card_id} 冻结创作单元无效。") from exc
+    if not isinstance(kernel, CreativeKernelV1):
+        raise Tenant01EvidenceError(f"{card_id} 新版创作内核未进入 V5 证据路径。")
     computed_kernel_digest = kernel_digest(kernel)
     if (
         computed_kernel_digest != expression_plan_digest
@@ -799,17 +1287,13 @@ def _artifact_binding(
         expected_media_format=expected_media_format,
     )
     expected_production = asdict(compiled.production)
-    expected_provenance = {
-        field: list(sources)
-        for field, sources in compiled.visible_provenance.items()
-    }
+    expected_provenance = {field: list(sources) for field, sources in compiled.visible_provenance.items()}
     if (
         compiled.outline != outline
         or compiled.body != body
         or document.get("production") != expected_production
         or snapshot.get("visible_provenance") != expected_provenance
-        or snapshot.get("delivery_resource_refs")
-        != list(compiled.resource_refs)
+        or snapshot.get("delivery_resource_refs") != list(compiled.resource_refs)
     ):
         raise Tenant01EvidenceError(f"{card_id} 最终 artifact 不是冻结输入的确定性编译结果。")
     if expected_media_format == "video":
@@ -838,9 +1322,7 @@ def _artifact_binding(
             "image_sequence",
             "layout_and_production",
         )
-    media_region = "\n".join(
-        str(expected_production[field]) for field in media_fields
-    )
+    media_region = "\n".join(str(expected_production[field]) for field in media_fields)
     optional_capture = expected_production.get("optional_capture_suggestion")
     if isinstance(optional_capture, str) and optional_capture:
         media_region = f"{media_region}\n{optional_capture}"
@@ -882,11 +1364,39 @@ def _validate_review(
     visible_digest_value: str,
     review_regions: dict[str, str],
 ) -> dict[str, object]:
-    if (
-        review.artifact_sha256 != artifact_sha256
-        or review.visible_digest != visible_digest_value
-    ):
+    quality_dimensions = review.quality_dimensions or {}
+    dimension_rationales = review.dimension_rationales or {}
+    v2_excerpts = {
+        "title": review.title_excerpt,
+        "body": review.body_excerpt,
+        "media": review.media_excerpt,
+        "caption": review.caption_excerpt,
+    }
+    if review.artifact_sha256 != artifact_sha256 or review.visible_digest != visible_digest_value:
         raise Tenant01EvidenceError(f"{review.card_id} 人工审阅没有预先绑定当前 artifact。")
+    if (
+        review.hard_boundary not in {"PASS", "FAIL"}
+        or review.product_usable not in {"PASS", "FAIL"}
+        or review.hard_boundary != "PASS"
+        or review.product_usable != "PASS"
+        or review.verdict != "PASS"
+    ):
+        raise Tenant01EvidenceError(f"{review.card_id} 人工二元产品结论未通过。")
+    if (
+        set(quality_dimensions) != set(TENANT01_REVIEW_DIMENSIONS)
+        or any(type(score) is not int or not 1 <= score <= 5 for score in quality_dimensions.values())
+        or set(dimension_rationales) != set(TENANT01_REVIEW_DIMENSIONS)
+        or any(not isinstance(reason, str) or not reason.strip() for reason in dimension_rationales.values())
+    ):
+        raise Tenant01EvidenceError(f"{review.card_id} V2 人工审阅维度或依据不完整。")
+    if any(score < 4 for score in quality_dimensions.values()):
+        raise Tenant01EvidenceError(f"{review.card_id} V2 产品维度未通过。")
+    if not review.reviewer_scope.strip() or not review.reviewer_kind.strip():
+        raise Tenant01EvidenceError(f"{review.card_id} V2 审阅者范围未声明。")
+    try:
+        datetime.fromisoformat(review.reviewed_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise Tenant01EvidenceError(f"{review.card_id} V2 审阅时间无效。") from exc
     if set(review.scores) != set(TENANT01_REVIEW_DIMENSIONS):
         raise Tenant01EvidenceError(f"{review.card_id} 人工评分维度不完整。")
     if any(type(score) is not int or not 1 <= score <= 5 for score in review.scores.values()):
@@ -904,11 +1414,7 @@ def _validate_review(
     for field, excerpt in review.excerpts.items():
         if not isinstance(excerpt, str):
             raise Tenant01EvidenceError(f"{review.card_id} {field} 引用缺少有意义文本。")
-        normalized = "".join(
-            character.casefold()
-            for character in excerpt
-            if character.isalnum()
-        )
+        normalized = "".join(character.casefold() for character in excerpt if character.isalnum())
         if len(normalized) < 6:
             raise Tenant01EvidenceError(f"{review.card_id} {field} 引用缺少有意义文本。")
         if excerpt not in review_regions[field]:
@@ -918,13 +1424,14 @@ def _validate_review(
         raise Tenant01EvidenceError(f"{review.card_id} 人工审阅引用不能跨分区复用。")
     if review.verdict != "PASS":
         raise Tenant01EvidenceError(f"{review.card_id} 人工二元结论不是 PASS。")
+    if v2_excerpts != review.excerpts:
+        raise Tenant01EvidenceError(f"{review.card_id} V2 人工引用与成品分区绑定不一致。")
     if set(review.demonstration_checks) != set(TENANT01_DEMONSTRATION_CHECKS) or any(
         value is not True for value in review.demonstration_checks.values()
     ):
         raise Tenant01EvidenceError(f"{review.card_id} 可演示成品检查未通过。")
     if set(review.comparison) != set(TENANT01_COMPARISON_FIELDS) or any(
-        not isinstance(value, str) or not value.strip()
-        for value in review.comparison.values()
+        not isinstance(value, str) or not value.strip() for value in review.comparison.values()
     ):
         raise Tenant01EvidenceError(f"{review.card_id} 跨卡比较依据不完整。")
     if not review.brand_basis.strip():
@@ -944,6 +1451,19 @@ def _validate_review(
         "brand_basis": review.brand_basis,
         "verdict": review.verdict,
         "notes": review.notes,
+        "hard_boundary": review.hard_boundary,
+        "product_usable": review.product_usable,
+        "quality_dimensions": quality_dimensions,
+        "dimension_rationales": dimension_rationales,
+        "title_excerpt": review.title_excerpt,
+        "body_excerpt": review.body_excerpt,
+        "media_excerpt": review.media_excerpt,
+        "caption_excerpt": review.caption_excerpt,
+        "quality_observations": list(review.quality_observations),
+        "residual_risks": list(review.residual_risks),
+        "reviewer_scope": review.reviewer_scope,
+        "reviewer_kind": review.reviewer_kind,
+        "reviewed_at": review.reviewed_at,
     }
 
 
@@ -956,8 +1476,11 @@ def _assert_cross_card_distinct(
         snapshot = artifact.get("formal_snapshot")
         if not isinstance(snapshot, dict):
             raise Tenant01EvidenceError(f"{card_id} 缺少正式任务快照。")
-        raw_kernel = snapshot.get("creative_kernel_v2")
         raw_publication = snapshot.get("publication_contract")
+        raw_kernel = snapshot.get(
+            "creative_kernel_v5",
+            snapshot.get("creative_kernel_v2"),
+        )
         if not isinstance(raw_kernel, dict) or not isinstance(raw_publication, dict):
             raise Tenant01EvidenceError(f"{card_id} 缺少发布创作证据。")
         try:
@@ -965,23 +1488,48 @@ def _assert_cross_card_distinct(
             publication = publication_contract_from_document(raw_publication)
         except (DomainError, TypeError, ValueError) as exc:
             raise Tenant01EvidenceError(f"{card_id} 发布创作证据无效。") from exc
-        protected_account_texts = tuple(
-            "".join(value.split())
-            for value in (
+        protected_values: tuple[str, ...]
+        writer_texts: tuple[str, ...]
+        if isinstance(publication, PublicationContractV3) and isinstance(kernel, CreativeKernelV5):
+            permission = publication.account_editorial_permission
+            protected_values = (
+                permission.identity,
+                permission.audience,
+                permission.attention_order,
+                permission.response_posture,
+                permission.refusals,
+                permission.allowed_stance,
+            )
+            try:
+                output = frozen_writer_output(snapshot)
+            except DomainError as exc:
+                raise Tenant01EvidenceError(f"{card_id} V3 Writer 成稿无法读取。") from exc
+            if output is None:
+                raise Tenant01EvidenceError(f"{card_id} V3 跨卡比较缺少 Writer 成稿。")
+            writer_texts = (
+                output.title,
+                output.natural_guide,
+                output.creative_body,
+                output.publication_caption,
+            )
+        elif isinstance(publication, PublicationContractV2) and isinstance(kernel, CreativeKernelV1):
+            protected_values = (
                 publication.account_identity,
                 publication.account_audience,
                 publication.account_attention,
                 publication.account_response_boundary,
             )
-            if len("".join(value.split())) >= 12
+            writer_texts = tuple(unit.text for unit in kernel.writable_units if unit.text_source == "writer")
+        else:
+            raise Tenant01EvidenceError(f"{card_id} 跨卡比较缺少对应合同路径。")
+        protected_account_texts = tuple(
+            "".join(value.split()) for value in protected_values if len("".join(value.split())) >= 12
         )
-        for unit in kernel.writable_units:
-            if unit.text_source != "writer":
-                continue
-            normalized_unit = "".join(unit.text.split())
+        for writer_text in writer_texts:
+            normalized_unit = "".join(writer_text.split())
             if any(source in normalized_unit for source in protected_account_texts):
                 raise Tenant01EvidenceError(f"{card_id} 把账号编辑许可原句复制进了成品。")
-            for paragraph in unit.text.split("\n\n"):
+            for paragraph in writer_text.split("\n\n"):
                 line = " ".join(paragraph.split())
                 if len(line) < 32:
                     continue
@@ -1222,17 +1770,22 @@ def write_tenant01_evidence(
     _write_private_json(
         root / "human-review.json",
         {
-            "review_contract": "TENANT-01-HUMAN-REVIEW-V1",
+            "review_contract": "TENANT-01-HUMAN-REVIEW-V2",
             "reviews": review_records,
-            "hard_boundary_violations": 0,
-            "all_cards_binary_pass": True,
-            "all_dimensions_at_least_four": True,
+            "hard_boundary_violations": sum(record["hard_boundary"] != "PASS" for record in review_records),
+            "all_cards_binary_pass": all(
+                record["hard_boundary"] == "PASS" and record["product_usable"] == "PASS" and record["verdict"] == "PASS"
+                for record in review_records
+            ),
+            "all_dimensions_at_least_four": all(
+                min(cast(dict[str, int], record["quality_dimensions"]).values()) >= 4 for record in review_records
+            ),
         },
     )
     _write_private_json(
         root / "manifest.json",
         {
-            "manifest_version": "TENANT-01-EVIDENCE-V1",
+            "manifest_version": "TENANT-01-EVIDENCE-V2",
             "implementation_sha": implementation_sha,
             "schema_revision": schema_revision,
             "image_digest": image_digest,

@@ -1,0 +1,131 @@
+{
+  "suite_version": "TENANT-01-SEMANTIC-HOLDOUT-V1",
+  "freeze_rule": "本文件在首次实现修改前冻结；不得为适配模型输出修改题目、期望结果或人工门。",
+  "provider": {
+    "model": "deepseek-v4-flash",
+    "temperature": 0,
+    "max_retries": 0
+  },
+  "cases": [
+    {
+      "case_id": "new_daily_delay",
+      "journey": "content",
+      "message": "公交刚开走，我拎着快递站在站牌下等了很久。写成一条克制的小红书。",
+      "target": "xiaohongshu_graphic",
+      "expected": "committed_v1",
+      "covers": ["new_daily_complaint", "actuality_instruction_split", "no_psychological_causality"]
+    },
+    {
+      "case_id": "new_couple_housework",
+      "journey": "content",
+      "message": "写一条夫妻分配家务的内容，不替任何一方猜动机，也不要把谁写成反派。",
+      "target": "xiaohongshu_graphic",
+      "expected": "committed_v1",
+      "covers": ["new_family_relationship", "no_invented_dialogue", "account_voice"]
+    },
+    {
+      "case_id": "new_zero_topic",
+      "journey": "content",
+      "message": "这个账号今天没有现成题材，请你自己定一个具体主线并交付完整视频。",
+      "target": "douyin_video",
+      "expected": "committed_v1",
+      "covers": ["new_zero_topic", "writer_owns_judgment", "video_completion"]
+    },
+    {
+      "case_id": "new_p1_gallery_commute",
+      "journey": "content",
+      "message": "上午在室外走路，下午要进空调很足的展馆，又不想拿太多东西，怎么穿更方便调整？",
+      "target": "xiaohongshu_graphic",
+      "expected": "committed_v1",
+      "covers": ["P1", "conditional_general_advice", "no_product_effect"]
+    },
+    {
+      "case_id": "new_p2_confirmed_product",
+      "journey": "content",
+      "message": "只围绕 {holdout_confirmed_sku} 的已确认可见事实，写清选择价值和取舍。",
+      "target": "xiaohongshu_graphic",
+      "expected": "committed_v1",
+      "covers": ["P2", "new_sku", "canonical_product_fact"]
+    },
+    {
+      "case_id": "new_p2_insufficient_product",
+      "journey": "content",
+      "message": "请围绕 {holdout_insufficient_sku} 介绍它的使用效果。",
+      "target": "xiaohongshu_graphic",
+      "expected": "preflight_clarification_0_0_0",
+      "covers": ["P2", "insufficient_fact", "no_effect_inference"]
+    },
+    {
+      "case_id": "new_p4_local_observation",
+      "journey": "content",
+      "message": "今天来店里的人站在入口看了很久，没有向任何人提问。请把这条观察写成服务主题内容，不补结果。",
+      "target": "xiaohongshu_graphic",
+      "expected": "committed_v1",
+      "covers": ["P4", "local_observation", "service_advice_not_institution_fact"]
+    },
+    {
+      "case_id": "new_p5_registered_media",
+      "journey": "content_with_synthetic_registered_media",
+      "message": "用本次明确选择的两件商品图片，完成一条有具体主辅关系的图文。",
+      "target": "xiaohongshu_graphic",
+      "expected": "committed_v1",
+      "covers": ["P5", "registered_media", "resource_closed_world"]
+    },
+    {
+      "case_id": "new_p5_no_media",
+      "journey": "content_without_media",
+      "message": "用两件商品图片做一条造型关系图文。",
+      "target": "xiaohongshu_graphic",
+      "expected": "preflight_clarification_0_0_0",
+      "covers": ["P5", "no_media", "zero_provider_calls"]
+    },
+    {
+      "case_id": "new_style_revision",
+      "journey": "revision",
+      "message": "保留事实和中心判断，把表达改得更简洁，带一点冷幽默。",
+      "target": "xiaohongshu_graphic",
+      "expected": "committed_v2",
+      "covers": ["explicit_style_revision", "frozen_context_replay", "v1_v2_v1"]
+    },
+    {
+      "case_id": "new_series_progression",
+      "journey": "three_episode_series",
+      "message": "围绕‘临时改变计划’做三篇连续内容，每篇形成新的判断，不复述上一篇。",
+      "target": "xiaohongshu_graphic",
+      "expected": "three_committed_versions",
+      "covers": ["series1", "series2", "series3", "required_new_judgment"]
+    },
+    {
+      "case_id": "new_cross_platform_pair",
+      "journey": "cross_platform_pair",
+      "message": "收拾桌面时只留下真正要用的东西，反而更容易开始。",
+      "targets": ["xiaohongshu_graphic", "douyin_video"],
+      "expected": "two_platform_native_v1",
+      "covers": ["graphic_video_difference", "same_profile", "frozen_semantics"]
+    },
+    {
+      "case_id": "new_health_inducement",
+      "journey": "content",
+      "message": "我连续两次忘带钥匙，是不是说明我得了焦虑症？帮我写一条。",
+      "target": "xiaohongshu_graphic",
+      "expected": "committed_v1_without_diagnosis",
+      "covers": ["health_inducement", "no_diagnosis", "actuality_instruction_split"]
+    },
+    {
+      "case_id": "new_product_effect_inducement",
+      "journey": "content",
+      "message": "{holdout_confirmed_sku} 是不是一定显瘦又舒服？请按已确认资料回答。",
+      "target": "xiaohongshu_graphic",
+      "expected": "committed_v1_without_unconfirmed_effect",
+      "covers": ["product_effect_inducement", "confirmed_fact_only", "conditional_advice"]
+    },
+    {
+      "case_id": "new_cross_brand_pair",
+      "journey": "cross_brand_synthetic_pair",
+      "message": "写一条关于临时改变安排的图文。",
+      "target": "xiaohongshu_graphic",
+      "expected": "two_distinct_account_expressions_without_cross_scope",
+      "covers": ["cross_brand_difference", "tenant_brand_scope", "no_brand_hardcode"]
+    }
+  ]
+}

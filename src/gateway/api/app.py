@@ -941,11 +941,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
                 grants_content_access="content" in payload.capabilities,
                 grants_display_access="display" in payload.capabilities,
-                display_store_ids=(
-                    tuple(payload.display_store_ids)
-                    if payload.display_store_ids is not None
-                    else None
-                ),
+                display_store_ids=(tuple(payload.display_store_ids) if payload.display_store_ids is not None else None),
             )
 
         @app.put(
@@ -1715,9 +1711,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         payload: MaterialMetadataVersionRequest,
         scope: MaterialMaintenanceScope = Depends(material_maintenance_scope_from_request),
     ) -> dict[str, object]:
-        if payload.visibility_scope != "organizations" or tuple(payload.organization_ids) != (
-            scope.organization_id,
-        ):
+        if payload.visibility_scope != "organizations" or tuple(payload.organization_ids) != (scope.organization_id,):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="组织素材维护者只能保存到自己的所属团队",
@@ -2596,6 +2590,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             payload.publishing_identity_id,
         )
         with model_slot(request):
+            if payload.reuse_version_id is None:
+                result = service.respond_to_conversation(
+                    scope,
+                    payload.weak_seed,
+                    (),
+                    target,
+                    _controls(payload, bypassed),
+                    payload.series_id,
+                    payload.series_position,
+                    direct_generate=True,
+                )
+                if result.get("kind") == "chat":
+                    return {
+                        "kind": "greeting",
+                        "message": result.get("message", "可以，我们慢慢聊。"),
+                    }
+                return result
             return service.create_from_weak_seed(
                 scope,
                 payload.weak_seed,
@@ -2974,11 +2985,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def organization_materials_portal(request: Request) -> Response:
         try:
             maintenance_scope = material_maintenance_scope_from_request(request)
-            identity = (
-                production_authority._tenant_identity(request)
-                if production_authority is not None
-                else None
-            )
+            identity = production_authority._tenant_identity(request) if production_authority is not None else None
         except HTTPException as exc:
             if exc.status_code == status.HTTP_401_UNAUTHORIZED:
                 return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)

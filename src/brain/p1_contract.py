@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_V5_VERSION,
     DELIVERY_COMPILER_VERSION,
     MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
 )
@@ -32,22 +33,17 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         "visual_styling_story": P5SemanticContract,
     }
     expected = expected_types[artifact.primary_product]
-    if not isinstance(contract, expected) or any(
-        not str(value).strip() for value in vars(contract).values()
-    ):
+    if not isinstance(contract, expected) or any(not str(value).strip() for value in vars(contract).values()):
         raise GenerationFailed("内容成品缺少当前主要产品的必要部分")
-    compiler_version = (artifact.completion_snapshot_patch or {}).get(
-        "delivery_compiler_version"
-    )
+    compiler_version = (artifact.completion_snapshot_patch or {}).get("delivery_compiler_version")
     media_native = compiler_version in {
         MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
         DELIVERY_COMPILER_VERSION,
+        DELIVERY_COMPILER_V5_VERSION,
     }
     if isinstance(artifact.production, VideoProductionBundle):
         required = tuple(
-            value
-            for key, value in vars(artifact.production).items()
-            if key != "optional_capture_suggestion"
+            value for key, value in vars(artifact.production).items() if key != "optional_capture_suggestion"
         )
         headings: tuple[str, ...] = (
             (
@@ -78,9 +74,7 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         )
     elif isinstance(artifact.production, GraphicProductionBundle):
         required = tuple(
-            value
-            for key, value in vars(artifact.production).items()
-            if key != "optional_capture_suggestion"
+            value for key, value in vars(artifact.production).items() if key != "optional_capture_suggestion"
         )
         headings = (
             (
@@ -110,10 +104,7 @@ def assert_content_complete(artifact: GeneratedArtifact) -> None:
         raise GenerationFailed("内容成品缺少可执行的媒体制作部分")
     if not all(heading in artifact.body for heading in headings):
         raise GenerationFailed("内容成品正文没有完整可见文字包")
-    if (
-        artifact.production.optional_capture_suggestion
-        and "可选补拍建议" not in artifact.body
-    ):
+    if artifact.production.optional_capture_suggestion and "可选补拍建议" not in artifact.body:
         raise GenerationFailed("内容成品遗漏可见的可选补拍建议")
     # The semantic contract remains persisted and validated above, but it is no longer copied
     # verbatim into the user artifact as compiler scaffolding. Source binding and product-specific

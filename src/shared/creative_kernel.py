@@ -14,7 +14,7 @@ from src.shared.narrative import (
     ObservationType,
     ReviewerObservation,
 )
-from src.shared.product_value import ProductValueContract
+from src.shared.product_value import LegacyProductValueContract
 from src.shared.types import ContentProduct, MediaFormat
 from src.shared.visible_structure import (
     WRITER_WRAPPER_NORMALIZATION_CONTRACT_VERSION,
@@ -58,9 +58,8 @@ LEGACY_KERNEL_VERSION = "creative-kernel-v1"
 DUAL_TRACK_KERNEL_VERSION = "creative-kernel-v2"
 MEDIA_NATIVE_KERNEL_VERSION = "creative-kernel-v3"
 KERNEL_VERSION = "creative-kernel-v4"
-_WRITER_SUPPORTING_COPY_KERNEL_VERSIONS = frozenset(
-    {MEDIA_NATIVE_KERNEL_VERSION, KERNEL_VERSION}
-)
+CREATIVE_KERNEL_V5_VERSION = "creative-kernel-v5"
+_WRITER_SUPPORTING_COPY_KERNEL_VERSIONS = frozenset({MEDIA_NATIVE_KERNEL_VERSION, KERNEL_VERSION})
 MAX_PRODUCT_FACT_BLOCKS = 3
 PRODUCT_VALUE_UNIT_ID = "unit:product-value"
 DRAMATIZATION_DISCLOSURE = "以下是情景演绎，不对应真实人物或经历："
@@ -224,6 +223,164 @@ class CreativeKernelV1:
         raise KeyError(unit_id)
 
 
+KernelOwnerV5: TypeAlias = Literal["writer", "server_fact"]
+
+
+@dataclass(frozen=True)
+class CreativeKernelUnitV5:
+    unit_id: str
+    purpose: Literal[
+        "title",
+        "natural_guide",
+        "frozen_fact",
+        "creative_body",
+        "publication_caption",
+    ]
+    order: int
+    owner: KernelOwnerV5
+    fact_refs: tuple[str, ...]
+    media_slot_refs: tuple[str, ...]
+    provenance: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CreativeKernelV5:
+    kernel_version: str
+    units: tuple[CreativeKernelUnitV5, ...]
+    media_program_id: str
+    selected_fact_block_ids: tuple[str, ...]
+
+
+CreativeKernel: TypeAlias = CreativeKernelV1 | CreativeKernelV5
+
+
+def build_creative_kernel_v5(
+    *,
+    writer_output_digest: str,
+    trusted_fact_refs: Sequence[str],
+    selected_fact_blocks: Sequence[ImmutableFactBlock],
+    media_program_id: str,
+    media_unit_bindings: Sequence[str],
+) -> CreativeKernelV5:
+    writer_purposes = (
+        ("unit:title", "title", "title"),
+        ("unit:natural-guide", "natural_guide", "natural_guide"),
+    )
+    units: list[CreativeKernelUnitV5] = []
+    order = 10
+    for unit_id, purpose, output_field in writer_purposes:
+        units.append(
+            CreativeKernelUnitV5(
+                unit_id=unit_id,
+                purpose=cast(
+                    Literal[
+                        "title",
+                        "natural_guide",
+                        "frozen_fact",
+                        "creative_body",
+                        "publication_caption",
+                    ],
+                    purpose,
+                ),
+                order=order,
+                owner="writer",
+                fact_refs=(),
+                media_slot_refs=_v5_media_slots(unit_id, media_unit_bindings),
+                provenance=(f"writer-output-v3:{output_field}:{writer_output_digest}",),
+            )
+        )
+        order += 10
+    block_by_fact_ref = {block.fact_id: block for block in selected_fact_blocks}
+    for index, fact_ref in enumerate(
+        dict.fromkeys(trusted_fact_refs),
+        start=1,
+    ):
+        unit_id = f"unit:frozen-fact:{index}"
+        block = block_by_fact_ref.get(fact_ref)
+        units.append(
+            CreativeKernelUnitV5(
+                unit_id=unit_id,
+                purpose="frozen_fact",
+                order=order,
+                owner="server_fact",
+                fact_refs=(fact_ref,),
+                media_slot_refs=_v5_media_slots("unit:frozen-fact:*", media_unit_bindings),
+                provenance=(
+                    *((f"immutable-fact-block:{block.fact_block_id}",) if block is not None else ()),
+                    f"fact:{fact_ref}",
+                ),
+            )
+        )
+        order += 1
+    units.extend(
+        (
+            CreativeKernelUnitV5(
+                unit_id="unit:creative-body",
+                purpose="creative_body",
+                order=order + 10,
+                owner="writer",
+                fact_refs=(),
+                media_slot_refs=_v5_media_slots("unit:body:*", media_unit_bindings),
+                provenance=(f"writer-output-v3:creative_body:{writer_output_digest}",),
+            ),
+            CreativeKernelUnitV5(
+                unit_id="unit:publication-caption",
+                purpose="publication_caption",
+                order=order + 20,
+                owner="writer",
+                fact_refs=(),
+                media_slot_refs=_v5_media_slots("unit:release-caption", media_unit_bindings),
+                provenance=(f"writer-output-v3:publication_caption:{writer_output_digest}",),
+            ),
+        )
+    )
+    kernel = CreativeKernelV5(
+        kernel_version=CREATIVE_KERNEL_V5_VERSION,
+        units=tuple(units),
+        media_program_id=media_program_id,
+        selected_fact_block_ids=tuple(block.fact_block_id for block in selected_fact_blocks),
+    )
+    assert_creative_kernel_v5(kernel)
+    return kernel
+
+
+def assert_creative_kernel_v5(kernel: CreativeKernelV5) -> None:
+    identifiers = [unit.unit_id for unit in kernel.units]
+    orders = [unit.order for unit in kernel.units]
+    writer_purposes = {unit.purpose for unit in kernel.units if unit.owner == "writer"}
+    if (
+        kernel.kernel_version != CREATIVE_KERNEL_V5_VERSION
+        or not kernel.media_program_id
+        or not kernel.units
+        or len(identifiers) != len(set(identifiers))
+        or len(orders) != len(set(orders))
+        or orders != sorted(orders)
+        or writer_purposes
+        != {
+            "title",
+            "natural_guide",
+            "creative_body",
+            "publication_caption",
+        }
+    ):
+        raise DomainError("冻结创作内核 V5 结构无效")
+    for unit in kernel.units:
+        if unit.owner == "server_fact":
+            if unit.purpose != "frozen_fact" or len(unit.fact_refs) != 1:
+                raise DomainError("冻结事实单元所有权无效")
+        elif unit.purpose == "frozen_fact" or unit.fact_refs:
+            raise DomainError("Writer 单元取得了事实所有权")
+        if not unit.provenance:
+            raise DomainError("冻结创作内核 V5 缺少来源")
+
+
+def _v5_media_slots(
+    expected_binding: str,
+    bindings: Sequence[str],
+) -> tuple[str, ...]:
+    return tuple(binding for binding in bindings if binding == expected_binding)
+
+
 @dataclass(frozen=True)
 class WriterWrapperNormalization:
     unit_id: str
@@ -244,7 +401,7 @@ def build_kernel_skeleton(
     media_format: Literal["video", "graphic"] = "graphic",
     kernel_version: str = DUAL_TRACK_KERNEL_VERSION,
     primary_product: ContentProduct | None = None,
-    product_value_contract: ProductValueContract | None = None,
+    product_value_contract: LegacyProductValueContract | None = None,
 ) -> CreativeKernelV1:
     """Build the one small server-owned writing skeleton for a new artifact."""
     if (
@@ -284,13 +441,8 @@ def build_kernel_skeleton(
         if kernel_version == KERNEL_VERSION
         else (
             resources
-            if kernel_version == MEDIA_NATIVE_KERNEL_VERSION
-            and primary_product == "visual_styling_story"
-            else tuple(
-                resource_id
-                for resource_id in resources
-                if not resource_id.startswith("resource:product:")
-            )
+            if kernel_version == MEDIA_NATIVE_KERNEL_VERSION and primary_product == "visual_styling_story"
+            else tuple(resource_id for resource_id in resources if not resource_id.startswith("resource:product:"))
         )
     )
     if kernel_version not in {
@@ -415,10 +567,10 @@ def build_kernel_skeleton(
             )
         )
     if product_value_contract is not None:
-        if (
-            primary_product != product_value_contract.primary_product
-            or primary_product not in {"product_truth", "visual_styling_story"}
-        ):
+        if primary_product != product_value_contract.primary_product or primary_product not in {
+            "product_truth",
+            "visual_styling_story",
+        }:
             raise ValueError("product value contract does not match the creative product")
         units.append(
             CreativeKernelUnit(
@@ -868,7 +1020,25 @@ def repair_kernel_units(
     )
 
 
-def kernel_document(kernel: CreativeKernelV1) -> dict[str, object]:
+def kernel_document(kernel: CreativeKernel) -> dict[str, object]:
+    if isinstance(kernel, CreativeKernelV5):
+        return {
+            "kernel_version": kernel.kernel_version,
+            "media_program_id": kernel.media_program_id,
+            "selected_fact_block_ids": list(kernel.selected_fact_block_ids),
+            "units": [
+                {
+                    "unit_id": unit.unit_id,
+                    "purpose": unit.purpose,
+                    "order": unit.order,
+                    "owner": unit.owner,
+                    "fact_refs": list(unit.fact_refs),
+                    "media_slot_refs": list(unit.media_slot_refs),
+                    "provenance": list(unit.provenance),
+                }
+                for unit in kernel.units
+            ],
+        }
     return {
         "kernel_version": kernel.kernel_version,
         "program_id": kernel.program_id,
@@ -894,7 +1064,9 @@ def kernel_document(kernel: CreativeKernelV1) -> dict[str, object]:
     }
 
 
-def kernel_from_document(value: object) -> CreativeKernelV1:
+def kernel_from_document(value: object) -> CreativeKernel:
+    if isinstance(value, Mapping) and value.get("kernel_version") == CREATIVE_KERNEL_V5_VERSION:
+        return _creative_kernel_v5_from_document(value)
     if not isinstance(value, Mapping) or frozenset(value) not in {
         frozenset({"kernel_version", "units"}),
         frozenset({"kernel_version", "program_id", "units"}),
@@ -1049,7 +1221,7 @@ def kernel_from_document(value: object) -> CreativeKernelV1:
     )
 
 
-def kernel_digest(kernel: CreativeKernelV1) -> str:
+def kernel_digest(kernel: CreativeKernel) -> str:
     canonical = json.dumps(
         kernel_document(kernel),
         ensure_ascii=False,
@@ -1057,6 +1229,77 @@ def kernel_digest(kernel: CreativeKernelV1) -> str:
         sort_keys=True,
     ).encode()
     return hashlib.sha256(canonical).hexdigest()
+
+
+def _creative_kernel_v5_from_document(
+    value: Mapping[object, object],
+) -> CreativeKernelV5:
+    raw_units = value.get("units")
+    raw_blocks = value.get("selected_fact_block_ids")
+    if (
+        set(value)
+        != {
+            "kernel_version",
+            "media_program_id",
+            "selected_fact_block_ids",
+            "units",
+        }
+        or not isinstance(raw_units, list)
+        or not isinstance(raw_blocks, list)
+    ):
+        raise DomainError("冻结创作内核 V5 结构无效")
+    units: list[CreativeKernelUnitV5] = []
+    allowed_purposes = {
+        "title",
+        "natural_guide",
+        "frozen_fact",
+        "creative_body",
+        "publication_caption",
+    }
+    for raw in raw_units:
+        if not isinstance(raw, Mapping) or set(raw) != {
+            "unit_id",
+            "purpose",
+            "order",
+            "owner",
+            "fact_refs",
+            "media_slot_refs",
+            "provenance",
+        }:
+            raise DomainError("冻结创作内核 V5 单元无效")
+        purpose = raw.get("purpose")
+        owner = raw.get("owner")
+        order = raw.get("order")
+        if purpose not in allowed_purposes or owner not in {"writer", "server_fact"} or not isinstance(order, int):
+            raise DomainError("冻结创作内核 V5 单元字段无效")
+        units.append(
+            CreativeKernelUnitV5(
+                unit_id=_required_string(raw.get("unit_id")),
+                purpose=cast(
+                    Literal[
+                        "title",
+                        "natural_guide",
+                        "frozen_fact",
+                        "creative_body",
+                        "publication_caption",
+                    ],
+                    purpose,
+                ),
+                order=order,
+                owner=cast(KernelOwnerV5, owner),
+                fact_refs=_string_tuple(raw.get("fact_refs")),
+                media_slot_refs=_string_tuple(raw.get("media_slot_refs")),
+                provenance=_string_tuple(raw.get("provenance")),
+            )
+        )
+    kernel = CreativeKernelV5(
+        kernel_version=CREATIVE_KERNEL_V5_VERSION,
+        units=tuple(units),
+        media_program_id=_required_string(value.get("media_program_id")),
+        selected_fact_block_ids=tuple(str(item) for item in raw_blocks),
+    )
+    assert_creative_kernel_v5(kernel)
+    return kernel
 
 
 def creative_units_digest(kernel: CreativeKernelV1) -> str:
@@ -1340,9 +1583,7 @@ def normalize_writer_unit_text(
             purpose=unit.purpose,
             removed_prefix=removed_prefix,
             raw_text_sha256=hashlib.sha256(text.encode()).hexdigest(),
-            normalized_text_sha256=hashlib.sha256(
-                normalized_text.encode()
-            ).hexdigest(),
+            normalized_text_sha256=hashlib.sha256(normalized_text.encode()).hexdigest(),
         ),
     )
 

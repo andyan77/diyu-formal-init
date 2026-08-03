@@ -36,7 +36,10 @@ from src.shared.account_editorial_lens import (
     account_editorial_lens_from_document,
     build_account_editorial_lens,
 )
-from src.shared.brand_publication import brand_context_packet_digest
+from src.shared.brand_publication import (
+    brand_context_packet_digest,
+    brand_context_packet_v3_digest,
+)
 from src.shared.content_snapshot import (
     frozen_media_contract,
     frozen_product_facts,
@@ -45,6 +48,8 @@ from src.shared.content_snapshot import (
 from src.shared.creative_kernel import (
     KERNEL_VERSION,
     OBSERVATION_ONLY_PROGRAM,
+    CreativeKernelV1,
+    build_creative_kernel_v5,
     build_kernel_skeleton,
     creative_units_digest,
     kernel_digest,
@@ -59,11 +64,12 @@ from src.shared.creative_plan import (
     platform_shape,
 )
 from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_V5_VERSION,
     DELIVERY_COMPILER_VERSION,
     DeliveryCompileInput,
     compile_delivery,
 )
-from src.shared.errors import DomainError
+from src.shared.errors import DomainError, GenerationFailed
 from src.shared.factual_basis import (
     FrozenFactRecord,
     ImmutableFactBlock,
@@ -89,6 +95,7 @@ from src.shared.narrative import (
     visible_digest,
 )
 from src.shared.product_value import (
+    build_product_decision_basis_v2,
     build_product_value_contract,
     product_value_contract_digest,
     product_value_contract_document,
@@ -97,8 +104,14 @@ from src.shared.product_value import (
 from src.shared.publication_contract import (
     NEGATIVE_SAFETY_RULE_IDS,
     PUBLICATION_CONTRACT_VERSION,
+    AccountEditorialPermissionV3,
+    BrandContextUseV3,
+    PlatformDirectionV3,
+    ProductDecisionBasisRefV2,
+    PublicationContractV2,
     PublicationInputSpanV1,
     build_publication_contract,
+    build_publication_contract_v3,
     negative_safety_contract_text,
     publication_contract_digest,
     publication_contract_document,
@@ -113,6 +126,7 @@ from src.shared.types import (
     AccountExpression,
     BrandContext,
     BrandContextPacketV2,
+    BrandContextPacketV3,
     BrandContextSegment,
     ContentProduct,
     ContentTarget,
@@ -120,6 +134,15 @@ from src.shared.types import (
     ProductFact,
     TenantManagementScope,
     TrustedScope,
+)
+from src.shared.writer_request import (
+    WRITER_OUTPUT_VERSION,
+    WriterOutputV3,
+    build_writer_request_v3,
+    writer_output_digest,
+    writer_output_document,
+    writer_request_digest,
+    writer_request_document,
 )
 from src.tool import run_tenant01_golden_suite as tenant01_runner
 from src.tool.run_tenant01_golden_suite import (
@@ -237,9 +260,7 @@ def test_tenant01_final_suite_requires_confirmed_source_bound_publication() -> N
         source_document_count=21,
         source_segment_count=5_046,
         source_bound_writer_item_count=3,
-        publication_roles=frozenset(
-            {"public_brand_fact", "expression_constraint", "creative_method"}
-        ),
+        publication_roles=frozenset({"public_brand_fact", "expression_constraint", "creative_method"}),
     )
     _assert_formal_publication_summary(valid)
 
@@ -297,14 +318,8 @@ def _tenant01_evidence_inputs(
             if card_id == "P4_series1"
             else "brand_life_narrative"
         )
-        target: ContentTarget = (
-            "douyin_video"
-            if card_id in {"P1", "cross_platform_douyin"}
-            else "xiaohongshu_graphic"
-        )
-        media_format: MediaFormat = (
-            "video" if target == "douyin_video" else "graphic"
-        )
+        target: ContentTarget = "douyin_video" if card_id in {"P1", "cross_platform_douyin"} else "xiaohongshu_graphic"
+        media_format: MediaFormat = "video" if target == "douyin_video" else "graphic"
         product_value = None
         products: tuple[ProductFact, ...] = ()
         if card_id == "P2":
@@ -322,11 +337,7 @@ def _tenant01_evidence_inputs(
                 products=products,
             )
             assert product_value is not None
-        product_records = tuple(
-            record
-            for product in products
-            for record in product_fact_records(product)
-        )
+        product_records = tuple(record for product in products for record in product_fact_records(product))
         frame = new_frame(
             "general_observation",
             (),
@@ -344,9 +355,7 @@ def _tenant01_evidence_inputs(
             start_byte=candidate.start_byte,
             end_byte=candidate.end_byte,
         )
-        topic_origin: TopicOrigin = (
-            "system_selected" if card_id == "zero_topic" else "explicit_user"
-        )
+        topic_origin: TopicOrigin = "system_selected" if card_id == "zero_topic" else "explicit_user"
         plan = build_creative_plan(
             topic_spans=(source_text,),
             primary_value=primary_product,
@@ -360,13 +369,7 @@ def _tenant01_evidence_inputs(
             media_format=media_format,
         )
         series_position = (
-            1
-            if card_id == "P4_series1"
-            else 2
-            if card_id == "series2"
-            else 3
-            if card_id == "series3"
-            else None
+            1 if card_id == "P4_series1" else 2 if card_id == "series2" else 3 if card_id == "series3" else None
         )
         media_program = select_media_program(
             primary_product=primary_product,
@@ -426,9 +429,7 @@ def _tenant01_evidence_inputs(
         fact_blocks = immutable_product_fact_blocks(product_packet)
         kernel = replace(
             kernel,
-            selected_fact_block_ids=tuple(
-                block.fact_block_id for block in fact_blocks
-            ),
+            selected_fact_block_ids=tuple(block.fact_block_id for block in fact_blocks),
         )
         compiled = compile_delivery(
             DeliveryCompileInput(
@@ -438,10 +439,7 @@ def _tenant01_evidence_inputs(
                 production_conditions="测试制作条件",
                 allowed_resource_ids=envelope.resource_ids,
                 immutable_fact_blocks=fact_blocks,
-                trusted_fact_texts=tuple(
-                    (record.fact_id, record.exact_text)
-                    for record in product_records
-                ),
+                trusted_fact_texts=tuple((record.fact_id, record.exact_text) for record in product_records),
                 media_capability_envelope=envelope,
                 media_program=media_program,
                 product_value_contract=product_value,
@@ -460,14 +458,8 @@ def _tenant01_evidence_inputs(
                 "source_note": product.source_note,
                 "fact_version": product.fact_version,
                 "applicability": product.applicability,
-                "product_id": (
-                    str(product.product_id) if product.product_id else None
-                ),
-                "product_version_id": (
-                    str(product.product_version_id)
-                    if product.product_version_id
-                    else None
-                ),
+                "product_id": (str(product.product_id) if product.product_id else None),
+                "product_version_id": (str(product.product_version_id) if product.product_version_id else None),
             }
             for product in products
         ]
@@ -522,12 +514,9 @@ def _tenant01_evidence_inputs(
                     "expression_plan_digest": kernel_digest(kernel),
                     "delivery_compiler_version": DELIVERY_COMPILER_VERSION,
                     "writer_model": TENANT01_PROVIDER_MODEL,
-                    "immutable_product_fact_blocks": (
-                        immutable_fact_blocks_document(fact_blocks)
-                    ),
+                    "immutable_product_fact_blocks": (immutable_fact_blocks_document(fact_blocks)),
                     "visible_provenance": {
-                        field: list(sources)
-                        for field, sources in compiled.visible_provenance.items()
+                        field: list(sources) for field, sources in compiled.visible_provenance.items()
                     },
                     "delivery_resource_refs": list(compiled.resource_refs),
                     "media_capability_envelope": media_envelope_document(envelope),
@@ -561,9 +550,7 @@ def _tenant01_evidence_inputs(
                     "transport_retries": 0,
                     "stage": stage,
                     "model": TENANT01_PROVIDER_MODEL,
-                    "request_sha256": sha256(
-                        f"{card_id}:{stage}:request".encode()
-                    ).hexdigest(),
+                    "request_sha256": sha256(f"{card_id}:{stage}:request".encode()).hexdigest(),
                     "response_sha256": _tenant01_json_digest(response),
                     "response": response,
                 }
@@ -580,13 +567,7 @@ def _tenant01_evidence_inputs(
         artifacts.append(Tenant01ArtifactInput(card_id, artifact_file, raw_file))
         artifact_sha256 = sha256_file(root / artifact_file)
         visible_digest_value = visible_digest(compiled.outline, body)
-        media_excerpt = str(
-            production[
-                "cover_or_first_frame"
-                if media_format == "video"
-                else "hero_image"
-            ]
-        )
+        media_excerpt = str(production["cover_or_first_frame" if media_format == "video" else "hero_image"])
         reviews.append(
             Tenant01HumanReview(
                 card_id=card_id,
@@ -606,6 +587,22 @@ def _tenant01_evidence_inputs(
                 brand_basis=f"projection:test / profile:{card_id}",
                 verdict="PASS",
                 notes="已逐字阅读最终可见成品，与评分引用一致。",
+                hard_boundary="PASS",
+                product_usable="PASS",
+                quality_dimensions={dimension: 4 for dimension in TENANT01_REVIEW_DIMENSIONS},
+                dimension_rationales={
+                    dimension: f"{card_id} {dimension} 引用成品的独立判断依据"
+                    for dimension in TENANT01_REVIEW_DIMENSIONS
+                },
+                title_excerpt=f"{card_id} 标题证据",
+                body_excerpt=f"{card_id} 正文证据",
+                media_excerpt=media_excerpt,
+                caption_excerpt=f"{card_id} 发布配文证据",
+                quality_observations=(),
+                residual_risks=(),
+                reviewer_scope="最终 artifact 标题、正文、媒体结构与发布配文",
+                reviewer_kind="single_execution_product_review",
+                reviewed_at="2026-08-02T12:00:00+00:00",
             )
         )
     _write_private_json(
@@ -645,6 +642,312 @@ def _tenant01_evidence_inputs(
     return tuple(artifacts), tuple(reviews)
 
 
+def _tenant01_v3_artifact(root: Path) -> Path:
+    card_id = "P2"
+    source_text = "请解释这件双面短外套的选择价值。"
+    candidate = user_fact_candidates((source_text,))[0]
+    input_role = PublicationInputSpanV1(
+        source_id=candidate.source_id,
+        role="creation_instruction",
+        exact_text=candidate.exact_text,
+        turn_index=candidate.turn_index,
+        start_offset=candidate.start_offset,
+        end_offset=candidate.end_offset,
+        start_byte=candidate.start_byte,
+        end_byte=candidate.end_byte,
+    )
+    product = ProductFact(
+        "TEST-P2-V3",
+        {
+            "category": "双面短外套",
+            "colors": ["炭灰纯色", "深绿细格纹"],
+        },
+        display_name="测试双面短外套",
+    )
+    products = (product,)
+    product_records = product_fact_records(product)
+    frame = new_frame(
+        "general_observation",
+        (),
+        tuple(record.fact_id for record in product_records),
+    )
+    plan = build_creative_plan(
+        topic_spans=(source_text,),
+        primary_value="product_truth",
+        tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        mechanism_id=None,
+        target_shape=platform_shape("xiaohongshu_graphic", "graphic"),
+        topic_origin="explicit_user",
+    )
+    envelope = build_media_capability_envelope(
+        platform_shape=plan.platform_shape,
+        media_format="graphic",
+    )
+    media_program = select_media_program(
+        primary_product="product_truth",
+        envelope=envelope,
+        mechanism_id=plan.mechanism_id,
+        topic_origin=plan.topic_origin,
+        fact_count=len(product_records),
+        series_position=None,
+    )
+    product_basis = build_product_decision_basis_v2(
+        primary_product="product_truth",
+        products=products,
+    )
+    assert product_basis is not None
+    fact_blocks = immutable_product_fact_blocks(
+        build_product_fact_packet(
+            products,
+            allowed_fact_ids=frame.allowed_product_fact_ids,
+        )
+    )
+    selected_blocks = tuple(block for block in fact_blocks if block.fact_id in product_basis.supporting_fact_refs)
+
+    projection_id = "11111111-1111-4111-8111-111111111111"
+    projection_digest = "d" * 64
+    segment_id = "55555555-5555-4555-8555-555555555555"
+    segment_text = "先回应具体处境，再给受众保留选择空间。"
+    packet_segments = [
+        {
+            "segment_id": segment_id,
+            "source_document_id": "22222222-2222-4222-8222-222222222222",
+            "source_document_version_id": ("33333333-3333-4333-8333-333333333333"),
+            "source_id": "brand_source_segment:v3-test",
+            "source_version": "V1",
+            "semantic_kind": "expression_constraint",
+            "evidence_level": "confirmed_publication",
+            "visibility_scope": "brand_all",
+            "digest": sha256(segment_text.encode()).hexdigest(),
+            "exact_text": segment_text,
+            "source_digest": sha256(b"v3 immutable source").hexdigest(),
+        }
+    ]
+    packet_digest = brand_context_packet_v3_digest(
+        projection_id=projection_id,
+        projection_version=1,
+        projection_digest=projection_digest,
+        available_segment_refs=(segment_id,),
+        frozen_segment_refs=(segment_id,),
+        consumed_segment_refs=(segment_id,),
+        displayed_segment_refs=(),
+        segments=packet_segments,
+    )
+    publication = build_publication_contract_v3(
+        input_roles=(input_role,),
+        topic_origin="explicit_user",
+        topic=source_text,
+        content_product="product_truth",
+        central_job="解释已确认商品事实如何帮助用户做选择",
+        audience_payoff="获得一条商品专属的选择判断",
+        explicit_user_controls=(source_text,),
+        account_editorial_permission=AccountEditorialPermissionV3(
+            identity="测试表达身份",
+            audience="需要清楚选择的受众",
+            attention_order="先看具体条件再形成判断",
+            response_posture="回应具体处境并保留选择空间",
+            refusals="不补造现实或商品事实",
+            allowed_stance="允许形成条件化选择建议",
+            source_profile_id="44444444-4444-4444-8444-444444444444",
+            source_profile_version=2,
+        ),
+        frozen_fact_refs=tuple(frame.allowed_fact_ids),
+        product_decision_basis=ProductDecisionBasisRefV2(
+            contract_version=product_basis.contract_version,
+            digest=product_value_contract_digest(product_basis),
+            supporting_fact_refs=product_basis.supporting_fact_refs,
+        ),
+        series_delta=None,
+        platform_direction=PlatformDirectionV3(
+            target="xiaohongshu_graphic",
+            media_format="graphic",
+            direction_version="platform-direction-v3-test",
+            direction_digest="e" * 64,
+        ),
+        media_capability_ref=media_envelope_digest(envelope),
+        brand_context_use=BrandContextUseV3(
+            available_refs=(segment_id,),
+            frozen_refs=(segment_id,),
+            consumed_refs=(segment_id,),
+            displayed_refs=(),
+        ),
+        publication_projection_id=projection_id,
+        publication_projection_version=1,
+        publication_projection_digest=projection_digest,
+    )
+    writer_request = build_writer_request_v3(
+        publication,
+        product_decision_basis=product_basis,
+        prior_output=None,
+        revision_instruction=None,
+    )
+    writer_output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="双面不是多一个答案，而是多一次取舍",
+        natural_guide="这篇从两面之间的可见差异，说明选择怎样成立。",
+        creative_body=(
+            "如果你确实需要两种不同的可见重点，这个选择才有价值。"
+            "同一时刻主要呈现其中一面，也意味着暂时放下另一面的视觉重点。"
+        ),
+        publication_caption="先想清楚今天希望哪一面成为重点，再做选择。",
+    )
+    output_digest = writer_output_digest(writer_output)
+    kernel = build_creative_kernel_v5(
+        writer_output_digest=output_digest,
+        trusted_fact_refs=product_basis.supporting_fact_refs,
+        selected_fact_blocks=selected_blocks,
+        media_program_id=media_program.program_id,
+        media_unit_bindings=media_program.unit_bindings,
+    )
+    compiled = compile_delivery(
+        DeliveryCompileInput(
+            primary_product="product_truth",
+            media_format="graphic",
+            products=products,
+            production_conditions="测试制作条件",
+            allowed_resource_ids=envelope.resource_ids,
+            immutable_fact_blocks=fact_blocks,
+            trusted_fact_texts=tuple((record.fact_id, record.exact_text) for record in product_records),
+            media_capability_envelope=envelope,
+            media_program=media_program,
+            product_value_contract=product_basis,
+            publication_contract=publication,
+            writer_output=writer_output,
+        ),
+        kernel,
+    )
+    product_documents = [
+        {
+            "sku": product.sku,
+            "display_name": product.display_name,
+            "facts": product.facts,
+            "source_kind": product.source_kind,
+            "source_note": product.source_note,
+            "fact_version": product.fact_version,
+            "applicability": product.applicability,
+            "product_id": None,
+            "product_version_id": None,
+        }
+    ]
+    snapshot = {
+        "brand_context_packet": {
+            "packet_version": "brand-context-packet-v3",
+            "packet_digest": packet_digest,
+            "publication_projection_id": projection_id,
+            "publication_projection_version": 1,
+            "publication_projection_digest": projection_digest,
+            "available_segment_refs": [segment_id],
+            "frozen_segment_refs": [segment_id],
+            "consumed_segment_refs": [segment_id],
+            "displayed_segment_refs": [],
+            "segments": packet_segments,
+        },
+        "account_expression_profile_id": ("44444444-4444-4444-8444-444444444444"),
+        "account_expression_profile_version": 2,
+        "account_expression": {
+            "profile_id": "44444444-4444-4444-8444-444444444444",
+            "version": 2,
+            "identity_position": "测试表达身份",
+            "authority_boundary": "不补造现实或商品事实",
+            "audience_relationship": "需要清楚选择的受众",
+            "content_territories": "先看具体条件再形成判断",
+            "default_production_conditions": "测试制作条件",
+        },
+        "original_direction": {"selections": []},
+        "publishing_target": "xiaohongshu_graphic",
+        "user_premise": source_text,
+        "creative_plan_v2": creative_plan_document(plan),
+        "publication_contract": publication_contract_document(publication),
+        "publication_contract_digest": publication_contract_digest(publication),
+        "product_value_contract": product_value_contract_document(product_basis),
+        "product_value_contract_digest": product_value_contract_digest(product_basis),
+        "product_facts": product_documents,
+        "narrative_frame": frame_document(frame),
+        "writer_request_v3": writer_request_document(writer_request),
+        "writer_request_v3_digest": writer_request_digest(writer_request),
+        "writer_output_v3": writer_output_document(writer_output),
+        "writer_output_v3_digest": output_digest,
+        "creative_kernel_v5": kernel_document(kernel),
+        "expression_plan_digest": kernel_digest(kernel),
+        "deterministic_checked_kernel_digest": kernel_digest(kernel),
+        "reviewed_creative_digest": output_digest,
+        "delivery_compiler_version": DELIVERY_COMPILER_V5_VERSION,
+        "writer_model": TENANT01_PROVIDER_MODEL,
+        "immutable_product_fact_blocks": immutable_fact_blocks_document(selected_blocks),
+        "visible_provenance": {field: list(sources) for field, sources in compiled.visible_provenance.items()},
+        "delivery_resource_refs": list(compiled.resource_refs),
+        "media_capability_envelope": media_envelope_document(envelope),
+        "media_capability_envelope_digest": media_envelope_digest(envelope),
+        "media_program": media_program_document(media_program),
+        "media_program_digest": media_program_digest(media_program),
+    }
+    path = root / "P2.v3.artifact.json"
+    _write_private_json(
+        path,
+        {
+            "suite_version": TENANT01_SUITE_VERSION,
+            "card_id": card_id,
+            "task_id": str(uuid4()),
+            "run_id": str(uuid4()),
+            "version_id": str(uuid4()),
+            "version": 1,
+            "outline": compiled.outline,
+            "body": compiled.body,
+            "visible_digest": visible_digest(
+                compiled.outline,
+                compiled.body,
+            ),
+            "production": asdict(compiled.production),
+            "formal_snapshot": snapshot,
+        },
+    )
+    return path
+
+
+def test_product_decision_basis_v2_contains_a_consumer_tradeoff_not_a_safety_disclaimer() -> None:
+    product = ProductFact(
+        sku="HOLDOUT-STRUCTURE-01",
+        display_name="结构轮廓测试商品",
+        facts={
+            "material_or_structure": "双层结构",
+            "silhouette": "短款直线轮廓",
+        },
+        source_kind="synthetic_confirmed_product_record",
+    )
+
+    basis = build_product_decision_basis_v2(
+        primary_product="product_truth",
+        products=(product,),
+    )
+
+    assert basis is not None
+    machine_plan = "\n".join(
+        (
+            basis.product_specific_understanding,
+            basis.tradeoff,
+            basis.condition_of_validity,
+        )
+    )
+    assert "结构" in basis.tradeoff
+    assert "轮廓" in basis.tradeoff
+    assert all(marker not in machine_plan for marker in ("不能据此", "尚未确认", "验收", "合同", "事实许可"))
+
+
+def test_product_decision_basis_v2_fails_closed_without_a_real_choice_dimension() -> None:
+    product = ProductFact(
+        sku="HOLDOUT-ONE-FIELD-01",
+        display_name="单字段测试商品",
+        facts={"material_or_structure": "双层结构"},
+        source_kind="synthetic_confirmed_product_record",
+    )
+
+    with pytest.raises(GenerationFailed, match="还不足以形成商品专属理解"):
+        build_product_decision_basis_v2(
+            primary_product="product_truth",
+            products=(product,),
+        )
+
+
 def _write_tenant01_generation_ledger(
     root: Path,
     *,
@@ -674,12 +977,8 @@ def _write_tenant01_generation_ledger(
                 "raw_response_file": item.raw_response_file,
                 "raw_response_sha256": sha256_file(raw_path),
                 "provider_stages": [response["stage"] for response in responses],
-                "request_hashes": [
-                    response["request_sha256"] for response in responses
-                ],
-                "response_hashes": [
-                    response["response_sha256"] for response in responses
-                ],
+                "request_hashes": [response["request_sha256"] for response in responses],
+                "response_hashes": [response["response_sha256"] for response in responses],
             }
         )
     _write_private_json(
@@ -699,18 +998,90 @@ def _write_tenant01_generation_ledger(
     ledger_path.chmod(0o400)
 
 
+def test_tenant01_evidence_replays_publication_v3_without_legacy_oracle(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    path = _tenant01_v3_artifact(tmp_path)
+
+    document, _, projection, regions = _artifact_binding(
+        path,
+        card_id="P2",
+    )
+
+    assert projection["publication_contract_version"] == ("publication-contract-v3")
+    assert projection["deterministic_checked_kernel_digest"]
+    assert regions["title"] == document["outline"]
+    assert "商品编辑目标" not in str(document["body"])
+    assert "如果你确实需要两种不同的可见重点，这个选择才有价值。" in str(document["body"])
+    assert "先认清自己最不能妥协的条件" not in str(document["body"])
+    assert "下次再观察" not in str(document["body"])
+    production = cast(dict[str, object], document["production"])
+    assert "如果你确实需要两种不同的可见重点，这个选择才有价值。" in str(production["image_sequence"])
+    snapshot = cast(dict[str, object], document["formal_snapshot"])
+    product_basis = cast(dict[str, object], snapshot["product_value_contract"])
+    for internal_field in (
+        "product_specific_understanding",
+        "tradeoff",
+        "condition_of_validity",
+    ):
+        assert str(product_basis[internal_field]) not in str(document["body"])
+
+    replayed_packet = ContentService._brand_context_packet_from_snapshot(snapshot)
+    assert isinstance(replayed_packet, BrandContextPacketV3)
+    assert replayed_packet.consumed_segment_refs
+    assert replayed_packet.displayed_segment_refs == ()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("writer_request", "Writer 请求没有绑定唯一 V3 发布合同"),
+        ("brand_use", "发布责任合同来源、状态或摘要无效"),
+    ),
+)
+def test_tenant01_evidence_v3_rejects_rehashed_binding_drift(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    tmp_path.chmod(0o700)
+    path = _tenant01_v3_artifact(tmp_path)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    snapshot = document["formal_snapshot"]
+    if mutation == "writer_request":
+        snapshot["writer_request_v3"]["central_job"] = "伪造的 Writer 责任"
+        snapshot["writer_request_v3_digest"] = _tenant01_json_digest(snapshot["writer_request_v3"])
+    else:
+        packet = snapshot["brand_context_packet"]
+        packet["consumed_segment_refs"] = []
+        packet["displayed_segment_refs"] = []
+        packet["packet_digest"] = brand_context_packet_v3_digest(
+            projection_id=packet["publication_projection_id"],
+            projection_version=packet["publication_projection_version"],
+            projection_digest=packet["publication_projection_digest"],
+            available_segment_refs=packet["available_segment_refs"],
+            frozen_segment_refs=packet["frozen_segment_refs"],
+            consumed_segment_refs=packet["consumed_segment_refs"],
+            displayed_segment_refs=packet["displayed_segment_refs"],
+            segments=packet["segments"],
+        )
+    _write_private_json(path, document)
+
+    with pytest.raises(Tenant01EvidenceError, match=message):
+        _artifact_binding(path, card_id="P2")
+
+
 def _recompile_tenant01_artifact(path: Path) -> tuple[str, str]:
     document = json.loads(path.read_text(encoding="utf-8"))
     snapshot = document["formal_snapshot"]
     kernel = kernel_from_document(snapshot["creative_kernel_v2"])
-    publication = publication_contract_from_document(
-        snapshot["publication_contract"]
-    )
+    publication = publication_contract_from_document(snapshot["publication_contract"])
+    assert isinstance(publication, PublicationContractV2)
+    assert isinstance(kernel, CreativeKernelV1)
     raw_product_value = snapshot["product_value_contract"]
     product_value = (
-        product_value_contract_from_document(raw_product_value)
-        if isinstance(raw_product_value, dict)
-        else None
+        product_value_contract_from_document(raw_product_value) if isinstance(raw_product_value, dict) else None
     )
     envelope, media_program = frozen_media_contract(snapshot)
     products = frozen_product_facts(snapshot)
@@ -734,15 +1105,11 @@ def _recompile_tenant01_artifact(path: Path) -> tuple[str, str]:
             primary_product=cast(ContentProduct, publication.primary_product),
             media_format=envelope.media_format,
             products=products,
-            production_conditions=snapshot["account_expression"][
-                "default_production_conditions"
-            ],
+            production_conditions=snapshot["account_expression"]["default_production_conditions"],
             allowed_resource_ids=envelope.resource_ids,
             immutable_fact_blocks=blocks,
             trusted_fact_texts=tuple(
-                (unit.fact_refs[0], unit.text)
-                for unit in kernel.units
-                if unit.track == "trusted_fact"
+                (unit.fact_refs[0], unit.text) for unit in kernel.units if unit.track == "trusted_fact"
             ),
             media_capability_envelope=envelope,
             media_program=media_program,
@@ -758,10 +1125,7 @@ def _recompile_tenant01_artifact(path: Path) -> tuple[str, str]:
         compiled.body,
     )
     document["production"] = asdict(compiled.production)
-    snapshot["visible_provenance"] = {
-        field: list(sources)
-        for field, sources in compiled.visible_provenance.items()
-    }
+    snapshot["visible_provenance"] = {field: list(sources) for field, sources in compiled.visible_provenance.items()}
     snapshot["delivery_resource_refs"] = list(compiled.resource_refs)
     _write_private_json(path, document)
     return sha256_file(path), document["visible_digest"]
@@ -782,6 +1146,10 @@ def _rebind_tenant01_review(
             artifact_sha256=sha256_file(artifact_path),
             visible_digest=artifact["visible_digest"],
             excerpts=(excerpts if excerpts is not None else review.excerpts),
+            title_excerpt=(excerpts["title"] if excerpts is not None else review.title_excerpt),
+            body_excerpt=(excerpts["body"] if excerpts is not None else review.body_excerpt),
+            media_excerpt=(excerpts["media"] if excerpts is not None else review.media_excerpt),
+            caption_excerpt=(excerpts["caption"] if excerpts is not None else review.caption_excerpt),
         )
         if review.card_id == card_id
         else review
@@ -838,6 +1206,37 @@ def _tenant01_finalize_args(root: Path, implementation_sha: str) -> argparse.Nam
         image_digest="sha256:" + "b" * 64,
         source_manifest_digest="e" * 64,
     )
+
+
+def _tenant01_review_v2_document(
+    reviews: tuple[Tenant01HumanReview, ...],
+) -> dict[str, object]:
+    return {
+        "review_contract": "TENANT-01-HUMAN-REVIEW-V2",
+        "reviews": [
+            {
+                "card_id": review.card_id,
+                "artifact_file": review.artifact_file,
+                "artifact_sha256": review.artifact_sha256,
+                "visible_digest": review.visible_digest,
+                "hard_boundary": review.hard_boundary,
+                "product_usable": review.product_usable,
+                "quality_dimensions": review.quality_dimensions,
+                "dimension_rationales": review.dimension_rationales,
+                "title_excerpt": review.title_excerpt,
+                "body_excerpt": review.body_excerpt,
+                "media_excerpt": review.media_excerpt,
+                "caption_excerpt": review.caption_excerpt,
+                "quality_observations": list(review.quality_observations),
+                "residual_risks": list(review.residual_risks),
+                "reviewer_scope": review.reviewer_scope,
+                "reviewer_kind": review.reviewer_kind,
+                "reviewed_at": review.reviewed_at,
+                "verdict": review.verdict,
+            }
+            for review in reviews
+        ],
+    }
 
 
 def test_final_suite_session_must_outlive_the_complete_run(
@@ -1118,9 +1517,7 @@ def test_account_editorial_lens_historical_v1_remains_readable_without_upgrade()
         closure_boundary="历史收束",
     )
 
-    parsed = account_editorial_lens_from_document(
-        account_editorial_lens_document(historical)
-    )
+    parsed = account_editorial_lens_from_document(account_editorial_lens_document(historical))
 
     assert parsed == historical
     assert parsed.contract_version == ACCOUNT_EDITORIAL_LENS_V1_VERSION
@@ -1149,9 +1546,7 @@ def test_account_editorial_lens_historical_v2_remains_readable_without_upgrade()
         series_progression_boundary="历史系列推进边界",
     )
 
-    parsed = account_editorial_lens_from_document(
-        account_editorial_lens_document(historical)
-    )
+    parsed = account_editorial_lens_from_document(account_editorial_lens_document(historical))
 
     assert parsed == historical
     assert parsed.contract_version == ACCOUNT_EDITORIAL_LENS_V2_VERSION
@@ -1224,9 +1619,7 @@ def test_visible_brand_fact_requires_brand_to_be_the_explicit_subject() -> None:
     )
 
     assert ordinary.allowed_brand_fact_ids == ()
-    assert explicit.allowed_brand_fact_ids == tuple(
-        record.fact_id for record in brand_fact_records((exact_fact,))
-    )
+    assert explicit.allowed_brand_fact_ids == tuple(record.fact_id for record in brand_fact_records((exact_fact,)))
 
 
 def test_tenant01_content_product_taxonomy_is_not_an_insertable_brand_fact() -> None:
@@ -1345,6 +1738,43 @@ def test_visible_context_basis_is_frozen_business_language_only() -> None:
         "gaps": ["本次没有选择制作素材"],
     }
     assert "private-id" not in json.dumps(result)
+
+
+def test_visible_context_basis_v3_reports_only_consumed_or_displayed_materials() -> None:
+    snapshot = {
+        "brand_context_packet": {
+            "packet_version": "brand-context-packet-v3",
+            "available_segment_refs": ["brand-available", "method-used"],
+            "frozen_segment_refs": ["method-used"],
+            "consumed_segment_refs": ["method-used"],
+            "displayed_segment_refs": [],
+            "segments": [
+                {
+                    "semantic_kind": "brand_fact",
+                    "segment_id": "brand-available",
+                },
+                {
+                    "semantic_kind": "creative_method",
+                    "segment_id": "method-used",
+                },
+            ],
+        },
+        "product_facts": [],
+        "material_snapshots": [],
+    }
+
+    result = visible_context_basis(
+        snapshot,
+        account_name="笛语官方账号",
+        channel="小红书",
+        media_format="graphic",
+    )
+
+    assert result["brand_material_categories"] == ["品牌创作方法"]
+    assert "品牌已确认资料" not in cast(
+        list[str],
+        result["brand_material_categories"],
+    )
 
 
 def _import_scope(database_url: str) -> tuple[TenantManagementScope, UUID]:
@@ -1710,14 +2140,18 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
         assert selected.context_packet is not None
         assert repeated.context_packet is not None
         assert selected.context_packet.packet_digest == repeated.context_packet.packet_digest
-        assert len(selected.context_packet.segments) <= 24
-        assert sum(len(item.exact_text) for item in selected.context_packet.segments) <= 12_000
         assert all(
             sha256(item.exact_text.encode()).hexdigest() == item.digest for item in selected.context_packet.segments
         )
         assert all(item.source_digest is not None for item in selected.context_packet.segments)
-        assert selected.context_packet.packet_version == "brand-context-packet-v2"
-        assert isinstance(selected.context_packet, BrandContextPacketV2)
+        assert selected.context_packet.packet_version == "brand-context-packet-v3"
+        assert isinstance(selected.context_packet, BrandContextPacketV3)
+        assert (
+            set(selected.context_packet.displayed_segment_refs)
+            <= set(selected.context_packet.consumed_segment_refs)
+            <= set(selected.context_packet.frozen_segment_refs)
+            <= set(selected.context_packet.available_segment_refs)
+        )
         assert selected.context_packet.publication_projection_id == str(projection_id)
         assert selected.context_packet.publication_projection_digest == publication["digest"]
         assert selected.candidate_product_guidance_context == ()
@@ -2227,9 +2661,7 @@ def test_tenant01_snapshot_recompile_keeps_unselected_product_facts_in_registry(
     tmp_path.chmod(0o700)
     artifacts, _ = _tenant01_evidence_inputs(tmp_path)
     artifact = next(item for item in artifacts if item.card_id == "P2")
-    document = json.loads(
-        (tmp_path / artifact.artifact_file).read_text(encoding="utf-8")
-    )
+    document = json.loads((tmp_path / artifact.artifact_file).read_text(encoding="utf-8"))
     snapshot = cast(dict[str, object], document["formal_snapshot"])
     raw_kernel = cast(dict[str, object], snapshot["creative_kernel_v2"])
     units = cast(list[dict[str, object]], raw_kernel["units"])
@@ -2237,20 +2669,13 @@ def test_tenant01_snapshot_recompile_keeps_unselected_product_facts_in_registry(
     dropped_ref = cast(list[str], dropped["fact_refs"])[0]
     dropped_text = str(dropped["text"])
     raw_kernel["units"] = [unit for unit in units if unit is not dropped]
-    blocks = cast(
-        list[dict[str, object]], snapshot["immutable_product_fact_blocks"]
-    )
-    dropped_block_id = next(
-        str(block["fact_block_id"])
-        for block in blocks
-        if block["fact_id"] == dropped_ref
-    )
+    blocks = cast(list[dict[str, object]], snapshot["immutable_product_fact_blocks"])
+    dropped_block_id = next(str(block["fact_block_id"]) for block in blocks if block["fact_id"] == dropped_ref)
     raw_kernel["selected_fact_block_ids"] = [
-        value
-        for value in cast(list[str], raw_kernel["selected_fact_block_ids"])
-        if value != dropped_block_id
+        value for value in cast(list[str], raw_kernel["selected_fact_block_ids"]) if value != dropped_block_id
     ]
     kernel = kernel_from_document(raw_kernel)
+    assert isinstance(kernel, CreativeKernelV1)
     snapshot["expression_plan_digest"] = kernel_digest(kernel)
     snapshot["reviewed_kernel_digest"] = kernel_digest(kernel)
     snapshot["reviewed_creative_digest"] = creative_units_digest(kernel)
@@ -2294,11 +2719,7 @@ def test_tenant01_evidence_rejects_unmeaningful_review_regions(
     tmp_path.chmod(0o700)
     artifacts, reviews = _tenant01_evidence_inputs(tmp_path)
     card_id = "cross_platform_douyin"
-    review_index = next(
-        index
-        for index, review in enumerate(reviews)
-        if review.card_id == card_id
-    )
+    review_index = next(index for index, review in enumerate(reviews) if review.card_id == card_id)
     review = reviews[review_index]
     excerpts = dict(review.excerpts)
     if mutation == "wrong_region":
@@ -2398,12 +2819,8 @@ def test_tenant01_evidence_rebuilds_rehashed_publication_semantics(
     document = json.loads(path.read_text(encoding="utf-8"))
     snapshot = document["formal_snapshot"]
     snapshot["publication_contract"][field] = f"伪造 {field}"
-    publication = publication_contract_from_document(
-        snapshot["publication_contract"]
-    )
-    snapshot["publication_contract_digest"] = publication_contract_digest(
-        publication
-    )
+    publication = publication_contract_from_document(snapshot["publication_contract"])
+    snapshot["publication_contract_digest"] = publication_contract_digest(publication)
     _write_private_json(path, document)
 
     with pytest.raises(Tenant01EvidenceError, match="语义没有绑定冻结输入"):
@@ -2419,9 +2836,7 @@ def test_tenant01_evidence_preserves_frozen_fact_reference_order(
     document = json.loads(path.read_text(encoding="utf-8"))
     snapshot = cast(dict[str, object], document["formal_snapshot"])
     frame = frame_from_document(snapshot["narrative_frame"])
-    publication_document = cast(
-        dict[str, object], snapshot["publication_contract"]
-    )
+    publication_document = cast(dict[str, object], snapshot["publication_contract"])
     frozen_refs = cast(list[str], publication_document["frozen_fact_refs"])
     reordered = [*frozen_refs[1:], frozen_refs[0]]
     if reordered == list(frame.allowed_fact_ids):
@@ -2430,17 +2845,13 @@ def test_tenant01_evidence_preserves_frozen_fact_reference_order(
     assert reordered != list(frame.allowed_fact_ids)
     publication_document["frozen_fact_refs"] = reordered
     publication = publication_contract_from_document(publication_document)
-    snapshot["publication_contract_digest"] = publication_contract_digest(
-        publication
-    )
+    snapshot["publication_contract_digest"] = publication_contract_digest(publication)
     _write_private_json(path, document)
 
     rebound, _, _, _ = _artifact_binding(path, card_id="P2")
 
     rebound_snapshot = cast(dict[str, object], rebound["formal_snapshot"])
-    rebound_publication = cast(
-        dict[str, object], rebound_snapshot["publication_contract"]
-    )
+    rebound_publication = cast(dict[str, object], rebound_snapshot["publication_contract"])
     assert rebound_publication["frozen_fact_refs"] == reordered
 
 
@@ -2452,27 +2863,19 @@ def test_tenant01_evidence_keeps_style_instruction_outside_fact_track(
     path = tmp_path / "P1.artifact.json"
     document = json.loads(path.read_text(encoding="utf-8"))
     snapshot = cast(dict[str, object], document["formal_snapshot"])
-    publication_document = cast(
-        dict[str, object], snapshot["publication_contract"]
-    )
+    publication_document = cast(dict[str, object], snapshot["publication_contract"])
     spans = cast(list[dict[str, object]], publication_document["intake_spans"])
     assert len(spans) == 1
     spans[0]["role"] = "style_or_revision_instruction"
     publication = publication_contract_from_document(publication_document)
-    snapshot["publication_contract_digest"] = publication_contract_digest(
-        publication
-    )
+    snapshot["publication_contract_digest"] = publication_contract_digest(publication)
     _write_private_json(path, document)
 
     rebound, _, _, _ = _artifact_binding(path, card_id="P1")
 
     rebound_snapshot = cast(dict[str, object], rebound["formal_snapshot"])
-    rebound_publication = cast(
-        dict[str, object], rebound_snapshot["publication_contract"]
-    )
-    rebound_spans = cast(
-        list[dict[str, object]], rebound_publication["intake_spans"]
-    )
+    rebound_publication = cast(dict[str, object], rebound_snapshot["publication_contract"])
+    rebound_spans = cast(list[dict[str, object]], rebound_publication["intake_spans"])
     assert rebound_spans[0]["role"] == "style_or_revision_instruction"
 
 
@@ -2507,17 +2910,11 @@ def test_tenant01_evidence_rejects_rehashed_delivery_output_drift(
     elif mutation == "media":
         document["production"]["hero_image"] += "\n伪造媒体说明。"
     elif mutation == "caption":
-        document["production"][
-            "release_caption_and_interaction"
-        ] += "\n伪造发布配文。"
+        document["production"]["release_caption_and_interaction"] += "\n伪造发布配文。"
     elif mutation == "visible_provenance":
-        document["formal_snapshot"]["visible_provenance"]["body"] = [
-            "unit:forged"
-        ]
+        document["formal_snapshot"]["visible_provenance"]["body"] = ["unit:forged"]
     else:
-        document["formal_snapshot"]["delivery_resource_refs"] = [
-            "resource:forged"
-        ]
+        document["formal_snapshot"]["delivery_resource_refs"] = ["resource:forged"]
     _write_private_json(path, document)
     reviews = _rebind_tenant01_review(
         tmp_path,
@@ -2655,27 +3052,17 @@ def test_tenant01_evidence_rejects_unbound_raw_provider_metadata(
     elif mutation == "wrong_model":
         document["responses"][0]["model"] = "forged-model"
         document["responses"][0]["response"]["model"] = "forged-model"
-        document["responses"][0]["response_sha256"] = _tenant01_json_digest(
-            document["responses"][0]["response"]
-        )
+        document["responses"][0]["response_sha256"] = _tenant01_json_digest(document["responses"][0]["response"])
     elif mutation == "bad_request_hash":
         document["responses"][0]["request_sha256"] = "not-a-sha256"
     elif mutation == "empty_choices":
         document["responses"][0]["response"]["choices"] = []
-        document["responses"][0]["response_sha256"] = _tenant01_json_digest(
-            document["responses"][0]["response"]
-        )
+        document["responses"][0]["response_sha256"] = _tenant01_json_digest(document["responses"][0]["response"])
     elif mutation == "empty_content":
-        document["responses"][0]["response"]["choices"][0]["message"][
-            "content"
-        ] = " "
-        document["responses"][0]["response_sha256"] = _tenant01_json_digest(
-            document["responses"][0]["response"]
-        )
+        document["responses"][0]["response"]["choices"][0]["message"]["content"] = " "
+        document["responses"][0]["response_sha256"] = _tenant01_json_digest(document["responses"][0]["response"])
     else:
-        document["responses"][0]["response"]["choices"][0]["message"][
-            "content"
-        ] = "篡改但不更新响应摘要"
+        document["responses"][0]["response"]["choices"][0]["message"]["content"] = "篡改但不更新响应摘要"
     _write_private_json(path, document)
 
     with pytest.raises(Tenant01EvidenceError, match=message):
@@ -2774,11 +3161,11 @@ def test_tenant01_evidence_rejects_missing_publication_inputs(
 
 @pytest.mark.parametrize(
     ("mutation", "message"),
-        (
-            ("low_natural_language", "natural_language"),
-            ("missing_media_reference", "media 引用缺少有意义文本"),
-            ("false_demonstration_check", "可演示成品检查未通过"),
-        ),
+    (
+        ("low_natural_language", "natural_language"),
+        ("missing_media_reference", "media 引用缺少有意义文本"),
+        ("false_demonstration_check", "可演示成品检查未通过"),
+    ),
 )
 def test_tenant01_evidence_rejects_dimension_and_binary_false_greens(
     tmp_path: Path,
@@ -2834,24 +3221,20 @@ def test_tenant01_evidence_rejects_repeated_writer_paragraph_across_platforms(
             if unit["purpose"] == "body" and unit["text_source"] == "writer":
                 unit["text"] = repeated
         kernel = kernel_from_document(snapshot["creative_kernel_v2"])
+        assert isinstance(kernel, CreativeKernelV1)
         snapshot["expression_plan_digest"] = kernel_digest(kernel)
         snapshot["reviewed_kernel_digest"] = kernel_digest(kernel)
         snapshot["reviewed_creative_digest"] = creative_units_digest(kernel)
         _write_private_json(path, document)
-        artifact_sha256, visible_digest_value = _recompile_tenant01_artifact(
-            path
-        )
-        review_index = next(
-            index
-            for index, review in enumerate(updated_reviews)
-            if review.card_id == card_id
-        )
+        artifact_sha256, visible_digest_value = _recompile_tenant01_artifact(path)
+        review_index = next(index for index, review in enumerate(updated_reviews) if review.card_id == card_id)
         review = updated_reviews[review_index]
         updated_reviews[review_index] = replace(
             review,
             artifact_sha256=artifact_sha256,
             visible_digest=visible_digest_value,
             excerpts={**review.excerpts, "body": repeated},
+            body_excerpt=repeated,
         )
     _write_tenant01_generation_ledger(
         tmp_path,
@@ -2897,18 +3280,10 @@ def test_tenant01_evidence_allows_only_snapshot_bound_repeated_user_fact(
             "actuality_reflection",
             tuple(candidate.exact_text for candidate in candidates),
             (),
-            user_fact_source_ids=tuple(
-                candidate.source_id for candidate in candidates
-            ),
+            user_fact_source_ids=tuple(candidate.source_id for candidate in candidates),
         )
-        target: ContentTarget = (
-            "douyin_video"
-            if card_id == "cross_platform_douyin"
-            else "xiaohongshu_graphic"
-        )
-        media_format: MediaFormat = (
-            "video" if target == "douyin_video" else "graphic"
-        )
+        target: ContentTarget = "douyin_video" if card_id == "cross_platform_douyin" else "xiaohongshu_graphic"
+        media_format: MediaFormat = "video" if target == "douyin_video" else "graphic"
         plan = build_creative_plan(
             topic_spans=(repeated_fact,),
             primary_value="brand_life_narrative",
@@ -2920,9 +3295,7 @@ def test_tenant01_evidence_allows_only_snapshot_bound_repeated_user_fact(
             primary_product="brand_life_narrative",
             topic_spans=(repeated_fact,),
             topic_origin="explicit_user",
-            known_conditions=tuple(
-                candidate.exact_text for candidate in candidates
-            ),
+            known_conditions=tuple(candidate.exact_text for candidate in candidates),
             frozen_fact_refs=tuple(frame.allowed_fact_ids),
             intake_spans=spans,
             account_identity="测试表达身份",
@@ -2975,17 +3348,9 @@ def test_tenant01_evidence_allows_only_snapshot_bound_repeated_user_fact(
         snapshot["reviewed_kernel_digest"] = kernel_digest(kernel)
         snapshot["reviewed_creative_digest"] = creative_units_digest(kernel)
         _write_private_json(path, document)
-        artifact_sha256, visible_digest_value = _recompile_tenant01_artifact(
-            path
-        )
-        assert repeated_fact in json.loads(path.read_text(encoding="utf-8"))[
-            "body"
-        ]
-        review_index = next(
-            index
-            for index, review in enumerate(updated_reviews)
-            if review.card_id == card_id
-        )
+        artifact_sha256, visible_digest_value = _recompile_tenant01_artifact(path)
+        assert repeated_fact in json.loads(path.read_text(encoding="utf-8"))["body"]
+        review_index = next(index for index, review in enumerate(updated_reviews) if review.card_id == card_id)
         updated_reviews[review_index] = replace(
             updated_reviews[review_index],
             artifact_sha256=artifact_sha256,
@@ -3010,14 +3375,9 @@ def test_tenant01_artifact_projects_and_rebuilds_frozen_delivery(
     tmp_path.chmod(0o700)
     artifacts, _ = _tenant01_evidence_inputs(tmp_path)
     source = json.loads(
-        (
-            tmp_path
-            / next(
-                item.artifact_file
-                for item in artifacts
-                if item.card_id == "coffee"
-            )
-        ).read_text(encoding="utf-8")
+        (tmp_path / next(item.artifact_file for item in artifacts if item.card_id == "coffee")).read_text(
+            encoding="utf-8"
+        )
     )
     snapshot = source["formal_snapshot"]
     user_premise = snapshot["user_premise"]
@@ -3041,12 +3401,8 @@ def test_tenant01_artifact_projects_and_rebuilds_frozen_delivery(
     projected = cast(dict[str, object], artifact["formal_snapshot"])
     assert projected["user_premise"] == user_premise
     assert projected["creative_plan_v2"] == snapshot["creative_plan_v2"]
-    assert projected["reviewed_kernel_digest"] == snapshot[
-        "reviewed_kernel_digest"
-    ]
-    assert projected["reviewed_creative_digest"] == snapshot[
-        "reviewed_creative_digest"
-    ]
+    assert projected["reviewed_kernel_digest"] == snapshot["reviewed_kernel_digest"]
+    assert projected["reviewed_creative_digest"] == snapshot["reviewed_creative_digest"]
     assert artifact["production"] == source["production"]
 
 
@@ -3065,6 +3421,53 @@ def test_tenant01_finalizer_rejects_dirty_worktree_without_writing(
         tenant01_runner._finalize(_tenant01_finalize_args(tmp_path, implementation_sha))
 
     assert _tenant01_file_state(tmp_path) == before
+
+
+def test_tenant01_human_review_v2_parses_every_required_field(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    _, reviews = _tenant01_evidence_inputs(tmp_path)
+    review_path = tmp_path / "review-input.json"
+    _write_private_json(review_path, _tenant01_review_v2_document(reviews))
+
+    parsed = tenant01_runner._reviews(review_path)
+
+    assert len(parsed) == len(TENANT01_CARD_IDS)
+    assert all(review.hard_boundary == "PASS" for review in parsed)
+    assert all(review.product_usable == "PASS" for review in parsed)
+    assert all(review.dimension_rationales for review in parsed)
+    assert all(review.reviewer_kind == "single_execution_product_review" for review in parsed)
+
+
+def test_tenant01_human_review_v2_rejects_prefilled_pass_without_artifact_quotes(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    _, reviews = _tenant01_evidence_inputs(tmp_path)
+    document = _tenant01_review_v2_document(reviews)
+    raw_reviews = document["reviews"]
+    assert isinstance(raw_reviews, list)
+    first = raw_reviews[0]
+    assert isinstance(first, dict)
+    first["body_excerpt"] = ""
+    review_path = tmp_path / "review-input.json"
+    _write_private_json(review_path, document)
+
+    parsed = tenant01_runner._reviews(review_path)
+    with pytest.raises(Tenant01EvidenceError, match="body 引用缺少有意义文本"):
+        _write_tenant01_fixture_evidence(
+            tmp_path,
+            tuple(
+                Tenant01ArtifactInput(
+                    card_id,
+                    f"{card_id}.artifact.json",
+                    f"{card_id}.raw.json",
+                )
+                for card_id in sorted(TENANT01_CARD_IDS)
+            ),
+            parsed,
+        )
 
 
 @pytest.mark.parametrize(
@@ -3160,9 +3563,7 @@ def test_tenant01_finalizer_rejects_generation_ledger_hash_drift(
         RuntimeError,
         match="generation ledger is unavailable or mutable",
     ):
-        tenant01_runner._finalize(
-            _tenant01_finalize_args(tmp_path, implementation_sha)
-        )
+        tenant01_runner._finalize(_tenant01_finalize_args(tmp_path, implementation_sha))
 
     assert _tenant01_file_state(tmp_path) == before
 

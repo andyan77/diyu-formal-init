@@ -44,6 +44,7 @@ from src.shared.creative_plan import (
     creative_plan_from_document,
 )
 from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_V5_VERSION,
     DUAL_TRACK_DELIVERY_COMPILER_VERSION,
 )
 from src.shared.errors import GenerationFailed
@@ -53,6 +54,11 @@ from src.shared.factual_basis import (
     product_fact_records,
     select_product_fact_block_ids,
 )
+from src.shared.media_program import (
+    build_media_capability_envelope,
+    media_envelope_digest,
+    select_media_program,
+)
 from src.shared.narrative import (
     NarrativeFrame,
     NarrativeIssue,
@@ -61,7 +67,16 @@ from src.shared.narrative import (
     user_fact_candidates,
     visible_digest,
 )
-from src.shared.publication_contract import negative_safety_contract_text
+from src.shared.product_value import build_product_decision_basis_v2
+from src.shared.publication_contract import (
+    AccountEditorialPermissionV3,
+    BrandContextUseV3,
+    PlatformDirectionV3,
+    PublicationContractV3,
+    PublicationInputSpanV1,
+    build_publication_contract_v3,
+    negative_safety_contract_text,
+)
 from src.shared.review_evidence import (
     REVIEW_EVIDENCE_V2_VERSION,
     build_clause_contexts_v2,
@@ -77,6 +92,7 @@ from src.shared.types import (
     ProductFact,
     RoutingInput,
 )
+from src.shared.writer_request import WRITER_OUTPUT_VERSION, WriterOutputV3
 from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
 
 
@@ -542,6 +558,231 @@ def _kernel_request(
         delivery_compiler_version=DUAL_TRACK_DELIVERY_COMPILER_VERSION,
         prior_creative_kernel=prior_kernel,
     )
+
+
+def _publication_v3_request() -> GenerationInput:
+    request = _request()
+    assert request.creative_plan is not None
+    direction = request.platform_direction
+    candidates = user_fact_candidates((request.weak_seed,))
+    roles = tuple(
+        PublicationInputSpanV1(
+            source_id=candidate.source_id,
+            role="creation_instruction",
+            exact_text=candidate.exact_text,
+            turn_index=candidate.turn_index,
+            start_offset=candidate.start_offset,
+            end_offset=candidate.end_offset,
+            start_byte=candidate.start_byte,
+            end_byte=candidate.end_byte,
+        )
+        for candidate in candidates
+    )
+    envelope = build_media_capability_envelope(
+        platform_shape=request.creative_plan.platform_shape,
+        media_format=request.media_format,
+    )
+    program = select_media_program(
+        primary_product=request.primary_product,
+        envelope=envelope,
+        mechanism_id=request.creative_plan.mechanism_id,
+        series_position=None,
+        fact_count=0,
+        topic_origin=request.creative_plan.topic_origin,
+        publication_contract=True,
+    )
+    publication = build_publication_contract_v3(
+        input_roles=roles,
+        topic_origin="explicit_user",
+        topic=request.weak_seed,
+        content_product=request.primary_product,
+        central_job="形成一条独立且可读的生活观察",
+        audience_payoff="让受众从具体题材获得一个清楚判断",
+        explicit_user_controls=tuple(span.exact_text for span in roles),
+        account_editorial_permission=AccountEditorialPermissionV3(
+            identity="品牌生活观察账号",
+            audience="重视真实感受与关系边界的人",
+            attention_order="先看具体题材，再形成判断",
+            response_posture="平等回应，不替任何一方补经历",
+            refusals="不新增真人、品牌或商品事实",
+            allowed_stance="允许一般观察、比喻和条件建议",
+            source_profile_id="profile-v3-test",
+            source_profile_version=1,
+        ),
+        frozen_fact_refs=(),
+        product_decision_basis=None,
+        series_delta=None,
+        platform_direction=PlatformDirectionV3(
+            target=direction.platform,
+            media_format=direction.media_format,
+            direction_version=direction.version,
+            direction_digest=direction.direction_digest,
+        ),
+        media_capability_ref=media_envelope_digest(envelope),
+        brand_context_use=BrandContextUseV3((), (), (), ()),
+        publication_projection_id="projection-v3-test",
+        publication_projection_version=1,
+        publication_projection_digest="a" * 64,
+    )
+    return replace(
+        request,
+        delivery_compiler_version=DELIVERY_COMPILER_V5_VERSION,
+        media_capability_envelope=envelope,
+        media_program=program,
+        publication_contract=publication,
+    )
+
+
+def test_publication_v3_uses_one_writer_call_without_legacy_repair_or_reviewer() -> None:
+    request = _publication_v3_request()
+    FakeClient.responses = [
+        _completion(
+            {
+                "title": "亲近不等于替对方写答案",
+                "natural_guide": "这篇把关系里的理解和边界放在一起看。",
+                "creative_body": ("愿意靠近，可以从听见对方的处境开始；但理解不是抢先替对方解释。"),
+                "publication_caption": "留一点空间，关系反而更容易说清楚。",
+            }
+        )
+    ]
+
+    artifact = _generator().generate(request)
+
+    assert len(FakeClient.requests) == 1
+    assert artifact.completion_snapshot_patch is not None
+    patch = artifact.completion_snapshot_patch
+    assert patch["delivery_compiler_version"] == DELIVERY_COMPILER_V5_VERSION
+    assert patch["version_authorization"] == "deterministic-publication-v3"
+    assert patch["creative_kernel_v5"]
+    assert patch["writer_request_v3"]
+    assert patch["writer_output_v3"]
+    assert patch["deterministic_checked_kernel_digest"]
+    assert "reviewer_model" not in patch
+    prompt = _payload_prompts()[0]
+    assert "title、natural_guide、creative_body、publication_caption" in prompt
+    assert '"unit_id"' not in prompt
+    assert "每个可见句" not in prompt
+    assert "必须二选一" not in prompt
+    assert request.active_domain_assets[0].body not in prompt
+
+
+def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
+    base = _publication_v3_request()
+    message = "公交刚开走，我拎着快递站在站牌下等了很久。帮我发一条。"
+    candidates = user_fact_candidates((message,))
+    actuality = candidates[0]
+    roles = tuple(
+        PublicationInputSpanV1(
+            source_id=candidate.source_id,
+            role=("observable_actuality" if candidate == actuality else "creation_instruction"),
+            exact_text=candidate.exact_text,
+            turn_index=candidate.turn_index,
+            start_offset=candidate.start_offset,
+            end_offset=candidate.end_offset,
+            start_byte=candidate.start_byte,
+            end_byte=candidate.end_byte,
+        )
+        for candidate in candidates
+    )
+    contract = replace(
+        cast(PublicationContractV3, base.publication_contract),
+        input_roles=roles,
+        topic=actuality.exact_text,
+        frozen_fact_refs=(actuality.source_id,),
+        explicit_user_controls=tuple(span.exact_text for span in roles if span.role != "observable_actuality"),
+    )
+    request = replace(
+        base,
+        weak_seed=message,
+        narrative_frame=new_frame(
+            "actuality_reflection",
+            (actuality.exact_text,),
+            (),
+            user_fact_source_ids=(actuality.source_id,),
+        ),
+        publication_contract=contract,
+    )
+    FakeClient.responses = [
+        _completion(
+            {
+                "title": "等车时，时间忽然变得具体",
+                "natural_guide": "从一次停顿里看看安排被打断后的节奏。",
+                "creative_body": actuality.exact_text,
+                "publication_caption": "先让这一刻停在原处。",
+            }
+        )
+    ]
+
+    with pytest.raises(GenerationFailed, match="Writer 不得复制或改写服务端事实块"):
+        _generator().generate(request)
+
+
+@pytest.mark.parametrize(
+    "forbidden_field",
+    ("resource_refs", "fact_refs", "brand_fact_refs", "product_fact_refs"),
+)
+def test_publication_v3_rejects_internal_product_plan_copy_and_owned_fields(
+    forbidden_field: str,
+) -> None:
+    request = _publication_v3_request()
+    product = ProductFact(
+        sku="PLAN-COPY-01",
+        display_name="计划复制测试商品",
+        facts={"colors": ["深蓝", "浅灰"]},
+        source_kind="synthetic_confirmed_product_record",
+    )
+    basis = build_product_decision_basis_v2(
+        primary_product="product_truth",
+        products=(product,),
+    )
+    assert basis is not None
+    product_fact_ids = tuple(record.fact_id for record in product_fact_records(product))
+    product_request = replace(
+        request,
+        products=(product,),
+        narrative_frame=new_frame("general_observation", (), product_fact_ids),
+    )
+    assert product_request.narrative_frame is not None
+    context = BoundaryContext.from_request(product_request, product_request.narrative_frame)
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="从两种颜色里选一个重点",
+        natural_guide="这篇只谈本次选择。",
+        creative_body=basis.tradeoff,
+        publication_caption="先决定希望哪一种颜色被看见。",
+    )
+
+    with pytest.raises(GenerationFailed, match="不得照抄内部商品选择计划"):
+        DeepSeekGenerator._assert_writer_output_v3_boundaries(
+            output,
+            context=context,
+            product_basis=basis,
+        )
+
+    fact_copy = replace(
+        output,
+        creative_body="计划复制测试商品可以先从两种颜色的差异开始看。",
+    )
+    with pytest.raises(GenerationFailed, match="不得复述或改写服务端商品事实块"):
+        DeepSeekGenerator._assert_writer_output_v3_boundaries(
+            fact_copy,
+            context=context,
+            product_basis=basis,
+        )
+
+    FakeClient.responses = [
+        _completion(
+            {
+                "title": "标题",
+                "natural_guide": "导读",
+                "creative_body": "正文",
+                "publication_caption": "配文",
+                forbidden_field: ["invented:writer-owned-reference"],
+            }
+        )
+    ]
+    with pytest.raises(GenerationFailed, match="Writer 返回结构不完整"):
+        _generator().generate(request)
 
 
 def _kernel_writer(
@@ -1146,11 +1387,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
         for candidate in candidates
         if candidate.exact_text in {"今天店里忙了一天，", "回家还因为谁洗碗拌了两句。"}
     )
-    instruction_candidates = tuple(
-        candidate.source_id
-        for candidate in candidates
-        if candidate not in fact_candidates
-    )
+    instruction_candidates = tuple(candidate.source_id for candidate in candidates if candidate not in fact_candidates)
     assert "narrative_mode 由\n  服务端根据显式形式与完整事实句选择派生" in prompt
     assert "你不得返回或选择该字段" in prompt
     assert "primary_value 是本篇给受众的主要回报，不是 narrative_mode" in prompt
@@ -1162,9 +1399,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
                 "kind": "ready",
                 "message": "好，我保留这段原话，其他由我来完成。",
                 "user_premises": [message],
-                "user_fact_sentence_ids": [
-                    candidate.source_id for candidate in fact_candidates
-                ],
+                "user_fact_sentence_ids": [candidate.source_id for candidate in fact_candidates],
                 "user_instruction_sentence_ids": list(instruction_candidates),
                 "user_sentence_roles": _sentence_roles(
                     message,
@@ -1182,9 +1417,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
         "今天店里忙了一天，",
         "回家还因为谁洗碗拌了两句。",
     )
-    assert decision.user_fact_source_ids == tuple(
-        candidate.source_id for candidate in fact_candidates
-    )
+    assert decision.user_fact_source_ids == tuple(candidate.source_id for candidate in fact_candidates)
     assert decision.narrative_mode == "actuality_reflection"
 
 
@@ -1192,9 +1425,7 @@ def test_single_turn_intake_keeps_the_server_owned_premise_when_the_model_paraph
     message = "店里有个人只想自己看看，不想被打扰。请给一条尚未执行的回应建议。"
     candidates = user_fact_candidates((message,))
     fact_candidates = tuple(
-        candidate
-        for candidate in candidates
-        if candidate.exact_text in {"店里有个人只想自己看看，", "不想被打扰。"}
+        candidate for candidate in candidates if candidate.exact_text in {"店里有个人只想自己看看，", "不想被打扰。"}
     )
     request = ConversationInput(
         message=message,
@@ -1212,9 +1443,7 @@ def test_single_turn_intake_keeps_the_server_owned_premise_when_the_model_paraph
                 "kind": "ready",
                 "message": "好，我保留事实边界并直接完成。",
                 "user_premises": ["有人只想安静看看，请给一条回应建议。"],
-                "user_fact_sentence_ids": [
-                    candidate.source_id for candidate in fact_candidates
-                ],
+                "user_fact_sentence_ids": [candidate.source_id for candidate in fact_candidates],
                 "user_sentence_roles": _sentence_roles(
                     message,
                     tuple(candidate.source_id for candidate in fact_candidates),
@@ -1227,9 +1456,7 @@ def test_single_turn_intake_keeps_the_server_owned_premise_when_the_model_paraph
     decision = _generator().collaborate(request)
 
     assert decision.user_premises == (message,)
-    assert decision.user_fact_spans == tuple(
-        candidate.exact_text for candidate in fact_candidates
-    )
+    assert decision.user_fact_spans == tuple(candidate.exact_text for candidate in fact_candidates)
 
 
 def test_conversation_intake_freezes_system_selected_topic_origin() -> None:
@@ -1291,9 +1518,7 @@ def test_conversation_intake_keeps_frozen_actuality_as_the_explicit_topic() -> N
                 "kind": "ready",
                 "message": "好，我会回应这段具体生活片段。",
                 "user_premises": [message],
-                "user_fact_sentence_ids": [
-                    actuality.source_id for actuality in actualities
-                ],
+                "user_fact_sentence_ids": [actuality.source_id for actuality in actualities],
                 "user_sentence_roles": _sentence_roles(
                     message,
                     tuple(actuality.source_id for actuality in actualities),
@@ -1393,9 +1618,7 @@ def test_conversation_intake_keeps_creation_instruction_out_of_frozen_actuality(
     message = "今天店里有人只想自己看看。请回应这种状态，不补写顾客身份、对白或结果。"
     candidates = user_fact_candidates((message,))
     fact = next(candidate for candidate in candidates if candidate.exact_text == "今天店里有人只想自己看看。")
-    instructions = tuple(
-        candidate for candidate in candidates if candidate.source_id != fact.source_id
-    )
+    instructions = tuple(candidate for candidate in candidates if candidate.source_id != fact.source_id)
     request = ConversationInput(
         message=message,
         history=(),
@@ -1413,9 +1636,7 @@ def test_conversation_intake_keeps_creation_instruction_out_of_frozen_actuality(
                 "message": "好，我只保留实际观察。",
                 "user_premises": [message],
                 "user_fact_sentence_ids": [fact.source_id],
-                "user_instruction_sentence_ids": [
-                    instruction.source_id for instruction in instructions
-                ],
+                "user_instruction_sentence_ids": [instruction.source_id for instruction in instructions],
                 "user_sentence_roles": _sentence_roles(
                     message,
                     (fact.source_id,),
@@ -1429,9 +1650,7 @@ def test_conversation_intake_keeps_creation_instruction_out_of_frozen_actuality(
 
     assert decision.user_fact_spans == (fact.exact_text,)
     assert decision.user_fact_source_ids == (fact.source_id,)
-    assert decision.user_instruction_source_ids == tuple(
-        instruction.source_id for instruction in instructions
-    )
+    assert decision.user_instruction_source_ids == tuple(instruction.source_id for instruction in instructions)
 
 
 @pytest.mark.parametrize(

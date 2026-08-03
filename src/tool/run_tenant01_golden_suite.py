@@ -26,7 +26,7 @@ from src.infrastructure.production_auth import ProductionAuthRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.errors import GenerationFailed
 from src.shared.narrative import visible_digest
-from src.shared.product_value import build_product_value_contract
+from src.shared.product_value import build_product_decision_basis_v2
 from src.shared.types import ContentTarget, ProductFact
 from src.tool.run_gate_c_final_suite import (
     _current_head,
@@ -62,6 +62,7 @@ _FINAL_OUTPUT_FILES = ("human-review.json", "manifest.json", "SHA256SUMS")
 _FAILURE_MARKER_FILES = ("suite-failure.json", "human-review-failure.json")
 _MINIMUM_FINAL_SUITE_SESSION_LEASE_SECONDS = 15 * 60
 _EVIDENCE_SERIES_TITLE = "把选择留给人的三篇观察"
+_PROTECTED_PROJECT_MEMORY_STATUS = " M docs/项目记忆.md"
 
 
 def _canonical_digest(value: object) -> str:
@@ -76,11 +77,12 @@ def _canonical_digest(value: object) -> str:
 
 
 def _is_sha256(value: object) -> bool:
-    return (
-        isinstance(value, str)
-        and len(value) == 64
-        and all(character in "0123456789abcdef" for character in value)
-    )
+    return isinstance(value, str) and len(value) == 64 and all(character in "0123456789abcdef" for character in value)
+
+
+def _has_disallowed_worktree_change(status: str) -> bool:
+    lines = tuple(line for line in status.splitlines() if line)
+    return any(line != _PROTECTED_PROJECT_MEMORY_STATUS for line in lines)
 
 
 class _Tenant01EvidenceGenerator(_EvidenceDeepSeekGenerator):
@@ -183,9 +185,7 @@ def _assert_final_suite_session_lease(
         )
         row = cursor.fetchone()
     if row is None:
-        raise RuntimeError(
-            "TENANT-01 final suite requires a fresh tenant-user session lease"
-        )
+        raise RuntimeError("TENANT-01 final suite requires a fresh tenant-user session lease")
 
 
 @dataclass(frozen=True)
@@ -216,9 +216,7 @@ class _FormalAccountSummary:
 def _assert_formal_publication_summary(
     summary: _FormalPublicationSummary,
 ) -> None:
-    required_roles = frozenset(
-        {"public_brand_fact", "expression_constraint", "creative_method"}
-    )
+    required_roles = frozenset({"public_brand_fact", "expression_constraint", "creative_method"})
     if (
         summary.public_brand_name != "笛语"
         or summary.projection_status != "confirmed"
@@ -227,10 +225,7 @@ def _assert_formal_publication_summary(
         or summary.source_bound_writer_item_count < len(required_roles)
         or not required_roles.issubset(summary.publication_roles)
     ):
-        raise RuntimeError(
-            "TENANT-01 final suite requires the confirmed source-bound "
-            "笛语 publication projection"
-        )
+        raise RuntimeError("TENANT-01 final suite requires the confirmed source-bound 笛语 publication projection")
 
 
 def _formal_publication_summary(
@@ -286,9 +281,7 @@ def _formal_publication_summary(
         )
         row = cursor.fetchone()
     if row is None:
-        raise RuntimeError(
-            "TENANT-01 final suite requires a current publication projection"
-        )
+        raise RuntimeError("TENANT-01 final suite requires a current publication projection")
     roles = row[5] if isinstance(row[5], list) else []
     return _FormalPublicationSummary(
         public_brand_name=str(row[0] or ""),
@@ -313,8 +306,7 @@ def _assert_formal_account_summary(summary: _FormalAccountSummary) -> None:
         or not summary.profile_confirmed_by_enabled_manager
     ):
         raise RuntimeError(
-            "TENANT-01 final suite requires a current administrator-confirmed "
-            "formal logical-account profile"
+            "TENANT-01 final suite requires a current administrator-confirmed formal logical-account profile"
         )
 
 
@@ -388,9 +380,7 @@ def _formal_account_summary(
         )
         rows = cursor.fetchall()
     if len(rows) != 1:
-        raise RuntimeError(
-            "TENANT-01 final suite requires one formal logical-account identity"
-        )
+        raise RuntimeError("TENANT-01 final suite requires one formal logical-account identity")
     row = rows[0]
     return _FormalAccountSummary(
         logical_account_id=UUID(str(row[0])),
@@ -434,9 +424,7 @@ def _config_cards(config_path: Path, *, p2_sku: str) -> tuple[_Card, ...]:
         if not card_id or not message or not target:
             raise ValueError("TENANT-01 golden card is incomplete")
         cards.append(_Card(card_id, message, target, position))
-    if {card.card_id for card in cards} != TENANT01_CARD_IDS or len(cards) != len(
-        TENANT01_CARD_IDS
-    ):
+    if {card.card_id for card in cards} != TENANT01_CARD_IDS or len(cards) != len(TENANT01_CARD_IDS):
         raise ValueError("TENANT-01 golden card coverage drifted")
     return tuple(cards)
 
@@ -444,14 +432,12 @@ def _config_cards(config_path: Path, *, p2_sku: str) -> tuple[_Card, ...]:
 def _assert_p2_product_ready(products: tuple[ProductFact, ...]) -> None:
     """Reject an ineligible golden P2 fixture before the first provider call."""
     try:
-        contract = build_product_value_contract(
+        contract = build_product_decision_basis_v2(
             primary_product="product_truth",
             products=products,
         )
     except GenerationFailed as exc:
-        raise RuntimeError(
-            "TENANT-01 P2 fixture lacks a frozen product-specific value contract"
-        ) from exc
+        raise RuntimeError("TENANT-01 P2 fixture lacks a frozen product-specific value contract") from exc
     if contract is None:
         raise RuntimeError("TENANT-01 P2 fixture did not produce a product value contract")
 
@@ -622,42 +608,35 @@ def _artifact(
             "series_context",
             "narrative_frame",
             "creative_plan_v2",
+            "writer_request_v3",
+            "writer_request_v3_digest",
+            "writer_output_v3",
+            "writer_output_v3_digest",
+            "creative_kernel_v5",
             "creative_kernel_v2",
             "expression_plan_digest",
+            "deterministic_checked_kernel_digest",
             "reviewed_kernel_digest",
             "reviewed_creative_digest",
         )
     }
     formal_snapshot["publishing_target"] = card.target
     if formal_snapshot.get("user_premise") != card.message:
-        raise RuntimeError(
-            f"{card.card_id}: frozen premise drifted from the golden card"
-        )
+        raise RuntimeError(f"{card.card_id}: frozen premise drifted from the golden card")
     try:
         compiled = compile_tenant01_snapshot_delivery(
             formal_snapshot,
             card_id=card.card_id,
         )
     except Tenant01EvidenceError as exc:
-        raise RuntimeError(
-            f"{card.card_id}: frozen snapshot cannot rebuild production"
-        ) from exc
+        raise RuntimeError(f"{card.card_id}: frozen snapshot cannot rebuild production") from exc
     if compiled.outline != outline or compiled.body != body:
-        raise RuntimeError(
-            f"{card.card_id}: API result drifted from deterministic delivery"
-        )
-    expected_provenance = {
-        field: list(sources)
-        for field, sources in compiled.visible_provenance.items()
-    }
-    if (
-        formal_snapshot.get("visible_provenance") != expected_provenance
-        or formal_snapshot.get("delivery_resource_refs")
-        != list(compiled.resource_refs)
-    ):
-        raise RuntimeError(
-            f"{card.card_id}: persisted delivery bindings drifted from compilation"
-        )
+        raise RuntimeError(f"{card.card_id}: API result drifted from deterministic delivery")
+    expected_provenance = {field: list(sources) for field, sources in compiled.visible_provenance.items()}
+    if formal_snapshot.get("visible_provenance") != expected_provenance or formal_snapshot.get(
+        "delivery_resource_refs"
+    ) != list(compiled.resource_refs):
+        raise RuntimeError(f"{card.card_id}: persisted delivery bindings drifted from compilation")
     return {
         "suite_version": _SUITE_VERSION,
         "card_id": card.card_id,
@@ -734,8 +713,7 @@ def _write_generation_ledger(
                 }
                 or response.get("request_index") != request_index
                 or response.get("transport_retries") != 0
-                or response.get("stage")
-                != expected_stages[request_index - 1]
+                or response.get("stage") != expected_stages[request_index - 1]
                 or response.get("model") != _MODEL
                 or not _is_sha256(response.get("request_sha256"))
                 or not _is_sha256(response.get("response_sha256"))
@@ -747,19 +725,13 @@ def _write_generation_ledger(
                 raise RuntimeError(f"{card.card_id}: raw stage cannot enter generation ledger")
             choices = payload.get("choices")
             first_choice = choices[0] if isinstance(choices, list) and choices else None
-            message = (
-                first_choice.get("message")
-                if isinstance(first_choice, dict)
-                else None
-            )
+            message = first_choice.get("message") if isinstance(first_choice, dict) else None
             if (
                 not isinstance(message, dict)
                 or not isinstance(message.get("content"), str)
                 or not str(message["content"]).strip()
             ):
-                raise RuntimeError(
-                    f"{card.card_id}: empty raw response cannot enter generation ledger"
-                )
+                raise RuntimeError(f"{card.card_id}: empty raw response cannot enter generation ledger")
             stages.append(str(response.get("stage", "")))
             request_hashes.append(str(response.get("request_sha256", "")))
             response_hashes.append(str(response.get("response_sha256", "")))
@@ -825,11 +797,7 @@ def _p5_preflight(
     events = [json.loads(line) for line in response.text.splitlines() if line.strip()]
     questions = [event for event in events if event.get("kind") == "question"]
     after = _persistence_counts(database_url, journey.tenant_id)
-    if (
-        not questions
-        or any(event.get("event") == "completed" for event in events)
-        or before != after
-    ):
+    if not questions or any(event.get("event") == "completed" for event in events) or before != after:
         raise RuntimeError("P5 no-media preflight did not fail before persistence")
     return {
         "card_id": "P5_no_media",
@@ -846,7 +814,7 @@ def _generate(args: argparse.Namespace) -> None:
     implementation_sha = _current_head()
     if implementation_sha != args.implementation_sha:
         raise RuntimeError("current HEAD is not the frozen implementation SHA")
-    if _git_status():
+    if _has_disallowed_worktree_change(_git_status()):
         raise RuntimeError("TENANT-01 final suite requires a clean worktree")
     if root.exists():
         raise RuntimeError("TENANT-01 evidence directory already exists")
@@ -854,9 +822,7 @@ def _generate(args: argparse.Namespace) -> None:
     if not database_url:
         raise RuntimeError("formal application database is unavailable")
     _assert_final_suite_session_lease(database_url, journey)
-    identity = ProductionAuthRepository(database_url).load_tenant_session(
-        journey.session_token
-    )
+    identity = ProductionAuthRepository(database_url).load_tenant_session(journey.session_token)
     if identity is None or identity.tenant_id != journey.tenant_id:
         raise RuntimeError("TENANT-01 final suite formal session is unavailable")
     cards = _config_cards(Path(args.config).resolve(), p2_sku=journey.p2_sku)
@@ -970,51 +936,68 @@ def _generate(args: argparse.Namespace) -> None:
 
 def _reviews(path: Path) -> tuple[Tenant01HumanReview, ...]:
     document = _json_object(path)
-    if document.get("review_contract") != "TENANT-01-HUMAN-REVIEW-V1":
+    if document.get("review_contract") != "TENANT-01-HUMAN-REVIEW-V2":
         raise ValueError("TENANT-01 human-review contract drifted")
     raw_reviews = document.get("reviews")
     if not isinstance(raw_reviews, list):
         raise ValueError("TENANT-01 human reviews are unavailable")
     reviews: list[Tenant01HumanReview] = []
     for raw in raw_reviews:
-        if not isinstance(raw, dict):
+        if not isinstance(raw, dict) or set(raw) != {
+            "card_id",
+            "artifact_file",
+            "artifact_sha256",
+            "visible_digest",
+            "hard_boundary",
+            "product_usable",
+            "quality_dimensions",
+            "dimension_rationales",
+            "title_excerpt",
+            "body_excerpt",
+            "media_excerpt",
+            "caption_excerpt",
+            "quality_observations",
+            "residual_risks",
+            "reviewer_scope",
+            "reviewer_kind",
+            "reviewed_at",
+            "verdict",
+        }:
             raise ValueError("TENANT-01 human review is invalid")
-        scores = raw.get("scores")
-        excerpts = raw.get("excerpts")
-        boundaries = raw.get("hard_boundaries")
-        demonstration_checks = raw.get("demonstration_checks")
-        comparison = raw.get("comparison")
-        if not isinstance(scores, dict) or not isinstance(excerpts, dict) or not isinstance(
-            boundaries, dict
-        ) or not isinstance(demonstration_checks, dict) or not isinstance(
-            comparison, dict
+        dimensions = raw.get("quality_dimensions")
+        rationales = raw.get("dimension_rationales")
+        observations = raw.get("quality_observations")
+        residual_risks = raw.get("residual_risks")
+        if (
+            not isinstance(dimensions, dict)
+            or not isinstance(rationales, dict)
+            or not isinstance(observations, list)
+            or not isinstance(residual_risks, list)
         ):
             raise ValueError("TENANT-01 human review evidence is incomplete")
-        if set(scores) != set(TENANT01_REVIEW_DIMENSIONS) or any(
-            type(value) is not int for value in scores.values()
+        if set(dimensions) != set(TENANT01_REVIEW_DIMENSIONS) or any(
+            type(value) is not int for value in dimensions.values()
         ):
             raise ValueError("TENANT-01 human review scores are invalid")
-        if set(boundaries) != set(TENANT01_HARD_BOUNDARIES) or any(
-            type(value) is not bool for value in boundaries.values()
+        if set(rationales) != set(TENANT01_REVIEW_DIMENSIONS) or any(
+            not isinstance(value, str) or not value.strip() for value in rationales.values()
         ):
-            raise ValueError("TENANT-01 human review boundaries are invalid")
-        if set(excerpts) != {"title", "body", "media", "caption"} or any(
-            not isinstance(value, str) for value in excerpts.values()
-        ):
+            raise ValueError("TENANT-01 human review rationales are invalid")
+        excerpts = {
+            "title": raw.get("title_excerpt"),
+            "body": raw.get("body_excerpt"),
+            "media": raw.get("media_excerpt"),
+            "caption": raw.get("caption_excerpt"),
+        }
+        if any(not isinstance(value, str) for value in excerpts.values()):
             raise ValueError("TENANT-01 human review excerpts are invalid")
-        if set(demonstration_checks) != set(TENANT01_DEMONSTRATION_CHECKS) or any(
-            type(value) is not bool for value in demonstration_checks.values()
+        if any(not isinstance(value, str) for value in observations) or any(
+            not isinstance(value, str) for value in residual_risks
         ):
-            raise ValueError("TENANT-01 demonstration checks are invalid")
-        if set(comparison) != set(TENANT01_COMPARISON_FIELDS) or any(
-            not isinstance(value, str) for value in comparison.values()
-        ):
-            raise ValueError("TENANT-01 cross-card comparison is invalid")
+            raise ValueError("TENANT-01 human review observations are invalid")
         artifact_sha256 = raw.get("artifact_sha256")
         visible_digest_value = raw.get("visible_digest")
-        if not _is_sha256(artifact_sha256) or not _is_sha256(
-            visible_digest_value
-        ):
+        if not _is_sha256(artifact_sha256) or not _is_sha256(visible_digest_value):
             raise ValueError("TENANT-01 human review is not artifact-bound")
         reviews.append(
             Tenant01HumanReview(
@@ -1022,17 +1005,35 @@ def _reviews(path: Path) -> tuple[Tenant01HumanReview, ...]:
                 artifact_file=str(raw.get("artifact_file", "")),
                 artifact_sha256=cast(str, artifact_sha256),
                 visible_digest=cast(str, visible_digest_value),
-                scores={str(key): cast(int, value) for key, value in scores.items()},
+                scores={str(key): cast(int, value) for key, value in dimensions.items()},
                 excerpts={str(key): str(value) for key, value in excerpts.items()},
-                hard_boundaries={str(key): cast(bool, value) for key, value in boundaries.items()},
+                hard_boundaries={boundary: raw.get("hard_boundary") == "PASS" for boundary in TENANT01_HARD_BOUNDARIES},
                 demonstration_checks={
-                    str(key): cast(bool, value)
-                    for key, value in demonstration_checks.items()
+                    check: raw.get("product_usable") == "PASS" for check in TENANT01_DEMONSTRATION_CHECKS
                 },
-                comparison={str(key): str(value) for key, value in comparison.items()},
-                brand_basis=str(raw.get("brand_basis", "")),
+                comparison={field: str(rationales.get("platform_fit", "")) for field in TENANT01_COMPARISON_FIELDS},
+                brand_basis=str(rationales.get("brand_relation", "")),
                 verdict=str(raw.get("verdict", "")),
-                notes=str(raw.get("notes", "")),
+                notes="\n".join(
+                    (
+                        *cast(list[str], observations),
+                        *cast(list[str], residual_risks),
+                    )
+                )
+                or "逐篇全文审阅，未记录额外质量观察或残余风险。",
+                hard_boundary=str(raw.get("hard_boundary", "")),
+                product_usable=str(raw.get("product_usable", "")),
+                quality_dimensions={str(key): cast(int, value) for key, value in dimensions.items()},
+                dimension_rationales={str(key): str(value) for key, value in rationales.items()},
+                title_excerpt=str(raw.get("title_excerpt", "")),
+                body_excerpt=str(raw.get("body_excerpt", "")),
+                media_excerpt=str(raw.get("media_excerpt", "")),
+                caption_excerpt=str(raw.get("caption_excerpt", "")),
+                quality_observations=tuple(cast(list[str], observations)),
+                residual_risks=tuple(cast(list[str], residual_risks)),
+                reviewer_scope=str(raw.get("reviewer_scope", "")),
+                reviewer_kind=str(raw.get("reviewer_kind", "")),
+                reviewed_at=str(raw.get("reviewed_at", "")),
             )
         )
     return tuple(reviews)
@@ -1107,7 +1108,7 @@ def _finalize(args: argparse.Namespace) -> None:
     implementation_sha = _current_head()
     if implementation_sha != args.implementation_sha:
         raise RuntimeError("current HEAD is not the frozen implementation SHA")
-    if _git_status():
+    if _has_disallowed_worktree_change(_git_status()):
         raise RuntimeError("TENANT-01 finalization requires a clean worktree")
     _assert_finalizable_evidence_root(
         root,

@@ -630,7 +630,6 @@ def _generation_input(
         target_shape="小红书图文完整成品",
     )
 
-
     envelope = build_media_capability_envelope(
         platform_shape=("小红书图文完整成品" if media_format == "graphic" else "抖音短视频完整成品"),
         media_format=cast(Any, media_format),
@@ -706,9 +705,7 @@ def _with_publication_contract(
     )
     frame = request.narrative_frame
     assert frame is not None
-    actuality = tuple(
-        span for span in spans if span.role == "observable_actuality"
-    )
+    actuality = tuple(span for span in spans if span.role == "observable_actuality")
     frozen_frame = new_frame(
         "actuality_reflection" if actuality else frame.narrative_mode,
         tuple(span.exact_text for span in actuality),
@@ -726,28 +723,16 @@ def _with_publication_contract(
         known_conditions=tuple(span.exact_text for span in actuality),
         frozen_fact_refs=tuple(sorted(frozen_frame.allowed_fact_ids)),
         intake_spans=spans,
-        account_identity=(
-            expression.identity_position
-            if expression is not None
-            else request.brand.content_role_name
-        ),
+        account_identity=(expression.identity_position if expression is not None else request.brand.content_role_name),
         account_audience=(
-            expression.audience_relationship
-            if expression is not None
-            else request.brand.audience_description
+            expression.audience_relationship if expression is not None else request.brand.audience_description
         ),
-        account_attention=(
-            expression.content_territories if expression is not None else ""
-        ),
+        account_attention=(expression.content_territories if expression is not None else ""),
         account_response_boundary=(
-            expression.authority_boundary
-            if expression is not None
-            else request.brand.content_role_boundary
+            expression.authority_boundary if expression is not None else request.brand.content_role_boundary
         ),
         source_profile_id=(
-            str(expression.profile_id)
-            if expression is not None and expression.profile_id is not None
-            else None
+            str(expression.profile_id) if expression is not None and expression.profile_id is not None else None
         ),
         source_profile_version=(expression.version if expression is not None else None),
         publication_projection_id=None,
@@ -774,10 +759,7 @@ def _publication_writer_units(**overrides: str) -> list[dict[str, str]]:
         "release_caption": "这次先把注意力留给那一点意外。",
     }
     text_by_purpose.update(overrides)
-    return [
-        {"unit_id": f"unit:{purpose.replace('_', '-')}", "text": text}
-        for purpose, text in text_by_purpose.items()
-    ]
+    return [{"unit_id": f"unit:{purpose.replace('_', '-')}", "text": text} for purpose, text in text_by_purpose.items()]
 
 
 def _p1_publication_request() -> GenerationInput:
@@ -1100,11 +1082,7 @@ def _publication_media_case(
         else "brand_life_narrative"
     )
     series_position = (
-        2
-        if program_id == "graphic_series_response_v1"
-        else 3
-        if program_id == "graphic_series_choice_v1"
-        else None
+        2 if program_id == "graphic_series_response_v1" else 3 if program_id == "graphic_series_choice_v1" else None
     )
     selected_materials = (
         (
@@ -1136,9 +1114,7 @@ def _publication_media_case(
         envelope = build_media_capability_envelope_v2(
             platform_shape="publication-v2-test",
             media_format=media_format,
-            bound_product_media=tuple(
-                _bound_product_media(index=index) for index in (1, 2)
-            ),
+            bound_product_media=tuple(_bound_product_media(index=index) for index in (1, 2)),
         )
     else:
         registered_resources = (
@@ -1166,11 +1142,7 @@ def _publication_media_case(
         mechanism_id=None,
         series_position=series_position,
         fact_count=0,
-        topic_origin=(
-            "system_selected"
-            if program_id == "graphic_choice_contrast_v1"
-            else "explicit_user"
-        ),
+        topic_origin=("system_selected" if program_id == "graphic_choice_contrast_v1" else "explicit_user"),
     )
     assert program.program_id == program_id
     frame = new_frame("general_observation", (), ())
@@ -1192,9 +1164,7 @@ def _publication_media_case(
     kernel = replace(
         skeleton,
         units=tuple(
-            replace(unit, text=writer_text[unit.purpose])
-            if unit.text_source == "writer"
-            else unit
+            replace(unit, text=writer_text[unit.purpose]) if unit.text_source == "writer" else unit
             for unit in skeleton.units
         ),
     )
@@ -1265,8 +1235,7 @@ def test_publication_v2_projects_every_media_program_without_legacy_copy(
     assert request.media_capability_envelope is not None
     assert compiled.resource_refs == request.media_program.required_resource_ids
     assert (
-        f"media-program:{media_program_digest(request.media_program)}"
-        in compiled.visible_provenance["media_program"]
+        f"media-program:{media_program_digest(request.media_program)}" in compiled.visible_provenance["media_program"]
     )
     assert (
         f"media-envelope:{media_envelope_digest(request.media_capability_envelope)}"
@@ -1290,22 +1259,15 @@ def test_publication_v2_projects_every_media_program_without_legacy_copy(
     )
     if program_id.startswith("graphic_"):
         assert isinstance(compiled.production, GraphicProductionBundle)
-        assert compiled.production.release_caption_and_interaction not in (
-            compiled.production.image_sequence
-        )
+        assert compiled.production.release_caption_and_interaction not in (compiled.production.image_sequence)
         assert "发布配文" not in compiled.production.image_sequence
     else:
         assert isinstance(compiled.production, VideoProductionBundle)
-        assert compiled.production.release_caption_and_interaction not in (
-            compiled.production.viewing_flow
-        )
+        assert compiled.production.release_caption_and_interaction not in (compiled.production.viewing_flow)
         assert "发布配文" not in compiled.production.viewing_flow
     if request.media_program.series_position is not None:
         assert f"系列第 {request.media_program.series_position} 篇" in compiled.body
-    if (
-        request.media_program.primary_resource_id
-        and request.media_program.secondary_resource_id
-    ):
+    if request.media_program.primary_resource_id and request.media_program.secondary_resource_id:
         assert (
             f"media-role:primary:{request.media_program.primary_resource_id}"
             in compiled.visible_provenance["media_program"]
@@ -1342,9 +1304,7 @@ def test_publication_v2_projection_does_not_rewrite_legacy_output(
     assert legacy_phrase in legacy.body
     assert legacy_phrase not in publication.body
     assert publication.resource_refs == legacy.resource_refs
-    assert publication.visible_provenance["media_program"] == (
-        legacy.visible_provenance["media_program"]
-    )
+    assert publication.visible_provenance["media_program"] == (legacy.visible_provenance["media_program"])
 
 
 def test_publication_v2_compiler_requires_exact_facts_and_product_digest() -> None:
@@ -1460,12 +1420,7 @@ def test_publication_v2_keeps_product_plan_internal_and_rejects_exact_copy(
     for copied_text in internal_plan:
         copied_kernel = replace(
             kernel,
-            units=tuple(
-                replace(unit, text=copied_text)
-                if unit.purpose == "body"
-                else unit
-                for unit in kernel.units
-            ),
+            units=tuple(replace(unit, text=copied_text) if unit.purpose == "body" else unit for unit in kernel.units),
         )
         with pytest.raises(
             GenerationFailed,
@@ -1557,12 +1512,8 @@ def test_observation_program_paginates_distinct_visible_text_shapes() -> None:
     body = next(unit for unit in kernel.units if unit.purpose == "body")
 
     continuous = _graphic_observation_sequence((replace(body, text="一段连续观察。再给一个有限选择。"),))
-    paragraphs = _graphic_observation_sequence(
-        (replace(body, text="先观察。\n\n再选择。\n\n最后行动。"),)
-    )
-    lines = _graphic_observation_sequence(
-        (replace(body, text="先观察。\n再选择。\n最后行动。"),)
-    )
+    paragraphs = _graphic_observation_sequence((replace(body, text="先观察。\n\n再选择。\n\n最后行动。"),))
+    lines = _graphic_observation_sequence((replace(body, text="先观察。\n再选择。\n最后行动。"),))
     structured = _graphic_observation_sequence(
         (
             replace(body, unit_id="unit:body-opening", text="先观察。"),
@@ -2579,7 +2530,15 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
             assert value_document["primary_product"] == ("visual_styling_story")
             assert value_document["relation_kind"] == "color_hierarchy"
             assert set(value_document["resource_refs"]) == {item["resource_id"] for item in resources}
-            assert value_document["visible_styling_proposition"] not in result["body"]
+            assert value_document["contract_version"] == "product-decision-basis-v2"
+            assert all(
+                value_document[field] not in result["body"]
+                for field in (
+                    "product_specific_understanding",
+                    "tradeoff",
+                    "condition_of_validity",
+                )
+            )
             assert "主视觉" in result["body"]
             assert "辅助视觉" in result["body"]
             assert frozen_product_value_contract(snapshot) is not None
@@ -3229,14 +3188,8 @@ def test_actuality_writer_receives_one_frozen_fact_without_duplicate_instruction
 
     assert prompt.count(fact) == 1
     assert "publication-contract-v2" not in prompt
-    assert sum(
-        span.role == "observable_actuality"
-        for span in request.publication_contract.intake_spans
-    ) == 2
-    assert sum(
-        span.role == "creation_instruction"
-        for span in request.publication_contract.intake_spans
-    ) == 1
+    assert sum(span.role == "observable_actuality" for span in request.publication_contract.intake_spans) == 2
+    assert sum(span.role == "creation_instruction" for span in request.publication_contract.intake_spans) == 1
     assert "这些原句由服务端另行展示" in prompt
     assert "只把原句用于找到作品的具体张力" in prompt
     assert "谁或什么发生了变化、为什么变化" in prompt
@@ -3280,10 +3233,7 @@ def test_product_writer_receives_semantic_plan_without_product_fact_literals() -
             narrative_frame=new_frame(
                 "general_observation",
                 (),
-                tuple(
-                    item.fact_id
-                    for item in build_product_fact_packet((product,)).facts
-                ),
+                tuple(item.fact_id for item in build_product_fact_packet((product,)).facts),
             ),
             creative_plan=plan,
             product_value_contract=value_contract,
@@ -3361,10 +3311,7 @@ def test_compiler_does_not_normalize_or_fuzz_near_fact_copy() -> None:
     kernel = replace(
         kernel,
         units=tuple(
-            replace(unit, text=f"前文。{near_copy}后文。")
-            if unit.purpose == "body"
-            else unit
-            for unit in kernel.units
+            replace(unit, text=f"前文。{near_copy}后文。") if unit.purpose == "body" else unit for unit in kernel.units
         ),
     )
 
@@ -3381,17 +3328,17 @@ def test_compiler_does_not_normalize_or_fuzz_near_fact_copy() -> None:
     )
     compatibility_kernel = replace(
         kernel,
-        units=tuple(
-            replace(unit, text="ABC")
-            if unit.purpose == "body"
-            else unit
-            for unit in kernel.units
-        ),
+        units=tuple(replace(unit, text="ABC") if unit.purpose == "body" else unit for unit in kernel.units),
     )
-    assert suppress_exact_writer_fact_duplicates(
-        compatibility_request,
-        compatibility_kernel,
-    ).unit("unit:body").text == "ABC"
+    assert (
+        suppress_exact_writer_fact_duplicates(
+            compatibility_request,
+            compatibility_kernel,
+        )
+        .unit("unit:body")
+        .text
+        == "ABC"
+    )
 
 
 def test_compiler_suppresses_complete_writer_unit_but_not_replayed_unit() -> None:
@@ -3401,31 +3348,34 @@ def test_compiler_suppresses_complete_writer_unit_but_not_replayed_unit() -> Non
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
     writer_kernel = replace(
         kernel,
-        units=tuple(
-            replace(unit, text=fact)
-            if unit.purpose == "body"
-            else unit
-            for unit in kernel.units
-        ),
+        units=tuple(replace(unit, text=fact) if unit.purpose == "body" else unit for unit in kernel.units),
     )
     replayed_kernel = replace(
         writer_kernel,
         units=tuple(
-            replace(unit, text_source="prior_version")
-            if unit.purpose == "body"
-            else unit
+            replace(unit, text_source="prior_version") if unit.purpose == "body" else unit
             for unit in writer_kernel.units
         ),
     )
 
-    assert suppress_exact_writer_fact_duplicates(
-        _compile_input(request),
-        writer_kernel,
-    ).unit("unit:body").text == ""
-    assert suppress_exact_writer_fact_duplicates(
-        _compile_input(request),
-        replayed_kernel,
-    ).unit("unit:body").text == fact
+    assert (
+        suppress_exact_writer_fact_duplicates(
+            _compile_input(request),
+            writer_kernel,
+        )
+        .unit("unit:body")
+        .text
+        == ""
+    )
+    assert (
+        suppress_exact_writer_fact_duplicates(
+            _compile_input(request),
+            replayed_kernel,
+        )
+        .unit("unit:body")
+        .text
+        == fact
+    )
 
 
 def test_compiler_suppresses_standalone_fact_line_without_changing_other_bytes() -> None:
@@ -3436,9 +3386,7 @@ def test_compiler_suppresses_standalone_fact_line_without_changing_other_bytes()
     writer_kernel = replace(
         kernel,
         units=tuple(
-            replace(unit, text=f"保留开头。\n{fact}\n保留 emoji：☕️。")
-            if unit.purpose == "body"
-            else unit
+            replace(unit, text=f"保留开头。\n{fact}\n保留 emoji：☕️。") if unit.purpose == "body" else unit
             for unit in kernel.units
         ),
     )
@@ -3458,12 +3406,7 @@ def test_compiler_rechecks_visible_structure_after_exact_fact_suppression() -> N
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
     wrapped_fact_kernel = replace(
         kernel,
-        units=tuple(
-            replace(unit, text=f"{fact}\n“”")
-            if unit.purpose == "body"
-            else unit
-            for unit in kernel.units
-        ),
+        units=tuple(replace(unit, text=f"{fact}\n“”") if unit.purpose == "body" else unit for unit in kernel.units),
     )
 
     with pytest.raises(GenerationFailed, match="留下了无效可见结构"):
@@ -3716,9 +3659,7 @@ def test_writer_prompt_receives_direction_and_every_frozen_series_entry() -> Non
 
 
 def test_series_writer_rejects_one_long_clause_copied_from_frozen_prior_entry() -> None:
-    repeated_clause = (
-        "当对方给出一个明确回应时，只接住其中一个具体点，不再追加第二层解释。"
-    )
+    repeated_clause = "当对方给出一个明确回应时，只接住其中一个具体点，不再追加第二层解释。"
     base_series = _series_context()
     prior_entries = (
         base_series.prior_entries[0],
@@ -3731,9 +3672,7 @@ def test_series_writer_rejects_one_long_clause_copied_from_frozen_prior_entry() 
     repeated_kernel = replace(
         kernel,
         units=tuple(
-            replace(unit, text=repeated_clause)
-            if unit.unit_id == "unit:body-opening"
-            else unit
+            replace(unit, text=repeated_clause) if unit.unit_id == "unit:body-opening" else unit
             for unit in kernel.units
         ),
     )
@@ -4113,14 +4052,8 @@ def test_p2_exact_fact_repetition_gets_one_bounded_affected_unit_repair(
 def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     request = _p3_account_link_request()
     assert request.publication_contract is not None
-    assert (
-        request.publication_contract.account_identity
-        == "从穿衣编辑的位置重新看熟悉事物"
-    )
-    assert (
-        request.publication_contract.account_audience
-        == "陪正在重新选择日常节奏的人看清取舍。"
-    )
+    assert request.publication_contract.account_identity == "从穿衣编辑的位置重新看熟悉事物"
+    assert request.publication_contract.account_audience == "陪正在重新选择日常节奏的人看清取舍。"
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
     prompt = DeepSeekGenerator(
         "https://example.invalid",
@@ -4192,22 +4125,22 @@ def test_explicit_local_response_does_not_receive_the_account_topic_domain() -> 
     fact = "今天店里有人只想自己看看。"
     request = _with_publication_contract(
         replace(
-        base,
-        brand=replace(
-            base.brand,
-            context_packet=packet,
-            expression_constraint_context=(constraint,),
-        ),
-        weak_seed=fact,
-        primary_product="local_response",
-        narrative_frame=new_frame("general_observation", (), ()),
-        creative_plan=build_creative_plan(
-            topic_spans=(fact,),
-            primary_value="local_response",
-            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
-            mechanism_id=None,
-            target_shape="小红书图文完整成品",
-        ),
+            base,
+            brand=replace(
+                base.brand,
+                context_packet=packet,
+                expression_constraint_context=(constraint,),
+            ),
+            weak_seed=fact,
+            primary_product="local_response",
+            narrative_frame=new_frame("general_observation", (), ()),
+            creative_plan=build_creative_plan(
+                topic_spans=(fact,),
+                primary_value="local_response",
+                tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+                mechanism_id=None,
+                target_shape="小红书图文完整成品",
+            ),
         ),
         roles=("observable_actuality",),
     )
@@ -4236,22 +4169,22 @@ def test_system_selected_account_topic_receives_the_frozen_topic_domain() -> Non
     packet, constraint = _current_publication_packet()
     request = _with_publication_contract(
         replace(
-        base,
-        brand=replace(
-            base.brand,
-            context_packet=packet,
-            expression_constraint_context=(constraint,),
-        ),
-        weak_seed="今天不知道发什么，帮我做一条。",
-        narrative_frame=new_frame("general_observation", (), ()),
-        creative_plan=build_creative_plan(
-            topic_spans=(),
-            primary_value="brand_life_narrative",
-            tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
-            mechanism_id=None,
-            target_shape="小红书图文完整成品",
-            topic_origin="system_selected",
-        ),
+            base,
+            brand=replace(
+                base.brand,
+                context_packet=packet,
+                expression_constraint_context=(constraint,),
+            ),
+            weak_seed="今天不知道发什么，帮我做一条。",
+            narrative_frame=new_frame("general_observation", (), ()),
+            creative_plan=build_creative_plan(
+                topic_spans=(),
+                primary_value="brand_life_narrative",
+                tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+                mechanism_id=None,
+                target_shape="小红书图文完整成品",
+                topic_origin="system_selected",
+            ),
         ),
         roles=("creation_instruction", "creation_instruction"),
     )

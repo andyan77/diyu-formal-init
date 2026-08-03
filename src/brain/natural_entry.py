@@ -3,15 +3,14 @@ from __future__ import annotations
 import re
 
 _CONTINUATION_SIGNALS = ("接着上一条", "延续之前", "继续上一条", "沿用上一条")
-_HIGH_CONFIDENCE_CHAT = frozenset(
-    {"hello", "hi", "你好", "您好", "谢谢", "谢谢你"}
-)
+_HIGH_CONFIDENCE_CHAT = frozenset({"hello", "hi", "你好", "您好", "谢谢", "谢谢你"})
 
 
 def is_natural_chat(text: str) -> bool:
-    """Keep a tiny high-confidence ordinary-conversation fast path out of content tasks."""
+    """Keep short, uncommitted conversation out of the content lifecycle."""
     normalized = text.strip().casefold()
-    return normalized.rstrip("。！!，, ") in _HIGH_CONFIDENCE_CHAT
+    plain = normalized.rstrip("。！!，, ")
+    return plain in _HIGH_CONFIDENCE_CHAT or (bool(plain) and "\n" not in plain and len(plain) <= 12)
 
 
 def natural_reply() -> str:

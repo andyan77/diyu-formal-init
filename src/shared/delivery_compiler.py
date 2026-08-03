@@ -5,14 +5,17 @@ from dataclasses import dataclass, replace
 from typing import Literal, TypeAlias
 
 from src.shared.creative_kernel import (
+    CREATIVE_KERNEL_V5_VERSION,
     DRAMATIZATION_DISCLOSURE,
     DUAL_TRACK_KERNEL_VERSION,
     HYPOTHESIS_DISCLOSURE,
     KERNEL_VERSION,
     MEDIA_NATIVE_KERNEL_VERSION,
     PRODUCT_VALUE_UNIT_ID,
+    CreativeKernel,
     CreativeKernelUnit,
     CreativeKernelV1,
+    CreativeKernelV5,
     UnitMode,
     compiler_owned_unit_source,
     compiler_owned_unit_texts,
@@ -27,12 +30,18 @@ from src.shared.media_program import (
     media_program_digest,
 )
 from src.shared.product_value import (
+    P2ProductDecisionBasisV2,
     P2ProductValueContractV1,
+    P5ProductDecisionBasisV2,
     P5ProductValueContractV1,
     ProductValueContract,
     product_value_contract_digest,
 )
-from src.shared.publication_contract import PublicationContractV2
+from src.shared.publication_contract import (
+    PublicationContract,
+    PublicationContractV2,
+    PublicationContractV3,
+)
 from src.shared.types import (
     ContentProduct,
     ContentProductionBundle,
@@ -50,6 +59,7 @@ from src.shared.visible_structure import (
     assert_writer_visible_text_safe,
     v3_compiler_visible_heading,
 )
+from src.shared.writer_request import WriterOutputV3
 
 DeliveryMedia: TypeAlias = Literal["video", "graphic"]
 
@@ -57,12 +67,14 @@ LEGACY_DELIVERY_COMPILER_VERSION = "delivery-compiler-v1"
 DUAL_TRACK_DELIVERY_COMPILER_VERSION = "delivery-compiler-v2"
 MEDIA_NATIVE_DELIVERY_COMPILER_VERSION = "delivery-compiler-v3"
 DELIVERY_COMPILER_VERSION = "delivery-compiler-v4"
+DELIVERY_COMPILER_V5_VERSION = "delivery-compiler-v5"
 SUPPORTED_DELIVERY_COMPILER_VERSIONS = frozenset(
     {
         LEGACY_DELIVERY_COMPILER_VERSION,
         DUAL_TRACK_DELIVERY_COMPILER_VERSION,
         MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
         DELIVERY_COMPILER_VERSION,
+        DELIVERY_COMPILER_V5_VERSION,
     }
 )
 ORIGINAL_COMPOSITION_RESOURCE_ID = "resource:original_composition"
@@ -127,7 +139,8 @@ class DeliveryCompileInput:
     media_capability_envelope: MediaCapabilityEnvelope | None = None
     media_program: MediaProgramSelectionV1 | None = None
     product_value_contract: ProductValueContract | None = None
-    publication_contract: PublicationContractV2 | None = None
+    publication_contract: PublicationContract | None = None
+    writer_output: WriterOutputV3 | None = None
 
 
 @dataclass(frozen=True)
@@ -207,8 +220,12 @@ def compiler_owned_media_unit_texts(
 
 def compile_delivery(
     request: DeliveryCompileInput,
-    kernel: CreativeKernelV1,
+    kernel: CreativeKernel,
 ) -> CompiledDelivery:
+    if isinstance(kernel, CreativeKernelV5):
+        compiled = _compile_delivery_v5(request, kernel)
+        _assert_compiled_delivery_v5(request, kernel, compiled)
+        return compiled
     kernel = suppress_exact_writer_fact_duplicates(request, kernel)
     compiled = _compile_delivery(request, kernel)
     assert_compiled_delivery(request, kernel, compiled)
@@ -231,11 +248,7 @@ def suppress_exact_writer_fact_duplicates(
     if request.publication_contract is None:
         return kernel
     frozen_bytes = tuple(
-        dict.fromkeys(
-            exact_text.encode("utf-8")
-            for _, exact_text in request.trusted_fact_texts
-            if exact_text
-        )
+        dict.fromkeys(exact_text.encode("utf-8") for _, exact_text in request.trusted_fact_texts if exact_text)
     )
     if not frozen_bytes:
         return kernel
@@ -259,9 +272,7 @@ def suppress_exact_writer_fact_duplicates(
         try:
             assert_writer_visible_text_safe(normalized_text)
         except ValueError as exc:
-            raise GenerationFailed(
-                "Writer 逐字事实副本去重后留下了无效可见结构"
-            ) from exc
+            raise GenerationFailed("Writer 逐字事实副本去重后留下了无效可见结构") from exc
         changed = True
         deduplicated_units.append(
             replace(
@@ -276,9 +287,12 @@ def suppress_exact_writer_fact_duplicates(
 
 def assert_compiled_delivery(
     request: DeliveryCompileInput,
-    kernel: CreativeKernelV1,
+    kernel: CreativeKernel,
     compiled: CompiledDelivery,
 ) -> None:
+    if isinstance(kernel, CreativeKernelV5):
+        _assert_compiled_delivery_v5(request, kernel, compiled)
+        return
     kernel = suppress_exact_writer_fact_duplicates(request, kernel)
     _assert_immutable_fact_blocks(request, kernel)
     _assert_expression_plan(request, kernel)
@@ -368,10 +382,18 @@ def _assert_expression_plan(
     fact_text_by_id = dict(request.trusted_fact_texts)
     if len(fact_text_by_id) != len(request.trusted_fact_texts):
         raise GenerationFailed("可信事实轨来源重复")
-    if request.publication_contract is not None and (
-        request.publication_contract.primary_product != request.primary_product
-        or set(request.publication_contract.frozen_fact_refs)
-        != set(fact_text_by_id)
+    publication_contract = request.publication_contract
+    legacy_product_contract = (
+        request.product_value_contract
+        if isinstance(
+            request.product_value_contract,
+            (P2ProductValueContractV1, P5ProductValueContractV1),
+        )
+        else None
+    )
+    if isinstance(publication_contract, PublicationContractV2) and (
+        publication_contract.primary_product != request.primary_product
+        or set(publication_contract.frozen_fact_refs) != set(fact_text_by_id)
     ):
         raise GenerationFailed("发布责任合同与冻结事实轨不一致")
     for unit in kernel.units:
@@ -403,11 +425,11 @@ def _assert_expression_plan(
                 raise GenerationFailed("创作表达文字来源漂移")
         elif unit.unit_id == PRODUCT_VALUE_UNIT_ID:
             if (
-                request.product_value_contract is None
+                legacy_product_contract is None
                 or unit.text_source != "server_compiler"
                 or unit.purpose != "body"
                 or unit.mode != "recommendation"
-                or unit.text != request.product_value_contract.visible_text
+                or unit.text != legacy_product_contract.visible_text
             ):
                 raise GenerationFailed("商品价值合同可见单元漂移")
         elif unit.text_source not in {"writer", "prior_version"}:
@@ -424,22 +446,374 @@ def _assert_expression_plan(
     value_units = tuple(unit for unit in kernel.units if unit.unit_id == PRODUCT_VALUE_UNIT_ID)
     if request.product_value_contract is None:
         if value_units or (
-            request.publication_contract is not None
-            and request.publication_contract.product_value_contract_digest
-            is not None
+            isinstance(publication_contract, PublicationContractV2)
+            and publication_contract.product_value_contract_digest is not None
         ):
             raise GenerationFailed("无商品价值合同的成品包含商品价值单元")
-    elif request.publication_contract is not None:
+    elif isinstance(publication_contract, PublicationContractV2):
         if (
             value_units
-            or request.product_value_contract.primary_product
-            != request.primary_product
-            or request.publication_contract.product_value_contract_digest
+            or request.product_value_contract.primary_product != request.primary_product
+            or publication_contract.product_value_contract_digest
             != product_value_contract_digest(request.product_value_contract)
         ):
             raise GenerationFailed("发布责任合同与商品语义计划不一致")
-    elif len(value_units) != 1 or request.product_value_contract.primary_product != request.primary_product:
+    elif (
+        legacy_product_contract is None
+        or len(value_units) != 1
+        or legacy_product_contract.primary_product != request.primary_product
+    ):
         raise GenerationFailed("商品价值合同与成品产品不一致")
+
+
+def _compile_delivery_v5(
+    request: DeliveryCompileInput,
+    kernel: CreativeKernelV5,
+) -> CompiledDelivery:
+    """Compile V5 without owning any title, judgment, body or caption copy."""
+
+    contract = request.publication_contract
+    output = request.writer_output
+    envelope = request.media_capability_envelope
+    program = request.media_program
+    if not isinstance(contract, PublicationContractV3) or output is None or envelope is None or program is None:
+        raise GenerationFailed("V5 成品缺少冻结发布、Writer 或媒体合同")
+    assert_media_program_allowed(envelope, program)
+    if (
+        kernel.kernel_version != CREATIVE_KERNEL_V5_VERSION
+        or kernel.media_program_id != program.program_id
+        or request.media_format != envelope.media_format
+        or request.allowed_resource_ids != envelope.resource_ids
+    ):
+        raise GenerationFailed("V5 创作内核与冻结媒体合同不一致")
+    unit_by_purpose = {unit.purpose: unit for unit in kernel.units if unit.owner == "writer"}
+    if set(unit_by_purpose) != {
+        "title",
+        "natural_guide",
+        "creative_body",
+        "publication_caption",
+    }:
+        raise GenerationFailed("V5 创作内核缺少 Writer 四类成稿所有权")
+    fact_text_by_id = dict(request.trusted_fact_texts)
+    if len(fact_text_by_id) != len(request.trusted_fact_texts):
+        raise GenerationFailed("V5 可信事实来源重复")
+    fact_units = tuple(unit for unit in kernel.units if unit.owner == "server_fact")
+    if any(len(unit.fact_refs) != 1 or unit.fact_refs[0] not in fact_text_by_id for unit in fact_units):
+        raise GenerationFailed("V5 事实单元超出冻结事实集合")
+    writer_text = "\n".join(
+        (
+            output.title,
+            output.natural_guide,
+            output.creative_body,
+            output.publication_caption,
+        )
+    )
+    if any(exact_text and exact_text in writer_text for exact_text in fact_text_by_id.values()):
+        raise GenerationFailed("Writer 不得复制服务端冻结事实块")
+
+    visible_facts = tuple(
+        _v5_visible_fact(unit.fact_refs[0], fact_text_by_id[unit.fact_refs[0]]) for unit in fact_units
+    )
+    full_body = "\n\n".join((*visible_facts, output.creative_body))
+    scope_source = _v5_artifact_scope_source(fact_units)
+    artifact_scope = _PHRASES[scope_source]
+    body_paragraphs = tuple(paragraph.strip() for paragraph in output.creative_body.split("\n\n") if paragraph.strip())
+    if not body_paragraphs:
+        raise GenerationFailed("V5 Writer 正文为空")
+
+    provenance: dict[str, tuple[str, ...]] = {
+        "outline": (
+            unit_by_purpose["title"].unit_id,
+            *unit_by_purpose["title"].provenance,
+        ),
+        "artifact_scope": (scope_source,),
+        "natural_guide": (
+            unit_by_purpose["natural_guide"].unit_id,
+            *unit_by_purpose["natural_guide"].provenance,
+        ),
+        "full_body": tuple(
+            source
+            for unit in (*fact_units, unit_by_purpose["creative_body"])
+            for source in (unit.unit_id, *unit.provenance)
+        ),
+        "release_caption_and_interaction": (
+            unit_by_purpose["publication_caption"].unit_id,
+            *unit_by_purpose["publication_caption"].provenance,
+        ),
+        "media_program": (
+            f"media-envelope:{media_envelope_digest(envelope)}",
+            f"media-program:{media_program_digest(program)}",
+            f"media-program:{program.program_id}",
+            *(f"media-resource:{resource_id}" for resource_id in program.required_resource_ids),
+        ),
+    }
+    optional_suggestion = _optional_capture_suggestion(program)
+    production: ContentProductionBundle
+    if request.media_format == "graphic":
+        opening, sequence, production_note = _v5_graphic_projection(
+            output.title,
+            body_paragraphs=body_paragraphs,
+            fact_count=len(fact_units),
+            program=program,
+        )
+        production = GraphicProductionBundle(
+            natural_guide=output.natural_guide,
+            hero_image=opening,
+            image_sequence=sequence,
+            full_body=full_body,
+            layout_and_production=production_note,
+            release_caption_and_interaction=output.publication_caption,
+            optional_capture_suggestion=optional_suggestion,
+        )
+        provenance.update(
+            {
+                "hero_image": provenance["media_program"],
+                "image_sequence": (
+                    *provenance["media_program"],
+                    *provenance["full_body"],
+                ),
+                "layout_and_production": provenance["media_program"],
+            }
+        )
+    else:
+        opening, flow, production_note = _v5_video_projection(
+            output.title,
+            body_paragraphs=body_paragraphs,
+            program=program,
+        )
+        duration = _duration(full_body, request.production_conditions)
+        production = VideoProductionBundle(
+            natural_guide=output.natural_guide,
+            spoken_lines=full_body,
+            visual_actions=flow,
+            subtitles=full_body,
+            sound_and_production=production_note,
+            cover_or_first_frame=opening,
+            viewing_flow=f"{opening}\n{flow}",
+            natural_duration=duration,
+            release_caption_and_interaction=output.publication_caption,
+            optional_capture_suggestion=optional_suggestion,
+        )
+        provenance.update(
+            {
+                "cover_or_first_frame": provenance["media_program"],
+                "viewing_flow": (
+                    *provenance["media_program"],
+                    *provenance["full_body"],
+                ),
+                "spoken_lines": provenance["full_body"],
+                "visual_actions": provenance["media_program"],
+                "subtitles": provenance["full_body"],
+                "sound_and_production": provenance["media_program"],
+                "natural_duration": ("compiler:duration",),
+            }
+        )
+    if optional_suggestion is not None:
+        provenance["optional_capture_suggestion"] = (
+            f"compiler:optional-capture-suggestion:{program.optional_capture_suggestion_id}",
+        )
+    semantic_contract = _v5_semantic_contract(
+        request,
+        output,
+        visible_facts,
+    )
+    body = _visible_body_v3(output.title, artifact_scope, production)
+    provenance["body"] = (
+        "compiler:visible-body",
+        *tuple(source for sources in provenance.values() for source in sources),
+    )
+    return CompiledDelivery(
+        outline=output.title,
+        body=body,
+        semantic_contract=semantic_contract,
+        production=production,
+        resource_refs=program.required_resource_ids,
+        visible_provenance=provenance,
+    )
+
+
+def _assert_compiled_delivery_v5(
+    request: DeliveryCompileInput,
+    kernel: CreativeKernelV5,
+    compiled: CompiledDelivery,
+) -> None:
+    expected = _compile_delivery_v5(request, kernel)
+    if compiled != expected:
+        raise GenerationFailed("V5 确定性成品编译发生漂移")
+    if any(resource_id not in request.allowed_resource_ids for resource_id in compiled.resource_refs):
+        raise GenerationFailed("V5 成品使用了未登记资源")
+    allowed_sources = {
+        "compiler:visible-body",
+        "compiler:duration",
+        *(source for unit in kernel.units for source in (unit.unit_id, *unit.provenance)),
+        *(f"media-resource:{item}" for item in compiled.resource_refs),
+    }
+    if request.media_capability_envelope is not None:
+        allowed_sources.add(f"media-envelope:{media_envelope_digest(request.media_capability_envelope)}")
+    if request.media_program is not None:
+        allowed_sources.update(
+            {
+                f"media-program:{media_program_digest(request.media_program)}",
+                f"media-program:{request.media_program.program_id}",
+            }
+        )
+        if request.media_program.optional_capture_suggestion_id is not None:
+            allowed_sources.add(
+                f"compiler:optional-capture-suggestion:{request.media_program.optional_capture_suggestion_id}"
+            )
+    allowed_sources.update(_PHRASES)
+    if any(source not in allowed_sources for sources in compiled.visible_provenance.values() for source in sources):
+        raise GenerationFailed("V5 成品包含未知可见来源")
+
+
+def _v5_visible_fact(fact_ref: str, exact_text: str) -> str:
+    if fact_ref.startswith("source:user_actuality:"):
+        return f"{_PHRASES['phrase:scope-user-fact']}“{exact_text}”"
+    if fact_ref.startswith("brand:"):
+        return exact_text
+    return f"{_PHRASES['phrase:scope-product-fact']}{exact_text}"
+
+
+def _v5_artifact_scope_source(
+    fact_units: tuple[object, ...],
+) -> str:
+    refs = tuple(
+        fact_ref for unit in fact_units if isinstance(unit, object) for fact_ref in getattr(unit, "fact_refs", ())
+    )
+    if any(ref.startswith("source:user_actuality:") for ref in refs):
+        return "phrase:artifact-user-fact"
+    if refs:
+        return "phrase:artifact-confirmed-fact"
+    return "phrase:artifact-general"
+
+
+def _v5_graphic_projection(
+    title: str,
+    *,
+    body_paragraphs: tuple[str, ...],
+    fact_count: int,
+    program: MediaProgramSelectionV1,
+) -> tuple[str, str, str]:
+    body_bindings = tuple(
+        f"正文位置 {index} 承载原句：{_media_text_anchor(paragraph)}"
+        for index, paragraph in enumerate(body_paragraphs, start=1)
+    )
+    if program.primary_resource_id and program.secondary_resource_id:
+        return (
+            f"首图以《{title}》作为文字层，主视觉素材居中且面积较大，辅助视觉素材侧置且面积较小。",
+            "；".join(
+                (
+                    "先完整呈现主视觉素材，再由辅助视觉素材回应",
+                    *(f"冻结事实位置 {index} 原样承载服务端事实块" for index in range(1, fact_count + 1)),
+                    *body_bindings,
+                    "末页承载 Writer 发布配文",
+                )
+            )
+            + "。",
+            "只使用冻结的主、辅两份登记素材与抽象排版；主视觉先出现、居中且较大，辅助视觉后出现、侧置且较小。",
+        )
+    return (
+        f"首图只使用作品标题《{title}》、抽象色块、线条和留白。",
+        "；".join(
+            (
+                "标题与导读分别占一个阅读位置",
+                *(f"冻结事实位置 {index} 原样承载服务端事实块" for index in range(1, fact_count + 1)),
+                *body_bindings,
+                "末页承载 Writer 发布配文",
+            )
+        )
+        + "。",
+        "只使用原创文字排版、抽象色块、线条、符号、留白和冻结登记素材；不增加人物、场地、道具或商品实物。",
+    )
+
+
+def _v5_video_projection(
+    title: str,
+    *,
+    body_paragraphs: tuple[str, ...],
+    program: MediaProgramSelectionV1,
+) -> tuple[str, str, str]:
+    body_bindings = tuple(
+        f"镜头位置 {index} 的字幕与文字层承载原句：{_media_text_anchor(paragraph)}"
+        for index, paragraph in enumerate(body_paragraphs, start=1)
+    )
+    if program.primary_resource_id and program.secondary_resource_id:
+        return (
+            f"首帧以《{title}》和主视觉素材建立画面重心，辅助视觉素材暂居侧边。",
+            "；".join(
+                (
+                    "主视觉先出现，辅助视觉后回应",
+                    *body_bindings,
+                    "结尾承载 Writer 发布配文",
+                )
+            )
+            + "。",
+            "只使用冻结的两份登记素材、字幕和抽象转场；不增加人物、场地、道具、动作或声音资源。",
+        )
+    return (
+        f"首帧只使用作品标题《{title}》与抽象动态图形。",
+        "；".join(
+            (
+                "导读作为开场字幕",
+                *body_bindings,
+                "结尾承载 Writer 发布配文",
+            )
+        )
+        + "。",
+        "使用原创文字卡、抽象图形、字幕和静音可成立的节奏；不增加人物、场地、道具、商品、现场声音或外部素材。",
+    )
+
+
+def _media_text_anchor(paragraph: str) -> str:
+    """Bind a slot to Writer copy without authoring or semantically rewriting it."""
+
+    normalized = " ".join(paragraph.split())
+    endings = tuple(index + 1 for index, character in enumerate(normalized) if character in "。！？!?")
+    return normalized[: min(endings)] if endings else normalized
+
+
+def _v5_semantic_contract(
+    request: DeliveryCompileInput,
+    output: WriterOutputV3,
+    visible_facts: tuple[str, ...],
+) -> ContentSemanticContract:
+    basis = request.product_value_contract
+    if isinstance(basis, P2ProductDecisionBasisV2):
+        return P2SemanticContract(
+            basis.product_specific_understanding,
+            basis.tradeoff,
+            basis.condition_of_validity,
+        )
+    if isinstance(basis, P5ProductDecisionBasisV2):
+        return P5SemanticContract(
+            basis.product_specific_understanding,
+            basis.tradeoff,
+            basis.condition_of_validity,
+        )
+    fact_text = "\n".join(visible_facts)
+    if request.primary_product == "dressing_decision":
+        return P1SemanticContract(
+            output.creative_body,
+            _PHRASES["phrase:fact-boundary"],
+            output.publication_caption,
+        )
+    if request.primary_product == "brand_life_narrative":
+        return P3SemanticContract(
+            output.creative_body,
+            output.publication_caption,
+            output.natural_guide,
+        )
+    if request.primary_product == "local_response":
+        return P4SemanticContract(
+            fact_text or output.natural_guide,
+            output.creative_body,
+            output.publication_caption,
+        )
+    return P5SemanticContract(
+        fact_text,
+        output.creative_body,
+        _PHRASES["phrase:resource-boundary"],
+    )
 
 
 def _compile_delivery(
@@ -628,14 +1002,13 @@ def _compile_delivery_v4(
     body_units = tuple(unit for unit in kernel.units if unit.purpose == "body")
     if not body_units or any(not unit.text.strip() for unit in (*singleton.values(), *body_units)):
         raise GenerationFailed("创作内核包含空的可见创作单元")
-    writer_visible_text = "\n".join(
-        unit.text for unit in kernel.units if unit.text_source == "writer"
-    )
-    if request.publication_contract is not None and request.product_value_contract is not None:
+    writer_visible_text = "\n".join(unit.text for unit in kernel.units if unit.text_source == "writer")
+    if request.publication_contract is not None and isinstance(
+        request.product_value_contract,
+        (P2ProductValueContractV1, P5ProductValueContractV1),
+    ):
         publication_visible_text = "\n".join(
-            unit.text
-            for unit in kernel.units
-            if unit.text_source in {"writer", "prior_version"}
+            unit.text for unit in kernel.units if unit.text_source in {"writer", "prior_version"}
         )
         internal_product_plan = (
             (
@@ -696,12 +1069,9 @@ def _compile_delivery_v4(
             fact_units,
             media_native=True,
         )
-    if (
-        request.publication_contract is None
-        and isinstance(
-            request.product_value_contract,
-            (P2ProductValueContractV1, P5ProductValueContractV1),
-        )
+    if request.publication_contract is None and isinstance(
+        request.product_value_contract,
+        (P2ProductValueContractV1, P5ProductValueContractV1),
     ):
         content_units = fact_units
         full_body = _product_value_full_body(
@@ -922,8 +1292,7 @@ def _bind_graphic_program_to_title(
     opening, sequence, production_note = texts
     if (
         legacy_observation_binding
-        and
-        program.program_id == "graphic_observation_progression_v1"
+        and program.program_id == "graphic_observation_progression_v1"
         and program.series_position is None
     ):
         sequence = _graphic_observation_sequence(body_units)
@@ -954,8 +1323,7 @@ def _graphic_observation_sequence(
     lines = tuple(line.strip() for line in body.splitlines() if line.strip())
     if len(lines) >= 3:
         return (
-            "第 1 页给作品标题；第 2 页保留本次真实片段；"
-            "后三页依照正文换行逐步推进，每页只承担一步；末页回到发布配文。"
+            "第 1 页给作品标题；第 2 页保留本次真实片段；后三页依照正文换行逐步推进，每页只承担一步；末页回到发布配文。"
         )
     return (
         "第 1 页给作品标题；第 2 页保留本次真实片段；"
@@ -977,16 +1345,10 @@ def _publication_graphic_program_text(
     """
 
     paragraph_count = _writer_paragraph_count(body_units)
-    fact_pages = (
-        f"为 {fact_count} 条已冻结事实原句分别保留独立页面；"
-        if fact_count
-        else ""
-    )
+    fact_pages = f"为 {fact_count} 条已冻结事实原句分别保留独立页面；" if fact_count else ""
     body_pages = f"按正文现有顺序使用 {paragraph_count} 页，每页绑定一个正文段落；"
     series_marker = (
-        f"首图保留系列第 {program.series_position} 篇的序号标记，"
-        if program.series_position is not None
-        else "首图"
+        f"首图保留系列第 {program.series_position} 篇的序号标记，" if program.series_position is not None else "首图"
     )
     registered_opening = (
         "首图绑定冻结的主视觉与辅助视觉资源；主视觉居中且较大，辅助视觉侧置且较小，标题不遮挡资源。"
@@ -994,21 +1356,11 @@ def _publication_graphic_program_text(
         else "首图按本次冻结顺序绑定已登记商品资源，标题不遮挡资源。"
     )
     opening_by_program = {
-        "graphic_fact_guided_v1": (
-            f"{series_marker}只排标题和观看回报，并为冻结事实页保留独立文字层级。"
-        ),
-        "graphic_observation_progression_v1": (
-            f"{series_marker}只排标题和观看回报，用单一强调色建立阅读起点。"
-        ),
-        "graphic_choice_contrast_v1": (
-            f"{series_marker}只排标题和观看回报，保留两个独立版面层级。"
-        ),
-        "graphic_series_response_v1": (
-            f"{series_marker}只排标题和观看回报，用一条进度线标明本篇位置。"
-        ),
-        "graphic_series_choice_v1": (
-            f"{series_marker}只排标题和观看回报，用错位层级标明本篇位置。"
-        ),
+        "graphic_fact_guided_v1": (f"{series_marker}只排标题和观看回报，并为冻结事实页保留独立文字层级。"),
+        "graphic_observation_progression_v1": (f"{series_marker}只排标题和观看回报，用单一强调色建立阅读起点。"),
+        "graphic_choice_contrast_v1": (f"{series_marker}只排标题和观看回报，保留两个独立版面层级。"),
+        "graphic_series_response_v1": (f"{series_marker}只排标题和观看回报，用一条进度线标明本篇位置。"),
+        "graphic_series_choice_v1": (f"{series_marker}只排标题和观看回报，用错位层级标明本篇位置。"),
         "graphic_registered_product_relation_v1": registered_opening,
         "graphic_selected_asset_sequence_v1": (
             "首图绑定本次冻结资源顺序中的第一份已登记素材，标题置于不遮挡素材的区域。"
@@ -1021,12 +1373,9 @@ def _publication_graphic_program_text(
         "graphic_series_response_v1": "沿用系列位置标记，正文页只绑定本篇现有段落。",
         "graphic_series_choice_v1": "保留系列位置标记，用段落错位呈现本篇现有内容。",
         "graphic_registered_product_relation_v1": (
-            "只使用冻结的登记商品资源；主视觉先出现、居中且较大，辅助视觉随后出现、侧置且较小，"
-            "不交换冻结角色。"
+            "只使用冻结的登记商品资源；主视觉先出现、居中且较大，辅助视觉随后出现、侧置且较小，不交换冻结角色。"
         ),
-        "graphic_selected_asset_sequence_v1": (
-            "只使用本次冻结的所选素材与抽象排版，严格保持冻结资源顺序。"
-        ),
+        "graphic_selected_asset_sequence_v1": ("只使用本次冻结的所选素材与抽象排版，严格保持冻结资源顺序。"),
     }
     resource_pages_by_program = {
         "graphic_registered_product_relation_v1": (
@@ -1034,9 +1383,7 @@ def _publication_graphic_program_text(
             if program.primary_resource_id and program.secondary_resource_id
             else "按本次冻结顺序逐项绑定已登记商品资源；"
         ),
-        "graphic_selected_asset_sequence_v1": (
-            "按本次冻结资源顺序逐项绑定已登记素材；"
-        ),
+        "graphic_selected_asset_sequence_v1": ("按本次冻结资源顺序逐项绑定已登记素材；"),
     }
     try:
         opening = opening_by_program[program.program_id]
@@ -1044,9 +1391,7 @@ def _publication_graphic_program_text(
     except KeyError as exc:
         raise GenerationFailed("图文媒体程序与发布责任合同不一致") from exc
     sequence = (
-        "第 1 页绑定标题与观看回报；"
-        f"{resource_pages_by_program.get(program.program_id, '')}"
-        f"{fact_pages}{body_pages}"
+        f"第 1 页绑定标题与观看回报；{resource_pages_by_program.get(program.program_id, '')}{fact_pages}{body_pages}"
     )
     production_note = (
         layout
@@ -1055,10 +1400,7 @@ def _publication_graphic_program_text(
             "graphic_registered_product_relation_v1",
             "graphic_selected_asset_sequence_v1",
         }
-        else (
-            f"{layout}只使用文字、排版、色块、线条、符号和留白；"
-            "不要求现实人物、商品、照片、家具、场地或道具。"
-        )
+        else (f"{layout}只使用文字、排版、色块、线条、符号和留白；不要求现实人物、商品、照片、家具、场地或道具。")
     )
     return opening, sequence, production_note
 
@@ -1073,16 +1415,11 @@ def _publication_video_program_text(
     """Project generated text into a frozen video program without writing copy."""
 
     paragraph_count = _writer_paragraph_count(body_units)
-    fact_step = (
-        f"逐条显示 {fact_count} 条已冻结事实原句；"
-        if fact_count
-        else ""
-    )
+    fact_step = f"逐条显示 {fact_count} 条已冻结事实原句；" if fact_count else ""
     body_step = f"把正文现有的 {paragraph_count} 个段落按原顺序逐屏绑定；"
     abstract_sequence = f"标题短停后，{fact_step}{body_step}"
     subtitle_strategy = (
-        "字幕逐字跟随已经生成的正文；事实原句单独成屏，正文只按原段落断句，"
-        "不增加正文以外的文字或现实细节。"
+        "字幕逐字跟随已经生成的正文；事实原句单独成屏，正文只按原段落断句，不增加正文以外的文字或现实细节。"
     )
     registered_opening = (
         "首帧绑定冻结的主视觉与辅助视觉资源；主视觉居中且较大，辅助视觉侧置且较小，标题不遮挡资源。"
@@ -1090,8 +1427,7 @@ def _publication_video_program_text(
         else "首帧按本次冻结顺序绑定已登记商品资源，标题不遮挡资源。"
     )
     registered_sequence = (
-        "标题短停后，先绑定冻结的主视觉资源，再绑定冻结的辅助视觉资源；"
-        "关系帧保持既定主辅版面角色；"
+        "标题短停后，先绑定冻结的主视觉资源，再绑定冻结的辅助视觉资源；关系帧保持既定主辅版面角色；"
         if program.primary_resource_id and program.secondary_resource_id
         else "标题短停后，按本次冻结顺序逐项绑定已登记商品资源；"
     )
@@ -1107,15 +1443,10 @@ def _publication_video_program_text(
     sequence_by_program = {
         "video_dynamic_text_v1": abstract_sequence,
         "video_condition_choice_v1": abstract_sequence,
-        "video_creator_expression_v1": (
-            f"标题短停后，{fact_step}已登记创作者按正文原顺序完整表达。"
-        ),
-        "video_registered_product_display_v1": (
-            f"{registered_sequence}{fact_step}{body_step}"
-        ),
+        "video_creator_expression_v1": (f"标题短停后，{fact_step}已登记创作者按正文原顺序完整表达。"),
+        "video_registered_product_display_v1": (f"{registered_sequence}{fact_step}{body_step}"),
         "video_selected_asset_sequence_v1": (
-            "标题短停后，按本次冻结资源顺序逐项绑定已登记素材；"
-            f"{fact_step}{body_step}"
+            f"标题短停后，按本次冻结资源顺序逐项绑定已登记素材；{fact_step}{body_step}"
         ),
     }
     spoken_by_program = {
@@ -1126,22 +1457,13 @@ def _publication_video_program_text(
         "video_selected_asset_sequence_v1": "本版无口播；完整正文逐字进入字幕：\n" + full_body,
     }
     production_by_program = {
-        "video_dynamic_text_v1": (
-            "默认静音，只使用文字、排版、色块、线条、符号、留白和字幕切换完成。"
-        ),
-        "video_condition_choice_v1": (
-            "两个文字层级只绑定正文已有段落，不添加新文字；默认静音，不调用现实画面。"
-        ),
-        "video_creator_expression_v1": (
-            "只使用已登记创作者表达与抽象编排；不要求场地、道具或环境声。"
-        ),
+        "video_dynamic_text_v1": ("默认静音，只使用文字、排版、色块、线条、符号、留白和字幕切换完成。"),
+        "video_condition_choice_v1": ("两个文字层级只绑定正文已有段落，不添加新文字；默认静音，不调用现实画面。"),
+        "video_creator_expression_v1": ("只使用已登记创作者表达与抽象编排；不要求场地、道具或环境声。"),
         "video_registered_product_display_v1": (
-            "只使用冻结的登记商品资源和抽象编排；不交换冻结主辅角色，"
-            "不增加演员、场地、道具或环境声。"
+            "只使用冻结的登记商品资源和抽象编排；不交换冻结主辅角色，不增加演员、场地、道具或环境声。"
         ),
-        "video_selected_asset_sequence_v1": (
-            "只使用本次冻结的所选素材与抽象编排，严格保持冻结资源顺序。"
-        ),
+        "video_selected_asset_sequence_v1": ("只使用本次冻结的所选素材与抽象编排，严格保持冻结资源顺序。"),
     }
     try:
         return (
@@ -1159,10 +1481,7 @@ def _writer_paragraph_count(
     body_units: tuple[CreativeKernelUnit, ...],
 ) -> int:
     paragraphs = tuple(
-        paragraph.strip()
-        for unit in body_units
-        for paragraph in unit.text.split("\n\n")
-        if paragraph.strip()
+        paragraph.strip() for unit in body_units for paragraph in unit.text.split("\n\n") if paragraph.strip()
     )
     return max(1, len(paragraphs))
 

@@ -3,10 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from uuid import UUID
 
-from src.shared.creative_kernel import (
-    CreativeKernelV1,
-    kernel_from_document,
-)
+from src.shared.creative_kernel import CreativeKernel, kernel_from_document
 from src.shared.creative_plan import (
     CreativePlanV2,
     creative_plan_from_document,
@@ -28,11 +25,16 @@ from src.shared.product_value import (
     product_value_contract_from_document,
 )
 from src.shared.publication_contract import (
-    PublicationContractV2,
+    PublicationContract,
     publication_contract_digest,
     publication_contract_from_document,
 )
 from src.shared.types import ProductFact, SeriesContext, SeriesEntry
+from src.shared.writer_request import (
+    WriterOutputV3,
+    writer_output_digest,
+    writer_output_from_document,
+)
 
 _CONTEXT_CATEGORY_LABELS = {
     "brand_fact": "品牌已确认资料",
@@ -55,10 +57,18 @@ def visible_context_basis(
     snapshot = snapshot or {}
     packet = snapshot.get("brand_context_packet")
     raw_segments = packet.get("segments") if isinstance(packet, dict) else None
+    consumed_or_displayed: set[str] | None = None
+    if isinstance(packet, dict) and packet.get("packet_version") == "brand-context-packet-v3":
+        raw_consumed = packet.get("consumed_segment_refs")
+        raw_displayed = packet.get("displayed_segment_refs")
+        if isinstance(raw_consumed, list) and isinstance(raw_displayed, list):
+            consumed_or_displayed = {str(item) for item in (*raw_consumed, *raw_displayed)}
     categories: list[str] = []
     if isinstance(raw_segments, list):
         for segment in raw_segments:
             if not isinstance(segment, dict):
+                continue
+            if consumed_or_displayed is not None and str(segment.get("segment_id")) not in consumed_or_displayed:
                 continue
             label = _CONTEXT_CATEGORY_LABELS.get(str(segment.get("semantic_kind")))
             if label and label not in categories:
@@ -106,12 +116,30 @@ def frozen_creative_plan(
 
 def frozen_creative_kernel(
     snapshot: Mapping[str, object],
-) -> CreativeKernelV1 | None:
+) -> CreativeKernel | None:
     value = snapshot.get(
-        "creative_kernel_v2",
-        snapshot.get("creative_kernel_v1"),
+        "creative_kernel_v5",
+        snapshot.get(
+            "creative_kernel_v2",
+            snapshot.get("creative_kernel_v1"),
+        ),
     )
     return None if value is None else kernel_from_document(value)
+
+
+def frozen_writer_output(
+    snapshot: Mapping[str, object],
+) -> WriterOutputV3 | None:
+    value = snapshot.get("writer_output_v3")
+    digest = snapshot.get("writer_output_v3_digest")
+    if value is None and digest is None:
+        return None
+    if value is None or not isinstance(digest, str):
+        raise DomainError("内容任务冻结的 Writer 成稿不完整")
+    output = writer_output_from_document(value)
+    if writer_output_digest(output) != digest:
+        raise DomainError("内容任务冻结的 Writer 成稿摘要不一致")
+    return output
 
 
 def frozen_delivery_compiler_version(
@@ -160,7 +188,7 @@ def frozen_product_value_contract(
 
 def frozen_publication_contract(
     snapshot: Mapping[str, object],
-) -> PublicationContractV2 | None:
+) -> PublicationContract | None:
     value = snapshot.get("publication_contract")
     digest = snapshot.get("publication_contract_digest")
     if value is None and digest is None:
@@ -219,16 +247,8 @@ def frozen_product_facts(snapshot: Mapping[str, object]) -> tuple[ProductFact, .
                 source_note=str(raw.get("source_note") or ""),
                 fact_version=version,
                 applicability=str(raw.get("applicability") or ""),
-                product_id=(
-                    UUID(str(raw["product_id"]))
-                    if raw.get("product_id")
-                    else None
-                ),
-                product_version_id=(
-                    UUID(str(raw["product_version_id"]))
-                    if raw.get("product_version_id")
-                    else None
-                ),
+                product_id=(UUID(str(raw["product_id"])) if raw.get("product_id") else None),
+                product_version_id=(UUID(str(raw["product_version_id"])) if raw.get("product_version_id") else None),
             )
         )
     return tuple(products)

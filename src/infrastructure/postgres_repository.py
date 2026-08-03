@@ -13,9 +13,9 @@ from psycopg.types.json import Jsonb
 
 from src.ports.content_repository import ContentRepository
 from src.shared.brand_publication import (
-    BRAND_CONTEXT_PACKET_VERSION,
-    brand_context_packet_digest,
+    BRAND_CONTEXT_PACKET_V3_VERSION,
     brand_context_packet_document,
+    brand_context_packet_v3_digest,
     publication_projection_digest,
 )
 from src.shared.content_origin import aigc_disclosure, is_ai_generated_content
@@ -25,6 +25,7 @@ from src.shared.content_snapshot import (
     visible_direction,
 )
 from src.shared.delivery_compiler import (
+    DELIVERY_COMPILER_V5_VERSION,
     DELIVERY_COMPILER_VERSION,
     MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
 )
@@ -33,7 +34,7 @@ from src.shared.narrative import visible_digest
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
-    BrandContextPacketV2,
+    BrandContextPacketV3,
     BrandContextSegment,
     ContentControlContext,
     ContentProduct,
@@ -108,16 +109,41 @@ class PostgresContentRepository(ContentRepository):
             "publication_contract_digest",
         }
     )
-    _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS = (
-        _DUAL_TRACK_COMPLETION_KEYS - _PUBLICATION_COMPLETION_KEYS
+    _PUBLICATION_V3_COMPLETION_KEYS = frozenset(
+        {
+            "creative_kernel_v5",
+            "writer_request_v3",
+            "writer_request_v3_digest",
+            "writer_output_v3",
+            "writer_output_v3_digest",
+            "expression_plan_version",
+            "expression_plan_digest",
+            "delivery_compiler_version",
+            "writer_model",
+            "version_authorization",
+            "claim_inventory_v1",
+            "deterministic_checked_kernel_digest",
+            "reviewed_creative_digest",
+            "product_fact_packet",
+            "immutable_product_fact_blocks",
+            "used_product_fact_ids",
+            "used_product_fact_block_ids",
+            "product_fact_renderer_version",
+            "visible_provenance",
+            "delivery_resource_refs",
+            "media_capability_envelope",
+            "media_capability_envelope_digest",
+            "media_program",
+            "media_program_digest",
+            "product_value_contract",
+            "product_value_contract_digest",
+            "publication_contract",
+            "publication_contract_digest",
+        }
     )
-    _MEDIA_NATIVE_COMPLETION_KEYS = (
-        _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS
-        - _PRODUCT_VALUE_COMPLETION_KEYS
-    )
-    _LEGACY_DUAL_TRACK_COMPLETION_KEYS = (
-        _MEDIA_NATIVE_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
-    )
+    _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS = _DUAL_TRACK_COMPLETION_KEYS - _PUBLICATION_COMPLETION_KEYS
+    _MEDIA_NATIVE_COMPLETION_KEYS = _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS - _PRODUCT_VALUE_COMPLETION_KEYS
+    _LEGACY_DUAL_TRACK_COMPLETION_KEYS = _MEDIA_NATIVE_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
     _REVISION_IMMUTABLE_SNAPSHOT_KEYS = frozenset(
         {
             "creation_commitment",
@@ -145,11 +171,17 @@ class PostgresContentRepository(ContentRepository):
         "creative_plan_v2",
         "narrative_frame",
         "creative_kernel_v2",
+        "creative_kernel_v5",
+        "writer_request_v3",
+        "writer_request_v3_digest",
+        "writer_output_v3",
+        "writer_output_v3_digest",
         "expression_plan_version",
         "expression_plan_digest",
         "delivery_compiler_version",
         "version_authorization",
         "reviewed_kernel_digest",
+        "deterministic_checked_kernel_digest",
         "reviewed_creative_digest",
         "product_fact_packet",
         "immutable_product_fact_blocks",
@@ -205,7 +237,9 @@ class PostgresContentRepository(ContentRepository):
         patch_keys = frozenset(patch)
         compiler_version = patch.get("delivery_compiler_version")
         expected_key_sets: tuple[frozenset[str], ...]
-        if compiler_version == DELIVERY_COMPILER_VERSION:
+        if compiler_version == DELIVERY_COMPILER_V5_VERSION:
+            expected_key_sets = (cls._PUBLICATION_V3_COMPLETION_KEYS,)
+        elif compiler_version == DELIVERY_COMPILER_VERSION:
             expected_key_sets = (
                 cls._DUAL_TRACK_COMPLETION_KEYS,
                 cls._PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS,
@@ -222,7 +256,12 @@ class PostgresContentRepository(ContentRepository):
             expected_key_sets = (cls._LEGACY_DUAL_TRACK_COMPLETION_KEYS,)
         if patch_keys not in expected_key_sets:
             raise DomainError("创作内核快照补丁字段不完整或越界")
-        if patch.get("version_authorization") != "deterministic-dual-track-v1":
+        expected_authorization = (
+            "deterministic-publication-v3"
+            if compiler_version == DELIVERY_COMPILER_V5_VERSION
+            else "deterministic-dual-track-v1"
+        )
+        if patch.get("version_authorization") != expected_authorization:
             raise DomainError("内容版本缺少确定性双轨授权")
         for key in cls._REVISION_IMMUTABLE_SNAPSHOT_KEYS:
             current_value = current.get(key)
@@ -238,7 +277,11 @@ class PostgresContentRepository(ContentRepository):
     ) -> dict[str, object]:
         if not isinstance(task_snapshot, dict):
             return {}
-        if task_snapshot.get("version_authorization") != "deterministic-dual-track-v1":
+        authorization = task_snapshot.get("version_authorization")
+        if authorization not in {
+            "deterministic-dual-track-v1",
+            "deterministic-publication-v3",
+        }:
             return {}
         compiler_version = task_snapshot.get("delivery_compiler_version")
         audit_version = (
@@ -247,6 +290,7 @@ class PostgresContentRepository(ContentRepository):
             in {
                 MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
                 DELIVERY_COMPILER_VERSION,
+                DELIVERY_COMPILER_V5_VERSION,
             }
             else AUDIT_VERSION_V2
         )
@@ -258,8 +302,13 @@ class PostgresContentRepository(ContentRepository):
             ),
             **{key: task_snapshot.get(key) for key in cls._VERSION_AUDIT_KEYS},
         }
+        creative_kernel = (
+            audit["creative_kernel_v5"]
+            if authorization == "deterministic-publication-v3"
+            else audit["creative_kernel_v2"]
+        )
         if (
-            not isinstance(audit["creative_kernel_v2"], dict)
+            not isinstance(creative_kernel, dict)
             or not isinstance(audit["narrative_frame"], dict)
             or not isinstance(audit["visible_provenance"], dict)
         ):
@@ -399,7 +448,6 @@ class PostgresContentRepository(ContentRepository):
         primary_product: ContentProduct,
         products: tuple[ProductFact, ...],
     ) -> BrandContext:
-        del weak_seed, products
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
@@ -457,12 +505,7 @@ class PostgresContentRepository(ContentRepository):
                 "publication_role": str(row["publication_role"]),
                 "published_text": str(row["published_text"]),
                 "applicability": [
-                    str(value)
-                    for value in (
-                        row["applicability"]
-                        if isinstance(row["applicability"], list)
-                        else []
-                    )
+                    str(value) for value in (row["applicability"] if isinstance(row["applicability"], list) else [])
                 ],
                 "source_kind": str(row["source_kind"]),
                 "source_ref": str(row["source_ref"]),
@@ -475,32 +518,34 @@ class PostgresContentRepository(ContentRepository):
         # confirmed expression baseline by the migration.  Their migration
         # digest proves that baseline source, while source-bound projections
         # use the application contract digest and must be recomputable here.
-        source_bound = any(
-            str(item["source_kind"]) == "brand_source_segment"
-            for item in digest_items
-        )
+        source_bound = any(str(item["source_kind"]) == "brand_source_segment" for item in digest_items)
         if source_bound and publication_projection_digest(digest_items) != projection_digest:
             raise DomainError("当前品牌发布版本摘要校验失败。")
+        available_rows = [row for row in rows if str(row["publication_role"]) != "internal_only"]
         applicable_rows = [
             row
-            for row in rows
-            if str(row["publication_role"]) != "internal_only"
-            and (
+            for row in available_rows
+            if (
                 not isinstance(row["applicability"], list)
                 or not row["applicability"]
                 or primary_product in row["applicability"]
             )
         ]
-        selected: list[Mapping[str, object]] = []
-        character_count = 0
-        for row in applicable_rows:
-            text = str(row["published_text"])
-            if character_count + len(text) > self._BRAND_PACKET_CHARACTER_BUDGET:
-                continue
-            selected.append(row)
-            character_count += len(text)
-            if len(selected) >= self._BRAND_PACKET_SEGMENT_LIMIT:
-                break
+        explicit_subjects = {
+            context.brand_name.casefold(),
+            *(product.sku.casefold() for product in products),
+            *(product.display_name.casefold() for product in products if product.display_name.strip()),
+        }
+        normalized_seed = weak_seed.casefold()
+        selected = [
+            row
+            for row in applicable_rows
+            if str(row["publication_role"]) in {"expression_constraint", "creative_method"}
+            or (
+                str(row["publication_role"]) == "public_brand_fact"
+                and any(subject and subject in normalized_seed for subject in explicit_subjects)
+            )
+        ]
         role_to_kind = {
             "public_brand_fact": "brand_fact",
             "expression_constraint": "expression_constraint",
@@ -510,9 +555,7 @@ class PostgresContentRepository(ContentRepository):
             BrandContextSegment(
                 segment_id=str(row["item_id"]),
                 source_document_id=(
-                    str(row["document_id"])
-                    if row["document_id"] is not None
-                    else str(row["source_ref"])
+                    str(row["document_id"]) if row["document_id"] is not None else str(row["source_ref"])
                 ),
                 source_document_version_id=(
                     str(row["document_version_id"])
@@ -524,9 +567,7 @@ class PostgresContentRepository(ContentRepository):
                 semantic_kind=role_to_kind[str(row["publication_role"])],
                 evidence_level="confirmed_publication",
                 visibility_scope="brand_all",
-                digest=hashlib.sha256(
-                    str(row["published_text"]).encode()
-                ).hexdigest(),
+                digest=hashlib.sha256(str(row["published_text"]).encode()).hexdigest(),
                 exact_text=str(row["published_text"]),
                 source_digest=str(row["source_digest"]),
             )
@@ -548,18 +589,38 @@ class PostgresContentRepository(ContentRepository):
             }
             for segment in segments
         ]
-        packet_digest = brand_context_packet_digest(
+        available_refs = tuple(str(row["item_id"]) for row in available_rows)
+        frozen_refs = tuple(segment.segment_id for segment in segments)
+        consumed_refs = tuple(
+            segment.segment_id
+            for segment in segments
+            if segment.semantic_kind
+            in {
+                "expression_constraint",
+                "creative_method",
+            }
+        )
+        displayed_refs: tuple[str, ...] = ()
+        packet_digest = brand_context_packet_v3_digest(
             projection_id=projection_id,
             projection_version=projection_version,
             projection_digest=projection_digest,
+            available_segment_refs=available_refs,
+            frozen_segment_refs=frozen_refs,
+            consumed_segment_refs=consumed_refs,
+            displayed_segment_refs=displayed_refs,
             segments=packet_document,
         )
-        packet = BrandContextPacketV2(
-            BRAND_CONTEXT_PACKET_VERSION,
+        packet = BrandContextPacketV3(
+            BRAND_CONTEXT_PACKET_V3_VERSION,
             packet_digest,
             projection_id,
             projection_version,
             projection_digest,
+            available_refs,
+            frozen_refs,
+            consumed_refs,
+            displayed_refs,
             segments,
         )
         return replace(

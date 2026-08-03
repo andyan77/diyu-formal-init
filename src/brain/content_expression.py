@@ -35,7 +35,7 @@ from src.shared.product_value import (
     product_value_contract_document,
 )
 from src.shared.publication_contract import (
-    PublicationContractV2,
+    PublicationContract,
     publication_contract_digest,
     publication_contract_document,
 )
@@ -484,7 +484,7 @@ def snapshot_document(
     media_program: MediaProgramSelectionV1 | None = None,
     product_value_contract: ProductValueContract | None = None,
     brand_context_packet: BrandContextPacket | None = None,
-    publication_contract: PublicationContractV2 | None = None,
+    publication_contract: PublicationContract | None = None,
 ) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
@@ -557,24 +557,16 @@ def snapshot_document(
             control.account_expression.version if control.account_expression else None
         ),
         "account_editorial_lens": (
-            account_editorial_lens_document(account_editorial_lens)
-            if account_editorial_lens is not None
-            else None
+            account_editorial_lens_document(account_editorial_lens) if account_editorial_lens is not None else None
         ),
         "account_editorial_lens_digest": (
-            account_editorial_lens_digest(account_editorial_lens)
-            if account_editorial_lens is not None
-            else None
+            account_editorial_lens_digest(account_editorial_lens) if account_editorial_lens is not None else None
         ),
         "publication_contract": (
-            publication_contract_document(publication_contract)
-            if publication_contract is not None
-            else None
+            publication_contract_document(publication_contract) if publication_contract is not None else None
         ),
         "publication_contract_digest": (
-            publication_contract_digest(publication_contract)
-            if publication_contract is not None
-            else None
+            publication_contract_digest(publication_contract) if publication_contract is not None else None
         ),
         "business_data_kind": business_data_kind,
         "brand_reference_context": list(brand_reference_context),
@@ -601,14 +593,10 @@ def snapshot_document(
         "media_program": (media_program_document(media_program) if media_program is not None else None),
         "media_program_digest": (media_program_digest(media_program) if media_program is not None else None),
         "product_value_contract": (
-            product_value_contract_document(product_value_contract)
-            if product_value_contract is not None
-            else None
+            product_value_contract_document(product_value_contract) if product_value_contract is not None else None
         ),
         "product_value_contract_digest": (
-            product_value_contract_digest(product_value_contract)
-            if product_value_contract is not None
-            else None
+            product_value_contract_digest(product_value_contract) if product_value_contract is not None else None
         ),
         "reviewed_kernel_digest": None,
         "visible_provenance": None,
@@ -653,9 +641,7 @@ def snapshot_document(
                 "fact_version": item.fact_version,
                 "applicability": item.applicability,
                 "product_id": str(item.product_id) if item.product_id else None,
-                "product_version_id": (
-                    str(item.product_version_id) if item.product_version_id else None
-                ),
+                "product_version_id": (str(item.product_version_id) if item.product_version_id else None),
             }
             for item in products
         ],

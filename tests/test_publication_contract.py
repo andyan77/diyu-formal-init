@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from dataclasses import replace
 from typing import cast
 
 import pytest
 
+from src.brain.input_role_resolver import resolve_input_roles
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.shared.content_snapshot import frozen_publication_contract
 from src.shared.delivery_compiler import (
@@ -16,13 +18,22 @@ from src.shared.delivery_compiler import (
 from src.shared.errors import DomainError
 from src.shared.narrative import UserFactCandidate, user_fact_candidates
 from src.shared.publication_contract import (
+    AccountEditorialPermissionV3,
+    BrandContextUseV3,
     IntakeSpanRole,
+    PlatformDirectionV3,
     PublicationContractV2,
+    PublicationContractV3,
     PublicationInputSpanV1,
     build_publication_contract,
+    build_publication_contract_v3,
     publication_contract_digest,
     publication_contract_document,
     publication_contract_from_document,
+)
+from src.shared.writer_request import (
+    build_writer_request_v3,
+    writer_request_document,
 )
 
 
@@ -85,6 +96,59 @@ def _contract(
         publication_projection_version=3,
         publication_projection_digest="1" * 64,
         product_value_contract_digest="2" * 64,
+    )
+
+
+def _contract_v3() -> PublicationContractV3:
+    turns = ("回家才发现忘记喝水，帮我发一条。",)
+    candidates = user_fact_candidates(turns)
+    assert len(candidates) == 2
+    resolution = resolve_input_roles(
+        user_turns=turns,
+        candidates=candidates,
+        roles={
+            candidates[0].source_id: "observable_actuality",
+            candidates[1].source_id: "creation_instruction",
+        },
+        selected_actuality_source_ids=(candidates[0].source_id,),
+    )
+    return build_publication_contract_v3(
+        input_roles=resolution.spans,
+        topic_origin="explicit_user",
+        topic=candidates[0].exact_text,
+        content_product="brand_life_narrative",
+        central_job="围绕用户提供的具体张力形成一条独立判断",
+        audience_payoff="让受众从这个生活片段里看到一个值得停留的观察",
+        explicit_user_controls=(candidates[1].exact_text,),
+        account_editorial_permission=AccountEditorialPermissionV3(
+            identity="品牌生活观察账号",
+            audience="愿意认真看日常的人",
+            attention_order="先看具体处境，再形成判断",
+            response_posture="平等、具体、不替用户补原因",
+            refusals="不新增用户身体、心理、原因或后续结果",
+            allowed_stance="可以形成一般观察与低风险比喻",
+            source_profile_id="profile-v3-tests",
+            source_profile_version=3,
+        ),
+        frozen_fact_refs=(candidates[0].source_id,),
+        product_decision_basis=None,
+        series_delta=None,
+        platform_direction=PlatformDirectionV3(
+            target="小红书",
+            media_format="graphic",
+            direction_version="platform-direction-v3-test",
+            direction_digest="3" * 64,
+        ),
+        media_capability_ref="4" * 64,
+        brand_context_use=BrandContextUseV3(
+            available_refs=("brand-1", "method-1"),
+            frozen_refs=("brand-1", "method-1"),
+            consumed_refs=("method-1",),
+            displayed_refs=(),
+        ),
+        publication_projection_id="projection-v3-tests",
+        publication_projection_version=4,
+        publication_projection_digest="5" * 64,
     )
 
 
@@ -196,10 +260,7 @@ def test_three_distinct_creation_instructions_keep_exact_char_and_byte_spans(
     span = _publication_span(candidates[0], role)
 
     assert turn[span.start_offset : span.end_offset] == span.exact_text
-    assert (
-        turn.encode("utf-8")[span.start_byte : span.end_byte].decode("utf-8")
-        == span.exact_text
-    )
+    assert turn.encode("utf-8")[span.start_byte : span.end_byte].decode("utf-8") == span.exact_text
     assert span.role != "observable_actuality"
 
 
@@ -256,6 +317,85 @@ def test_publication_contract_has_stable_direct_and_json_round_trips() -> None:
     assert publication_contract_digest(
         publication_contract_from_document(json_document)
     ) == publication_contract_digest(contract)
+
+
+def test_publication_contract_v3_is_the_only_writer_semantic_projection() -> None:
+    contract = _contract_v3()
+    document = publication_contract_document(contract)
+    restored = publication_contract_from_document(_json_round_trip_document(document))
+    request = build_writer_request_v3(
+        contract,
+        product_decision_basis=None,
+        prior_output=None,
+        revision_instruction=None,
+    )
+    request_document = writer_request_document(request)
+
+    assert restored == contract
+    assert publication_contract_digest(restored) == publication_contract_digest(contract)
+    assert request.actuality_context == ((contract.input_roles[0].source_id, contract.input_roles[0].exact_text),)
+    assert contract.input_roles[1].exact_text in request.explicit_user_controls
+    assert contract.input_roles[1].exact_text not in "\n".join(text for _, text in request.actuality_context)
+    assert "known_conditions" not in request_document
+    assert "visible_text" not in json.dumps(
+        request_document,
+        ensure_ascii=False,
+    )
+
+
+def test_publication_contract_v3_projects_two_brands_without_a_diyu_branch() -> None:
+    first = _contract_v3()
+    second = replace(
+        first,
+        account_editorial_permission=replace(
+            first.account_editorial_permission,
+            identity="另一品牌的生活编辑",
+            audience="希望把日常说清楚的人",
+            allowed_stance="从具体处境形成克制但明确的判断",
+        ),
+        publication_projection_id="55555555-5555-4555-8555-555555555555",
+        publication_projection_digest="5" * 64,
+    )
+
+    first_request = writer_request_document(
+        build_writer_request_v3(
+            first,
+            product_decision_basis=None,
+            prior_output=None,
+            revision_instruction=None,
+        )
+    )
+    second_request = writer_request_document(
+        build_writer_request_v3(
+            second,
+            product_decision_basis=None,
+            prior_output=None,
+            revision_instruction=None,
+        )
+    )
+
+    assert first_request["account_editorial_permission"] != second_request["account_editorial_permission"]
+    assert first_request["publication_contract_digest"] != second_request["publication_contract_digest"]
+    assert "笛语" not in json.dumps(first_request, ensure_ascii=False)
+    assert "笛语" not in json.dumps(second_request, ensure_ascii=False)
+
+
+def test_publication_contract_v3_fails_closed_on_brand_use_and_span_drift() -> None:
+    document = publication_contract_document(_contract_v3())
+    raw_use = document["brand_context_use"]
+    assert isinstance(raw_use, dict)
+    raw_use["displayed_refs"] = ["brand-1"]
+    raw_use["consumed_refs"] = ["method-1"]
+    with pytest.raises(DomainError, match="品牌资料消费状态越界"):
+        publication_contract_from_document(document)
+
+    span_document = publication_contract_document(_contract_v3())
+    raw_roles = span_document["input_roles"]
+    assert isinstance(raw_roles, list)
+    assert isinstance(raw_roles[0], dict)
+    raw_roles[0]["end_byte"] = int(raw_roles[0]["end_byte"]) + 1
+    with pytest.raises(DomainError, match="输入跨度无效"):
+        publication_contract_from_document(span_document)
 
 
 @pytest.mark.parametrize(

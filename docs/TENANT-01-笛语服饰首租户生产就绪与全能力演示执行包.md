@@ -34,6 +34,46 @@ P5 在建任务前自然提示且差分 `0/0/0`；软件功能真值与租户资
   十一卡人工初审为 4 PASS／7 FAIL；对应 raw、artifact 与逐卡结论永久作为失败候选保留，
   不删除、不改写，也不拼接进后续候选。
 
+### 2026-08-02 最终共享语义编译返工：责任矩阵与冻结保留集
+
+本段是当前施工真值，取代下方历史 WIP 的“只保留 publication-contract-v2”结论；历史失败、
+raw、artifact、ledger 和人审输入继续原样保留。`ba95a1f…` 只作为诊断候选，不得用其中预填
+PASS 生成最终 manifest。新任务只允许沿一条链路执行：输入角色解析 → 任务相关上下文选择 →
+`PublicationContractV3` → `WriterRequestV3` → `CreativeKernelV5` →
+`DeliveryCompilerV5` → 确定性硬边界 → 原子保存 → 独立产品审阅。
+
+| 问题 | 违反的不变量 | 当前错误作者 | 正确责任作者 | 共享修复 | 同时关闭的历史失败 | 承重回归 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 创作命令混入现实事实 | 现实事实只能是服务端冻结的连续原文 span | intake 结果被整段输入兜底 | `InputRoleResolver` | 两个内容 API 共用同一 span 验证与生成授权；模型只能选择已有 span | daily、P1 事实复述 | 三种不同命令字面的 offset／byte 等值和 `0/0/0` mutation |
+| 原始品牌资料或不相关资料进入 Writer | Writer 只能消费本题确认发布投影 | repository 丢弃 `weak_seed/products` 后按位置和预算截取 | `BrandContextSelectorV3` | 按作用域、内容产品、题材、明确商品／资料、账号和平台确定性选择；无 raw fallback | coffee、family、zero-topic 的品牌脚手架与画像复读 | held-out 表格／目录／采集／流程不进入，确认公开项正常进入 |
+| “存在／冻结”冒充“实际使用” | UI 只能声明本题真实消费与展示 | context packet 与 UI 投影 | V3 消费记录＋presentation | 分开记录 `available/frozen/consumed/displayed`，UI 只投影后两者 | 所有“资料已入库但正文无关”的假绿 | API／React 同一 snapshot 投影与 displayed refs 反证 |
+| 多套语义合同竞争 | Writer 只能接收一个最小业务合同 | Plan、Lens、claim、unit responsibility、repair 同时约束 | `PublicationContractV3` | 固定事实／用户控制／系列／产品责任／账号／平台优先级，仅保留六条负向边界 | P1、coffee、family、zero-topic 模板化 | 正向自然表达 mutation 不被句式门拒绝；恢复旧层变红 |
+| 商品内部验收文本进入正文 | 商品机器计划不拥有可见文案 | `ProductValueContract.visible_text`／Compiler | `ProductDecisionBasisV2`＋Writer | 机器字段仅冻结理解、取舍、条件和 fact refs；规范事实由服务端逐字插入 | P2 合同语言、通用安全说明 | visible_text 直出 mutation 变红；canonical fact 字节等值 |
+| Writer／Compiler 争夺观点与收束 | Writer 独占非事实成稿；Compiler 只编译结构 | kernel purpose、Compiler 固定媒体文案与收束 | Writer＋`CreativeKernelV5`／`DeliveryCompilerV5` | Kernel 只存 unit 所有权和 refs；Compiler 只绑定槽位、事实、披露、来源 | P1 固定骨架、P4 含混收束、跨卡观看链复读 | 恢复固定观点 mutation 变红；跨题材媒体职责比较 |
+| 系列只换词不推进 | 每篇必须有冻结的新任务和新判断 | 通用 series context／Writer | `SeriesEpisodeContract` | 冻结前文事实、判断、本篇任务、必需新增判断、位置和 topic origin | series2／series3 | V1→V2→V1、topic origin、两次新增判断反证 |
+| 确定性校验冒充自然语言 Reviewer | 软件硬门只证明可计算边界 | post validator／repair／evidence oracle | 确定性 checker＋独立人审 V2 | checker 只验所有权、字节事实、refs、资源、结构、AIGC、digest、RLS 和原子性 | 4/7、平均分及预填 PASS 假绿 | Human Review V2 字段、原文引用、逐卡二元门和 finalizer mutation |
+
+直接消费者清单冻结如下；施工完成前不得只修主 Writer 入口：
+
+| 合同 | 生产者 | 全部直接消费者 | 用户可见 | 当前处理 |
+| --- | --- | --- | --- | --- |
+| 输入 span／角色 | 服务端 candidate＋受控 intake 选择 | direct API、stream API、NarrativeFrame、PublicationContract、snapshot、revision replay、evidence | 只有 actuality 事实块可见 | 合并到统一 resolver |
+| 品牌投影／消费状态 | confirmed publication projection＋selector | ContentService、WriterRequest、snapshot、context_basis、React、finalizer | consumed/displayed 类别可见 | 新增 V3 状态投影 |
+| 商品 canonical fact／DecisionBasis | ProductResolver＋confirmed V 字段 | PublicationContract、WriterRequest、Compiler、snapshot、revision、evidence | canonical fact 与 Writer 自然解释可见 | 机器计划与文案分离 |
+| PublicationContract | ContentService | WriterRequest、Kernel builder、snapshot、revision、evidence | 字段名和安全条款不可见 | 新任务仅 V3，旧版只读 |
+| WriterRequest | PublicationContract 投影器 | DeepSeek writer、raw request digest | Writer 输出可见 | 只允许四类自然成稿字段 |
+| CreativeKernel | Writer response＋服务端 unit owner | Compiler、snapshot、revision、evidence | 单元文字经 Compiler 可见 | V5 去除句式／claim 责任 |
+| MediaProgram／Envelope | 服务端 | WriterRequest 的槽位提示、Compiler、snapshot、revision、evidence | 最终媒体结构与条件式建议可见 | Writer 前冻结，不反向授权 |
+| DeliveryCompiler | 冻结事实＋Kernel＋MediaProgram | artifact、presentation、snapshot patch、digest、evidence | 最终成品 | V5 不写观点／收束 |
+| Human Review V2 | 一次真实全文人工审阅 | finalizer、manifest、私有证据 | 不进入成品 | 不默认 PASS、不用平均分 |
+
+冻结保留集为 `config/tenant01/semantic-holdout-v1.json`，含 15 个与既有十一卡不共享原句模板的
+合成场景，覆盖新生活／家庭／零题材、P1—P5、商品事实充分与不足、有／无登记资源、明确风格
+修订、系列、跨平台、健康／商品效果诱导及跨品牌差异。文件首次落盘后以 Git blob 与 SHA-256
+共同冻结；SHA-256 为 `e773158aef2a22e3d4344f20c80bdf90b5bd9d19c0d3012b4f5fd0b00d1dcda7`，
+首次 Git blob 为 `89fef8e9201501548e32cb5e7d8684808be57dad`。后续不得为通过输出修改题目、
+期望或人工门。
+
 ### 本轮共享责任合同与直接消费者清单
 
 当前落盘候选只保留 `publication-contract-v2` 这一份新任务负向安全合同；它不是句式 DSL，
