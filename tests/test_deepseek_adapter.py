@@ -799,9 +799,9 @@ def test_publication_v3_suppresses_only_a_complete_exact_fact_guide() -> None:
     second_paragraph = "把下一步缩小到眼前能完成的一件事，选择会更清楚。"
     FakeClient.responses = [
         _completion(
-            {
-                "title": "计划外的停顿，也有自己的节奏",
-                "natural_guide": actuality.exact_text + "。",
+                {
+                    "title": "计划外的停顿，也有自己的节奏",
+                    "natural_guide": actuality.exact_text.rstrip("，") + "。",
                 "creative_body": first_paragraph + "\n\n" + second_paragraph,
                 "publication_caption": "先接住眼前这一拍。",
             }

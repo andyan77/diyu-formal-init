@@ -269,13 +269,19 @@ def suppress_exact_fact_only_units(
 
 
 def _contains_fact(text: str, facts: tuple[str, ...]) -> bool:
-    return any(fact in text for fact in facts)
+    return any(
+        fact in text or fact.rstrip("，。！？；,.!?;") in text
+        for fact in facts
+    )
 
 
 def _is_fact_only(text: str, facts: tuple[str, ...]) -> bool:
     remainder = text
     for fact in facts:
         remainder = remainder.replace(fact, "")
+        delimiter_free_fact = fact.rstrip("，。！？；,.!?;")
+        if delimiter_free_fact != fact:
+            remainder = remainder.replace(delimiter_free_fact, "")
     return not remainder.strip(" \t\r\n，。！？；：、,.!?;:'\"“”‘’（）()[]【】")
 
 

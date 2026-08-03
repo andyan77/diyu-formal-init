@@ -537,7 +537,11 @@ class ContentService:
             controls = tuple(
                 dict.fromkeys(
                     (
-                        *(span.exact_text for span in intake_spans if span.role != "observable_actuality"),
+                        *(
+                            span.exact_text
+                            for span in intake_spans
+                            if span.role == "style_or_revision_instruction"
+                        ),
                         *(
                             f"{item.axis}：{item.applied_label}"
                             for item in (control.direction.selections if control.direction is not None else ())
@@ -557,7 +561,11 @@ class ContentService:
                 else (
                     "围绕只读冻结现实片段的可见张力完成本题"
                     if actuality_spans
-                    else "\n".join(item for item in plan.topic_spans if item.strip())
+                    else (
+                        "围绕已冻结商品选择依据完成本题"
+                        if primary_product in {"product_truth", "visual_styling_story"}
+                        else "\n".join(item for item in plan.topic_spans if item.strip())
+                    )
                 )
             )
             task_role = context.content_role_name or "当前账号"
