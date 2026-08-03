@@ -2444,6 +2444,38 @@ def test_tenant01_evidence_preserves_frozen_fact_reference_order(
     assert rebound_publication["frozen_fact_refs"] == reordered
 
 
+def test_tenant01_evidence_keeps_style_instruction_outside_fact_track(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    artifacts, _ = _tenant01_evidence_inputs(tmp_path)
+    path = tmp_path / "P1.artifact.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    snapshot = cast(dict[str, object], document["formal_snapshot"])
+    publication_document = cast(
+        dict[str, object], snapshot["publication_contract"]
+    )
+    spans = cast(list[dict[str, object]], publication_document["intake_spans"])
+    assert len(spans) == 1
+    spans[0]["role"] = "style_or_revision_instruction"
+    publication = publication_contract_from_document(publication_document)
+    snapshot["publication_contract_digest"] = publication_contract_digest(
+        publication
+    )
+    _write_private_json(path, document)
+
+    rebound, _, _, _ = _artifact_binding(path, card_id="P1")
+
+    rebound_snapshot = cast(dict[str, object], rebound["formal_snapshot"])
+    rebound_publication = cast(
+        dict[str, object], rebound_snapshot["publication_contract"]
+    )
+    rebound_spans = cast(
+        list[dict[str, object]], rebound_publication["intake_spans"]
+    )
+    assert rebound_spans[0]["role"] == "style_or_revision_instruction"
+
+
 @pytest.mark.parametrize(
     "mutation",
     (

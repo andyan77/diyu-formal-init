@@ -698,15 +698,6 @@ def _artifact_binding(
         or actuality_spans != user_fact_by_id
         or tuple(publication.known_conditions) != tuple(dict.fromkeys(user_fact_by_id.values()))
         or any(
-            span.role
-            != (
-                "observable_actuality"
-                if span.source_id in user_fact_by_id
-                else "creation_instruction"
-            )
-            for span in publication.intake_spans
-        )
-        or any(
             span.source_id in user_fact_by_id
             for span in publication.intake_spans
             if span.role != "observable_actuality"
