@@ -81,6 +81,7 @@ from src.shared.writer_request import (
 
 TENANT01_SUITE_VERSION: Final[str] = "TENANT-01-GOLDEN-V1"
 TENANT01_RAW_BUNDLE_VERSION: Final[str] = "ux03-gate-c-provider-stages-v1"
+TENANT01_PROVIDER_FAILURE_TRACE_VERSION: Final[str] = "tenant01-provider-failure-trace-v2"
 TENANT01_GENERATION_LEDGER_VERSION: Final[str] = "tenant01-generation-ledger-v1"
 TENANT01_GENERATION_LEDGER_FILE: Final[str] = "generation-ledger.json"
 TENANT01_PROVIDER_MODEL: Final[str] = "deepseek-v4-flash"
@@ -252,6 +253,48 @@ def _canonical_digest(value: object) -> str:
             sort_keys=True,
         ).encode()
     ).hexdigest()
+
+
+def proves_pristine_provider_transport_failure(document: object) -> bool:
+    """Accept resume only for one bound attempt that received no provider response."""
+
+    if not isinstance(document, dict):
+        return False
+    trace = cast(dict[str, object], document)
+    attempts = trace.get("provider_attempts")
+    events = trace.get("event_names")
+    responses = trace.get("responses")
+    if (
+        trace.get("failure_trace_version") != TENANT01_PROVIDER_FAILURE_TRACE_VERSION
+        or trace.get("request_count") != 0
+        or not isinstance(attempts, list)
+        or len(attempts) != 1
+        or not isinstance(events, list)
+        or not events
+        or events[-1] != "failed"
+        or responses != []
+    ):
+        return False
+    attempt = attempts[0]
+    if not isinstance(attempt, dict) or set(attempt) != {
+        "request_index",
+        "transport_retries",
+        "stage",
+        "model",
+        "request_sha256",
+        "response_received",
+        "outcome",
+    }:
+        return False
+    return bool(
+        attempt.get("request_index") == 1
+        and attempt.get("transport_retries") == 0
+        and attempt.get("stage") in {"intake", "writer"}
+        and attempt.get("model") == TENANT01_PROVIDER_MODEL
+        and _sha256_text(attempt.get("request_sha256"))
+        and attempt.get("response_received") is False
+        and attempt.get("outcome") == "transport_no_response"
+    )
 
 
 def _raw_binding(path: Path, *, card_id: str) -> dict[str, object]:

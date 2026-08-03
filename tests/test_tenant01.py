@@ -180,6 +180,7 @@ from src.tool.tenant01_evidence import (
     Tenant01HumanReview,
     _artifact_binding,
     compile_tenant01_snapshot_delivery,
+    proves_pristine_provider_transport_failure,
     sha256_file,
     write_tenant01_evidence,
 )
@@ -4027,10 +4028,20 @@ def test_tenant01_frozen_generalization_config_is_complete_and_immutable(
         generalization_runner._config(changed_path, journey)
 
 
-@pytest.mark.parametrize("received_response", (False, True))
+@pytest.mark.parametrize(
+    ("failure_mode", "expected_response_count", "expected_transport_proof"),
+    (
+        ("pre_provider", 0, False),
+        ("transport", 0, True),
+        ("provider_rejection", 1, False),
+        ("post_response", 1, False),
+    ),
+)
 def test_tenant01_generalization_failure_freezes_provider_trace_before_classification(
     tmp_path: Path,
-    received_response: bool,
+    failure_mode: str,
+    expected_response_count: int,
+    expected_transport_proof: bool,
 ) -> None:
     tmp_path.chmod(0o700)
     generator = object.__new__(generalization_runner._GeneralizationGenerator)
@@ -4038,8 +4049,26 @@ def test_tenant01_generalization_failure_freezes_provider_trace_before_classific
     generator._allowed_run_ids = frozenset({"failed-case"})
     generator._active_run_id = None
     generator._responses = []
+    generator._provider_attempts = []
+    generator._event_names = ()
     generator.begin("failed-case")
-    if received_response:
+    generator.observe_events(("received", "compiling_context", "failed"))
+    request_attempt = {
+        "request_index": 1,
+        "transport_retries": 0,
+        "stage": "intake",
+        "model": TENANT01_PROVIDER_MODEL,
+        "request_sha256": "a" * 64,
+        "response_received": failure_mode in {"provider_rejection", "post_response"},
+        "outcome": {
+            "transport": "transport_no_response",
+            "provider_rejection": "http_rejection_response",
+            "post_response": "response_received",
+        }.get(failure_mode, "not_attempted"),
+    }
+    if failure_mode != "pre_provider":
+        generator._provider_attempts.append(request_attempt)
+    if failure_mode == "post_response":
         generator._responses.append(
             {
                 "stage": "intake",
@@ -4048,18 +4077,19 @@ def test_tenant01_generalization_failure_freezes_provider_trace_before_classific
             }
         )
 
-    raw_files, request_count = generalization_runner._freeze_failure_trace(
+    trace = generalization_runner._freeze_failure_trace(
         generator,
         root=tmp_path,
         case_id="failed-case",
         before_raw=set(),
     )
 
-    assert request_count == int(received_response)
-    assert len(raw_files) == 1
-    trace = json.loads(raw_files[0].read_text(encoding="utf-8"))
-    assert trace["request_count"] == int(received_response)
-    assert len(trace["responses"]) == int(received_response)
+    assert trace.provider_response_count == expected_response_count
+    assert trace.transport_failure_proven is expected_transport_proof
+    assert len(trace.files) == 1
+    document = json.loads(trace.files[0].read_text(encoding="utf-8"))
+    assert document["request_count"] == expected_response_count
+    assert len(document["responses"]) == int(failure_mode == "post_response")
     assert generator.abort() is None
 
 
@@ -4072,11 +4102,21 @@ def test_tenant01_generalization_failure_rejects_invalid_provider_trace(
     generator._allowed_run_ids = frozenset({"failed-case"})
     generator._active_run_id = None
     generator._responses = []
+    generator._provider_attempts = []
+    generator._event_names = ()
     generator.begin("failed-case")
-    generator._responses.extend(
+    generator._provider_attempts.extend(
         (
-            {"stage": "writer", "transport_retries": 0},
-            {"stage": "intake", "transport_retries": 0},
+            {
+                "stage": "writer",
+                "transport_retries": 0,
+                "response_received": True,
+            },
+            {
+                "stage": "intake",
+                "transport_retries": 0,
+                "response_received": True,
+            },
         )
     )
 
@@ -4089,6 +4129,44 @@ def test_tenant01_generalization_failure_rejects_invalid_provider_trace(
         )
 
     assert not tuple(tmp_path.glob("*.raw.json"))
+
+
+def test_tenant01_transport_resume_proof_fails_closed_under_mutation(
+    tmp_path: Path,
+) -> None:
+    tmp_path.chmod(0o700)
+    generator = object.__new__(tenant01_runner._Tenant01EvidenceGenerator)
+    generator._evidence_root = tmp_path
+    generator._active_card = "P1"
+    generator._request_count = 0
+    generator._responses = []
+    generator._provider_attempts = [
+        {
+            "request_index": 1,
+            "transport_retries": 0,
+            "stage": "intake",
+            "model": TENANT01_PROVIDER_MODEL,
+            "request_sha256": "a" * 64,
+            "response_received": False,
+            "outcome": "transport_no_response",
+        }
+    ]
+    generator.abort_card(event_names=("received", "compiling_context", "failed"))
+    failure = json.loads((tmp_path / "P1.failed.raw.json").read_text(encoding="utf-8"))
+
+    assert proves_pristine_provider_transport_failure(failure)
+    mutations = (
+        ("event_names", ["received", "conversation"]),
+        ("request_count", 1),
+        ("responses", [{"provider": "response"}]),
+    )
+    for key, value in mutations:
+        changed = dict(failure)
+        changed[key] = value
+        assert not proves_pristine_provider_transport_failure(changed)
+    changed_attempt = json.loads(json.dumps(failure))
+    changed_attempt["provider_attempts"][0]["outcome"] = "http_unavailable_response"
+    assert not proves_pristine_provider_transport_failure(changed_attempt)
 
 
 def test_tenant01_git_suite_config_is_public_but_journey_remains_private(

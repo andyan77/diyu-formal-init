@@ -99,7 +99,11 @@ from src.shared.writer_request import (
     suppress_exact_fact_only_units,
     writer_request_document,
 )
-from src.tool.llm_gateway.deepseek import BoundaryContext, DeepSeekGenerator
+from src.tool.llm_gateway.deepseek import (
+    BoundaryContext,
+    DeepSeekGenerator,
+    ProviderRequestFailure,
+)
 
 
 class FakeResponse:
@@ -2316,6 +2320,54 @@ def test_route_and_transport_only_retry_429_or_transport(
     )
     assert result == "brand_life_narrative"
     assert len(FakeClient.requests) == 2
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_kind"),
+    (
+        (429, "http_unavailable_response"),
+        (503, "http_unavailable_response"),
+        (400, "http_rejection_response"),
+    ),
+)
+def test_provider_failure_exposes_only_bounded_response_classification(
+    status_code: int,
+    expected_kind: str,
+) -> None:
+    FakeClient.responses = [FakeResponse(status_code, {"error": {"secret": "not-copied"}})]
+
+    with pytest.raises(ProviderRequestFailure) as captured:
+        _generator(max_retries=0)._request("system", "prompt", 20)
+
+    assert captured.value.kind == expected_kind
+    assert captured.value.response_received is True
+    assert captured.value.retry_count == 0
+    assert "not-copied" not in str(captured.value)
+
+
+def test_provider_transport_failure_is_explicitly_no_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class TransportFailureClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def __enter__(self) -> TransportFailureClient:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def post(self, *_: object, **__: object) -> FakeResponse:
+            raise httpx.ConnectError("synthetic transport failure")
+
+    monkeypatch.setattr(httpx, "Client", TransportFailureClient)
+    with pytest.raises(ProviderRequestFailure) as captured:
+        _generator(max_retries=0)._request("system", "prompt", 20)
+
+    assert captured.value.kind == "transport_no_response"
+    assert captured.value.response_received is False
+    assert captured.value.retry_count == 0
 
 
 def test_revision_must_change_allowed_expression_not_actuality() -> None:

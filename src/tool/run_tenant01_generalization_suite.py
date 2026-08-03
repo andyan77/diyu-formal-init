@@ -22,7 +22,7 @@ from src.infrastructure.local_object_store import LocalObjectStore
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.tool.execution_control import ExecutionControl, verify_runtime_action
-from src.tool.llm_gateway.deepseek import DeepSeekGenerator
+from src.tool.llm_gateway.deepseek import DeepSeekGenerator, ProviderRequestFailure
 from src.tool.run_gate_c_final_suite import (
     _current_head,
     _git_status,
@@ -42,7 +42,9 @@ from src.tool.run_tenant01_golden_suite import (
 from src.tool.tenant01_evidence import (
     TENANT01_GENERALIZATION_CASE_IDS,
     TENANT01_GENERALIZATION_CONFIG_SHA256,
+    TENANT01_PROVIDER_FAILURE_TRACE_VERSION,
     TENANT01_PROVIDER_MODEL,
+    proves_pristine_provider_transport_failure,
     sha256_file,
 )
 
@@ -135,29 +137,56 @@ class _GeneralizationGenerator(DeepSeekGenerator):
         self._allowed_run_ids = allowed_run_ids
         self._active_run_id: str | None = None
         self._responses: list[dict[str, object]] = []
+        self._provider_attempts: list[dict[str, object]] = []
+        self._event_names: tuple[str, ...] = ()
 
     def begin(self, run_id: str) -> None:
         if self._active_run_id is not None or run_id not in self._allowed_run_ids:
             raise RuntimeError("generalization provider run ownership drifted")
         self._active_run_id = run_id
         self._responses = []
+        self._provider_attempts = []
+        self._event_names = ()
 
-    def _write_trace(self) -> str:
+    def observe_events(self, event_names: tuple[str, ...]) -> None:
+        if self._active_run_id is None:
+            raise RuntimeError("generalization provider run is not active")
+        self._event_names = event_names
+
+    def _write_trace(self, *, failed: bool = False) -> str:
         run_id = self._active_run_id
         if run_id is None:
             raise RuntimeError("generalization provider run is not active")
-        filename = f"generalization-{run_id}.raw.json"
-        _write_private_json(
-            self._evidence_root / filename,
-            {
+        filename = f"generalization-{run_id}{'.failed' if failed else ''}.raw.json"
+        document: dict[str, object]
+        if failed:
+            document = {
+                "raw_bundle_version": "tenant01-generalization-provider-failure-v2",
+                "failure_trace_version": TENANT01_PROVIDER_FAILURE_TRACE_VERSION,
+                "run_id": run_id,
+                "request_count": sum(
+                    int(bool(attempt["response_received"]))
+                    for attempt in self._provider_attempts
+                ),
+                "event_names": list(self._event_names),
+                "provider_attempts": self._provider_attempts,
+                "responses": self._responses,
+            }
+        else:
+            document = {
                 "raw_bundle_version": "tenant01-generalization-provider-stages-v1",
                 "run_id": run_id,
                 "request_count": len(self._responses),
                 "responses": self._responses,
-            },
+            }
+        _write_private_json(
+            self._evidence_root / filename,
+            document,
         )
         self._active_run_id = None
         self._responses = []
+        self._provider_attempts = []
+        self._event_names = ()
         return filename
 
     def finish(self, *, allow_preflight: bool = False) -> str:
@@ -167,7 +196,13 @@ class _GeneralizationGenerator(DeepSeekGenerator):
             if not allow_preflight
             else stages in {(), ("intake",)}
         )
-        if not valid_stages or any(item["transport_retries"] != 0 for item in self._responses):
+        if (
+            not valid_stages
+            or len(self._provider_attempts) != len(self._responses)
+            or any(item["transport_retries"] != 0 for item in self._responses)
+            or any(item["transport_retries"] != 0 for item in self._provider_attempts)
+            or any(not bool(item["response_received"]) for item in self._provider_attempts)
+        ):
             raise RuntimeError("generalization provider stages drifted")
         return self._write_trace()
 
@@ -176,12 +211,12 @@ class _GeneralizationGenerator(DeepSeekGenerator):
 
         if self._active_run_id is None:
             return None
-        stages = tuple(str(item["stage"]) for item in self._responses)
+        stages = tuple(str(item["stage"]) for item in self._provider_attempts)
         if stages not in {(), ("intake",), ("writer",), ("intake", "writer")} or any(
-            item["transport_retries"] != 0 for item in self._responses
+            item["transport_retries"] != 0 for item in self._provider_attempts
         ):
             raise RuntimeError("failed generalization provider trace drifted")
-        return self._write_trace()
+        return self._write_trace(failed=True)
 
     def _request(
         self,
@@ -195,13 +230,6 @@ class _GeneralizationGenerator(DeepSeekGenerator):
         run_id = self._active_run_id
         if run_id is None:
             raise RuntimeError("provider call is not bound to a generalization run")
-        payload, retries = super()._request(
-            system,
-            prompt,
-            max_tokens,
-            thinking_disabled=thinking_disabled,
-            timeout_seconds=timeout_seconds,
-        )
         stage = "writer" if "你是笛语 Writer" in system else "intake"
         request_payload: dict[str, object] = {
             "model": TENANT01_PROVIDER_MODEL,
@@ -215,13 +243,47 @@ class _GeneralizationGenerator(DeepSeekGenerator):
         }
         if thinking_disabled:
             request_payload["thinking"] = {"type": "disabled"}
+        request_index = len(self._provider_attempts) + 1
+        request_sha256 = _canonical_digest(request_payload)
+        try:
+            payload, retries = super()._request(
+                system,
+                prompt,
+                max_tokens,
+                thinking_disabled=thinking_disabled,
+                timeout_seconds=timeout_seconds,
+            )
+        except ProviderRequestFailure as exc:
+            self._provider_attempts.append(
+                {
+                    "request_index": request_index,
+                    "transport_retries": exc.retry_count,
+                    "stage": stage,
+                    "model": TENANT01_PROVIDER_MODEL,
+                    "request_sha256": request_sha256,
+                    "response_received": exc.response_received,
+                    "outcome": exc.kind,
+                }
+            )
+            raise
+        self._provider_attempts.append(
+            {
+                "request_index": request_index,
+                "transport_retries": retries,
+                "stage": stage,
+                "model": TENANT01_PROVIDER_MODEL,
+                "request_sha256": request_sha256,
+                "response_received": True,
+                "outcome": "response_received",
+            }
+        )
         self._responses.append(
             {
                 "request_index": len(self._responses) + 1,
                 "transport_retries": retries,
                 "stage": stage,
                 "model": TENANT01_PROVIDER_MODEL,
-                "request_sha256": _canonical_digest(request_payload),
+                "request_sha256": request_sha256,
                 "response_sha256": _canonical_digest(payload),
                 "response": payload,
             }
@@ -384,12 +446,14 @@ def _stream(
         },
     )
     if response.status_code != 200:
+        generator.observe_events((f"http_{response.status_code}",))
         raise RuntimeError(f"{run_id}: formal content API failed")
     events = [
         cast(dict[str, object], json.loads(line))
         for line in response.text.splitlines()
         if line.strip()
     ]
+    generator.observe_events(tuple(str(event.get("event", "")) for event in events))
     result = _completed(events)
     if expect_preflight:
         if result is not None:
@@ -458,7 +522,9 @@ def _revision(
         },
     )
     if response.status_code != 201 or not isinstance(response.json(), dict):
+        generator.observe_events((f"http_{response.status_code}",))
         raise RuntimeError(f"{case.case_id}: formal revision failed")
+    generator.observe_events(("http_201",))
     raw_file = generator.finish()
     revised = _artifact_outcome(
         root,
@@ -638,21 +704,36 @@ def _assert_result_shape(case: _Case, outcomes: list[dict[str, object]]) -> None
             raise RuntimeError(f"{case.case_id}: unknown result kind")
 
 
+@dataclass(frozen=True)
+class _FailureTrace:
+    files: tuple[Path, ...]
+    provider_response_count: int
+    transport_failure_proven: bool
+
+
 def _freeze_failure_trace(
     generator: _GeneralizationGenerator,
     *,
     root: Path,
     case_id: str,
     before_raw: set[Path],
-) -> tuple[list[Path], int]:
+) -> _FailureTrace:
     generator.abort()
     after_raw = set(root.glob(f"generalization-{case_id}*.raw.json"))
-    new_raw = sorted(after_raw - before_raw)
+    new_raw = tuple(sorted(after_raw - before_raw))
     request_count = sum(
         int(cast(int, _json_object(path).get("request_count", 0)))
         for path in new_raw
     )
-    return new_raw, request_count
+    return _FailureTrace(
+        files=new_raw,
+        provider_response_count=request_count,
+        transport_failure_proven=(
+            request_count == 0
+            and len(new_raw) == 1
+            and proves_pristine_provider_transport_failure(_json_object(new_raw[0]))
+        ),
+    )
 
 
 def _raw_evidence_files(value: object) -> tuple[str, ...]:
@@ -760,27 +841,43 @@ def _run(args: argparse.Namespace) -> None:
                     journey=journey,
                     case=case,
                 )
-            except (KeyError, RuntimeError, TypeError, ValueError):
-                new_raw, request_count = _freeze_failure_trace(
+            except (KeyError, RuntimeError, TypeError, ValueError) as exc:
+                failure_trace = _freeze_failure_trace(
                     generator,
                     root=root,
                     case_id=case.case_id,
                     before_raw=before_raw,
+                )
+                failure_receipt = root / f"generalization-{case.case_id}.failure.json"
+                _write_private_json(
+                    failure_receipt,
+                    {
+                        "failure_receipt_version": "tenant01-generalization-failure-receipt-v2",
+                        "case_id": case.case_id,
+                        "exception_type": type(exc).__name__,
+                        "provider_response_count": failure_trace.provider_response_count,
+                        "transport_failure_proven": failure_trace.transport_failure_proven,
+                        "provider_traces": [
+                            {
+                                "file": path.name,
+                                "sha256": sha256_file(path),
+                            }
+                            for path in failure_trace.files
+                        ],
+                    },
                 )
                 control.record_acceptance_sample(
                     candidate_sha=implementation_sha,
                     suite_id=_ACCEPTANCE_SUITE_ID,
                     acceptance_run_id=str(args.acceptance_run_id),
                     sample_id=case.case_id,
-                    provider_response_received=request_count > 0,
-                    request_count=request_count,
-                    artifact_digest=(
-                        _canonical_digest([sha256_file(path) for path in new_raw])
-                        if new_raw
-                        else None
-                    ),
+                    provider_response_received=failure_trace.provider_response_count > 0,
+                    request_count=failure_trace.provider_response_count,
+                    artifact_digest=sha256_file(failure_receipt),
                     final_status=(
-                        "transport_failed_no_response" if request_count == 0 else "delivery_uncertain"
+                        "transport_failed_no_response"
+                        if failure_trace.transport_failure_proven
+                        else "delivery_uncertain"
                     ),
                 )
                 raise

@@ -42,7 +42,7 @@ from src.tool.gate_c_evidence import (
     sha256_file,
     write_gate_c_evidence,
 )
-from src.tool.llm_gateway.deepseek import DeepSeekGenerator
+from src.tool.llm_gateway.deepseek import DeepSeekGenerator, ProviderRequestFailure
 
 _MODEL = "deepseek-v4-flash"
 _SUITE_VERSION = "ux03-gate-c-formal-final-suite-v3"
@@ -135,6 +135,7 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
         self._active_card: str | None = None
         self._request_count = 0
         self._responses: list[dict[str, object]] = []
+        self._provider_attempts: list[dict[str, object]] = []
 
     def begin_card(self, card_id: str) -> None:
         if card_id not in self._allowed_card_ids:
@@ -142,6 +143,7 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
         self._active_card = card_id
         self._request_count = 0
         self._responses = []
+        self._provider_attempts = []
 
     def end_card(self) -> None:
         card_id = self._active_card
@@ -149,7 +151,9 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
             raise RuntimeError(
                 "each final card must include only intake, Writer, and optional affected-unit repair stages"
             )
-        if any(item["transport_retries"] != 0 for item in self._responses):
+        if any(item["transport_retries"] != 0 for item in self._responses) or any(
+            item["transport_retries"] != 0 for item in self._provider_attempts
+        ):
             raise RuntimeError("final card provider transport retry is forbidden")
         _write_private_json(
             self._evidence_root / f"{card_id}.raw.json",
@@ -162,6 +166,7 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
         )
         self._active_card = None
         self._responses = []
+        self._provider_attempts = []
 
     def abort_card(self, *, event_names: tuple[str, ...]) -> None:
         """Persist provider stages for a failed card without calling them success evidence."""
@@ -169,20 +174,25 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
         card_id = self._active_card
         if card_id is None:
             raise RuntimeError("failed final card is not active")
-        if any(item["transport_retries"] != 0 for item in self._responses):
+        if any(item["transport_retries"] != 0 for item in self._responses) or any(
+            item["transport_retries"] != 0 for item in self._provider_attempts
+        ):
             raise RuntimeError("final card provider transport retry is forbidden")
         _write_private_json(
             self._evidence_root / f"{card_id}.failed.raw.json",
             {
                 "raw_bundle_version": "ux03-gate-c-provider-failure-v1",
+                "failure_trace_version": "tenant01-provider-failure-trace-v2",
                 "card_id": card_id,
                 "request_count": self._request_count,
                 "event_names": list(event_names),
+                "provider_attempts": self._provider_attempts,
                 "responses": self._responses,
             },
         )
         self._active_card = None
         self._responses = []
+        self._provider_attempts = []
 
     def _request(
         self,
@@ -196,14 +206,62 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
         card_id = self._active_card
         if card_id is None:
             raise RuntimeError("provider call is not bound to one final card")
-        payload, retries = super()._request(
-            system,
-            prompt,
-            max_tokens,
-            thinking_disabled=thinking_disabled,
-            timeout_seconds=timeout_seconds,
-        )
+        request_index = len(self._provider_attempts) + 1
+        stage = "intake" if request_index == 1 else "writer"
+        request_payload: dict[str, object] = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.0,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+        }
+        if thinking_disabled:
+            request_payload["thinking"] = {"type": "disabled"}
+        request_sha256 = hashlib.sha256(
+            json.dumps(
+                request_payload,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+        try:
+            payload, retries = super()._request(
+                system,
+                prompt,
+                max_tokens,
+                thinking_disabled=thinking_disabled,
+                timeout_seconds=timeout_seconds,
+            )
+        except ProviderRequestFailure as exc:
+            self._provider_attempts.append(
+                {
+                    "request_index": request_index,
+                    "transport_retries": exc.retry_count,
+                    "stage": stage,
+                    "model": self.model_name,
+                    "request_sha256": request_sha256,
+                    "response_received": exc.response_received,
+                    "outcome": exc.kind,
+                }
+            )
+            self._request_count += int(exc.response_received)
+            raise
         self._request_count += 1
+        self._provider_attempts.append(
+            {
+                "request_index": request_index,
+                "transport_retries": retries,
+                "stage": stage,
+                "model": self.model_name,
+                "request_sha256": request_sha256,
+                "response_received": True,
+                "outcome": "response_received",
+            }
+        )
         self._responses.append(
             {
                 "request_index": self._request_count,

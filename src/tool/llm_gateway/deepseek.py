@@ -7,7 +7,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from email.utils import parsedate_to_datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import httpx
 
@@ -178,6 +178,34 @@ _SPEAKER_ID = "speaker:brand_account"
 _CREATOR_ACTOR_ID = "actor:creator"
 _CREATOR_EXPRESSION_RESOURCE_ID = "resource:creator_expression"
 _ORIGINAL_COMPOSITION_RESOURCE_ID = "resource:original_composition"
+
+ProviderFailureKind = Literal[
+    "transport_no_response",
+    "http_unavailable_response",
+    "http_rejection_response",
+    "invalid_response",
+]
+
+
+class ProviderRequestFailure(GenerationFailed):
+    """Expose only the bounded transport fact needed by acceptance evidence.
+
+    The public error remains a ``GenerationFailed``.  No response body, URL,
+    credential, or provider message crosses this boundary.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        kind: ProviderFailureKind,
+        response_received: bool,
+        retry_count: int,
+    ) -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.response_received = response_received
+        self.retry_count = retry_count
 _SPOKEN_SLOT = "spoken"
 _COVER_PURPOSE = "cover"
 _SCENE_PURPOSE = "scene"
@@ -4844,7 +4872,12 @@ CreativePlanV2：{
                     if response.status_code < 400:
                         result = response.json()
                         if not isinstance(result, dict):
-                            raise GenerationFailed("模型返回无效")
+                            raise ProviderRequestFailure(
+                                "模型返回无效",
+                                kind="invalid_response",
+                                response_received=True,
+                                retry_count=retries,
+                            )
                         if self._status_tracker is not None:
                             self._status_tracker.record("available")
                         return result, retries
@@ -4877,17 +4910,32 @@ CreativePlanV2：{
                         )
                         if self._status_tracker is not None and state is not None:
                             self._status_tracker.record(state)
-                        raise GenerationFailed("模型服务拒绝当前请求")
+                        raise ProviderRequestFailure(
+                            "模型服务拒绝当前请求",
+                            kind="http_rejection_response",
+                            response_received=True,
+                            retry_count=retries,
+                        )
                     if retries >= self._max_retries:
                         if self._status_tracker is not None:
                             self._status_tracker.record("degraded" if response.status_code == 429 else "unavailable")
-                        raise GenerationFailed("模型服务暂时不可用")
+                        raise ProviderRequestFailure(
+                            "模型服务暂时不可用",
+                            kind="http_unavailable_response",
+                            response_received=True,
+                            retry_count=retries,
+                        )
                     delay = self._retry_delay(response.headers.get("Retry-After"), retries)
                 except httpx.TransportError as exc:
                     if retries >= self._max_retries:
                         if self._status_tracker is not None:
                             self._status_tracker.record("unavailable")
-                        raise GenerationFailed("模型网络请求失败") from exc
+                        raise ProviderRequestFailure(
+                            "模型网络请求失败",
+                            kind="transport_no_response",
+                            response_received=False,
+                            retry_count=retries,
+                        ) from exc
                     delay = min(4.0, 0.5 * (2**retries))
                 retries += 1
                 time.sleep(delay)

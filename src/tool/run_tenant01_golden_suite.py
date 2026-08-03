@@ -60,6 +60,7 @@ from src.tool.tenant01_evidence import (
     Tenant01GeneralizationReview,
     Tenant01HumanReview,
     compile_tenant01_snapshot_delivery,
+    proves_pristine_provider_transport_failure,
     sha256_file,
     write_tenant01_evidence,
 )
@@ -958,7 +959,11 @@ def _generate(args: argparse.Namespace) -> None:
                         provider_response_received=request_count > 0,
                         request_count=request_count,
                         artifact_digest=sha256_file(failed_raw),
-                        final_status=("transport_failed_no_response" if request_count == 0 else "delivery_uncertain"),
+                        final_status=(
+                            "transport_failed_no_response"
+                            if proves_pristine_provider_transport_failure(failure)
+                            else "delivery_uncertain"
+                        ),
                     )
                 raise
             task_id = UUID(str(result["task_id"]))
