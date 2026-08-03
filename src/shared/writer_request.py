@@ -55,6 +55,7 @@ def build_writer_request_v3(
     contract: PublicationContractV3,
     *,
     product_decision_basis: ProductDecisionBasisV2 | None,
+    platform_expression_responsibility: str,
     prior_output: WriterOutputV3 | None,
     revision_instruction: str | None,
 ) -> WriterRequestV3:
@@ -127,6 +128,9 @@ def build_writer_request_v3(
             "target": platform.target,
             "media_format": platform.media_format,
             "direction_version": platform.direction_version,
+            "expression_responsibility": (
+                platform_expression_responsibility.strip()
+            ),
         },
         prohibited_bindings=contract.prohibited_bindings,
         prior_output=(
@@ -203,7 +207,14 @@ def assert_writer_request_v3(request: WriterRequestV3) -> None:
             "allowed_stance",
         }
         or any(not value for value in request.account_editorial_permission.values())
-        or set(request.platform_direction) != {"target", "media_format", "direction_version"}
+        or set(request.platform_direction)
+        != {
+            "target",
+            "media_format",
+            "direction_version",
+            "expression_responsibility",
+        }
+        or any(not value for value in request.platform_direction.values())
     ):
         raise DomainError("Writer 请求没有绑定唯一发布合同")
 

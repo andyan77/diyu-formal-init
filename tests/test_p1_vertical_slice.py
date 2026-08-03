@@ -109,6 +109,7 @@ def test_workbench_renders_complete_artifact_without_internal_trace() -> None:
 
 
 def test_natural_chat_does_not_create_task(app_database_url: str) -> None:
+    messages = ("hello world", "你好呀", "今天有点累")
     with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
         cursor.execute("SELECT COUNT(*) FROM business_tasks")
@@ -117,7 +118,21 @@ def test_natural_chat_does_not_create_task(app_database_url: str) -> None:
         client.get("/ui/select/content")
         responses = [
             client.post("/api/v1/content", json={"weak_seed": message})
-            for message in ("hello world", "你好呀", "今天有点累")
+            for message in messages
+        ]
+        stream_responses = [
+            client.post(
+                "/api/v1/content/stream",
+                json={
+                    "message": message,
+                    "conversation": [],
+                    "publishing_identity_id": str(ACCOUNT_ID),
+                    "target": "xiaohongshu_graphic",
+                    "material_ids": [],
+                    "interaction_mode": "generate",
+                },
+            )
+            for message in messages
         ]
     with psycopg.connect(app_database_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
@@ -127,6 +142,16 @@ def test_natural_chat_does_not_create_task(app_database_url: str) -> None:
     assert all(response.status_code == 200 for response in responses)
     assert all(response.json()["kind"] == "greeting" for response in responses)
     assert all("你好" in response.json()["message"] for response in responses)
+    assert all(response.status_code == 200 for response in stream_responses)
+    stream_events = [
+        [json.loads(line) for line in response.text.splitlines() if line.strip()]
+        for response in stream_responses
+    ]
+    assert all(
+        any(event.get("event") == "conversation" for event in events)
+        and not any(event.get("event") == "completed" for event in events)
+        for events in stream_events
+    )
     assert before[0] == after[0]
 
 
@@ -163,13 +188,17 @@ def test_direct_and_stream_content_share_exact_input_role_boundary(
         completed = next(event["result"] for event in events if event.get("event") == "completed")
     task_ids = tuple(UUID(str(result["task_id"])) for result in (direct, completed))
     with psycopg.connect(migrator_database_url) as connection:
-        snapshots = tuple(
-            connection.execute(
+        snapshot_values: list[dict[str, object]] = []
+        for task_id in task_ids:
+            row = connection.execute(
                 "SELECT content_context_snapshot FROM business_tasks WHERE id = %s",
                 (task_id,),
-            ).fetchone()[0]
-            for task_id in task_ids
-        )
+            ).fetchone()
+            assert row is not None
+            snapshot = row[0]
+            assert isinstance(snapshot, dict)
+            snapshot_values.append(snapshot)
+        snapshots = tuple(snapshot_values)
     role_documents: list[list[dict[str, object]]] = []
     frame_facts: list[list[str]] = []
     for snapshot in snapshots:

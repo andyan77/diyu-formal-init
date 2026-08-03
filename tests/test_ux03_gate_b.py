@@ -1311,6 +1311,20 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                 "请介绍 EAST-01",
             )
             assert [item.fact_version for item in east_products] == [2]
+            assert [item.sku for item in content_repository.load_product_facts(
+                east_scope,
+                "请介绍 华东门店针织衫",
+            )] == ["EAST-01"]
+            for invalid_reference in (
+                "请介绍 EAST-010",
+                "请介绍 XEAST-01",
+                "请介绍 EAST-01、完全未知商品",
+            ):
+                with pytest.raises(DomainError, match="完整"):
+                    content_repository.load_product_facts(
+                        east_scope,
+                        invalid_reference,
+                    )
             assert (
                 content_repository.load_product_facts(
                     south_scope,
@@ -1356,6 +1370,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
                     material_ids=(UUID(material_id),),
                 ),
             )
+            assert first["kind"] == "content", first
             first_task_id = UUID(str(first["task_id"]))
             with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
                 cursor.execute(
@@ -1368,7 +1383,7 @@ def test_gate_b_brand_scope_usage_and_readiness_journey(
             assert frozen_snapshot["product_facts"][0]["fact_version"] == 2
             assert frozen_snapshot["material_snapshots"][0]["reference_version"] == 2
             assert frozen_snapshot["brand_reference_context"] == []
-            assert frozen_snapshot["brand_context_packet"]["packet_version"] == "brand-context-packet-v2"
+            assert frozen_snapshot["brand_context_packet"]["packet_version"] == "brand-context-packet-v3"
             assert frozen_snapshot["brand_context_packet"]["publication_projection_id"]
             assert any(
                 item["semantic_kind"] == "expression_constraint"

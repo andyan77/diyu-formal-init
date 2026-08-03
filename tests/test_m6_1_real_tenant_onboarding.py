@@ -414,7 +414,20 @@ def test_real_brand_non_product_p3_has_no_demo_tenant_context(
     assert result["kind"] == "content"
     body = str(result["body"])
     assert tenant_name in service.identity_summary(scope)["brand"]
-    assert "一家人，可以自然呼应" in body
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT content_context_snapshot FROM business_tasks WHERE tenant_id = %s AND id = %s",
+            (tenant_id, UUID(str(result["task_id"]))),
+        )
+        snapshot_row = cursor.fetchone()
+    assert snapshot_row is not None
+    snapshot = snapshot_row[0]
+    assert isinstance(snapshot, dict)
+    publication = snapshot["publication_contract"]
+    assert isinstance(publication, dict)
+    assert publication["contract_version"] == "publication-contract-v3"
+    assert publication["topic_origin"] == "explicit_user"
+    assert str(publication["central_job"]).strip()
     for forbidden in ("折线之间", "南城店", "ZX-C218", "炭灰", "深绿细格纹"):
         assert forbidden not in body
     assert not is_natural_chat("品牌官方账号能不能聊聊：走进门店只想自己看看，这种沉默是不是也应该被尊重？")

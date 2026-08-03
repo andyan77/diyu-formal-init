@@ -632,7 +632,7 @@ def _publication_v3_request() -> GenerationInput:
         product_decision_basis=None,
         series_delta=None,
         platform_direction=PlatformDirectionV3(
-            target=direction.platform,
+            target=request.target,
             media_format=direction.media_format,
             direction_version=direction.version,
             direction_digest=direction.direction_digest,
@@ -727,6 +727,9 @@ def test_publication_v3_rejects_writer_copy_of_a_frozen_actuality() -> None:
     writer_request = build_writer_request_v3(
         contract,
         product_decision_basis=None,
+        platform_expression_responsibility=(
+            request.platform_direction.direction
+        ),
         prior_output=None,
         revision_instruction=None,
     )

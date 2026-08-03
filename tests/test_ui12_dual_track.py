@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
@@ -378,7 +379,7 @@ def test_legacy_kernel_document_remains_readable_without_reinterpretation() -> N
         unit.pop("scope_id")
         unit.pop("allowed_resource_ids")
         unit.pop("text_source")
-    restored = kernel_from_document(document)
+    restored = cast(CreativeKernelV1, kernel_from_document(document))
     assert restored.kernel_version == "creative-kernel-v1"
     assert restored.unit("unit:body").mode == "general_observation"
 

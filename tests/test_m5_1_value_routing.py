@@ -127,7 +127,10 @@ def test_x01_routes_assets_versions_and_shared_product_truth(app_database_url: s
     # product packet, but Writer is no longer allowed to surface it through
     # unrelated free copy.
     assert "两面都以完整外观呈现" in str(p2["body"])
-    assert "想先看就先看，不用解释" in str(p4["body"])
+    p4_input = next(item for item in generator.inputs if item.primary_product == "local_response")
+    assert p4_input.weak_seed == R2_B
+    assert p4_input.publication_contract is not None
+    assert str(p4["body"]).strip()
 
 
 def test_store_identity_ui_and_account_boundary(app_database_url: str) -> None:

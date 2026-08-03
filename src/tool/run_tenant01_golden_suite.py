@@ -28,6 +28,7 @@ from src.shared.errors import GenerationFailed
 from src.shared.narrative import visible_digest
 from src.shared.product_value import build_product_decision_basis_v2
 from src.shared.types import ContentTarget, ProductFact
+from src.tool.execution_control import verify_runtime_action
 from src.tool.run_gate_c_final_suite import (
     _current_head,
     _EvidenceDeepSeekGenerator,
@@ -1238,6 +1239,9 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> None:
     os.umask(0o077)
     args = _parser().parse_args()
+    verify_runtime_action(
+        "model_runner" if args.command == "generate" else "evidence_finalizer"
+    )
     cast(Any, args.action)(args)
 
 

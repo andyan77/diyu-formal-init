@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Final, cast
 from uuid import UUID
 
+from src.brain.platform_directions import direction_for
 from src.shared.brand_publication import (
     BRAND_CONTEXT_PACKET_V3_VERSION,
     brand_context_packet_digest,
@@ -909,6 +910,9 @@ def _artifact_binding_v3(
     expected_writer_request = build_writer_request_v3(
         publication,
         product_decision_basis=product_value,
+        platform_expression_responsibility=(
+            direction_for(expected_target).direction
+        ),
         prior_output=None,
         revision_instruction=None,
     )

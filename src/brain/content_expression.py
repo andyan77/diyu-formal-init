@@ -667,6 +667,8 @@ def snapshot_document(
                         "position": item.position,
                         "outline": item.outline,
                         "body": item.body,
+                        "prior_facts": list(item.prior_facts),
+                        "prior_judgment": item.prior_judgment,
                     }
                     for item in series_context.prior_entries
                 ],

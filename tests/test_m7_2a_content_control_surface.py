@@ -415,8 +415,6 @@ def test_direction_reaches_generation_and_a_soft_conflict_stays_visible(
         assert "你还可以继续改。" in directed["translation_notice"]
         assert "克制的冷幽默" in directed["applied_direction"]
         assert "幽默玩梗" not in directed["body"]
-        assert "本次表达会采用" in directed["body"]
-        assert "结尾自然收住就行。" in directed["body"]
 
         snapshot = _snapshot(app_database_url, directed["task_id"])
         original = {item["stable_id"]: item["label"] for item in snapshot["original_direction"]["selections"]}
@@ -425,6 +423,11 @@ def test_direction_reaches_generation_and_a_soft_conflict_stays_visible(
         assert applied[_STYLE_HUMOUR] == "克制的冷幽默"
         assert snapshot["catalog_version"] == load_catalog().catalog_version
         assert snapshot["translation_notice"] == directed["translation_notice"]
+        publication = snapshot["publication_contract"]
+        assert isinstance(publication, dict)
+        assert publication["contract_version"] == "publication-contract-v3"
+        assert "style：克制的冷幽默" in publication["explicit_user_controls"]
+        assert "结尾自然收住就行。" in publication["explicit_user_controls"]
 
         receipt = _receipt(app_database_url, directed["task_id"])
         assert receipt["catalog_version"] == load_catalog().catalog_version
@@ -530,8 +533,6 @@ def test_only_explicitly_selected_in_scope_references_enter_the_task(
             "/api/v1/content",
             json={"weak_seed": _SEED, "material_ids": [text_asset["id"], described["id"]]},
         ).json()
-        assert "上周整理的通勤观察" in with_text["body"]
-        assert "外套细节照" in with_text["body"]
         refs = _snapshot(app_database_url, with_text["task_id"])["material_refs"]
         assert {item["asset_id"] for item in refs} == {text_asset["id"], described["id"]}
         assert all(item["reference_version"] == 1 for item in refs)
@@ -631,7 +632,13 @@ def test_a_revision_replays_its_own_frozen_conditions(app_database_url: str) -> 
                 "creative_direction": {"selections": {"style": _STYLE_HUMOUR}},
             },
         ).json()
-        assert _SEGMENTS["identity_position"] in created["body"]
+        created_snapshot = _snapshot(app_database_url, created["task_id"])
+        publication = created_snapshot["publication_contract"]
+        assert isinstance(publication, dict)
+        permission = publication["account_editorial_permission"]
+        assert isinstance(permission, dict)
+        assert permission["source_profile_version"] == frozen_version
+        assert _SEGMENTS["identity_position"] not in created["body"]
         # The internal version number is a receipt field, never visible artifact text.
         assert f"V{frozen_version}" not in created["body"]
         assert _receipt(app_database_url, created["task_id"])["account_expression_profile_version"] == frozen_version
@@ -647,9 +654,8 @@ def test_a_revision_replays_its_own_frozen_conditions(app_database_url: str) -> 
         ).json()
         assert revised["version"] == 2
         # The later profile version must not leak into an existing task.
-        assert _SEGMENTS["identity_position"] in revised["body"]
+        assert _SEGMENTS["identity_position"] not in revised["body"]
         assert "换了一版之后的表达身份说明。" not in revised["body"]
-        assert "克制的冷幽默" in revised["body"]
         assert (
             _latest_receipt(app_database_url, created["task_id"])["account_expression_profile_version"]
             == frozen_version

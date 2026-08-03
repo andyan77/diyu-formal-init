@@ -9,6 +9,7 @@ from typing import cast
 from src.ports.display_generator import DisplayGenerator
 from src.shared.dm01_rules import assert_dm01_rule_bundle
 from src.shared.errors import GenerationFailed
+from src.shared.product_references import alias_index
 from src.shared.types import DisplayContext, DisplayGenerationInput, GeneratedDisplayArtifact
 
 _POSITIONS = ("left", "center", "right")
@@ -164,11 +165,12 @@ def _resolve_product_references(
     Case folding is used only to compare the person's words. No normalization, SKU grammar,
     prefix match or similarity rule is allowed to mint a product identity.
     """
-    aliases: dict[str, set[str]] = {}
-    for sku, facts in context.products:
-        for label in (sku, str(facts.get("name", ""))):
-            if label:
-                aliases.setdefault(label.casefold(), set()).add(sku)
+    aliases = alias_index(
+        tuple(
+            (sku, (sku, str(facts.get("name", ""))))
+            for sku, facts in context.products
+        )
+    )
 
     resolved: set[str] = set()
     unresolved: list[str] = []
@@ -188,7 +190,10 @@ def _resolve_product_references(
     )
 
 
-def _split_reference_phrase(reference_phrase: str, aliases: dict[str, set[str]]) -> tuple[str, ...]:
+def _split_reference_phrase(
+    reference_phrase: str,
+    aliases: dict[str, frozenset[str]],
+) -> tuple[str, ...]:
     stripped = reference_phrase.strip("".join(_REFERENCE_SEPARATORS))
     if not stripped:
         return ("",)

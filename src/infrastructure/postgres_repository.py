@@ -31,6 +31,11 @@ from src.shared.delivery_compiler import (
 )
 from src.shared.errors import DomainError
 from src.shared.narrative import visible_digest
+from src.shared.product_references import (
+    alias_index,
+    has_partial_reference_list,
+    resolve_literal_mentions,
+)
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
@@ -448,6 +453,13 @@ class PostgresContentRepository(ContentRepository):
         primary_product: ContentProduct,
         products: tuple[ProductFact, ...],
     ) -> BrandContext:
+        if not weak_seed.strip():
+            raise DomainError("本次内容题材不能为空。")
+        product_identities = tuple(product.sku for product in products)
+        if len(product_identities) != len(set(product_identities)):
+            raise DomainError("本次内容包含重复商品身份。")
+        if primary_product == "product_truth" and len(products) != 1:
+            raise DomainError("商品解释必须明确绑定一件当前已确认商品。")
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
@@ -531,20 +543,11 @@ class PostgresContentRepository(ContentRepository):
                 or primary_product in row["applicability"]
             )
         ]
-        explicit_subjects = {
-            context.brand_name.casefold(),
-            *(product.sku.casefold() for product in products),
-            *(product.display_name.casefold() for product in products if product.display_name.strip()),
-        }
-        normalized_seed = weak_seed.casefold()
         selected = [
             row
             for row in applicable_rows
-            if str(row["publication_role"]) in {"expression_constraint", "creative_method"}
-            or (
-                str(row["publication_role"]) == "public_brand_fact"
-                and any(subject and subject in normalized_seed for subject in explicit_subjects)
-            )
+            if str(row["publication_role"])
+            in {"public_brand_fact", "expression_constraint", "creative_method"}
         ]
         role_to_kind = {
             "public_brand_fact": "brand_fact",
@@ -1490,9 +1493,61 @@ class PostgresContentRepository(ContentRepository):
                     position=self._integer(row["position"]),
                     outline=content.outline,
                     body=content.body,
+                    prior_facts=self._series_prior_facts(
+                        row["version_audit_snapshot"],
+                    ),
+                    prior_judgment=self._series_prior_judgment(
+                        row["version_audit_snapshot"],
+                        content.outline,
+                    ),
                 )
                 for row, content in validated_rows
             ),
+        )
+
+    @staticmethod
+    def _series_prior_facts(snapshot: object) -> tuple[str, ...]:
+        if not isinstance(snapshot, dict):
+            return ()
+        publication = snapshot.get("publication_contract")
+        if not isinstance(publication, dict):
+            return ()
+        roles = publication.get("input_roles")
+        if not isinstance(roles, list):
+            return ()
+        return tuple(
+            f"{str(role['source_id'])}：{str(role['exact_text'])}"
+            for role in roles
+            if isinstance(role, dict)
+            and role.get("role") == "observable_actuality"
+            and isinstance(role.get("source_id"), str)
+            and isinstance(role.get("exact_text"), str)
+        )
+
+    @staticmethod
+    def _series_prior_judgment(snapshot: object, outline: str) -> str:
+        if isinstance(snapshot, dict):
+            output = snapshot.get("writer_output_v3")
+            if isinstance(output, dict):
+                title = output.get("title")
+                body = output.get("creative_body")
+                first_body = (
+                    next(
+                        (
+                            paragraph.strip()
+                            for paragraph in body.split("\n\n")
+                            if paragraph.strip()
+                        ),
+                        "",
+                    )
+                    if isinstance(body, str)
+                    else ""
+                )
+                if isinstance(title, str) and title.strip() and first_body:
+                    return f"{title.strip()}：{first_body}"
+        return next(
+            (line.strip() for line in outline.splitlines() if line.strip()),
+            "",
         )
 
     def load_active_assets(
@@ -1528,10 +1583,19 @@ class PostgresContentRepository(ContentRepository):
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT product.id AS product_id, product.current_version_id AS product_version_id,
-                       sku, display_name, facts, source_kind, source_note,
-                       fact_version, applicability
+                SELECT product.id AS product_id,
+                       product_version.id AS product_version_id,
+                       product.sku, product_version.display_name,
+                       product_version.facts, product_version.source_kind,
+                       product_version.source_note,
+                       product_version.version_number AS fact_version,
+                       product_version.applicability
                 FROM brand_products product
+                JOIN brand_product_versions product_version
+                  ON product_version.tenant_id = product.tenant_id
+                 AND product_version.brand_id = product.brand_id
+                 AND product_version.product_id = product.id
+                 AND product_version.id = product.current_version_id
                 JOIN content_accounts target_account
                   ON target_account.tenant_id = product.tenant_id
                  AND target_account.brand_id = product.brand_id
@@ -1545,34 +1609,39 @@ class PostgresContentRepository(ContentRepository):
                   AND product.status = 'active'
                   AND product.current_version_id IS NOT NULL
                   AND product.business_data_kind = 'formal_business_data'
+                  AND target_account.enabled = true
+                  AND root_account.enabled = true
                   AND (
-                    product.visibility_scope = 'brand_all'
+                    product_version.visibility_scope = 'brand_all'
                     OR (
-                      root_account.control_organization_id IS NOT NULL
+                      product_version.visibility_scope = 'organizations'
+                      AND root_account.control_organization_id IS NOT NULL
                       AND EXISTS (
                         SELECT 1
-                        FROM brand_product_scope_organizations product_scope
+                        FROM unnest(
+                          product_version.scope_organization_ids
+                        ) AS product_scope(organization_id)
+                        WHERE organization_is_same_or_descendant(
+                          product.tenant_id,
+                          root_account.control_organization_id,
+                          product_scope.organization_id
+                        )
+                      )
+                    )
+                    OR (
+                      product_version.visibility_scope = 'headquarters'
+                      AND root_account.control_organization_id IS NOT NULL
+                      AND EXISTS (
+                        SELECT 1
+                        FROM unnest(
+                          product_version.scope_organization_ids
+                        ) AS product_scope(organization_id)
                         JOIN organizations scoped_organization
-                          ON scoped_organization.tenant_id = product_scope.tenant_id
+                          ON scoped_organization.tenant_id = product.tenant_id
                          AND scoped_organization.id = product_scope.organization_id
-                        WHERE product_scope.tenant_id = product.tenant_id
-                          AND product_scope.product_id = product.id
-                          AND (
-                            (
-                              product.visibility_scope = 'organizations'
-                              AND organization_is_same_or_descendant(
-                                    product.tenant_id,
-                                    root_account.control_organization_id,
-                                    product_scope.organization_id
-                                  )
-                            )
-                            OR (
-                              product.visibility_scope = 'headquarters'
-                              AND scoped_organization.organization_level = 'company'
-                              AND product_scope.organization_id =
-                                  root_account.control_organization_id
-                            )
-                          )
+                         AND scoped_organization.organization_level = 'company'
+                        WHERE product_scope.organization_id =
+                              root_account.control_organization_id
                       )
                     )
                   )
@@ -1581,20 +1650,36 @@ class PostgresContentRepository(ContentRepository):
                 (scope.account_id, scope.tenant_id, scope.brand_id),
             )
             rows = cursor.fetchall()
-        normalized_seed = weak_seed.casefold()
-        matched = [
-            row
-            for row in rows
-            if str(row["sku"]).casefold() in normalized_seed
-            or (str(row["display_name"]).strip() and str(row["display_name"]).casefold() in normalized_seed)
-        ]
-        if (
-            not matched
-            and len(rows) == 1
-            and any(marker in weak_seed for marker in ("这件", "这款", "这个商品", "商品A"))
+        aliases = alias_index(
+            tuple(
+                (
+                    str(row["sku"]),
+                    tuple(
+                        label
+                        for label in (
+                            str(row["sku"]),
+                            str(row["display_name"]).strip(),
+                        )
+                        if label
+                    ),
+                )
+                for row in rows
+            )
+        )
+        resolution = resolve_literal_mentions(weak_seed, aliases)
+        if resolution.ambiguous_aliases:
+            raise DomainError("你提到的商品名称对应多件当前商品，请改用完整商品编号再说明一次。")
+        if resolution.near_aliases or has_partial_reference_list(
+            weak_seed,
+            resolution.matches,
         ):
-            matched = rows
-        return tuple(self._product_fact(row) for row in matched)
+            raise DomainError("我还不能完整确认你提到的商品，请使用完整商品编号或完整商品名称再说明一次。")
+        selected = resolution.resolved_identities
+        return tuple(
+            self._product_fact(row)
+            for row in rows
+            if str(row["sku"]) in selected
+        )
 
     def load_task_product_facts(self, scope: TrustedScope, task_id: UUID) -> tuple[ProductFact, ...]:
         with self._tx(scope) as cursor:

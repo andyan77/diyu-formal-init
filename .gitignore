@@ -6,6 +6,7 @@
 var/postgres/
 var/tmp/
 var/materials-test/
+var/execution-control/
 
 # Python
 __pycache__/

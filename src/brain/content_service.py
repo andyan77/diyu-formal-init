@@ -90,6 +90,7 @@ from src.shared.product_value import (
 from src.shared.publication_contract import (
     AccountEditorialPermissionV3,
     BrandContextUseV3,
+    IntakeSpanRole,
     PlatformDirectionV3,
     ProductDecisionBasisRefV2,
     PublicationContract,
@@ -97,10 +98,10 @@ from src.shared.publication_contract import (
     PublicationInputSpanV1,
     SeriesDeltaV1,
     assert_publication_contract,
-    build_publication_contract,
     build_publication_contract_v3,
     product_brief,
 )
+from src.shared.series_episode import build_series_episode_contract
 from src.shared.service_status import ProviderStatusTracker
 from src.shared.types import (
     AccountExpression,
@@ -204,6 +205,7 @@ class ContentService:
             and primary_product_override is None
             and reuse_version_id is None
             and is_natural_chat(weak_seed)
+            and not requests_continuation(weak_seed)
         ):
             return {"kind": "greeting", "message": natural_reply()}
         commitment = creation_commitment or evaluate_creation_intent(
@@ -249,7 +251,14 @@ class ContentService:
             products = source.products
             prior_body = source.body
             if self._requests_independent_result(sanitized_seed):
-                primary_product = self._generator.route(RoutingInput(sanitized_seed, context, products, prior_body))
+                primary_product = self._generator.route(
+                    RoutingInput(
+                        sanitized_seed,
+                        self._context_for_intake(context),
+                        products,
+                        prior_body,
+                    )
+                )
                 source_description = None
             else:
                 primary_product = source.primary_product
@@ -273,7 +282,12 @@ class ContentService:
                 else None
             )
             primary_product = primary_product_override or self._generator.route(
-                RoutingInput(sanitized_seed, context, products, series_prior)
+                RoutingInput(
+                    sanitized_seed,
+                    self._context_for_intake(context),
+                    products,
+                    series_prior,
+                )
             )
             if primary_product == "visual_styling_story":
                 if not bound_products:
@@ -310,6 +324,8 @@ class ContentService:
             primary_product,
             products,
         )
+        if not isinstance(context.context_packet, BrandContextPacketV3):
+            raise DomainError("当前品牌还没有可供新任务使用的已确认发布版本。")
         assets = self._repository.load_active_assets(
             scope, primary_product, sanitized_seed, products, target, is_recompile
         )
@@ -337,6 +353,11 @@ class ContentService:
         publication_spans = intake_spans or self._default_publication_spans(
             sanitized_seed,
             frozen_frame,
+            non_fact_role=(
+                "style_or_revision_instruction"
+                if reuse_version_id is not None
+                else "creation_instruction"
+            ),
         )
         frozen_frame = self._frame_with_publication_spans(
             frozen_frame,
@@ -380,6 +401,7 @@ class ContentService:
             context=context,
             product_value_contract=product_value_contract,
             intake_spans=publication_spans,
+            target=target,
             direction=direction,
             series_context=series_context,
             media_envelope=media_envelope,
@@ -456,20 +478,47 @@ class ContentService:
     def _default_publication_spans(
         weak_seed: str,
         frame: NarrativeFrame,
+        *,
+        non_fact_role: IntakeSpanRole,
     ) -> tuple[PublicationInputSpanV1, ...]:
         fact_texts = {fact.exact_text for fact in frame.user_facts}
-        return tuple(
-            PublicationInputSpanV1(
-                source_id=candidate.source_id,
-                role=("observable_actuality" if candidate.exact_text in fact_texts else "creation_instruction"),
-                exact_text=candidate.exact_text,
-                turn_index=candidate.turn_index,
-                start_offset=candidate.start_offset,
-                end_offset=candidate.end_offset,
-                start_byte=candidate.start_byte,
-                end_byte=candidate.end_byte,
+        candidates = user_fact_candidates((weak_seed,))
+        roles: dict[str, IntakeSpanRole] = {
+            candidate.source_id: (
+                "observable_actuality"
+                if candidate.exact_text in fact_texts
+                else non_fact_role
             )
-            for candidate in user_fact_candidates((weak_seed,))
+            for candidate in candidates
+        }
+        resolution = resolve_input_roles(
+            user_turns=(weak_seed,),
+            candidates=candidates,
+            roles=roles,
+            selected_actuality_source_ids=tuple(
+                candidate.source_id
+                for candidate in candidates
+                if candidate.exact_text in fact_texts
+            ),
+        )
+        return resolution.spans
+
+    @staticmethod
+    def _context_for_intake(context: BrandContext) -> BrandContext:
+        """Keep account identity for routing while withholding raw publication text.
+
+        Task-specific publication context is selected only after the content
+        product is known.  The intake model must never see raw or bulk context
+        that the final PublicationContract did not consume.
+        """
+
+        return replace(
+            context,
+            brand_reference_context=(),
+            expression_constraint_context=(),
+            creative_method_context=(),
+            candidate_product_guidance_context=(),
+            context_packet=None,
         )
 
     @staticmethod
@@ -498,12 +547,15 @@ class ContentService:
         context: BrandContext,
         product_value_contract: ProductValueContract | None,
         intake_spans: tuple[PublicationInputSpanV1, ...],
+        target: ContentTarget,
         direction: PlatformDirection,
         series_context: SeriesContext | None,
         media_envelope: MediaCapabilityEnvelope,
-    ) -> PublicationContract:
+    ) -> PublicationContractV3:
         expression = control.account_expression
         packet = context.context_packet
+        if not isinstance(packet, BrandContextPacketV3):
+            raise DomainError("新内容任务必须使用已确认的 PublicationContractV3。")
         if isinstance(packet, BrandContextPacketV3):
             central_job, audience_payoff, _ = product_brief(
                 primary_product,
@@ -521,17 +573,26 @@ class ContentService:
                 )
                 else None
             )
+            frozen_series = build_series_episode_contract(
+                series_context,
+                topic_origin=plan.topic_origin,
+                current_episode_job=(
+                    f"完成系列第 {series_context.target_position} 篇并推进冻结主线"
+                    if series_context is not None
+                    else ""
+                ),
+            )
             series_delta = (
                 SeriesDeltaV1(
-                    contract_version="series-episode-contract-v1",
-                    prior_episode_facts=(),
-                    prior_judgments=tuple(entry.outline for entry in series_context.prior_entries),
-                    current_episode_job=(f"完成系列第 {series_context.target_position} 篇并推进冻结主线"),
-                    required_new_judgment="形成一条前篇尚未完成的新判断",
-                    series_position=series_context.target_position,
-                    topic_origin=plan.topic_origin,
+                    contract_version=frozen_series.contract_version,
+                    prior_episode_facts=frozen_series.prior_episode_facts,
+                    prior_judgments=frozen_series.prior_judgments,
+                    current_episode_job=frozen_series.current_episode_job,
+                    required_new_judgment=frozen_series.required_new_judgment,
+                    series_position=frozen_series.series_position,
+                    topic_origin=frozen_series.topic_origin,
                 )
-                if series_context is not None
+                if frozen_series is not None
                 else None
             )
             controls = tuple(
@@ -636,7 +697,7 @@ class ContentService:
                 product_decision_basis=product_basis,
                 series_delta=series_delta,
                 platform_direction=PlatformDirectionV3(
-                    target=direction.platform,
+                    target=target,
                     media_format=direction.media_format,
                     direction_version=direction.version,
                     direction_digest=direction.direction_digest,
@@ -652,39 +713,7 @@ class ContentService:
                 publication_projection_version=(packet.publication_projection_version),
                 publication_projection_digest=(packet.publication_projection_digest),
             )
-        projection_id: str | None = None
-        projection_version: int | None = None
-        projection_digest: str | None = None
-        if isinstance(packet, BrandContextPacketV2):
-            projection_id = packet.publication_projection_id
-            projection_version = packet.publication_projection_version
-            projection_digest = packet.publication_projection_digest
-        return build_publication_contract(
-            primary_product=primary_product,
-            topic_spans=plan.topic_spans,
-            topic_origin=plan.topic_origin,
-            known_conditions=tuple(fact.exact_text for fact in frame.user_facts),
-            frozen_fact_refs=tuple(frame.allowed_fact_ids),
-            intake_spans=intake_spans,
-            account_identity=(expression.identity_position if expression is not None else context.content_role_name),
-            account_audience=(
-                expression.audience_relationship if expression is not None else context.audience_description
-            ),
-            account_attention=(expression.content_territories if expression is not None else ""),
-            account_response_boundary=(
-                expression.authority_boundary if expression is not None else context.content_role_boundary
-            ),
-            source_profile_id=(
-                str(expression.profile_id) if expression is not None and expression.profile_id is not None else None
-            ),
-            source_profile_version=(expression.version if expression is not None else None),
-            publication_projection_id=projection_id,
-            publication_projection_version=projection_version,
-            publication_projection_digest=projection_digest,
-            product_value_contract_digest=(
-                product_value_contract_digest(product_value_contract) if product_value_contract is not None else None
-            ),
-        )
+        raise DomainError("新内容任务没有形成 PublicationContractV3。")
 
     @staticmethod
     def _frame_with_brand_facts(
@@ -694,13 +723,10 @@ class ContentService:
         user_premise: str,
     ) -> NarrativeFrame:
         product_ids = tuple(record.fact_id for product in products for record in product_fact_records(product))
-        # A confirmed publication packet remains frozen in the task snapshot,
-        # but a public brand fact is not automatically the subject of every
-        # piece of content.  Only an explicit reference to the current brand
-        # makes those exact facts visible.  ContentRole, profile and the
-        # confirmed expression/method projection still constrain every task.
-        # This is a positive subject binding, not a keyword/after-the-fact
-        # content filter.
+        # V3 receives only the confirmed publication items selected for this
+        # task's content product and scope.  Those public facts are therefore
+        # direct consumers. Legacy snapshots already freeze their NarrativeFrame
+        # and must never be re-authorized from a name mention.
         brand_ids = ContentService._visible_brand_fact_ids(context, user_premise)
         if frame is None:
             return new_frame("general_observation", (), product_ids, brand_ids)
@@ -750,9 +776,10 @@ class ContentService:
         context: BrandContext,
         user_premise: str,
     ) -> tuple[str, ...]:
-        if not context.brand_name.strip() or context.brand_name.casefold() not in user_premise.casefold():
-            return ()
-        return tuple(record.fact_id for record in brand_fact_records(context.brand_reference_context))
+        del user_premise
+        if isinstance(context.context_packet, BrandContextPacketV3):
+            return tuple(record.fact_id for record in brand_fact_records(context.brand_reference_context))
+        return ()
 
     @staticmethod
     def _bound_products(
@@ -816,6 +843,18 @@ class ContentService:
         if raw_history and raw_history[-1].role == "user" and raw_history[-1].content == message:
             raw_history = raw_history[:-1]
         raw_user_turns = tuple(turn.content for turn in raw_history if turn.role == "user") + (message,)
+        textual_commitment = evaluate_creation_intent(raw_user_turns)
+        if (
+            not raw_history
+            and is_natural_chat(message)
+            and not textual_commitment.committed
+            and not requests_continuation(message)
+        ):
+            return {
+                "kind": "chat",
+                "message": natural_reply(),
+                "direct_generation_available": False,
+            }
         commitment = evaluate_creation_intent(
             () if conversation_only else raw_user_turns,
             explicit_ui=direct_generate and not conversation_only,
@@ -888,7 +927,7 @@ class ContentService:
             ConversationInput(
                 message=sanitized_message,
                 history=sanitized_history,
-                brand=context,
+                brand=self._context_for_intake(context),
                 products=products,
                 target=target,
                 selected_direction=selected_direction,
@@ -1764,7 +1803,7 @@ class ContentService:
             publication_contract = replace(
                 publication_contract,
                 platform_direction=PlatformDirectionV3(
-                    target=direction.platform,
+                    target=target,
                     media_format=direction.media_format,
                     direction_version=direction.version,
                     direction_digest=direction.direction_digest,

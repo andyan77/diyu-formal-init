@@ -816,6 +816,15 @@ class DeepSeekGenerator(ContentGenerator):
         contract = request.publication_contract
         if not isinstance(contract, PublicationContractV3):
             raise GenerationFailed("PublicationContractV3 路由发生漂移")
+        if (
+            contract.platform_direction.target != request.target
+            or contract.platform_direction.media_format != request.media_format
+            or contract.platform_direction.direction_version
+            != request.platform_direction.version
+            or contract.platform_direction.direction_digest
+            != request.platform_direction.direction_digest
+        ):
+            raise GenerationFailed("Writer 平台责任没有绑定冻结平台方向")
         assert_media_program_allowed(
             request.media_capability_envelope,
             request.media_program,
@@ -837,6 +846,9 @@ class DeepSeekGenerator(ContentGenerator):
         writer_request = build_writer_request_v3(
             contract,
             product_decision_basis=product_basis,
+            platform_expression_responsibility=(
+                request.platform_direction.direction
+            ),
             prior_output=request.prior_writer_output,
             revision_instruction=request.revision_instruction,
         )

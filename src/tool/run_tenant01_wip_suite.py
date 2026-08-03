@@ -19,6 +19,7 @@ from src.infrastructure.content_control_repository import (
 from src.infrastructure.local_object_store import LocalObjectStore
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
+from src.tool.execution_control import verify_runtime_action
 from src.tool.run_gate_c_final_suite import (
     _EvidenceDeepSeekGenerator,
     _persistence_ids,
@@ -196,7 +197,9 @@ def main() -> None:
     parser.add_argument("--journey-file", required=True)
     parser.add_argument("--config", default="config/tenant01/golden-v1.json")
     parser.add_argument("--card", action="append", required=True)
-    _run(parser.parse_args())
+    arguments = parser.parse_args()
+    verify_runtime_action("model_runner")
+    _run(arguments)
 
 
 if __name__ == "__main__":

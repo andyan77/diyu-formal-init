@@ -412,14 +412,14 @@ def test_formal_content_api_enforces_global_tenant_user_rate_limits_and_releases
     before = _content_counts(migrator_database_url, tenant_ids)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        first = executor.submit(_post_content, app, tokens[(0, 0)], "阻塞-租户一")
-        second = executor.submit(_post_content, app, tokens[(1, 0)], "阻塞-租户二")
+        first = executor.submit(_post_content, app, tokens[(0, 0)], "阻塞-租户一，请写一条容量测试内容")
+        second = executor.submit(_post_content, app, tokens[(1, 0)], "阻塞-租户二，请写一条容量测试内容")
         assert generator.wait_until_entered(2)
 
         started = time.perf_counter()
-        tenant_rejected = _post_content(app, tokens[(0, 1)], "同租户超限")
+        tenant_rejected = _post_content(app, tokens[(0, 1)], "请写一条容量测试内容：同租户超限")
         tenant_reject_seconds = time.perf_counter() - started
-        global_rejected = _post_content(app, tokens[(2, 0)], "全局超限")
+        global_rejected = _post_content(app, tokens[(2, 0)], "请写一条容量测试内容：全局超限")
         assert tenant_rejected.status_code == 429
         assert global_rejected.status_code == 429
         assert tenant_reject_seconds < 2
@@ -433,17 +433,17 @@ def test_formal_content_api_enforces_global_tenant_user_rate_limits_and_releases
     after_blocking = _content_counts(migrator_database_url, tenant_ids)
     assert after_blocking == (before[0] + 2, before[1] + 2, before[2] + 2)
 
-    failed = _post_content(app, tokens[(0, 2)], "失败-供应商最终失败")
+    failed = _post_content(app, tokens[(0, 2)], "失败-供应商最终失败，请写一条容量测试内容")
     assert failed.status_code == 422
     after_failure = _content_counts(migrator_database_url, tenant_ids)
     assert after_failure == (after_blocking[0] + 1, after_blocking[1] + 1, after_blocking[2])
-    recovered = _post_content(app, tokens[(0, 3)], "恢复-失败后可以继续")
+    recovered = _post_content(app, tokens[(0, 3)], "请写一条容量测试内容：失败后恢复")
     assert recovered.status_code == 200
 
     # Starlette may replace a BaseException raised by a sync worker with its
     # stopped-portal RuntimeError while closing that one test client.
     with pytest.raises((RequestCancelled, RuntimeError, CancelledError)):
-        _post_content(app, tokens[(1, 1)], "取消-调用被取消")
+        _post_content(app, tokens[(1, 1)], "取消-调用被取消，请写一条容量测试内容")
     after_cancel = _content_counts(migrator_database_url, tenant_ids)
     assert after_cancel[2] == after_failure[2] + 1
     with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
@@ -452,7 +452,7 @@ def test_formal_content_api_enforces_global_tenant_user_rate_limits_and_releases
             (tenants[1].tenant_id,),
         )
         assert cursor.fetchone() == ("failed",)
-    assert _post_content(app, tokens[(1, 2)], "恢复-取消后可以继续").status_code == 200
+    assert _post_content(app, tokens[(1, 2)], "请写一条容量测试内容：取消后恢复").status_code == 200
 
     dedup_app = _controlled_app(
         app_database_url,
@@ -461,9 +461,9 @@ def test_formal_content_api_enforces_global_tenant_user_rate_limits_and_releases
         global_concurrency=4,
         tenant_concurrency=4,
     )
-    assert _post_content(dedup_app, tokens[(0, 4)], "单用户第一次").status_code == 200
+    assert _post_content(dedup_app, tokens[(0, 4)], "请写一条容量测试内容：单用户第一次").status_code == 200
     dedup_before = _content_counts(migrator_database_url, tenant_ids)
-    assert _post_content(dedup_app, tokens[(0, 4)], "单用户两秒内重复").status_code == 429
+    assert _post_content(dedup_app, tokens[(0, 4)], "请写一条容量测试内容：单用户两秒内重复").status_code == 429
     assert _content_counts(migrator_database_url, tenant_ids) == dedup_before
 
     rate_app = _controlled_app(
@@ -474,10 +474,10 @@ def test_formal_content_api_enforces_global_tenant_user_rate_limits_and_releases
         tenant_concurrency=4,
         tenant_rate=2,
     )
-    assert _post_content(rate_app, tokens[(2, 1)], "租户速率一").status_code == 200
-    assert _post_content(rate_app, tokens[(2, 2)], "租户速率二").status_code == 200
+    assert _post_content(rate_app, tokens[(2, 1)], "请写一条容量测试内容：租户速率一").status_code == 200
+    assert _post_content(rate_app, tokens[(2, 2)], "请写一条容量测试内容：租户速率二").status_code == 200
     rate_before = _content_counts(migrator_database_url, tenant_ids)
-    assert _post_content(rate_app, tokens[(2, 3)], "租户速率三").status_code == 429
+    assert _post_content(rate_app, tokens[(2, 3)], "请写一条容量测试内容：租户速率三").status_code == 429
     assert _content_counts(migrator_database_url, tenant_ids) == rate_before
 
 

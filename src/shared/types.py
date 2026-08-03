@@ -284,6 +284,8 @@ class SeriesEntry:
     position: int
     outline: str
     body: str
+    prior_facts: tuple[str, ...] = ()
+    prior_judgment: str = ""
 
 
 @dataclass(frozen=True)

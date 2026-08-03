@@ -277,6 +277,12 @@ def frozen_series_context(snapshot: Mapping[str, object]) -> SeriesContext | Non
                     position=int(str(raw["position"])),
                     outline=str(raw["outline"]),
                     body=str(raw["body"]),
+                    prior_facts=tuple(
+                        str(item)
+                        for item in raw.get("prior_facts", [])
+                        if isinstance(item, str)
+                    ),
+                    prior_judgment=str(raw.get("prior_judgment") or ""),
                 )
             )
         return SeriesContext(

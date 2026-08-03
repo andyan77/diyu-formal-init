@@ -21,8 +21,18 @@ P2DecisionAxis: TypeAlias = Literal[
     "complete_side_choice",
     "confirmed_visible_difference",
     "internal_color_relationship",
+    "confirmed_feature_and_structure",
     "confirmed_structure_and_silhouette",
 ]
+P2_DECISION_AXES = frozenset(
+    {
+        "complete_side_choice",
+        "confirmed_visible_difference",
+        "internal_color_relationship",
+        "confirmed_feature_and_structure",
+        "confirmed_structure_and_silhouette",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -183,6 +193,13 @@ def _build_p2_decision_basis_v2(
         understanding = "这件商品的专属可见选择点，是资料中已确认的强对比颜色关系。"
         tradeoff = "本次选择是采用这组已确认强对比作为判断重点，或不采用这项依据。"
         condition = "只有用户本次确实要按已确认的强对比颜色关系作选择时，这项价值才成立。"
+    elif observable and structure:
+        decision_axis = "confirmed_feature_and_structure"
+        structure_key = "material_or_structure" if "material_or_structure" in facts_by_key else "material"
+        source_keys = ("display_name", "observable_features", structure_key)
+        understanding = "这件商品已确认的可见特征与结构，提供两个可以相互复核的选择维度。"
+        tradeoff = "先看可见特征时，结构用于复核；把结构作为主要判断时，可见特征退到辅助位置。"
+        condition = "只有本次选择确实需要同时核对这项可见特征与结构时，这项价值才成立。"
     elif structure and silhouette:
         decision_axis = "confirmed_structure_and_silhouette"
         structure_key = "material_or_structure" if "material_or_structure" in facts_by_key else "material"
@@ -300,12 +317,7 @@ def product_value_contract_from_document(
         condition_of_validity = _required_string(value.get("condition_of_validity"))
         if primary_product == "product_truth":
             decision_axis = value.get("decision_axis")
-            if decision_axis not in {
-                "complete_side_choice",
-                "confirmed_visible_difference",
-                "internal_color_relationship",
-                "confirmed_structure_and_silhouette",
-            }:
+            if decision_axis not in P2_DECISION_AXES:
                 raise DomainError("内容任务冻结的商品选择维度无效")
             contract_v2: ProductDecisionBasisV2 = P2ProductDecisionBasisV2(
                 contract_version=PRODUCT_DECISION_BASIS_VERSION,
@@ -426,12 +438,7 @@ def assert_product_decision_basis_v2(
         len(contract.resource_refs) != 2 or len(set(contract.resource_refs)) != 2
     ):
         raise DomainError("内容任务冻结的商品选择资源无效")
-    if isinstance(contract, P2ProductDecisionBasisV2) and contract.decision_axis not in {
-        "complete_side_choice",
-        "confirmed_visible_difference",
-        "internal_color_relationship",
-        "confirmed_structure_and_silhouette",
-    }:
+    if isinstance(contract, P2ProductDecisionBasisV2) and contract.decision_axis not in P2_DECISION_AXES:
         raise DomainError("内容任务冻结的商品选择维度无效")
 
 

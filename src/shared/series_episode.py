@@ -32,9 +32,16 @@ def build_series_episode_contract(
         return None
     contract = SeriesEpisodeContractV1(
         contract_version=SERIES_EPISODE_CONTRACT_VERSION,
-        prior_episode_facts=(),
+        prior_episode_facts=tuple(
+            dict.fromkeys(
+                fact
+                for entry in context.prior_entries
+                for fact in entry.prior_facts
+            )
+        ),
         prior_judgments=tuple(
-            f"V{entry.version} / 第{entry.position}篇\n{entry.outline}\n{entry.body}" for entry in context.prior_entries
+            entry.prior_judgment or _legacy_outline_judgment(entry.outline)
+            for entry in context.prior_entries
         ),
         current_episode_job=current_episode_job.strip(),
         required_new_judgment=("在冻结前情上形成一个此前没有表达过、并且完成本篇任务的新判断"),
@@ -43,6 +50,18 @@ def build_series_episode_contract(
     )
     assert_series_episode_contract(contract)
     return contract
+
+
+def _legacy_outline_judgment(outline: str) -> str:
+    """Read one bounded legacy judgment without treating a whole artifact as it."""
+
+    first_line = next(
+        (line.strip() for line in outline.splitlines() if line.strip()),
+        "",
+    )
+    if not first_line:
+        raise DomainError("系列前情缺少可冻结的判断")
+    return first_line
 
 
 def series_episode_contract_document(

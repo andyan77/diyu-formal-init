@@ -365,7 +365,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert [event["event"] for event in g1] == ["conversation"]
         assert g1[-1]["kind"] == "chat"
         assert _counts(app_database_url) == before_g1
-        assert _CALLS == {"intake": 1, "writer": 0, "reviewer": 0}
+        assert _CALLS == {"intake": 0, "writer": 0, "reviewer": 0}
         time.sleep(2.05)
 
         conversation_before = _counts(app_database_url)
@@ -413,9 +413,9 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             time.sleep(2.05)
         assert all(fact_span in g4_body for fact_span in _G4_FACT_SPANS)
         g3_snapshot = _snapshot(app_database_url, task_ids["G3"])
-        g3_kernel = g3_snapshot["creative_kernel_v2"]
+        g3_kernel = g3_snapshot["creative_kernel_v5"]
         assert isinstance(g3_kernel, dict)
-        assert g3_kernel["program_id"] == "observation_only_v1"
+        assert g3_kernel["media_program_id"] == "graphic_observation_progression_v1"
 
         g6_before = _counts(app_database_url)
         g6 = _events(client, _G6)
@@ -438,12 +438,16 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert str(frame["user_facts"][1]["source_id"]).startswith("source:user_actuality:turn-1:clause-2:")
         publication_contract = snapshot["publication_contract"]
         assert isinstance(publication_contract, dict)
-        assert [span["role"] for span in publication_contract["intake_spans"]] == [
+        assert [span["role"] for span in publication_contract["input_roles"]] == [
             "observable_actuality",
             "observable_actuality",
             "creation_instruction",
         ]
-        assert publication_contract["known_conditions"] == list(_G4_FACT_SPANS)
+        assert [
+            span["exact_text"]
+            for span in publication_contract["input_roles"]
+            if span["role"] == "observable_actuality"
+        ] == list(_G4_FACT_SPANS)
         assert frame["allowed_brand_fact_ids"] == []
         assert snapshot["creation_commitment"] == {
             "gate_version": "creation-intent-gate-v1",
@@ -459,14 +463,14 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert plan["plan_version"] == "creative-plan-v3"
         assert plan["topic_origin"] == "explicit_user"
         assert "system_creative_plan" not in snapshot
-        kernel_v1 = snapshot["creative_kernel_v2"]
+        kernel_v1 = snapshot["creative_kernel_v5"]
         assert isinstance(kernel_v1, dict)
-        assert kernel_v1["kernel_version"] == "creative-kernel-v4"
-        assert kernel_v1["program_id"] == "observation_only_v1"
-        assert snapshot["delivery_compiler_version"] == "delivery-compiler-v4"
-        assert snapshot["version_authorization"] == "deterministic-dual-track-v1"
+        assert kernel_v1["kernel_version"] == "creative-kernel-v5"
+        assert kernel_v1["media_program_id"] == "graphic_fact_guided_v1"
+        assert snapshot["delivery_compiler_version"] == "delivery-compiler-v5"
+        assert snapshot["version_authorization"] == "deterministic-publication-v3"
         assert "review_evidence_version" not in snapshot
-        assert isinstance(snapshot["reviewed_kernel_digest"], str)
+        assert isinstance(snapshot["deterministic_checked_kernel_digest"], str)
         assert isinstance(snapshot["visible_provenance"], dict)
 
         forbidden_frame_change = client.post(
@@ -498,7 +502,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         v2 = revision.json()
         assert v2["version"] == 2
         assert all(fact_span in v2["body"] for fact_span in _G4_FACT_SPANS)
-        assert "这次按你的修改要求改变了允许调整的表达" in v2["body"]
+        assert v2["body"] != g4_body
         revision_counts = _counts(app_database_url)
         revision_calls = dict(_CALLS)
         replayed_revision = client.post(
@@ -526,10 +530,10 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert revised_snapshot["delivery_compiler_version"] == snapshot["delivery_compiler_version"]
         assert revised_snapshot["version_authorization"] == snapshot["version_authorization"]
         assert revised_snapshot["speaker_kind"] == snapshot["speaker_kind"]
-        revised_kernel = revised_snapshot["creative_kernel_v2"]
+        revised_kernel = revised_snapshot["creative_kernel_v5"]
         assert isinstance(revised_kernel, dict)
         assert revised_kernel != kernel_v1
-        assert revised_kernel["program_id"] == kernel_v1["program_id"]
+        assert revised_kernel["media_program_id"] == kernel_v1["media_program_id"]
         original_units = kernel_v1["units"]
         revised_units = revised_kernel["units"]
         assert isinstance(original_units, list)
@@ -590,8 +594,8 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             assert version_audit["delivery_compiler_version"] == snapshot["delivery_compiler_version"]
         v1_audit = cast(dict[str, object], audits[0]["version_audit_snapshot"])
         v2_audit = cast(dict[str, object], audits[1]["version_audit_snapshot"])
-        assert v1_audit["creative_kernel_v2"] == kernel_v1
-        assert v2_audit["creative_kernel_v2"] == revised_kernel
+        assert v1_audit["creative_kernel_v5"] == kernel_v1
+        assert v2_audit["creative_kernel_v5"] == revised_kernel
         assert v1_audit["narrative_frame"] == v2_audit["narrative_frame"]
         with (
             psycopg.connect(app_database_url) as connection,

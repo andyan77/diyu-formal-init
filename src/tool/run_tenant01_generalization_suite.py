@@ -21,6 +21,7 @@ from src.infrastructure.content_control_repository import (
 from src.infrastructure.local_object_store import LocalObjectStore
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
+from src.tool.execution_control import verify_runtime_action
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator
 from src.tool.run_gate_c_final_suite import (
     _current_head,
@@ -736,7 +737,9 @@ def main() -> None:
         "--config",
         default="config/tenant01/semantic-holdout-v1.json",
     )
-    _run(parser.parse_args())
+    arguments = parser.parse_args()
+    verify_runtime_action("generalization_runner")
+    _run(arguments)
 
 
 if __name__ == "__main__":

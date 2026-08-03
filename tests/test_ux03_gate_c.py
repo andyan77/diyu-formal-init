@@ -111,6 +111,7 @@ from src.shared.product_value import (
     product_value_contract_digest,
 )
 from src.shared.publication_contract import (
+    PublicationContractV2,
     PublicationInputSpanV1,
     build_publication_contract,
 )
@@ -1020,6 +1021,11 @@ def _compile_input(request: GenerationInput) -> DeliveryCompileInput:
 def _filled_kernel(request: GenerationInput) -> object:
     assert request.narrative_frame is not None
     context = BoundaryContext.from_request(request, request.narrative_frame)
+    legacy_product_value_contract = request.product_value_contract
+    assert legacy_product_value_contract is None or isinstance(
+        legacy_product_value_contract,
+        (P2ProductValueContractV1, P5ProductValueContractV1),
+    )
     skeleton = build_kernel_skeleton(
         frame=request.narrative_frame,
         fact_registry=context.fact_registry,
@@ -1029,7 +1035,7 @@ def _filled_kernel(request: GenerationInput) -> object:
         media_format=request.media_format,
         kernel_version=KERNEL_VERSION,
         primary_product=request.primary_product,
-        product_value_contract=request.product_value_contract,
+        product_value_contract=legacy_product_value_contract,
     )
     text_by_purpose = {
         "title": "甜味把熟悉的一天叫醒了",
@@ -1309,7 +1315,7 @@ def test_publication_v2_projection_does_not_rewrite_legacy_output(
 
 def test_publication_v2_compiler_requires_exact_facts_and_product_digest() -> None:
     request, kernel = _publication_media_case("graphic_observation_progression_v1")
-    assert request.publication_contract is not None
+    assert isinstance(request.publication_contract, PublicationContractV2)
 
     fact_drift = replace(
         request,
@@ -1348,7 +1354,7 @@ def test_publication_v2_keeps_product_plan_internal_and_rejects_exact_copy(
     program_id: MediaProgramId,
 ) -> None:
     request, kernel = _publication_media_case(program_id)
-    assert request.publication_contract is not None
+    assert isinstance(request.publication_contract, PublicationContractV2)
     assert request.media_program is not None
     contract: ProductValueContract
     internal_plan: tuple[str, str, str]
@@ -3176,7 +3182,7 @@ def test_current_confirmed_brand_fact_uses_the_single_artifact_scope() -> None:
 
 def test_actuality_writer_receives_one_frozen_fact_without_duplicate_instruction_text() -> None:
     request = _p3_account_link_request()
-    assert request.publication_contract is not None
+    assert isinstance(request.publication_contract, PublicationContractV2)
     assert request.narrative_frame is not None
     fact = request.narrative_frame.user_facts[0].exact_text
     kernel = cast(CreativeKernelV1, _filled_kernel(request))
@@ -4051,7 +4057,7 @@ def test_p2_exact_fact_repetition_gets_one_bounded_affected_unit_repair(
 
 def test_p3_writer_receives_one_explicit_account_editorial_link() -> None:
     request = _p3_account_link_request()
-    assert request.publication_contract is not None
+    assert isinstance(request.publication_contract, PublicationContractV2)
     assert request.publication_contract.account_identity == "从穿衣编辑的位置重新看熟悉事物"
     assert request.publication_contract.account_audience == "陪正在重新选择日常节奏的人看清取舍。"
     kernel = cast(CreativeKernelV1, _filled_kernel(request))

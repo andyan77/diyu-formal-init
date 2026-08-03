@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import cast
 
 import pytest
 
@@ -433,7 +434,7 @@ def test_legacy_kernel_document_remains_readable_and_recompilable() -> None:
     legacy_document = kernel_document(kernel)
     legacy_document.pop("program_id")
 
-    restored = kernel_from_document(legacy_document)
+    restored = cast(CreativeKernelV1, kernel_from_document(legacy_document))
     assert restored.kernel_version == DUAL_TRACK_KERNEL_VERSION
     assert restored.program_id == OBSERVATION_ONLY_PROGRAM
     assert kernel_from_document(kernel_document(restored)) == restored

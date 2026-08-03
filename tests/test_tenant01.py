@@ -15,6 +15,7 @@ import psycopg
 import pytest
 
 from src.brain.content_service import ContentService
+from src.brain.platform_directions import direction_for
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.tenant_lifecycle import (
     TENANT_LIFECYCLE_CONTRACT_VERSION,
@@ -782,6 +783,7 @@ def _tenant01_v3_artifact(root: Path) -> Path:
     writer_request = build_writer_request_v3(
         publication,
         product_decision_basis=product_basis,
+        platform_expression_responsibility=direction_for("xiaohongshu_graphic").direction,
         prior_output=None,
         revision_instruction=None,
     )
@@ -936,6 +938,30 @@ def test_product_decision_basis_v2_contains_a_consumer_tradeoff_not_a_safety_dis
     assert "结构" in basis.tradeoff
     assert "轮廓" in basis.tradeoff
     assert all(marker not in machine_plan for marker in ("不能据此", "尚未确认", "验收", "合同", "事实许可"))
+
+
+def test_product_decision_basis_v2_combines_visible_feature_and_structure() -> None:
+    product = ProductFact(
+        sku="HOLDOUT-FEATURE-STRUCTURE-01",
+        display_name="特征结构测试商品",
+        facts={
+            "observable_features": "圆领",
+            "material_or_structure": "针织结构",
+        },
+        source_kind="synthetic_confirmed_product_record",
+    )
+
+    basis = build_product_decision_basis_v2(
+        primary_product="product_truth",
+        products=(product,),
+    )
+
+    assert isinstance(basis, P2ProductDecisionBasisV2)
+    assert basis.decision_axis == "confirmed_feature_and_structure"
+    assert "可见特征" in basis.tradeoff
+    assert "结构" in basis.tradeoff
+    assert len(basis.supporting_fact_refs) == 3
+    assert product_value_contract_from_document(product_value_contract_document(basis)) == basis
 
 
 def test_product_decision_basis_v2_fails_closed_without_a_real_choice_dimension() -> None:
@@ -1679,7 +1705,7 @@ def test_account_editorial_lens_historical_v3_remains_readable_without_upgrade()
     assert parsed.contract_version == ACCOUNT_EDITORIAL_LENS_V3_VERSION
 
 
-def test_visible_brand_fact_requires_brand_to_be_the_explicit_subject() -> None:
+def test_v3_selected_brand_fact_is_direct_while_legacy_cannot_reauthorize_from_a_name() -> None:
     exact_fact = "笛语提供面向日常穿衣选择的品牌内容。"
     context = BrandContext(
         brand_name="笛语",
@@ -1711,9 +1737,33 @@ def test_visible_brand_fact_requires_brand_to_be_the_explicit_subject() -> None:
         context,
         "笛语为什么把日常穿衣选择讲得这么克制？",
     )
+    v3_context = replace(
+        context,
+        context_packet=BrandContextPacketV3(
+            packet_version="brand-context-packet-v3",
+            packet_digest="1" * 64,
+            publication_projection_id="projection-test",
+            publication_projection_version=1,
+            publication_projection_digest="2" * 64,
+            available_segment_refs=("segment-test",),
+            frozen_segment_refs=("segment-test",),
+            consumed_segment_refs=(),
+            displayed_segment_refs=(),
+            segments=(),
+        ),
+    )
+    selected_for_task = ContentService._frame_with_brand_facts(
+        None,
+        (),
+        v3_context,
+        "早上凉、中午热，今天怎么穿更稳妥？",
+    )
 
     assert ordinary.allowed_brand_fact_ids == ()
-    assert explicit.allowed_brand_fact_ids == tuple(record.fact_id for record in brand_fact_records((exact_fact,)))
+    assert explicit.allowed_brand_fact_ids == ()
+    assert selected_for_task.allowed_brand_fact_ids == tuple(
+        record.fact_id for record in brand_fact_records((exact_fact,))
+    )
 
 
 def test_tenant01_content_product_taxonomy_is_not_an_insertable_brand_fact() -> None:
@@ -2230,6 +2280,22 @@ def test_tenant01_brand_context_is_task_relevant_typed_and_deterministic(
             "product_truth",
             (product,),
         )
+        with pytest.raises(DomainError, match="明确绑定一件"):
+            repository.select_brand_context_for_task(
+                scope,
+                context,
+                "没有商品不能形成商品解释",
+                "product_truth",
+                (),
+            )
+        with pytest.raises(DomainError, match="题材不能为空"):
+            repository.select_brand_context_for_task(
+                scope,
+                context,
+                "  ",
+                "brand_life_narrative",
+                (),
+            )
 
         assert selected.context_packet is not None
         assert repeated.context_packet is not None

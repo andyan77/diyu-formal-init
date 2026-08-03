@@ -134,7 +134,7 @@ def _contract_v3() -> PublicationContractV3:
         product_decision_basis=None,
         series_delta=None,
         platform_direction=PlatformDirectionV3(
-            target="小红书",
+            target="xiaohongshu_graphic",
             media_format="graphic",
             direction_version="platform-direction-v3-test",
             direction_digest="3" * 64,
@@ -326,6 +326,7 @@ def test_publication_contract_v3_is_the_only_writer_semantic_projection() -> Non
     request = build_writer_request_v3(
         contract,
         product_decision_basis=None,
+        platform_expression_responsibility="以图文页面形成完整阅读结构",
         prior_output=None,
         revision_instruction=None,
     )
@@ -393,6 +394,7 @@ def test_publication_contract_v3_projects_two_brands_without_a_diyu_branch() -> 
         build_writer_request_v3(
             first,
             product_decision_basis=None,
+            platform_expression_responsibility="以图文页面形成完整阅读结构",
             prior_output=None,
             revision_instruction=None,
         )
@@ -401,6 +403,7 @@ def test_publication_contract_v3_projects_two_brands_without_a_diyu_branch() -> 
         build_writer_request_v3(
             second,
             product_decision_basis=None,
+            platform_expression_responsibility="以图文页面形成完整阅读结构",
             prior_output=None,
             revision_instruction=None,
         )

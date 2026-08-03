@@ -3258,16 +3258,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     status_code=status.HTTP_303_SEE_OTHER,
                 )
             with model_slot(request):
-                result = service.create_from_weak_seed(
+                result = service.respond_to_conversation(
                     scope,
                     weak_seed,
-                    target=target,
+                    (),
+                    target,
                     series_id=series_id,
                     series_position=series_position,
+                    direct_generate=True,
                 )
         except DomainError as exc:
             return RedirectResponse("/content?notice=" + str(exc), status_code=status.HTTP_303_SEE_OTHER)
-        if result["kind"] in {"greeting", "question"}:
+        if result["kind"] in {"greeting", "chat", "question"}:
             return RedirectResponse("/content?notice=" + str(result["message"]), status_code=status.HTTP_303_SEE_OTHER)
         return RedirectResponse(workbench_location(result, target=target), status_code=status.HTTP_303_SEE_OTHER)
 
