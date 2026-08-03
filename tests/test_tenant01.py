@@ -921,6 +921,7 @@ def test_product_decision_basis_v2_contains_a_consumer_tradeoff_not_a_safety_dis
     )
 
     assert basis is not None
+    assert basis.decision_axis == "confirmed_structure_and_silhouette"
     machine_plan = "\n".join(
         (
             basis.product_specific_understanding,
@@ -962,6 +963,7 @@ def test_product_decision_basis_v2_treats_multiple_colors_as_one_relation_not_va
     )
 
     assert basis is not None
+    assert basis.decision_axis == "internal_color_relationship"
     machine_plan = "\n".join(
         (
             basis.product_specific_understanding,

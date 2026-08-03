@@ -60,6 +60,7 @@ def build_writer_request_v3(
     basis_document: dict[str, object] | None = None
     if isinstance(product_decision_basis, P2ProductDecisionBasisV2):
         basis_document = {
+            "decision_axis": product_decision_basis.decision_axis,
             "product_specific_understanding": (product_decision_basis.product_specific_understanding),
             "tradeoff": product_decision_basis.tradeoff,
             "condition_of_validity": (product_decision_basis.condition_of_validity),

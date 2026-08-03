@@ -967,7 +967,7 @@ class DeepSeekGenerator(ContentGenerator):
             "只返回 title、natural_guide、creative_body、publication_caption 四个字符串字段。\n"
             "actuality_fact_refs 只表示服务端另有冻结事实；你看不到也不拥有这些原句。四个字段须直接完成非事实创作，不猜测、复原或补写其内容。\n"
             "account_editorial_permission 只决定观察顺序与回应姿态，不能替换用户题材，也不能把生活题材转向服饰、商品或品牌宣讲。\n"
-            "product_decision_basis 是穷尽式机器计划：标题、导读、正文和配文都只能自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子；不得添加计划外的购买理由、适用场景、人群、耐久、搭配效果、体验或其他商品判断。\n"
+            "product_decision_basis 是穷尽式机器计划：decision_axis 是唯一允许讨论的商品选择维度；标题、导读、正文和配文都只能自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子；不得拿其他商品维度作对照，也不得添加计划外的购买理由、适用场景、人群、耐久、搭配效果、体验或其他商品判断。\n"
             "你可以形成中心判断、一般观察、条件建议、比喻、节奏、幽默和留白；建议与假设须保持该身份。\n"
             "存在 actuality_fact_refs 时，一般观察必须保持为不绑定当前用户的创作表达；不得解释任何人的身体或心理状态、动机、原因、后果、健康变化，也不得把建议写成已经发生的现实。\n"
             "不得新增真人现实、商品硬事实/功效/体验、品牌机构事实或未登记资源，也不得输出媒体制作指令。\n"
@@ -4076,7 +4076,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 创建任务。只返回以下一种 JSON：
 {chat_shape}
 {question_shape}
-{{"kind":"ready","message":"一句自然承接","user_premises":["逐字复制实际使用的用户消息"],
+{{"kind":"ready","message":"一句自然承接，并明确本题非事实编辑焦点","user_premises":["逐字复制实际使用的用户消息"],
 "user_fact_sentence_ids":["只能选择服务端候选 sentence_id，不能返回或裁剪事实正文"],
 "user_sentence_roles":[{{"sentence_id":"按服务端候选顺序逐项返回","role":"observable_actuality|creation_instruction|style_or_revision_instruction"}}],
 "creative_plan":{{"plan_version":"{PLAN_VERSION}","topic_spans":["只能逐字截取用户消息"],
@@ -4111,6 +4111,9 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   服务端已经用可见标点把候选冻结成原始 offset；不得把相邻跨度拼接，也不得把指令升级成现实。
   若单个候选仍同时含事实与命令且无法按既有边界安全分开，该候选不得标为 observable_actuality；
   可以作为创作种子或控制，但不能冒充逐字现实引用。
+- ready 的 message 同时作为 Writer 的非事实编辑焦点：必须让 Writer 在不读取现实原句时仍能
+  知道本题要回应的具体张力；它不能复述、改写或补充现实事实，不能只是“我来整理这段内容”
+  这类无题材承接，也不能另选账号长期内容领地。
 - 显式模式为 dramatization 时必须使用它；没有明确演绎要求不得升级为剧情。
 - general_observation 不创造人物动作、对白、动机、结果、地点、持有物或生活履历。
 {series_intake_rule}

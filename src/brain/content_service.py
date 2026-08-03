@@ -570,14 +570,11 @@ class ContentService:
                     )
                 )
             )
+            task_role = context.content_role_name or "当前账号"
+            task_identity = f"以{task_role}的身份回应本题；账号长期画像不是本篇人物、事件或题材"
+            task_audience = "面向本次输入的直接读者；不得根据账号长期受众补写家庭关系、人物或经历"
             account_attention = (
-                "先完整回应当前生活题材；账号内容领地只决定观察顺序，不能替换题材，也不能强行转向服饰、商品或品牌宣讲"
-                if primary_product in {"brand_life_narrative", "local_response"}
-                else (
-                    expression.content_territories
-                    if expression is not None
-                    else context.decision_order
-                )
+                f"先完成本篇任务：{central_job}；账号长期内容领地只能影响观察顺序，不能替换题材"
             )
             return build_publication_contract_v3(
                 input_roles=intake_spans,
@@ -588,10 +585,8 @@ class ContentService:
                 audience_payoff=audience_payoff,
                 explicit_user_controls=controls,
                 account_editorial_permission=AccountEditorialPermissionV3(
-                    identity=(expression.identity_position if expression is not None else context.content_role_name),
-                    audience=(
-                        expression.audience_relationship if expression is not None else context.audience_description
-                    ),
+                    identity=task_identity,
+                    audience=task_audience,
                     attention_order=(
                         "；".join(
                             item
