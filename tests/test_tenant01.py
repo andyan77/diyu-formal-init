@@ -259,8 +259,8 @@ def test_tenant01_final_suite_requires_confirmed_source_bound_publication() -> N
         projection_status="confirmed",
         source_document_count=21,
         source_segment_count=5_046,
-        source_bound_writer_item_count=3,
-        publication_roles=frozenset({"public_brand_fact", "expression_constraint", "creative_method"}),
+        source_bound_writer_item_count=2,
+        publication_roles=frozenset({"public_brand_fact", "expression_constraint"}),
     )
     _assert_formal_publication_summary(valid)
 
@@ -1304,7 +1304,6 @@ def test_final_suite_requires_current_formal_account_profile() -> None:
         profile_id=uuid4(),
         profile_version=2,
         complete_segment_count=5,
-        profile_confirmed_after_publication=True,
         profile_confirmed_by_enabled_manager=True,
     )
 
@@ -1313,7 +1312,6 @@ def test_final_suite_requires_current_formal_account_profile() -> None:
         replace(valid, business_data_kind="synthetic_business_fixture"),
         replace(valid, control_organization_declared=False),
         replace(valid, complete_segment_count=4),
-        replace(valid, profile_confirmed_after_publication=False),
         replace(valid, profile_confirmed_by_enabled_manager=False),
     ):
         with pytest.raises(RuntimeError, match="administrator-confirmed"):

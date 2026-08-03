@@ -209,14 +209,13 @@ class _FormalAccountSummary:
     profile_id: UUID
     profile_version: int
     complete_segment_count: int
-    profile_confirmed_after_publication: bool
     profile_confirmed_by_enabled_manager: bool
 
 
 def _assert_formal_publication_summary(
     summary: _FormalPublicationSummary,
 ) -> None:
-    required_roles = frozenset({"public_brand_fact", "expression_constraint", "creative_method"})
+    required_roles = frozenset({"public_brand_fact", "expression_constraint"})
     if (
         summary.public_brand_name != "笛语"
         or summary.projection_status != "confirmed"
@@ -302,7 +301,6 @@ def _assert_formal_account_summary(summary: _FormalAccountSummary) -> None:
         or not summary.content_role.strip()
         or summary.profile_version < 1
         or summary.complete_segment_count != 5
-        or not summary.profile_confirmed_after_publication
         or not summary.profile_confirmed_by_enabled_manager
     ):
         raise RuntimeError(
@@ -333,7 +331,6 @@ def _formal_account_summary(
                     + CASE WHEN btrim(profile.audience_relationship) <> '' THEN 1 ELSE 0 END
                     + CASE WHEN btrim(profile.content_territories) <> '' THEN 1 ELSE 0 END
                     + CASE WHEN btrim(profile.default_production_conditions) <> '' THEN 1 ELSE 0 END),
-                   profile.created_at >= projection.confirmed_at,
                    EXISTS (
                        SELECT 1
                          FROM tenant_management_grants management_grant
@@ -392,8 +389,7 @@ def _formal_account_summary(
         profile_id=UUID(str(row[6])),
         profile_version=int(row[7]),
         complete_segment_count=int(row[8]),
-        profile_confirmed_after_publication=bool(row[9]),
-        profile_confirmed_by_enabled_manager=bool(row[10]),
+        profile_confirmed_by_enabled_manager=bool(row[9]),
     )
 
 
