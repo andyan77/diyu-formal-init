@@ -1,9 +1,12 @@
 # 当前里程碑
 
 - 当前里程碑：`TENANT-01 · 笛语服饰首租户生产就绪与全能力演示`。
-- 状态：`ACTIVE / BOUNDED_REWORK`。主控终审退回品牌发布投影、逐卡产品完成门与租户资料
-  就绪度三项确定性缺口；既有生产运行和历史证据保留，但不再作为当前 REVIEW 结论。不得创建
-  TENANT-02、successor 或平行状态文件。
+- 状态：`BLOCKED / FINAL_ACCEPTANCE_HARD_BOUNDARY_FAILURE`。最终候选
+  `80ed1437e8797829f6eb323adf0d5a04205756cc` 已完成同 SHA 后端、OpenAPI、前端和显式
+  Chrome Gate A—D 工程门；但唯一正式 26 卡验收在首张 `coffee` 收到 intake／Writer 两个
+  有效供应商响应后，命中“Writer 不得复制或改写服务端事实块”硬门。run 已幂等失败、版本为
+  0，按最终裁决不得重跑、用 V2 洗白、修改 Prompt／oracle 或继续其余样本。既有生产不变，
+  不得创建 TENANT-02、successor 或平行状态文件。
 - 2026-08-03 主控已作出最终产品裁决，取代下方历史记录中“等待是否改变单 Writer 责任”的
   停止结论：服务端只对可信事实、来源字节、引用、权限、资源、租户隔离、版本、摘要和失败
   原子性提供确定性保证；Writer 的全部文字均标记为未验证 `creative_expression`，不得升级为
@@ -18,10 +21,11 @@
 - 当前工作树有 93 行用户未提交项目记忆，内容属于企业报价、LangGraph 与招聘讨论；均按用户
   修改原样保护，不覆盖、不暂存、不提交。除这些受保护内容外，TENANT-01 没有工作树修改，
   暂存区为空。
-- 当前生产运行实现为 `96dcb74d4538f8f929193292b119333a64ee9558`，唯一权威 CI
-  `30712642287` 为 `success`；运行镜像 digest 为
-  `sha256:6e9aa9140bd2e66a56df398c00daa0ce596c8ee07dfdd2f3db3e6e1c2d8a5d0c`，schema
-  `20260812_39`，公网／回环 readiness 与 `/status` 均为 200。部署前备份
+- 2026-08-03 只读复核的当前生产运行实现为
+  `f77a2e852758b9157425633041aea59d9f2b24da`；运行镜像 digest 为
+  `sha256:f869aa605f3bc81a429a56a4081b1c4eabaa351587245f5b8aa73fb19f7bb683`，schema
+  `20260813_40`，公网／回环 readiness、liveness 与 `/status` 均为 200。原唯一权威 CI
+  `30712642287` 继续只承重历史生产候选；本次未 push、未触发 CI、未备份或部署。历史部署前备份
   `/var/backups/diyu-m5-4/20260801T183351Z-predeploy` 已通过权限、checksum、隔离恢复、
   FORCE RLS、应用 readiness 与对象恢复；上一健康镜像在新 schema 上完成回退往返。
 - 笛语服饰生产中已有 21 份源文档、5,046 个稳定语义 segment、14 个品牌授权候选商品与
@@ -44,10 +48,17 @@
   中 P2 完成，P1 因复述冻结现实被服务端失败关闭，daily 仍新增身体需求、意志力、大脑占用、
   疲惫和身体提醒等未授权解释。两轮均为同一模型、temperature 0、max_retries 0，三卡一起运行，
   没有择优或单卡重跑。
-- 历史三卡二元产品门未通过，因此当时没有运行最终十一卡、完整工程门、CI、备份或部署；该
-  停止结论现已被 2026-08-03 最终裁决替代。当前唯一下一动作是在不再扩张语义合同的前提下
-  完成确定性门、冻结 26 卡执行、人工样本审阅和生产交付；全部成立前 TENANT-01 继续保持
-  `ACTIVE / BOUNDED_REWORK`，不启动下一里程碑。
+- 历史三卡停止结论已被 2026-08-03 最终裁决替代并实际执行。治理修复
+  `b028bbfd5a3b04a213926da3aaea5bb0cc1e9961` 关闭跨候选失败计数与 suite resume 身份接缝；
+  序列化稳定性修复 `80ed1437e8797829f6eb323adf0d5a04205756cc` 通过 Ruff、mypy、Golden／
+  OpenAPI `785 passed, 2 skipped`、前端四门和显式 Chrome Gate A—D。正式验收的 `coffee`
+  Writer 将冻结事实“居然是甜的”写入混合创作段落，并扩写“入口的瞬间却愣了一下”；服务端
+  正确失败关闭，task／failed run／version 差分为 `1/1/0`，未形成 artifact。私有失败证据与
+  可复算 checksum 位于
+  `/home/faye/.local/share/diyu-tenant01-evidence/80ed1437e8797829f6eb323adf0d5a04205756cc/acceptance-26-v1/`。
+  本轮 synthetic task、run、series、activity event 与临时 session 已按精确 UUID 清理，永久
+  running 为 0。唯一下一动作：停止执行，由主控审阅这一合同级失败包；TENANT-01 不进入
+  REVIEW，也不启动下一里程碑。
 - Gate C 当前运行实现为 `ec3dbe45d485816c7a49f9c801cd2baa2fe58c04`；其后仅有测试 oracle
   前向提交 `6e3cb46b6c18d82f245a92f36c972ab65fa62bde`，没有运行代码变化。当前实现继续保留
   `faa4792538cbbcb54ff7b329dee7d03dd9488a24` 已关闭的总部素材作用域、正式 P5 消费者和
