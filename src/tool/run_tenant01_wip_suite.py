@@ -20,6 +20,7 @@ from src.infrastructure.local_object_store import LocalObjectStore
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.tool.execution_control import verify_runtime_action
+from src.tool.formal_api_pacing import FormalApiSubmissionPacer
 from src.tool.run_gate_c_final_suite import (
     _EvidenceDeepSeekGenerator,
     _persistence_ids,
@@ -108,6 +109,7 @@ def _run(args: argparse.Namespace) -> None:
         object_store,
     )
     app = create_app(settings)
+    pacer = FormalApiSubmissionPacer()
     failures: list[dict[str, str]] = []
     with TestClient(app, base_url="https://diyu.example") as client:
         client.cookies.set("diyu_session", journey.session_token)
@@ -137,6 +139,8 @@ def _run(args: argparse.Namespace) -> None:
                     client,
                     generator,
                     card,
+                    pacer=pacer,
+                    tenant_id=journey.tenant_id,
                     publishing_identity_id=journey.publishing_identity_id,
                     series_id=series_id or uuid4(),
                 )
