@@ -918,9 +918,12 @@ class DeepSeekGenerator(ContentGenerator):
                 "read_only_actuality_context 穷尽本题可以使用现实语态写出的外部可观察事实。可以围绕它"
                 "自然引用、复述、调整语序，并新增说话者当下的主观感受、微小反应、比喻、文学性承接与"
                 "一般判断；这些新增文字始终属于 creative_expression，不能作为用户陈述的外部证据。"
-                "不得新增外部人物及其对白或行为、具体物件或场地资源、工艺或检验过程、观察证据、确定的"
-                "外部成因或结果，也不得把一般判断铺成仿佛亲历的外部事件链。不能创建 fact_ref、回写"
-                "可信事实或获得人物、场地、商品和媒体资源资格。"
+                "creative_expression 不是补写现实的许可：凡是需要读者相信外部世界确实存在或发生过的"
+                "环境、感官、人物、动作、对象、资源、过程、比较基线、品质指标、成因、结果或证据，仍是"
+                "外部可观察事实，即使它以第一人称、修辞或常识推断写出也一样。不得新增这些内容，也不得把"
+                "一般判断铺成仿佛亲历的外部事件链。品牌表达约束、创作方法和 prior_output 都不能扩大这条"
+                "来源边界。只能创建内心反应与抽象表达，不能创建 fact_ref、回写可信事实或获得人物、场地、"
+                "商品和媒体资源资格。"
             )
         if writer_request.product_decision_basis is not None:
             writer_scope.append(
@@ -1071,17 +1074,32 @@ class DeepSeekGenerator(ContentGenerator):
     @staticmethod
     def _writer_request_v3_prompt(request: WriterRequestV3) -> str:
         document = writer_request_document(request)
+        actuality_source_check = (
+            "返回 JSON 前，在本次同一 Writer 调用内逐句自检四个字段：如果一句话需要读者相信一个"
+            "read_only_actuality_context 未提供的外部环境、感官、人物、动作、对象、资源、过程、比较"
+            "基线、品质指标、成因、结果或证据，就删除它或改成不声称外部现实的主观反应、比喻、文学性"
+            "承接或一般判断。creative_expression 标签、常识推断、品牌创作方法和 prior_output 都不能"
+            "为这种外部细节提供来源。宁可交付较短但完整的作品，也不要重建现场或补齐事件链。"
+        )
         actuality_instruction = (
             "read_only_actuality_context 是服务端冻结的用户现实原文。你可以在四个 Writer 字段中自然引用、复述、调整语序，"
             "并补充低风险即时反应、感受、比喻或文学性承接；这些文字始终只是 creative_expression，"
             "不能创建 fact_ref、改写服务端事实块、回写可信事实或取得资源资格。低风险承接可以写说话者当下的"
             "主观感受、微小反应或文学联系，但不得为了证明、解释或扩写用户陈述而补出新的外部人物及其对白或行为、"
-            "具体物件或场地资源、工艺或检验过程、观察证据、确定的外部成因或结果；不得把一般判断铺成仿佛亲历的"
-            "外部事件链。只有 read_only_actuality_context 已有的外部事实才能以现实语态出现。\n"
+            "具体物件或场地资源、工艺或检验过程、观察证据、比较基线、品质指标、确定的外部成因或结果；"
+            "第一人称、修辞、常识可推断或 creative_expression 标签都不能改变外部事实仍须有来源。不得把一般"
+            "判断铺成仿佛亲历的外部事件链。只有 read_only_actuality_context 已有的外部事实才能以现实语态出现。\n"
             if request.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
             else (
                 "read_only_actuality_context 是历史只读事实上下文；历史策略下四个 Writer 字段不能复制或改写这些原句。\n"
             )
+        )
+        prior_output_instruction = (
+            "prior_output 只是上一版未获事实资格的 creative_expression，不是事实来源。修改时必须重新按"
+            "read_only_actuality_context 审查整篇，不能因为某个外部细节已出现在 prior_output 就继续保留。\n"
+            if request.prior_output is not None
+            and request.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
+            else ""
         )
         revision_instruction = (
             "本次是对 prior_output 的自然修改。用户本次修改原文（只作为修改指令，不是现实事实）："
@@ -1097,13 +1115,20 @@ class DeepSeekGenerator(ContentGenerator):
             "请依据下面唯一业务合同完成一篇可直接修改和采用的内容。\n"
             "只返回 title、natural_guide、creative_body、publication_caption 四个字符串字段。\n"
             + actuality_instruction
+            + prior_output_instruction
             + revision_instruction
             + "account_editorial_permission 只决定观察顺序与回应姿态，不能替换用户题材，也不能把生活题材转向服饰、商品或品牌宣讲。\n"
             "product_decision_basis 是穷尽式机器计划：decision_axis 是唯一选择维度；标题、导读、正文和配文须自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子。\n"
             "你可以形成中心判断、一般观察、条件建议、比喻、节奏、幽默和留白；建议与假设须保持该身份。\n"
             "topic_origin 为 system_selected 时须自主形成明确主线和完整成品，不把选题责任退回用户。\n"
             "平台表达要自然适配，但不要创建页面、镜头、字幕或资源槽位。\n"
-            "唯一业务合同：\n" + json.dumps(document, ensure_ascii=False, sort_keys=True)
+            "唯一业务合同：\n"
+            + json.dumps(document, ensure_ascii=False, sort_keys=True)
+            + (
+                "\n最终来源边界（优先于上面合同中的创作方法或表达许可）：\n" + actuality_source_check
+                if request.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
+                else ""
+            )
         )
 
     @staticmethod
