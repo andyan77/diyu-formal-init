@@ -791,7 +791,8 @@ def test_publication_v3_rejects_a_body_with_no_creative_expression_after_exact_d
         _generator().generate(request)
 
     system = _payload_system_prompts()[0]
-    assert "可以围绕 read_only_actuality_context 自然引用、复述、调整语序" in system
+    assert "read_only_actuality_context 穷尽本题可以使用现实语态写出的外部可观察事实" in system
+    assert "可以围绕它自然引用、复述、调整语序" in system
     assert "始终属于 creative_expression" in system
     assert "不能创建 fact_ref、回写可信事实" in system
 
