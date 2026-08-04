@@ -253,16 +253,20 @@
 
 ## TENANT-01 最终 REVIEW 交付（2026-08-04，当前权威结论）
 
-- 18 项纵向完成门为 `18/18`。最终运行 SHA
+- 冻结工程交付门为 `18/18`；这一比例只表示本执行包的工程、验收、CI、部署、恢复、回退与
+  清理门全部完成，不表示“首租户全部业务目标 100%”。最终运行 SHA
   `748190c552c6b9610aa951bd346fe8903ef51121` 在同一
   `acceptance_run_id=tenant01-final-20260804-748190c`、同一
   `deepseek-v4-flash`、temperature `0`、max retries `0` 下完成 11 张正式黄金卡与 15 张
-  冻结泛化回归卡。machine hard、human high-risk boundary、structure 均为 `26/26`；首稿
-  product usable 为 `23/26`，满足冻结下限。
+  冻结泛化回归卡。全部 26 卡均在隔离 synthetic tenant 和冻结品牌投影上完成，只证明共享架构、
+  作用域和内容合同，不表示正式管理员租户已经完成真实内容生产。machine hard、human high-risk
+  boundary、structure 均为 `26/26`；首稿 product usable 为 `23/26`，满足冻结下限。
 - 三个质量 FAIL 诚实保留：`new_couple_housework` 猜测一方动机并使用单边性别指代；
   `new_style_revision` 的 V2 与 V1 可见全文相同，未落实“更简洁、带一点冷幽默”；
   `new_series_progression` 三篇重复核心标题及雨天／客户／旧书店主线，没有形成三个独立中心
   判断。三项均为产品质量观察，不是可信事实、权限、资源、隔离、版本或 digest 硬失败。
+- 26 卡执行侧审阅由单一执行端逐篇完成，当前主控已完成独立复核；不宣称两名独立真人盲审，也
+  不把重复的 `comparison` 派生字段作为跨卡差异的单独证明。
 - build-once 镜像 digest 为
   `sha256:edc8dfc45f9cea82fd29ac656aa660c86ac3b50c1fb4c02df3b4d64f2cd617a4`；最终 manifest、部署与
   当前生产运行 digest 一致，构建次数为 1，部署端未重建。唯一权威 CI 为 GitHub Actions run
@@ -276,25 +280,33 @@
   `sha256:f869aa605f3bc81a429a56a4081b1c4eabaa351587245f5b8aa73fb19f7bb683` 已在当前新 schema 上通过
   三端点和正式不可变历史读取，再切回最终 digest；全程未 downgrade 数据库，往返前后正式历史
   响应和数据库指纹一致。
-- P5 在没有本次明确选择的正式商品媒体时，于任务前返回自然资料提示，task／run／version
-  差分 `0/0/0`、Writer 调用 0；生产正式媒体绑定仍为 0。DM01 的 synthetic V1→V2→V1 与库存
-  守恒成立、模型调用 0，但生产正式门店和库存仍为空，因此真实经营采用继续标记
-  `data_missing`。
+- P4 因生产没有正式门店事实而保持 `data_missing`。P5 在没有本次明确选择的正式商品媒体
+  时，于任务前返回自然资料提示，task／run／version 差分 `0/0/0`、Writer 调用 0；生产正式
+  媒体绑定仍为 0，保持 `data_missing`。DM01 的 synthetic V1→V2→V1 与库存守恒成立、模型调用
+  0，但生产正式门店和库存仍为空，因此真实经营采用继续标记 `data_missing`。
 - 生产笛语服饰保留 21 个资料投影（19 份授权资料＋2 份模板）、5,046 个 segment、14 个品牌
   候选商品、203 条字段证据和 26 个 ProductFact 字段；正式商品媒体、媒体绑定、门店均为 0。
   软件功能真值 `58/0/0/6/0`、资产 `41/243/25/119` 与租户资料就绪度继续分开记录。
+- 正式租户当前只有已激活管理员和 1 个逻辑发布账号；账号画像为 0，尚未创建正式内容成员，内容
+  能力为 `ready_after_admin_action`。生产已具备管理员配置画像和成员的能力，但管理员完成这两项
+  配置后才能开始正式内容生产。
 - 清理通过：F 盘主 synthetic 租户及 7,035 条关联行归零；固定演示租户只删除 1 条由最终验收
   生成的 synthetic 内容链，另外 199,967 行正式演示数据清理前后指纹相同；DM01 synthetic
   链、临时会话、token、素材对象、浏览器目录、pytest 临时目录、代理和一次性脚本均为 0，
-  永久 running 为 0。正式 raw、artifact、manifest、checksum、生产数据、备份和不可变历史
-  保留。
+  永久 running 为 0。ECS 遗留 `diyu-tenant01-final-pg` 和其独占匿名 volume 已在证明生产
+  不依赖后精确删除，55441 监听归零；生产 digest、schema、六个端点和历史指纹保持不变。追加式
+  证据为 `production/ecs-temporary-database-cleanup.json`，SHA-256
+  `e17054205194de84aafa2d66500ac6d1adabb793d7328b90ca3005fe883ddd10`；原 acceptance
+  `SHA256SUMS` 87/87 项复算通过。正式 raw、artifact、manifest、checksum、生产数据、备份和
+  不可变历史保留。
 - `docs/项目记忆.md` 未暂存、未提交、未覆盖，最终 diff SHA-256 保持
   `96862202b06fd7821797d984215163069e8598a8641209ebae629ca2df0baaf7`。21 份私有 Markdown
   原文未进入当前候选树、CI 输入、公开日志或最终公开证据；历史 Git 对象中既有 18 份旧副本
   仍按禁止改写历史约束如实披露。
-- 当前未证明真实发布、员工长期采用、平台流量／排名／爆款、GMV／销售、多真实租户市场差异、
-  企业 SLA、无正式媒体时的 P5 成品或无正式门店／库存时的 DM01 经营采用。当前状态仅为
-  `TENANT-01 REVIEW`，不是 `CLOSED`；唯一下一动作是主控独立终审 TENANT-01。
+- 当前未证明正式租户真实内容生产与真实发布、真实员工采用、平台流量／排名／爆款、GMV／
+  销售、多真实租户市场差异、企业 SLA、无正式门店事实时的 P4、无正式媒体时的 P5 成品或无
+  正式门店／库存时的 DM01 经营采用。当前状态仅为 `TENANT-01 REVIEW`，不是 `CLOSED`；唯一
+  下一动作是主控最终独立复核并决定是否 `CLOSED`。
 
 ## UX-02 关闭记录（历史保留）
 
