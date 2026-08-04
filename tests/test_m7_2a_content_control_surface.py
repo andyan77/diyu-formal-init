@@ -1168,9 +1168,17 @@ def test_a_cross_goal_adaptation_never_re_reads_todays_private_preference(
 
         # A same-goal revision keeps replaying the snapshot, in an ordinary session and in a
         # temporary preference-free one; the revision endpoint reads that session header too.
+        # Use an independent V1 for each branch because the deterministic stub intentionally
+        # emits the same visible V2 for every instruction, and production rejects a second
+        # identical child revision instead of recording a fake change.
         for headers in ({}, {"X-Diyu-Preference-Session": "bypass"}):
+            revision_source = client.post(
+                "/api/v1/content",
+                json={"weak_seed": _SEED, "target": "douyin_video"},
+            ).json()
+            assert seen[-1] == note
             revised = client.post(
-                f"/api/v1/tasks/{source['task_id']}/revisions",
+                f"/api/v1/tasks/{revision_source['task_id']}/revisions",
                 json={"instruction": "第二句更短一点，其他不动。", "target": "douyin_video"},
                 headers=headers,
             )
