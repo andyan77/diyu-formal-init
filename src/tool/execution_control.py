@@ -119,24 +119,16 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
     "CANDIDATE_REVIEW": frozenset({"CI_READY", "NEEDS_DIAGNOSIS", "FAILED_SAFE"}),
     "CI_READY": frozenset({"DEPLOY_READY", "NEEDS_DIAGNOSIS", "FAILED_SAFE"}),
     "DEPLOY_READY": frozenset({"REVIEW", "ENVIRONMENT_RESTRICTED", "FAILED_SAFE"}),
-    "CURRENT_TRUTH_RECONCILIATION": frozenset(
-        {"SUPPORTED_SURFACE_AUDIT", "FAILED_SAFE"}
-    ),
-    "SUPPORTED_SURFACE_AUDIT": frozenset(
-        {"SHARED_ROOT_CAUSE_REPAIR", "FAILED_SAFE"}
-    ),
-    "SHARED_ROOT_CAUSE_REPAIR": frozenset(
-        {"FORMAL_LOCAL_VERTICAL_ACCEPTANCE", "FAILED_SAFE"}
-    ),
+    "CURRENT_TRUTH_RECONCILIATION": frozenset({"SUPPORTED_SURFACE_AUDIT", "FAILED_SAFE"}),
+    "SUPPORTED_SURFACE_AUDIT": frozenset({"SHARED_ROOT_CAUSE_REPAIR", "FAILED_SAFE"}),
+    "SHARED_ROOT_CAUSE_REPAIR": frozenset({"FORMAL_LOCAL_VERTICAL_ACCEPTANCE", "FAILED_SAFE"}),
     "FORMAL_LOCAL_VERTICAL_ACCEPTANCE": frozenset(
         {"SHARED_ROOT_CAUSE_REPAIR", "UNIQUE_PRODUCTION_CANDIDATE", "FAILED_SAFE"}
     ),
     "UNIQUE_PRODUCTION_CANDIDATE": frozenset(
         {"SHARED_ROOT_CAUSE_REPAIR", "LIVE_TENANT_ACCEPTANCE_AND_GUIDE", "FAILED_SAFE"}
     ),
-    "LIVE_TENANT_ACCEPTANCE_AND_GUIDE": frozenset(
-        {"SHARED_ROOT_CAUSE_REPAIR", "REVIEW_HANDOFF", "FAILED_SAFE"}
-    ),
+    "LIVE_TENANT_ACCEPTANCE_AND_GUIDE": frozenset({"SHARED_ROOT_CAUSE_REPAIR", "REVIEW_HANDOFF", "FAILED_SAFE"}),
     "REVIEW_HANDOFF": frozenset({"REVIEW", "FAILED_SAFE"}),
     "NEEDS_DIAGNOSIS": frozenset({"STRUCTURAL_IMPLEMENTATION", "DETERMINISTIC_GATE", "FAILED_SAFE"}),
     "NEEDS_ARCHITECTURE_REVIEW": frozenset({"STRUCTURAL_IMPLEMENTATION", "NEEDS_CONTROLLER_RULING"}),
@@ -160,9 +152,7 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
 _REWORK_TARGET_GATE_REQUIREMENTS: Mapping[str, frozenset[str]] = {
     "SUPPORTED_SURFACE_AUDIT": frozenset({"current_truth_snapshot"}),
     "SHARED_ROOT_CAUSE_REPAIR": frozenset({"supported_surface_audit"}),
-    "FORMAL_LOCAL_VERTICAL_ACCEPTANCE": frozenset(
-        {"shared_root_cause_repair", "formal_publication_projection_ready"}
-    ),
+    "FORMAL_LOCAL_VERTICAL_ACCEPTANCE": frozenset({"shared_root_cause_repair", "formal_publication_projection_ready"}),
     "UNIQUE_PRODUCTION_CANDIDATE": frozenset(
         {
             "deterministic_engineering",
@@ -193,6 +183,16 @@ _REWORK_TARGET_GATE_REQUIREMENTS: Mapping[str, frozenset[str]] = {
     ),
     "REVIEW": frozenset({"guide_finalized", "review_handoff"}),
 }
+_FORWARD_HEAD_SYNC_STATES = frozenset(
+    {
+        "STRUCTURAL_IMPLEMENTATION",
+        "DETERMINISTIC_GATE",
+        "CURRENT_TRUTH_RECONCILIATION",
+        "SUPPORTED_SURFACE_AUDIT",
+        "SHARED_ROOT_CAUSE_REPAIR",
+        "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
+    }
+)
 _STATE_FIELDS = frozenset(
     {
         "state_version",
@@ -1150,15 +1150,19 @@ class ExecutionControl:
                 raise ExecutionControlError("legacy controller audit PASS is required before candidate review")
             completed = set(cast(list[str], state["completed_gates"]))
             required_rework_gates = _REWORK_TARGET_GATE_REQUIREMENTS.get(target, frozenset())
-            if expected_state in {
-                "CURRENT_TRUTH_RECONCILIATION",
-                "SUPPORTED_SURFACE_AUDIT",
-                "SHARED_ROOT_CAUSE_REPAIR",
-                "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
-                "UNIQUE_PRODUCTION_CANDIDATE",
-                "LIVE_TENANT_ACCEPTANCE_AND_GUIDE",
-                "REVIEW_HANDOFF",
-            } and not required_rework_gates <= completed:
+            if (
+                expected_state
+                in {
+                    "CURRENT_TRUTH_RECONCILIATION",
+                    "SUPPORTED_SURFACE_AUDIT",
+                    "SHARED_ROOT_CAUSE_REPAIR",
+                    "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
+                    "UNIQUE_PRODUCTION_CANDIDATE",
+                    "LIVE_TENANT_ACCEPTANCE_AND_GUIDE",
+                    "REVIEW_HANDOFF",
+                }
+                and not required_rework_gates <= completed
+            ):
                 missing = ", ".join(sorted(required_rework_gates - completed))
                 raise ExecutionControlError(f"rework transition is missing completed gates: {missing}")
             review_gates = {"acceptance_finalized", "product_review", "engineering_review"}
@@ -1212,6 +1216,43 @@ class ExecutionControl:
     def begin(self, gate: str, command: str, run_id: str | None, pid: int) -> dict[str, object]:
         with self._lock():
             state = self._state()
+            current_head = _git_sha(self.repository, "HEAD")
+            if current_head != state["head_sha"]:
+                self._verify_event_chain(state)
+                self._verify_decision(state)
+                previous_head = str(state["head_sha"])
+                if state["current_state"] not in _FORWARD_HEAD_SYNC_STATES:
+                    raise ExecutionControlError("only pre-freeze implementation states may advance HEAD")
+                if state["active_command"] is not None:
+                    raise ExecutionControlError("cannot advance execution-control HEAD during an active command")
+                if not _git_is_ancestor(self.repository, previous_head, current_head):
+                    raise ExecutionControlError("forward execution-control HEAD is not a linear descendant")
+                if _protected_digest(self.repository, self.protected_path) != state["protected_user_change_digest"]:
+                    raise ExecutionControlError("protected user change digest drifted")
+                if not _worktree_contains_only_protected_change(self.repository, self.protected_path):
+                    raise ExecutionControlError(
+                        "advancing execution-control HEAD requires committed implementation and only the protected change"
+                    )
+                invalidated = list(cast(list[str], state["completed_gates"]))
+                state.update(
+                    {
+                        "head_sha": current_head,
+                        "origin_sha": _git_sha(self.repository, "origin/main"),
+                        "worktree_digest": _worktree_digest(self.repository),
+                        "completed_gates": [],
+                        "heartbeat_at": _now(),
+                    }
+                )
+                state = self._commit(
+                    state,
+                    "forward_candidate_head_synchronized",
+                    {
+                        "previous_head": previous_head,
+                        "head_sha": current_head,
+                        "invalidated_completed_gates": invalidated,
+                        "same_milestone": True,
+                    },
+                )
             # Implementation and deterministic states intentionally contain
             # forward WIP.  Freeze the exact tree at command start instead of
             # pretending the initialization tree remains current forever.

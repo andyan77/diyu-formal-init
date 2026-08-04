@@ -692,9 +692,7 @@ def test_structural_environment_restriction_recovers_without_rewriting_history(
 ) -> None:
     _transition(control_fixture, "BOOTSTRAP", "CONTRACT_FROZEN")
     _transition(control_fixture, "CONTRACT_FROZEN", "STRUCTURAL_IMPLEMENTATION")
-    restricted = control_fixture.control.classify(
-        _failure("environment_restriction", "ENVIRONMENT_RESTRICTED")
-    )
+    restricted = control_fixture.control.classify(_failure("environment_restriction", "ENVIRONMENT_RESTRICTED"))
     assert restricted["current_state"] == "ENVIRONMENT_RESTRICTED"
     assert restricted["previous_state"] == "STRUCTURAL_IMPLEMENTATION"
     before = (control_fixture.runtime_root / "events.jsonl").read_bytes()
@@ -932,12 +930,33 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
         "SHARED_ROOT_CAUSE_REPAIR",
     )
     assert repaired["current_state"] == "SHARED_ROOT_CAUSE_REPAIR"
-    control_fixture.control.begin(
+    forward = control_fixture.repository / "formal-usability-forward.py"
+    forward.write_text("# committed repair\n", encoding="utf-8")
+    _git(control_fixture.repository, "add", forward.name)
+    _git(control_fixture.repository, "commit", "-m", "commit shared repair")
+    dirty = control_fixture.repository / "uncommitted-repair.py"
+    dirty.write_text("# uncommitted repair\n", encoding="utf-8")
+    before_failed_sync = control_fixture.control.status()
+    with pytest.raises(
+        ExecutionControlError,
+        match="requires committed implementation and only the protected change",
+    ):
+        control_fixture.control.begin(
+            "shared_root_cause_repair",
+            "must reject uncommitted repair",
+            None,
+            os.getpid(),
+        )
+    assert control_fixture.control.status()["event_count"] == before_failed_sync["event_count"]
+    dirty.unlink()
+    synchronized = control_fixture.control.begin(
         "shared_root_cause_repair",
         "verify shared repairs",
         None,
         os.getpid(),
     )
+    assert synchronized["head_sha"] != repaired["head_sha"]
+    assert synchronized["completed_gates"] == []
     control_fixture.control.complete(
         "shared_root_cause_repair",
         "evidence/shared-repair.json",
@@ -945,7 +964,7 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
     with pytest.raises(ExecutionControlError, match="formal_publication_projection_ready"):
         control_fixture.control.transition(
             "SHARED_ROOT_CAUSE_REPAIR",
-            str(reopened["head_sha"]),
+            str(synchronized["head_sha"]),
             control_fixture.contract_digest,
             "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
         )
@@ -961,7 +980,7 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
     )
     local_acceptance = control_fixture.control.transition(
         "SHARED_ROOT_CAUSE_REPAIR",
-        str(reopened["head_sha"]),
+        str(synchronized["head_sha"]),
         control_fixture.contract_digest,
         "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
     )
@@ -977,7 +996,7 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
     with pytest.raises(ExecutionControlError, match="formal_context_consumption_proven"):
         control_fixture.control.transition(
             "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
-            str(reopened["head_sha"]),
+            str(synchronized["head_sha"]),
             control_fixture.contract_digest,
             "UNIQUE_PRODUCTION_CANDIDATE",
         )
@@ -993,7 +1012,7 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
     )
     candidate = control_fixture.control.transition(
         "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
-        str(reopened["head_sha"]),
+        str(synchronized["head_sha"]),
         control_fixture.contract_digest,
         "UNIQUE_PRODUCTION_CANDIDATE",
     )
