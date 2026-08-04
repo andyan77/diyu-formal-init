@@ -717,8 +717,10 @@ def test_publication_v3_writer_prompt_requires_a_material_revision() -> None:
     prompt = _generator()._writer_request_v3_prompt(writer_request)
 
     assert instruction in prompt
-    assert "必须实质执行 revision_instruction" in prompt
+    assert "用户本次修改原文（只作为修改指令，不是现实事实）" in prompt
+    assert "必须直接执行这条修改" in prompt
     assert "至少一个字段形成可见且有意义的变化" in prompt
+    assert "即使 prior_output 看起来已经满足修改方向" in prompt
     assert "不得原样返回、只换标点、只改空白或只改变 JSON 包装" in prompt
 
 
@@ -955,6 +957,10 @@ def test_publication_v3_coffee_actuality_is_natural_expression_not_fact_ownershi
         (candidate.source_id,) for candidate in actuality
     }
     assert expected_body in artifact.body
+    system = _payload_system_prompts()[0]
+    assert "穷尽本题可以使用现实语态写出的外部可观察事实" in system
+    assert "这些新增文字始终属于 creative_expression，不能作为用户陈述的外部证据" in system
+    assert "不得新增外部人物及其对白或行为" in system
 
 
 def test_publication_v3_keeps_canonical_fact_exclusive_to_server() -> None:

@@ -915,9 +915,12 @@ class DeepSeekGenerator(ContentGenerator):
             }
         ):
             writer_scope.append(
-                "可以围绕 read_only_actuality_context 自然引用、复述、调整语序，并补充低风险的"
-                "即时反应、感受、比喻或文学性承接；这些文字始终属于 creative_expression，"
-                "不能创建 fact_ref、回写可信事实或获得人物、场地、商品和媒体资源资格。"
+                "read_only_actuality_context 穷尽本题可以使用现实语态写出的外部可观察事实。可以围绕它"
+                "自然引用、复述、调整语序，并新增说话者当下的主观感受、微小反应、比喻、文学性承接与"
+                "一般判断；这些新增文字始终属于 creative_expression，不能作为用户陈述的外部证据。"
+                "不得新增外部人物及其对白或行为、具体物件或场地资源、工艺或检验过程、观察证据、确定的"
+                "外部成因或结果，也不得把一般判断铺成仿佛亲历的外部事件链。不能创建 fact_ref、回写"
+                "可信事实或获得人物、场地、商品和媒体资源资格。"
             )
         if writer_request.product_decision_basis is not None:
             writer_scope.append(
@@ -1081,9 +1084,12 @@ class DeepSeekGenerator(ContentGenerator):
             )
         )
         revision_instruction = (
-            "本次是对 prior_output 的自然修改。必须实质执行 revision_instruction，并让 title、natural_guide、"
-            "creative_body、publication_caption 至少一个字段形成可见且有意义的变化；不得原样返回、只换标点、"
-            "只改空白或只改变 JSON 包装。没有要求改变的事实、来源、资源和硬边界继续保持不变。\n"
+            "本次是对 prior_output 的自然修改。用户本次修改原文（只作为修改指令，不是现实事实）："
+            + json.dumps(request.revision_instruction, ensure_ascii=False)
+            + "。必须直接执行这条修改，并让 title、natural_guide、creative_body、publication_caption 至少"
+            "一个字段形成可见且有意义的变化。即使 prior_output 看起来已经满足修改方向，也必须交付措辞"
+            "不同且同样符合要求的改稿；不得原样返回、只换标点、只改空白或只改变 JSON 包装。没有要求"
+            "改变的事实、来源、资源和硬边界继续保持不变。\n"
             if request.revision_instruction is not None
             else ""
         )
