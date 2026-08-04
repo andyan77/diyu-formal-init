@@ -193,6 +193,15 @@ _FORWARD_HEAD_SYNC_STATES = frozenset(
         "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
     }
 )
+_FORMAL_REWORK_REPAIR_STATES = frozenset(
+    {
+        "SHARED_ROOT_CAUSE_REPAIR",
+        "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
+        "UNIQUE_PRODUCTION_CANDIDATE",
+        "LIVE_TENANT_ACCEPTANCE_AND_GUIDE",
+        "REVIEW_HANDOFF",
+    }
+)
 _STATE_FIELDS = frozenset(
     {
         "state_version",
@@ -1364,7 +1373,11 @@ class ExecutionControl:
             elif failure_class in {"hard_semantic_boundary_failure", "security_or_isolation_failure"}:
                 target = "FAILED_SAFE"
             elif failure_class == "implementation_defect":
-                target = "NEEDS_DIAGNOSIS"
+                target = (
+                    "SHARED_ROOT_CAUSE_REPAIR"
+                    if state["current_state"] in _FORMAL_REWORK_REPAIR_STATES
+                    else "NEEDS_DIAGNOSIS"
+                )
             if failure_document["allowed_next_state"] != target:
                 raise ExecutionControlError("failure allowed_next_state does not match policy")
             _atomic_private_json(self.failure_path, failure_document)

@@ -1017,3 +1017,16 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
         "UNIQUE_PRODUCTION_CANDIDATE",
     )
     assert candidate["current_state"] == "UNIQUE_PRODUCTION_CANDIDATE"
+    control_fixture.control.begin(
+        "late_implementation_defect",
+        "observe ordinary post-freeze implementation defect",
+        None,
+        os.getpid(),
+    )
+    control_fixture.control.observe_command_exit(2)
+    returned_to_repair = control_fixture.control.classify(
+        _failure("implementation_defect", "SHARED_ROOT_CAUSE_REPAIR"),
+        clear_active=True,
+    )
+    assert returned_to_repair["current_state"] == "SHARED_ROOT_CAUSE_REPAIR"
+    assert returned_to_repair["active_command"] is None

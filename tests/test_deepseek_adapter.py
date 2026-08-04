@@ -1097,6 +1097,7 @@ def test_kernel_writer_prompt_requires_a_material_revision() -> None:
 
     prompt = _generator()._kernel_writer_prompt(request, prior)
 
+    assert request.revision_instruction is not None
     assert request.revision_instruction in prompt
     assert "必须实质执行该要求" in prompt
     assert "至少一个可写 unit 的自然文字" in prompt
