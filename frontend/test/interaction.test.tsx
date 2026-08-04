@@ -450,6 +450,18 @@ async function main(): Promise<void> {
     document.querySelector(".generation-failure")?.textContent ?? "",
     /当前请求较多，请稍后再试/
   );
+  assert.match(
+    document.querySelector(".generation-failure")?.textContent ?? "",
+    /发生阶段请求排队/
+  );
+  assert.match(
+    document.querySelector(".generation-failure")?.textContent ?? "",
+    /是否值得重试可以/
+  );
+  assert.match(
+    document.querySelector(".generation-failure")?.textContent ?? "",
+    /00000000-0000-4000-8000-000000000429/
+  );
   assert.equal(document.querySelector(".creator-artifact"), null);
   assert.equal(
     document.querySelector(".composer-submit .primary"),
@@ -491,6 +503,16 @@ async function main(): Promise<void> {
   );
 
   await act(async () => {
+    await api("/api/v1/test-permission-denied").catch(() => undefined);
+  });
+  await settle();
+  assert.ok(
+    document.querySelector('textarea[aria-label="内容需求"]'),
+    "权限 403 必须留在原页并保留当前会话，不能按登录失效处理"
+  );
+  assert.equal(document.querySelector(".access-recovery"), null);
+
+  await act(async () => {
     await api("/api/v1/test-session-invalid").catch(() => undefined);
   });
   await settle();
@@ -510,6 +532,9 @@ async function main(): Promise<void> {
 
   const bootstrapWindow = window as unknown as {
     __DIYU_BOOTSTRAP__: {
+      application?: string;
+      capabilities?: string[];
+      identity?: Record<string, string>;
       current_publishing_identity_id?: string | null;
     };
   };
@@ -536,6 +561,30 @@ async function main(): Promise<void> {
   await click(find(".composer-submit button", "发送"));
   assert.match(document.querySelector(".conversation-notice")?.textContent ?? "", /先选择一个发布账号/);
   assert.equal(requests.length, requestCount);
+  await act(async () => root.unmount());
+
+  window.history.pushState({}, "", "/user");
+  bootstrapWindow.__DIYU_BOOTSTRAP__.application = "tenant_user";
+  bootstrapWindow.__DIYU_BOOTSTRAP__.capabilities = ["content"];
+  bootstrapWindow.__DIYU_BOOTSTRAP__.identity = {
+    operator: "笛语品控",
+    organization: "笛语服饰管理组织",
+    account: "总部品牌内容运营"
+  };
+  root = createRoot(container);
+  await act(async () => root.render(<Root />));
+  await settle();
+  assert.match(document.querySelector(".user-help > summary")?.textContent ?? "", /使用说明.*当前可用与待补/);
+  assert.equal(document.querySelectorAll(".capability-matrix tbody tr").length, 58);
+  assert.match(document.body.textContent ?? "", /软件是否实现/);
+  assert.match(document.body.textContent ?? "", /当前资料是否满足/);
+  assert.match(document.body.textContent ?? "", /当前用户是否获权/);
+  assert.match(document.body.textContent ?? "", /正式生产是否实测/);
+  assert.match(document.body.textContent ?? "", /P4.*P5.*DM01/s);
+  assert.match(document.body.textContent ?? "", /自然人.*工作资格.*逻辑发布账号.*平台和形式/s);
+  assert.match(document.body.textContent ?? "", /发送：普通交流，不创建任务/);
+  assert.match(document.body.textContent ?? "", /生成内容：创建正式任务、运行和版本/);
+  assert.match(document.body.textContent ?? "", /candidate-user-help-sha.*20260817_44/s);
   await act(async () => root.unmount());
 
   window.history.pushState({}, "", "/status");

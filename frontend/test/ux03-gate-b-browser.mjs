@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+
+import { resolveChromePath } from "./chrome-path.mjs";
 
 const required = name => {
   const value = process.env[name];
@@ -13,14 +15,7 @@ const baseUrl = required("UX03_GATE_B_BASE_URL").replace(/\/$/, "");
 const username = required("UX03_GATE_B_USERNAME");
 const password = required("UX03_GATE_B_PASSWORD");
 const repo = resolve(new URL("../..", import.meta.url).pathname);
-const chromePath = [
-  process.env.UX03_CHROME,
-  "/usr/bin/google-chrome",
-  "/usr/bin/chromium",
-  "/home/faye/.cache/puppeteer/chrome/linux-148.0.7778.97/chrome-linux64/chrome"
-]
-  .filter(Boolean)
-  .find(path => existsSync(path) && statSync(path).isFile());
+const chromePath = resolveChromePath({ configured: process.env.UX03_CHROME });
 if (!chromePath) throw new Error("未找到本机 Chrome");
 const { default: WebSocket } = await import(
   pathToFileURL(join(repo, "frontend", "node_modules", "ws", "index.js")).href

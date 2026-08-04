@@ -160,11 +160,14 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
 _REWORK_TARGET_GATE_REQUIREMENTS: Mapping[str, frozenset[str]] = {
     "SUPPORTED_SURFACE_AUDIT": frozenset({"current_truth_snapshot"}),
     "SHARED_ROOT_CAUSE_REPAIR": frozenset({"supported_surface_audit"}),
-    "FORMAL_LOCAL_VERTICAL_ACCEPTANCE": frozenset({"shared_root_cause_repair"}),
+    "FORMAL_LOCAL_VERTICAL_ACCEPTANCE": frozenset(
+        {"shared_root_cause_repair", "formal_publication_projection_ready"}
+    ),
     "UNIQUE_PRODUCTION_CANDIDATE": frozenset(
         {
             "deterministic_engineering",
             "formal_local_vertical",
+            "formal_context_consumption_proven",
             "explicit_browser",
             "mutation_proof",
         }

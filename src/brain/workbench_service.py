@@ -7,6 +7,7 @@ from contextlib import suppress
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from src.brain.formal_readiness import capability_matrix, guide_truth
 from src.brain.onboarding_prefill import (
     generic_account_profile_candidate,
     product_prefills,
@@ -25,9 +26,16 @@ _MAX_MEDIA_BYTES = 50 * 1024 * 1024
 
 
 class WorkbenchService:
-    def __init__(self, repository: WorkbenchRepository, object_store: MaterialObjectStore) -> None:
+    def __init__(
+        self,
+        repository: WorkbenchRepository,
+        object_store: MaterialObjectStore,
+        *,
+        runtime_sha: str = "unbound",
+    ) -> None:
         self._repository = repository
         self._object_store = object_store
+        self._runtime_sha = runtime_sha
 
     def content_context(self, scope: TrustedScope, generator_mode: str) -> dict[str, object]:
         return {
@@ -895,7 +903,7 @@ class WorkbenchService:
     def readiness(self, scope: TenantManagementScope) -> dict[str, object]:
         items = self._repository.readiness(scope)
         by_id = {str(item["id"]): item for item in items}
-        inputs = self._repository.tenant_readiness_inputs(scope)
+        inputs = self._repository.tenant_readiness_inputs(scope, self._runtime_sha)
         source_document_count = inputs.get("source_documents")
         publication_confirmed = inputs.get("publication_confirmed")
         product_media_count = inputs.get("product_media_products")
@@ -1057,17 +1065,48 @@ class WorkbenchService:
                 "members",
             ),
         ]
+        matrix = capability_matrix(
+            inputs,
+            viewer_role="tenant_admin",
+            can_content=False,
+            can_display=False,
+            runtime_sha=self._runtime_sha,
+        )
+        summary = matrix["summary"]
+        if not isinstance(summary, dict):
+            raise DomainError("正式能力矩阵汇总无效")
         return {
             "brand_name": str(inputs["brand_name"]),
             "software_truth": {
-                "usable": 58,
+                "usable": int(summary["implemented"]),
                 "defective": 0,
                 "placeholder": 0,
-                "not_built": 6,
-                "unproven": 0,
+                "not_built": int(summary["not_built"]),
+                "unproven": int(summary["implemented"]) - int(summary["formally_tested"]),
             },
             "items": items,
             "tenant_data_items": tenant_items,
+            "capability_matrix": matrix,
+            "usage_guide": guide_truth(inputs),
+        }
+
+    def user_readiness(
+        self,
+        scope: TenantManagementScope,
+        *,
+        can_content: bool,
+        can_display: bool,
+    ) -> dict[str, object]:
+        inputs = self._repository.tenant_readiness_inputs(scope, self._runtime_sha)
+        return {
+            "capability_matrix": capability_matrix(
+                inputs,
+                viewer_role="tenant_user",
+                can_content=can_content,
+                can_display=can_display,
+                runtime_sha=self._runtime_sha,
+            ),
+            "usage_guide": guide_truth(inputs),
         }
 
     def brand_expression(self, scope: TenantManagementScope) -> dict[str, object]:

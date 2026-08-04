@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BrandMark } from "../components/Brand";
+import { CapabilityMatrixView, UsageGuideView } from "../components/CapabilityGuide";
 import { ApiError, api } from "../services/api";
 import "../styles/tenant-admin.css";
-import type { BootstrapContext, Target } from "./types";
+import type {
+  BootstrapContext,
+  FormalCapabilityMatrix,
+  Target,
+  UsageGuideTruth
+} from "./types";
 import {
   publishingChannelForTarget,
   publishingPlatformChoices,
@@ -23,10 +29,19 @@ type EntryType = "tenant_admin" | "tenant_user";
 type Organization = {
   id: string;
   name: string;
+  enabled?: boolean;
+  business_data_kind?: string;
   level?: string;
   organization_level?: string;
   parent_organization_id?: string | null;
+  parent_organization?: string | null;
 };
+
+function activeOrganizations(
+  organizations: Organization[] | null | undefined
+): Organization[] {
+  return (organizations ?? []).filter(item => item.enabled !== false);
+}
 
 type AccountGrant = {
   account_id: string;
@@ -55,6 +70,56 @@ type Operator = {
     store_enabled: boolean;
   }>;
 };
+
+type MemberDraft = {
+  displayName: string;
+  username: string;
+  organizationId: string;
+  entryType: EntryType;
+  content: boolean;
+  display: boolean;
+  materialMaintenance: boolean;
+  accountIds: string[];
+  maintenanceAccountIds: string[];
+  storeIds: string[];
+};
+
+const memberDraftKey = "diyu:tenant-admin:member-draft:v1";
+
+function emptyMemberDraft(): MemberDraft {
+  return {
+    displayName: "",
+    username: "",
+    organizationId: "",
+    entryType: "tenant_user",
+    content: true,
+    display: false,
+    materialMaintenance: false,
+    accountIds: [],
+    maintenanceAccountIds: [],
+    storeIds: []
+  };
+}
+
+function savedMemberDraft(): MemberDraft {
+  try {
+    const raw = window.sessionStorage.getItem(memberDraftKey);
+    if (!raw) return emptyMemberDraft();
+    const parsed = JSON.parse(raw) as Partial<MemberDraft>;
+    const baseline = emptyMemberDraft();
+    return {
+      ...baseline,
+      ...parsed,
+      accountIds: Array.isArray(parsed.accountIds) ? parsed.accountIds : [],
+      maintenanceAccountIds: Array.isArray(parsed.maintenanceAccountIds)
+        ? parsed.maintenanceAccountIds
+        : [],
+      storeIds: Array.isArray(parsed.storeIds) ? parsed.storeIds : []
+    };
+  } catch {
+    return emptyMemberDraft();
+  }
+}
 
 type DisplayStore = {
   id: string;
@@ -138,9 +203,14 @@ type PublicationRole =
   | "creative_method";
 type PublicationSource = {
   source_segment_id: string;
+  source_document_id: string;
+  source_id: string;
   source_title: string;
   source_version: string;
   source_digest: string;
+  source_document_digest: string;
+  source_locator: string;
+  heading_path: string[];
   semantic_kind: "brand_fact" | "expression_constraint" | "creative_method";
   source_text: string;
 };
@@ -148,8 +218,16 @@ type PublicationItem = {
   position: number;
   publication_role: PublicationRole | "internal_only";
   published_text: string;
+  applicability: string[];
+  source_kind: string;
+  source_segment_id: string | null;
+  source_document_id: string | null;
+  source_id: string | null;
+  source_locator: string | null;
   source_label: string;
   source_version: string;
+  source_digest: string;
+  source_document_digest: string | null;
 };
 type PublicationVersion = {
   id: string;
@@ -282,6 +360,8 @@ type ReadinessResponse = {
   };
   items: ReadinessItem[];
   tenant_data_items: TenantDataReadiness[];
+  capability_matrix: FormalCapabilityMatrix;
+  usage_guide: UsageGuideTruth;
 };
 
 type LibraryScope = "brand_all" | "headquarters" | "organizations";
@@ -433,6 +513,13 @@ const sections: Array<{ id: Section; label: string }> = [
   { id: "library", label: "品牌资料库" },
   { id: "readiness", label: "当前可用与待补" }
 ];
+
+function requestedSection(): Section {
+  const candidate = new URLSearchParams(window.location.search).get("section");
+  return sections.some(item => item.id === candidate)
+    ? (candidate as Section)
+    : "overview";
+}
 
 const scopeLabels: Record<LibraryScope, string> = {
   brand_all: "品牌全员",
@@ -666,6 +753,7 @@ function AccountSecurity({
     <Drawer title="账户安全" onClose={onClose}>
       <form className="tenant-form" onSubmit={event => void submit(event)}>
         <p className="tenant-security-note">修改后，所有已登录设备都需要重新登录。</p>
+        <p className="field-help">新密码至少需要 12 个字符；请勿复用其他系统密码。</p>
         <label>
           当前密码
           <input
@@ -1065,10 +1153,12 @@ function TeamUsage(): JSX.Element {
 
 function Members({
   setNotice,
-  currentUserId
+  currentUserId,
+  onSection
 }: {
   setNotice: (notice: Notice) => void;
   currentUserId: string;
+  onSection: (section: Section) => void;
 }): JSX.Element {
   const operators = useRequest<Operator[]>("/api/v1/tenant-management/operators");
   const organizations = useRequest<Organization[]>("/api/v1/tenant-management/organizations");
@@ -1082,6 +1172,7 @@ function Members({
   const [saving, setSaving] = useState(false);
   const [activationLink, setActivationLink] = useState("");
   const [copyFeedback, setCopyFeedback] = useState<Notice>(null);
+  const [usernameSuggestions, setUsernameSuggestions] = useState<string[]>([]);
   const [confirmingDisable, setConfirmingDisable] = useState(false);
   const [storeForm, setStoreForm] = useState({
     name: "",
@@ -1095,18 +1186,7 @@ function Members({
   const disableTrigger = useRef<HTMLButtonElement>(null);
   const confirmDisableButton = useRef<HTMLButtonElement>(null);
   const disableInFlight = useRef(false);
-  const [form, setForm] = useState({
-    displayName: "",
-    username: "",
-    organizationId: "",
-    entryType: "tenant_user" as EntryType,
-    content: true,
-    display: false,
-    materialMaintenance: false,
-    accountIds: [] as string[],
-    maintenanceAccountIds: [] as string[],
-    storeIds: [] as string[]
-  });
+  const [form, setForm] = useState<MemberDraft>(emptyMemberDraft);
   const [edit, setEdit] = useState({
     displayName: "",
     organizationId: "",
@@ -1135,6 +1215,14 @@ function Members({
       setRestoreDisableFocus(false);
     }
   }, [confirmingDisable, restoreDisableFocus]);
+  useEffect(() => {
+    if (drawer !== "create") return;
+    try {
+      window.sessionStorage.setItem(memberDraftKey, JSON.stringify(form));
+    } catch {
+      // A blocked session store must not prevent member creation in this tab.
+    }
+  }, [drawer, form]);
 
   const cancelDisable = (): void => {
     setConfirmingDisable(false);
@@ -1144,6 +1232,7 @@ function Members({
     setDrawer(null);
     setActivationLink("");
     setCopyFeedback(null);
+    setUsernameSuggestions([]);
     setConfirmingDisable(false);
     setRestoreDisableFocus(false);
   };
@@ -1164,30 +1253,21 @@ function Members({
     setCopyFeedback(null);
     setConfirmingDisable(false);
     setRestoreDisableFocus(false);
-    setForm({
-      displayName: "",
-      username: "",
-      organizationId: "",
-      entryType: "tenant_user",
-      content: true,
-      display: false,
-      materialMaintenance: false,
-      accountIds: [],
-      maintenanceAccountIds: [],
-      storeIds: []
-    });
+    setUsernameSuggestions([]);
+    setForm(savedMemberDraft());
     setDrawer("create");
   };
   const create = (event: FormEvent): void => {
     event.preventDefault();
     setCopyFeedback(null);
-    void run(async () => {
-      const created = await api<{
-        activation_link: string;
-        activation_url: string;
-      }>(
-        "/api/v1/tenant-management/users",
-        {
+    setSaving(true);
+    setUsernameSuggestions([]);
+    void (async () => {
+      try {
+        const created = await api<{
+          activation_link: string;
+          activation_url: string;
+        }>("/api/v1/tenant-management/users", {
           method: "POST",
           body: JSON.stringify({
             display_name: form.displayName,
@@ -1204,9 +1284,7 @@ function Members({
             publishing_identity_ids:
               form.entryType === "tenant_user" ? form.accountIds : [],
             expression_profile_maintenance_account_ids:
-              form.entryType === "tenant_user"
-                ? form.maintenanceAccountIds
-                : [],
+              form.entryType === "tenant_user" ? form.maintenanceAccountIds : [],
             grants_tenant_management: form.entryType === "tenant_admin",
             grants_material_maintenance:
               form.entryType === "tenant_user" && form.materialMaintenance,
@@ -1214,10 +1292,27 @@ function Members({
             display_store_ids:
               form.entryType === "tenant_user" && form.display ? form.storeIds : []
           })
+        });
+        setActivationLink(created.activation_url);
+        try {
+          window.sessionStorage.removeItem(memberDraftKey);
+        } catch {
+          // The created member is authoritative even if browser draft storage is blocked.
         }
-      );
-      setActivationLink(created.activation_url);
-    }, "成员已建立。请把本次一次性激活链接安全交给本人。");
+        await refresh();
+        setNotice({
+          tone: "success",
+          message: "成员已建立。请把本次一次性激活链接安全交给本人。"
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.errorCode === "USERNAME_TAKEN") {
+          setUsernameSuggestions(error.suggestions);
+        }
+        setNotice({ tone: "error", message: readableRequestError(error) });
+      } finally {
+        setSaving(false);
+      }
+    })();
   };
   const toggleAccount = (accountId: string): void => {
     setForm(value => ({
@@ -1263,6 +1358,21 @@ function Members({
   };
   const requestError =
     operators.error ?? organizations.error ?? accounts.error ?? stores.error;
+  const enabledAccounts = (accounts.data ?? []).filter(account => account.enabled);
+  const selectedAccounts = enabledAccounts.filter(account => form.accountIds.includes(account.id));
+  const hasMissingPlatform =
+    form.entryType === "tenant_user" &&
+    form.content &&
+    (
+      selectedAccounts.length === 0 ||
+      selectedAccounts.some(
+        account => !account.platform_targets.some(target => target.enabled)
+      )
+    );
+  const hasIllegalMaintenanceScope = form.maintenanceAccountIds.some(accountId => {
+    const account = enabledAccounts.find(item => item.id === accountId);
+    return account?.control_organization?.id !== form.organizationId;
+  });
   const saveStore = (event: FormEvent): void => {
     event.preventDefault();
     void run(async () => {
@@ -1329,7 +1439,7 @@ function Members({
               }
             >
               <option value="">请选择</option>
-              {organizations.data
+              {activeOrganizations(organizations.data)
                 ?.filter(item => (item.level ?? item.organization_level) === "company")
                 .map(item => (
                   <option key={item.id} value={item.id}>{item.name}</option>
@@ -1349,7 +1459,7 @@ function Members({
               }
             >
               <option value="">请选择</option>
-              {organizations.data
+              {activeOrganizations(organizations.data)
                 ?.filter(item => (item.level ?? item.organization_level) === "operating_unit")
                 .map(item => (
                   <option key={item.id} value={item.id}>{item.name}</option>
@@ -1458,7 +1568,7 @@ function Members({
                   {member.entry_type === "tenant_admin" ? "租户管理员" : "租户用户"}
                 </p>
                 <small>
-                  {member.enabled ? "已启用" : "已停用"}
+                  登录用户名：{member.username} · {member.enabled ? "已启用" : "已停用"}
                   {member.entry_type === "tenant_user" &&
                     ` · ${member.account_grants.length} 个发布账号`}
                 </small>
@@ -1487,9 +1597,30 @@ function Members({
                 required
                 minLength={3}
                 value={form.username}
-                onChange={event => setForm({ ...form, username: event.target.value })}
+                onChange={event => {
+                  setUsernameSuggestions([]);
+                  setForm({ ...form, username: event.target.value });
+                }}
               />
             </label>
+            {usernameSuggestions.length > 0 && (
+              <div className="username-suggestions" role="alert">
+                <p>登录用户名已被使用。姓名或工作名可以保留；请选择可用中文登录名：</p>
+                {usernameSuggestions.map(suggestion => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    className="text-action"
+                    onClick={() => {
+                      setForm({ ...form, username: suggestion });
+                      setUsernameSuggestions([]);
+                    }}
+                  >
+                    使用 {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
             <label>
               所属组织
               <select
@@ -1504,7 +1635,7 @@ function Members({
                 }
               >
                 <option value="">请选择</option>
-                {organizations.data?.map(item => (
+                {activeOrganizations(organizations.data).map(item => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
@@ -1606,7 +1737,7 @@ function Members({
                         store.execution_organization_id === form.organizationId
                     ).length === 0 ? (
                       <p className="tenant-security-note">
-                        当前组织还没有已确认的门店档案。请先关闭成员编辑，再使用本页上方的“建立与维护门店档案”。
+                        当前没有正式门店档案，暂不能开通陈列搭配；不影响内容生产。
                       </p>
                     ) : (
                       (stores.data ?? [])
@@ -1653,7 +1784,10 @@ function Members({
                         <label>
                           <input
                             type="checkbox"
-                            disabled={!form.accountIds.includes(account.id)}
+                            disabled={
+                              !form.accountIds.includes(account.id) ||
+                              account.control_organization?.id !== form.organizationId
+                            }
                             checked={form.maintenanceAccountIds.includes(
                               account.id
                             )}
@@ -1672,6 +1806,9 @@ function Members({
                             }
                           />
                           可维护五段画像
+                          {account.control_organization?.id !== form.organizationId && (
+                            <small>仅账号负责团队成员可获得</small>
+                          )}
                         </label>
                       </div>
                     ))}
@@ -1685,6 +1822,53 @@ function Members({
                   选择内容创作时，请至少分配一个发布账号。
                 </p>
               )}
+            <section className="member-prerequisites" aria-labelledby="member-prerequisites-title">
+              <h3 id="member-prerequisites-title">创建前条件</h3>
+              <ul>
+                <li className={form.organizationId ? "ready" : "missing"}>
+                  所属组织：{form.organizationId ? "已选择" : "尚未选择"}
+                  {activeOrganizations(organizations.data).length === 0 && (
+                    <button type="button" className="text-action" onClick={() => {
+                      closeDrawer();
+                      onSection("library");
+                    }}>去建立组织</button>
+                  )}
+                </li>
+                {form.entryType === "tenant_user" && form.content && (
+                  <>
+                    <li className={form.accountIds.length > 0 ? "ready" : "missing"}>
+                      发布账号：{form.accountIds.length > 0 ? "已选择" : "尚未分配"}
+                      {enabledAccounts.length === 0 && (
+                        <button type="button" className="text-action" onClick={() => {
+                          closeDrawer();
+                          onSection("accounts");
+                        }}>去建立发布账号</button>
+                      )}
+                    </li>
+                    <li className={!hasMissingPlatform ? "ready" : "missing"}>
+                      平台与形式：{hasMissingPlatform ? "所选账号仍缺平台目标" : "已满足"}
+                      {hasMissingPlatform && (
+                        <button type="button" className="text-action" onClick={() => {
+                          closeDrawer();
+                          onSection("accounts");
+                        }}>去补平台目标</button>
+                      )}
+                    </li>
+                  </>
+                )}
+                {form.entryType === "tenant_user" && form.display && (
+                  <li className={form.storeIds.length > 0 ? "ready" : "missing"}>
+                    正式门店：{form.storeIds.length > 0 ? "已选择" : "尚未建立或选择"}
+                    <button type="button" className="text-action" onClick={closeDrawer}>
+                      去建立门店档案
+                    </button>
+                  </li>
+                )}
+                <li className={!hasIllegalMaintenanceScope ? "ready" : "missing"}>
+                  五段画像维护范围：{hasIllegalMaintenanceScope ? "存在跨组织选择" : "范围合法"}
+                </li>
+              </ul>
+            </section>
             <button
               className="primary"
               type="submit"
@@ -1692,10 +1876,11 @@ function Members({
                 saving ||
                 (form.entryType === "tenant_user" &&
                   form.content &&
-                  form.accountIds.length === 0) ||
+                  (form.accountIds.length === 0 || hasMissingPlatform)) ||
                 (form.entryType === "tenant_user" &&
                   form.display &&
-                  form.storeIds.length === 0)
+                  form.storeIds.length === 0) ||
+                hasIllegalMaintenanceScope
               }
             >
               创建并生成一次性激活链接
@@ -1740,6 +1925,7 @@ function Members({
               {drawer.organization} ·{" "}
               {drawer.entry_type === "tenant_admin" ? "租户管理员" : "租户用户"}
             </p>
+            <p>登录用户名：{drawer.username} · {drawer.enabled ? "已启用" : "已停用"}</p>
             <fieldset
               className="member-grants"
               disabled={drawer.id === currentUserId}
@@ -1777,7 +1963,7 @@ function Members({
                     }));
                   }}
                 >
-                  {organizations.data?.map(organization => (
+                  {activeOrganizations(organizations.data).map(organization => (
                     <option key={organization.id} value={organization.id}>
                       {organization.name}
                     </option>
@@ -1874,13 +2060,22 @@ function Members({
                   {edit.display && (
                     <fieldset>
                       <legend>获准使用的门店</legend>
-                      {(stores.data ?? [])
-                        .filter(
-                          store =>
-                            store.enabled &&
-                            store.execution_organization_id === edit.organizationId
-                        )
-                        .map(store => (
+                      {(stores.data ?? []).filter(
+                        store =>
+                          store.enabled &&
+                          store.execution_organization_id === edit.organizationId
+                      ).length === 0 ? (
+                        <p className="tenant-security-note">
+                          当前没有正式门店档案，暂不能开通陈列搭配；不影响内容生产。
+                        </p>
+                      ) : (
+                        (stores.data ?? [])
+                          .filter(
+                            store =>
+                              store.enabled &&
+                              store.execution_organization_id === edit.organizationId
+                          )
+                          .map(store => (
                           <label key={store.id}>
                             <input
                               type="checkbox"
@@ -1896,7 +2091,8 @@ function Members({
                             />
                             {store.name}
                           </label>
-                        ))}
+                          ))
+                      )}
                     </fieldset>
                   )}
                   {accounts.data?.map(account => {
@@ -2638,7 +2834,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                 }}
               >
                 <option value="">请选择负责团队</option>
-                {organizations.data?.map(item => (
+                {activeOrganizations(organizations.data).map(item => (
                     <option key={item.id} value={item.id}>
                       {item.name}
                     </option>
@@ -2794,7 +2990,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                 }
               >
                 <option value="">请选择</option>
-                {organizations.data?.map(organization => (
+                {activeOrganizations(organizations.data).map(organization => (
                   <option key={organization.id} value={organization.id}>
                     {organization.name}
                   </option>
@@ -2841,7 +3037,7 @@ function Accounts({ setNotice }: { setNotice: (notice: Notice) => void }): JSX.E
                       onChange={event => setProfileOrganizationId(event.target.value)}
                     >
                       <option value="">请选择公司级组织</option>
-                      {organizations.data
+                      {activeOrganizations(organizations.data)
                         ?.filter(
                           organization =>
                             (organization.level ?? organization.organization_level) === "company"
@@ -2958,6 +3154,8 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
   const [productVersions, setProductVersions] = useState<ProductVersion[]>([]);
   const [selectedMaterial, setSelectedMaterial] =
     useState<OrganizationMaterial | null>(null);
+  const [selectedOrganization, setSelectedOrganization] =
+    useState<Organization | null>(null);
   const [materialVersions, setMaterialVersions] = useState<MaterialVersion[]>([]);
   const [materialBindings, setMaterialBindings] = useState<
     ProductMediaBinding[]
@@ -3196,21 +3394,64 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
   const saveOrganization = (event: FormEvent): void => {
     event.preventDefault();
     setSaving(true);
-    void api("/api/v1/tenant-management/organizations", {
-      method: "POST",
+    const organizationPath = selectedOrganization
+      ? `/api/v1/tenant-management/organizations/${selectedOrganization.id}`
+      : "/api/v1/tenant-management/organizations";
+    void api(organizationPath, {
+      method: selectedOrganization ? "PATCH" : "POST",
       body: JSON.stringify({
         name: organizationForm.name,
         organization_level: organizationForm.level,
         parent_organization_id: organizationForm.parentOrganizationId || null,
-        as_synthetic_business_fixture: false
+        ...(selectedOrganization
+          ? {}
+          : { as_synthetic_business_fixture: false })
       })
     })
       .then(async () => {
         await organizations.refresh();
-        setDrawer("reference");
+        setSelectedOrganization(null);
+        setOrganizationForm({
+          name: "",
+          level: "unspecified",
+          parentOrganizationId: ""
+        });
         setNotice({
           tone: "success",
-          message: "组织已建立。它的层级来自你的明确选择，不会按名称推断。"
+          message: selectedOrganization
+            ? "组织资料已修改；所有业务对象仍按不可变组织 ID 关联。"
+            : "组织已建立。它的层级来自你的明确选择，不会按名称推断。"
+        });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
+  };
+  const setOrganizationEnabled = (
+    organization: Organization,
+    enabled: boolean
+  ): void => {
+    setSaving(true);
+    void api(
+      `/api/v1/tenant-management/organizations/${organization.id}/enabled`,
+      { method: "PUT", body: JSON.stringify({ enabled }) }
+    )
+      .then(async () => {
+        await organizations.refresh();
+        if (selectedOrganization?.id === organization.id) {
+          setSelectedOrganization(null);
+          setOrganizationForm({
+            name: "",
+            level: "unspecified",
+            parentOrganizationId: ""
+          });
+        }
+        setNotice({
+          tone: "success",
+          message: enabled
+            ? "组织已恢复，可以重新用于新的成员和业务范围。"
+            : "空组织已停用，不再出现在新的成员和业务范围选择器中。"
         });
       })
       .catch(error =>
@@ -3652,6 +3893,21 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
           type="button"
           className="text-action"
           onClick={() => {
+            setSelectedOrganization(null);
+            setOrganizationForm({
+              name: "",
+              level: "unspecified",
+              parentOrganizationId: ""
+            });
+            setDrawer("organization");
+          }}
+        >
+          管理组织
+        </button>
+        <button
+          type="button"
+          className="text-action"
+          onClick={() => {
             setPublicationDrafts([]);
             setPublicationQuery("");
             setDrawer("publication");
@@ -3746,6 +4002,16 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                             <small>
                               来源：{item.source_label} · {item.source_version}
                             </small>
+                            <small>
+                              适用：
+                              {item.applicability
+                                .map(value =>
+                                  publicationContentOptions.find(
+                                    ([product]) => product === value
+                                  )?.[1] ?? value
+                                )
+                                .join("、")}
+                            </small>
                           </li>
                         ))}
                     </ul>
@@ -3836,6 +4102,15 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
               <div className="product-list">
                 {visibleProducts.map(item => {
                   const facts = item.facts ?? {};
+                  const fieldEvidence = item.field_evidence ?? [];
+                  const usableFields = fieldEvidence.filter(
+                    field => field.allowed_in_product_fact
+                  );
+                  const missingFields = Array.from(new Set(
+                    fieldEvidence
+                      .filter(field => !field.allowed_in_product_fact)
+                      .map(field => field.field_name)
+                  ));
                   const category = facts.category ?? item.category ?? "未填写品类";
                   const features =
                     facts.observable_features ??
@@ -3864,6 +4139,36 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                           ? ` · 更新于 ${humanDate(item.updated_at)}`
                           : ""}
                       </p>
+                      <dl className="product-readiness">
+                        <div>
+                          <dt>当前可使用的事实</dt>
+                          <dd>
+                            {usableFields.length > 0
+                              ? usableFields.map(field => `${field.field_name}：${field.exact_text}`).join("；")
+                              : "当前没有字段获准进入 ProductFact"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>尚缺字段</dt>
+                          <dd>
+                            {missingFields.length > 0
+                              ? missingFields.join("、")
+                              : "当前来源未标出其他待补字段"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>能做什么</dt>
+                          <dd>
+                            {usableFields.length > 0
+                              ? "只围绕上列已确认字段制作具体商品解释。"
+                              : "可继续普通生活、穿衣选择或工作现场内容，但不让该 SKU 承担具体商品结论。"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>不能承诺什么</dt>
+                          <dd>不能新增未获准的工艺、品质、性能、功效、库存、价格或品牌保证。</dd>
+                        </div>
+                      </dl>
                       <button
                         type="button"
                         className="text-action"
@@ -3959,6 +4264,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                     />
                     <span>
                       <strong>{source.source_title}</strong>
+                      <small>{source.heading_path.join(" / ")}</small>
                       <small>{source.source_text}</small>
                     </span>
                   </label>
@@ -4142,7 +4448,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                     ? "明确选择公司级组织"
                     : "选择可用区域"}
                 </legend>
-                {organizations.data
+                {activeOrganizations(organizations.data)
                   ?.filter(item => {
                     const level = item.level ?? item.organization_level;
                     return form.visibilityScope === "headquarters"
@@ -4224,7 +4530,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                 <dd>
                   {readableScope(
                     form.visibilityScope,
-                    (organizations.data ?? []).filter(item =>
+                    activeOrganizations(organizations.data).filter(item =>
                       form.organizationIds.includes(item.id)
                     )
                   )}
@@ -4318,7 +4624,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
             {!selectedEntry.source_document && form.visibilityScope !== "brand_all" && (
               <fieldset>
                 <legend>选择可用组织</legend>
-                {organizations.data
+                {activeOrganizations(organizations.data)
                   ?.filter(item =>
                     form.visibilityScope === "headquarters"
                       ? (item.level ?? item.organization_level) === "company"
@@ -4379,8 +4685,61 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
         </Drawer>
       )}
       {drawer === "organization" && (
-        <Drawer title="建立组织" onClose={() => setDrawer("reference")}>
+        <Drawer title="管理组织" onClose={() => setDrawer(null)}>
+          <section className="organization-lifecycle" aria-label="组织列表">
+            <h3>当前组织</h3>
+            <ul className="plain-list">
+              {(organizations.data ?? []).map(item => (
+                <li key={item.id}>
+                  <div>
+                    <strong>{item.name}</strong>
+                    <span>
+                      {item.organization_level ?? item.level ?? "unspecified"}
+                      {item.parent_organization
+                        ? ` · 上级：${item.parent_organization}`
+                        : ""}
+                      {item.enabled === false ? " · 已停用" : " · 使用中"}
+                    </span>
+                  </div>
+                  <div className="row-actions">
+                    {item.enabled !== false && (
+                      <button
+                        type="button"
+                        className="text-action"
+                        disabled={saving}
+                        onClick={() => {
+                          setSelectedOrganization(item);
+                          setOrganizationForm({
+                            name: item.name,
+                            level:
+                              item.organization_level ??
+                              item.level ??
+                              "unspecified",
+                            parentOrganizationId:
+                              item.parent_organization_id ?? ""
+                          });
+                        }}
+                      >
+                        修改
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="text-action"
+                      disabled={saving}
+                      onClick={() =>
+                        setOrganizationEnabled(item, item.enabled === false)
+                      }
+                    >
+                      {item.enabled === false ? "恢复" : "停用"}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
           <form className="tenant-form" onSubmit={saveOrganization}>
+            <h3>{selectedOrganization ? "修改组织资料" : "建立新组织"}</h3>
             <label>
               组织名称
               <input
@@ -4423,17 +4782,36 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                 }
               >
                 <option value="">没有上级组织</option>
-                {organizations.data?.map(item => (
+                {activeOrganizations(organizations.data)
+                  .filter(item => item.id !== selectedOrganization?.id)
+                  .map(item => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
-                ))}
+                  ))}
               </select>
             </label>
             <p>组织层级由你明确选择；系统不会根据名称猜测。</p>
             <button className="primary" type="submit" disabled={saving}>
-              建立组织
+              {selectedOrganization ? "保存修改" : "建立组织"}
             </button>
+            {selectedOrganization && (
+              <button
+                type="button"
+                className="text-action"
+                disabled={saving}
+                onClick={() => {
+                  setSelectedOrganization(null);
+                  setOrganizationForm({
+                    name: "",
+                    level: "unspecified",
+                    parentOrganizationId: ""
+                  });
+                }}
+              >
+                取消修改
+              </button>
+            )}
           </form>
         </Drawer>
       )}
@@ -4646,7 +5024,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                     ? "选择公司级组织"
                     : "选择可用区域"}
                 </legend>
-                {organizations.data
+                {activeOrganizations(organizations.data)
                   ?.filter(item => {
                     const level = item.level ?? item.organization_level;
                     return productScope === "headquarters"
@@ -4743,7 +5121,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                 }
               >
                 <option value="">请选择</option>
-                {organizations.data?.map(item => (
+                {activeOrganizations(organizations.data).map(item => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
@@ -4784,7 +5162,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                     ? "选择公司级组织"
                     : "选择可用区域"}
                 </legend>
-                {organizations.data
+                {activeOrganizations(organizations.data)
                   ?.filter(item => {
                     const level = item.level ?? item.organization_level;
                     return materialForm.visibilityScope === "headquarters"
@@ -4910,7 +5288,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
             {materialForm.visibilityScope !== "brand_all" && (
               <fieldset>
                 <legend>选择可用组织</legend>
-                {organizations.data
+                {activeOrganizations(organizations.data)
                   ?.filter(item =>
                     materialForm.visibilityScope === "headquarters"
                       ? (item.level ?? item.organization_level) === "company"
@@ -5102,7 +5480,11 @@ function Readiness({ onSection }: { onSection: (section: Section) => void }): JS
         </section>
         <section aria-labelledby="software-readiness-title">
           <h2 id="software-readiness-title">软件能力诊断</h2>
-          <p>当前功能真值：{readiness.data?.software_truth.usable ?? 58} 项真实可用；资料缺口不会把整套系统写成不可用。</p>
+          <p>
+            当前注册的软件能力：{readiness.data?.software_truth.usable ?? "—"} 项；
+            同一候选尚未完成正式实测：{readiness.data?.software_truth.unproven ?? "—"} 项。
+            资料缺口、本人权限与正式实测分别显示，不再混成一个“ready”。
+          </p>
         <div className="readiness-list">
           {readiness.data?.items.map(item => (
             <article key={item.id}>
@@ -5166,6 +5548,12 @@ function Readiness({ onSection }: { onSection: (section: Section) => void }): JS
           ))}
         </div>
         </section>
+        {readiness.data?.usage_guide && readiness.data.capability_matrix && (
+          <>
+            <UsageGuideView guide={readiness.data.usage_guide} />
+            <CapabilityMatrixView matrix={readiness.data.capability_matrix} />
+          </>
+        )}
         </>
       )}
     </section>
@@ -5179,7 +5567,7 @@ export default function TenantAdminApp({
   context: BootstrapContext;
   onPasswordUpdated?: (path: string) => void;
 }): JSX.Element {
-  const [section, setSection] = useState<Section>("overview");
+  const [section, setSection] = useState<Section>(requestedSection);
   const [notice, setNotice] = useState<Notice>(null);
   const [securityOpen, setSecurityOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -5190,6 +5578,12 @@ export default function TenantAdminApp({
   useEffect(() => {
     if (mobileMenuOpen) firstNavigationItem.current?.focus();
   }, [mobileMenuOpen]);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (section === "overview") url.searchParams.delete("section");
+    else url.searchParams.set("section", section);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [section]);
   return (
     <div className="tenant-admin-app">
       {mobileMenuOpen && (
@@ -5280,7 +5674,11 @@ export default function TenantAdminApp({
         {section === "overview" && <Overview onSection={setSection} />}
         {section === "usage" && <TeamUsage />}
         {section === "members" && (
-          <Members setNotice={setNotice} currentUserId={identity.operator_id ?? ""} />
+          <Members
+            setNotice={setNotice}
+            currentUserId={identity.operator_id ?? ""}
+            onSection={setSection}
+          />
         )}
         {section === "accounts" && <Accounts setNotice={setNotice} />}
         {section === "library" && <BrandLibrary setNotice={setNotice} />}

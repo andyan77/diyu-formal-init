@@ -316,6 +316,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                 WHERE headquarters.tenant_id = account.tenant_id
                   AND headquarters.id = account.control_organization_id
                   AND headquarters.organization_level = 'company'
+                  AND headquarters.enabled = true
               )
         ) AS allowed
     """
@@ -387,7 +388,8 @@ class PostgresContentControlRepository(ContentControlRepository):
             )
             self._one(cursor, "只有当前租户的有权主体可以声明账号控制组织")
             cursor.execute(
-                "SELECT id FROM organizations WHERE tenant_id = %s AND id = %s",
+                "SELECT id FROM organizations WHERE tenant_id = %s "
+                "AND id = %s AND enabled = true",
                 (scope.tenant_id, organization_id),
             )
             self._one(cursor, "只能声明当前租户已有的组织")
@@ -530,6 +532,7 @@ class PostgresContentControlRepository(ContentControlRepository):
                           WHERE headquarters.tenant_id = account.tenant_id
                             AND headquarters.id = account.control_organization_id
                             AND headquarters.organization_level = 'company'
+                            AND headquarters.enabled = true
                         )) AS can_maintain,
                        (account.control_organization_source <> 'declared') AS can_declare
                 FROM content_accounts account
@@ -575,7 +578,8 @@ class PostgresContentControlRepository(ContentControlRepository):
     def management_organizations(self, scope: TenantManagementScope) -> list[dict[str, object]]:
         with self._tenant_tx(scope.tenant_id) as cursor:
             cursor.execute(
-                "SELECT id, name, organization_level FROM organizations WHERE tenant_id = %s ORDER BY name",
+                "SELECT id, name, organization_level FROM organizations "
+                "WHERE tenant_id = %s AND enabled = true ORDER BY name",
                 (scope.tenant_id,),
             )
             rows = cursor.fetchall()

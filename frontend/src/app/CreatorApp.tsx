@@ -43,6 +43,13 @@ type FailedAttempt = {
   requestId: string;
 };
 
+type FailureDiagnostic = {
+  stage: string;
+  retryable: boolean;
+  action: string;
+  traceId: string;
+};
+
 const PRIMARY_AXES = new Set(["topic", "style", "form"]);
 const STAGE_LABELS: Record<GenerationStage, string> = {
   received: "已接收",
@@ -50,6 +57,20 @@ const STAGE_LABELS: Record<GenerationStage, string> = {
   generating: "正在生成",
   validating: "正在检查",
   finalizing: "正在收尾"
+};
+
+const FAILURE_STAGE_LABELS: Record<string, string> = {
+  authentication: "登录状态",
+  authorization: "资格与作用域检查",
+  csrf: "页面提交校验",
+  intake: "生成前输入检查",
+  context: "资料与事实准备",
+  provider: "内容生成服务",
+  validation: "成品边界检查",
+  persistence: "版本保存",
+  rate_limit: "请求排队",
+  transport: "网络传输",
+  unknown: "系统处理"
 };
 
 function targetMetadata(target: Target, label?: string): PlatformTarget {
@@ -868,6 +889,8 @@ export default function CreatorApp({
   );
   const [generationFailed, setGenerationFailed] = useState(false);
   const [generationFailureMessage, setGenerationFailureMessage] = useState("");
+  const [failureDiagnostic, setFailureDiagnostic] =
+    useState<FailureDiagnostic | null>(null);
   const [lastFailedAttempt, setLastFailedAttempt] =
     useState<FailedAttempt | null>(null);
   const [savingDefaults, setSavingDefaults] = useState(false);
@@ -1084,6 +1107,7 @@ export default function CreatorApp({
     setDirectGenerationOffer(null);
     setGenerationFailed(false);
     setGenerationFailureMessage("");
+    setFailureDiagnostic(null);
     setLastFailedAttempt(null);
   };
 
@@ -1198,6 +1222,7 @@ export default function CreatorApp({
     setNotice("");
     setGenerationFailed(false);
     setGenerationFailureMessage("");
+    setFailureDiagnostic(null);
     setLastFailedAttempt(null);
     setTargetConflict(null);
     setDirectGenerationOffer(null);
@@ -1282,10 +1307,19 @@ export default function CreatorApp({
           setGenerationFailed(true);
           setGenerationFailureMessage(
             `${
+              streamEvent.detail ??
               streamEvent.message ??
               "这次还没能整理成一份可靠的成品。"
             } 输入和已有成品都已保留。`
           );
+          setFailureDiagnostic({
+            stage: streamEvent.failure_stage ?? "unknown",
+            retryable: streamEvent.retryable ?? true,
+            action:
+              streamEvent.action ??
+              "输入已经保留，可以使用原输入重试。",
+            traceId: streamEvent.trace_id ?? ""
+          });
           setLastFailedAttempt({
             kind: "stream",
             instruction,
@@ -1300,6 +1334,12 @@ export default function CreatorApp({
         setGenerationFailureMessage(
           "连接提前结束了，输入和已有成品都已保留，可以安全重试。"
         );
+        setFailureDiagnostic({
+          stage: "transport",
+          retryable: true,
+          action: "网络恢复后可以使用原输入重试。",
+          traceId: ""
+        });
         setLastFailedAttempt({
           kind: "stream",
           instruction,
@@ -1310,11 +1350,27 @@ export default function CreatorApp({
     } catch (reason) {
       if (!(reason instanceof DOMException && reason.name === "AbortError")) {
         setGenerationFailed(true);
-        setGenerationFailureMessage(
-          reason instanceof ApiError && reason.status === 429
-            ? "当前请求较多，请稍后再试。输入和已有成品都已保留。"
-            : "网络没有完成这次请求。输入和已有成品都已保留，可以恢复后重试。"
-        );
+        if (reason instanceof ApiError) {
+          setGenerationFailureMessage(
+            `${reason.message} 输入和已有成品都已保留。`
+          );
+          setFailureDiagnostic({
+            stage: reason.failureStage,
+            retryable: reason.retryable,
+            action: reason.action,
+            traceId: reason.traceId
+          });
+        } else {
+          setGenerationFailureMessage(
+            "网络没有完成这次请求。输入和已有成品都已保留，可以恢复后重试。"
+          );
+          setFailureDiagnostic({
+            stage: "transport",
+            retryable: true,
+            action: "网络恢复后可以使用原输入重试。",
+            traceId: ""
+          });
+        }
         setLastFailedAttempt({
           kind: "stream",
           instruction,
@@ -1338,6 +1394,7 @@ export default function CreatorApp({
     setNotice("");
     setGenerationFailed(false);
     setGenerationFailureMessage("");
+    setFailureDiagnostic(null);
     setLastFailedAttempt(null);
     if (appendUser) {
       setMessages(value => [
@@ -1375,11 +1432,29 @@ export default function CreatorApp({
       }
       setDirectionsOpen(false);
       setLastFailedAttempt(null);
-    } catch {
+    } catch (reason) {
       setGenerationFailed(true);
-      setGenerationFailureMessage(
-        "这次修改没有完成。你的要求和已有版本都已保留，可以安全重试。"
-      );
+      if (reason instanceof ApiError) {
+        setGenerationFailureMessage(
+          `${reason.message} 你的要求和已有版本都已保留。`
+        );
+        setFailureDiagnostic({
+          stage: reason.failureStage,
+          retryable: reason.retryable,
+          action: reason.action,
+          traceId: reason.traceId
+        });
+      } else {
+        setGenerationFailureMessage(
+          "这次修改没有完成。你的要求和已有版本都已保留，可以安全重试。"
+        );
+        setFailureDiagnostic({
+          stage: "transport",
+          retryable: true,
+          action: "网络恢复后可以使用同一修改要求重试。",
+          traceId: ""
+        });
+      }
       setLastFailedAttempt({ kind: "revision", instruction, requestId });
     } finally {
       setPending(false);
@@ -1702,43 +1777,70 @@ export default function CreatorApp({
           {generationFailed && (
             <div className="generation-failure" role="alert">
               <p>{generationFailureMessage}</p>
+              {failureDiagnostic && (
+                <dl className="failure-diagnostic">
+                  <div>
+                    <dt>发生阶段</dt>
+                    <dd>
+                      {FAILURE_STAGE_LABELS[failureDiagnostic.stage] ??
+                        "系统处理"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>是否值得重试</dt>
+                    <dd>{failureDiagnostic.retryable ? "可以" : "先按提示处理"}</dd>
+                  </div>
+                  {failureDiagnostic.traceId && (
+                    <div>
+                      <dt>定位编号</dt>
+                      <dd><code>{failureDiagnostic.traceId}</code></dd>
+                    </div>
+                  )}
+                </dl>
+              )}
+              {failureDiagnostic?.action && (
+                <p className="failure-action">下一步：{failureDiagnostic.action}</p>
+              )}
               <div>
                 <button
                   type="button"
                   onClick={() => {
                     setGenerationFailed(false);
                     setGenerationFailureMessage("");
+                    setFailureDiagnostic(null);
                     setLastFailedAttempt(null);
                     composerRef.current?.focus();
                   }}
                 >
                   继续补充
                 </button>
-                <button
-                  type="button"
-                  className="primary"
-                  disabled={!lastFailedAttempt || pending}
-                  onClick={() => {
-                    if (!lastFailedAttempt) return;
-                    if (lastFailedAttempt.kind === "stream") {
-                      void runCreationStream(
-                        lastFailedAttempt.instruction,
-                        false,
-                        undefined,
-                        lastFailedAttempt.interactionMode ?? "conversation",
-                        lastFailedAttempt.requestId
-                      );
-                    } else {
-                      void runRevision(
-                        lastFailedAttempt.instruction,
-                        false,
-                        lastFailedAttempt.requestId
-                      );
-                    }
-                  }}
-                >
-                  再试一次
-                </button>
+                {failureDiagnostic?.retryable !== false && (
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={!lastFailedAttempt || pending}
+                    onClick={() => {
+                      if (!lastFailedAttempt) return;
+                      if (lastFailedAttempt.kind === "stream") {
+                        void runCreationStream(
+                          lastFailedAttempt.instruction,
+                          false,
+                          undefined,
+                          lastFailedAttempt.interactionMode ?? "conversation",
+                          lastFailedAttempt.requestId
+                        );
+                      } else {
+                        void runRevision(
+                          lastFailedAttempt.instruction,
+                          false,
+                          lastFailedAttempt.requestId
+                        );
+                      }
+                    }}
+                  >
+                    再试一次
+                  </button>
+                )}
               </div>
             </div>
           )}

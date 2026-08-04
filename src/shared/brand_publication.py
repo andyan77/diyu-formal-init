@@ -125,6 +125,10 @@ def brand_context_packet_document(
         }
         if segment.source_digest is not None:
             document["source_digest"] = segment.source_digest
+        if segment.source_document_digest is not None:
+            document["source_document_digest"] = segment.source_document_digest
+        if segment.applicability:
+            document["applicability"] = list(segment.applicability)
         if include_text:
             document["exact_text"] = segment.exact_text
         segments.append(document)

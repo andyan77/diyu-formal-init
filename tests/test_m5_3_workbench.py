@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from uuid import uuid4
 
+import psycopg
 from fastapi.testclient import TestClient
 
 from src.gateway.api.app import create_app
@@ -148,18 +149,9 @@ def test_manager_creates_distinct_account_role_and_grants_registered_operator_on
         )
         assert declared.status_code == 200
         assert declared.json()["speaker_kind"] == "personal_ip_account"
-        refreshed = manager.get(
-            "/api/v1/tenant-management/publishing-accounts"
-        ).json()
-        declared_account = next(
-            account
-            for account in refreshed
-            if account["id"] == created.json()["id"]
-        )
-        assert (
-            declared_account["content_role"]["speaker_kind"]
-            == "personal_ip_account"
-        )
+        refreshed = manager.get("/api/v1/tenant-management/publishing-accounts").json()
+        declared_account = next(account for account in refreshed if account["id"] == created.json()["id"])
+        assert declared_account["content_role"]["speaker_kind"] == "personal_ip_account"
         operators = manager.get("/api/v1/tenant-management/operators").json()
         assigned = next(item for item in operators if item["id"] == external_operator["id"])
         assert account_name in assigned["publishing_accounts"]
@@ -216,6 +208,15 @@ def test_series_is_explicitly_created_inserted_reordered_and_reset() -> None:
             },
         )
         assert created.status_code == 201
+        duplicate = client.post(
+            "/api/v1/content/series",
+            json={
+                "title": created.json()["title"],
+                "premise": "重复名称必须给出可行动提示。",
+            },
+        )
+        assert duplicate.status_code == 422
+        assert duplicate.json()["error_code"] == "SERIES_TITLE_TAKEN"
         series_id = created.json()["id"]
         assert (
             client.post(f"/api/v1/content/series/{series_id}/items", json={"task_id": first["task_id"]}).status_code
@@ -286,7 +287,9 @@ def _material_payload(
     }
 
 
-def test_materials_keep_private_and_organization_entries_separate_and_reject_known_minor() -> None:
+def test_materials_keep_private_and_organization_entries_separate_and_reject_known_minor(
+    migrator_database_url: str,
+) -> None:
     with TestClient(create_app(Settings.model_validate({}))) as headquarters:
         headquarters.get("/ui/select/content")
         rejected = headquarters.post(
@@ -306,7 +309,22 @@ def test_materials_keep_private_and_organization_entries_separate_and_reject_kno
         assert organization.status_code == 201
         listed = headquarters.get("/api/v1/materials").json()
         assert {item["scope"] for item in listed} >= {"personal", "organization"}
-        assert headquarters.delete(f"/api/v1/materials/{personal.json()['id']}").json() == {"deleted": True}
+        personal_id = personal.json()["id"]
+        assert headquarters.delete(f"/api/v1/materials/{personal_id}").json() == {"deleted": True}
+        assert all(item["id"] != personal_id for item in headquarters.get("/api/v1/materials").json())
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(TENANT_ID),))
+            cursor.execute(
+                "SELECT asset.status, count(version.id) "
+                "FROM material_assets asset "
+                "LEFT JOIN material_asset_versions version "
+                "  ON version.tenant_id = asset.tenant_id AND version.asset_id = asset.id "
+                "WHERE asset.tenant_id = %s AND asset.id = %s "
+                "GROUP BY asset.status",
+                (TENANT_ID, personal_id),
+            )
+            deleted_row = cursor.fetchone()
+        assert deleted_row == ("deleted", 0)
         text = headquarters.post(
             "/api/v1/materials/personal",
             json=_material_payload("搭配文字备注", "notes.txt", "text/plain", b"reference note"),

@@ -45,6 +45,7 @@ class Settings:
     model_global_concurrency: int
     model_tenant_concurrency: int
     model_tenant_rate_per_minute: int
+    runtime_sha: str
 
     @property
     def is_production(self) -> bool:
@@ -89,6 +90,7 @@ class Settings:
             "DIYU_MODEL_GLOBAL_CONCURRENCY": "model_global_concurrency",
             "DIYU_MODEL_TENANT_CONCURRENCY": "model_tenant_concurrency",
             "DIYU_MODEL_TENANT_RATE_PER_MINUTE": "model_tenant_rate_per_minute",
+            "DIYU_RUNTIME_SHA": "runtime_sha",
         }
 
         def read(name: str, default: str | None = None) -> str | None:
@@ -196,6 +198,7 @@ class Settings:
             model_global_concurrency=int(read("DIYU_MODEL_GLOBAL_CONCURRENCY", "4") or "4"),
             model_tenant_concurrency=int(read("DIYU_MODEL_TENANT_CONCURRENCY", "2") or "2"),
             model_tenant_rate_per_minute=int(read("DIYU_MODEL_TENANT_RATE_PER_MINUTE", "12") or "12"),
+            runtime_sha=str(read("DIYU_RUNTIME_SHA", "unbound")),
         )
         if configured.generator_mode == "deepseek" and not all(
             (
@@ -218,6 +221,11 @@ class Settings:
             raise RuntimeError("登录限流配置超出安全范围")
         if not 1 <= configured.model_global_concurrency <= 20 or not 1 <= configured.model_tenant_concurrency <= 10:
             raise RuntimeError("模型并发配置超出安全范围")
+        if configured.runtime_sha != "unbound" and (
+            len(configured.runtime_sha) != 40
+            or any(character not in "0123456789abcdef" for character in configured.runtime_sha)
+        ):
+            raise RuntimeError("DIYU_RUNTIME_SHA 必须是完整小写 Git SHA")
         if not 1 <= configured.model_tenant_rate_per_minute <= 120:
             raise RuntimeError("模型租户速率配置超出安全范围")
         if configured.is_production and not all(

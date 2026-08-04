@@ -21,6 +21,7 @@ from psycopg.rows import dict_row
 
 from src.shared.errors import DomainError
 from src.shared.types import (
+    ContentTarget,
     DisplayScope,
     MaterialMaintenanceScope,
     TenantManagementScope,
@@ -303,7 +304,7 @@ class ProductionAuthRepository:
             access is None
             or not bool(access["user_enabled"])
             or not bool(access["tenant_enabled"])
-            or str(access["business_data_kind"]) == "legacy_hidden"
+            or str(access["business_data_kind"]) != "formal_business_data"
         ):
             return None
         if str(access["entry_kind"]) != expected_entry_kind:
@@ -371,7 +372,7 @@ class ProductionAuthRepository:
             access is None
             or not bool(access["user_enabled"])
             or not bool(access["tenant_enabled"])
-            or str(access["business_data_kind"]) == "legacy_hidden"
+            or str(access["business_data_kind"]) != "formal_business_data"
         ):
             return None
         audience = str(row["audience"])
@@ -549,6 +550,12 @@ class ProductionAuthRepository:
         grants_display_access: bool = False,
         display_store_ids: tuple[UUID, ...] = (),
     ) -> CreatedTenantUser:
+        display_name = display_name.strip()
+        username = username.strip()
+        if not 1 <= len(display_name) <= 80:
+            raise DomainError("姓名或工作名需要在 1 到 80 个字符之间")
+        if not 3 <= len(username) <= 80:
+            raise DomainError("登录用户名需要在 3 到 80 个字符之间")
         resolved_entry_type = entry_type or ("tenant_admin" if grants_tenant_management else "tenant_user")
         if resolved_entry_type not in {"tenant_admin", "tenant_user"}:
             raise DomainError("请选择租户管理员或租户用户入口")
@@ -604,7 +611,9 @@ class ProductionAuthRepository:
             manager_organization_id = self._one(cursor, "找不到当前租户管理员")["organization_id"]
             selected_organization_id = organization_id or UUID(str(manager_organization_id))
             cursor.execute(
-                "SELECT id FROM organizations WHERE tenant_id = %s AND id = %s",
+                "SELECT id FROM organizations "
+                "WHERE tenant_id = %s AND id = %s AND enabled = true "
+                "AND business_data_kind = 'formal_business_data'",
                 (manager.tenant_id, selected_organization_id),
             )
             self._one(cursor, "只能授予当前租户的组织资格")
@@ -733,6 +742,73 @@ class ProductionAuthRepository:
             "display_store_ids": [str(value) for value in requested_store_ids],
         }
 
+    def available_username_candidates(
+        self,
+        manager: TenantSession,
+        display_name: str,
+    ) -> tuple[str, ...]:
+        """Return only globally unused candidates, never the conflicting identity."""
+
+        normalized_name = display_name.strip()
+        if not normalized_name:
+            return ()
+        with self._tenant_tx(manager.tenant_id) as cursor:
+            cursor.execute(
+                """
+                SELECT 1
+                FROM tenant_management_grants management_grant
+                JOIN users manager
+                  ON manager.tenant_id = management_grant.tenant_id
+                 AND manager.id = management_grant.user_id
+                WHERE management_grant.tenant_id = %s
+                  AND management_grant.user_id = %s
+                  AND management_grant.enabled = true
+                  AND manager.enabled = true
+                  AND manager.entry_kind = 'tenant_admin'
+                  AND manager.business_data_kind = 'formal_business_data'
+                """,
+                (manager.tenant_id, manager.user_id),
+            )
+            self._one(cursor, "当前身份没有租户成员管理资格")
+            cursor.execute(
+                "SELECT username FROM available_login_username_candidates(%s)",
+                (normalized_name,),
+            )
+            rows = cursor.fetchall()
+        return tuple(str(row["username"]) for row in rows)
+
+    def record_content_request_failure(
+        self,
+        scope: TrustedScope,
+        target: ContentTarget,
+        *,
+        trace_id: UUID,
+        error_code: str,
+        failure_stage: str,
+        retryable: bool,
+    ) -> None:
+        """Persist only safe request coordinates and a stable classification."""
+
+        with self._tenant_tx(scope.tenant_id) as cursor:
+            cursor.execute(
+                """
+                INSERT INTO content_request_failures
+                    (trace_id, tenant_id, user_id, account_id, target,
+                     error_code, failure_stage, retryable)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    trace_id,
+                    scope.tenant_id,
+                    scope.user_id,
+                    scope.account_id,
+                    target,
+                    error_code,
+                    failure_stage,
+                    retryable,
+                ),
+            )
+
     def create_reset_token(self, manager: TenantSession, user_id: UUID) -> str:
         raw_token, digest = self._token()
         with self._tenant_tx(manager.tenant_id) as cursor:
@@ -818,7 +894,9 @@ class ProductionAuthRepository:
                 else UUID(str(current["organization_id"]))
             )
             cursor.execute(
-                "SELECT id, name FROM organizations WHERE tenant_id = %s AND id = %s",
+                "SELECT id, name FROM organizations "
+                "WHERE tenant_id = %s AND id = %s AND enabled = true "
+                "AND business_data_kind = 'formal_business_data'",
                 (manager.tenant_id, resolved_organization_id),
             )
             organization = self._one(cursor, "只能选择当前租户已有的组织")
@@ -1428,6 +1506,7 @@ class ProductionAuthRepository:
                 SELECT organization.id, organization.name,
                        organization.business_data_kind,
                        organization.organization_level,
+                       organization.enabled,
                        organization.parent_organization_id,
                        parent.name AS parent_organization
                 FROM organizations organization
@@ -1446,6 +1525,7 @@ class ProductionAuthRepository:
                     "name": str(row["name"]),
                     "business_data_kind": str(row["business_data_kind"]),
                     "organization_level": str(row["organization_level"]),
+                    "enabled": bool(row["enabled"]),
                     "parent_organization_id": (
                         str(row["parent_organization_id"])
                         if row["parent_organization_id"] is not None
@@ -1488,6 +1568,8 @@ class ProductionAuthRepository:
                     SELECT name, organization_level
                     FROM organizations
                     WHERE tenant_id = %s AND id = %s
+                      AND enabled = true
+                      AND business_data_kind = 'formal_business_data'
                     """,
                     (manager.tenant_id, parent_organization_id),
                 )
@@ -1541,6 +1623,202 @@ class ProductionAuthRepository:
                 else None
             ),
             "parent_organization": parent_name,
+            "enabled": True,
+        }
+
+    @staticmethod
+    def _validate_organization_hierarchy(
+        cursor: psycopg.Cursor[dict[str, object]],
+        tenant_id: UUID,
+        organization_id: UUID,
+        organization_level: str,
+        parent_organization_id: UUID | None,
+    ) -> str | None:
+        if organization_level not in {
+            "company",
+            "region",
+            "operating_unit",
+            "unspecified",
+        }:
+            raise DomainError("请选择公司、区域、经营单元或暂未指定")
+        if parent_organization_id == organization_id:
+            raise DomainError("组织不能把自己设为上级组织")
+        if parent_organization_id is None:
+            return None
+        cursor.execute(
+            "SELECT name, organization_level FROM organizations "
+            "WHERE tenant_id = %s AND id = %s AND enabled = true "
+            "AND business_data_kind = 'formal_business_data'",
+            (tenant_id, parent_organization_id),
+        )
+        parent = cursor.fetchone()
+        if parent is None:
+            raise DomainError("上级组织必须是当前租户已启用的正式组织")
+        parent_level = str(parent["organization_level"])
+        if organization_level == "region" and parent_level != "company":
+            raise DomainError("区域的上级组织必须是明确登记的公司级组织")
+        if organization_level == "operating_unit" and parent_level not in {
+            "company",
+            "region",
+        }:
+            raise DomainError("经营单元的上级组织必须是公司或区域")
+        return str(parent["name"])
+
+    def update_tenant_organization(
+        self,
+        manager: TenantSession,
+        organization_id: UUID,
+        name: str,
+        organization_level: str,
+        parent_organization_id: UUID | None,
+    ) -> dict[str, object]:
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise DomainError("请填写真实组织名称")
+        with self._tenant_tx(manager.tenant_id) as cursor:
+            cursor.execute(
+                "SELECT id, enabled FROM organizations "
+                "WHERE tenant_id = %s AND id = %s "
+                "AND business_data_kind = 'formal_business_data' FOR UPDATE",
+                (manager.tenant_id, organization_id),
+            )
+            current = self._one(cursor, "找不到当前租户可维护的正式组织")
+            if not bool(current["enabled"]):
+                raise DomainError("请先恢复这个组织，再修改组织资料")
+            parent_name = self._validate_organization_hierarchy(
+                cursor,
+                manager.tenant_id,
+                organization_id,
+                organization_level,
+                parent_organization_id,
+            )
+            try:
+                cursor.execute(
+                    "UPDATE organizations SET name = %s, "
+                    "organization_level = %s, parent_organization_id = %s "
+                    "WHERE tenant_id = %s AND id = %s",
+                    (
+                        normalized_name,
+                        organization_level,
+                        parent_organization_id,
+                        manager.tenant_id,
+                        organization_id,
+                    ),
+                )
+            except psycopg.errors.UniqueViolation as exc:
+                raise DomainError("当前租户已有同名组织") from exc
+            self._tenant_audit(
+                cursor,
+                manager.tenant_id,
+                manager.user_id,
+                "organization.updated",
+                organization_id,
+            )
+        return {
+            "id": str(organization_id),
+            "name": normalized_name,
+            "business_data_kind": "formal_business_data",
+            "organization_level": organization_level,
+            "parent_organization_id": (
+                str(parent_organization_id)
+                if parent_organization_id is not None
+                else None
+            ),
+            "parent_organization": parent_name,
+            "enabled": True,
+        }
+
+    def set_tenant_organization_enabled(
+        self,
+        manager: TenantSession,
+        organization_id: UUID,
+        enabled: bool,
+    ) -> dict[str, object]:
+        with self._tenant_tx(manager.tenant_id) as cursor:
+            cursor.execute(
+                "SELECT name, enabled, parent_organization_id FROM organizations "
+                "WHERE tenant_id = %s AND id = %s "
+                "AND business_data_kind = 'formal_business_data' FOR UPDATE",
+                (manager.tenant_id, organization_id),
+            )
+            organization = self._one(cursor, "找不到当前租户可维护的正式组织")
+            if bool(organization["enabled"]) == enabled:
+                return {
+                    "id": str(organization_id),
+                    "name": str(organization["name"]),
+                    "enabled": enabled,
+                }
+            if enabled:
+                parent_id = organization["parent_organization_id"]
+                if parent_id is not None:
+                    cursor.execute(
+                        "SELECT 1 FROM organizations WHERE tenant_id = %s "
+                        "AND id = %s AND enabled = true",
+                        (manager.tenant_id, parent_id),
+                    )
+                    self._one(cursor, "请先恢复这个组织的上级组织")
+            else:
+                reference_checks = (
+                    ("下级组织", "organizations", "parent_organization_id"),
+                    ("成员", "users", "organization_id"),
+                    ("发布账号", "content_accounts", "control_organization_id"),
+                    ("门店负责团队", "display_stores", "control_organization_id"),
+                    ("门店执行组织", "display_stores", "execution_organization_id"),
+                    ("陈列任务", "display_tasks", "organization_id"),
+                    (
+                        "组织素材维护资格",
+                        "organization_material_maintainers",
+                        "organization_id",
+                    ),
+                    ("组织素材", "material_assets", "owner_organization_id"),
+                    (
+                        "资料范围",
+                        "brand_library_entry_organizations",
+                        "organization_id",
+                    ),
+                    (
+                        "商品范围",
+                        "brand_product_scope_organizations",
+                        "organization_id",
+                    ),
+                    (
+                        "素材范围",
+                        "material_asset_scope_organizations",
+                        "organization_id",
+                    ),
+                )
+                blockers: list[str] = []
+                for label, table, column in reference_checks:
+                    cursor.execute(
+                        f"SELECT 1 FROM {table} WHERE tenant_id = %s "
+                        f"AND {column} = %s LIMIT 1",
+                        (manager.tenant_id, organization_id),
+                    )
+                    if cursor.fetchone() is not None:
+                        blockers.append(label)
+                if blockers:
+                    raise DomainError(
+                        "这个组织仍被以下正式对象使用，不能停用："
+                        + "、".join(blockers)
+                        + "。请先迁移或停用相关业务对象。",
+                        error_code="ORGANIZATION_IN_USE",
+                    )
+            cursor.execute(
+                "UPDATE organizations SET enabled = %s "
+                "WHERE tenant_id = %s AND id = %s",
+                (enabled, manager.tenant_id, organization_id),
+            )
+            self._tenant_audit(
+                cursor,
+                manager.tenant_id,
+                manager.user_id,
+                "organization.restored" if enabled else "organization.disabled",
+                organization_id,
+            )
+        return {
+            "id": str(organization_id),
+            "name": str(organization["name"]),
+            "enabled": enabled,
         }
 
     def bootstrap_existing_tenant_admin(self, tenant_id: UUID, user_id: UUID, username: str) -> str:
@@ -1861,7 +2139,7 @@ class ProductionAuthRepository:
                AND user_record.id = %s
                AND user_record.enabled = true
                AND user_record.entry_kind = 'tenant_user'
-               AND user_record.business_data_kind <> 'legacy_hidden'
+               AND user_record.business_data_kind = 'formal_business_data'
                AND NOT EXISTS (
                    SELECT 1
                      FROM tenant_management_grants AS management_grant
@@ -1894,6 +2172,7 @@ class ProductionAuthRepository:
                      WHERE tenant_id = %s
                        AND enabled = true
                        AND platform_enabled = true
+                       AND business_data_kind = 'formal_business_data'
                        AND (id = %s OR carrier_of_account_id = %s)
                      ORDER BY CASE channel
                          WHEN '抖音' THEN 1
@@ -1983,6 +2262,7 @@ class ProductionAuthRepository:
                      WHERE tenant_id = %s
                        AND enabled = true
                        AND platform_enabled = true
+                       AND business_data_kind = 'formal_business_data'
                        AND (id = %s OR carrier_of_account_id = %s)
                      ORDER BY CASE channel
                          WHEN '抖音' THEN 1
@@ -2021,6 +2301,7 @@ class ProductionAuthRepository:
                       AND carrier.channel = %s
                       AND carrier.enabled = true
                       AND carrier.platform_enabled = true
+                      AND carrier.business_data_kind = 'formal_business_data'
                     """,
                     (
                         identity.tenant_id,
@@ -2076,7 +2357,7 @@ class ProductionAuthRepository:
                  AND store.business_data_kind = user_record.business_data_kind
                 WHERE user_record.tenant_id = %s AND user_record.id = %s AND user_record.enabled = true
                   AND user_record.entry_kind = 'tenant_user'
-                  AND user_record.business_data_kind <> 'legacy_hidden'
+                  AND user_record.business_data_kind = 'formal_business_data'
                   AND NOT EXISTS (
                       SELECT 1
                         FROM tenant_management_grants AS management_grant
@@ -2128,7 +2409,7 @@ class ProductionAuthRepository:
                    AND user_record.id = %s
                    AND user_record.enabled = true
                    AND user_record.entry_kind = 'tenant_user'
-                   AND user_record.business_data_kind <> 'legacy_hidden'
+                   AND user_record.business_data_kind = 'formal_business_data'
                    AND NOT EXISTS (
                        SELECT 1
                          FROM tenant_management_grants management_grant
@@ -2169,7 +2450,7 @@ class ProductionAuthRepository:
                    AND user_record.id = %s
                    AND user_record.enabled = true
                    AND user_record.entry_kind = 'tenant_user'
-                   AND user_record.business_data_kind <> 'legacy_hidden'
+                   AND user_record.business_data_kind = 'formal_business_data'
                 """,
                 (identity.tenant_id, identity.user_id),
             )
@@ -2204,6 +2485,55 @@ class ProductionAuthRepository:
             actor_organization_id=UUID(row["organization_id"]),
             store_id=UUID(row["id"]),
         )
+
+    def tenant_display_gap(self, identity: TenantSession) -> dict[str, int | bool]:
+        """Return counts only; never expose hidden stores or another user's grants."""
+
+        if identity.audience != "tenant-user":
+            raise DomainError("这个登录账号不能进入租户用户入口")
+        with self._tenant_tx(identity.tenant_id) as cursor:
+            cursor.execute(
+                """
+                SELECT
+                  (SELECT count(*)
+                     FROM display_stores store
+                    WHERE store.tenant_id = %s
+                      AND store.enabled = true
+                      AND store.current_profile_version_id IS NOT NULL
+                      AND store.business_data_kind = 'formal_business_data') AS formal_stores,
+                  EXISTS (
+                    SELECT 1
+                      FROM display_access_grants access_grant
+                     WHERE access_grant.tenant_id = %s
+                       AND access_grant.user_id = %s
+                       AND access_grant.enabled = true
+                  ) AS has_display_access,
+                  (SELECT count(*)
+                     FROM display_store_access_grants store_grant
+                     JOIN display_stores store
+                       ON store.tenant_id = store_grant.tenant_id
+                      AND store.id = store_grant.store_id
+                    WHERE store_grant.tenant_id = %s
+                      AND store_grant.user_id = %s
+                      AND store_grant.enabled = true
+                      AND store.enabled = true
+                      AND store.current_profile_version_id IS NOT NULL
+                      AND store.business_data_kind = 'formal_business_data') AS granted_stores
+                """,
+                (
+                    identity.tenant_id,
+                    identity.tenant_id,
+                    identity.user_id,
+                    identity.tenant_id,
+                    identity.user_id,
+                ),
+            )
+            row = self._one(cursor, "无法读取陈列资料缺口")
+        return {
+            "formal_stores": int(str(row["formal_stores"])),
+            "has_display_access": bool(row["has_display_access"]),
+            "granted_stores": int(str(row["granted_stores"])),
+        }
 
     def manager_scope(self, identity: TenantSession) -> TenantManagementScope:
         if identity.audience != "tenant-admin":

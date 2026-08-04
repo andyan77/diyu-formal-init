@@ -287,6 +287,8 @@ def _delete_gate_b_fixture(
         "tenant_management_grants",
         "display_access_grants",
         "organization_material_maintainers",
+        "content_request_failures",
+        "formal_capability_observations",
         "content_accounts",
         "content_roles",
         "brand_expression_baselines",
@@ -426,6 +428,8 @@ def _delete_gate_b_fixture(
             "brand_library_entry_versions": ("brand_library_entry_versions_immutable"),
             "brand_product_versions": "brand_product_versions_immutable",
             "material_asset_versions": "material_asset_versions_immutable",
+            "content_request_failures": "content_request_failures_immutable",
+            "formal_capability_observations": "formal_capability_observations_immutable",
         }
         for table in tenant_tables:
             trigger = immutable_triggers.get(table)

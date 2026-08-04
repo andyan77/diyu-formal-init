@@ -1632,6 +1632,7 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
             {
                 "kind": "ready",
                 "message": "好，我保留这段原话，其他由我来完成。",
+                "claim_scope": "task_actuality",
                 "user_premises": [message],
                 "user_fact_sentence_ids": [candidate.source_id for candidate in fact_candidates],
                 "user_instruction_sentence_ids": list(instruction_candidates),
@@ -1676,6 +1677,7 @@ def test_single_turn_intake_keeps_the_server_owned_premise_when_the_model_paraph
             {
                 "kind": "ready",
                 "message": "好，我保留事实边界并直接完成。",
+                "claim_scope": "task_actuality",
                 "user_premises": ["有人只想安静看看，请给一条回应建议。"],
                 "user_fact_sentence_ids": [candidate.source_id for candidate in fact_candidates],
                 "user_sentence_roles": _sentence_roles(
@@ -1712,6 +1714,7 @@ def test_conversation_intake_freezes_system_selected_topic_origin() -> None:
             {
                 "kind": "ready",
                 "message": "好，我会从当前账号内容领地选择一个具体主线。",
+                "claim_scope": "general_topic",
                 "user_premises": [message],
                 "user_fact_sentence_ids": [],
                 "user_sentence_roles": _sentence_roles(message),
@@ -1751,6 +1754,7 @@ def test_conversation_intake_keeps_frozen_actuality_as_the_explicit_topic() -> N
             {
                 "kind": "ready",
                 "message": "好，我会回应这段具体生活片段。",
+                "claim_scope": "task_actuality",
                 "user_premises": [message],
                 "user_fact_sentence_ids": [actuality.source_id for actuality in actualities],
                 "user_sentence_roles": _sentence_roles(
@@ -1802,6 +1806,7 @@ def test_conversation_intake_freezes_the_whole_negated_sentence() -> None:
             {
                 "kind": "ready",
                 "message": "好，我会保留完整原话。",
+                "claim_scope": "task_actuality",
                 "user_premises": [message],
                 "user_fact_sentence_ids": [negated.source_id],
                 "user_instruction_sentence_ids": list(instruction_candidates),
@@ -1868,6 +1873,7 @@ def test_conversation_intake_keeps_creation_instruction_out_of_frozen_actuality(
             {
                 "kind": "ready",
                 "message": "好，我只保留实际观察。",
+                "claim_scope": "task_actuality",
                 "user_premises": [message],
                 "user_fact_sentence_ids": [fact.source_id],
                 "user_instruction_sentence_ids": [instruction.source_id for instruction in instructions],
@@ -1917,6 +1923,7 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
             {
                 "kind": "ready",
                 "message": "可以，直接开始。",
+                "claim_scope": "general_topic",
                 "user_premises": [message],
                 "user_fact_sentence_ids": facts,
                 "user_instruction_sentence_ids": [
@@ -2059,6 +2066,7 @@ def test_conversation_rejects_synthetic_or_mode_drifted_spans() -> None:
             {
                 "kind": "ready",
                 "message": "开始。",
+                "claim_scope": "general_topic",
                 "user_premises": [message],
                 "user_fact_sentence_ids": ["source:user_actuality:invented"],
                 "user_instruction_sentence_ids": [
@@ -2323,16 +2331,18 @@ def test_route_and_transport_only_retry_429_or_transport(
 
 
 @pytest.mark.parametrize(
-    ("status_code", "expected_kind"),
+    ("status_code", "expected_kind", "expected_code", "retryable"),
     (
-        (429, "http_unavailable_response"),
-        (503, "http_unavailable_response"),
-        (400, "http_rejection_response"),
+        (429, "http_unavailable_response", "PROVIDER_UNAVAILABLE", True),
+        (503, "http_unavailable_response", "PROVIDER_UNAVAILABLE", True),
+        (400, "http_rejection_response", "PROVIDER_REQUEST_REJECTED", False),
     ),
 )
 def test_provider_failure_exposes_only_bounded_response_classification(
     status_code: int,
     expected_kind: str,
+    expected_code: str,
+    retryable: bool,
 ) -> None:
     FakeClient.responses = [FakeResponse(status_code, {"error": {"secret": "not-copied"}})]
 
@@ -2342,6 +2352,9 @@ def test_provider_failure_exposes_only_bounded_response_classification(
     assert captured.value.kind == expected_kind
     assert captured.value.response_received is True
     assert captured.value.retry_count == 0
+    assert captured.value.error_code == expected_code
+    assert captured.value.failure_stage == "provider"
+    assert captured.value.retryable is retryable
     assert "not-copied" not in str(captured.value)
 
 
@@ -2368,6 +2381,9 @@ def test_provider_transport_failure_is_explicitly_no_response(
     assert captured.value.kind == "transport_no_response"
     assert captured.value.response_received is False
     assert captured.value.retry_count == 0
+    assert captured.value.error_code == "PROVIDER_TRANSPORT_FAILED"
+    assert captured.value.failure_stage == "transport"
+    assert captured.value.retryable is True
 
 
 def test_revision_must_change_allowed_expression_not_actuality() -> None:

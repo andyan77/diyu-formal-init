@@ -248,12 +248,23 @@ def test_ui05_a_conversation_only_persists_ready_and_failure_is_terminal(
             client,
             _conversation_payload("请直接写一条完整内容，并触发受控失败。"),
         )
-        assert failed[-1] == {
-            "event": "failed",
-            "message": (
-                "这次还没能整理成一份可靠的成品。你的想法仍然保留，可以直接再试一次，也可以告诉我最想保留哪部分。"
-            ),
+        failure = failed[-1]
+        assert set(failure) == {
+            "event",
+            "detail",
+            "error_code",
+            "failure_stage",
+            "retryable",
+            "action",
+            "trace_id",
         }
+        assert failure["event"] == "failed"
+        assert failure["detail"] == "controlled generation failure"
+        assert failure["error_code"] == "GENERATION_VALIDATION_FAILED"
+        assert failure["failure_stage"] == "validation"
+        assert failure["retryable"] is False
+        assert failure["action"] == "请按提示补齐当前步骤所需信息后继续。"
+        UUID(str(failure["trace_id"]))
         assert _persistence_counts(app_database_url) == {
             "tasks": before_failure["tasks"] + 1,
             "runs": before_failure["runs"] + 1,
@@ -361,7 +372,20 @@ def test_ui05_b_entry_qualifications_are_mutually_exclusive_and_api_errors_stay_
         content_api = client.get("/api/v1/content/publishing-identities")
         assert content_api.status_code == 403
         assert content_api.headers["content-type"].startswith("application/json")
-        assert set(content_api.json()) == {"detail"}
+        content_failure = content_api.json()
+        assert set(content_failure) == {
+            "detail",
+            "error_code",
+            "failure_stage",
+            "retryable",
+            "action",
+            "trace_id",
+        }
+        assert content_failure["error_code"] == "PERMISSION_DENIED"
+        assert content_failure["failure_stage"] == "authorization"
+        assert content_failure["retryable"] is False
+        assert "留在当前页面" in content_failure["action"]
+        UUID(content_failure["trace_id"])
 
         client.cookies.set("diyu_session", user_token)
         forbidden_admin = client.get("/tenant-admin")
@@ -373,7 +397,20 @@ def test_ui05_b_entry_qualifications_are_mutually_exclusive_and_api_errors_stay_
         admin_api = client.get("/api/v1/admin/readiness")
         assert admin_api.status_code == 403
         assert admin_api.headers["content-type"].startswith("application/json")
-        assert set(admin_api.json()) == {"detail"}
+        admin_failure = admin_api.json()
+        assert set(admin_failure) == {
+            "detail",
+            "error_code",
+            "failure_stage",
+            "retryable",
+            "action",
+            "trace_id",
+        }
+        assert admin_failure["error_code"] == "PERMISSION_DENIED"
+        assert admin_failure["failure_stage"] == "authorization"
+        assert admin_failure["retryable"] is False
+        assert "留在当前页面" in admin_failure["action"]
+        UUID(admin_failure["trace_id"])
 
         client.cookies.delete("diyu_session")
         client.cookies.set("diyu_ops_session", ops_token)

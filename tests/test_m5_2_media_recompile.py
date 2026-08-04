@@ -272,7 +272,8 @@ def test_transform_boundaries_receipts_and_silent_store_video(app_database_url: 
         assert created.status_code == 200
         payload = created.json()
         assert payload["kind"] == "question"
-        assert "当前可用于制作的登记商品素材" in payload["message"]
+        assert "当前没有足够的正式商品图片/视频及商品绑定" in payload["message"]
+        assert "普通文字内容仍可使用" in payload["message"]
 
 
 def test_openapi_exposes_only_target_names_and_not_account_ids() -> None:

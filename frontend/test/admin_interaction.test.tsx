@@ -225,14 +225,29 @@ async function main(): Promise<void> {
 
   await click(find(".tenant-nav button", "成员与入口资格"));
   await click(find("button", "添加成员"));
-  const memberInputs = Array.from(
+  let memberInputs = Array.from(
     document.querySelectorAll(".tenant-drawer input")
   ) as HTMLInputElement[];
-  await input(memberInputs[0], "门店内容成员");
-  await input(memberInputs[1], "ui05-member");
+  await input(memberInputs[0], "柯桥店阿丹");
+  await input(memberInputs[1], "柯桥店阿丹");
   await select(
     document.querySelector(".tenant-drawer select") as HTMLSelectElement,
     "11111111-1111-4111-8111-111111111111"
+  );
+  await click(find(".tenant-nav button", "发布账号与账号画像"));
+  await settle();
+  assert.equal(window.location.search, "?section=accounts");
+  await click(find(".tenant-nav button", "成员与入口资格"));
+  await click(find("button", "添加成员"));
+  memberInputs = Array.from(
+    document.querySelectorAll(".tenant-drawer input")
+  ) as HTMLInputElement[];
+  assert.equal(memberInputs[0].value, "柯桥店阿丹", "跨页配置必须保留成员姓名草稿");
+  assert.equal(memberInputs[1].value, "柯桥店阿丹", "跨页配置必须保留登录用户名草稿");
+  assert.equal(
+    (document.querySelector(".tenant-drawer select") as HTMLSelectElement).value,
+    "11111111-1111-4111-8111-111111111111",
+    "跨页配置必须保留成员组织草稿"
   );
   await click(find(".tenant-drawer label", "租户管理员"));
   assert.doesNotMatch(document.querySelector(".tenant-drawer")?.textContent ?? "", /获准操作的发布账号/);
@@ -248,14 +263,20 @@ async function main(): Promise<void> {
   await click(find(".tenant-drawer label", "总部品牌内容运营"));
   await click(find(".tenant-drawer button", "创建并生成一次性激活链接"));
   await settle();
-  const memberCreate = requests.find(
+  assert.match(document.body.textContent ?? "", /登录用户名已被使用/);
+  assert.match(document.body.textContent ?? "", /笛语柯桥店阿丹/);
+  await click(find(".username-suggestions button", "使用 笛语柯桥店阿丹"));
+  await click(find(".tenant-drawer button", "创建并生成一次性激活链接"));
+  await settle();
+  const memberCreate = requests.filter(
     item => item.path === "/api/v1/tenant-management/users" && item.method === "POST"
-  );
+  ).at(-1);
   assert.equal(memberCreate?.body?.entry_type, "tenant_user");
   assert.deepEqual(memberCreate?.body?.capabilities, ["content"]);
   assert.deepEqual(memberCreate?.body?.publishing_identity_ids, [
     "33333333-3333-4333-8333-333333333333"
   ]);
+  assert.equal(memberCreate?.body?.username, "笛语柯桥店阿丹");
   assert.equal(memberCreate?.body?.grants_material_maintenance, false);
   assert.deepEqual(
     memberCreate?.body?.expression_profile_maintenance_account_ids,
@@ -284,6 +305,8 @@ async function main(): Promise<void> {
   assert.doesNotMatch(document.body.textContent ?? "", /链接已发送|已交付/);
 
   await click(find(".tenant-drawer button", "关闭"));
+  assert.match(document.body.textContent ?? "", /柯桥店阿丹/);
+  assert.match(document.body.textContent ?? "", /登录用户名：笛语柯桥店阿丹/);
   await click(find("button", "查看与处理"));
   assert.match(
     document.querySelector(".tenant-drawer")?.textContent ?? "",
@@ -546,6 +569,89 @@ async function main(): Promise<void> {
   assert.match(document.body.textContent ?? "", /shooting-note.txt/);
   assert.match(document.body.textContent ?? "", /创作端品牌表达/);
   assert.match(document.body.textContent ?? "", /当前 V1/);
+
+  await click(find("button", "管理组织"));
+  await settle();
+  await input(
+    find(".tenant-drawer label", "组织名称").querySelector(
+      "input"
+    ) as HTMLInputElement,
+    "生命周期空组织"
+  );
+  await select(
+    find(".tenant-drawer label", "组织层级").querySelector(
+      "select"
+    ) as HTMLSelectElement,
+    "region"
+  );
+  await click(find(".tenant-drawer button", "建立组织"));
+  await settle();
+  let lifecycleRow = find(
+    ".organization-lifecycle li",
+    "生命周期空组织"
+  );
+  const editOrganization = Array.from(
+    lifecycleRow.querySelectorAll("button")
+  ).find(item => item.textContent?.includes("修改"));
+  assert.ok(editOrganization);
+  await click(editOrganization);
+  await input(
+    find(".tenant-drawer label", "组织名称").querySelector(
+      "input"
+    ) as HTMLInputElement,
+    "生命周期空组织已修改"
+  );
+  await click(find(".tenant-drawer button", "保存修改"));
+  await settle();
+  lifecycleRow = find(
+    ".organization-lifecycle li",
+    "生命周期空组织已修改"
+  );
+  const disableOrganization = Array.from(
+    lifecycleRow.querySelectorAll("button")
+  ).find(item => item.textContent?.includes("停用"));
+  assert.ok(disableOrganization);
+  await click(disableOrganization);
+  await settle();
+  lifecycleRow = find(
+    ".organization-lifecycle li",
+    "生命周期空组织已修改"
+  );
+  assert.match(lifecycleRow.textContent ?? "", /已停用/);
+  assert.ok(
+    requests.some(
+      item =>
+        item.path.includes("/tenant-management/organizations/") &&
+        item.path.endsWith("/enabled") &&
+        item.body?.enabled === false
+    ),
+    "组织停用必须写入正式生命周期接口"
+  );
+  await click(find(".tenant-drawer button", "关闭"));
+  await click(find("button", "新增资料"));
+  const lifecycleScope = Array.from(
+    document.querySelectorAll(".tenant-drawer select")
+  ).at(-1) as HTMLSelectElement;
+  await select(lifecycleScope, "organizations");
+  assert.doesNotMatch(
+    document.querySelector(".tenant-drawer")?.textContent ?? "",
+    /生命周期空组织已修改/,
+    "已停用组织不得进入新的业务范围选择器"
+  );
+  await click(find(".tenant-drawer button", "关闭"));
+  await click(find("button", "管理组织"));
+  lifecycleRow = find(
+    ".organization-lifecycle li",
+    "生命周期空组织已修改"
+  );
+  const restoreOrganization = Array.from(
+    lifecycleRow.querySelectorAll("button")
+  ).find(item => item.textContent?.includes("恢复"));
+  assert.ok(restoreOrganization);
+  await click(restoreOrganization);
+  await settle();
+  await click(find(".tenant-drawer button", "关闭"));
+
   await click(find("button", "核对创作端品牌表达"));
   await settle();
   const publicationSource = find(
@@ -764,12 +870,23 @@ async function main(): Promise<void> {
   await click(find(".tenant-drawer button", "关闭"));
   await click(find(".tenant-nav button", "当前可用与待补"));
   await settle();
+  assert.equal(window.location.search, "?section=readiness");
   assert.match(document.body.textContent ?? "", /判断依据/);
   assert.match(document.body.textContent ?? "", /缺少资料/);
   assert.match(document.body.textContent ?? "", /影响/);
   assert.doesNotMatch(document.body.textContent ?? "", /知识完整度|生产就绪百分比/);
+  assert.match(document.body.textContent ?? "", /软件是否实现/);
+  assert.match(document.body.textContent ?? "", /当前资料是否满足/);
+  assert.match(document.body.textContent ?? "", /当前用户是否获权/);
+  assert.match(document.body.textContent ?? "", /正式生产是否实测/);
+  assert.equal(document.querySelectorAll(".capability-matrix tbody tr").length, 58);
+  assert.match(document.body.textContent ?? "", /P4.*P5.*DM01/s);
+  assert.match(document.body.textContent ?? "", /自然人 → 工作资格 → 逻辑发布账号 → 平台和形式/);
+  assert.match(document.body.textContent ?? "", /发送只进行普通交流/);
+  assert.match(document.body.textContent ?? "", /生成内容才建立正式任务/);
+  assert.match(document.body.textContent ?? "", /20260817_44/);
 
-  for (const forbidden of ["tenant_id", "ContentRole", "RLS", "schema", "测试通过"]) {
+  for (const forbidden of ["tenant_id", "RLS", "测试通过"]) {
     assert.doesNotMatch(document.body.textContent ?? "", new RegExp(forbidden));
   }
 
@@ -786,6 +903,7 @@ async function main(): Promise<void> {
     item => item.path === "/api/v1/auth/password"
   ).length;
   await click(find(".tenant-drawer button", "修改密码"));
+  assert.match(document.body.textContent ?? "", /新密码至少需要 12 个字符/);
   await settle();
   assert.match(document.body.textContent ?? "", /两次输入的新密码不一致/);
   assert.equal(

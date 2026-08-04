@@ -818,7 +818,11 @@ class ContentService:
 
     @staticmethod
     def _product_media_selection_question() -> str:
-        return "当前可用于制作的登记商品素材不足。这条视觉内容需要选择两件不同商品，并为每件选择一份已登记图片。"
+        return (
+            "当前没有足够的正式商品图片/视频及商品绑定，暂不能生成商品视觉成品。"
+            "请由品牌管理员在品牌资料库补充组织官方素材，为至少两件不同商品完成绑定，"
+            "并在本次任务中明确选择两件不同商品各自已登记的图片或视频；普通文字内容仍可使用。"
+        )
 
     def respond_to_conversation(
         self,
@@ -922,7 +926,15 @@ class ContentService:
         available_user_turns = tuple(turn.content for turn in sanitized_history if turn.role == "user") + (
             sanitized_message,
         )
-        fact_candidates = user_fact_candidates(available_user_turns)
+        raw_fact_candidates = user_fact_candidates(available_user_turns)
+        seen_fact_texts: set[str] = set()
+        latest_unique_candidates = []
+        for candidate in reversed(raw_fact_candidates):
+            if candidate.exact_text in seen_fact_texts:
+                continue
+            seen_fact_texts.add(candidate.exact_text)
+            latest_unique_candidates.append(candidate)
+        fact_candidates = tuple(reversed(latest_unique_candidates))
         decision: ConversationDecision = self._generator.collaborate(
             ConversationInput(
                 message=sanitized_message,
@@ -1022,6 +1034,37 @@ class ContentService:
             selected_actuality_source_ids=decision.user_fact_source_ids,
         )
         publication_spans = role_resolution.spans
+        if decision.claim_scope == "institutional_claim":
+            return {
+                "kind": "question",
+                "message": (
+                    "这句是品牌或机构保证，当前没有对应的已确认机构来源。"
+                    "请先由品牌管理员补入可复用品牌事实，或改为只表达你本轮亲自观察到的现场。"
+                ),
+            }
+        if decision.claim_scope == "specific_product_claim" and not products:
+            return {
+                "kind": "question",
+                "message": (
+                    "这句涉及明确商品的工艺、性能或品质事实。"
+                    "请指定已登记 SKU 并补齐对应 ProductFact。"
+                ),
+            }
+        if (
+            decision.claim_scope == "task_actuality"
+            and primary_product == "product_truth"
+            and not products
+        ):
+            # The same intake model may over-select product_truth when a work
+            # observation mentions production quality.  The server owns this
+            # structural correction: a frozen task-local actuality without an
+            # identified product remains an account observation and never
+            # gains ProductFact authority.
+            primary_product = "brand_life_narrative"
+            creative_plan = replace(
+                creative_plan,
+                primary_value="brand_life_narrative",
+            )
         premise = "\n".join(decision.user_premises)
         self._validate_plan(
             creative_plan,
@@ -1386,10 +1429,23 @@ class ContentService:
             source_digest = item.get("source_digest")
             if source_digest is not None and not isinstance(source_digest, str):
                 raise DomainError("内容任务冻结的品牌资料包无效")
+            source_document_digest = item.get("source_document_digest")
+            if source_document_digest is not None and not isinstance(
+                source_document_digest,
+                str,
+            ):
+                raise DomainError("内容任务冻结的品牌资料包无效")
+            raw_applicability = item.get("applicability", [])
+            if not isinstance(raw_applicability, list) or any(
+                not isinstance(value, str) for value in raw_applicability
+            ):
+                raise DomainError("内容任务冻结的品牌资料包无效")
             segments.append(
                 BrandContextSegment(
                     **{key: str(item[key]) for key in required},
                     source_digest=source_digest,
+                    source_document_digest=source_document_digest,
+                    applicability=tuple(raw_applicability),
                 )
             )
         digest = raw.get("packet_digest")
@@ -1426,6 +1482,12 @@ class ContentService:
             }
             if segment.source_digest is not None:
                 segment_document["source_digest"] = segment.source_digest
+            if segment.source_document_digest is not None:
+                segment_document["source_document_digest"] = (
+                    segment.source_document_digest
+                )
+            if segment.applicability:
+                segment_document["applicability"] = list(segment.applicability)
             segment_documents.append(segment_document)
         if raw.get("packet_version") == "brand-context-packet-v3":
             ref_fields = (
@@ -2021,8 +2083,17 @@ class ContentService:
             self._repository.fail_run(scope, task_id, run_id, str(exc))
             raise
         except Exception as exc:  # Provider implementation details never reach the user.
+            _LOGGER.error(
+                "content provider call failed type=%s",
+                type(exc).__name__,
+            )
             self._repository.fail_run(scope, task_id, run_id, "模型调用失败，请稍后重试")
-            raise GenerationFailed("模型调用失败，请稍后重试") from exc
+            raise GenerationFailed(
+                "模型或网络暂时不可用，当前输入已保留。",
+                error_code="PROVIDER_UNAVAILABLE",
+                failure_stage="provider",
+                retryable=True,
+            ) from exc
         except BaseException:
             # Cancellation and process-level interruption must not leave a durable
             # generation run looking active after the request slot is released.
@@ -2049,9 +2120,17 @@ class ContentService:
             self._repository.fail_run(scope, task_id, run_id, str(exc))
             raise
         except Exception as exc:
-            _LOGGER.exception("content finalization failed")
+            _LOGGER.error(
+                "content finalization failed type=%s",
+                type(exc).__name__,
+            )
             self._repository.fail_run(scope, task_id, run_id, "成品保存失败，请稍后重试")
-            raise GenerationFailed("成品保存失败，请稍后重试") from exc
+            raise GenerationFailed(
+                "成品保存失败；没有写入半版本，当前输入和历史版本均已保留。",
+                error_code="VERSION_PERSISTENCE_FAILED",
+                failure_stage="persistence",
+                retryable=True,
+            ) from exc
         except BaseException:
             self._repository.fail_run(scope, task_id, run_id, "成品保存已取消")
             raise

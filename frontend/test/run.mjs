@@ -142,6 +142,9 @@ URL.createObjectURL = blob => {
 };
 URL.revokeObjectURL = () => undefined;
 dom.window.HTMLAnchorElement.prototype.click = () => undefined;
+const supportedFormalCapabilityIds = Array.from({ length: 64 }, (_, index) => index + 1)
+  .filter(value => ![33, 53, 59, 61, 62, 63].includes(value))
+  .map(value => `FT-${String(value).padStart(3, "0")}`);
 dom.window.__DIYU_BOOTSTRAP__ = {
   application: "content",
   generator_mode: "deepseek",
@@ -185,7 +188,97 @@ dom.window.__DIYU_BOOTSTRAP__ = {
     { value: "xiaohongshu_video", label: "小红书视频", platform_label: "小红书", format_label: "视频" },
     { value: "xiaohongshu_graphic", label: "小红书图文", platform_label: "小红书", format_label: "图文" },
     { value: "wechat_channels_video", label: "微信视频号", platform_label: "微信视频号", format_label: "视频" }
-  ]
+  ],
+  capability_matrix: {
+    registry_version: "formal-capabilities-v1",
+    runtime_sha: "candidate-user-help-sha",
+    schema_revision: "20260817_44",
+    generated_at: "2026-08-04T12:00:00Z",
+    truth_sources: ["formal-api", "postgresql", "production-observation"],
+    summary: {
+      implemented: 58,
+      not_built: 0,
+      data_satisfied: 43,
+      permission_granted: 29,
+      formally_tested: 58
+    },
+    items: supportedFormalCapabilityIds.map((id, index) => ({
+      id,
+      role: index < 10 ? "public" : "tenant_user",
+      route: index < 10 ? "/status" : "/user",
+      title: `正式能力 ${index + 1}`,
+      consumer: "formal-api-postgresql",
+      software_implemented: true,
+      data_state: index < 43 ? "satisfied" : "missing",
+      permission_state: index < 29 ? "granted" : "not_granted",
+      formally_tested: true,
+      supplement_href: "/tenant-admin?section=readiness"
+    }))
+  },
+  usage_guide: {
+    identity_model: [
+      "笛语系统运维管理员：维护最小运维入口。",
+      "笛语服饰租户管理员：管理组织、成员、账号与资料。",
+      "笛语服饰租户用户：按本人资格创作、修改、复制和导出。"
+    ],
+    relationship: "自然人 → 工作资格 → 逻辑发布账号 → 平台和形式",
+    send_vs_generate: {
+      send: "发送：普通交流，不创建任务。",
+      generate: "生成内容：创建正式任务、运行和版本。"
+    },
+    administrator_steps: [
+      "创建组织。",
+      "创建逻辑发布账号并配置平台目标、ContentRole 和五段画像。",
+      "创建成员，分配账号资格并发送单次激活链接。"
+    ],
+    named_member_examples: ["笛语品控", "柯桥店阿丹"],
+    current_counts: {
+      formal_users: 2,
+      content_users: 1,
+      logical_accounts: 1,
+      platform_targets: 4,
+      profile_accounts: 1,
+      active_products: 14,
+      allowed_product_fact_fields: 26,
+      organization_media: 0,
+      product_media_products: 0,
+      confirmed_stores: 0,
+      formal_inventory_snapshots: 0
+    },
+    content_path_state: "partial",
+    brand_context_summary: {
+      status: "needs_admin_confirmation",
+      message: "来源资料已保存，但还需管理员确认来源绑定版本。"
+    },
+    truth_boundaries: [
+      "用户本轮陈述只在当前任务内冻结，不自动成为可复用品牌事实。",
+      "系统不自动发布，采用和发布由用户完成。"
+    ],
+    product_fact_readiness: [
+      {
+        sku: "DIYU-CSPU-004",
+        display_name: "男童复古拼色图形短袖",
+        current_facts: [{ field: "品类", value: "短袖" }, { field: "色彩", value: "拼色" }],
+        missing_fields: ["价格带", "功效"],
+        can_do: "可基于下列已确认字段解释这件商品的选择依据；每次任务只加载该 SKU 的事实。",
+        cannot_promise: "未列入当前可用事实的属性、工艺、性能、功效、体验和品牌保证均不能承诺。"
+      }
+    ],
+    service_status_meanings: [
+      { state: "unknown", meaning: "最近没有足够新鲜的真实观察。" },
+      { state: "degraded", meaning: "最近观察到可恢复异常。" },
+      { state: "unavailable", meaning: "最近观察到生成依赖不可用。" }
+    ],
+    common_errors: [
+      { code: "USERNAME_TAKEN", meaning: "登录用户名已被使用，请改用候选用户名。" },
+      { code: "PROVIDER_UNAVAILABLE", meaning: "生成服务暂不可用；输入已保留，可稍后重试。" }
+    ],
+    data_missing: [
+      { id: "P4", missing: true, message: "当前没有正式门店事实。", supplement_href: "/tenant-admin?section=readiness" },
+      { id: "P5", missing: true, message: "当前没有正式商品图片、视频及商品绑定。", supplement_href: "/tenant-admin?section=materials" },
+      { id: "DM01", missing: true, message: "当前缺少正式门店档案和库存。", supplement_href: "/tenant-admin?section=readiness" }
+    ]
+  }
 };
 
 globalThis.fetch = async (input, init = {}) => {
@@ -200,7 +293,25 @@ globalThis.fetch = async (input, init = {}) => {
   if (path === "/api/v1/test-session-invalid") {
     ok = false;
     status = 401;
-    payload = { detail: "当前登录已经失效" };
+    payload = {
+      detail: "当前登录已经失效",
+      error_code: "AUTH_EXPIRED",
+      failure_stage: "authentication",
+      retryable: false,
+      action: "请重新登录后继续。",
+      trace_id: "00000000-0000-4000-8000-000000000401"
+    };
+  } else if (path === "/api/v1/test-permission-denied") {
+    ok = false;
+    status = 403;
+    payload = {
+      detail: "当前账号没有这项资格",
+      error_code: "PERMISSION_DENIED",
+      failure_stage: "authorization",
+      retryable: false,
+      action: "请留在当前页面，联系品牌管理员确认当前工作资格和作用域。",
+      trace_id: "00000000-0000-4000-8000-000000000403"
+    };
   } else if (path === "/api/v1/status" && publicStatusRequestFails) {
     ok = false;
     status = 503;
@@ -355,7 +466,16 @@ globalThis.fetch = async (input, init = {}) => {
           event: "failed",
           message: body?.message?.includes("限流")
             ? "当前请求较多，请稍后再试。"
-            : "这次还没能整理成一份可靠的成品。你的想法仍然保留。"
+            : "这次还没能整理成一份可靠的成品。你的想法仍然保留。",
+          error_code: body?.message?.includes("限流")
+            ? "RATE_LIMITED"
+            : "GENERATION_VALIDATION_FAILED",
+          failure_stage: body?.message?.includes("限流")
+            ? "rate_limit"
+            : "validation",
+          retryable: true,
+          action: "输入已经保留，可以使用原输入重试。",
+          trace_id: "00000000-0000-4000-8000-000000000429"
         }
       ];
     } else if (body?.interaction_mode === "conversation") {

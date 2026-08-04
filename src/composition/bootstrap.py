@@ -89,4 +89,5 @@ def build_workbench_service(settings: Settings) -> WorkbenchService:
     return WorkbenchService(
         PostgresWorkbenchRepository(settings.app_database_url),
         _object_store(settings),
+        runtime_sha=settings.runtime_sha,
     )

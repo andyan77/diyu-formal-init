@@ -8,12 +8,14 @@ RUN npm run build
 
 FROM ghcr.io/astral-sh/uv:python3.10-bookworm-slim AS runtime
 
+ARG DIYU_RUNTIME_SHA=unbound
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_CACHE_DIR=/tmp/uv-cache \
     UV_LINK_MODE=copy \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/.venv/bin:$PATH" \
+    DIYU_RUNTIME_SHA="$DIYU_RUNTIME_SHA"
 
 WORKDIR /app
 COPY pyproject.toml uv.lock ./

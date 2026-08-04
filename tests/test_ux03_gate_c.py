@@ -2460,10 +2460,15 @@ def test_formal_product_media_binding_creates_and_freezes_p5(
             assert sibling_scope_rejected.status_code == 200
             sibling_events = [json.loads(line) for line in sibling_scope_rejected.text.splitlines() if line.strip()]
             assert not any(item["event"] == "completed" for item in sibling_events)
-            assert any(
-                item.get("event") == "failed" and "可靠的成品" in str(item.get("message") or "")
-                for item in sibling_events
-            ), sibling_events
+            sibling_failure = next(
+                item for item in sibling_events if item.get("event") == "failed"
+            )
+            assert sibling_failure["detail"] == "这次参考里有当前身份不能使用的素材。"
+            assert sibling_failure["error_code"] == "DOMAIN_VALIDATION_FAILED"
+            assert sibling_failure["failure_stage"] == "validation"
+            assert sibling_failure["retryable"] is False
+            assert sibling_failure["action"] == "请按提示补齐当前步骤所需信息后继续。"
+            UUID(str(sibling_failure["trace_id"]))
             assert (
                 _tenant_persistence_counts(
                     migrator_database_url,

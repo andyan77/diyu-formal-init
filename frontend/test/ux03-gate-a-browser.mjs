@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { resolveChromePath } from "./chrome-path.mjs";
 
 const required = name => {
   const value = process.env[name];
@@ -26,15 +28,7 @@ const storeOrganizationName = `UX03 浏览器门店 ${suffix}`;
 const hqAccountName = `总部逻辑发布账号 ${suffix}`;
 const storeAccountName = `门店逻辑发布账号 ${suffix}`;
 const repo = resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const chromeCandidates = [
-  process.env.UX03_CHROME,
-  "/usr/bin/google-chrome",
-  "/usr/bin/chromium",
-  "/home/faye/.cache/puppeteer/chrome/linux-148.0.7778.97/chrome-linux64/chrome"
-].filter(Boolean);
-const chromePath = chromeCandidates.find(
-  path => existsSync(path) && statSync(path).isFile()
-);
+const chromePath = resolveChromePath({ configured: process.env.UX03_CHROME });
 if (!chromePath) throw new Error("未找到本机 Chrome");
 
 const { default: WebSocket } = await import(
@@ -412,14 +406,28 @@ try {
     })()`,
     "P5 无真实媒体的局部资料缺口"
   );
+  const formalTruth = await admin.evaluate(`(() => {
+    const rows=[...document.querySelectorAll('.capability-matrix tbody tr')];
+    return {
+      rows: rows.length,
+      implemented: rows.filter(row=>row.innerText.includes('已实现')).length,
+      dataMissing: rows.filter(row=>row.innerText.includes('资料缺失')).length,
+      formallyTested: rows.filter(row=>row.innerText.includes('已实测')).length,
+      columns: document.querySelector('.capability-matrix thead')?.innerText || ''
+    };
+  })()`);
+  ensure(formalTruth.rows === 58 && formalTruth.implemented === 58, "58 项软件实现真值没有逐项呈现");
+  ensure(formalTruth.dataMissing > 0, "正式资料缺口被软件实现状态掩盖");
   ensure(
-    await admin.evaluate(
-      "document.querySelector('[aria-labelledby=software-readiness-title]')?.innerText.includes('58 项真实可用')"
-    ),
-    "资料缺口错误降低了软件功能真值"
+    formalTruth.columns.includes("当前资料是否满足") &&
+      formalTruth.columns.includes("当前用户是否获权") &&
+      formalTruth.columns.includes("正式生产是否实测"),
+    "正式能力没有分离资料、权限和实测真值"
   );
   record("软件能力与笛语服饰资料就绪度分离", {
-    software_truth: "58/0/0/6/0",
+    software_implemented: formalTruth.implemented,
+    data_missing_rows: formalTruth.dataMissing,
+    formally_tested_rows: formalTruth.formallyTested,
     p5: "data_missing",
     p5_scope: "只影响商品视觉"
   });

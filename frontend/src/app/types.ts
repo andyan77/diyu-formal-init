@@ -23,6 +23,69 @@ export interface PublishingIdentity {
   platform_targets: PlatformTarget[];
 }
 
+export interface FormalCapabilityItem {
+  id: string;
+  role: string;
+  route: string;
+  title: string;
+  consumer: string;
+  software_implemented: boolean;
+  data_state: "satisfied" | "partial" | "missing" | "not_required";
+  permission_state: "granted" | "not_granted" | "not_applicable";
+  formally_tested: boolean;
+  supplement_href: string;
+}
+
+export interface FormalCapabilityMatrix {
+  registry_version: string;
+  runtime_sha: string;
+  schema_revision: string;
+  generated_at: string;
+  truth_sources: string[];
+  summary: {
+    implemented: number;
+    not_built: number;
+    data_satisfied: number;
+    permission_granted: number;
+    formally_tested: number;
+  };
+  items: FormalCapabilityItem[];
+}
+
+export interface UsageGuideTruth {
+  identity_model: string[];
+  relationship: string;
+  send_vs_generate: { send: string; generate: string };
+  administrator_steps: string[];
+  named_member_examples: string[];
+  current_counts: Record<string, number>;
+  content_path_state: "satisfied" | "partial" | "missing";
+  brand_context_summary: {
+    status: "source_bound_confirmed" | "needs_admin_confirmation";
+    message: string;
+  };
+  truth_boundaries: string[];
+  product_fact_readiness: Array<{
+    sku: string;
+    display_name: string;
+    current_facts: Array<{ field: string; value: string }>;
+    missing_fields: string[];
+    can_do: string;
+    cannot_promise: string;
+  }>;
+  service_status_meanings: Array<{
+    state: "unknown" | "degraded" | "unavailable";
+    meaning: string;
+  }>;
+  common_errors: Array<{ code: string; meaning: string }>;
+  data_missing: Array<{
+    id: "P4" | "P5" | "DM01";
+    missing: boolean;
+    message: string;
+    supplement_href: string;
+  }>;
+}
+
 export interface BootstrapContext {
   application:
     | "public"
@@ -46,6 +109,8 @@ export interface BootstrapContext {
   generator_mode?: "stub" | "deepseek";
   capabilities?: Array<"content" | "display" | "materials">;
   display_stores?: Array<{ id: string; name: string }>;
+  capability_matrix?: FormalCapabilityMatrix;
+  usage_guide?: UsageGuideTruth;
   service_state?: "available" | "unavailable";
   runtime_summary?: Record<string, number | null>;
   pending_requests?: number;
@@ -187,4 +252,14 @@ export type ContentStreamEvent =
       message?: string;
     }
   | { event: "completed"; result: ContentVersion; conversation_id?: string | null }
-  | { event: "failed"; message?: string };
+  | {
+      event: "failed";
+      detail?: string;
+      message?: string;
+      error_code?: string;
+      failure_stage?: string;
+      retryable?: boolean;
+      action?: string;
+      trace_id?: string;
+      suggestions?: string[];
+    };

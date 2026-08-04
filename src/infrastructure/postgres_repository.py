@@ -471,7 +471,8 @@ class PostgresContentRepository(ContentRepository):
                        item.applicability, item.source_kind,
                        item.source_ref, item.source_version,
                        item.source_digest,
-                       segment.document_id, segment.document_version_id
+                       segment.document_id, segment.document_version_id,
+                       document_version.normalized_sha256 AS source_document_digest
                   FROM brands brand
                   JOIN content_accounts target_account
                     ON target_account.tenant_id = brand.tenant_id
@@ -499,6 +500,10 @@ class PostgresContentRepository(ContentRepository):
                     ON segment.tenant_id = item.tenant_id
                    AND segment.brand_id = item.brand_id
                    AND segment.id = item.source_segment_id
+                  LEFT JOIN brand_source_document_versions document_version
+                    ON document_version.tenant_id = segment.tenant_id
+                   AND document_version.brand_id = segment.brand_id
+                   AND document_version.id = segment.document_version_id
                  WHERE brand.tenant_id = %s
                    AND brand.id = %s
                  ORDER BY item.position
@@ -573,6 +578,19 @@ class PostgresContentRepository(ContentRepository):
                 digest=hashlib.sha256(str(row["published_text"]).encode()).hexdigest(),
                 exact_text=str(row["published_text"]),
                 source_digest=str(row["source_digest"]),
+                source_document_digest=(
+                    str(row["source_document_digest"])
+                    if row["source_document_digest"] is not None
+                    else None
+                ),
+                applicability=tuple(
+                    str(value)
+                    for value in (
+                        row["applicability"]
+                        if isinstance(row["applicability"], list)
+                        else []
+                    )
+                ),
             )
             for row in selected
         )
@@ -589,6 +607,8 @@ class PostgresContentRepository(ContentRepository):
                 "digest": segment.digest,
                 "exact_text": segment.exact_text,
                 "source_digest": segment.source_digest,
+                "source_document_digest": segment.source_document_digest,
+                "applicability": list(segment.applicability),
             }
             for segment in segments
         ]
@@ -673,6 +693,88 @@ class PostgresContentRepository(ContentRepository):
                 (scope.tenant_id, scope.brand_id, scope.account_id),
             )
             logical_account_id = UUID(str(self._one(cursor, "当前发布账号不可用")["logical_account_id"]))
+            task_snapshot = (
+                snapshot
+                | {
+                    "logical_publishing_identity_id": str(logical_account_id),
+                    "platform_carrier_id": str(scope.account_id),
+                    "target": target,
+                }
+                if snapshot is not None
+                else None
+            )
+            reused_failed_task = False
+            if client_request_id is not None:
+                # Serialize every attempt for one tenant-scoped client request.
+                # A row lock on the previous failed run is insufficient because
+                # two concurrent retries can both observe that same historical
+                # row before either inserts the new running attempt.
+                cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"content-request:{scope.tenant_id}:{client_request_id}",),
+                )
+                cursor.execute(
+                    """
+                    SELECT run_record.status, task_record.id AS task_id,
+                           task_record.brand_id, task_record.account_id,
+                           task_record.created_by, task_record.weak_seed,
+                           task_record.primary_content_product,
+                           task_record.parent_version_id, task_record.media_format,
+                           task_record.production_conditions,
+                           task_record.content_context_snapshot,
+                           task_record.series_id, task_record.series_position
+                      FROM generation_runs run_record
+                      JOIN business_tasks task_record
+                        ON task_record.tenant_id = run_record.tenant_id
+                       AND task_record.id = run_record.task_id
+                     WHERE run_record.tenant_id = %s
+                       AND run_record.client_request_id = %s
+                     ORDER BY run_record.started_at DESC, run_record.id DESC
+                     LIMIT 1
+                     FOR UPDATE OF run_record
+                    """,
+                    (scope.tenant_id, client_request_id),
+                )
+                previous = cursor.fetchone()
+                if previous is not None:
+                    if str(previous["status"]) == "running":
+                        raise DomainError(
+                            "同一请求仍在处理中，请稍后查看结果。",
+                            error_code="REQUEST_IN_PROGRESS",
+                            failure_stage="persistence",
+                            retryable=True,
+                        )
+                    if str(previous["status"]) == "succeeded":
+                        raise DomainError(
+                            "同一请求已经完成，请读取已有版本。",
+                            error_code="REQUEST_ALREADY_COMPLETED",
+                            failure_stage="persistence",
+                            retryable=False,
+                        )
+                    expected = {
+                        "brand_id": scope.brand_id,
+                        "account_id": scope.account_id,
+                        "created_by": scope.user_id,
+                        "weak_seed": weak_seed,
+                        "primary_content_product": primary_product,
+                        "parent_version_id": parent_version_id,
+                        "media_format": media_format,
+                        "production_conditions": production_conditions,
+                        "content_context_snapshot": task_snapshot,
+                        "series_id": series_context.series_id if series_context is not None else None,
+                        "series_position": (
+                            series_context.target_position if series_context is not None else None
+                        ),
+                    }
+                    if any(previous[key] != value for key, value in expected.items()):
+                        raise DomainError(
+                            "这次重试的输入或冻结上下文已经改变，请作为新请求重新生成。",
+                            error_code="IDEMPOTENCY_CONTEXT_CHANGED",
+                            failure_stage="context",
+                            retryable=False,
+                        )
+                    task_id = UUID(str(previous["task_id"]))
+                    reused_failed_task = True
             prior_body: str | None = None
             if parent_version_id is not None:
                 cursor.execute(
@@ -702,46 +804,36 @@ class PostgresContentRepository(ContentRepository):
                 )
                 row = self._one(cursor, "只能明确复用当前用户当前作用域中的内容")
                 prior_body = validate_version_content(row).body
-            cursor.execute(
-                """
-                INSERT INTO business_tasks
-                    (id, tenant_id, brand_id, account_id, logical_account_id,
-                     created_by, weak_seed,
-                     primary_content_product, product_refs, parent_version_id, media_format,
-                     production_conditions, content_context_snapshot, series_id,
-                     series_position, series_revision_used)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    task_id,
-                    scope.tenant_id,
-                    scope.brand_id,
-                    scope.account_id,
-                    logical_account_id,
-                    scope.user_id,
-                    weak_seed,
-                    primary_product,
-                    Jsonb([product.sku for product in products]),
-                    parent_version_id,
-                    media_format,
-                    production_conditions,
+            if not reused_failed_task:
+                cursor.execute(
+                    """
+                    INSERT INTO business_tasks
+                        (id, tenant_id, brand_id, account_id, logical_account_id,
+                         created_by, weak_seed,
+                         primary_content_product, product_refs, parent_version_id, media_format,
+                         production_conditions, content_context_snapshot, series_id,
+                         series_position, series_revision_used)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
                     (
-                        Jsonb(
-                            snapshot
-                            | {
-                                "logical_publishing_identity_id": str(logical_account_id),
-                                "platform_carrier_id": str(scope.account_id),
-                                "target": target,
-                            }
-                        )
-                        if snapshot is not None
-                        else None
+                        task_id,
+                        scope.tenant_id,
+                        scope.brand_id,
+                        scope.account_id,
+                        logical_account_id,
+                        scope.user_id,
+                        weak_seed,
+                        primary_product,
+                        Jsonb([product.sku for product in products]),
+                        parent_version_id,
+                        media_format,
+                        production_conditions,
+                        Jsonb(task_snapshot) if task_snapshot is not None else None,
+                        series_context.series_id if series_context is not None else None,
+                        series_context.target_position if series_context is not None else None,
+                        series_context.revision if series_context is not None else None,
                     ),
-                    series_context.series_id if series_context is not None else None,
-                    series_context.target_position if series_context is not None else None,
-                    series_context.revision if series_context is not None else None,
-                ),
-            )
+                )
             cursor.execute(
                 """
                 INSERT INTO generation_runs
@@ -1095,6 +1187,79 @@ class PostgresContentRepository(ContentRepository):
             version = self._one(cursor, "原版本不存在，不能修改")
             validate_version_content(version)
             parent_version_id = UUID(str(version["id"]))
+            input_receipt = self._input_receipt(
+                self._product(task["primary_content_product"]),
+                context,
+                products,
+                target,
+                platform_direction,
+                parent_version_id,
+                source_description,
+                control,
+                series_context,
+            ) | {
+                "revision_instruction": instruction,
+                "writer_model": model,
+                "version_authorization": (
+                    "external-reviewer" if reviewer_model else "deterministic-dual-track-v1"
+                ),
+                **({"reviewer_model": reviewer_model} if reviewer_model else {}),
+            }
+            if client_request_id is not None:
+                cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"content-request:{scope.tenant_id}:{client_request_id}",),
+                )
+                cursor.execute(
+                    """
+                    SELECT run_record.status, run_record.task_id,
+                           run_record.model, run_record.used_assets,
+                           run_record.input_receipt,
+                           task_record.brand_id, task_record.account_id,
+                           task_record.created_by
+                      FROM generation_runs run_record
+                      JOIN business_tasks task_record
+                        ON task_record.tenant_id = run_record.tenant_id
+                       AND task_record.id = run_record.task_id
+                     WHERE run_record.tenant_id = %s
+                       AND run_record.client_request_id = %s
+                     ORDER BY run_record.started_at DESC, run_record.id DESC
+                     LIMIT 1
+                    """,
+                    (scope.tenant_id, client_request_id),
+                )
+                previous = cursor.fetchone()
+                if previous is not None:
+                    if str(previous["status"]) == "running":
+                        raise DomainError(
+                            "同一请求仍在处理中，请稍后查看结果。",
+                            error_code="REQUEST_IN_PROGRESS",
+                            failure_stage="persistence",
+                            retryable=True,
+                        )
+                    if str(previous["status"]) == "succeeded":
+                        raise DomainError(
+                            "同一请求已经完成，请读取已有版本。",
+                            error_code="REQUEST_ALREADY_COMPLETED",
+                            failure_stage="persistence",
+                            retryable=False,
+                        )
+                    expected = {
+                        "task_id": task_id,
+                        "brand_id": scope.brand_id,
+                        "account_id": scope.account_id,
+                        "created_by": scope.user_id,
+                        "model": model,
+                        "used_assets": self._asset_receipts(used_assets),
+                        "input_receipt": input_receipt,
+                    }
+                    if any(previous[key] != value for key, value in expected.items()):
+                        raise DomainError(
+                            "这次重试的修改要求或冻结上下文已经改变，请作为新请求重新修改。",
+                            error_code="IDEMPOTENCY_CONTEXT_CHANGED",
+                            failure_stage="context",
+                            retryable=False,
+                        )
             cursor.execute(
                 "UPDATE business_tasks SET revision_instruction = %s, production_conditions = %s WHERE tenant_id = %s AND id = %s",
                 (instruction, production_conditions, scope.tenant_id, task_id),
@@ -1112,26 +1277,7 @@ class PostgresContentRepository(ContentRepository):
                     task_id,
                     model,
                     Jsonb(self._asset_receipts(used_assets)),
-                    Jsonb(
-                        self._input_receipt(
-                            self._product(task["primary_content_product"]),
-                            context,
-                            products,
-                            target,
-                            platform_direction,
-                            parent_version_id,
-                            source_description,
-                            control,
-                            series_context,
-                        )
-                        | {
-                            "writer_model": model,
-                            "version_authorization": (
-                                "external-reviewer" if reviewer_model else "deterministic-dual-track-v1"
-                            ),
-                            **({"reviewer_model": reviewer_model} if reviewer_model else {}),
-                        }
-                    ),
+                    Jsonb(input_receipt),
                     client_request_id,
                 ),
             )

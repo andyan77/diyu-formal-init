@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { BrandMark } from "../components/Brand";
+import { CapabilityMatrixView, UsageGuideView } from "../components/CapabilityGuide";
 import type { BootstrapContext } from "./types";
 
 export function UserHome({ context }: { context: BootstrapContext }): JSX.Element {
@@ -67,6 +68,13 @@ export function UserHome({ context }: { context: BootstrapContext }): JSX.Elemen
           <p className="user-home-recovery">
             当前账号还没有可用的工作入口，请联系品牌管理员调整资格。
           </p>
+        )}
+        {context.usage_guide && context.capability_matrix && (
+          <details className="user-help">
+            <summary>使用说明 / 当前可用与待补</summary>
+            <UsageGuideView guide={context.usage_guide} />
+            <CapabilityMatrixView matrix={context.capability_matrix} />
+          </details>
         )}
       </section>
     </main>

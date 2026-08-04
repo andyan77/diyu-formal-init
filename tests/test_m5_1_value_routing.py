@@ -65,6 +65,40 @@ def _product(task: dict[str, object], app_database_url: str) -> str:
     return str(row[0])
 
 
+def _content_object_counts(database_url: str, scope: TrustedScope) -> tuple[int, int, int]:
+    with psycopg.connect(database_url) as connection, connection.cursor() as cursor:
+        cursor.execute("SELECT set_config('app.tenant_id', %s, true)", (str(scope.tenant_id),))
+        cursor.execute(
+            """
+            SELECT
+              (SELECT count(*) FROM business_tasks task
+                WHERE task.tenant_id = %s AND task.created_by = %s AND task.account_id = %s),
+              (SELECT count(*) FROM generation_runs run
+                 JOIN business_tasks task
+                   ON task.tenant_id = run.tenant_id AND task.id = run.task_id
+                WHERE task.tenant_id = %s AND task.created_by = %s AND task.account_id = %s),
+              (SELECT count(*) FROM content_versions version
+                 JOIN business_tasks task
+                   ON task.tenant_id = version.tenant_id AND task.id = version.task_id
+                WHERE task.tenant_id = %s AND task.created_by = %s AND task.account_id = %s)
+            """,
+            (
+                scope.tenant_id,
+                scope.user_id,
+                scope.account_id,
+                scope.tenant_id,
+                scope.user_id,
+                scope.account_id,
+                scope.tenant_id,
+                scope.user_id,
+                scope.account_id,
+            ),
+        )
+        row = cursor.fetchone()
+    assert row is not None
+    return (int(row[0]), int(row[1]), int(row[2]))
+
+
 def test_x01_routes_assets_versions_and_shared_product_truth(app_database_url: str) -> None:
     generator = CapturingContentGenerator()
     service = ContentService(
@@ -78,14 +112,19 @@ def test_x01_routes_assets_versions_and_shared_product_truth(app_database_url: s
 
     p1 = service.create_from_weak_seed(scope, R1_A)
     p2 = service.create_from_weak_seed(scope, R1_B)
+    calls_before_p5 = len(generator.inputs)
+    objects_before_p5 = _content_object_counts(app_database_url, scope)
     p5 = service.create_from_weak_seed(scope, R1_C)
+    assert len(generator.inputs) == calls_before_p5, "P5 缺正式媒体必须在 Writer 前停止"
+    assert _content_object_counts(app_database_url, scope) == objects_before_p5
     p3 = service.create_from_weak_seed(scope, R2_A)
     p4 = service.create_from_weak_seed(scope, R2_B)
     independent = service.create_from_weak_seed(scope, R3, UUID(str(p3["version_id"])))
     assert [item["kind"] for item in (p1, p2, p3, p4)] == ["content"] * 4
     assert p5["kind"] == "question"
     assert independent["kind"] == "question"
-    assert "当前可用于制作的登记商品素材" in str(p5["message"])
+    assert "当前没有足够的正式商品图片/视频及商品绑定" in str(p5["message"])
+    assert "普通文字内容仍可使用" in str(p5["message"])
     assert [_product(item, app_database_url) for item in (p1, p2, p3, p4)] == [
         "dressing_decision",
         "product_truth",
@@ -181,5 +220,5 @@ def test_sibling_brand_product_never_enters_store_content_input(
     )
     created = service.create_from_weak_seed(_store_scope(), R1_C)
     assert created["kind"] == "question"
-    assert "当前可用于制作的登记商品素材" in str(created["message"])
+    assert "当前没有足够的正式商品图片/视频及商品绑定" in str(created["message"])
     assert generator.inputs == []

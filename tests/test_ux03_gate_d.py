@@ -147,9 +147,9 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
             force_rls_rows = connection.execute(
                 "SELECT relname, relforcerowsecurity FROM pg_class "
                 "WHERE oid IN ("
-                    "'organizations'::regclass, "
-                    "'brands'::regclass, "
-                    "'brand_expression_baselines'::regclass, "
+                "'organizations'::regclass, "
+                "'brands'::regclass, "
+                "'brand_expression_baselines'::regclass, "
                 "'brand_source_documents'::regclass, "
                 "'brand_source_document_versions'::regclass, "
                 "'brand_source_segments'::regclass, "
@@ -157,7 +157,9 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
                 "'display_store_access_grants'::regclass, "
                 "'display_store_profile_versions'::regclass, "
                 "'brand_publication_projections'::regclass, "
-                "'brand_publication_projection_items'::regclass"
+                "'brand_publication_projection_items'::regclass, "
+                "'content_request_failures'::regclass, "
+                "'formal_capability_observations'::regclass"
                 ")"
             ).fetchall()
             compatibility_projection = connection.execute(
@@ -178,9 +180,9 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
         assert constraint_row is not None
         revision = revision_row[0]
         constraint_validated = constraint_row[0]
-        assert revision == "20260813_40"
+        assert revision == "20260817_44"
         assert constraint_validated is True
-        assert len(force_rls_rows) == 11
+        assert len(force_rls_rows) == 13
         assert all(bool(row[1]) for row in force_rls_rows)
         assert compatibility_projection == (
             "confirmed",

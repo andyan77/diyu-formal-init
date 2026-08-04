@@ -1,20 +1,94 @@
 export class ApiError extends Error {
   readonly status: number;
+  readonly errorCode: string;
+  readonly failureStage: string;
+  readonly retryable: boolean;
+  readonly action: string;
+  readonly traceId: string;
+  readonly suggestions: string[];
 
-  constructor(message: string, status: number) {
+  constructor(
+    message: string,
+    status: number,
+    details?: {
+      errorCode?: string;
+      failureStage?: string;
+      retryable?: boolean;
+      action?: string;
+      traceId?: string;
+      suggestions?: string[];
+    }
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.errorCode = details?.errorCode ?? "UNKNOWN_FAILURE";
+    this.failureStage = details?.failureStage ?? "unknown";
+    this.retryable = details?.retryable ?? status >= 500;
+    this.action = details?.action ?? "请保留当前输入后再试。";
+    this.traceId = details?.traceId ?? "";
+    this.suggestions = details?.suggestions ?? [];
   }
 }
 
 export const SESSION_INVALID_EVENT = "diyu:session-invalid";
 
-function signalInvalidSession(status: number): void {
-  if (status !== 401 && status !== 403) return;
+function signalInvalidSession(status: number, errorCode: string): void {
+  if (errorCode !== "AUTH_REQUIRED" && errorCode !== "AUTH_EXPIRED") return;
   window.dispatchEvent(
-    new CustomEvent(SESSION_INVALID_EVENT, { detail: { status } })
+    new CustomEvent(SESSION_INVALID_EVENT, { detail: { status, errorCode } })
   );
+}
+
+type FailurePayload = {
+  detail?: unknown;
+  error_code?: unknown;
+  failure_stage?: unknown;
+  retryable?: unknown;
+  action?: unknown;
+  trace_id?: unknown;
+  suggestions?: unknown;
+};
+
+function parsedFailure(payload: unknown, status = 0): {
+  message: string;
+  errorCode: string;
+  failureStage: string;
+  retryable: boolean;
+  action: string;
+  traceId: string;
+  suggestions: string[];
+} {
+  const value =
+    typeof payload === "object" && payload !== null
+      ? (payload as FailurePayload)
+      : {};
+  return {
+    message:
+      typeof value.detail === "string"
+        ? value.detail
+        : "当前操作没有完成，请稍后再试。",
+    errorCode:
+      typeof value.error_code === "string"
+        ? value.error_code
+        : "UNKNOWN_FAILURE",
+    failureStage:
+      typeof value.failure_stage === "string"
+        ? value.failure_stage
+        : "unknown",
+    retryable:
+      typeof value.retryable === "boolean" ? value.retryable : status >= 500,
+    action:
+      typeof value.action === "string"
+        ? value.action
+        : "请保留当前输入后再试。",
+    traceId: typeof value.trace_id === "string" ? value.trace_id : "",
+    suggestions: Array.isArray(value.suggestions)
+      ? value.suggestions.filter(
+          (item): item is string => typeof item === "string"
+        )
+      : []
+  };
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -27,13 +101,17 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     }
   });
   if (!response.ok) {
-    signalInvalidSession(response.status);
     const payload: unknown = await response.json().catch(() => ({}));
-    const detail =
-      typeof payload === "object" && payload !== null && "detail" in payload
-        ? String(payload.detail)
-        : "当前操作没有完成，请稍后再试。";
-    throw new ApiError(detail, response.status);
+    const failure = parsedFailure(payload, response.status);
+    signalInvalidSession(response.status, failure.errorCode);
+    throw new ApiError(failure.message, response.status, {
+      errorCode: failure.errorCode,
+      failureStage: failure.failureStage,
+      retryable: failure.retryable,
+      action: failure.action,
+      traceId: failure.traceId,
+      suggestions: failure.suggestions
+    });
   }
   return response.json() as Promise<T>;
 }
@@ -54,13 +132,17 @@ export async function* streamApi<T>(
     signal
   });
   if (!response.ok) {
-    signalInvalidSession(response.status);
     const failure: unknown = await response.json().catch(() => ({}));
-    const detail =
-      typeof failure === "object" && failure !== null && "detail" in failure
-        ? String(failure.detail)
-        : "当前操作没有完成，请稍后再试。";
-    throw new ApiError(detail, response.status);
+    const parsed = parsedFailure(failure, response.status);
+    signalInvalidSession(response.status, parsed.errorCode);
+    throw new ApiError(parsed.message, response.status, {
+      errorCode: parsed.errorCode,
+      failureStage: parsed.failureStage,
+      retryable: parsed.retryable,
+      action: parsed.action,
+      traceId: parsed.traceId,
+      suggestions: parsed.suggestions
+    });
   }
   if (!response.body) {
     throw new ApiError("这次没有收到完整结果，请保留输入后再试。", 502);

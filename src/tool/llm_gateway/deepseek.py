@@ -202,7 +202,19 @@ class ProviderRequestFailure(GenerationFailed):
         response_received: bool,
         retry_count: int,
     ) -> None:
-        super().__init__(message)
+        classifications = {
+            "transport_no_response": ("PROVIDER_TRANSPORT_FAILED", "transport", True),
+            "http_unavailable_response": ("PROVIDER_UNAVAILABLE", "provider", True),
+            "http_rejection_response": ("PROVIDER_REQUEST_REJECTED", "provider", False),
+            "invalid_response": ("PROVIDER_INVALID_RESPONSE", "provider", True),
+        }
+        error_code, failure_stage, retryable = classifications[kind]
+        super().__init__(
+            message,
+            error_code=error_code,
+            failure_stage=failure_stage,
+            retryable=retryable,
+        )
         self.kind = kind
         self.response_received = response_received
         self.retry_count = retry_count
@@ -705,11 +717,19 @@ class DeepSeekGenerator(ContentGenerator):
         raw_premises = document.get("user_premises")
         raw_fact_ids = document.get("user_fact_sentence_ids")
         raw_sentence_roles = document.get("user_sentence_roles")
+        raw_claim_scope = document.get("claim_scope")
         raw_plan = document.get("creative_plan")
         if (
             not isinstance(raw_premises, list)
             or not isinstance(raw_fact_ids, list)
             or not isinstance(raw_sentence_roles, list)
+            or raw_claim_scope
+            not in {
+                "task_actuality",
+                "specific_product_claim",
+                "institutional_claim",
+                "general_topic",
+            }
         ):
             raise GenerationFailed("模型协作返回格式不完整")
         model_premises = self._exact_string_list(raw_premises)
@@ -801,6 +821,10 @@ class DeepSeekGenerator(ContentGenerator):
             )
         except DomainError as exc:
             raise GenerationFailed("模型返回的 CreativePlanV2 超出冻结边界") from exc
+        if raw_claim_scope == "task_actuality" and not facts:
+            raise GenerationFailed("用户现场陈述分类没有绑定冻结现实原句")
+        if raw_claim_scope == "specific_product_claim" and plan.primary_value != "product_truth":
+            raise GenerationFailed("具体商品声明没有进入商品事实路径")
         return ConversationDecision(
             "ready",
             message.strip(),
@@ -811,6 +835,7 @@ class DeepSeekGenerator(ContentGenerator):
             user_span_roles=tuple(
                 (source_id, cast(IntakeSpanRole, role)) for source_id, role in sentence_roles.items()
             ),
+            claim_scope=cast(Any, raw_claim_scope),
             narrative_mode=narrative_mode,
             creative_plan=plan,
             primary_product=plan.primary_value,
@@ -4174,6 +4199,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 {{"kind":"ready","message":"一句自然承接，并明确本题非事实编辑焦点","user_premises":["逐字复制实际使用的用户消息"],
 "user_fact_sentence_ids":["只能选择服务端候选 sentence_id，不能返回或裁剪事实正文"],
 "user_sentence_roles":[{{"sentence_id":"按服务端候选顺序逐项返回","role":"observable_actuality|creation_instruction|style_or_revision_instruction"}}],
+"claim_scope":"task_actuality|specific_product_claim|institutional_claim|general_topic",
 "creative_plan":{{"plan_version":"{PLAN_VERSION}","topic_spans":["只能逐字截取用户消息"],
 "topic_origin":"explicit_user|system_selected",
 "primary_value":"dressing_decision|product_truth|brand_life_narrative|local_response|visual_styling_story",
@@ -4226,6 +4252,11 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   现实原句标为 observable_actuality，不把人物目的、对白、动作或结果补进计划。
 - 商品硬事实只来自当前可用商品；没有资料不猜。
 - user_premises 必须包含本轮用户消息且只能逐字复制用户消息；普通聊天不带入。
+- claim_scope 只描述这次输入需要什么事实边界：本人本轮生活或工作现场陈述选
+  task_actuality；明确可识别商品的属性、工艺、性能或品质声明选 specific_product_claim；
+  品牌、公司或组织的正式保证、承诺或机构结论选 institutional_claim；其余题材与创作要求
+  选 general_topic。工作现场中未指向明确商品的批次观察仍是 task_actuality，不能因为出现
+  品质或工艺概念就改成 specific_product_claim；机构保证也不能伪装成 task_actuality。
 - tone_ids 只能从 {json.dumps(request.allowed_tone_ids, ensure_ascii=False)} 选择，至少一个。
 - mechanism_id 只能从 {json.dumps(request.allowed_mechanism_ids, ensure_ascii=False)}
   选择或为 null；platform_shape 必须逐字为 {request.platform_shape}。

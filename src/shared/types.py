@@ -83,6 +83,8 @@ class BrandContextSegment:
     digest: str
     exact_text: str
     source_digest: str | None = None
+    source_document_digest: str | None = None
+    applicability: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -322,6 +324,12 @@ class RoutingInput:
 
 ConversationDisposition: TypeAlias = Literal["chat", "question", "ready"]
 ConversationRole: TypeAlias = Literal["user", "assistant"]
+ClaimScope: TypeAlias = Literal[
+    "task_actuality",
+    "specific_product_claim",
+    "institutional_claim",
+    "general_topic",
+]
 
 
 @dataclass(frozen=True)
@@ -363,6 +371,7 @@ class ConversationDecision:
     user_fact_source_ids: tuple[str, ...] = ()
     user_instruction_source_ids: tuple[str, ...] = ()
     user_span_roles: tuple[tuple[str, IntakeSpanRole], ...] = ()
+    claim_scope: ClaimScope | None = None
     narrative_mode: NarrativeMode | None = None
     creative_plan: CreativePlanV2 | None = None
     primary_product: ContentProduct | None = None

@@ -13,7 +13,7 @@ from html import escape
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qs, urlencode, urlsplit
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 from fastapi import (
@@ -24,6 +24,7 @@ from fastapi import (
     Security,
     status,
 )
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -93,6 +94,7 @@ from src.gateway.api.contracts import (
     SetExpressionProfileMaintenanceRequest,
     UnmetCapabilityRequest,
     UnmetCapabilityResponseRequest,
+    UpdateOrganizationRequest,
     UpdatePublishingAccountRequest,
     UpdatePublishingSpeakerKindRequest,
     UpdateTenantUserGrantsRequest,
@@ -103,6 +105,7 @@ from src.gateway.api.html import (
     render_login_failure,
     render_spa_shell,
     render_tenant_admin_access_denied,
+    render_tenant_data_missing,
     render_tenant_user_access_denied,
     workbench_location,
 )
@@ -152,6 +155,100 @@ _REVISION_MAY_READ_PREFERENCE = False
 
 def _safe_log_path(path: str) -> str:
     return "/activate/:token" if path.startswith("/activate/") else path
+
+
+def _failure_action(error_code: str, retryable: bool) -> str:
+    if error_code in {"AUTH_REQUIRED", "AUTH_EXPIRED"}:
+        return "请重新登录后继续。"
+    if error_code in {"PERMISSION_DENIED", "SCOPE_DENIED"}:
+        return "请留在当前页面，联系品牌管理员确认当前工作资格和作用域。"
+    if error_code == "CSRF_REJECTED":
+        return "请从当前笛语页面重新提交，不要使用其他站点复制的提交页面。"
+    if error_code == "USERNAME_TAKEN":
+        return "请改用下方可用登录用户名；姓名或工作名可以保持不变。"
+    if error_code == "RATE_LIMITED":
+        return "请稍等片刻后使用原输入重试；不会因此建立重复任务。"
+    if error_code == "REQUEST_IN_PROGRESS":
+        return "请稍后读取同一请求；不要重复提交。"
+    if error_code == "REQUEST_ALREADY_COMPLETED":
+        return "请读取同一请求已经提交的不可变版本。"
+    if error_code == "IDEMPOTENCY_CONTEXT_CHANGED":
+        return "冻结资料已经变化；保留当前输入，并作为一次新请求明确生成。"
+    if error_code == "PRODUCT_FACT_REQUIRED":
+        return "请选择明确商品并补齐相应事实，或改为不承诺具体商品属性的内容。"
+    if error_code == "PERSISTENCE_FAILED":
+        return "原有版本和输入均已保留，请使用同一重试动作再次保存。"
+    if error_code == "VERSION_PERSISTENCE_FAILED":
+        return "原有版本和输入均已保留；请凭 trace_id 定位后使用同一重试动作。"
+    if error_code.startswith("PROVIDER_"):
+        return "输入已经保留；仅在页面显示可以重试时，使用原输入重试。"
+    if retryable:
+        return "输入已经保留，可以使用原输入重试。"
+    return "请按提示补齐当前步骤所需信息后继续。"
+
+
+def _failure_payload(
+    message: str,
+    *,
+    error_code: str,
+    failure_stage: str,
+    retryable: bool,
+    trace_id: UUID | None = None,
+    suggestions: tuple[str, ...] = (),
+) -> dict[str, object]:
+    resolved_trace = trace_id or uuid4()
+    payload: dict[str, object] = {
+        "detail": message,
+        "error_code": error_code,
+        "failure_stage": failure_stage,
+        "retryable": retryable,
+        "action": _failure_action(error_code, retryable),
+        "trace_id": str(resolved_trace),
+    }
+    if suggestions:
+        payload["suggestions"] = list(suggestions)
+    return payload
+
+
+def _http_failure_payload(exc: HTTPException, *, trace_id: UUID | None = None) -> dict[str, object]:
+    detail = exc.detail
+    if isinstance(detail, dict):
+        message = str(detail.get("detail") or detail.get("message") or "当前操作没有完成。")
+        code = str(detail.get("error_code") or "INVALID_REQUEST")
+        stage = str(detail.get("failure_stage") or "validation")
+        retryable = bool(detail.get("retryable", False))
+        raw_suggestions = detail.get("suggestions")
+        suggestions = (
+            tuple(str(item) for item in raw_suggestions)
+            if isinstance(raw_suggestions, list)
+            else ()
+        )
+        return _failure_payload(
+            message,
+            error_code=code,
+            failure_stage=stage,
+            retryable=retryable,
+            trace_id=trace_id,
+            suggestions=suggestions,
+        )
+    defaults: dict[int, tuple[str, str, bool]] = {
+        status.HTTP_401_UNAUTHORIZED: ("AUTH_REQUIRED", "authentication", False),
+        status.HTTP_403_FORBIDDEN: ("PERMISSION_DENIED", "authorization", False),
+        status.HTTP_404_NOT_FOUND: ("NOT_FOUND", "validation", False),
+        status.HTTP_422_UNPROCESSABLE_ENTITY: ("INVALID_REQUEST", "intake", False),
+        status.HTTP_429_TOO_MANY_REQUESTS: ("RATE_LIMITED", "rate_limit", True),
+    }
+    error_code, failure_stage, retryable = defaults.get(
+        exc.status_code,
+        ("SYSTEM_UNAVAILABLE", "unknown", exc.status_code >= 500),
+    )
+    return _failure_payload(
+        str(detail) if detail else "当前操作没有完成。",
+        error_code=error_code,
+        failure_stage=failure_stage,
+        retryable=retryable,
+        trace_id=trace_id,
+    )
 
 
 def _target(value: str | None, text: str = "") -> ContentTarget:
@@ -438,6 +535,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     production_authority = cast(ProductionSessionAuthority, authority) if current_settings.is_production else None
 
+    def record_content_request_failure(
+        scope: TrustedScope,
+        target: ContentTarget,
+        payload: dict[str, object],
+    ) -> None:
+        if production_authority is None:
+            return
+        try:
+            production_authority.repository.record_content_request_failure(
+                scope,
+                target,
+                trace_id=UUID(str(payload["trace_id"])),
+                error_code=str(payload["error_code"]),
+                failure_stage=str(payload["failure_stage"]),
+                retryable=bool(payload["retryable"]),
+            )
+        except Exception:
+            _RUNTIME_LOGGER.exception("safe content request failure diagnostic could not be recorded")
+
+    def record_request_state_failure(
+        request: Request,
+        payload: dict[str, object],
+    ) -> None:
+        scope = getattr(request.state, "content_failure_scope", None)
+        target = getattr(request.state, "content_failure_target", None)
+        if isinstance(scope, TrustedScope) and target in {
+            "douyin_video",
+            "xiaohongshu_video",
+            "xiaohongshu_graphic",
+            "wechat_channels_video",
+        }:
+            record_content_request_failure(
+                scope,
+                cast(ContentTarget, target),
+                payload,
+            )
+
     @contextmanager
     def model_slot(request: Request) -> Iterator[None]:
         if production_authority is None:
@@ -471,7 +605,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     and not null_origin_is_same_origin
                     and urlsplit(origin).hostname != request.url.hostname
                 ):
-                    return JSONResponse({"detail": "跨站请求被拒绝"}, status_code=status.HTTP_403_FORBIDDEN)
+                    return JSONResponse(
+                        _failure_payload(
+                            "跨站请求被拒绝",
+                            error_code="CSRF_REJECTED",
+                            failure_stage="csrf",
+                            retryable=False,
+                        ),
+                        status_code=status.HTTP_403_FORBIDDEN,
+                    )
             started = time.perf_counter()
             try:
                 response = await call_next(request)
@@ -738,7 +880,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if not production_authority.repository.change_password(
                 identity, payload.current_password, payload.password
             ):
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="当前密码不正确")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={
+                        "detail": "当前密码不正确",
+                        "error_code": "CURRENT_PASSWORD_INVALID",
+                        "failure_stage": "validation",
+                        "retryable": False,
+                    },
+                )
             return {"changed": True}
 
         def activation_paths(raw_token: str) -> tuple[str, str]:
@@ -811,9 +961,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     display_store_ids=tuple(payload.display_store_ids),
                 )
             except psycopg.errors.UniqueViolation as exc:
+                constraint_name = exc.diag.constraint_name
+                if constraint_name == "user_credentials_username_key":
+                    suggestions = production_authority.repository.available_username_candidates(
+                        identity,
+                        payload.display_name,
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail={
+                            "detail": "登录用户名已被使用；姓名或工作名可以同名。",
+                            "error_code": "USERNAME_TAKEN",
+                            "failure_stage": "validation",
+                            "retryable": False,
+                            "suggestions": list(suggestions),
+                        },
+                    ) from exc
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="当前租户已有同名自然人，或登录用户名已被使用",
+                    detail={
+                        "detail": "成员资料与当前约束冲突，请刷新后重试。",
+                        "error_code": "CONSTRAINT_CONFLICT",
+                        "failure_stage": "persistence",
+                        "retryable": False,
+                    },
                 ) from exc
             activation_link, activation_url = activation_paths(str(created["activation_token"]))
             return CreatedTenantUserResponse(
@@ -842,6 +1013,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 payload.as_synthetic_business_fixture,
                 payload.organization_level,
                 payload.parent_organization_id,
+            )
+
+        @app.patch(
+            "/api/v1/tenant-management/organizations/{organization_id}",
+            responses=business_failures,
+        )
+        def update_tenant_organization(
+            organization_id: UUID,
+            payload: UpdateOrganizationRequest,
+            request: Request,
+        ) -> dict[str, object]:
+            return production_authority.repository.update_tenant_organization(
+                formal_manager_identity(request),
+                organization_id,
+                payload.name,
+                payload.organization_level,
+                payload.parent_organization_id,
+            )
+
+        @app.put(
+            "/api/v1/tenant-management/organizations/{organization_id}/enabled",
+            responses=business_failures,
+        )
+        def set_tenant_organization_enabled(
+            organization_id: UUID,
+            payload: SetEnabledRequest,
+            request: Request,
+        ) -> dict[str, object]:
+            return production_authority.repository.set_tenant_organization_enabled(
+                formal_manager_identity(request),
+                organization_id,
+                payload.enabled,
             )
 
         @app.patch(
@@ -2224,9 +2427,70 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, object]:
         return display_service.fetch_version(scope, task_id, version)
 
+    @app.exception_handler(HTTPException)
+    async def http_error_handler(request: Request, exc: HTTPException) -> object:
+        payload = _http_failure_payload(exc)
+        record_request_state_failure(request, payload)
+        return JSONResponse(
+            payload,
+            status_code=exc.status_code,
+            headers=exc.headers,
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error_handler(
+        _: Request,
+        __: RequestValidationError,
+    ) -> object:
+        return JSONResponse(
+            _failure_payload(
+                "输入格式不完整或字段不符合要求，请检查后再试。",
+                error_code="INVALID_REQUEST",
+                failure_stage="intake",
+                retryable=False,
+            ),
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
     @app.exception_handler(DomainError)
-    async def domain_error_handler(_: Request, exc: DomainError) -> object:
-        return JSONResponse({"detail": str(exc)}, status_code=422)
+    async def domain_error_handler(request: Request, exc: DomainError) -> object:
+        payload = _failure_payload(
+            str(exc),
+            error_code=exc.error_code,
+            failure_stage=exc.failure_stage,
+            retryable=exc.retryable,
+        )
+        record_request_state_failure(request, payload)
+        failure_status = (
+            status.HTTP_503_SERVICE_UNAVAILABLE
+            if exc.failure_stage in {"provider", "transport"}
+            else status.HTTP_500_INTERNAL_SERVER_ERROR
+            if exc.failure_stage == "persistence"
+            else status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
+        return JSONResponse(payload, status_code=failure_status)
+
+    @app.exception_handler(Exception)
+    async def unknown_error_handler(request: Request, exc: Exception) -> object:
+        # Keep diagnostics useful without logging an exception message that may
+        # contain user input or provider text.  The trace id in the response and
+        # append-only diagnostic row is the support correlation key.
+        _RUNTIME_LOGGER.error(
+            "unhandled API failure type=%s path=%s",
+            type(exc).__name__,
+            _safe_log_path(request.url.path),
+        )
+        payload = _failure_payload(
+            "系统未能完成当前操作。",
+            error_code="SYSTEM_UNAVAILABLE",
+            failure_stage="unknown",
+            retryable=True,
+        )
+        record_request_state_failure(request, payload)
+        return JSONResponse(
+            payload,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     @app.get("/assets/diyu-logo-horizontal.svg", include_in_schema=False)
     def logo() -> FileResponse:
@@ -2287,6 +2551,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 scope = production_authority.repository.display_scope(identity, store_id)
             except DomainError:
+                display_gap = production_authority.repository.tenant_display_gap(identity)
+                if display_gap["formal_stores"] == 0:
+                    return HTMLResponse(
+                        render_tenant_data_missing(
+                            "陈列搭配入口",
+                            "当前缺少正式门店档案和库存，纯文字陈列暂不可用。",
+                            "/tenant-admin?section=members",
+                            "建立门店档案并补充真实库存",
+                        ),
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    )
                 return HTMLResponse(
                     render_tenant_user_access_denied(
                         "陈列搭配入口",
@@ -2589,6 +2864,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             target,
             payload.publishing_identity_id,
         )
+        request.state.content_failure_scope = scope
+        request.state.content_failure_target = target
         with model_slot(request):
             if payload.reuse_version_id is None:
                 result = service.respond_to_conversation(
@@ -2644,6 +2921,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             selected_target,
             payload.publishing_identity_id,
         )
+        request.state.content_failure_scope = scope
+        request.state.content_failure_target = selected_target
         production_identity = (
             production_authority._tenant_identity(request) if production_authority is not None else None
         )
@@ -2722,33 +3001,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         }
                     )
             except HTTPException as exc:
-                message = (
-                    "当前请求较多，请稍后再试。"
-                    if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS
-                    else "当前入口不能完成这次操作，请返回后重新进入。"
+                failure = _http_failure_payload(exc)
+                record_content_request_failure(scope, selected_target, failure)
+                events.put({"event": "failed", **failure})
+            except (DomainError, GenerationFailed) as exc:
+                failure = _failure_payload(
+                    str(exc),
+                    error_code=exc.error_code,
+                    failure_stage=exc.failure_stage,
+                    retryable=exc.retryable,
                 )
-                events.put({"event": "failed", "message": message})
-            except (DomainError, GenerationFailed):
-                events.put(
-                    {
-                        "event": "failed",
-                        "message": (
-                            "这次还没能整理成一份可靠的成品。你的想法仍然保留，"
-                            "可以直接再试一次，也可以告诉我最想保留哪部分。"
-                        ),
-                    }
+                record_content_request_failure(scope, selected_target, failure)
+                events.put({"event": "failed", **failure})
+            except Exception as exc:
+                _RUNTIME_LOGGER.error(
+                    "content collaboration failed type=%s",
+                    type(exc).__name__,
                 )
-            except Exception:
-                _RUNTIME_LOGGER.exception("content collaboration failed")
-                events.put(
-                    {
-                        "event": "failed",
-                        "message": (
-                            "这次还没能整理成一份可靠的成品。你的想法仍然保留，"
-                            "可以直接再试一次，也可以告诉我最想保留哪部分。"
-                        ),
-                    }
+                failure = _failure_payload(
+                    "系统未能完成这次内容处理。",
+                    error_code="SYSTEM_UNAVAILABLE",
+                    failure_stage="unknown",
+                    retryable=True,
                 )
+                record_content_request_failure(scope, selected_target, failure)
+                events.put({"event": "failed", **failure})
             finally:
                 events.put(None)
 
@@ -2910,6 +3187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     status_code=status.HTTP_403_FORBIDDEN,
                 )
             capabilities: list[str] = []
+            readiness_brand_id: UUID | None = None
             context: dict[str, object] = {
                 "application": "tenant_user",
                 "identity": production_authority.repository.tenant_user_identity(identity),
@@ -2922,6 +3200,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     None,
                     first_identity_id,
                 )
+                readiness_brand_id = identity_scope.brand_id
                 account_identity = workbench_service.user_portal_context(identity_scope)["identity"]
                 if isinstance(account_identity, dict):
                     context["identity"] = {
@@ -2938,14 +3217,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         identity,
                         UUID(display_stores[0]["id"]),
                     )
+                    readiness_brand_id = display_scope.brand_id
                     display_context = workbench_service.display_context(
                         display_scope,
                         current_settings.generator_mode,
                     )
                     context["identity"] = display_context["identity"]
             try:
-                production_authority.repository.material_maintenance_scope(identity)
+                maintenance_scope = production_authority.repository.material_maintenance_scope(identity)
                 capabilities.append("materials")
+                if readiness_brand_id is None:
+                    readiness_brand_id = maintenance_scope.brand_id
             except DomainError:
                 pass
             if not capabilities:
@@ -2960,6 +3242,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             context["capabilities"] = capabilities
             context["display_stores"] = display_stores
             context["formal_runtime"] = True
+            if readiness_brand_id is not None:
+                context.update(
+                    workbench_service.user_readiness(
+                        TenantManagementScope(
+                            identity.tenant_id,
+                            identity.user_id,
+                            readiness_brand_id,
+                        ),
+                        can_content="content" in capabilities,
+                        can_display="display" in capabilities,
+                    )
+                )
         else:
             context = workbench_service.user_portal_context(user_scope_from_request(request))
             context["capabilities"] = ["content", "display"]

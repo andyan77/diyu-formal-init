@@ -44,12 +44,13 @@ Object.defineProperty(globalThis.navigator, "clipboard", {
   },
   configurable: true
 });
-const organizations = [
+let organizations = [
   {
     id: "11111111-1111-4111-8111-111111111111",
     name: "笛语服饰管理组织",
     level: "company",
     organization_level: "company",
+    enabled: true,
     business_data_kind: "formal_business_data"
   },
   {
@@ -57,6 +58,7 @@ const organizations = [
     name: "浙江区域",
     level: "region",
     organization_level: "region",
+    enabled: true,
     business_data_kind: "formal_business_data"
   },
   {
@@ -64,6 +66,7 @@ const organizations = [
     name: "柯桥门店",
     level: "operating_unit",
     organization_level: "operating_unit",
+    enabled: true,
     business_data_kind: "formal_business_data"
   }
 ];
@@ -144,17 +147,27 @@ let brandEntries = [
 const publicationSources = [
   {
     source_segment_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    source_document_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    source_id: "DIYU-BRAND-BASELINE-001",
     source_title: "笛语品牌身份与内容战略基线",
     source_version: "V1",
     source_digest: "a".repeat(64),
+    source_document_digest: "f".repeat(64),
+    source_locator: "line:49",
+    heading_path: ["品牌定位", "品牌定位一句话"],
     semantic_kind: "brand_fact",
     source_text: "品牌面向需要清楚日常穿衣选择的人。"
   },
   {
     source_segment_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    source_document_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    source_id: "DIYU-CONTENT-ROLE-001",
     source_title: "笛语内容角色",
     source_version: "V1",
     source_digest: "b".repeat(64),
+    source_document_digest: "e".repeat(64),
+    source_locator: "line:100",
+    heading_path: ["ContentRole", "内容负责人"],
     semantic_kind: "expression_constraint",
     source_text: "先回应具体处境，再给明确判断。"
   }
@@ -174,8 +187,16 @@ let publicationProjection = {
         position: 1,
         publication_role: "public_brand_fact",
         published_text: "笛语面向需要清楚日常穿衣选择的人。",
+        applicability: ["dressing_decision", "brand_life_narrative"],
+        source_kind: "brand_source_segment",
+        source_segment_id: publicationSources[0].source_segment_id,
+        source_document_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        source_id: "DIYU-BRAND-BASELINE-001",
+        source_locator: "line:49",
         source_label: "笛语品牌身份与内容战略基线",
-        source_version: "V1"
+        source_version: "V1",
+        source_digest: "a".repeat(64),
+        source_document_digest: "f".repeat(64)
       }
     ]
   },
@@ -238,6 +259,7 @@ let brandBaseline = {
   draft: "真实、克制、有依据。"
 };
 let failedPath = null;
+let rejectUsernameOnce = true;
 let unmetRequest = {
   stable_request_id: "UI04-UNMET-FIXTURE",
   request_text: "希望以后可以更容易整理门店当天的选题。",
@@ -271,6 +293,23 @@ globalThis.fetch = async (input, init = {}) => {
   }
   let value = {};
   if (path === "/api/v1/admin/readiness") {
+    const excluded = new Set([33, 53, 59, 61, 62, 63]);
+    const capabilities = Array.from({ length: 64 }, (_, index) => index + 1)
+      .filter(number => !excluded.has(number))
+      .map((number, index) => ({
+        id: `FT-${String(number).padStart(3, "0")}`,
+        role: number < 9 ? "访客" : number < 34 ? "管理员" : "租户用户",
+        route: number < 34 ? "/tenant-admin" : "/content",
+        title: `正式能力 ${number}`,
+        consumer: `bounded-consumer-${number}`,
+        software_implemented: true,
+        data_state: number >= 50 && number <= 52 ? "missing" : "satisfied",
+        permission_state: number < 34 ? "granted" : "not_granted",
+        formally_tested: index < 23,
+        supplement_href: number < 34
+          ? "/tenant-admin?section=members"
+          : "/user"
+      }));
     value = {
       brand_name: "笛语",
       software_truth: {
@@ -327,7 +366,98 @@ globalThis.fetch = async (input, init = {}) => {
           version: "V1",
           evaluated_at: "2026-07-27T00:00:00Z"
         }
-      ]
+      ],
+      capability_matrix: {
+        registry_version: "tenant01-formal-capabilities-v1",
+        runtime_sha: "a".repeat(40),
+        schema_revision: "20260817_44",
+        generated_at: "2026-08-04T12:00:00Z",
+        truth_sources: ["正式能力注册表", "当前租户 PostgreSQL"],
+        summary: {
+          implemented: 58,
+          not_built: 6,
+          data_satisfied: 55,
+          permission_granted: 32,
+          formally_tested: 23
+        },
+        items: capabilities
+      },
+      usage_guide: {
+        identity_model: [
+          "笛语系统运维管理员：最小 /ops 运维入口。",
+          "笛语服饰租户管理员：维护组织、成员与账号。",
+          "笛语服饰租户用户：在本人获准范围内工作。"
+        ],
+        relationship: "自然人 → 工作资格 → 逻辑发布账号 → 平台和形式",
+        send_vs_generate: {
+          send: "发送只进行普通交流，不建立任务、运行或版本。",
+          generate: "生成内容才建立正式任务、运行和不可变版本。"
+        },
+        administrator_steps: ["建立组织。", "建立发布账号和 ContentRole。", "创建并激活成员。"],
+        named_member_examples: ["笛语品控：正式内容用户。", "柯桥店阿丹：显示名允许同名。"],
+        current_counts: {
+          formal_users: 2,
+          content_users: 1,
+          logical_accounts: 1,
+          platform_targets: 4,
+          profile_accounts: 1,
+          active_products: 14,
+          allowed_product_fact_fields: 26,
+          organization_media: 0,
+          product_media_products: 0,
+          confirmed_stores: 0,
+          formal_inventory_snapshots: 0
+        },
+        content_path_state: "satisfied",
+        brand_context_summary: {
+          status: "source_bound_confirmed",
+          message: "新内容只读取当前已确认、来源绑定且适用于本题的最小品牌表达。"
+        },
+        truth_boundaries: [
+          "用户本轮陈述不自动进入品牌事实。",
+          "具体商品承诺必须有可信来源。",
+          "系统不自动发布。"
+        ],
+        product_fact_readiness: [
+          {
+            sku: "DIYU-CSPU-004",
+            display_name: "男童复古拼色图形短袖",
+            current_facts: [{ field: "品类", value: "短袖" }, { field: "色彩", value: "拼色" }],
+            missing_fields: ["价格带", "功效"],
+            can_do: "可基于下列已确认字段解释这件商品的选择依据；每次任务只加载该 SKU 的事实。",
+            cannot_promise: "未列入当前可用事实的属性、工艺、性能、功效、体验和品牌保证均不能承诺。"
+          }
+        ],
+        service_status_meanings: [
+          { state: "unknown", meaning: "最近没有足够新鲜的真实观察。" },
+          { state: "degraded", meaning: "最近观察到可恢复异常。" },
+          { state: "unavailable", meaning: "最近观察到生成依赖不可用。" }
+        ],
+        common_errors: [
+          { code: "USERNAME_TAKEN", meaning: "改用可用登录用户名。" },
+          { code: "PROVIDER_UNAVAILABLE", meaning: "保留输入后按提示重试。" }
+        ],
+        data_missing: [
+          {
+            id: "P4",
+            missing: true,
+            message: "当前没有正式门店档案。",
+            supplement_href: "/tenant-admin?section=members"
+          },
+          {
+            id: "P5",
+            missing: true,
+            message: "当前没有正式商品媒体绑定。",
+            supplement_href: "/tenant-admin?section=library"
+          },
+          {
+            id: "DM01",
+            missing: true,
+            message: "当前缺少正式门店档案和库存。",
+            supplement_href: "/tenant-admin?section=members"
+          }
+        ]
+      }
     };
   } else if (path === "/api/v1/tenant-management/team-usage") {
     value = {
@@ -377,10 +507,51 @@ globalThis.fetch = async (input, init = {}) => {
     };
   } else if (path === "/api/v1/tenant-management/operators" && method === "GET") {
     value = operators;
+  } else if (
+    path.match(/^\/api\/v1\/tenant-management\/organizations\/[^/]+\/enabled$/) &&
+    method === "PUT"
+  ) {
+    const organizationId = path.split("/").at(-2);
+    organizations = organizations.map(item =>
+      item.id === organizationId ? { ...item, enabled: body.enabled } : item
+    );
+    value = organizations.find(item => item.id === organizationId);
+  } else if (
+    path.match(/^\/api\/v1\/tenant-management\/organizations\/[^/]+$/) &&
+    method === "PATCH"
+  ) {
+    const organizationId = path.split("/").at(-1);
+    organizations = organizations.map(item =>
+      item.id === organizationId
+        ? {
+            ...item,
+            name: body.name,
+            level: body.organization_level,
+            organization_level: body.organization_level,
+            parent_organization_id: body.parent_organization_id
+          }
+        : item
+    );
+    value = organizations.find(item => item.id === organizationId);
+  } else if (
+    path === "/api/v1/tenant-management/organizations" &&
+    method === "POST"
+  ) {
+    const organization = {
+      id: `11111111-1111-4111-8111-${String(organizations.length + 200).padStart(12, "0")}`,
+      name: body.name,
+      level: body.organization_level,
+      organization_level: body.organization_level,
+      parent_organization_id: body.parent_organization_id,
+      business_data_kind: "formal_business_data",
+      enabled: true
+    };
+    organizations = [...organizations, organization];
+    value = organization;
   } else if (path === "/api/v1/tenant-management/organizations") {
     value = organizations;
   } else if (path === "/api/v1/tenant-management/control-organizations") {
-    value = organizations;
+    value = organizations.filter(item => item.enabled !== false);
   } else if (
     path === "/api/v1/tenant-management/display-stores" &&
     method === "GET"
@@ -478,10 +649,18 @@ globalThis.fetch = async (input, init = {}) => {
         position: index + 1,
         publication_role: item.publication_role,
         published_text: item.published_text,
+        applicability: item.applicability,
+        source_kind: "brand_source_segment",
+        source_segment_id: item.source_segment_id,
+        source_document_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        source_id: "DIYU-BRAND-BASELINE-001",
+        source_locator: "line:49",
         source_label: publicationSources.find(
           source => source.source_segment_id === item.source_segment_id
         )?.source_title ?? "已确认来源",
-        source_version: "V1"
+        source_version: "V1",
+        source_digest: "a".repeat(64),
+        source_document_digest: "f".repeat(64)
       }))
     };
     publicationProjection = {
@@ -800,6 +979,22 @@ globalThis.fetch = async (input, init = {}) => {
     unmetRequest = { ...unmetRequest, ...body };
     value = unmetRequest;
   } else if (path === "/api/v1/tenant-management/users" && method === "POST") {
+    if (body.username === "柯桥店阿丹" && rejectUsernameOnce) {
+      rejectUsernameOnce = false;
+      return {
+        ok: false,
+        status: 422,
+        json: async () => ({
+          detail: "登录用户名已被使用；姓名或工作名可以同名。",
+          error_code: "USERNAME_TAKEN",
+          failure_stage: "validation",
+          retryable: false,
+          action: "请改用下方可用登录用户名；姓名或工作名可以保持不变。",
+          trace_id: "00000000-0000-4000-8000-000000000422",
+          suggestions: ["笛语柯桥店阿丹", "笛语柯桥店阿丹2"]
+        })
+      };
+    }
     operators = [
       {
         id: "22222222-2222-4222-8222-222222222222",

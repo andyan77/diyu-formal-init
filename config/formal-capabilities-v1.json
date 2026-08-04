@@ -1,0 +1,594 @@
+{
+  "registry_version": "tenant01-formal-capabilities-v1",
+  "source": "docs/前端UI架构/UX-01-前端功能真值台账.md",
+  "excluded_as_not_built": [
+    "FT-033",
+    "FT-053",
+    "FT-059",
+    "FT-061",
+    "FT-062",
+    "FT-063"
+  ],
+  "capabilities": [
+    {
+      "id": "FT-001",
+      "role": "访客",
+      "route": "/",
+      "title": "跳过/重播首页动效",
+      "consumer": "PublicHome 本地状态",
+      "data_gate": "not_required",
+      "permission_gate": "public",
+      "supplement": "/"
+    },
+    {
+      "id": "FT-002",
+      "role": "访客",
+      "route": "/",
+      "title": "开始创作",
+      "consumer": "/login",
+      "data_gate": "not_required",
+      "permission_gate": "public",
+      "supplement": "/"
+    },
+    {
+      "id": "FT-003",
+      "role": "访客",
+      "route": "/",
+      "title": "品牌管理/笛语运维入口",
+      "consumer": "两个独立登录路由",
+      "data_gate": "not_required",
+      "permission_gate": "public",
+      "supplement": "/"
+    },
+    {
+      "id": "FT-004",
+      "role": "全角色",
+      "route": "三类登录",
+      "title": "用户名/密码登录",
+      "consumer": "正式 HTML POST",
+      "data_gate": "not_required",
+      "permission_gate": "authenticated",
+      "supplement": "/"
+    },
+    {
+      "id": "FT-005",
+      "role": "新成员",
+      "route": "/activate/:token",
+      "title": "设置/重设密码",
+      "consumer": "正式一次性 token",
+      "data_gate": "not_required",
+      "permission_gate": "activation_token",
+      "supplement": "/"
+    },
+    {
+      "id": "FT-006",
+      "role": "新成员",
+      "route": "激活",
+      "title": "在另一浏览器会话打开",
+      "consumer": "token 无会话依赖",
+      "data_gate": "not_required",
+      "permission_gate": "activation_token",
+      "supplement": "/"
+    },
+    {
+      "id": "FT-007",
+      "role": "全角色",
+      "route": "错入口",
+      "title": "自然恢复",
+      "consumer": "服务端 HTML 403/303",
+      "data_gate": "not_required",
+      "permission_gate": "authenticated",
+      "supplement": "/"
+    },
+    {
+      "id": "FT-008",
+      "role": "全角色",
+      "route": "会话过期",
+      "title": "回到对应登录",
+      "consumer": "正式认证中间件",
+      "data_gate": "not_required",
+      "permission_gate": "authenticated",
+      "supplement": "/"
+    },
+    {
+      "id": "FT-009",
+      "role": "管理员",
+      "route": "概览",
+      "title": "查看近 7 日真实摘要",
+      "consumer": "team-usage + readiness",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-010",
+      "role": "管理员",
+      "route": "概览",
+      "title": "“查看全部”待办",
+      "consumer": "前端切换能力诊断",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-011",
+      "role": "管理员",
+      "route": "成员",
+      "title": "查看成员与状态",
+      "consumer": "operators API",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-012",
+      "role": "管理员",
+      "route": "成员",
+      "title": "创建成员",
+      "consumer": "POST /tenant-management/users",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-013",
+      "role": "管理员",
+      "route": "创建成员",
+      "title": "选择管理员/租户用户互斥入口",
+      "consumer": "同一创建 API",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-014",
+      "role": "管理员",
+      "route": "创建成员",
+      "title": "分配内容/DM01 资格",
+      "consumer": "创建/授权 API",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-015",
+      "role": "管理员",
+      "route": "创建成员",
+      "title": "绑定逻辑发布账号",
+      "consumer": "创建/授权 API",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-016",
+      "role": "管理员",
+      "route": "创建成员",
+      "title": "获得完整 HTTPS 激活链接",
+      "consumer": "activation_url additive API 字段",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-017",
+      "role": "管理员",
+      "route": "创建成员",
+      "title": "点击激活链接",
+      "consumer": "正式 <a> + 激活页",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-018",
+      "role": "管理员",
+      "route": "成员详情",
+      "title": "复制激活链接",
+      "consumer": "Clipboard API + aria-live",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-019",
+      "role": "管理员",
+      "route": "成员详情",
+      "title": "更新入口与账号资格",
+      "consumer": "PATCH .../grants",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-020",
+      "role": "管理员",
+      "route": "成员详情",
+      "title": "生成重设密码链接",
+      "consumer": "POST .../reset",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-021",
+      "role": "管理员",
+      "route": "成员详情",
+      "title": "复制/点击重设链接",
+      "consumer": "reset_url + 正式 <a>/Clipboard",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-022",
+      "role": "管理员",
+      "route": "成员详情",
+      "title": "停用成员",
+      "consumer": "本地风险确认 + POST .../disable",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-023",
+      "role": "管理员",
+      "route": "发布账号",
+      "title": "创建逻辑发布账号",
+      "consumer": "正式创建 API",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-024",
+      "role": "管理员",
+      "route": "发布账号",
+      "title": "声明机构/个人 IP",
+      "consumer": "speaker-kind API",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-025",
+      "role": "管理员",
+      "route": "发布账号",
+      "title": "添加多个平台目标",
+      "consumer": "platform-carriers API",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-026",
+      "role": "管理员",
+      "route": "发布账号",
+      "title": "查看/维护五段画像",
+      "consumer": "版本化 profile API",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-027",
+      "role": "管理员",
+      "route": "品牌资料库",
+      "title": "新增文字资料",
+      "consumer": "brand-library preview/version/lifecycle API",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-028",
+      "role": "管理员",
+      "route": "品牌资料库",
+      "title": "品牌全员/总部/指定区域",
+      "consumer": "显式组织层级 + 控制组织作用域",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-029",
+      "role": "管理员",
+      "route": "品牌资料库",
+      "title": "维护商品事实",
+      "consumer": "preview + brand-products version API",
+      "data_gate": "product_catalog",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-030",
+      "role": "管理员",
+      "route": "品牌资料库",
+      "title": "上传组织官方素材",
+      "consumer": "materials/version/lifecycle API",
+      "data_gate": "organization_media",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-031",
+      "role": "管理员",
+      "route": "团队使用",
+      "title": "切换 7/30 日",
+      "consumer": "team-usage API",
+      "data_gate": "not_required",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-032",
+      "role": "管理员",
+      "route": "能力诊断",
+      "title": "看依据/缺口/影响/去补",
+      "consumer": "readiness v3 API",
+      "data_gate": "tenant_readiness",
+      "permission_gate": "tenant_admin",
+      "supplement": "/tenant-admin?section=readiness"
+    },
+    {
+      "id": "FT-034",
+      "role": "租户用户",
+      "route": "/user",
+      "title": "选择内容/DM01 工作",
+      "consumer": "bootstrap capabilities",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-035",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "选择逻辑发布账号",
+      "consumer": "bootstrap + query",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-036",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "选择平台与形式",
+      "consumer": "账号获准 targets",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-037",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "“发送”继续交流",
+      "consumer": "content stream + gate",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-038",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "“生成内容”显式成稿",
+      "consumer": "interaction_mode=generate",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-039",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "可选创作方向",
+      "consumer": "expression catalog + task snapshot",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-040",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "真实生成阶段",
+      "consumer": "ContentService NDJSON stream",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-041",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "完整成品 V1",
+      "consumer": "creative-kernel-v4 + MediaCapabilityEnvelopeV2 + product-media resolver + product-value-contract-v1 + delivery-compiler-v4",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-042",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "自然修改 V2",
+      "consumer": "revision API",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-043",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "V1→V2→V1/当前版",
+      "consumer": "versions API",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-044",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "复制/导出当前查看版",
+      "consumer": "Clipboard/Blob",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-045",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "系列",
+      "consumer": "series API + frozen writer context",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-046",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "我的素材",
+      "consumer": "materials API",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-047",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "429/失败后保留输入",
+      "consumer": "正式失败卡片 + 幂等重试",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-048",
+      "role": "租户用户",
+      "route": "账号/平台切换",
+      "title": "保护未提交输入",
+      "consumer": "sessionStorage + 目标冲突选择",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-049",
+      "role": "租户用户",
+      "route": "加载/无数据",
+      "title": "空状态",
+      "consumer": "多处前端分支",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-050",
+      "role": "DM01 用户",
+      "route": "/display",
+      "title": "生成纯文字参考方案",
+      "consumer": "structured product version selection + formal resolver + DM01RuleBundleV1",
+      "data_gate": "dm01_path",
+      "permission_gate": "tenant_user_display",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-051",
+      "role": "DM01 用户",
+      "route": "/display",
+      "title": "局部修改/历史/复制",
+      "consumer": "frozen context + transactional finalize + revision/versions/clipboard",
+      "data_gate": "dm01_path",
+      "permission_gate": "tenant_user_display",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-052",
+      "role": "DM01 用户",
+      "route": "/display",
+      "title": "库存守恒可见",
+      "consumer": "dm01-plan-v2 + deterministic body compiler",
+      "data_gate": "dm01_path",
+      "permission_gate": "tenant_user_display",
+      "supplement": "/user"
+    },
+    {
+      "id": "FT-054",
+      "role": "运维",
+      "route": "/ops",
+      "title": "开通租户及首位管理员",
+      "consumer": "ops tenants API",
+      "data_gate": "not_required",
+      "permission_gate": "ops",
+      "supplement": "/ops"
+    },
+    {
+      "id": "FT-055",
+      "role": "运维",
+      "route": "/ops",
+      "title": "完整 HTTPS 激活链接",
+      "consumer": "activation_url additive API 字段",
+      "data_gate": "not_required",
+      "permission_gate": "ops",
+      "supplement": "/ops"
+    },
+    {
+      "id": "FT-056",
+      "role": "运维",
+      "route": "/ops",
+      "title": "停用/恢复租户",
+      "consumer": "ops API",
+      "data_gate": "not_required",
+      "permission_gate": "ops",
+      "supplement": "/ops"
+    },
+    {
+      "id": "FT-057",
+      "role": "运维",
+      "route": "/ops",
+      "title": "处理能力反馈",
+      "consumer": "ops unmet request API",
+      "data_gate": "not_required",
+      "permission_gate": "ops",
+      "supplement": "/ops"
+    },
+    {
+      "id": "FT-058",
+      "role": "公开",
+      "route": "/status",
+      "title": "查看服务状态",
+      "consumer": "shared public projection + normalized provider observation",
+      "data_gate": "service_observation",
+      "permission_gate": "public",
+      "supplement": "/"
+    },
+    {
+      "id": "FT-060",
+      "role": "全角色",
+      "route": "错误状态",
+      "title": "网络错误后的自然恢复",
+      "consumer": "各空间正式错误与重试状态",
+      "data_gate": "content_path",
+      "permission_gate": "authenticated",
+      "supplement": "/"
+    },
+    {
+      "id": "FT-064",
+      "role": "租户用户",
+      "route": "/content",
+      "title": "移动双工作面",
+      "consumer": "前端 tab",
+      "data_gate": "content_path",
+      "permission_gate": "tenant_user_content",
+      "supplement": "/user"
+    }
+  ]
+}

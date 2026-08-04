@@ -90,6 +90,38 @@ def render_tenant_user_access_denied(
     )
 
 
+def render_tenant_data_missing(
+    entry_name: str,
+    message: str,
+    supplement_href: str,
+    supplement_label: str,
+) -> str:
+    """Explain a data-local gate without pretending the user's session is invalid."""
+
+    safe_entry_name = escape(entry_name)
+    safe_message = escape(message)
+    safe_supplement_href = escape(supplement_href, quote=True)
+    safe_supplement_label = escape(supplement_label)
+    return (
+        "<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        f"<title>{safe_entry_name} · 笛语</title>"
+        "<link rel='stylesheet' href='/app/assets/index.css'></head><body>"
+        "<main class='entry-page'><header class='entry-brand'>"
+        "<img src='/assets/diyu-logo-horizontal.svg' alt='笛语'></header>"
+        f"<section class='entry-copy'><p class='eyebrow'>{safe_entry_name}</p>"
+        "<h1>这项工作当前缺少正式资料。</h1>"
+        f"<p>{safe_message}</p><p>当前登录仍然有效，其他已获准能力不受影响。</p></section>"
+        "<section class='entry-choices' aria-label='可选操作'>"
+        "<a class='entry-choice' href='/user'><span>继续工作</span>"
+        "<strong>返回租户用户工作台</strong><small>继续使用其他已获准能力。</small></a>"
+        f"<a class='entry-choice' href='{safe_supplement_href}'><span>补充资料</span>"
+        f"<strong>{safe_supplement_label}</strong>"
+        "<small>请由租户管理员登录后完成配置。</small></a>"
+        "</section></main></body></html>"
+    )
+
+
 def render_login_failure(entry_name: str, login_href: str, message: str) -> str:
     """Keep browser form failures in the product surface instead of returning API JSON."""
     safe_entry_name = escape(entry_name)

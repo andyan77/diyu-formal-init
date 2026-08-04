@@ -11,11 +11,20 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
+from src.brain.workbench_service import WorkbenchService
 from src.gateway.api.app import create_app
 from src.gateway.api.settings import Settings
 from src.infrastructure.production_auth import ProductionAuthRepository, TenantSession
-from src.infrastructure.seed_demo import ACCOUNT_ID, ORG_ID, TENANT_ADMIN_USER_ID, TENANT_ID
+from src.infrastructure.seed_demo import (
+    ACCOUNT_ID,
+    BRAND_ID,
+    ORG_ID,
+    TENANT_ADMIN_USER_ID,
+    TENANT_ID,
+    USER_ID,
+)
 from src.shared.errors import DomainError
+from src.shared.types import TrustedScope
 
 
 def _settings(database_url: str) -> Settings:
@@ -74,6 +83,199 @@ def _clear_auth_state(migrator_database_url: str) -> None:
         cursor.execute("DELETE FROM user_credentials")
         cursor.execute("DELETE FROM platform_sessions")
         cursor.execute("DELETE FROM platform_operators")
+
+
+def test_formal_usability_schema_keeps_identity_and_diagnostics_boundaries(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    repository = ProductionAuthRepository(app_database_url)
+    trace_id = uuid4()
+    repository.record_content_request_failure(
+        TrustedScope(TENANT_ID, USER_ID, BRAND_ID, ACCOUNT_ID),
+        "douyin_video",
+        trace_id=trace_id,
+        error_code="PRODUCT_FACT_REQUIRED",
+        failure_stage="context",
+        retryable=False,
+    )
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(*) FROM pg_constraint WHERE conname = "
+            "'users_tenant_id_display_name_key'"
+        )
+        assert cursor.fetchone() == (0,)
+        cursor.execute(
+            "SELECT indexdef FROM pg_indexes WHERE indexname = "
+            "'users_tenant_display_name_idx'"
+        )
+        index_row = cursor.fetchone()
+        assert index_row is not None
+        index_definition = str(index_row[0])
+        assert "UNIQUE" not in index_definition
+        assert "(tenant_id, display_name)" in index_definition
+        cursor.execute(
+            "SELECT indexdef FROM pg_indexes WHERE indexname = "
+            "'user_credentials_username_key'"
+        )
+        username_index_row = cursor.fetchone()
+        assert username_index_row is not None
+        assert "UNIQUE" in str(username_index_row[0])
+        cursor.execute(
+            "SELECT indexdef FROM pg_indexes WHERE indexname = "
+            "'generation_runs_active_client_request'"
+        )
+        retry_index_row = cursor.fetchone()
+        assert retry_index_row is not None
+        retry_index = str(retry_index_row[0])
+        assert "UNIQUE" in retry_index
+        assert "status = ANY (ARRAY['running'::text, 'succeeded'::text])" in retry_index
+        cursor.execute(
+            "SELECT is_nullable, column_default FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = 'organizations' "
+            "AND column_name = 'enabled'"
+        )
+        enabled_column = cursor.fetchone()
+        assert enabled_column is not None
+        assert enabled_column[0] == "NO"
+        assert enabled_column[1] == "true"
+        cursor.execute(
+            "SELECT indexdef FROM pg_indexes WHERE indexname = "
+            "'organizations_assignment_lookup'"
+        )
+        organization_index = cursor.fetchone()
+        assert organization_index is not None
+        assert "(tenant_id, enabled, name)" in str(organization_index[0])
+        cursor.execute(
+            "SELECT relrowsecurity, relforcerowsecurity FROM pg_class "
+            "WHERE relname = 'content_request_failures'"
+        )
+        assert cursor.fetchone() == (True, True)
+        cursor.execute(
+            "SELECT relrowsecurity, relforcerowsecurity FROM pg_class "
+            "WHERE relname = 'formal_capability_observations'"
+        )
+        assert cursor.fetchone() == (True, True)
+        cursor.execute(
+            "SELECT has_table_privilege('diyu_app', "
+            "'formal_capability_observations', 'INSERT'), "
+            "has_table_privilege('diyu_app', "
+            "'formal_capability_observations', 'SELECT')"
+        )
+        assert cursor.fetchone() == (False, True)
+        cursor.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = 'content_request_failures' "
+            "ORDER BY ordinal_position"
+        )
+        assert [row[0] for row in cursor.fetchall()] == [
+            "trace_id",
+            "tenant_id",
+            "user_id",
+            "account_id",
+            "target",
+            "error_code",
+            "failure_stage",
+            "retryable",
+            "occurred_at",
+        ]
+        cursor.execute(
+            "SELECT trace_id, error_code, failure_stage, retryable "
+            "FROM content_request_failures WHERE trace_id = %s",
+            (trace_id,),
+        )
+        assert cursor.fetchone() == (
+            trace_id,
+            "PRODUCT_FACT_REQUIRED",
+            "context",
+            False,
+        )
+    with (
+        psycopg.connect(migrator_database_url, autocommit=True) as connection,
+        connection.cursor() as cursor,
+        pytest.raises(psycopg.errors.RaiseException),
+    ):
+        cursor.execute(
+            "UPDATE content_request_failures SET retryable = true WHERE trace_id = %s",
+            (trace_id,),
+        )
+
+
+def test_tenant_organization_lifecycle_is_explicit_and_reference_safe(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    repository = ProductionAuthRepository(app_database_url)
+    manager = TenantSession(TENANT_ID, TENANT_ADMIN_USER_ID, "tenant-admin")
+    marker = uuid4().hex[:10]
+    created = repository.create_tenant_organization(
+        manager,
+        f"组织生命周期-{marker}",
+        organization_level="unspecified",
+    )
+    organization_id = UUID(str(created["id"]))
+
+    updated = repository.update_tenant_organization(
+        manager,
+        organization_id,
+        f"  组织生命周期已修改-{marker}  ",
+        "region",
+        ORG_ID,
+    )
+    assert updated["name"] == f"组织生命周期已修改-{marker}"
+    assert updated["organization_level"] == "region"
+    assert updated["parent_organization_id"] == str(ORG_ID)
+
+    # A child relationship is itself a durable reference, so detach it before
+    # exercising the empty-organization disable/restore path.
+    repository.update_tenant_organization(
+        manager,
+        organization_id,
+        f"组织生命周期已修改-{marker}",
+        "unspecified",
+        None,
+    )
+    disabled = repository.set_tenant_organization_enabled(
+        manager,
+        organization_id,
+        False,
+    )
+    assert disabled["enabled"] is False
+    listed = {
+        str(item["id"]): item for item in repository.tenant_organizations(manager)
+    }
+    assert listed[str(organization_id)]["enabled"] is False
+
+    rejected_name = f"禁用组织拒绝成员-{marker}"
+    with pytest.raises(DomainError, match="只能授予当前租户的组织资格"):
+        repository.create_tenant_user(
+            manager,
+            rejected_name,
+            f"disabled-org-{marker}",
+            organization_id,
+            None,
+            grants_tenant_management=False,
+            grants_material_maintenance=False,
+            grants_content_access=False,
+        )
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(*) FROM users WHERE tenant_id = %s AND display_name = %s",
+            (TENANT_ID, rejected_name),
+        )
+        assert cursor.fetchone() == (0,)
+
+    restored = repository.set_tenant_organization_enabled(
+        manager,
+        organization_id,
+        True,
+    )
+    assert restored["enabled"] is True
+    with pytest.raises(DomainError) as in_use:
+        repository.set_tenant_organization_enabled(manager, ORG_ID, False)
+    assert in_use.value.error_code == "ORGANIZATION_IN_USE"
+    with pytest.raises(DomainError, match="找不到当前租户"):
+        repository.set_tenant_organization_enabled(manager, uuid4(), False)
 
 
 def test_production_login_activation_and_entry_boundaries(app_database_url: str, migrator_database_url: str) -> None:
@@ -165,16 +367,44 @@ def test_production_login_activation_and_entry_boundaries(app_database_url: str,
         assert demo_signed_in.headers["location"] == "/tenant-admin?section=demo"
         assert client.get("/user").status_code == 403
         display_name = f"重复自然人-{uuid4().hex[:8]}"
+        first_username = f"first-{uuid4().hex[:10]}"
         first = client.post(
             "/api/v1/tenant-management/users",
-            json={"display_name": display_name, "username": f"first-{uuid4().hex[:10]}"},
+            json={"display_name": f"  {display_name}  ", "username": f"  {first_username}  "},
         )
         assert first.status_code == 201
+        assert first.json()["username"] == first_username
         duplicate = client.post(
             "/api/v1/tenant-management/users",
             json={"display_name": display_name, "username": f"second-{uuid4().hex[:10]}"},
         )
-        assert duplicate.status_code == 422
+        assert duplicate.status_code == 201
+        conflict_display_name = f"冲突回滚-{uuid4().hex[:8]}"
+        username_conflict = client.post(
+            "/api/v1/tenant-management/users",
+            json={"display_name": conflict_display_name, "username": first_username.upper()},
+        )
+        assert username_conflict.status_code == 422
+        failure = username_conflict.json()
+        assert failure["error_code"] == "USERNAME_TAKEN"
+        assert failure["failure_stage"] == "validation"
+        assert failure["retryable"] is False
+        assert failure["trace_id"]
+        assert "登录用户名已被使用" in failure["detail"]
+        assert "同名" in failure["detail"]
+        assert all(value.startswith("笛语") for value in failure["suggestions"])
+        assert first_username not in json.dumps(failure, ensure_ascii=False)
+        with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT count(*) FROM users WHERE tenant_id = %s AND display_name = %s",
+                (TENANT_ID, display_name),
+            )
+            assert cursor.fetchone() == (2,)
+            cursor.execute(
+                "SELECT count(*) FROM users WHERE tenant_id = %s AND display_name = %s",
+                (TENANT_ID, conflict_display_name),
+            )
+            assert cursor.fetchone() == (0,), "用户名冲突必须回滚自然人、凭据、链接和授权"
 
 
 def test_production_created_user_uses_one_time_link_and_cannot_escalate(
@@ -246,6 +476,58 @@ def test_production_created_user_uses_one_time_link_and_cannot_escalate(
             ).status_code
             == 422
         )
+
+
+def test_dm01_without_formal_store_is_actionable_and_has_zero_business_effect(
+    app_database_url: str,
+    migrator_database_url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = ProductionAuthRepository(app_database_url)
+    token = repository.create_tenant_session(
+        TenantSession(TENANT_ID, USER_ID, "tenant-user")
+    )
+
+    def refuse_display_scope(*_: object, **__: object) -> object:
+        raise DomainError("当前登录账号没有获准使用的门店档案")
+
+    def unexpected_display_context(*_: object, **__: object) -> object:
+        raise AssertionError("DM01 缺门店必须在工作台或任何模型消费者之前停止")
+
+    monkeypatch.setattr(ProductionAuthRepository, "display_scope", refuse_display_scope)
+    monkeypatch.setattr(
+        ProductionAuthRepository,
+        "tenant_display_gap",
+        lambda *_: {"formal_stores": 0, "has_display_access": False, "granted_stores": 0},
+    )
+    monkeypatch.setattr(WorkbenchService, "display_context", unexpected_display_context)
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(*) FROM display_tasks WHERE tenant_id = %s",
+            (TENANT_ID,),
+        )
+        before_row = cursor.fetchone()
+        assert before_row is not None
+        before = int(before_row[0])
+    with TestClient(
+        create_app(_settings(app_database_url)),
+        base_url="https://diyuai.cc",
+    ) as client:
+        client.cookies.set("diyu_session", token)
+        response = client.get("/display")
+        assert response.status_code == 422
+        assert "当前缺少正式门店档案和库存，纯文字陈列暂不可用。" in response.text
+        assert "建立门店档案并补充真实库存" in response.text
+        assert "/tenant-admin?section=members" in response.text
+        assert client.get("/user").status_code == 200, "资料缺口不得清除有效会话"
+    with psycopg.connect(migrator_database_url) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(*) FROM display_tasks WHERE tenant_id = %s",
+            (TENANT_ID,),
+        )
+        after_row = cursor.fetchone()
+        assert after_row is not None
+        assert int(after_row[0]) == before
 
 
 def test_ux02_admin_provisions_and_disables_content_user_with_trusted_full_url(
@@ -501,7 +783,10 @@ def test_tenant_admin_changes_password_without_exposing_or_keeping_old_sessions(
             },
         )
         assert wrong_current.status_code == 401
-        assert wrong_current.json() == {"detail": "当前密码不正确"}
+        wrong_failure = wrong_current.json()
+        assert wrong_failure["detail"] == "当前密码不正确"
+        assert wrong_failure["error_code"] == "CURRENT_PASSWORD_INVALID"
+        assert wrong_failure["failure_stage"] == "validation"
         assert client.get("/tenant-admin").status_code == 200
         assert repository.load_tenant_session(second_session) == identity
 

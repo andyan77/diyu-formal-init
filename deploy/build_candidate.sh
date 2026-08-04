@@ -36,6 +36,7 @@ fi
 
 export DOCKER_BUILDKIT=1
 docker build \
+  --build-arg "DIYU_RUNTIME_SHA=$sha" \
   --label "cc.diyu.tenant01.implementation_sha=$sha" \
   --tag "$image_tag" \
   "$source_repository"

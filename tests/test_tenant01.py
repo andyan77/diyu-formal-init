@@ -2891,7 +2891,9 @@ def test_exact_preimage_classification_is_atomic_and_revokes_hidden_access(
             scope,
             include_archived=True,
         )
-        assert {synthetic_user_id, legacy_user_id} <= {UUID(str(person["id"])) for person in archived_people}
+        assert {synthetic_user_id, legacy_user_id}.isdisjoint(
+            {UUID(str(person["id"])) for person in archived_people}
+        )
         visible_accounts = repository.management_accounts(scope)
         assert synthetic_account_id not in {UUID(str(account["id"])) for account in visible_accounts}
     finally:

@@ -1450,8 +1450,9 @@ def test_formal_react_new_tenant_gate_a_journey(
             assert any(
                 event["event"] == "conversation"
                 and event["kind"] == "question"
-                and "选择两件不同商品" in event["message"]
-                and "已登记图片" in event["message"]
+                and "当前没有足够的正式商品图片/视频及商品绑定" in event["message"]
+                and "品牌资料库" in event["message"]
+                and "普通文字内容仍可使用" in event["message"]
                 for event in events
             )
             assert not any(event["event"] == "completed" for event in events)

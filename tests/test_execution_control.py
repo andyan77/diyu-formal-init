@@ -914,3 +914,87 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
         "SUPPORTED_SURFACE_AUDIT",
     )
     assert advanced["current_state"] == "SUPPORTED_SURFACE_AUDIT"
+
+    control_fixture.control.begin(
+        "supported_surface_audit",
+        "audit supported surface",
+        None,
+        os.getpid(),
+    )
+    control_fixture.control.complete(
+        "supported_surface_audit",
+        "evidence/supported-surface.json",
+    )
+    repaired = control_fixture.control.transition(
+        "SUPPORTED_SURFACE_AUDIT",
+        str(reopened["head_sha"]),
+        control_fixture.contract_digest,
+        "SHARED_ROOT_CAUSE_REPAIR",
+    )
+    assert repaired["current_state"] == "SHARED_ROOT_CAUSE_REPAIR"
+    control_fixture.control.begin(
+        "shared_root_cause_repair",
+        "verify shared repairs",
+        None,
+        os.getpid(),
+    )
+    control_fixture.control.complete(
+        "shared_root_cause_repair",
+        "evidence/shared-repair.json",
+    )
+    with pytest.raises(ExecutionControlError, match="formal_publication_projection_ready"):
+        control_fixture.control.transition(
+            "SHARED_ROOT_CAUSE_REPAIR",
+            str(reopened["head_sha"]),
+            control_fixture.contract_digest,
+            "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
+        )
+    control_fixture.control.begin(
+        "formal_publication_projection_ready",
+        "verify source-bound publication projection",
+        None,
+        os.getpid(),
+    )
+    control_fixture.control.complete(
+        "formal_publication_projection_ready",
+        "evidence/formal-publication-projection.json",
+    )
+    local_acceptance = control_fixture.control.transition(
+        "SHARED_ROOT_CAUSE_REPAIR",
+        str(reopened["head_sha"]),
+        control_fixture.contract_digest,
+        "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
+    )
+    assert local_acceptance["current_state"] == "FORMAL_LOCAL_VERTICAL_ACCEPTANCE"
+    for gate in (
+        "deterministic_engineering",
+        "formal_local_vertical",
+        "explicit_browser",
+        "mutation_proof",
+    ):
+        control_fixture.control.begin(gate, f"verify {gate}", None, os.getpid())
+        control_fixture.control.complete(gate, f"evidence/{gate}.json")
+    with pytest.raises(ExecutionControlError, match="formal_context_consumption_proven"):
+        control_fixture.control.transition(
+            "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
+            str(reopened["head_sha"]),
+            control_fixture.contract_digest,
+            "UNIQUE_PRODUCTION_CANDIDATE",
+        )
+    control_fixture.control.begin(
+        "formal_context_consumption_proven",
+        "verify formal context consumption",
+        None,
+        os.getpid(),
+    )
+    control_fixture.control.complete(
+        "formal_context_consumption_proven",
+        "evidence/formal-context-consumption.json",
+    )
+    candidate = control_fixture.control.transition(
+        "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
+        str(reopened["head_sha"]),
+        control_fixture.contract_digest,
+        "UNIQUE_PRODUCTION_CANDIDATE",
+    )
+    assert candidate["current_state"] == "UNIQUE_PRODUCTION_CANDIDATE"

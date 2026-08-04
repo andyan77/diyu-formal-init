@@ -1,0 +1,78 @@
+{
+  "schema_version": "tenant01-formal-publication-selection-v1",
+  "source_contract_version": "tenant-brand-source-v1",
+  "items": [
+    {
+      "source_id": "DIYU-BRAND-BASELINE-001",
+      "source_version": "V1",
+      "source_document_digest": "dd139d41e056493f9bbbd589b0a0a5f26acd49070dd312cf7427bd79ef42b7c0",
+      "source_locator": "line:49",
+      "source_segment_digest": "072b6e228e0685a4106c9391bb14fc7c856e45ed4b106397ec363c95b21501b7",
+      "publication_role": "public_brand_fact",
+      "applicability": ["dressing_decision", "product_truth", "visual_styling_story"]
+    },
+    {
+      "source_id": "DIYU-BRAND-BASELINE-001",
+      "source_version": "V1",
+      "source_document_digest": "dd139d41e056493f9bbbd589b0a0a5f26acd49070dd312cf7427bd79ef42b7c0",
+      "source_locator": "line:55",
+      "source_segment_digest": "9cefc9d462b91103eaffbe9791c0ba261a35d97fcb7317dd736b01d7fbcb43c3",
+      "publication_role": "public_brand_fact",
+      "applicability": ["dressing_decision", "product_truth", "visual_styling_story"]
+    },
+    {
+      "source_id": "DIYU-AUDIENCE-PROFILE-001",
+      "source_version": "V1",
+      "source_document_digest": "f48541b18ee0cc937f16d46dc332140b57f5eb6580609f869e0828a03c0abbc4",
+      "source_locator": "line:42",
+      "source_segment_digest": "338dfc756c439e6c372ea04d6b9971215126cd24cfacc91a2461e4eb37f2aab8",
+      "publication_role": "public_brand_fact",
+      "applicability": ["dressing_decision", "product_truth"]
+    },
+    {
+      "source_id": "DIYU-BRAND-VOICE-001",
+      "source_version": "V1",
+      "source_document_digest": "e7daadd092188cd499999cc5325d922d886947345b2ae1c86b6f941977888b63",
+      "source_locator": "line:34",
+      "source_segment_digest": "b5429d4d24e0f7549ac6cfd0b732e44b0904e6671a7dd314e18e86ee27637806",
+      "publication_role": "expression_constraint",
+      "applicability": ["dressing_decision", "product_truth", "brand_life_narrative", "local_response", "visual_styling_story"]
+    },
+    {
+      "source_id": "DIYU-CONTENT-GOVERNANCE-001",
+      "source_version": "V1",
+      "source_document_digest": "521b9e6da4d576664ca21c98f6c1333a10a5f471568072d50754cf45fb38a8ba",
+      "source_locator": "line:59",
+      "source_segment_digest": "d735c6547256fa98b4bc3e1698557586c9a88a94bfec04e608d4f4d4aab7db01",
+      "publication_role": "expression_constraint",
+      "applicability": ["dressing_decision", "product_truth", "brand_life_narrative", "local_response", "visual_styling_story"]
+    },
+    {
+      "source_id": "DIYU-CONTENT-GOVERNANCE-001",
+      "source_version": "V1",
+      "source_document_digest": "521b9e6da4d576664ca21c98f6c1333a10a5f471568072d50754cf45fb38a8ba",
+      "source_locator": "line:136",
+      "source_segment_digest": "a50c074d9a16745c6fc4360205ce7a4afcdce375f9dfe29ad5c498f287e83924",
+      "publication_role": "expression_constraint",
+      "applicability": ["dressing_decision", "product_truth", "brand_life_narrative", "local_response", "visual_styling_story"]
+    },
+    {
+      "source_id": "DIYU-BRAND-VISUAL-001",
+      "source_version": "V1",
+      "source_document_digest": "d1b9dc5e075203e7c7f5b7e5b5cc3372e3e58dd286f4be5ad14069aa70bdb75e",
+      "source_locator": "line:66",
+      "source_segment_digest": "b1844efed1aea1dba9536ab4f1873aadad5df30e84611e2cbf59ee3c7563cfd1",
+      "publication_role": "creative_method",
+      "applicability": ["brand_life_narrative", "local_response", "visual_styling_story"]
+    },
+    {
+      "source_id": "DIYU-DISPLAY-EXPRESSION-001",
+      "source_version": "V1",
+      "source_document_digest": "438e273cb6d85fe2d4b3f508704f53664d910432bad7f9186b0cf55b4354818d",
+      "source_locator": "line:147",
+      "source_segment_digest": "32e1c9b70fbb4021bd53922dc823b747162f94ce499556b9b5dbf0f471c20b3e",
+      "publication_role": "creative_method",
+      "applicability": ["dressing_decision", "product_truth", "visual_styling_story"]
+    }
+  ]
+}

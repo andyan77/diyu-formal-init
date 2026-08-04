@@ -80,9 +80,22 @@ export default function StatusPage(): JSX.Element {
           </div>
         </dl>
         {status && (
-          <p className="status-checked-at">
-            本页检查于 {new Date(status.checked_at).toLocaleString("zh-CN")}；页面检查不会发起内容生成。
-          </p>
+          <>
+            <p className="status-checked-at">
+              本页检查于 {new Date(status.checked_at).toLocaleString("zh-CN")}；页面检查不会发起内容生成。
+              {status.content_generation.observed_at
+                ? ` 最近一次模型服务观察为 ${new Date(status.content_generation.observed_at).toLocaleString("zh-CN")}，有效至 ${new Date(status.content_generation.fresh_until ?? status.content_generation.observed_at).toLocaleString("zh-CN")}。`
+                : " 当前进程还没有新鲜的模型服务观察。"}
+            </p>
+            <details className="status-meanings">
+              <summary>这些状态分别是什么意思</summary>
+              <dl>
+                <div><dt>近期状态尚无法确认</dt><dd>没有足够新鲜的模型调用观察；不等于服务已经停机。</dd></div>
+                <div><dt>暂时受影响</dt><dd>最近观察到限流或部分可恢复异常；核心管理能力仍可使用。</dd></div>
+                <div><dt>暂时不可用</dt><dd>核心依赖失败，或新鲜观察显示模型服务不可用。</dd></div>
+              </dl>
+            </details>
+          </>
         )}
         <button className="primary" type="button" onClick={() => void check()}>
           重新检查

@@ -496,6 +496,14 @@ class CreateOrganizationRequest(BaseModel):
     parent_organization_id: UUID | None = None
 
 
+class UpdateOrganizationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    organization_level: Literal["company", "region", "operating_unit", "unspecified"]
+    parent_organization_id: UUID | None = None
+
+
 class SaveDisplayStoreRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -32,13 +32,31 @@ class WorkbenchRepository(ABC):
     def tenant_readiness_inputs(
         self,
         scope: TenantManagementScope,
+        candidate_sha: str = "unbound",
     ) -> dict[str, object]:
-        del scope
+        del scope, candidate_sha
         return {
             "brand_name": "当前品牌",
             "source_documents": 0,
+            "publication_confirmed": False,
             "product_media_products": 0,
             "confirmed_stores": 0,
+            "formal_users": 0,
+            "content_users": 0,
+            "root_accounts": 0,
+            "platform_targets": 0,
+            "profile_accounts": 0,
+            "active_products": 0,
+            "allowed_product_fact_fields": 0,
+            "organization_media": 0,
+            "formal_inventory_snapshots": 0,
+            "display_users": 0,
+            "formal_content_tasks": 0,
+            "formal_content_versions": 0,
+            "formal_display_tasks": 0,
+            "schema_revision": "unknown",
+            "evaluated_at": "",
+            "observed_capability_ids": [],
         }
 
     @abstractmethod
