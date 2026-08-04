@@ -433,6 +433,10 @@ def test_factory_actuality_routes_without_product_fact_and_claim_scopes_fail_clo
             _FACTORY_FACT_SPANS
         )
         assert frame["allowed_product_fact_ids"] == []
+        publication = cast(dict[str, object], snapshot["publication_contract"])
+        permission = cast(dict[str, object], publication["account_editorial_permission"])
+        assert "不得把用户现实陈述或 creative_expression 具体化" in str(permission["refusals"])
+        assert "只在本题事实、来源与资源边界内影响怎样表达" in str(permission["response_posture"])
 
         time.sleep(2.05)
         guarantee_before = _counts(app_database_url)

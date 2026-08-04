@@ -681,6 +681,8 @@ def test_publication_v3_uses_one_writer_call_without_legacy_repair_or_reviewer()
     assert patch["writer_output_v3"]
     assert patch["deterministic_checked_kernel_digest"]
     assert "reviewer_model" not in patch
+    assert artifact.provider_usage is not None
+    assert artifact.provider_usage["version_authorization"] == "deterministic-publication-v3"
     prompt = _payload_prompts()[0]
     assert "title、natural_guide、creative_body、publication_caption" in prompt
     assert '"unit_id"' not in prompt
@@ -689,10 +691,10 @@ def test_publication_v3_uses_one_writer_call_without_legacy_repair_or_reviewer()
     assert "不能替换用户题材" in prompt
     assert "不得为了证明、解释或扩写用户陈述" in prompt
     assert "新的外部人物及其对白或行为" in prompt
-    assert "不得把一般判断铺成仿佛亲历的外部事件链" in prompt
+    assert "不能把宽泛的品牌、商品、工艺、质量、性能、功效或机构判断具体化" in prompt
     assert "最终来源边界（优先于上面合同中的创作方法或表达许可）" in prompt
     assert "在本次同一 Writer 调用内逐句自检四个字段" in prompt
-    assert "宁可交付较短但完整的作品，也不要重建现场或补齐事件链" in prompt
+    assert "宁可交付较短但完整的作品，也不要用虚构细节证明用户的判断" in prompt
     assert prompt.rfind("最终来源边界") > prompt.rfind('"read_only_actuality_context"')
     assert request.active_domain_assets[0].body not in prompt
     system = _payload_system_prompts()[0]
@@ -723,7 +725,7 @@ def test_publication_v3_writer_prompt_requires_a_material_revision() -> None:
     assert instruction in prompt
     assert "用户本次修改原文（只作为修改指令，不是现实事实）" in prompt
     assert "必须直接执行这条修改" in prompt
-    assert "至少一个字段形成可见且有意义的变化" in prompt
+    assert "至少一个其他字段都形成可见且有意义的变化" in prompt
     assert "即使 prior_output 看起来已经满足修改方向" in prompt
     assert "不得原样返回、只换标点、只改空白或只改变 JSON 包装" in prompt
     assert "prior_output 只是上一版未获事实资格的 creative_expression，不是事实来源" in prompt
@@ -801,8 +803,8 @@ def test_publication_v3_rejects_a_body_with_no_creative_expression_after_exact_d
     assert "read_only_actuality_context 穷尽本题可以使用现实语态写出的外部可观察事实" in system
     assert "可以围绕它自然引用、复述、调整语序" in system
     assert "始终属于 creative_expression" in system
-    assert "creative_expression 不是补写现实的许可" in system
-    assert "即使它以第一人称、修辞或常识推断写出也一样" in system
+    assert "低风险场景化承接可以作为未验证的 creative_expression 存在" in system
+    assert "宽泛判断时，该判断不授权 Writer 补出具体子维度" in system
     assert "品牌表达约束、创作方法和 prior_output 都不能扩大这条来源边界" in system
     assert "不能创建 fact_ref、回写可信事实" in system
 
@@ -971,7 +973,7 @@ def test_publication_v3_coffee_actuality_is_natural_expression_not_fact_ownershi
     system = _payload_system_prompts()[0]
     assert "穷尽本题可以使用现实语态写出的外部可观察事实" in system
     assert "这些新增文字始终属于 creative_expression，不能作为用户陈述的外部证据" in system
-    assert "环境、感官、人物、动作、对象、资源、过程、比较基线、品质指标" in system
+    assert "不能被写成支撑或解释品牌、商品、工艺、检验、质量、性能、功效或机构结论的具体证据" in system
 
 
 def test_publication_v3_keeps_canonical_fact_exclusive_to_server() -> None:

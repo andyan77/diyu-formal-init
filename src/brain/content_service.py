@@ -635,6 +635,19 @@ class ContentService:
             account_attention = (
                 f"先完成本篇任务：{central_job}；账号长期内容领地只能影响观察顺序，不能替换题材"
             )
+            scoped_expression_constraints = tuple(
+                f"只在本题事实、来源与资源边界内影响怎样表达：{item}"
+                for item in context.expression_constraint_context
+            )
+            scoped_creative_methods = tuple(
+                f"只在本题事实、来源与资源边界内组织非事实创作：{item}"
+                for item in context.creative_method_context
+            )
+            authority_boundary = (
+                expression.authority_boundary
+                if expression is not None
+                else context.content_role_boundary
+            )
             return build_publication_contract_v3(
                 input_roles=intake_spans,
                 topic_origin=plan.topic_origin,
@@ -651,7 +664,7 @@ class ContentService:
                             item
                             for item in (
                                 account_attention,
-                                *context.creative_method_context,
+                                *scoped_creative_methods,
                             )
                             if item
                         )
@@ -660,7 +673,7 @@ class ContentService:
                         "；".join(
                             (
                                 "先看本题具体张力，再给受众保留可执行判断",
-                                *context.expression_constraint_context,
+                                *scoped_expression_constraints,
                             )
                         )
                     ),
@@ -668,12 +681,11 @@ class ContentService:
                         "；".join(
                             item
                             for item in (
+                                authority_boundary,
                                 (
-                                    expression.authority_boundary
-                                    if expression is not None
-                                    else context.content_role_boundary
+                                    "不得把用户现实陈述或 creative_expression 具体化为未获来源支持的品牌、"
+                                    "商品、工艺、检验、质量、性能、功效或正式机构结论"
                                 ),
-                                *context.expression_constraint_context,
                             )
                             if item
                         )
@@ -682,7 +694,7 @@ class ContentService:
                         "；".join(
                             (
                                 "按当前账号的观察顺序和回应姿态形成独立判断，不照抄账号定义",
-                                *context.creative_method_context,
+                                *scoped_creative_methods,
                             )
                         )
                     ),

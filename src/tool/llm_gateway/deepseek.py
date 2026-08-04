@@ -918,12 +918,12 @@ class DeepSeekGenerator(ContentGenerator):
                 "read_only_actuality_context 穷尽本题可以使用现实语态写出的外部可观察事实。可以围绕它"
                 "自然引用、复述、调整语序，并新增说话者当下的主观感受、微小反应、比喻、文学性承接与"
                 "一般判断；这些新增文字始终属于 creative_expression，不能作为用户陈述的外部证据。"
-                "creative_expression 不是补写现实的许可：凡是需要读者相信外部世界确实存在或发生过的"
-                "环境、感官、人物、动作、对象、资源、过程、比较基线、品质指标、成因、结果或证据，仍是"
-                "外部可观察事实，即使它以第一人称、修辞或常识推断写出也一样。不得新增这些内容，也不得把"
-                "一般判断铺成仿佛亲历的外部事件链。品牌表达约束、创作方法和 prior_output 都不能扩大这条"
-                "来源边界。只能创建内心反应与抽象表达，不能创建 fact_ref、回写可信事实或获得人物、场地、"
-                "商品和媒体资源资格。"
+                "低风险场景化承接可以作为未验证的 creative_expression 存在，但不能被写成支撑或解释品牌、"
+                "商品、工艺、检验、质量、性能、功效或机构结论的具体证据。用户只提供宽泛判断时，该判断不"
+                "授权 Writer 补出具体子维度、前一时期缺陷、比较基线、检验发现、人员行为、成因、下游效果或"
+                "品牌保证。品牌表达约束、创作方法和 prior_output 都不能扩大这条来源边界。正文新增部分必须"
+                "由主观反应、比喻或文学性承接、一般判断构成，不能创建 fact_ref、回写可信事实或获得人物、"
+                "场地、商品和媒体资源资格。"
             )
         if writer_request.product_decision_basis is not None:
             writer_scope.append(
@@ -1027,7 +1027,10 @@ class DeepSeekGenerator(ContentGenerator):
             model=self._model,
             latency_ms=int((time.monotonic() - started) * 1000),
             retry_count=retries,
-            provider_usage=self._provider_usage_receipt([writer_payload]),
+            provider_usage=(
+                self._provider_usage_receipt([writer_payload])
+                | {"version_authorization": "deterministic-publication-v3"}
+            ),
             primary_product=request.primary_product,
             semantic_contract=compiled.semantic_contract,
             production=compiled.production,
@@ -1076,19 +1079,21 @@ class DeepSeekGenerator(ContentGenerator):
         document = writer_request_document(request)
         actuality_source_check = (
             "返回 JSON 前，在本次同一 Writer 调用内逐句自检四个字段：如果一句话需要读者相信一个"
-            "read_only_actuality_context 未提供的外部环境、感官、人物、动作、对象、资源、过程、比较"
-            "基线、品质指标、成因、结果或证据，就删除它或改成不声称外部现实的主观反应、比喻、文学性"
-            "承接或一般判断。creative_expression 标签、常识推断、品牌创作方法和 prior_output 都不能"
-            "为这种外部细节提供来源。宁可交付较短但完整的作品，也不要重建现场或补齐事件链。"
+            "read_only_actuality_context 未提供的具体细节来支撑或解释品牌、商品、工艺、检验、质量、"
+            "性能、功效或机构结论，就删除它或改成不提供外部证据的主观反应、比喻、文学性承接或一般"
+            "判断。宽泛判断不授权具体子维度、前一时期缺陷、比较基线、检验发现、人员行为、成因、下游"
+            "效果或品牌保证。creative_expression 标签、常识推断、品牌创作方法和 prior_output 都不能"
+            "为这些硬断言提供来源。宁可交付较短但完整的作品，也不要用虚构细节证明用户的判断。"
         )
         actuality_instruction = (
             "read_only_actuality_context 是服务端冻结的用户现实原文。你可以在四个 Writer 字段中自然引用、复述、调整语序，"
             "并补充低风险即时反应、感受、比喻或文学性承接；这些文字始终只是 creative_expression，"
             "不能创建 fact_ref、改写服务端事实块、回写可信事实或取得资源资格。低风险承接可以写说话者当下的"
             "主观感受、微小反应或文学联系，但不得为了证明、解释或扩写用户陈述而补出新的外部人物及其对白或行为、"
-            "具体物件或场地资源、工艺或检验过程、观察证据、比较基线、品质指标、确定的外部成因或结果；"
-            "第一人称、修辞、常识可推断或 creative_expression 标签都不能改变外部事实仍须有来源。不得把一般"
-            "判断铺成仿佛亲历的外部事件链。只有 read_only_actuality_context 已有的外部事实才能以现实语态出现。\n"
+            "具体物件或场地资源；尤其不能把宽泛的品牌、商品、工艺、质量、性能、功效或机构判断具体化成"
+            "子维度、前一时期缺陷、比较基线、检验发现、人员行为、成因、下游效果或品牌保证。第一人称、"
+            "修辞、常识可推断或 creative_expression 标签都不能为这些具体硬断言提供来源。正文新增部分只用"
+            "主观反应、比喻或文学性承接、一般判断完成，不用虚构细节证明用户的判断。\n"
             if request.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
             else (
                 "read_only_actuality_context 是历史只读事实上下文；历史策略下四个 Writer 字段不能复制或改写这些原句。\n"
@@ -1104,8 +1109,8 @@ class DeepSeekGenerator(ContentGenerator):
         revision_instruction = (
             "本次是对 prior_output 的自然修改。用户本次修改原文（只作为修改指令，不是现实事实）："
             + json.dumps(request.revision_instruction, ensure_ascii=False)
-            + "。必须直接执行这条修改，并让 title、natural_guide、creative_body、publication_caption 至少"
-            "一个字段形成可见且有意义的变化。即使 prior_output 看起来已经满足修改方向，也必须交付措辞"
+            + "。必须直接执行这条修改，并让 creative_body 与 title、natural_guide、publication_caption 中"
+            "至少一个其他字段都形成可见且有意义的变化。即使 prior_output 看起来已经满足修改方向，也必须交付措辞"
             "不同且同样符合要求的改稿；不得原样返回、只换标点、只改空白或只改变 JSON 包装。没有要求"
             "改变的事实、来源、资源和硬边界继续保持不变。\n"
             if request.revision_instruction is not None
