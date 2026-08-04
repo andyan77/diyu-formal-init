@@ -1,14 +1,22 @@
 # 当前里程碑
 
 - 当前里程碑：`TENANT-01 · 笛语服饰首租户生产就绪与全能力演示`。
-- 状态：`ACTIVE / CONTRACT_REWORK`。`80ed1437e8797829f6eb323adf0d5a04205756cc`
-  在旧“用户现实字面独占”合同下正确失败，其 raw、artifact、ledger、失败 run 与清理证据继续
-  原样保留；主控现已裁决该合同属于产品误杀并由
-  `user-actuality-natural-expression-v2` 取代。新合同允许 Writer 在 `creative_expression` 中
-  自然引用、复述、调整语序并补充低风险即时反应、感受、比喻和文学性承接；这些文字不得取得
-  `fact_ref`、回写可信事实或获得权限与资源。当前施工只同步收敛 Writer 请求、DeepSeek 后置门、
-  DeliveryCompiler、快照摘要和执行治理，既有生产不变；不得创建 TENANT-02、successor 或平行
-  状态文件。
+- 状态：`REVIEW`。最终运行候选为
+  `748190c552c6b9610aa951bd346fe8903ef51121`，唯一 acceptance run 为
+  `tenant01-final-20260804-748190c`；execution-control 已在同一运行 SHA 下完成确定性门、
+  11＋15 卡、逐篇审阅、两份有界审查、唯一 CI、备份恢复、按 digest 部署、生产验证、旧镜像
+  往返回退与精确清理，并于 2026-08-04 从 `DEPLOY_READY` 正式转移到 `REVIEW`。不得自行置为
+  `CLOSED`，也不得创建 TENANT-02、successor 或平行状态文件。
+- 当前唯一生产镜像为
+  `sha256:edc8dfc45f9cea82fd29ac656aa660c86ac3b50c1fb4c02df3b4d64f2cd617a4`，schema
+  `20260813_40`；公网／回环 `/health/ready`、`/health/live`、`/status` 均为 200。唯一权威 CI
+  为 GitHub Actions run `30889298662`（job `91927407713`，`success`）。上一健康镜像
+  `sha256:f869aa605f3bc81a429a56a4081b1c4eabaa351587245f5b8aa73fb19f7bb683` 已在当前 schema 上完成
+  不降级数据库的往返回退，最终再次切回候选且不可变历史一致。
+- 最终验收为 machine hard `26/26`、human high-risk boundary `26/26`、structure `26/26`、
+  first-draft usable `23/26`。三个诚实质量 FAIL 为 `new_couple_housework` 的动机猜测与单边性别
+  指代、`new_style_revision` 的 V2 未落实简洁冷幽默修订、`new_series_progression` 的三篇中心
+  判断和叙事主线重复；均未改写为硬边界失败，也未触发重跑或单卡 Prompt 补丁。
 - 2026-08-03 主控已作出最终产品裁决，取代下方历史记录中“等待是否改变单 Writer 责任”的
   停止结论：服务端只对可信事实、来源字节、引用、权限、资源、租户隔离、版本、摘要和失败
   原子性提供确定性保证；Writer 的全部文字均标记为未验证 `creative_expression`，不得升级为
@@ -242,6 +250,51 @@
   “全有或全无”绑定：同句每个显式片段都必须唯一绑定本次冻结商品；任一未知、近邻或歧义
   片段使硬约束在 task 前、修订在新 run/version 前整句失败关闭。功能真值恢复为
   `58/0/0/6/0`；资产保持 `41/243/25/119`、激活增量 0。唯一下一动作：主控最终定向终审。
+
+## TENANT-01 最终 REVIEW 交付（2026-08-04，当前权威结论）
+
+- 18 项纵向完成门为 `18/18`。最终运行 SHA
+  `748190c552c6b9610aa951bd346fe8903ef51121` 在同一
+  `acceptance_run_id=tenant01-final-20260804-748190c`、同一
+  `deepseek-v4-flash`、temperature `0`、max retries `0` 下完成 11 张正式黄金卡与 15 张
+  冻结泛化回归卡。machine hard、human high-risk boundary、structure 均为 `26/26`；首稿
+  product usable 为 `23/26`，满足冻结下限。
+- 三个质量 FAIL 诚实保留：`new_couple_housework` 猜测一方动机并使用单边性别指代；
+  `new_style_revision` 的 V2 与 V1 可见全文相同，未落实“更简洁、带一点冷幽默”；
+  `new_series_progression` 三篇重复核心标题及雨天／客户／旧书店主线，没有形成三个独立中心
+  判断。三项均为产品质量观察，不是可信事实、权限、资源、隔离、版本或 digest 硬失败。
+- build-once 镜像 digest 为
+  `sha256:edc8dfc45f9cea82fd29ac656aa660c86ac3b50c1fb4c02df3b4d64f2cd617a4`；最终 manifest、部署与
+  当前生产运行 digest 一致，构建次数为 1，部署端未重建。唯一权威 CI 为 GitHub Actions run
+  `30889298662`、job `91927407713`，结论 `success`。
+- 新鲜 predeploy 备份为
+  `/var/backups/diyu-m5-4/20260804T080232Z-tenant01-748190c552c6b9610aa951bd346fe8903ef51121-predeploy`，
+  目录／文件权限 0700／0600，checksum、`pg_restore` 清单、隔离恢复、FORCE RLS、恢复库
+  readiness 与对象往返均通过。生产 schema 为 `20260813_40`；公网和回环的 ready／live／status
+  均为 200。
+- 上一健康镜像
+  `sha256:f869aa605f3bc81a429a56a4081b1c4eabaa351587245f5b8aa73fb19f7bb683` 已在当前新 schema 上通过
+  三端点和正式不可变历史读取，再切回最终 digest；全程未 downgrade 数据库，往返前后正式历史
+  响应和数据库指纹一致。
+- P5 在没有本次明确选择的正式商品媒体时，于任务前返回自然资料提示，task／run／version
+  差分 `0/0/0`、Writer 调用 0；生产正式媒体绑定仍为 0。DM01 的 synthetic V1→V2→V1 与库存
+  守恒成立、模型调用 0，但生产正式门店和库存仍为空，因此真实经营采用继续标记
+  `data_missing`。
+- 生产笛语服饰保留 21 个资料投影（19 份授权资料＋2 份模板）、5,046 个 segment、14 个品牌
+  候选商品、203 条字段证据和 26 个 ProductFact 字段；正式商品媒体、媒体绑定、门店均为 0。
+  软件功能真值 `58/0/0/6/0`、资产 `41/243/25/119` 与租户资料就绪度继续分开记录。
+- 清理通过：F 盘主 synthetic 租户及 7,035 条关联行归零；固定演示租户只删除 1 条由最终验收
+  生成的 synthetic 内容链，另外 199,967 行正式演示数据清理前后指纹相同；DM01 synthetic
+  链、临时会话、token、素材对象、浏览器目录、pytest 临时目录、代理和一次性脚本均为 0，
+  永久 running 为 0。正式 raw、artifact、manifest、checksum、生产数据、备份和不可变历史
+  保留。
+- `docs/项目记忆.md` 未暂存、未提交、未覆盖，最终 diff SHA-256 保持
+  `96862202b06fd7821797d984215163069e8598a8641209ebae629ca2df0baaf7`。21 份私有 Markdown
+  原文未进入当前候选树、CI 输入、公开日志或最终公开证据；历史 Git 对象中既有 18 份旧副本
+  仍按禁止改写历史约束如实披露。
+- 当前未证明真实发布、员工长期采用、平台流量／排名／爆款、GMV／销售、多真实租户市场差异、
+  企业 SLA、无正式媒体时的 P5 成品或无正式门店／库存时的 DM01 经营采用。当前状态仅为
+  `TENANT-01 REVIEW`，不是 `CLOSED`；唯一下一动作是主控独立终审 TENANT-01。
 
 ## UX-02 关闭记录（历史保留）
 
