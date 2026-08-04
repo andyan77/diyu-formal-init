@@ -29,6 +29,7 @@ from src.shared.types import (
 
 _TOKEN_TTL = timedelta(hours=8)
 _ACTIVATION_TTL = timedelta(hours=24)
+MODEL_REQUEST_DUPLICATE_WINDOW_SECONDS = 2.0
 _SCRYPT_N = 2**15
 _SCRYPT_MAX_MEMORY = 64 * 1024 * 1024
 _DIYU_FASHION_TENANT_NAME = "笛语服饰"
@@ -109,7 +110,9 @@ class ModelRequestLimiter:
         key = (tenant_id, user_id)
         with self._lock:
             previous = self._recent_submissions.get(key)
-            if previous is not None and now - previous < timedelta(seconds=2):
+            if previous is not None and now - previous < timedelta(
+                seconds=MODEL_REQUEST_DUPLICATE_WINDOW_SECONDS
+            ):
                 return False
             attempts = self._tenant_attempts[tenant_id]
             floor = now - timedelta(minutes=1)

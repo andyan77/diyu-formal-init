@@ -33,6 +33,7 @@ from src.tool.execution_control import (
     ExecutionControl,
     verify_runtime_action,
 )
+from src.tool.formal_api_pacing import FormalApiSubmissionPacer
 from src.tool.run_gate_c_final_suite import (
     _current_head,
     _EvidenceDeepSeekGenerator,
@@ -537,10 +538,13 @@ def _stream_card(
     generator: _EvidenceDeepSeekGenerator,
     card: _Card,
     *,
+    pacer: FormalApiSubmissionPacer,
+    tenant_id: UUID,
     publishing_identity_id: UUID,
     series_id: UUID,
 ) -> dict[str, object]:
     series_card = card.card_id in {"P4_series1", "series2", "series3"}
+    pacer.before_request(tenant_id)
     generator.begin_card(card.card_id)
     response = client.post(
         "/api/v1/content/stream",
@@ -782,10 +786,12 @@ def _write_generation_ledger(
 def _p5_preflight(
     client: TestClient,
     *,
+    pacer: FormalApiSubmissionPacer,
     database_url: str,
     journey: _Journey,
 ) -> dict[str, object]:
     before = _persistence_counts(database_url, journey.tenant_id)
+    pacer.before_request(journey.tenant_id)
     response = client.post(
         "/api/v1/content/stream",
         json={
@@ -898,6 +904,7 @@ def _generate(args: argparse.Namespace) -> None:
         object_store,
     )
     app = create_app(settings)
+    pacer = FormalApiSubmissionPacer()
     with TestClient(app, base_url="https://diyu.example") as client:
         client.cookies.set("diyu_session", journey.session_token)
         if args.resume_unreceived:
@@ -943,6 +950,8 @@ def _generate(args: argparse.Namespace) -> None:
                     client,
                     generator,
                     card,
+                    pacer=pacer,
+                    tenant_id=journey.tenant_id,
                     publishing_identity_id=journey.publishing_identity_id,
                     series_id=series_id,
                 )
@@ -1001,7 +1010,12 @@ def _generate(args: argparse.Namespace) -> None:
         if not (root / "p5-no-media.json").is_file():
             _write_private_json(
                 root / "p5-no-media.json",
-                _p5_preflight(client, database_url=database_url, journey=journey),
+                _p5_preflight(
+                    client,
+                    pacer=pacer,
+                    database_url=database_url,
+                    journey=journey,
+                ),
             )
     ledger_sha256 = _write_generation_ledger(
         root,

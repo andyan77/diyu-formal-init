@@ -664,6 +664,32 @@ def test_failed_controlled_command_requires_explicit_classification(
     assert classified["active_command"] is None
 
 
+def test_structural_environment_restriction_recovers_without_rewriting_history(
+    control_fixture: _ControlFixture,
+) -> None:
+    _transition(control_fixture, "BOOTSTRAP", "CONTRACT_FROZEN")
+    _transition(control_fixture, "CONTRACT_FROZEN", "STRUCTURAL_IMPLEMENTATION")
+    restricted = control_fixture.control.classify(
+        _failure("environment_restriction", "ENVIRONMENT_RESTRICTED")
+    )
+    assert restricted["current_state"] == "ENVIRONMENT_RESTRICTED"
+    assert restricted["previous_state"] == "STRUCTURAL_IMPLEMENTATION"
+    before = (control_fixture.runtime_root / "events.jsonl").read_bytes()
+
+    with pytest.raises(ExecutionControlError, match="is not allowed"):
+        control_fixture.control.transition(
+            "ENVIRONMENT_RESTRICTED",
+            str(restricted["head_sha"]),
+            control_fixture.contract_digest,
+            "REVIEW",
+        )
+
+    recovered = _transition(control_fixture, "ENVIRONMENT_RESTRICTED", "STRUCTURAL_IMPLEMENTATION")
+    assert recovered["previous_state"] == "ENVIRONMENT_RESTRICTED"
+    assert recovered["failure_class"] is None
+    assert (control_fixture.runtime_root / "events.jsonl").read_bytes().startswith(before)
+
+
 def test_final_controller_ruling_updates_contract_without_rewriting_history(
     control_fixture: _ControlFixture,
 ) -> None:

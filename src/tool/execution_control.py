@@ -115,7 +115,14 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
     "NEEDS_ARCHITECTURE_REVIEW": frozenset({"STRUCTURAL_IMPLEMENTATION", "NEEDS_CONTROLLER_RULING"}),
     "NEEDS_CONTROLLER_RULING": frozenset({"STRUCTURAL_IMPLEMENTATION", "FAILED_SAFE"}),
     "ENVIRONMENT_RESTRICTED": frozenset(
-        {"MODEL_READINESS", "MODEL_PREFLIGHT", "GENERALIZATION_EVAL", "DEPLOY_READY", "FAILED_SAFE"}
+        {
+            "STRUCTURAL_IMPLEMENTATION",
+            "MODEL_READINESS",
+            "MODEL_PREFLIGHT",
+            "GENERALIZATION_EVAL",
+            "DEPLOY_READY",
+            "FAILED_SAFE",
+        }
     ),
     # A controller ruling may replace the contract that caused a safe stop.
     # The transition itself is performed only by ``adopt_ruling`` so ordinary

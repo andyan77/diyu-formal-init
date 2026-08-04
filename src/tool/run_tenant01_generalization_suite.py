@@ -22,6 +22,7 @@ from src.infrastructure.local_object_store import LocalObjectStore
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.tool.execution_control import ExecutionControl, verify_runtime_action
+from src.tool.formal_api_pacing import FormalApiSubmissionPacer
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator, ProviderRequestFailure
 from src.tool.run_gate_c_final_suite import (
     _current_head,
@@ -414,6 +415,7 @@ def _stream(
     client: TestClient,
     generator: _GeneralizationGenerator,
     *,
+    pacer: FormalApiSubmissionPacer,
     root: Path,
     database_url: str,
     tenant_id: UUID,
@@ -428,6 +430,7 @@ def _stream(
     expect_preflight: bool = False,
 ) -> dict[str, object]:
     before = _persistence_counts(database_url, tenant_id)
+    pacer.before_request(tenant_id)
     generator.begin(run_id)
     response = client.post(
         "/api/v1/content/stream",
@@ -493,6 +496,7 @@ def _revision(
     client: TestClient,
     generator: _GeneralizationGenerator,
     *,
+    pacer: FormalApiSubmissionPacer,
     root: Path,
     database_url: str,
     journey: _Journey,
@@ -501,6 +505,7 @@ def _revision(
     baseline = _stream(
         client,
         generator,
+        pacer=pacer,
         root=root,
         database_url=database_url,
         tenant_id=journey.tenant_id,
@@ -510,6 +515,7 @@ def _revision(
         publishing_identity_id=journey.publishing_identity_id,
     )
     task_id = UUID(str(baseline["task_id"]))
+    pacer.before_request(journey.tenant_id)
     generator.begin(f"{case.case_id}--v2")
     response = client.post(
         f"/api/v1/tasks/{task_id}/revisions",
@@ -544,6 +550,7 @@ def _series(
     client: TestClient,
     generator: _GeneralizationGenerator,
     *,
+    pacer: FormalApiSubmissionPacer,
     root: Path,
     database_url: str,
     journey: _Journey,
@@ -567,6 +574,7 @@ def _series(
         _stream(
             client,
             generator,
+            pacer=pacer,
             root=root,
             database_url=database_url,
             tenant_id=journey.tenant_id,
@@ -586,6 +594,7 @@ def _case_outcomes(
     secondary: TestClient,
     generator: _GeneralizationGenerator,
     *,
+    pacer: FormalApiSubmissionPacer,
     root: Path,
     database_url: str,
     journey: _Journey,
@@ -595,6 +604,7 @@ def _case_outcomes(
         return _revision(
             primary,
             generator,
+            pacer=pacer,
             root=root,
             database_url=database_url,
             journey=journey,
@@ -604,6 +614,7 @@ def _case_outcomes(
         return _series(
             primary,
             generator,
+            pacer=pacer,
             root=root,
             database_url=database_url,
             journey=journey,
@@ -615,6 +626,7 @@ def _case_outcomes(
             _stream(
                 primary,
                 generator,
+                pacer=pacer,
                 root=root,
                 database_url=database_url,
                 tenant_id=journey.tenant_id,
@@ -630,6 +642,7 @@ def _case_outcomes(
             _stream(
                 client,
                 generator,
+                pacer=pacer,
                 root=root,
                 database_url=database_url,
                 tenant_id=tenant_id,
@@ -663,6 +676,7 @@ def _case_outcomes(
         _stream(
             primary,
             generator,
+            pacer=pacer,
             root=root,
             database_url=database_url,
             tenant_id=journey.tenant_id,
@@ -821,6 +835,7 @@ def _run(args: argparse.Namespace) -> None:
         object_store,
     )
     app = create_app(settings)
+    pacer = FormalApiSubmissionPacer()
     with (
         TestClient(app, base_url="https://diyu.example") as primary,
         TestClient(app, base_url="https://diyu.example") as secondary,
@@ -836,6 +851,7 @@ def _run(args: argparse.Namespace) -> None:
                     primary,
                     secondary,
                     generator,
+                    pacer=pacer,
                     root=root,
                     database_url=database_url,
                     journey=journey,
