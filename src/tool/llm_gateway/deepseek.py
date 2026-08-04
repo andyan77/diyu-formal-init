@@ -1071,16 +1071,27 @@ class DeepSeekGenerator(ContentGenerator):
         actuality_instruction = (
             "read_only_actuality_context 是服务端冻结的用户现实原文。你可以在四个 Writer 字段中自然引用、复述、调整语序，"
             "并补充低风险即时反应、感受、比喻或文学性承接；这些文字始终只是 creative_expression，"
-            "不能创建 fact_ref、改写服务端事实块、回写可信事实或取得资源资格。\n"
+            "不能创建 fact_ref、改写服务端事实块、回写可信事实或取得资源资格。低风险承接可以写说话者当下的"
+            "主观感受、微小反应或文学联系，但不得为了证明、解释或扩写用户陈述而补出新的外部人物及其对白或行为、"
+            "具体物件或场地资源、工艺或检验过程、观察证据、确定的外部成因或结果；不得把一般判断铺成仿佛亲历的"
+            "外部事件链。只有 read_only_actuality_context 已有的外部事实才能以现实语态出现。\n"
             if request.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
             else (
                 "read_only_actuality_context 是历史只读事实上下文；历史策略下四个 Writer 字段不能复制或改写这些原句。\n"
             )
         )
+        revision_instruction = (
+            "本次是对 prior_output 的自然修改。必须实质执行 revision_instruction，并让 title、natural_guide、"
+            "creative_body、publication_caption 至少一个字段形成可见且有意义的变化；不得原样返回、只换标点、"
+            "只改空白或只改变 JSON 包装。没有要求改变的事实、来源、资源和硬边界继续保持不变。\n"
+            if request.revision_instruction is not None
+            else ""
+        )
         return (
             "请依据下面唯一业务合同完成一篇可直接修改和采用的内容。\n"
             "只返回 title、natural_guide、creative_body、publication_caption 四个字符串字段。\n"
             + actuality_instruction
+            + revision_instruction
             + "account_editorial_permission 只决定观察顺序与回应姿态，不能替换用户题材，也不能把生活题材转向服饰、商品或品牌宣讲。\n"
             "product_decision_basis 是穷尽式机器计划：decision_axis 是唯一选择维度；标题、导读、正文和配文须自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子。\n"
             "你可以形成中心判断、一般观察、条件建议、比喻、节奏、幽默和留白；建议与假设须保持该身份。\n"

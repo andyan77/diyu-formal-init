@@ -687,9 +687,39 @@ def test_publication_v3_uses_one_writer_call_without_legacy_repair_or_reviewer()
     assert "每个可见句" not in prompt
     assert "必须二选一" not in prompt
     assert "不能替换用户题材" in prompt
+    assert "不得为了证明、解释或扩写用户陈述" in prompt
+    assert "新的外部人物及其对白或行为" in prompt
+    assert "不得把一般判断铺成仿佛亲历的外部事件链" in prompt
     assert request.active_domain_assets[0].body not in prompt
     system = _payload_system_prompts()[0]
     assert negative_safety_contract_text() in system
+
+
+def test_publication_v3_writer_prompt_requires_a_material_revision() -> None:
+    request = _publication_v3_request()
+    contract = cast(PublicationContractV3, request.publication_contract)
+    prior = WriterOutputV3(
+        output_version="writer-output-v3",
+        title="原来的标题",
+        natural_guide="原来的导读。",
+        creative_body="原来的正文。",
+        publication_caption="原来的配文。",
+    )
+    instruction = "保留事实不变，把开头改得更自然。"
+    writer_request = build_writer_request_v3(
+        contract,
+        product_decision_basis=None,
+        platform_expression_responsibility=request.platform_direction.direction,
+        prior_output=prior,
+        revision_instruction=instruction,
+    )
+
+    prompt = _generator()._writer_request_v3_prompt(writer_request)
+
+    assert instruction in prompt
+    assert "必须实质执行 revision_instruction" in prompt
+    assert "至少一个字段形成可见且有意义的变化" in prompt
+    assert "不得原样返回、只换标点、只改空白或只改变 JSON 包装" in prompt
 
 
 def test_publication_v3_rejects_a_body_with_no_creative_expression_after_exact_deduplication() -> None:
