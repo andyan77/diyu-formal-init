@@ -31,6 +31,7 @@ MILESTONE = "TENANT-01"
 DEFAULT_RUNTIME_ROOT = Path("var/execution-control/TENANT-01")
 DEFAULT_PROTECTED_PATH = Path("docs/项目记忆.md")
 ACCEPTANCE_CHECKPOINT_VERSION = "tenant01-acceptance-checkpoint-v2"
+FORMAL_USABILITY_REWORK_ID = "TENANT01-FORMAL-USABILITY-20260804"
 
 NORMAL_STATES = frozenset(
     {
@@ -46,6 +47,13 @@ NORMAL_STATES = frozenset(
         "CANDIDATE_REVIEW",
         "CI_READY",
         "DEPLOY_READY",
+        "CURRENT_TRUTH_RECONCILIATION",
+        "SUPPORTED_SURFACE_AUDIT",
+        "SHARED_ROOT_CAUSE_REPAIR",
+        "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
+        "UNIQUE_PRODUCTION_CANDIDATE",
+        "LIVE_TENANT_ACCEPTANCE_AND_GUIDE",
+        "REVIEW_HANDOFF",
         "REVIEW",
     }
 )
@@ -111,6 +119,25 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
     "CANDIDATE_REVIEW": frozenset({"CI_READY", "NEEDS_DIAGNOSIS", "FAILED_SAFE"}),
     "CI_READY": frozenset({"DEPLOY_READY", "NEEDS_DIAGNOSIS", "FAILED_SAFE"}),
     "DEPLOY_READY": frozenset({"REVIEW", "ENVIRONMENT_RESTRICTED", "FAILED_SAFE"}),
+    "CURRENT_TRUTH_RECONCILIATION": frozenset(
+        {"SUPPORTED_SURFACE_AUDIT", "FAILED_SAFE"}
+    ),
+    "SUPPORTED_SURFACE_AUDIT": frozenset(
+        {"SHARED_ROOT_CAUSE_REPAIR", "FAILED_SAFE"}
+    ),
+    "SHARED_ROOT_CAUSE_REPAIR": frozenset(
+        {"FORMAL_LOCAL_VERTICAL_ACCEPTANCE", "FAILED_SAFE"}
+    ),
+    "FORMAL_LOCAL_VERTICAL_ACCEPTANCE": frozenset(
+        {"SHARED_ROOT_CAUSE_REPAIR", "UNIQUE_PRODUCTION_CANDIDATE", "FAILED_SAFE"}
+    ),
+    "UNIQUE_PRODUCTION_CANDIDATE": frozenset(
+        {"SHARED_ROOT_CAUSE_REPAIR", "LIVE_TENANT_ACCEPTANCE_AND_GUIDE", "FAILED_SAFE"}
+    ),
+    "LIVE_TENANT_ACCEPTANCE_AND_GUIDE": frozenset(
+        {"SHARED_ROOT_CAUSE_REPAIR", "REVIEW_HANDOFF", "FAILED_SAFE"}
+    ),
+    "REVIEW_HANDOFF": frozenset({"REVIEW", "FAILED_SAFE"}),
     "NEEDS_DIAGNOSIS": frozenset({"STRUCTURAL_IMPLEMENTATION", "DETERMINISTIC_GATE", "FAILED_SAFE"}),
     "NEEDS_ARCHITECTURE_REVIEW": frozenset({"STRUCTURAL_IMPLEMENTATION", "NEEDS_CONTROLLER_RULING"}),
     "NEEDS_CONTROLLER_RULING": frozenset({"STRUCTURAL_IMPLEMENTATION", "FAILED_SAFE"}),
@@ -129,6 +156,39 @@ _TRANSITIONS: Mapping[str, frozenset[str]] = {
     # callers still cannot escape FAILED_SAFE through the generic CLI.
     "FAILED_SAFE": frozenset(),
     "REVIEW": frozenset(),
+}
+_REWORK_TARGET_GATE_REQUIREMENTS: Mapping[str, frozenset[str]] = {
+    "SUPPORTED_SURFACE_AUDIT": frozenset({"current_truth_snapshot"}),
+    "SHARED_ROOT_CAUSE_REPAIR": frozenset({"supported_surface_audit"}),
+    "FORMAL_LOCAL_VERTICAL_ACCEPTANCE": frozenset({"shared_root_cause_repair"}),
+    "UNIQUE_PRODUCTION_CANDIDATE": frozenset(
+        {
+            "deterministic_engineering",
+            "formal_local_vertical",
+            "explicit_browser",
+            "mutation_proof",
+        }
+    ),
+    "LIVE_TENANT_ACCEPTANCE_AND_GUIDE": frozenset(
+        {
+            "candidate_frozen",
+            "model_sample_acceptance",
+            "product_review",
+            "engineering_review",
+            "build_once",
+            "ci_success",
+            "backup_restore",
+        }
+    ),
+    "REVIEW_HANDOFF": frozenset(
+        {
+            "production_deploy",
+            "live_tenant_acceptance",
+            "rollback_roundtrip",
+            "synthetic_cleanup",
+        }
+    ),
+    "REVIEW": frozenset({"guide_finalized", "review_handoff"}),
 }
 _STATE_FIELDS = frozenset(
     {
@@ -320,6 +380,34 @@ def _worktree_digest(repository: Path) -> str:
     return hashlib.sha256(
         status + b"\0" + tracked_diff + b"\0" + staged_diff + b"\0" + _canonical_bytes(untracked_hashes)
     ).hexdigest()
+
+
+def _worktree_contains_only_protected_change(
+    repository: Path,
+    protected_path: Path,
+) -> bool:
+    entries = tuple(
+        entry
+        for entry in _git(
+            repository,
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+        ).split(b"\0")
+        if entry
+    )
+    return entries == (b" M " + str(protected_path).encode("utf-8"),)
+
+
+def _git_is_ancestor(repository: Path, ancestor: str, descendant: str) -> bool:
+    completed = subprocess.run(
+        ("git", "merge-base", "--is-ancestor", ancestor, descendant),
+        cwd=repository,
+        check=False,
+        capture_output=True,
+    )
+    return completed.returncode == 0
 
 
 def _read_object(path: Path) -> dict[str, object]:
@@ -659,6 +747,80 @@ class ExecutionControl:
                 },
             )
 
+    def reopen_review(
+        self,
+        *,
+        expected_runtime_head: str,
+        rework_id: str,
+    ) -> dict[str, object]:
+        """Append a same-milestone REVIEW rework without erasing prior proof.
+
+        REVIEW stays terminal for generic transitions.  This dedicated action
+        accepts only the controller-authorized TENANT-01 formal-usability
+        rework, a linear descendant of the delivered runtime, and a worktree
+        whose sole change is the already protected project-memory diff.
+        """
+
+        if rework_id != FORMAL_USABILITY_REWORK_ID:
+            raise ExecutionControlError("TENANT-01 REVIEW rework authorization is unknown")
+        with self._lock():
+            state = self._state()
+            self._verify_event_chain(state)
+            self._verify_decision(state)
+            if state["current_state"] != "REVIEW":
+                raise ExecutionControlError("only a delivered TENANT-01 REVIEW may be reopened")
+            if state["head_sha"] != expected_runtime_head:
+                raise ExecutionControlError("REVIEW rework runtime head does not match the delivered state")
+            if state["active_command"] is not None:
+                raise ExecutionControlError("REVIEW rework cannot replace an active command")
+            if _protected_digest(self.repository, self.protected_path) != state["protected_user_change_digest"]:
+                raise ExecutionControlError("protected user change digest drifted")
+            if not _worktree_contains_only_protected_change(self.repository, self.protected_path):
+                raise ExecutionControlError(
+                    "REVIEW rework requires a clean staging area and only the protected project-memory change"
+                )
+            next_head = _git_sha(self.repository, "HEAD")
+            if not _git_is_ancestor(self.repository, expected_runtime_head, next_head):
+                raise ExecutionControlError("REVIEW rework head is not a linear descendant of the delivered runtime")
+            previous_gates = tuple(cast(list[str], state["completed_gates"]))
+            previous_evidence_count = len(cast(list[str], state["evidence_paths"]))
+            historical_acceptance_count = len(cast(dict[str, object], state["acceptance_runs"]))
+            state.update(
+                {
+                    "previous_state": "REVIEW",
+                    "current_state": "CURRENT_TRUTH_RECONCILIATION",
+                    "head_sha": next_head,
+                    "origin_sha": _git_sha(self.repository, "origin/main"),
+                    "worktree_digest": _worktree_digest(self.repository),
+                    "active_gate": None,
+                    "active_run_id": None,
+                    "active_command": None,
+                    "active_pid": None,
+                    "completed_gates": [],
+                    "failure_class": None,
+                    "heartbeat_at": _now(),
+                    "approved_next_action": None,
+                }
+            )
+            return self._commit(
+                state,
+                "review_rework_reopened",
+                {
+                    "rework_id": rework_id,
+                    "from_state": "REVIEW",
+                    "to_state": "CURRENT_TRUTH_RECONCILIATION",
+                    "delivered_runtime_head": expected_runtime_head,
+                    "rework_head": next_head,
+                    "historical_completed_gates": list(previous_gates),
+                    "historical_gates_invalidated": True,
+                    "historical_acceptance_ledgers_retained": True,
+                    "historical_acceptance_count": historical_acceptance_count,
+                    "historical_evidence_paths_retained": True,
+                    "historical_evidence_path_count": previous_evidence_count,
+                    "same_milestone": True,
+                },
+            )
+
     def begin_acceptance_suite(
         self,
         *,
@@ -984,6 +1146,18 @@ class ExecutionControl:
             ):
                 raise ExecutionControlError("legacy controller audit PASS is required before candidate review")
             completed = set(cast(list[str], state["completed_gates"]))
+            required_rework_gates = _REWORK_TARGET_GATE_REQUIREMENTS.get(target, frozenset())
+            if expected_state in {
+                "CURRENT_TRUTH_RECONCILIATION",
+                "SUPPORTED_SURFACE_AUDIT",
+                "SHARED_ROOT_CAUSE_REPAIR",
+                "FORMAL_LOCAL_VERTICAL_ACCEPTANCE",
+                "UNIQUE_PRODUCTION_CANDIDATE",
+                "LIVE_TENANT_ACCEPTANCE_AND_GUIDE",
+                "REVIEW_HANDOFF",
+            } and not required_rework_gates <= completed:
+                missing = ", ".join(sorted(required_rework_gates - completed))
+                raise ExecutionControlError(f"rework transition is missing completed gates: {missing}")
             review_gates = {"acceptance_finalized", "product_review", "engineering_review"}
             if target == "CANDIDATE_REVIEW" and expected_state == "INDEPENDENT_AUDIT" and not review_gates <= completed:
                 raise ExecutionControlError("finalized acceptance and both bounded reviews are required")
@@ -1298,6 +1472,9 @@ def _parser() -> argparse.ArgumentParser:
     history.add_argument("--summary-file", type=Path, required=True)
     ruling = commands.add_parser("adopt-ruling")
     ruling.add_argument("--decision-source", type=Path, required=True)
+    reopen_review = commands.add_parser("reopen-review")
+    reopen_review.add_argument("--expected-runtime-head", required=True)
+    reopen_review.add_argument("--rework-id", required=True)
     begin = commands.add_parser("begin")
     begin.add_argument("--gate", required=True)
     begin.add_argument("--controlled-command", required=True)
@@ -1392,6 +1569,11 @@ def main() -> None:
         state = control.record_history(arguments.summary_file)
     elif command == "adopt-ruling":
         state = control.adopt_ruling(arguments.decision_source)
+    elif command == "reopen-review":
+        state = control.reopen_review(
+            expected_runtime_head=str(arguments.expected_runtime_head),
+            rework_id=str(arguments.rework_id),
+        )
     elif command == "begin":
         state = control.begin(
             str(arguments.gate), str(arguments.controlled_command), arguments.run_id, int(arguments.pid)

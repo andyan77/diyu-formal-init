@@ -11,6 +11,7 @@ import pytest
 
 from src.tool.execution_control import (
     ACCEPTANCE_CHECKPOINT_VERSION,
+    FORMAL_USABILITY_REWORK_ID,
     ExecutionControl,
     ExecutionControlError,
     run_controlled_command,
@@ -102,6 +103,28 @@ def _reach_generalization(fixture: _ControlFixture) -> None:
     _transition(fixture, "STRUCTURAL_IMPLEMENTATION", "DETERMINISTIC_GATE")
     _transition(fixture, "DETERMINISTIC_GATE", "MODEL_READINESS")
     _transition(fixture, "MODEL_READINESS", "GENERALIZATION_EVAL")
+
+
+def _reach_review(fixture: _ControlFixture) -> None:
+    _reach_generalization(fixture)
+    _transition(fixture, "GENERALIZATION_EVAL", "INDEPENDENT_AUDIT")
+    for gate in ("acceptance_finalized", "product_review", "engineering_review"):
+        fixture.control.begin(gate, f"complete {gate}", None, os.getpid())
+        fixture.control.complete(gate, f"evidence/{gate}.json")
+    _transition(fixture, "INDEPENDENT_AUDIT", "CANDIDATE_REVIEW")
+    _transition(fixture, "CANDIDATE_REVIEW", "CI_READY")
+    fixture.control.begin("ci_success", "authoritative CI", None, os.getpid())
+    fixture.control.complete("ci_success", "evidence/ci.json")
+    _transition(fixture, "CI_READY", "DEPLOY_READY")
+    for gate in (
+        "backup_restore",
+        "production_deploy",
+        "rollback_roundtrip",
+        "synthetic_cleanup",
+    ):
+        fixture.control.begin(gate, f"complete {gate}", None, os.getpid())
+        fixture.control.complete(gate, f"evidence/{gate}.json")
+    _transition(fixture, "DEPLOY_READY", "REVIEW")
 
 
 def _failure(failure_class: str, allowed_next_state: str) -> dict[str, object]:
@@ -803,3 +826,91 @@ def test_head_change_invalidates_completed_gates_without_rewriting_events(
     assert transitioned["head_sha"] != control_fixture.initial_head
     assert transitioned["completed_gates"] == []
     assert (control_fixture.runtime_root / "events.jsonl").read_bytes().startswith(before)
+
+
+def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
+    control_fixture: _ControlFixture,
+) -> None:
+    _reach_review(control_fixture)
+    delivered = control_fixture.control.status()
+    delivered_head = str(delivered["head_sha"])
+    delivered_acceptance = delivered["acceptance_runs"]
+    delivered_evidence = tuple(cast(list[str], delivered["evidence_paths"]))
+    before = (control_fixture.runtime_root / "events.jsonl").read_bytes()
+
+    with pytest.raises(ExecutionControlError, match="not allowed"):
+        control_fixture.control.transition(
+            "REVIEW",
+            delivered_head,
+            control_fixture.contract_digest,
+            "CURRENT_TRUTH_RECONCILIATION",
+        )
+
+    marker = control_fixture.repository / "formal-usability-rework.txt"
+    marker.write_text("authorized bounded rework\n", encoding="utf-8")
+    _git(control_fixture.repository, "add", marker.name)
+    _git(control_fixture.repository, "commit", "-m", "bounded review rework")
+
+    with pytest.raises(ExecutionControlError, match="authorization is unknown"):
+        control_fixture.control.reopen_review(
+            expected_runtime_head=delivered_head,
+            rework_id="TENANT-02",
+        )
+
+    scratch = control_fixture.repository / "untracked.txt"
+    scratch.write_text("must fail closed\n", encoding="utf-8")
+    with pytest.raises(ExecutionControlError, match="clean staging area"):
+        control_fixture.control.reopen_review(
+            expected_runtime_head=delivered_head,
+            rework_id=FORMAL_USABILITY_REWORK_ID,
+        )
+    scratch.unlink()
+
+    protected = control_fixture.repository / "docs" / "项目记忆.md"
+    protected.write_text("已提交项目记忆\n用户受保护修改\n漂移\n", encoding="utf-8")
+    with pytest.raises(ExecutionControlError, match="protected user change digest drifted"):
+        control_fixture.control.reopen_review(
+            expected_runtime_head=delivered_head,
+            rework_id=FORMAL_USABILITY_REWORK_ID,
+        )
+    protected.write_text("已提交项目记忆\n用户受保护修改\n", encoding="utf-8")
+
+    reopened = control_fixture.control.reopen_review(
+        expected_runtime_head=delivered_head,
+        rework_id=FORMAL_USABILITY_REWORK_ID,
+    )
+
+    assert reopened["current_state"] == "CURRENT_TRUTH_RECONCILIATION"
+    assert reopened["previous_state"] == "REVIEW"
+    assert reopened["head_sha"] != delivered_head
+    assert reopened["completed_gates"] == []
+    assert reopened["acceptance_runs"] == delivered_acceptance
+    assert tuple(cast(list[str], reopened["evidence_paths"])) == delivered_evidence
+    events = (control_fixture.runtime_root / "events.jsonl").read_bytes()
+    assert events.startswith(before)
+    assert b'"event_type":"review_rework_reopened"' in events
+
+    with pytest.raises(ExecutionControlError, match="current_truth_snapshot"):
+        control_fixture.control.transition(
+            "CURRENT_TRUTH_RECONCILIATION",
+            str(reopened["head_sha"]),
+            control_fixture.contract_digest,
+            "SUPPORTED_SURFACE_AUDIT",
+        )
+    control_fixture.control.begin(
+        "current_truth_snapshot",
+        "record dated production truth",
+        None,
+        os.getpid(),
+    )
+    control_fixture.control.complete(
+        "current_truth_snapshot",
+        "evidence/current-truth.json",
+    )
+    advanced = control_fixture.control.transition(
+        "CURRENT_TRUTH_RECONCILIATION",
+        str(reopened["head_sha"]),
+        control_fixture.contract_digest,
+        "SUPPORTED_SURFACE_AUDIT",
+    )
+    assert advanced["current_state"] == "SUPPORTED_SURFACE_AUDIT"
