@@ -29,7 +29,7 @@ from src.shared.delivery_compiler import (
     DELIVERY_COMPILER_VERSION,
     MEDIA_NATIVE_DELIVERY_COMPILER_VERSION,
 )
-from src.shared.errors import DomainError
+from src.shared.errors import DomainError, GenerationFailed
 from src.shared.narrative import visible_digest
 from src.shared.product_references import (
     alias_index,
@@ -551,8 +551,7 @@ class PostgresContentRepository(ContentRepository):
         selected = [
             row
             for row in applicable_rows
-            if str(row["publication_role"])
-            in {"public_brand_fact", "expression_constraint", "creative_method"}
+            if str(row["publication_role"]) in {"public_brand_fact", "expression_constraint", "creative_method"}
         ]
         role_to_kind = {
             "public_brand_fact": "brand_fact",
@@ -579,17 +578,10 @@ class PostgresContentRepository(ContentRepository):
                 exact_text=str(row["published_text"]),
                 source_digest=str(row["source_digest"]),
                 source_document_digest=(
-                    str(row["source_document_digest"])
-                    if row["source_document_digest"] is not None
-                    else None
+                    str(row["source_document_digest"]) if row["source_document_digest"] is not None else None
                 ),
                 applicability=tuple(
-                    str(value)
-                    for value in (
-                        row["applicability"]
-                        if isinstance(row["applicability"], list)
-                        else []
-                    )
+                    str(value) for value in (row["applicability"] if isinstance(row["applicability"], list) else [])
                 ),
             )
             for row in selected
@@ -762,9 +754,7 @@ class PostgresContentRepository(ContentRepository):
                         "production_conditions": production_conditions,
                         "content_context_snapshot": task_snapshot,
                         "series_id": series_context.series_id if series_context is not None else None,
-                        "series_position": (
-                            series_context.target_position if series_context is not None else None
-                        ),
+                        "series_position": (series_context.target_position if series_context is not None else None),
                     }
                     if any(previous[key] != value for key, value in expected.items()):
                         raise DomainError(
@@ -896,6 +886,7 @@ class PostgresContentRepository(ContentRepository):
         snapshot_patch: dict[str, object] | None = None,
     ) -> dict[str, object]:
         version_id = uuid4()
+        artifact_digest = visible_digest(outline, body)
         with self._tx(scope) as cursor:
             cursor.execute(
                 """
@@ -957,6 +948,28 @@ class PostgresContentRepository(ContentRepository):
                 current_version = item["current_version"]
                 if not isinstance(current_version, int):
                     raise DomainError("内容版本数据无效")
+                cursor.execute(
+                    """
+                    SELECT artifact_digest
+                    FROM content_versions
+                    WHERE tenant_id = %s AND item_id = %s AND task_id = %s
+                      AND version_number = %s
+                    """,
+                    (
+                        scope.tenant_id,
+                        item_id,
+                        task_id,
+                        current_version,
+                    ),
+                )
+                parent = self._one(cursor, "当前内容版本不存在，不能完成修改")
+                if str(parent["artifact_digest"]) == artifact_digest:
+                    raise GenerationFailed(
+                        "这次修改没有形成可见变化；原版本已完整保留，请把修改要求说得更具体。",
+                        error_code="REVISION_UNCHANGED",
+                        failure_stage="validation",
+                        retryable=False,
+                    )
                 next_version = current_version + 1
                 cursor.execute(
                     "UPDATE content_items SET current_version = %s WHERE tenant_id = %s AND id = %s",
@@ -981,7 +994,6 @@ class PostgresContentRepository(ContentRepository):
             )
             if cursor.rowcount != 1:
                 raise DomainError("生成运行不存在或已结束")
-            artifact_digest = visible_digest(outline, body)
             version_audit_snapshot = self._version_audit_snapshot(
                 merged_snapshot,
                 artifact_digest,
@@ -1200,9 +1212,7 @@ class PostgresContentRepository(ContentRepository):
             ) | {
                 "revision_instruction": instruction,
                 "writer_model": model,
-                "version_authorization": (
-                    "external-reviewer" if reviewer_model else "deterministic-dual-track-v1"
-                ),
+                "version_authorization": ("external-reviewer" if reviewer_model else "deterministic-dual-track-v1"),
                 **({"reviewer_model": reviewer_model} if reviewer_model else {}),
             }
             if client_request_id is not None:
@@ -1679,11 +1689,7 @@ class PostgresContentRepository(ContentRepository):
                 body = output.get("creative_body")
                 first_body = (
                     next(
-                        (
-                            paragraph.strip()
-                            for paragraph in body.split("\n\n")
-                            if paragraph.strip()
-                        ),
+                        (paragraph.strip() for paragraph in body.split("\n\n") if paragraph.strip()),
                         "",
                     )
                     if isinstance(body, str)
@@ -1821,11 +1827,7 @@ class PostgresContentRepository(ContentRepository):
         ):
             raise DomainError("我还不能完整确认你提到的商品，请使用完整商品编号或完整商品名称再说明一次。")
         selected = resolution.resolved_identities
-        return tuple(
-            self._product_fact(row)
-            for row in rows
-            if str(row["sku"]) in selected
-        )
+        return tuple(self._product_fact(row) for row in rows if str(row["sku"]) in selected)
 
     def load_task_product_facts(self, scope: TrustedScope, task_id: UUID) -> tuple[ProductFact, ...]:
         with self._tx(scope) as cursor:

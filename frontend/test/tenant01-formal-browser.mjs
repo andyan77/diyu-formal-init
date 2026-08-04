@@ -814,6 +814,10 @@ try {
     const pane=document.querySelector('.creator-artifact');
     return {
       body:pane?.innerText??'',
+      content:[
+        pane?.querySelector('.artifact-title h2')?.textContent.trim()??'',
+        pane?.querySelector('.artifact-body')?.innerText.trim()??''
+      ].join('\\n'),
       aigc:pane?.innerText.includes('AI 辅助生成')===true,
       context:pane?.querySelector('.artifact-context-basis')?.innerText??''
     };
@@ -855,9 +859,14 @@ try {
     "自然修改 V2",
     60000
   );
-  const v2Body = await content.evaluate(
-    "document.querySelector('.creator-artifact')?.innerText??''"
-  );
+  const v2Content = await content.evaluate(`(() => {
+    const pane=document.querySelector('.creator-artifact');
+    return [
+      pane?.querySelector('.artifact-title h2')?.textContent.trim()??'',
+      pane?.querySelector('.artifact-body')?.innerText.trim()??''
+    ].join('\\n');
+  })()`);
+  ensure(v2Content !== v1.content, "修改要求没有形成不同的 V2 成品");
   await content.click(".version-history summary", "历史版本");
   await content.click(".version-history button", "V1");
   ensure(
@@ -866,15 +875,26 @@ try {
     ),
     "V1 回读没有保留当前 V2 身份"
   );
-  const v1Again = await content.evaluate(
-    "document.querySelector('.creator-artifact')?.innerText??''"
-  );
+  const v1Again = await content.evaluate(`(() => {
+    const pane=document.querySelector('.creator-artifact');
+    return [
+      pane?.querySelector('.artifact-title h2')?.textContent.trim()??'',
+      pane?.querySelector('.artifact-body')?.innerText.trim()??''
+    ].join('\\n');
+  })()`);
   await content.click(".history-reading button", "回到当前版");
   ensure(
-    v1Again !== v2Body &&
+    v1Again === v1.content &&
       (await content.evaluate(
         "document.querySelector('.creator-artifact .eyebrow')?.textContent.includes('当前版本')===true"
-      )),
+      )) &&
+      (await content.evaluate(`(() => {
+        const pane=document.querySelector('.creator-artifact');
+        return [
+          pane?.querySelector('.artifact-title h2')?.textContent.trim()??'',
+          pane?.querySelector('.artifact-body')?.innerText.trim()??''
+        ].join('\\n')===${JSON.stringify(v2Content)};
+      })()`)),
     "V1→V2→V1→V2 回读发生漂移"
   );
   await content.click(".artifact-actions button", "复制");
@@ -894,7 +914,7 @@ try {
   );
   record("CONTENT_V2_HISTORY_COPY_EXPORT", {
     v1_sha256: digest(v1Again),
-    v2_sha256: digest(v2Body),
+    v2_sha256: digest(v2Content),
     immutable_difference: true,
     copy: true,
     export: true

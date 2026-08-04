@@ -731,9 +731,7 @@ def test_publication_v3_rejects_a_body_with_no_creative_expression_after_exact_d
     writer_request = build_writer_request_v3(
         contract,
         product_decision_basis=None,
-        platform_expression_responsibility=(
-            request.platform_direction.direction
-        ),
+        platform_expression_responsibility=(request.platform_direction.direction),
         prior_output=None,
         revision_instruction=None,
     )
@@ -806,9 +804,9 @@ def test_publication_v3_suppresses_only_a_standalone_exact_actuality_paragraph()
     second_paragraph = "把下一步缩小到眼前能完成的一件事，选择会更清楚。"
     FakeClient.responses = [
         _completion(
-                {
-                    "title": "计划外的停顿，也有自己的节奏",
-                    "natural_guide": "先接住这个具体瞬间。",
+            {
+                "title": "计划外的停顿，也有自己的节奏",
+                "natural_guide": "先接住这个具体瞬间。",
                 "creative_body": actuality.exact_text + "\n\n" + first_paragraph + "\n\n" + second_paragraph,
                 "publication_caption": "先接住眼前这一拍。",
             }
@@ -830,8 +828,7 @@ def test_publication_v3_preserves_actuality_inside_natural_writer_fields() -> No
         title="熟悉的咖啡，今天有点不一样",
         natural_guide="今天喝了一直喝的蓝山咖啡，居然是甜的。",
         creative_body=(
-            "今天照常喝那杯蓝山咖啡，入口的瞬间却愣了一下——居然是甜的。\n\n"
-            "不是加了糖的那种甜，是咖啡本身带来的意外。"
+            "今天照常喝那杯蓝山咖啡，入口的瞬间却愣了一下——居然是甜的。\n\n不是加了糖的那种甜，是咖啡本身带来的意外。"
         ),
         publication_caption="熟悉的蓝山，今天有点甜。",
     )
@@ -854,11 +851,14 @@ def test_publication_v3_allows_exact_actuality_in_title_and_caption() -> None:
         publication_caption="居然是甜的",
     )
 
-    assert suppress_exact_fact_only_units(
-        output,
-        user_actuality_texts=("居然是甜的",),
-        exclusive_fact_texts=(),
-    ) == output
+    assert (
+        suppress_exact_fact_only_units(
+            output,
+            user_actuality_texts=("居然是甜的",),
+            exclusive_fact_texts=(),
+        )
+        == output
+    )
 
 
 def test_publication_v3_coffee_actuality_is_natural_expression_not_fact_ownership() -> None:
@@ -899,8 +899,7 @@ def test_publication_v3_coffee_actuality_is_natural_expression_not_fact_ownershi
         publication_contract=contract,
     )
     expected_body = (
-        "今天照常喝那杯蓝山咖啡，入口的瞬间却愣了一下——居然是甜的。\n\n"
-        "不是加了糖的那种甜，是咖啡本身带来的意外。"
+        "今天照常喝那杯蓝山咖啡，入口的瞬间却愣了一下——居然是甜的。\n\n不是加了糖的那种甜，是咖啡本身带来的意外。"
     )
     FakeClient.responses = [
         _completion(
@@ -922,9 +921,7 @@ def test_publication_v3_coffee_actuality_is_natural_expression_not_fact_ownershi
     units = cast(list[dict[str, object]], kernel["units"])
     assert all(unit["fact_refs"] == [] for unit in units if unit["owner"] == "writer")
     server_units = [unit for unit in units if unit["owner"] == "server_fact"]
-    assert {
-        tuple(cast(list[str], unit["fact_refs"])) for unit in server_units
-    } == {
+    assert {tuple(cast(list[str], unit["fact_refs"])) for unit in server_units} == {
         (candidate.source_id,) for candidate in actuality
     }
     assert expected_body in artifact.body
@@ -1087,6 +1084,23 @@ def test_kernel_writer_prompt_exposes_current_trusted_contracts() -> None:
     assert "actuality_reflection 对应的用户现实原文" in prompt
     assert "Writer 只能写不复述该事实的抽象关系反思" in prompt
     assert "不能复制、概括或扩写人物、动作、对白、动机、原因、结果" in prompt
+
+
+def test_kernel_writer_prompt_requires_a_material_revision() -> None:
+    base = _kernel_request()
+    prior = _parsed_kernel(base, _kernel_writer())
+    request = replace(
+        base,
+        revision_instruction="保留事实不变，把开头改得更自然。",
+        prior_creative_kernel=prior,
+    )
+
+    prompt = _generator()._kernel_writer_prompt(request, prior)
+
+    assert request.revision_instruction in prompt
+    assert "必须实质执行该要求" in prompt
+    assert "至少一个可写 unit 的自然文字" in prompt
+    assert "不得原样返回、只换标点或只改变结构包装" in prompt
 
 
 def test_kernel_reviewer_prompt_binds_recombined_frozen_event_details() -> None:

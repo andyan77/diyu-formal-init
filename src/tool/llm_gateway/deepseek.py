@@ -218,6 +218,8 @@ class ProviderRequestFailure(GenerationFailed):
         self.kind = kind
         self.response_received = response_received
         self.retry_count = retry_count
+
+
 _SPOKEN_SLOT = "spoken"
 _COVER_PURPOSE = "cover"
 _SCENE_PURPOSE = "scene"
@@ -2619,6 +2621,9 @@ candidate_product_guidance 只能形成一般选择取舍；它们均不是品�
 本次修改要求：{request.revision_instruction or "（首次生成）"}
 此前可写内核（首次生成时为空；只用于修改，不是事实来源）：
 {json.dumps(prior, ensure_ascii=False)}
+若本次修改要求不是“首次生成”，必须实质执行该要求，并让至少一个可写 unit 的自然文字与
+此前可写内核不同；不得原样返回、只换标点或只改变结构包装。没有要求改变的事实、来源、
+资源和硬边界继续保持不变。
 服务端冻结的系列前情（只用于承接主线，不是新增现实事实许可证）：
 {json.dumps(series_projection, ensure_ascii=False)}
 

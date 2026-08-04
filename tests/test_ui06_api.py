@@ -59,11 +59,13 @@ _FACTORY_FACT_SPANS = (
 _UNSUPPORTED_BRAND_GUARANTEE = "笛语已经正式保证今年所有产品车缝品质大幅提升"
 _UNREGISTERED_SKU_CLAIM = "请写 ZX-NOT-REGISTERED 的车缝品质已经大幅提升"
 _RETRYABLE_REVISION = "保留原判断，把结尾改得更克制。"
+_UNCHANGED_REVISION = "受控测试：原样返回不得创建新版本。"
 
 _CAPTURED_FRAMES: list[NarrativeFrame] = []
 _CAPTURED_PLANS: list[object] = []
 _CALLS = {"intake": 0, "writer": 0, "reviewer": 0}
 _FAILED_ONCE: set[str] = set()
+_FIRST_ARTIFACTS: dict[UUID, GeneratedArtifact] = {}
 
 
 def _plan(
@@ -130,23 +132,15 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
         selected_facts = tuple(
             candidate
             for candidate in request.user_fact_candidates
-            if (
-                request.message == _G4
-                and candidate.exact_text in _G4_FACT_SPANS
-            )
-            or (
-                request.message == _FACTORY_ACTUALITY
-                and candidate.exact_text in _FACTORY_FACT_SPANS
-            )
+            if (request.message == _G4 and candidate.exact_text in _G4_FACT_SPANS)
+            or (request.message == _FACTORY_ACTUALITY and candidate.exact_text in _FACTORY_FACT_SPANS)
             or request.message == _UNSUPPORTED_BRAND_GUARANTEE
         )
         fact_spans = tuple(candidate.exact_text for candidate in selected_facts)
         span_roles: tuple[tuple[str, IntakeSpanRole], ...] = tuple(
             (
                 candidate.source_id,
-                "observable_actuality"
-                if candidate in selected_facts
-                else "creation_instruction",
+                "observable_actuality" if candidate in selected_facts else "creation_instruction",
             )
             for candidate in request.user_fact_candidates
         )
@@ -187,6 +181,8 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
 
     def generate(self, request: GenerationInput) -> GeneratedArtifact:
         _CALLS["writer"] += 1
+        if request.revision_instruction == _UNCHANGED_REVISION:
+            return _FIRST_ARTIFACTS[request.task_id]
         if "验证一次失败原子性" in request.weak_seed:
             raise GenerationFailed("受控失败")
         if "验证同一请求失败后安全重试" in request.weak_seed and request.weak_seed not in _FAILED_ONCE:
@@ -197,10 +193,7 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
                 failure_stage="provider",
                 retryable=True,
             )
-        if (
-            request.revision_instruction == _RETRYABLE_REVISION
-            and _RETRYABLE_REVISION not in _FAILED_ONCE
-        ):
+        if request.revision_instruction == _RETRYABLE_REVISION and _RETRYABLE_REVISION not in _FAILED_ONCE:
             _FAILED_ONCE.add(_RETRYABLE_REVISION)
             raise GenerationFailed(
                 "受控修改可重试失败",
@@ -211,7 +204,18 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
         assert request.narrative_frame is not None
         _CAPTURED_FRAMES.append(request.narrative_frame)
         _CAPTURED_PLANS.append(request.creative_plan)
-        return super().generate(request)
+        # The deterministic stub otherwise emits one generic revision suffix
+        # for every instruction. Keep this idempotency fixture visibly distinct
+        # from its parent without changing production revision semantics.
+        generated_request = (
+            replace(request, revision_instruction=None)
+            if request.revision_instruction == _RETRYABLE_REVISION
+            else request
+        )
+        artifact = super().generate(generated_request)
+        if request.revision_instruction is None:
+            _FIRST_ARTIFACTS[request.task_id] = artifact
+        return artifact
 
 
 def _settings(database_url: str) -> Settings:
@@ -403,6 +407,7 @@ def test_factory_actuality_routes_without_product_fact_and_claim_scopes_fail_clo
     _CAPTURED_FRAMES.clear()
     _CAPTURED_PLANS.clear()
     _FAILED_ONCE.clear()
+    _FIRST_ARTIFACTS.clear()
     _CALLS.update(intake=0, writer=0, reviewer=0)
     auth = ProductionAuthRepository(app_database_url)
     token = auth.create_tenant_session(TenantSession(TENANT_ID, USER_ID, "tenant-user"))
@@ -455,9 +460,7 @@ def test_send_then_generate_same_actuality_freezes_each_statement_once(
     _FAILED_ONCE.clear()
     _CALLS.update(intake=0, writer=0, reviewer=0)
     auth = ProductionAuthRepository(app_database_url)
-    token = auth.create_tenant_session(
-        TenantSession(TENANT_ID, USER_ID, "tenant-user")
-    )
+    token = auth.create_tenant_session(TenantSession(TENANT_ID, USER_ID, "tenant-user"))
     with TestClient(
         _app(app_database_url, monkeypatch),
         base_url="https://diyuai.cc",
@@ -482,10 +485,9 @@ def test_send_then_generate_same_actuality_freezes_each_statement_once(
         result = cast(dict[str, object], generated[-1]["result"])
         snapshot = _snapshot(app_database_url, UUID(str(result["task_id"])))
         frame = cast(dict[str, object], snapshot["narrative_frame"])
-        assert [
-            item["exact_text"]
-            for item in cast(list[dict[str, object]], frame["user_facts"])
-        ] == list(_FACTORY_FACT_SPANS)
+        assert [item["exact_text"] for item in cast(list[dict[str, object]], frame["user_facts"])] == list(
+            _FACTORY_FACT_SPANS
+        )
 
 
 def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
@@ -496,6 +498,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
     _CAPTURED_FRAMES.clear()
     _CAPTURED_PLANS.clear()
     _FAILED_ONCE.clear()
+    _FIRST_ARTIFACTS.clear()
     _CALLS.update(intake=0, writer=0, reviewer=0)
     auth = ProductionAuthRepository(app_database_url)
     token = auth.create_tenant_session(TenantSession(TENANT_ID, USER_ID, "tenant-user"))
@@ -576,9 +579,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
         assert frame["narrative_mode"] == "actuality_reflection"
         assert isinstance(frame["user_facts"], list)
         assert len(frame["user_facts"]) == 2
-        assert [fact["exact_text"] for fact in frame["user_facts"]] == list(
-            _G4_FACT_SPANS
-        )
+        assert [fact["exact_text"] for fact in frame["user_facts"]] == list(_G4_FACT_SPANS)
         assert str(frame["user_facts"][0]["source_id"]).startswith("source:user_actuality:turn-1:clause-1:")
         assert str(frame["user_facts"][1]["source_id"]).startswith("source:user_actuality:turn-1:clause-2:")
         publication_contract = snapshot["publication_contract"]
@@ -589,9 +590,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             "creation_instruction",
         ]
         assert [
-            span["exact_text"]
-            for span in publication_contract["input_roles"]
-            if span["role"] == "observable_actuality"
+            span["exact_text"] for span in publication_contract["input_roles"] if span["role"] == "observable_actuality"
         ] == list(_G4_FACT_SPANS)
         assert frame["allowed_brand_fact_ids"] == []
         assert snapshot["creation_commitment"] == {
@@ -631,6 +630,32 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             },
         )
         assert forbidden_frame_change.status_code == 422
+
+        unchanged_before = _counts(app_database_url)
+        unchanged = client.post(
+            f"/api/v1/tasks/{g4_task_id}/revisions",
+            json={
+                "instruction": _UNCHANGED_REVISION,
+                "publishing_identity_id": str(ACCOUNT_ID),
+                "target": "xiaohongshu_graphic",
+                "source_target": "xiaohongshu_graphic",
+                "request_id": str(uuid4()),
+            },
+        )
+        assert unchanged.status_code == 422, unchanged.text
+        assert unchanged.json()["error_code"] == "REVISION_UNCHANGED"
+        assert unchanged.json()["failure_stage"] == "validation"
+        assert unchanged.json()["retryable"] is False
+        unchanged_after = _counts(app_database_url)
+        assert unchanged_after == {
+            "tasks": unchanged_before["tasks"],
+            "runs": unchanged_before["runs"] + 1,
+            "running": unchanged_before["running"],
+            "failed": unchanged_before["failed"] + 1,
+            "versions": unchanged_before["versions"],
+        }
+        assert _snapshot(app_database_url, g4_task_id) == snapshot
+        time.sleep(2.05)
 
         revision_request_id = uuid4()
         revision = client.post(
@@ -894,10 +919,7 @@ def test_formal_api_g1_to_g7_snapshot_history_and_atomic_failure(
             },
         )
         assert replayed_retried_revision.status_code == 201
-        assert (
-            replayed_retried_revision.json()["version_id"]
-            == retried_revision_payload["version_id"]
-        )
+        assert replayed_retried_revision.json()["version_id"] == retried_revision_payload["version_id"]
         assert _counts(app_database_url) == after_retried_revision
 
         time.sleep(2.05)

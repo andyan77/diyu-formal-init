@@ -396,6 +396,7 @@ def run(
         or frozen_user_facts != _FACTORY_USER_FACTS
         or not new_task.get("consumed_segment_refs")
         or len(new_artifacts) != 2
+        or len({str(item["artifact_digest"]) for item in new_artifacts}) != 2
     ):
         raise DomainError("正式浏览器业务对象增量或边界未达到冻结结果")
     browser["database_evidence"] = {
