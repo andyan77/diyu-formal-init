@@ -854,6 +854,8 @@ def _generate(args: argparse.Namespace) -> None:
         checkpoint_digest = sha256_file(checkpoint_path)
     elif root.exists():
         raise RuntimeError("TENANT-01 evidence directory already exists")
+    object_store_root = root / "object-store"
+    settings = _settings(database_url=database_url, object_store_root=object_store_root)
     control = ExecutionControl(Path.cwd())
     control.begin_acceptance_suite(
         candidate_sha=implementation_sha,
@@ -876,8 +878,6 @@ def _generate(args: argparse.Namespace) -> None:
     if not args.resume_unreceived:
         root.mkdir(mode=0o700, parents=True)
         root.chmod(0o700)
-    object_store_root = root / "object-store"
-    settings = _settings(database_url=database_url, object_store_root=object_store_root)
     object_store = LocalObjectStore(str(object_store_root))
     control_service = ContentControlService(
         PostgresContentControlRepository(database_url),

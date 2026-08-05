@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import inspect
 import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, replace
@@ -4202,6 +4203,18 @@ def test_tenant01_git_suite_config_is_public_but_journey_remains_private(
         _Journey.from_file(journey_path)
     journey_path.chmod(0o600)
     assert _Journey.from_file(journey_path).p2_sku == "FORMAL-SKU"
+
+
+def test_tenant01_final_suite_preflights_protected_settings_before_ledger_start() -> None:
+    golden_source = inspect.getsource(tenant01_runner._generate)
+    generalization_source = inspect.getsource(generalization_runner._run)
+
+    assert golden_source.index("settings = _settings") < golden_source.index(
+        "control.begin_acceptance_suite"
+    )
+    assert generalization_source.index("settings = _settings") < generalization_source.index(
+        "control.begin_acceptance_suite"
+    )
 
 
 def test_tenant01_generalization_review_parser_keeps_product_failures(

@@ -786,6 +786,14 @@ def _run(args: argparse.Namespace) -> None:
         raise RuntimeError("generalization suite requires the frozen worktree")
     journey = _Journey.from_file(Path(args.journey_file).resolve())
     cases = _config(Path(args.config).resolve(), journey)
+    database_url = os.environ.get("DIYU_APP_DATABASE_URL", "")
+    if not database_url:
+        raise RuntimeError("formal application database is unavailable")
+    object_store_root = root / "generalization-object-store"
+    settings = _settings(
+        database_url=database_url,
+        object_store_root=object_store_root,
+    )
     control = ExecutionControl(Path.cwd())
     control.begin_acceptance_suite(
         candidate_sha=implementation_sha,
@@ -802,14 +810,7 @@ def _run(args: argparse.Namespace) -> None:
             acceptance_run_id=str(args.acceptance_run_id),
         )
     )
-    database_url = os.environ.get("DIYU_APP_DATABASE_URL", "")
-    if not database_url:
-        raise RuntimeError("formal application database is unavailable")
-    object_store = LocalObjectStore(str(root / "generalization-object-store"))
-    settings = _settings(
-        database_url=database_url,
-        object_store_root=root / "generalization-object-store",
-    )
+    object_store = LocalObjectStore(str(object_store_root))
     control_service = ContentControlService(
         PostgresContentControlRepository(database_url),
         object_store,
