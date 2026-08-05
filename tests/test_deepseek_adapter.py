@@ -82,6 +82,7 @@ from src.shared.publication_contract import (
 )
 from src.shared.review_evidence import (
     REVIEW_EVIDENCE_V2_VERSION,
+    ClauseContextV2,
     build_clause_contexts_v2,
     unit_contracts_v2,
 )
@@ -2881,6 +2882,38 @@ def test_dramatization_writer_receives_a_complete_scene_requirement() -> None:
     assert '"mode": "disclosed_dramatization"' in prompt
     assert "包含场景推进、角色行动或对白以及可见收束" in prompt
     assert "不能写成观点文章" in prompt
+    assert "虚构场景和对白不授予任何商品事实" in prompt
+    assert "材料、属性、性能、效果、价格、库存或实际体验" in prompt
+
+
+def test_license_reviewer_treats_fiction_as_no_product_fact_license() -> None:
+    frame = new_frame("dramatization", (), ())
+    context = ClauseContextV2(
+        clause_id="unit:body:clause:1",
+        unit_id="unit:body",
+        exact_text="虚构对白里出现一件未登记商品。",
+        visible_order=1,
+        text_source="writer_unit",
+        unit_contract="disclosed_dramatization",
+        speaker_kind="personal_ip_account",
+    )
+    contexts = (context,)
+    policies = build_unit_clause_license_policies_v1(
+        frame=frame,
+        unit_contracts={context.unit_id: "disclosed_dramatization"},
+    )
+    licenses = materialize_clause_licenses_v1(contexts=contexts, policies=policies)
+
+    prompt = _generator()._kernel_license_reviewer_prompt(
+        licenses=licenses,
+        contexts=contexts,
+        actuality_facts=(),
+        protected_subjects=(),
+        product_fact_packet=build_product_fact_packet(()),
+    )
+
+    assert "即使商品属性出现在虚构场景、角色对白或假设举例中" in prompt
+    assert "仍必须标记 unsupported_product_fact" in prompt
 
 
 def test_ui10_frame_allowed_brand_fact_uses_service_frozen_unit() -> None:

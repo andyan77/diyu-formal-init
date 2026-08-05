@@ -2280,6 +2280,8 @@ class DeepSeekGenerator(ContentGenerator):
             ),
             "disclosed_dramatization": (
                 "写成完整虚构情境，包含场景推进、角色行动或对白以及可见收束；不能写成观点文章。"
+                "虚构场景和对白不授予任何商品事实；未提供可信商品事实时，不得让任何商品、"
+                "服装或道具具有材料、属性、性能、效果、价格、库存或实际体验。"
             ),
         }
         writer_resource_by_id: dict[str, tuple[str, str]] = {}
@@ -2769,7 +2771,8 @@ Writer-owned clause 不得让当前表达者或第一人称复数承担
    ProductFactPacket 中的硬属性、数字和 canonical_text 只能由服务端 ImmutableFactBlock
    原样插入；writer-owned clause 即使准确复述也必须 unsupported_product_fact。根据 Packet
    推导性能、功效、用途／穿着结果、设计动机、价格、库存、比较结论或实际体验，同样必须
-   unsupported_product_fact。资料来源或制作资源被当成商品事实时必须
+   unsupported_product_fact。即使商品属性出现在虚构场景、角色对白或假设举例中，只要没有
+   精确 allowed_fact_refs，仍必须标记 unsupported_product_fact。资料来源或制作资源被当成商品事实时必须
    source_or_resource_as_fact。Packet 只帮助识别边界，不使 claim_refs 或相近表述获得许可。
 5. 按 prohibited_binding_checks 的给定顺序逐项阅读 question，并为每个 binding_id
    恰好返回一个 binding_check，不得遗漏、重复、增加或改名：absent 表示该问题所述绑定

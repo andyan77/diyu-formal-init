@@ -937,7 +937,6 @@ def test_actuality_scene_metaphor_and_disclosed_dramatization_are_paired() -> No
         ).issues
         == ()
     )
-
     dramatization_frame = replace(
         _frame(),
         narrative_mode="dramatization",
@@ -973,6 +972,19 @@ def test_actuality_scene_metaphor_and_disclosed_dramatization_are_paired() -> No
         ).issues
         == ()
     )
+
+
+def test_disclosed_dramatization_product_fact_check_explicitly_covers_fiction() -> None:
+    frame = replace(_frame(), narrative_mode="dramatization", user_facts=())
+    policies = build_unit_clause_license_policies_v1(
+        frame=frame,
+        unit_contracts={"unit:body": "disclosed_dramatization"},
+    )
+
+    assert policies[0].subject_scope == "fictional_only"
+    assert "unsupported_product_fact" in policies[0].prohibited_bindings
+    question = prohibited_binding_question_v1("unsupported_product_fact")
+    assert "即使位于虚构场景、角色对白或假设举例" in question
 
 
 def test_present_uncertain_and_expression_drift_fail_closed() -> None:
