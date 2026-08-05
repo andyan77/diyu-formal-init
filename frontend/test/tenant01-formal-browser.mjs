@@ -35,6 +35,7 @@ const candidateSha = required("TENANT01_CANDIDATE_SHA");
 const expectFormallyTested =
   process.env.TENANT01_EXPECT_FORMALLY_TESTED === "1";
 const expectAigc = process.env.TENANT01_EXPECT_AIGC === "1";
+const providerWaitMs = expectAigc ? 150000 : 60000;
 const credentials = JSON.parse(readFileSync(credentialPath, "utf8"));
 const contextEvidence = JSON.parse(readFileSync(contextPath, "utf8"));
 ensure(credentials.candidate_sha === candidateSha, "浏览器凭据候选 SHA 漂移");
@@ -794,7 +795,7 @@ try {
   await content.waitFor(
     "document.querySelector('.message.assistant')!==null",
     "普通发送结果",
-    60000
+    providerWaitMs
   );
   ensure(
     !(await content.evaluate("document.querySelector('.creator-artifact')!==null")),
@@ -807,7 +808,7 @@ try {
   await content.waitFor(
     "document.querySelector('.creator-artifact .eyebrow')?.textContent.includes('V1')",
     "精确验厂输入 V1",
-    60000
+    providerWaitMs
   );
   await content.click(".artifact-context-basis summary", "本次依据");
   const v1 = await content.evaluate(`(() => {
@@ -857,7 +858,7 @@ try {
   await content.waitFor(
     "document.querySelector('.creator-artifact .eyebrow')?.textContent.includes('V2')",
     "自然修改 V2",
-    60000
+    providerWaitMs
   );
   const v2Content = await content.evaluate(`(() => {
     const pane=document.querySelector('.creator-artifact');

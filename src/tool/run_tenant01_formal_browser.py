@@ -412,7 +412,7 @@ def run(
             env=environment,
             capture_output=True,
             text=True,
-            timeout=240,
+            timeout=600 if provider_model else 240,
         )
         if result.returncode != 0:
             diagnostic = (result.stderr or result.stdout).strip()[-3000:]

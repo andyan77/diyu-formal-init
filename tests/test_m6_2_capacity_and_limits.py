@@ -534,6 +534,15 @@ def test_release_scripts_build_once_and_activate_only_the_bound_digest() -> None
         assert action in deploy_entry
 
 
+def test_formal_provider_browser_deadlines_cover_the_frozen_provider_timeout() -> None:
+    browser = Path("frontend/test/tenant01-formal-browser.mjs").read_text(encoding="utf-8")
+    runner = Path("src/tool/run_tenant01_formal_browser.py").read_text(encoding="utf-8")
+
+    assert "const providerWaitMs = expectAigc ? 150000 : 60000;" in browser
+    assert browser.count("providerWaitMs") == 4
+    assert "timeout=600 if provider_model else 240" in runner
+
+
 def test_frontend_lock_is_portable_and_ci_uses_the_frozen_tree() -> None:
     lock = json.loads(Path("frontend/package-lock.json").read_text(encoding="utf-8"))
     packages = lock["packages"]
