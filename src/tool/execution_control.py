@@ -1659,7 +1659,11 @@ def _parser() -> argparse.ArgumentParser:
             "acceptance_runner",
             "evidence_finalizer",
             "ci",
+            "production_readonly",
+            "backup",
             "deploy",
+            "rollback",
+            "cleanup",
         ),
         required=True,
     )

@@ -14,6 +14,7 @@ from src.tool.execution_control import (
     FORMAL_USABILITY_REWORK_ID,
     ExecutionControl,
     ExecutionControlError,
+    _parser,
     run_controlled_command,
 )
 
@@ -1126,3 +1127,14 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
     )
     assert returned_to_repair["current_state"] == "SHARED_ROOT_CAUSE_REPAIR"
     assert returned_to_repair["active_command"] is None
+
+
+@pytest.mark.parametrize(
+    "action",
+    ("production_readonly", "backup", "deploy", "rollback", "cleanup"),
+)
+def test_release_phase_actions_are_exposed_by_cli_parser(action: str) -> None:
+    parsed = _parser().parse_args(("verify", "--action", action))
+
+    assert parsed.command == "verify"
+    assert parsed.action == action
