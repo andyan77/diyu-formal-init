@@ -20,6 +20,7 @@ from src.infrastructure.content_control_repository import (
 )
 from src.infrastructure.local_object_store import LocalObjectStore
 from src.infrastructure.postgres_repository import PostgresContentRepository
+from src.infrastructure.production_auth import ProductionAuthRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.publication_contract import INTAKE_ROLE_CONTRACT_VERSION
 from src.tool.execution_control import ExecutionControl, verify_runtime_action
@@ -355,6 +356,65 @@ def _run_ids(cases: tuple[_Case, ...]) -> frozenset[str]:
         else:
             values.add(case.case_id)
     return frozenset(values)
+
+
+def _validate_journey_targets(
+    database_url: str,
+    journey: _Journey,
+    cases: tuple[_Case, ...],
+) -> None:
+    """Fail before the append-only ledger when any formal identity lacks its target."""
+
+    required_primary = {
+        target
+        for case in cases
+        for target in case.targets
+    }
+    required_secondary = {
+        target
+        for case in cases
+        if case.journey == "cross_brand_synthetic_pair"
+        for target in case.targets
+    }
+    auth = ProductionAuthRepository(database_url)
+    identities = (
+        (
+            "primary",
+            journey.session_token,
+            journey.tenant_id,
+            journey.publishing_identity_id,
+            required_primary,
+        ),
+        (
+            "secondary",
+            journey.secondary_session_token,
+            journey.secondary_tenant_id,
+            journey.secondary_publishing_identity_id,
+            required_secondary,
+        ),
+    )
+    for label, token, tenant_id, publishing_identity_id, required in identities:
+        session = auth.load_tenant_session(token)
+        if (
+            session is None
+            or session.audience != "tenant-user"
+            or session.tenant_id != tenant_id
+        ):
+            raise RuntimeError(
+                f"generalization {label} formal session does not match its frozen tenant"
+            )
+        allowed = set(
+            auth.allowed_content_targets(
+                session,
+                publishing_identity_id,
+            )
+        )
+        missing = sorted(required - allowed)
+        if missing:
+            raise RuntimeError(
+                f"generalization {label} publishing identity is missing frozen targets: "
+                + ", ".join(missing)
+            )
 
 
 def _completed(events: list[dict[str, object]]) -> dict[str, object] | None:
@@ -789,6 +849,7 @@ def _run(args: argparse.Namespace) -> None:
     database_url = os.environ.get("DIYU_APP_DATABASE_URL", "")
     if not database_url:
         raise RuntimeError("formal application database is unavailable")
+    _validate_journey_targets(database_url, journey, cases)
     object_store_root = root / "generalization-object-store"
     settings = _settings(
         database_url=database_url,

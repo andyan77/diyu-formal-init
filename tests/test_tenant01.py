@@ -18,6 +18,7 @@ import pytest
 from src.brain.content_service import ContentService
 from src.brain.platform_directions import direction_for
 from src.infrastructure.postgres_repository import PostgresContentRepository
+from src.infrastructure.production_auth import TenantSession
 from src.infrastructure.tenant_lifecycle import (
     TENANT_LIFECYCLE_CONTRACT_VERSION,
     TenantLifecycleClassifier,
@@ -4213,6 +4214,80 @@ def test_tenant01_final_suite_preflights_protected_settings_before_ledger_start(
         "control.begin_acceptance_suite"
     )
     assert generalization_source.index("settings = _settings") < generalization_source.index(
+        "control.begin_acceptance_suite"
+    )
+
+
+def test_tenant01_generalization_preflights_every_identity_target_before_ledger(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary_tenant = uuid4()
+    secondary_tenant = uuid4()
+    primary_user = uuid4()
+    secondary_user = uuid4()
+    primary_identity = uuid4()
+    secondary_identity = uuid4()
+    journey = generalization_runner._Journey(
+        tenant_id=primary_tenant,
+        session_token="primary-session",
+        publishing_identity_id=primary_identity,
+        confirmed_sku="CONFIRMED",
+        insufficient_sku="INSUFFICIENT",
+        registered_media_asset_ids=(uuid4(), uuid4()),
+        secondary_tenant_id=secondary_tenant,
+        secondary_session_token="secondary-session",
+        secondary_publishing_identity_id=secondary_identity,
+    )
+    cases = (
+        generalization_runner._Case(
+            case_id="primary",
+            journey="single_turn",
+            message="ordinary input",
+            targets=("douyin_video",),
+            expected="artifact",
+        ),
+        generalization_runner._Case(
+            case_id="pair",
+            journey="cross_brand_synthetic_pair",
+            message="ordinary input",
+            targets=("xiaohongshu_graphic",),
+            expected="pair",
+        ),
+    )
+
+    class _Auth:
+        def load_tenant_session(self, token: str) -> TenantSession | None:
+            return {
+                "primary-session": TenantSession(
+                    primary_tenant, primary_user, "tenant-user"
+                ),
+                "secondary-session": TenantSession(
+                    secondary_tenant, secondary_user, "tenant-user"
+                ),
+            }.get(token)
+
+        def allowed_content_targets(
+            self,
+            identity: TenantSession,
+            publishing_identity_id: UUID | None = None,
+        ) -> tuple[str, ...]:
+            del identity
+            return {
+                primary_identity: ("douyin_video", "xiaohongshu_graphic"),
+                secondary_identity: ("douyin_video",),
+            }.get(publishing_identity_id, ())
+
+    monkeypatch.setattr(
+        generalization_runner,
+        "ProductionAuthRepository",
+        lambda _database_url: _Auth(),
+    )
+
+    with pytest.raises(RuntimeError, match="secondary.*xiaohongshu_graphic"):
+        generalization_runner._validate_journey_targets("database", journey, cases)
+
+    run_source = inspect.getsource(generalization_runner._run)
+    assert run_source.index("_validate_journey_targets") < run_source.index(
         "control.begin_acceptance_suite"
     )
 
