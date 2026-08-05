@@ -3,13 +3,14 @@
 ## 当前状态
 
 - 里程碑：`TENANT-01`
-- 状态：`REVIEW`（execution-control 已从 `DEPLOY_READY` 正式转移；不得自行 `CLOSED`）
+- 状态：`REVIEW`（execution-control 追加式交付；不得自行 `CLOSED`）
 - 唯一写入执行端：当前 WSL Codex
 - Git 启动基线：`94fa541f4b5a8f9c3fab5de6d826473440b6dd30`
 - UX-03：`CLOSED / PASS`
-- 最终运行锚点：运行实现 `748190c552c6b9610aa951bd346fe8903ef51121`，镜像
-  `sha256:edc8dfc45f9cea82fd29ac656aa660c86ac3b50c1fb4c02df3b4d64f2cd617a4`，schema
-  `20260813_40`；公网／回环 ready、live、status 均为 200
+- 最终运行锚点：运行实现 `c5eb588844f9d398f742aa8a5406e4c5f41900bc`，镜像
+  `sha256:5c129a035d916a0ce7e006de45754487ca16bead100653727f64deb9540714b2`，schema
+  `20260817_44`；公网／回环 ready、live、status 均为 200，唯一权威 CI 为
+  `30977038261 success`
 - 工作树保护：`docs/项目记忆.md` 用户未提交内容全部保留，不暂存、不提交；最终 diff SHA-256
   `96862202b06fd7821797d984215163069e8598a8641209ebae629ca2df0baaf7`
 - 私有资料：仅从用户指定 Windows 目录只读；原文不得进入 Git、CI、公开日志或公开证据
@@ -56,13 +57,18 @@
 
 ## 唯一结果
 
-笛语服饰作为首个正式租户，生产已具备管理员配置组织、账号画像和成员的能力；当前管理员已
-激活，存在 1 个逻辑发布账号，但账号画像为 0，尚未创建正式内容成员，内容能力为
-`ready_after_admin_action`。管理员完成画像和成员配置后才能开始正式内容生产。21 份授权资料
-以源文档和稳定语义 segment 原子入库，14 个候选商品以 V/P/C/R 字段证据边界入库并由正式内容
-上下文按任务相关性消费。P4、P5、DM01 的正式资料缺口继续分别诚实显示；软件功能真值与租户
-资料就绪度分开。最终候选须完成本地门、两份有界审查、权威 CI、备份恢复、生产部署、隔离
-恢复库黄金套件、旧镜像往返回退和精确清理，随后进入 `REVIEW`，不得自行 `CLOSED`。
+笛语服饰生产现有管理员、“笛语品控”和“柯桥店阿丹”3 个正式用户；1 个逻辑发布账号、四个
+平台／形式目标和完整五段画像已就绪。管理员可创建同名 display_name 的正式成员，登录用户名
+仍保持全系统唯一；权限 403、认证失效和建任务前失败已分开处理。正式内容用户可以发送普通
+交流而不建任务，也可以从自然生活、感悟、抱怨和工作现场种子生成完整内容、自然修改为 V2、
+回读历史、复制和导出；系统不自动发布。
+
+21 份来源文档和 5,046 个不可变 segment 继续作为证据库，不能整体进入 Writer。正式 confirmed
+projection V2 只发布 8 个来源绑定条目，并按任务 applicability 冻结和消费；14 个候选商品的
+203 条字段证据中仅 26 个允许字段经独立 ProductFact 管道按 SKU 加载。P4、P5、DM01 因正式
+门店事实、正式媒体、门店和库存缺失而继续显示 `data_missing`，不阻断普通内容生产。完整门、
+两审、CI、备份恢复、生产部署、正式浏览器验收、回退往返和精确清理均已完成，当前为
+`REVIEW`，不得自行 `CLOSED`。
 
 ## 主控终审退回与本次有界返工
 
@@ -344,7 +350,10 @@ API／React 消费者 → 原子幂等 dry-run／导入 → BrandContextPacket �
 SLA、`20/55/44` 全组合稳定支持、无真实图片时的笛语 P5 成品，或无真实门店／库存时的笛语
 DM01 实际经营采用。当前状态和唯一下一动作以文末“最终 REVIEW 交付”为准。
 
-## 2026-08-04 最终 REVIEW 交付（当前唯一权威结论）
+## 2026-08-04 历史 REVIEW 交付（运行实现 `748190c…`，已被取代）
+
+> 本节保留上一健康运行实现及其 26 卡验收的追加式历史事实；它不代表当前生产、当前证据或
+> 当前租户真值。当前权威结论见文末 `c5eb588…` 最终 REVIEW 交付。
 
 TENANT-01 已完成工程、验收、CI、生产部署、恢复、回退和清理的唯一纵向结果。正式管理员现在
 可以登录生产，读取笛语服饰现有资料与商品边界；生产已具备管理员配置账号画像和成员的能力，
@@ -467,5 +476,100 @@ visible digest 和逐篇引用。generation ledger 保持只读；普通私有�
   销售、多真实租户市场差异、企业 SLA、`20/55/44` 全组合稳定支持、无正式门店事实时的 P4、
   无正式媒体时的 P5 成品，以及无正式门店／库存时的 DM01 真实经营采用。
 
-当前状态：`TENANT-01 REVIEW`。本执行端不得自行置为 `CLOSED`。唯一下一动作：主控最终独立
-复核并决定是否 `CLOSED`。
+该候选当时进入 `TENANT-01 REVIEW`，随后被主控有界返工裁决取代；不得把本节无时间限定地称为
+当前生产或最终证据。
+
+## 2026-08-04 最终 REVIEW 交付（运行实现 `c5eb588…`，当前唯一权威结论）
+
+### 共享合同纠偏
+
+- 主控裁决 `TENANT01-CONTROLLER-RULING-20260804-DOMAIN-ELABORATION` 取代了历史
+  `a10e565…` 中“必须引入独立后置语义 Reviewer”的停止结论；旧人工 FAIL、V1/V2、raw、
+  artifact、checksum 和清理记录不删除、不改写，也不作为当前候选。
+- 冻结的上位事实允许 Writer 作常识性、非量化、非认证、非具体 SKU 的自然解释。线迹、针脚、
+  接缝、针距、收边等常见观察维度，以及低风险即时反应、比喻和场景化承接，始终是未验证
+  `creative_expression`：无 `fact_ref`、不回写 ProductFact／BrandFact／用户事实、不获得人物、
+  场地、道具或媒体权限，也不能成为后续任务的可信来源。
+- 量化规格、针距数值、合格率／缺陷率／提升百分比、检测／认证／验收、具体 SKU／全部商品／
+  全批次结论、机构保证，以及用户未提供的工艺、设备、材料、生产方法、性能、功效、耐用性、
+  舒适度、体验、比较基线、成因和检测记录仍须可信来源。没有新增 Reviewer、第二模型、词表、
+  关键词规则、fallback 或服务端固定成稿。
+- 成品表达范围统一为：“以下保留用户提供的真实片段；其余为创作性表达，不作为现场事实或
+  检验记录。”冻结用户原句和来源保持不变。
+
+### 正式发布投影与任务消费
+
+- 正式 production projection 为 confirmed V2：id
+  `402278fb-15b6-4739-b947-32b38beb917e`、digest
+  `102e0cdfbe49ac7c00bab2255b0bec6f95b1e49dc3bbc36b6b51401999b0faf5`。8 个条目均为
+  `source_kind=brand_source_segment`，包括 3 项 `public_brand_fact`、3 项
+  `expression_constraint`、2 项 `creative_method`；compatibility baseline V1 保留在追加式历史。
+- 21 份来源逐文档完成去向矩阵：6 份产生最小充分发布项，1 份进入独立 ProductFact 管道，
+  2 份模板保持 `template_only/internal_only`，其余保留为 internal／not publishable。用户明确
+  排除的 26 条视频、目录、验收问题、待填字段、分析过程和操作脚手架均未进入 Writer。
+- 5,046 个 segment 是可追溯证据库，不是 Prompt。任务只冻结与 tenant／brand／organization／
+  publishing account／ContentRole／画像版本／平台目标和 content product 相符的最小引用；正式
+  验厂任务 available／frozen／consumed／displayed refs 可复算，实际消费 4 个与
+  `brand_life_narrative` 相符的来源绑定条目。raw segment 没有整体进入 request。
+- candidate freeze、WriterRequest、task snapshot、context evidence 和 production acceptance
+  引用同一 projection id／version／digest；任一漂移均在 provider request_count=0 时失败。
+  V2 重放原冻结投影，后续 current projection 不能污染旧 V1/V2。
+
+### 正式用户、正式 V1/V2 与能力真值
+
+- 正式管理员通过应用合同建立“柯桥店”组织和成员“柯桥店阿丹”；display_name 可与
+  `legacy_hidden` 历史身份同名，正式登录用户名为“笛语柯桥店阿丹”，只获得内容账号资格，
+  无门店时没有错误授予陈列资格。legacy_hidden UUID、6 个历史任务与授权保持不变。
+- 重复 username 返回稳定 `USERNAME_TAKEN` 且成员、credential、token、grant 零部分写；同名
+  display_name＋不同 username 成功。权限 403 留在原页并保留输入，只有真实认证失效才清会话。
+- 正式“笛语品控”以精确输入“今天去工厂验厂，今年量装大货的车缝品质有了大幅度的提升”完成
+  V1→V2→V1→V2、复制和导出；task／run／version 差分 `+1/+2/+2`，两次 run 均 succeeded，
+  retry 0，永久 running 为 0。V1 artifact digest `c49e3842…f641`，V2 digest
+  `e976c105…30a1`，可见 digest 不同。Writer／ProductFact refs 均为 0，用户原文没有升级为
+  系统确认的品牌或商品事实。
+- 全文审阅结论：high-risk boundary `PASS`、structure `PASS`、product usable `PASS`。
+  “亲眼看见”“最容易毛躁的转角”“每一道线迹”语气略强，V2 改动幅度较小，均作为采用前可
+  收敛的产品质量观察保留，不是硬边界失败。
+- 58/58 软件支持面完成消费者盘点和本地正式 React／API／PostgreSQL 纵向；生产浏览器读取同一
+  58 行动态能力真值并完成 9/9 正式关键旅程。软件是否实现、资料是否满足、本人是否获权、生产
+  是否实测四列分开呈现，不以静态“58”冒充租户资料全部 ready。
+- 当前生产有 3 个正式用户（管理员、笛语品控、柯桥店阿丹）、1 个逻辑发布账号、四个获准平台／
+  形式目标、完整五段画像；正式组织媒体 0、商品媒体绑定 0、门店 0、库存 0。P4、P5、DM01
+  均为 `data_missing`，普通生活、感悟、抱怨和工作现场内容仍可生成；系统不自动发布。
+- 管理员 UI 已有“使用说明／当前可用与待补”和 publication projection 当前／历史入口；用户
+  工作台已有简明帮助入口。仓库权威说明为
+  `docs/笛语服饰使用说明与能力就绪清单.md`，动态 UI 继续读取共享 readiness／permission 服务，
+  不复制会漂移的静态真值。
+
+### 工程、CI、部署、回退与清理
+
+- 受影响测试和 mutation proof `46/46` 通过；恢复 creative_expression 写回事实、projection
+  freeze 漂移、删除可见创作范围、恢复“任何质量维度即硬失败”、允许量化／认证／具体 SKU
+  无来源结论等反证均真实变红。Ruff、mypy（159）、Golden／OpenAPI（890 passed，2 个环境开关
+  browser skip 已显式覆盖）、前端 lint／typecheck／interaction／build 和 Chrome Gate A—D
+  （4／1／125／65）全部通过。
+- 唯一运行 SHA：`c5eb588844f9d398f742aa8a5406e4c5f41900bc`；唯一权威 CI：GitHub Actions
+  run `30977038261`，`success`；build-once／生产镜像 digest：
+  `sha256:5c129a035d916a0ce7e006de45754487ca16bead100653727f64deb9540714b2`；schema：
+  `20260817_44`。生产 `deepseek-v4-flash`、temperature 0、max retries 0。
+- 新鲜 predeploy 备份：
+  `/var/backups/diyu-m5-4/20260805T051600Z-tenant01-c5eb588844f9d398f742aa8a5406e4c5f41900bc-predeploy`；
+  目录／文件 0700／0600，backup checksum
+  `7e423f2d2387db7588b597bc737d8677642d5ebf9f4dc9dbe29955a9a2c4d187`，隔离恢复、FORCE RLS、
+  无作用域读取拒绝、对象恢复和 readiness 均通过。
+- 当前生产公网与回环 ready／live／status 六项均 200，backup timer active，内容／陈列永久
+  running 0／0。上一健康运行实现 `748190c…` 在 schema 44 上完成六端点和正式 V1/V2 历史读取，
+  再切回同一 c5eb digest；数据库没有 downgrade，正式内容和陈列指纹往返一致。
+- 本地精确删除 15 个 `笛语服饰正式纵向-local-` synthetic tenant 及关联行，残留租户作用域行为
+  0；生产验收 session、已用 token、临时密码、浏览器目录、远端临时目录、SSH control proxy、
+  本地 18443 监听和临时凭据均为 0。正式 projection、正式成员及正式 V1/V2 保留；正式 V1/V2
+  是追加式 `formal_business_data` 与验收证明，删除会降低版本不可变性，不能伪装成 synthetic。
+- `docs/项目记忆.md` 始终未覆盖、未暂存、未提交，保护 diff SHA-256 为
+  `96862202b06fd7821797d984215163069e8598a8641209ebae629ca2df0baaf7`。
+
+### 尚未证明与交付状态
+
+尚未证明正式员工长期采用、真实发布、平台流量／排名／爆款、GMV／销售、经营效果、多真实租户
+市场差异、企业 SLA，以及补齐真实门店事实／媒体／门店库存后的 P4、P5、DM01 正式经营结果。
+
+当前状态：`TENANT-01 REVIEW`，不是 `CLOSED`。唯一下一动作：主控独立终审。

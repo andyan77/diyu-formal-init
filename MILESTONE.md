@@ -1,33 +1,37 @@
 # 当前里程碑
 
 - 当前里程碑：`TENANT-01 · 笛语服饰首租户生产就绪与全能力演示`。
-- 状态：`REVIEW`。当前生产 SHA 与最终运行候选均为
-  `748190c552c6b9610aa951bd346fe8903ef51121`，唯一 acceptance run 为
-  `tenant01-final-20260804-748190c`；execution-control 已在同一运行 SHA 下完成确定性门、
-  11＋15 卡、逐篇审阅、两份有界审查、唯一 CI、备份恢复、按 digest 部署、生产验证、旧镜像
-  往返回退与精确清理，并于 2026-08-04 从 `DEPLOY_READY` 正式转移到 `REVIEW`。不得自行置为
+- 状态：`REVIEW`。当前生产运行实现和唯一运行候选均为
+  `c5eb588844f9d398f742aa8a5406e4c5f41900bc`；execution-control 已追加完成共享合同纠偏、
+  来源绑定发布投影、本地 58 项正式支持面、同 SHA DeepSeek V1→V2、两份有界审查、唯一 CI、
+  备份恢复、按 digest 部署、正式租户生产浏览器验收、旧镜像往返回退和精确清理。不得自行置为
   `CLOSED`，也不得创建 TENANT-02、successor 或平行状态文件。
 - 当前唯一生产镜像为
-  `sha256:edc8dfc45f9cea82fd29ac656aa660c86ac3b50c1fb4c02df3b4d64f2cd617a4`，schema
-  `20260813_40`；公网／回环 `/health/ready`、`/health/live`、`/status` 均为 200。唯一权威 CI
-  为 GitHub Actions run `30889298662`（job `91927407713`，`success`）。上一健康镜像
-  `sha256:f869aa605f3bc81a429a56a4081b1c4eabaa351587245f5b8aa73fb19f7bb683` 已在当前 schema 上完成
-  不降级数据库的往返回退，最终再次切回候选且不可变历史一致。
-- 最终验收为 machine hard `26/26`、human high-risk boundary `26/26`、structure `26/26`、
-  first-draft usable `23/26`。三个诚实质量 FAIL 为 `new_couple_housework` 的动机猜测与单边性别
-  指代、`new_style_revision` 的 V2 未落实简洁冷幽默修订、`new_series_progression` 的三篇中心
-  判断和叙事主线重复；均未改写为硬边界失败，也未触发重跑或单卡 Prompt 补丁。
-- 当前唯一最终验收证据根为
-  `/mnt/diyu-build/evidence/TENANT-01/748190c552c6b9610aa951bd346fe8903ef51121/acceptance-v2/`；
-  下方 `golden-v1` 等路径只属于有日期的历史快照，不代表当前最终验收证据。
-- 2026-08-03 主控已作出最终产品裁决，取代下方历史记录中“等待是否改变单 Writer 责任”的
-  停止结论：服务端只对可信事实、来源字节、引用、权限、资源、租户隔离、版本、摘要和失败
-  原子性提供确定性保证；Writer 的全部文字均标记为未验证 `creative_expression`，不得升级为
-  ProductFact、BrandFact 或真人事实。最终验收采用 26 个冻结样本的双轨门：机器硬门和成品
-  字段／平台结构必须 `26/26`，首稿产品可用率必须至少 `23/26`；质量失败可经一次自然反馈
-  形成追加式 V2，硬边界失败不能用 V2 洗白。现有 15 卡正式称“冻结泛化回归集”，不冒充
-  真正盲测；最终 SHA 冻结后由主控另做一次未公开小样本抽检。不得在查看泛化结果后补 Prompt、
-  规则或 oracle，也不新增 Reviewer、第二模型、语义词表、规则引擎、固定成稿或审批状态机。
+  `sha256:5c129a035d916a0ce7e006de45754487ca16bead100653727f64deb9540714b2`，schema
+  `20260817_44`；公网／回环 `/health/ready`、`/health/live`、`/status` 均为 200，内容与
+  陈列永久 running 均为 0。唯一权威 CI 为 GitHub Actions run `30977038261`（`success`）。
+  上一健康运行实现 `748190c552c6b9610aa951bd346fe8903ef51121` 已在 schema 44 上完成不降级
+  数据库的往返回退，最终再次切回候选且正式历史指纹一致。
+- 本轮主控裁决 `TENANT01-CONTROLLER-RULING-20260804-DOMAIN-ELABORATION` 已取代历史
+  `a10e565…` 的停止结论，但旧 FAIL、raw、artifact 与 checksum 原样保留。冻结的上位事实允许
+  Writer 在未验证 `creative_expression` 中作非量化、非认证、非具体 SKU 的常识性解释和低风险
+  文学性承接；这些文字不取得 `fact_ref`、不回写事实域、不获得资源，也不能成为后续任务的可信
+  来源。量化规格、检测／认证、合格率、提升百分比、具体 SKU／全批次结论、机构保证及未提供的
+  工艺、设备、材料、性能、功效或体验仍必须有可信来源。
+- 正式租户当前有 3 个 `formal_business_data` 用户：管理员、正式内容用户“笛语品控”和正式成员
+  “柯桥店阿丹”；后者以全局唯一用户名“笛语柯桥店阿丹”建立，显示名同名不再冲突，并只获得
+  内容账号资格。正式发布投影为 confirmed V2：id
+  `402278fb-15b6-4739-b947-32b38beb917e`、digest
+  `102e0cdfbe49ac7c00bab2255b0bec6f95b1e49dc3bbc36b6b51401999b0faf5`、8 个来源绑定条目；
+  兼容基线 V1 完整保留，5,046 个原始 segment 没有整体进入 Writer。
+- 正式“笛语品控”用精确验厂输入完成 V1→V2→V1→V2、复制与导出；task／run／version 差分
+  `+1/+2/+2`，两次 run 均 succeeded，永久 running 为 0，V1/V2 digest 不同。冻结用户原文
+  未变，Writer／ProductFact refs 均为 0，projection id／version／digest 在 freeze、request、
+  snapshot、context 与 evidence 全链一致。V1/V2 的“线迹、针脚、收线、转角”等为可收敛的产品
+  表达观察，不是硬边界失败；全文 high-risk、structure、product usable 均为 `PASS`。
+- 当前权威证据根为
+  `/mnt/diyu-build/evidence/TENANT-01/c5eb588844f9d398f742aa8a5406e4c5f41900bc/`。下方
+  `748190c…/acceptance-v2`、`a10e565…` 及更早路径均为追加式历史证据，不代表当前运行候选。
 - 启动 Git 基线：`94fa541f4b5a8f9c3fab5de6d826473440b6dd30`；启动时生产运行实现
   `1f6aafee584fa5e2832be20c12534d9493691bda`、schema `20260810_37`，均须以现场只读审计
   复核。UX-03 保持 `CLOSED / 主控最终独立终审 PASS`。
@@ -262,7 +266,10 @@
   片段使硬约束在 task 前、修订在新 run/version 前整句失败关闭。功能真值恢复为
   `58/0/0/6/0`；资产保持 `41/243/25/119`、激活增量 0。唯一下一动作：主控最终定向终审。
 
-## TENANT-01 最终 REVIEW 交付（2026-08-04，当前权威结论）
+## TENANT-01 历史 REVIEW 交付（2026-08-04，运行实现 `748190c…`，已被取代）
+
+> 本节只记录上一健康运行实现 `748190c…` 的追加式历史事实；当前生产、当前证据和当前 REVIEW
+> 结论以紧随本节之后的 `c5eb588…` 最终交付为准。
 
 - 冻结工程交付门为 `18/18`；这一比例只表示本执行包的工程、验收、CI、部署、恢复、回退与
   清理门全部完成，不表示“首租户全部业务目标 100%”。最终运行 SHA
@@ -314,10 +321,53 @@
   `96862202b06fd7821797d984215163069e8598a8641209ebae629ca2df0baaf7`。21 份私有 Markdown
   原文未进入当前候选树、CI 输入、公开日志或最终公开证据；历史 Git 对象中既有 18 份旧副本
   仍按禁止改写历史约束如实披露。
-- 当前未证明正式租户真实内容生产与真实发布、真实员工采用、平台流量／排名／爆款、GMV／
+- 该历史候选当时未证明正式租户真实内容生产与真实发布、真实员工采用、平台流量／排名／爆款、GMV／
   销售、多真实租户市场差异、企业 SLA、无正式门店事实时的 P4、无正式媒体时的 P5 成品或无
-  正式门店／库存时的 DM01 经营采用。当前状态仅为 `TENANT-01 REVIEW`，不是 `CLOSED`；唯一
-  下一动作是主控最终独立复核并决定是否 `CLOSED`。
+  正式门店／库存时的 DM01 经营采用。该状态后来被主控返工裁决取代，不代表当前生产状态。
+
+## TENANT-01 最终 REVIEW 交付（2026-08-04，运行实现 `c5eb588…`，当前唯一权威结论）
+
+- 冻结工程与正式用户交付门全部通过：共享自然解释合同、来源绑定发布投影、58/58 支持面、
+  同 SHA 正式 V1→V2、两份有界审查、唯一 CI、build-once、备份恢复、同 digest 部署、正式生产
+  浏览器、旧镜像往返回退与精确清理均为 `PASS`。它不等于真实员工已经采用或内容已经发布。
+- 实现 SHA：`c5eb588844f9d398f742aa8a5406e4c5f41900bc`；镜像 digest：
+  `sha256:5c129a035d916a0ce7e006de45754487ca16bead100653727f64deb9540714b2`；schema：
+  `20260817_44`；唯一权威 CI：GitHub Actions run `30977038261`，结论 `success`。
+- 笛语服饰正式发布投影为 confirmed V2：id `402278fb-15b6-4739-b947-32b38beb917e`、digest
+  `102e0cdfbe49ac7c00bab2255b0bec6f95b1e49dc3bbc36b6b51401999b0faf5`，共 8 项：3 项
+  `public_brand_fact`、3 项 `expression_constraint`、2 项 `creative_method`。全部绑定真实来源
+  segment、版本与 digest；兼容基线 V1 追加式保留。19 份授权资料与 2 份模板均在覆盖矩阵有
+  明确去向，模板、目录、验收问题、内部脚手架与用户排除的 26 条视频不进入 Writer；商品字段只
+  经独立 ProductFact 管道。5,046 个 segment 是证据库，不以“全部塞入 Prompt”冒充可消费。
+- 正式任务冻结并实际消费 projection V2 中与 `brand_life_narrative` 相符的 4 项来源引用；
+  candidate freeze、WriterRequest、task snapshot、context evidence 与最终生产证据的 projection
+  id／version／digest 完全一致。后续投影不会污染旧任务，V2 重放原冻结上下文。
+- 正式“笛语品控”输入“今天去工厂验厂，今年量装大货的车缝品质有了大幅度的提升”，完成
+  V1→V2→V1→V2、复制和导出；task／run／version 差分 `+1/+2/+2`，succeeded run 为 2，
+  永久 running 为 0。服务端冻结原句不变，Writer／ProductFact refs 均为 0；线迹、针脚、接缝、
+  收边等非量化常见维度和低风险场景只属于 `creative_expression`。V1/V2 高风险边界、结构与首稿
+  可用均为 `PASS`，V2 有真实但较小的可见差异。
+- 明确商品输入继续只加载所选 SKU 的已确认 ProductFact；无来源机构保证与未登记 SKU 在任务和
+  Writer 前失败关闭。量化规格、检测／认证、合格率、提升百分比、具体 SKU／全批次结论、机构
+  保证和未提供的工艺／设备／材料／性能／功效／体验不能借创作表达进入可信事实域。
+- 正式用户从 2 增为 3：“柯桥店阿丹”以正式组织和全局唯一中文用户名建立，display_name 允许
+  与 `legacy_hidden` 历史身份同名；历史 UUID、6 个任务和授权不变。重复 username 返回
+  `USERNAME_TAKEN` 且零部分写；权限 403 保留会话，只有真实认证失效才回登录。
+- P4 因正式门店事实为 0、P5 因正式组织媒体和商品媒体绑定为 0、DM01 因正式门店和库存为 0，
+  均继续为 `data_missing`；普通生活、感悟、抱怨和工作现场内容不受这些局部缺口阻断。系统不
+  自动发布，采用和发布由用户完成。
+- 新鲜 predeploy 备份位于
+  `/var/backups/diyu-m5-4/20260805T051600Z-tenant01-c5eb588844f9d398f742aa8a5406e4c5f41900bc-predeploy`；
+  0700／0600、checksum、隔离恢复、FORCE RLS、无作用域读取拒绝、对象恢复和 readiness 均
+  `PASS`。上一健康 `748190c…` 镜像在 schema 44 上完成六端点与正式历史读取，再切回 c5eb；
+  数据库未降级，正式内容／陈列历史指纹前后一致。
+- 清理完成：本地 15 个精确匹配的正式纵向 synthetic tenant 及其关联行归零；生产验收 session、
+  已用 token、临时密码、浏览器目录、远端临时目录、SSH control proxy 与本地 18443 监听归零。
+  正式发布投影、正式成员和正式 V1/V2 继续保留；该 V1/V2 是 `formal_business_data` 追加式历史，
+  删除它会降低版本不可变性，因此不伪装成 synthetic 清理。永久 running 为 0。
+- 当前仍未证明：正式员工长期采用、真实发布、平台流量／排名／爆款、GMV／销售、经营效果、
+  多真实租户市场差异、企业 SLA，以及资料补齐后的 P4、P5 和 DM01 正式经营结果。
+- 当前状态：`TENANT-01 REVIEW`，不是 `CLOSED`。唯一下一动作：主控独立终审。
 
 ## UX-02 关闭记录（历史保留）
 
