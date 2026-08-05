@@ -160,6 +160,7 @@ from src.tool.run_tenant01_golden_suite import (
     _assert_final_suite_session_lease,
     _assert_formal_account_summary,
     _assert_formal_publication_summary,
+    _assert_frozen_card_product,
     _assert_p2_product_ready,
     _FormalAccountSummary,
     _FormalPublicationSummary,
@@ -1531,6 +1532,29 @@ def test_final_suite_series_title_is_natural_and_unique_per_creator(
     )
 
     assert title == f"把选择留给人的三篇观察 · 第{before + 1}组"
+
+
+def test_final_suite_rejects_frozen_card_product_drift_before_evidence_finalization() -> None:
+    card = tenant01_runner._Card(
+        card_id="P4_series1",
+        message="某次本地服务观察，请只回应这份服务关系。",
+        target="xiaohongshu_graphic",
+        series_position=1,
+    )
+    valid: dict[str, object] = {
+        "publication_contract": {"content_product": "local_response"},
+        "creative_plan_v2": {"primary_value": "local_response"},
+    }
+
+    _assert_frozen_card_product(card, valid)
+
+    for invalid in (
+        {**valid, "publication_contract": {"content_product": "brand_life_narrative"}},
+        {**valid, "creative_plan_v2": {"primary_value": "brand_life_narrative"}},
+        {"publication_contract": valid["publication_contract"]},
+    ):
+        with pytest.raises(RuntimeError, match="frozen content product drifted"):
+            _assert_frozen_card_product(card, invalid)
 
 
 def _write_tenant01_fixture_evidence(

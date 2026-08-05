@@ -700,6 +700,10 @@ def test_publication_v3_uses_one_writer_call_without_legacy_repair_or_reviewer()
     assert "最终来源边界（优先于上面合同中的创作方法或表达许可）" in prompt
     assert "在本次同一 Writer 调用内逐句自检四个字段" in prompt
     assert "宁可交付较短但完整的作品，也不要用虚构硬事实证明用户的判断" in prompt
+    assert "explicit_user_controls 是用户本轮冻结的直接写作要求" in prompt
+    assert "优先于一般创作许可" in prompt
+    assert "也不得通过补写身份、对白、动作、原因或结果绕过" in prompt
+    assert request.weak_seed in prompt
     assert prompt.rfind("最终来源边界") > prompt.rfind('"read_only_actuality_context"')
     assert request.active_domain_assets[0].body not in prompt
     system = _payload_system_prompts()[0]
@@ -1770,7 +1774,9 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
     assert "你不得返回或选择该字段" in prompt
     assert "primary_value 是本篇给受众的主要回报，不是 narrative_mode" in prompt
     assert "没有选题但要求生成”\n  通常选 brand_life_narrative" in prompt
-    assert "门店或本地服务中的可观察片段并要求回应时，选 local_response" in prompt
+    assert "primary_value 是互斥的下游消费合同" in prompt
+    assert "本地服务关系中的\n  可观察片段并要求回应时，local_response 优先且必须选择" in prompt
+    assert "brand_life_narrative 只用于不以\n  本地服务关系为回应对象" in prompt
     assert "编辑焦点只能概括原文中可见的外部要素及其" in prompt
     assert "不得增加身体或心理状态、动机、原因、后果、评价、建议或主题升华" in prompt
     FakeClient.responses = [

@@ -1043,6 +1043,15 @@ class DeepSeekGenerator(ContentGenerator):
     @staticmethod
     def _writer_request_v3_prompt(request: WriterRequestV3) -> str:
         document = writer_request_document(request)
+        explicit_control_instruction = (
+            "explicit_user_controls 是用户本轮冻结的直接写作要求，优先于一般创作许可。必须逐项执行；"
+            "其中的禁止项即使被标成 creative_expression、假设、比喻或文学性承接，也不得通过补写"
+            "身份、对白、动作、原因或结果绕过。当前控制："
+            + json.dumps(request.explicit_user_controls, ensure_ascii=False)
+            + "。\n"
+            if request.explicit_user_controls
+            else ""
+        )
         actuality_source_check = (
             "返回 JSON 前，在本次同一 Writer 调用内逐句自检四个字段：如果一句话需要读者相信一个"
             "read_only_actuality_context 未提供的量化、检验、认证、具体商品或批次、工艺方法、性能、"
@@ -1087,6 +1096,7 @@ class DeepSeekGenerator(ContentGenerator):
             + actuality_instruction
             + prior_output_instruction
             + revision_instruction
+            + explicit_control_instruction
             + "account_editorial_permission 只决定观察顺序与回应姿态，不能替换用户题材，也不能把生活题材转向服饰、商品或品牌宣讲。\n"
             "product_decision_basis 是穷尽式机器计划：decision_axis 是唯一选择维度；标题、导读、正文和配文须自然表达其中已有的选择价值、取舍和成立条件，不照抄内部句子。\n"
             "你可以形成中心判断、一般观察、条件建议、比喻、节奏、幽默和留白；建议与假设须保持该身份。\n"
@@ -4267,8 +4277,10 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   general_observation／actuality_reflection／hypothesis／dramatization。只有商品请求选
   product_truth 或其他确有商品前提的商品价值；开放题材、生活种子和“没有选题但要求生成”
   通常选 brand_life_narrative，由系统自主形成安全主线和账号观看回报。
-- 用户明确提供门店或本地服务中的可观察片段并要求回应时，选 local_response；只把服务端候选中的
-  现实原句标为 observable_actuality，不把人物目的、对白、动作或结果补进计划。
+- primary_value 是互斥的下游消费合同，不是可互换的文风标签。用户明确提供本地服务关系中的
+  可观察片段并要求回应时，local_response 优先且必须选择；brand_life_narrative 只用于不以
+  本地服务关系为回应对象的生活、工作或开放题材。只把服务端候选中的现实原句标为
+  observable_actuality，不把人物目的、对白、动作或结果补进计划。
 - 商品硬事实只来自当前可用商品；没有资料不猜。
 - user_premises 必须包含本轮用户消息且只能逐字复制用户消息；普通聊天不带入。
 - claim_scope 只描述这次输入需要什么事实边界：本人本轮生活或工作现场陈述选

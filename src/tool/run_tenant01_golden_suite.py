@@ -64,6 +64,7 @@ from src.tool.tenant01_evidence import (
     compile_tenant01_snapshot_delivery,
     proves_pristine_provider_transport_failure,
     sha256_file,
+    tenant01_expected_primary_product,
     write_tenant01_evidence,
 )
 
@@ -579,6 +580,19 @@ def _stream_card(
     return cast(dict[str, object], result)
 
 
+def _assert_frozen_card_product(card: _Card, snapshot: dict[str, object]) -> None:
+    expected = tenant01_expected_primary_product(card.card_id)
+    publication = snapshot.get("publication_contract")
+    plan = snapshot.get("creative_plan_v2")
+    observed_publication = publication.get("content_product") if isinstance(publication, dict) else None
+    observed_plan = plan.get("primary_value") if isinstance(plan, dict) else None
+    if observed_publication != expected or observed_plan != expected:
+        raise RuntimeError(
+            f"{card.card_id}: frozen content product drifted "
+            f"(expected={expected}, publication={observed_publication}, plan={observed_plan})"
+        )
+
+
 def _artifact(
     card: _Card,
     result: dict[str, object],
@@ -986,6 +1000,44 @@ def _generate(args: argparse.Namespace) -> None:
                 version_number,
             )
             snapshot = _task_snapshot(database_url, journey.tenant_id, task_id)
+            try:
+                _assert_frozen_card_product(card, snapshot)
+            except RuntimeError as exc:
+                raw_path = root / f"{card.card_id}.raw.json"
+                raw = _json_object(raw_path)
+                request_count = int(cast(int, raw["request_count"]))
+                failure_path = root / "suite-failure.json"
+                publication = snapshot.get("publication_contract")
+                plan = snapshot.get("creative_plan_v2")
+                _write_private_json(
+                    failure_path,
+                    {
+                        "failure_contract": "TENANT-01-FROZEN-CARD-BINDING-V1",
+                        "candidate_sha": implementation_sha,
+                        "acceptance_run_id": args.acceptance_run_id,
+                        "card_id": card.card_id,
+                        "expected_content_product": tenant01_expected_primary_product(card.card_id),
+                        "publication_content_product": (
+                            publication.get("content_product") if isinstance(publication, dict) else None
+                        ),
+                        "plan_primary_value": (plan.get("primary_value") if isinstance(plan, dict) else None),
+                        "raw_file": raw_path.name,
+                        "raw_sha256": sha256_file(raw_path),
+                        "request_count": request_count,
+                        "verdict": "FAILED_IMMUTABLE_DO_NOT_FINALIZE",
+                    },
+                )
+                control.record_acceptance_sample(
+                    candidate_sha=implementation_sha,
+                    suite_id=_ACCEPTANCE_SUITE_ID,
+                    acceptance_run_id=str(args.acceptance_run_id),
+                    sample_id=card.card_id,
+                    provider_response_received=request_count > 0,
+                    request_count=request_count,
+                    artifact_digest=sha256_file(failure_path),
+                    final_status="delivery_uncertain",
+                )
+                raise RuntimeError(str(exc)) from exc
             artifact_path = root / f"{card.card_id}.artifact.json"
             _write_private_json(
                 artifact_path,

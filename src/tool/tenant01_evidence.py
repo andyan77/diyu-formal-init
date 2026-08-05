@@ -424,6 +424,12 @@ def _primary_product_contract(card_id: str) -> ContentProduct:
     return "brand_life_narrative"
 
 
+def tenant01_expected_primary_product(card_id: str) -> ContentProduct:
+    """Expose the one frozen Golden product oracle to every evidence consumer."""
+
+    return _primary_product_contract(card_id)
+
+
 def _plan_allowlists(
     snapshot: dict[str, object],
     *,
