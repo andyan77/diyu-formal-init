@@ -2,42 +2,48 @@
 
 - 当前里程碑：`TENANT-01 · 笛语服饰首租户生产就绪与全能力演示`。
 - 状态：`REVIEW`。当前生产运行实现和唯一运行候选均为
-  `c5eb588844f9d398f742aa8a5406e4c5f41900bc`；execution-control 已追加完成共享合同纠偏、
-  来源绑定发布投影、本地 58 项正式支持面、同 SHA DeepSeek V1→V2、两份有界审查、唯一 CI、
-  备份恢复、按 digest 部署、正式租户生产浏览器验收、旧镜像往返回退和精确清理。不得自行置为
-  `CLOSED`，也不得创建 TENANT-02、successor 或平行状态文件。
+  `b12b3cbeb17c0af1b4a5452e54c4a5685adb0461`；execution-control 已追加完成 Intake 单一角色
+  真源、显式控制隔离、P4 路由机器门、来源绑定发布投影、本地 58 项正式支持面、fresh 26 卡、
+  两份有界审查、唯一 CI、备份恢复、按 digest 部署、正式租户 P1 V1→V2、旧镜像往返回退和
+  精确清理。不得自行置为 `CLOSED`，也不得创建 TENANT-02、successor 或平行状态文件。
 - 当前唯一生产镜像为
-  `sha256:5c129a035d916a0ce7e006de45754487ca16bead100653727f64deb9540714b2`，schema
+  `sha256:8281c1b59667d93a0c60ff47920a7cbd689d80554e4ef6154f9e9759a2e7e68d`，schema
   `20260817_44`；公网／回环 `/health/ready`、`/health/live`、`/status` 均为 200，内容与
-  陈列永久 running 均为 0。唯一权威 CI 为 GitHub Actions run `30977038261`（`success`）。
-  上一健康运行实现 `748190c552c6b9610aa951bd346fe8903ef51121` 已在 schema 44 上完成不降级
+  陈列永久 running 均为 0。唯一权威 CI 为 GitHub Actions run `31006296024`（job
+  `92306898035`，`success`）。上一健康运行实现 `c5eb588844f9d398f742aa8a5406e4c5f41900bc`
+  已在 schema 44 上完成不降级
   数据库的往返回退，最终再次切回候选且正式历史指纹一致。
-- 本轮主控裁决 `TENANT01-CONTROLLER-RULING-20260804-DOMAIN-ELABORATION` 已取代历史
-  `a10e565…` 的停止结论，但旧 FAIL、raw、artifact 与 checksum 原样保留。冻结的上位事实允许
-  Writer 在未验证 `creative_expression` 中作非量化、非认证、非具体 SKU 的常识性解释和低风险
-  文学性承接；这些文字不取得 `fact_ref`、不回写事实域、不获得资源，也不能成为后续任务的可信
-  来源。量化规格、检测／认证、合格率、提升百分比、具体 SKU／全批次结论、机构保证及未提供的
-  工艺、设备、材料、性能、功效或体验仍必须有可信来源。
+- Intake 新合同 `intake-role-projection-v2` 只要求模型返回完整、有序的 `user_sentence_roles`；
+  actuality／fact 与 creation／style instruction ID 均由服务端从角色表唯一派生。新 live 请求已
+  删除 `user_fact_sentence_ids`，未知、缺失、重复、乱序或非法 role 继续失败关闭；旧 raw 仅经
+  legacy replay adapter 无模型回放，不取得授权权力。自然解释裁决继续有效：非量化、非认证、
+  非具体 SKU 的常见维度和低风险文学性承接只属于 `creative_expression`，不能回写事实域；量化
+  规格、检测／认证、具体商品性能与机构保证仍必须有可信来源。
 - 正式租户当前有 3 个 `formal_business_data` 用户：管理员、正式内容用户“笛语品控”和正式成员
   “柯桥店阿丹”；后者以全局唯一用户名“笛语柯桥店阿丹”建立，显示名同名不再冲突，并只获得
   内容账号资格。正式发布投影为 confirmed V2：id
   `402278fb-15b6-4739-b947-32b38beb917e`、digest
   `102e0cdfbe49ac7c00bab2255b0bec6f95b1e49dc3bbc36b6b51401999b0faf5`、8 个来源绑定条目；
   兼容基线 V1 完整保留，5,046 个原始 segment 没有整体进入 Writer。
-- 正式“笛语品控”用精确验厂输入完成 V1→V2→V1→V2、复制与导出；task／run／version 差分
-  `+1/+2/+2`，两次 run 均 succeeded，永久 running 为 0，V1/V2 digest 不同。冻结用户原文
-  未变，Writer／ProductFact refs 均为 0，projection id／version／digest 在 freeze、request、
-  snapshot、context 与 evidence 全链一致。V1/V2 的“线迹、针脚、收线、转角”等为可收敛的产品
-  表达观察，不是硬边界失败；全文 high-risk、structure、product usable 均为 `PASS`。
+- 正式“笛语品控”先验证普通“发送”为 `0/0/0`，再以“早上有点凉，中午又热，我不想带太多
+  东西，今天怎么穿更稳妥？”完成 V1→V2→V1→V2；task／run／version 差分 `+1/+2/+2`，两次
+  run 均 succeeded、retry 0，永久 running 为 0。前三句由服务端派生为 actuality，最后一句
+  为 creation instruction；无 ProductFact，旧双真源字段缺席，projection id／version／digest
+  在任务快照与 WriterRequest 中一致。系统不自动发布，成品是完整可编辑首稿，用户采用前必须
+  阅读全文，可用自然反馈形成追加式 V2。
+- fresh acceptance run `tenant01-intake-final-20260805-b12b3cb` 的 protocol、machine hard、
+  structure、human high-risk boundary 均为 `26/26 PASS`，first-draft usable 为 `23/26`。
+  主控以 `controller_trial_acceptance=PASS` 批准进入受控生产试运行；其余 3 项原文质量观察继续
+  保留，不宣称 26 篇质量完美或任意首稿可直接发布。
 - 当前权威证据根为
-  `/mnt/diyu-build/evidence/TENANT-01/c5eb588844f9d398f742aa8a5406e4c5f41900bc/`。下方
-  `748190c…/acceptance-v2`、`a10e565…` 及更早路径均为追加式历史证据，不代表当前运行候选。
+  `/mnt/diyu-build/evidence/TENANT-01/b12b3cbeb17c0af1b4a5452e54c4a5685adb0461/`。下方
+  `c5eb588…`、`748190c…/acceptance-v2`、`a10e565…` 及更早路径均为追加式历史证据，不代表
+  当前运行候选。
 - 启动 Git 基线：`94fa541f4b5a8f9c3fab5de6d826473440b6dd30`；启动时生产运行实现
   `1f6aafee584fa5e2832be20c12534d9493691bda`、schema `20260810_37`，均须以现场只读审计
   复核。UX-03 保持 `CLOSED / 主控最终独立终审 PASS`。
-- 当前工作树有 93 行用户未提交项目记忆，内容属于企业报价、LangGraph 与招聘讨论；均按用户
-  修改原样保护，不覆盖、不暂存、不提交。除这些受保护内容外，TENANT-01 没有工作树修改，
-  暂存区为空。
+- 当前工作树中的用户未提交项目记忆按原样保护，不覆盖、不暂存、不提交；其 diff SHA-256 为
+  `96862202b06fd7821797d984215163069e8598a8641209ebae629ca2df0baaf7`。
 ### 2026-08-03 返工前历史快照（已被取代）
 
 > **口径声明：2026-08-03 返工前历史快照，已被 2026-08-04 最终 REVIEW 交付取代，不代表当前生产状态。**
@@ -325,14 +331,17 @@
   销售、多真实租户市场差异、企业 SLA、无正式门店事实时的 P4、无正式媒体时的 P5 成品或无
   正式门店／库存时的 DM01 经营采用。该状态后来被主控返工裁决取代，不代表当前生产状态。
 
-## TENANT-01 最终 REVIEW 交付（2026-08-04，运行实现 `c5eb588…`，当前唯一权威结论）
+## TENANT-01 历史 REVIEW 交付（2026-08-04，运行实现 `c5eb588…`，已被取代）
+
+> 本节原样保留 c5 候选的正式投影、生产纵向、备份、部署和回退事实；当前唯一权威结论为紧随
+> 本节之后的 `b12b3cb…` 受控生产试运行 REVIEW 交付。不得把本节称为当前运行状态。
 
 - 冻结工程与正式用户交付门全部通过：共享自然解释合同、来源绑定发布投影、58/58 支持面、
   同 SHA 正式 V1→V2、两份有界审查、唯一 CI、build-once、备份恢复、同 digest 部署、正式生产
   浏览器、旧镜像往返回退与精确清理均为 `PASS`。它不等于真实员工已经采用或内容已经发布。
-- 实现 SHA：`c5eb588844f9d398f742aa8a5406e4c5f41900bc`；镜像 digest：
+- 该轮实现 SHA：`c5eb588844f9d398f742aa8a5406e4c5f41900bc`；镜像 digest：
   `sha256:5c129a035d916a0ce7e006de45754487ca16bead100653727f64deb9540714b2`；schema：
-  `20260817_44`；唯一权威 CI：GitHub Actions run `30977038261`，结论 `success`。
+  `20260817_44`；该轮当时的权威 CI：GitHub Actions run `30977038261`，结论 `success`。
 - 笛语服饰正式发布投影为 confirmed V2：id `402278fb-15b6-4739-b947-32b38beb917e`、digest
   `102e0cdfbe49ac7c00bab2255b0bec6f95b1e49dc3bbc36b6b51401999b0faf5`，共 8 项：3 项
   `public_brand_fact`、3 项 `expression_constraint`、2 项 `creative_method`。全部绑定真实来源
@@ -365,8 +374,54 @@
   已用 token、临时密码、浏览器目录、远端临时目录、SSH control proxy 与本地 18443 监听归零。
   正式发布投影、正式成员和正式 V1/V2 继续保留；该 V1/V2 是 `formal_business_data` 追加式历史，
   删除它会降低版本不可变性，因此不伪装成 synthetic 清理。永久 running 为 0。
-- 当前仍未证明：正式员工长期采用、真实发布、平台流量／排名／爆款、GMV／销售、经营效果、
+- 该轮仍未证明：正式员工长期采用、真实发布、平台流量／排名／爆款、GMV／销售、经营效果、
   多真实租户市场差异、企业 SLA，以及资料补齐后的 P4、P5 和 DM01 正式经营结果。
+- 该轮当时状态为 `TENANT-01 REVIEW`，随后被 b12 返工取代。
+
+## TENANT-01 最终 REVIEW 交付（2026-08-05，运行实现 `b12b3cb…`，当前唯一权威结论）
+
+- 用户现在可以在获准账号和平台上把自然输入生成完整、可编辑、带 AIGC 标识且可回读的 V1，
+  用自然反馈形成追加式 V2，并复制或导出当前查看版本；普通“发送”不建任务，系统不自动发布。
+  用户采用或发布前必须阅读全文，本交付不承诺任意首稿无需编辑即可发布。
+- Intake 双真源已彻底删除：`intake-role-projection-v2` 只接收完整有序的角色表，服务端唯一派生
+  actuality 与 creation instruction IDs。旧 P1 raw 的无模型回放得到前三句 actuality、末句
+  creation instruction；恢复双真源、交并集合并、缺失／重复／乱序、legacy 字段重新授权及
+  无 artifact 误报 machine／structure FAIL 的 mutation 均真实变红。
+- fresh 26 卡绑定同一 SHA、同一隔离 synthetic confirmed projection V3（id
+  `9c3fffd0-b3f1-4ddf-8771-d1a5c24cff76`、digest
+  `efd3e6dc32ba15cac1b0c3852700a86eebb5093be74659090309c9c57354c4d6`）、同一
+  `deepseek-v4-flash / temperature=0 /
+  max_retries=0` 和 acceptance run `tenant01-intake-final-20260805-b12b3cb`，没有复用 c76、跨
+  SHA 拼接、随机重跑或择优。protocol、machine hard、structure、human high-risk boundary 均为
+  `26/26 PASS`；first-draft usable 为 `23/26`。generation ledger 为 0400，finalization 的 87 项
+  checksum 全部可复算。
+- 创始人裁决 `controller_trial_acceptance=PASS`，批准上述 26 张进入受控生产试运行。三个非阻断
+  质量观察原样保留：`new_product_effect_inducement` 避开无来源效果但转向颜色、未直接解释资料
+  缺口；`new_series_progression` 第 1／2 集中心句重复、系列推进弱；`new_style_revision` V2 标题、
+  导读和配文变化，但正文对冷幽默／克制指令落实不足。这些不改变事实、权限、资源或 V1 不可变性，
+  由真实用户的 V2 修改率、采用率和放弃率继续验证，不再据此补 Prompt。
+- 生产正式“笛语品控”先验证普通发送 `0/0/0`，再以温差穿衣 P1 完成 `+1/+2/+2` 的
+  V1→V2→V1→V2；两次 DeepSeek run 均 succeeded、retry 0，永久 running 为 0。前三句只作为
+  本轮冻结 actuality，最后一句只作为 creation instruction；ProductFact refs 为 0，旧
+  `user_fact_sentence_ids` 不在快照中，projection V2 id／digest 与正式任务实际消费一致。
+- 运行 SHA：`b12b3cbeb17c0af1b4a5452e54c4a5685adb0461`；镜像 digest：
+  `sha256:8281c1b59667d93a0c60ff47920a7cbd689d80554e4ef6154f9e9759a2e7e68d`；schema：
+  `20260817_44`；唯一权威 CI：GitHub Actions run `31006296024`、job `92306898035`，结论
+  `success`。
+- 新鲜 predeploy 备份为
+  `/var/backups/diyu-m5-4/20260805T124314Z-tenant01-b12b3cbeb17c0af1b4a5452e54c4a5685adb0461-predeploy`；
+  checksum、0700／0600、隔离恢复、FORCE RLS、无作用域读取拒绝、对象恢复和 candidate readiness
+  均为 `PASS`。上一健康 c5 镜像在 schema 44 上 ready／live／status 六端点全 200，再切回 b12；
+  数据库未降级，内容与陈列历史指纹在往返中一致。
+- 精确清理完成：本地 16 个显式 TENANT-01 synthetic tenant 及全部 tenant-scoped 关联行归零；
+  生产 9 个退出 runner 容器、9 个独占 bind WIP 目录、31 个 `/run` 目录、staging 脚本、近期已
+  撤销 session／已用 token、失效交接文件，以及本地 synthetic 媒体、凭据投影、Chrome、代理和
+  SSH 隧道均清零。正式 V1/V2、confirmed projection、raw、artifact、manifest、review 和 checksum
+  保留；最终单次 HTTPS 重设链接以 ECS root-only 0600 私有交接保留。
+- P4 因无正式门店事实、P5 因无正式商品媒体／绑定、DM01 因无正式门店和库存继续为
+  `data_missing`。仍未证明真实员工长期采用、真实发布、首稿直接采用率、V2 修改率、放弃率、
+  平均修改次数、品牌相关性、事实／资源投诉率、流量／排名／爆款、GMV／销售、经营效果、多真实
+  租户市场差异和企业 SLA。
 - 当前状态：`TENANT-01 REVIEW`，不是 `CLOSED`。唯一下一动作：主控独立终审。
 
 ## UX-02 关闭记录（历史保留）

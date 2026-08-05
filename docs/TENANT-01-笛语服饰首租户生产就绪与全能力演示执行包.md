@@ -7,10 +7,10 @@
 - 唯一写入执行端：当前 WSL Codex
 - Git 启动基线：`94fa541f4b5a8f9c3fab5de6d826473440b6dd30`
 - UX-03：`CLOSED / PASS`
-- 最终运行锚点：运行实现 `c5eb588844f9d398f742aa8a5406e4c5f41900bc`，镜像
-  `sha256:5c129a035d916a0ce7e006de45754487ca16bead100653727f64deb9540714b2`，schema
+- 最终运行锚点：运行实现 `b12b3cbeb17c0af1b4a5452e54c4a5685adb0461`，镜像
+  `sha256:8281c1b59667d93a0c60ff47920a7cbd689d80554e4ef6154f9e9759a2e7e68d`，schema
   `20260817_44`；公网／回环 ready、live、status 均为 200，唯一权威 CI 为
-  `30977038261 success`
+  GitHub Actions run `31006296024`（job `92306898035`，`success`）。
 - 工作树保护：`docs/项目记忆.md` 用户未提交内容全部保留，不暂存、不提交；最终 diff SHA-256
   `96862202b06fd7821797d984215163069e8598a8641209ebae629ca2df0baaf7`
 - 私有资料：仅从用户指定 Windows 目录只读；原文不得进入 Git、CI、公开日志或公开证据
@@ -353,7 +353,7 @@ DM01 实际经营采用。当前状态和唯一下一动作以文末“最终 RE
 ## 2026-08-04 历史 REVIEW 交付（运行实现 `748190c…`，已被取代）
 
 > 本节保留上一健康运行实现及其 26 卡验收的追加式历史事实；它不代表当前生产、当前证据或
-> 当前租户真值。当前权威结论见文末 `c5eb588…` 最终 REVIEW 交付。
+> 当前租户真值。当前权威结论见文末 `b12b3cb…` 最终 REVIEW 交付。
 
 TENANT-01 已完成工程、验收、CI、生产部署、恢复、回退和清理的唯一纵向结果。正式管理员现在
 可以登录生产，读取笛语服饰现有资料与商品边界；生产已具备管理员配置账号画像和成员的能力，
@@ -479,7 +479,10 @@ visible digest 和逐篇引用。generation ledger 保持只读；普通私有�
 该候选当时进入 `TENANT-01 REVIEW`，随后被主控有界返工裁决取代；不得把本节无时间限定地称为
 当前生产或最终证据。
 
-## 2026-08-04 最终 REVIEW 交付（运行实现 `c5eb588…`，当前唯一权威结论）
+## 2026-08-04 历史 REVIEW 交付（运行实现 `c5eb588…`，已被取代）
+
+> 本节保留 c5eb 候选当时的实施、审阅和生产事实；已被 2026-08-05 `b12b3cb…`
+> 最终 REVIEW 交付取代，不代表当前生产候选或最终验收证据。
 
 ### 共享合同纠偏
 
@@ -548,7 +551,7 @@ visible digest 和逐篇引用。generation ledger 保持只读；普通私有�
   无来源结论等反证均真实变红。Ruff、mypy（159）、Golden／OpenAPI（890 passed，2 个环境开关
   browser skip 已显式覆盖）、前端 lint／typecheck／interaction／build 和 Chrome Gate A—D
   （4／1／125／65）全部通过。
-- 唯一运行 SHA：`c5eb588844f9d398f742aa8a5406e4c5f41900bc`；唯一权威 CI：GitHub Actions
+- 该轮运行 SHA：`c5eb588844f9d398f742aa8a5406e4c5f41900bc`；该轮当时的权威 CI：GitHub Actions
   run `30977038261`，`success`；build-once／生产镜像 digest：
   `sha256:5c129a035d916a0ce7e006de45754487ca16bead100653727f64deb9540714b2`；schema：
   `20260817_44`。生产 `deepseek-v4-flash`、temperature 0、max retries 0。
@@ -571,5 +574,70 @@ visible digest 和逐篇引用。generation ledger 保持只读；普通私有�
 
 尚未证明正式员工长期采用、真实发布、平台流量／排名／爆款、GMV／销售、经营效果、多真实租户
 市场差异、企业 SLA，以及补齐真实门店事实／媒体／门店库存后的 P4、P5、DM01 正式经营结果。
+
+该候选当时进入 `TENANT-01 REVIEW`，随后由 Intake 单一真源返工取代。当前状态与唯一下一
+动作以下方 2026-08-05 最终交付为准。
+
+## 2026-08-05 最终 REVIEW 交付（运行实现 `b12b3cb…`，当前唯一权威结论）
+
+### Intake 单一真源与历史回放
+
+- 新合同 `intake-role-projection-v2` 只接收模型返回的完整、有序
+  `user_sentence_roles`；actuality／fact 和 creation／style instruction ID 由服务端从该角色表
+  唯一派生。新 live schema 已删除 `user_fact_sentence_ids`，不允许模型再维护第二份
+  等价事实集合；未知、缺失、重复、乱序或非法 role 继续失败关闭。
+- `tenant01-closed-20260805-c5eb588` 的 P1 失败 raw、failure summary、cleanup 和 checksum 保持
+  原样。legacy replay adapter 不调模型重放该 raw，按原顺序得到前三句
+  `observable_actuality`、第四句 `creation_instruction`；旧 `user_fact_sentence_ids` 不取得事实授权。
+  无 artifact 的旧失败继续精确记为 `protocol_contract=FAIL`、machine／structure／product
+  `NOT_EVALUABLE`，不改写为内容或 Writer 失败。
+
+### Fresh 26 卡与受控试运行裁决
+
+- 唯一 acceptance run `tenant01-intake-final-20260805-b12b3cb` 在同一 b12 SHA、同一隔离
+  synthetic confirmed projection V3（id `9c3fffd0-b3f1-4ddf-8771-d1a5c24cff76`、digest
+  `efd3e6dc32ba15cac1b0c3852700a86eebb5093be74659090309c9c57354c4d6`）、
+  `deepseek-v4-flash`、temperature 0、max retries 0 下从头运行 11 张黄金卡和 15 张冻结
+  泛化卡；没有跨 SHA 拼接、补跑单卡或择优。
+- 逐卡全文审阅与 finalization 结果：`protocol_contract=26/26 PASS`、
+  `machine_hard_gate=26/26 PASS`、`structure_gate=26/26 PASS`、
+  `human_high_risk_boundary=26/26 PASS`、`first_draft_usable=23/26`。raw、artifact、真实
+  UUID、digest、human review、manifest 和 `SHA256SUMS` 绑定同一候选，87/87 可复算。
+- 创始人裁决 `controller_trial_acceptance=PASS`，批准 26 张作为受控生产试运行样本。
+  这不表示 26 篇质量完美或任意首稿无需编辑即可发布；用户采用前必须阅读全文，
+  可以自然反馈形成追加式 V2，系统不自动发布。
+- 原文质量观察全部保留，其中 3 项不阻断：`new_product_effect_inducement` 虽避免了
+  无来源的显瘦／舒适承诺，但转向颜色，没有直接解释缺失证据；`new_series_progression`
+  的 series 1／2 重复“临时改道，也是一种抵达”，推进较弱；`new_style_revision` 的 V2
+  标题／导语／配文有变化，但正文变化很小，冷幽默／风格指令落实偏弱。这些均为
+  `first_draft_quality_observation`，不改写为硬边界失败。
+
+### 生产、回退、清理与真实边界
+
+- 两份有界审查均为 PASS：一份覆盖工程、安全、RLS、租户隔离、版本与兼容；一份
+  覆盖产品试运行口径、逐卡质量观察与防夸大。唯一权威 CI 为 GitHub Actions run
+  `31006296024`、job `92306898035`，`success`。
+- 运行 SHA `b12b3cbeb17c0af1b4a5452e54c4a5685adb0461`；build-once 并实际部署的镜像 digest
+  `sha256:8281c1b59667d93a0c60ff47920a7cbd689d80554e4ef6154f9e9759a2e7e68d`；schema
+  `20260817_44`。新鲜 predeploy 备份
+  `/var/backups/diyu-m5-4/20260805T124314Z-tenant01-b12b3cbeb17c0af1b4a5452e54c4a5685adb0461-predeploy`
+  的 checksum digest 为 `96414939d3e90bfa8289ca1c9de635c6d6b062b6d14773fdda09f7bdc9aa9ef5`；
+  权限、checksum、隔离恢复、FORCE RLS、无作用域读取拒绝、对象恢复和 readiness 均通过。
+- 正式“笛语品控”验证普通“发送”为 `0/0/0`，再以低种子穿衣输入完成生产
+  V1→V2→V1→V2；task／run／version 差分 `+1/+2/+2`，两次 run succeeded、retry 0、永久
+  running 0，新合同旧字段缺席、projection 全链一致、AIGC 和不自动发布成立。
+- 上一健康运行 `c5eb588…` 在 schema 44 上完成不降级数据库的镜像往返，最终切回
+  b12 同一 digest；公网／回环 ready、live、status 六项均 200，内容／陈列永久 running
+  为 0，正式历史指纹往返一致，backup timer active。
+- 精确清理已删除本轮 synthetic tenant 及其用户、session、token、task、run、version、临时
+  数据库／目录、浏览器资料、代理／隧道和凭据投影；正式 projection、正式成员、正式版本、
+  raw、artifact、human review、manifest 和 checksum 保留。合并清理证据 SHA-256 为
+  `3044db0e66040c85bb7375e0c8a94bb4fe8e7d016c710851ec2a776868cc578f`。
+- 正式资料仍为组织媒体 0、商品媒体绑定 0、门店 0、库存 0；P4、P5、DM01 继续
+  `data_missing`，不用 synthetic 证据冒充正式业务就绪。尚未证明真实员工长期采用、真实发布、
+  首稿直接采用率、V2 修改率、放弃率、平均修改次数、品牌相关性长期评分，以及流量、排名、
+  GMV、爆款、销售或经营效果。
+- `docs/项目记忆.md` 仍未覆盖、未暂存、未提交，保护 diff SHA-256 为
+  `96862202b06fd7821797d984215163069e8598a8641209ebae629ca2df0baaf7`。
 
 当前状态：`TENANT-01 REVIEW`，不是 `CLOSED`。唯一下一动作：主控独立终审。
