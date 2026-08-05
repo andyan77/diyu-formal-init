@@ -32,6 +32,7 @@ DEFAULT_RUNTIME_ROOT = Path("var/execution-control/TENANT-01")
 DEFAULT_PROTECTED_PATH = Path("docs/项目记忆.md")
 ACCEPTANCE_CHECKPOINT_VERSION = "tenant01-acceptance-checkpoint-v2"
 FORMAL_USABILITY_REWORK_ID = "TENANT01-FORMAL-USABILITY-20260804"
+INTAKE_SINGLE_SOURCE_REWORK_ID = "TENANT01-INTAKE-SINGLE-SOURCE-REWORK-20260805"
 FINAL_CONTROLLER_RULING_ID = "TENANT01-CONTROLLER-RULING-20260803-FINAL"
 DOMAIN_ELABORATION_RULING_ID = (
     "TENANT01-CONTROLLER-RULING-20260804-DOMAIN-ELABORATION"
@@ -39,6 +40,10 @@ DOMAIN_ELABORATION_RULING_ID = (
 _ACCEPTED_CONTROLLER_RULING_IDS = frozenset(
     {FINAL_CONTROLLER_RULING_ID, DOMAIN_ELABORATION_RULING_ID}
 )
+_REVIEW_REWORK_TARGETS: Mapping[str, str] = {
+    FORMAL_USABILITY_REWORK_ID: "CURRENT_TRUTH_RECONCILIATION",
+    INTAKE_SINGLE_SOURCE_REWORK_ID: "SHARED_ROOT_CAUSE_REPAIR",
+}
 
 NORMAL_STATES = frozenset(
     {
@@ -784,12 +789,13 @@ class ExecutionControl:
         """Append a same-milestone REVIEW rework without erasing prior proof.
 
         REVIEW stays terminal for generic transitions.  This dedicated action
-        accepts only the controller-authorized TENANT-01 formal-usability
-        rework, a linear descendant of the delivered runtime, and a worktree
-        whose sole change is the already protected project-memory diff.
+        accepts only a controller-authorized TENANT-01 rework, a linear
+        descendant of the delivered runtime, and a worktree whose sole change
+        is the already protected project-memory diff.
         """
 
-        if rework_id != FORMAL_USABILITY_REWORK_ID:
+        target_state = _REVIEW_REWORK_TARGETS.get(rework_id)
+        if target_state is None:
             raise ExecutionControlError("TENANT-01 REVIEW rework authorization is unknown")
         with self._lock():
             state = self._state()
@@ -816,7 +822,7 @@ class ExecutionControl:
             state.update(
                 {
                     "previous_state": "REVIEW",
-                    "current_state": "CURRENT_TRUTH_RECONCILIATION",
+                    "current_state": target_state,
                     "head_sha": next_head,
                     "origin_sha": _git_sha(self.repository, "origin/main"),
                     "worktree_digest": _worktree_digest(self.repository),
@@ -836,7 +842,7 @@ class ExecutionControl:
                 {
                     "rework_id": rework_id,
                     "from_state": "REVIEW",
-                    "to_state": "CURRENT_TRUTH_RECONCILIATION",
+                    "to_state": target_state,
                     "delivered_runtime_head": expected_runtime_head,
                     "rework_head": next_head,
                     "historical_completed_gates": list(previous_gates),

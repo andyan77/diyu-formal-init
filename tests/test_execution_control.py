@@ -12,6 +12,7 @@ import pytest
 from src.tool.execution_control import (
     ACCEPTANCE_CHECKPOINT_VERSION,
     FORMAL_USABILITY_REWORK_ID,
+    INTAKE_SINGLE_SOURCE_REWORK_ID,
     ExecutionControl,
     ExecutionControlError,
     _parser,
@@ -1127,6 +1128,36 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
     )
     assert returned_to_repair["current_state"] == "SHARED_ROOT_CAUSE_REPAIR"
     assert returned_to_repair["active_command"] is None
+
+
+def test_intake_single_source_rework_reopens_review_directly_to_shared_repair(
+    control_fixture: _ControlFixture,
+) -> None:
+    _reach_review(control_fixture)
+    delivered = control_fixture.control.status()
+    delivered_head = str(delivered["head_sha"])
+    delivered_acceptance = delivered["acceptance_runs"]
+    delivered_evidence = tuple(cast(list[str], delivered["evidence_paths"]))
+    before = (control_fixture.runtime_root / "events.jsonl").read_bytes()
+
+    marker = control_fixture.repository / "intake-single-source-rework.txt"
+    marker.write_text("controller-authorized intake contract repair\n", encoding="utf-8")
+    _git(control_fixture.repository, "add", marker.name)
+    _git(control_fixture.repository, "commit", "-m", "authorize intake contract repair")
+
+    reopened = control_fixture.control.reopen_review(
+        expected_runtime_head=delivered_head,
+        rework_id=INTAKE_SINGLE_SOURCE_REWORK_ID,
+    )
+
+    assert reopened["current_state"] == "SHARED_ROOT_CAUSE_REPAIR"
+    assert reopened["previous_state"] == "REVIEW"
+    assert reopened["completed_gates"] == []
+    assert reopened["acceptance_runs"] == delivered_acceptance
+    assert tuple(cast(list[str], reopened["evidence_paths"])) == delivered_evidence
+    events = (control_fixture.runtime_root / "events.jsonl").read_bytes()
+    assert events.startswith(before)
+    assert INTAKE_SINGLE_SOURCE_REWORK_ID.encode() in events
 
 
 @pytest.mark.parametrize(
