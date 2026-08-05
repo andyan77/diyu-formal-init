@@ -1068,6 +1068,14 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
     assert candidate["current_state"] == "UNIQUE_PRODUCTION_CANDIDATE"
     with pytest.raises(ExecutionControlError, match="formal acceptance runner is not authorized"):
         control_fixture.control.verify("acceptance_runner")
+    with pytest.raises(ExecutionControlError, match="formal acceptance is not authorized"):
+        control_fixture.control.begin_acceptance_suite(
+            candidate_sha=str(synchronized["head_sha"]),
+            suite_id="rework-suite",
+            acceptance_run_id="rework-run",
+            config_digest="a" * 64,
+            sample_ids=("sample-1",),
+        )
     with pytest.raises(ExecutionControlError, match="evidence finalizer is not allowed"):
         control_fixture.control.verify("evidence_finalizer")
     control_fixture.control.begin("candidate_frozen", "freeze candidate", None, os.getpid())
@@ -1077,6 +1085,34 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
     )
     assert control_fixture.control.verify("evidence_finalizer")["current_state"] == (
         "UNIQUE_PRODUCTION_CANDIDATE"
+    )
+    started_rework_suite = control_fixture.control.begin_acceptance_suite(
+        candidate_sha=str(synchronized["head_sha"]),
+        suite_id="rework-suite",
+        acceptance_run_id="rework-run",
+        config_digest="a" * 64,
+        sample_ids=("sample-1",),
+    )
+    assert (
+        cast(dict[str, object], started_rework_suite["acceptance_runs"])[
+            f'{synchronized["head_sha"]}:rework-suite'
+        ]
+        is not None
+    )
+    control_fixture.control.record_acceptance_sample(
+        candidate_sha=str(synchronized["head_sha"]),
+        suite_id="rework-suite",
+        acceptance_run_id="rework-run",
+        sample_id="sample-1",
+        provider_response_received=True,
+        request_count=1,
+        artifact_digest="b" * 64,
+        final_status="artifact_ready",
+    )
+    control_fixture.control.complete_acceptance_suite(
+        candidate_sha=str(synchronized["head_sha"]),
+        suite_id="rework-suite",
+        acceptance_run_id="rework-run",
     )
     with pytest.raises(ExecutionControlError, match="CI is not authorized"):
         control_fixture.control.verify("ci")

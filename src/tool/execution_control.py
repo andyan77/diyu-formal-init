@@ -214,6 +214,18 @@ _FORMAL_REWORK_REPAIR_STATES = frozenset(
         "REVIEW_HANDOFF",
     }
 )
+
+
+def _formal_acceptance_state_allowed(state: Mapping[str, object]) -> bool:
+    """Authorize the legacy evaluation state or one explicitly frozen rework candidate."""
+
+    if state.get("governance_version") != GOVERNANCE_VERSION:
+        return False
+    current = str(state.get("current_state"))
+    if current == "GENERALIZATION_EVAL":
+        return True
+    completed = set(cast(list[str], state.get("completed_gates", [])))
+    return current == "UNIQUE_PRODUCTION_CANDIDATE" and "candidate_frozen" in completed
 _STATE_FIELDS = frozenset(
     {
         "state_version",
@@ -869,8 +881,8 @@ class ExecutionControl:
         with self._lock():
             state = self._state()
             self._verify_static(state)
-            if state["current_state"] != "GENERALIZATION_EVAL":
-                raise ExecutionControlError("formal acceptance can only start in GENERALIZATION_EVAL")
+            if not _formal_acceptance_state_allowed(state):
+                raise ExecutionControlError("formal acceptance is not authorized for the current frozen state")
             if candidate_sha != state["head_sha"]:
                 raise ExecutionControlError("acceptance candidate SHA differs from the frozen state")
             checkpoint_digest: str | None = None
@@ -940,7 +952,7 @@ class ExecutionControl:
         with self._lock():
             state = self._state()
             self._verify_static(state)
-            if state["current_state"] != "GENERALIZATION_EVAL":
+            if not _formal_acceptance_state_allowed(state):
                 raise ExecutionControlError("interrupted acceptance recovery is not allowed in the current state")
             if (
                 state["active_pid"] != expected_pid
@@ -1463,15 +1475,7 @@ class ExecutionControl:
                 if current != "GENERALIZATION_EVAL":
                     raise ExecutionControlError("generalization runner is not allowed in the current state")
             elif action == "acceptance_runner":
-                legacy_acceptance = current == "GENERALIZATION_EVAL"
-                rework_acceptance = (
-                    current == "UNIQUE_PRODUCTION_CANDIDATE"
-                    and "candidate_frozen" in completed
-                )
-                if (
-                    not (legacy_acceptance or rework_acceptance)
-                    or state["governance_version"] != GOVERNANCE_VERSION
-                ):
+                if not _formal_acceptance_state_allowed(state):
                     raise ExecutionControlError("formal acceptance runner is not authorized")
             elif action == "evidence_finalizer":
                 legacy_finalization = current in {"GENERALIZATION_EVAL", "INDEPENDENT_AUDIT"}
