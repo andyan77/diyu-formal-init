@@ -140,8 +140,6 @@ class FormalBoundaryGenerator(DeterministicContentGenerator):
             "ready",
             "边界夹具已形成结构化意图。",
             user_premises=(request.message,),
-            user_fact_spans=tuple(candidate.exact_text for candidate in facts),
-            user_fact_source_ids=tuple(candidate.source_id for candidate in facts),
             user_span_roles=roles,
             claim_scope=cast(Any, claim_scope),
             narrative_mode=cast(Any, narrative_mode),

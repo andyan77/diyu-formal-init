@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from src.shared.errors import DomainError
+from src.shared.publication_contract import INTAKE_ROLE_CONTRACT_VERSION
 from src.tool import run_tenant01_formal_browser as browser_tool
 from src.tool.tenant01_candidate_freeze import (
     CANDIDATE_FREEZE_SCHEMA,
@@ -75,6 +76,7 @@ def _document(binding: dict[str, object] | None = None) -> dict[str, object]:
             "temperature": 0,
             "max_retries": 0,
         },
+        "intake_contract_version": INTAKE_ROLE_CONTRACT_VERSION,
         "context_evidence_sha256": _CONTEXT_SHA,
         "binding": frozen,
         "binding_digest": _digest(frozen),

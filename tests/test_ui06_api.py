@@ -91,6 +91,10 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
                 "ready",
                 "模型错误地认为可以直接创作。",
                 user_premises=(request.message,),
+                user_span_roles=tuple(
+                    (candidate.source_id, "creation_instruction")
+                    for candidate in request.user_fact_candidates
+                ),
                 narrative_mode="general_observation",
                 creative_plan=cast(Any, _plan(request, "brand_life_narrative")),
                 primary_product="brand_life_narrative",
@@ -102,6 +106,10 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
                 "ready",
                 "模型错误地认为可以直接泛化这段个人经历。",
                 user_premises=(request.message,),
+                user_span_roles=tuple(
+                    (candidate.source_id, "creation_instruction")
+                    for candidate in request.user_fact_candidates
+                ),
                 narrative_mode="general_observation",
                 creative_plan=cast(Any, _plan(request, "brand_life_narrative")),
                 primary_product="brand_life_narrative",
@@ -111,6 +119,10 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
                 "ready",
                 "模型夹带了并不存在的情节。",
                 user_premises=(request.message,),
+                user_span_roles=tuple(
+                    (candidate.source_id, "creation_instruction")
+                    for candidate in request.user_fact_candidates
+                ),
                 narrative_mode="general_observation",
                 creative_plan=replace(
                     cast(Any, _plan(request, "brand_life_narrative")),
@@ -123,8 +135,9 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
                 "ready",
                 "模型试图截断否定语义。",
                 user_premises=(request.message,),
-                user_fact_spans=("和婆婆吵架。",),
-                user_fact_source_ids=(request.user_fact_candidates[0].source_id,),
+                user_span_roles=(
+                    (request.user_fact_candidates[0].source_id, "observable_actuality"),
+                ),
                 narrative_mode="actuality_reflection",
                 creative_plan=cast(Any, _plan(request, "brand_life_narrative")),
                 primary_product="brand_life_narrative",
@@ -136,7 +149,6 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
             or (request.message == _FACTORY_ACTUALITY and candidate.exact_text in _FACTORY_FACT_SPANS)
             or request.message == _UNSUPPORTED_BRAND_GUARANTEE
         )
-        fact_spans = tuple(candidate.exact_text for candidate in selected_facts)
         span_roles: tuple[tuple[str, IntakeSpanRole], ...] = tuple(
             (
                 candidate.source_id,
@@ -162,12 +174,12 @@ class _UI06LifecycleGenerator(DeterministicContentGenerator):
             "ready",
             "可以，我直接完成。",
             user_premises=(request.message,),
-            user_fact_spans=fact_spans,
-            user_fact_source_ids=tuple(candidate.source_id for candidate in selected_facts),
             user_span_roles=span_roles,
             claim_scope=cast(Any, claim_scope),
             narrative_mode=(
-                "actuality_reflection" if fact_spans else request.explicit_narrative_mode or "general_observation"
+                "actuality_reflection"
+                if selected_facts
+                else request.explicit_narrative_mode or "general_observation"
             ),
             creative_plan=cast(
                 Any,

@@ -18,6 +18,8 @@ from src.shared.delivery_compiler import (
 from src.shared.errors import DomainError
 from src.shared.narrative import UserFactCandidate, user_fact_candidates
 from src.shared.publication_contract import (
+    INTAKE_ROLE_CONTRACT_VERSION,
+    LEGACY_INTAKE_ROLE_CONTRACT_VERSION,
     LEGACY_USER_ACTUALITY_EXPRESSION_POLICY,
     USER_ACTUALITY_EXPRESSION_POLICY,
     AccountEditorialPermissionV3,
@@ -112,7 +114,6 @@ def _contract_v3() -> PublicationContractV3:
             candidates[0].source_id: "observable_actuality",
             candidates[1].source_id: "creation_instruction",
         },
-        selected_actuality_source_ids=(candidates[0].source_id,),
     )
     return build_publication_contract_v3(
         input_roles=resolution.spans,
@@ -352,17 +353,21 @@ def test_publication_contract_v3_is_the_only_writer_semantic_projection() -> Non
     )
     assert document["expression_policy_version"] == USER_ACTUALITY_EXPRESSION_POLICY
     assert request_document["expression_policy_version"] == USER_ACTUALITY_EXPRESSION_POLICY
+    assert document["intake_role_contract_version"] == INTAKE_ROLE_CONTRACT_VERSION
+    assert request_document["intake_role_contract_version"] == INTAKE_ROLE_CONTRACT_VERSION
 
 
 def test_legacy_v3_snapshot_reads_without_backfilling_expression_policy() -> None:
     current_document = publication_contract_document(_contract_v3())
     legacy_document = dict(current_document)
     legacy_document.pop("expression_policy_version")
+    legacy_document.pop("intake_role_contract_version")
 
     restored = publication_contract_from_document(legacy_document)
 
     assert isinstance(restored, PublicationContractV3)
     assert restored.expression_policy_version == LEGACY_USER_ACTUALITY_EXPRESSION_POLICY
+    assert restored.intake_role_contract_version == LEGACY_INTAKE_ROLE_CONTRACT_VERSION
     assert publication_contract_document(restored) == legacy_document
     legacy_request = build_writer_request_v3(
         restored,
@@ -372,6 +377,7 @@ def test_legacy_v3_snapshot_reads_without_backfilling_expression_policy() -> Non
         revision_instruction=None,
     )
     assert "expression_policy_version" not in writer_request_document(legacy_request)
+    assert "intake_role_contract_version" not in writer_request_document(legacy_request)
 
 
 def test_publication_contract_v3_rejects_actuality_text_in_writer_topic() -> None:

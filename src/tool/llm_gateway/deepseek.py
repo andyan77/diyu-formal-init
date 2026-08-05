@@ -95,6 +95,7 @@ from src.shared.factual_basis import (
     registered_product_claims,
     select_product_fact_block_ids,
 )
+from src.shared.intake_contract import parse_live_intake_role_projection
 from src.shared.media_program import (
     assert_media_program_allowed,
     media_envelope_digest,
@@ -124,10 +125,10 @@ from src.shared.product_value import (
     product_value_contract_document,
 )
 from src.shared.publication_contract import (
+    INTAKE_ROLE_CONTRACT_VERSION,
     USER_ACTUALITY_DOMAIN_ELABORATION,
     USER_ACTUALITY_EXPRESSION_POLICY,
     USER_ACTUALITY_HARD_FACT_BOUNDARY,
-    IntakeSpanRole,
     PublicationContractV2,
     PublicationContractV3,
     negative_safety_contract_text,
@@ -719,13 +720,11 @@ class DeepSeekGenerator(ContentGenerator):
                 proposed_intent_span=proposed_intent_span,
             )
         raw_premises = document.get("user_premises")
-        raw_fact_ids = document.get("user_fact_sentence_ids")
         raw_sentence_roles = document.get("user_sentence_roles")
         raw_claim_scope = document.get("claim_scope")
         raw_plan = document.get("creative_plan")
         if (
             not isinstance(raw_premises, list)
-            or not isinstance(raw_fact_ids, list)
             or not isinstance(raw_sentence_roles, list)
             or raw_claim_scope
             not in {
@@ -760,41 +759,11 @@ class DeepSeekGenerator(ContentGenerator):
                 or source_bytes[candidate.start_byte : candidate.end_byte].decode("utf-8") != candidate.exact_text
             ):
                 raise GenerationFailed("用户原文跨度地址与正文不一致")
-        fact_source_ids = self._exact_string_list(raw_fact_ids)
-        sentence_roles: dict[str, str] = {}
-        for raw_role in raw_sentence_roles:
-            if not isinstance(raw_role, dict) or set(raw_role) != {
-                "sentence_id",
-                "role",
-            }:
-                raise GenerationFailed("用户句子角色投影格式不完整")
-            sentence_id = raw_role.get("sentence_id")
-            role = raw_role.get("role")
-            if (
-                not isinstance(sentence_id, str)
-                or sentence_id in sentence_roles
-                or sentence_id not in candidate_by_id
-                or role
-                not in {
-                    "observable_actuality",
-                    "creation_instruction",
-                    "style_or_revision_instruction",
-                }
-            ):
-                raise GenerationFailed("用户句子角色投影超出冻结候选")
-            sentence_roles[sentence_id] = role
-        if tuple(sentence_roles) != tuple(candidate_by_id):
-            raise GenerationFailed("用户句子角色没有按候选顺序完整冻结")
-        role_fact_ids = tuple(source_id for source_id, role in sentence_roles.items() if role == "observable_actuality")
-        instruction_source_ids = tuple(
-            source_id
-            for source_id, role in sentence_roles.items()
-            if role in {"creation_instruction", "style_or_revision_instruction"}
-        )
-        if any(source_id not in candidate_by_id for source_id in fact_source_ids):
-            raise GenerationFailed("模型返回的用户事实句标识不存在")
-        if fact_source_ids != role_fact_ids:
-            raise GenerationFailed("现实事实数组与句子角色投影不一致")
+        try:
+            role_projection = parse_live_intake_role_projection(document, candidates)
+        except DomainError as exc:
+            raise GenerationFailed("模型 Intake 角色合同无效") from exc
+        fact_source_ids = role_projection.actuality_source_ids
         facts = tuple(candidate_by_id[source_id] for source_id in fact_source_ids)
         premise_text = "\n".join(premises)
         if any(fact not in premise_text for fact in facts):
@@ -833,12 +802,8 @@ class DeepSeekGenerator(ContentGenerator):
             "ready",
             message.strip(),
             user_premises=premises,
-            user_fact_spans=facts,
-            user_fact_source_ids=fact_source_ids,
-            user_instruction_source_ids=instruction_source_ids,
-            user_span_roles=tuple(
-                (source_id, cast(IntakeSpanRole, role)) for source_id, role in sentence_roles.items()
-            ),
+            user_span_roles=role_projection.roles,
+            intake_contract_version=INTAKE_ROLE_CONTRACT_VERSION,
             claim_scope=cast(Any, raw_claim_scope),
             narrative_mode=narrative_mode,
             creative_plan=plan,
@@ -4249,7 +4214,6 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 {chat_shape}
 {question_shape}
 {{"kind":"ready","message":"一句自然承接，并明确本题非事实编辑焦点","user_premises":["逐字复制实际使用的用户消息"],
-"user_fact_sentence_ids":["只能选择服务端候选 sentence_id，不能返回或裁剪事实正文"],
 "user_sentence_roles":[{{"sentence_id":"按服务端候选顺序逐项返回","role":"observable_actuality|creation_instruction|style_or_revision_instruction"}}],
 "claim_scope":"task_actuality|specific_product_claim|institutional_claim|general_topic",
 "creative_plan":{{"plan_version":"{PLAN_VERSION}","topic_spans":["只能逐字截取用户消息"],
@@ -4274,13 +4238,13 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
   本身不是可逐字插入的现实事件。若没有至少一个可观察的动作、事件、对白或结果，必须
   question；不得把时间标签或评价词对应的 sentence_id 当作事实后直接创作。
 - 只给题材且没有现实片段用 general_observation；给出真人生活／工作片段用
-  actuality_reflection，并只选择完整服务端事实句 ID，不得裁剪、概括或改写；明确条件推演
-  与明确故事／短剧／情境演绎不属于现实事实，user_fact_sentence_ids 必须为空。narrative_mode 由
+  actuality_reflection，并只把完整服务端候选标为 observable_actuality，不得裁剪、概括或改写；明确条件推演
+  与明确故事／短剧／情境演绎不属于现实事实，不得标为 observable_actuality。narrative_mode 由
   服务端根据显式形式与完整事实句选择派生，你不得返回或选择该字段。
 - ready 时，user_sentence_roles 必须按下方服务端候选顺序逐项返回且完整覆盖。直接陈述可观察
   现实的完整跨度标为 observable_actuality；要求生成或平台成品的跨度标为 creation_instruction；
   只规定风格、修改方式或不得怎样写的跨度标为 style_or_revision_instruction。
-  user_fact_sentence_ids 必须恰好等于所有 observable_actuality 的 sentence_id，顺序一致。
+  服务端只从这张完整角色表派生现实事实与创作／风格指令 ID；不得返回第二份事实选择数组。
   服务端已经用可见标点把候选冻结成原始 offset；不得把相邻跨度拼接，也不得把指令升级成现实。
   若单个候选仍同时含事实与命令且无法按既有边界安全分开，该候选不得标为 observable_actuality；
   可以作为创作种子或控制，但不能冒充逐字现实引用。
@@ -4321,7 +4285,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
 系列：{request.prior_series_summary or "无"}
 此前交流：
 {history}
-服务端事实句候选（只能按 sentence_id 选择，exact_text 只读）：
+服务端输入跨度候选（必须按 sentence_id 顺序逐项分类，exact_text 只读）：
 {json.dumps(candidate_document, ensure_ascii=False)}
 用户本轮：{request.message}"""
 

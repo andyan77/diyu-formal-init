@@ -43,6 +43,7 @@ from src.tool.gate_c_evidence import (
     write_gate_c_evidence,
 )
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator, ProviderRequestFailure
+from src.tool.tenant01_evidence import failed_generation_gate_evaluation
 
 _MODEL = "deepseek-v4-flash"
 _SUITE_VERSION = "ux03-gate-c-formal-final-suite-v3"
@@ -188,6 +189,7 @@ class _EvidenceDeepSeekGenerator(DeepSeekGenerator):
                 "event_names": list(event_names),
                 "provider_attempts": self._provider_attempts,
                 "responses": self._responses,
+                "gate_evaluation": failed_generation_gate_evaluation(),
             },
         )
         self._active_card = None

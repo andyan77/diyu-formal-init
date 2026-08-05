@@ -7,6 +7,7 @@ from uuid import UUID
 from src.shared.creative_plan import CreativePlanV2
 from src.shared.narrative import NarrativeFrame, NarrativeMode, UserFactCandidate
 from src.shared.publication_contract import (
+    INTAKE_ROLE_CONTRACT_VERSION,
     IntakeSpanRole,
     PublicationContract,
 )
@@ -368,16 +369,30 @@ class ConversationDecision:
     disposition: ConversationDisposition
     message: str
     user_premises: tuple[str, ...] = ()
-    user_fact_spans: tuple[str, ...] = ()
-    user_fact_source_ids: tuple[str, ...] = ()
-    user_instruction_source_ids: tuple[str, ...] = ()
     user_span_roles: tuple[tuple[str, IntakeSpanRole], ...] = ()
+    intake_contract_version: str = INTAKE_ROLE_CONTRACT_VERSION
     claim_scope: ClaimScope | None = None
     narrative_mode: NarrativeMode | None = None
     creative_plan: CreativePlanV2 | None = None
     primary_product: ContentProduct | None = None
     creation_proposal: bool = False
     proposed_intent_span: str = ""
+
+    @property
+    def user_fact_source_ids(self) -> tuple[str, ...]:
+        return tuple(
+            source_id
+            for source_id, role in self.user_span_roles
+            if role == "observable_actuality"
+        )
+
+    @property
+    def user_instruction_source_ids(self) -> tuple[str, ...]:
+        return tuple(
+            source_id
+            for source_id, role in self.user_span_roles
+            if role != "observable_actuality"
+        )
 
 
 @dataclass(frozen=True)

@@ -16,9 +16,10 @@ from psycopg.rows import dict_row
 from src.brain.platform_directions import direction_for
 from src.shared.brand_publication import publication_projection_digest
 from src.shared.errors import DomainError
+from src.shared.publication_contract import INTAKE_ROLE_CONTRACT_VERSION
 from src.shared.types import ContentTarget
 
-CANDIDATE_FREEZE_SCHEMA = "tenant01-candidate-freeze-v1"
+CANDIDATE_FREEZE_SCHEMA = "tenant01-candidate-freeze-v2"
 _MODEL_CONFIG = {
     "provider": "deepseek",
     "model": "deepseek-v4-flash",
@@ -227,6 +228,7 @@ def assert_candidate_freeze_document(
         "candidate_sha",
         "created_at",
         "model_config",
+        "intake_contract_version",
         "context_evidence_sha256",
         "binding",
         "binding_digest",
@@ -237,6 +239,7 @@ def assert_candidate_freeze_document(
     if (
         document.get("schema_version") != CANDIDATE_FREEZE_SCHEMA
         or document.get("candidate_sha") != candidate_sha
+        or document.get("intake_contract_version") != INTAKE_ROLE_CONTRACT_VERSION
         or document.get("context_evidence_sha256") != context_evidence_sha256
         or model_config != _MODEL_CONFIG
         or set(binding) != _BINDING_FIELDS
@@ -298,6 +301,7 @@ def create_candidate_freeze(
         "candidate_sha": candidate_sha,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "model_config": dict(_MODEL_CONFIG),
+        "intake_contract_version": INTAKE_ROLE_CONTRACT_VERSION,
         "context_evidence_sha256": context_evidence_sha256,
         "binding": current,
         "binding_digest": _canonical_digest(current),

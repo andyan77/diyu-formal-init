@@ -88,6 +88,7 @@ from src.shared.product_value import (
     product_value_contract_digest,
 )
 from src.shared.publication_contract import (
+    INTAKE_ROLE_CONTRACT_VERSION,
     USER_ACTUALITY_DOMAIN_ELABORATION,
     USER_ACTUALITY_HARD_FACT_BOUNDARY,
     AccountEditorialPermissionV3,
@@ -497,11 +498,6 @@ class ContentService:
             user_turns=(weak_seed,),
             candidates=candidates,
             roles=roles,
-            selected_actuality_source_ids=tuple(
-                candidate.source_id
-                for candidate in candidates
-                if candidate.exact_text in fact_texts
-            ),
         )
         return resolution.spans
 
@@ -982,7 +978,23 @@ class ContentService:
                 "message": decision.message,
             }
         if (
-            not decision.user_fact_source_ids
+            decision.primary_product is None
+            or decision.narrative_mode is None
+            or not decision.user_premises
+            or decision.creative_plan is None
+        ):
+            raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
+        if decision.intake_contract_version != INTAKE_ROLE_CONTRACT_VERSION:
+            raise GenerationFailed("新内容任务的 Intake 角色合同版本无效")
+        role_resolution = resolve_input_roles(
+            user_turns=available_user_turns,
+            candidates=fact_candidates,
+            roles=dict(decision.user_span_roles),
+            contract_version=decision.intake_contract_version,
+        )
+        publication_spans = role_resolution.spans
+        if (
+            not role_resolution.actuality_source_ids
             and not products
             and requires_indispensable_user_fact(commitment.intent_span)
         ):
@@ -990,13 +1002,6 @@ class ContentService:
                 "kind": "question",
                 "message": "这段真实经历里，哪一件具体发生的事是必须保留的？",
             }
-        if (
-            decision.primary_product is None
-            or decision.narrative_mode is None
-            or not decision.user_premises
-            or decision.creative_plan is None
-        ):
-            raise GenerationFailed("这次还没能整理成可靠的创作要求，请继续补充一句。")
         primary_product = decision.primary_product
         narrative_mode = decision.narrative_mode
         creative_plan = decision.creative_plan
@@ -1018,34 +1023,6 @@ class ContentService:
             premise not in available_user_turns for premise in decision.user_premises
         ):
             raise GenerationFailed("模型没有可靠保留用户原话")
-        candidate_by_id = {candidate.source_id: candidate.exact_text for candidate in fact_candidates}
-        if len(decision.user_fact_source_ids) != len(decision.user_fact_spans) or any(
-            candidate_by_id.get(source_id) != exact_text
-            for source_id, exact_text in zip(
-                decision.user_fact_source_ids,
-                decision.user_fact_spans,
-                strict=True,
-            )
-        ):
-            raise GenerationFailed("模型返回的用户事实句标识不存在或原文漂移")
-        roles = decision.user_span_roles or tuple(
-            (
-                candidate.source_id,
-                (
-                    "observable_actuality"
-                    if candidate.source_id in decision.user_fact_source_ids
-                    else "creation_instruction"
-                ),
-            )
-            for candidate in fact_candidates
-        )
-        role_resolution = resolve_input_roles(
-            user_turns=available_user_turns,
-            candidates=fact_candidates,
-            roles=dict(roles),
-            selected_actuality_source_ids=decision.user_fact_source_ids,
-        )
-        publication_spans = role_resolution.spans
         if decision.claim_scope == "institutional_claim":
             return {
                 "kind": "question",
@@ -1088,10 +1065,10 @@ class ContentService:
         )
         frame = new_frame(
             narrative_mode,
-            decision.user_fact_spans,
+            role_resolution.actuality_texts,
             tuple(record.fact_id for product in products for record in product_fact_records(product)),
             (),
-            user_fact_source_ids=decision.user_fact_source_ids,
+            user_fact_source_ids=role_resolution.actuality_source_ids,
         )
         explicit_mode = self._explicit_narrative_mode(control, sanitized_message)
         if explicit_mode is not None and frame.narrative_mode != explicit_mode:

@@ -12,6 +12,8 @@ from src.shared.product_value import (
     ProductDecisionBasisV2,
 )
 from src.shared.publication_contract import (
+    INTAKE_ROLE_CONTRACT_VERSION,
+    LEGACY_INTAKE_ROLE_CONTRACT_VERSION,
     LEGACY_USER_ACTUALITY_EXPRESSION_POLICY,
     USER_ACTUALITY_EXPRESSION_POLICY,
     PublicationContractV3,
@@ -43,6 +45,7 @@ class WriterRequestV3:
     prior_output: dict[str, str] | None
     revision_instruction: str | None
     expression_policy_version: str
+    intake_role_contract_version: str
 
 
 @dataclass(frozen=True)
@@ -148,6 +151,7 @@ def build_writer_request_v3(
         ),
         revision_instruction=(revision_instruction.strip() if revision_instruction else None),
         expression_policy_version=contract.expression_policy_version,
+        intake_role_contract_version=contract.intake_role_contract_version,
     )
     assert_writer_request_v3(request)
     return request
@@ -175,6 +179,8 @@ def writer_request_document(request: WriterRequestV3) -> dict[str, object]:
     }
     if request.expression_policy_version != LEGACY_USER_ACTUALITY_EXPRESSION_POLICY:
         document["expression_policy_version"] = request.expression_policy_version
+    if request.intake_role_contract_version != LEGACY_INTAKE_ROLE_CONTRACT_VERSION:
+        document["intake_role_contract_version"] = request.intake_role_contract_version
     return document
 
 
@@ -226,6 +232,11 @@ def assert_writer_request_v3(request: WriterRequestV3) -> None:
         not in {
             LEGACY_USER_ACTUALITY_EXPRESSION_POLICY,
             USER_ACTUALITY_EXPRESSION_POLICY,
+        }
+        or request.intake_role_contract_version
+        not in {
+            LEGACY_INTAKE_ROLE_CONTRACT_VERSION,
+            INTAKE_ROLE_CONTRACT_VERSION,
         }
     ):
         raise DomainError("Writer 请求没有绑定唯一发布合同")

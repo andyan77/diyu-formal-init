@@ -107,6 +107,7 @@ from src.shared.product_value import (
     product_value_contract_from_document,
 )
 from src.shared.publication_contract import (
+    INTAKE_ROLE_CONTRACT_VERSION,
     NEGATIVE_SAFETY_RULE_IDS,
     PUBLICATION_CONTRACT_VERSION,
     AccountEditorialPermissionV3,
@@ -1167,6 +1168,7 @@ def _write_tenant01_generation_ledger(
             "ledger_version": TENANT01_GENERATION_LEDGER_VERSION,
             "suite_version": TENANT01_SUITE_VERSION,
             "implementation_sha": implementation_sha,
+            "intake_contract_version": INTAKE_ROLE_CONTRACT_VERSION,
             "provider_config": {
                 "model": TENANT01_PROVIDER_MODEL,
                 "temperature": 0,
@@ -1362,6 +1364,7 @@ def _write_tenant01_suite_config(
         "suite_version": TENANT01_SUITE_VERSION,
         "implementation_sha": implementation_sha,
         "acceptance_run_id": "tenant01-acceptance-test",
+        "intake_contract_version": INTAKE_ROLE_CONTRACT_VERSION,
         "provider_config": {
             "model": TENANT01_PROVIDER_MODEL,
             "temperature": 0,
@@ -1558,6 +1561,7 @@ def _tenant01_generalization_reviews(
             "suite_version": "TENANT-01-FROZEN-GENERALIZATION-V1",
             "implementation_sha": "a" * 40,
             "acceptance_run_id": "tenant01-acceptance-test",
+            "intake_contract_version": INTAKE_ROLE_CONTRACT_VERSION,
             "source_config": {
                 "file": "config/tenant01/semantic-holdout-v1.json",
                 "sha256": "e773158aef2a22e3d4344f20c80bdf90b5bd9d19c0d3012b4f5fd0b00d1dcda7",
@@ -2936,6 +2940,7 @@ def test_tenant01_evidence_binds_artifacts_reviews_and_persistence(tmp_path: Pat
         for record in manifest["artifacts"]
     )
     assert human_review["hard_boundary_violations"] == 0
+    assert human_review["protocol_contract_passed"] == 26
     assert human_review["machine_hard_gate_passed"] == 26
     assert human_review["human_high_risk_boundary_gate_passed"] == 26
     assert human_review["structure_gate_passed"] == 26
@@ -2943,6 +2948,7 @@ def test_tenant01_evidence_binds_artifacts_reviews_and_persistence(tmp_path: Pat
     assert human_review["first_draft_usable_minimum"] == 23
     assert human_review["sample_count"] == 26
     assert manifest["acceptance_run_id"] == "tenant01-acceptance-test"
+    assert manifest["acceptance"]["protocol_contract_passed"] == 26
     assert manifest["acceptance"]["human_high_risk_boundary_gate_passed"] == 26
     assert manifest["image_binding"]["file"] == "image-binding.json"
     assert manifest["image_binding"]["build_count"] == 1

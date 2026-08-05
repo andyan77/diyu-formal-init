@@ -1765,7 +1765,6 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
         for candidate in candidates
         if candidate.exact_text in {"今天店里忙了一天，", "回家还因为谁洗碗拌了两句。"}
     )
-    instruction_candidates = tuple(candidate.source_id for candidate in candidates if candidate not in fact_candidates)
     assert "narrative_mode 由\n  服务端根据显式形式与完整事实句选择派生" in prompt
     assert "你不得返回或选择该字段" in prompt
     assert "primary_value 是本篇给受众的主要回报，不是 narrative_mode" in prompt
@@ -1780,8 +1779,6 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
                 "message": "好，我保留这段原话，其他由我来完成。",
                 "claim_scope": "task_actuality",
                 "user_premises": [message],
-                "user_fact_sentence_ids": [candidate.source_id for candidate in fact_candidates],
-                "user_instruction_sentence_ids": list(instruction_candidates),
                 "user_sentence_roles": _sentence_roles(
                     message,
                     tuple(candidate.source_id for candidate in fact_candidates),
@@ -1794,10 +1791,6 @@ def test_conversation_intake_preserves_exact_spans_and_mode() -> None:
     decision = _generator().collaborate(request)
     assert decision.disposition == "ready"
     assert decision.user_premises == (message,)
-    assert decision.user_fact_spans == (
-        "今天店里忙了一天，",
-        "回家还因为谁洗碗拌了两句。",
-    )
     assert decision.user_fact_source_ids == tuple(candidate.source_id for candidate in fact_candidates)
     assert decision.narrative_mode == "actuality_reflection"
 
@@ -1825,7 +1818,6 @@ def test_single_turn_intake_keeps_the_server_owned_premise_when_the_model_paraph
                 "message": "好，我保留事实边界并直接完成。",
                 "claim_scope": "task_actuality",
                 "user_premises": ["有人只想安静看看，请给一条回应建议。"],
-                "user_fact_sentence_ids": [candidate.source_id for candidate in fact_candidates],
                 "user_sentence_roles": _sentence_roles(
                     message,
                     tuple(candidate.source_id for candidate in fact_candidates),
@@ -1838,7 +1830,7 @@ def test_single_turn_intake_keeps_the_server_owned_premise_when_the_model_paraph
     decision = _generator().collaborate(request)
 
     assert decision.user_premises == (message,)
-    assert decision.user_fact_spans == tuple(candidate.exact_text for candidate in fact_candidates)
+    assert decision.user_fact_source_ids == tuple(candidate.source_id for candidate in fact_candidates)
 
 
 def test_conversation_intake_freezes_system_selected_topic_origin() -> None:
@@ -1862,7 +1854,6 @@ def test_conversation_intake_freezes_system_selected_topic_origin() -> None:
                 "message": "好，我会从当前账号内容领地选择一个具体主线。",
                 "claim_scope": "general_topic",
                 "user_premises": [message],
-                "user_fact_sentence_ids": [],
                 "user_sentence_roles": _sentence_roles(message),
                 "creative_plan": _intake_plan(
                     message,
@@ -1902,7 +1893,6 @@ def test_conversation_intake_keeps_frozen_actuality_as_the_explicit_topic() -> N
                 "message": "好，我会回应这段具体生活片段。",
                 "claim_scope": "task_actuality",
                 "user_premises": [message],
-                "user_fact_sentence_ids": [actuality.source_id for actuality in actualities],
                 "user_sentence_roles": _sentence_roles(
                     message,
                     tuple(actuality.source_id for actuality in actualities),
@@ -1921,10 +1911,7 @@ def test_conversation_intake_keeps_frozen_actuality_as_the_explicit_topic() -> N
 
     decision = _generator().collaborate(request)
 
-    assert decision.user_fact_spans == (
-        "今天事情一件接一件，",
-        "回到家才发现自己连水都忘了喝，",
-    )
+    assert decision.user_fact_source_ids == tuple(actuality.source_id for actuality in actualities)
     assert decision.narrative_mode == "actuality_reflection"
     assert decision.creative_plan is not None
     assert decision.creative_plan.topic_origin == "explicit_user"
@@ -1934,9 +1921,6 @@ def test_conversation_intake_freezes_the_whole_negated_sentence() -> None:
     message = "我没有和婆婆吵架。帮我写条小红书。"
     candidates = user_fact_candidates((message,))
     negated = next(candidate for candidate in candidates if candidate.exact_text == "我没有和婆婆吵架。")
-    instruction_candidates = tuple(
-        candidate.source_id for candidate in candidates if candidate.source_id != negated.source_id
-    )
     request = ConversationInput(
         message=message,
         history=(),
@@ -1954,8 +1938,6 @@ def test_conversation_intake_freezes_the_whole_negated_sentence() -> None:
                 "message": "好，我会保留完整原话。",
                 "claim_scope": "task_actuality",
                 "user_premises": [message],
-                "user_fact_sentence_ids": [negated.source_id],
-                "user_instruction_sentence_ids": list(instruction_candidates),
                 "user_sentence_roles": _sentence_roles(
                     message,
                     (negated.source_id,),
@@ -1967,7 +1949,6 @@ def test_conversation_intake_freezes_the_whole_negated_sentence() -> None:
 
     decision = _generator().collaborate(request)
 
-    assert decision.user_fact_spans == ("我没有和婆婆吵架。",)
     assert decision.user_fact_source_ids == (negated.source_id,)
 
 
@@ -2021,8 +2002,6 @@ def test_conversation_intake_keeps_creation_instruction_out_of_frozen_actuality(
                 "message": "好，我只保留实际观察。",
                 "claim_scope": "task_actuality",
                 "user_premises": [message],
-                "user_fact_sentence_ids": [fact.source_id],
-                "user_instruction_sentence_ids": [instruction.source_id for instruction in instructions],
                 "user_sentence_roles": _sentence_roles(
                     message,
                     (fact.source_id,),
@@ -2034,9 +2013,43 @@ def test_conversation_intake_keeps_creation_instruction_out_of_frozen_actuality(
 
     decision = _generator().collaborate(request)
 
-    assert decision.user_fact_spans == (fact.exact_text,)
     assert decision.user_fact_source_ids == (fact.source_id,)
     assert decision.user_instruction_source_ids == tuple(instruction.source_id for instruction in instructions)
+
+
+def test_conversation_intake_rejects_deleted_duplicate_fact_authority() -> None:
+    message = "今天店里有人只想自己看看。请回应这种状态。"
+    candidates = user_fact_candidates((message,))
+    actuality = candidates[0]
+    request = ConversationInput(
+        message=message,
+        history=(),
+        brand=_brand(),
+        products=(),
+        target="xiaohongshu_graphic",
+        allowed_tone_ids=(ACCOUNT_BASELINE_TONE_ID,),
+        platform_shape="xiaohongshu_graphic:graphic",
+        user_fact_candidates=candidates,
+    )
+    FakeClient.responses = [
+        _completion(
+            {
+                "kind": "ready",
+                "message": "好，我只保留实际观察。",
+                "claim_scope": "task_actuality",
+                "user_premises": [message],
+                "user_sentence_roles": _sentence_roles(
+                    message,
+                    (actuality.source_id,),
+                ),
+                "user_fact_sentence_ids": [actuality.source_id],
+                "creative_plan": _intake_plan(message),
+            }
+        )
+    ]
+
+    with pytest.raises(GenerationFailed, match="Intake 角色合同无效"):
+        _generator().collaborate(request)
 
 
 @pytest.mark.parametrize(
@@ -2071,10 +2084,6 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
                 "message": "可以，直接开始。",
                 "claim_scope": "general_topic",
                 "user_premises": [message],
-                "user_fact_sentence_ids": facts,
-                "user_instruction_sentence_ids": [
-                    candidate.source_id for candidate in user_fact_candidates((message,))
-                ],
                 "user_sentence_roles": _sentence_roles(message),
                 "narrative_mode": mode,
                 "creative_plan": _intake_plan(message),
@@ -2094,7 +2103,7 @@ def test_conversation_intake_accepts_the_three_nonactual_modes(
         )
     )
     assert decision.narrative_mode == mode
-    assert decision.user_fact_spans == ()
+    assert decision.user_fact_source_ids == ()
 
 
 def test_conversation_question_must_bind_one_user_fact_gap() -> None:
@@ -2214,17 +2223,18 @@ def test_conversation_rejects_synthetic_or_mode_drifted_spans() -> None:
                 "message": "开始。",
                 "claim_scope": "general_topic",
                 "user_premises": [message],
-                "user_fact_sentence_ids": ["source:user_actuality:invented"],
-                "user_instruction_sentence_ids": [
-                    candidate.source_id for candidate in user_fact_candidates((message,))
+                "user_sentence_roles": [
+                    {
+                        "sentence_id": "source:user_actuality:invented",
+                        "role": "creation_instruction",
+                    }
                 ],
-                "user_sentence_roles": _sentence_roles(message),
                 "narrative_mode": "actuality_reflection",
                 "creative_plan": _intake_plan(message),
             }
         )
     ]
-    with pytest.raises(GenerationFailed, match="事实句标识不存在"):
+    with pytest.raises(GenerationFailed, match="Intake 角色合同无效"):
         _generator().collaborate(
             ConversationInput(
                 message,

@@ -11,6 +11,8 @@ from src.shared.errors import DomainError
 
 PUBLICATION_CONTRACT_VERSION = "publication-contract-v2"
 PUBLICATION_CONTRACT_V3_VERSION = "publication-contract-v3"
+LEGACY_INTAKE_ROLE_CONTRACT_VERSION = "intake-role-projection-v1"
+INTAKE_ROLE_CONTRACT_VERSION = "intake-role-projection-v2"
 LEGACY_USER_ACTUALITY_EXPRESSION_POLICY = "user-actuality-read-only-v1"
 USER_ACTUALITY_EXPRESSION_POLICY = "user-actuality-natural-expression-v2"
 
@@ -172,6 +174,7 @@ class PublicationContractV3:
     publication_projection_version: int
     publication_projection_digest: str
     expression_policy_version: str = USER_ACTUALITY_EXPRESSION_POLICY
+    intake_role_contract_version: str = INTAKE_ROLE_CONTRACT_VERSION
 
 
 PublicationContract: TypeAlias = PublicationContractV2 | PublicationContractV3
@@ -254,6 +257,8 @@ def publication_contract_document(
             "publication_projection_version": (contract.publication_projection_version),
             "publication_projection_digest": (contract.publication_projection_digest),
         }
+        if contract.intake_role_contract_version != LEGACY_INTAKE_ROLE_CONTRACT_VERSION:
+            document["intake_role_contract_version"] = contract.intake_role_contract_version
         if contract.expression_policy_version != LEGACY_USER_ACTUALITY_EXPRESSION_POLICY:
             document["expression_policy_version"] = contract.expression_policy_version
         return document
@@ -597,6 +602,7 @@ def build_publication_contract_v3(
         publication_projection_id=publication_projection_id,
         publication_projection_version=publication_projection_version,
         publication_projection_digest=publication_projection_digest,
+        intake_role_contract_version=INTAKE_ROLE_CONTRACT_VERSION,
     )
     _assert_publication_contract_v3(contract)
     return contract
@@ -717,6 +723,10 @@ def _publication_contract_v3_from_document(
                 value.get("expression_policy_version")
                 or LEGACY_USER_ACTUALITY_EXPRESSION_POLICY
             ),
+            intake_role_contract_version=str(
+                value.get("intake_role_contract_version")
+                or LEGACY_INTAKE_ROLE_CONTRACT_VERSION
+            ),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise DomainError("内容任务冻结的发布责任合同无效") from exc
@@ -733,6 +743,11 @@ def _assert_publication_contract_v3(contract: PublicationContractV3) -> None:
         not in {
             LEGACY_USER_ACTUALITY_EXPRESSION_POLICY,
             USER_ACTUALITY_EXPRESSION_POLICY,
+        }
+        or contract.intake_role_contract_version
+        not in {
+            LEGACY_INTAKE_ROLE_CONTRACT_VERSION,
+            INTAKE_ROLE_CONTRACT_VERSION,
         }
         or contract.topic_origin not in {"explicit_user", "system_selected"}
         or not contract.topic

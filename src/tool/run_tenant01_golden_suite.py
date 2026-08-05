@@ -27,6 +27,7 @@ from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.errors import GenerationFailed
 from src.shared.narrative import visible_digest
 from src.shared.product_value import build_product_decision_basis_v2
+from src.shared.publication_contract import INTAKE_ROLE_CONTRACT_VERSION
 from src.shared.types import ContentTarget, ProductFact
 from src.tool.execution_control import (
     ACCEPTANCE_CHECKPOINT_VERSION,
@@ -771,6 +772,7 @@ def _write_generation_ledger(
             "ledger_version": TENANT01_GENERATION_LEDGER_VERSION,
             "suite_version": _SUITE_VERSION,
             "implementation_sha": implementation_sha,
+            "intake_contract_version": INTAKE_ROLE_CONTRACT_VERSION,
             "provider_config": {
                 "model": _MODEL,
                 "temperature": 0,
@@ -1028,6 +1030,7 @@ def _generate(args: argparse.Namespace) -> None:
             "suite_version": _SUITE_VERSION,
             "implementation_sha": implementation_sha,
             "acceptance_run_id": args.acceptance_run_id,
+            "intake_contract_version": INTAKE_ROLE_CONTRACT_VERSION,
             "provider_config": {
                 "model": _MODEL,
                 "temperature": 0,
@@ -1241,6 +1244,7 @@ def _assert_finalizable_evidence_root(
         "suite_version",
         "implementation_sha",
         "acceptance_run_id",
+        "intake_contract_version",
         "provider_config",
         "cards",
         "generation_ledger",
@@ -1253,6 +1257,7 @@ def _assert_finalizable_evidence_root(
         config.get("suite_version") != _SUITE_VERSION
         or config.get("implementation_sha") != implementation_sha
         or not str(config.get("acceptance_run_id", "")).strip()
+        or config.get("intake_contract_version") != INTAKE_ROLE_CONTRACT_VERSION
         or not isinstance(provider, dict)
         or set(provider) != {"model", "temperature", "max_retries"}
         or provider.get("model") != _MODEL
@@ -1301,6 +1306,8 @@ def _finalize(args: argparse.Namespace) -> None:
     acceptance_run_id = str(golden_config.get("acceptance_run_id", ""))
     if not acceptance_run_id or generalization_suite_config.get("acceptance_run_id") != acceptance_run_id:
         raise RuntimeError("TENANT-01 acceptance run binding drifted")
+    if generalization_suite_config.get("intake_contract_version") != INTAKE_ROLE_CONTRACT_VERSION:
+        raise RuntimeError("TENANT-01 generalization Intake contract version drifted")
     control = ExecutionControl(Path.cwd())
     acceptance_runs = cast(dict[str, dict[str, object]], control.status()["acceptance_runs"])
     for suite_id in (_ACCEPTANCE_SUITE_ID, "tenant01-generalization-15-v1"):

@@ -163,7 +163,6 @@ class DeterministicContentGenerator(ContentGenerator):
             for candidate in request.user_fact_candidates
         )
         fact_source_ids = tuple(source_id for source_id, role in roles if role == "observable_actuality")
-        candidate_by_id = {candidate.source_id: candidate.exact_text for candidate in request.user_fact_candidates}
         return ConversationDecision(
             "ready",
             f"好，我按当前选择的{request.brand.platform}{request.brand.media_format}整理。",
@@ -180,9 +179,6 @@ class DeterministicContentGenerator(ContentGenerator):
                 target_shape=(request.platform_shape or platform_shape(request.target, request.brand.media_format)),
             ),
             primary_product=product,
-            user_fact_spans=tuple(candidate_by_id[source_id] for source_id in fact_source_ids),
-            user_fact_source_ids=fact_source_ids,
-            user_instruction_source_ids=tuple(source_id for source_id, role in roles if role != "observable_actuality"),
             user_span_roles=roles,
             creation_proposal=True,
             proposed_intent_span=text,

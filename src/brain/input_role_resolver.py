@@ -5,13 +5,18 @@ from dataclasses import dataclass
 
 from src.shared.errors import DomainError
 from src.shared.narrative import UserFactCandidate
-from src.shared.publication_contract import IntakeSpanRole, PublicationInputSpanV1
+from src.shared.publication_contract import (
+    INTAKE_ROLE_CONTRACT_VERSION,
+    IntakeSpanRole,
+    PublicationInputSpanV1,
+)
 
 
 @dataclass(frozen=True)
 class InputRoleResolution:
     """One complete, source-bound interpretation of the current user turns."""
 
+    contract_version: str
     spans: tuple[PublicationInputSpanV1, ...]
 
     @property
@@ -22,13 +27,17 @@ class InputRoleResolution:
     def actuality_texts(self) -> tuple[str, ...]:
         return tuple(span.exact_text for span in self.spans if span.role == "observable_actuality")
 
+    @property
+    def instruction_source_ids(self) -> tuple[str, ...]:
+        return tuple(span.source_id for span in self.spans if span.role != "observable_actuality")
+
 
 def resolve_input_roles(
     *,
     user_turns: Sequence[str],
     candidates: Sequence[UserFactCandidate],
     roles: Mapping[str, IntakeSpanRole],
-    selected_actuality_source_ids: Sequence[str],
+    contract_version: str = INTAKE_ROLE_CONTRACT_VERSION,
 ) -> InputRoleResolution:
     """Validate model-selected roles against server-owned exact candidates.
 
@@ -43,9 +52,8 @@ def resolve_input_roles(
         raise DomainError("用户输入跨度标识重复")
     if tuple(roles) != candidate_ids:
         raise DomainError("用户输入角色没有完整覆盖冻结跨度")
-    actuality_ids = tuple(source_id for source_id in candidate_ids if roles[source_id] == "observable_actuality")
-    if tuple(selected_actuality_source_ids) != actuality_ids:
-        raise DomainError("现实事实选择与输入角色不一致")
+    if contract_version != INTAKE_ROLE_CONTRACT_VERSION:
+        raise DomainError("新内容任务的 Intake 角色合同版本无效")
 
     spans: list[PublicationInputSpanV1] = []
     turn_tuple = tuple(user_turns)
@@ -71,4 +79,4 @@ def resolve_input_roles(
                 end_byte=candidate.end_byte,
             )
         )
-    return InputRoleResolution(tuple(spans))
+    return InputRoleResolution(contract_version, tuple(spans))

@@ -21,6 +21,7 @@ from src.infrastructure.content_control_repository import (
 from src.infrastructure.local_object_store import LocalObjectStore
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
+from src.shared.publication_contract import INTAKE_ROLE_CONTRACT_VERSION
 from src.tool.execution_control import ExecutionControl, verify_runtime_action
 from src.tool.formal_api_pacing import FormalApiSubmissionPacer
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator, ProviderRequestFailure
@@ -45,6 +46,7 @@ from src.tool.tenant01_evidence import (
     TENANT01_GENERALIZATION_CONFIG_SHA256,
     TENANT01_PROVIDER_FAILURE_TRACE_VERSION,
     TENANT01_PROVIDER_MODEL,
+    failed_generation_gate_evaluation,
     proves_pristine_provider_transport_failure,
     sha256_file,
 )
@@ -880,6 +882,7 @@ def _run(args: argparse.Namespace) -> None:
                             }
                             for path in failure_trace.files
                         ],
+                        "gate_evaluation": failed_generation_gate_evaluation(),
                     },
                 )
                 control.record_acceptance_sample(
@@ -929,6 +932,7 @@ def _run(args: argparse.Namespace) -> None:
             "suite_version": _SUITE_VERSION,
             "implementation_sha": implementation_sha,
             "acceptance_run_id": args.acceptance_run_id,
+            "intake_contract_version": INTAKE_ROLE_CONTRACT_VERSION,
             "source_config": {
                 "file": "config/tenant01/semantic-holdout-v1.json",
                 "sha256": TENANT01_GENERALIZATION_CONFIG_SHA256,

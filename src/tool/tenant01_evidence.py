@@ -62,6 +62,7 @@ from src.shared.product_value import (
     product_value_contract_from_document,
 )
 from src.shared.publication_contract import (
+    INTAKE_ROLE_CONTRACT_VERSION,
     PUBLICATION_CONTRACT_V3_VERSION,
     PUBLICATION_CONTRACT_VERSION,
     PublicationContractV2,
@@ -82,9 +83,10 @@ from src.shared.writer_request import (
 TENANT01_SUITE_VERSION: Final[str] = "TENANT-01-GOLDEN-V1"
 TENANT01_RAW_BUNDLE_VERSION: Final[str] = "ux03-gate-c-provider-stages-v1"
 TENANT01_PROVIDER_FAILURE_TRACE_VERSION: Final[str] = "tenant01-provider-failure-trace-v2"
-TENANT01_GENERATION_LEDGER_VERSION: Final[str] = "tenant01-generation-ledger-v1"
+TENANT01_GENERATION_LEDGER_VERSION: Final[str] = "tenant01-generation-ledger-v2"
 TENANT01_GENERATION_LEDGER_FILE: Final[str] = "generation-ledger.json"
 TENANT01_PROVIDER_MODEL: Final[str] = "deepseek-v4-flash"
+TENANT01_NOT_EVALUABLE: Final[str] = "NOT_EVALUABLE"
 TENANT01_CARD_IDS: Final[frozenset[str]] = frozenset(
     {
         "coffee",
@@ -295,6 +297,23 @@ def proves_pristine_provider_transport_failure(document: object) -> bool:
         and attempt.get("response_received") is False
         and attempt.get("outcome") == "transport_no_response"
     )
+
+
+def failed_generation_gate_evaluation() -> dict[str, str]:
+    """Classify a pre-artifact protocol failure without inventing product results."""
+
+    return {
+        "protocol_contract": "FAIL",
+        "machine_hard": TENANT01_NOT_EVALUABLE,
+        "structure": TENANT01_NOT_EVALUABLE,
+        "human_high_risk_boundary": TENANT01_NOT_EVALUABLE,
+        "product_usable": TENANT01_NOT_EVALUABLE,
+    }
+
+
+def assert_failed_generation_gate_evaluation(value: object) -> None:
+    if value != failed_generation_gate_evaluation():
+        raise Tenant01EvidenceError("无 artifact 的协议失败被错误记入成品验收门。")
 
 
 def _raw_binding(path: Path, *, card_id: str) -> dict[str, object]:
@@ -867,6 +886,7 @@ def _artifact_binding_v3(
     if (
         not isinstance(publication, PublicationContractV3)
         or publication.contract_version != PUBLICATION_CONTRACT_V3_VERSION
+        or publication.intake_role_contract_version != INTAKE_ROLE_CONTRACT_VERSION
         or publication_contract_digest(publication) != publication_digest
         or _canonical_digest(raw_publication) != publication_digest
         or publication.publication_projection_id != projection_id
@@ -1062,6 +1082,7 @@ def _artifact_binding_v3(
             "brand_context_packet_digest": packet_digest,
             "creative_plan_version": plan.plan_version,
             "publication_contract_version": publication.contract_version,
+            "intake_role_contract_version": publication.intake_role_contract_version,
             "publication_contract_digest": publication_digest,
             "writer_request_digest": writer_request_digest_value,
             "writer_output_digest": writer_digest,
@@ -1558,6 +1579,9 @@ def _validate_review(
         "verdict": review.verdict,
         "notes": review.notes,
         "hard_boundary": review.hard_boundary,
+        "protocol_contract": "PASS",
+        "machine_hard": "PASS",
+        "structure_complete": "PASS",
         "product_usable": review.product_usable,
         "quality_dimensions": quality_dimensions,
         "dimension_rationales": dimension_rationales,
@@ -1615,6 +1639,8 @@ def _validate_generalization_review(
         "result_file": review.result_file,
         "result_sha256": review.result_sha256,
         "hard_boundary": review.hard_boundary,
+        "protocol_contract": "PASS",
+        "machine_hard": "PASS",
         "structure_complete": review.structure_complete,
         "product_usable": review.product_usable,
         "excerpts": dict(review.excerpts),
@@ -1750,6 +1776,7 @@ def _generation_ledger(
         "ledger_version",
         "suite_version",
         "implementation_sha",
+        "intake_contract_version",
         "provider_config",
         "cards",
     }:
@@ -1760,6 +1787,7 @@ def _generation_ledger(
         document.get("ledger_version") != TENANT01_GENERATION_LEDGER_VERSION
         or document.get("suite_version") != TENANT01_SUITE_VERSION
         or document.get("implementation_sha") != implementation_sha
+        or document.get("intake_contract_version") != INTAKE_ROLE_CONTRACT_VERSION
         or provider
         != {
             "model": TENANT01_PROVIDER_MODEL,
@@ -1898,6 +1926,8 @@ def write_tenant01_evidence(
         generalization_config.get("suite_version")
         != "TENANT-01-FROZEN-GENERALIZATION-V1"
         or generalization_config.get("implementation_sha") != implementation_sha
+        or generalization_config.get("intake_contract_version")
+        != INTAKE_ROLE_CONTRACT_VERSION
         or not isinstance(source_config, dict)
         or source_config.get("sha256") != TENANT01_GENERALIZATION_CONFIG_SHA256
         or source_config.get("set_kind") != "frozen_generalization_regression"
@@ -1983,9 +2013,17 @@ def write_tenant01_evidence(
         record["hard_boundary"] == "PASS"
         for record in (*review_records, *generalization_records)
     )
-    structure_passed = len(review_records) + sum(
+    protocol_passed = sum(
+        record["protocol_contract"] == "PASS"
+        for record in (*review_records, *generalization_records)
+    )
+    machine_hard_passed = sum(
+        record["machine_hard"] == "PASS"
+        for record in (*review_records, *generalization_records)
+    )
+    structure_passed = sum(
         record["structure_complete"] == "PASS"
-        for record in generalization_records
+        for record in (*review_records, *generalization_records)
     )
     first_draft_usable = sum(
         record["product_usable"] == "PASS"
@@ -1994,6 +2032,8 @@ def write_tenant01_evidence(
     sample_count = len(review_records) + len(generalization_records)
     if (
         sample_count != len(TENANT01_ACCEPTANCE_SAMPLE_IDS)
+        or protocol_passed != sample_count
+        or machine_hard_passed != sample_count
         or hard_boundary_passed != sample_count
         or structure_passed != sample_count
         or first_draft_usable < TENANT01_FIRST_DRAFT_USABLE_MINIMUM
@@ -2027,7 +2067,8 @@ def write_tenant01_evidence(
             "reviews": review_records,
             "generalization_reviews": generalization_records,
             "hard_boundary_violations": sample_count - hard_boundary_passed,
-            "machine_hard_gate_passed": sample_count,
+            "protocol_contract_passed": protocol_passed,
+            "machine_hard_gate_passed": machine_hard_passed,
             "human_high_risk_boundary_gate_passed": hard_boundary_passed,
             "structure_gate_passed": structure_passed,
             "first_draft_usable": first_draft_usable,
@@ -2065,6 +2106,7 @@ def write_tenant01_evidence(
                 "temperature": 0,
                 "max_retries": 0,
             },
+            "intake_contract_version": INTAKE_ROLE_CONTRACT_VERSION,
             "artifacts": artifact_records,
             "generalization_results": [
                 {
@@ -2082,7 +2124,8 @@ def write_tenant01_evidence(
             },
             "acceptance": {
                 "sample_count": sample_count,
-                "machine_hard_gate_passed": sample_count,
+                "protocol_contract_passed": protocol_passed,
+                "machine_hard_gate_passed": machine_hard_passed,
                 "human_high_risk_boundary_gate_passed": hard_boundary_passed,
                 "structure_gate_passed": structure_passed,
                 "first_draft_usable": first_draft_usable,
