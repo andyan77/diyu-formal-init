@@ -4272,6 +4272,8 @@ def test_tenant01_generalization_preflights_every_identity_target_before_ledger(
             publishing_identity_id: UUID | None = None,
         ) -> tuple[str, ...]:
             del identity
+            if publishing_identity_id is None:
+                return ()
             return {
                 primary_identity: ("douyin_video", "xiaohongshu_graphic"),
                 secondary_identity: ("douyin_video",),
