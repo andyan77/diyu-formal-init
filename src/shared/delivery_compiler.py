@@ -39,6 +39,7 @@ from src.shared.product_value import (
 )
 from src.shared.publication_contract import (
     USER_ACTUALITY_EXPRESSION_POLICY,
+    USER_ACTUALITY_VISIBLE_SCOPE,
     PublicationContract,
     PublicationContractV2,
     PublicationContractV3,
@@ -114,7 +115,7 @@ _PHRASES: dict[str, str] = {
     "phrase:title-hypothesis": "假设一下：",
     "phrase:title-dramatization": "情景演绎：",
     "phrase:artifact-general": "以下是围绕这个主题的创作表达，不对应真实人物或经历。",
-    "phrase:artifact-user-fact": ("以下内容保留你提供的真实片段；其余为创作性观察，不补充现实细节。"),
+    "phrase:artifact-user-fact": USER_ACTUALITY_VISIBLE_SCOPE,
     "phrase:artifact-confirmed-fact": ("以下只引用已确认的信息；其余为一般观察，不增加新的现实主张。"),
     "phrase:artifact-recommendation": "以下是可选择的创作建议，不表示已经执行。",
     "phrase:artifact-user-fact-recommendation": ("以下内容保留你提供的真实片段；其余为可选择建议，不表示已经执行。"),

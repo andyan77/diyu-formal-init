@@ -144,6 +144,7 @@ class BrandContext:
     creative_method_context: tuple[str, ...] = ()
     candidate_product_guidance_context: tuple[str, ...] = ()
     context_packet: BrandContextPacket | None = None
+    content_role_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -491,6 +492,7 @@ class ContentControlContext:
     content_role: str = ""
     content_role_boundary: str = ""
     speaker_kind: SpeakerKind = "unknown"
+    content_role_id: UUID | None = None
     # The acting person's own soft collaboration input.  It reaches the generator and stays out
     # of the tenant-visible task snapshot and the ordinary run receipt.
     collaboration_note: str = ""

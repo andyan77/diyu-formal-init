@@ -330,7 +330,7 @@ class PostgresContentRepository(ContentRepository):
                        b.positioning, b.decision_order, b.tone,
                        root_account.name AS account_name,
                        u.display_name AS operator_name, o.name AS organization_name,
-                       cr.name AS content_role_name, cr.voice_boundary,
+                       cr.id AS content_role_id, cr.name AS content_role_name, cr.voice_boundary,
                        cr.speaker_kind, ba.description AS audience_description,
                        b.strategy_version, target_account.channel, root_account.business_data_kind,
                        root_account.control_organization_id
@@ -443,6 +443,7 @@ class PostgresContentRepository(ContentRepository):
             business_data_kind=str(row["business_data_kind"]),
             brand_reference_context=tuple(brand_reference_context),
             speaker_kind=cast(SpeakerKind, str(row["speaker_kind"])),
+            content_role_id=UUID(str(row["content_role_id"])),
         )
 
     def select_brand_context_for_task(

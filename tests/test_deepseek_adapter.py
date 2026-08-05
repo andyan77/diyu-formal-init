@@ -69,6 +69,9 @@ from src.shared.narrative import (
 )
 from src.shared.product_value import build_product_decision_basis_v2
 from src.shared.publication_contract import (
+    USER_ACTUALITY_DOMAIN_ELABORATION,
+    USER_ACTUALITY_HARD_FACT_BOUNDARY,
+    USER_ACTUALITY_VISIBLE_SCOPE,
     AccountEditorialPermissionV3,
     BrandContextUseV3,
     PlatformDirectionV3,
@@ -689,12 +692,13 @@ def test_publication_v3_uses_one_writer_call_without_legacy_repair_or_reviewer()
     assert "每个可见句" not in prompt
     assert "必须二选一" not in prompt
     assert "不能替换用户题材" in prompt
-    assert "不得为了证明、解释或扩写用户陈述" in prompt
+    assert "不得为了证明用户陈述" in prompt
     assert "新的外部人物及其对白或行为" in prompt
-    assert "不能把宽泛的品牌、商品、工艺、质量、性能、功效或机构判断具体化" in prompt
+    assert USER_ACTUALITY_DOMAIN_ELABORATION in prompt
+    assert USER_ACTUALITY_HARD_FACT_BOUNDARY in prompt
     assert "最终来源边界（优先于上面合同中的创作方法或表达许可）" in prompt
     assert "在本次同一 Writer 调用内逐句自检四个字段" in prompt
-    assert "宁可交付较短但完整的作品，也不要用虚构细节证明用户的判断" in prompt
+    assert "宁可交付较短但完整的作品，也不要用虚构硬事实证明用户的判断" in prompt
     assert prompt.rfind("最终来源边界") > prompt.rfind('"read_only_actuality_context"')
     assert request.active_domain_assets[0].body not in prompt
     system = _payload_system_prompts()[0]
@@ -802,11 +806,12 @@ def test_publication_v3_rejects_a_body_with_no_creative_expression_after_exact_d
     system = _payload_system_prompts()[0]
     assert "read_only_actuality_context 穷尽本题可以使用现实语态写出的外部可观察事实" in system
     assert "可以围绕它自然引用、复述、调整语序" in system
-    assert "始终属于 creative_expression" in system
-    assert "低风险场景化承接可以作为未验证的 creative_expression 存在" in system
-    assert "宽泛判断时，该判断不授权 Writer 补出具体子维度" in system
+    assert "始终属于未验证的 creative_expression" in system
+    assert "也允许低风险即时反应、感受、比喻和文学性场景承接" in system
+    assert "已冻结的上位事实允许 Writer 用常识性、非量化、非认证的常见观察维度帮助理解" in system
+    assert "自然解释也不能作为用户陈述的外部证据或后续任务的可信来源" in system
     assert "品牌表达约束、创作方法和 prior_output 都不能扩大这条来源边界" in system
-    assert "不能创建 fact_ref、回写可信事实" in system
+    assert "不创建fact_ref，不回写可信事实" in system
 
 
 def test_publication_v3_suppresses_only_a_standalone_exact_actuality_paragraph() -> None:
@@ -970,10 +975,87 @@ def test_publication_v3_coffee_actuality_is_natural_expression_not_fact_ownershi
         (candidate.source_id,) for candidate in actuality
     }
     assert expected_body in artifact.body
+    assert USER_ACTUALITY_VISIBLE_SCOPE in artifact.body
     system = _payload_system_prompts()[0]
     assert "穷尽本题可以使用现实语态写出的外部可观察事实" in system
-    assert "这些新增文字始终属于 creative_expression，不能作为用户陈述的外部证据" in system
-    assert "不能被写成支撑或解释品牌、商品、工艺、检验、质量、性能、功效或机构结论的具体证据" in system
+    assert USER_ACTUALITY_DOMAIN_ELABORATION in system
+    assert USER_ACTUALITY_HARD_FACT_BOUNDARY in system
+    assert "后续任务的可信来源" in system
+
+
+def test_publication_v3_upper_level_actuality_allows_common_dimensions_without_fact_ownership() -> None:
+    base = _publication_v3_request()
+    message = "今天去工厂验厂，今年量装大货的车缝品质有了大幅度的提升。帮我生成。"
+    candidates = user_fact_candidates((message,))
+    assert len(candidates) == 3
+    actuality = candidates[:2]
+    roles = tuple(
+        PublicationInputSpanV1(
+            source_id=candidate.source_id,
+            role=("observable_actuality" if candidate in actuality else "creation_instruction"),
+            exact_text=candidate.exact_text,
+            turn_index=candidate.turn_index,
+            start_offset=candidate.start_offset,
+            end_offset=candidate.end_offset,
+            start_byte=candidate.start_byte,
+            end_byte=candidate.end_byte,
+        )
+        for candidate in candidates
+    )
+    contract = replace(
+        cast(PublicationContractV3, base.publication_contract),
+        input_roles=roles,
+        topic="围绕本次工作现场观察形成自然表达",
+        frozen_fact_refs=tuple(candidate.source_id for candidate in actuality),
+        explicit_user_controls=(candidates[2].exact_text,),
+    )
+    request = replace(
+        base,
+        weak_seed=message,
+        narrative_frame=new_frame(
+            "actuality_reflection",
+            tuple(candidate.exact_text for candidate in actuality),
+            (),
+            user_fact_source_ids=tuple(candidate.source_id for candidate in actuality),
+        ),
+        publication_contract=contract,
+    )
+    expected_body = (
+        "今天去工厂验厂，眼前的变化让人停下来多看了一会儿。"
+        "线迹显得细密，接缝更平整，针距看起来均匀，收边也利落；"
+        "这些常见维度只是围绕车缝品质提升的创作性展开，不是检验记录。"
+    )
+    FakeClient.responses = [
+        _completion(
+            {
+                "title": "认真，藏在一针一线里",
+                "natural_guide": "从一次工作现场观察，写下变化带来的当下感受。",
+                "creative_body": expected_body,
+                "publication_caption": "针脚里的秩序，也让时间有了被认真对待的样子。",
+            }
+        )
+    ]
+
+    artifact = _generator().generate(request)
+
+    assert artifact.completion_snapshot_patch is not None
+    kernel = cast(dict[str, object], artifact.completion_snapshot_patch["creative_kernel_v5"])
+    units = cast(list[dict[str, object]], kernel["units"])
+    writer_units = [unit for unit in units if unit["owner"] == "writer"]
+    assert writer_units
+    assert all(unit["fact_refs"] == [] for unit in writer_units)
+    assert all(
+        isinstance(unit["provenance"], list)
+        and len(unit["provenance"]) == 1
+        and str(unit["provenance"][0]).startswith("writer-output-v3:")
+        for unit in writer_units
+    )
+    assert USER_ACTUALITY_VISIBLE_SCOPE in artifact.body
+    assert expected_body in artifact.body
+    prompt = _payload_prompts()[0]
+    assert USER_ACTUALITY_DOMAIN_ELABORATION in prompt
+    assert USER_ACTUALITY_HARD_FACT_BOUNDARY in prompt
+    assert "宽泛判断不授权具体子维度" not in prompt
 
 
 def test_publication_v3_keeps_canonical_fact_exclusive_to_server() -> None:

@@ -14,6 +14,18 @@ PUBLICATION_CONTRACT_V3_VERSION = "publication-contract-v3"
 LEGACY_USER_ACTUALITY_EXPRESSION_POLICY = "user-actuality-read-only-v1"
 USER_ACTUALITY_EXPRESSION_POLICY = "user-actuality-natural-expression-v2"
 
+USER_ACTUALITY_DOMAIN_ELABORATION = (
+    "已冻结的上位事实允许 Writer 用常识性、非量化、非认证的常见观察维度帮助理解，也允许低风险即时"
+    "反应、感受、比喻和文学性场景承接；这些新增文字始终属于未验证的 creative_expression，不创建"
+    "fact_ref，不回写可信事实，也不取得人物、场地、道具、商品或媒体资源资格"
+)
+USER_ACTUALITY_HARD_FACT_BOUNDARY = (
+    "具体数值或规格、检验结果、认证、合格率或提升百分比、具体 SKU 或全部商品和批次结论，以及未提供的"
+    "工艺、设备、材料、生产方法、性能、功效、耐用性、舒适度、体验、比较基线、成因、记录或机构保证，"
+    "仍必须有对应可信来源"
+)
+USER_ACTUALITY_VISIBLE_SCOPE = "以下保留用户提供的真实片段；其余为创作性表达，不作为现场事实或检验记录。"
+
 IntakeSpanRole: TypeAlias = Literal[
     "observable_actuality",
     "creation_instruction",
@@ -25,7 +37,9 @@ NEGATIVE_SAFETY_RULES: dict[str, str] = {
         "不把 Writer 的自然复述、润色、低风险即时反应、感受、比喻或文学性承接升级为可信事实；"
         "不创建新的 fact_ref，也不回写用户、商品或品牌事实仓"
     ),
-    "no_product_fact_or_effect": "不新增商品硬事实或具体商品效果",
+    "no_product_fact_or_effect": (
+        "不新增无来源的量化规格、检验或认证结论、具体商品或批次事实、性能、功效、体验或机构保证"
+    ),
     "no_method_as_fact": "不把品牌约束、方法或机构信息升级为现实事实",
     "no_unregistered_media": "不使用未登记的人物、场地、道具、商品或媒体资源",
     "advice_stays_conditional": "一般建议保持建议、条件或假设身份",

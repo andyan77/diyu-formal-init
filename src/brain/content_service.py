@@ -88,6 +88,8 @@ from src.shared.product_value import (
     product_value_contract_digest,
 )
 from src.shared.publication_contract import (
+    USER_ACTUALITY_DOMAIN_ELABORATION,
+    USER_ACTUALITY_HARD_FACT_BOUNDARY,
     AccountEditorialPermissionV3,
     BrandContextUseV3,
     IntakeSpanRole,
@@ -682,10 +684,8 @@ class ContentService:
                             item
                             for item in (
                                 authority_boundary,
-                                (
-                                    "不得把用户现实陈述或 creative_expression 具体化为未获来源支持的品牌、"
-                                    "商品、工艺、检验、质量、性能、功效或正式机构结论"
-                                ),
+                                USER_ACTUALITY_DOMAIN_ELABORATION,
+                                USER_ACTUALITY_HARD_FACT_BOUNDARY,
                             )
                             if item
                         )
@@ -1210,6 +1210,7 @@ class ContentService:
                 content_role=context.content_role_name,
                 content_role_boundary=context.content_role_boundary,
                 speaker_kind=context.speaker_kind,
+                content_role_id=context.content_role_id,
             )
         requested = controls or RequestedControls()
         boundary_text = " ".join(
@@ -1245,6 +1246,7 @@ class ContentService:
             content_role=context.content_role_name,
             content_role_boundary=context.content_role_boundary,
             speaker_kind=context.speaker_kind,
+            content_role_id=context.content_role_id,
             collaboration_note=collaboration_note,
         )
 
@@ -1311,6 +1313,7 @@ class ContentService:
         catalog_version = snapshot.get("catalog_version")
         preference_version = snapshot.get("private_preference_version")
         frozen_role = snapshot.get("content_role")
+        frozen_role_id = snapshot.get("content_role_id")
         frozen_boundary = snapshot.get("content_role_boundary")
         frozen_speaker_kind = snapshot.get("speaker_kind")
         return ContentControlContext(
@@ -1335,6 +1338,7 @@ class ContentService:
                     else "unknown"
                 ),
             ),
+            content_role_id=(UUID(str(frozen_role_id)) if frozen_role_id else None),
             # A revision replays conditions; it never reads today's private preference.
             collaboration_note="",
         )

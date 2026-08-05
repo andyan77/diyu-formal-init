@@ -29,6 +29,7 @@ from src.tool.run_tenant01_formal_vertical import (
     _dictionary,
     _settings,
 )
+from src.tool.tenant01_candidate_freeze import validate_candidate_freeze
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _FACTORY_USER_FACTS = (
@@ -145,11 +146,16 @@ def _new_task_rows(
         connection.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant_id),))
         rows = connection.execute(
             """
-            SELECT task.id, task.primary_content_product, task.product_refs,
+            SELECT task.id, task.brand_id, task.account_id,
+                   task.logical_account_id, task.created_by, task.media_format,
+                   task.primary_content_product, task.product_refs,
                    task.content_context_snapshot,
                    task.content_context_snapshot #>>
                      '{brand_context_packet,publication_projection_id}'
                      AS publication_projection_id,
+                   task.content_context_snapshot #>>
+                     '{brand_context_packet,publication_projection_version}'
+                     AS publication_projection_version,
                    task.content_context_snapshot #>>
                      '{brand_context_packet,publication_projection_digest}'
                      AS publication_projection_digest,
@@ -165,7 +171,9 @@ def _new_task_rows(
               LEFT JOIN content_versions version
                 ON version.tenant_id=task.tenant_id AND version.task_id=task.id
              WHERE task.tenant_id=%s AND task.created_at >= %s
-             GROUP BY task.id, task.primary_content_product, task.product_refs,
+             GROUP BY task.id, task.brand_id, task.account_id,
+                      task.logical_account_id, task.created_by, task.media_format,
+                      task.primary_content_product, task.product_refs,
                       task.content_context_snapshot
              ORDER BY task.id
             """,
@@ -188,16 +196,51 @@ def _new_task_rows(
             snapshot.get("brand_context_packet"),
             "正式浏览器品牌上下文快照无效",
         )
+        publication = _dictionary(
+            snapshot.get("publication_contract"),
+            "正式浏览器发布合同快照无效",
+        )
+        permission = _dictionary(
+            publication.get("account_editorial_permission"),
+            "正式浏览器账号画像快照无效",
+        )
+        platform = _dictionary(
+            publication.get("platform_direction"),
+            "正式浏览器平台目标快照无效",
+        )
         raw_consumed = packet.get("consumed_segment_refs")
         if not isinstance(raw_consumed, list) or any(not isinstance(value, str) for value in raw_consumed):
             raise DomainError("正式浏览器已消费品牌来源引用无效")
+        projection_version = packet.get("publication_projection_version")
+        profile_version = snapshot.get("account_expression_profile_version")
+        if type(projection_version) is not int or type(profile_version) is not int:
+            raise DomainError("正式浏览器投影或画像版本快照无效")
+        if (
+            publication.get("publication_projection_id") != packet.get("publication_projection_id")
+            or publication.get("publication_projection_version") != projection_version
+            or publication.get("publication_projection_digest") != packet.get("publication_projection_digest")
+            or permission.get("source_profile_id") != snapshot.get("account_expression_profile_id")
+            or permission.get("source_profile_version") != profile_version
+        ):
+            raise DomainError("正式浏览器发布合同与任务冻结上下文发生漂移")
         records.append(
             {
                 "task_id": str(row["id"]),
+                "brand_id": str(row["brand_id"]),
+                "platform_target_account_id": str(row["account_id"]),
+                "publishing_account_id": str(row["logical_account_id"]),
+                "created_by": str(row["created_by"]),
                 "content_product": str(row["primary_content_product"]),
                 "product_refs": list(row["product_refs"]),
                 "publication_projection_id": str(row["publication_projection_id"]),
+                "publication_projection_version": projection_version,
                 "publication_projection_digest": str(row["publication_projection_digest"]),
+                "account_expression_profile_id": str(snapshot["account_expression_profile_id"]),
+                "account_expression_profile_version": profile_version,
+                "content_role": str(snapshot["content_role"]),
+                "content_role_id": str(snapshot["content_role_id"]),
+                "platform_target_key": str(platform["target"]),
+                "media_format": str(platform["media_format"]),
                 "run_count": int(row["run_count"]),
                 "version_count": int(row["version_count"]),
                 "current_version": int(row["current_version"]),
@@ -260,6 +303,7 @@ def run(
     context_evidence_path: Path,
     output_path: Path,
     candidate_sha: str,
+    candidate_freeze_path: Path | None = None,
     expect_formally_tested: bool = False,
     provider_model: bool = False,
 ) -> dict[str, object]:
@@ -289,6 +333,24 @@ def run(
         context_evidence.get("projection_isolation"),
         "正式浏览器缺少确认后的 current projection",
     )
+
+    frozen_binding: dict[str, object] | None = None
+    candidate_freeze_sha256: str | None = None
+    if provider_model:
+        if candidate_freeze_path is None:
+            raise DomainError("正式候选模型调用缺少不可变 candidate freeze")
+        frozen_binding, candidate_freeze_sha256 = validate_candidate_freeze(
+            database_url=database_url,
+            candidate_freeze_path=candidate_freeze_path,
+            context_evidence_path=context_evidence_path,
+            candidate_sha=candidate_sha,
+        )
+        if (
+            frozen_binding.get("tenant_id") != credentials.get("tenant_id")
+            or frozen_binding.get("brand_id") != credentials.get("brand_id")
+            or frozen_binding.get("publishing_account_id") != credentials.get("account_id")
+        ):
+            raise DomainError("正式候选冻结与受控租户凭据不一致")
 
     tenant_id = UUID(str(credentials["tenant_id"]))
     before = _counts(database_url, tenant_id)
@@ -399,6 +461,25 @@ def run(
         or len({str(item["artifact_digest"]) for item in new_artifacts}) != 2
     ):
         raise DomainError("正式浏览器业务对象增量或边界未达到冻结结果")
+    if provider_model:
+        if frozen_binding is None or candidate_freeze_sha256 is None:
+            raise DomainError("正式候选模型调用缺少已验证冻结绑定")
+        task_binding = {
+            "tenant_id": str(tenant_id),
+            "brand_id": new_task.get("brand_id"),
+            "publishing_account_id": new_task.get("publishing_account_id"),
+            "platform_target_account_id": new_task.get("platform_target_account_id"),
+            "platform_target_key": new_task.get("platform_target_key"),
+            "media_format": new_task.get("media_format"),
+            "content_role_id": new_task.get("content_role_id"),
+            "account_expression_profile_id": new_task.get("account_expression_profile_id"),
+            "account_expression_profile_version": new_task.get("account_expression_profile_version"),
+            "publication_projection_id": new_task.get("publication_projection_id"),
+            "publication_projection_version": new_task.get("publication_projection_version"),
+            "publication_projection_digest": new_task.get("publication_projection_digest"),
+        }
+        if any(frozen_binding.get(key) != value for key, value in task_binding.items()):
+            raise DomainError("正式模型任务消费上下文与 candidate freeze 不一致")
     browser["database_evidence"] = {
         "before": before,
         "after": after,
@@ -410,6 +491,10 @@ def run(
         browser["provider_artifacts"] = new_artifacts
         browser["provider_model"] = "deepseek-v4-flash"
         browser["provider_max_retries"] = 0
+        browser["candidate_freeze"] = {
+            "sha256": candidate_freeze_sha256,
+            "binding": frozen_binding,
+        }
     browser["context_evidence_sha256"] = hashlib.sha256(context_evidence_path.read_bytes()).hexdigest()
     browser["generated_at"] = datetime.now(timezone.utc).isoformat()
     browser["expected_formally_tested"] = expect_formally_tested
@@ -441,6 +526,7 @@ def main() -> int:
     parser.add_argument("--context-evidence", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--candidate-sha", required=True)
+    parser.add_argument("--candidate-freeze", type=Path)
     parser.add_argument("--expect-formally-tested", action="store_true")
     parser.add_argument("--provider-model", action="store_true")
     args = parser.parse_args()
@@ -453,6 +539,11 @@ def main() -> int:
         context_evidence_path=args.context_evidence.resolve(strict=True),
         output_path=args.output.resolve(),
         candidate_sha=args.candidate_sha,
+        candidate_freeze_path=(
+            args.candidate_freeze.resolve(strict=True)
+            if args.candidate_freeze is not None
+            else None
+        ),
         expect_formally_tested=args.expect_formally_tested,
         provider_model=args.provider_model,
     )
