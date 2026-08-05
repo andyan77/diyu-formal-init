@@ -1064,6 +1064,55 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
         "UNIQUE_PRODUCTION_CANDIDATE",
     )
     assert candidate["current_state"] == "UNIQUE_PRODUCTION_CANDIDATE"
+    with pytest.raises(ExecutionControlError, match="CI is not authorized"):
+        control_fixture.control.verify("ci")
+    for gate in (
+        "candidate_frozen",
+        "model_sample_acceptance",
+        "product_review",
+        "engineering_review",
+        "build_once",
+    ):
+        control_fixture.control.begin(gate, f"verify {gate}", None, os.getpid())
+        control_fixture.control.complete(gate, f"evidence/{gate}.json")
+    assert control_fixture.control.verify("ci")["current_state"] == "UNIQUE_PRODUCTION_CANDIDATE"
+    with pytest.raises(ExecutionControlError, match="production backup is not authorized"):
+        control_fixture.control.verify("backup")
+    control_fixture.control.begin("ci_success", "authoritative CI", None, os.getpid())
+    control_fixture.control.complete("ci_success", "evidence/ci.json")
+    assert control_fixture.control.verify("production_readonly")["current_state"] == (
+        "UNIQUE_PRODUCTION_CANDIDATE"
+    )
+    assert control_fixture.control.verify("backup")["current_state"] == "UNIQUE_PRODUCTION_CANDIDATE"
+    with pytest.raises(ExecutionControlError, match="deployment is not authorized"):
+        control_fixture.control.verify("deploy")
+    control_fixture.control.begin("backup_restore", "backup and isolated restore", None, os.getpid())
+    control_fixture.control.complete("backup_restore", "evidence/backup-restore.json")
+    live = control_fixture.control.transition(
+        "UNIQUE_PRODUCTION_CANDIDATE",
+        str(synchronized["head_sha"]),
+        control_fixture.contract_digest,
+        "LIVE_TENANT_ACCEPTANCE_AND_GUIDE",
+    )
+    assert live["current_state"] == "LIVE_TENANT_ACCEPTANCE_AND_GUIDE"
+    assert control_fixture.control.verify("deploy")["current_state"] == (
+        "LIVE_TENANT_ACCEPTANCE_AND_GUIDE"
+    )
+    with pytest.raises(ExecutionControlError, match="production rollback is not authorized"):
+        control_fixture.control.verify("rollback")
+    for gate in ("production_deploy", "live_tenant_acceptance"):
+        control_fixture.control.begin(gate, f"verify {gate}", None, os.getpid())
+        control_fixture.control.complete(gate, f"evidence/{gate}.json")
+    assert control_fixture.control.verify("rollback")["current_state"] == (
+        "LIVE_TENANT_ACCEPTANCE_AND_GUIDE"
+    )
+    with pytest.raises(ExecutionControlError, match="production cleanup is not authorized"):
+        control_fixture.control.verify("cleanup")
+    control_fixture.control.begin("rollback_roundtrip", "rollback and return", None, os.getpid())
+    control_fixture.control.complete("rollback_roundtrip", "evidence/rollback.json")
+    assert control_fixture.control.verify("cleanup")["current_state"] == (
+        "LIVE_TENANT_ACCEPTANCE_AND_GUIDE"
+    )
     control_fixture.control.begin(
         "late_implementation_defect",
         "observe ordinary post-freeze implementation defect",

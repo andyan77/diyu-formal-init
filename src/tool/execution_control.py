@@ -1463,19 +1463,56 @@ class ExecutionControl:
                 if current not in {"GENERALIZATION_EVAL", "INDEPENDENT_AUDIT"}:
                     raise ExecutionControlError("evidence finalizer is not allowed in the current state")
             elif action == "ci":
-                if (
-                    current != "CI_READY"
-                    or not {
-                        "acceptance_finalized",
-                        "product_review",
-                        "engineering_review",
-                    }
-                    <= completed
-                ):
+                legacy_ci_ready = current == "CI_READY" and {
+                    "acceptance_finalized",
+                    "product_review",
+                    "engineering_review",
+                } <= completed
+                rework_ci_ready = current == "UNIQUE_PRODUCTION_CANDIDATE" and {
+                    "candidate_frozen",
+                    "model_sample_acceptance",
+                    "product_review",
+                    "engineering_review",
+                    "build_once",
+                } <= completed
+                if not (legacy_ci_ready or rework_ci_ready):
                     raise ExecutionControlError("CI is not authorized")
+            elif action == "production_readonly":
+                if (
+                    current not in {"UNIQUE_PRODUCTION_CANDIDATE", "LIVE_TENANT_ACCEPTANCE_AND_GUIDE"}
+                    or "ci_success" not in completed
+                ):
+                    raise ExecutionControlError("production read-only verification is not authorized")
+            elif action == "backup":
+                if (
+                    current != "UNIQUE_PRODUCTION_CANDIDATE"
+                    or not {"build_once", "ci_success"} <= completed
+                ):
+                    raise ExecutionControlError("production backup is not authorized")
             elif action == "deploy":
-                if current != "DEPLOY_READY" or not {"ci_success", "backup_restore"} <= completed:
+                legacy_deploy_ready = current == "DEPLOY_READY" and {
+                    "ci_success",
+                    "backup_restore",
+                } <= completed
+                rework_deploy_ready = current == "LIVE_TENANT_ACCEPTANCE_AND_GUIDE" and {
+                    "build_once",
+                    "ci_success",
+                    "backup_restore",
+                } <= completed
+                if not (legacy_deploy_ready or rework_deploy_ready):
                     raise ExecutionControlError("deployment is not authorized")
+            elif action == "rollback":
+                if (
+                    current != "LIVE_TENANT_ACCEPTANCE_AND_GUIDE"
+                    or not {"production_deploy", "live_tenant_acceptance"} <= completed
+                ):
+                    raise ExecutionControlError("production rollback is not authorized")
+            elif action == "cleanup":
+                if (
+                    current != "LIVE_TENANT_ACCEPTANCE_AND_GUIDE"
+                    or "rollback_roundtrip" not in completed
+                ):
+                    raise ExecutionControlError("production cleanup is not authorized")
             else:
                 raise ExecutionControlError("unknown execution-control action")
             return state

@@ -507,6 +507,7 @@ def test_release_scripts_build_once_and_activate_only_the_bound_digest() -> None
     rollback = Path("deploy/rollback.sh").read_text(encoding="utf-8")
     restore = Path("deploy/restore_verify.sh").read_text(encoding="utf-8")
     build = Path("deploy/build_candidate.sh").read_text(encoding="utf-8")
+    deploy_entry = Path("scripts/tenant01_deploy_entry.sh").read_text(encoding="utf-8")
 
     assert compose.count("image: ${DIYU_IMAGE_REF:?DIYU_IMAGE_REF is required}") == 5
     assert compose.count("pull_policy: never") == 5
@@ -527,6 +528,10 @@ def test_release_scripts_build_once_and_activate_only_the_bound_digest() -> None
     assert "checkout --detach --quiet" not in rollback
     assert "DIYU_IMAGE_DIGEST is required" in restore
     assert "DIYU_IMAGE_TAG" not in compose + deploy + rollback + restore
+    assert 'action="deploy"' in deploy_entry
+    assert 'verify --action "$action"' in deploy_entry
+    for action in ("production_readonly", "backup", "deploy", "rollback", "cleanup"):
+        assert action in deploy_entry
 
 
 def test_frontend_lock_is_portable_and_ci_uses_the_frozen_tree() -> None:
