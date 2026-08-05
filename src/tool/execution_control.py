@@ -32,6 +32,13 @@ DEFAULT_RUNTIME_ROOT = Path("var/execution-control/TENANT-01")
 DEFAULT_PROTECTED_PATH = Path("docs/项目记忆.md")
 ACCEPTANCE_CHECKPOINT_VERSION = "tenant01-acceptance-checkpoint-v2"
 FORMAL_USABILITY_REWORK_ID = "TENANT01-FORMAL-USABILITY-20260804"
+FINAL_CONTROLLER_RULING_ID = "TENANT01-CONTROLLER-RULING-20260803-FINAL"
+DOMAIN_ELABORATION_RULING_ID = (
+    "TENANT01-CONTROLLER-RULING-20260804-DOMAIN-ELABORATION"
+)
+_ACCEPTED_CONTROLLER_RULING_IDS = frozenset(
+    {FINAL_CONTROLLER_RULING_ID, DOMAIN_ELABORATION_RULING_ID}
+)
 
 NORMAL_STATES = frozenset(
     {
@@ -695,10 +702,11 @@ class ExecutionControl:
         if set(decision) != {"decision_version", "milestone", "objective", "contract", "audit"}:
             raise ExecutionControlError("controller ruling fields drifted")
         contract = decision.get("contract")
+        ruling_id = contract.get("ruling_id") if isinstance(contract, dict) else None
         if (
             decision.get("milestone") != MILESTONE
             or not isinstance(contract, dict)
-            or contract.get("ruling_id") != "TENANT01-CONTROLLER-RULING-20260803-FINAL"
+            or ruling_id not in _ACCEPTED_CONTROLLER_RULING_IDS
         ):
             raise ExecutionControlError("final TENANT-01 controller ruling is invalid")
         with self._lock():
@@ -719,11 +727,16 @@ class ExecutionControl:
             previous_contract_digest = str(state["contract_digest"])
             previous_head = str(state["head_sha"])
             next_head = _git_sha(self.repository, "HEAD")
+            target_state = (
+                "SHARED_ROOT_CAUSE_REPAIR"
+                if ruling_id == DOMAIN_ELABORATION_RULING_ID
+                else "STRUCTURAL_IMPLEMENTATION"
+            )
             _atomic_private_json(self.decision_path, decision)
             state.update(
                 {
                     "previous_state": previous_state,
-                    "current_state": "STRUCTURAL_IMPLEMENTATION",
+                    "current_state": target_state,
                     "objective_digest": _digest(decision["objective"]),
                     "contract_digest": _digest(contract),
                     "controller_decision_digest": _file_digest(self.decision_path),
@@ -740,15 +753,16 @@ class ExecutionControl:
                     "approved_next_action": None,
                 }
             )
-            if next_head != previous_head:
+            gates_invalidated = next_head != previous_head or ruling_id == DOMAIN_ELABORATION_RULING_ID
+            if gates_invalidated:
                 state["completed_gates"] = []
             return self._commit(
                 state,
                 "controller_ruling_adopted",
                 {
-                    "ruling_id": contract["ruling_id"],
+                    "ruling_id": ruling_id,
                     "from_state": previous_state,
-                    "to_state": "STRUCTURAL_IMPLEMENTATION",
+                    "to_state": target_state,
                     "previous_head": previous_head,
                     "head_sha": next_head,
                     "previous_contract_digest": previous_contract_digest,
@@ -756,6 +770,8 @@ class ExecutionControl:
                     "historical_failure_counts_retained": True,
                     "historical_counts_govern_current_acceptance": False,
                     "historical_acceptance_ledgers_retained": True,
+                    "historical_failure_evidence_retained": True,
+                    "completed_gates_invalidated": gates_invalidated,
                 },
             )
 

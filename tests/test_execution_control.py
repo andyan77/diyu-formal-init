@@ -792,6 +792,53 @@ def test_controller_ruling_recovers_failed_safe_without_erasing_acceptance_histo
     assert "controller_ruling_adopted" in events
 
 
+def test_domain_elaboration_ruling_recovers_to_shared_repair_and_invalidates_old_gates(
+    control_fixture: _ControlFixture,
+) -> None:
+    _reach_model_preflight(control_fixture)
+    control_fixture.control.begin("old_candidate_gate", "old candidate proof", None, os.getpid())
+    control_fixture.control.complete("old_candidate_gate", "evidence/old-candidate.json")
+    failed = control_fixture.control.classify(
+        _failure("hard_semantic_boundary_failure", "FAILED_SAFE")
+    )
+    assert failed["current_state"] == "FAILED_SAFE"
+    failure_before = (control_fixture.runtime_root / "failure.json").read_bytes()
+    events_before = (control_fixture.runtime_root / "events.jsonl").read_bytes()
+    source = control_fixture.runtime_root / "domain-elaboration-ruling.json"
+    _write_private_json(
+        source,
+        {
+            "decision_version": "TENANT01-CONTROLLER-RULING-20260804-DOMAIN-ELABORATION",
+            "milestone": "TENANT-01",
+            "objective": {"terminal_state": "REVIEW"},
+            "contract": {
+                "ruling_id": "TENANT01-CONTROLLER-RULING-20260804-DOMAIN-ELABORATION",
+                "writer_output_identity": "unverified-creative-expression",
+                "common_sense_domain_elaboration": "allowed-without-trusted-fact-promotion",
+            },
+            "audit": {"status": "PREAUTHORIZED"},
+        },
+    )
+
+    adopted = control_fixture.control.adopt_ruling(source)
+
+    assert adopted["current_state"] == "SHARED_ROOT_CAUSE_REPAIR"
+    assert adopted["previous_state"] == "FAILED_SAFE"
+    assert adopted["completed_gates"] == []
+    assert adopted["failure_class"] is None
+    assert (control_fixture.runtime_root / "failure.json").read_bytes() == failure_before
+    assert (control_fixture.runtime_root / "events.jsonl").read_bytes().startswith(events_before)
+    final_event = json.loads(
+        (control_fixture.runtime_root / "events.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()[-1]
+    )
+    assert final_event["data"]["ruling_id"] == (
+        "TENANT01-CONTROLLER-RULING-20260804-DOMAIN-ELABORATION"
+    )
+    assert final_event["data"]["historical_failure_evidence_retained"] is True
+
+
 def test_state_schema_lists_candidate_scoped_governance_fields() -> None:
     schema = json.loads(Path("config/execution-control-v1.schema.json").read_text(encoding="utf-8"))
     required = set(cast(list[str], schema["required"]))
