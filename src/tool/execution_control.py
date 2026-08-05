@@ -1463,10 +1463,23 @@ class ExecutionControl:
                 if current != "GENERALIZATION_EVAL":
                     raise ExecutionControlError("generalization runner is not allowed in the current state")
             elif action == "acceptance_runner":
-                if current != "GENERALIZATION_EVAL" or state["governance_version"] != GOVERNANCE_VERSION:
+                legacy_acceptance = current == "GENERALIZATION_EVAL"
+                rework_acceptance = (
+                    current == "UNIQUE_PRODUCTION_CANDIDATE"
+                    and "candidate_frozen" in completed
+                )
+                if (
+                    not (legacy_acceptance or rework_acceptance)
+                    or state["governance_version"] != GOVERNANCE_VERSION
+                ):
                     raise ExecutionControlError("formal acceptance runner is not authorized")
             elif action == "evidence_finalizer":
-                if current not in {"GENERALIZATION_EVAL", "INDEPENDENT_AUDIT"}:
+                legacy_finalization = current in {"GENERALIZATION_EVAL", "INDEPENDENT_AUDIT"}
+                rework_finalization = (
+                    current == "UNIQUE_PRODUCTION_CANDIDATE"
+                    and "candidate_frozen" in completed
+                )
+                if not (legacy_finalization or rework_finalization):
                     raise ExecutionControlError("evidence finalizer is not allowed in the current state")
             elif action == "ci":
                 legacy_ci_ready = current == "CI_READY" and {

@@ -1066,10 +1066,21 @@ def test_review_rework_is_append_only_same_milestone_and_invalidates_old_gates(
         "UNIQUE_PRODUCTION_CANDIDATE",
     )
     assert candidate["current_state"] == "UNIQUE_PRODUCTION_CANDIDATE"
+    with pytest.raises(ExecutionControlError, match="formal acceptance runner is not authorized"):
+        control_fixture.control.verify("acceptance_runner")
+    with pytest.raises(ExecutionControlError, match="evidence finalizer is not allowed"):
+        control_fixture.control.verify("evidence_finalizer")
+    control_fixture.control.begin("candidate_frozen", "freeze candidate", None, os.getpid())
+    control_fixture.control.complete("candidate_frozen", "evidence/candidate-frozen.json")
+    assert control_fixture.control.verify("acceptance_runner")["current_state"] == (
+        "UNIQUE_PRODUCTION_CANDIDATE"
+    )
+    assert control_fixture.control.verify("evidence_finalizer")["current_state"] == (
+        "UNIQUE_PRODUCTION_CANDIDATE"
+    )
     with pytest.raises(ExecutionControlError, match="CI is not authorized"):
         control_fixture.control.verify("ci")
     for gate in (
-        "candidate_frozen",
         "model_sample_acceptance",
         "product_review",
         "engineering_review",
