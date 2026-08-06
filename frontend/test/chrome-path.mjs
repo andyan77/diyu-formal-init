@@ -12,7 +12,7 @@ const isFile = path => {
 
 export const resolveChromePath = ({
   configured,
-  cacheRoot = "/mnt/diyu-build/cache/chrome-for-testing"
+  cacheRoot = "/home/faye/diyu-build/cache/chrome-for-testing"
 } = {}) => {
   const cached = existsSync(cacheRoot)
     ? readdirSync(cacheRoot, { withFileTypes: true })

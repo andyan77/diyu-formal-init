@@ -59,7 +59,7 @@ def _chrome_binary() -> Path:
     candidates = [Path(configured)] if configured else []
     candidates.extend(
         sorted(
-            Path("/mnt/diyu-build/cache/chrome-for-testing").glob("*/chrome-linux64/chrome"),
+            Path("/home/faye/diyu-build/cache/chrome-for-testing").glob("*/chrome-linux64/chrome"),
             reverse=True,
         )
     )
@@ -71,7 +71,7 @@ def _chrome_binary() -> Path:
     )
     match = next((path for path in candidates if path.is_file()), None)
     if match is None:
-        raise DomainError("未找到 F/build 卷或系统中的受控 Chrome")
+        raise DomainError("未找到构建缓存或系统中的受控 Chrome")
     return match.resolve()
 
 
