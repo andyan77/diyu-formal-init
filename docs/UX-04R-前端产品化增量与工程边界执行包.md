@@ -1,8 +1,8 @@
 # UX-04R 执行包：前端产品化增量与工程边界（完整修订草案）
 
-- 状态：`REVISION-6 · PASS_WITH_BOUNDED_CORRECTIONS 修正已落盘`（与
+- 状态：`REVISION-6 · APPROVED_FOR_EXECUTION`（与
   [COMM-01 执行包](COMM-01-品牌价值可见创作参谋确认提案与付费试点最小闭环执行包.md)
-  同批；根目录 `MILESTONE.md` 仍是唯一里程碑真源；本文件不自行改变任何状态）。
+  同批，founder 2026-08-06 确认；`MILESTONE.md` 当前主线已为 COMM-01）。
 - 修订记录：REVISION-3（2026-08-06）随 COMM-01 落实 founder 裁决——FE-00 走查与 B6
   可用性门复用同批用户（COMM-01 D-COMM-05b）；FE-10 增补 v3 失败模式验收；编号对齐确认。
   同批定名：去除文件名"-完整修订版"后缀，`937a881` 两份原稿自工作区删除（经 git 历史可追溯）。

@@ -205,7 +205,7 @@ deprecated
 
 只修直接影响当前理解的三项：
 
-1. `ContentBrief` 是内容任务在运行时的语义概念，首期物理实现由现有 `business_tasks`、内容目标/上下文及 `content_items/content_versions` 共同承接；不新增 `content_briefs` 表或同义领域对象；
+1. `ContentBrief` 是内容任务在运行时的语义概念，首期物理实现由现有 `business_tasks`、内容目标/上下文及 `content_items/content_versions` 共同承接；不新增 `content_briefs` 表或同义领域对象；（2026-08-06 D-COMM-04 注记：COMM-01 的 `CreationProposalV1` 为瞬时签名提案 + expand-only 快照，显式遵守本条；见 COMM-01 执行包 §一）
 2. 第二批 README 声明但实际不存在的 `04-AB知识卡机器导入候选-v0.1.jsonl`，应修正为实际可用来源或明确标注已被聚合候选取代；不得凭空重建缺失文件；
 3. 文档中的生命周期枚举统一为本包三态，并说明候选登记、当前激活、单次实际调用和真实生产质量是四个不同事实。
 

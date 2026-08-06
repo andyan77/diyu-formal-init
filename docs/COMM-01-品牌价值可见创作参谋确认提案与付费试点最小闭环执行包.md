@@ -1,8 +1,7 @@
 # COMM-01 执行包：品牌价值可见、创作参谋、确认提案与付费试点最小闭环（完整修订草案）
 
-- 状态：`REVISION-6 · PASS_WITH_BOUNDED_CORRECTIONS 修正已落盘`（根目录 `MILESTONE.md`
-  仍是唯一里程碑真源。本文件落盘不自行改变 TENANT-01 或任何 successor 状态；全部有界修正
-  落盘后待守护确认转 `APPROVED_FOR_EXECUTION`）。
+- 状态：`REVISION-6 · APPROVED_FOR_EXECUTION`（founder 2026-08-06 确认守护审查通过并授权
+  状态迁移；`MILESTONE.md` 当前主线已为 COMM-01，TENANT-01 已按 §十一 置 CLOSED）。
 - 修订记录：REVISION-3（2026-08-06）落实 founder 对审查保留项的裁决——R1=选项 a
   （B 门前置建设 + 时间盒 + 最低裁剪清单，见 D-COMM-05a/05b）；R2 v3 历史回归口径
   （见 B3 与 §十三）；R3 提案字段消费者规则（见 B1.1）；§七 编号与 UX-04R 对齐。

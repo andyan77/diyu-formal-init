@@ -106,6 +106,10 @@ raw、artifact、ledger 和审阅输入均继续保留，不改写成从未发�
 6. 不新增生产 Reviewer、第二模型、模型投票、fallback、语义词表、规则引擎、服务端固定成稿
    或审批状态机；系统仍不自动发布，用户在采用或发布前自然阅读全文。
 
+   > **修订注记（2026-08-06，D-COMM-03）**：本条「审批状态机」一项被 COMM-01 执行包 §一
+   > D-COMM-03 有界修订——仅允许追加式单级决策事件（`content_version_decision_events`）
+   > 与服务端只读派生投影；多级审批链、BPM、自动发布及本条其余边界原文继续有效。
+
 验收与证据实现 `8055dfbd0d861b73aa1fa4d6f14d910566072813` 已将 11 张既有回归卡和
 15 张冻结泛化卡绑定为唯一 26 样本口径：`machine_hard_gate=26/26`、
 `structure_gate=26/26`、`first_draft_usable>=23/26`。finalizer 逐文件复算 raw／artifact／

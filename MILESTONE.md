@@ -1,5 +1,28 @@
 # 当前里程碑
 
+- 当前里程碑：`COMM-01 · 品牌价值可见、创作参谋、确认提案与付费试点最小闭环`。
+- 状态：`IN-PROGRESS`（2026-08-06 立项）。规范真源：
+  `docs/COMM-01-品牌价值可见创作参谋确认提案与付费试点最小闭环执行包.md`（REVISION-6，
+  守护审查 `PASS_WITH_BOUNDED_CORRECTIONS` 十二项修正已落盘，founder 确认转
+  `APPROVED_FOR_EXECUTION`）与配套 `docs/UX-04R-前端产品化增量与工程边界执行包.md`；
+  工程对照 `docs/COMM-01-执行包排产与工程对照指南.md`（V2：12 执行包 / 12 接缝裁定）。
+- 立项授权：founder 2026-08-06 确认审查通过，并依据 COMM-01 执行包 §十一 授权本状态迁移
+  （TENANT-01 置 CLOSED、主线切换、supersession 注记落盘）。EXE-06/07/08（B1/B3/B4）
+  重活须 founder 显式授权 + 守护三关 + 冻结验收重跑（B3 完整 26 卡）；不得自行置为
+  `CLOSED`，也不得创建 COMM-02、successor 或平行状态文件。
+- 裁决注记索引：D-COMM-01…08 见 COMM-01 执行包 §一。其中 D-COMM-02 有界解冻
+  「不启动 UX-04」（仅 UX-04R 绞杀者增量）；D-COMM-03 有界修订 TENANT-01
+  「不新增审批状态机」（仅追加式决策事件 + 只读派生投影）；D-COMM-04 显式遵守 M5-K
+  「ContentBrief 不建物理表」；D-COMM-08 GKB 不接入运行主线。
+
+## TENANT-01 · 笛语服饰首租户生产就绪与全能力演示（CLOSED）
+
+> **口径声明（2026-08-06）**：founder 依据 COMM-01 执行包 §十一 授权将本里程碑由
+> `REVIEW` 置为 `CLOSED`。`CLOSED` 只证明本里程碑交付与受控试运行验收完成；其全部
+> 未证明项（真实员工长期采用、真实发布、平台流量、经营效果等）原样保留，权威证据根与
+> 全部历史记录不改写。下方原文中「不得自行置为 `CLOSED`」条款已被本授权 supersede，
+> 其余内容按历史快照原样保留。
+
 - 当前里程碑：`TENANT-01 · 笛语服饰首租户生产就绪与全能力演示`。
 - 状态：`REVIEW`。当前生产运行实现和唯一运行候选均为
   `b12b3cbeb17c0af1b4a5452e54c4a5685adb0461`；execution-control 已追加完成 Intake 单一角色
