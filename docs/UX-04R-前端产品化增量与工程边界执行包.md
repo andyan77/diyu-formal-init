@@ -1,13 +1,18 @@
 # UX-04R 执行包：前端产品化增量与工程边界（完整修订草案）
 
-- 状态：`DRAFT-FOR-REVIEW · REVISION-5`（与 [COMM-01 执行包](COMM-01-品牌价值可见创作参谋确认提案与付费试点最小闭环执行包.md)
-  同批审查；根目录 `MILESTONE.md` 仍是唯一里程碑真源；本文件不自行改变任何状态）。
+- 状态：`REVISION-6 · PASS_WITH_BOUNDED_CORRECTIONS 修正已落盘`（与
+  [COMM-01 执行包](COMM-01-品牌价值可见创作参谋确认提案与付费试点最小闭环执行包.md)
+  同批；根目录 `MILESTONE.md` 仍是唯一里程碑真源；本文件不自行改变任何状态）。
 - 修订记录：REVISION-3（2026-08-06）随 COMM-01 落实 founder 裁决——FE-00 走查与 B6
   可用性门复用同批用户（COMM-01 D-COMM-05b）；FE-10 增补 v3 失败模式验收；编号对齐确认。
   同批定名：去除文件名"-完整修订版"后缀，`937a881` 两份原稿自工作区删除（经 git 历史可追溯）。
 - 修订记录：REVISION-4（2026-08-06）随 COMM-01 裁决 D-COMM-07——FE-06 更名"有界交互
   编排工作区"并新增 FE-06.0（协作方式分段控制器 + 路由可见性 + 主动引导）；FE-05 增补
   数据实证引导；验收旅程与可用性门增补新手引导项。
+- 修订记录：REVISION-6（2026-08-06）落实终审有界修正——`BoundedAdvisorV1` 术语残留
+  清理为两层架构名；FE-02 合同清单更新（编排四合同 / OpportunityV2 / AdvisorDraftV1 /
+  制作包所有权拆分）；FE-00 编号修正（FE-13）并增补设计审查清单；`/content/projects`
+  交付或删导航规则；流式诚实口径；FE-11 增补 PilotMetricsPanel 与管理端 content-review。
 - 修订记录：REVISION-5（2026-08-06）随 COMM-01 D-COMM-08 定稿——FE-06.0 增补
   ChatGPT 体感基准；FE-07 增补 `model_parametric` 徽标渲染规则；验收旅程增补知识来源
   与对话体感行。不新增 FE 工作项。
@@ -45,7 +50,7 @@
 |---|---|
 | 信息架构与设计系统 | **有界采纳**：增加 FE-00 目标体验蓝图、路由责任和触碰路径规则，不做全局重建 |
 | 今日工作台与首次使用 | **采纳**：`/user` 成为今日工作台 |
-| 创作参谋工作台 | **采纳但收窄**：在 `/content` 内建立真实 `BoundedAdvisorV1` 状态，不另建通用 Agent 应用 |
+| 创作参谋工作台 | **采纳但收窄**：在 `/content` 内建立 `BoundedInteractionOrchestratorV1 + ContentAdvisorCapabilityV1` 两层状态，不另建通用 Agent 应用 |
 | CreativeBriefV1 | **改写采纳**：不建物理实体，但完整渲染/编辑 `CreationProposalV1` |
 | ProductionPackageV1 | **最低版本前移**：试点启用前完成结构化制作包；高级十节能力后续按反馈迭代 |
 | 品牌依据与知识反馈 | **采纳**：常驻依据面板 + 租户管理员品牌反馈队列 |
@@ -70,7 +75,8 @@
   制作包：ProductionPackageV1、版本、品牌依据、决策操作
 
 /content/projects
-  可选增量：计划、最近任务、系列与历史；首期可由 /user 与侧栏承接，不强制独立上线
+  可选增量：计划、最近任务、系列与历史；首期可由 /user 与侧栏承接。
+  终审规则：要么交付最小只读页、要么首期从导航删除——不得出现空导航
 
 /materials
   我的素材 / 本组织可用素材（沿用既有权限）
@@ -160,7 +166,13 @@ type CreationWorkspaceState =
 6. 5 名目标用户的原型可用性走查记录（与 COMM-01 B6 可用性门**复用同一批用户**，
    两轮记录分别留存；用户来源规则见 COMM-01 D-COMM-05b）。
 
-验收：未通过 FE-00，不允许 FE-05—FE-12 以“先写页面再看效果”方式开工。
+验收：未通过 FE-00，不允许 FE-05—FE-13 以“先写页面再看效果”方式开工。
+
+**设计审查清单（终审增补，随 FE-00 交付评审）**：一个首屏只回答一个核心问题、每阶段
+最多一个实心主动作；默认模式"智能"，新用户不需先理解模式选择器；术语字典——界面只用
+"创作方案 / 制作包 / 品牌依据"等大白话，内部合同名不进普通用户 UI；四步阶段条为轻量
+状态提示、不做流程向导式压迫；空态必有下一动作、错误必保留输入并给恢复动作；新组件
+使用 UserShell 作用域内局部设计 token，不加剧两套全局 `:root` 互相覆盖。
 
 ---
 
@@ -183,9 +195,11 @@ type CreationWorkspaceState =
 ```text
 context_selected
 BrandBasisItemV1
-BoundedAdvisorV1
+OpportunityV2
+InteractionRequestV1 / IntentProjectionV1 / RouteDecisionV1 / InteractionResponseV1
+AdvisorDraftV1
 CreationProposalV1
-ProductionPackageV1
+ContentProductionPackageV1 / DisplayExecutionPackageV1
 ContentDecisionProjectionV1
 brand_basis_feedback
 ```
@@ -290,6 +304,8 @@ ChatGPT——单一自然语言输入框贯穿参谋 / 提案 / 制作全程、�
 结构化卡片作为**对话流内消息**渲染（不跳转表单页、无强制表单感）、模式与卡片是对话的
 增强而非打断、切换模式不清空会话；**但系统不是另一个 ChatGPT**——能力白名单、品牌
 依据与诚实标注、任务承诺门、有界自由对话口径不因体感优化而放松。体感是壳，有界是骨。
+**流式口径（终审）**：自然文本以 `message_delta` 增量流为目标；结构化卡片完整校验后
+整体发出；若 Brief 裁定暂不做 token 级流式，文案须为"状态实时反馈"，不得虚称流式。
 
 #### FE-06.1 结构化响应组件
 
@@ -439,7 +455,10 @@ ChatGPT——单一自然语言输入框贯穿参谋 / 提案 / 制作全程、�
 - 界面展示服务端派生状态，而不是前端自己拼枚举；
 - 多次导出显示次数/最近时间；
 - 决策变化不伪造内容 V2；
-- 无自动发布按钮。
+- 无自动发布按钮；
+- **管理端消费者（终审增补）**：租户管理端新增 `content-review` 二级入口（可审内容列表 +
+  只读制作包视图，批准/人工发布在此执行，不只在用户页放管理员按钮）；`PilotMetricsPanel`
+  展示 B5 北极星与支撑指标（并入本项，不新增 FE 编号）。
 
 ### FE-12 · 租户管理员品牌反馈队列（中；承接 A6）
 

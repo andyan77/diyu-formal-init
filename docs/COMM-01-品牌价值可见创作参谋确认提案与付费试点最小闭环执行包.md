@@ -1,7 +1,8 @@
 # COMM-01 执行包：品牌价值可见、创作参谋、确认提案与付费试点最小闭环（完整修订草案）
 
-- 状态：`DRAFT-FOR-REVIEW · REVISION-5`（本文件为完整修订草案，待守护审查；根目录
-  `MILESTONE.md` 仍是唯一里程碑真源。本文件落盘不自行改变 TENANT-01 或任何 successor 状态）。
+- 状态：`REVISION-6 · PASS_WITH_BOUNDED_CORRECTIONS 修正已落盘`（根目录 `MILESTONE.md`
+  仍是唯一里程碑真源。本文件落盘不自行改变 TENANT-01 或任何 successor 状态；全部有界修正
+  落盘后待守护确认转 `APPROVED_FOR_EXECUTION`）。
 - 修订记录：REVISION-3（2026-08-06）落实 founder 对审查保留项的裁决——R1=选项 a
   （B 门前置建设 + 时间盒 + 最低裁剪清单，见 D-COMM-05a/05b）；R2 v3 历史回归口径
   （见 B3 与 §十三）；R3 提案字段消费者规则（见 B1.1）；§七 编号与 UX-04R 对齐。
@@ -14,6 +15,12 @@
   蒸馏防隐式复活、重启门只触发重评）与 founder ChatGPT 体感基准原则；"六层知识基座"
   更名"六层参谋依据与约束栈"。注：Codex 审查基于 REVISION-3 上传件 + REVISION-5 规格，
   落盘前已逐项对照仓内 REVISION-4 实际状态复核（basis_ref 冲突实际位于 A7.5.3）。
+- 修订记录：REVISION-6（2026-08-06）落实终审 `PASS_WITH_BOUNDED_CORRECTIONS` 十二项
+  有界修正——A5 拆 A5a/A5b、A6 反馈两表化、意图→能力唯一映射（+content_revision、
+  required_data_predicates）、交互 API 版本化与流式诚实、B1 nonce/幂等、B3 所有权边界与
+  完整 26 卡重跑、B4 管理员审阅入口与事件语义冻结、B5 口径冻结、术语/编号残留清理。
+  三处校准：A7.0 第 6 层"A5 起步、B4 定源"；OpportunityV2 归 EXE-02/03 排产（见指南 V2）；
+  流式以 message_delta 为目标、可降级为诚实文案。
 - 配套文件：[UX-04R 前端产品化增量与工程边界执行包](UX-04R-前端产品化增量与工程边界执行包.md)。
 - 立项依据：founder 2026-08-06 会话裁决，以及其后对品牌知识无感、用户冷启动无头绪、
   “参谋先于生成器”、标准制作交付包与前端产品化缺口的连续审查结论。
@@ -353,25 +360,36 @@ content_locations[]   仅 direct_fact / product_fact 可有
 
 通用 AI 对比只存在于受控演示脚本，不在产品内提供关闭品牌约束的开关。
 
+**A5 拆分（终审修正，防 A 门依赖未实现能力）**：
+
+- **A5a（随阶段 A 交付）**：场景 1—4 可真实运行演练；场景 5（提案→制作包→V2）仅冻结
+  脚本、原型、数据与预期合同，不虚称可运行；
+- **A5b（随 EXE-07 交付）**：五场景全链真实运行演练，是 B 门放行条件之一。
+- A 门不再要求尚未实现的场景 5 真实运行。
+
 ### A6 · 品牌依据反馈与责任分流（中：schema / API）
 
 不得继续把品牌资料问题全部塞入 `unmet_capability_requests`。
 
-#### A6.1 租户品牌资料反馈
+#### A6.1 租户品牌资料反馈（终审修正：两表事件化，真正追加式）
 
-新增 append-only `brand_basis_feedbacks`（或同等有界对象），字段至少包含：
+> 不允许在所谓 append-only 表上更新 `handling_status`——处理动作全部事件化。
 
 ```text
-feedback_id
- tenant_id / brand_id / account_id
- task_id / content_version_id
- basis_ref
- feedback_type     incorrect / outdated / irrelevant / missing
- user_note
- created_by / created_at
- handling_status   received / reviewing / resolved / rejected
- handled_by / handled_at / resolution_note
+brand_basis_feedbacks              不可变提交事实（一次写入，永不 UPDATE）
+  feedback_id / tenant_id / brand_id / account_id
+  task_id / content_version_id / basis_ref
+  feedback_type   incorrect / outdated / irrelevant / missing
+  user_note / created_by / created_at
+
+brand_basis_feedback_events        处理事件（append-only，类型化 metadata）
+  event_type      reviewing / resolved / rejected / reopened / candidate_created
+  actor_id / created_at / note?
 ```
+
+服务端由事件流派生 `current_status`，前端只读投影。首期反馈只允许绑定**已冻结**的
+`content_version_id + basis_ref`；提案前反馈须另设版本化引用后才允许，不得用易失内存
+对象冒充持久上下文。
 
 - 普通内容用户可提交；
 - 租户管理员在“品牌反馈”队列处理；
@@ -417,7 +435,7 @@ feedback_id
 | 3 表达能力目录 | 五轴（题材 / 讲法 / 风格 / 形式 / 连续）：系统自身会哪些创作打法 | 已在仓（catalog-v1） |
 | 4 能力与权限 | 当前用户资格、已启用能力、平台目标 | 已在仓（auth_grants + A7.3 注册表） |
 | 5 运行状态 | 进行中任务、最近内容、系列前情、资料缺口 | 已在仓（readiness / tasks / opportunities 输入） |
-| 6 用户个人 | 私人创作偏好、历史采用行为 | 已在仓（preferences；采用事件由 A5 补齐） |
+| 6 用户个人 | 私人创作偏好、历史采用行为 | 已在仓（preferences；采用事件 A5 起步、B4 定源——SEAM-01 单源切换） |
 
 **能力自评估（回答"能做什么"前必须先算）**：基于六层现状，把内容方向如实分为三类呈现——
 **可做**（资料足以支撑）／**可做但受限**（说明缺什么、给补充入口）／**当前做不了**
@@ -464,12 +482,25 @@ get_recommendations / evaluate_or_compare / prepare_proposal / active_revision_f
 
 #### A7.3 `CapabilityRegistryV1`（代码内静态类型表，非平台）
 
-首发五项：`general_conversation / system_guide / brand_knowledge_answer /
-content_advisor / proposal_compiler`；每项声明
-`capability_id / version / accepted_intents / required_permissions / allowed_modes / task_policy`；
+首发六项：`general_conversation / system_guide / brand_knowledge_answer /
+content_advisor / proposal_compiler / content_revision`；每项声明
+`capability_id / version / accepted_intents / required_permissions /
+required_data_predicates / allowed_modes / task_policy`；
 `task_policy ∈ {no_task, proposal_only, requires_proposal_confirmation, active_task_revision}`。
 不做数据库注册表、插件市场或动态 Agent 平台；`CapabilityHandoff` 合同**推迟**——首发
 "能力未启用"只需一句有界说明（不静默降级为普通文案），待第二个真实专业能力立项时再补合同。
+
+**意图 → 能力唯一映射（终审冻结，同一意图不得由两个能力无规则竞争）**：
+
+```text
+general_conversation     → general_conversation
+understand_system        → system_guide（确定性投影，原则上不调用模型）
+query_brand_knowledge    → brand_knowledge_answer
+get_recommendations      → content_advisor
+evaluate_or_compare      → content_advisor
+prepare_proposal         → proposal_compiler
+active_revision_followup → content_revision
+```
 
 #### A7.4 `RouteDecisionV1` 与路由优先级（冻结）
 
@@ -483,6 +514,17 @@ reason_code / suggested_actions[]`。优先级冻结为：
 
 用户显式选择"自由对话"后，识别到创作意图也不得静默形成提案或任务；智能模式的路由结果
 必须以轻量方式对用户可见（如"智能分流 · 已使用内容创意能力"，可一键保持 / 切换）。
+
+**交互 API 版本化与流式诚实（终审修正）**：
+
+- 新增 `/api/v1/interactions/stream` 承载编排请求（`InteractionRequestV1` →
+  `InteractionStreamEventV1` 判别联合 + 顺序状态机）；旧 `/api/v1/content/stream` 保留
+  兼容至切换完成；业务承诺不再进入 `interaction_mode`（分层修正见 A7.1）；
+- `publishing_identity_id` 多账号时必填、单合法账号可服务端默认；`target` 参谋阶段可空、
+  提案阶段必须确定；
+- **流式口径**：自然文本支持 `message_delta` 增量流；结构化卡片在完整校验后一次发出
+  （不流半 JSON）。若执行 Brief 裁定暂不做 token 级流式，界面文案必须为"状态实时反馈"，
+  **不得虚称 ChatGPT 式流式**。
 
 #### A7.5 内容创意能力 `ContentAdvisorCapabilityV1`
 
@@ -571,7 +613,8 @@ Advisor 可用；Prompt 蒸馏产物落地后无任何运行时 GKB 查询。参
 ## 五、阶段 B：确认提案、最低制作包、人工决策与可用性门（B1—B6）
 
 > 放行定位：B1—B6 全部通过，且阶段 C 的试点运营材料就绪后，才允许真实设计伙伴开始使用。
-> B1/B2/B3/B4 为重活，须独立 Brief、founder 显式授权与守护三关。
+> 风险级统一口径（终审修正）：B1 / B3 / B4 为重活，须独立 Brief、founder 显式授权与
+> 守护三关；B2 / B5 为中；B6 为人类门。
 
 ### B1 · `CreationProposalV1`：第一等生成前确认合同（重）
 
@@ -623,7 +666,14 @@ B1 交付物包含**逐字段消费者映射表**，并对 `duration_target`、`
   素材和商品版本；
 - 任一真源版本已变化，确认失败并要求重新生成提案；
 - 验证通过后，同一 proposal 文档原样写入 `content_context_snapshot`，并在同一事务中建立 task/run；
-- 不允许确认后服务端再次静默换题、换平台、换形式或换依据。
+- 不允许确认后服务端再次静默换题、换平台、换形式或换依据；
+- **防重放与幂等（终审修正）**：token 额外绑定 `nonce` 与 `contract_version`；确认请求
+  必须携带 `confirmation_request_id` 并以数据库唯一约束保证幂等——重复同一 request_id
+  回读同一任务；不同 request_id 重放同一 token 一律拒绝（不允许偶然重复建任务）；
+- 生成前与提案编译使用同一 `BrandContextSelectionService` 输出；确认时只**重验证**
+  依赖版本，不重新选择语义（防提案所见与任务实际使用漂移）；
+- 模型通用建议以类型化对象冻结（保留 `knowledge_origin=model_parametric`），
+  不得只存无来源字符串。
 
 #### B1.3 用户交互
 
@@ -675,7 +725,16 @@ CreationProposalV1
 v4/v5 主动收窄为四字段。B3 重新引入 Writer 结构化输出是对该架构撤退的部分逆转，执行
 Brief 必须显式对照该失败模式设计回归口径，至少包含：`script_blocks` 不得等价于把
 `creative_body` 切段改名（逐块 purpose / linked_step_ids 必须有独立信息量）；
-`subtitle_cues` 不得等于台词整块复制（须体现断句与屏幕长度约束）。
+`subtitle_cues` 不得等于台词整块复制（须体现断句与屏幕长度约束），且每条 cue 必须是
+对应 script block 的**连续原文片段**——长度、顺序与覆盖由服务端校验（机器可判，
+替代相似度启发式）。
+
+**所有权边界（终审修正）**：Planner 只在服务端冻结的 skeleton / slot / 资源 allowlist
+内填建议；`WriterOutputV4` 只能填写 writer-owned 的 script / subtitle 单元，**不能**返回
+事实 refs、资源权限或服务端 slot；事实由 Compiler 确定性插入。内容侧结构化投影落
+`ContentProductionPackageV1`（随 content_versions 首次插入）；DM01 落
+`DisplayExecutionPackageV1`（随 display version 插入），**不得硬塞入 ContentVersion**；
+"ProductionPackageV1"作两者统称保留。
 
 #### B3.2 来源状态
 
@@ -759,7 +818,8 @@ area / rail / product / quantity / facing / spacing / focus / substitute / execu
 - 人工抽样确认制作步骤可执行且没有虚构资源；
 - `suggested_needs_review` 不得渲染为“已确认”；
 - v3 失败模式回归口径通过：切段改名 / 台词整块复制检测为 FAIL（机器可判 + 人工抽样双口径）；
-- 受影响冻结验收子集 fresh rerun。
+- **完整 26 张冻结集重跑**（终审修正：B3 改变全部内容输出合同，不适用"受影响子集"
+  口径）——machine hard 26/26、structure 26/26、first-draft usable ≥23/26。
 
 ### B4 · 追加式内容决策事件与只读状态投影（重：schema）
 
@@ -797,6 +857,16 @@ last_decision_at
 - 事件 append-only，内容版本行保持不可变；
 - 无自动发布入口。
 
+**管理员审阅入口与事件语义冻结（终审修正）**：
+
+- 新增租户管理端 `content-review` 二级入口（或等价列表）：管理员可读取本租户可审内容与
+  结构化制作包，才能执行 approved / published_manual——**不得只在租户用户页面放管理员按钮**；
+- 语义冻结：adopted/abandoned 取同版本最后事件为当前采用投影；approved/approval_revoked
+  同理；`published_manual` **要求先 approved**；`exported` 定义为"服务端完成导出准备"
+  （单一定义，不与浏览器下载成功混用）；
+- 事件 `metadata` 使用按事件类型的 Pydantic union，不接受任意 JSON；表加 update/delete
+  触发器防改删。
+
 ### B5 · 北极星、参谋漏斗与运营指标（中）
 
 北极星：
@@ -819,6 +889,11 @@ last_decision_at
     分子 = PilotOps 周复盘台账中标记"不专业 / 口径不一致"的独立会话（同一用户对同一
     会话重复反馈只计一次）；观察周期、最低样本量、阈值与去重规则须在观察开始前于
     B5 Brief 冻结；无分母不得计算百分比。不新建数据库表，不冒充自动埋点。
+
+**北极星与指标口径（终审冻结）**：按 tenant/organization + 自然周 + 唯一
+`content_version` 去重；同一版本 adopted 与 approved **不重复计数**；活跃团队定义、
+周起点与时区在 B5 Brief 观察开始前冻结；`model_parametric` 内容排除口径见 SEAM-08；
+管理端消费者为 `PilotMetricsPanel`（并入 FE-11，不新增 FE 编号）；无来源指标不展示。
 
 内部诊断可继续展示 Provider Usage 估算消耗，但必须明确：
 
@@ -977,8 +1052,8 @@ python3 <assert> && git add <files> && git commit
 
 | 阶段门 | 必须条件 |
 |---|---|
-| A 放行：可做正式商业演示 | A1—A7 全部通过；五场景演练完成；普通用户无工程自证术语 |
-| B 放行：产品具备试点启用条件 | B1—B5 上线并 fresh 验收；B6 人类可用性门通过；最低制作包可执行 |
+| A 放行：可做正式商业演示 | A1—A7 全部通过；A5a 场景 1—4 真实演练 + 场景 5 冻结合同；普通用户无工程自证术语 |
+| B 放行：产品具备试点启用条件 | B1—B5 上线并 fresh 验收；A5b 五场景全链真实演练；B6 人类可用性门通过；最低制作包可执行 |
 | 试点启动门 | C1 运营材料、线下合同/报价与支持责任人就绪；无需计费或额度系统 |
 | 试点扩大门 | 北极星连续 ≥3 周期 > 0；非创始人真实采用；入驻与支持成本可核算；无安全硬缺陷 |
 | successor 门 | C3 完整复盘经主控批准；不得自行创建下一商业化里程碑 |
@@ -1031,7 +1106,8 @@ python3 <assert> && git add <files> && git commit
 
 ## 十三、守护审查请求
 
-1. `BoundedAdvisorV1` 是否足够形成真实参谋，而未膨胀为通用 Agent？
+1. 有界交互编排器与内容创意能力两层（`BoundedInteractionOrchestratorV1` +
+   `ContentAdvisorCapabilityV1`）是否真实分离、足以形成参谋，而未膨胀为通用 Agent？
 2. `CreationProposalV1 + proposal_token + snapshot` 是否遵守“不建 Brief 物理表”且能防确认漂移？
 3. 最低 `ProductionPackageV1` 是否已在试点启用前提供真正可执行交付，而非只把 body 重新排版？
 4. `confirmed_source / compiler_derived / suggested_needs_review / unavailable` 是否足以防止制作建议冒充事实？

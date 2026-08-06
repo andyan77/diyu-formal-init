@@ -1,4 +1,9 @@
-# COMM-01 / UX-04R 执行包排产与工程对照指南（V1）
+# COMM-01 / UX-04R 执行包排产与工程对照指南（V2）
+
+> V2（2026-08-06）：终审 `PASS_WITH_BOUNDED_CORRECTIONS` 十二项有界修正已同步进
+> 两份 REVISION-6 执行包与本指南（选择服务前移、OpportunityV2、反馈两表、A5a/A5b、
+> 交互 API 版本化与流式诚实、B1 防重放幂等、B3 所有权与完整 26 卡、B4 管理员入口与
+> 语义冻结、B5 口径冻结、术语/编号残留清理）。转 `APPROVED_FOR_EXECUTION` 待守护确认。
 
 - 性质：**非规范性工程参考**。规范真源是
   [COMM-01 执行包](COMM-01-品牌价值可见创作参谋确认提案与付费试点最小闭环执行包.md)（REVISION-5）与
@@ -45,7 +50,11 @@
 | SEAM-05 | B1 proposal_token 密钥 | HMAC 服务端签名，密钥经环境变量注入（`load_env` 惯例），禁止硬编码；token 绑定 tenant/account/scope/过期与依赖版本 |
 | SEAM-06 | FE-01 SPA 路由与服务端入口 | `src/gateway/api/html.py` 的 bootstrap 注入（identity/application）需适配新路由集合（SPA fallback 或逐路径注册），旧 URL 对照表是验收交付物 |
 | SEAM-07 | V5→V6 编译复算 | `_assert_compiled_delivery_v5`（字节级重编译比对）扩展覆盖 V6 结构化投影；旧内容永走 V5 读路径，不迁移 |
-| SEAM-08 | 北极星"品牌依据内容"精确定义 | = 被批准或采用、且 `context_basis.items` 含 ≥1 条**非** `model_parametric` 条目的内容版本（D-COMM-08 第 3 条排除项落进指标口径） |
+| SEAM-08 | 北极星"品牌依据内容"精确定义 | = 被批准或采用、且 `context_basis.items` 含 ≥1 条**非** `model_parametric` 条目的内容版本（D-COMM-08 第 3 条排除项落进指标口径）；tenant/organization + 自然周 + 唯一版本去重，adopted 与 approved 不双计 |
+| SEAM-09 | A 门演示与未实现能力 | A5 拆 A5a（场景 1—4 真实演练 + 场景 5 冻结合同，随 EXE-03）与 A5b（五场景全链，随 EXE-07，为 B 门条件） |
+| SEAM-10 | 反馈表"append-only + 可变状态"自相矛盾 | 两表事件化：`brand_basis_feedbacks`（不可变提交）+ `brand_basis_feedback_events`（处理事件），服务端派生 current_status |
+| SEAM-11 | 上下文选择多点漂移 | `BrandContextSelectionService` 前移为纯服务（EXE-02 交付），OpportunityV2 / Advisor / Proposal / context_selected / 快照 / 制作包六点同源消费；提案确认只重验证不重选 |
+| SEAM-12 | 制作包存储所有权 | 内容侧 `ContentProductionPackageV1` 随 content_versions；DM01 `DisplayExecutionPackageV1` 随 display version——不塞入 ContentVersion |
 
 ---
 
@@ -80,9 +89,10 @@
   本包核心改动：留下并投影）；`src/gateway/api/app.py:2932`（emit 白名单）；
   `src/gateway/api/contracts.py:79-93` + `frontend/src/app/types.ts:134-141`（合同扩展）；
   `CreatorApp.tsx:1915-1924 / 762-783`（两处折叠块，改常驻）。
-- **技术方案要点**：选择结果 → 确定性白名单投影（不加模型调用）；`basis_ref` 服务端生成、
-  绑定 tenant/account/请求作用域、不可反推 segment/digest；items 原样冻结进任务快照；
-  旧版本无 items 前端回退现有类目显示；SEAM-03。
+- **技术方案要点**：**抽出 `BrandContextSelectionService` 纯服务（SEAM-11，本包核心交付，
+  六个下游消费点同源）**；选择结果 → 确定性白名单投影（不加模型调用）；`basis_ref`
+  服务端生成、绑定 tenant/account/请求作用域、不可反推 segment/digest；content_locations
+  用稳定语义指针不用字符偏移；items 原样冻结进任务快照；旧版本无 items 前端回退；SEAM-03。
 - **风险点**：泄漏内部 ID（验收含全载荷 grep 断言，fail-closed）；V5 防漂移复算
   （`delivery_compiler.py:649-680`）不受影响；历史版本零改写。
 - **验证标准**：流事件与成品投影逐项一致；载荷 grep 无 segment/digest/sha/prompt；
@@ -99,7 +109,10 @@
   `TenantAdminApp.tsx:5553-5554`（诊断保留点）；`PublicHome.tsx:18`（7200ms 常量）+
   `styles/product.css:275-294`；数据实证引导数据源：`src/brain/formal_readiness.py:315` 一带。
 - **技术方案要点**：`features/today/` 新结构；机会卡"用这条开始"只回填输入区与方向；
-  空态保留四入口不造假数据；本包**后端零改动**（发现缺口停下上报，不顺手改）。
+  空态保留四入口不造假数据；**后端增量：`OpportunityV2` 兼容投影**（现有 V1 仅
+  title/seed/selections/why/materials，不足以承载 basis/gaps/difficulty/建议平台形式——
+  由后端消费 EXE-02 的选择服务组合投影，**前端不得自行拼装伪依据**；故本包依赖 EXE-02）；
+  A5 按 SEAM-09 只交付 A5a。
 - **风险点**：未选账号降级路径；机会为空的体验；动效改造的减动效兼容。
 - **验证标准**：浏览/刷新/保存计划前后三表计数不变（前端 e2e 复证）；`/user` 渲染 grep 无
   `FT-`/`SHA`/`Schema`/"58 项"；首页首帧 CTA 可见可交互断言；演示脚本 + 一次完整演练记录。
@@ -129,9 +142,12 @@
   （承诺门原样）；`contracts.py:64-65`（interaction_mode 兼容映射）；
   `src/brain/platform_directions.py` + `config/content_expression/catalog-v1.json`（建议数据源）；
   readiness + opportunities 输入（A7.0"能做什么"确定性投影）。
-- **技术方案要点**：新增 `src/brain/interaction_orchestrator.py` + registry dataclass 表；
-  意图判定顺序＝确定性信号 → 有界模型分类（同一模型、扩展 schema）；`model_parametric`
-  标注贯穿；GKB 零调用（D-COMM-08 工程断言）。
+- **技术方案要点**：新增 `src/brain/interaction_orchestrator.py` + registry dataclass 表
+  （六能力含 content_revision，意图→能力唯一映射，required_data_predicates）；新端点
+  `/api/v1/interactions/stream`（旧 stream 保留兼容）；意图判定＝确定性信号 → 有界模型
+  分类（同一模型、扩展 schema）；自然文本 `message_delta` 增量流为目标、卡片校验后整发
+  （降级须改文案，不虚称流式）；`AdvisorDraftV1` 显式草稿合同；`model_parametric` 标注
+  贯穿；GKB 零调用（D-COMM-08 工程断言）。
 - **风险点**：**与冻结验收的边界**——本包不触碰 create_content 生成路径则无需 fresh rerun，
   但若共享 prompt 段被改动须与守护对齐子集重跑（Brief 中显式裁定）；膨胀为通用 Agent
   （响应白名单 + 审查 13 条防守）；A7.7 矩阵含边界拒答指路行。
@@ -146,9 +162,11 @@
 - **上下游承接**：`business_tasks.content_context_snapshot`（expand-only 冻结先例，M7-2A §四）；
   `content_service.py:552-556`（V3 强制点，建任务路径）；`creation_intent_gate`（显式承诺来源）；
   投影 id/digest/画像版本已有快照字段先例（MILESTONE.md TENANT-01 段）。
-- **技术方案要点**：确认时服务端验签 + 作用域 + 过期 + 品牌投影/画像/素材/商品版本一致性；
-  任一真源版本变化 → 确认失败要求重新编译提案；同事务建 task/run；"直接制作"=系统默认
-  提案一键确认（摩擦增量一次点击）。
+- **技术方案要点**：确认时服务端验签 + 作用域 + 过期 + nonce + contract_version +
+  品牌投影/画像/素材/商品版本一致性；`confirmation_request_id` 幂等（DB 唯一约束，重复
+  request_id 回读同一任务、异 request_id 重放同 token 拒绝）；任一真源版本变化 → 确认
+  失败要求重新编译提案；确认只重验证不重选（SEAM-11）；同事务建 task/run；"直接制作"=
+  系统默认提案一键确认（摩擦增量一次点击）。
 - **风险点**：**改运行语义 → 冻结验收子集 fresh rerun**（范围：协作/意图门相关卡 + 抽样生成卡，
   Brief 与守护圈定）；token 重放/跨账号/篡改（验收含攻击用例）；模型通用建议只入
   `system_recommendation`/`accepted_assumptions`（D-COMM-08 第 3 条）。
@@ -166,13 +184,17 @@
   `src/shared/types.py:233-262`（既有 Bundle 结构起点）；`content_service.py:2098-2110`
   （持久化点，加 nullable jsonb 列）；`visible_provenance`（`delivery_compiler.py:538-563`，
   扩展覆盖制作包全字段）；退役对象 `CreatorApp.tsx:157-174` / `DisplayApp.tsx:41-56`。
-- **技术方案要点**：v3 反模式机器判定（script_block 与 creative_body 段落相似度阈值 +
-  逐块 purpose/linked_step 独立信息量检查）+ 人工抽样双口径；`suggested_needs_review`
-  渲染永不映射确认绿；无声音素材时 audio/editing 仅 compiler_derived/suggested。
+- **技术方案要点**：所有权边界——Planner 只在服务端冻结的 skeleton/slot/资源 allowlist
+  内填建议，WriterV4 只回 writer-owned script/subtitle 单元、不返回事实 refs/资源权限/
+  服务端 slot；v3 反模式机器判定（subtitle cue 必须是对应 script block **连续原文片段**，
+  长度/顺序/覆盖服务端校验 + 逐块 purpose/linked_step 独立信息量）+ 人工抽样双口径；
+  存储所有权 SEAM-12（内容/DM01 分表）；`suggested_needs_review` 渲染永不映射确认绿；
+  无声音素材时 audio/editing 仅 compiler_derived/suggested；A5b 五场景全链演示随本包交付。
 - **风险点**：单包体量——Brief 阶段可评估拆为"后端链 / 前端渲染"两步（守护定，不改总数上限
   精神）；fresh rerun；结构化投影与 body 双源漂移（同一确定性编译产出 + 复算覆盖）。
 - **验证标准**：B3.7 全项（含 v3 回归口径 FAIL 判定）；新成品零正则渲染；旧成品兼容回退；
-  人工抽样无虚构资源；受影响冻结验收子集 fresh rerun。
+  人工抽样无虚构资源；**完整 26 张冻结集重跑**（hard 26/26、structure 26/26、
+  first-draft usable ≥23/26——B3 改全部输出合同，不适用子集口径）。
 
 ### EXE-08 · 决策事件与指标（B4 + B5 + FE-11）【重】
 
@@ -182,8 +204,10 @@
 - **上下游承接**：`activity_events` 先例（`postgres_repository.py:1423` content.saved）；
   `workbench_repository.py:1172-1219`（汇总扩展点，`provider_usage.is_complete_billing_total=False`
   口径不变）；SEAM-01（A5 → B4 单源切换）；SEAM-08（北极星口径）；alembic RLS 模式沿用。
-- **技术方案要点**：撤回批准不产生内容 V2；导出可多次计数；派生状态服务端算、前端只读；
-  无自动发布入口。
+- **技术方案要点**：撤回批准不产生内容 V2；导出可多次计数（定义=服务端完成导出准备）；
+  `published_manual` 须先 approved；事件 metadata 按类型 Pydantic union + update/delete
+  触发器；管理端 `content-review` 二级入口（可审列表 + 只读制作包视图）+
+  `PilotMetricsPanel`（并入 FE-11）；派生状态服务端算、前端只读；无自动发布入口。
 - **风险点**：schema 变更（nullable/新表可回滚）；双源切换断言（SEAM-01）；权限扩展
   （账号负责团队批准权）明确不在本包隐式做。
 - **验证标准**：B4 全项；事件 append-only + 版本行零更新断言；派生投影回读一致；
