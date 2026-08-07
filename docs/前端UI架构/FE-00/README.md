@@ -8,12 +8,16 @@
 | 子项 | 责任方 | 状态 |
 |---|---|---|
 | **FE-00-DESIGN_ARTIFACTS** | 执行侧 | 本目录七份材料已交付 |
-| **FE-00-HUMAN-WALKTHROUGH** | founder | **BLOCKED_EXTERNAL** — 5 名目标用户实际走查记录未补齐 |
+| **FE-00-HUMAN-WALKTHROUGH** | founder | **CLOSED_BY_FOUNDER_RULING**（2026-08-07，AI 专家代行评审，见 [走查记录-AI代行评审-2026-08-07.md](走查记录-AI代行评审-2026-08-07.md)） |
 
 **放行判据（硬约束）**：走查记录未补齐前，EXE-01 整体只能报
 `PARTIAL · BLOCKED_EXTERNAL_FE00_HUMAN_GATE`，不得宣称 COMPLETE，
 **不得放行 FE-05—FE-13**。走查用户与 COMM-01 B6 可用性门复用同一批人
 （D-COMM-05b），两轮记录分别留存。
+
+> **2026-08-07 补记**：真实用户走查由 founder 裁决改为 AI 专家代行评审（记录见上表链接，
+> 含裁决原文、方法与诚实边界）。三项批准前置齐备，P1—P6 已置 `APPROVED`，
+> FE-00 整体通过；B6 可用性门（EXE-09）仍须真实用户。
 
 ## 材料清单
 
@@ -58,4 +62,6 @@
 - `--surface-soft` 在 `product.css` 中被 `.artifact-context-basis` 使用但全仓未定义，
   且无回退值 → 该元素背景实际渲染为透明。修复会改变现有页面观感，
   属设计裁决，随 FE-00 评审一并决定，不在基础设施提交里顺手改。
+  **（2026-08-07 设计裁决：随 EXE-02 依据面板改造在 UserShell 作用域局部定义
+  `--surface-soft: #f6f4f0`，禁止新增全局 `:root`；见走查记录 F3。）**
 - `--line-soft`、`--text-muted` 同样全仓未定义，但均带回退值，观感无影响。
