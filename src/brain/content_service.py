@@ -26,6 +26,11 @@ from src.brain.natural_entry import (
     sanitize_seed,
 )
 from src.brain.p1_contract import assert_content_complete
+from src.brain.payoff_assembly import (
+    assemble_task_value,
+    build_payoff_request,
+    product_contract_job,
+)
 from src.brain.platform_directions import direction_for
 from src.ports.content_generator import ContentGenerator
 from src.ports.content_repository import ContentRepository
@@ -44,6 +49,7 @@ from src.shared.content_snapshot import (
     frozen_product_value_contract,
     frozen_publication_contract,
     frozen_series_context,
+    frozen_task_value_assembly,
     frozen_user_premise,
     frozen_writer_output,
 )
@@ -106,6 +112,12 @@ from src.shared.publication_contract import (
 )
 from src.shared.series_episode import build_series_episode_contract
 from src.shared.service_status import ProviderStatusTracker
+from src.shared.task_value_assembly import (
+    TaskValueAssemblyV1,
+    assert_task_value_matches_contract,
+    task_value_assembly_digest,
+    task_value_assembly_document,
+)
 from src.shared.types import (
     AccountExpression,
     ActiveAsset,
@@ -353,18 +365,11 @@ class ContentService:
             context,
             sanitized_seed,
         )
-        publication_spans = intake_spans or self._default_publication_spans(
+        publication_spans, frozen_frame = self._frozen_publication_spans(
             sanitized_seed,
             frozen_frame,
-            non_fact_role=(
-                "style_or_revision_instruction"
-                if reuse_version_id is not None
-                else "creation_instruction"
-            ),
-        )
-        frozen_frame = self._frame_with_publication_spans(
-            frozen_frame,
-            publication_spans,
+            intake_spans,
+            reuse_version_id,
         )
         context = self._context_with_brand_use(context, frozen_frame)
         try:
@@ -396,7 +401,7 @@ class ContentService:
                 )
         except GenerationFailed as exc:
             return {"kind": "question", "message": str(exc)}
-        publication_contract = self._new_publication_contract(
+        publication_contract, task_value_assembly = self._new_publication_contract(
             primary_product=primary_product,
             plan=plan,
             frame=frozen_frame,
@@ -429,23 +434,26 @@ class ContentService:
             source_description,
             production_conditions,
             control,
-            snapshot_document(
-                control,
-                context.content_role_name,
-                products,
-                series_context,
-                context.business_data_kind,
-                context.brand_reference_context,
-                frozen_frame,
-                sanitized_seed,
-                plan,
-                commitment,
-                delivery_compiler_version=delivery_compiler_version,
-                media_capability_envelope=media_envelope,
-                media_program=media_program,
-                product_value_contract=product_value_contract,
-                publication_contract=publication_contract,
-                brand_context_packet=context.context_packet,
+            self._snapshot_with_task_value(
+                snapshot_document(
+                    control,
+                    context.content_role_name,
+                    products,
+                    series_context,
+                    context.business_data_kind,
+                    context.brand_reference_context,
+                    frozen_frame,
+                    sanitized_seed,
+                    plan,
+                    commitment,
+                    delivery_compiler_version=delivery_compiler_version,
+                    media_capability_envelope=media_envelope,
+                    media_program=media_program,
+                    product_value_contract=product_value_contract,
+                    publication_contract=publication_contract,
+                    brand_context_packet=context.context_packet,
+                ),
+                task_value_assembly,
             ),
             series_context,
             client_request_id=client_request_id,
@@ -519,6 +527,124 @@ class ContentService:
             context_packet=None,
         )
 
+    @classmethod
+    def _frozen_publication_spans(
+        cls,
+        sanitized_seed: str,
+        frame: NarrativeFrame,
+        intake_spans: tuple[PublicationInputSpanV1, ...] | None,
+        reuse_version_id: UUID | None,
+    ) -> tuple[tuple[PublicationInputSpanV1, ...], NarrativeFrame]:
+        """Resolve this task's input roles and re-freeze the frame against them."""
+
+        spans = intake_spans or cls._default_publication_spans(
+            sanitized_seed,
+            frame,
+            non_fact_role=(
+                "style_or_revision_instruction" if reuse_version_id is not None else "creation_instruction"
+            ),
+        )
+        return spans, cls._frame_with_publication_spans(frame, spans)
+
+    @staticmethod
+    def _recarried_publication_contract(
+        contract: PublicationContractV3,
+        media_envelope: MediaCapabilityEnvelope | None,
+        target: ContentTarget,
+        direction: PlatformDirection,
+        instruction: str,
+    ) -> PublicationContractV3:
+        """Re-point a frozen contract at a new platform carrier, semantics untouched.
+
+        The value the task was produced with — payoff, central job, frozen facts —
+        travels unchanged; only the carrier and the user's new instruction move.
+        """
+
+        if media_envelope is None:
+            raise GenerationFailed("平台改编缺少冻结媒体能力合同")
+        recarried = replace(
+            contract,
+            platform_direction=PlatformDirectionV3(
+                target=target,
+                media_format=direction.media_format,
+                direction_version=direction.version,
+                direction_digest=direction.direction_digest,
+            ),
+            media_capability_ref=media_envelope_digest(media_envelope),
+            explicit_user_controls=tuple(
+                dict.fromkeys((*contract.explicit_user_controls, instruction.strip()))
+            ),
+        )
+        assert_publication_contract(recarried)
+        return recarried
+
+    @staticmethod
+    def _explicit_user_controls(
+        intake_spans: tuple[PublicationInputSpanV1, ...],
+        control: ContentControlContext,
+    ) -> tuple[str, ...]:
+        """Everything the user explicitly asked for, in the order they asked for it."""
+
+        direction = control.direction
+        return tuple(
+            dict.fromkeys(
+                (
+                    *(
+                        span.exact_text
+                        for span in intake_spans
+                        if span.role == "style_or_revision_instruction"
+                    ),
+                    *(
+                        f"{item.axis}：{item.applied_label}"
+                        for item in (direction.selections if direction is not None else ())
+                    ),
+                    *((direction.custom_text,) if direction is not None and direction.custom_text else ()),
+                )
+            )
+        )
+
+    @staticmethod
+    def _frozen_task_value(
+        contract: PublicationContractV3,
+        assembly: TaskValueAssemblyV1,
+        central_job: str,
+    ) -> tuple[PublicationContractV3, TaskValueAssemblyV1]:
+        """Fail closed unless the assembled value is exactly what the contract froze.
+
+        The Writer reads ``contract.audience_payoff`` and nothing else, so the
+        assembly is only honest evidence if the two are the same string.  The
+        product's central job is re-derived and compared, because EXE-V0 may
+        change what a reader gets and never what the product owes.
+        """
+
+        assert_task_value_matches_contract(
+            assembly,
+            contract_audience_payoff=contract.audience_payoff,
+            central_job_before=central_job,
+            central_job_after=product_contract_job(contract.content_product, contract.topic_origin),
+        )
+        return contract, assembly
+
+    @staticmethod
+    def _snapshot_with_task_value(
+        snapshot: dict[str, object],
+        assembly: TaskValueAssemblyV1 | None,
+    ) -> dict[str, object]:
+        """Attach the task's value assembly to a snapshot, expand-only.
+
+        The snapshot column is jsonb and every reader ignores keys it does not
+        know, so no migration is involved.  A task without an assembly (a
+        pre-V0 source being recompiled) keeps its document exactly as it was.
+        """
+
+        if assembly is None:
+            return snapshot
+        return {
+            **snapshot,
+            "task_value_assembly": task_value_assembly_document(assembly),
+            "task_value_assembly_digest": task_value_assembly_digest(assembly),
+        }
+
     @staticmethod
     def _frame_with_publication_spans(
         frame: NarrativeFrame,
@@ -535,8 +661,9 @@ class ContentService:
             user_fact_source_ids=tuple(span.source_id for span in actuality),
         )
 
-    @staticmethod
+    @classmethod
     def _new_publication_contract(
+        cls,
         *,
         primary_product: ContentProduct,
         plan: CreativePlanV2,
@@ -549,13 +676,13 @@ class ContentService:
         direction: PlatformDirection,
         series_context: SeriesContext | None,
         media_envelope: MediaCapabilityEnvelope,
-    ) -> PublicationContractV3:
+    ) -> tuple[PublicationContractV3, TaskValueAssemblyV1]:
         expression = control.account_expression
         packet = context.context_packet
         if not isinstance(packet, BrandContextPacketV3):
             raise DomainError("新内容任务必须使用已确认的 PublicationContractV3。")
         if isinstance(packet, BrandContextPacketV3):
-            central_job, audience_payoff, _ = product_brief(
+            central_job, static_payoff, _ = product_brief(
                 primary_product,
                 plan.topic_origin,
             )
@@ -593,26 +720,17 @@ class ContentService:
                 if frozen_series is not None
                 else None
             )
-            controls = tuple(
-                dict.fromkeys(
-                    (
-                        *(
-                            span.exact_text
-                            for span in intake_spans
-                            if span.role == "style_or_revision_instruction"
-                        ),
-                        *(
-                            f"{item.axis}：{item.applied_label}"
-                            for item in (control.direction.selections if control.direction is not None else ())
-                        ),
-                        *(
-                            (control.direction.custom_text,)
-                            if control.direction is not None and control.direction.custom_text
-                            else ()
-                        ),
-                    )
+            assembly = assemble_task_value(
+                build_payoff_request(
+                    content_product=primary_product,
+                    topic_origin=plan.topic_origin,
+                    account_expression=expression,
+                    product_basis=product_basis,
+                    series_delta=series_delta,
+                    static_payoff=static_payoff,
                 )
             )
+            controls = cls._explicit_user_controls(intake_spans, control)
             actuality_spans = tuple(span for span in intake_spans if span.role == "observable_actuality")
             topic = (
                 "由 Writer 从当前账号允许的内容领地自主选择一个具体题材"
@@ -646,13 +764,13 @@ class ContentService:
                 if expression is not None
                 else context.content_role_boundary
             )
-            return build_publication_contract_v3(
+            contract = build_publication_contract_v3(
                 input_roles=intake_spans,
                 topic_origin=plan.topic_origin,
                 topic=topic or "围绕本次明确输入完成一篇作品",
                 content_product=primary_product,
                 central_job=central_job,
-                audience_payoff=audience_payoff,
+                audience_payoff=assembly.audience_payoff,
                 explicit_user_controls=controls,
                 account_editorial_permission=AccountEditorialPermissionV3(
                     identity=task_identity,
@@ -721,6 +839,7 @@ class ContentService:
                 publication_projection_version=(packet.publication_projection_version),
                 publication_projection_digest=(packet.publication_projection_digest),
             )
+            return cls._frozen_task_value(contract, assembly, central_job)
         raise DomainError("新内容任务没有形成 PublicationContractV3。")
 
     @staticmethod
@@ -1853,27 +1972,13 @@ class ContentService:
             except GenerationFailed as exc:
                 return {"kind": "question", "message": str(exc)}
         if isinstance(publication_contract, PublicationContractV3):
-            if media_envelope is None:
-                raise GenerationFailed("平台改编缺少冻结媒体能力合同")
-            publication_contract = replace(
+            publication_contract = self._recarried_publication_contract(
                 publication_contract,
-                platform_direction=PlatformDirectionV3(
-                    target=target,
-                    media_format=direction.media_format,
-                    direction_version=direction.version,
-                    direction_digest=direction.direction_digest,
-                ),
-                media_capability_ref=media_envelope_digest(media_envelope),
-                explicit_user_controls=tuple(
-                    dict.fromkeys(
-                        (
-                            *publication_contract.explicit_user_controls,
-                            instruction.strip(),
-                        )
-                    )
-                ),
+                media_envelope,
+                target,
+                direction,
+                instruction,
             )
-            assert_publication_contract(publication_contract)
         assets = self._repository.load_active_assets(
             target_scope,
             source.primary_product,
@@ -1897,27 +2002,30 @@ class ContentService:
             source.source_description,
             production_conditions,
             control,
-            snapshot_document(
-                control,
-                control.content_role or context.content_role_name,
-                source.products,
-                series_context,
-                context.business_data_kind,
-                context.brand_reference_context,
-                frame,
-                source_premise,
-                creative_plan,
-                evaluate_creation_intent(
-                    (instruction,),
-                    active_revision=True,
-                    creation_kind="recompile",
+            self._snapshot_with_task_value(
+                snapshot_document(
+                    control,
+                    control.content_role or context.content_role_name,
+                    source.products,
+                    series_context,
+                    context.business_data_kind,
+                    context.brand_reference_context,
+                    frame,
+                    source_premise,
+                    creative_plan,
+                    evaluate_creation_intent(
+                        (instruction,),
+                        active_revision=True,
+                        creation_kind="recompile",
+                    ),
+                    delivery_compiler_version=delivery_compiler_version,
+                    media_capability_envelope=media_envelope,
+                    media_program=media_program,
+                    product_value_contract=product_value_contract,
+                    publication_contract=publication_contract,
+                    brand_context_packet=context.context_packet,
                 ),
-                delivery_compiler_version=delivery_compiler_version,
-                media_capability_envelope=media_envelope,
-                media_program=media_program,
-                product_value_contract=product_value_contract,
-                publication_contract=publication_contract,
-                brand_context_packet=context.context_packet,
+                frozen_task_value_assembly(snapshot),
             ),
             None,
         )

@@ -29,6 +29,11 @@ from src.shared.publication_contract import (
     publication_contract_digest,
     publication_contract_from_document,
 )
+from src.shared.task_value_assembly import (
+    TaskValueAssemblyV1,
+    task_value_assembly_digest,
+    task_value_assembly_from_document,
+)
 from src.shared.types import ProductFact, SeriesContext, SeriesEntry
 from src.shared.writer_request import (
     WriterOutputV3,
@@ -199,6 +204,27 @@ def frozen_publication_contract(
     if publication_contract_digest(contract) != digest:
         raise DomainError("内容任务冻结的发布责任合同摘要不一致")
     return contract
+
+
+def frozen_task_value_assembly(
+    snapshot: Mapping[str, object],
+) -> TaskValueAssemblyV1 | None:
+    """Return the value assembly a task was frozen with, or ``None`` before EXE-V0.
+
+    A pre-V0 snapshot carries neither key, and nothing backfills one: an older
+    task keeps the static payoff it was actually produced with.
+    """
+
+    value = snapshot.get("task_value_assembly")
+    digest = snapshot.get("task_value_assembly_digest")
+    if value is None and digest is None:
+        return None
+    if value is None or not isinstance(digest, str):
+        raise DomainError("内容任务冻结的价值组装不完整")
+    assembly = task_value_assembly_from_document(value)
+    if task_value_assembly_digest(assembly) != digest:
+        raise DomainError("内容任务冻结的价值组装摘要不一致")
+    return assembly
 
 
 def visible_direction(snapshot: object) -> tuple[str | None, list[str]]:
