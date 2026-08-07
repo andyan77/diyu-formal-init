@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { FormEvent, JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BrandMark } from "../components/Brand";
 import {
@@ -460,11 +461,14 @@ function ArtifactPane({
 
 export default function CreatorApp({
   context,
-  taskId
+  taskId,
+  taskVersion = null
 }: {
   context: BootstrapContext;
   /** Present on /content/tasks/:taskId. The package page itself is EXE-07. */
   taskId?: string;
+  /** From `?version=`; null opens the highest version there is. */
+  taskVersion?: number | null;
 }): JSX.Element {
   const publishingIdentities = normalizedIdentities(context);
   const operatorIdentity = context.identity ?? {};
@@ -566,7 +570,10 @@ export default function CreatorApp({
   const [savingDefaults, setSavingDefaults] = useState(false);
   const [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
+  const navigate = useNavigate();
   const [renderedScope, setRenderedScope] = useState(advisorScope.scopeKey);
+  const [deepLinkError, setDeepLinkError] = useState("");
+  const openedDeepLink = useRef("");
   const identityTriggerRef = useRef<HTMLButtonElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -895,27 +902,52 @@ export default function CreatorApp({
     }
   };
 
-  const openSeriesTask = async (taskId: string): Promise<void> => {
+  /**
+   * Open one task and show one of its versions.
+   *
+   * `requested` of null means the highest there is. Shared by the series
+   * drawer and by /content/tasks/:taskId so a deep link cannot drift from what
+   * opening the same task from inside the workspace does.
+   */
+  const openTaskVersion = async (
+    openTaskId: string,
+    requested: number | null,
+    txn: AdvisorScopeTransaction
+  ): Promise<void> => {
+    const values = await api<ContentVersion[]>(
+      scope(`/api/v1/content/tasks/${openTaskId}/versions`),
+      { signal: txn.signal }
+    );
+    if (!txn.live()) return;
+    const ordered = values
+      .slice()
+      .sort((left, right) => right.version - left.version);
+    const chosen =
+      requested === null
+        ? ordered[0]
+        : ordered.find(item => item.version === requested);
+    if (!chosen) {
+      throw new Error(
+        requested === null
+          ? "这条内容还没有可读成品。"
+          : `这条内容没有第 ${requested} 版。`
+      );
+    }
+    clearOneTimeControls();
+    setMessages([]);
+    setVersions(values);
+    setCurrent(chosen);
+    setViewed(chosen);
+    setToolOpen(null);
+    setMobileView("artifact");
+  };
+
+  const openSeriesTask = async (seriesTaskId: string): Promise<void> => {
     const txn = advisorScope.begin();
     setPending(true);
     setNotice("");
     try {
-      const values = await api<ContentVersion[]>(
-        scope(`/api/v1/content/tasks/${taskId}/versions`),
-        { signal: txn.signal }
-      );
-      if (!txn.live()) return;
-      const latest = values
-        .slice()
-        .sort((left, right) => right.version - left.version)[0];
-      if (!latest) throw new Error("这个系列条目还没有可读成品。");
-      clearOneTimeControls();
-      setMessages([]);
-      setVersions(values);
-      setCurrent(latest);
-      setViewed(latest);
-      setToolOpen(null);
-      setMobileView("artifact");
+      await openTaskVersion(seriesTaskId, null, txn);
     } catch (reason) {
       if (!txn.live()) return;
       setNotice(reason instanceof Error ? reason.message : "无法打开这篇系列内容。");
@@ -923,6 +955,38 @@ export default function CreatorApp({
       if (txn.live()) setPending(false);
     }
   };
+
+  // /content/tasks/:taskId — the id used to be a dead prop. Loading it once per
+  // (task, version, scope) keeps a re-render from refetching, and keeps a
+  // scope switch from leaving the previous account's task on screen.
+  useEffect(() => {
+    if (!taskId || !hasResolvedIdentity) return;
+    const attempt = `${taskId}#${taskVersion ?? "latest"}#${advisorScope.scopeKey}`;
+    if (openedDeepLink.current === attempt) return;
+    openedDeepLink.current = attempt;
+    const txn = advisorScope.begin();
+    void (async () => {
+      setPending(true);
+      setDeepLinkError("");
+      try {
+        await openTaskVersion(taskId, taskVersion, txn);
+      } catch (reason) {
+        if (!txn.live()) return;
+        setDeepLinkError(
+          reason instanceof ApiError && reason.status === 403
+            ? "这条内容不属于当前发布账号。换个账号，或者回到工作台重新开始。"
+            : reason instanceof Error
+              ? reason.message
+              : "打不开这条内容。"
+        );
+      } finally {
+        if (txn.live()) setPending(false);
+      }
+    })();
+    // openTaskVersion closes over the scope it was created with and guards its
+    // own writes; the attempt key is the honest dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId, taskVersion, hasResolvedIdentity, advisorScope.scopeKey]);
 
   const creativeCustomText = (): string =>
     [
@@ -1463,6 +1527,21 @@ export default function CreatorApp({
       <main
         className={`creator-conversation ${mobileView === "artifact" ? "mobile-hidden" : ""}`}
       >
+        {deepLinkError && (
+          <div className="deep-link-recovery" role="alert">
+            <p>{deepLinkError}</p>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                setDeepLinkError("");
+                navigate("/content");
+              }}
+            >
+              返回工作台
+            </button>
+          </div>
+        )}
         <section className="conversation-stream" aria-live="polite">
           {messages.length === 0 ? (
             <div className="creator-welcome">

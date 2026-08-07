@@ -2147,6 +2147,23 @@ a {
   background: var(--white);
 }
 
+/* A deep link that cannot be opened still has to be a place you can leave;
+   this carries the reason and the way back out (EXE-01R R2). */
+.deep-link-recovery {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  margin: 18px 0;
+  padding: 16px 18px;
+  border: 1px solid var(--stone-200);
+  border-radius: 12px;
+  background: var(--white);
+}
+
+.deep-link-recovery p {
+  margin: 0;
+}
+
 .generation-progress {
   display: flex;
   align-items: center;
