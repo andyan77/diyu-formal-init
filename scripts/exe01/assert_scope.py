@@ -44,7 +44,13 @@ COMMON_FORBIDDEN: tuple[tuple[str, str], ...] = (
 
 @dataclass(frozen=True)
 class Window:
-    """One package's change surface, pinned to the commits that bound it."""
+    """One package's change surface, pinned to the commits that bound it.
+
+    `head` is a literal SHA once the package has finished. Leaving it as HEAD
+    would mean every later package's commits keep arriving inside a window
+    that closed, and each one would have to be argued about here — a finished
+    package must not be able to fail because of work it never did.
+    """
 
     package: str
     base: str
@@ -75,10 +81,14 @@ EXE01 = Window(
     ),
 )
 
+# Frozen at the implementation-final commit. Anything after it belongs to a
+# later package and is judged by that package's own window.
+EXE01R_FINAL = "13cfcb2308a9c0b8efbaaa4500e4f0a723d269c7"
+
 EXE01R = Window(
     package="EXE-01R",
     base="357d17cd610d5c3c0b3fd5f7c703b8710da82d64",
-    head="HEAD",
+    head=EXE01R_FINAL,
     allowed=(
         ("frontend/", "R1—R4 作用域事务、流校验、深链与视觉证据"),
         ("scripts/exe01/", "本包断言、预算工具与门链 runner"),
@@ -182,10 +192,32 @@ def check_additive_projection(window: Window) -> list[str]:
     return []
 
 
+def check_frozen_head(window: Window) -> list[str]:
+    """A frozen window must still describe this branch.
+
+    Pinning the head to a SHA is only honest while that SHA is behind us: if
+    it were dropped by a rebase, or pointed at some other line of work, the
+    window would keep passing while describing a tree nobody has.
+    """
+    if window.head == "HEAD":
+        return []
+    known = run("git", "cat-file", "-e", f"{window.head}^{{commit}}")
+    if known.returncode != 0:
+        return [f"[{window.package}] 冻结点 {window.head[:12]} 在本仓找不到"]
+    reachable = run("git", "merge-base", "--is-ancestor", window.head, "HEAD")
+    if reachable.returncode != 0:
+        return [
+            f"[{window.package}] 冻结点 {window.head[:12]} 不是当前 HEAD 的祖先；"
+            "分支被改写过，这个窗口已经不描述本分支"
+        ]
+    return []
+
+
 def report(window: Window, files: list[str]) -> None:
+    edge = "HEAD" if window.head == "HEAD" else f"{window.head[:7]}（已冻结）"
     print(
         f"PASS [{window.package}] change surface within scope "
-        f"({len(files)} files, {window.base[:7]}..{window.head})"
+        f"({len(files)} files, {window.base[:7]}..{edge})"
     )
     for prefix, why in window.allowed:
         hits = sum(1 for path in files if path.startswith(prefix))
@@ -205,6 +237,7 @@ def main() -> int:
     for window in WINDOWS:
         files = changed_files(window)
         seen.append((window, files))
+        failures += check_frozen_head(window)
         failures += check_surface(window, files)
         failures += check_no_growth(window)
         failures += check_additive_projection(window)
