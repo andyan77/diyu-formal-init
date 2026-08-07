@@ -207,7 +207,7 @@ try {
   };
   const navigate = async url => {
     await send("Page.navigate", { url }, sessionId);
-    await waitFor("document.readyState==='complete'", url);
+    await waitFor(`document.readyState==='complete' && !document.querySelector('.page-loading')`, url);
   };
 
   if (!skipBinding) {

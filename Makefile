@@ -1,4 +1,4 @@
-.PHONY: format lint typecheck test golden openapi frontend-lint frontend-typecheck frontend-build frontend-test
+.PHONY: format lint typecheck test golden openapi frontend-lint frontend-typecheck frontend-build frontend-test exe01-gates
 
 format:
 	.venv/bin/python -m ruff format src tests alembic
@@ -29,3 +29,8 @@ frontend-build:
 
 frontend-test:
 	npm --prefix frontend run test
+
+# The nine EXE-01 / EXE-01R determinism gates. Self-contained: brings up the
+# project's own local PostgreSQL, migrates and seeds it, then runs all nine.
+exe01-gates:
+	bash scripts/exe01/run_gates.sh

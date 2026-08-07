@@ -41,6 +41,14 @@ const {
   window
 } = harness;
 const document = window.document;
+const bootstrapWindow = window as unknown as {
+  __DIYU_BOOTSTRAP__: {
+    application?: string;
+    capabilities?: string[];
+    identity?: Record<string, string>;
+    current_publishing_identity_id?: string | null;
+  };
+};
 
 function find(selector: string, contains: string): HTMLElement {
   const node = Array.from(document.querySelectorAll(selector)).find(item =>
@@ -96,6 +104,105 @@ async function send(value: string): Promise<void> {
   await input(composer, value);
   await click(find(".composer-submit button", "发送"));
   await settle();
+}
+
+/**
+ * /user 的能力矩阵：先证明技术诊断面板不在首屏，展开后再逐项核对。
+ */
+async function userHelpJourney(container: Element): Promise<void> {
+  window.history.pushState({}, "", "/user");
+  bootstrapWindow.__DIYU_BOOTSTRAP__.application = "tenant_user";
+  bootstrapWindow.__DIYU_BOOTSTRAP__.capabilities = ["content"];
+  bootstrapWindow.__DIYU_BOOTSTRAP__.identity = {
+    operator: "笛语品控",
+    organization: "笛语服饰管理组织",
+    account: "总部品牌内容运营"
+  };
+  const root = createRoot(container);
+  await act(async () => root.render(<Root />));
+  await settle();
+  assert.match(document.querySelector(".user-help > summary")?.textContent ?? "", /使用说明.*当前可用与待补/);
+  // Migrated journey: the technical diagnostic panel is no longer part of
+  // /user's first load — the bundle budget forbids it — so this now opens the
+  // disclosure first. Everything asserted below is unchanged, including the
+  // exact row count.
+  assert.equal(
+    document.querySelectorAll(".capability-matrix tbody tr").length,
+    0,
+    "技术诊断面板在展开前不得出现在 /user 首屏"
+  );
+  await openDisclosure(".user-help");
+  assert.equal(document.querySelectorAll(".capability-matrix tbody tr").length, 58);
+  assert.match(document.body.textContent ?? "", /软件是否实现/);
+  assert.match(document.body.textContent ?? "", /当前资料是否满足/);
+  assert.match(document.body.textContent ?? "", /当前用户是否获权/);
+  assert.match(document.body.textContent ?? "", /正式生产是否实测/);
+  assert.match(document.body.textContent ?? "", /P4.*P5.*DM01/s);
+  assert.match(document.body.textContent ?? "", /自然人.*工作资格.*逻辑发布账号.*平台和形式/s);
+  assert.match(document.body.textContent ?? "", /发送：普通交流，不创建任务/);
+  assert.match(document.body.textContent ?? "", /生成内容：创建正式任务、运行和版本/);
+  assert.match(document.body.textContent ?? "", /candidate-user-help-sha.*20260817_44/s);
+  await act(async () => root.unmount());
+}
+
+/**
+ * /status 的对外状态页：五种服务端状态 + 一次读取失败，各自的说法必须不同，
+ * 且全程只允许 GET、只允许 no-store。
+ */
+async function statusPageJourney(container: Element): Promise<void> {
+  window.history.pushState({}, "", "/status");
+  setPublicStatus("unknown");
+  const root = createRoot(container);
+  await act(async () => root.render(<Root />));
+  await settle();
+  assert.match(document.body.textContent ?? "", /内容生成近期状态尚无法确认/);
+  assert.match(document.body.textContent ?? "", /纯文字陈列参考方案可以使用/);
+
+  setPublicStatus("degraded");
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /内容生成暂时受影响/);
+  assert.match(document.body.textContent ?? "", /纯文字陈列参考方案仍可使用/);
+
+  setPublicStatus("unavailable");
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /内容生成暂时受影响/);
+
+  setPublicStatus("available");
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /主要功能可以使用/);
+
+  setPublicStatus("unknown", "unavailable");
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /笛语暂时无法接单/);
+  setPublicStatusFailure(true);
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /当前状态暂无法确认/);
+  assert.doesNotMatch(document.body.textContent ?? "", /笛语暂时无法接单/);
+  assert.doesNotMatch(document.body.textContent ?? "", /主要功能可以使用/);
+  assert.doesNotMatch(document.body.textContent ?? "", /正在检查/);
+  setPublicStatusFailure(false);
+  setPublicStatus("available");
+  await click(find("button", "重新检查"));
+  await settle();
+  assert.match(document.body.textContent ?? "", /主要功能可以使用/);
+  assert.doesNotMatch(document.body.textContent ?? "", /当前状态暂无法确认/);
+  assert.doesNotMatch(document.body.textContent ?? "", /笛语暂时无法接单/);
+  assert.equal(
+    requests.filter(item => item.path === "/api/v1/status").every(item => item.method === "GET"),
+    true,
+    "状态页只能读取状态投影，不得创建内容任务或外部探测"
+  );
+  assert.equal(
+    requests.filter(item => item.path === "/api/v1/status").every(item => item.cache === "no-store"),
+    true,
+    "状态页重新检查不得读取旧缓存"
+  );
+  await act(async () => root.unmount());
 }
 
 async function main(): Promise<void> {
@@ -211,6 +318,20 @@ async function main(): Promise<void> {
   // AdvisorDraftV1 scope, which also pins down the account the draft belongs
   // to. Both halves are asserted: the draft is kept, and the retired storage
   // key is not written.
+  //
+  // EXE-01R migrated the scope again, from display names to stable ids: the
+  // tenant component is the bootstrap's tenant_id, not the brand's name. Both
+  // readings are asserted so the change cannot silently revert.
+  assert.equal(
+    advisorDrafts.read({
+      operator: "user-hq",
+      tenant: "tenant-0001",
+      publishingIdentityId: "identity-hq",
+      target: "xiaohongshu_graphic"
+    }),
+    "今天店里忙了一天，回家因为洗碗拌了两句，帮我发条小红书。",
+    "未提交输入必须按 AdvisorDraftV1 作用域保留"
+  );
   assert.equal(
     advisorDrafts.read({
       operator: "user-hq",
@@ -218,8 +339,8 @@ async function main(): Promise<void> {
       publishingIdentityId: "identity-hq",
       target: "xiaohongshu_graphic"
     }),
-    "今天店里忙了一天，回家因为洗碗拌了两句，帮我发条小红书。",
-    "未提交输入必须按 AdvisorDraftV1 作用域保留"
+    "",
+    "草稿作用域不得再由品牌展示名构成"
   );
   assert.equal(
     Object.keys(window.sessionStorage).filter(key =>
@@ -558,15 +679,26 @@ async function main(): Promise<void> {
 
   await act(async () => root.unmount());
 
-  const bootstrapWindow = window as unknown as {
-    __DIYU_BOOTSTRAP__: {
-      application?: string;
-      capabilities?: string[];
-      identity?: Record<string, string>;
-      current_publishing_identity_id?: string | null;
-    };
-  };
   bootstrapWindow.__DIYU_BOOTSTRAP__.current_publishing_identity_id = null;
+
+  // EXE-01R made the URL the scope's home, so "the server named no account"
+  // now has to be staged with an address that names none either — otherwise
+  // this re-mount is really testing that an explicit, granted account in the
+  // URL survives a reload, which is a different (and desirable) guarantee.
+  // Both are asserted, in that order.
+  window.history.replaceState({}, "", "/content?publishing_identity_id=identity-hq");
+  root = createRoot(container);
+  await act(async () => root.render(<Root />));
+  await settle();
+  assert.equal(
+    (document.querySelector('select[aria-label="发布账号"]') as HTMLSelectElement)
+      .value,
+    "identity-hq",
+    "地址里明确指定且已获准的账号，重新进入时必须保持"
+  );
+  await act(async () => root.unmount());
+
+  window.history.replaceState({}, "", "/content");
   const requestCount = requests.length;
   root = createRoot(container);
   await act(async () => root.render(<Root />));
@@ -576,6 +708,11 @@ async function main(): Promise<void> {
       .value,
     "",
     "多账号且服务端没有解析当前账号时，客户端不得默认第一项"
+  );
+  assert.equal(
+    new URL(window.location.href).searchParams.get("publishing_identity_id"),
+    null,
+    "没有账号可用时不得把某个账号写进地址栏"
   );
   assert.equal(
     requests.length,
@@ -591,93 +728,9 @@ async function main(): Promise<void> {
   assert.equal(requests.length, requestCount);
   await act(async () => root.unmount());
 
-  window.history.pushState({}, "", "/user");
-  bootstrapWindow.__DIYU_BOOTSTRAP__.application = "tenant_user";
-  bootstrapWindow.__DIYU_BOOTSTRAP__.capabilities = ["content"];
-  bootstrapWindow.__DIYU_BOOTSTRAP__.identity = {
-    operator: "笛语品控",
-    organization: "笛语服饰管理组织",
-    account: "总部品牌内容运营"
-  };
-  root = createRoot(container);
-  await act(async () => root.render(<Root />));
-  await settle();
-  assert.match(document.querySelector(".user-help > summary")?.textContent ?? "", /使用说明.*当前可用与待补/);
-  // Migrated journey: the technical diagnostic panel is no longer part of
-  // /user's first load — the bundle budget forbids it — so this now opens the
-  // disclosure first. Everything asserted below is unchanged, including the
-  // exact row count.
-  assert.equal(
-    document.querySelectorAll(".capability-matrix tbody tr").length,
-    0,
-    "技术诊断面板在展开前不得出现在 /user 首屏"
-  );
-  await openDisclosure(".user-help");
-  assert.equal(document.querySelectorAll(".capability-matrix tbody tr").length, 58);
-  assert.match(document.body.textContent ?? "", /软件是否实现/);
-  assert.match(document.body.textContent ?? "", /当前资料是否满足/);
-  assert.match(document.body.textContent ?? "", /当前用户是否获权/);
-  assert.match(document.body.textContent ?? "", /正式生产是否实测/);
-  assert.match(document.body.textContent ?? "", /P4.*P5.*DM01/s);
-  assert.match(document.body.textContent ?? "", /自然人.*工作资格.*逻辑发布账号.*平台和形式/s);
-  assert.match(document.body.textContent ?? "", /发送：普通交流，不创建任务/);
-  assert.match(document.body.textContent ?? "", /生成内容：创建正式任务、运行和版本/);
-  assert.match(document.body.textContent ?? "", /candidate-user-help-sha.*20260817_44/s);
-  await act(async () => root.unmount());
+  await userHelpJourney(container);
 
-  window.history.pushState({}, "", "/status");
-  setPublicStatus("unknown");
-  root = createRoot(container);
-  await act(async () => root.render(<Root />));
-  await settle();
-  assert.match(document.body.textContent ?? "", /内容生成近期状态尚无法确认/);
-  assert.match(document.body.textContent ?? "", /纯文字陈列参考方案可以使用/);
-
-  setPublicStatus("degraded");
-  await click(find("button", "重新检查"));
-  await settle();
-  assert.match(document.body.textContent ?? "", /内容生成暂时受影响/);
-  assert.match(document.body.textContent ?? "", /纯文字陈列参考方案仍可使用/);
-
-  setPublicStatus("unavailable");
-  await click(find("button", "重新检查"));
-  await settle();
-  assert.match(document.body.textContent ?? "", /内容生成暂时受影响/);
-
-  setPublicStatus("available");
-  await click(find("button", "重新检查"));
-  await settle();
-  assert.match(document.body.textContent ?? "", /主要功能可以使用/);
-
-  setPublicStatus("unknown", "unavailable");
-  await click(find("button", "重新检查"));
-  await settle();
-  assert.match(document.body.textContent ?? "", /笛语暂时无法接单/);
-  setPublicStatusFailure(true);
-  await click(find("button", "重新检查"));
-  await settle();
-  assert.match(document.body.textContent ?? "", /当前状态暂无法确认/);
-  assert.doesNotMatch(document.body.textContent ?? "", /笛语暂时无法接单/);
-  assert.doesNotMatch(document.body.textContent ?? "", /主要功能可以使用/);
-  assert.doesNotMatch(document.body.textContent ?? "", /正在检查/);
-  setPublicStatusFailure(false);
-  setPublicStatus("available");
-  await click(find("button", "重新检查"));
-  await settle();
-  assert.match(document.body.textContent ?? "", /主要功能可以使用/);
-  assert.doesNotMatch(document.body.textContent ?? "", /当前状态暂无法确认/);
-  assert.doesNotMatch(document.body.textContent ?? "", /笛语暂时无法接单/);
-  assert.equal(
-    requests.filter(item => item.path === "/api/v1/status").every(item => item.method === "GET"),
-    true,
-    "状态页只能读取状态投影，不得创建内容任务或外部探测"
-  );
-  assert.equal(
-    requests.filter(item => item.path === "/api/v1/status").every(item => item.cache === "no-store"),
-    true,
-    "状态页重新检查不得读取旧缓存"
-  );
-  await act(async () => root.unmount());
+  await statusPageJourney(container);
 }
 
 await main();

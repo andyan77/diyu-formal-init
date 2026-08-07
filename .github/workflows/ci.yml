@@ -16,6 +16,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
+        with:
+          # The determinism gates diff against commits up to 22 back
+          # (af20ae5, fa75ea2, 3043217, 357d17c); the default shallow
+          # clone cannot see them.
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.10"
@@ -37,3 +42,5 @@ jobs:
         run: make typecheck
       - name: Golden regression
         run: make golden
+      - name: EXE-01 determinism gates
+        run: make exe01-gates

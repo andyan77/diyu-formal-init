@@ -270,7 +270,7 @@ try {
     sessionId
   );
   await waitFor(
-    "document.readyState==='complete' && Boolean(document.querySelector('.creator-composer textarea'))",
+    "document.readyState==='complete' && !document.querySelector('.page-loading') && Boolean(document.querySelector('.creator-composer textarea'))",
     "正式创作工作台"
   );
   await waitFor(

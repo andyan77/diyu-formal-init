@@ -126,7 +126,14 @@ export interface ContentVersion {
   ai_generated: boolean;
   aigc_label?: string | null;
   aigc_release_reminder?: string | null;
-  target?: Target | null;
+  /**
+   * A human label — `小红书图文`, not `xiaohongshu_graphic`. The server
+   * sends the label here and the identifier in `target_key`
+   * (content_service.py:2186). Typing this as `Target` was a lie that
+   * nothing caught until a completed artifact was validated against it.
+   */
+  target?: string | null;
+  /** The identifier. This one is safe to put in a URL. */
   target_key?: Target | null;
   adapted_from?: string | null;
   translation_notice?: string | null;
@@ -236,11 +243,22 @@ export type GenerationStage =
   | "validating"
   | "finalizing";
 
+/**
+ * The conversation replies the content stream can carry.
+ *
+ * `greeting` is small talk. The server produces it in create_from_weak_seed
+ * (content_service.py 213/222/229/312) and app.py:2883 relabels a chat reply
+ * as one, and respond_to_conversation returns that result unchanged — so it
+ * reaches this stream and the UI must accept it. It renders as an assistant
+ * message, exactly like `chat`.
+ */
+export type ConversationKind = "chat" | "question" | "greeting";
+
 export type ContentStreamEvent =
   | { event: GenerationStage }
   | {
       event: "conversation";
-      kind: "chat" | "question";
+      kind: ConversationKind;
       message: string;
       conversation_id?: string | null;
       direct_generation_available?: boolean;
@@ -263,3 +281,17 @@ export type ContentStreamEvent =
       trace_id?: string;
       suggestions?: string[];
     };
+
+export type FailedAttempt = {
+  kind: "stream" | "revision";
+  instruction: string;
+  interactionMode?: "conversation" | "generate";
+  requestId: string;
+};
+
+export type FailureDiagnostic = {
+  stage: string;
+  retryable: boolean;
+  action: string;
+  traceId: string;
+};

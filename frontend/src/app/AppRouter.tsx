@@ -131,10 +131,18 @@ function ContentTaskRoute({
 }: {
   context: BootstrapContext;
 }): JSX.Element {
-  // The task's own package page belongs to EXE-07; until then the workspace
-  // renders and the id stays addressable in the URL rather than being dropped.
+  // The task's own package page belongs to EXE-07. Until then the workspace
+  // opens the task itself, so the address is something you can share and
+  // return to rather than an id the page ignores.
   const { taskId } = useParams<{ taskId: string }>();
-  return <CreatorApp context={context} taskId={taskId} />;
+  const [searchParams] = useSearchParams();
+  const raw = searchParams.get("version");
+  const parsed = raw === null ? null : Number(raw);
+  // A version that is not a positive integer is not a version. Falling back to
+  // the latest is friendlier than an error page and cannot show the wrong one.
+  const version =
+    parsed !== null && Number.isInteger(parsed) && parsed >= 1 ? parsed : null;
+  return <CreatorApp context={context} taskId={taskId} taskVersion={version} />;
 }
 
 function RoutedApp(): JSX.Element {
