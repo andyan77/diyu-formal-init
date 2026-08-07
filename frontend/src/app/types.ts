@@ -274,3 +274,17 @@ export type ContentStreamEvent =
       trace_id?: string;
       suggestions?: string[];
     };
+
+export type FailedAttempt = {
+  kind: "stream" | "revision";
+  instruction: string;
+  interactionMode?: "conversation" | "generate";
+  requestId: string;
+};
+
+export type FailureDiagnostic = {
+  stage: string;
+  retryable: boolean;
+  action: string;
+  traceId: string;
+};

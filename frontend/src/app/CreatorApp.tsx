@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import type { FormEvent, JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
+import type {
+  FormEvent,
+  JSX,
+  KeyboardEvent as ReactKeyboardEvent,
+  MutableRefObject,
+  RefObject
+} from "react";
 import { BrandMark } from "../components/Brand";
 import {
   FAILURE_STAGE_LABELS,
@@ -26,6 +32,11 @@ import {
   transferredContent
 } from "../services/api";
 import { AccountDrawer } from "../features/advisor/AccountDrawer";
+import {
+  CreatorHistoryRail,
+  CreatorTopBar,
+  GenerationFailurePanel
+} from "../features/advisor/CreatorChrome";
 import { MaterialsPanel } from "./MaterialsPanel";
 import { SeriesPanel } from "./SeriesPanel";
 import type { SeriesSelection } from "./SeriesPanel";
@@ -40,6 +51,8 @@ import type {
   ConversationTurn,
   CreationPreference,
   ExpressionCatalog,
+  FailedAttempt,
+  FailureDiagnostic,
   GenerationStage,
   Material,
   PlatformTarget,
@@ -54,19 +67,6 @@ type ConversationMessage = {
   text: string;
 };
 
-type FailedAttempt = {
-  kind: "stream" | "revision";
-  instruction: string;
-  interactionMode?: "conversation" | "generate";
-  requestId: string;
-};
-
-type FailureDiagnostic = {
-  stage: string;
-  retryable: boolean;
-  action: string;
-  traceId: string;
-};
 
 const PRIMARY_AXES = new Set(["topic", "style", "form"]);
 function targetOf(version: ContentVersion, fallback: Target): Target {
@@ -459,6 +459,12 @@ function ArtifactPane({
   );
 }
 
+
+/**
+ * Account, platform and format — the three controls that decide which scope
+ * the workspace is in. Lifted out of CreatorApp so the component that gained
+ * scope guards gives back more than it took (EXE-01R §9⑤).
+ */
 export default function CreatorApp({
   context,
   taskId,
@@ -1379,6 +1385,29 @@ export default function CreatorApp({
     void reloadCatalog();
   };
 
+  /** Retry the request that failed, exactly as it was sent. */
+  const retryLastAttempt = (attempt: FailedAttempt): void => {
+    if (attempt.kind === "stream") {
+      void runCreationStream(
+        attempt.instruction,
+        false,
+        undefined,
+        attempt.interactionMode ?? "conversation",
+        attempt.requestId
+      );
+      return;
+    }
+    void runRevision(attempt.instruction, false, attempt.requestId);
+  };
+
+  const dismissFailure = (): void => {
+    setGenerationFailed(false);
+    setGenerationFailureMessage("");
+    setFailureDiagnostic(null);
+    setLastFailedAttempt(null);
+    composerRef.current?.focus();
+  };
+
   const startFresh = (): void => {
     resetScopeBoundUiState();
     // Starting over is an explicit intent to discard what was typed; switching
@@ -1401,128 +1430,32 @@ export default function CreatorApp({
 
   return (
     <div className={`creator-app ${current ? "has-artifact" : "empty-creator"}`}>
-      <header className="creator-topbar">
-        <a className="creator-brand" href="/user">
-          <BrandMark compact />
-        </a>
-        <div className="creator-identity-controls">
-          <label>
-            <span>发布账号</span>
-            <select
-              aria-label="发布账号"
-              value={currentPublishingIdentityId}
-              onChange={event => {
-                switchScope({ publishingIdentityId: event.target.value });
-              }}
-            >
-              {!hasResolvedIdentity && <option value="">请选择发布账号</option>}
-              {publishingIdentities.map(item => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            ref={identityTriggerRef}
-            className="identity-trigger"
-            type="button"
-            disabled={!hasResolvedIdentity}
-            onClick={() => setAccountOpen(true)}
-          >
-            <strong>{currentPublishingIdentity.content_role}</strong>
-            <span>{currentPublishingIdentity.profile_summary}</span>
-          </button>
-        </div>
-        <div className="creator-target-controls">
-          <label>
-            <span>平台</span>
-            <select
-              aria-label="平台"
-              value={currentTargetMetadata.platform_label}
-              disabled={!hasResolvedIdentity}
-              onChange={event => {
-                const next = availableTargets.find(
-                  item => item.platform_label === event.target.value
-                );
-                if (next) {
-                  switchScope({ target: next.value });
-                }
-              }}
-            >
-              {platformLabels.map(platform => (
-                <option key={platform} value={platform}>
-                  {platform}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>内容形式</span>
-            <select
-              aria-label="内容形式"
-              value={currentTarget}
-              disabled={!hasResolvedIdentity}
-              onChange={event => {
-                switchScope({ target: event.target.value as Target });
-              }}
-            >
-              {formatTargets.map(item => (
-                <option key={item.value} value={item.value}>
-                  {item.format_label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </header>
+      <CreatorTopBar
+        publishingIdentities={publishingIdentities}
+        currentPublishingIdentityId={currentPublishingIdentityId}
+        currentPublishingIdentity={currentPublishingIdentity}
+        hasResolvedIdentity={hasResolvedIdentity}
+        currentTarget={currentTarget}
+        currentTargetMetadata={currentTargetMetadata}
+        platformLabels={platformLabels}
+        formatTargets={formatTargets}
+        availableTargets={availableTargets}
+        identityTriggerRef={identityTriggerRef}
+        onSwitchScope={switchScope}
+        onOpenAccount={() => setAccountOpen(true)}
+      />
 
-      <aside className="creator-history">
-        <button className="new-content" type="button" onClick={startFresh}>
-          ＋ 新创作
-        </button>
-        <div className="creator-tools" aria-label="创作资料">
-          <button
-            type="button"
-            disabled={!hasResolvedIdentity}
-            onClick={event => {
-              toolReturnFocus.current = event.currentTarget;
-              setToolOpen("series");
-            }}
-          >
-            <span>连续系列</span>
-            <small>{seriesSelection ? "本次已选择" : "创建、继续与编排"}</small>
-          </button>
-          <button
-            type="button"
-            disabled={!hasResolvedIdentity}
-            onClick={event => {
-              toolReturnFocus.current = event.currentTarget;
-              setToolOpen("materials");
-            }}
-          >
-            <span>我的素材</span>
-            <small>{materialIds.length ? `本次参考 ${materialIds.length} 份` : "管理与选择"}</small>
-          </button>
-        </div>
-        <p>最近</p>
-        <nav aria-label="最近成品">
-          {recent.length === 0 && <span className="empty-history">还没有成品</span>}
-          {recent.map(item => (
-            <button
-              type="button"
-              key={item.task_id}
-              className={current?.task_id === item.task_id ? "active" : ""}
-              onClick={() => void openRecent(item)}
-            >
-              <span>{item.title}</span>
-              <small>
-                V{item.version} · {humanDate(item.updated_at)}
-              </small>
-            </button>
-          ))}
-        </nav>
-      </aside>
+      <CreatorHistoryRail
+        hasResolvedIdentity={hasResolvedIdentity}
+        seriesSelection={seriesSelection}
+        materialIds={materialIds}
+        recent={recent}
+        current={current}
+        toolReturnFocus={toolReturnFocus}
+        onStartFresh={startFresh}
+        onOpenTool={setToolOpen}
+        onOpenRecent={item => void openRecent(item)}
+      />
 
       <main
         className={`creator-conversation ${mobileView === "artifact" ? "mobile-hidden" : ""}`}
@@ -1625,76 +1558,15 @@ export default function CreatorApp({
               </button>
             </div>
           )}
-          {generationFailed && (
-            <div className="generation-failure" role="alert">
-              <p>{generationFailureMessage}</p>
-              {failureDiagnostic && (
-                <dl className="failure-diagnostic">
-                  <div>
-                    <dt>发生阶段</dt>
-                    <dd>
-                      {FAILURE_STAGE_LABELS[failureDiagnostic.stage] ??
-                        "系统处理"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>是否值得重试</dt>
-                    <dd>{failureDiagnostic.retryable ? "可以" : "先按提示处理"}</dd>
-                  </div>
-                  {failureDiagnostic.traceId && (
-                    <div>
-                      <dt>定位编号</dt>
-                      <dd><code>{failureDiagnostic.traceId}</code></dd>
-                    </div>
-                  )}
-                </dl>
-              )}
-              {failureDiagnostic?.action && (
-                <p className="failure-action">下一步：{failureDiagnostic.action}</p>
-              )}
-              <div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGenerationFailed(false);
-                    setGenerationFailureMessage("");
-                    setFailureDiagnostic(null);
-                    setLastFailedAttempt(null);
-                    composerRef.current?.focus();
-                  }}
-                >
-                  继续补充
-                </button>
-                {failureDiagnostic?.retryable !== false && (
-                  <button
-                    type="button"
-                    className="primary"
-                    disabled={!lastFailedAttempt || pending}
-                    onClick={() => {
-                      if (!lastFailedAttempt) return;
-                      if (lastFailedAttempt.kind === "stream") {
-                        void runCreationStream(
-                          lastFailedAttempt.instruction,
-                          false,
-                          undefined,
-                          lastFailedAttempt.interactionMode ?? "conversation",
-                          lastFailedAttempt.requestId
-                        );
-                      } else {
-                        void runRevision(
-                          lastFailedAttempt.instruction,
-                          false,
-                          lastFailedAttempt.requestId
-                        );
-                      }
-                    }}
-                  >
-                    再试一次
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+          <GenerationFailurePanel
+            generationFailed={generationFailed}
+            generationFailureMessage={generationFailureMessage}
+            failureDiagnostic={failureDiagnostic}
+            lastFailedAttempt={lastFailedAttempt}
+            pending={pending}
+            onRetry={retryLastAttempt}
+            onDismiss={dismissFailure}
+          />
           {loadError && (
             <div className="inline-error" role="alert">
               <span>{loadError}</span>

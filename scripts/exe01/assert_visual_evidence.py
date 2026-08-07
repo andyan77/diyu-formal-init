@@ -142,6 +142,27 @@ def check_keyboard(probes: list[dict[str, object]]) -> list[str]:
     return problems
 
 
+def report(manifest: dict[str, object], captures: list[dict[str, object]]) -> None:
+    """The summary a reader scans; kept out of main so main stays a checklist."""
+    conditions = {str(item["condition"]) for item in captures}
+    violations = [v for scope in manifest["axe"].values() for v in scope]
+    print("PASS FE-00 visual evidence matrix")
+    print(f"  captures: {len(captures)}（IHDR 尺寸与 sha256 均已交叉校验）")
+    for condition in sorted(conditions):
+        count = sum(1 for item in captures if item["condition"] == condition)
+        note = {
+            "enforced": "重排硬门",
+            "na-by-design": "重排 N/A（裁决 A：固定画布原型豁免）",
+        }.get(
+            next(str(i["reflow"]) for i in captures if i["condition"] == condition), ""
+        )
+        print(f"    {condition:10s} {count:3d}  {note}")
+    print(f"  原型绑定: {len(manifest['prototypes'])} 份 sha256 与现盘一致")
+    print(f"  键盘探测: {len(manifest['keyboard'])} 帧")
+    print(f"  reduced-motion: {manifest['decisions']['reducedMotion'][:34]}…")
+    print(f"  axe-core: {len(violations)} violations, 0 serious/critical")
+
+
 def main() -> int:
     if not MANIFEST.exists():
         print(f"FAIL 缺少 {MANIFEST}", file=sys.stderr)
@@ -191,21 +212,7 @@ def main() -> int:
             print(f"FAIL {failure}", file=sys.stderr)
         return 1
 
-    print("PASS FE-00 visual evidence matrix")
-    print(f"  captures: {len(captures)}（IHDR 尺寸与 sha256 均已交叉校验）")
-    for condition in sorted(conditions):
-        count = sum(1 for item in captures if item["condition"] == condition)
-        note = {
-            "enforced": "重排硬门",
-            "na-by-design": "重排 N/A（裁决 A：固定画布原型豁免）",
-        }.get(
-            next(str(i["reflow"]) for i in captures if i["condition"] == condition), ""
-        )
-        print(f"    {condition:10s} {count:3d}  {note}")
-    print(f"  原型绑定: {len(manifest['prototypes'])} 份 sha256 与现盘一致")
-    print(f"  键盘探测: {len(manifest['keyboard'])} 帧")
-    print(f"  reduced-motion: {manifest['decisions']['reducedMotion'][:34]}…")
-    print(f"  axe-core: {len(violations)} violations, 0 serious/critical")
+    report(manifest, captures)
     return 0
 
 
