@@ -67,10 +67,18 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
         return row
 
     def content_identity(self, scope: TrustedScope) -> dict[str, str]:
+        """Bootstrap identity for /content.
+
+        `tenant_id` and `operator_id` come from the trusted row rather than the
+        caller so the client can key per-account state on something stable;
+        display names change and two brands can share one. Additive only —
+        existing keys keep their meaning (EXE-01R R1.4).
+        """
         with self._content_tx(scope) as cursor:
             cursor.execute(
                 """
-                SELECT b.name AS brand, u.id AS operator_id,
+                SELECT b.name AS brand, u.tenant_id AS tenant_id,
+                       u.id AS operator_id,
                        u.display_name AS operator,
                        o.name AS organization,
                        root.name AS account, target.channel AS platform,

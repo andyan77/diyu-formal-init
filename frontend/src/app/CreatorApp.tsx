@@ -8,7 +8,10 @@ import {
   normalizedIdentities,
   targetMetadata
 } from "../features/advisor/labels";
-import { useAdvisorScope } from "../features/advisor/useAdvisorScope";
+import {
+  useAdvisorScope,
+  type AdvisorScopeTransaction
+} from "../features/advisor/useAdvisorScope";
 import {
   ContentStreamContractError,
   guardContentStream,
@@ -21,6 +24,7 @@ import {
   streamApi,
   transferredContent
 } from "../services/api";
+import { AccountDrawer } from "../features/advisor/AccountDrawer";
 import { MaterialsPanel } from "./MaterialsPanel";
 import { SeriesPanel } from "./SeriesPanel";
 import type { SeriesSelection } from "./SeriesPanel";
@@ -330,281 +334,6 @@ function DirectionPanel({
   );
 }
 
-function editableAccountProfile(
-  value:
-    | AccountExpression["current"]
-    | AccountExpression["draft"]
-    | null
-    | undefined
-): AccountExpressionProfileFields | null {
-  return value
-    ? {
-        identity_position: value.identity_position,
-        authority_boundary: value.authority_boundary,
-        audience_relationship: value.audience_relationship,
-        content_territories: value.content_territories,
-        default_production_conditions: value.default_production_conditions
-      }
-    : null;
-}
-
-function AccountDrawer({
-  context,
-  publishingIdentity,
-  preferencePath,
-  preference,
-  profile,
-  profilePath,
-  onClose,
-  onPreference,
-  onProfile
-}: {
-  context: BootstrapContext;
-  publishingIdentity: PublishingIdentity;
-  preferencePath: string;
-  preference: CreationPreference | null;
-  profile: AccountExpression | null;
-  profilePath: string;
-  onClose: () => void;
-  onPreference: (value: CreationPreference) => void;
-  onProfile: (value: AccountExpression) => void;
-}): JSX.Element {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [profileDraft, setProfileDraft] =
-    useState<AccountExpressionProfileFields | null>(
-      editableAccountProfile(profile?.current ?? profile?.draft)
-    );
-  const panelRef = useRef<HTMLElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    closeRef.current?.focus();
-  }, []);
-  useEffect(() => {
-    setProfileDraft(
-      editableAccountProfile(profile?.current ?? profile?.draft)
-    );
-    setEditingProfile(false);
-  }, [profile]);
-
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>): void => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onClose();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusable = Array.from(
-      panelRef.current?.querySelectorAll<HTMLElement>(
-        "a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)"
-      ) ?? []
-    );
-    const first = focusable[0];
-    const last = focusable.at(-1);
-    if (!first || !last) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-
-  const toggleBodyDirections = async (): Promise<void> => {
-    if (!preference || saving) return;
-    setSaving(true);
-    setError("");
-    try {
-      const next = await api<CreationPreference>(preferencePath, {
-        method: "PUT",
-        body: JSON.stringify({
-          enabled: preference.enabled,
-          direction_defaults: preference.direction_defaults,
-          clear_direction_defaults: false,
-          collaboration_note: preference.collaboration_note,
-          body_related_opt_in: !preference.body_related_opt_in
-        })
-      });
-      onPreference(next);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "没有保存成功。");
-    } finally {
-      setSaving(false);
-    }
-  };
-  const saveProfile = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
-    if (!profile?.can_maintain || !profileDraft || saving) return;
-    setSaving(true);
-    setError("");
-    try {
-      const saved = await api<NonNullable<AccountExpression["current"]>>(
-        profilePath,
-        {
-        method: "POST",
-        body: JSON.stringify(profileDraft)
-        }
-      );
-      onProfile({ ...profile, current: saved, draft: null });
-      setEditingProfile(false);
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "账号画像没有保存成功。"
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-  const identity = context.identity ?? {};
-  return (
-    <div className="drawer-layer" role="presentation" onMouseDown={onClose}>
-      <aside
-        ref={panelRef}
-        className="account-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="account-drawer-title"
-        onMouseDown={event => event.stopPropagation()}
-        onKeyDown={handleKeyDown}
-      >
-        <header>
-          <div>
-            <p className="eyebrow">当前发布身份</p>
-            <h2 id="account-drawer-title">{publishingIdentity.name}</h2>
-          </div>
-          <button
-            ref={closeRef}
-            className="icon-button"
-            type="button"
-            aria-label="关闭"
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </header>
-        <dl className="identity-details">
-          <div>
-            <dt>表达身份</dt>
-            <dd>{publishingIdentity.content_role || identity.content_role || "—"}</dd>
-          </div>
-          <div>
-            <dt>负责团队</dt>
-            <dd>{publishingIdentity.control_organization ?? "—"}</dd>
-          </div>
-          <div>
-            <dt>账号画像</dt>
-            <dd>
-              {publishingIdentity.profile_version
-                ? `V${publishingIdentity.profile_version}`
-                : "尚未确认"}
-            </dd>
-          </div>
-        </dl>
-        <p className="profile-one-line">{publishingIdentity.profile_summary}</p>
-        {profile?.current && !editingProfile && (
-          <section className="profile-summary">
-            <h3>账号定位 · V{profile.current.version}</h3>
-            <p>{profile.current.identity_position}</p>
-            <p>{profile.current.authority_boundary}</p>
-            <p>{profile.current.audience_relationship}</p>
-            <p>{profile.current.content_territories}</p>
-            <p>{profile.current.default_production_conditions}</p>
-            {profile.can_maintain && (
-              <button
-                type="button"
-                className="text-action"
-                onClick={() => setEditingProfile(true)}
-              >
-                维护账号画像
-              </button>
-            )}
-          </section>
-        )}
-        {profile?.can_maintain && editingProfile && profileDraft && (
-          <form className="account-profile-editor" onSubmit={event => void saveProfile(event)}>
-            <h3>
-              基于当前 V{profile.current?.version ?? 0} 保存新版本
-            </h3>
-            {(
-              [
-                ["identity_position", "表达身份"],
-                ["authority_boundary", "权威边界"],
-                ["audience_relationship", "受众关系"],
-                ["content_territories", "内容领地"],
-                ["default_production_conditions", "长期制作条件"]
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key}>
-                {label}
-                <textarea
-                  required
-                  value={profileDraft[key]}
-                  onChange={event =>
-                    setProfileDraft(value =>
-                      value
-                        ? { ...value, [key]: event.target.value }
-                        : value
-                    )
-                  }
-                />
-              </label>
-            ))}
-            <div className="drawer-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  setProfileDraft(
-                    editableAccountProfile(
-                      profile.current ?? profile.draft
-                    )
-                  );
-                  setEditingProfile(false);
-                  setError("");
-                }}
-              >
-                取消
-              </button>
-              <button className="primary" type="submit" disabled={saving}>
-                {saving
-                  ? "正在保存……"
-                  : `保存为 V${(profile.current?.version ?? 0) + 1}`}
-              </button>
-            </div>
-          </form>
-        )}
-        {profile && !profile.can_maintain && (
-          <p className="profile-read-only">
-            你可以查看完整账号画像；维护资格由账号负责团队单独分配。
-          </p>
-        )}
-        {error && <p className="inline-error">{error}</p>}
-        {preference && (
-          <section className="personal-controls">
-            <h3>我的创作偏好</h3>
-            <label className="switch-line">
-              <span>
-                主动显示体型相关方向
-                <small>只有你打开后才出现，系统不会自行推断。</small>
-              </span>
-              <input
-                type="checkbox"
-                checked={preference.body_related_opt_in}
-                disabled={saving}
-                onChange={() => void toggleBodyDirections()}
-              />
-            </label>
-          </section>
-        )}
-      </aside>
-    </div>
-  );
-}
-
 function ArtifactPane({
   viewed,
   current,
@@ -738,19 +467,26 @@ export default function CreatorApp({
   taskId?: string;
 }): JSX.Element {
   const publishingIdentities = normalizedIdentities(context);
-  const bootstrapIdentityId =
-    context.current_publishing_identity_id ??
-    (publishingIdentities.length === 1 ? publishingIdentities[0]?.id : null) ??
-    "";
   const operatorIdentity = context.identity ?? {};
   // Account, platform and format come from the URL so switching is in-app and
   // the back button works; the server bootstrap is only the starting point.
+  //
+  // The scope keys on stable ids only. A display name is not an identifier —
+  // two brands can share one, and renaming a person would re-home their drafts
+  // — so a missing id stays empty rather than borrowing the name next to it.
   const advisorScope = useAdvisorScope({
-    operator:
-      operatorIdentity.operator_id ?? operatorIdentity.operator ?? "unknown-person",
-    tenant: operatorIdentity.brand ?? "unknown-brand",
-    fallbackPublishingIdentityId: bootstrapIdentityId,
-    fallbackTarget: context.current_target ?? ""
+    operator: operatorIdentity.operator_id ?? "",
+    tenant: operatorIdentity.tenant_id ?? "",
+    grants: publishingIdentities.map(item => ({
+      id: item.id,
+      targets: item.platform_targets.map(entry => entry.value)
+    })),
+    // One granted account is not a choice, so adopting it is not a guess.
+    // Several, with the server naming none, is a question for the person.
+    bootstrapPublishingIdentityId:
+      context.current_publishing_identity_id ??
+      (publishingIdentities.length === 1 ? (publishingIdentities[0]?.id ?? "") : ""),
+    bootstrapTarget: context.current_target ?? ""
   });
   const currentPublishingIdentityId = advisorScope.publishingIdentityId;
   const resolvedPublishingIdentity = publishingIdentities.find(
@@ -763,17 +499,19 @@ export default function CreatorApp({
     content_role: "尚未选择",
     platform_targets: [] as PlatformTarget[]
   };
-  const hasResolvedIdentity = Boolean(resolvedPublishingIdentity);
+  const hasResolvedIdentity =
+    advisorScope.hasIdentity && Boolean(resolvedPublishingIdentity);
   const availableTargets =
     currentPublishingIdentity.platform_targets.map(item => ({
       ...targetMetadata(item.value, item.label),
       ...item
     }));
-  const currentTarget = availableTargets.some(
-    item => item.value === advisorScope.target
-  )
-    ? (advisorScope.target as Target)
-    : availableTargets[0]?.value ?? "douyin_video";
+  // useAdvisorScope has already normalised this against the account's grants
+  // and rewritten the URL if it disagreed, so the three readings of the target
+  // — address bar, draft key and request payload — cannot diverge here.
+  const currentTarget = (advisorScope.target ||
+    availableTargets[0]?.value ||
+    "douyin_video") as Target;
   const currentTargetMetadata =
     availableTargets.find(item => item.value === currentTarget) ??
     targetMetadata(currentTarget);
@@ -828,6 +566,7 @@ export default function CreatorApp({
   const [savingDefaults, setSavingDefaults] = useState(false);
   const [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [renderedScope, setRenderedScope] = useState(advisorScope.scopeKey);
   const identityTriggerRef = useRef<HTMLButtonElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -908,35 +647,40 @@ export default function CreatorApp({
     // Everything below belongs to the scope in force when the load started. If
     // the operator switches account while these are in flight, the replies are
     // for an account that is no longer on screen and must be dropped.
-    const loadedFor = advisorScope.scopeKey;
-    const stale = (): boolean => !advisorScope.isCurrent(loadedFor);
+    const txn = advisorScope.begin();
     setLoadError("");
     try {
       const [catalogValue, preferenceValue, materialValue, profileValue] =
         await Promise.all([
-          api<ExpressionCatalog>(scope("/api/v1/content/expression-catalog")),
-          api<CreationPreference>(scope("/api/v1/user/creation-preferences")),
-          api<Material[]>(scope("/api/v1/materials")),
+          api<ExpressionCatalog>(scope("/api/v1/content/expression-catalog"), {
+            signal: txn.signal
+          }),
+          api<CreationPreference>(scope("/api/v1/user/creation-preferences"), {
+            signal: txn.signal
+          }),
+          api<Material[]>(scope("/api/v1/materials"), { signal: txn.signal }),
           api<AccountExpression>(
-            scope("/api/v1/content/account-expression-profile")
+            scope("/api/v1/content/account-expression-profile"),
+            { signal: txn.signal }
           )
         ]);
-      if (stale()) return;
+      if (!txn.live()) return;
       setCatalog(catalogValue);
       setPreference(preferenceValue);
       setMaterials(materialValue);
       setProfile(profileValue);
       const currentRecent = await api<RecentContent[]>(
-        scope("/api/v1/content/tasks")
+        scope("/api/v1/content/tasks"),
+        { signal: txn.signal }
       );
-      if (stale()) return;
+      if (!txn.live()) return;
       setRecent(
         currentRecent
           .slice()
           .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
       );
     } catch (reason) {
-      if (stale()) return;
+      if (!txn.live()) return;
       setLoadError(reason instanceof Error ? reason.message : "当前工作空间没有准备好。");
     }
   };
@@ -1019,11 +763,74 @@ export default function CreatorApp({
   };
 
   const reloadCatalog = async (): Promise<void> => {
+    const txn = advisorScope.begin();
     const value = await api<ExpressionCatalog>(
-      scope("/api/v1/content/expression-catalog")
+      scope("/api/v1/content/expression-catalog"),
+      { signal: txn.signal }
     );
+    if (!txn.live()) return;
     setCatalog(value);
   };
+
+  /**
+   * Everything on screen that belongs to one account and format.
+   *
+   * Deliberately never reads, writes or clears a draft: switching accounts has
+   * to leave each scope's composer text where its owner left it, and
+   * `clearOneTimeControls` cannot be reused here because its first act is to
+   * empty the composer.
+   */
+  const resetScopeBoundUiState = (): void => {
+    setMessages([]);
+    setCurrent(null);
+    setViewed(null);
+    setVersions([]);
+    setSelections({});
+    setClearedAxes([]);
+    setCustomText("");
+    setCustomAxes({});
+    setMaterialIds([]);
+    setSeriesSelection(null);
+    setStages([]);
+    setTargetConflict(null);
+    setDirectGenerationOffer(null);
+    setGenerationFailed(false);
+    setGenerationFailureMessage("");
+    setFailureDiagnostic(null);
+    setLastFailedAttempt(null);
+    setPending(false);
+    setSavingDefaults(false);
+    setNotice("");
+    setLoadError("");
+    setAccountOpen(false);
+    setToolOpen(null);
+    setDirectionsOpen(false);
+    setMobileView("conversation");
+  };
+
+  /**
+   * The payloads fetched for one scope.
+   *
+   * Separate from the reset above because only a scope change invalidates
+   * these; "另起一条" stays inside the same account, and blanking its catalog
+   * there would leave the direction panel empty with no refetch to refill it.
+   */
+  const discardScopeFetchedData = (): void => {
+    setCatalog(null);
+    setPreference(null);
+    setProfile(null);
+    setMaterials([]);
+    setRecent([]);
+  };
+
+  // Adjusting state during render rather than in an effect: an effect runs
+  // after the commit, so the new account's first frame would briefly show the
+  // previous account's artifact, materials and recent list.
+  if (renderedScope !== advisorScope.scopeKey) {
+    setRenderedScope(advisorScope.scopeKey);
+    resetScopeBoundUiState();
+    discardScopeFetchedData();
+  }
 
   const clearOneTimeControls = (): void => {
     setSeed("");
@@ -1043,13 +850,18 @@ export default function CreatorApp({
     setLastFailedAttempt(null);
   };
 
-  const loadVersions = async (artifact: ContentVersion): Promise<void> => {
+  const loadVersions = async (
+    artifact: ContentVersion,
+    txn: AdvisorScopeTransaction
+  ): Promise<void> => {
     if (targetOf(artifact, currentTarget) !== currentTarget) {
       throw new Error("这份成品属于另一个平台，请先切换平台再打开。");
     }
     const values = await api<ContentVersion[]>(
-      scope(`/api/v1/content/tasks/${artifact.task_id}/versions`)
+      scope(`/api/v1/content/tasks/${artifact.task_id}/versions`),
+      { signal: txn.signal }
     );
+    if (!txn.live()) return;
     setVersions(values);
   };
 
@@ -1059,32 +871,40 @@ export default function CreatorApp({
       switchScope({ target });
       return;
     }
+    const txn = advisorScope.begin();
     setPending(true);
     setNotice("");
     try {
       const value = await api<ContentVersion>(
-        scope(`/api/v1/tasks/${item.task_id}/versions/${item.version}`)
+        scope(`/api/v1/tasks/${item.task_id}/versions/${item.version}`),
+        { signal: txn.signal }
       );
+      if (!txn.live()) return;
       clearOneTimeControls();
       setMessages([]);
       setCurrent(value);
       setViewed(value);
-      await loadVersions(value);
+      await loadVersions(value, txn);
+      if (!txn.live()) return;
       setMobileView("artifact");
     } catch (reason) {
+      if (!txn.live()) return;
       setNotice(reason instanceof Error ? reason.message : "无法打开这份成品。");
     } finally {
-      setPending(false);
+      if (txn.live()) setPending(false);
     }
   };
 
   const openSeriesTask = async (taskId: string): Promise<void> => {
+    const txn = advisorScope.begin();
     setPending(true);
     setNotice("");
     try {
       const values = await api<ContentVersion[]>(
-        scope(`/api/v1/content/tasks/${taskId}/versions`)
+        scope(`/api/v1/content/tasks/${taskId}/versions`),
+        { signal: txn.signal }
       );
+      if (!txn.live()) return;
       const latest = values
         .slice()
         .sort((left, right) => right.version - left.version)[0];
@@ -1097,9 +917,10 @@ export default function CreatorApp({
       setToolOpen(null);
       setMobileView("artifact");
     } catch (reason) {
+      if (!txn.live()) return;
       setNotice(reason instanceof Error ? reason.message : "无法打开这篇系列内容。");
     } finally {
-      setPending(false);
+      if (txn.live()) setPending(false);
     }
   };
 
@@ -1162,6 +983,11 @@ export default function CreatorApp({
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const txn = advisorScope.begin();
+    // Leaving the scope aborts the transport too: a generation for the account
+    // you just left must not keep a connection open, let alone finish into it.
+    const abandon = (): void => controller.abort();
+    txn.signal.addEventListener("abort", abandon, { once: true });
     let terminal = false;
     try {
       for await (const streamEvent of guardContentStream(
@@ -1192,6 +1018,7 @@ export default function CreatorApp({
         controller.signal
         )
       )) {
+        if (!txn.live()) return;
         if (isStageEvent(streamEvent)) {
           const stage = streamEvent.event;
           setStages(value => (value.includes(stage) ? value : [...value, stage]));
@@ -1227,7 +1054,8 @@ export default function CreatorApp({
           // a person may immediately type the next instruction while history loads.
           setSeed(value => (value.trim() === instruction ? "" : value));
           setDirectGenerationOffer(null);
-          await loadVersions(streamEvent.result);
+          await loadVersions(streamEvent.result, txn);
+          if (!txn.live()) return;
           appendAssistant(
             "第一版已经整理好。你可以直接阅读，也可以继续告诉我哪里要变。"
           );
@@ -1263,6 +1091,7 @@ export default function CreatorApp({
           terminal = true;
         }
       }
+      if (!txn.live()) return;
       if (!terminal) {
         setGenerationFailed(true);
         setGenerationFailureMessage(
@@ -1282,7 +1111,10 @@ export default function CreatorApp({
         });
       }
     } catch (reason) {
-      if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+      if (
+        txn.live() &&
+        !(reason instanceof DOMException && reason.name === "AbortError")
+      ) {
         setGenerationFailed(true);
         if (reason instanceof ContentStreamContractError) {
           // The stream broke its own contract. Nothing it carried reaches the
@@ -1325,8 +1157,9 @@ export default function CreatorApp({
         });
       }
     } finally {
+      txn.signal.removeEventListener("abort", abandon);
       if (abortRef.current === controller) abortRef.current = null;
-      setPending(false);
+      if (txn.live()) setPending(false);
     }
   };
 
@@ -1336,6 +1169,7 @@ export default function CreatorApp({
     requestId: string = crypto.randomUUID()
   ): Promise<void> => {
     if (!current || pending) return;
+    const txn = advisorScope.begin();
     setPending(true);
     setNotice("");
     setGenerationFailed(false);
@@ -1353,6 +1187,7 @@ export default function CreatorApp({
         scope(`/api/v1/tasks/${current.task_id}/revisions`),
         {
           method: "POST",
+          signal: txn.signal,
           body: JSON.stringify({
             instruction,
             publishing_identity_id: currentPublishingIdentityId,
@@ -1362,6 +1197,7 @@ export default function CreatorApp({
           })
         }
       );
+      if (!txn.live()) return;
       // Clear the submitted instruction before any asynchronous version-history
       // refresh. A newer instruction typed after V2 appears must remain untouched.
       setSeed(value => (value.trim() === instruction ? "" : value));
@@ -1370,7 +1206,8 @@ export default function CreatorApp({
       } else {
         setCurrent(payload);
         setViewed(payload);
-        await loadVersions(payload);
+        await loadVersions(payload, txn);
+        if (!txn.live()) return;
         appendAssistant(
           `已经按你的话改成 V${payload.version}，上一版完整保留。`
         );
@@ -1379,6 +1216,7 @@ export default function CreatorApp({
       setDirectionsOpen(false);
       setLastFailedAttempt(null);
     } catch (reason) {
+      if (!txn.live()) return;
       setGenerationFailed(true);
       if (reason instanceof ApiError) {
         setGenerationFailureMessage(
@@ -1403,7 +1241,7 @@ export default function CreatorApp({
       }
       setLastFailedAttempt({ kind: "revision", instruction, requestId });
     } finally {
-      setPending(false);
+      if (txn.live()) setPending(false);
     }
   };
 
@@ -1438,6 +1276,7 @@ export default function CreatorApp({
 
   const saveDefaults = async (): Promise<void> => {
     if (!preference || savingDefaults) return;
+    const txn = advisorScope.begin();
     const effective = { ...catalog?.saved_defaults };
     clearedAxes.forEach(axis => delete effective[axis]);
     Object.assign(effective, selections);
@@ -1448,6 +1287,7 @@ export default function CreatorApp({
         scope("/api/v1/user/creation-preferences"),
         {
         method: "PUT",
+        signal: txn.signal,
         body: JSON.stringify({
           enabled: true,
           direction_defaults: effective,
@@ -1457,13 +1297,16 @@ export default function CreatorApp({
         })
         }
       );
+      if (!txn.live()) return;
       setPreference(value);
       await reloadCatalog();
+      if (!txn.live()) return;
       setNotice("已经保存为你的默认方向；只会在你没有提出本次方向时使用。");
     } catch (reason) {
+      if (!txn.live()) return;
       setNotice(reason instanceof Error ? reason.message : "默认方向没有保存成功。");
     } finally {
-      setSavingDefaults(false);
+      if (txn.live()) setSavingDefaults(false);
     }
   };
 
@@ -1473,12 +1316,10 @@ export default function CreatorApp({
   };
 
   const startFresh = (): void => {
-    setCurrent(null);
-    setViewed(null);
-    setVersions([]);
-    clearOneTimeControls();
-    setMessages([]);
-    setMobileView("conversation");
+    resetScopeBoundUiState();
+    // Starting over is an explicit intent to discard what was typed; switching
+    // accounts is not, which is why only this path touches the draft.
+    setSeed("");
   };
 
   const directionSummary = useMemo(() => {
@@ -1991,6 +1832,7 @@ export default function CreatorApp({
           }}
           onPreference={updatePreference}
           onProfile={setProfile}
+          begin={advisorScope.begin}
         />
       )}
       {toolOpen && (

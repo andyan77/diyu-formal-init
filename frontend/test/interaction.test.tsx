@@ -211,6 +211,20 @@ async function main(): Promise<void> {
   // AdvisorDraftV1 scope, which also pins down the account the draft belongs
   // to. Both halves are asserted: the draft is kept, and the retired storage
   // key is not written.
+  //
+  // EXE-01R migrated the scope again, from display names to stable ids: the
+  // tenant component is the bootstrap's tenant_id, not the brand's name. Both
+  // readings are asserted so the change cannot silently revert.
+  assert.equal(
+    advisorDrafts.read({
+      operator: "user-hq",
+      tenant: "tenant-0001",
+      publishingIdentityId: "identity-hq",
+      target: "xiaohongshu_graphic"
+    }),
+    "今天店里忙了一天，回家因为洗碗拌了两句，帮我发条小红书。",
+    "未提交输入必须按 AdvisorDraftV1 作用域保留"
+  );
   assert.equal(
     advisorDrafts.read({
       operator: "user-hq",
@@ -218,8 +232,8 @@ async function main(): Promise<void> {
       publishingIdentityId: "identity-hq",
       target: "xiaohongshu_graphic"
     }),
-    "今天店里忙了一天，回家因为洗碗拌了两句，帮我发条小红书。",
-    "未提交输入必须按 AdvisorDraftV1 作用域保留"
+    "",
+    "草稿作用域不得再由品牌展示名构成"
   );
   assert.equal(
     Object.keys(window.sessionStorage).filter(key =>
@@ -567,6 +581,25 @@ async function main(): Promise<void> {
     };
   };
   bootstrapWindow.__DIYU_BOOTSTRAP__.current_publishing_identity_id = null;
+
+  // EXE-01R made the URL the scope's home, so "the server named no account"
+  // now has to be staged with an address that names none either — otherwise
+  // this re-mount is really testing that an explicit, granted account in the
+  // URL survives a reload, which is a different (and desirable) guarantee.
+  // Both are asserted, in that order.
+  window.history.replaceState({}, "", "/content?publishing_identity_id=identity-hq");
+  root = createRoot(container);
+  await act(async () => root.render(<Root />));
+  await settle();
+  assert.equal(
+    (document.querySelector('select[aria-label="发布账号"]') as HTMLSelectElement)
+      .value,
+    "identity-hq",
+    "地址里明确指定且已获准的账号，重新进入时必须保持"
+  );
+  await act(async () => root.unmount());
+
+  window.history.replaceState({}, "", "/content");
   const requestCount = requests.length;
   root = createRoot(container);
   await act(async () => root.render(<Root />));
@@ -576,6 +609,11 @@ async function main(): Promise<void> {
       .value,
     "",
     "多账号且服务端没有解析当前账号时，客户端不得默认第一项"
+  );
+  assert.equal(
+    new URL(window.location.href).searchParams.get("publishing_identity_id"),
+    null,
+    "没有账号可用时不得把某个账号写进地址栏"
   );
   assert.equal(
     requests.length,
