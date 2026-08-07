@@ -7,6 +7,11 @@ but they are frozen at the length they had, so "minimal wiring" stays minimal an
 new logic has to leave in a function of its own.  The exemption file is derived
 from the base commit and may only shrink.
 
+That base moves once, at serialized integration.  Measured against the authorized
+base, EXE-01R's own allowed growth in `src/gateway/api/app.py` came out as an
+EXE-V0 trespass — this package has to be judged against the tree it actually sits
+on, which after the merge is the mainline.
+
 Usage:
     python3 scripts/exev0/assert_function_budget.py
     python3 scripts/exev0/assert_function_budget.py --regenerate
@@ -21,7 +26,12 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BASE_COMMIT = "c37ae78594220a3ada9ad73020c67b1aec99aa4f"
+
+# The base this package was authorized to build on, and the mainline merged in at
+# serialized integration.  Both pinned to SHAs for the reasons assert_scope.py
+# gives; the ledger records which one it came from and this gate rechecks it.
+AUTHORIZED_BASE = "c37ae78594220a3ada9ad73020c67b1aec99aa4f"
+MAINLINE_COMMIT = "8d909cf958c5241d70c8715252e881f89a047f50"
 MEASURED_TREE = "src"
 LINE_LIMIT = 60
 EXEMPTIONS_PATH = Path(__file__).resolve().parent / "function_budget_baseline.json"
@@ -44,6 +54,22 @@ def _function_lengths(source: str, path: str) -> dict[str, int]:
     return lengths
 
 
+def _is_ancestor(commit: str) -> bool:
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def base_commit() -> str:
+    """The tree this package sits on: the mainline once merged, the base until then."""
+
+    return MAINLINE_COMMIT if _is_ancestor(MAINLINE_COMMIT) else AUTHORIZED_BASE
+
+
 def _tracked_python_files(ref: str) -> list[str]:
     result = subprocess.run(
         ["git", "ls-tree", "-r", "--name-only", ref, "--", MEASURED_TREE],
@@ -56,10 +82,11 @@ def _tracked_python_files(ref: str) -> list[str]:
 
 
 def _lengths_at_base() -> dict[str, int]:
+    base = base_commit()
     lengths: dict[str, int] = {}
-    for path in _tracked_python_files(BASE_COMMIT):
+    for path in _tracked_python_files(base):
         blob = subprocess.run(
-            ["git", "show", f"{BASE_COMMIT}:{path}"],
+            ["git", "show", f"{base}:{path}"],
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,
@@ -86,7 +113,8 @@ def regenerate() -> int:
     EXEMPTIONS_PATH.write_text(
         json.dumps(
             {
-                "base_commit": BASE_COMMIT,
+                "base_commit": base_commit(),
+                "authorized_base": AUTHORIZED_BASE,
                 "line_limit": LINE_LIMIT,
                 "measured_tree": MEASURED_TREE,
                 "frozen_over_limit_functions": dict(sorted(exemptions.items())),
@@ -108,7 +136,8 @@ def _load_exemptions(failures: list[str]) -> dict[str, int]:
         return {}
     document = json.loads(EXEMPTIONS_PATH.read_text(encoding="utf-8"))
     if (
-        document.get("base_commit") != BASE_COMMIT
+        document.get("base_commit") != base_commit()
+        or document.get("authorized_base") != AUTHORIZED_BASE
         or document.get("line_limit") != LINE_LIMIT
         or document.get("measured_tree") != MEASURED_TREE
     ):

@@ -10,6 +10,7 @@ which of the五段 carry text, and the onboarding draft is referenced by digest.
 
 Usage:
     python3 scripts/exev0/build_fixed_samples.py            # verify, fail on drift
+    python3 scripts/exev0/build_fixed_samples.py --check    # the same, said out loud
     python3 scripts/exev0/build_fixed_samples.py --write    # regenerate
 """
 
@@ -363,6 +364,13 @@ def _markdown(manifest: dict[str, object]) -> str:
 
 
 def main() -> int:
+    # An unrecognised flag used to fall through to verify mode and report PASS,
+    # so a mistyped --write would have looked like a clean check.
+    unknown = [argument for argument in sys.argv[1:] if argument not in {"--write", "--check"}]
+    if unknown:
+        print(f"FAIL 无法识别的参数：{' '.join(unknown)}（只接受 --write / --check）", file=sys.stderr)
+        return 2
+
     rows = _rows()
     manifest = _manifest(rows)
     report = _markdown(manifest)

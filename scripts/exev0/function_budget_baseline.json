@@ -1,5 +1,6 @@
 {
-  "base_commit": "c37ae78594220a3ada9ad73020c67b1aec99aa4f",
+  "base_commit": "8d909cf958c5241d70c8715252e881f89a047f50",
+  "authorized_base": "c37ae78594220a3ada9ad73020c67b1aec99aa4f",
   "line_limit": 60,
   "measured_tree": "src",
   "frozen_over_limit_functions": {
@@ -28,8 +29,8 @@
     "src/brain/workbench_service.py::WorkbenchService.readiness": 189,
     "src/brain/workbench_service.py::WorkbenchService.save_management_product": 64,
     "src/composition/run_m7_2b_fixture.py::run": 462,
-    "src/gateway/api/app.py::create_app": 3402,
-    "src/gateway/api/app.py::create_app.content_workbench": 175,
+    "src/gateway/api/app.py::create_app": 3416,
+    "src/gateway/api/app.py::create_app.content_workbench": 189,
     "src/gateway/api/app.py::create_app.create_content_stream": 154,
     "src/gateway/api/app.py::create_app.create_content_stream.worker": 94,
     "src/gateway/api/app.py::create_app.display_workbench": 61,

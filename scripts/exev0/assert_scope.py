@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """Assert EXE-V0 stayed inside its allowed change surface.
 
-EXE-V0 and EXE-01R are implemented in parallel under the AGENTS.md §9 bounded
+EXE-V0 and EXE-01R were implemented in parallel under the AGENTS.md §9 bounded
 dual-executor exception, which only holds while the two allowlists stay mutually
 exclusive.  This package owns the value assembler and the two files it hangs
 off; the frontend, CI, the three specification documents, the database schema
 and — above all — the Writer prompt are somebody else's, or nobody's.
+
+The window is what makes that judgeable.  Before serialized integration it ran
+from the authorized base to HEAD.  Once the mainline (EXE-01R included) was
+merged in, that same two-dot diff started reporting every mainline file as an
+EXE-V0 trespass, so the far side moves to the merged mainline commit: what is
+left is exactly what this branch adds on top of it, post-merge commits included.
 
 Usage:
     python3 scripts/exev0/assert_scope.py
@@ -18,7 +24,16 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+# The base this package was authorized to build on (COMM-01 REVISION-7 / D-COMM-09).
 BASE_COMMIT = "c37ae78594220a3ada9ad73020c67b1aec99aa4f"
+
+# The mainline merged in at serialized integration, EXE-01R already inside it.
+# Pinned to a SHA rather than to `origin/...`: a gate that resolves a remote ref
+# judges whatever that ref happens to point at today, and a CI checkout may not
+# have the ref at all.  Merging a newer mainline means bumping this deliberately —
+# the gate says so out loud instead of quietly widening.
+MAINLINE_COMMIT = "8d909cf958c5241d70c8715252e881f89a047f50"
 
 # Exact paths and prefixes this package may touch, each with the clause allowing it.
 ALLOWED: tuple[tuple[str, str], ...] = (
@@ -62,15 +77,34 @@ BYTE_IDENTICAL: tuple[tuple[str, str], ...] = (
 )
 
 
-def changed_files() -> list[str]:
+def is_ancestor(commit: str) -> bool:
     result = subprocess.run(
-        ["git", "diff", "--name-only", BASE_COMMIT, "HEAD"],
+        ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def window_base() -> str:
+    """The far side of the diff: the mainline once merged, the base until then."""
+
+    return MAINLINE_COMMIT if is_ancestor(MAINLINE_COMMIT) else BASE_COMMIT
+
+
+def changed_files(base: str) -> list[str]:
+    # -z, not --name-only alone.  With core.quotePath at its default a CI runner
+    # emits "docs/EXE-V0/\345\233\272..." where this machine emits the path,
+    # and every 中文 filename then fails its prefix check on the runner only.
+    result = subprocess.run(
+        ["git", "diff", "--name-only", "-z", base, "HEAD"],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
         check=True,
     )
-    return [line for line in result.stdout.splitlines() if line]
+    return [path for path in result.stdout.split("\0") if path]
 
 
 def blob_at(ref: str, path: str) -> bytes | None:
@@ -85,7 +119,11 @@ def blob_at(ref: str, path: str) -> bytes | None:
 
 def main() -> int:
     failures: list[str] = []
-    files = changed_files()
+    if not is_ancestor(BASE_COMMIT):
+        print(f"FAIL 授权基线 {BASE_COMMIT[:12]} 不是当前 HEAD 的祖先", file=sys.stderr)
+        return 1
+    base = window_base()
+    files = changed_files(base)
 
     for path in files:
         for forbidden, why in FORBIDDEN:
@@ -109,7 +147,9 @@ def main() -> int:
             print(f"FAIL {failure}", file=sys.stderr)
         return 1
 
-    print(f"PASS change surface within scope ({len(files)} files vs {BASE_COMMIT[:7]})")
+    merged = base == MAINLINE_COMMIT
+    edge = f"{base[:7]}（已并入主线）" if merged else f"{base[:7]}（授权基线）"
+    print(f"PASS change surface within scope ({len(files)} files vs {edge})")
     for prefix, why in ALLOWED:
         hits = sum(1 for path in files if path.startswith(prefix))
         if hits:
