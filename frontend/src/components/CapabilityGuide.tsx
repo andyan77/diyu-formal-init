@@ -189,3 +189,24 @@ export function UsageGuideView({ guide }: { guide: UsageGuideTruth }): JSX.Eleme
     </section>
   );
 }
+
+/**
+ * Both panels together, as one lazily-loadable unit.
+ *
+ * `/user` opens this only when the disclosure is expanded, so the technical
+ * diagnostic surface stays out of that route's first load.
+ */
+export default function CapabilityGuide({
+  guide,
+  matrix
+}: {
+  guide: UsageGuideTruth;
+  matrix: FormalCapabilityMatrix;
+}): JSX.Element {
+  return (
+    <>
+      <UsageGuideView guide={guide} />
+      <CapabilityMatrixView matrix={matrix} />
+    </>
+  );
+}

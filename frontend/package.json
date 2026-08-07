@@ -10,11 +10,12 @@
     "contracts:gen": "node tools/generate-contracts.mjs",
     "contracts:check": "node tools/generate-contracts.mjs --check",
     "lint": "tsc --noEmit",
-    "test": "node test/chrome-path.test.mjs && node test/contract-stream.run.mjs && node test/run.mjs && node test/admin-run.mjs && node test/ui04-user-paths.run.mjs"
+    "test": "node test/chrome-path.test.mjs && node test/run-ts.mjs test/contract_stream.test.ts && node test/run-ts.mjs test/advisor_draft.test.ts && node test/run.mjs && node test/admin-run.mjs && node test/ui04-user-paths.run.mjs"
   },
   "dependencies": {
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-router-dom": "7.9.5"
   },
   "devDependencies": {
     "@types/node": "20.19.9",
