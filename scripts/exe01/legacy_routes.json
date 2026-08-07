@@ -1,0 +1,267 @@
+{
+  "schema": "exe01.legacy_routes.v1",
+  "note": "FE-01 的旧 URL 兼容合同。每行是一条可执行断言，由 scripts/exe01/assert_route_compatibility.py 对真实应用逐条复跑。expected_status / final_pathname / preserved_query / bootstrap_application 全部来自 2026-08-06 的实测，不是推断。",
+  "runtime_modes": {
+    "test": "本地 DIYU_RUNTIME_MODE=test。可完整运行时复核。",
+    "production": "DIYU_RUNTIME_MODE=production 才注册的路由（登录、激活、Ops）。构造该模式需要 deepseek API 地址与密钥、独立对象存储和公网 URL——均在 EXE-01 的禁改边界内，因此这些行只做静态复核，标注 registration_evidence。"
+  },
+  "verification_levels": {
+    "runtime_verified": "本包内以 TestClient 对真实 create_app() 实测。",
+    "static_verified": "以 app.py 中的注册点为证据，未在本包内运行时复核，原因见 blocked_reason。"
+  },
+  "routes": [
+    {
+      "legacy_url": "/",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 200,
+      "final_pathname": "/",
+      "preserved_query": {},
+      "bootstrap_application": "public",
+      "unauthenticated_behavior": "公开页，无需登录",
+      "full_page_navigation": true,
+      "note": "SPA 入口；客户端由 AppRouter 渲染 PublicHome。"
+    },
+    {
+      "legacy_url": "/status",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 200,
+      "final_pathname": "/status",
+      "preserved_query": {},
+      "bootstrap_application": "status",
+      "unauthenticated_behavior": "公开页，无需登录",
+      "full_page_navigation": true
+    },
+    {
+      "legacy_url": "/activate",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 404,
+      "final_pathname": "/activate",
+      "preserved_query": {},
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "404",
+      "full_page_navigation": true,
+      "note": "实测发现：服务端从未注册裸 /activate，只有 /activate/{activation_token}。旧 Root.tsx 里 pathname === \"/activate\" 的分支因此永远进不去——直接访问在 SPA 启动前就 404 了。AppRouter 保留同名客户端路由以维持行为等价，但这条路径的真值是 404，不是登录页。EXE-01 不新增该服务端路由（超出范围）；作为发现上报。"
+    },
+    {
+      "legacy_url": "/activate/{activation_token}",
+      "runtime_mode": "production",
+      "verification": "static_verified",
+      "expected_status": 200,
+      "final_pathname": "/activate/{activation_token}",
+      "preserved_query": {},
+      "bootstrap_application": "login",
+      "unauthenticated_behavior": "公开页；一次性链接自身即凭据",
+      "full_page_navigation": true,
+      "registration_evidence": "@app.get(\"/activate/{activation_token}\")",
+      "blocked_reason": "production 模式路由，构造需生产配置",
+      "test_mode_status": 404
+    },
+    {
+      "legacy_url": "/login",
+      "runtime_mode": "production",
+      "verification": "static_verified",
+      "expected_status": 200,
+      "final_pathname": "/login",
+      "preserved_query": {},
+      "bootstrap_application": "login",
+      "unauthenticated_behavior": "登录页本身",
+      "full_page_navigation": true,
+      "registration_evidence": "@app.get(\"/login\", include_in_schema=False)",
+      "blocked_reason": "production 模式路由，构造需生产配置",
+      "test_mode_status": 404
+    },
+    {
+      "legacy_url": "/tenant-admin/login",
+      "runtime_mode": "production",
+      "verification": "static_verified",
+      "expected_status": 200,
+      "final_pathname": "/tenant-admin/login",
+      "preserved_query": {},
+      "bootstrap_application": "login",
+      "unauthenticated_behavior": "登录页本身",
+      "full_page_navigation": true,
+      "registration_evidence": "@app.get(\"/tenant-admin/login\", include_in_schema=False)",
+      "blocked_reason": "production 模式路由，构造需生产配置",
+      "test_mode_status": 404
+    },
+    {
+      "legacy_url": "/ops/login",
+      "runtime_mode": "production",
+      "verification": "static_verified",
+      "expected_status": 200,
+      "final_pathname": "/ops/login",
+      "preserved_query": {},
+      "bootstrap_application": "login",
+      "unauthenticated_behavior": "登录页本身",
+      "full_page_navigation": true,
+      "registration_evidence": "@app.get(\"/ops/login\", include_in_schema=False)",
+      "blocked_reason": "production 模式路由，构造需生产配置",
+      "test_mode_status": 404
+    },
+    {
+      "legacy_url": "/ops",
+      "runtime_mode": "production",
+      "verification": "static_verified",
+      "expected_status": 200,
+      "final_pathname": "/ops",
+      "preserved_query": {},
+      "bootstrap_application": "ops",
+      "unauthenticated_behavior": "重定向到 /ops/login",
+      "full_page_navigation": true,
+      "registration_evidence": "@app.get(\"/ops\", include_in_schema=False)",
+      "blocked_reason": "production 模式路由，构造需生产配置",
+      "test_mode_status": 404
+    },
+    {
+      "legacy_url": "/admin",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 401,
+      "final_pathname": "/admin",
+      "preserved_query": {},
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "401；已登录时 303 重定向到 /tenant-admin",
+      "full_page_navigation": true,
+      "note": "EXE-01 未改动。已登录的重定向语义由 legacy_admin 处理器保留。"
+    },
+    {
+      "legacy_url": "/tenant-admin",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 401,
+      "final_pathname": "/tenant-admin",
+      "preserved_query": {},
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "401",
+      "full_page_navigation": true,
+      "note": "客户端 /tenant-admin/* 由 AppRouter 通配段承接，section 仍走 query。"
+    },
+    {
+      "legacy_url": "/user",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 401,
+      "final_pathname": "/user",
+      "preserved_query": {},
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "401",
+      "full_page_navigation": true
+    },
+    {
+      "legacy_url": "/display",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 401,
+      "final_pathname": "/display",
+      "preserved_query": {},
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "401",
+      "full_page_navigation": true
+    },
+    {
+      "legacy_url": "/organization-materials",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 303,
+      "final_pathname": "/materials",
+      "preserved_query": {},
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "303 到 /materials（只改名，不在此处判权限）",
+      "full_page_navigation": true,
+      "note": "EXE-01 新增改名重定向。SEAM-06。"
+    },
+    {
+      "legacy_url": "/organization-materials?publishing_identity_id=x",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 303,
+      "final_pathname": "/materials",
+      "preserved_query": {
+        "publishing_identity_id": "x"
+      },
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "303 到 /materials，query 原样保留",
+      "full_page_navigation": true
+    },
+    {
+      "legacy_url": "/materials",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 303,
+      "final_pathname": "/login",
+      "preserved_query": {},
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "303 到 /login（处理器自身的既有行为，EXE-01 只改了注册路径）",
+      "full_page_navigation": true,
+      "note": "与 /user 的 401 不一致，是处理器层面的既有差异，非本包引入。"
+    },
+    {
+      "legacy_url": "/content",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 401,
+      "final_pathname": "/content",
+      "preserved_query": {},
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "401",
+      "full_page_navigation": true
+    },
+    {
+      "legacy_url": "/content?task=11111111-1111-4111-8111-111111111111&version=2&notice=saved&target=douyin_video",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 303,
+      "final_pathname": "/content/tasks/11111111-1111-4111-8111-111111111111",
+      "preserved_query": {
+        "version": "2",
+        "target": "douyin_video",
+        "notice": "saved"
+      },
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "303 先做地址规范化，权限在目标路由判定",
+      "full_page_navigation": true,
+      "note": "EXE-01 新增规范化。html.py workbench_location 生成的旧地址由此收敛到任务自己的路由。"
+    },
+    {
+      "legacy_url": "/content/tasks/11111111-1111-4111-8111-111111111111?version=2",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 401,
+      "final_pathname": "/content/tasks/11111111-1111-4111-8111-111111111111",
+      "preserved_query": {
+        "version": "2"
+      },
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "401",
+      "full_page_navigation": true,
+      "note": "EXE-01 新增。复用 content_workbench，不复制权限与 scope 逻辑。"
+    },
+    {
+      "legacy_url": "/content/projects",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 404,
+      "final_pathname": "/content/projects",
+      "preserved_query": {},
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "404",
+      "full_page_navigation": true,
+      "note": "features/production 声明为 planned。不进导航、不落公共首页；客户端同样给恢复页。"
+    },
+    {
+      "legacy_url": "/no-such-page",
+      "runtime_mode": "test",
+      "verification": "runtime_verified",
+      "expected_status": 404,
+      "final_pathname": "/no-such-page",
+      "preserved_query": {},
+      "bootstrap_application": null,
+      "unauthenticated_behavior": "404",
+      "full_page_navigation": true,
+      "note": "未知路径必须 404，不得落公共首页。客户端由 NotFoundPage 承接同一规则。"
+    }
+  ]
+}
