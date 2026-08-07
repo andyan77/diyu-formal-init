@@ -108,10 +108,14 @@ def run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def changed_files(window: Window) -> list[str]:
-    result = run("git", "diff", "--name-only", window.base, window.head)
+    # -z, not --name-only alone: git quotes non-ASCII paths ("docs/\345\211...")
+    # whenever core.quotePath is left at its default, which is what a CI runner
+    # does and what this developer's machine does not. Every docs/前端UI架构/
+    # path then failed its prefix check on the runner and nowhere else.
+    result = run("git", "diff", "--name-only", "-z", window.base, window.head)
     if result.returncode != 0:
         raise SystemExit(f"无法比较 {window.base}..{window.head}: {result.stderr}")
-    return [line for line in result.stdout.splitlines() if line]
+    return [path for path in result.stdout.split("\0") if path]
 
 
 def line_count_at(ref: str, path: str) -> int | None:

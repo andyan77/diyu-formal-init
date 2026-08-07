@@ -80,7 +80,8 @@ def in_scope(path: str) -> bool:
 
 
 def tracked_at(ref: str) -> list[str]:
-    return [line for line in git("ls-tree", "-r", "--name-only", ref).splitlines() if in_scope(line)]
+    listing = git("ls-tree", "-r", "--name-only", "-z", ref)
+    return [path for path in listing.split("\0") if path and in_scope(path)]
 
 
 def present_now() -> list[str]:
@@ -90,8 +91,10 @@ def present_now() -> list[str]:
     until the commit after the one that introduced it — which is exactly when
     nobody is looking.
     """
-    tracked = git("ls-tree", "-r", "--name-only", "HEAD").splitlines()
-    untracked = git("ls-files", "--others", "--exclude-standard").splitlines()
+    # NUL-separated for the same reason as assert_scope: git quotes
+    # non-ASCII paths unless core.quotePath is explicitly turned off.
+    tracked = git("ls-tree", "-r", "--name-only", "-z", "HEAD").split("\0")
+    untracked = git("ls-files", "--others", "--exclude-standard", "-z").split("\0")
     seen = sorted(set(tracked) | set(untracked))
     return [path for path in seen if in_scope(path) and (PROJECT_ROOT / path).exists()]
 
