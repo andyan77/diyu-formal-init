@@ -7,11 +7,18 @@ exclusive.  This package owns the value assembler and the two files it hangs
 off; the frontend, CI, the three specification documents, the database schema
 and — above all — the Writer prompt are somebody else's, or nobody's.
 
-The window is what makes that judgeable.  Before serialized integration it ran
-from the authorized base to HEAD.  Once the mainline (EXE-01R included) was
-merged in, that same two-dot diff started reporting every mainline file as an
-EXE-V0 trespass, so the far side moves to the merged mainline commit: what is
-left is exactly what this branch adds on top of it, post-merge commits included.
+The window is what makes that judgeable, and it is now frozen at both ends.
+It ran from the authorized base to HEAD while the branch stood alone; after the
+mainline was merged in, the near side moved to the merged mainline commit so that
+EXE-01R's files stopped reading as EXE-V0 trespasses.  Both ends are now pinned
+SHAs: once this lands on the mainline, every later mainline commit is somebody
+else's package, and a window that still said HEAD would keep judging them by this
+package's allowlist forever.
+
+The commit that performs the freeze necessarily falls outside the window it
+freezes.  That is the same trade EXE-01R made at `eb6bb5d`, and it is why the
+head SHA is worth an ancestor assertion rather than a comment: a pinned SHA that
+is no longer behind us describes a tree nobody has.
 
 Usage:
     python3 scripts/exev0/assert_scope.py
@@ -26,14 +33,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # The base this package was authorized to build on (COMM-01 REVISION-7 / D-COMM-09).
-BASE_COMMIT = "c37ae78594220a3ada9ad73020c67b1aec99aa4f"
+AUTHORIZED_BASE = "c37ae78594220a3ada9ad73020c67b1aec99aa4f"
 
-# The mainline merged in at serialized integration, EXE-01R already inside it.
-# Pinned to a SHA rather than to `origin/...`: a gate that resolves a remote ref
-# judges whatever that ref happens to point at today, and a CI checkout may not
-# have the ref at all.  Merging a newer mainline means bumping this deliberately —
-# the gate says so out loud instead of quietly widening.
-MAINLINE_COMMIT = "8d909cf958c5241d70c8715252e881f89a047f50"
+# The frozen comparison window: the mainline merged in at serialized integration
+# (EXE-01R already inside it) and this package's implementation-final commit.
+# Pinned to SHAs rather than to `origin/...` or HEAD: a gate that resolves a
+# remote ref judges whatever that ref points at today, a CI checkout may not have
+# the ref at all, and a HEAD-anchored far side would keep scanning the mainline
+# long after this package stopped being the thing changing it.
+WINDOW_BASE = "8d909cf958c5241d70c8715252e881f89a047f50"
+WINDOW_HEAD = "877566ace648e3bef2a7f44ee6808b51613c3560"
 
 # Exact paths and prefixes this package may touch, each with the clause allowing it.
 ALLOWED: tuple[tuple[str, str], ...] = (
@@ -86,6 +95,14 @@ BYTE_IDENTICAL: tuple[tuple[str, str], ...] = (
 
 
 def is_ancestor(commit: str) -> bool:
+    known = subprocess.run(
+        ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    if known.returncode != 0:
+        return False
     result = subprocess.run(
         ["git", "merge-base", "--is-ancestor", commit, "HEAD"],
         cwd=PROJECT_ROOT,
@@ -95,18 +112,12 @@ def is_ancestor(commit: str) -> bool:
     return result.returncode == 0
 
 
-def window_base() -> str:
-    """The far side of the diff: the mainline once merged, the base until then."""
-
-    return MAINLINE_COMMIT if is_ancestor(MAINLINE_COMMIT) else BASE_COMMIT
-
-
-def changed_files(base: str) -> list[str]:
+def changed_files(base: str, head: str) -> list[str]:
     # -z, not --name-only alone.  With core.quotePath at its default a CI runner
     # emits "docs/EXE-V0/\345\233\272..." where this machine emits the path,
     # and every 中文 filename then fails its prefix check on the runner only.
     result = subprocess.run(
-        ["git", "diff", "--name-only", "-z", base, "HEAD"],
+        ["git", "diff", "--name-only", "-z", base, head],
         cwd=PROJECT_ROOT,
         capture_output=True,
         text=True,
@@ -127,11 +138,15 @@ def blob_at(ref: str, path: str) -> bytes | None:
 
 def main() -> int:
     failures: list[str] = []
-    if not is_ancestor(BASE_COMMIT):
-        print(f"FAIL 授权基线 {BASE_COMMIT[:12]} 不是当前 HEAD 的祖先", file=sys.stderr)
-        return 1
-    base = window_base()
-    files = changed_files(base)
+    for label, commit in (("窗口起点", WINDOW_BASE), ("窗口终点", WINDOW_HEAD)):
+        if not is_ancestor(commit):
+            print(
+                f"FAIL {label} {commit[:12]} 不是当前 HEAD 的祖先；"
+                "分支被改写过，这个窗口已经不描述本分支",
+                file=sys.stderr,
+            )
+            return 1
+    files = changed_files(WINDOW_BASE, WINDOW_HEAD)
 
     for path in files:
         for forbidden, why in FORBIDDEN:
@@ -143,8 +158,10 @@ def main() -> int:
                 failures.append(f"{path}: 不在本包允许的改动面内")
 
     for path, why in BYTE_IDENTICAL:
-        before = blob_at(BASE_COMMIT, path)
-        after = blob_at("HEAD", path)
+        # Anchored at the authorized base, not the window base: the honest claim
+        # is that this package never touched these, not merely that it stopped.
+        before = blob_at(AUTHORIZED_BASE, path)
+        after = blob_at(WINDOW_HEAD, path)
         if before is None or after is None:
             failures.append(f"{path}: 无法比对基线字节（{why}）")
         elif before != after:
@@ -155,9 +172,8 @@ def main() -> int:
             print(f"FAIL {failure}", file=sys.stderr)
         return 1
 
-    merged = base == MAINLINE_COMMIT
-    edge = f"{base[:7]}（已并入主线）" if merged else f"{base[:7]}（授权基线）"
-    print(f"PASS change surface within scope ({len(files)} files vs {edge})")
+    window = f"{WINDOW_BASE[:7]}..{WINDOW_HEAD[:7]}（已冻结）"
+    print(f"PASS change surface within scope ({len(files)} files, {window})")
     for prefix, why in ALLOWED:
         hits = sum(1 for path in files if path.startswith(prefix))
         if hits:
