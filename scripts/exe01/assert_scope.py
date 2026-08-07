@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Assert EXE-01 stayed inside its allowed change surface.
+"""Assert EXE-01 and EXE-01R each stayed inside their own change surface.
 
-The package may rebuild the frontend and adapt the SPA entry points, and
-nothing else. Content and domain services, repositories, database schema,
-generation semantics, permission semantics, the three specification documents
-and MILESTONE.md are all out of bounds. Reviewing that by eye across sixty
-changed files is how a boundary quietly moves, so it is checked here instead.
+Two packages have now touched this tree, and they were allowed different
+things: EXE-01 could rebuild the frontend and adapt the SPA entry points,
+EXE-01R could additionally add one projection field to one repository method.
+Checking both against one base would either let EXE-01R's allowances back-date
+onto EXE-01, or flag the supervisor's own commits between the two packages as
+if this package had made them. So each window is checked against its own base,
+its own allowlist, and its own red lines.
 
 Usage:
     python3 scripts/exe01/assert_scope.py
@@ -13,28 +15,16 @@ Usage:
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BASE_COMMIT = "af20ae5601a53551bb0d50288d69ff3f08e29163"
 
-# Prefixes this package is allowed to touch, each with the clause that allows it.
-ALLOWED: tuple[tuple[str, str], ...] = (
-    ("frontend/", "FE-00—FE-04 主交付面"),
-    ("scripts/exe01/", "本包断言与工具"),
-    ("scripts/golden.sh", "前端 codegen 漂移门接入（明文允许）"),
-    ("src/gateway/api/html.py", "SPA shell / bootstrap 适配（SEAM-06）"),
-    ("src/gateway/api/app.py", "新旧 SPA 入口注册与重定向（SEAM-06）"),
-    ("tests/test_exe01_", "对应后端路由测试（明文允许）"),
-    ("docs/前端UI架构/", "FE-00 设计交付物与截图回归"),
-    ("openapi.json", "app.py 路由表的确定性派生物；由 `make openapi` 重生，golden 门校验"),
-)
-
-# Paths that are forbidden even though a prefix above might otherwise cover
-# them, plus the explicit red lines from the execution prompt.
-FORBIDDEN: tuple[tuple[str, str], ...] = (
+# Red lines both packages share. Nothing below is reachable by any clause.
+COMMON_FORBIDDEN: tuple[tuple[str, str], ...] = (
     ("MILESTONE.md", "里程碑状态文件只读"),
     ("docs/COMM-01-", "规范真源只读"),
     ("docs/UX-04R-", "规范真源只读"),
@@ -51,75 +41,176 @@ FORBIDDEN: tuple[tuple[str, str], ...] = (
     ("pyproject.toml", "依赖与构建配置禁改"),
 )
 
-# Files that exist to prove the two giant components did not grow.
-NO_GROWTH = (
-    "frontend/src/app/CreatorApp.tsx",
-    "frontend/src/app/TenantAdminApp.tsx",
+
+@dataclass(frozen=True)
+class Window:
+    """One package's change surface, pinned to the commits that bound it."""
+
+    package: str
+    base: str
+    head: str
+    allowed: tuple[tuple[str, str], ...]
+    # Exact paths that override a COMMON_FORBIDDEN prefix, each with its clause.
+    exempt: tuple[tuple[str, str], ...] = ()
+    no_growth: tuple[str, ...] = ()
+
+
+EXE01 = Window(
+    package="EXE-01",
+    base="af20ae5601a53551bb0d50288d69ff3f08e29163",
+    head="3043217",
+    allowed=(
+        ("frontend/", "FE-00—FE-04 主交付面"),
+        ("scripts/exe01/", "本包断言与工具"),
+        ("scripts/golden.sh", "前端 codegen 漂移门接入（明文允许）"),
+        ("src/gateway/api/html.py", "SPA shell / bootstrap 适配（SEAM-06）"),
+        ("src/gateway/api/app.py", "新旧 SPA 入口注册与重定向（SEAM-06）"),
+        ("tests/test_exe01_", "对应后端路由测试（明文允许）"),
+        ("docs/前端UI架构/", "FE-00 设计交付物与截图回归"),
+        ("openapi.json", "app.py 路由表的确定性派生物；由 `make openapi` 重生，golden 门校验"),
+    ),
+    no_growth=(
+        "frontend/src/app/CreatorApp.tsx",
+        "frontend/src/app/TenantAdminApp.tsx",
+    ),
 )
 
+EXE01R = Window(
+    package="EXE-01R",
+    base="357d17cd610d5c3c0b3fd5f7c703b8710da82d64",
+    head="HEAD",
+    allowed=(
+        ("frontend/", "R1—R4 作用域事务、流校验、深链与视觉证据"),
+        ("scripts/exe01/", "本包断言、预算工具与门链 runner"),
+        ("Makefile", "make exe01-gates 入口（R5）"),
+        (".github/workflows/ci.yml", "九门远端接入（R5）"),
+        (".python-version", "监理裁决 2：钉住 3.10，消除 uv 取 3.14 的误报"),
+        ("src/gateway/api/app.py", "R2 深链最小 SPA 入口适配"),
+        ("tests/test_exe01r_", "R1/R2 对应后端测试（明文允许）"),
+        ("docs/前端UI架构/FE-00/", "R4 视觉证据矩阵与批准表"),
+    ),
+    exempt=(
+        (
+            "src/infrastructure/workbench_repository.py",
+            "R1.4 只增投影字段 tenant_id；下方另有 additive 断言",
+        ),
+    ),
+    no_growth=("frontend/src/app/CreatorApp.tsx",),
+)
 
-def changed_files() -> list[str]:
-    result = subprocess.run(
-        ["git", "diff", "--name-only", BASE_COMMIT, "HEAD"],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
+WINDOWS = (EXE01, EXE01R)
+
+
+def run(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        args, cwd=PROJECT_ROOT, capture_output=True, text=True, check=False
     )
+
+
+def changed_files(window: Window) -> list[str]:
+    result = run("git", "diff", "--name-only", window.base, window.head)
+    if result.returncode != 0:
+        raise SystemExit(f"无法比较 {window.base}..{window.head}: {result.stderr}")
     return [line for line in result.stdout.splitlines() if line]
 
 
 def line_count_at(ref: str, path: str) -> int | None:
-    result = subprocess.run(
-        ["git", "show", f"{ref}:{path}"],
-        cwd=PROJECT_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
+    result = run("git", "show", f"{ref}:{path}")
+    return None if result.returncode != 0 else len(result.stdout.splitlines())
+
+
+def check_surface(window: Window, files: list[str]) -> list[str]:
+    failures = []
+    exempt = dict(window.exempt)
+    for path in files:
+        if path in exempt:
+            continue
+        hit = next((why for bad, why in COMMON_FORBIDDEN if path.startswith(bad)), None)
+        if hit:
+            failures.append(f"[{window.package}] {path}: 越界（{hit}）")
+        elif not any(path.startswith(prefix) for prefix, _ in window.allowed):
+            failures.append(f"[{window.package}] {path}: 不在本包允许的改动面内")
+    return failures
+
+
+def check_no_growth(window: Window) -> list[str]:
+    failures = []
+    for path in window.no_growth:
+        before = line_count_at(window.base, path)
+        after = line_count_at(window.head, path)
+        if before is None or after is None:
+            failures.append(f"[{window.package}] {path}: 无法比对行数")
+        elif after > before:
+            failures.append(
+                f"[{window.package}] {path}: 净行数增长 {before} -> {after}；"
+                "触碰这个文件时必须同时搬出等量或更大的职责"
+            )
+    return failures
+
+
+def projection_keys(ref: str) -> set[str]:
+    """The column aliases `content_identity` hands the bootstrap."""
+    source = run("git", "show", f"{ref}:src/infrastructure/workbench_repository.py")
+    if source.returncode != 0:
+        return set()
+    body = source.stdout.split("def content_identity(")[-1].split("\n    def ")[0]
+    return set(re.findall(r"\bAS (\w+)", body))
+
+
+def check_additive_projection(window: Window) -> list[str]:
+    """R1.4 was allowed to add a field, not to take one away.
+
+    Line counts cannot see this — rewriting one SELECT line both adds and
+    removes — so the guarantee is checked where it actually lives: the set of
+    keys the method returns may only grow.
+    """
+    if not any(p.endswith("workbench_repository.py") for p, _ in window.exempt):
+        return []
+    before, after = projection_keys(window.base), projection_keys(window.head)
+    if not before:
+        return [f"[{window.package}] 无法读出 {window.base[:7]} 的 content_identity 投影"]
+    lost = sorted(before - after)
+    if lost:
+        return [
+            f"[{window.package}] content_identity 少了投影字段 {lost}；"
+            "R1.4 只准新增，不准改动既有键的含义"
+        ]
+    return []
+
+
+def report(window: Window, files: list[str]) -> None:
+    print(
+        f"PASS [{window.package}] change surface within scope "
+        f"({len(files)} files, {window.base[:7]}..{window.head})"
     )
-    if result.returncode != 0:
-        return None
-    return len(result.stdout.splitlines())
+    for prefix, why in window.allowed:
+        hits = sum(1 for path in files if path.startswith(prefix))
+        if hits:
+            print(f"  {prefix:34s} {hits:3d} 个文件 — {why}")
+    for path, why in window.exempt:
+        if path in files:
+            print(f"  {path:34s}   1 个文件 — {why}")
+    for path in window.no_growth:
+        before, after = line_count_at(window.base, path), line_count_at(window.head, path)
+        print(f"  {path}: {before} -> {after} 行")
 
 
 def main() -> int:
     failures: list[str] = []
-    files = changed_files()
-
-    for path in files:
-        for forbidden, why in FORBIDDEN:
-            if path.startswith(forbidden):
-                failures.append(f"{path}: 越界（{why}）")
-                break
-        else:
-            if not any(path.startswith(prefix) for prefix, _ in ALLOWED):
-                failures.append(f"{path}: 不在本包允许的改动面内")
-
-    for path in NO_GROWTH:
-        before = line_count_at(BASE_COMMIT, path)
-        after = line_count_at("HEAD", path)
-        if before is None or after is None:
-            failures.append(f"{path}: 无法比对行数")
-        elif after > before:
-            failures.append(
-                f"{path}: 净行数增长 {before} -> {after}；触碰这两个文件时必须同时搬出"
-                "等量或更大的职责"
-            )
+    seen: list[tuple[Window, list[str]]] = []
+    for window in WINDOWS:
+        files = changed_files(window)
+        seen.append((window, files))
+        failures += check_surface(window, files)
+        failures += check_no_growth(window)
+        failures += check_additive_projection(window)
 
     if failures:
         for failure in failures:
             print(f"FAIL {failure}", file=sys.stderr)
         return 1
-
-    print(f"PASS change surface within scope ({len(files)} files vs {BASE_COMMIT[:7]})")
-    for prefix, why in ALLOWED:
-        hits = sum(1 for path in files if path.startswith(prefix))
-        if hits:
-            print(f"  {prefix:34s} {hits:3d} 个文件 — {why}")
-    for path in NO_GROWTH:
-        print(
-            f"  {path}: {line_count_at(BASE_COMMIT, path)} -> {line_count_at('HEAD', path)} 行"
-        )
+    for window, files in seen:
+        report(window, files)
     return 0
 
 
