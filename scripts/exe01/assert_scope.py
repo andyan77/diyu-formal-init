@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BASE_COMMIT = "8c9f2ac60de7d23248f03add9f971e2c1bab5572"
+BASE_COMMIT = "af20ae5601a53551bb0d50288d69ff3f08e29163"
 
 # Prefixes this package is allowed to touch, each with the clause that allows it.
 ALLOWED: tuple[tuple[str, str], ...] = (

@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import css_usage  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-BASE_COMMIT = "8c9f2ac60de7d23248f03add9f971e2c1bab5572"
+BASE_COMMIT = "af20ae5601a53551bb0d50288d69ff3f08e29163"
 SCREENSHOTS = PROJECT_ROOT / "docs/前端UI架构/EXE-01-死样式截图回归"
 
 

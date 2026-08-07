@@ -1,0 +1,393 @@
+{
+  "schema": "exe01.fe00_evidence.v1",
+  "captures": [
+    {
+      "file": "desktop--today--1440x900.png",
+      "frame": "fe00-today",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 299
+    },
+    {
+      "file": "desktop--advisor--1440x900.png",
+      "frame": "fe00-advisor",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 1307
+    },
+    {
+      "file": "desktop--proposal--1440x900.png",
+      "frame": "fe00-proposal",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 2315
+    },
+    {
+      "file": "desktop--producing--1440x900.png",
+      "frame": "fe00-producing",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 3323
+    },
+    {
+      "file": "desktop--package--1440x900.png",
+      "frame": "fe00-package",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 4331
+    },
+    {
+      "file": "desktop--empty--1440x900.png",
+      "frame": "fe00-empty",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 330,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 5339
+    },
+    {
+      "file": "desktop--loading--1440x900.png",
+      "frame": "fe00-loading",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 330,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 5777
+    },
+    {
+      "file": "desktop--failure--1440x900.png",
+      "frame": "fe00-failure",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 360,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 6215
+    },
+    {
+      "file": "desktop--cross-account--1440x900.png",
+      "frame": "fe00-cross-account",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 330,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 6683
+    },
+    {
+      "file": "desktop--gap--1440x900.png",
+      "frame": "fe00-gap",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 300,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 7121
+    },
+    {
+      "file": "desktop--legacy--1440x900.png",
+      "frame": "fe00-legacy",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 340,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 7529
+    },
+    {
+      "file": "desktop--longtext--1440x900.png",
+      "frame": "fe00-longtext",
+      "name": "1440x900",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 7977
+    },
+    {
+      "file": "desktop--today--200pct-zoom.png",
+      "frame": "fe00-today",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 299
+    },
+    {
+      "file": "desktop--advisor--200pct-zoom.png",
+      "frame": "fe00-advisor",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 1307
+    },
+    {
+      "file": "desktop--proposal--200pct-zoom.png",
+      "frame": "fe00-proposal",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 2315
+    },
+    {
+      "file": "desktop--producing--200pct-zoom.png",
+      "frame": "fe00-producing",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 3323
+    },
+    {
+      "file": "desktop--package--200pct-zoom.png",
+      "frame": "fe00-package",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 4331
+    },
+    {
+      "file": "desktop--empty--200pct-zoom.png",
+      "frame": "fe00-empty",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 330,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 5339
+    },
+    {
+      "file": "desktop--loading--200pct-zoom.png",
+      "frame": "fe00-loading",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 330,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 5777
+    },
+    {
+      "file": "desktop--failure--200pct-zoom.png",
+      "frame": "fe00-failure",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 360,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 6215
+    },
+    {
+      "file": "desktop--cross-account--200pct-zoom.png",
+      "frame": "fe00-cross-account",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 330,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 6683
+    },
+    {
+      "file": "desktop--gap--200pct-zoom.png",
+      "frame": "fe00-gap",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 300,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 7121
+    },
+    {
+      "file": "desktop--legacy--200pct-zoom.png",
+      "frame": "fe00-legacy",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 340,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 7529
+    },
+    {
+      "file": "desktop--longtext--200pct-zoom.png",
+      "frame": "fe00-longtext",
+      "name": "200pct-zoom",
+      "width": 1440,
+      "height": 900,
+      "motion": "no-preference",
+      "x": 0,
+      "y": 7977
+    },
+    {
+      "file": "desktop--today--reduced-motion.png",
+      "frame": "fe00-today",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 900,
+      "motion": "reduce",
+      "x": 0,
+      "y": 299
+    },
+    {
+      "file": "desktop--advisor--reduced-motion.png",
+      "frame": "fe00-advisor",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 900,
+      "motion": "reduce",
+      "x": 0,
+      "y": 1307
+    },
+    {
+      "file": "desktop--proposal--reduced-motion.png",
+      "frame": "fe00-proposal",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 900,
+      "motion": "reduce",
+      "x": 0,
+      "y": 2315
+    },
+    {
+      "file": "desktop--producing--reduced-motion.png",
+      "frame": "fe00-producing",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 900,
+      "motion": "reduce",
+      "x": 0,
+      "y": 3323
+    },
+    {
+      "file": "desktop--package--reduced-motion.png",
+      "frame": "fe00-package",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 900,
+      "motion": "reduce",
+      "x": 0,
+      "y": 4331
+    },
+    {
+      "file": "desktop--empty--reduced-motion.png",
+      "frame": "fe00-empty",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 330,
+      "motion": "reduce",
+      "x": 0,
+      "y": 5339
+    },
+    {
+      "file": "desktop--loading--reduced-motion.png",
+      "frame": "fe00-loading",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 330,
+      "motion": "reduce",
+      "x": 0,
+      "y": 5777
+    },
+    {
+      "file": "desktop--failure--reduced-motion.png",
+      "frame": "fe00-failure",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 360,
+      "motion": "reduce",
+      "x": 0,
+      "y": 6215
+    },
+    {
+      "file": "desktop--cross-account--reduced-motion.png",
+      "frame": "fe00-cross-account",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 330,
+      "motion": "reduce",
+      "x": 0,
+      "y": 6683
+    },
+    {
+      "file": "desktop--gap--reduced-motion.png",
+      "frame": "fe00-gap",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 300,
+      "motion": "reduce",
+      "x": 0,
+      "y": 7121
+    },
+    {
+      "file": "desktop--legacy--reduced-motion.png",
+      "frame": "fe00-legacy",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 340,
+      "motion": "reduce",
+      "x": 0,
+      "y": 7529
+    },
+    {
+      "file": "desktop--longtext--reduced-motion.png",
+      "frame": "fe00-longtext",
+      "name": "reduced-motion",
+      "width": 1440,
+      "height": 900,
+      "motion": "reduce",
+      "x": 0,
+      "y": 7977
+    },
+    {
+      "file": "mobile--all-states--390x844.png",
+      "frame": "all",
+      "name": "390x844",
+      "width": 390,
+      "height": 844,
+      "motion": "no-preference"
+    },
+    {
+      "file": "mobile--all-states--200pct-zoom.png",
+      "frame": "all",
+      "name": "200pct-zoom",
+      "width": 195,
+      "height": 422,
+      "motion": "no-preference"
+    },
+    {
+      "file": "mobile--all-states--reduced-motion.png",
+      "frame": "all",
+      "name": "reduced-motion",
+      "width": 390,
+      "height": 844,
+      "motion": "reduce"
+    }
+  ],
+  "axe": {
+    "desktop": [],
+    "mobile": []
+  }
+}

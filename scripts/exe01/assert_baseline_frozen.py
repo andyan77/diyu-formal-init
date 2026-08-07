@@ -20,7 +20,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # The commit that froze both baselines, verified there against a live build and
 # a live inventory run.
-FREEZE_COMMIT = "e56b073"
+FREEZE_COMMIT = "fa75ea2"
 BASELINES = (
     "scripts/exe01/bundle_baseline.json",
     "scripts/exe01/test_baseline.json",

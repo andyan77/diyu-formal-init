@@ -9,15 +9,15 @@
    mistake this prototype for a reference to a product stylesheet class. */
 :root{
   --fe00-ink:#171614; --fe00-ink-soft:#45423e; --fe00-paper:#fbfaf7; --fe00-white:#fff;
-  --fe00-s50:#f6f4f0; --fe00-s100:#ece9e3; --fe00-s200:#ddd8d0; --fe00-s400:#817a70;
+  --fe00-s50:#f6f4f0; --fe00-s100:#ece9e3; --fe00-s200:#ddd8d0; --fe00-s400:#817a70; --fe00-muted:#5f584e;
   --fe00-red:#b93628; --fe00-red-dark:#93291f; --fe00-red-pale:#f8ece9;
   --fe00-green:#316a4f; --fe00-amber:#8a6212; --fe00-amber-pale:#fdf5e4;
   --fe00-sans:"Noto Sans CJK SC","Source Han Sans SC","Microsoft YaHei",system-ui,sans-serif;
   --fe00-serif:"Noto Serif CJK SC","Source Han Serif SC","Songti SC",serif;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(--fe00-sans);font-size:15px;line-height:1.6}
-.fe00-page{max-width:1180px;margin:0 auto;padding:32px 20px 80px}
+body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(--fe00-sans);font-size:16px;line-height:1.6}
+.fe00-page{width:1440px;margin:0 auto;padding:32px 0 80px}
 .fe00-page>h1{font-family:var(--fe00-serif);font-size:30px;margin:0 0 6px}
 .fe00-lede{color:var(--fe00-ink-soft);margin:0 0 8px}
 .fe00-toc{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 34px}
@@ -25,18 +25,18 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 .fe00-toc a:hover{border-color:var(--fe00-red);color:var(--fe00-red)}
 .fe00-case{margin:0 0 44px}
 .fe00-case>h2{font-size:16px;margin:0 0 4px;display:flex;align-items:baseline;gap:10px}
-.fe00-case>h2 small{font-weight:400;color:var(--fe00-s400);font-size:12px}
-.fe00-why{margin:0 0 12px;color:var(--fe00-ink-soft);font-size:13px}
+.fe00-case>h2 small{font-weight:400;color:var(--fe00-muted);font-size:12px}
+.fe00-why{margin:0 0 12px;color:var(--fe00-ink-soft);font-size:14px}
 
 /* The 1440x900 frame itself */
-.fe00-frame{width:1440px;height:900px;transform:scale(.79);transform-origin:top left;background:var(--fe00-paper);border:1px solid var(--fe00-s200);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(33,29,24,.09)}
-.fe00-shell{height:640px;margin-bottom:-150px}
+.fe00-frame{width:1440px;height:900px;background:var(--fe00-paper);border:1px solid var(--fe00-s200);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(33,29,24,.09)}
+.fe00-shell{height:900px}
 .fe00-topbar{height:60px;flex:0 0 60px;display:flex;align-items:center;gap:18px;padding:0 22px;border-bottom:1px solid var(--fe00-s200);background:var(--fe00-white)}
-.fe00-mark{font-family:var(--fe00-serif);font-size:19px;letter-spacing:.04em}
+.fe00-mark{display:block;width:112px;height:auto}
 .fe00-scope{display:flex;gap:8px;margin-left:6px}
-.fe00-scope select{height:34px;border:1px solid var(--fe00-s200);border-radius:8px;padding:0 10px;background:var(--fe00-white);font:inherit;font-size:13px;color:var(--fe00-ink)}
-.fe00-who{margin-left:auto;font-size:13px;color:var(--fe00-s400)}
-.fe00-stages{display:flex;align-items:center;gap:10px;padding:12px 22px;border-bottom:1px solid var(--fe00-s100);background:var(--fe00-white);font-size:13px;color:var(--fe00-s400)}
+.fe00-scope select{min-height:44px;border:1px solid var(--fe00-s200);border-radius:8px;padding:0 12px;background:var(--fe00-white);font:inherit;font-size:16px;color:var(--fe00-ink)}
+.fe00-who{margin-left:auto;font-size:14px;color:var(--fe00-ink-soft)}
+.fe00-stages{display:flex;align-items:center;gap:10px;padding:12px 22px;border-bottom:1px solid var(--fe00-s100);background:var(--fe00-white);font-size:14px;color:var(--fe00-ink-soft)}
 .fe00-stage{display:flex;align-items:center;gap:7px}
 .fe00-stage b{font-weight:600}
 .fe00-stage.is-now{color:var(--fe00-ink)}
@@ -47,12 +47,12 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 .fe00-left{padding:26px 24px;border-right:1px solid var(--fe00-s200);overflow:auto}
 .fe00-right{padding:26px 24px;background:var(--fe00-white);overflow:auto}
 .fe00-h{font-family:var(--fe00-serif);font-size:24px;margin:0 0 6px;letter-spacing:-.01em}
-.fe00-sub{color:var(--fe00-ink-soft);margin:0 0 20px;font-size:14px}
-.fe00-eyebrow{color:var(--fe00-red);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin:0 0 8px}
+.fe00-sub{color:var(--fe00-ink-soft);margin:0 0 20px;font-size:16px}
+.fe00-eyebrow{color:var(--fe00-red);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin:0 0 8px}
 
 .fe00-card{border:1px solid var(--fe00-s200);border-radius:12px;background:var(--fe00-white);padding:16px;margin:0 0 12px}
-.fe00-card h4{margin:0 0 4px;font-size:15px}
-.fe00-card p{margin:0;color:var(--fe00-ink-soft);font-size:13px}
+.fe00-card h3{margin:0 0 6px;font-size:17px}
+.fe00-card p{margin:0;color:var(--fe00-ink-soft);font-size:16px}
 .fe00-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .fe00-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 
@@ -63,47 +63,52 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 .fe00-actions{display:flex;align-items:center;gap:10px;margin-top:16px}
 
 .fe00-composer{border:1px solid var(--fe00-s200);border-radius:14px;background:var(--fe00-white);padding:14px}
-.fe00-composer textarea{width:100%;min-height:96px;border:0;outline:0;resize:vertical;font:inherit;line-height:1.7;background:transparent;color:var(--fe00-ink)}
+.fe00-composer textarea{width:100%;min-height:96px;border:0;outline:0;resize:vertical;font:inherit;font-size:16px;line-height:1.7;background:transparent;color:var(--fe00-ink)}
 .fe00-composer-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px}
-.fe00-hint{color:var(--fe00-s400);font-size:12px}
+.fe00-hint{color:var(--fe00-ink-soft);font-size:13px}
 
-.fe00-badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:650;line-height:1.7}
+.fe00-badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:650;line-height:1.7}
 .fe00-b-confirmed{background:#e8f1ec;color:var(--fe00-green)}
 .fe00-b-derived{background:var(--fe00-s100);color:var(--fe00-ink-soft)}
 .fe00-b-review{background:var(--fe00-amber-pale);color:var(--fe00-amber)}
 .fe00-b-missing{background:#fff;color:var(--fe00-red);border:1px solid var(--fe00-red)}
-.fe00-b-model{background:#fff;color:var(--fe00-s400);border:1px dashed var(--fe00-s400)}
+.fe00-b-model{background:#fff;color:var(--fe00-muted);border:1px dashed var(--fe00-muted)}
 
 .fe00-basis{border:1px solid var(--fe00-s200);border-radius:12px;padding:14px;background:var(--fe00-s50)}
 .fe00-basis ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:9px}
-.fe00-basis li{display:flex;align-items:flex-start;gap:9px;font-size:13px;padding-bottom:9px;border-bottom:1px solid var(--fe00-s100)}
+.fe00-basis li{display:flex;align-items:flex-start;gap:10px;font-size:16px;padding-bottom:9px;border-bottom:1px solid var(--fe00-s100)}
 .fe00-basis li:last-child{border-bottom:0;padding-bottom:0}
 .fe00-basis li span{flex:1}
-.fe00-basis li button{border:0;background:none;color:var(--fe00-s400);font-size:12px;text-decoration:underline;cursor:pointer;padding:0}
+.fe00-basis li button{border:0;background:none;color:var(--fe00-ink-soft);font-size:13px;text-decoration:underline;cursor:pointer;padding:0;min-height:44px}
 
 .fe00-msg{display:flex;gap:10px;margin:0 0 16px}
 .fe00-msg .fe00-av{width:28px;height:28px;flex:0 0 28px;border-radius:9px;background:var(--fe00-red-pale);color:var(--fe00-red);display:grid;place-items:center;font-size:12px;font-weight:700}
-.fe00-bubble{background:var(--fe00-white);border:1px solid var(--fe00-s200);border-radius:12px;padding:11px 13px;font-size:14px}
+.fe00-bubble{background:var(--fe00-white);border:1px solid var(--fe00-s200);border-radius:12px;padding:12px 14px;font-size:16px}
 .fe00-msg.is-me{justify-content:flex-end}
 .fe00-msg.is-me .fe00-bubble{background:var(--fe00-ink);color:#fff;border-color:var(--fe00-ink)}
 
 .fe00-step{display:grid;grid-template-columns:30px 1fr;gap:12px;padding:14px 0;border-top:1px solid var(--fe00-s100)}
 .fe00-step-n{width:26px;height:26px;border-radius:8px;background:var(--fe00-s100);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--fe00-ink-soft)}
-.fe00-step h5{margin:0 0 6px;font-size:14px;display:flex;gap:8px;align-items:center}
-.fe00-script{background:var(--fe00-s50);border-left:3px solid var(--fe00-s200);padding:9px 12px;border-radius:0 8px 8px 0;font-size:13px;margin:8px 0 0}
-.fe00-cue{font-size:12px;color:var(--fe00-s400);margin:6px 0 0}
+.fe00-step h4{margin:0 0 8px;font-size:17px;display:flex;gap:8px;align-items:center}
+.fe00-script{background:var(--fe00-s50);border-left:3px solid var(--fe00-s200);padding:9px 12px;border-radius:0 8px 8px 0;font-size:16px;margin:8px 0 0}
+.fe00-cue{font-size:13px;color:var(--fe00-ink-soft);margin:7px 0 0}
 
 .fe00-skeleton{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--fe00-s100),var(--fe00-s50),var(--fe00-s100));margin:0 0 10px}
 .fe00-alert{border:1px solid var(--fe00-red);border-left-width:4px;border-radius:0 10px 10px 0;background:#fff;padding:14px 16px}
-.fe00-alert h4{margin:0 0 4px;font-size:15px;color:var(--fe00-red)}
-.fe00-alert p{margin:0;font-size:13px;color:var(--fe00-ink-soft)}
-.fe00-note{border:1px solid var(--fe00-s200);border-radius:10px;background:var(--fe00-s50);padding:12px 14px;font-size:13px;color:var(--fe00-ink-soft)}
+.fe00-alert h3{margin:0 0 6px;font-size:17px;color:var(--fe00-red)}
+.fe00-alert p{margin:0;font-size:16px;color:var(--fe00-ink-soft)}
+.fe00-note{border:1px solid var(--fe00-s200);border-radius:10px;background:var(--fe00-s50);padding:13px 15px;font-size:16px;color:var(--fe00-ink-soft)}
 .fe00-legacy{border:1px dashed var(--fe00-s400);border-radius:10px;padding:14px;background:var(--fe00-white)}
-.fe00-legacy pre{margin:10px 0 0;white-space:pre-wrap;font:inherit;font-size:13px;color:var(--fe00-ink-soft)}
+.fe00-legacy pre{margin:10px 0 0;white-space:pre-wrap;font:inherit;font-size:16px;color:var(--fe00-ink-soft)}
+
+/* Deterministic evidence: nothing animates, so a screenshot taken twice is the
+   same bytes. Also honours the viewer's own reduced-motion setting. */
+*,*::before,*::after{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
-<div class="fe00-page">
+<main class="fe00-page">
 <h1>FE-00 桌面高保真原型</h1>
 <p class="fe00-lede">视口 1440×900，页面内按 0.79 缩放显示。每个画面下方注明它冻结了哪条规则。</p>
 <p class="fe00-lede">全部为静态原型，不引用产品样式表；class 一律 <code>fe00-</code> 前缀。</p>
@@ -120,6 +125,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
   <a href="#fe00-cross-account">跨账号</a>
   <a href="#fe00-gap">资料缺口</a>
   <a href="#fe00-legacy">旧成品兼容</a>
+  <a href="#fe00-longtext">长文本</a>
 </nav>
 
 <!-- ① today -->
@@ -127,23 +133,23 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <h2>① /user 今天可以做什么 <small>StartAction · OpportunityCard</small></h2>
 <p class="fe00-why">一屏只回答一个问题：今天做什么。四个入口平级，机会卡的主动作只回填输入区，不建任务。</p>
 <div class="fe00-frame fe00-shell">
-  <div class="fe00-topbar"><span class="fe00-mark">笛语</span><span class="fe00-who">陈曦 · 总部品牌内容运营</span></div>
+  <div class="fe00-topbar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26"><span class="fe00-who">陈曦 · 总部品牌内容运营</span></div>
   <div class="fe00-body" style="grid-template-columns:1fr">
     <div class="fe00-right" style="padding:40px 56px">
       <p class="fe00-eyebrow">总部品牌内容运营</p>
       <h3 class="fe00-h" style="font-size:32px">陈曦，今天想完成什么？</h3>
       <p class="fe00-sub">从下面任意一个开始都可以，中途都能改。</p>
       <div class="fe00-grid2" style="max-width:760px">
-        <div class="fe00-card"><h4>先了解一下</h4><p>看看品牌现在能支撑哪些表达。</p></div>
-        <div class="fe00-card"><h4>找个选题</h4><p>根据本周资料，看有什么值得说。</p></div>
-        <div class="fe00-card"><h4>评估一个想法</h4><p>我有想法，帮我看看站不站得住。</p></div>
-        <div class="fe00-card"><h4>直接做一条</h4><p>已经想好了，直接进制作。</p></div>
+        <div class="fe00-card"><h3>先了解一下</h3><p>看看品牌现在能支撑哪些表达。</p></div>
+        <div class="fe00-card"><h3>找个选题</h3><p>根据本周资料，看有什么值得说。</p></div>
+        <div class="fe00-card"><h3>评估一个想法</h3><p>我有想法，帮我看看站不站得住。</p></div>
+        <div class="fe00-card"><h3>直接做一条</h3><p>已经想好了，直接进制作。</p></div>
       </div>
       <h4 style="margin:30px 0 10px;font-size:14px">现在值得做的</h4>
       <div class="fe00-grid3" style="max-width:760px">
-        <div class="fe00-card"><h4>秋冬羊毛大衣的洗护说明</h4><p>本周新增 3 条商品事实，尚未被任何内容用过。</p><span class="fe00-badge fe00-b-confirmed">已确认资料</span></div>
-        <div class="fe00-card"><h4>门店"只想自己看看"的接待边界</h4><p>品牌表达边界里有明确立场，还没做过内容。</p><span class="fe00-badge fe00-b-confirmed">已确认资料</span></div>
-        <div class="fe00-card"><h4>上周那条的后续</h4><p>系列《慢一点的门店》缺第 3 条。</p><span class="fe00-badge fe00-b-derived">系统推导</span></div>
+        <div class="fe00-card"><h3>秋冬羊毛大衣的洗护说明</h3><p>本周新增 3 条商品事实，尚未被任何内容用过。</p><span class="fe00-badge fe00-b-confirmed">已确认资料</span></div>
+        <div class="fe00-card"><h3>门店"只想自己看看"的接待边界</h3><p>品牌表达边界里有明确立场，还没做过内容。</p><span class="fe00-badge fe00-b-confirmed">已确认资料</span></div>
+        <div class="fe00-card"><h3>上周那条的后续</h3><p>系列《慢一点的门店》缺第 3 条。</p><span class="fe00-badge fe00-b-derived">系统推导</span></div>
       </div>
       <div class="fe00-actions"><button class="fe00-btn-solid">用这条开始</button><button class="fe00-btn-text">继续上次没做完的（2）</button></div>
     </div>
@@ -157,11 +163,11 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <p class="fe00-why">账号与平台在顶部、在 URL 里；切换不整页刷新。依据面板常驻不折叠。唯一实心主动作是「形成创作方案」。</p>
 <div class="fe00-frame fe00-shell">
   <div class="fe00-topbar">
-    <span class="fe00-mark">笛语</span>
+    <img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26">
     <div class="fe00-scope">
-      <select><option>总部品牌内容运营</option><option>门店号 · 南京西路</option></select>
-      <select><option>小红书</option><option>抖音</option></select>
-      <select><option>图文</option><option>视频</option></select>
+      <select aria-label="发布账号"><option>总部品牌内容运营</option><option>门店号 · 南京西路</option></select>
+      <select aria-label="发布平台"><option>小红书</option><option>抖音</option></select>
+      <select aria-label="内容形式"><option>图文</option><option>视频</option></select>
     </div>
     <span class="fe00-who">陈曦</span>
   </div>
@@ -177,15 +183,15 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
       <div class="fe00-msg"><div class="fe00-av">笛</div><div class="fe00-bubble">
         这个方向品牌里有明确立场。给你两条切法，差别在于说给谁听。
       </div></div>
-      <div class="fe00-card"><h4>A · 从顾客的一次沉默讲起</h4><p>以门店里真实发生的接待边界为锚，落点是"不施压"。适合已经认识品牌的人。</p>
+      <div class="fe00-card"><h3>A · 从顾客的一次沉默讲起</h3><p>以门店里真实发生的接待边界为锚，落点是"不施压"。适合已经认识品牌的人。</p>
         <div class="fe00-actions"><button class="fe00-btn-line">按这个继续</button></div></div>
-      <div class="fe00-card"><h4>B · 从导购的训练标准讲起</h4><p>把"不追着讲"讲成一条可被检验的服务标准。适合第一次接触品牌的人。</p>
+      <div class="fe00-card"><h3>B · 从导购的训练标准讲起</h3><p>把"不追着讲"讲成一条可被检验的服务标准。适合第一次接触品牌的人。</p>
         <div class="fe00-actions"><button class="fe00-btn-line">按这个继续</button></div></div>
-      <div class="fe00-card" style="border-color:var(--fe00-red)"><h4>这条要不要带上具体商品？</h4>
+      <div class="fe00-card" style="border-color:var(--fe00-red)"><h3>这条要不要带上具体商品？</h4>
         <p>带上会更具体，但话题会从服务转向单品。</p>
         <div class="fe00-actions"><button class="fe00-btn-line">带上</button><button class="fe00-btn-line">不带</button><button class="fe00-btn-text">跳过</button></div></div>
       <div class="fe00-composer" style="margin-top:14px">
-        <textarea placeholder="接着说你的想法……">就用 A，但别写得太文艺。</textarea>
+        <textarea aria-label="内容需求" placeholder="接着说你的想法……">就用 A，但别写得太文艺。</textarea>
         <div class="fe00-composer-foot"><span class="fe00-hint">小红书 · 图文</span><button class="fe00-btn-solid">形成创作方案</button></div>
       </div>
     </div>
@@ -210,7 +216,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <h2>③ 方案确认 <small>CreationProposalCard</small></h2>
 <p class="fe00-why">制作前把"要做什么"摊开。分组可就地编辑。界面叫「创作方案」，不出现内部合同名。</p>
 <div class="fe00-frame fe00-shell">
-  <div class="fe00-topbar"><span class="fe00-mark">笛语</span><div class="fe00-scope"><select><option>总部品牌内容运营</option></select><select><option>小红书</option></select><select><option>图文</option></select></div><span class="fe00-who">陈曦</span></div>
+  <div class="fe00-topbar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26"><div class="fe00-scope"><select aria-label="发布账号"><option>总部品牌内容运营</option></select><select aria-label="发布平台"><option>小红书</option></select><select aria-label="内容形式"><option>图文</option></select></div><span class="fe00-who">陈曦</span></div>
   <div class="fe00-stages">
     <span class="fe00-stage is-done"><b>参谋中</b></span><span class="fe00-sep">→</span>
     <span class="fe00-stage is-now"><b>方案确认</b></span><span class="fe00-sep">→</span>
@@ -222,13 +228,13 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
       <h3 class="fe00-h">确认这次要做的内容</h3>
       <p class="fe00-sub">确认后才开始制作。任何一处都可以直接改。</p>
       <div style="max-width:820px">
-        <div class="fe00-card"><h4>要表达什么</h4><p>门店不追着讲解，是把选择权留给顾客——不是服务冷淡。</p></div>
+        <div class="fe00-card"><h3>要表达什么</h3><p>门店不追着讲解，是把选择权留给顾客——不是服务冷淡。</p></div>
         <div class="fe00-grid2">
-          <div class="fe00-card"><h4>说给谁</h4><p>已经认识品牌、对导购跟随有顾虑的人。</p></div>
-          <div class="fe00-card"><h4>发在哪</h4><p>小红书 · 图文，约 400 字，配 3 张门店实拍。</p></div>
+          <div class="fe00-card"><h3>说给谁</h3><p>已经认识品牌、对导购跟随有顾虑的人。</p></div>
+          <div class="fe00-card"><h3>发在哪</h3><p>小红书 · 图文，约 400 字，配 3 张门店实拍。</p></div>
         </div>
-        <div class="fe00-card"><h4>必须避免</h4><p>不承诺"无人打扰"；不贬低同行；不出现未确认的商品参数。</p></div>
-        <div class="fe00-card"><h4>会用到的依据</h4>
+        <div class="fe00-card"><h3>必须避免</h3><p>不承诺"无人打扰"；不贬低同行；不出现未确认的商品参数。</p></div>
+        <div class="fe00-card"><h3>会用到的依据</h4>
           <p>品牌表达边界 1 条、门店服务标准 1 条、账号画像 1 条。<span class="fe00-badge fe00-b-confirmed" style="margin-left:8px">全部已确认</span></p></div>
         <div class="fe00-actions"><button class="fe00-btn-solid">确认并开始制作</button><button class="fe00-btn-text">再聊聊</button></div>
       </div>
@@ -242,7 +248,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <h2>④ 正在制作 <small>阶段条 · 无主动作</small></h2>
 <p class="fe00-why">进行中阶段没有实心主动作，只有取消。阶段文案是状态实时反馈，不虚称逐字流式。</p>
 <div class="fe00-frame fe00-shell">
-  <div class="fe00-topbar"><span class="fe00-mark">笛语</span><span class="fe00-who">陈曦</span></div>
+  <div class="fe00-topbar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26"><span class="fe00-who">陈曦</span></div>
   <div class="fe00-stages">
     <span class="fe00-stage is-done"><b>参谋中</b></span><span class="fe00-sep">→</span>
     <span class="fe00-stage is-done"><b>方案确认</b></span><span class="fe00-sep">→</span>
@@ -269,7 +275,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <h2>⑤ /content/tasks/:taskId 制作包 <small>ProductionStep · ScriptBlock · SubtitleCue · SourceStatusBadge · DecisionActions</small></h2>
 <p class="fe00-why">每个步骤绑定台词与资源条件，每条带来源状态。「建议·待复核」是琥珀，永远不是确认绿。</p>
 <div class="fe00-frame fe00-shell">
-  <div class="fe00-topbar"><span class="fe00-mark">笛语</span><span class="fe00-who">陈曦 · V2</span></div>
+  <div class="fe00-topbar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26"><span class="fe00-who">陈曦 · V2</span></div>
   <div class="fe00-stages">
     <span class="fe00-stage is-done"><b>参谋中</b></span><span class="fe00-sep">→</span>
     <span class="fe00-stage is-done"><b>方案确认</b></span><span class="fe00-sep">→</span>
@@ -281,19 +287,19 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
       <p class="fe00-eyebrow">制作步骤</p>
       <h3 class="fe00-h" style="font-size:20px">沉默，也可以被尊重</h3>
       <div class="fe00-step"><div class="fe00-step-n">1</div><div>
-        <h5>开场固定机位<span class="fe00-badge fe00-b-confirmed">已确认</span></h5>
+        <h4>开场固定机位<span class="fe00-badge fe00-b-confirmed">已确认</span></h4>
         <p class="fe00-hint">门店入口斜 45°，人物半身入画。</p>
         <div class="fe00-script">有人走进门店，只想自己看看。</div>
         <p class="fe00-cue">字幕 1／3：「有人走进门店，只想自己看看。」</p>
       </div></div>
       <div class="fe00-step"><div class="fe00-step-n">2</div><div>
-        <h5>中段留一次停顿<span class="fe00-badge fe00-b-derived">系统推导</span></h5>
+        <h4>中段留一次停顿<span class="fe00-badge fe00-b-derived">系统推导</span></h4>
         <p class="fe00-hint">停顿约 1 秒，不加转场。</p>
         <div class="fe00-script">我们可以先把解释放一放，让选择慢一点发生。</div>
         <p class="fe00-cue">字幕 2／3：「我们可以先把解释放一放」</p>
       </div></div>
       <div class="fe00-step"><div class="fe00-step-n">3</div><div>
-        <h5>背景音乐<span class="fe00-badge fe00-b-review">建议 · 待人工复核</span></h5>
+        <h4>背景音乐<span class="fe00-badge fe00-b-review">建议 · 待人工复核</span></h4>
         <p class="fe00-hint">当前没有已授权的声音素材，这条只是建议，用前请自行确认版权。</p>
       </div></div>
     </div>
@@ -321,13 +327,13 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <h2>空态 <small>不造假数据，四个入口不隐藏</small></h2>
 <p class="fe00-why">没有历史不等于没有下一步。空态说明"先补什么"，入口原样保留。</p>
 <div class="fe00-frame" style="height:330px">
-  <div class="fe00-topbar"><span class="fe00-mark">笛语</span><span class="fe00-who">新账号</span></div>
+  <div class="fe00-topbar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26"><span class="fe00-who">新账号</span></div>
   <div class="fe00-body" style="grid-template-columns:1fr"><div class="fe00-right" style="padding:32px 56px">
     <h3 class="fe00-h">还没有可以推荐的选题</h3>
     <p class="fe00-sub">这个账号的品牌资料刚建好，还没有足够事实支撑选题推荐。你仍然可以直接开始。</p>
     <div class="fe00-grid2" style="max-width:620px">
-      <div class="fe00-card"><h4>先了解一下</h4><p>看看现在能支撑哪些表达。</p></div>
-      <div class="fe00-card"><h4>直接做一条</h4><p>已经想好了，直接进制作。</p></div>
+      <div class="fe00-card"><h3>先了解一下</h3><p>看看现在能支撑哪些表达。</p></div>
+      <div class="fe00-card"><h3>直接做一条</h3><p>已经想好了，直接进制作。</p></div>
     </div>
     <div class="fe00-actions"><button class="fe00-btn-line">去看看还缺什么资料</button></div>
   </div></div>
@@ -338,7 +344,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <h2>加载 <small>阶段条先到，骨架占位</small></h2>
 <p class="fe00-why">阶段条与作用域选择器先渲染，用户立刻知道自己在哪；内容区用骨架，不用转圈遮罩。</p>
 <div class="fe00-frame" style="height:330px">
-  <div class="fe00-topbar"><span class="fe00-mark">笛语</span><div class="fe00-scope"><select><option>总部品牌内容运营</option></select></div></div>
+  <div class="fe00-topbar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26"><div class="fe00-scope"><select aria-label="发布账号"><option>总部品牌内容运营</option></select></div></div>
   <div class="fe00-stages"><span class="fe00-stage is-now"><b>参谋中</b></span><span class="fe00-sep">→</span><span class="fe00-stage"><b>方案确认</b></span><span class="fe00-sep">→</span><span class="fe00-stage"><b>正在制作</b></span><span class="fe00-sep">→</span><span class="fe00-stage"><b>制作包</b></span></div>
   <div class="fe00-body"><div class="fe00-left">
     <div class="fe00-skeleton" style="width:52%;height:22px"></div>
@@ -354,13 +360,13 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <h2>失败 <small>输入必须保留</small></h2>
 <p class="fe00-why">失败文案说人话、给恢复动作，输入框内容原样不动。流事件违约（缺字段/乱序/截断）走同一条路径。</p>
 <div class="fe00-frame" style="height:360px">
-  <div class="fe00-topbar"><span class="fe00-mark">笛语</span><span class="fe00-who">陈曦</span></div>
+  <div class="fe00-topbar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26"><span class="fe00-who">陈曦</span></div>
   <div class="fe00-body"><div class="fe00-left">
-    <div class="fe00-alert"><h4>这次没能做完</h4>
+    <div class="fe00-alert"><h3>这次没能做完</h3>
       <p>返回的内容不完整，已经停在安全状态。你的输入还在下面，可以直接重试。</p></div>
     <div class="fe00-actions"><button class="fe00-btn-solid">用原输入重试</button><button class="fe00-btn-text">看看是哪一步</button></div>
     <div class="fe00-composer" style="margin-top:14px">
-      <textarea>就用 A，但别写得太文艺。</textarea>
+      <textarea aria-label="内容需求">就用 A，但别写得太文艺。</textarea>
       <div class="fe00-composer-foot"><span class="fe00-hint">输入已保留</span><button class="fe00-btn-line" disabled>形成创作方案</button></div>
     </div>
   </div><div class="fe00-right">
@@ -374,13 +380,13 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <h2>跨账号 <small>AdvisorDraftV1</small></h2>
 <p class="fe00-why">切到门店号后，总部账号写的字不出现在这里；切回总部原稿还在。这是本包已实现并有契约测试的行为。</p>
 <div class="fe00-frame" style="height:330px">
-  <div class="fe00-topbar"><span class="fe00-mark">笛语</span>
-    <div class="fe00-scope"><select><option selected>门店号 · 南京西路</option><option>总部品牌内容运营</option></select><select><option>抖音</option></select><select><option>视频</option></select></div>
+  <div class="fe00-topbar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26">
+    <div class="fe00-scope"><select aria-label="发布账号"><option selected>门店号 · 南京西路</option><option>总部品牌内容运营</option></select><select aria-label="发布平台"><option>抖音</option></select><select aria-label="内容形式"><option>视频</option></select></div>
     <span class="fe00-who">陈曦</span></div>
   <div class="fe00-body"><div class="fe00-left">
     <div class="fe00-note">已切换到 <b>门店号 · 南京西路</b>。总部账号那条草稿留在总部账号里，切回去就能看到。</div>
     <div class="fe00-composer" style="margin-top:14px">
-      <textarea placeholder="用门店号的口气，说点今天店里的事……"></textarea>
+      <textarea aria-label="内容需求" placeholder="用门店号的口气，说点今天店里的事……"></textarea>
       <div class="fe00-composer-foot"><span class="fe00-hint">抖音 · 视频</span><button class="fe00-btn-line" disabled>形成创作方案</button></div>
     </div>
   </div><div class="fe00-right">
@@ -396,13 +402,13 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <h2>资料缺口 <small>说清缺什么、谁来补、去哪补</small></h2>
 <p class="fe00-why">缺口不是错误。不阻断主链，但要让用户知道这次内容为什么受限。</p>
 <div class="fe00-frame" style="height:300px">
-  <div class="fe00-topbar"><span class="fe00-mark">笛语</span><span class="fe00-who">陈曦</span></div>
+  <div class="fe00-topbar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26"><span class="fe00-who">陈曦</span></div>
   <div class="fe00-body" style="grid-template-columns:1fr"><div class="fe00-right" style="padding:30px 56px">
     <h3 class="fe00-h" style="font-size:20px">这次会缺一块依据</h3>
     <p class="fe00-sub">你想讲的这款大衣还没有已确认的面料参数，所以成品里不会出现具体成分和克重。</p>
     <div style="max-width:640px">
-      <div class="fe00-card"><h4>缺什么</h4><p>ZX-C218 秋冬羊毛大衣 · 面料成分与克重 <span class="fe00-badge fe00-b-missing">缺资料</span></p></div>
-      <div class="fe00-card"><h4>谁来补</h4><p>租户管理员在「品牌资料 · 商品事实」里登记后即可生效。</p></div>
+      <div class="fe00-card"><h3>缺什么</h3><p>ZX-C218 秋冬羊毛大衣 · 面料成分与克重 <span class="fe00-badge fe00-b-missing">缺资料</span></p></div>
+      <div class="fe00-card"><h3>谁来补</h3><p>租户管理员在「品牌资料 · 商品事实」里登记后即可生效。</p></div>
       <div class="fe00-actions"><button class="fe00-btn-solid">先这样继续</button><button class="fe00-btn-text">把这条记成资料补充任务</button></div>
     </div>
   </div></div>
@@ -413,7 +419,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <h2>旧成品兼容 <small>LegacyArtifactView</small></h2>
 <p class="fe00-why">V5 及更早版本没有结构化制作包。原样只读呈现，明确说明为什么没有步骤表，不假装有。</p>
 <div class="fe00-frame" style="height:340px">
-  <div class="fe00-topbar"><span class="fe00-mark">笛语</span><span class="fe00-who">陈曦 · 历史版本 V1</span></div>
+  <div class="fe00-topbar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26"><span class="fe00-who">陈曦 · 历史版本 V1</span></div>
   <div class="fe00-body" style="grid-template-columns:1fr"><div class="fe00-right" style="padding:26px 56px">
     <div class="fe00-legacy">
       <p class="fe00-hint" style="margin:0">这是 2026 年 3 月的成品，当时还没有结构化制作包。内容原样保留，不做补算。</p>
@@ -430,6 +436,67 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 </div>
 </section>
 
+
+<section class="fe00-case" id="fe00-longtext">
+<h2>长文本 <small>不截断、不溢出、不挤压主动作</small></h2>
+<p class="fe00-why">真实账号名、真实商品名和真实台词都比示例长。长内容换行铺开，容器高度自适应；
+主动作不被挤出视口，徽标不换行断字。示例数据是确定性的，不随机生成。</p>
+<div class="fe00-frame fe00-shell">
+  <div class="fe00-topbar">
+    <img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="112" height="26">
+    <div class="fe00-scope">
+      <select aria-label="发布账号"><option>笛语服饰华东大区门店内容联合运营组（南京西路旗舰店）</option></select>
+      <select aria-label="发布平台"><option>小红书</option></select>
+      <select aria-label="内容形式"><option>图文</option></select>
+    </div>
+    <span class="fe00-who">陈曦 · 华东大区门店内容联合运营组</span>
+  </div>
+  <div class="fe00-stages">
+    <span class="fe00-stage is-done"><b>参谋中</b></span><span class="fe00-sep">→</span>
+    <span class="fe00-stage is-done"><b>方案确认</b></span><span class="fe00-sep">→</span>
+    <span class="fe00-stage is-done"><b>正在制作</b></span><span class="fe00-sep">→</span>
+    <span class="fe00-stage is-now"><b>制作包</b></span>
+  </div>
+  <div class="fe00-body">
+    <div class="fe00-left">
+      <p class="fe00-eyebrow">制作步骤</p>
+      <h3 class="fe00-h" style="font-size:22px">沉默，也可以被尊重——写给每一个走进门店只想自己安静看一会儿的人</h3>
+      <div class="fe00-step"><div class="fe00-step-n">1</div><div>
+        <h4>开场固定机位，人物半身入画并保持自然呼吸节奏 <span class="fe00-badge fe00-b-confirmed">已确认</span></h4>
+        <p class="fe00-hint">门店入口斜 45°，避开收银台与试衣间指示牌，人物站位距离玻璃门约一米二。</p>
+        <div class="fe00-script">有人走进门店，只想自己看看。我们不会立刻迎上去把这一季的故事讲一遍，
+        因为我们相信，一个人愿意停下来的那几分钟，本身就已经是一种表达——她在挑选，
+        也在确认自己今天想成为什么样子。我们能做的，是把空间让出来。</div>
+        <p class="fe00-cue">字幕 1／5：「有人走进门店，只想自己看看。」</p>
+        <p class="fe00-cue">字幕 2／5：「我们不会立刻迎上去把这一季的故事讲一遍」</p>
+      </div></div>
+      <div class="fe00-step"><div class="fe00-step-n">2</div><div>
+        <h4>ZX-C218 秋冬双面呢羊毛大衣（燕麦白 / 均码）细节特写
+          <span class="fe00-badge fe00-b-review">建议 · 待人工复核</span></h4>
+        <p class="fe00-hint">这条建议来自本次创作方案，尚未与已确认的商品事实逐项核对，用前请自行确认。</p>
+      </div></div>
+    </div>
+    <div class="fe00-right">
+      <p class="fe00-eyebrow">本版依据</p>
+      <div class="fe00-basis"><ul>
+        <li><span><b>品牌表达边界 · 顾客自主权条款</b>：不替顾客做决定，允许顾客在不被询问的情况下
+          完成整个到店流程，导购主动招呼至多一次且不得跟随。</span>
+          <span class="fe00-badge fe00-b-confirmed">已确认</span><button>这条不对</button></li>
+        <li><span><b>账号画像 · 华东大区门店内容联合运营组</b>：第一人称复数，语气克制，
+          不使用感叹号，不承诺任何未经登记的服务标准。</span>
+          <span class="fe00-badge fe00-b-confirmed">已确认</span><button>这条不对</button></li>
+      </ul></div>
+      <p class="fe00-eyebrow" style="margin-top:22px">这一版怎么处理</p>
+      <div class="fe00-actions" style="flex-wrap:wrap">
+        <button class="fe00-btn-solid">采用这一版</button>
+        <button class="fe00-btn-line">继续修改</button>
+        <button class="fe00-btn-line">导出</button>
+      </div>
+    </div>
+  </div>
 </div>
+</section>
+
+</main>
 </body>
 </html>
