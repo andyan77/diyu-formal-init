@@ -20,7 +20,6 @@ import {
   type AdvisorScopeTransaction
 } from "../features/advisor/useAdvisorScope";
 import {
-  ContentStreamContractError,
   guardContentStream,
   isStageEvent
 } from "../shared/contracts/contentStream";
@@ -33,7 +32,13 @@ import {
 } from "../services/api";
 import { AccountDrawer } from "../features/advisor/AccountDrawer";
 import {
+  describeRevisionFailure,
+  describeStreamFailure,
+  transportDiagnostic
+} from "../features/advisor/generationFailure";
+import {
   CreatorHistoryRail,
+  CreatorToolDrawer,
   CreatorTopBar,
   GenerationFailurePanel
 } from "../features/advisor/CreatorChrome";
@@ -1167,12 +1172,9 @@ export default function CreatorApp({
         setGenerationFailureMessage(
           "连接提前结束了，输入和已有成品都已保留，可以安全重试。"
         );
-        setFailureDiagnostic({
-          stage: "transport",
-          retryable: true,
-          action: "网络恢复后可以使用原输入重试。",
-          traceId: ""
-        });
+        setFailureDiagnostic(
+          transportDiagnostic("网络恢复后可以使用原输入重试。")
+        );
         setLastFailedAttempt({
           kind: "stream",
           instruction,
@@ -1185,40 +1187,13 @@ export default function CreatorApp({
         txn.live() &&
         !(reason instanceof DOMException && reason.name === "AbortError")
       ) {
+        const failure = describeStreamFailure(reason);
+        // A contract breach also withholds the transient progress trail: it
+        // belongs to a stream that already proved it cannot be trusted.
+        if (failure.discardStages) setStages([]);
         setGenerationFailed(true);
-        if (reason instanceof ContentStreamContractError) {
-          // The stream broke its own contract. Nothing it carried reaches the
-          // workspace: the guard withheld the result, and the transient progress
-          // trail goes with it so the failure is not shown mid-generation.
-          setStages([]);
-          setGenerationFailureMessage(reason.message);
-          setFailureDiagnostic({
-            stage: "contract",
-            retryable: true,
-            action: "输入已经保留，可以使用原输入重试。",
-            traceId: ""
-          });
-        } else if (reason instanceof ApiError) {
-          setGenerationFailureMessage(
-            `${reason.message} 输入和已有成品都已保留。`
-          );
-          setFailureDiagnostic({
-            stage: reason.failureStage,
-            retryable: reason.retryable,
-            action: reason.action,
-            traceId: reason.traceId
-          });
-        } else {
-          setGenerationFailureMessage(
-            "网络没有完成这次请求。输入和已有成品都已保留，可以恢复后重试。"
-          );
-          setFailureDiagnostic({
-            stage: "transport",
-            retryable: true,
-            action: "网络恢复后可以使用原输入重试。",
-            traceId: ""
-          });
-        }
+        setGenerationFailureMessage(failure.message);
+        setFailureDiagnostic(failure.diagnostic);
         setLastFailedAttempt({
           kind: "stream",
           instruction,
@@ -1287,28 +1262,10 @@ export default function CreatorApp({
       setLastFailedAttempt(null);
     } catch (reason) {
       if (!txn.live()) return;
+      const failure = describeRevisionFailure(reason);
       setGenerationFailed(true);
-      if (reason instanceof ApiError) {
-        setGenerationFailureMessage(
-          `${reason.message} 你的要求和已有版本都已保留。`
-        );
-        setFailureDiagnostic({
-          stage: reason.failureStage,
-          retryable: reason.retryable,
-          action: reason.action,
-          traceId: reason.traceId
-        });
-      } else {
-        setGenerationFailureMessage(
-          "这次修改没有完成。你的要求和已有版本都已保留，可以安全重试。"
-        );
-        setFailureDiagnostic({
-          stage: "transport",
-          retryable: true,
-          action: "网络恢复后可以使用同一修改要求重试。",
-          traceId: ""
-        });
-      }
+      setGenerationFailureMessage(failure.message);
+      setFailureDiagnostic(failure.diagnostic);
       setLastFailedAttempt({ kind: "revision", instruction, requestId });
     } finally {
       if (txn.live()) setPending(false);
@@ -1787,52 +1744,35 @@ export default function CreatorApp({
         />
       )}
       {toolOpen && (
-        <div
-          className="drawer-layer"
-          role="presentation"
-          onMouseDown={() => closeTool()}
+        <CreatorToolDrawer
+          which={toolOpen}
+          drawerRef={toolDrawerRef}
+          closeRef={toolCloseRef}
+          onClose={() => closeTool()}
+          onKeyDown={handleToolKeyDown}
         >
-          <aside
-            ref={toolDrawerRef}
-            className="creator-tool-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-label={toolOpen === "series" ? "连续系列" : "我的素材"}
-            onMouseDown={event => event.stopPropagation()}
-            onKeyDown={handleToolKeyDown}
-          >
-            <button
-              ref={toolCloseRef}
-              className="icon-button tool-drawer-close"
-              type="button"
-              aria-label="关闭"
-              onClick={() => closeTool()}
-            >
-              ×
-            </button>
-            {toolOpen === "series" ? (
-              <SeriesPanel
-                selected={seriesSelection}
-                onSelect={setSeriesSelection}
-                publishingIdentityId={currentPublishingIdentityId}
-                target={currentTarget}
-                onOpenTask={taskId => void openSeriesTask(taskId)}
-                onContinue={value => {
-                  startFresh();
-                  setSeriesSelection(value);
-                  closeTool(false);
-                }}
-              />
-            ) : (
-              <MaterialsPanel
-                selectedIds={materialIds}
-                onSelectedIdsChange={setMaterialIds}
-                publishingIdentityId={currentPublishingIdentityId}
-                target={currentTarget}
-              />
-            )}
-          </aside>
-        </div>
+          {toolOpen === "series" ? (
+            <SeriesPanel
+              selected={seriesSelection}
+              onSelect={setSeriesSelection}
+              publishingIdentityId={currentPublishingIdentityId}
+              target={currentTarget}
+              onOpenTask={taskId => void openSeriesTask(taskId)}
+              onContinue={value => {
+                startFresh();
+                setSeriesSelection(value);
+                closeTool(false);
+              }}
+            />
+          ) : (
+            <MaterialsPanel
+              selectedIds={materialIds}
+              onSelectedIdsChange={setMaterialIds}
+              publishingIdentityId={currentPublishingIdentityId}
+              target={currentTarget}
+            />
+          )}
+        </CreatorToolDrawer>
       )}
       {bodyOptIn && <span className="sr-only">体型相关方向已由本人主动启用</span>}
     </div>

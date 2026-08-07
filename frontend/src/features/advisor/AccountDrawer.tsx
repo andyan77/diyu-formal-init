@@ -42,6 +42,84 @@ export function editableAccountProfile(
     : null;
 }
 
+/** The five fields an account picture is made of, in the order they read. */
+const PROFILE_FIELDS = [
+  ["identity_position", "表达身份"],
+  ["authority_boundary", "权威边界"],
+  ["audience_relationship", "受众关系"],
+  ["content_territories", "内容领地"],
+  ["default_production_conditions", "长期制作条件"]
+] as const;
+
+type ProfileField = (typeof PROFILE_FIELDS)[number][0];
+
+function AccountProfileSummary({
+  current,
+  onEdit
+}: {
+  current: NonNullable<AccountExpression["current"]>;
+  /** Null when this person may read the picture but not maintain it. */
+  onEdit: (() => void) | null;
+}): JSX.Element {
+  return (
+    <section className="profile-summary">
+      <h3>账号定位 · V{current.version}</h3>
+      {PROFILE_FIELDS.map(([key]) => (
+        <p key={key}>{current[key]}</p>
+      ))}
+      {onEdit && (
+        <button type="button" className="text-action" onClick={onEdit}>
+          维护账号画像
+        </button>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Editing never overwrites: it saves as the next version, so the picture the
+ * account was published under stays readable.
+ */
+function AccountProfileEditor({
+  baseVersion,
+  draft,
+  saving,
+  onChange,
+  onSubmit,
+  onCancel
+}: {
+  baseVersion: number;
+  draft: AccountExpressionProfileFields;
+  saving: boolean;
+  onChange: (key: ProfileField, value: string) => void;
+  onSubmit: (event: FormEvent) => void;
+  onCancel: () => void;
+}): JSX.Element {
+  return (
+    <form className="account-profile-editor" onSubmit={onSubmit}>
+      <h3>基于当前 V{baseVersion} 保存新版本</h3>
+      {PROFILE_FIELDS.map(([key, label]) => (
+        <label key={key}>
+          {label}
+          <textarea
+            required
+            value={draft[key]}
+            onChange={event => onChange(key, event.target.value)}
+          />
+        </label>
+      ))}
+      <div className="drawer-actions">
+        <button type="button" onClick={onCancel}>
+          取消
+        </button>
+        <button className="primary" type="submit" disabled={saving}>
+          {saving ? "正在保存……" : `保存为 V${baseVersion + 1}`}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export function AccountDrawer({
   context,
   publishingIdentity,
@@ -212,75 +290,30 @@ export function AccountDrawer({
         </dl>
         <p className="profile-one-line">{publishingIdentity.profile_summary}</p>
         {profile?.current && !editingProfile && (
-          <section className="profile-summary">
-            <h3>账号定位 · V{profile.current.version}</h3>
-            <p>{profile.current.identity_position}</p>
-            <p>{profile.current.authority_boundary}</p>
-            <p>{profile.current.audience_relationship}</p>
-            <p>{profile.current.content_territories}</p>
-            <p>{profile.current.default_production_conditions}</p>
-            {profile.can_maintain && (
-              <button
-                type="button"
-                className="text-action"
-                onClick={() => setEditingProfile(true)}
-              >
-                维护账号画像
-              </button>
-            )}
-          </section>
+          <AccountProfileSummary
+            current={profile.current}
+            onEdit={profile.can_maintain ? () => setEditingProfile(true) : null}
+          />
         )}
         {profile?.can_maintain && editingProfile && profileDraft && (
-          <form className="account-profile-editor" onSubmit={event => void saveProfile(event)}>
-            <h3>
-              基于当前 V{profile.current?.version ?? 0} 保存新版本
-            </h3>
-            {(
-              [
-                ["identity_position", "表达身份"],
-                ["authority_boundary", "权威边界"],
-                ["audience_relationship", "受众关系"],
-                ["content_territories", "内容领地"],
-                ["default_production_conditions", "长期制作条件"]
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key}>
-                {label}
-                <textarea
-                  required
-                  value={profileDraft[key]}
-                  onChange={event =>
-                    setProfileDraft(value =>
-                      value
-                        ? { ...value, [key]: event.target.value }
-                        : value
-                    )
-                  }
-                />
-              </label>
-            ))}
-            <div className="drawer-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  setProfileDraft(
-                    editableAccountProfile(
-                      profile.current ?? profile.draft
-                    )
-                  );
-                  setEditingProfile(false);
-                  setError("");
-                }}
-              >
-                取消
-              </button>
-              <button className="primary" type="submit" disabled={saving}>
-                {saving
-                  ? "正在保存……"
-                  : `保存为 V${(profile.current?.version ?? 0) + 1}`}
-              </button>
-            </div>
-          </form>
+          <AccountProfileEditor
+            baseVersion={profile.current?.version ?? 0}
+            draft={profileDraft}
+            saving={saving}
+            onChange={(key, value) =>
+              setProfileDraft(current =>
+                current ? { ...current, [key]: value } : current
+              )
+            }
+            onSubmit={event => void saveProfile(event)}
+            onCancel={() => {
+              setProfileDraft(
+                editableAccountProfile(profile.current ?? profile.draft)
+              );
+              setEditingProfile(false);
+              setError("");
+            }}
+          />
         )}
         {profile && !profile.can_maintain && (
           <p className="profile-read-only">

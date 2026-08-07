@@ -142,6 +142,59 @@ function writeScopeParams(
   return written;
 }
 
+/**
+ * Give each scope its own AbortController, and hand out transactions against
+ * whichever scope was current when the work started.
+ *
+ * Kept apart from `useAdvisorScope` because it is the whole of the
+ * cross-account safety story: leaving a scope aborts its requests, and a reply
+ * still holding an aborted — or simply outdated — transaction is dropped.
+ */
+function useScopeTransactions(scopeKey: string): {
+  begin: () => AdvisorScopeTransaction;
+  isCurrent: (key: string) => boolean;
+} {
+  const latestKey = useRef(scopeKey);
+  latestKey.current = scopeKey;
+  const pool = useRef(new Map<string, AbortController>());
+
+  // Leaving a scope abandons its requests. Whatever they were about to say is
+  // about an account that is no longer on screen.
+  useEffect(() => {
+    const controllers = pool.current;
+    for (const [key, controller] of controllers) {
+      if (key === scopeKey) continue;
+      controller.abort();
+      controllers.delete(key);
+    }
+  }, [scopeKey]);
+
+  useEffect(() => {
+    const controllers = pool.current;
+    return () => {
+      for (const controller of controllers.values()) controller.abort();
+      controllers.clear();
+    };
+  }, []);
+
+  const isCurrent = useCallback((key: string) => latestKey.current === key, []);
+
+  const begin = useCallback((): AdvisorScopeTransaction => {
+    const key = latestKey.current;
+    const existing = pool.current.get(key);
+    const controller = existing ?? new AbortController();
+    if (!existing) pool.current.set(key, controller);
+    const { signal } = controller;
+    return {
+      scopeKey: key,
+      signal,
+      live: () => !signal.aborted && latestKey.current === key
+    };
+  }, []);
+
+  return { begin, isCurrent };
+}
+
 export function useAdvisorScope(identity: AdvisorScopeIdentity): AdvisorScopeApi {
   const [searchParams, setSearchParams] = useSearchParams();
   const fromUrl = {
@@ -169,36 +222,7 @@ export function useAdvisorScope(identity: AdvisorScopeIdentity): AdvisorScopeApi
     setSearchParams(writeScopeParams(searchParams, normal), { replace: true });
   }, [normal, searchParams, setSearchParams]);
 
-  const latestKey = useRef(scopeKey);
-  latestKey.current = scopeKey;
-  const pool = useRef(new Map<string, AbortController>());
-
-  const controllerFor = (key: string): AbortController => {
-    const existing = pool.current.get(key);
-    if (existing) return existing;
-    const created = new AbortController();
-    pool.current.set(key, created);
-    return created;
-  };
-
-  // Leaving a scope abandons its requests. Whatever they were about to say is
-  // about an account that is no longer on screen.
-  useEffect(() => {
-    const controllers = pool.current;
-    for (const [key, controller] of controllers) {
-      if (key === scopeKey) continue;
-      controller.abort();
-      controllers.delete(key);
-    }
-  }, [scopeKey]);
-
-  useEffect(() => {
-    const controllers = pool.current;
-    return () => {
-      for (const controller of controllers.values()) controller.abort();
-      controllers.clear();
-    };
-  }, []);
+  const { begin, isCurrent } = useScopeTransactions(scopeKey);
 
   // Adjusting state during render rather than in an effect, so the new scope's
   // first paint already shows its own draft instead of the previous account's.
@@ -230,20 +254,6 @@ export function useAdvisorScope(identity: AdvisorScopeIdentity): AdvisorScopeApi
     },
     [scope, searchParams, setSearchParams]
   );
-
-  const isCurrent = useCallback((key: string) => latestKey.current === key, []);
-
-  const begin = useCallback((): AdvisorScopeTransaction => {
-    const key = latestKey.current;
-    const { signal } = controllerFor(key);
-    return {
-      scopeKey: key,
-      signal,
-      live: () => !signal.aborted && latestKey.current === key
-    };
-    // controllerFor only touches refs, so the identity of `begin` can stay put.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return {
     scope,
