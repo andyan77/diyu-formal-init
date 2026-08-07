@@ -13,6 +13,15 @@
   --shadow: 0 22px 70px rgba(33, 29, 24, 0.12);
   --sans: "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
   --serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
+  /* Owned here, not inherited from styles.css. This sheet and the two that
+     build on it consume these four while styles.css is being retired; leaving
+     them defined only there makes the live layer depend on the dying one.
+     Values are byte-identical to the originals, so nothing renders differently
+     — this fixes ownership, it does not merge the two token sets. */
+  --line: #cfccc3;
+  --stone: #8a887f;
+  --red: #b7462e;
+  --red-pale: #f4e2dd;
 }
 
 * {
@@ -144,9 +153,7 @@ a {
   display: block;
   width: 34px;
   height: 34px;
-}
-
-/* Public home and the A motion: one hesitant seed becomes one settled expression. */
+}/* Public home and the A motion: one hesitant seed becomes one settled expression. */
 .public-home {
   position: relative;
   display: grid;
@@ -327,14 +334,12 @@ a {
 @keyframes seed-draw {
   to {
     stroke-dashoffset: 0;
-  }
-}
+  }}
 
 @keyframes seed-arrive {
   to {
     opacity: 1;
-  }
-}
+  }}
 
 @keyframes seed-travel {
   0% {
@@ -348,64 +353,53 @@ a {
   }
   100% {
     transform: translate(174px, 14px);
-  }
-}
+  }}
 
 @keyframes seed-release {
   to {
     opacity: 0;
-  }
-}
+  }}
 
 @keyframes direction-arrive {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
+  }}
 
 @keyframes direction-release {
   to {
     opacity: 0;
     transform: translateY(4px);
-  }
-}
+  }}
 
 @keyframes path-retreat {
   to {
     opacity: 0;
     stroke-dashoffset: -180;
-  }
-}
+  }}
 
 @keyframes path-resolve {
   to {
     opacity: 0;
     stroke-dashoffset: -90;
-  }
-}
+  }}
 
 @keyframes rhythm-find {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
+  }}
 
 @keyframes story-release {
   to {
     opacity: 0;
-  }
-}
+  }}
 
 @keyframes final-lockup {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-/* Authentication */
+  }}/* Authentication */
 .auth-page {
   display: grid;
   min-height: 100vh;
@@ -517,9 +511,7 @@ a {
 .auth-recovery p {
   margin: 4px 0 0;
   line-height: 1.65;
-}
-
-/* Small authenticated landing */
+}/* Small authenticated landing */
 .user-home {
   min-height: 100vh;
   padding: 28px clamp(24px, 6vw, 80px);
@@ -806,9 +798,7 @@ a {
   padding-top: 12px;
   overflow-wrap: anywhere;
   font-size: .76rem;
-}
-
-/* Creator */
+}/* Creator */
 .creator-app {
   display: grid;
   width: 100%;
@@ -875,20 +865,6 @@ a {
   margin-top: 3px;
   color: var(--stone-400);
   font-size: 0.75rem;
-}
-
-.target-switch {
-  margin-right: 20px;
-}
-
-.target-switch select {
-  min-height: 44px;
-  padding: 0 34px 0 12px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--stone-50);
-  color: var(--ink-soft);
-  font-size: 0.82rem;
 }
 
 .creator-history {
@@ -1590,9 +1566,7 @@ a {
   font-size: clamp(2rem, 5vw, 3rem);
 }
 
-.access-recovery p { margin: 0; color: var(--ink-soft); line-height: 1.7; }
-
-/* Identity drawer */
+.access-recovery p { margin: 0; color: var(--ink-soft); line-height: 1.7; }/* Identity drawer */
 .drawer-layer {
   position: fixed;
   inset: 0;
@@ -1752,138 +1726,7 @@ a {
   width: 40px;
   height: 22px;
   accent-color: var(--vermillion);
-}
-
-/* Management and ops product spaces deliberately use list/navigation grammar, not creator UI. */
-.control-space {
-  display: grid;
-  min-height: 100vh;
-  grid-template-columns: 260px minmax(0, 1fr);
-}
-
-.control-space > aside {
-  padding: 26px 20px;
-  border-right: 1px solid var(--stone-100);
-  background: var(--white);
-}
-
-.control-space .space-name {
-  margin: 34px 10px 18px;
-  font-size: 0.78rem;
-  font-weight: 760;
-  letter-spacing: 0.06em;
-}
-
-.control-space nav {
-  display: grid;
-  gap: 3px;
-}
-
-.control-space nav a,
-.control-space nav span {
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  padding: 0 10px;
-  border-radius: 8px;
-  color: var(--ink-soft);
-  font-size: 0.82rem;
-}
-
-.control-space nav a[aria-current="page"] {
-  background: var(--stone-50);
-  color: var(--ink);
-  font-weight: 690;
-}
-
-.control-space nav span {
-  color: var(--stone-400);
-}
-
-.control-space > main {
-  min-width: 0;
-}
-
-.control-topbar {
-  display: flex;
-  min-height: 66px;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 34px;
-  border-bottom: 1px solid var(--stone-100);
-  background: var(--white);
-  font-size: 0.86rem;
-  font-weight: 680;
-}
-
-.control-overview,
-.ops-overview {
-  width: min(900px, calc(100% - 64px));
-  margin: 70px auto;
-}
-
-.control-overview h1,
-.ops-overview h1 {
-  margin: 0 0 16px;
-  font-family: var(--serif);
-  font-size: clamp(2.1rem, 4vw, 3.4rem);
-  font-weight: 560;
-  letter-spacing: -0.035em;
-}
-
-.control-overview > p:not(.eyebrow) {
-  color: var(--ink-soft);
-}
-
-.control-overview > a {
-  display: inline-flex;
-  min-height: 44px;
-  align-items: center;
-  margin-top: 30px;
-  color: var(--vermillion);
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.ops-space > aside {
-  border-color: #2d2b28;
-  background: var(--ink);
-  color: var(--white);
-}
-
-.ops-space nav a,
-.ops-space nav span {
-  color: #bdb8b0;
-}
-
-.ops-space nav a[aria-current="page"] {
-  background: #2c2a27;
-  color: var(--white);
-}
-
-.ops-overview dl {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  margin: 40px 0;
-  background: var(--stone-200);
-}
-
-.ops-overview dl div {
-  padding: 22px;
-  background: var(--white);
-}
-
-.ops-overview dt {
-  color: var(--stone-400);
-  font-size: 0.76rem;
-}
-
-.ops-overview dd {
-  margin: 8px 0 0;
-  font-family: var(--serif);
-  font-size: 2rem;
-}
+}/* Management and ops product spaces deliberately use list/navigation grammar, not creator UI. */
 
 .page-loading {
   display: grid;
@@ -1907,8 +1750,7 @@ a {
 @keyframes loading-spin {
   to {
     transform: rotate(360deg);
-  }
-}
+  }}
 
 @media (max-width: 1040px) {
   .creator-app,
@@ -1990,8 +1832,7 @@ a {
   .creator-conversation:not(.mobile-hidden),
   .artifact-workspace:not(.mobile-hidden) {
     grid-column: 1 / -1;
-  }
-}
+  }}
 
 @media (max-width: 640px) {
   .home-message {
@@ -2083,17 +1924,6 @@ a {
 
   .identity-trigger span {
     font-size: 0.64rem;
-  }
-
-  .target-switch {
-    margin-right: 7px;
-  }
-
-  .target-switch select {
-    width: 103px;
-    min-height: 44px;
-    padding: 0 24px 0 7px;
-    font-size: 0.7rem;
   }
 
   .conversation-stream {
@@ -2204,31 +2034,7 @@ a {
   .account-drawer {
     width: 100%;
     padding: 22px;
-  }
-
-  .control-space {
-    grid-template-columns: 1fr;
-  }
-
-  .control-space > aside {
-    display: none;
-  }
-
-  .control-topbar {
-    min-height: 58px;
-    padding: 0 20px;
-  }
-
-  .control-overview,
-  .ops-overview {
-    width: calc(100% - 40px);
-    margin: 48px auto;
-  }
-
-  .ops-overview dl {
-    grid-template-columns: 1fr;
-  }
-}
+  }}
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -2247,10 +2053,7 @@ a {
   .home-message {
     opacity: 1;
     transform: none;
-  }
-}
-
-/* UI-05: one logical publishing identity owns several platform targets. */
+  }}/* UI-05: one logical publishing identity owns several platform targets. */
 .creator-identity-controls {
   display: grid;
   min-width: 0;
@@ -2373,8 +2176,7 @@ a {
   to {
     opacity: 0.3;
     transform: scale(0.72);
-  }
-}
+  }}
 
 .target-conflict p,
 .generation-failure p,
@@ -2454,8 +2256,7 @@ a {
 
   .creator-identity-controls {
     grid-template-columns: minmax(150px, 0.5fr) minmax(150px, 1fr);
-  }
-}
+  }}
 
 @media (max-width: 640px) {
   .user-help {
@@ -2548,5 +2349,4 @@ a {
   .target-conflict > div button,
   .generation-failure > div button {
     width: 100%;
-  }
-}
+  }}

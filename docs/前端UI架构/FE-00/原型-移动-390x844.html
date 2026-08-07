@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FE-00 移动高保真原型 · 390×844</title>
+<style>
+/* Self-contained; every class is fe00- prefixed. */
+:root{
+  --fe00-ink:#171614; --fe00-ink-soft:#45423e; --fe00-paper:#fbfaf7; --fe00-white:#fff;
+  --fe00-s50:#f6f4f0; --fe00-s100:#ece9e3; --fe00-s200:#ddd8d0; --fe00-s400:#817a70; --fe00-muted:#5f584e;
+  --fe00-red:#b93628; --fe00-red-dark:#93291f; --fe00-red-pale:#f8ece9;
+  --fe00-green:#316a4f; --fe00-amber:#8a6212; --fe00-amber-pale:#fdf5e4;
+  --fe00-sans:"Noto Sans CJK SC","Source Han Sans SC","Microsoft YaHei",system-ui,sans-serif;
+  --fe00-serif:"Noto Serif CJK SC","Source Han Serif SC","Songti SC",serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(--fe00-sans);font-size:16px;line-height:1.6}
+.fe00-page{max-width:1240px;margin:0 auto;padding:32px 20px 80px}
+.fe00-page>h1{font-family:var(--fe00-serif);font-size:30px;margin:0 0 6px}
+.fe00-lede{color:var(--fe00-ink-soft);margin:0 0 6px}
+.fe00-rules{margin:14px 0 30px;padding:14px 18px;border:1px solid var(--fe00-s200);border-radius:12px;background:var(--fe00-white);font-size:14px}
+.fe00-rules li{margin:5px 0}
+.fe00-row{display:flex;flex-wrap:wrap;gap:26px}
+.fe00-slot{width:390px}
+.fe00-slot h2{font-size:15px;margin:0 0 3px}
+.fe00-slot p.fe00-why{margin:0 0 10px;color:var(--fe00-ink-soft);font-size:14px;min-height:44px}
+
+.fe00-phone{width:390px;height:844px;background:var(--fe00-paper);border:1px solid var(--fe00-s200);border-radius:26px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 10px 34px rgba(33,29,24,.1)}
+.fe00-status{height:34px;flex:0 0 34px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:12px;color:var(--fe00-muted);background:var(--fe00-white)}
+.fe00-bar{height:52px;flex:0 0 52px;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--fe00-s200);background:var(--fe00-white)}
+.fe00-mark{display:block;width:98px;height:auto}
+.fe00-scope-m{margin-left:auto;max-width:210px;font-size:13px;color:var(--fe00-ink-soft);border:1px solid var(--fe00-s200);border-radius:999px;padding:7px 11px;min-height:44px;display:flex;align-items:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fe00-stages{display:flex;align-items:center;gap:6px;padding:9px 14px;border-bottom:1px solid var(--fe00-s100);background:var(--fe00-white);font-size:13px;color:var(--fe00-ink-soft);overflow-x:auto}
+.fe00-stage{white-space:nowrap}
+.fe00-stage.is-now{color:var(--fe00-ink);font-weight:650}
+.fe00-stage.is-now::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--fe00-red);margin-right:5px;vertical-align:1px}
+.fe00-stage.is-done{color:var(--fe00-green)}
+.fe00-sep{color:var(--fe00-s200)}
+.fe00-scroll{flex:1;overflow:auto;padding:18px 14px 12px}
+.fe00-h{font-family:var(--fe00-serif);font-size:23px;margin:0 0 6px;letter-spacing:-.01em}
+.fe00-sub{color:var(--fe00-ink-soft);font-size:16px;margin:0 0 16px}
+.fe00-eyebrow{color:var(--fe00-red);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin:0 0 8px}
+.fe00-card{border:1px solid var(--fe00-s200);border-radius:12px;background:var(--fe00-white);padding:14px;margin:0 0 10px}
+.fe00-card h3{margin:0 0 6px;font-size:17px}
+.fe00-card p{margin:0;color:var(--fe00-ink-soft);font-size:16px}
+.fe00-btn-solid{min-height:48px;width:100%;padding:0 20px;border:1px solid var(--fe00-red);border-radius:999px;background:var(--fe00-red);color:#fff;font:inherit;font-weight:650;cursor:pointer}
+.fe00-btn-line{min-height:48px;width:100%;padding:0 18px;border:1px solid var(--fe00-s200);border-radius:999px;background:var(--fe00-white);color:var(--fe00-ink-soft);font:inherit;cursor:pointer;margin-top:8px}
+.fe00-btn-text{min-height:44px;border:0;background:none;color:var(--fe00-ink-soft);font:inherit;font-size:15px;text-decoration:underline;text-underline-offset:4px;cursor:pointer;padding:0}
+.fe00-badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:650}
+.fe00-b-confirmed{background:#e8f1ec;color:var(--fe00-green)}
+.fe00-b-derived{background:var(--fe00-s100);color:var(--fe00-ink-soft)}
+.fe00-b-review{background:var(--fe00-amber-pale);color:var(--fe00-amber)}
+.fe00-b-missing{background:#fff;color:var(--fe00-red);border:1px solid var(--fe00-red)}
+.fe00-b-model{background:#fff;color:var(--fe00-muted);border:1px dashed var(--fe00-muted)}
+.fe00-msg{display:flex;gap:8px;margin:0 0 12px}
+.fe00-av{width:28px;height:28px;flex:0 0 28px;border-radius:8px;background:var(--fe00-red-pale);color:var(--fe00-red);display:grid;place-items:center;font-size:12px;font-weight:700}
+.fe00-bubble{background:var(--fe00-white);border:1px solid var(--fe00-s200);border-radius:12px;padding:11px 13px;font-size:16px}
+.fe00-msg.is-me{justify-content:flex-end}
+.fe00-msg.is-me .fe00-bubble{background:var(--fe00-ink);color:#fff;border-color:var(--fe00-ink)}
+.fe00-basis{border:1px solid var(--fe00-s200);border-radius:12px;padding:12px;background:var(--fe00-s50)}
+.fe00-basis ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px}
+.fe00-basis li{font-size:16px;display:grid;gap:4px;padding-bottom:8px;border-bottom:1px solid var(--fe00-s100)}
+.fe00-basis li:last-child{border-bottom:0;padding-bottom:0}
+.fe00-composer{border:1px solid var(--fe00-s200);border-radius:14px;background:var(--fe00-white);padding:12px;margin-top:12px}
+.fe00-composer textarea{width:100%;min-height:74px;border:0;outline:0;resize:vertical;font:inherit;font-size:16px;background:transparent;color:var(--fe00-ink)}
+.fe00-hint{color:var(--fe00-ink-soft);font-size:13px}
+.fe00-alert{border:1px solid var(--fe00-red);border-left-width:4px;border-radius:0 10px 10px 0;background:#fff;padding:13px 14px}
+.fe00-alert h3{margin:0 0 6px;font-size:17px;color:var(--fe00-red)}
+.fe00-alert p{margin:0;font-size:16px;color:var(--fe00-ink-soft)}
+.fe00-note{border:1px solid var(--fe00-s200);border-radius:10px;background:var(--fe00-s50);padding:12px 14px;font-size:16px;color:var(--fe00-ink-soft)}
+.fe00-skeleton{height:13px;border-radius:6px;background:var(--fe00-s100);margin:0 0 9px}
+.fe00-step{padding:12px 0;border-top:1px solid var(--fe00-s100)}
+.fe00-step h4{margin:0 0 7px;font-size:17px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.fe00-script{background:var(--fe00-s50);border-left:3px solid var(--fe00-s200);padding:8px 11px;border-radius:0 8px 8px 0;font-size:16px;margin:7px 0 0}
+.fe00-cue{font-size:13px;color:var(--fe00-ink-soft);margin:6px 0 0}
+/* Mobile keeps one work surface at a time; a bottom bar switches between them.
+   The desktop right rail becomes a tab, never a hidden panel. */
+.fe00-tabs{flex:0 0 62px;display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--fe00-s200);background:var(--fe00-white)}
+.fe00-tabs button{border:0;background:none;font:inherit;font-size:15px;color:var(--fe00-ink-soft);min-height:48px;cursor:pointer}
+.fe00-tabs button.is-on{color:var(--fe00-red);font-weight:700;box-shadow:inset 0 2px 0 var(--fe00-red)}
+
+*,*::before,*::after{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<main class="fe00-page">
+<h1>FE-00 移动高保真原型</h1>
+<p class="fe00-lede">视口 390×844（iPhone 14 / 15 逻辑分辨率），1:1 不缩放。</p>
+
+<ul class="fe00-rules">
+  <li><b>不隐藏工作面。</b>桌面的右栏在移动端变成底部第二个标签页，而不是 <code>display:none</code> 的隐藏侧栏。</li>
+  <li><b>字号下限。</b>正文 ≥ 13.5px，辅助文字 ≥ 12px。旧界面 0.62rem/0.64rem 的标签不再出现。</li>
+  <li><b>触控下限。</b>所有可点元素 ≥ 44px 高；主动作满宽 48px。</li>
+  <li><b>主链完整。</b>参谋 → 方案 → 制作 → 制作包四阶段在移动端全部可达，不再只有"对话/成品"双面。</li>
+</ul>
+
+<div class="fe00-row">
+
+<div class="fe00-slot">
+<h2>① 今天可以做什么</h2>
+<p class="fe00-why">四个入口纵向排列，满宽可点。机会卡在下方，滚动可达。</p>
+<div class="fe00-phone">
+  <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
+  <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">总部品牌内容运营</span></div>
+  <div class="fe00-scroll">
+    <p class="fe00-eyebrow">总部品牌内容运营</p>
+    <h3 class="fe00-h">陈曦，今天想完成什么？</h3>
+    <p class="fe00-sub">从任意一个开始都可以，中途都能改。</p>
+    <div class="fe00-card"><h3>先了解一下</h3><p>看看品牌现在能支撑哪些表达。</p></div>
+    <div class="fe00-card"><h3>找个选题</h3><p>根据本周资料，看有什么值得说。</p></div>
+    <div class="fe00-card"><h3>评估一个想法</h3><p>我有想法，帮我看看站不站得住。</p></div>
+    <div class="fe00-card"><h3>直接做一条</h3><p>已经想好了，直接进制作。</p></div>
+    <p class="fe00-eyebrow" style="margin-top:22px">现在值得做的</p>
+    <div class="fe00-card"><h3>秋冬羊毛大衣的洗护说明</h3><p>本周新增 3 条商品事实，还没被用过。</p>
+      <p style="margin-top:8px"><span class="fe00-badge fe00-b-confirmed">已确认资料</span></p></div>
+    <div class="fe00-card"><h3>门店"只想自己看看"的接待边界</h3><p>品牌表达边界里有明确立场。</p>
+      <p style="margin-top:8px"><span class="fe00-badge fe00-b-confirmed">已确认资料</span></p></div>
+    <button class="fe00-btn-solid" style="margin-top:8px">用这条开始</button>
+    <button class="fe00-btn-line">继续上次没做完的（2）</button>
+  </div>
+</div>
+</div>
+
+<div class="fe00-slot">
+<h2>② 参谋中 · 对话面</h2>
+<p class="fe00-why">底部两个标签在"对话"和"品牌依据"之间切换。依据不是被藏起来的折叠块。</p>
+<div class="fe00-phone">
+  <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
+  <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">总部 · 小红书 · 图文</span></div>
+  <div class="fe00-stages">
+    <span class="fe00-stage is-now">参谋中</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage">方案确认</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage">正在制作</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage">制作包</span>
+  </div>
+  <div class="fe00-scroll">
+    <div class="fe00-msg is-me"><div class="fe00-bubble">想说说我们店里不追着讲解这件事。</div></div>
+    <div class="fe00-msg"><div class="fe00-av">笛</div><div class="fe00-bubble">品牌里有明确立场。给你两条切法，差别在说给谁听。</div></div>
+    <div class="fe00-card"><h3>A · 从顾客的一次沉默讲起</h3><p>落点是"不施压"。适合已经认识品牌的人。</p>
+      <button class="fe00-btn-line">按这个继续</button></div>
+    <div class="fe00-card"><h3>B · 从导购的训练标准讲起</h3><p>讲成一条可被检验的服务标准。</p>
+      <button class="fe00-btn-line">按这个继续</button></div>
+    <div class="fe00-composer">
+      <textarea aria-label="内容需求">就用 A，但别写得太文艺。</textarea>
+      <button class="fe00-btn-solid" style="margin-top:8px">形成创作方案</button>
+    </div>
+  </div>
+  <div class="fe00-tabs"><button class="is-on">对话</button><button>品牌依据 · 4</button></div>
+</div>
+</div>
+
+<div class="fe00-slot">
+<h2>② 参谋中 · 品牌依据面</h2>
+<p class="fe00-why">同一屏的第二个工作面。条目级列出，每条可反馈；模型自带知识单独标注且不计入。</p>
+<div class="fe00-phone">
+  <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
+  <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">总部 · 小红书 · 图文</span></div>
+  <div class="fe00-stages">
+    <span class="fe00-stage is-now">参谋中</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage">方案确认</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage">正在制作</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage">制作包</span>
+  </div>
+  <div class="fe00-scroll">
+    <p class="fe00-eyebrow">本次将使用的品牌依据</p>
+    <div class="fe00-basis"><ul>
+      <li><b>品牌表达边界</b><span>不替顾客做决定，允许顾客只看不问</span>
+        <span><span class="fe00-badge fe00-b-confirmed">已确认</span> <button class="fe00-btn-text">这条不对</button></span></li>
+      <li><b>账号画像</b><span>总部品牌内容运营，第一人称复数</span>
+        <span><span class="fe00-badge fe00-b-confirmed">已确认</span> <button class="fe00-btn-text">这条不对</button></span></li>
+      <li><b>门店服务标准</b><span>主动招呼一次，之后不再跟随</span>
+        <span><span class="fe00-badge fe00-b-confirmed">已确认</span> <button class="fe00-btn-text">这条不对</button></span></li>
+      <li><b>通用写作建议</b><span>短句更适合手机阅读</span>
+        <span><span class="fe00-badge fe00-b-model">模型自带知识</span> <button class="fe00-btn-text">这条不对</button></span></li>
+    </ul></div>
+    <p class="fe00-hint" style="margin-top:10px">「模型自带知识」不计入品牌依据，只作提示。</p>
+  </div>
+  <div class="fe00-tabs"><button>对话</button><button class="is-on">品牌依据 · 4</button></div>
+</div>
+</div>
+
+<div class="fe00-slot">
+<h2>③ 方案确认</h2>
+<p class="fe00-why">分组纵向铺开，主动作固定在内容末尾满宽。只有一个实心按钮。</p>
+<div class="fe00-phone">
+  <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
+  <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">总部 · 小红书 · 图文</span></div>
+  <div class="fe00-stages">
+    <span class="fe00-stage is-done">参谋中</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage is-now">方案确认</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage">正在制作</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage">制作包</span>
+  </div>
+  <div class="fe00-scroll">
+    <h3 class="fe00-h">确认这次要做的内容</h3>
+    <p class="fe00-sub">确认后才开始制作。任何一处都能直接改。</p>
+    <div class="fe00-card"><h3>要表达什么</h3><p>门店不追着讲解，是把选择权留给顾客——不是服务冷淡。</p></div>
+    <div class="fe00-card"><h3>说给谁</h3><p>已经认识品牌、对导购跟随有顾虑的人。</p></div>
+    <div class="fe00-card"><h3>发在哪</h3><p>小红书 · 图文，约 400 字，配 3 张门店实拍。</p></div>
+    <div class="fe00-card"><h3>必须避免</h3><p>不承诺"无人打扰"；不出现未确认的商品参数。</p></div>
+    <div class="fe00-card"><h3>会用到的依据</h3><p>共 3 条 <span class="fe00-badge fe00-b-confirmed">全部已确认</span></p></div>
+    <button class="fe00-btn-solid" style="margin-top:6px">确认并开始制作</button>
+    <button class="fe00-btn-line">再聊聊</button>
+  </div>
+</div>
+</div>
+
+<div class="fe00-slot">
+<h2>⑤ 制作包</h2>
+<p class="fe00-why">步骤、台词、字幕在一条纵列里；来源状态徽标在折叠态也可见。决策操作在底部标签。</p>
+<div class="fe00-phone">
+  <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
+  <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">V2 · 小红书图文</span></div>
+  <div class="fe00-stages">
+    <span class="fe00-stage is-done">参谋中</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage is-done">方案确认</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage is-done">正在制作</span><span class="fe00-sep">→</span>
+    <span class="fe00-stage is-now">制作包</span>
+  </div>
+  <div class="fe00-scroll">
+    <h3 class="fe00-h" style="font-size:19px">沉默，也可以被尊重</h3>
+    <div class="fe00-step">
+      <h4>1 · 开场固定机位 <span class="fe00-badge fe00-b-confirmed">已确认</span></h4>
+      <p class="fe00-hint">门店入口斜 45°，人物半身入画。</p>
+      <div class="fe00-script">有人走进门店，只想自己看看。</div>
+      <p class="fe00-cue">字幕 1／3：「有人走进门店，只想自己看看。」</p>
+    </div>
+    <div class="fe00-step">
+      <h4>2 · 中段留一次停顿 <span class="fe00-badge fe00-b-derived">系统推导</span></h4>
+      <div class="fe00-script">我们可以先把解释放一放，让选择慢一点发生。</div>
+      <p class="fe00-cue">字幕 2／3：「我们可以先把解释放一放」</p>
+    </div>
+    <div class="fe00-step">
+      <h4>3 · 背景音乐 <span class="fe00-badge fe00-b-review">建议 · 待人工复核</span></h4>
+      <p class="fe00-hint">当前没有已授权的声音素材，用前请自行确认版权。</p>
+    </div>
+  </div>
+  <div class="fe00-tabs"><button class="is-on">制作包</button><button>怎么处理这一版</button></div>
+</div>
+</div>
+
+<div class="fe00-slot">
+<h2>失败 · 输入必须保留</h2>
+<p class="fe00-why">移动端同样保留输入并给恢复动作。失败不清空、不跳页、不吞掉已有成品。</p>
+<div class="fe00-phone">
+  <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
+  <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">总部 · 小红书 · 图文</span></div>
+  <div class="fe00-scroll">
+    <div class="fe00-alert"><h3>这次没能做完</h3>
+      <p>返回的内容不完整，已经停在安全状态。你的输入还在下面，可以直接重试。</p></div>
+    <button class="fe00-btn-solid" style="margin-top:12px">用原输入重试</button>
+    <button class="fe00-btn-line">看看是哪一步</button>
+    <div class="fe00-composer">
+      <textarea aria-label="内容需求">就用 A，但别写得太文艺。</textarea>
+      <p class="fe00-hint" style="margin-top:6px">输入已保留</p>
+    </div>
+    <div class="fe00-note" style="margin-top:12px">上一版 V1 仍然完整保留，可以随时打开。</div>
+  </div>
+</div>
+</div>
+
+<div class="fe00-slot">
+<h2>跨账号 · 不串稿</h2>
+<p class="fe00-why">切到门店号，总部写的字不在这里；切回去原稿还在。本包已实现，有契约测试。</p>
+<div class="fe00-phone">
+  <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
+  <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">门店号 · 南京西路</span></div>
+  <div class="fe00-scroll">
+    <div class="fe00-note">已切换到 <b>门店号 · 南京西路</b>。总部账号那条草稿留在总部账号里，切回去就能看到。</div>
+    <div class="fe00-composer">
+      <textarea aria-label="内容需求" placeholder="用门店号的口气，说点今天店里的事……"></textarea>
+      <p class="fe00-hint" style="margin-top:6px">抖音 · 视频</p>
+    </div>
+    <p class="fe00-eyebrow" style="margin-top:20px">门店号的品牌依据</p>
+    <div class="fe00-basis"><ul>
+      <li><b>门店画像</b><span>南京西路店，第一人称单数</span><span class="fe00-badge fe00-b-confirmed">已确认</span></li>
+    </ul></div>
+  </div>
+  <div class="fe00-tabs"><button class="is-on">对话</button><button>品牌依据 · 1</button></div>
+</div>
+</div>
+
+<div class="fe00-slot">
+<h2>加载 / 空态 / 资料缺口 / 旧成品</h2>
+<p class="fe00-why">四个短态并列在一屏内示意：都必须给出下一步，都不留死胡同。</p>
+<div class="fe00-phone">
+  <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
+  <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">状态合集</span></div>
+  <div class="fe00-scroll">
+    <p class="fe00-eyebrow">加载</p>
+    <div class="fe00-skeleton" style="width:60%;height:20px"></div>
+    <div class="fe00-skeleton" style="width:100%"></div><div class="fe00-skeleton" style="width:80%"></div>
+
+    <p class="fe00-eyebrow" style="margin-top:20px">空态</p>
+    <div class="fe00-card"><h3>还没有可以推荐的选题</h3><p>资料刚建好。你仍然可以直接开始。</p>
+      <button class="fe00-btn-line">去看看还缺什么资料</button></div>
+
+    <p class="fe00-eyebrow" style="margin-top:20px">资料缺口</p>
+    <div class="fe00-card"><h3>这次会缺一块依据</h4>
+      <p>ZX-C218 面料成分与克重 <span class="fe00-badge fe00-b-missing">缺资料</span></p>
+      <p style="margin-top:6px">由租户管理员在「品牌资料 · 商品事实」登记后生效。</p>
+      <button class="fe00-btn-line">先这样继续</button></div>
+
+    <p class="fe00-eyebrow" style="margin-top:20px">旧成品兼容</p>
+    <div class="fe00-card" style="border-style:dashed"><h3>2026 年 3 月的成品</h4>
+      <p>当时还没有结构化制作包，内容原样保留，不做补算。</p>
+      <button class="fe00-btn-line">基于这版重新做一条</button></div>
+  </div>
+</div>
+</div>
+
+
+<div class="fe00-slot">
+<h2>长文本</h2>
+<p class="fe00-why">真实账号名与真实台词都比示例长。390px 宽下换行铺开，不截断、不横向滚动，底部主动作不被挤出。</p>
+<div class="fe00-phone" id="fe00-m-longtext">
+  <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
+  <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">华东大区门店内容联合运营组</span></div>
+  <div class="fe00-scroll">
+    <h3 class="fe00-h" style="font-size:20px">沉默，也可以被尊重——写给每一个走进门店只想自己安静看一会儿的人</h3>
+    <div class="fe00-step">
+      <h4>1 · 开场固定机位，人物半身入画并保持自然呼吸节奏
+        <span class="fe00-badge fe00-b-confirmed">已确认</span></h4>
+      <p class="fe00-hint">门店入口斜 45°，避开收银台与试衣间指示牌，人物站位距离玻璃门约一米二。</p>
+      <div class="fe00-script">有人走进门店，只想自己看看。我们不会立刻迎上去把这一季的故事讲一遍，
+      因为我们相信，一个人愿意停下来的那几分钟，本身就已经是一种表达——她在挑选，
+      也在确认自己今天想成为什么样子。我们能做的，是把空间让出来。</div>
+      <p class="fe00-cue">字幕 1／5：「有人走进门店，只想自己看看。」</p>
+    </div>
+    <div class="fe00-step">
+      <h4>2 · ZX-C218 秋冬双面呢羊毛大衣（燕麦白 / 均码）细节特写
+        <span class="fe00-badge fe00-b-review">建议 · 待人工复核</span></h4>
+      <p class="fe00-hint">尚未与已确认的商品事实逐项核对，用前请自行确认。</p>
+    </div>
+    <button class="fe00-btn-solid" style="margin-top:10px">采用这一版</button>
+    <button class="fe00-btn-line">继续修改</button>
+  </div>
+</div>
+</div>
+
+</div>
+</main>
+</body>
+</html>

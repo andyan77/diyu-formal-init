@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import Root from "../src/app/Root";
+import { advisorDrafts } from "../src/features/advisor/advisorDraft";
 import { api } from "../src/services/api";
 
 // Cross-milestone UI contracts retained by this formal interaction journey:
@@ -67,6 +68,17 @@ async function input(
     Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(node, value);
     node.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
+}
+
+/** Expand a <details> and let its lazily-imported contents arrive. */
+async function openDisclosure(selector: string): Promise<void> {
+  const node = document.querySelector(selector) as HTMLDetailsElement | null;
+  assert.ok(node, `找不到 ${selector}`);
+  await act(async () => {
+    node.open = true;
+    node.dispatchEvent(new window.Event("toggle"));
+  });
+  await settle();
 }
 
 async function settle(): Promise<void> {
@@ -193,12 +205,28 @@ async function main(): Promise<void> {
     initialComposer,
     "今天店里忙了一天，回家因为洗碗拌了两句，帮我发条小红书。"
   );
+  // Migrated from the sessionStorage rescue this journey used to assert
+  // (`diyu-content-draft:user-hq:笛语服饰:identity-hq`). The requirement is
+  // unchanged — unsubmitted input must survive — but it is now held per
+  // AdvisorDraftV1 scope, which also pins down the account the draft belongs
+  // to. Both halves are asserted: the draft is kept, and the retired storage
+  // key is not written.
   assert.equal(
-    window.sessionStorage.getItem(
-      "diyu-content-draft:user-hq:笛语服饰:identity-hq"
-    ),
+    advisorDrafts.read({
+      operator: "user-hq",
+      tenant: "笛语服饰",
+      publishingIdentityId: "identity-hq",
+      target: "xiaohongshu_graphic"
+    }),
     "今天店里忙了一天，回家因为洗碗拌了两句，帮我发条小红书。",
-    "未提交输入必须保存在当前浏览器会话"
+    "未提交输入必须按 AdvisorDraftV1 作用域保留"
+  );
+  assert.equal(
+    Object.keys(window.sessionStorage).filter(key =>
+      key.startsWith("diyu-content-draft:")
+    ).length,
+    0,
+    "已退役的 sessionStorage 抢救机制不得再有任何读写"
   );
   await click(find(".composer-submit button", "生成内容"));
   await settle();
@@ -575,6 +603,16 @@ async function main(): Promise<void> {
   await act(async () => root.render(<Root />));
   await settle();
   assert.match(document.querySelector(".user-help > summary")?.textContent ?? "", /使用说明.*当前可用与待补/);
+  // Migrated journey: the technical diagnostic panel is no longer part of
+  // /user's first load — the bundle budget forbids it — so this now opens the
+  // disclosure first. Everything asserted below is unchanged, including the
+  // exact row count.
+  assert.equal(
+    document.querySelectorAll(".capability-matrix tbody tr").length,
+    0,
+    "技术诊断面板在展开前不得出现在 /user 首屏"
+  );
+  await openDisclosure(".user-help");
   assert.equal(document.querySelectorAll(".capability-matrix tbody tr").length, 58);
   assert.match(document.body.textContent ?? "", /软件是否实现/);
   assert.match(document.body.textContent ?? "", /当前资料是否满足/);

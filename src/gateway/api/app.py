@@ -3271,7 +3271,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.get(
-        "/organization-materials",
+        "/materials",
         response_class=HTMLResponse,
         dependencies=[Security(session_cookie)],
         responses=business_failures,
@@ -3311,6 +3311,53 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "<a href='/user'>返回工作台</a></main>"
                 ),
             )
+        )
+
+    @app.get(
+        "/organization-materials",
+        response_class=RedirectResponse,
+        include_in_schema=False,
+    )
+    def legacy_organization_materials(request: Request) -> RedirectResponse:
+        """The old address for the materials page (EXE-01 SEAM-06).
+
+        Deliberately unauthenticated: it only renames a path. Checking
+        credentials here would duplicate the entry gate that /materials already
+        applies, and would answer 401 where the honest answer is "moved".
+        """
+        query = request.url.query
+        return RedirectResponse(
+            "/materials" + (f"?{query}" if query else ""),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    @app.get(
+        "/content/tasks/{task}",
+        response_class=HTMLResponse,
+        dependencies=[Security(session_cookie)],
+        responses=business_failures,
+    )
+    def content_task_workbench(
+        request: Request,
+        task: UUID,
+        version: int | None = None,
+        target: ContentTarget | None = None,
+        publishing_identity_id: UUID | None = None,
+    ) -> Response:
+        """A task's own address (EXE-01 SEAM-06).
+
+        Delegates to `content_workbench` rather than repeating it: the scope
+        resolution, the operator check and the access-denied pages there are
+        the only implementation of those rules, and a second copy would be one
+        more place for them to drift.
+        """
+        return content_workbench(
+            request,
+            task=task,
+            version=version,
+            notice=None,
+            target=target,
+            publishing_identity_id=publishing_identity_id,
         )
 
     @app.get(
@@ -3383,6 +3430,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         target: ContentTarget | None = None,
         publishing_identity_id: UUID | None = None,
     ) -> Response:
+        # A task has its own address now (EXE-01 SEAM-06). The query form is
+        # what the server itself has been handing out since before this
+        # package, so it is canonicalised rather than broken. The path guard
+        # keeps `/content/tasks/{task}` — which calls straight into here — from
+        # redirecting to itself.
+        if task is not None and request.url.path == "/content":
+            carried = {
+                key: str(value)
+                for key, value in (
+                    ("version", version),
+                    ("target", target),
+                    ("publishing_identity_id", publishing_identity_id),
+                    ("notice", notice),
+                )
+                if value is not None
+            }
+            destination = f"/content/tasks/{task}"
+            if carried:
+                destination += "?" + urlencode(carried)
+            return RedirectResponse(
+                destination, status_code=status.HTTP_303_SEE_OTHER
+            )
         identity: TenantSession | None = None
         identity_options: list[dict[str, object]] = []
         selected_identity_id = publishing_identity_id

@@ -1,0 +1,39 @@
+{
+  "schema": "exe01.bundle_report.v1",
+  "entries": [
+    {
+      "file": "assets/index.js",
+      "raw": 382759,
+      "gzip": 108478
+    }
+  ],
+  "chunks": [],
+  "css": [
+    {
+      "file": "assets/index.css",
+      "raw": 93205,
+      "gzip": 17082
+    }
+  ],
+  "totals": {
+    "entry_js_raw": 382759,
+    "entry_js_gzip": 108478,
+    "chunk_js_raw": 0,
+    "chunk_js_gzip": 0,
+    "css_raw": 93205,
+    "css_gzip": 17082,
+    "chunk_count": 0
+  },
+  "graph": {
+    "index.html": {
+      "file": "assets/index.js",
+      "isEntry": true,
+      "isDynamicEntry": false,
+      "imports": [],
+      "dynamicImports": [],
+      "css": [
+        "assets/index.css"
+      ]
+    }
+  }
+}

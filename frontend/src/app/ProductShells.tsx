@@ -1,9 +1,16 @@
+import { Suspense, lazy, useState } from "react";
 import type { JSX } from "react";
 import { BrandMark } from "../components/Brand";
-import { CapabilityMatrixView, UsageGuideView } from "../components/CapabilityGuide";
 import type { BootstrapContext } from "./types";
 
+// The capability matrix is the technical diagnostic surface — runtime SHA,
+// schema revision, the formal support inventory. It sits inside a collapsed
+// disclosure, so there is no reason for /user to download it before someone
+// asks for it, and the bundle budget requires that it does not.
+const CapabilityGuide = lazy(() => import("../components/CapabilityGuide"));
+
 export function UserHome({ context }: { context: BootstrapContext }): JSX.Element {
+  const [helpOpen, setHelpOpen] = useState(false);
   const identity = context.identity ?? {};
   const capabilities = new Set(context.capabilities ?? ["content"]);
   const canCreateContent = capabilities.has("content");
@@ -42,7 +49,7 @@ export function UserHome({ context }: { context: BootstrapContext }): JSX.Elemen
           {canMaintainMaterials && (
             <a
               className={canCreateContent || canPlanDisplay ? "button task-secondary" : "button primary"}
-              href="/organization-materials"
+              href="/materials"
             >
               维护组织官方素材
             </a>
@@ -70,10 +77,19 @@ export function UserHome({ context }: { context: BootstrapContext }): JSX.Elemen
           </p>
         )}
         {context.usage_guide && context.capability_matrix && (
-          <details className="user-help">
+          <details
+            className="user-help"
+            onToggle={event => setHelpOpen(event.currentTarget.open)}
+          >
             <summary>使用说明 / 当前可用与待补</summary>
-            <UsageGuideView guide={context.usage_guide} />
-            <CapabilityMatrixView matrix={context.capability_matrix} />
+            {helpOpen && (
+              <Suspense fallback={<p className="subtle-status">正在打开使用说明……</p>}>
+                <CapabilityGuide
+                  guide={context.usage_guide}
+                  matrix={context.capability_matrix}
+                />
+              </Suspense>
+            )}
           </details>
         )}
       </section>

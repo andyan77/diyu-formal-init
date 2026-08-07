@@ -1,0 +1,23 @@
+{
+  "schema": "exe01.test_migration_ledger.v1",
+  "note": "FE-04 forbids deleting tests, shrinking assertions, or asserting only that some text exists. Where EXE-01 changed a journey, the old and new form are recorded here so the reconciliation gate can tell a migration from a regression.",
+  "migrations": [
+    {
+      "file": "frontend/test/interaction.test.tsx",
+      "old_journey": "输入未提交的内容后，断言 sessionStorage 键 diyu-content-draft:user-hq:笛语服饰:identity-hq 保存了原文。",
+      "new_journey": "同一处输入后，断言 AdvisorDraftV1 作用域（operator+tenant+publishing_identity+target）持有原文，并断言 diyu-content-draft:* 键数量为 0。",
+      "why": "FE-01 删除了 sessionStorage 抢救机制。旧键不含 target，切平台会串稿；新断言覆盖同一需求并额外锁住退役机制不复活。",
+      "old_assertions": 1,
+      "new_assertions": 2
+    },
+    {
+      "file": "frontend/test/interaction.test.tsx",
+      "old_journey": "在 /user 渲染后直接断言 .capability-matrix tbody tr 有 58 行。",
+      "new_journey": "先断言展开前为 0 行，展开 details.user-help 后再断言 58 行。",
+      "why": "预算要求 /user 首屏不加载技术诊断组件，该组件改为展开时按需加载。行数断言与其后全部文案断言原样保留。",
+      "old_assertions": 1,
+      "new_assertions": 2
+    }
+  ],
+  "removed_files": []
+}

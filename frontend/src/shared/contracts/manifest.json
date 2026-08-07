@@ -1,0 +1,159 @@
+{
+  "schema": "exe01.contract_manifest.v1",
+  "command": "npm --prefix frontend run contracts:gen",
+  "source": {
+    "path": "openapi.json",
+    "sha256": "61e0b67f1b08d4f442502ab6401576771fb9ed70eba54cee02977fdcba64ab8c",
+    "openapi": "3.1.0",
+    "path_count": 104,
+    "schema_count": 60
+  },
+  "generated": {
+    "path": "frontend/src/shared/contracts/gen/openapi.d.ts",
+    "sha256": "f8e53fe9a72f52de3ad99d85e81996a7da68b43015d1a098d8519cca5e6c450e",
+    "line_count": 8254
+  },
+  "allowlist": [
+    "AccountExpressionVersionRequest",
+    "AddSeriesItemRequest",
+    "ApplicationHandoffResponse",
+    "BrandExpressionConfirmRequest",
+    "BrandLibraryEntryRequest",
+    "BrandLibraryPreviewRequest",
+    "BrandLibraryVersionRequest",
+    "BrandPublicationProjectionCandidateRequest",
+    "BrandPublicationProjectionItemRequest",
+    "ChangePasswordRequest",
+    "ContentPlanItem",
+    "ContentPlanRequest",
+    "ContentQuestionResponse",
+    "ContentVersionResponse",
+    "ControlOrganizationRequest",
+    "ConversationTurnRequest",
+    "CreateContentRequest",
+    "CreateConversationRequest",
+    "CreateDisplayRequest",
+    "CreateOperatorRequest",
+    "CreateOrganizationRequest",
+    "CreatePlatformCarrierRequest",
+    "CreateProductMediaBindingRequest",
+    "CreatePublishingAccountRequest",
+    "CreateSeriesRequest",
+    "CreateTenantRequest",
+    "CreateTenantUserRequest",
+    "CreatedTenantUserResponse",
+    "CreationPreferenceRequest",
+    "CreativeDirectionRequest",
+    "DefaultPersonaRequest",
+    "DisplayProductSelectionRequest",
+    "DisplayQuestionResponse",
+    "DisplayRevisionRequest",
+    "DisplayVersionResponse",
+    "GreetingResponse",
+    "HTTPValidationError",
+    "MaterialMetadataVersionRequest",
+    "MaterialReferenceNoteRequest",
+    "MaterialUploadRequest",
+    "OrganizationMaterialUploadRequest",
+    "ProductImportPreviewRequest",
+    "ProvisionedTenantResponse",
+    "ReorderSeriesRequest",
+    "ResetTenantUserResponse",
+    "RestoredTenantUserResponse",
+    "RevisionRequest",
+    "SaveBrandProductRequest",
+    "SaveDisplayStoreRequest",
+    "SavedVersionResponse",
+    "SetEnabledRequest",
+    "SetExpressionProfileMaintenanceRequest",
+    "UnmetCapabilityRequest",
+    "UnmetCapabilityResponseRequest",
+    "UpdateOrganizationRequest",
+    "UpdatePublishingAccountRequest",
+    "UpdatePublishingSpeakerKindRequest",
+    "UpdateTenantUserGrantsRequest",
+    "UpdateTenantUserRequest",
+    "ValidationError"
+  ],
+  "blocked": [
+    {
+      "contract": "context_selected",
+      "owner": "EXE-02",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "BrandBasisItemV1",
+      "owner": "EXE-02",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "OpportunityV2",
+      "owner": "EXE-03",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "InteractionRequestV1",
+      "owner": "EXE-05",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "IntentProjectionV1",
+      "owner": "EXE-05",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "RouteDecisionV1",
+      "owner": "EXE-05",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "InteractionResponseV1",
+      "owner": "EXE-05",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "AdvisorDraftV1",
+      "owner": "EXE-05",
+      "note": "EXE-01 FE-01 delivers the client-side draft state contract of the same name; the wire contract still has no OpenAPI schema.",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "CreationProposalV1",
+      "owner": "EXE-06",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "ContentProductionPackageV1",
+      "owner": "EXE-07",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "DisplayExecutionPackageV1",
+      "owner": "EXE-07",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "ContentDecisionProjectionV1",
+      "owner": "EXE-08",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    },
+    {
+      "contract": "brand_basis_feedback",
+      "owner": "EXE-04",
+      "status": "BLOCKED_FE02_CONTRACT_SOURCE",
+      "reason": "no schema in openapi.json at this baseline"
+    }
+  ]
+}

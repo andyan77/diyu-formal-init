@@ -7,8 +7,10 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
+    "contracts:gen": "node tools/generate-contracts.mjs",
+    "contracts:check": "node tools/generate-contracts.mjs --check",
     "lint": "tsc --noEmit",
-    "test": "node test/chrome-path.test.mjs && node test/run.mjs && node test/admin-run.mjs && node test/ui04-user-paths.run.mjs"
+    "test": "node test/chrome-path.test.mjs && node test/run-ts.mjs test/contract_stream.test.ts && node test/run-ts.mjs test/advisor_draft.test.ts && node test/run.mjs && node test/admin-run.mjs && node test/ui04-user-paths.run.mjs"
   },
   "dependencies": {
     "react": "19.2.4",
@@ -18,8 +20,11 @@
     "@types/node": "20.19.9",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "axe-core": "4.11.1",
     "esbuild": "0.21.5",
     "jsdom": "24.1.3",
+    "openapi-typescript": "7.9.1",
+    "react-router-dom": "7.9.5",
     "typescript": "5.9.3",
     "vite": "5.4.21"
   }

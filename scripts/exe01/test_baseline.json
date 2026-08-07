@@ -1,0 +1,229 @@
+{
+  "schema": "exe01.test_inventory.v1",
+  "files": [
+    {
+      "path": "frontend/test/admin-run.mjs",
+      "lines": 1208,
+      "assertions": 0,
+      "assertion_methods": {},
+      "helper_definitions": 0,
+      "skip_markers": 0,
+      "is_browser_script": false
+    },
+    {
+      "path": "frontend/test/admin_interaction.test.tsx",
+      "lines": 964,
+      "assertions": 167,
+      "assertion_methods": {
+        "deepEqual": 9,
+        "doesNotMatch": 10,
+        "equal": 49,
+        "match": 70,
+        "ok": 29
+      },
+      "helper_definitions": 0,
+      "skip_markers": 0,
+      "is_browser_script": false
+    },
+    {
+      "path": "frontend/test/chrome-path.mjs",
+      "lines": 33,
+      "assertions": 0,
+      "assertion_methods": {},
+      "helper_definitions": 0,
+      "skip_markers": 0,
+      "is_browser_script": false
+    },
+    {
+      "path": "frontend/test/chrome-path.test.mjs",
+      "lines": 22,
+      "assertions": 2,
+      "assertion_methods": {
+        "equal": 2
+      },
+      "helper_definitions": 0,
+      "skip_markers": 0,
+      "is_browser_script": false
+    },
+    {
+      "path": "frontend/test/interaction.test.tsx",
+      "lines": 645,
+      "assertions": 112,
+      "assertion_methods": {
+        "deepEqual": 4,
+        "doesNotMatch": 7,
+        "equal": 47,
+        "match": 47,
+        "ok": 7
+      },
+      "helper_definitions": 0,
+      "skip_markers": 0,
+      "is_browser_script": false
+    },
+    {
+      "path": "frontend/test/run.mjs",
+      "lines": 584,
+      "assertions": 0,
+      "assertion_methods": {},
+      "helper_definitions": 0,
+      "skip_markers": 0,
+      "is_browser_script": false
+    },
+    {
+      "path": "frontend/test/tenant01-formal-browser.mjs",
+      "lines": 1068,
+      "assertions": 54,
+      "assertion_methods": {
+        "ensure": 35,
+        "record": 19
+      },
+      "helper_definitions": 2,
+      "skip_markers": 0,
+      "is_browser_script": true
+    },
+    {
+      "path": "frontend/test/ui04-user-paths.run.mjs",
+      "lines": 221,
+      "assertions": 0,
+      "assertion_methods": {},
+      "helper_definitions": 0,
+      "skip_markers": 0,
+      "is_browser_script": false
+    },
+    {
+      "path": "frontend/test/ui04_user_paths.test.tsx",
+      "lines": 226,
+      "assertions": 35,
+      "assertion_methods": {
+        "deepEqual": 5,
+        "doesNotMatch": 3,
+        "equal": 10,
+        "match": 10,
+        "ok": 7
+      },
+      "helper_definitions": 0,
+      "skip_markers": 0,
+      "is_browser_script": false
+    },
+    {
+      "path": "frontend/test/ux02-formal-browser.mjs",
+      "lines": 748,
+      "assertions": 34,
+      "assertion_methods": {
+        "ensure": 29,
+        "record": 5
+      },
+      "helper_definitions": 2,
+      "skip_markers": 0,
+      "is_browser_script": true
+    },
+    {
+      "path": "frontend/test/ux02-responsive-browser.mjs",
+      "lines": 361,
+      "assertions": 19,
+      "assertion_methods": {
+        "ensure": 19
+      },
+      "helper_definitions": 1,
+      "skip_markers": 0,
+      "is_browser_script": true
+    },
+    {
+      "path": "frontend/test/ux03-gate-a-browser.mjs",
+      "lines": 1024,
+      "assertions": 55,
+      "assertion_methods": {
+        "ensure": 46,
+        "record": 9
+      },
+      "helper_definitions": 2,
+      "skip_markers": 0,
+      "is_browser_script": true
+    },
+    {
+      "path": "frontend/test/ux03-gate-b-browser.mjs",
+      "lines": 433,
+      "assertions": 15,
+      "assertion_methods": {
+        "ensure": 10,
+        "record": 5
+      },
+      "helper_definitions": 2,
+      "skip_markers": 0,
+      "is_browser_script": true
+    },
+    {
+      "path": "frontend/test/ux03-gate-c-browser.mjs",
+      "lines": 513,
+      "assertions": 23,
+      "assertion_methods": {
+        "ensure": 20,
+        "record": 3
+      },
+      "helper_definitions": 2,
+      "skip_markers": 0,
+      "is_browser_script": true
+    },
+    {
+      "path": "frontend/test/ux03-gate-d-browser.mjs",
+      "lines": 355,
+      "assertions": 24,
+      "assertion_methods": {
+        "ensure": 19,
+        "record": 5
+      },
+      "helper_definitions": 2,
+      "skip_markers": 0,
+      "is_browser_script": true
+    },
+    {
+      "path": "frontend/test/ux03-product-media-browser.mjs",
+      "lines": 379,
+      "assertions": 9,
+      "assertion_methods": {
+        "ensure": 9
+      },
+      "helper_definitions": 1,
+      "skip_markers": 0,
+      "is_browser_script": true
+    }
+  ],
+  "all_files": [
+    "frontend/test/admin-fixtures.json",
+    "frontend/test/admin-run.mjs",
+    "frontend/test/admin_interaction.test.tsx",
+    "frontend/test/chrome-path.mjs",
+    "frontend/test/chrome-path.test.mjs",
+    "frontend/test/fixtures.json",
+    "frontend/test/interaction.test.tsx",
+    "frontend/test/run.mjs",
+    "frontend/test/tenant01-formal-browser.mjs",
+    "frontend/test/ui04-user-paths.run.mjs",
+    "frontend/test/ui04_user_paths.test.tsx",
+    "frontend/test/ux02-formal-browser.mjs",
+    "frontend/test/ux02-responsive-browser.mjs",
+    "frontend/test/ux03-gate-a-browser.mjs",
+    "frontend/test/ux03-gate-b-browser.mjs",
+    "frontend/test/ux03-gate-c-browser.mjs",
+    "frontend/test/ux03-gate-d-browser.mjs",
+    "frontend/test/ux03-product-media-browser.mjs"
+  ],
+  "totals": {
+    "file_count": 18,
+    "source_file_count": 16,
+    "browser_script_count": 8,
+    "total_lines_all_files": 9311,
+    "assertions": 549,
+    "skip_markers": 0
+  },
+  "browser_scripts": [
+    "frontend/test/tenant01-formal-browser.mjs",
+    "frontend/test/ux02-formal-browser.mjs",
+    "frontend/test/ux02-responsive-browser.mjs",
+    "frontend/test/ux03-gate-a-browser.mjs",
+    "frontend/test/ux03-gate-b-browser.mjs",
+    "frontend/test/ux03-gate-c-browser.mjs",
+    "frontend/test/ux03-gate-d-browser.mjs",
+    "frontend/test/ux03-product-media-browser.mjs"
+  ]
+}

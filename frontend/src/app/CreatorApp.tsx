@@ -2,6 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { BrandMark } from "../components/Brand";
 import {
+  FAILURE_STAGE_LABELS,
+  STAGE_LABELS,
+  humanDate,
+  normalizedIdentities,
+  targetMetadata
+} from "../features/advisor/labels";
+import { useAdvisorScope } from "../features/advisor/useAdvisorScope";
+import {
+  ContentStreamContractError,
+  guardContentStream
+} from "../shared/contracts/contentStream";
+import {
   ApiError,
   api,
   scopedContentPath,
@@ -51,107 +63,8 @@ type FailureDiagnostic = {
 };
 
 const PRIMARY_AXES = new Set(["topic", "style", "form"]);
-const STAGE_LABELS: Record<GenerationStage, string> = {
-  received: "已接收",
-  compiling_context: "已准备本次条件",
-  generating: "正在生成",
-  validating: "正在检查",
-  finalizing: "正在收尾"
-};
-
-const FAILURE_STAGE_LABELS: Record<string, string> = {
-  authentication: "登录状态",
-  authorization: "资格与作用域检查",
-  csrf: "页面提交校验",
-  intake: "生成前输入检查",
-  context: "资料与事实准备",
-  provider: "内容生成服务",
-  validation: "成品边界检查",
-  persistence: "版本保存",
-  rate_limit: "请求排队",
-  transport: "网络传输",
-  unknown: "系统处理"
-};
-
-function targetMetadata(target: Target, label?: string): PlatformTarget {
-  if (target === "xiaohongshu_graphic") {
-    return {
-      value: target,
-      label: label ?? "小红书图文",
-      platform_label: "小红书",
-      format_label: "图文"
-    };
-  }
-  if (target === "xiaohongshu_video") {
-    return {
-      value: target,
-      label: label ?? "小红书视频",
-      platform_label: "小红书",
-      format_label: "视频"
-    };
-  }
-  if (target === "wechat_channels_video") {
-    return {
-      value: target,
-      label: label ?? "微信视频号视频",
-      platform_label: "微信视频号",
-      format_label: "视频"
-    };
-  }
-  return {
-    value: target,
-    label: label ?? "抖音视频",
-    platform_label: "抖音",
-    format_label: "视频"
-  };
-}
-
-function normalizedTargets(context: BootstrapContext): PlatformTarget[] {
-  return (context.targets ?? []).map(item => ({
-    ...targetMetadata(item.value, item.label),
-    ...item
-  }));
-}
-
-function normalizedIdentities(context: BootstrapContext): PublishingIdentity[] {
-  if (context.publishing_identities?.length) return context.publishing_identities;
-  const identity = context.identity ?? {};
-  return [
-    {
-      id: identity.publishing_identity_id ?? identity.account_id ?? "current",
-      name: identity.account ?? "当前发布账号",
-      content_role: identity.content_role ?? "当前表达身份",
-      profile_summary: identity.profile_summary ?? "沿用当前账号画像",
-      platform_targets: normalizedTargets(context)
-    }
-  ];
-}
-
-function contentLocation(identityId: string, target?: Target): string {
-  const query = new URLSearchParams({ publishing_identity_id: identityId });
-  if (target) query.set("target", target);
-  return `/content?${query.toString()}`;
-}
-
-function draftStorageKey(
-  context: BootstrapContext,
-  publishingIdentityId: string
-): string {
-  const identity = context.identity ?? {};
-  const person = identity.operator_id ?? identity.operator ?? "unknown-person";
-  const brand = identity.brand ?? "unknown-brand";
-  return `diyu-content-draft:${person}:${brand}:${publishingIdentityId}`;
-}
-
 function targetOf(version: ContentVersion, fallback: Target): Target {
   return version.target_key ?? version.target ?? fallback;
-}
-
-function humanDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? ""
-    : new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(date);
 }
 
 function ArtifactBody({ value }: { value: string }): JSX.Element {
@@ -816,15 +729,29 @@ function ArtifactPane({
 }
 
 export default function CreatorApp({
-  context
+  context,
+  taskId
 }: {
   context: BootstrapContext;
+  /** Present on /content/tasks/:taskId. The package page itself is EXE-07. */
+  taskId?: string;
 }): JSX.Element {
   const publishingIdentities = normalizedIdentities(context);
-  const currentPublishingIdentityId =
+  const bootstrapIdentityId =
     context.current_publishing_identity_id ??
     (publishingIdentities.length === 1 ? publishingIdentities[0]?.id : null) ??
     "";
+  const operatorIdentity = context.identity ?? {};
+  // Account, platform and format come from the URL so switching is in-app and
+  // the back button works; the server bootstrap is only the starting point.
+  const advisorScope = useAdvisorScope({
+    operator:
+      operatorIdentity.operator_id ?? operatorIdentity.operator ?? "unknown-person",
+    tenant: operatorIdentity.brand ?? "unknown-brand",
+    fallbackPublishingIdentityId: bootstrapIdentityId,
+    fallbackTarget: context.current_target ?? ""
+  });
+  const currentPublishingIdentityId = advisorScope.publishingIdentityId;
   const resolvedPublishingIdentity = publishingIdentities.find(
     item => item.id === currentPublishingIdentityId
   );
@@ -841,10 +768,11 @@ export default function CreatorApp({
       ...targetMetadata(item.value, item.label),
       ...item
     }));
-  const currentTarget =
-    availableTargets.some(item => item.value === context.current_target)
-      ? (context.current_target as Target)
-      : availableTargets[0]?.value ?? "douyin_video";
+  const currentTarget = availableTargets.some(
+    item => item.value === advisorScope.target
+  )
+    ? (advisorScope.target as Target)
+    : availableTargets[0]?.value ?? "douyin_video";
   const currentTargetMetadata =
     availableTargets.find(item => item.value === currentTarget) ??
     targetMetadata(currentTarget);
@@ -860,7 +788,10 @@ export default function CreatorApp({
   const [materials, setMaterials] = useState<Material[]>([]);
   const [recent, setRecent] = useState<RecentContent[]>([]);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
-  const [seed, setSeed] = useState("");
+  const { draft: seed, setDraft: setSeedValue } = advisorScope;
+  const setSeed = (next: string | ((value: string) => string)): void => {
+    setSeedValue(typeof next === "function" ? next(seed) : next);
+  };
   const [selections, setSelections] = useState<Record<string, string>>({});
   const [clearedAxes, setClearedAxes] = useState<string[]>([]);
   const [customText, setCustomText] = useState("");
@@ -973,6 +904,11 @@ export default function CreatorApp({
 
   const loadWorkspace = async (): Promise<void> => {
     if (!hasResolvedIdentity) return;
+    // Everything below belongs to the scope in force when the load started. If
+    // the operator switches account while these are in flight, the replies are
+    // for an account that is no longer on screen and must be dropped.
+    const loadedFor = advisorScope.scopeKey;
+    const stale = (): boolean => !advisorScope.isCurrent(loadedFor);
     setLoadError("");
     try {
       const [catalogValue, preferenceValue, materialValue, profileValue] =
@@ -984,6 +920,7 @@ export default function CreatorApp({
             scope("/api/v1/content/account-expression-profile")
           )
         ]);
+      if (stale()) return;
       setCatalog(catalogValue);
       setPreference(preferenceValue);
       setMaterials(materialValue);
@@ -991,22 +928,28 @@ export default function CreatorApp({
       const currentRecent = await api<RecentContent[]>(
         scope("/api/v1/content/tasks")
       );
+      if (stale()) return;
       setRecent(
         currentRecent
           .slice()
           .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
       );
     } catch (reason) {
+      if (stale()) return;
       setLoadError(reason instanceof Error ? reason.message : "当前工作空间没有准备好。");
     }
   };
 
   useEffect(() => {
+    // Switching account or platform no longer reloads the page, so the
+    // workspace has to refetch for the new scope. `isCurrent` drops a reply
+    // that arrives after the operator has already moved on, which is what
+    // stops one account's materials from appearing under another's name.
     void loadWorkspace();
-    // The server bootstrap is immutable for this page load. A target change navigates and creates
-    // a new page bootstrap, so no client account guess belongs in this dependency list.
+    // loadWorkspace closes over the scope it was created with, and guards its
+    // own writes; the scope key is the honest dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [advisorScope.scopeKey]);
 
   useEffect(
     () => () => {
@@ -1026,32 +969,20 @@ export default function CreatorApp({
     }
   }, [toolOpen]);
 
-  useEffect(() => {
-    const draftKey = draftStorageKey(context, currentPublishingIdentityId);
-    const draft = window.sessionStorage.getItem(draftKey);
-    if (draft) {
-      setSeed(draft);
-      window.sessionStorage.removeItem(draftKey);
-    }
-  }, [context, currentPublishingIdentityId]);
-
-  useEffect(() => {
-    const draftKey = draftStorageKey(context, currentPublishingIdentityId);
-    if (seed) {
-      window.sessionStorage.setItem(draftKey, seed);
-    } else {
-      window.sessionStorage.removeItem(draftKey);
-    }
-  }, [context, currentPublishingIdentityId, seed]);
-
-  const navigateWithDraft = (location: string, draft = seed): void => {
-    if (draft.trim()) {
-      window.sessionStorage.setItem(
-        draftStorageKey(context, currentPublishingIdentityId),
-        draft
-      );
-    }
-    window.location.assign(location);
+  /**
+   * Change account, platform or format without leaving the page.
+   *
+   * This replaces `navigateWithDraft`, which wrote the composer text into
+   * sessionStorage and then called `window.location.assign` — a full reload
+   * whose only way to keep the draft was a key that ignored the target, so the
+   * text you wrote for one account reappeared under another. The draft now
+   * belongs to its scope (AdvisorDraftV1) and the switch is a URL change.
+   */
+  const switchScope = (
+    next: { publishingIdentityId?: string; target?: Target },
+    carried?: string
+  ): void => {
+    advisorScope.switchTo(next, carried);
   };
 
   const closeTool = (restoreFocus = true): void => {
@@ -1124,7 +1055,7 @@ export default function CreatorApp({
   const openRecent = async (item: RecentContent): Promise<void> => {
     const target = item.target ?? currentTarget;
     if (target !== currentTarget) {
-      window.location.assign(contentLocation(currentPublishingIdentityId, target));
+      switchScope({ target });
       return;
     }
     setPending(true);
@@ -1232,7 +1163,8 @@ export default function CreatorApp({
     abortRef.current = controller;
     let terminal = false;
     try {
-      for await (const streamEvent of streamApi<ContentStreamEvent>(
+      for await (const streamEvent of guardContentStream(
+        streamApi<unknown>(
         "/api/v1/content/stream",
         {
           message: instruction,
@@ -1257,6 +1189,7 @@ export default function CreatorApp({
           series_position: seriesSelection?.position ?? null
         },
         controller.signal
+        )
       )) {
         if (streamEvent.event in STAGE_LABELS) {
           const stage = streamEvent.event as GenerationStage;
@@ -1350,7 +1283,17 @@ export default function CreatorApp({
     } catch (reason) {
       if (!(reason instanceof DOMException && reason.name === "AbortError")) {
         setGenerationFailed(true);
-        if (reason instanceof ApiError) {
+        if (reason instanceof ContentStreamContractError) {
+          // The stream broke its own contract. Stop here rather than let a
+          // half-formed result reach the workspace; the composer keeps its text.
+          setGenerationFailureMessage(reason.message);
+          setFailureDiagnostic({
+            stage: "contract",
+            retryable: true,
+            action: "输入已经保留，可以使用原输入重试。",
+            traceId: ""
+          });
+        } else if (reason instanceof ApiError) {
           setGenerationFailureMessage(
             `${reason.message} 输入和已有成品都已保留。`
           );
@@ -1470,12 +1413,7 @@ export default function CreatorApp({
       return;
     }
     if (current && targetOf(current, currentTarget) !== currentTarget) {
-      navigateWithDraft(
-        contentLocation(
-          currentPublishingIdentityId,
-          targetOf(current, currentTarget)
-        )
-      );
+      switchScope({ target: targetOf(current, currentTarget) });
       return;
     }
     if (!current) {
@@ -1566,7 +1504,7 @@ export default function CreatorApp({
               aria-label="发布账号"
               value={currentPublishingIdentityId}
               onChange={event => {
-                navigateWithDraft(contentLocation(event.target.value));
+                switchScope({ publishingIdentityId: event.target.value });
               }}
             >
               {!hasResolvedIdentity && <option value="">请选择发布账号</option>}
@@ -1600,9 +1538,7 @@ export default function CreatorApp({
                   item => item.platform_label === event.target.value
                 );
                 if (next) {
-                  navigateWithDraft(
-                    contentLocation(currentPublishingIdentityId, next.value)
-                  );
+                  switchScope({ target: next.value });
                 }
               }}
             >
@@ -1620,12 +1556,7 @@ export default function CreatorApp({
               value={currentTarget}
               disabled={!hasResolvedIdentity}
               onChange={event => {
-                navigateWithDraft(
-                  contentLocation(
-                    currentPublishingIdentityId,
-                    event.target.value as Target
-                  )
-                );
+                switchScope({ target: event.target.value as Target });
               }}
             >
               {formatTargets.map(item => (
@@ -1740,11 +1671,8 @@ export default function CreatorApp({
                   type="button"
                   className="primary"
                   onClick={() => {
-                    navigateWithDraft(
-                      contentLocation(
-                        currentPublishingIdentityId,
-                        targetConflict.target
-                      ),
+                    switchScope(
+                      { target: targetConflict.target },
                       targetConflict.instruction
                     );
                   }}
