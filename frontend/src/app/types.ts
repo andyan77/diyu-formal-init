@@ -126,7 +126,14 @@ export interface ContentVersion {
   ai_generated: boolean;
   aigc_label?: string | null;
   aigc_release_reminder?: string | null;
-  target?: Target | null;
+  /**
+   * A human label — `小红书图文`, not `xiaohongshu_graphic`. The server
+   * sends the label here and the identifier in `target_key`
+   * (content_service.py:2186). Typing this as `Target` was a lie that
+   * nothing caught until a completed artifact was validated against it.
+   */
+  target?: string | null;
+  /** The identifier. This one is safe to put in a URL. */
   target_key?: Target | null;
   adapted_from?: string | null;
   translation_notice?: string | null;

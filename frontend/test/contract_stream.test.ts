@@ -153,13 +153,18 @@ assert.equal(
   "missing_field"
 );
 
-// 3. Enum members, because targetOf feeds these straight into the address bar.
+// 3. Enum members, because targetOf feeds target_key straight into the
+// address bar. Migrated, not weakened: the empty-value case moved from
+// `target` to `target_key` once it turned out that `target` is the human
+// label and only `target_key` ever reaches a URL. Same violation, same
+// guarantee, now asserted on the field that actually carries the risk — and
+// `target` gained its own type assertion further down.
 assert.equal(
   (await rejects([completedWith({ target_key: "weibo_post" })])).violation,
   "illegal_value"
 );
 assert.equal(
-  (await rejects([completedWith({ target: "" })])).violation,
+  (await rejects([completedWith({ target_key: "" })])).violation,
   "illegal_value"
 );
 assert.equal(
@@ -263,5 +268,45 @@ assert.deepEqual(
   ["douyin_video", "xiaohongshu_video", "xiaohongshu_graphic", "wechat_channels_video"]
 );
 assert.deepEqual([...CONVERSATION_KINDS], ["chat", "question", "greeting"]);
+
+// The server sends the label and the identifier side by side, and they are
+// NOT the same alphabet: content_service.py:2186 writes
+//   "target": _TARGET_LABELS[target]   ->  小红书图文
+//   "target_key": target               ->  xiaohongshu_graphic
+// Enum-checking `target` rejected every real completed artifact. The browser
+// journey found it; these keep it found.
+const labelled = await collect([
+  completedWith({
+    target: "小红书图文",
+    target_key: "xiaohongshu_graphic"
+  })
+]);
+assert.equal(
+  (labelled[0] as { result: { target?: string } }).result.target,
+  "小红书图文",
+  "服务端真实发的中文标签必须原样通过，不得按枚举校验"
+);
+assert.equal(
+  (labelled[0] as { result: { target_key?: string } }).result.target_key,
+  "xiaohongshu_graphic"
+);
+
+// The identifier is still enum-checked — that is the one that reaches the URL.
+assert.equal(
+  (await rejects([completedWith({ target_key: "小红书图文" })])).violation,
+  "illegal_value",
+  "target_key 必须仍然只收枚举值：它会被写进地址栏"
+);
+assert.equal(
+  (await rejects([completedWith({ target_key: "weibo_post" })])).violation,
+  "illegal_value"
+);
+
+// A label is still text, so a non-string is still a lie about the shape.
+assert.equal(
+  (await rejects([completedWith({ target: 7 })])).violation,
+  "illegal_value",
+  "target 虽是自由文本，但必须是字符串"
+);
 
 console.log("content stream contract guard checks passed");

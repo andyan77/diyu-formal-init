@@ -309,8 +309,10 @@ function readVersionCore(
 /**
  * Copy the optional fields the artifact pane reads.
  *
- * `target` and `target_key` are enum-checked because `targetOf` feeds them to
- * `switchScope`, which writes them into the query string.
+ * Only `target_key` is enum-checked, and only it may reach `switchScope` and
+ * the query string. `target` is the human label the server puts beside it
+ * (`小红书图文`), so enum-checking it rejected every real completed artifact —
+ * loudly, which is how this was found, but wrongly.
  */
 function readVersionExtras(
   probe: Probe,
@@ -321,7 +323,7 @@ function readVersionExtras(
   if (label !== undefined) version.aigc_label = label;
   const reminder = readText(probe, record, "aigc_release_reminder", false);
   if (reminder !== undefined) version.aigc_release_reminder = reminder;
-  const target = readChoice(probe, record, "target", TARGETS, false);
+  const target = readText(probe, record, "target", false);
   if (target !== undefined) version.target = target;
   const targetKey = readChoice(probe, record, "target_key", TARGETS, false);
   if (targetKey !== undefined) version.target_key = targetKey;

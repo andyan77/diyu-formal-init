@@ -61,6 +61,8 @@ export const version = (overrides = {}) => ({
   ai_generated: true,
   aigc_label: "AI 辅助生成",
   aigc_release_reminder: "发布前请使用平台 AI 内容声明功能。",
+  // Label and identifier, exactly as content_service.py:2186 pairs them.
+  target: "小红书图文",
   target_key: "xiaohongshu_graphic",
   ...overrides
 });

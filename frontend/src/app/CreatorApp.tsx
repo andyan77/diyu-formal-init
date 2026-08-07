@@ -74,8 +74,15 @@ type ConversationMessage = {
 
 
 const PRIMARY_AXES = new Set(["topic", "style", "form"]);
+/**
+ * Which scope an artifact belongs to.
+ *
+ * Never falls back to `version.target`: that is a display label, and this
+ * value is written into the address bar. Staying on the current scope is
+ * the safe answer when the server did not say.
+ */
 function targetOf(version: ContentVersion, fallback: Target): Target {
-  return version.target_key ?? version.target ?? fallback;
+  return version.target_key ?? fallback;
 }
 
 function ArtifactBody({ value }: { value: string }): JSX.Element {
