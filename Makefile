@@ -1,4 +1,4 @@
-.PHONY: format lint typecheck test golden openapi frontend-lint frontend-typecheck frontend-build frontend-test exe01-gates
+.PHONY: format lint typecheck test golden openapi frontend-lint frontend-typecheck frontend-build frontend-test exe01-gates exev0-gates
 
 format:
 	.venv/bin/python -m ruff format src tests alembic
@@ -34,3 +34,12 @@ frontend-test:
 # project's own local PostgreSQL, migrates and seeds it, then runs all nine.
 exe01-gates:
 	bash scripts/exe01/run_gates.sh
+
+# The three EXE-V0 gates: change surface, the function-budget ratchet and the
+# fixed-sample manifest. Pure git, AST and stdlib — no database, no network, so
+# unlike exe01-gates there is nothing to bring up first. Each recipe line is its
+# own shell, so the first gate to fail stops the target.
+exev0-gates:
+	.venv/bin/python scripts/exev0/assert_scope.py
+	.venv/bin/python scripts/exev0/assert_function_budget.py
+	.venv/bin/python scripts/exev0/build_fixed_samples.py --check

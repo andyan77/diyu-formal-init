@@ -44,3 +44,5 @@ jobs:
         run: make golden
       - name: EXE-01 determinism gates
         run: make exe01-gates
+      - name: EXE-V0 value-engine gates
+        run: make exev0-gates

@@ -45,7 +45,15 @@ ALLOWED: tuple[tuple[str, str], ...] = (
     ("tests/test_exev0_", "本包测试"),
     ("scripts/exev0/", "本包两门与固定样本脚本"),
     ("docs/EXE-V0/", "本包交付材料"),
+    ("Makefile", "监理解禁：make exev0-gates 入口（仅限此目的）"),
+    (".github/workflows/ci.yml", "监理解禁：exev0 三门远端接入（仅限此目的）"),
 )
+
+# Both were red lines until the supervisor lifted them, verbatim, for one purpose:
+# 「授权微轮补 `make exev0-gates` 并接入 ci.yml（Makefile 与 ci.yml 两文件解禁仅限此目的）」
+# (COMM-01 排产与工程对照指南, e5038bf).  Exact paths only — everything else under
+# .github/ stays forbidden, so lifting one file did not open the directory.
+NARROW_EXCEPTIONS = frozenset({"Makefile", ".github/workflows/ci.yml"})
 
 # Red lines from the execution prompt, checked before the allowlist.
 FORBIDDEN: tuple[tuple[str, str], ...] = (
@@ -127,7 +135,7 @@ def main() -> int:
 
     for path in files:
         for forbidden, why in FORBIDDEN:
-            if path.startswith(forbidden):
+            if path.startswith(forbidden) and path not in NARROW_EXCEPTIONS:
                 failures.append(f"{path}: 越界（{why}）")
                 break
         else:
