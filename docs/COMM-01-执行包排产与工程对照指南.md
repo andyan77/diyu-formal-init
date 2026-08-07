@@ -297,6 +297,25 @@ failed=0 + 新增 skip=0（不硬编码通过数）。函数预算 = EXE-01R 同
 ⑦ P0 缺失不阻塞本地实现，但报告须标 `production_profile_calibration=UNVERIFIED`，
 且不得进入 EXE-V1 部署与真实陪跑；P0 分类增加 `mixed_or_ambiguous` 第三态。
 
+- **实现轮交付与监理复验（2026-08-07，runtime_verified）**：分支 `exe-v0-value-engine`
+  远端 HEAD `cbdf0be`，恰建于治理基线 `c37ae78`；14 文件全在 allowlist（
+  `publication_contract.py` 未触碰，比授权面更克制）；`deepseek.py` 与 `openapi.json`
+  与基线**字节零漂移**（监理独立 diff 复核 = 0 行）。监理复跑：golden **951/2/0**
+  （913+38 新增，skip 未增；监理环境首跑 exit 1 系缺 node_modules 的环境假象，
+  补装后 codegen/openapi 双检查通过）；exev0 双门真实退出码绿（1697 函数 / 233 冻结
+  豁免 / 新函数 ≤60，棘轮曾当场拦下三处越界并被重构回基线内）；**固定样本在监理
+  环境逐字节复现**（160 行，digest `aa0b8844…c9672` 与交付一致——确定性成立）；
+  **篡改反证外科级命中**：禁用 `is_static_default` → 全量 951 条中恰其专属反证
+  `test_a_ruleset_that_reproduces_a_static_default_is_refused_at_the_hard_gate`
+  单条转红（1 failed / 950 passed），还原后干净。执行侧诚实项（venv 3.10 对齐口径、
+  TOTP 偶发 401 隔离复绿、P0 摘要不复制进分支待集成）全部核实相容。
+  **监理裁决：`assembly_trace.used_profile_fields` 只记实际撑起路径的字段——批准**
+  （把未参与决策的字段写成证据即伪造溯源；商品/系列路径行改指冻结依据的分列口径成立）。
+  终态申报 `IMPLEMENTED_ON_AUTHORIZED_BASE · AWAITING_SERIALIZED_INTEGRATION` 合规。
+  **已知集成风险预授权**：`scripts/exev0/assert_scope.py:67` 现用两点 diff
+  `BASE..HEAD`，merge 主线后必误报——集成指令预授权改为对主线的三点 diff
+  （merge-base 语义）或沿 EXE-01R 先例冻结实现终态 SHA，属最小修门。
+
 ### EXE-02 · 品牌依据可见闭环（A1 + A2 + FE-07）
 
 - **需求**：`context_selected` 流式事件；条目级 `context_basis.items[]`（`BrandBasisItemV1` 白名单
