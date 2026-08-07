@@ -1,6 +1,7 @@
 # COMM-01 执行包：品牌价值可见、创作参谋、确认提案与付费试点最小闭环（完整修订草案）
 
-- 状态：`REVISION-6 · APPROVED_FOR_EXECUTION`（founder 2026-08-06 确认守护审查通过并授权
+- 状态：`REVISION-7 · APPROVED_FOR_EXECUTION`（REVISION-7 = 文末 D-COMM-09 追加裁决，
+  founder 2026-08-07；REVISION-6 = founder 2026-08-06 确认守护审查通过并授权
   状态迁移；`MILESTONE.md` 当前主线已为 COMM-01，TENANT-01 已按 §十一 置 CLOSED）。
 - 修订记录：REVISION-3（2026-08-06）落实 founder 对审查保留项的裁决——R1=选项 a
   （B 门前置建设 + 时间盒 + 最低裁剪清单，见 D-COMM-05a/05b）；R2 v3 历史回归口径
