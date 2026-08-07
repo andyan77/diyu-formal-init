@@ -11,7 +11,8 @@ import {
 import { useAdvisorScope } from "../features/advisor/useAdvisorScope";
 import {
   ContentStreamContractError,
-  guardContentStream
+  guardContentStream,
+  isStageEvent
 } from "../shared/contracts/contentStream";
 import {
   ApiError,
@@ -1164,7 +1165,7 @@ export default function CreatorApp({
     let terminal = false;
     try {
       for await (const streamEvent of guardContentStream(
-        streamApi<unknown>(
+        streamApi(
         "/api/v1/content/stream",
         {
           message: instruction,
@@ -1191,8 +1192,8 @@ export default function CreatorApp({
         controller.signal
         )
       )) {
-        if (streamEvent.event in STAGE_LABELS) {
-          const stage = streamEvent.event as GenerationStage;
+        if (isStageEvent(streamEvent)) {
+          const stage = streamEvent.event;
           setStages(value => (value.includes(stage) ? value : [...value, stage]));
           continue;
         }
@@ -1284,8 +1285,10 @@ export default function CreatorApp({
       if (!(reason instanceof DOMException && reason.name === "AbortError")) {
         setGenerationFailed(true);
         if (reason instanceof ContentStreamContractError) {
-          // The stream broke its own contract. Stop here rather than let a
-          // half-formed result reach the workspace; the composer keeps its text.
+          // The stream broke its own contract. Nothing it carried reaches the
+          // workspace: the guard withheld the result, and the transient progress
+          // trail goes with it so the failure is not shown mid-generation.
+          setStages([]);
           setGenerationFailureMessage(reason.message);
           setFailureDiagnostic({
             stage: "contract",

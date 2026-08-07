@@ -116,11 +116,18 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function* streamApi<T>(
+/**
+ * Decoded NDJSON lines, typed as `unknown` on purpose.
+ *
+ * Casting each parsed line to a caller-chosen type here would hand the reducer
+ * a well-typed lie whenever the wire disagrees; validation belongs to
+ * `guardContentStream`, which is the only thing that can actually check.
+ */
+export async function* streamApi(
   path: string,
   payload: object,
   signal?: AbortSignal
-): AsyncGenerator<T> {
+): AsyncGenerator<unknown> {
   const response = await fetch(path, {
     method: "POST",
     credentials: "same-origin",
@@ -158,11 +165,11 @@ export async function* streamApi<T>(
       const lines = buffer.split(/\r?\n/);
       buffer = lines.pop() ?? "";
       for (const line of lines) {
-        if (line.trim()) yield JSON.parse(line) as T;
+        if (line.trim()) yield JSON.parse(line);
       }
       if (done) break;
     }
-    if (buffer.trim()) yield JSON.parse(buffer) as T;
+    if (buffer.trim()) yield JSON.parse(buffer);
   } finally {
     reader.releaseLock();
   }

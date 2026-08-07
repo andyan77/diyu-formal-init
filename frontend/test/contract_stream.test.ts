@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 
 import {
+  CONVERSATION_KINDS,
   ContentStreamContractError,
   GENERATION_STAGES,
+  TARGETS,
   createContentStreamGuard,
   guardContentStream
 } from "../src/shared/contracts/contentStream";
@@ -128,5 +130,123 @@ assert.doesNotMatch(rejection.message, /teleported/);
 const guard = createContentStreamGuard();
 assert.equal(guard.accept({ event: "received" }).ok, true);
 assert.equal(guard.finish()?.violation, "truncated");
+
+// EXE-01R R3 — the guard now checks every field the workspace reads, not just
+// that a key is present. Each case below is a shape the old guard waved through.
+
+const completedWith = (result: Record<string, unknown>): unknown => ({
+  event: "completed",
+  result: { ...completed.result, ...result }
+});
+const completedWithout = (field: string): unknown => {
+  const result: Record<string, unknown> = { ...completed.result };
+  delete result[field];
+  return { event: "completed", result };
+};
+
+// 1. A result without an outline reaches the artifact header as `undefined`.
+assert.equal((await rejects([completedWithout("outline")])).violation, "missing_field");
+
+// 2. Without ai_generated the AIGC disclosure silently disappears.
+assert.equal(
+  (await rejects([completedWithout("ai_generated")])).violation,
+  "missing_field"
+);
+
+// 3. Enum members, because targetOf feeds these straight into the address bar.
+assert.equal(
+  (await rejects([completedWith({ target_key: "weibo_post" })])).violation,
+  "illegal_value"
+);
+assert.equal(
+  (await rejects([completedWith({ target: "" })])).violation,
+  "illegal_value"
+);
+assert.equal(
+  (await rejects([
+    { event: "target_conflict", mentioned_target: "weibo_post", label: "微博" }
+  ])).violation,
+  "illegal_value"
+);
+assert.equal(
+  (await rejects([{ event: "conversation", kind: "greeting", message: "你好" }]))
+    .violation,
+  "illegal_value"
+);
+
+// 4. Types, not just presence: a string version or a numeric body would render.
+assert.equal(
+  (await rejects([completedWith({ version: "one" })])).violation,
+  "illegal_value"
+);
+assert.equal(
+  (await rejects([completedWith({ body: 123 })])).violation,
+  "illegal_value"
+);
+assert.equal(
+  (await rejects([completedWith({ version: 0 })])).violation,
+  "illegal_value"
+);
+assert.equal(
+  (await rejects([completedWith({ ai_generated: "true" })])).violation,
+  "illegal_value"
+);
+assert.equal(
+  (await rejects([completedWith({ kind: "display" })])).violation,
+  "illegal_value"
+);
+assert.equal(
+  (await rejects([{ event: "failed", detail: "坏了", retryable: "yes" }])).violation,
+  "illegal_value"
+);
+
+// context_basis is optional, but a present one is read field by field.
+assert.equal(
+  (await rejects([completedWith({ context_basis: { account: "总部" } })])).violation,
+  "missing_field"
+);
+assert.equal(
+  (await rejects([
+    completedWith({ context_basis: { ...completed.result, account: 1 } })
+  ])).violation,
+  "illegal_value"
+);
+
+// 5. The terminal event is withheld until the stream closes cleanly, so an
+// after-terminal violation leaves the consumer with nothing to commit.
+const held = await collect([{ event: "received" }, completed]);
+assert.deepEqual(held[0], { event: "received" });
+assert.deepEqual(held[1], completed);
+const late = await (async () => {
+  const seen: unknown[] = [];
+  async function* source(): AsyncGenerator<unknown> {
+    yield { event: "received" };
+    yield completed;
+    yield { event: "finalizing" };
+  }
+  try {
+    for await (const event of guardContentStream(source())) seen.push(event);
+  } catch (reason) {
+    assert.ok(reason instanceof ContentStreamContractError);
+    return seen;
+  }
+  throw new Error("expected the guard to reject this stream");
+})();
+assert.deepEqual(
+  late,
+  [{ event: "received" }],
+  "违约前不得把 completed 交给消费方"
+);
+
+// Validated events are rebuilt, so an unvalidated key cannot ride along.
+const rebuilt = await collect([completedWith({ smuggled: "payload" })]);
+assert.deepEqual(rebuilt, [completed]);
+
+// The enums stay the declared truth source rather than drifting into prose.
+assert.deepEqual(
+  [...TARGETS],
+  ["douyin_video", "xiaohongshu_video", "xiaohongshu_graphic", "wechat_channels_video"]
+);
+assert.deepEqual([...CONVERSATION_KINDS], ["chat", "question"]);
 
 console.log("content stream contract guard checks passed");

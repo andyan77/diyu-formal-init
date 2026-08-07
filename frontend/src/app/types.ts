@@ -236,11 +236,14 @@ export type GenerationStage =
   | "validating"
   | "finalizing";
 
+/** The conversation replies the content stream can carry. */
+export type ConversationKind = "chat" | "question";
+
 export type ContentStreamEvent =
   | { event: GenerationStage }
   | {
       event: "conversation";
-      kind: "chat" | "question";
+      kind: ConversationKind;
       message: string;
       conversation_id?: string | null;
       direct_generation_available?: boolean;
