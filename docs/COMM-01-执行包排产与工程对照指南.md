@@ -120,6 +120,20 @@
   浏览器脚本一律打**本地**拉起的实例，不触生产/外部服务。验收细则以 EXE-01R 执行 Prompt 为准。
 - **状态口径**：EXE-01 维持 COMPLETE（地基交付本身有效），EXE-01R 为独立有界返工包，
   **EXE-02 不得先于 EXE-01R 通过监理复验开工**。
+- **Prompt v1.1 修订（2026-08-07，守护审查 PASS_AFTER_BOUNDED_CORRECTIONS，监理逐条实证后采纳）**：
+  安装顺序（uv sync → npm ci → make 四目标 → golden）/ 独立 clean worktree 门（分支已存在即
+  PRECONDITION_BLOCKED，禁 reset/clean/stash）/ scope 切换禁用会清草稿的
+  `clearOneTimeControls`（首行 `setSeed("")`），抽不碰草稿的 `resetScopeBoundUiState` /
+  后端只补 `tenant_id` 只增投影（`operator_id` 实已在 `workbench_repository.py:73`）/
+  R2 放行 `app.py` 最小深链入口适配（版本不存在仍出 SPA shell）/ R3 终态原子提交语义
+  （用户消息与暂态进度不算污染）/ R4 同帧跨条件哈希比对 + manifest 记物理尺寸与 CSS 视口 +
+  执行端只登记 P6v2 DRAFT 不动 P6 / scope 门改双窗口（历史 af20ae5→3043217 + 当前
+  202da6d→HEAD）+ 9 门自包含 runner / 函数预算五级优先（豁免棘轮按 202da6d 冻结）/
+  CI run 须 headSha==最终远端 HEAD / 执行侧终态只能
+  `IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`。
+  **双向事实纠错**：审查方"分隔符已为 U+0000"不实（`advisorDraft.ts:37` 为普通空格）；
+  v1 的 `content_service.py:1960` 锚点系 `identity_summary` 误引，弃用。
+  完整 v1.1 覆盖段以监理会话 2026-08-07 输出为准，与 v1 冲突处以 v1.1 为准。
 
 ### EXE-02 · 品牌依据可见闭环（A1 + A2 + FE-07）
 
