@@ -194,6 +194,23 @@
   估算误差（停止组因：制度性停止点〔角色分离/门红不绕〕属设计如此，产能切分属
   排产责任）。第三轮范围收敛为最短收口路径：9 处棘轮修复 → 门链（双窗口 scope +
   runner + make 目标）→ ci.yml 接入与 dispatch 三件套 → 浏览器脚本 → 双基线说明。
+- **执行轮次 3+4 交付、监理复验与串行合入（2026-08-07，runtime_verified）——EXE-01R
+  收口 COMPLETE**：轮次 3（远端 `f4600ac`）九处棘轮全修回（只用抽取）、九门进 CI、
+  quotePath 中文路径转义 bug 以 `-z` 修门不绕门、8 个浏览器脚本等待条件修法经监理裁定
+  属本包合规（协议缺陷修工具，断言 549→646 只增）。轮次 4：实现终态 `13cfcb2`、冻结
+  提交 `eb6bb5d`——scope 窗写死 357d17c..13cfcb2 + 祖先守卫（监理篡改反证：外来 SHA
+  当场报"冻结点不是当前 HEAD 的祖先"）。残留归属查清：ux03-product-media 系**本包 R3
+  回归**——`completed.result.target` 被当枚举校验，而服务端 `content_service.py:2186`
+  成对发射（`target` 是人看的标签、`target_key` 才是枚举）；35 条自建断言全绿却拦不住，
+  因夹具按同一错误理解编写，**自己验自己验不出来，真服务器一跑现形**→ 修三处（守卫
+  target 改自由文本 / types.ts target 改 string / targetOf 删标签兜底）+ 5 条反证；
+  ux03-gate-c 基线本就不过、修后反超基线；ux03-gate-d 归属 EXE-01 时期既有 → **监理
+  路由 EXE-03**（陈列搭配导航面，若属 DM01 深层链路届时转独立小包）。浏览器脚本终态
+  3 PASS / 1 FAIL(已归属) / 4 BLOCKED(缺私有语料/fixture 逐条在案)。监理复验：golden
+  920/2/0 + 前端 9 套件 + CI 三件套（run 31186778559 headSha==`eb6bb5d`）+ 修复代码
+  逐处核对全真。**串行集成第 1 步完成：merge `d484540` 入主线**，合并后主线 CI
+  dispatch 复核（run 31188653125）。**教训固化：合同夹具必须取自服务端真源形状，
+  不得照实现者的理解手写**——此为 EXE-V0 固定样本纪律的先例依据。
 
 ### EXE-V0 · 价值引擎先行包（founder 2026-08-07 注入，第一部分核心）
 
@@ -279,6 +296,25 @@ failed=0 + 新增 skip=0（不硬编码通过数）。函数预算 = EXE-01R 同
 并行期终态只能报 `IMPLEMENTED_ON_AUTHORIZED_BASE · AWAITING_SERIALIZED_INTEGRATION`。
 ⑦ P0 缺失不阻塞本地实现，但报告须标 `production_profile_calibration=UNVERIFIED`，
 且不得进入 EXE-V1 部署与真实陪跑；P0 分类增加 `mixed_or_ambiguous` 第三态。
+
+- **实现轮交付与监理复验（2026-08-07，runtime_verified）**：分支 `exe-v0-value-engine`
+  远端 HEAD `cbdf0be`，恰建于治理基线 `c37ae78`；14 文件全在 allowlist（
+  `publication_contract.py` 未触碰，比授权面更克制）；`deepseek.py` 与 `openapi.json`
+  与基线**字节零漂移**（监理独立 diff 复核 = 0 行）。监理复跑：golden **951/2/0**
+  （913+38 新增，skip 未增；监理环境首跑 exit 1 系缺 node_modules 的环境假象，
+  补装后 codegen/openapi 双检查通过）；exev0 双门真实退出码绿（1697 函数 / 233 冻结
+  豁免 / 新函数 ≤60，棘轮曾当场拦下三处越界并被重构回基线内）；**固定样本在监理
+  环境逐字节复现**（160 行，digest `aa0b8844…c9672` 与交付一致——确定性成立）；
+  **篡改反证外科级命中**：禁用 `is_static_default` → 全量 951 条中恰其专属反证
+  `test_a_ruleset_that_reproduces_a_static_default_is_refused_at_the_hard_gate`
+  单条转红（1 failed / 950 passed），还原后干净。执行侧诚实项（venv 3.10 对齐口径、
+  TOTP 偶发 401 隔离复绿、P0 摘要不复制进分支待集成）全部核实相容。
+  **监理裁决：`assembly_trace.used_profile_fields` 只记实际撑起路径的字段——批准**
+  （把未参与决策的字段写成证据即伪造溯源；商品/系列路径行改指冻结依据的分列口径成立）。
+  终态申报 `IMPLEMENTED_ON_AUTHORIZED_BASE · AWAITING_SERIALIZED_INTEGRATION` 合规。
+  **已知集成风险预授权**：`scripts/exev0/assert_scope.py:67` 现用两点 diff
+  `BASE..HEAD`，merge 主线后必误报——集成指令预授权改为对主线的三点 diff
+  （merge-base 语义）或沿 EXE-01R 先例冻结实现终态 SHA，属最小修门。
 
 ### EXE-02 · 品牌依据可见闭环（A1 + A2 + FE-07）
 

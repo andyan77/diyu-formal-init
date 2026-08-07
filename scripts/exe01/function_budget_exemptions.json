@@ -1,0 +1,350 @@
+{
+  "base_sha": "357d17cd610d5c3c0b3fd5f7c703b8710da82d64",
+  "limit": 60,
+  "note": "冻结豁免：基线中已超 60 行的函数。可修改，行数只减不增（棘轮）。新增逻辑请抽成 ≤60 行的新函数，不得让这些函数继续变长。",
+  "exemptions": [
+    {
+      "file": "frontend/src/app/AppRouter.tsx",
+      "path": "RoutedApp",
+      "baseline_start_line": 140,
+      "baseline_end_line": 223,
+      "baseline_lines": 84
+    },
+    {
+      "file": "frontend/src/app/CreatorApp.tsx",
+      "path": "AccountDrawer",
+      "baseline_start_line": 350,
+      "baseline_end_line": 605,
+      "baseline_lines": 256
+    },
+    {
+      "file": "frontend/src/app/CreatorApp.tsx",
+      "path": "ArtifactPane",
+      "baseline_start_line": 607,
+      "baseline_end_line": 729,
+      "baseline_lines": 123
+    },
+    {
+      "file": "frontend/src/app/CreatorApp.tsx",
+      "path": "CreatorApp",
+      "baseline_start_line": 731,
+      "baseline_end_line": 2044,
+      "baseline_lines": 1314
+    },
+    {
+      "file": "frontend/src/app/CreatorApp.tsx",
+      "path": "CreatorApp > runCreationStream",
+      "baseline_start_line": 1131,
+      "baseline_end_line": 1328,
+      "baseline_lines": 198
+    },
+    {
+      "file": "frontend/src/app/CreatorApp.tsx",
+      "path": "CreatorApp > runRevision",
+      "baseline_start_line": 1330,
+      "baseline_end_line": 1405,
+      "baseline_lines": 76
+    },
+    {
+      "file": "frontend/src/app/CreatorApp.tsx",
+      "path": "DirectionAxis",
+      "baseline_start_line": 89,
+      "baseline_end_line": 183,
+      "baseline_lines": 95
+    },
+    {
+      "file": "frontend/src/app/CreatorApp.tsx",
+      "path": "DirectionPanel",
+      "baseline_start_line": 185,
+      "baseline_end_line": 330,
+      "baseline_lines": 146
+    },
+    {
+      "file": "frontend/src/app/DisplayApp.tsx",
+      "path": "DisplayApp",
+      "baseline_start_line": 58,
+      "baseline_end_line": 382,
+      "baseline_lines": 325
+    },
+    {
+      "file": "frontend/src/app/LoginPage.tsx",
+      "path": "ActivationPage",
+      "baseline_start_line": 83,
+      "baseline_end_line": 168,
+      "baseline_lines": 86
+    },
+    {
+      "file": "frontend/src/app/LoginPage.tsx",
+      "path": "LoginPage",
+      "baseline_start_line": 12,
+      "baseline_end_line": 81,
+      "baseline_lines": 70
+    },
+    {
+      "file": "frontend/src/app/MaterialsPanel.tsx",
+      "path": "MaterialsPanel",
+      "baseline_start_line": 95,
+      "baseline_end_line": 261,
+      "baseline_lines": 167
+    },
+    {
+      "file": "frontend/src/app/OpsApp.tsx",
+      "path": "FeedbackList",
+      "baseline_start_line": 247,
+      "baseline_end_line": 337,
+      "baseline_lines": 91
+    },
+    {
+      "file": "frontend/src/app/OpsApp.tsx",
+      "path": "OpsApp",
+      "baseline_start_line": 339,
+      "baseline_end_line": 402,
+      "baseline_lines": 64
+    },
+    {
+      "file": "frontend/src/app/OpsApp.tsx",
+      "path": "TenantList",
+      "baseline_start_line": 183,
+      "baseline_end_line": 245,
+      "baseline_lines": 63
+    },
+    {
+      "file": "frontend/src/app/OpsApp.tsx",
+      "path": "TenantProvisioning",
+      "baseline_start_line": 66,
+      "baseline_end_line": 181,
+      "baseline_lines": 116
+    },
+    {
+      "file": "frontend/src/app/OrganizationMaterialsApp.tsx",
+      "path": "OrganizationMaterialsApp",
+      "baseline_start_line": 38,
+      "baseline_end_line": 197,
+      "baseline_lines": 160
+    },
+    {
+      "file": "frontend/src/app/ProductShells.tsx",
+      "path": "UserHome",
+      "baseline_start_line": 12,
+      "baseline_end_line": 98,
+      "baseline_lines": 87
+    },
+    {
+      "file": "frontend/src/app/PublicHome.tsx",
+      "path": "PublicHome",
+      "baseline_start_line": 5,
+      "baseline_end_line": 95,
+      "baseline_lines": 91
+    },
+    {
+      "file": "frontend/src/app/SeriesPanel.tsx",
+      "path": "SeriesPanel",
+      "baseline_start_line": 26,
+      "baseline_end_line": 186,
+      "baseline_lines": 161
+    },
+    {
+      "file": "frontend/src/app/StatusPage.tsx",
+      "path": "StatusPage",
+      "baseline_start_line": 29,
+      "baseline_end_line": 107,
+      "baseline_lines": 79
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "AccountSecurity",
+      "baseline_start_line": 699,
+      "baseline_end_line": 800,
+      "baseline_lines": 102
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "Accounts",
+      "baseline_start_line": 2412,
+      "baseline_end_line": 3117,
+      "baseline_lines": 706
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "Accounts > <arg of accounts.data?.map>",
+      "baseline_start_line": 2618,
+      "baseline_end_line": 2786,
+      "baseline_lines": 169
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "BrandLibrary",
+      "baseline_start_line": 3119,
+      "baseline_end_line": 5439,
+      "baseline_lines": 2321
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "BrandLibrary > <arg of publicationDrafts.map>",
+      "baseline_start_line": 4277,
+      "baseline_end_line": 4355,
+      "baseline_lines": 79
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "BrandLibrary > <arg of visibleProducts.map>",
+      "baseline_start_line": 4103,
+      "baseline_end_line": 4181,
+      "baseline_lines": 79
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "BrandLibrary > saveProducts",
+      "baseline_start_line": 3268,
+      "baseline_end_line": 3355,
+      "baseline_lines": 88
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "Drawer",
+      "baseline_start_line": 635,
+      "baseline_end_line": 697,
+      "baseline_lines": 63
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "Members",
+      "baseline_start_line": 1154,
+      "baseline_end_line": 2366,
+      "baseline_lines": 1213
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "Overview",
+      "baseline_start_line": 933,
+      "baseline_end_line": 1008,
+      "baseline_lines": 76
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "Readiness",
+      "baseline_start_line": 5441,
+      "baseline_end_line": 5561,
+      "baseline_lines": 121
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "TeamUsage",
+      "baseline_start_line": 1010,
+      "baseline_end_line": 1152,
+      "baseline_lines": 143
+    },
+    {
+      "file": "frontend/src/app/TenantAdminApp.tsx",
+      "path": "TenantAdminApp",
+      "baseline_start_line": 5563,
+      "baseline_end_line": 5695,
+      "baseline_lines": 133
+    },
+    {
+      "file": "frontend/src/components/CapabilityGuide.tsx",
+      "path": "UsageGuideView",
+      "baseline_start_line": 97,
+      "baseline_end_line": 191,
+      "baseline_lines": 95
+    },
+    {
+      "file": "frontend/src/features/advisor/useAdvisorScope.ts",
+      "path": "useAdvisorScope",
+      "baseline_start_line": 53,
+      "baseline_end_line": 129,
+      "baseline_lines": 77
+    },
+    {
+      "file": "frontend/test/admin-run.mjs",
+      "path": "<anonymous>",
+      "baseline_start_line": 281,
+      "baseline_end_line": 1174,
+      "baseline_lines": 894
+    },
+    {
+      "file": "frontend/test/admin_interaction.test.tsx",
+      "path": "main",
+      "baseline_start_line": 102,
+      "baseline_end_line": 962,
+      "baseline_lines": 861
+    },
+    {
+      "file": "frontend/test/interaction.test.tsx",
+      "path": "main",
+      "baseline_start_line": 101,
+      "baseline_end_line": 681,
+      "baseline_lines": 581
+    },
+    {
+      "file": "frontend/test/run.mjs",
+      "path": "<anonymous>",
+      "baseline_start_line": 284,
+      "baseline_end_line": 533,
+      "baseline_lines": 250
+    },
+    {
+      "file": "frontend/test/tenant01-formal-browser.mjs",
+      "path": "createPage",
+      "baseline_start_line": 162,
+      "baseline_end_line": 318,
+      "baseline_lines": 157
+    },
+    {
+      "file": "frontend/test/ui04-user-paths.run.mjs",
+      "path": "<anonymous>",
+      "baseline_start_line": 120,
+      "baseline_end_line": 199,
+      "baseline_lines": 80
+    },
+    {
+      "file": "frontend/test/ux02-formal-browser.mjs",
+      "path": "createPage",
+      "baseline_start_line": 115,
+      "baseline_end_line": 239,
+      "baseline_lines": 125
+    },
+    {
+      "file": "frontend/test/ux02-responsive-browser.mjs",
+      "path": "page",
+      "baseline_start_line": 98,
+      "baseline_end_line": 170,
+      "baseline_lines": 73
+    },
+    {
+      "file": "frontend/test/ux03-gate-a-browser.mjs",
+      "path": "createPage",
+      "baseline_start_line": 121,
+      "baseline_end_line": 295,
+      "baseline_lines": 175
+    },
+    {
+      "file": "frontend/test/ux03-gate-a-browser.mjs",
+      "path": "inspectUser",
+      "baseline_start_line": 750,
+      "baseline_end_line": 851,
+      "baseline_lines": 102
+    },
+    {
+      "file": "scripts/exe01/assert_bundle_budget.py",
+      "path": "main",
+      "baseline_start_line": 69,
+      "baseline_end_line": 136,
+      "baseline_lines": 68
+    },
+    {
+      "file": "scripts/exe01/assert_dead_css.py",
+      "path": "main",
+      "baseline_start_line": 51,
+      "baseline_end_line": 115,
+      "baseline_lines": 65
+    },
+    {
+      "file": "scripts/exe01/assert_test_reconciliation.py",
+      "path": "main",
+      "baseline_start_line": 29,
+      "baseline_end_line": 128,
+      "baseline_lines": 100
+    }
+  ]
+}

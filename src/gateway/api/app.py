@@ -3570,15 +3570,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if task is not None and version is not None:
             try:
                 result = service.fetch_version(scope, task, version)
-            except DomainError as exc:
-                raise HTTPException(status_code=404, detail="找不到当前会话可见的版本") from exc
-            fallback_extra = (
-                "<h2>内容概要</h2><p>"
-                + escape(str(result["outline"]))
-                + "</p><h2>完整文字成品</h2><article>"
-                + escape(str(result["body"]))
-                + "</article>"
-            )
+            except DomainError:
+                # A version that is not there is not a reason to withhold the
+                # application. Returning 404 here meant the deep link never
+                # served the SPA shell, so React could not boot and the person
+                # met a bare error page with nowhere to go (EXE-01R R2).
+                #
+                # Permission is decided above and is untouched: an unauthorised
+                # caller has already been sent to /login or the access-denied
+                # page and never reaches this line, so "missing" is never used
+                # to describe "not yours".
+                fallback_extra = (
+                    "<h2>找不到这个版本</h2>"
+                    "<p>这条内容的这一版不在当前发布账号里。</p>"
+                    "<p><a href='/content'>返回工作台</a></p>"
+                )
+            else:
+                fallback_extra = (
+                    "<h2>内容概要</h2><p>"
+                    + escape(str(result["outline"]))
+                    + "</p><h2>完整文字成品</h2><article>"
+                    + escape(str(result["body"]))
+                    + "</article>"
+                )
         if current_settings.generator_mode == "stub":
             fallback_extra = "<p>离线确定性测试模式：此页结果不是实际模型调用。</p>" + fallback_extra
         del notice

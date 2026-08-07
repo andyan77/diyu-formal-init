@@ -137,7 +137,7 @@ try {
     };
     const navigate = async path => {
       await send("Page.navigate", { url: `${baseUrl}${path}` }, sessionId);
-      await waitFor("document.readyState === 'complete'", `加载 ${path}`);
+      await waitFor(`document.readyState === 'complete' && !document.querySelector('.page-loading')`, `加载 ${path}`);
     };
     const fill = async (selector, value) => {
       ensure(

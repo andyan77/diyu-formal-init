@@ -150,6 +150,7 @@ dom.window.__DIYU_BOOTSTRAP__ = {
   generator_mode: "deepseek",
   formal_runtime: true,
   identity: {
+    tenant_id: "tenant-0001",
     operator_id: "user-hq",
     operator: "总部内容运营甲",
     organization: "笛语服饰管理组织",
