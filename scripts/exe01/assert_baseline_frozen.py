@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Gate the EXE-01 baseline commit.
+"""Assert the EXE-01 baselines have not been edited since they were frozen.
 
-The frozen baselines are only worth something if they came from a real build of
-the tree being committed. This re-runs both measurements and requires the
-committed files to reproduce byte for byte, so a hand-edited or stale baseline
-cannot enter the history and silently loosen the later budget check.
+The bundle and test baselines are a record of the tree *before* EXE-01 touched
+it, so they must never be regenerated: re-freezing them after a regression would
+silently move the budget and the coverage floor to wherever the code happens to
+be. Their reproducibility was verified at the freeze commit; from then on the
+only invariant worth checking is that the bytes are unchanged.
 
 Usage:
     python3 scripts/exe01/assert_baseline_frozen.py
@@ -12,62 +13,55 @@ Usage:
 
 from __future__ import annotations
 
-import json
+import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-import bundle_report  # noqa: E402
-import test_inventory  # noqa: E402
-
-HERE = Path(__file__).resolve().parent
-BUNDLE_BASELINE = HERE / "bundle_baseline.json"
-TEST_BASELINE = HERE / "test_baseline.json"
-
-
-def render(payload: dict[str, object]) -> str:
-    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# The commit that froze both baselines, verified there against a live build and
+# a live inventory run.
+FREEZE_COMMIT = "e56b073"
+BASELINES = (
+    "scripts/exe01/bundle_baseline.json",
+    "scripts/exe01/test_baseline.json",
+)
 
 
-def check(name: str, path: Path, live: dict[str, object]) -> list[str]:
-    if not path.exists():
-        return [f"{name}: missing frozen baseline at {path}"]
-    frozen = path.read_text(encoding="utf-8")
-    if frozen != render(live):
-        return [
-            f"{name}: frozen baseline does not reproduce from the current tree "
-            f"({path}); re-run the generator instead of editing it by hand"
-        ]
-    return []
+def frozen_bytes(relative: str) -> bytes | None:
+    result = subprocess.run(
+        ["git", "show", f"{FREEZE_COMMIT}:{relative}"],
+        cwd=PROJECT_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    return result.stdout if result.returncode == 0 else None
 
 
 def main() -> int:
     failures: list[str] = []
-    failures += check("bundle", BUNDLE_BASELINE, bundle_report.collect())
-    failures += check("tests", TEST_BASELINE, test_inventory.collect())
+    for relative in BASELINES:
+        path = PROJECT_ROOT / relative
+        if not path.exists():
+            failures.append(f"{relative}: deleted")
+            continue
+        original = frozen_bytes(relative)
+        if original is None:
+            failures.append(
+                f"{relative}: cannot read it at freeze commit {FREEZE_COMMIT}"
+            )
+        elif original != path.read_bytes():
+            failures.append(
+                f"{relative}: edited since {FREEZE_COMMIT}; a baseline records "
+                "the pre-change tree and must not be re-frozen"
+            )
 
     if failures:
         for failure in failures:
             print(f"FAIL {failure}", file=sys.stderr)
         return 1
-
-    bundle = json.loads(BUNDLE_BASELINE.read_text(encoding="utf-8"))
-    tests = json.loads(TEST_BASELINE.read_text(encoding="utf-8"))
-    print("PASS baseline frozen and reproducible")
-    print(
-        "  entry js  raw={entry_js_raw} gzip={entry_js_gzip}".format(
-            **bundle["totals"]
-        )
-    )
-    print("  css       raw={css_raw} gzip={css_gzip}".format(**bundle["totals"]))
-    print("  route chunks={chunk_count}".format(**bundle["totals"]))
-    print(
-        "  tests     files={file_count} assertions={assertions} "
-        "browser_scripts={browser_script_count} skips={skip_markers}".format(
-            **tests["totals"]
-        )
-    )
+    print(f"PASS baselines unchanged since {FREEZE_COMMIT}")
+    for relative in BASELINES:
+        print(f"  {relative}")
     return 0
 
 
