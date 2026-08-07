@@ -78,6 +78,18 @@
   codegen 工具链进 CI 的 node 依赖。
 - **验证标准**：旧 URL 对照表全通；切账号/平台不整页刷新、草稿不丢（浏览器断言）；首包体积不增；
   死样式删除附全 TSX grep 零引用证明 + 多视口截图回归；FE-00 未过不得开工 EXE-02+ 的界面项。
+- **监理复验记录（2026-08-06，runtime_verified）**：执行分支 `exe-01-frontend-foundation`
+  远端 HEAD `3043217`，监理独立 worktree 全量复跑——golden 913/2/0、前端 6 suite 全过、
+  8 断言脚本全 PASS（路由断言在裸环境正确失败关闭、test.sh 环境下通过）、entry gzip
+  −29.6%、批准表 P1—P6 全 DRAFT 零自批、依赖门合规（esbuild 为基线既有）、后端 2 skip
+  均为基线既有环境门控。**判定：PARTIAL · BLOCKED_EXTERNAL_FE00_HUMAN_GATE，符合预期
+  轨迹，无需补充执行 Prompt。**
+- **EXE-01 上报遗留缺陷与去向**（执行侧发现、未越界顺手修，处置正确）：
+  ① 裸 `/activate` 服务端从未注册（仅 `/activate/{token}`），旧 Root 分支为死代码 →
+  EXE-03 触碰 `/user` 壳时一并裁决注册或删除；② `/materials` 未授权 303→/login 而
+  `/user` 返回 401，处理器层既有不一致 → EXE-03 统一未授权行为口径；③ `--surface-soft`
+  全仓未定义无回退，`.artifact-context-basis` 背景实际透明 → FE-00 设计评审时裁决补定义
+  或删除；④ 生产模式 5 条路由仅 static_verified → EXE-10 生产晋级时随部署验收补运行时复核。
 
 ### EXE-02 · 品牌依据可见闭环（A1 + A2 + FE-07）
 
