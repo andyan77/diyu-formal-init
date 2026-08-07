@@ -1,0 +1,87 @@
+{
+  "schema": "exe01.css_visual_regression.v1",
+  "method": "src/gateway/api/html.py pages rendered with the built stylesheet, screenshotted in headless Chrome at 1440x900 and 390x844; every element's full computed style dumped and compared against the same pages built from base commit 8c9f2ac",
+  "why_these_pages": "these are the only surfaces whose class names exist solely as Python string literals, so a TSX-only zero-reference proof would not have covered them",
+  "viewports": [
+    "desktop-1440x900",
+    "mobile-390x844"
+  ],
+  "captures": 12,
+  "elements_compared": 262,
+  "computed_style_differences": [],
+  "screenshots": [
+    {
+      "file": "activation_failure--desktop-1440x900.png",
+      "sha256_before": "87c54bc9d268ba3090903fbdd6c386e3a1342d888ef9b0887109988a253e9623",
+      "sha256_after": "87c54bc9d268ba3090903fbdd6c386e3a1342d888ef9b0887109988a253e9623",
+      "identical": true
+    },
+    {
+      "file": "activation_failure--mobile-390x844.png",
+      "sha256_before": "e83376b4e3c4063a2bc158531b9a1b4fe4cac033689084a6cfce0e9f18253c63",
+      "sha256_after": "e83376b4e3c4063a2bc158531b9a1b4fe4cac033689084a6cfce0e9f18253c63",
+      "identical": true
+    },
+    {
+      "file": "login_failure--desktop-1440x900.png",
+      "sha256_before": "eccef3997afdf0fabcf8c99332d2cc2c6639b652315f43392eedb046789413f4",
+      "sha256_after": "eccef3997afdf0fabcf8c99332d2cc2c6639b652315f43392eedb046789413f4",
+      "identical": true
+    },
+    {
+      "file": "login_failure--mobile-390x844.png",
+      "sha256_before": "ee66ca114cf371b7f3b5a33ac4d96107fc9963f9fee1da7627dec49466820622",
+      "sha256_after": "ee66ca114cf371b7f3b5a33ac4d96107fc9963f9fee1da7627dec49466820622",
+      "identical": true
+    },
+    {
+      "file": "spa_shell_noscript--desktop-1440x900.png",
+      "sha256_before": "cbb222acb3e7acac7221ef157bebda23e13d9314b7aff8f59749f564cce81a9f",
+      "sha256_after": "cbb222acb3e7acac7221ef157bebda23e13d9314b7aff8f59749f564cce81a9f",
+      "identical": true
+    },
+    {
+      "file": "spa_shell_noscript--mobile-390x844.png",
+      "sha256_before": "7a319db7378a6507a82d1d877ed6319000efb2c0da321095c3a815a24b69d72f",
+      "sha256_after": "7a319db7378a6507a82d1d877ed6319000efb2c0da321095c3a815a24b69d72f",
+      "identical": true
+    },
+    {
+      "file": "tenant_admin_access_denied--desktop-1440x900.png",
+      "sha256_before": "f5144d260606bf19d057bbd983984bb7b095808a23af866b2df6bd5bee49243f",
+      "sha256_after": "f5144d260606bf19d057bbd983984bb7b095808a23af866b2df6bd5bee49243f",
+      "identical": true
+    },
+    {
+      "file": "tenant_admin_access_denied--mobile-390x844.png",
+      "sha256_before": "4ee7b6d0a5da257a96a3efc1cb91b53dcef38448ebfa58b01cc6d12c774d99d0",
+      "sha256_after": "4ee7b6d0a5da257a96a3efc1cb91b53dcef38448ebfa58b01cc6d12c774d99d0",
+      "identical": true
+    },
+    {
+      "file": "tenant_data_missing--desktop-1440x900.png",
+      "sha256_before": "4d4ab9cce8854b8ab6544efa17ddbd00161ce3a5eaeb02ab13faa55723440353",
+      "sha256_after": "4d4ab9cce8854b8ab6544efa17ddbd00161ce3a5eaeb02ab13faa55723440353",
+      "identical": true
+    },
+    {
+      "file": "tenant_data_missing--mobile-390x844.png",
+      "sha256_before": "dfa8adc3c876716fa540e9df78835e6ba5b0fb4f2bfd2bf9f565ebdff6013978",
+      "sha256_after": "dfa8adc3c876716fa540e9df78835e6ba5b0fb4f2bfd2bf9f565ebdff6013978",
+      "identical": true
+    },
+    {
+      "file": "tenant_user_access_denied--desktop-1440x900.png",
+      "sha256_before": "20ad561b5c5d045b1e714bbed0f8b82550e123b287b5477d89fdb7dc7296552a",
+      "sha256_after": "20ad561b5c5d045b1e714bbed0f8b82550e123b287b5477d89fdb7dc7296552a",
+      "identical": true
+    },
+    {
+      "file": "tenant_user_access_denied--mobile-390x844.png",
+      "sha256_before": "2aac0c4fec9e2b45f32a689b5f8297c00d269f60f3db336ffb63bec8591741f1",
+      "sha256_after": "2aac0c4fec9e2b45f32a689b5f8297c00d269f60f3db336ffb63bec8591741f1",
+      "identical": true
+    }
+  ],
+  "all_screenshots_identical": true
+}
