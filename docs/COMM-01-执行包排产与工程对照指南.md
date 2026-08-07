@@ -14,12 +14,21 @@
 
 ---
 
-## 一、排产总览（12 包，顺序即依赖序）
+## 一、排产总览（两部分合一方案 · founder 2026-08-07 裁决注入价值先行目标）
+
+> **同一份方案、同一条主线 COMM-01，分两部分先后实现，不另立里程碑：**
+> **第一部分 · 价值引擎先行与陪跑交付** = EXE-01R 收口 + EXE-V0 + EXE-V1——先把
+> "内容应该是什么"的发动机装上并部署 ECS，由 founder 向陪跑种子客户**有陪同**交付与辅导；
+> **第二部分 · 全量产品化** = EXE-02—EXE-12 按原序落盘，吸收价值方案增量
+> （P1→EXE-02、P2-P4→EXE-06、P5→EXE-07 后、部署 runbook→EXE-10）。
+> 无陪同自助与可用性阈值验收仍属 B6 人类门（EXE-09），不因先行交付提前放开。
 
 | # | 执行包 | 承接工作项 | 风险级 | 阶段门 |
 |---|---|---|---|---|
 | EXE-01 | 前端地基与体验蓝图 | FE-00—FE-04 | 中 | 先行门 |
 | EXE-01R | EXE-01 有界返工（founder 2026-08-07 追加裁决，EXE-02 前置） | 五项：作用域事务化 / task 深链补实现 / 流校验补强 / 证据矩阵重做 / 远端集成证明 | 中 | 先行门 |
+| EXE-V0 | 价值引擎先行包（founder 注入意图目标，第一部分核心） | P0 生产只读核查分叉 + 服务端确定性组装 payoff + payoff_source + 路径观测 + 结构硬门 | **重（改生成语义）** | 先行价值门 |
+| EXE-V1 | 最小生产晋级与陪跑交付包（第一部分收口） | 部署 runbook + ECS 晋级 + 生产冒烟 + 陪跑交付材料 + 反馈台账 + L0 生产观察 | 中（运维+doc；生产动作逐项单独裁决） | 陪跑交付门 |
 | EXE-02 | 品牌依据可见闭环 | A1 + A2 + FE-07 | 中 | A |
 | EXE-03 | 今日工作台与帮助分流 | A3 + A4 + A5 + FE-05/08/13 | 中 | A |
 | EXE-04 | 品牌反馈队列 | A6 + FE-12 | 中 | A |
@@ -56,6 +65,7 @@
 | SEAM-10 | 反馈表"append-only + 可变状态"自相矛盾 | 两表事件化：`brand_basis_feedbacks`（不可变提交）+ `brand_basis_feedback_events`（处理事件），服务端派生 current_status |
 | SEAM-11 | 上下文选择多点漂移 | `BrandContextSelectionService` 前移为纯服务（EXE-02 交付），OpportunityV2 / Advisor / Proposal / context_selected / 快照 / 制作包六点同源消费；提案确认只重验证不重选 |
 | SEAM-12 | 制作包存储所有权 | 内容侧 `ContentProductionPackageV1` 随 content_versions；DM01 `DisplayExecutionPackageV1` 随 display version——不塞入 ContentVersion |
+| SEAM-13 | EXE-V0 组装 payoff 与 EXE-06 确认 payoff 双源 | 合同增 `payoff_source ∈ {server_assembled, user_confirmed, static_fallback}` 判别，第一天进合同；EXE-06 上线后新任务一律走用户确认路径、组装器降级为 fallback；历史快照零改写；降级必须可见（快照记 `payoff_degraded`），不得静默冒充成功 |
 
 ---
 
@@ -179,6 +189,62 @@
   估算误差（停止组因：制度性停止点〔角色分离/门红不绕〕属设计如此，产能切分属
   排产责任）。第三轮范围收敛为最短收口路径：9 处棘轮修复 → 门链（双窗口 scope +
   runner + make 目标）→ ci.yml 接入与 dispatch 三件套 → 浏览器脚本 → 双基线说明。
+
+### EXE-V0 · 价值引擎先行包（founder 2026-08-07 注入，第一部分核心）
+
+- **动机**：真实性防线（"不能是什么"）已工业级，但 `audience_payoff` 是产品类型级静态查表
+  （`publication_contract.py:456`，6 题材共 3 句固定文案，签名只吃 primary_product +
+  topic_origin），空话坐在 Writer prompt 最高权重位（`src/tool/llm_gateway/deepseek.py:2138`
+  `给读者的回报：{contract.audience_payoff}`），校验只查非空永远绿——"应该是什么"没有发动机。
+  模型+用户确认路径在 COMM-01 前物理不可行（`content_service.py:505` `_context_for_intake`
+  刻意剥离画像；确认环节依赖 EXE-06 proposal_token + FE-09），故本包走**服务端确定性组装**。
+- **需求**：① P0 生产只读核查（生效画像分叉：查询包由方案作者交付、监理守护审查、
+  生产授权运维端执行、证据入私有根、仓库只落无敏感摘要；若生效"普通生活"版→先修画像
+  [零代码 API 动作，单独裁决]再校准基线）；② 服务端确定性组装 `task_audience_payoff`
+  （零 LLM：画像五段 + 题材 + primary_product + 冻结商品/系列引用 → 每篇不同的具体回报句）；
+  ③ `payoff_source` 第一天进合同（SEAM-13）；④ `brand_relevance_path` 七枚举（ADR-013 §4）
+  观测字段 + `assembly_trace` 进任务快照，只记录不拦截；⑤ 结构硬门子集：非空+长度边界、
+  规范化后≠任何静态默认句、路径∈七枚举、`product_brief()` 产出语义收窄为
+  `product_contract_job`（五类产品不变量，组装器与模型均不可改写）、路径与 primary_product
+  不矛盾；⑥ 组装无法产出合法 payoff（如画像字段空）→ 静态 fallback 但
+  `payoff_source=static_fallback` + `payoff_degraded=true` **可见记录**——V0 无追问出口的
+  过渡策略，EXE-06 升级为"新任务不得带病放行"。
+- **上下游承接**：手术点 `content_service.py:558` 在 `_new_publication_contract()`（:539）
+  体内，与 EXE-06 承接点同函数——所有改动附 supersession 注记"EXE-06 上线后组装器降级
+  fallback"；快照 jsonb expand-only（20260726_20 先例），V5 读路径与历史零改写；
+  与 EXE-01R **并行**（纯后端 vs 前端+CI 零文件交叠），后合入者过合并后全部门；
+  观测产出（路径分布/静态重合率/degraded 率）是 EXE-06 Brief 的设计输入。
+- **风险点**：改生成语义 → 受影响冻结验收子集 **fresh rerun**（不得沿用 23/26）；真模型
+  子集需 founder 显式启用（密钥预 export 进环境、脚本绝不读 `.env`——2026-06-20 先例）；
+  模板化表达上限："每篇不同"≠"每篇都好"，交付材料须如实陈述此边界。
+- **验证标准**：组装确定性（同输入同输出）单测；固定样本回归（前后对照归档供 founder 审）；
+  6 题材 payoff 互不相同且各可指回画像字段（**样本验收目标，非运行时硬门**）；golden 全绿；
+  硬门反证测试（静态默认句必拒、非法路径必拒、degraded 必可见）；payoff 零事实主张
+  （不含商品属性/经历/效果断言）；新增函数 ≤60 行。
+
+### EXE-V1 · 最小生产晋级与陪跑交付包（第一部分收口）
+
+- **需求**：① 部署 runbook（版本 tag / 配置核对 / 回滚预案 / local→ECS 推送纪律）；
+  ② ECS 部署 + 部署后运行时冒烟（固定样本生产实跑 + 顺带收 EXE-01 遗留④中后端相关
+  路由的运行时复核）；③ 陪跑交付材料：founder 辅导脚本、种子客户选择标准（对齐
+  D-COMM-05 付费设计伙伴口径）、**已知边界卡**（如实告知当前做不到什么：依据面板未常驻、
+  payoff 为模板组装、无自助引导等）、结构化反馈台账（手工 plan-B 口径，含"改什么/不改及
+  理由"处置列）、事故联系与回滚协议；④ L0 生产观察：≥20 条真实生成的路径分布直方图 +
+  payoff 静态重合率 + 人工抽样质量台账。
+- **边界（硬约束）**：只做**有陪同交付**（founder 在场辅导）；无陪同自助与七项 ≥80%
+  可用性验收仍属 B6 人类门（EXE-09）；计费维持线下零工程（D-COMM-06）；每个生产动作
+  （部署/画像修正/密钥启用）**逐项单独裁决**，不预支授权。
+- **上下游承接**：种子客户与 B6 复用同批人（D-COMM-05b，陪跑轮记录单独留存）；反馈台账
+  与 L0 数据直接喂 EXE-06 Brief；runbook 与冒烟资产被 EXE-10 复用扩展。
+- **验证标准**：部署三件套（tag + 回滚预案 + 冒烟记录）齐备；≥1 次完整陪跑交付演练记录；
+  台账处置列非空。
+
+**第二部分增量注记（吸收价值方案，届时随各包 Brief 生效）**：EXE-02 快照观测字段升级为
+basis_ref 关联；EXE-06 增 P2-P4——`CreationProposalV1` 扩 `task_audience_payoff` /
+`brand_relevance_path` 两字段（不新建 TaskValueIntentV1，避免语义四源漂移并补 R3 消费闭环）
++ 用户确认 + 路径↔证据闭合表 + `organization_people` 窄门（情景演绎不授路径资格）+
+fallback 升级为"新任务不得带病放行"，同时把 EXE-V0 组装器降级 fallback、B 门时间盒重设
+（D-COMM-05a）；EXE-07 后补 P5（`_LENS_PRODUCTS` 扩五类）；EXE-10 复用 EXE-V1 runbook。
 
 ### EXE-02 · 品牌依据可见闭环（A1 + A2 + FE-07）
 
