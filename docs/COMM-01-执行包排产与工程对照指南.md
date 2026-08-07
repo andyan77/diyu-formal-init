@@ -134,6 +134,27 @@
   **双向事实纠错**：审查方"分隔符已为 U+0000"不实（`advisorDraft.ts:37` 为普通空格）；
   v1 的 `content_service.py:1960` 锚点系 `identity_summary` 误引，弃用。
   完整 v1.1 覆盖段以监理会话 2026-08-07 输出为准，与 v1 冲突处以 v1.1 为准。
+- **执行轮次 1 交付与监理复验（2026-08-07，runtime_verified）**：分支
+  `exe-01r-scope-stream-hardening` 远端 HEAD `caeb6ea`（`357d17c` + 4 commits，
+  改动面全在 allowlist 内）。**R1/R2/R3 复验全部为真**：golden 920/2/0 +
+  codegen up to date（913→920 = 新增 7 条后端测试）；前端 9 套件全过（新增断言
+  流事务 10 / 跨账号 12 / 深链 13）；篡改反证抽查真咬人（禁用终态缓存 → runner
+  断言崩溃，还原 → 全绿）；CreatorApp 2044→1968 行（AccountDrawer 311 行抽出）。
+  **R4 = BLOCKED_BY_DESIGN_REAPPROVAL**：真实缩放溢出监理独立复现（桌面 200%
+  文档 1440 > 视口 720；移动 1:1 即 410 > 390；两原型 animation/transition 计数
+  全为 0），P2v2/P3v2/P6v2 已按纪律 DRAFT 登记、P6 未动，待 founder 裁决重排口径。
+  **R5 未交付**（无 9 门 runner、无 CI run），待第二轮。执行侧自报 PARTIAL，诚实。
+- **监理二次自纠（字节级教训）**：v1.1 中"分隔符为普通空格"的纠错**本身是错的**——
+  xxd 复验得 `22 00 22`：分隔符自 EXE-01 `bbfe4e1` 起就是**裸 NUL 控制字节**
+  （执行侧本意打空格却写入 \x00，git 从此视该文件为二进制；文本渲染里 NUL 不可见，
+  致监理与实证代理两轮都读成"空格"）。远程审查该条为真。执行侧已改为源码可见的字面转义序列（反斜杠 u 0 0 0 0 七个字符）。**教训固化：字节级论断必须用 xxd/hexdump 字节级验证，不得凭文本渲染。**
+- **本轮监理裁决（随第二轮 Prompt 生效）**：① `conversation.kind` 枚举须补
+  `greeting`——服务端 5 处真实发射点（`content_service.py:213/222/229/312`、
+  `app.py:2883`），严格 `chat|question` 会把合法问候拒为违约（审查方与 Brief 均
+  只读了 TS 类型未查服务端真源）；② 深链缺 target 落默认平台 scope 属已知限界，
+  修复需读任务拿 target（本包禁区），随 EXE-07 制作包页面收口；③ 仓根加
+  `.python-version` 固定 3.10 纳入第二轮（uv 默认取 3.14 触发 asyncio 行为差异
+  误报，CI 实用 3.10）。
 
 ### EXE-02 · 品牌依据可见闭环（A1 + A2 + FE-07）
 
