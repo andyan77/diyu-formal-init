@@ -19,6 +19,7 @@
 | # | 执行包 | 承接工作项 | 风险级 | 阶段门 |
 |---|---|---|---|---|
 | EXE-01 | 前端地基与体验蓝图 | FE-00—FE-04 | 中 | 先行门 |
+| EXE-01R | EXE-01 有界返工（founder 2026-08-07 追加裁决，EXE-02 前置） | 五项：作用域事务化 / task 深链补实现 / 流校验补强 / 证据矩阵重做 / 远端集成证明 | 中 | 先行门 |
 | EXE-02 | 品牌依据可见闭环 | A1 + A2 + FE-07 | 中 | A |
 | EXE-03 | 今日工作台与帮助分流 | A3 + A4 + A5 + FE-05/08/13 | 中 | A |
 | EXE-04 | 品牌反馈队列 | A6 + FE-12 | 中 | A |
@@ -90,6 +91,35 @@
   `/user` 返回 401，处理器层既有不一致 → EXE-03 统一未授权行为口径；③ `--surface-soft`
   全仓未定义无回退，`.artifact-context-basis` 背景实际透明 → FE-00 设计评审时裁决补定义
   或删除；④ 生产模式 5 条路由仅 static_verified → EXE-10 生产晋级时随部署验收补运行时复核。
+- **FE-00 人类走查门收口（2026-08-07）**：founder 裁决以 AI 专家代行评审替代真实用户走查
+  （裁决原文、方法与诚实边界见执行分支
+  `docs/前端UI架构/FE-00/走查记录-AI代行评审-2026-08-07.md`，commit `94cc40a`）。
+  P1—P6 已置 `APPROVED`；缺陷 ③（`--surface-soft`）设计裁决为随 EXE-02 在 UserShell
+  作用域局部定义 `#f6f4f0`；走查发现 F1—F4 作为实现约束路由至 EXE-02/03/06/07。
+  **B6 可用性门（EXE-09）仍须真实用户，不受本替代影响。**
+  EXE-01 据此从 `PARTIAL · BLOCKED_EXTERNAL_FE00_HUMAN_GATE` 收口为 **COMPLETE**；
+  执行分支已合入主线（merge `588303a`），主线同时含监理记录与执行产物。
+
+### EXE-01R · EXE-01 有界返工包（founder 2026-08-07 追加裁决，EXE-02 前置）
+
+外部审查提出五项问题，监理以独立代码实证逐项复核（static_verified，file:line 证据存档于
+监理会话），判定与去向：
+
+| # | 指控 | 复核判定 | 关键证据 |
+|---|---|---|---|
+| 1 | 作用域未事务化 | **属实（P0）**：`useAdvisorScope` 的 AbortController 无任何消费方；流消费零 `isCurrent`/epoch 守卫，A 账号迟到 `completed` 会落进 B 账号；切号只重载 workspace，`messages/current/viewed/versions/selections/materialIds` 全不清（`materialIds` 还会带进 B 的请求载荷）；草稿键 `tenant` 用品牌展示名（后端 bootstrap 未投影稳定 id）；非法 target 被静默兜底不归一化，URL/草稿/API 三者口径不一致 | `useAdvisorScope.ts:74-125`、`CreatorApp.tsx:943-952/1131-1328/747-753/771-775`、`workbench_repository.py:73` |
+| 2 | 深链假宣称 | **指控不成立、建议采纳**：全仓 grep 零处"业务全兼容"宣称，`legacy_routes.json` 诚实限定为路由级 303/query 保持；且**非回归**——重构前 SPA 同样从不消费 `?task/?version`（成品只进服务端 `<noscript>`）。但旧 URL 确实承载成品链接 → 按审查建议**补真实现**：`taskId` prop 现为死参数，而 `openSeriesTask`（`CreatorApp.tsx:1080-1101`）已具备全部加载能力，接线成本低 | `AppRouter.tsx:129-138`、`app.py:3570-3581`、`html.py:31` |
+| 3 | 流校验非 fail-closed | **属实（P0/P1）**：字段校验仅"存在性"零类型（`version:"one"`、`body:123` 可通过）；UI 消费的 `outline`/`ai_generated` 不在必填清单；target 枚举不校验且直写 URL；守卫内两处 `as unknown as` 强转；**terminal 事件即到即提交**，after-terminal 违约时成品已上屏 + 失败横幅并存，"违约流不改工作区"不成立；5 类反证测试仅 1 类存在 | `contentStream.ts:92-121/157/167`、`CreatorApp.tsx:1222-1238` |
+| 4 | 证据矩阵掺水 | **属实且比指控更重（假绿）**：36 张桌面 PNG 仅 12 个不同 sha256——200% zoom / reduced-motion 条件与基准逐字节相同（截图裁剪固定 `.fe00-frame` 1440×900，视口条件从未生效）；断言只查文件存在+非零字节，无 PNG 实际尺寸、无 `scrollWidth<=clientWidth`、无键盘探测、无原型源码 hash 绑定；移动端为一张 all-states 长图 ×3 | `fe00-evidence.mjs:24-34/127`、`assert_visual_evidence.py:51-56` |
+| 5 | 远端集成缺失 | **部分属实**：CI 存在（`ci.yml` deterministic-quality-gate：frontend 四目标 + lint/typecheck/golden，push/PR@main + workflow_dispatch）但 8 个 `scripts/exe01/assert_*` 全不在任何 runner 里；8 个部署面浏览器脚本（均基线既有）EXE-01 一个都没跑、零运行产物；包内双基线不一致（回归对照用 `8c9f2ac`、scope 断言用 `af20ae5`）；分支落后监理记录——此项已由监理合并 `588303a` 解决 | `ci.yml:3-39`、`test_baseline.json:73-208`、`regression-summary.json` |
+
+- **监理自报漏检**：2026-08-07 P6 批准时仅验"39 张存在 + axe 零违规"，未做跨条件哈希比对，
+  漏过第 4 项假绿。P6 批准已加限定注记（见批准表），待 EXE-01R 重做证据后以 P6v2 行取代。
+- **EXE-01R 边界**：只修上表五项，不做 CreatorApp 全量重构、不迁存量 63 处手写类型、
+  不碰 TenantAdminApp；新增/改动函数 ≤60 行（AST 断言 + 存量超限冻结清单只减不增）；
+  浏览器脚本一律打**本地**拉起的实例，不触生产/外部服务。验收细则以 EXE-01R 执行 Prompt 为准。
+- **状态口径**：EXE-01 维持 COMPLETE（地基交付本身有效），EXE-01R 为独立有界返工包，
+  **EXE-02 不得先于 EXE-01R 通过监理复验开工**。
 
 ### EXE-02 · 品牌依据可见闭环（A1 + A2 + FE-07）
 
