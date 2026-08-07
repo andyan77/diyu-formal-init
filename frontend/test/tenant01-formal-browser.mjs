@@ -215,7 +215,7 @@ try {
         { url: /^https?:\/\//.test(path) ? path : `${baseUrl}${path}` },
         sessionId
       );
-      await waitFor("document.readyState === 'complete'", `加载 ${path}`);
+      await waitFor(`document.readyState === 'complete' && !document.querySelector('.page-loading')`, `加载 ${path}`);
     };
     const fill = async (selector, value) => {
       const changed = await evaluate(`(() => {
