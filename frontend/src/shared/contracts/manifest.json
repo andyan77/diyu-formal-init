@@ -3,15 +3,15 @@
   "command": "npm --prefix frontend run contracts:gen",
   "source": {
     "path": "openapi.json",
-    "sha256": "19be3877749d888e5542d8c200478b8f0bffeeb2aefcf59aea585a8cdcc1300d",
+    "sha256": "61e0b67f1b08d4f442502ab6401576771fb9ed70eba54cee02977fdcba64ab8c",
     "openapi": "3.1.0",
-    "path_count": 103,
+    "path_count": 104,
     "schema_count": 60
   },
   "generated": {
     "path": "frontend/src/shared/contracts/gen/openapi.d.ts",
-    "sha256": "c6ef5b2551d9d8d96edd21f0e5ed2de1bafc247172c45291cf34297694f957cd",
-    "line_count": 8182
+    "sha256": "f8e53fe9a72f52de3ad99d85e81996a7da68b43015d1a098d8519cca5e6c450e",
+    "line_count": 8254
   },
   "allowlist": [
     "AccountExpressionVersionRequest",

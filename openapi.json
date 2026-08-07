@@ -7943,6 +7943,106 @@
         "summary": "Content Workbench"
       }
     },
+    "/content/tasks/{task}": {
+      "get": {
+        "description": "A task's own address (EXE-01 SEAM-06).\n\nDelegates to `content_workbench` rather than repeating it: the scope\nresolution, the operator check and the access-denied pages there are\nthe only implementation of those rules, and a second copy would be one\nmore place for them to drift.",
+        "operationId": "content_task_workbench_content_tasks__task__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "douyin_video",
+                    "xiaohongshu_video",
+                    "xiaohongshu_graphic",
+                    "wechat_channels_video"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          },
+          {
+            "in": "query",
+            "name": "publishing_identity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Publishing Identity Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "缺少或无效的可信会话。"
+          },
+          "403": {
+            "description": "当前可信会话属于另一应用。"
+          },
+          "422": {
+            "description": "业务失败；生成失败时不会产生半成品版本。"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Content Task Workbench"
+      }
+    },
     "/display": {
       "get": {
         "operationId": "display_workbench_display_get",
@@ -8043,9 +8143,9 @@
         "summary": "Display Workbench"
       }
     },
-    "/organization-materials": {
+    "/materials": {
       "get": {
-        "operationId": "organization_materials_portal_organization_materials_get",
+        "operationId": "organization_materials_portal_materials_get",
         "responses": {
           "200": {
             "content": {

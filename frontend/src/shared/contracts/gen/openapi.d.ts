@@ -1,7 +1,7 @@
 /**
  * GENERATED FILE — DO NOT EDIT BY HAND.
  *
- * Source:   openapi.json (sha256 19be3877749d888e5542d8c200478b8f0bffeeb2aefcf59aea585a8cdcc1300d)
+ * Source:   openapi.json (sha256 61e0b67f1b08d4f442502ab6401576771fb9ed70eba54cee02977fdcba64ab8c)
  * Command:  npm --prefix frontend run contracts:gen
  * Drift:    python3 scripts/exe01/assert_codegen_drift.py
  *
@@ -1636,6 +1636,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/content/tasks/{task}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Content Task Workbench
+         * @description A task's own address (EXE-01 SEAM-06).
+         *
+         *     Delegates to `content_workbench` rather than repeating it: the scope
+         *     resolution, the operator check and the access-denied pages there are
+         *     the only implementation of those rules, and a second copy would be one
+         *     more place for them to drift.
+         */
+        get: operations["content_task_workbench_content_tasks__task__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/display": {
         parameters: {
             query?: never;
@@ -1653,7 +1678,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/organization-materials": {
+    "/materials": {
         parameters: {
             query?: never;
             header?: never;
@@ -1661,7 +1686,7 @@ export interface paths {
             cookie?: never;
         };
         /** Organization Materials Portal */
-        get: operations["organization_materials_portal_organization_materials_get"];
+        get: operations["organization_materials_portal_materials_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7845,6 +7870,53 @@ export interface operations {
             };
         };
     };
+    content_task_workbench_content_tasks__task__get: {
+        parameters: {
+            query?: {
+                publishing_identity_id?: string | null;
+                target?: ("douyin_video" | "xiaohongshu_video" | "xiaohongshu_graphic" | "wechat_channels_video") | null;
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                task: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description 缺少或无效的可信会话。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 当前可信会话属于另一应用。 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 业务失败；生成失败时不会产生半成品版本。 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     display_workbench_display_get: {
         parameters: {
             query?: {
@@ -7891,7 +7963,7 @@ export interface operations {
             };
         };
     };
-    organization_materials_portal_organization_materials_get: {
+    organization_materials_portal_materials_get: {
         parameters: {
             query?: never;
             header?: never;

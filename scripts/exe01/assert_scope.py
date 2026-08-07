@@ -29,6 +29,7 @@ ALLOWED: tuple[tuple[str, str], ...] = (
     ("src/gateway/api/app.py", "新旧 SPA 入口注册与重定向（SEAM-06）"),
     ("tests/test_exe01_", "对应后端路由测试（明文允许）"),
     ("docs/前端UI架构/", "FE-00 设计交付物与截图回归"),
+    ("openapi.json", "app.py 路由表的确定性派生物；由 `make openapi` 重生，golden 门校验"),
 )
 
 # Paths that are forbidden even though a prefix above might otherwise cover
