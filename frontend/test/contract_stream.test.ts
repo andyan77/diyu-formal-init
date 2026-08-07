@@ -168,9 +168,24 @@ assert.equal(
   ])).violation,
   "illegal_value"
 );
+// Small talk is a real reply, not a violation: create_from_weak_seed answers
+// it with kind "greeting" and app.py relabels chat as greeting on the same
+// path, so the guard has to let it through.
+const greeting = await collect([
+  { event: "conversation", kind: "greeting", message: "你好呀，今天想聊点什么？" }
+]);
+assert.deepEqual(greeting, [
+  { event: "conversation", kind: "greeting", message: "你好呀，今天想聊点什么？" }
+]);
+// A kind nobody emits is still refused, so widening the enum did not turn it
+// into "accept any string".
 assert.equal(
-  (await rejects([{ event: "conversation", kind: "greeting", message: "你好" }]))
+  (await rejects([{ event: "conversation", kind: "farewell", message: "再见" }]))
     .violation,
+  "illegal_value"
+);
+assert.equal(
+  (await rejects([{ event: "conversation", kind: "", message: "空" }])).violation,
   "illegal_value"
 );
 
@@ -247,6 +262,6 @@ assert.deepEqual(
   [...TARGETS],
   ["douyin_video", "xiaohongshu_video", "xiaohongshu_graphic", "wechat_channels_video"]
 );
-assert.deepEqual([...CONVERSATION_KINDS], ["chat", "question"]);
+assert.deepEqual([...CONVERSATION_KINDS], ["chat", "question", "greeting"]);
 
 console.log("content stream contract guard checks passed");

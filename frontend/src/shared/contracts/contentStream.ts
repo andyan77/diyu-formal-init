@@ -65,7 +65,13 @@ export const TARGETS = [
 const _targetsCoverUnion: Exact<(typeof TARGETS)[number], Target> = true;
 void _targetsCoverUnion;
 
-export const CONVERSATION_KINDS = ["chat", "question"] as const;
+/**
+ * Small talk arrives as `greeting`, not `chat`. Rejecting it would turn an
+ * ordinary conversation into a contract violation; the first pass of this
+ * guard read the declared TypeScript union rather than the server, which is
+ * why the enum was one member short.
+ */
+export const CONVERSATION_KINDS = ["chat", "question", "greeting"] as const;
 const _kindsCoverUnion: Exact<(typeof CONVERSATION_KINDS)[number], ConversationKind> =
   true;
 void _kindsCoverUnion;

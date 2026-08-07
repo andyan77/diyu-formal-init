@@ -9,9 +9,15 @@
 //
 //   node frontend/tools/fe00-reflow-check.mjs
 //
-// Exits non-zero when a prototype overflows horizontally. Fixing an overflow
-// means changing the prototype's visual layout, which is a design decision —
-// see approved-prototypes.md P2v2/P3v2 rather than editing the layout here.
+// Founder decision A (guide, EXE-01R section R4): reflow acceptance belongs to
+// the real product pages, and these fixed-canvas prototypes are exempt from the
+// 200% requirement — a 1440px design frame is *meant* to be 1440px wide, and
+// shrinking it would stop it being the thing under review. So the two zoom
+// conditions are recorded as N/A-by-design.
+//
+// What is not exempt is a prototype overflowing its own declared viewport:
+// a 390x844 mobile prototype that needs 410px at 1:1 is a defect in the
+// prototype, not a property of zoom. That stays a hard gate.
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -60,32 +66,49 @@ for (const [label, file, w, h] of [["desktop","原型-桌面-1440x900.html",1440
       returnByValue: true
     }, sessionId);
     const measured = JSON.parse(out.result.value);
-    const overflow = measured.scrollWidth > measured.clientWidth;
-    results.push({ condition: name, ...measured, overflow });
+    const overflows = measured.scrollWidth > measured.clientWidth;
+    const exempt = name.endsWith("-200pct");
+    const verdict = exempt
+      ? "N/A-by-design"
+      : overflows
+        ? "OVERFLOW"
+        : "ok";
+    results.push({ condition: name, ...measured, overflows, exempt, verdict });
     console.log(
       `${name.padEnd(18)} scrollWidth=${String(measured.scrollWidth).padStart(5)}` +
       ` clientWidth=${String(measured.clientWidth).padStart(5)}` +
       ` animated=${measured.animated}` +
-      `  ${overflow ? "OVERFLOW" : "ok"}`
+      `  ${verdict}`
     );
     await send("Target.closeTarget", { targetId });
   }
 }
 socket.close(); chrome.kill(); await new Promise(d=>chrome.once("exit",d)); rmSync(profile,{recursive:true,force:true,maxRetries:5});
 
-const failing = results.filter(item => item.overflow);
+console.log("");
+console.log("裁决 A（指南 EXE-01R 节 R4）：固定画布原型豁免 200% 重排验收，");
+console.log("重排验收挂真实产品页；以下 200% 条件记 N/A-by-design，非通过也非失败：");
+for (const item of results.filter(entry => entry.exempt)) {
+  console.log(
+    `  ${item.condition}: 文档宽 ${item.scrollWidth} / 视口宽 ${item.clientWidth}` +
+    `（豁免，不判定）`
+  );
+}
+console.log("");
+console.log(`reduced-motion：animated 计数 ${results.map(i => i.animated).join("/")}` +
+  " —— 原型无条件禁用动效，条件记 N/A，不用重复截图充证据。");
+
+const failing = results.filter(item => !item.exempt && item.overflows);
 if (failing.length) {
   console.error("");
-  console.error("FAIL 以下条件下原型横向溢出，200% 重排不成立：");
+  console.error("FAIL 原型在自己声明的视口下就横向溢出：");
   for (const item of failing) {
     console.error(
       `  ${item.condition}: 文档宽 ${item.scrollWidth} > 视口宽 ${item.clientWidth}`
     );
   }
-  console.error("");
-  console.error("这需要改原型的视觉布局，属设计裁决：见 approved-prototypes.md");
-  console.error("的 P2v2 / P3v2，不要在这里改布局把检查做绿。");
   process.exitCode = 1;
 } else {
-  console.log("\nPASS 两份原型在 200% 缩放下都不横向溢出");
+  console.log("");
+  console.log("PASS 两份原型在各自声明的视口下都不横向溢出");
 }

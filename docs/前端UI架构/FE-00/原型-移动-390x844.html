@@ -80,6 +80,17 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 .fe00-tabs button{border:0;background:none;font:inherit;font-size:15px;color:var(--fe00-ink-soft);min-height:48px;cursor:pointer}
 .fe00-tabs button.is-on{color:var(--fe00-red);font-weight:700;box-shadow:inset 0 2px 0 var(--fe00-red)}
 
+/* Defect fix (EXE-01R R4a), not a redesign: the gallery page's own 20px side
+   padding pushed the fixed 390px phone frame to 410px, so the document was
+   wider than a 390px window before any zoom. At phone width the surrounding
+   chrome steps aside instead, and the frame is still shown 1:1 — which is the
+   whole point of a 390x844 prototype. */
+@media (max-width:430px){
+  .fe00-page{padding-left:0;padding-right:0}
+  .fe00-page>h1,.fe00-page>.fe00-lede,.fe00-rules{margin-left:16px;margin-right:16px}
+  .fe00-slot>h2,.fe00-slot>.fe00-why{margin-left:16px;margin-right:16px}
+}
+
 *,*::before,*::after{animation:none!important;transition:none!important}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 </style>
@@ -101,7 +112,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <div class="fe00-slot">
 <h2>① 今天可以做什么</h2>
 <p class="fe00-why">四个入口纵向排列，满宽可点。机会卡在下方，滚动可达。</p>
-<div class="fe00-phone">
+<div class="fe00-phone" id="fe00-m-today">
   <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
   <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">总部品牌内容运营</span></div>
   <div class="fe00-scroll">
@@ -126,7 +137,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <div class="fe00-slot">
 <h2>② 参谋中 · 对话面</h2>
 <p class="fe00-why">底部两个标签在"对话"和"品牌依据"之间切换。依据不是被藏起来的折叠块。</p>
-<div class="fe00-phone">
+<div class="fe00-phone" id="fe00-m-advisor">
   <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
   <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">总部 · 小红书 · 图文</span></div>
   <div class="fe00-stages">
@@ -154,7 +165,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <div class="fe00-slot">
 <h2>② 参谋中 · 品牌依据面</h2>
 <p class="fe00-why">同一屏的第二个工作面。条目级列出，每条可反馈；模型自带知识单独标注且不计入。</p>
-<div class="fe00-phone">
+<div class="fe00-phone" id="fe00-m-basis">
   <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
   <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">总部 · 小红书 · 图文</span></div>
   <div class="fe00-stages">
@@ -184,7 +195,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <div class="fe00-slot">
 <h2>③ 方案确认</h2>
 <p class="fe00-why">分组纵向铺开，主动作固定在内容末尾满宽。只有一个实心按钮。</p>
-<div class="fe00-phone">
+<div class="fe00-phone" id="fe00-m-proposal">
   <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
   <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">总部 · 小红书 · 图文</span></div>
   <div class="fe00-stages">
@@ -210,7 +221,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <div class="fe00-slot">
 <h2>⑤ 制作包</h2>
 <p class="fe00-why">步骤、台词、字幕在一条纵列里；来源状态徽标在折叠态也可见。决策操作在底部标签。</p>
-<div class="fe00-phone">
+<div class="fe00-phone" id="fe00-m-package">
   <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
   <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">V2 · 小红书图文</span></div>
   <div class="fe00-stages">
@@ -244,7 +255,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <div class="fe00-slot">
 <h2>失败 · 输入必须保留</h2>
 <p class="fe00-why">移动端同样保留输入并给恢复动作。失败不清空、不跳页、不吞掉已有成品。</p>
-<div class="fe00-phone">
+<div class="fe00-phone" id="fe00-m-failure">
   <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
   <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">总部 · 小红书 · 图文</span></div>
   <div class="fe00-scroll">
@@ -264,7 +275,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <div class="fe00-slot">
 <h2>跨账号 · 不串稿</h2>
 <p class="fe00-why">切到门店号，总部写的字不在这里；切回去原稿还在。本包已实现，有契约测试。</p>
-<div class="fe00-phone">
+<div class="fe00-phone" id="fe00-m-cross-account">
   <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
   <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">门店号 · 南京西路</span></div>
   <div class="fe00-scroll">
@@ -285,7 +296,7 @@ body{margin:0;background:var(--fe00-s100);color:var(--fe00-ink);font-family:var(
 <div class="fe00-slot">
 <h2>加载 / 空态 / 资料缺口 / 旧成品</h2>
 <p class="fe00-why">四个短态并列在一屏内示意：都必须给出下一步，都不留死胡同。</p>
-<div class="fe00-phone">
+<div class="fe00-phone" id="fe00-m-states">
   <div class="fe00-status"><span>9:41</span><span>笛语</span></div>
   <div class="fe00-bar"><img class="fe00-mark" src="../../../assets/brand/diyu-vi/svg/diyu-logo-horizontal.svg" alt="笛语" width="98" height="23"><span class="fe00-scope-m">状态合集</span></div>
   <div class="fe00-scroll">

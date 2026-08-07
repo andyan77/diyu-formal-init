@@ -236,8 +236,16 @@ export type GenerationStage =
   | "validating"
   | "finalizing";
 
-/** The conversation replies the content stream can carry. */
-export type ConversationKind = "chat" | "question";
+/**
+ * The conversation replies the content stream can carry.
+ *
+ * `greeting` is small talk. The server produces it in create_from_weak_seed
+ * (content_service.py 213/222/229/312) and app.py:2883 relabels a chat reply
+ * as one, and respond_to_conversation returns that result unchanged — so it
+ * reaches this stream and the UI must accept it. It renders as an assistant
+ * message, exactly like `chat`.
+ */
+export type ConversationKind = "chat" | "question" | "greeting";
 
 export type ContentStreamEvent =
   | { event: GenerationStage }
