@@ -1,9 +1,14 @@
-# COMM-01 / UX-04R 执行包排产与工程对照指南（V2）
+# COMM-01 / UX-04R 执行包排产与工程对照指南（V3）
 
 > V2（2026-08-06）：终审 `PASS_WITH_BOUNDED_CORRECTIONS` 十二项有界修正已同步进
 > 两份 REVISION-6 执行包与本指南（选择服务前移、OpportunityV2、反馈两表、A5a/A5b、
 > 交互 API 版本化与流式诚实、B1 防重放幂等、B3 所有权与完整 26 卡、B4 管理员入口与
 > 语义冻结、B5 口径冻结、术语/编号残留清理）。转 `APPROVED_FOR_EXECUTION` 待守护确认。
+>
+> V3（2026-08-07）：D-COMM-09 落盘（MILESTONE / COMM-01 REVISION-7 / UX-04R 交叉注记 /
+> AGENTS §9 例外同轮更新）——两部分合一、EXE-V0/V1 入列（14 包 / 13 接缝）；守护审查
+> 修正吸收：SEAM-13 溯源正交化、TaskValueAssemblyV1 独立版本化对象（不原地扩写 V3 合同）、
+> V0 可产路径收窄、降级 path=null、安全构造模板、安装顺序补 npm ci、函数预算改棘轮口径。
 
 - 性质：**非规范性工程参考**。规范真源是
   [COMM-01 执行包](COMM-01-品牌价值可见创作参谋确认提案与付费试点最小闭环执行包.md)（REVISION-5）与
@@ -65,7 +70,7 @@
 | SEAM-10 | 反馈表"append-only + 可变状态"自相矛盾 | 两表事件化：`brand_basis_feedbacks`（不可变提交）+ `brand_basis_feedback_events`（处理事件），服务端派生 current_status |
 | SEAM-11 | 上下文选择多点漂移 | `BrandContextSelectionService` 前移为纯服务（EXE-02 交付），OpportunityV2 / Advisor / Proposal / context_selected / 快照 / 制作包六点同源消费；提案确认只重验证不重选 |
 | SEAM-12 | 制作包存储所有权 | 内容侧 `ContentProductionPackageV1` 随 content_versions；DM01 `DisplayExecutionPackageV1` 随 display version——不塞入 ContentVersion |
-| SEAM-13 | EXE-V0 组装 payoff 与 EXE-06 确认 payoff 双源 | 合同增 `payoff_source ∈ {server_assembled, user_confirmed, static_fallback}` 判别，第一天进合同；EXE-06 上线后新任务一律走用户确认路径、组装器降级为 fallback；历史快照零改写；降级必须可见（快照记 `payoff_degraded`），不得静默冒充成功 |
+| SEAM-13 | payoff 溯源与确认态正交化（V3 修订，取代单字段 payoff_source 草案） | 快照记四个正交字段：`payoff_origin ∈ {server_assembled, static_fallback, user_edited(EXE-06 起)}`、`payoff_confirmation_state ∈ {unavailable_pre_proposal, pending, user_confirmed}`、`payoff_degraded`、`payoff_degradation_reason ∈ {missing_profile_signal, invalid_assembly, unsupported_relevance_path, safety_gate_rejected}`。EXE-V0 只产 origin ∈ {server_assembled, static_fallback} 且 confirmation_state=unavailable_pre_proposal；EXE-06 只推进确认态/产生 user_edited，不得抹除原始溯源；历史快照零改写；降级必须可见，不得静默冒充成功 |
 
 ---
 
@@ -245,6 +250,35 @@ basis_ref 关联；EXE-06 增 P2-P4——`CreationProposalV1` 扩 `task_audience
 + 用户确认 + 路径↔证据闭合表 + `organization_people` 窄门（情景演绎不授路径资格）+
 fallback 升级为"新任务不得带病放行"，同时把 EXE-V0 组装器降级 fallback、B 门时间盒重设
 （D-COMM-05a）；EXE-07 后补 P5（`_LENS_PRODUCTS` 扩五类）；EXE-10 复用 EXE-V1 runbook。
+
+**EXE-V0 v1.1 修正（2026-08-07 守护审查采纳，与上文冲突处以本块为准）**：
+① 动态价值以 **`TaskValueAssemblyV1` 独立版本化对象**随任务快照存储（含
+contract_version / audience_payoff / 四个正交溯源字段 / brand_relevance_path? /
+ruleset_version+digest / assembly_trace，单独带 digest）——**不原地扩写
+publication-contract-v3 结构**（历史 digest 字节兼容红线）；
+`PublicationContractV3.audience_payoff` 仍是 Writer 唯一消费值且必须与 assembly 值
+相等（断言）；**`deepseek.py` 一行不改**并加"该行未修改"断言。
+② V0 可产路径收窄：`V0_PRODUCIBLE = {product_expertise(仅 product_decision_basis 的
+supporting_fact_refs 非空触发), existing_series(仅有效 series_delta 触发),
+audience_relationship, brand_stance}`；`V0_RESERVED = {brand_visual, local_trust,
+organization_people}` 一律不产。降级（static_fallback）时
+`brand_relevance_path=null` + `degradation_reason` 必填，**不得为凑枚举伪造路径**。
+③ 安全构造：payoff 只能由版本化审核模板 + 白名单语义片段组装；不拼接画像五段原文/
+seed 原文/商品事实值；不出现人物/账号/门店名；显式用户题材不得被画像改写为商品/门店/
+行业题材；assembly_trace 为精确类型合同（枚举字段名 + template_id + ruleset digest，
+零原文零 PII）。
+④ 历史与幂等三测试：pre-V0 快照 round-trip digest 不变；retry/幂等不重选模板不换
+digest；V1→V2 修订沿用原任务冻结值不读新画像。`product_brief()` 旧 V2 调用路径
+（`publication_contract.py:421`）行为与历史 digest 零变化。
+⑤ 安装顺序：uv sync → **npm ci** → make 前后端目标 → golden；期望值只冻结
+failed=0 + 新增 skip=0（不硬编码通过数）。函数预算 = EXE-01R 同款棘轮口径
+（新函数 ≤60；基线超限冻结豁免只减不增），配 `scripts/exev0/` 双门
+（assert_scope + assert_function_budget）。
+⑥ 并行与集成：与 EXE-01R 并行实现、**串行集成**（EXE-01R 先合入且先把 scope 窗
+从 HEAD 冻结为终态 SHA；EXE-V0 后 merge 主线重跑合并后全部门 + CI 三件套）。
+并行期终态只能报 `IMPLEMENTED_ON_AUTHORIZED_BASE · AWAITING_SERIALIZED_INTEGRATION`。
+⑦ P0 缺失不阻塞本地实现，但报告须标 `production_profile_calibration=UNVERIFIED`，
+且不得进入 EXE-V1 部署与真实陪跑；P0 分类增加 `mixed_or_ambiguous` 第三态。
 
 ### EXE-02 · 品牌依据可见闭环（A1 + A2 + FE-07）
 

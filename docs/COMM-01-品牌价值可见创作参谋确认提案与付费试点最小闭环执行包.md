@@ -106,6 +106,13 @@ content.publication_revoked
   即触发范围复审，只允许两种出路——按 D-COMM-05b 清单进一步裁剪，或由 founder 重新裁决
   改走选项 b（受监督首用）。不允许无限期顺延。
 
+> **2026-08-07 有界 supersession（D-COMM-09，见 REVISION-7）**：founder 提前行使本条既设的
+> "选项 b（受监督首用）"出口——仅限 EXE-V1 定义的有界陪跑交付：founder 在场辅导、指名
+> 租户/账号/操作者、限定会话数与周期、不开放无陪同登录入口、不宣称 B 门通过或自助可用、
+> 每次生成人工检查 `payoff_degraded`、不自动发布、部署/密钥/画像修正逐项授权、出现安全/
+> 租户隔离/事实错误即停止并回滚。"不设受监督首用旁路"对**无陪同自助**继续有效；
+> B6（EXE-09）仍须真实用户无陪同验收，本 supersession 不替代之。
+
 #### D-COMM-05b · 最低裁剪清单（强制，防"最低包"回涨）
 
 - `WriterOutputV4` 只承载 `script_blocks` 与 `subtitle_cues`；`audio_plan`、`editing_plan`、
@@ -1130,3 +1137,32 @@ python3 <assert> && git add <files> && git commit
     永不自动接入？
 17. ChatGPT 体感基准与有界性是否并存——体感优化（单输入框、流式、卡片内嵌对话流）
     是否侵蚀了能力白名单、承诺门或诚实标注？
+
+---
+
+## REVISION-7 追加裁决（2026-08-07）· D-COMM-09 价值引擎先行与两部分合一
+
+founder 2026-08-07 裁决（守护审查 `PASS_WITH_REQUIRED_CORRECTIONS` 修正已吸收）：
+
+1. **两部分合一**：同一主线 COMM-01 内，第一部分 = EXE-01R 收口 + EXE-V0（价值引擎先行：
+   服务端确定性组装 `audience_payoff`，零 LLM、零前端、零 migration）+ EXE-V1（最小生产
+   晋级与有界陪跑交付）；第二部分 = EXE-02—EXE-12 原序，吸收价值增量（P1→EXE-02、
+   P2-P4→EXE-06、P5→EXE-07 后、runbook→EXE-10）。排产细则见工程指南 V3（14 执行包 /
+   13 接缝；EXE-01R 系返工不计新包）。
+2. **有界受监督陪跑交付**：系提前行使 D-COMM-05a 既设"选项 b（受监督首用）"出口，
+   边界条款见该条 2026-08-07 supersession 注记；B6（EXE-09）证明的是无陪同自助可用性，
+   口径不变、不得提前宣称。
+3. **TaskValueAssemblyV1 长期数据语义**：动态价值以独立版本化对象随任务快照存储，
+   **不原地扩写 `publication-contract-v3` 结构**（历史 digest 字节兼容红线）；
+   `PublicationContractV3.audience_payoff` 仍是 Writer 唯一消费值且必须与 assembly 值
+   相等。溯源正交四字段：`payoff_origin ∈ {server_assembled, static_fallback,
+   user_edited(EXE-06 起)}`、`payoff_confirmation_state ∈ {unavailable_pre_proposal,
+   pending, user_confirmed}`、`payoff_degraded`、`payoff_degradation_reason`。
+   EXE-V0 只产 origin ∈ {server_assembled, static_fallback} 且
+   confirmation_state=unavailable_pre_proposal；EXE-06 只推进确认态或产生 user_edited，
+   不得抹除原始溯源。`central_job` 语义冻结为 `product_contract_job`（五类产品不变量，
+   服务端专属，模型与组装器不可改写）。EXE-06 的 CreationProposalV1 扩
+   `task_audience_payoff` / `brand_relevance_path` 两字段（不新建 TaskValueIntentV1），
+   `organization_people` 路径窄门与"新任务不得带病放行"均随 EXE-06 生效。
+4. **有界双执行端并行**：见 AGENTS.md §9 例外条款；集成顺序固定——EXE-01R 先合入
+   （scope 窗冻结为终态 SHA），EXE-V0 后合入并在最新主线重跑合并后全部质量门。

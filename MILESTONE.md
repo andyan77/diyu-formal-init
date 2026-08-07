@@ -5,7 +5,8 @@
   `docs/COMM-01-品牌价值可见创作参谋确认提案与付费试点最小闭环执行包.md`（REVISION-6，
   守护审查 `PASS_WITH_BOUNDED_CORRECTIONS` 十二项修正已落盘，founder 确认转
   `APPROVED_FOR_EXECUTION`）与配套 `docs/UX-04R-前端产品化增量与工程边界执行包.md`；
-  工程对照 `docs/COMM-01-执行包排产与工程对照指南.md`（V2：12 执行包 / 12 接缝裁定）。
+  工程对照 `docs/COMM-01-执行包排产与工程对照指南.md`（V3：14 执行包 / 13 接缝裁定；
+  14 = 原 12 包 + EXE-V0/EXE-V1，EXE-01R 系 EXE-01 有界返工不计新包）。
 - 立项授权：founder 2026-08-06 确认审查通过，并依据 COMM-01 执行包 §十一 授权本状态迁移
   （TENANT-01 置 CLOSED、主线切换、supersession 注记落盘）。EXE-06/07/08（B1/B3/B4）
   重活须 founder 显式授权 + 守护三关 + 冻结验收重跑（B3 完整 26 卡）；不得自行置为
@@ -14,6 +15,11 @@
   「不启动 UX-04」（仅 UX-04R 绞杀者增量）；D-COMM-03 有界修订 TENANT-01
   「不新增审批状态机」（仅追加式决策事件 + 只读派生投影）；D-COMM-04 显式遵守 M5-K
   「ContentBrief 不建物理表」；D-COMM-08 GKB 不接入运行主线。
+- 2026-08-07 founder 追加裁决 **D-COMM-09**（全文见 COMM-01 执行包 REVISION-7）：两部分合一——
+  价值引擎先行（EXE-V0 服务端确定性组装 payoff + EXE-V1 有界陪跑交付，后者系提前行使
+  D-COMM-05a 既设"选项 b（受监督首用）"出口的有界 supersession，B6 无陪同验收口径不变）
+  先于全量产品化（EXE-02—EXE-12）；执行端并行按 AGENTS.md §9 有界双执行端例外
+  （隔离 worktree + 互斥 allowlist + 串行集成：EXE-01R 先合入、EXE-V0 后合入并重跑合并后全部门）。
 
 ## TENANT-01 · 笛语服饰首租户生产就绪与全能力演示（CLOSED）
 
