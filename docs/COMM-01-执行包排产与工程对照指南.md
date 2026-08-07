@@ -315,6 +315,21 @@ failed=0 + 新增 skip=0（不硬编码通过数）。函数预算 = EXE-01R 同
   **已知集成风险预授权**：`scripts/exev0/assert_scope.py:67` 现用两点 diff
   `BASE..HEAD`，merge 主线后必误报——集成指令预授权改为对主线的三点 diff
   （merge-base 语义）或沿 EXE-01R 先例冻结实现终态 SHA，属最小修门。
+- **串行集成轮交付与监理复验（2026-08-07，runtime_verified）**：merge `4e09cbf` 零冲突
+  （两侧变更文件交集 ∅：主线 123 vs 本包 14；diff 8d909cf..16638f6 恰 14 文件，主线
+  零丢失零改写；实现代码自 `cbdf0be` 起逐字节未变）。修门四处——G1 scope 窗主线 SHA
+  钉死 `8d909cf` + 双祖先断言（预授权内）；G3 中文路径 `-z`（与 EXE-01R quotePath
+  同类缺陷第二次实锤）；G4 未知参数退出码 2（监理 `--wrte` 探针实测）；
+  **G2 越权自首，监理裁决：追认批准**——预算门同类窗口缺陷不修则组合门结构性必红，
+  文件在其 allowlist 内，台账审计干净（233 条豁免零增零删，仅 EXE-01R 两处合法更新
+  create_app 3416 / content_workbench 189，其自身三处冻结值 186/295/241 未动，监理
+  逐值复核）。组合门监理独立复跑：golden **958/2/0** + codegen（真实退出码）、exev0
+  三门绿、固定样本 digest `aa0b8844…` 第三次逐字节复现（远端 CI 未跑这三门，监理
+  本地执行即唯一第三方执行）；CI 三件套精确（run 31192914148 / headSha==`16638f6` /
+  success / dispatch）。棘轮探针首轮误设计被执行侧自报为非自证，防假绿意识到位。
+  **遗留缺口上报正确并裁决**：ci.yml 不含 exev0 三门 → 授权微轮补 `make exev0-gates`
+  并接入 ci.yml（Makefile 与 ci.yml 两文件解禁仅限此目的），微轮复验通过后由监理
+  执行集成第 2 步（merge 入主线）。`.python-version` 落地使前轮 venv 变通作废，已确认。
 
 ### EXE-02 · 品牌依据可见闭环（A1 + A2 + FE-07）
 
