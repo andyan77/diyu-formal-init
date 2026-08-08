@@ -1,6 +1,6 @@
 # A-8 · founder 素材定稿签署页
 
-- 状态：`AWAITING_FOUNDER_SIGNOFF`
+- 状态：`SIGNED · ATT-GATEA-20260808-01`（2026-08-08 签署；原 `AWAITING_FOUNDER_SIGNOFF` 状态就此推进）
 - 前置：仅在监理独立复验 PASS 后组织签署。
 - 唯一 manifest SHA-256：
   `14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06`
@@ -36,8 +36,20 @@
 内部不可发布和待 Gate D 核验的边界不作事实升格；同意在监理复验 PASS 后按该 digest 进入后续
 Gate，任何合同变更须生成新 digest 并重新签署。
 
-签名：____________________
+签名：founder Faye（主控会话文字确认）
 
-签署时间：____________________
+签署时间：2026-08-08
 
-签署记录 ID：____________________
+签署记录 ID：ATT-GATEA-20260808-01
+
+## 签署记录（监理经手登记）
+
+- 记录 ID：`ATT-GATEA-20260808-01`
+- 签署人：founder Faye；方式：主控会话文字确认（2026-08-08）
+- 原话逐字：「签署确认，digest 14fed121 开头那份」
+- 绑定对象：本页上方唯一 manifest SHA-256
+  `14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06`
+  （当次会话内该前缀唯一，无歧义）
+- 前置满足：监理独立复验 PASS（治理日志 §六 Gate A 监理复验记录）后组织签署
+- 效力：Gate A 素材合同冻结基线成立；任何合同变更须生成新 digest 并重新签署
+- 经手：监理登记；本登记不改写 `import-contract.json` / `import-manifest.json`

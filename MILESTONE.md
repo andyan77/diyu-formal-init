@@ -16,6 +16,7 @@
 - 2026-08-08：**`S0 COMPLETE · PASS`（监理落款）**。监理六面独立复验（Git/证据/CI/生产/RLS/合并）全部通过；四悬账 4/4 关账（P0-D1 改判「观测 · 测量口径错误」、E1 追认+扩权驳回、E2 追认+程序违规记录、EXE-V1 闭结）；执行分支已串行合入主线。当前动作：**Prompt 2（Gate A）待签发**。
 - 2026-08-08：Prompt 2（Gate A · 素材定稿、消费通道与导入合同）**已签发**；基线 `55b1a5e`，执行分支 `exe/brand-matrix-a`，模型配额 0、生产接触 0，完成门含 founder 素材定稿签署。
 - 2026-08-08：**Gate A 监理复验 PASS**，状态 `GATE-A VERIFIED_BY_SUPERVISOR · AWAITING_FOUNDER_SIGNOFF`；等待 founder 对 manifest digest `14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06` 完成签署后置 COMPLETE（详见文末监理复验块与治理日志 §六）。
+- 2026-08-08：founder 签署完成（`ATT-GATEA-20260808-01`），**`GATE-A COMPLETE · PASS`**（监理落款）。当前动作：**Prompt 3（Gate B）待签发**。
 
 > **口径声明（2026-08-07）**：以下 COMM-01 段为 2026-08-06 立项时的历史登记；其
 > 「当前里程碑」表述已被上方 BRAND-MATRIX-01 立项与 D10 暂停裁决 supersede，其余

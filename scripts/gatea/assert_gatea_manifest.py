@@ -272,10 +272,23 @@ def assert_human_contract(digest: str) -> None:
         if digest not in text:
             raise AssertionError(f"{name} does not bind the manifest digest")
     signoff = (directory / "08-founder素材定稿签署页.md").read_text(encoding="utf-8")
-    if "AWAITING_FOUNDER_SIGNOFF" not in signoff:
-        raise AssertionError("founder signoff page has the wrong status")
-    if "签名：____________________" not in signoff or "签署时间：____________________" not in signoff:
-        raise AssertionError("founder signoff fields must remain blank")
+    blanks_intact = (
+        "签名：____________________" in signoff
+        and "签署时间：____________________" in signoff
+    )
+    awaiting = "- 状态：`AWAITING_FOUNDER_SIGNOFF`" in signoff
+    signed = (
+        "## 签署记录（监理经手登记）" in signoff
+        and "- 状态：`SIGNED · ATT-" in signoff
+        and signoff.count(digest) >= 2
+    )
+    if awaiting and blanks_intact and not signed:
+        return
+    if signed and not blanks_intact and not awaiting:
+        return
+    raise AssertionError(
+        "founder signoff page must be exactly blank-awaiting or signed-with-attestation"
+    )
 
 
 def main() -> None:

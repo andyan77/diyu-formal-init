@@ -854,3 +854,13 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   `COMPLETE`，随后签发 Prompt 3（Gate B）。
 
 <!-- BRAND-MATRIX-01-GATEA-SUPERVISOR-VERDICT-END -->
+
+### Gate A COMPLETE 落款（2026-08-08，监理）
+
+- founder 已对 manifest digest `14fed121…aeb48a06` 完成签署（记录
+  `ATT-GATEA-20260808-01`，原话「签署确认，digest 14fed121 开头那份」，主控会话文字确认）。
+- 监理确认签署未改写冻结 manifest（digest 复算不变）。Gate A 完成门全部满足：
+  **`GATE-A COMPLETE · PASS`**。
+- 机制进化记录：`assert_gatea_manifest.py` 的「签名区必须空白」检查系交付态专用不变式，签署后按「协议缺陷改工具」原则进化为二态合法（空白待签／已签且登记绑定 digest），杜绝签署后门禁误报。
+- 下一动作：签发 Prompt 3（Gate B · 账号语义正向消费与七族品牌关联）；基线为含本落款
+  的主线最终提交，具体 SHA 以 chat 签发件为准。
