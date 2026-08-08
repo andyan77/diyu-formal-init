@@ -124,6 +124,7 @@ from src.shared.series_episode import (
 )
 from src.shared.service_status import ProviderStatusTracker
 from src.shared.task_value_assembly import (
+    BRAND_RELEVANCE_CONTRACT_V2_VERSION,
     BrandRelevanceEvidenceV1,
     BrandRelevancePath,
     TaskValueAssemblyV1,
@@ -140,6 +141,7 @@ from src.shared.types import (
     BrandContextPacketV2,
     BrandContextPacketV3,
     BrandContextSegment,
+    BrandRelevanceQualificationV1,
     ContentControlContext,
     ContentProduct,
     ContentTarget,
@@ -176,6 +178,92 @@ _TARGET_LABELS: dict[ContentTarget, str] = {
     "wechat_channels_video": "微信视频号视频",
 }
 _LOGGER = logging.getLogger(__name__)
+_SNAPSHOT_SEGMENT_KEYS = (
+    "segment_id",
+    "source_document_id",
+    "source_document_version_id",
+    "source_id",
+    "source_version",
+    "semantic_kind",
+    "evidence_level",
+    "visibility_scope",
+    "digest",
+    "exact_text",
+)
+
+
+def _optional_snapshot_string(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise DomainError("内容任务冻结的品牌资料作用域无效")
+    return value
+
+
+def _segment_from_snapshot_item(item: dict[str, object]) -> BrandContextSegment:
+    if any(not isinstance(item.get(key), str) for key in _SNAPSHOT_SEGMENT_KEYS):
+        raise DomainError("内容任务冻结的品牌资料包无效")
+    source_digest = item.get("source_digest")
+    source_document_digest = item.get("source_document_digest")
+    if source_digest is not None and not isinstance(source_digest, str):
+        raise DomainError("内容任务冻结的品牌资料包无效")
+    if source_document_digest is not None and not isinstance(source_document_digest, str):
+        raise DomainError("内容任务冻结的品牌资料包无效")
+    applicability = item.get("applicability", [])
+    scope_ids = item.get("scope_organization_ids", [])
+    if not isinstance(applicability, list) or any(not isinstance(value, str) for value in applicability):
+        raise DomainError("内容任务冻结的品牌资料包无效")
+    if not isinstance(scope_ids, list) or any(not isinstance(value, str) for value in scope_ids):
+        raise DomainError("内容任务冻结的品牌资料作用域无效")
+    scope_version = str(item.get("scope_contract_version") or "publication-item-scope-v1")
+    effective_at, expires_at = item.get("effective_at"), item.get("expires_at")
+    if scope_version == "publication-item-scope-v2" and (
+        not isinstance(effective_at, str) or (expires_at is not None and not isinstance(expires_at, str))
+    ):
+        raise DomainError("内容任务冻结的品牌资料生命周期无效")
+    return BrandContextSegment(
+        **{key: str(item[key]) for key in _SNAPSHOT_SEGMENT_KEYS},
+        source_digest=source_digest,
+        source_document_digest=source_document_digest,
+        applicability=tuple(applicability),
+        scope_contract_version=scope_version,
+        scope_organization_ids=tuple(scope_ids),
+        effective_at=(str(effective_at) if effective_at is not None else None),
+        expires_at=(str(expires_at) if expires_at is not None else None),
+        authority_class=str(item.get("authority_class") or "legacy_compatibility"),
+        semantic_subject_type=_optional_snapshot_string(item.get("semantic_subject_type")),
+        semantic_subject_id=_optional_snapshot_string(item.get("semantic_subject_id")),
+        claim_key=_optional_snapshot_string(item.get("claim_key")),
+    )
+
+
+def _segment_document_for_digest(segment: BrandContextSegment) -> dict[str, object]:
+    document: dict[str, object] = {key: getattr(segment, key) for key in _SNAPSHOT_SEGMENT_KEYS}
+    if segment.source_digest is not None:
+        document["source_digest"] = segment.source_digest
+    if segment.source_document_digest is not None:
+        document["source_document_digest"] = segment.source_document_digest
+    if segment.applicability:
+        document["applicability"] = list(segment.applicability)
+    if segment.scope_contract_version == "publication-item-scope-v2":
+        document.update(
+            {
+                "scope_contract_version": segment.scope_contract_version,
+                "scope_organization_ids": list(segment.scope_organization_ids),
+                "effective_at": segment.effective_at,
+                "expires_at": segment.expires_at,
+                "authority_class": segment.authority_class,
+                "semantic_subject_type": segment.semantic_subject_type,
+                "semantic_subject_id": segment.semantic_subject_id,
+                "claim_key": segment.claim_key,
+            }
+        )
+    return document
+
+
+def _frozen_task_context_time(snapshot: dict[str, object] | None, context: BrandContext) -> str | None:
+    raw = snapshot.get("task_context_as_of") if snapshot is not None else None
+    return raw if isinstance(raw, str) else context.task_context_as_of
 
 
 def _requests_explicit_dramatization(natural_text: str) -> bool:
@@ -285,6 +373,34 @@ def _account_relevance_evidence(
         )
         for path in paths
     )
+
+
+def _qualification_relevance_evidence(
+    qualifications: tuple[BrandRelevanceQualificationV1, ...],
+) -> tuple[BrandRelevanceEvidenceV1, ...]:
+    evidence: list[BrandRelevanceEvidenceV1] = []
+    for qualification in qualifications:
+        if qualification.path_family not in {"local_trust", "organization_people"}:
+            raise DomainError("组织作用域资格包含未知品牌关联路径")
+        path = cast(BrandRelevancePath, qualification.path_family)
+        evidence.append(
+            brand_relevance_evidence(
+                path_family=path,
+                source_object_type=qualification.source_object_type,
+                source_id=qualification.source_id,
+                source_version=qualification.source_version,
+                source_digest=qualification.source_digest,
+                actual_consumed_refs=qualification.actual_consumed_refs,
+                organization_ref=qualification.organization_ref,
+                authorization_ref=(
+                    qualification.authorization.authorization_id if qualification.authorization is not None else None
+                ),
+                contract_version=BRAND_RELEVANCE_CONTRACT_V2_VERSION,
+                involves_person=qualification.involves_person,
+                authorization=qualification.authorization,
+            )
+        )
+    return tuple(evidence)
 
 
 def _assert_reviewed_artifact(artifact: GeneratedArtifact, frame: NarrativeFrame | None) -> None:
@@ -572,6 +688,7 @@ class ContentService:
                     product_value_contract=product_value_contract,
                     publication_contract=publication_contract,
                     brand_context_packet=context.context_packet,
+                    task_context_as_of=context.task_context_as_of,
                 ),
                 task_value_assembly,
             ),
@@ -870,6 +987,7 @@ class ContentService:
                 creative_methods=context.creative_method_context,
             )
             relevance_evidence = cls._brand_relevance_evidence(
+                context=context,
                 account_resolution=account_resolution,
                 product_value_contract=product_value_contract,
                 frozen_series=frozen_series,
@@ -952,6 +1070,7 @@ class ContentService:
     @staticmethod
     def _brand_relevance_evidence(
         *,
+        context: BrandContext,
         account_resolution: AccountEditorialResolutionV4,
         product_value_contract: ProductValueContract | None,
         frozen_series: SeriesEpisodeContractV1 | None,
@@ -961,6 +1080,7 @@ class ContentService:
             *_product_relevance_evidence(product_value_contract),
             *_series_relevance_evidence(frozen_series, series_context),
             *_account_relevance_evidence(account_resolution),
+            *_qualification_relevance_evidence(context.relevance_qualifications),
         )
 
     @staticmethod
@@ -1559,18 +1679,14 @@ class ContentService:
         control: ContentControlContext,
         snapshot: dict[str, object] | None = None,
     ) -> BrandContext:
-        """Speak from the identity this task froze, not from whatever the account carries today.
-
-        Renaming the account's expression identity, or rewriting its boundary, changes what the
-        next new task says.  It must not silently rewrite the identity an existing task and all
-        of its later versions were produced under.
-        """
+        """Speak from the frozen identity instead of today's account profile."""
         raw_references = snapshot.get("brand_reference_context") if snapshot is not None else None
         frozen_references = (
             tuple(str(item) for item in raw_references if isinstance(item, str))
             if isinstance(raw_references, list)
             else context.brand_reference_context
         )
+        frozen_task_context_as_of = _frozen_task_context_time(snapshot, context)
         frozen_packet = ContentService._brand_context_packet_from_snapshot(snapshot)
         frozen_constraints = (
             tuple(
@@ -1605,6 +1721,7 @@ class ContentService:
                 creative_method_context=frozen_methods,
                 candidate_product_guidance_context=frozen_product_guidance,
                 context_packet=frozen_packet,
+                task_context_as_of=frozen_task_context_as_of,
             )
         return replace(
             context,
@@ -1615,6 +1732,7 @@ class ContentService:
             creative_method_context=frozen_methods,
             candidate_product_guidance_context=frozen_product_guidance,
             context_packet=frozen_packet,
+            task_context_as_of=frozen_task_context_as_of,
             speaker_kind=control.speaker_kind,
         )
 
@@ -1638,42 +1756,7 @@ class ContentService:
         for item in raw_segments:
             if not isinstance(item, dict):
                 raise DomainError("内容任务冻结的品牌资料包无效")
-            required = (
-                "segment_id",
-                "source_document_id",
-                "source_document_version_id",
-                "source_id",
-                "source_version",
-                "semantic_kind",
-                "evidence_level",
-                "visibility_scope",
-                "digest",
-                "exact_text",
-            )
-            if any(not isinstance(item.get(key), str) for key in required):
-                raise DomainError("内容任务冻结的品牌资料包无效")
-            source_digest = item.get("source_digest")
-            if source_digest is not None and not isinstance(source_digest, str):
-                raise DomainError("内容任务冻结的品牌资料包无效")
-            source_document_digest = item.get("source_document_digest")
-            if source_document_digest is not None and not isinstance(
-                source_document_digest,
-                str,
-            ):
-                raise DomainError("内容任务冻结的品牌资料包无效")
-            raw_applicability = item.get("applicability", [])
-            if not isinstance(raw_applicability, list) or any(
-                not isinstance(value, str) for value in raw_applicability
-            ):
-                raise DomainError("内容任务冻结的品牌资料包无效")
-            segments.append(
-                BrandContextSegment(
-                    **{key: str(item[key]) for key in required},
-                    source_digest=source_digest,
-                    source_document_digest=source_document_digest,
-                    applicability=tuple(raw_applicability),
-                )
-            )
+            segments.append(_segment_from_snapshot_item(item))
         digest = raw.get("packet_digest")
         if not isinstance(digest, str):
             raise DomainError("内容任务冻结的品牌资料包无效")
@@ -1692,27 +1775,7 @@ class ContentService:
             or not isinstance(projection_digest, str)
         ):
             raise DomainError("内容任务冻结的品牌发布版本无效")
-        segment_documents: list[dict[str, object]] = []
-        for segment in segments:
-            segment_document: dict[str, object] = {
-                "segment_id": segment.segment_id,
-                "source_document_id": segment.source_document_id,
-                "source_document_version_id": segment.source_document_version_id,
-                "source_id": segment.source_id,
-                "source_version": segment.source_version,
-                "semantic_kind": segment.semantic_kind,
-                "evidence_level": segment.evidence_level,
-                "visibility_scope": segment.visibility_scope,
-                "digest": segment.digest,
-                "exact_text": segment.exact_text,
-            }
-            if segment.source_digest is not None:
-                segment_document["source_digest"] = segment.source_digest
-            if segment.source_document_digest is not None:
-                segment_document["source_document_digest"] = segment.source_document_digest
-            if segment.applicability:
-                segment_document["applicability"] = list(segment.applicability)
-            segment_documents.append(segment_document)
+        segment_documents = [_segment_document_for_digest(segment) for segment in segments]
         if raw.get("packet_version") == "brand-context-packet-v3":
             ref_fields = (
                 "available_segment_refs",
@@ -2136,6 +2199,7 @@ class ContentService:
                     product_value_contract=product_value_contract,
                     publication_contract=publication_contract,
                     brand_context_packet=context.context_packet,
+                    task_context_as_of=context.task_context_as_of,
                 ),
                 frozen_task_value_assembly(snapshot),
             ),

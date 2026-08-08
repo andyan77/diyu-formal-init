@@ -11,6 +11,7 @@ from src.shared.publication_contract import (
     SeriesDeltaV1,
     product_brief,
 )
+from src.shared.publication_scope import AuthorizationContractV1
 from src.shared.task_value_assembly import (
     BRAND_RELEVANCE_CONTRACT_VERSION,
     PAYOFF_MAX_LENGTH,
@@ -441,13 +442,16 @@ def brand_relevance_evidence(
     organization_ref: str | None = None,
     authorization_ref: str | None = None,
     media_ref: str | None = None,
+    contract_version: str = BRAND_RELEVANCE_CONTRACT_VERSION,
+    involves_person: bool = False,
+    authorization: AuthorizationContractV1 | None = None,
 ) -> BrandRelevanceEvidenceV1:
     """Create one typed path source; the shared contract performs fail-closed validation."""
 
     from src.shared.task_value_assembly import assert_brand_relevance_evidence
 
     evidence = BrandRelevanceEvidenceV1(
-        contract_version=BRAND_RELEVANCE_CONTRACT_VERSION,
+        contract_version=contract_version,
         path_family=path_family,
         source_object_type=source_object_type,
         source_id=source_id,
@@ -457,6 +461,8 @@ def brand_relevance_evidence(
         organization_ref=organization_ref,
         authorization_ref=authorization_ref,
         media_ref=media_ref,
+        involves_person=involves_person,
+        authorization=authorization,
     )
     assert_brand_relevance_evidence(evidence)
     return evidence

@@ -88,6 +88,7 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
     brand_id = uuid4()
     user_id = uuid4()
     baseline_id = uuid4()
+    v1_digest_before_45: str | None = None
     try:
         monkeypatch.setenv("DIYU_MIGRATOR_DATABASE_URL", test_database_url)
         alembic_config = Config("alembic.ini")
@@ -106,8 +107,7 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
                 (organization_id, tenant_id, "历史迁移既有组织"),
             )
             connection.execute(
-                "INSERT INTO users (id, tenant_id, organization_id, display_name) "
-                "VALUES (%s, %s, %s, %s)",
+                "INSERT INTO users (id, tenant_id, organization_id, display_name) VALUES (%s, %s, %s, %s)",
                 (user_id, tenant_id, organization_id, "历史迁移确认人"),
             )
             connection.execute(
@@ -124,9 +124,7 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
                 (baseline_id, tenant_id, brand_id, "历史已确认品牌表达", user_id),
             )
             connection.execute("ALTER TABLE brands FORCE ROW LEVEL SECURITY")
-            connection.execute(
-                "ALTER TABLE brand_expression_baselines FORCE ROW LEVEL SECURITY"
-            )
+            connection.execute("ALTER TABLE brand_expression_baselines FORCE ROW LEVEL SECURITY")
         with psycopg.connect(migrator_database_url, autocommit=True) as admin_connection:
             admin_connection.execute(
                 sql.SQL("ALTER ROLE {} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS").format(
@@ -134,6 +132,21 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
                 )
             )
 
+        command.upgrade(alembic_config, "20260817_44")
+        with psycopg.connect(test_database_url) as connection:
+            connection.execute("SELECT set_config('app.tenant_id', %s, true)", (str(tenant_id),))
+            digest_row = connection.execute(
+                "SELECT projection.digest FROM brands brand "
+                "JOIN brand_publication_projections projection "
+                "ON projection.tenant_id = brand.tenant_id "
+                "AND projection.brand_id = brand.id "
+                "AND projection.id = brand.current_publication_projection_id "
+                "WHERE brand.tenant_id = %s AND brand.id = %s",
+                (tenant_id, brand_id),
+            ).fetchone()
+            assert digest_row is not None
+            v1_digest_before_45 = str(digest_row[0])
+        command.upgrade(alembic_config, "head")
         command.upgrade(alembic_config, "head")
         with psycopg.connect(test_database_url) as connection:
             connection.execute(
@@ -159,11 +172,20 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
                 "'brand_publication_projections'::regclass, "
                 "'brand_publication_projection_items'::regclass, "
                 "'content_request_failures'::regclass, "
-                "'formal_capability_observations'::regclass"
+                "'formal_capability_observations'::regclass, "
+                "'brand_feedback_observations'::regclass, "
+                "'content_authorizations'::regclass, "
+                "'content_authorization_reservations'::regclass, "
+                "'content_authorization_events'::regclass, "
+                "'brand_relevance_qualifications'::regclass, "
+                "'brand_publication_claim_conflicts'::regclass"
                 ")"
             ).fetchall()
             compatibility_projection = connection.execute(
-                "SELECT projection.status, item.source_kind, item.source_ref "
+                "SELECT projection.status, item.source_kind, item.source_ref, "
+                "projection.contract_version, item.visibility_scope, "
+                "item.scope_contract_version, item.effective_at, item.expires_at, "
+                "projection.digest "
                 "FROM brands brand "
                 "JOIN brand_publication_projections projection "
                 "  ON projection.tenant_id = brand.tenant_id "
@@ -180,14 +202,20 @@ def test_historical_upgrade_validates_organization_parent_fk_as_non_bypass_owner
         assert constraint_row is not None
         revision = revision_row[0]
         constraint_validated = constraint_row[0]
-        assert revision == "20260817_44"
+        assert revision == "20260818_45"
         assert constraint_validated is True
-        assert len(force_rls_rows) == 13
+        assert len(force_rls_rows) == 19
         assert all(bool(row[1]) for row in force_rls_rows)
         assert compatibility_projection == (
             "confirmed",
             "brand_expression_baseline",
             str(baseline_id),
+            "brand-publication-projection-v1",
+            "brand_all",
+            "publication-item-scope-v1",
+            None,
+            None,
+            v1_digest_before_45,
         )
     finally:
         monkeypatch.setenv("DIYU_MIGRATOR_DATABASE_URL", migrator_database_url)
@@ -429,8 +457,7 @@ def _cleanup(database_url: str, tenant_id: UUID, operator_id: UUID) -> None:
         # the formal product path. Classify only its organizations for the exact
         # guarded teardown after every assertion has completed.
         cursor.execute(
-            "UPDATE organizations SET business_data_kind = "
-            "'synthetic_business_fixture' WHERE tenant_id = %s",
+            "UPDATE organizations SET business_data_kind = 'synthetic_business_fixture' WHERE tenant_id = %s",
             (tenant_id,),
         )
         cursor.execute(
@@ -459,13 +486,11 @@ def _cleanup(database_url: str, tenant_id: UUID, operator_id: UUID) -> None:
             (tenant_id,),
         )
         cursor.execute(
-            "UPDATE display_stores SET current_profile_version_id=NULL "
-            "WHERE tenant_id=%s",
+            "UPDATE display_stores SET current_profile_version_id=NULL WHERE tenant_id=%s",
             (tenant_id,),
         )
         cursor.execute(
-            "ALTER TABLE display_store_profile_versions "
-            "DISABLE TRIGGER display_store_profile_versions_immutable"
+            "ALTER TABLE display_store_profile_versions DISABLE TRIGGER display_store_profile_versions_immutable"
         )
         try:
             cursor.execute(
@@ -474,8 +499,7 @@ def _cleanup(database_url: str, tenant_id: UUID, operator_id: UUID) -> None:
             )
         finally:
             cursor.execute(
-                "ALTER TABLE display_store_profile_versions "
-                "ENABLE TRIGGER display_store_profile_versions_immutable"
+                "ALTER TABLE display_store_profile_versions ENABLE TRIGGER display_store_profile_versions_immutable"
             )
         for table in (
             "display_artifacts",
@@ -1375,15 +1399,9 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             )
             assert formal_store.status_code == 201, formal_store.text
             DM01StoreSeedWriter(migrator_database_url).seed(record)
-            stores = admin.get(
-                "/api/v1/tenant-management/display-stores"
-            )
+            stores = admin.get("/api/v1/tenant-management/display-stores")
             assert stores.status_code == 200, stores.text
-            display_store_id = next(
-                item["id"]
-                for item in stores.json()
-                if item["name"] == record["store_name"]
-            )
+            display_store_id = next(item["id"] for item in stores.json() if item["name"] == record["store_name"])
             grant = admin.patch(
                 f"/api/v1/tenant-management/users/{member.json()['user_id']}/grants",
                 json={
@@ -1410,15 +1428,18 @@ def test_formal_dm01_v1_v2_uses_product_versions_and_frozen_rules(
             session_identity = auth.load_tenant_session(session_token)
             assert session_identity is not None
             resolved_display_scope = auth.display_scope(session_identity)
-            assert PostgresDisplayRepository(app_database_url).load_context(
-                resolved_display_scope,
-                product_version_inventory=(
-                    (
-                        UUID(str(visible_by_sku["abc-123"]["product_version_id"])),
-                        1,
+            assert (
+                PostgresDisplayRepository(app_database_url).load_context(
+                    resolved_display_scope,
+                    product_version_inventory=(
+                        (
+                            UUID(str(visible_by_sku["abc-123"]["product_version_id"])),
+                            1,
+                        ),
                     ),
-                ),
-            ) is not None
+                )
+                is not None
+            )
 
             before = _counts(app_database_url, tenant_id)
             inactive = user.post(

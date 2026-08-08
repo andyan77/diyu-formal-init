@@ -1923,3 +1923,21 @@
 - 模型调用 0、生产接触 0；未导入素材、未建账号、未执行 Gate C 的组织作用域/生命周期/
   人物授权/媒体资格，未制作 Gate D 母版。远端 CI 四查以最终推送提交为准，待监理复验确认。
 - 唯一下一动作：监理独立复验 Gate B；PASS 后再签发 Gate C。
+
+## BRAND-MATRIX-01 · Gate C 执行侧核验稿（2026-08-08，待监理复验确认）
+
+- 状态：**`GATE-C IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`**；不得据此写
+  `COMPLETE / PASS`。
+- 迁移 45 只前向扩展：投影条目级多组织作用域、生命周期、权威/claim 身份与 V2 digest；
+  六张新治理表 FORCE RLS。旧投影/快照继续按 V1 `brand_all`、无到期和旧 digest 解释。
+- 正式读取以根逻辑账号 `control_organization_id` 过滤 brand_all/headquarters/organizations，
+  冻结服务端可信时间；结构化同级冲突进入 `needs_review`，反馈观察不能直接升格正式来源。
+- organization_people 和涉人 local_trust 强制完整授权；机构型 local_trust 无需人物授权。
+  两条 single-use fixture 均证明 V1 核销一次、同任务 V2 不重复、新任务拒绝、失败释放。
+- 双用户同逻辑账号的真实 actor 归属成立，`created_by` 所有权边界不放宽；tenant/brand/
+  region/store 四级泄漏反证为 0，合法组织后代正向可见。
+- 44→45 升级、旧读取/快照/digest 兼容和第二次 upgrade head 识别通过；没有数据库降级或
+  数据删除。最终 Gate C 三断言、全量门和 CI 四查以推送候选结果为准，待监理复验确认。
+- 模型调用 0、生产接触 0；未导入 Gate A 的 31 条知识、10 个账号和两条真实授权，未制作
+  母版。Gate D 才做隔离环境真实导入及八剧本重演。
+- 唯一下一动作：监理独立复验 Gate C；PASS 前不得推进后续 Gate。

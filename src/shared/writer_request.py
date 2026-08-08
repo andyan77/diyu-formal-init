@@ -300,9 +300,7 @@ def _writer_account_editorial_context(
         "applied": resolution.applied,
         "contract_version": resolution.contract_version,
         "lens_contract_version": (resolution.lens.contract_version if resolution.lens is not None else None),
-        "lens_digest": (
-            account_editorial_lens_digest(resolution.lens) if resolution.lens is not None else None
-        ),
+        "lens_digest": (account_editorial_lens_digest(resolution.lens) if resolution.lens is not None else None),
         "degraded_reasons": [reason.value for reason in resolution.degraded_reasons],
         "source_refs": list(resolution.source_refs),
         "source_digest": resolution.source_digest,
@@ -314,7 +312,7 @@ def _writer_brand_relevance(contract: PublicationContractV3) -> dict[str, object
     if contract.brand_relevance_state is None:
         return None
     evidence = contract.brand_relevance_evidence
-    return {
+    document: dict[str, object] = {
         "state": contract.brand_relevance_state,
         "family": evidence.path_family if evidence is not None else None,
         "source_object_type": evidence.source_object_type if evidence is not None else None,
@@ -328,6 +326,14 @@ def _writer_brand_relevance(contract: PublicationContractV3) -> dict[str, object
         "degraded_reason": contract.brand_relevance_degraded_reason,
         "demonstration_eligible": contract.demonstration_eligible,
     }
+    if evidence is not None and evidence.contract_version != "brand-relevance-evidence-v1":
+        document.update(
+            {
+                "authorization_digest": (evidence.authorization.digest if evidence.authorization is not None else None),
+                "involves_person": evidence.involves_person,
+            }
+        )
+    return document
 
 
 def _valid_account_editorial_context(value: dict[str, object] | None) -> bool:
