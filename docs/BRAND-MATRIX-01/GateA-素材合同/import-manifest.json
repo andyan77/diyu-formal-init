@@ -1,0 +1,4738 @@
+{
+  "account_transition_plan": {
+    "authorization_migration": "map each retained operator qualification to the minimum new logical account and organization scope only after exact Gate D inventory",
+    "existing_account_slots": [
+      "EXISTING-SLOT-01",
+      "EXISTING-SLOT-02",
+      "EXISTING-SLOT-03",
+      "EXISTING-SLOT-04",
+      "EXISTING-SLOT-05",
+      "EXISTING-SLOT-06",
+      "EXISTING-SLOT-07",
+      "EXISTING-SLOT-08",
+      "EXISTING-SLOT-09"
+    ],
+    "history_retention": "old tasks, versions and digests remain unchanged and continue to resolve by original account ID",
+    "inventory_scope": "Gate A accepted S0 count only; exact IDs must be inventoried in Gate D isolation database",
+    "observed_existing_count": 9,
+    "route": "referenced accounts are disabled, archived and hidden by default; proven unreferenced synthetic objects may be precisely deleted; natural-person identities are never deleted by this plan",
+    "synthetic_exact_delete_criteria": [
+      "explicit synthetic marker or creation batch provenance",
+      "zero task/version/artifact/reference edges",
+      "zero retained authorization or audit dependency",
+      "exact object ID allowlist",
+      "pre-delete and post-delete count plus referential assertions",
+      "rollback possible before commit"
+    ]
+  },
+  "accounts": [
+    {
+      "account_code": "H01",
+      "content_role_id": "CR-01",
+      "content_role_version": "v1",
+      "display_name": "笛语服饰",
+      "historical_compatibility": {
+        "legacy_candidates": [
+          "HQ-01",
+          "HQ-ACC-01"
+        ],
+        "retirement_mapping": "archive_old_if_referenced; exact Gate D inventory required"
+      },
+      "logical_account_id": "DIYU-LPA-H01",
+      "organization_id": "DIYU-HQ-001",
+      "planned_operation_qualifications": [
+        "brand_content_operator",
+        "brand_approver"
+      ],
+      "platform_format_targets": {
+        "platforms": [
+          "douyin",
+          "xiaohongshu",
+          "wechat_video"
+        ],
+        "product_mix": {
+          "P1": 10,
+          "P2": 20,
+          "P3": 30,
+          "P4": 10,
+          "P5": 30
+        }
+      },
+      "profile_segments": {
+        "audience_relationship": {
+          "source_anchor": "素材草案-v0/01 §2 H01 受众关系",
+          "summary": "与长期关注者和平等观望者保持真诚、有立场且不迎合所有人的关系。"
+        },
+        "authority_boundary": {
+          "source_anchor": "素材草案-v0/01 §2 H01 权威边界",
+          "summary": "仅使用品牌战略、正式品牌资料和总部确认文件，不讲私人经历、未确认商品或单店结论。"
+        },
+        "content_territory": {
+          "source_anchor": "素材草案-v0/01 §2 H01 内容领地",
+          "summary": "负责品牌级为什么、系列选择、品牌拒绝和商品入季理由。"
+        },
+        "default_production_conditions": {
+          "source_anchor": "素材草案-v0/01 §2 H01 默认生产条件",
+          "summary": "至少具备品牌基线、主题、已确认素材或正式商品资料之一；商品确定表述仅限V级。"
+        },
+        "identity_position": {
+          "source_anchor": "素材草案-v0/01 §2 H01 身份位置",
+          "summary": "总部品牌官方母号，代表笛语品牌而非个人。"
+        }
+      }
+    },
+    {
+      "account_code": "H02",
+      "content_role_id": "CR-02",
+      "content_role_version": "v1",
+      "display_name": "笛语主理人·取舍笔记",
+      "historical_compatibility": {
+        "legacy_candidates": [
+          "HQ-02",
+          "HQ-ACC-02"
+        ],
+        "retirement_mapping": "archive_old_if_referenced; exact Gate D inventory required"
+      },
+      "logical_account_id": "DIYU-LPA-H02",
+      "organization_id": "DIYU-HQ-001",
+      "planned_operation_qualifications": [
+        "brand_content_operator",
+        "founder_persona_authorization"
+      ],
+      "platform_format_targets": {
+        "platforms": [
+          "douyin",
+          "xiaohongshu",
+          "wechat_video"
+        ],
+        "product_mix": {
+          "P1": 5,
+          "P2": 10,
+          "P3": 60,
+          "P4": 5,
+          "P5": 20
+        }
+      },
+      "profile_segments": {
+        "audience_relationship": {
+          "source_anchor": "素材草案-v0/01 §2 H02 受众关系",
+          "summary": "以同为生活中的人面对长期关注者，可承认不完美但不戏剧化造假。"
+        },
+        "authority_boundary": {
+          "source_anchor": "素材草案-v0/01 §2 H02 权威边界",
+          "summary": "只讲本人已确认经历、表达和品牌决策；未绑定真人时仅讲组织岗位观点与一般观察。"
+        },
+        "content_territory": {
+          "source_anchor": "素材草案-v0/01 §2 H02 内容领地",
+          "summary": "P3为主，讨论经营选择、家庭与个体关系及行业判断，不强行转卖货。"
+        },
+        "default_production_conditions": {
+          "source_anchor": "素材草案-v0/01 §2 H02 默认生产条件",
+          "summary": "至少有真实事件、观察、情绪或明确观点；没有真人授权时禁止第一人称经历。"
+        },
+        "identity_position": {
+          "source_anchor": "素材草案-v0/01 §2 H02 身份位置",
+          "summary": "总部做决定者的位置，解释品牌选择而非构造第二个角色。"
+        }
+      }
+    },
+    {
+      "account_code": "H03",
+      "content_role_id": "CR-03",
+      "content_role_version": "v1",
+      "display_name": "笛语·把衣服讲清楚",
+      "historical_compatibility": {
+        "legacy_candidates": [
+          "HQ-03",
+          "HQ-ACC-03"
+        ],
+        "retirement_mapping": "archive_old_if_referenced; exact Gate D inventory required"
+      },
+      "logical_account_id": "DIYU-LPA-H03",
+      "organization_id": "DIYU-HQ-001",
+      "planned_operation_qualifications": [
+        "product_content_operator",
+        "product_owner_approval"
+      ],
+      "platform_format_targets": {
+        "platforms": [
+          "douyin",
+          "xiaohongshu",
+          "wechat_video"
+        ],
+        "product_mix": {
+          "P1": 15,
+          "P2": 60,
+          "P3": 10,
+          "P4": 5,
+          "P5": 10
+        }
+      },
+      "profile_segments": {
+        "audience_relationship": {
+          "source_anchor": "素材草案-v0/01 §2 H03 受众关系",
+          "summary": "面向明确商品兴趣者，解释优势、代价、适合与不适合，不包装不存在的设计原意。"
+        },
+        "authority_boundary": {
+          "source_anchor": "素材草案-v0/01 §2 H03 权威边界",
+          "summary": "仅据商品结构与规划发声；禁止虚构库存销量、实际价格和QA/QC结论，严格保留V/P/C/R。"
+        },
+        "content_territory": {
+          "source_anchor": "素材草案-v0/01 §2 H03 内容领地",
+          "summary": "P2主场，每条至少覆盖问题、优势、牺牲和反选中的三项。"
+        },
+        "default_production_conditions": {
+          "source_anchor": "素材草案-v0/01 §2 H03 默认生产条件",
+          "summary": "至少有商品硬事实与一条专业判断；V级可确定，P级弹性，价格只作候选建议。"
+        },
+        "identity_position": {
+          "source_anchor": "素材草案-v0/01 §2 H03 身份位置",
+          "summary": "总部商品企划位置，负责商品结构、组合、角色与生命周期，不冒充设计师或面料专家。"
+        }
+      }
+    },
+    {
+      "account_code": "H04",
+      "content_role_id": "GATEA-CR-H04-QUALITY",
+      "content_role_version": "v1-pending-founder-attestation",
+      "display_name": "笛语·出厂之前",
+      "historical_compatibility": {
+        "legacy_candidates": [
+          "HQ-ACC-04"
+        ],
+        "retirement_mapping": "new logical account; do not infer an existing DB row before Gate D"
+      },
+      "logical_account_id": "DIYU-LPA-H04",
+      "organization_id": "DIYU-HQ-001",
+      "planned_operation_qualifications": [
+        "quality_content_operator",
+        "quality_owner_approval"
+      ],
+      "platform_format_targets": {
+        "platforms": [
+          "douyin",
+          "xiaohongshu",
+          "wechat_video"
+        ],
+        "product_mix": {
+          "P1": 0,
+          "P2": 40,
+          "P3": 40,
+          "P4": 0,
+          "P5": 20
+        }
+      },
+      "profile_segments": {
+        "audience_relationship": {
+          "source_anchor": "素材草案-v0/01 §2 H04 受众关系",
+          "summary": "面向持续判断品牌是否诚实的受众，以过程可查而非专业形容词建立可信度。"
+        },
+        "authority_boundary": {
+          "source_anchor": "素材草案-v0/01 §2 H04 权威边界",
+          "summary": "不得虚构检测数据、零缺陷或批次合格；QA与QC责任保持分离。"
+        },
+        "content_territory": {
+          "source_anchor": "素材草案-v0/01 §2 H04 内容领地",
+          "summary": "讲合格定义、生产前拦截、成品检查、反馈如何更新标准。"
+        },
+        "default_production_conditions": {
+          "source_anchor": "素材草案-v0/01 §2 H04 默认生产条件",
+          "summary": "真实品控素材当前为0；DEMO记录只可演示且不得当作真实批次证据。"
+        },
+        "identity_position": {
+          "source_anchor": "素材草案-v0/01 §2 H04 身份位置",
+          "summary": "总部品质管理中心的纪实位置，连接QA、QC、商品、生产与反馈。"
+        }
+      }
+    },
+    {
+      "account_code": "R01",
+      "content_role_id": "CR-07",
+      "content_role_version": "v1",
+      "display_name": "笛语华东·江浙穿衣日历",
+      "historical_compatibility": {
+        "legacy_candidates": [
+          "RG-01",
+          "RG-ACC-01"
+        ],
+        "retirement_mapping": "archive old regional account if referenced; inventory in Gate D"
+      },
+      "logical_account_id": "DIYU-LPA-R01",
+      "organization_id": "DIYU-REGION-001",
+      "planned_operation_qualifications": [
+        "regional_content_operator",
+        "regional_scope_grant"
+      ],
+      "platform_format_targets": {
+        "platforms": [
+          "douyin",
+          "xiaohongshu",
+          "wechat_video"
+        ],
+        "product_mix": {
+          "P1": 15,
+          "P2": 15,
+          "P3": 20,
+          "P4": 35,
+          "P5": 15
+        }
+      },
+      "profile_segments": {
+        "audience_relationship": {
+          "source_anchor": "素材草案-v0/01 §2 R01 受众关系",
+          "summary": "面向华东家庭与门店周边家庭，作为懂本地的翻译者而非第二总部。"
+        },
+        "authority_boundary": {
+          "source_anchor": "素材草案-v0/01 §2 R01 权威边界",
+          "summary": "只叠加本区域气候、商圈、节庆和经营事实，不改品牌定位、不冒充总部、不跨区域。"
+        },
+        "content_territory": {
+          "source_anchor": "素材草案-v0/01 §2 R01 内容领地",
+          "summary": "P4/P3偏重，承担区域主题、门店协同、本地场景与总部内容转译。"
+        },
+        "default_production_conditions": {
+          "source_anchor": "素材草案-v0/01 §2 R01 默认生产条件",
+          "summary": "必须同时有一个区域事实和一个总部依据，且区域知识带时效；过期不得当前使用。"
+        },
+        "identity_position": {
+          "source_anchor": "素材草案-v0/01 §2 R01 身份位置",
+          "summary": "华东区域翻译和组织者，把总部定义转为本地可用语境。"
+        }
+      }
+    },
+    {
+      "account_code": "R02",
+      "content_role_id": "CR-07",
+      "content_role_version": "v2-amd-2026-0808-01",
+      "display_name": "笛语四川·巴适穿衣",
+      "historical_compatibility": {
+        "legacy_candidates": [
+          "RG-01-instance-2"
+        ],
+        "retirement_mapping": "new region instance; no DB identity inferred before Gate D"
+      },
+      "logical_account_id": "DIYU-LPA-R02",
+      "organization_id": "DIYU-REGION-002",
+      "planned_operation_qualifications": [
+        "regional_content_operator",
+        "regional_scope_grant"
+      ],
+      "platform_format_targets": {
+        "platforms": [
+          "douyin",
+          "xiaohongshu",
+          "wechat_video"
+        ],
+        "product_mix": {
+          "P1": 15,
+          "P2": 15,
+          "P3": 20,
+          "P4": 35,
+          "P5": 15
+        }
+      },
+      "profile_segments": {
+        "audience_relationship": {
+          "source_anchor": "素材草案-v0/01 §2 R02 受众关系",
+          "summary": "面向四川家庭，沿用通用AudienceProfile，不按城市生成刻板画像。"
+        },
+        "authority_boundary": {
+          "source_anchor": "素材草案-v0/01 §2 R02 权威边界及D-08",
+          "summary": "与R01同构但资料池隔离，只用四川事实；方言人格不改变事实和合规边界。"
+        },
+        "content_territory": {
+          "source_anchor": "素材草案-v0/01 §2 R02 内容领地及D-08",
+          "summary": "配比同R01，差异来自本地事实与穿衣问题，可采用已批准方言人格。"
+        },
+        "default_production_conditions": {
+          "source_anchor": "素材草案-v0/01 §2 R02 默认生产条件",
+          "summary": "同时需要四川区域事实与总部依据；本Gate仅定义合同，签署前不导入真实租户。"
+        },
+        "identity_position": {
+          "source_anchor": "素材草案-v0/01 §2 R02 身份位置",
+          "summary": "四川区域的独立翻译实例，用于证明区域知识隔离。"
+        }
+      }
+    },
+    {
+      "account_code": "S01",
+      "content_role_id": "CR-10",
+      "content_role_version": "v1",
+      "display_name": "笛语杭州西湖店",
+      "historical_compatibility": {
+        "legacy_candidates": [
+          "ST-01",
+          "ST-ACC-XXX"
+        ],
+        "retirement_mapping": "archive old store account if referenced; exact ID in Gate D"
+      },
+      "logical_account_id": "DIYU-LPA-S01",
+      "organization_id": "DIYU-STORE-001",
+      "planned_operation_qualifications": [
+        "store_content_operator",
+        "store_scope_grant"
+      ],
+      "platform_format_targets": {
+        "platforms": [
+          "douyin",
+          "xiaohongshu",
+          "wechat_video"
+        ],
+        "product_mix": {
+          "P1": 25,
+          "P2": 15,
+          "P3": 10,
+          "P4": 40,
+          "P5": 10
+        }
+      },
+      "profile_segments": {
+        "audience_relationship": {
+          "source_anchor": "素材草案-v0/01 §2 S01 受众关系",
+          "summary": "面向门店周边家庭，提供具体及时可信信息但不替顾客下结论。"
+        },
+        "authority_boundary": {
+          "source_anchor": "素材草案-v0/01 §2 S01 权威边界",
+          "summary": "只用本店、本商圈、本地天气与本店商品服务事实；不代表总部、不跨店、不编库存成交。"
+        },
+        "content_territory": {
+          "source_anchor": "素材草案-v0/01 §2 S01 内容领地",
+          "summary": "P4主场，覆盖到店问题、试穿观察、店内搭配、本店日常与本地活动。"
+        },
+        "default_production_conditions": {
+          "source_anchor": "素材草案-v0/01 §2 S01 默认生产条件",
+          "summary": "至少一个本店真实事实；缺料可讲通用商品信息但不得制造现场，动态信息必须带范围和时效。"
+        },
+        "identity_position": {
+          "source_anchor": "素材草案-v0/01 §2 S01 身份位置",
+          "summary": "杭州西湖加盟门店的证明与服务位置，只讲本店发生的事。"
+        }
+      }
+    },
+    {
+      "account_code": "S02",
+      "content_role_id": "CR-10+CR-09",
+      "content_role_version": "v1",
+      "display_name": "笛语西湖店·试衣间问答",
+      "historical_compatibility": {
+        "legacy_candidates": [
+          "RG-03",
+          "CR-09"
+        ],
+        "retirement_mapping": "new store-scoped logical account; no legacy DB row assumed"
+      },
+      "logical_account_id": "DIYU-LPA-S02",
+      "organization_id": "DIYU-STORE-001",
+      "planned_operation_qualifications": [
+        "store_styling_operator",
+        "store_scope_grant"
+      ],
+      "platform_format_targets": {
+        "platforms": [
+          "douyin",
+          "xiaohongshu",
+          "wechat_video"
+        ],
+        "product_mix": {
+          "P1": 30,
+          "P2": 20,
+          "P3": 5,
+          "P4": 35,
+          "P5": 10
+        }
+      },
+      "profile_segments": {
+        "audience_relationship": {
+          "source_anchor": "素材草案-v0/01 §2 S02 受众关系",
+          "summary": "以具体、清楚、能讲优缺点和条件判断的方式服务，不制造育儿焦虑。"
+        },
+        "authority_boundary": {
+          "source_anchor": "素材草案-v0/01 §2 S02 权威边界",
+          "summary": "只用商品、服务、本地场景与本店资料；不虚构资格、研发原意或绝对推荐。"
+        },
+        "content_territory": {
+          "source_anchor": "素材草案-v0/01 §2 S02 内容领地",
+          "summary": "P1/P4双主场，回答真实穿衣、搭配、天气与到店问题。"
+        },
+        "default_production_conditions": {
+          "source_anchor": "素材草案-v0/01 §2 S02 默认生产条件",
+          "summary": "商品、场景、问题至少两项；顾客信息匿名化，人物片段在签署前仅为角色情境素材。"
+        },
+        "identity_position": {
+          "source_anchor": "素材草案-v0/01 §2 S02 身份位置",
+          "summary": "杭州店试衣间外的搭配服务位置，采用CR-10主角色加CR-09辅助角色。"
+        }
+      }
+    },
+    {
+      "account_code": "S03",
+      "content_role_id": "CR-10",
+      "content_role_version": "v1",
+      "display_name": "笛语湖州吴兴店·街坊衣事",
+      "historical_compatibility": {
+        "legacy_candidates": [
+          "ST-02",
+          "ST-ACC-XXX"
+        ],
+        "retirement_mapping": "archive old store account if referenced; exact ID in Gate D"
+      },
+      "logical_account_id": "DIYU-LPA-S03",
+      "organization_id": "DIYU-STORE-002",
+      "planned_operation_qualifications": [
+        "store_content_operator",
+        "store_scope_grant"
+      ],
+      "platform_format_targets": {
+        "platforms": [
+          "douyin",
+          "xiaohongshu",
+          "wechat_video"
+        ],
+        "product_mix": {
+          "P1": 25,
+          "P2": 15,
+          "P3": 10,
+          "P4": 40,
+          "P5": 10
+        }
+      },
+      "profile_segments": {
+        "audience_relationship": {
+          "source_anchor": "素材草案-v0/01 §2 S03 受众关系",
+          "summary": "面向社区半径家庭，适合长期复购与换季问题，不以焦虑推动到店。"
+        },
+        "authority_boundary": {
+          "source_anchor": "素材草案-v0/01 §2 S03 权威边界",
+          "summary": "与S01同构且门店间不得互引，本店现场只属于本店。"
+        },
+        "content_territory": {
+          "source_anchor": "素材草案-v0/01 §2 S03 内容领地",
+          "summary": "P4主场，聚焦社区门店的上学放学、就近活动、临时降温与复购。"
+        },
+        "default_production_conditions": {
+          "source_anchor": "素材草案-v0/01 §2 S03 默认生产条件",
+          "summary": "至少一个本店真实事实；门店资料不自动向上成为通用事实，复用须明确授权。"
+        },
+        "identity_position": {
+          "source_anchor": "素材草案-v0/01 §2 S03 身份位置",
+          "summary": "湖州吴兴加盟门店实例，用于证明并列门店各说本店事实。"
+        }
+      }
+    },
+    {
+      "account_code": "S04",
+      "content_role_id": "CR-10",
+      "content_role_version": "v1-pending-persona-attestation",
+      "display_name": "阿野在笛语·成都金牛店",
+      "historical_compatibility": {
+        "legacy_candidates": [
+          "ST-03-candidate"
+        ],
+        "retirement_mapping": "new logical account; do not infer existing DB identity before Gate D"
+      },
+      "logical_account_id": "DIYU-LPA-S04",
+      "organization_id": "DIYU-STORE-003",
+      "planned_operation_qualifications": [
+        "store_content_operator",
+        "person_authorization",
+        "store_scope_grant"
+      ],
+      "platform_format_targets": {
+        "platforms": [
+          "douyin",
+          "xiaohongshu",
+          "wechat_video"
+        ],
+        "product_mix": {
+          "P1": 25,
+          "P2": 15,
+          "P3": 10,
+          "P4": 40,
+          "P5": 10
+        }
+      },
+      "profile_segments": {
+        "audience_relationship": {
+          "source_anchor": "素材草案-v0/01 §2 S04 受众关系",
+          "summary": "面向愿意看真实成长过程的本地家庭，人设真实性是硬边界。"
+        },
+        "authority_boundary": {
+          "source_anchor": "素材草案-v0/01 §2 S04 权威边界",
+          "summary": "只讲自己经手的本店事实，不代表门店经营结论、不冒充专业资格。"
+        },
+        "content_territory": {
+          "source_anchor": "素材草案-v0/01 §2 S04 内容领地",
+          "summary": "P4为主、P1次之，讲学习过程、接待、纠错与协作。"
+        },
+        "default_production_conditions": {
+          "source_anchor": "素材草案-v0/01 §2 S04 默认生产条件",
+          "summary": "至少一个本店真实事实；当前原句均为未签署角色情境，绑定真人前不得使用姓名、肖像或声音。"
+        },
+        "identity_position": {
+          "source_anchor": "素材草案-v0/01 §2 S04 身份位置",
+          "summary": "成都金牛门店成长型员工的演示角色位置；阿野为虚构名且未绑定真人。"
+        }
+      }
+    }
+  ],
+  "amendments": [
+    {
+      "amendment_id": "AMD-2026-0808-01",
+      "approved_at": "2026-08-08",
+      "approved_by": "founder",
+      "change_summary": "区域和门店账号由不模仿方言人设升级为可以模仿方言人设；事实与合规边界不变",
+      "consumer": "Gate D import and scenario 7",
+      "from_version": "v1",
+      "source_anchor": "素材草案-v0/09 §4",
+      "status": "approved_not_imported",
+      "target_anchor": "§3.5表达幅度表地域程度行",
+      "target_document_id": "DIYU-BRAND-BASELINE-001",
+      "to_version": "v2"
+    }
+  ],
+  "anomaly_samples": [
+    {
+      "expected_behavior": "旧任务读v1；签署和版本化后新任务读v2；不发明精确比例",
+      "name": "过期成分口径版本对",
+      "object_ids": [
+        "DIYU-CSPU-008",
+        "J-CSPU-008"
+      ],
+      "sample_id": "ANOM-01",
+      "source_anchor": "素材草案-v0/07 样本1"
+    },
+    {
+      "expected_behavior": "门店错误资料不得进入ProductFact；总部口径零污染",
+      "name": "门店错误成分文件",
+      "object_ids": [
+        "DIYU-STORE-001",
+        "DIYU-CSPU-008",
+        "DEMO-QCX-2608-003"
+      ],
+      "sample_id": "ANOM-02",
+      "source_anchor": "素材草案-v0/07 样本2"
+    },
+    {
+      "expected_behavior": "同级冲突needs_review并失败关闭，不按时间或标题自动选边",
+      "name": "同字段正式事实冲突",
+      "object_ids": [
+        "DIYU-CSPU-013"
+      ],
+      "sample_id": "ANOM-03",
+      "source_anchor": "素材草案-v0/07 样本3"
+    },
+    {
+      "expected_behavior": "不得作为当前事实；仅可带时间回顾",
+      "name": "过期区域活动",
+      "object_ids": [
+        "RK-EC-08",
+        "DIYU-REGION-001"
+      ],
+      "sample_id": "ANOM-04",
+      "source_anchor": "素材草案-v0/07 样本4"
+    },
+    {
+      "expected_behavior": "可检索但组织轴拒绝调用",
+      "name": "跨门店读取",
+      "object_ids": [
+        "DIYU-LPA-S01",
+        "SK-HuZ-03",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002"
+      ],
+      "sample_id": "ANOM-05",
+      "source_anchor": "素材草案-v0/07 样本5"
+    },
+    {
+      "expected_behavior": "独立登录可授权；共享登录禁止；事件归属自然人",
+      "name": "两名用户共同操作逻辑账号",
+      "object_ids": [
+        "DIYU-LPA-S01",
+        "OP-TEST-02",
+        "OP-TEST-03"
+      ],
+      "sample_id": "ANOM-06",
+      "source_anchor": "素材草案-v0/07 样本6"
+    },
+    {
+      "expected_behavior": "一次预留提交核销，失败释放，第二次拒绝",
+      "name": "私人经历单次授权",
+      "object_ids": [
+        "PS-S04-03",
+        "PS-S02-05",
+        "DIYU-LPA-S04",
+        "DIYU-LPA-S02"
+      ],
+      "sample_id": "ANOM-07",
+      "source_anchor": "素材草案-v0/07 样本7"
+    },
+    {
+      "expected_behavior": "旧任务保持冻结digest，新任务使用新版本",
+      "name": "知识更新前后两版任务",
+      "object_ids": [
+        "DIYU-CSPU-008",
+        "J-CSPU-008",
+        "AMD-2026-0808-01"
+      ],
+      "sample_id": "ANOM-08",
+      "source_anchor": "素材草案-v0/07 样本8"
+    }
+  ],
+  "consumption_items": [
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H02",
+        "H03",
+        "H04",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "ExpressionConstraintSelector",
+      "consumer_products": [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5"
+      ],
+      "content_class": "brand_stance_constraint",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-001-BRAND-STANCES",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-REGION-001",
+        "DIYU-REGION-002",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "expression_constraint",
+      "publishability": "constraint_only",
+      "raw_markdown": false,
+      "selection_priority": 10,
+      "source_anchor": "§3.4稳定选择与拒绝",
+      "source_document_id": "DIYU-BRAND-BASELINE-001",
+      "version": "v1",
+      "writer_eligible": true
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H02",
+        "H03",
+        "R01",
+        "R02",
+        "S01",
+        "S03"
+      ],
+      "consumer_component": "AccountEditorialLens",
+      "consumer_products": [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5"
+      ],
+      "content_class": "account_profile_contract",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-002-ACCOUNT-DUTIES",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-REGION-001",
+        "DIYU-REGION-002",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002"
+      ],
+      "primary_channel": "profile_content_role",
+      "publishability": "internal_projection",
+      "raw_markdown": false,
+      "selection_priority": 20,
+      "source_anchor": "§三与§四",
+      "source_document_id": "DIYU-ACCOUNT-MATRIX-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H02",
+        "H03",
+        "H04",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "ExpressionConstraintSelector",
+      "consumer_products": [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5"
+      ],
+      "content_class": "voice_constraint",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-003-VOICE",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-REGION-001",
+        "DIYU-REGION-002",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "expression_constraint",
+      "publishability": "constraint_only",
+      "raw_markdown": false,
+      "selection_priority": 30,
+      "source_anchor": "§一至§九",
+      "source_document_id": "DIYU-BRAND-VOICE-001",
+      "version": "v1",
+      "writer_eligible": true
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H02",
+        "H03",
+        "H04",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "AudienceLens",
+      "consumer_products": [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5"
+      ],
+      "content_class": "audience_profile",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-004-AUDIENCE",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-REGION-001",
+        "DIYU-REGION-002",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "profile_content_role",
+      "publishability": "internal_projection",
+      "raw_markdown": false,
+      "selection_priority": 20,
+      "source_anchor": "§一至§十四",
+      "source_document_id": "DIYU-AUDIENCE-PROFILE-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H02",
+        "H03",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "ContentRoleProjector",
+      "consumer_products": [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5"
+      ],
+      "content_class": "content_role",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-005-ROLES",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-REGION-001",
+        "DIYU-REGION-002",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "profile_content_role",
+      "publishability": "internal_projection",
+      "raw_markdown": false,
+      "selection_priority": 20,
+      "source_anchor": "CR-01至CR-10、§十一至§十二",
+      "source_document_id": "DIYU-CONTENT-ROLE-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H02",
+        "H03",
+        "H04",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "AuthorizationResolver",
+      "consumer_products": [],
+      "content_class": "authorization_policy",
+      "effective_at": null,
+      "exclusion_reason": "deterministic authorization only; never Writer prose",
+      "expires_at": null,
+      "item_id": "CI-006-AUTHORITY",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-REGION-001",
+        "DIYU-REGION-002",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "internal_template_not_publishable",
+      "publishability": "not_publishable",
+      "raw_markdown": false,
+      "selection_priority": 0,
+      "source_anchor": "§一至§十",
+      "source_document_id": "DIYU-ACCOUNT-AUTHORITY-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H02",
+        "H03",
+        "H04",
+        "S02",
+        "S04"
+      ],
+      "consumer_component": "OrganizationPersonLens",
+      "consumer_products": [
+        "P2",
+        "P3",
+        "P4"
+      ],
+      "content_class": "organization_person_role",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-007-ORG-IP",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-STORE-001",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "profile_content_role",
+      "publishability": "internal_projection",
+      "raw_markdown": false,
+      "selection_priority": 20,
+      "source_anchor": "CR-HQ-01至13、§三至§六",
+      "source_document_id": "DIYU-ORG-IP-ACCOUNT-MATRIX-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H02",
+        "H03",
+        "H04",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "ScopeResolver",
+      "consumer_products": [],
+      "content_class": "scope_policy",
+      "effective_at": null,
+      "exclusion_reason": "scope and RACI data are resolver inputs, not Writer prose",
+      "expires_at": null,
+      "item_id": "CI-008-ORG-SCOPE",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-REGION-001",
+        "DIYU-REGION-002",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "internal_template_not_publishable",
+      "publishability": "not_publishable",
+      "raw_markdown": false,
+      "selection_priority": 0,
+      "source_anchor": "组织树、L1-L4、RACI与渠道授权矩阵",
+      "source_document_id": "DIYU-TENANT-ORG-AUTH-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H02",
+        "H03",
+        "H04",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "ExpressionConstraintSelector",
+      "consumer_products": [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5"
+      ],
+      "content_class": "content_safety_constraint",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-009-CONTENT-CONSTRAINTS",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-REGION-001",
+        "DIYU-REGION-002",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "expression_constraint",
+      "publishability": "constraint_only",
+      "raw_markdown": false,
+      "selection_priority": 10,
+      "source_anchor": "§一至§五、§十至§十六",
+      "source_document_id": "DIYU-CONTENT-GOVERNANCE-001",
+      "version": "v1",
+      "writer_eligible": true
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H02",
+        "H03",
+        "H04",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "RightsAndScopeResolver",
+      "consumer_products": [],
+      "content_class": "rights_and_scope_policy",
+      "effective_at": null,
+      "exclusion_reason": "rights, privacy and organization checks are deterministic gates",
+      "expires_at": null,
+      "item_id": "CI-009-RIGHTS-SCOPE",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-REGION-001",
+        "DIYU-REGION-002",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "internal_template_not_publishable",
+      "publishability": "not_publishable",
+      "raw_markdown": false,
+      "selection_priority": 0,
+      "source_anchor": "§六至§九、§十四",
+      "source_document_id": "DIYU-CONTENT-GOVERNANCE-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H03",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "ProductFactProjector",
+      "consumer_products": [
+        "P1",
+        "P2",
+        "P5"
+      ],
+      "content_class": "verified_visual_product_field",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-010-V-FACTS",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "product_fact_candidate",
+      "publishability": "eligible_as_product_fact",
+      "raw_markdown": false,
+      "selection_priority": 10,
+      "source_anchor": "§二四个深度CSPU的V级字段",
+      "source_document_id": "DIYU-CANDIDATE-PRODUCT-MASTER-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H03",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "CandidateFactProjector",
+      "consumer_products": [
+        "P1",
+        "P2",
+        "P5"
+      ],
+      "content_class": "candidate_product_field",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-010-PC-CANDIDATES",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "product_fact_candidate",
+      "publishability": "candidate_conditional_language_only",
+      "raw_markdown": false,
+      "selection_priority": 50,
+      "source_anchor": "§二四个深度CSPU的P/C级字段",
+      "source_document_id": "DIYU-CANDIDATE-PRODUCT-MASTER-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [],
+      "consumer_component": "ProductFieldGradeGuard",
+      "consumer_products": [],
+      "content_class": "restricted_product_field",
+      "effective_at": null,
+      "exclusion_reason": "R fields, exact composition/process/price/fit/performance are prohibited from ProductFact and Writer",
+      "expires_at": null,
+      "item_id": "CI-010-R-EXCLUDED",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "internal_template_not_publishable",
+      "publishability": "not_publishable",
+      "raw_markdown": false,
+      "selection_priority": 0,
+      "source_anchor": "§0与R级字段",
+      "source_document_id": "DIYU-CANDIDATE-PRODUCT-MASTER-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H03",
+        "H01",
+        "S02"
+      ],
+      "consumer_component": "JudgmentProjector",
+      "consumer_products": [
+        "P1",
+        "P2"
+      ],
+      "content_class": "judgment_candidate",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-011-TRADEOFF",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "product_fact_candidate",
+      "publishability": "candidate_until_attested",
+      "raw_markdown": false,
+      "selection_priority": 30,
+      "source_anchor": "四个深度CSPU取舍与P2命题",
+      "source_document_id": "DIYU-PRODUCT-TRADEOFF-P2-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H03",
+        "S02"
+      ],
+      "consumer_component": "CandidateFactProjector",
+      "consumer_products": [
+        "P1",
+        "P2"
+      ],
+      "content_class": "price_and_audience_candidate",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-012-PRICE-CANDIDATE",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "product_fact_candidate",
+      "publishability": "candidate_not_actual_price",
+      "raw_markdown": false,
+      "selection_priority": 90,
+      "source_anchor": "§一至§九",
+      "source_document_id": "DIYU-PRODUCT-PRICE-CORRECTION-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H03",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "MediaRegistry",
+      "consumer_products": [
+        "P5"
+      ],
+      "content_class": "media_metadata",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-013-MEDIA-METADATA",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "media",
+      "publishability": "not_eligible_until_gate_d",
+      "raw_markdown": false,
+      "selection_priority": 40,
+      "source_anchor": "DIYU-V-001至026目录行",
+      "source_document_id": "DIYU-ASSET-CATALOG-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H03",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "CreativeMethodSelector",
+      "consumer_products": [
+        "P5"
+      ],
+      "content_class": "visual_method",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-014-VISUAL-ANALYSIS",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "creative_method",
+      "publishability": "method_only",
+      "raw_markdown": false,
+      "selection_priority": 40,
+      "source_anchor": "风格族与内容形态，不含权利结论",
+      "source_document_id": "DIYU-ASSET-VISUAL-ANALYSIS-001",
+      "version": "v1",
+      "writer_eligible": true
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H02",
+        "H03",
+        "H04",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "CreativeMethodSelector",
+      "consumer_products": [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5"
+      ],
+      "content_class": "media_calling_method",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-015-CALLING-METHOD",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-REGION-001",
+        "DIYU-REGION-002",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "creative_method",
+      "publishability": "method_only",
+      "raw_markdown": false,
+      "selection_priority": 50,
+      "source_anchor": "P1-P5建议、主题族与重复控制",
+      "source_document_id": "DIYU-ASSET-CALLING-001",
+      "version": "v1",
+      "writer_eligible": true
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H03",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "ProductFieldGradeGuard",
+      "consumer_products": [
+        "P1",
+        "P2",
+        "P5"
+      ],
+      "content_class": "product_grade_policy",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-016-V-GRADE",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "product_fact_candidate",
+      "publishability": "policy_only",
+      "raw_markdown": false,
+      "selection_priority": 5,
+      "source_anchor": "§2.1 V级与§十五",
+      "source_document_id": "DIYU-ASSET-PRODUCT-INFERENCE-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H03",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "ProductFieldGradeGuard",
+      "consumer_products": [
+        "P1",
+        "P2",
+        "P5"
+      ],
+      "content_class": "candidate_grade_policy",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-016-PC-GRADE",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "product_fact_candidate",
+      "publishability": "conditional_language_only",
+      "raw_markdown": false,
+      "selection_priority": 5,
+      "source_anchor": "§2.2至§2.3",
+      "source_document_id": "DIYU-ASSET-PRODUCT-INFERENCE-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [],
+      "consumer_component": "ProductFieldGradeGuard",
+      "consumer_products": [],
+      "content_class": "restricted_grade_policy",
+      "effective_at": null,
+      "exclusion_reason": "R fields and prohibited precision are never Writer or ProductFact inputs",
+      "expires_at": null,
+      "item_id": "CI-016-R-GRADE",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "internal_template_not_publishable",
+      "publishability": "not_publishable",
+      "raw_markdown": false,
+      "selection_priority": 0,
+      "source_anchor": "§2.4与§四",
+      "source_document_id": "DIYU-ASSET-PRODUCT-INFERENCE-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H03",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "MediaMasterGate",
+      "consumer_products": [
+        "P5"
+      ],
+      "content_class": "media_governance",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-017-MASTER-GATES",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "media",
+      "publishability": "not_eligible_until_gate_d",
+      "raw_markdown": false,
+      "selection_priority": 5,
+      "source_anchor": "母版命名、§五与§六",
+      "source_document_id": "DIYU-ASSET-BRAND-UNIFICATION-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H02",
+        "H03",
+        "R01",
+        "R02",
+        "S01",
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "consumer_component": "CreativeMethodSelector",
+      "consumer_products": [
+        "P5"
+      ],
+      "content_class": "visual_narrative_method",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-018-VISUAL-NARRATIVE",
+      "organization_scope": [
+        "DIYU-HQ-001",
+        "DIYU-REGION-001",
+        "DIYU-REGION-002",
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "creative_method",
+      "publishability": "method_only",
+      "raw_markdown": false,
+      "selection_priority": 30,
+      "source_anchor": "视觉基调、家庭呼应与P5模型",
+      "source_document_id": "DIYU-BRAND-VISUAL-001",
+      "version": "v1",
+      "writer_eligible": true
+    },
+    {
+      "applicable_account_ids": [
+        "H01",
+        "H04"
+      ],
+      "consumer_component": "DisplayMethodSelector",
+      "consumer_products": [
+        "P5"
+      ],
+      "content_class": "display_method",
+      "effective_at": null,
+      "exclusion_reason": null,
+      "expires_at": null,
+      "item_id": "CI-019-DISPLAY-METHOD",
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "primary_channel": "creative_method",
+      "publishability": "method_only",
+      "raw_markdown": false,
+      "selection_priority": 60,
+      "source_anchor": "品牌陈列原则与焦点规则",
+      "source_document_id": "DIYU-DISPLAY-EXPRESSION-001",
+      "version": "v1",
+      "writer_eligible": true
+    },
+    {
+      "applicable_account_ids": [],
+      "consumer_component": "StoreFixtureIntake",
+      "consumer_products": [],
+      "content_class": "fixture_template",
+      "effective_at": null,
+      "exclusion_reason": "template contains no verified facts for the three demo stores",
+      "expires_at": null,
+      "item_id": "CI-020-FIXTURE-TEMPLATE",
+      "organization_scope": [
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "internal_template_not_publishable",
+      "publishability": "not_publishable",
+      "raw_markdown": false,
+      "selection_priority": 0,
+      "source_anchor": "候选模板与示范档案声明",
+      "source_document_id": "DIYU-STORE-FIXTURE-PROFILE-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [],
+      "consumer_component": "GateDOperatorChecklist",
+      "consumer_products": [],
+      "content_class": "operator_checklist",
+      "effective_at": null,
+      "exclusion_reason": "human collection procedure only",
+      "expires_at": null,
+      "item_id": "CI-021-COLLECTION-CHECKLIST",
+      "organization_scope": [
+        "DIYU-STORE-001",
+        "DIYU-STORE-002",
+        "DIYU-STORE-003"
+      ],
+      "primary_channel": "internal_template_not_publishable",
+      "publishability": "not_publishable",
+      "raw_markdown": false,
+      "selection_priority": 0,
+      "source_anchor": "§三至§十二",
+      "source_document_id": "DIYU-STORE-FIXTURE-COLLECTION-001",
+      "version": "v1",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [],
+      "consumer_component": "GateAProvenance",
+      "consumer_products": [],
+      "content_class": "historical_reference",
+      "effective_at": null,
+      "exclusion_reason": "reference only; authorization conflict resolved by additive v2 decision",
+      "expires_at": null,
+      "item_id": "CI-022-README-REFERENCE",
+      "organization_scope": [],
+      "primary_channel": "internal_template_not_publishable",
+      "publishability": "not_publishable",
+      "raw_markdown": false,
+      "selection_priority": 0,
+      "source_anchor": "授权边界与M6-1门槛",
+      "source_document_id": "REPO-DIYU-ONBOARDING-README",
+      "version": "repository_snapshot",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [],
+      "consumer_component": "GateAProvenance",
+      "consumer_products": [],
+      "content_class": "duplicate_reference",
+      "effective_at": null,
+      "exclusion_reason": "duplicate minimal restatement; Windows document remains canonical",
+      "expires_at": null,
+      "item_id": "CI-023-BASELINE-REFERENCE",
+      "organization_scope": [],
+      "primary_channel": "internal_template_not_publishable",
+      "publishability": "not_publishable",
+      "raw_markdown": false,
+      "selection_priority": 0,
+      "source_anchor": "候选基线摘要",
+      "source_document_id": "REPO-REF-DIYU-BRAND-BASELINE-001",
+      "version": "repository_snapshot",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [],
+      "consumer_component": "GateAProvenance",
+      "consumer_products": [],
+      "content_class": "duplicate_reference",
+      "effective_at": null,
+      "exclusion_reason": "duplicate minimal restatement; Windows document remains canonical",
+      "expires_at": null,
+      "item_id": "CI-024-ACCOUNT-REFERENCE",
+      "organization_scope": [],
+      "primary_channel": "internal_template_not_publishable",
+      "publishability": "not_publishable",
+      "raw_markdown": false,
+      "selection_priority": 0,
+      "source_anchor": "候选账号边界摘要",
+      "source_document_id": "REPO-REF-DIYU-ACCOUNT-MATRIX-001",
+      "version": "repository_snapshot",
+      "writer_eligible": false
+    },
+    {
+      "applicable_account_ids": [],
+      "consumer_component": "none",
+      "consumer_products": [],
+      "content_class": "out_of_scope_store_snapshot",
+      "effective_at": null,
+      "exclusion_reason": "D-07 closed: KQ store is outside the matrix; no cross-store reuse and no demo import",
+      "expires_at": null,
+      "item_id": "CI-025-KQ-DM01-EXCLUDED",
+      "organization_scope": [],
+      "primary_channel": "internal_template_not_publishable",
+      "publishability": "not_publishable",
+      "raw_markdown": false,
+      "selection_priority": 0,
+      "source_anchor": "文件头与§零",
+      "source_document_id": "DIYU-STORE-KQ-WALL-01",
+      "version": "KQ-WALL-01-task-2026-07-25",
+      "writer_eligible": false
+    }
+  ],
+  "contract_status": "implemented_awaiting_supervisor_reverification_and_founder_attestation",
+  "counts": {
+    "accounts": 10,
+    "amendments": 1,
+    "anomaly_samples": 8,
+    "deep_sku_packages": 4,
+    "judgments": 4,
+    "media_registry": 26,
+    "organizations": 6,
+    "regional_store_entries": 31,
+    "series": 2,
+    "source_documents": 25
+  },
+  "deep_sku_packages": [
+    {
+      "candidate_only_fields": [
+        "silhouette",
+        "material_tendency",
+        "season",
+        "age_range",
+        "size_range",
+        "suggested_price_band",
+        "tradeoff",
+        "candidate_name",
+        "product_role",
+        "style_tags"
+      ],
+      "cspu_id": "DIYU-CSPU-001",
+      "field_tiers": {
+        "C": [
+          "candidate_name",
+          "product_role",
+          "style_tags"
+        ],
+        "P": [
+          "silhouette:宽松/落肩倾向",
+          "material_tendency",
+          "season",
+          "age_range",
+          "size_range",
+          "suggested_price_band",
+          "tradeoff"
+        ],
+        "R": [
+          "exact_composition",
+          "exact_process",
+          "actual_sku",
+          "actual_price",
+          "inventory",
+          "sales",
+          "certification",
+          "exact_fit"
+        ],
+        "V": [
+          "category:男童短袖上衣",
+          "main_color:明亮黄色"
+        ]
+      },
+      "product_fact_fields": [
+        "category:男童短袖上衣",
+        "main_color:明亮黄色"
+      ],
+      "prohibited_fact_fields": [
+        "exact_composition",
+        "exact_process",
+        "actual_sku",
+        "actual_price",
+        "inventory",
+        "sales",
+        "certification",
+        "exact_fit"
+      ],
+      "source_anchor": "DIYU-CANDIDATE-PRODUCT-MASTER-001 §二 DIYU-CSPU-001；素材草案-v0/06 §1"
+    },
+    {
+      "candidate_only_fields": [
+        "silhouette",
+        "material_tendency",
+        "season",
+        "size_range",
+        "suggested_price_band",
+        "advantage",
+        "tradeoff",
+        "candidate_name",
+        "product_role",
+        "style_tags"
+      ],
+      "cspu_id": "DIYU-CSPU-006",
+      "field_tiers": {
+        "C": [
+          "candidate_name",
+          "product_role",
+          "style_tags"
+        ],
+        "P": [
+          "silhouette:宽松/自然展开/A字倾向",
+          "material_tendency",
+          "season",
+          "size_range",
+          "suggested_price_band",
+          "advantage",
+          "tradeoff"
+        ],
+        "R": [
+          "exact_composition",
+          "exact_process",
+          "actual_sku",
+          "actual_price",
+          "inventory",
+          "sales",
+          "certification",
+          "exact_fit",
+          "stain_resistance"
+        ],
+        "V": [
+          "category:女童连衣裙",
+          "main_color:白色或米白色"
+        ]
+      },
+      "product_fact_fields": [
+        "category:女童连衣裙",
+        "main_color:白色或米白色"
+      ],
+      "prohibited_fact_fields": [
+        "exact_composition",
+        "exact_process",
+        "actual_sku",
+        "actual_price",
+        "inventory",
+        "sales",
+        "certification",
+        "exact_fit",
+        "stain_resistance"
+      ],
+      "source_anchor": "DIYU-CANDIDATE-PRODUCT-MASTER-001 §二 DIYU-CSPU-006；素材草案-v0/06 §2"
+    },
+    {
+      "candidate_only_fields": [
+        "silhouette",
+        "material_tendency_v1",
+        "season",
+        "size_range",
+        "suggested_price_band",
+        "advantage",
+        "tradeoff",
+        "candidate_name",
+        "product_role",
+        "style_tags"
+      ],
+      "cspu_id": "DIYU-CSPU-008",
+      "field_tiers": {
+        "C": [
+          "candidate_name",
+          "product_role",
+          "style_tags"
+        ],
+        "P": [
+          "silhouette:宽松/落肩/松弛",
+          "material_tendency_v1",
+          "season",
+          "size_range",
+          "suggested_price_band",
+          "advantage",
+          "tradeoff"
+        ],
+        "R": [
+          "exact_composition_percentage",
+          "exact_process",
+          "actual_sku",
+          "actual_price",
+          "inventory",
+          "sales",
+          "certification",
+          "exact_fit",
+          "shape_stability"
+        ],
+        "V": [
+          "category:针织开衫",
+          "main_color:灰色"
+        ]
+      },
+      "product_fact_fields": [
+        "category:针织开衫",
+        "main_color:灰色"
+      ],
+      "prohibited_fact_fields": [
+        "exact_composition_percentage",
+        "exact_process",
+        "actual_sku",
+        "actual_price",
+        "inventory",
+        "sales",
+        "certification",
+        "exact_fit",
+        "shape_stability"
+      ],
+      "source_anchor": "DIYU-CANDIDATE-PRODUCT-MASTER-001 §二 DIYU-CSPU-008；素材草案-v0/06 §3"
+    },
+    {
+      "candidate_only_fields": [
+        "category",
+        "silhouette",
+        "material_tendency",
+        "season",
+        "size_range",
+        "suggested_price_band",
+        "advantage",
+        "tradeoff",
+        "candidate_name",
+        "product_role",
+        "style_tags"
+      ],
+      "cspu_id": "DIYU-CSPU-013",
+      "field_tiers": {
+        "C": [
+          "candidate_name",
+          "product_role",
+          "style_tags"
+        ],
+        "P": [
+          "category:户外保暖外套",
+          "silhouette:宽松/机能层次型",
+          "material_tendency",
+          "season",
+          "size_range",
+          "suggested_price_band",
+          "advantage",
+          "tradeoff"
+        ],
+        "R": [
+          "exact_composition",
+          "exact_process",
+          "actual_sku",
+          "actual_price",
+          "inventory",
+          "sales",
+          "certification",
+          "exact_fit",
+          "windproof_rating",
+          "warmth_temperature",
+          "waterproof_rating"
+        ],
+        "V": [
+          "main_color:灰色"
+        ]
+      },
+      "product_fact_fields": [
+        "main_color:灰色"
+      ],
+      "prohibited_fact_fields": [
+        "exact_composition",
+        "exact_process",
+        "actual_sku",
+        "actual_price",
+        "inventory",
+        "sales",
+        "certification",
+        "exact_fit",
+        "windproof_rating",
+        "warmth_temperature",
+        "waterproof_rating"
+      ],
+      "source_anchor": "DIYU-CANDIDATE-PRODUCT-MASTER-001 §二 DIYU-CSPU-013；素材草案-v0/06 §4"
+    }
+  ],
+  "exclusions": [
+    {
+      "exclusion_id": "D-07-KQ",
+      "object_ids": [
+        "DIYU-STORE-KQ-WALL-01"
+      ],
+      "reason": "柯桥店不属于十账号矩阵；资料不得跨店复用；DM01不进入演示导入",
+      "status": "closed"
+    },
+    {
+      "exclusion_id": "RAW-MARKDOWN-WRITER",
+      "object_ids": [
+        "SOURCE-DOCUMENTS-ALL"
+      ],
+      "reason": "原始Markdown全文进入Writer数量必须为0；只允许原子消费项经过选择合同",
+      "status": "enforced"
+    },
+    {
+      "exclusion_id": "RAW-MEDIA-P5",
+      "object_ids": [
+        "DIYU-V-001..026-RAW"
+      ],
+      "reason": "原始文件在Gate D获得统一笛语/DIYU母版并通过十项门前，P5 eligibility=false",
+      "status": "enforced"
+    }
+  ],
+  "judgments": [
+    {
+      "applicability_conditions": [
+        "整套没有第二个强色",
+        "孩子不排斥高视觉存在感",
+        "用途为日常与轻活动而非低调正式场合"
+      ],
+      "approved_at": null,
+      "approved_by": "founder",
+      "cspu_id": "DIYU-CSPU-001",
+      "effective_at": null,
+      "evidence_refs": [
+        "素材草案-v0/06 §1",
+        "DIYU-CANDIDATE-PRODUCT-MASTER-001 §二 DIYU-CSPU-001",
+        "DIYU-PRODUCT-TRADEOFF-P2-001 DIYU-CSPU-001"
+      ],
+      "expires_at": null,
+      "judgment_id": "J-CSPU-001",
+      "judgment_owner": {
+        "account_id": "H03",
+        "role": "商品负责人"
+      },
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "status": "awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "applicability_conditions": [
+        "活动强度与脏污概率可控",
+        "家庭接受浅色打理频率",
+        "不要求利落腰线或高强度户外"
+      ],
+      "approved_at": null,
+      "approved_by": "founder",
+      "cspu_id": "DIYU-CSPU-006",
+      "effective_at": null,
+      "evidence_refs": [
+        "素材草案-v0/06 §2",
+        "DIYU-CANDIDATE-PRODUCT-MASTER-001 §二 DIYU-CSPU-006",
+        "DIYU-PRODUCT-TRADEOFF-P2-001 DIYU-CSPU-006"
+      ],
+      "expires_at": null,
+      "judgment_id": "J-CSPU-006",
+      "judgment_owner": {
+        "account_id": "H03",
+        "role": "商品负责人"
+      },
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "status": "awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "applicability_conditions": [
+        "用途是室内外切换而非高强度户外",
+        "家庭接受针织挂放和清洗方式",
+        "需要层次而非轮廓支撑"
+      ],
+      "approved_at": null,
+      "approved_by": "founder",
+      "cspu_id": "DIYU-CSPU-008",
+      "effective_at": null,
+      "evidence_refs": [
+        "素材草案-v0/06 §3",
+        "DIYU-CANDIDATE-PRODUCT-MASTER-001 §二 DIYU-CSPU-008",
+        "DIYU-PRODUCT-TRADEOFF-P2-001 DIYU-CSPU-008"
+      ],
+      "expires_at": null,
+      "judgment_id": "J-CSPU-008",
+      "judgment_owner": {
+        "account_id": "H03",
+        "role": "商品负责人"
+      },
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "status": "awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "applicability_conditions": [
+        "主要用途在户外与自然场景",
+        "家庭接受室内机能观感",
+        "不要求兼任正式或学院感外套"
+      ],
+      "approved_at": null,
+      "approved_by": "founder",
+      "cspu_id": "DIYU-CSPU-013",
+      "effective_at": null,
+      "evidence_refs": [
+        "素材草案-v0/06 §4",
+        "DIYU-CANDIDATE-PRODUCT-MASTER-001 §二 DIYU-CSPU-013",
+        "DIYU-PRODUCT-TRADEOFF-P2-001 DIYU-CSPU-013"
+      ],
+      "expires_at": null,
+      "judgment_id": "J-CSPU-013",
+      "judgment_owner": {
+        "account_id": "H03",
+        "role": "商品负责人"
+      },
+      "organization_scope": [
+        "DIYU-HQ-001"
+      ],
+      "status": "awaiting_founder_attestation",
+      "version": "v1"
+    }
+  ],
+  "media_registry": [
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "851756695e0a420b98eb98bade75e701",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-001",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-001"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "851756695e0a420b98eb98bade75e701.mov",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-001-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "binding_reason": "series_visual_not_single_sku",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "a3aa978ce1854cc9bc40fb13ea0fde3b",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-002",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "a3aa978ce1854cc9bc40fb13ea0fde3b.mov",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01"
+      ],
+      "target_master_name": "DIYU-V-002-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "ae449309367b4484a8bad14f1adb1378",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-003",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-002"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "ae449309367b4484a8bad14f1adb1378.mov",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-003-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "b075f71ac88241668395aa8986521775",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-004",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-006"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "b075f71ac88241668395aa8986521775.mov",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-004-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "b44984687f244b75b23298e853f52a16",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-005",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-006"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "b44984687f244b75b23298e853f52a16.mov",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-005-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "b591672b4f724cef832ad14af245106d",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-006",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-005"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "b591672b4f724cef832ad14af245106d.mov",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-006-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "c5c3e289b7474c11a556d77d64701eac",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-007",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-003"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "c5c3e289b7474c11a556d77d64701eac.mov",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-007-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "binding_reason": "no_frozen_deep_sku_binding_in_gate_a",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "d29002784d76466dba7ee39bf91fe74e",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-008",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "d29002784d76466dba7ee39bf91fe74e.mov",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01"
+      ],
+      "target_master_name": "DIYU-V-008-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "binding_reason": "series_visual_not_single_sku",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "f8d8ec9140ce4313b44428d135cdb357",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-009",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "f8d8ec9140ce4313b44428d135cdb357.mov",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H02"
+      ],
+      "target_master_name": "DIYU-V-009-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "fe31d406d87343ee8ac548b59ce5d5f5",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-010",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-007"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "fe31d406d87343ee8ac548b59ce5d5f5.mov",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-010-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v1e00fgi0000d4tob2nog65ovkq67hh0",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-011",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-008"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v1e00fgi0000d4tob2nog65ovkq67hh0.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-011-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v1e00fgi0000d5i5b8nog65l7l5s42l0",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-012",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-009"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v1e00fgi0000d5i5b8nog65l7l5s42l0.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-012-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "binding_reason": "series_visual_not_single_sku",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v1e00fgi0000d60klbfog65tsad5t4c0",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-013",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v1e00fgi0000d60klbfog65tsad5t4c0.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "S02"
+      ],
+      "target_master_name": "DIYU-V-013-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v1e00fgi0000d6rl76nog65sfji59cq0",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-014",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-010"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v1e00fgi0000d6rl76nog65sfji59cq0.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-014-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "binding_reason": "no_frozen_deep_sku_binding_in_gate_a",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v1e00fgi0000d7hlemvog65qj6u04g0g",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-015",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v1e00fgi0000d7hlemvog65qj6u04g0g.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01"
+      ],
+      "target_master_name": "DIYU-V-015-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v2700fgi0000d5vvgpnog65ki7hdqfig",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-016",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-004"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v2700fgi0000d5vvgpnog65ki7hdqfig.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-016-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "binding_reason": "no_frozen_deep_sku_binding_in_gate_a",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v2700fgi0000d7nhjrfog65md31p25o0",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-017",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v2700fgi0000d7nhjrfog65md31p25o0.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01"
+      ],
+      "target_master_name": "DIYU-V-017-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "binding_reason": "no_frozen_deep_sku_binding_in_gate_a",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v2800fgi0000d4r2ssnog65vcrku7c50",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-018",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v2800fgi0000d4r2ssnog65vcrku7c50.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01"
+      ],
+      "target_master_name": "DIYU-V-018-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "binding_reason": "no_frozen_deep_sku_binding_in_gate_a",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v2800fgi0000d4uc3d7og65vk8up4f80",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-019",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v2800fgi0000d4uc3d7og65vk8up4f80.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01"
+      ],
+      "target_master_name": "DIYU-V-019-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v2800fgi0000d510ml7og65t6ofpqamg",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-020",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-011"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v2800fgi0000d510ml7og65t6ofpqamg.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-020-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v2800fgi0000d5e6dvfog65qh109916g",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-021",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-012"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v2800fgi0000d5e6dvfog65qh109916g.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-021-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v2800fgi0000d5jf8vfog65gnp1id7r0",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-022",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-013"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v2800fgi0000d5jf8vfog65gnp1id7r0.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "R01"
+      ],
+      "target_master_name": "DIYU-V-022-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v2800fgi0000d5k3lenog65l69pdp9tg",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-023",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-013"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v2800fgi0000d5k3lenog65l69pdp9tg.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "S04"
+      ],
+      "target_master_name": "DIYU-V-023-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "binding_reason": "no_frozen_deep_sku_binding_in_gate_a",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v2800fgi0000d5k42unog65kcr726gm0",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-024",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v2800fgi0000d5k42unog65kcr726gm0.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01"
+      ],
+      "target_master_name": "DIYU-V-024-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v2800fgi0000d5ndfinog65k8gc753s0",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-025",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [
+        "DIYU-CSPU-014"
+      ],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v2800fgi0000d5ndfinog65k8gc753s0.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "target_master_name": "DIYU-V-025-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    },
+    {
+      "authorization_term_status": "pending_gate_d",
+      "binding_reason": "no_frozen_deep_sku_binding_in_gate_a",
+      "brand_identity_placement": "right_upper_safe_area_watermark_and_end_slate_with_笛语_or_DIYU",
+      "completion_status": "pending_gate_d",
+      "declared_identifier": "v2800fgi0000d7k89gvog65gk4cugcl0",
+      "edit_plan": {
+        "cover": "pending_gate_d",
+        "intro": "pending_gate_d",
+        "outro": "pending_gate_d",
+        "subtitles": "pending_gate_d"
+      },
+      "effective_at": null,
+      "expires_at": null,
+      "founder_decision_ref": "docs/COMM-01-执行包排产与工程对照指南.md §六 D13及唯一附加条款",
+      "master_sha256": null,
+      "master_status": "pending_gate_d",
+      "media_id": "DIYU-V-026",
+      "p5_eligibility": false,
+      "person_child_authorization_evidence": {
+        "basis": "D13 does not replace per-person/per-child evidence collection",
+        "status": "pending_gate_d"
+      },
+      "product_bindings": [],
+      "publication_gates": {
+        "01_brand_name_unified": "pending_gate_d",
+        "02_brand_identity_complete": "pending_gate_d",
+        "03_account_authorized": "pending_gate_d",
+        "04_platform_authorized": "pending_gate_d",
+        "05_person_child_authorization_valid": "pending_gate_d",
+        "06_music_third_party_clear": "pending_gate_d",
+        "07_product_claim_supported": "pending_gate_d",
+        "08_no_personal_sensitive_information": "pending_gate_d",
+        "09_child_expression_boundary": "pending_gate_d",
+        "10_usage_and_reviewer_recorded": "pending_gate_d"
+      },
+      "rights_decisions": {
+        "ai_recreation": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "commercial_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        },
+        "real_person_and_child_use": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "individual_identity_and_guardian_evidence_pending_gate_d"
+        },
+        "secondary_edit": {
+          "basis": "D13",
+          "decision": "approved_by_founder",
+          "evidence_status": "decision_recorded"
+        }
+      },
+      "sha_verification": "pending_gate_d",
+      "source_filename_raw": "v2800fgi0000d7k89gvog65gk4cugcl0.mp4",
+      "source_sha256": null,
+      "target_account_ids": [
+        "H01"
+      ],
+      "target_master_name": "DIYU-V-026-MASTER-v1",
+      "target_platforms": [
+        "douyin",
+        "xiaohongshu",
+        "wechat_video"
+      ],
+      "third_party_verification": {
+        "basis": "DIYU-CONTENT-GOVERNANCE-001 §8.4",
+        "status": "pending_gate_d"
+      }
+    }
+  ],
+  "organizations": [
+    {
+      "name": "笛语总部",
+      "organization_id": "DIYU-HQ-001",
+      "organization_type": "headquarters",
+      "parent_id": null,
+      "version": "v1"
+    },
+    {
+      "name": "华东区域代理",
+      "organization_id": "DIYU-REGION-001",
+      "organization_type": "region",
+      "parent_id": "DIYU-HQ-001",
+      "version": "v1"
+    },
+    {
+      "name": "四川区域代理",
+      "organization_id": "DIYU-REGION-002",
+      "organization_type": "region",
+      "parent_id": "DIYU-HQ-001",
+      "version": "v1"
+    },
+    {
+      "name": "杭州西湖门店",
+      "organization_id": "DIYU-STORE-001",
+      "organization_type": "store",
+      "parent_id": "DIYU-REGION-001",
+      "version": "v1"
+    },
+    {
+      "name": "湖州吴兴门店",
+      "organization_id": "DIYU-STORE-002",
+      "organization_type": "store",
+      "parent_id": "DIYU-REGION-001",
+      "version": "v1"
+    },
+    {
+      "name": "成都金牛门店",
+      "organization_id": "DIYU-STORE-003",
+      "organization_type": "store",
+      "parent_id": "DIYU-REGION-002",
+      "version": "v1"
+    }
+  ],
+  "regional_store_entries": [
+    {
+      "effective_at": "2026-05-01",
+      "entry_id": "RK-EC-01",
+      "expires_at": null,
+      "organization_id": "DIYU-REGION-001",
+      "review_cycle": "annual_april",
+      "source_anchor": "素材草案-v0/02 §3.2 RK-EC-01",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-05-01",
+      "entry_id": "RK-EC-02",
+      "expires_at": null,
+      "organization_id": "DIYU-REGION-001",
+      "review_cycle": "annual_april",
+      "source_anchor": "素材草案-v0/02 §3.2 RK-EC-02",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-08-01",
+      "entry_id": "RK-EC-03",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-REGION-001",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §3.2 RK-EC-03",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-08-10",
+      "entry_id": "RK-EC-04",
+      "expires_at": "2026-09-15",
+      "organization_id": "DIYU-REGION-001",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §3.2 RK-EC-04",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-09-15",
+      "entry_id": "RK-EC-05",
+      "expires_at": "2026-10-10",
+      "organization_id": "DIYU-REGION-001",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §3.2 RK-EC-05",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-06-01",
+      "entry_id": "RK-EC-06",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-REGION-001",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §3.2 RK-EC-06",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-06-01",
+      "entry_id": "RK-EC-07",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-REGION-001",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §3.2 RK-EC-07",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-07-15",
+      "entry_id": "RK-EC-08",
+      "expires_at": "2026-07-31",
+      "organization_id": "DIYU-REGION-001",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §3.2 RK-EC-08；07样本4",
+      "status": "expired_demo_sample_not_current",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-08-01",
+      "entry_id": "RK-SW-01",
+      "expires_at": null,
+      "organization_id": "DIYU-REGION-002",
+      "review_cycle": "annual_september",
+      "source_anchor": "素材草案-v0/02 §3.3 RK-SW-01",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-08-01",
+      "entry_id": "RK-SW-02",
+      "expires_at": null,
+      "organization_id": "DIYU-REGION-002",
+      "review_cycle": "annual_september",
+      "source_anchor": "素材草案-v0/02 §3.3 RK-SW-02",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2027-02-15",
+      "entry_id": "RK-SW-03",
+      "expires_at": "2027-05-01",
+      "organization_id": "DIYU-REGION-002",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §3.3 RK-SW-03",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2027-02-01",
+      "entry_id": "RK-SW-04",
+      "expires_at": "2027-05-01",
+      "organization_id": "DIYU-REGION-002",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §3.3 RK-SW-04",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-06-01",
+      "entry_id": "RK-SW-05",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-REGION-002",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §3.3 RK-SW-05",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-08-01",
+      "entry_id": "RK-SW-06",
+      "expires_at": null,
+      "organization_id": "DIYU-REGION-002",
+      "review_cycle": "annual_september",
+      "source_anchor": "素材草案-v0/02 §3.3 RK-SW-06",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2027-01-15",
+      "entry_id": "RK-SW-07",
+      "expires_at": "2027-02-20",
+      "organization_id": "DIYU-REGION-002",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §3.3 RK-SW-07",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-06-01",
+      "entry_id": "SK-HZ-01",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-STORE-001",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.2 SK-HZ-01",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-06-01",
+      "entry_id": "SK-HZ-02",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-STORE-001",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.2 SK-HZ-02",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-07-20",
+      "entry_id": "SK-HZ-03",
+      "expires_at": "2026-08-31",
+      "organization_id": "DIYU-STORE-001",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.2 SK-HZ-03",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-06-01",
+      "entry_id": "SK-HZ-04",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-STORE-001",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.2 SK-HZ-04",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-08-07",
+      "entry_id": "SK-HZ-05",
+      "expires_at": null,
+      "organization_id": "DIYU-STORE-001",
+      "review_cycle": "until_collection_complete",
+      "source_anchor": "素材草案-v0/02 §4.2 SK-HZ-05",
+      "status": "fixture_gap_not_fact",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-08-07",
+      "entry_id": "SK-HZ-06",
+      "expires_at": null,
+      "organization_id": "DIYU-STORE-001",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.2 SK-HZ-06",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-06-01",
+      "entry_id": "SK-HuZ-01",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-STORE-002",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.3 SK-HuZ-01",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-06-01",
+      "entry_id": "SK-HuZ-02",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-STORE-002",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.3 SK-HuZ-02",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-07-20",
+      "entry_id": "SK-HuZ-03",
+      "expires_at": "2026-08-31",
+      "organization_id": "DIYU-STORE-002",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.3 SK-HuZ-03",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-06-01",
+      "entry_id": "SK-HuZ-04",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-STORE-002",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.3 SK-HuZ-04",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-08-07",
+      "entry_id": "SK-HuZ-05",
+      "expires_at": null,
+      "organization_id": "DIYU-STORE-002",
+      "review_cycle": "until_collection_complete",
+      "source_anchor": "素材草案-v0/02 §4.3 SK-HuZ-05",
+      "status": "fixture_gap_not_fact",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-06-01",
+      "entry_id": "SK-CD-01",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-STORE-003",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.4 SK-CD-01",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-10-01",
+      "entry_id": "SK-CD-02",
+      "expires_at": "2027-03-01",
+      "organization_id": "DIYU-STORE-003",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.4 SK-CD-02",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-10-01",
+      "entry_id": "SK-CD-03",
+      "expires_at": "2027-03-01",
+      "organization_id": "DIYU-STORE-003",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.4 SK-CD-03",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-08-07",
+      "entry_id": "SK-CD-04",
+      "expires_at": "2026-12-31",
+      "organization_id": "DIYU-STORE-003",
+      "review_cycle": null,
+      "source_anchor": "素材草案-v0/02 §4.4 SK-CD-04",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "effective_at": "2026-08-07",
+      "entry_id": "SK-CD-05",
+      "expires_at": null,
+      "organization_id": "DIYU-STORE-003",
+      "review_cycle": "until_collection_complete",
+      "source_anchor": "素材草案-v0/02 §4.4 SK-CD-05",
+      "status": "fixture_gap_not_fact",
+      "version": "v1"
+    }
+  ],
+  "schema_version": "gatea-import-contract-v1",
+  "selection_contract": {
+    "applicable_accounts": [
+      "H01",
+      "H02",
+      "H03",
+      "H04",
+      "R01",
+      "R02",
+      "S01",
+      "S02",
+      "S03",
+      "S04"
+    ],
+    "applicable_products": [
+      "P1",
+      "P2",
+      "P3",
+      "P4",
+      "P5"
+    ],
+    "excluded_item_ids": [],
+    "max_characters": 12000,
+    "max_items": 24,
+    "organization_scope": [
+      "DIYU-HQ-001",
+      "DIYU-REGION-001",
+      "DIYU-REGION-002",
+      "DIYU-STORE-001",
+      "DIYU-STORE-002",
+      "DIYU-STORE-003"
+    ],
+    "overflow_reason": "not_evaluated_in_gate_a; Gate B/C runtime must persist every selected and excluded item ID with a reason, and must never truncate silently",
+    "selected_item_ids": [],
+    "selection_policy_version": "gatea-selection-policy-v1",
+    "selection_priority": "numeric_priority_ascending_then_item_id; title_order_forbidden"
+  },
+  "series": [
+    {
+      "account_ids": [
+        "H01",
+        "H02",
+        "S02"
+      ],
+      "cspu_ids": [
+        "DIYU-CSPU-001",
+        "DIYU-CSPU-006"
+      ],
+      "media_ids": [
+        "DIYU-V-002",
+        "DIYU-V-009",
+        "DIYU-V-013"
+      ],
+      "name": "各自站住",
+      "series_id": "DIYU-SERIES-001",
+      "source_anchor": "素材草案-v0/03 系列1",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    },
+    {
+      "account_ids": [
+        "H01",
+        "R01",
+        "S01",
+        "S04"
+      ],
+      "cspu_ids": [
+        "DIYU-CSPU-013"
+      ],
+      "media_ids": [
+        "DIYU-V-022",
+        "DIYU-V-023"
+      ],
+      "name": "同一件外套的四个位置",
+      "series_id": "DIYU-SERIES-002",
+      "source_anchor": "素材草案-v0/03 系列2",
+      "status": "demo_fiction_awaiting_founder_attestation",
+      "version": "v1"
+    }
+  ],
+  "source_documents": [
+    {
+      "consumer": "P1-P5 / Gate B expression projection",
+      "document_id": "DIYU-BRAND-BASELINE-001",
+      "exclusion_reason": null,
+      "ordinal": 1,
+      "primary_channel": "expression_constraint",
+      "relative_filename": "笛语最小可用账号矩阵 V1.md",
+      "sha256": "dd02c8d58e9447927ff0d934e8dc7d1ce2ea17987cd686c6c2470525ffe1b86f",
+      "source_anchor": "正文文档编号；文件名与正文身份互换",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P1-P5 / Gate B AccountEditorialLens",
+      "document_id": "DIYU-ACCOUNT-MATRIX-001",
+      "exclusion_reason": null,
+      "ordinal": 2,
+      "primary_channel": "profile_content_role",
+      "relative_filename": "笛语品牌身份与内容战略基线 V1.md",
+      "sha256": "8c8297cf53d7d5087ca6be16a2d8441e654c5d80ec505dc7eba3d75661bdf940",
+      "source_anchor": "正文文档编号；§三账号职责与§四P1-P5配比",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P1-P5 / Gate B ExpressionConstraintSelector",
+      "document_id": "DIYU-BRAND-VOICE-001",
+      "exclusion_reason": null,
+      "ordinal": 3,
+      "primary_channel": "expression_constraint",
+      "relative_filename": "笛语品牌声纹与表达边界 V1.md",
+      "sha256": "1505f3a55bf5494c211602e591cd9cd201a7db1540e0478ab410ecd268316d0b",
+      "source_anchor": "§一至§九",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P1-P5 / Gate B AudienceLens",
+      "document_id": "DIYU-AUDIENCE-PROFILE-001",
+      "exclusion_reason": null,
+      "ordinal": 4,
+      "primary_channel": "profile_content_role",
+      "relative_filename": "笛语目标人群 AudienceProfile V1.md",
+      "sha256": "0219468cf791330b3d55134f71e46601c085b65bcc005b5ba7731470caa63289",
+      "source_anchor": "§一至§十四",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P1-P5 / Gate B ContentRoleProjector",
+      "document_id": "DIYU-CONTENT-ROLE-001",
+      "exclusion_reason": null,
+      "ordinal": 5,
+      "primary_channel": "profile_content_role",
+      "relative_filename": "笛语 ContentRole 角色表达卡 V1.md",
+      "sha256": "00d6018f0eaa34a055f337c50f007b5e686908b7442cb77b791fbb0623e8ed60",
+      "source_anchor": "CR-01至CR-10、§十一至§十二",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "Gate C authorization resolver",
+      "document_id": "DIYU-ACCOUNT-AUTHORITY-001",
+      "exclusion_reason": "权限治理只供确定性授权组件，禁止作为 Writer 文案",
+      "ordinal": 6,
+      "primary_channel": "internal_template_not_publishable",
+      "relative_filename": "笛语账号发声权限与资料调用边界 V1.md",
+      "sha256": "33dc0d7439b0f567c29a719a51b16654a08e601228289d70c0b9c2ea5f3028d1",
+      "source_anchor": "§一至§十",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P1-P5 / Gate B organization-person lens",
+      "document_id": "DIYU-ORG-IP-ACCOUNT-MATRIX-001",
+      "exclusion_reason": null,
+      "ordinal": 7,
+      "primary_channel": "profile_content_role",
+      "relative_filename": "笛语组织型IP账号矩阵与总部岗位IP池 V1.md",
+      "sha256": "bb034e8a29c83d1127c028688e0a13daf1b3633df5a2bd3e81809e336a9b2eb1",
+      "source_anchor": "CR-HQ-01至13、§三至§六",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "Gate C scope and authorization resolver",
+      "document_id": "DIYU-TENANT-ORG-AUTH-001",
+      "exclusion_reason": "租户、组织、RACI与授权矩阵不进入 Writer",
+      "ordinal": 8,
+      "primary_channel": "internal_template_not_publishable",
+      "relative_filename": "笛语租户、组织节点与渠道授权基线 V1.md",
+      "sha256": "8e876960a6b8d2f455f340e3e35ab53da007718007e1e54a5e1548cf0c0b4180",
+      "source_anchor": "组织树、L1-L4、RACI与渠道授权矩阵",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P1-P5 / Gate B constraints; Gate C rights and scope",
+      "document_id": "DIYU-CONTENT-GOVERNANCE-001",
+      "exclusion_reason": null,
+      "ordinal": 9,
+      "primary_channel": "expression_constraint",
+      "relative_filename": "笛语内容规则、红线与合规边界 V1.md",
+      "sha256": "be13a9894dbea60113eddbbf575c130ef8047f818292aea68e1fc740847d29d0",
+      "source_anchor": "§一至§十九",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P1/P2/P5 / Gate D candidate import; only V fields become ProductFact",
+      "document_id": "DIYU-CANDIDATE-PRODUCT-MASTER-001",
+      "exclusion_reason": null,
+      "ordinal": 10,
+      "primary_channel": "product_fact_candidate",
+      "relative_filename": "笛语首批候选商品主档 V1.md",
+      "sha256": "a78528115b747f1ed6802ae9190813c07fe23c6e5cf46a44f32794352db78892",
+      "source_anchor": "§0、§一至§四",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P1/P2 / judgment candidate projection",
+      "document_id": "DIYU-PRODUCT-TRADEOFF-P2-001",
+      "exclusion_reason": null,
+      "ordinal": 11,
+      "primary_channel": "product_fact_candidate",
+      "relative_filename": "笛语商品专业取舍与P2内容依据 V1.md",
+      "sha256": "7afa664bf491fe70d7165647752a4983e319f5bf6945a820df51db6d13e32c97",
+      "source_anchor": "14款取舍表、P2命题与最低合格门",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P1/P2 planning only; Gate D correction workflow",
+      "document_id": "DIYU-PRODUCT-PRICE-CORRECTION-001",
+      "exclusion_reason": null,
+      "ordinal": 12,
+      "primary_channel": "product_fact_candidate",
+      "relative_filename": "笛语候选商品价格价格、目标人群匹配与校正清单 V1.md",
+      "sha256": "8b80b736b5f013bbfdfb9716ff541b8bb386edcc172855b55c10f7d176553d48",
+      "source_anchor": "§一至§十",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P5 / Gate D media registry and master production",
+      "document_id": "DIYU-ASSET-CATALOG-001",
+      "exclusion_reason": null,
+      "ordinal": 13,
+      "primary_channel": "media",
+      "relative_filename": "笛语首批26条视频素材目录 V1.md",
+      "sha256": "79bced7f3eacd4cec1519e7f86496277227cf72ce32578b894c26c3ae575114e",
+      "source_anchor": "DIYU-V-001至026与统一登记口径",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P5 / Gate B visual method selector",
+      "document_id": "DIYU-ASSET-VISUAL-ANALYSIS-001",
+      "exclusion_reason": null,
+      "ordinal": 14,
+      "primary_channel": "creative_method",
+      "relative_filename": "笛语视频视觉特征与内容形态分析 V1.md",
+      "sha256": "423427911715b26ac5f874439255ecc6d12ad15080fb620949079be34c74f852",
+      "source_anchor": "风格族、内容形态与五大缺口",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P1-P5 / Gate B media method selector",
+      "document_id": "DIYU-ASSET-CALLING-001",
+      "exclusion_reason": null,
+      "ordinal": 15,
+      "primary_channel": "creative_method",
+      "relative_filename": "笛语视频素材P1—P5调用建议 V1.md",
+      "sha256": "b2aedc33d214cd423d4a18e54878aad7e83add07607c3e6d69dfea83ad754bba",
+      "source_anchor": "P1-P5调用建议、主题族、账号推荐与重复控制",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P1/P2/P5 / Gate B/C field-grade projector",
+      "document_id": "DIYU-ASSET-PRODUCT-INFERENCE-001",
+      "exclusion_reason": null,
+      "ordinal": 16,
+      "primary_channel": "product_fact_candidate",
+      "relative_filename": "笛语视频素材商品推断与调用补充规则 V1.md",
+      "sha256": "f7dfd3b235ce159b2b1aa5f74adca4f2f8b803407c5e463a6910f7714b793d7c",
+      "source_anchor": "§二V/P/C/R、§四禁区、§十二至十六",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "Gate D media master pipeline and publish gate",
+      "document_id": "DIYU-ASSET-BRAND-UNIFICATION-001",
+      "exclusion_reason": null,
+      "ordinal": 17,
+      "primary_channel": "media",
+      "relative_filename": "笛语素材品牌标识统一任务表 V1.md",
+      "sha256": "d2b59c3abc3c58f5869beff0ebefe805443ec712a3c386429f8b520eaa31cdb3",
+      "source_anchor": "母版命名、授权补录项与§六十项门禁",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P5 / Gate B visual narrative selector",
+      "document_id": "DIYU-BRAND-VISUAL-001",
+      "exclusion_reason": null,
+      "ordinal": 18,
+      "primary_channel": "creative_method",
+      "relative_filename": "笛语视觉基调与P5视觉叙事基线 V1.md",
+      "sha256": "9fea80296b07907ae47f8e37a57b1df0608f1f79821f576f044fcb63cb1b2a6c",
+      "source_anchor": "视觉基调、家庭关系呼应与P5叙事模型",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "P5/DM01 method only; no store measurements",
+      "document_id": "DIYU-DISPLAY-EXPRESSION-001",
+      "exclusion_reason": null,
+      "ordinal": 19,
+      "primary_channel": "creative_method",
+      "relative_filename": "笛语品牌陈列表达基线 V1.md",
+      "sha256": "a418ffbae8683ee7de96525c2abf95017cabbe34fff72ca035727289b3d3c8ad",
+      "source_anchor": "品牌陈列原则与焦点形成规则",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "Gate D store-fixture intake template",
+      "document_id": "DIYU-STORE-FIXTURE-PROFILE-001",
+      "exclusion_reason": "模板与示例假设不得作为杭州、湖州或成都门店事实",
+      "ordinal": 20,
+      "primary_channel": "internal_template_not_publishable",
+      "relative_filename": "笛语实际门店挂杆条件档案 V1.md",
+      "sha256": "0ae96d129878923c7083890c41cbe6d95bf1141ce8d61bc9fcb4ed6764712f0c",
+      "source_anchor": "候选模板与示范档案声明",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "Gate D operator collection checklist",
+      "document_id": "DIYU-STORE-FIXTURE-COLLECTION-001",
+      "exclusion_reason": "采集作业清单不进入 Writer",
+      "ordinal": 21,
+      "primary_channel": "internal_template_not_publishable",
+      "relative_filename": "笛语门店挂杆拍摄与测量采集清单 V1.md",
+      "sha256": "b5b99a667c8a3706f1a52d4c5d5e2bf6d987f237a01e486b1340e89698a85dcc",
+      "source_anchor": "§三至§十二",
+      "source_kind": "windows_readonly"
+    },
+    {
+      "consumer": "Gate A provenance and supersession only",
+      "document_id": "REPO-DIYU-ONBOARDING-README",
+      "exclusion_reason": "仓库参考不是运行时资料；旧媒体排除说明由授权裁决v2追加式取代",
+      "ordinal": 22,
+      "primary_channel": "internal_template_not_publishable",
+      "relative_filename": "README.md",
+      "sha256": "dee2361e4d13c6b754a0908e87b8d7c8ea3e918d83f6acaed687bafea2b60754",
+      "source_anchor": "授权边界与M6-1门槛",
+      "source_kind": "repository_reference"
+    },
+    {
+      "consumer": "Gate A cross-reference only",
+      "document_id": "REPO-REF-DIYU-BRAND-BASELINE-001",
+      "exclusion_reason": "最小重述不与Windows正文重复进入运行时",
+      "ordinal": 23,
+      "primary_channel": "internal_template_not_publishable",
+      "relative_filename": "DIYU-BRAND-BASELINE-001-品牌身份与内容战略基线.md",
+      "sha256": "c2fb52699491766981d606720370e00071e9f708b8f1869938869731103c142c",
+      "source_anchor": "候选基线摘要",
+      "source_kind": "repository_reference"
+    },
+    {
+      "consumer": "Gate A cross-reference only",
+      "document_id": "REPO-REF-DIYU-ACCOUNT-MATRIX-001",
+      "exclusion_reason": "最小重述不与Windows正文重复进入运行时",
+      "ordinal": 24,
+      "primary_channel": "internal_template_not_publishable",
+      "relative_filename": "DIYU-ACCOUNT-MATRIX-001-最小可用账号矩阵.md",
+      "sha256": "f13c35780e51844922f6915f95572cb53115274fc467e450e26669b801913557",
+      "source_anchor": "候选账号边界摘要",
+      "source_kind": "repository_reference"
+    },
+    {
+      "consumer": "none in BRAND-MATRIX-01 demo import",
+      "document_id": "DIYU-STORE-KQ-WALL-01",
+      "exclusion_reason": "D-07关闭：柯桥不在十账号矩阵，资料不跨店复用且DM01不导入",
+      "ordinal": 25,
+      "primary_channel": "internal_template_not_publishable",
+      "relative_filename": "DM01-首期墙面双层挂杆候选资料.md",
+      "sha256": "02d75554fcef5659175d75c877665e26d9b08f1c53a77499c92ba279f1c43503",
+      "source_anchor": "文件头与§零；user_task_snapshot",
+      "source_kind": "repository_reference"
+    }
+  ]
+}

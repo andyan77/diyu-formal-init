@@ -767,3 +767,52 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 > **基线勘正（2026-08-08，监理）**：上条记录中「基线 `55b1a5e`」为监理复验关账时点
 > HEAD；Prompt 2 实际 `EXPECTED_BASE_SHA` 为**含本勘正在内的签发链最终主线提交**，
 > 具体 SHA 以 chat 签发件载明值为准。执行侧以 chat 签发件为唯一基线真源。
+
+<!-- BRAND-MATRIX-01-GATEA-CLOSEOUT-START -->
+
+### Gate A 收口记录（执行侧核验稿，2026-08-08）
+
+> 状态：**`GATE-A IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`**。以下结果均为执行侧
+> 核验，**待监理复验确认**；本记录不代替 founder attestation，不把 Gate A 置为 COMPLETE。
+
+#### 1. 合同结果
+
+- 25/25 文档具有唯一主通道；30 个原子消费项零未分类，整篇 Markdown 进入 Writer 为 0，
+  internal/template/not publishable 进入 Writer 为 0。
+- import manifest 精确包含账号/组织/深度 SKU/系列/区域门店条目/媒体/J/修订单/异常样本
+  `10/6/4/2/31/26/4/1/8`；十账号五段画像 `50/50`、ContentRole `10/10`、组织绑定 `10/10`。
+- manifest SHA-256 为
+  `14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06`；构建器两份独立
+  临时输出逐字节一致，非仅比较摘要字符串。
+- 四组 J 的 `judgment_owner` 均为商品负责人/H03；`approved_by=founder` 与业务所有权分离，
+  `approved_at=null`。四个深度 SKU 保留 V/P/C/R，正式 ProductFact 只纳入 V 字段。
+- 媒体 26/26 `source_sha256=null`、`sha_verification=pending_gate_d`、母版未完成、当前
+  `P5 eligibility=false`；授权裁决、逐人物/儿童证据、第三方核验与母版状态分字段保存。
+- D-07 已追加式关闭；媒体授权 v2 已追加式登记；空白签署页绑定唯一 digest，状态
+  `AWAITING_FOUNDER_SIGNOFF`，签名与时间均为空。
+
+#### 2. 冻结与隐私
+
+- Windows 21 份真源、`素材草案-v0` 11 文件与仓库四份参考字节差异均为 0；21 份真源完整
+  blob 与候选树交集为 0；Gate A 新写面秘密、凭据、私钥和私有绝对证据路径命中为 0。
+- 未修改 `src/`、`alembic/`、`frontend/`、冻结脚本目录、`docs/项目记忆.md` 或主线；模型调用
+  0、生产接触 0，未读 `.env`。
+
+#### 3. 本地门
+
+- Gate A：build、scope/manifest/privacy 断言在提交前最终候选上门控；manifest 与 privacy
+  已通过，scope 在本追加记录完成后执行。
+- 既有回归：`git diff --check`、`make lint`、`make typecheck`、`make golden`、
+  `make exev0-gates`、`make exe01-gates`、前端 lint/typecheck/test/build、
+  `bash scripts/test.sh` 全绿；Golden 与独立全量测试均为 `958 passed, 2 skipped`，EXE-V0
+  3/3，EXE-01 9/9。
+- `CI_SCOPE=existing_regression_only`：最终提交 push 后的 workflow_dispatch 四查由执行报告
+  登记；现有 CI 不执行 `scripts/gatea/**`，不得用远程 CI 替代本地 Gate A 专属断言。
+
+#### 4. 诚实边界与下一动作
+
+本 Gate 未导入数据库、未创建/退役账号、未迁移授权、未接通运行时消费者、未取得原始视频、
+未计算媒体 SHA、未制作母版、未接触生产、未获得 founder 最终签署。唯一下一动作：监理独立
+复验；PASS 后由主控组织 founder 对上述 digest 作独立 attestation。
+
+<!-- BRAND-MATRIX-01-GATEA-CLOSEOUT-END -->

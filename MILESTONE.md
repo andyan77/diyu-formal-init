@@ -1875,3 +1875,20 @@
 - 唯一必要回归全部通过：Ruff、mypy、Golden、全量测试和前端 lint/typecheck/build 绿色，Golden 与全量测试均为 `130 passed`。审查 A（容量、限流与租户隔离）和审查 B（备份、恢复与版本回退）均无阻断。
 - `d2c6908` 首次 CI 因不存在的浮动 `astral-sh/setup-uv@v8` 标签在 job 初始化失败；按官方 v8.1.0 不可变提交修正后，`29adfe5` 的唯一 CI run `30090059899` 绿色。该历史失败保留为 CI 运行时证据。
 - 上述时间均是本次 ECS 的有界观察值，不是企业 SLA、RTO 或 RPO；M6-2 不证明 200 并发、真实发布、平台流量、销售效果或企业采用。
+
+## BRAND-MATRIX-01 · Gate A 执行侧核验稿（2026-08-08，待监理复验确认）
+
+- 状态：**`GATE-A IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`**；不得据此写
+  `COMPLETE / PASS`，founder 签署尚未发生。
+- Gate A 素材合同已落盘：25/25 文档主通道、30 个原子消费项；manifest 精确计数
+  `10/6/4/2/31/26/4/1/8`，账号画像 `50/50`、ContentRole `10/10`、组织绑定 `10/10`。
+- manifest SHA-256：
+  `14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06`；空白 founder
+  签署页绑定该 digest，状态 `AWAITING_FOUNDER_SIGNOFF`，签名区为空。
+- 执行侧本地核验：Gate A manifest/privacy 断言通过；既有 `git diff`、Ruff、mypy、Golden、
+  EXE-V0、EXE-01、前端四门和独立全量测试全绿，测试 `958 passed, 2 skipped`。完整 scope
+  断言与 workflow_dispatch 四查在最终提交候选上执行，均待监理复验确认。
+- `CI_SCOPE=existing_regression_only`；远程 CI 不运行 `scripts/gatea/**`。模型调用 0、生产接触
+  0；未导入、未建账号、未触库、未接消费者、未做母版、未代签。
+- 唯一下一动作：监理复验；PASS 后由主控组织 founder 对上述 manifest digest 完成独立
+  attestation，再追加签署记录并决定 Gate A `COMPLETE / PASS`。
