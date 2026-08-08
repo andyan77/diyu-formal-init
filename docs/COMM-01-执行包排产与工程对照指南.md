@@ -708,3 +708,45 @@ failed=0 + 新增 skip=0（不硬编码通过数）。函数预算 = EXE-01R 同
 `S0 IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`，等待监理复验终裁。
 
 <!-- BRAND-MATRIX-01-S0-CLOSEOUT-END -->
+
+<!-- BRAND-MATRIX-01-S0-SUPERVISOR-VERDICT-START -->
+
+### S0 监理复验终裁（2026-08-08）
+
+> 状态：**`S0 COMPLETE · PASS`**（监理落款）。本记录只登记监理独立复验事实与终裁，
+> 执行侧收口记录（上方 CLOSEOUT 块）原文保留。
+
+#### 1. 监理独立复验（不依赖执行侧证据文件的重测）
+
+| 面 | 独立手段 | 结果 |
+|---|---|---|
+| Git 面 | `git ls-remote` + 祖先/范围重算 | 执行分支 HEAD `7583239` 精确匹配；主线 `a65c4e2`、`main`、EXE-V1 分支均未被执行侧触碰；`a65c4e2..7583239` 恰为 EXE-V1 合并（`ad8d471`）+ 2 笔 S0 记录提交；范围 28 文件、修改类 3 文件全部 append-only（0 删行）；`素材草案-v0`、`alembic/`、`src/`、前端零改动 |
+| 证据面 | 本机重算 | 私有证据根 0700，27/27 `sha256sum -c` 通过；`SHA256SUMS` 自身 digest 与报告逐字符一致 |
+| CI 面 | `gh api` 直查 run `31251813432` | `workflow_dispatch`、head SHA == `7583239`、`success`、19 步非成功数 0（含 0 skipped） |
+| 生产面 | SSH 只读重测 | 唯一镜像 38、WIP 0、2 个 `diyu-tenant01-final` 存疑保留在位；运行容器 image == 冻结 digest `9a1dea01…`；`DIYU_RUNTIME_SHA=95fa010`；`/health/live`、`/health/ready`、`/api/v1/status` 均 200 |
+| RLS 面 | 独立 READ ONLY 会话重跑无谓词反证 | `diyu_app` `rolsuper=f`、`rolbypassrls=f`、`row_security_active=t`；仅 `set_config` 切换上下文 9→0，与执行侧结果完全复现 |
+| 合并面 | `git diff --quiet` 树比对 | 主线合并结果树与 `7583239` 逐字节相同，CI 绿色结论对合并后主线直接成立；合并断言 `28/28` 范围、双 secrets 扫描通过后门控提交 |
+
+#### 2. 四笔悬账终裁落款（4/4 关账）
+
+- **P0-D1**：正式改判为**「观测 · 测量口径错误」**并关账。依据：执行侧 S0-2d 证据 +
+  监理独立反证两次一致——超管路径的 `row_security_active=false` 只描述超管视角，应用
+  真实角色 `diyu_app` 下 RLS 实际生效。原 P0 登记与执行侧注记均原文保留。
+- **E1**：授权内 44 个无 release binding `diyu-saas` 镜像回收**【追认】**；扩大到
+  `diyu-tenant01-wip` 的越授权尝试**【驳回】**（护栏已拦、未遂、零损害）。关账。
+- **E2**：658MB 纯构建缓存回收**【追认】**；「先做后报」程序违规记录在案，规则维持
+  「先报、冻结范围、再做」。关账。
+- **EXE-V1 交付主张**：5/5 `VERIFIED`、0 `CONTRADICTED`，EXE-V1 里程碑**正式闭结**。
+
+#### 3. 镜像处置审计结论
+
+allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正常、运行容器 digest 未变、
+三端点 200——**通过**。2 个 `diyu-tenant01-final` 按「存疑保留＝已处置」条款关闭，如需
+回收须另立裁决。被删 WIP 不可本机恢复、仅可源码重建的事实已如实登记。
+
+#### 4. 状态推进
+
+- `S0 → COMPLETE`；模型调用累计 0（执行侧 0 + 监理 0），Gate D+E ≤300 配额未动。
+- 下一动作：**Prompt 2（Gate A · 素材定稿、消费通道与导入合同）签发**。
+
+<!-- BRAND-MATRIX-01-S0-SUPERVISOR-VERDICT-END -->
