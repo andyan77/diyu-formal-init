@@ -15,6 +15,7 @@
 - 2026-08-08：`S0 IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`；执行侧已完成基线归一、四悬账证据绑定核验、遗留镜像处置和盲测托管落盘，等待监理复验终裁。
 - 2026-08-08：**`S0 COMPLETE · PASS`（监理落款）**。监理六面独立复验（Git/证据/CI/生产/RLS/合并）全部通过；四悬账 4/4 关账（P0-D1 改判「观测 · 测量口径错误」、E1 追认+扩权驳回、E2 追认+程序违规记录、EXE-V1 闭结）；执行分支已串行合入主线。当前动作：**Prompt 2（Gate A）待签发**。
 - 2026-08-08：Prompt 2（Gate A · 素材定稿、消费通道与导入合同）**已签发**；基线 `55b1a5e`，执行分支 `exe/brand-matrix-a`，模型配额 0、生产接触 0，完成门含 founder 素材定稿签署。
+- 2026-08-08：**Gate A 监理复验 PASS**，状态 `GATE-A VERIFIED_BY_SUPERVISOR · AWAITING_FOUNDER_SIGNOFF`；等待 founder 对 manifest digest `14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06` 完成签署后置 COMPLETE（详见文末监理复验块与治理日志 §六）。
 
 > **口径声明（2026-08-07）**：以下 COMM-01 段为 2026-08-06 立项时的历史登记；其
 > 「当前里程碑」表述已被上方 BRAND-MATRIX-01 立项与 D10 暂停裁决 supersede，其余
@@ -1892,3 +1893,16 @@
   0；未导入、未建账号、未触库、未接消费者、未做母版、未代签。
 - 唯一下一动作：监理复验；PASS 后由主控组织 founder 对上述 manifest digest 完成独立
   attestation，再追加签署记录并决定 Gate A `COMPLETE / PASS`。
+
+## BRAND-MATRIX-01 · Gate A 监理复验记录（2026-08-08）
+
+- 状态推进：`GATE-A VERIFIED_BY_SUPERVISOR · AWAITING_FOUNDER_SIGNOFF`（监理落款；
+  founder 签署完成前不得置 `COMPLETE / PASS`）。
+- 监理独立复验全部通过：manifest 独立双跑逐字节一致且与已提交产物一致（digest
+  `14fed121…aeb48a06`）；计数 `10/6/4/2/31/26/4/1/8`＋文档 25 实测吻合；31 条目前缀
+  8/7/6/5/5 与监理亲数一致；媒体 26/26 诚实空值；J 4/4 六字段；异常锚点 8/8 真实；
+  21 份真源 blob 与树交集 0；CI run `31254885113` 四查绿；CI 未覆盖的 `scripts/gatea`
+  由监理本地 Ruff/mypy 补验全绿。执行分支已串行合入主线。
+- 过程记录（监理自纠）：`2ded991` 提交时断言链未焊死（heredoc 换行断链），治理日志块
+  先行推送而本状态行漏登——内容经事后复核无误，本条即补登记录；断言门控纪律恢复。
+
