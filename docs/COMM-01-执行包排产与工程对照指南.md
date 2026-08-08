@@ -864,3 +864,18 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 - 机制进化记录：`assert_gatea_manifest.py` 的「签名区必须空白」检查系交付态专用不变式，签署后按「协议缺陷改工具」原则进化为二态合法（空白待签／已签且登记绑定 digest），杜绝签署后门禁误报。
 - 下一动作：签发 Prompt 3（Gate B · 账号语义正向消费与七族品牌关联）；基线为含本落款
   的主线最终提交，具体 SHA 以 chat 签发件为准。
+
+### Prompt 3（Gate B）签发记录（2026-08-08）
+
+- 基线：本签发记录提交自身（SHA 以 chat 签发件载明值为准，沿用基线勘正惯例）；执行分支
+  `exe/brand-matrix-b`；模型调用配额 **0**；生产接触 **0**；本 Gate 允许本地 PG 跑测试。
+- 监理签发前亲核代码锚点（写入 accepted_facts）：`account_editorial_lens.py`
+  `_LENS_PRODUCTS` 现仅 `{brand_life_narrative, local_response}`（P3/P4）；
+  `task_value_assembly.py` 七族枚举注释明言「V0 只装配前四族」；`content_service.py`
+  商品依据仅对 P2/P5 装配；五类产品键以 ADR-013 表为准（P1 `dressing_decision`／
+  P2 `product_truth`／P3 `brand_life_narrative`／P4 `local_response`／
+  P5 `visual_styling_story`），P5 建简报前必须绑定真实商品（ADR-013 §5）。
+- 范围：扩 lens 至 P1—P5、五道 AND 门显性化（禁静默 None）、P1 取得商品依据、七族全部
+  可生产、degraded 可见、topic fidelity、旧快照旧解释；禁新增 Reviewer/第二模型/语义
+  词表/服务端固定成稿；alembic 与 frontend 冻结（确需迁移→停+报）。
+- 执行侧终态只允许 `GATE-B IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`。
