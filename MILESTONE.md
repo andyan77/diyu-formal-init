@@ -1908,3 +1908,17 @@
 - 过程记录（监理自纠）：`2ded991` 提交时断言链未焊死（heredoc 换行断链），治理日志块
   先行推送而本状态行漏登——内容经事后复核无误，本条即补登记录；断言门控纪律恢复。
 
+## BRAND-MATRIX-01 · Gate B 执行侧核验稿（2026-08-08，待监理复验确认）
+
+- 状态：**`GATE-B IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`**；不得据此写
+  `COMPLETE / PASS`。
+- 新任务账号语义统一由 `account-editorial-resolution-v1` 冻结，lens V4 覆盖 P1—P5；五个
+  稳定降级码显性进入快照与现有 context_basis。PublicationContract、快照、WriterRequest
+  共享同一版本和 digest，修订/平台改编不重读当前画像，旧 V1—V3 快照不升级解释。
+- P1 有商品/无商品/依据不足三路径成立；七族 7/7 类型化合同和消费证据成立，后三族缺资格
+  引用时 0 个错误 applied；无自然路径显式 degraded 且不算演示 PASS。
+- H01/H03/S02 同种子差异和零模型正式纵向通过；本地 Gate B 三断言、Ruff、mypy、Golden、
+  EXE-V0、EXE-01、前端四门、全量测试和两套既有 secrets 全绿，`984 passed, 2 skipped`。
+- 模型调用 0、生产接触 0；未导入素材、未建账号、未执行 Gate C 的组织作用域/生命周期/
+  人物授权/媒体资格，未制作 Gate D 母版。远端 CI 四查以最终推送提交为准，待监理复验确认。
+- 唯一下一动作：监理独立复验 Gate B；PASS 后再签发 Gate C。

@@ -27,13 +27,19 @@ from src.brain.natural_entry import (
 )
 from src.brain.p1_contract import assert_content_complete
 from src.brain.payoff_assembly import (
+    RULESET_V1,
     assemble_task_value,
+    brand_relevance_evidence,
     build_payoff_request,
     product_contract_job,
 )
 from src.brain.platform_directions import direction_for
 from src.ports.content_generator import ContentGenerator
 from src.ports.content_repository import ContentRepository
+from src.shared.account_editorial_lens import (
+    AccountEditorialResolutionV4,
+    resolve_account_editorial_context,
+)
 from src.shared.brand_publication import (
     bind_brand_context_packet_v3_use,
     brand_context_packet_digest,
@@ -86,6 +92,7 @@ from src.shared.narrative import (
     visible_digest,
 )
 from src.shared.product_value import (
+    P1ProductDecisionBasisV3,
     P2ProductDecisionBasisV2,
     P5ProductDecisionBasisV2,
     ProductValueContract,
@@ -110,9 +117,15 @@ from src.shared.publication_contract import (
     build_publication_contract_v3,
     product_brief,
 )
-from src.shared.series_episode import build_series_episode_contract
+from src.shared.series_episode import (
+    SeriesEpisodeContractV1,
+    build_series_episode_contract,
+    series_episode_contract_digest,
+)
 from src.shared.service_status import ProviderStatusTracker
 from src.shared.task_value_assembly import (
+    BrandRelevanceEvidenceV1,
+    BrandRelevancePath,
     TaskValueAssemblyV1,
     assert_task_value_matches_contract,
     task_value_assembly_digest,
@@ -133,6 +146,7 @@ from src.shared.types import (
     ConversationDecision,
     ConversationInput,
     ConversationTurn,
+    GeneratedArtifact,
     GenerationInput,
     MediaFormat,
     PlatformDirection,
@@ -170,6 +184,112 @@ def _requests_explicit_dramatization(natural_text: str) -> bool:
         if not prefix.endswith(_NEGATED_CONTROL_SUFFIXES):
             return True
     return False
+
+
+def _gateb_context_basis(contract: PublicationContract | None) -> dict[str, object]:
+    if not isinstance(contract, PublicationContractV3):
+        return {
+            "account_editorial_state": "legacy_unavailable",
+            "account_editorial_degraded_reasons": [],
+            "brand_relevance_state": "legacy_unavailable",
+            "brand_relevance_family": None,
+        }
+    resolution = contract.account_editorial_resolution
+    return {
+        "account_editorial_state": (
+            "applied"
+            if resolution is not None and resolution.applied
+            else "degraded"
+            if resolution is not None
+            else "legacy_unavailable"
+        ),
+        "account_editorial_degraded_reasons": (
+            [reason.value for reason in resolution.degraded_reasons] if resolution is not None else []
+        ),
+        "brand_relevance_state": contract.brand_relevance_state or "legacy_unavailable",
+        "brand_relevance_family": (
+            contract.brand_relevance_evidence.path_family if contract.brand_relevance_evidence is not None else None
+        ),
+    }
+
+
+def _product_relevance_evidence(
+    contract: ProductValueContract | None,
+) -> tuple[BrandRelevanceEvidenceV1, ...]:
+    if not isinstance(
+        contract,
+        (P1ProductDecisionBasisV3, P2ProductDecisionBasisV2, P5ProductDecisionBasisV2),
+    ):
+        return ()
+    digest = product_value_contract_digest(contract)
+    product = brand_relevance_evidence(
+        path_family="product_expertise",
+        source_object_type="product_decision_basis",
+        source_id=f"product-decision-basis:{digest}",
+        source_version=contract.contract_version,
+        source_digest=digest,
+        actual_consumed_refs=contract.supporting_fact_refs,
+    )
+    if not isinstance(contract, P5ProductDecisionBasisV2):
+        return (product,)
+    visual = brand_relevance_evidence(
+        path_family="brand_visual",
+        source_object_type="brand_visual_qualification",
+        source_id=f"brand-visual-qualification:{digest}",
+        source_version=contract.contract_version,
+        source_digest=digest,
+        actual_consumed_refs=contract.resource_refs,
+        media_ref="|".join(contract.resource_refs),
+    )
+    return product, visual
+
+
+def _series_relevance_evidence(
+    contract: SeriesEpisodeContractV1 | None,
+    context: SeriesContext | None,
+) -> tuple[BrandRelevanceEvidenceV1, ...]:
+    if contract is None or context is None:
+        return ()
+    digest = series_episode_contract_digest(contract)
+    series_ref = f"series:{context.series_id}:revision:{context.revision}"
+    return (
+        brand_relevance_evidence(
+            path_family="existing_series",
+            source_object_type="series_episode",
+            source_id=series_ref,
+            source_version=contract.contract_version,
+            source_digest=digest,
+            actual_consumed_refs=(
+                series_ref,
+                *(f"series-version:{entry.version_id}" for entry in context.prior_entries),
+            ),
+        ),
+    )
+
+
+def _account_relevance_evidence(
+    resolution: AccountEditorialResolutionV4,
+) -> tuple[BrandRelevanceEvidenceV1, ...]:
+    if not resolution.applied or resolution.lens is None:
+        return ()
+    profile_ref = f"account-profile:{resolution.lens.source_profile_id}"
+    paths: tuple[BrandRelevancePath, ...] = ("audience_relationship", "brand_stance")
+    return tuple(
+        brand_relevance_evidence(
+            path_family=path,
+            source_object_type="account_profile",
+            source_id=profile_ref,
+            source_version=str(resolution.lens.source_profile_version),
+            source_digest=resolution.source_digest,
+            actual_consumed_refs=resolution.source_refs,
+        )
+        for path in paths
+    )
+
+
+def _assert_reviewed_artifact(artifact: GeneratedArtifact, frame: NarrativeFrame | None) -> None:
+    if frame is not None and artifact.reviewed_digest != visible_digest(artifact.outline, artifact.body):
+        raise GenerationFailed("最终成品与被审查内容不一致")
 
 
 class ContentService:
@@ -495,11 +615,7 @@ class ContentService:
         fact_texts = {fact.exact_text for fact in frame.user_facts}
         candidates = user_fact_candidates((weak_seed,))
         roles: dict[str, IntakeSpanRole] = {
-            candidate.source_id: (
-                "observable_actuality"
-                if candidate.exact_text in fact_texts
-                else non_fact_role
-            )
+            candidate.source_id: ("observable_actuality" if candidate.exact_text in fact_texts else non_fact_role)
             for candidate in candidates
         }
         resolution = resolve_input_roles(
@@ -540,9 +656,7 @@ class ContentService:
         spans = intake_spans or cls._default_publication_spans(
             sanitized_seed,
             frame,
-            non_fact_role=(
-                "style_or_revision_instruction" if reuse_version_id is not None else "creation_instruction"
-            ),
+            non_fact_role=("style_or_revision_instruction" if reuse_version_id is not None else "creation_instruction"),
         )
         return spans, cls._frame_with_publication_spans(frame, spans)
 
@@ -571,9 +685,7 @@ class ContentService:
                 direction_digest=direction.direction_digest,
             ),
             media_capability_ref=media_envelope_digest(media_envelope),
-            explicit_user_controls=tuple(
-                dict.fromkeys((*contract.explicit_user_controls, instruction.strip()))
-            ),
+            explicit_user_controls=tuple(dict.fromkeys((*contract.explicit_user_controls, instruction.strip()))),
         )
         assert_publication_contract(recarried)
         return recarried
@@ -589,11 +701,7 @@ class ContentService:
         return tuple(
             dict.fromkeys(
                 (
-                    *(
-                        span.exact_text
-                        for span in intake_spans
-                        if span.role == "style_or_revision_instruction"
-                    ),
+                    *(span.exact_text for span in intake_spans if span.role == "style_or_revision_instruction"),
                     *(
                         f"{item.axis}：{item.applied_label}"
                         for item in (direction.selections if direction is not None else ())
@@ -694,10 +802,34 @@ class ContentService:
                 )
                 if isinstance(
                     product_value_contract,
-                    (P2ProductDecisionBasisV2, P5ProductDecisionBasisV2),
+                    (
+                        P1ProductDecisionBasisV3,
+                        P2ProductDecisionBasisV2,
+                        P5ProductDecisionBasisV2,
+                    ),
                 )
                 else None
             )
+            if product_basis is not None and product_value_contract is not None:
+                product_basis = replace(
+                    product_basis,
+                    source_packet_digest=product_value_contract.source_packet_digest,
+                    judgment_ref=(
+                        product_value_contract.judgment_ref
+                        if isinstance(product_value_contract, P1ProductDecisionBasisV3)
+                        else None
+                    ),
+                    judgment_version=(
+                        product_value_contract.judgment_version
+                        if isinstance(product_value_contract, P1ProductDecisionBasisV3)
+                        else None
+                    ),
+                    applicability_conditions=(
+                        product_value_contract.applicability_conditions
+                        if isinstance(product_value_contract, P1ProductDecisionBasisV3)
+                        else ()
+                    ),
+                )
             frozen_series = build_series_episode_contract(
                 series_context,
                 topic_origin=plan.topic_origin,
@@ -720,6 +852,29 @@ class ContentService:
                 if frozen_series is not None
                 else None
             )
+            account_resolution = resolve_account_editorial_context(
+                primary_product=primary_product,
+                account_expression=expression,
+                brand_context_packet=packet,
+                content_role_name=context.content_role_name,
+                content_role_boundary="；".join(
+                    item
+                    for item in (
+                        context.content_role_boundary,
+                        USER_ACTUALITY_DOMAIN_ELABORATION,
+                        USER_ACTUALITY_HARD_FACT_BOUNDARY,
+                    )
+                    if item
+                ),
+                expression_constraints=context.expression_constraint_context,
+                creative_methods=context.creative_method_context,
+            )
+            relevance_evidence = cls._brand_relevance_evidence(
+                account_resolution=account_resolution,
+                product_value_contract=product_value_contract,
+                frozen_series=frozen_series,
+                series_context=series_context,
+            )
             assembly = assemble_task_value(
                 build_payoff_request(
                     content_product=primary_product,
@@ -728,7 +883,9 @@ class ContentService:
                     product_basis=product_basis,
                     series_delta=series_delta,
                     static_payoff=static_payoff,
-                )
+                    relevance_evidence=relevance_evidence,
+                ),
+                ruleset=RULESET_V1,
             )
             controls = cls._explicit_user_controls(intake_spans, control)
             actuality_spans = tuple(span for span in intake_spans if span.role == "observable_actuality")
@@ -745,25 +902,7 @@ class ContentService:
                     )
                 )
             )
-            task_role = context.content_role_name or "当前账号"
-            task_identity = f"以{task_role}的身份回应本题；账号长期画像不是本篇人物、事件或题材"
-            task_audience = "面向本次输入的直接读者；不得根据账号长期受众补写家庭关系、人物或经历"
-            account_attention = (
-                f"先完成本篇任务：{central_job}；账号长期内容领地只能影响观察顺序，不能替换题材"
-            )
-            scoped_expression_constraints = tuple(
-                f"只在本题事实、来源与资源边界内影响怎样表达：{item}"
-                for item in context.expression_constraint_context
-            )
-            scoped_creative_methods = tuple(
-                f"只在本题事实、来源与资源边界内组织非事实创作：{item}"
-                for item in context.creative_method_context
-            )
-            authority_boundary = (
-                expression.authority_boundary
-                if expression is not None
-                else context.content_role_boundary
-            )
+            permission = account_resolution.editorial_permission
             contract = build_publication_contract_v3(
                 input_roles=intake_spans,
                 topic_origin=plan.topic_origin,
@@ -773,51 +912,14 @@ class ContentService:
                 audience_payoff=assembly.audience_payoff,
                 explicit_user_controls=controls,
                 account_editorial_permission=AccountEditorialPermissionV3(
-                    identity=task_identity,
-                    audience=task_audience,
-                    attention_order=(
-                        "；".join(
-                            item
-                            for item in (
-                                account_attention,
-                                *scoped_creative_methods,
-                            )
-                            if item
-                        )
-                    ),
-                    response_posture=(
-                        "；".join(
-                            (
-                                "先看本题具体张力，再给受众保留可执行判断",
-                                *scoped_expression_constraints,
-                            )
-                        )
-                    ),
-                    refusals=(
-                        "；".join(
-                            item
-                            for item in (
-                                authority_boundary,
-                                USER_ACTUALITY_DOMAIN_ELABORATION,
-                                USER_ACTUALITY_HARD_FACT_BOUNDARY,
-                            )
-                            if item
-                        )
-                    ),
-                    allowed_stance=(
-                        "；".join(
-                            (
-                                "按当前账号的观察顺序和回应姿态形成独立判断，不照抄账号定义",
-                                *scoped_creative_methods,
-                            )
-                        )
-                    ),
-                    source_profile_id=(
-                        str(expression.profile_id)
-                        if expression is not None and expression.profile_id is not None
-                        else None
-                    ),
-                    source_profile_version=(expression.version if expression is not None else None),
+                    identity=permission.identity,
+                    audience=permission.audience,
+                    attention_order=permission.attention_order,
+                    response_posture=permission.response_posture,
+                    refusals=permission.refusals,
+                    allowed_stance=permission.allowed_stance,
+                    source_profile_id=permission.source_profile_id,
+                    source_profile_version=permission.source_profile_version,
                 ),
                 frozen_fact_refs=tuple(frame.allowed_fact_ids),
                 product_decision_basis=product_basis,
@@ -838,9 +940,28 @@ class ContentService:
                 publication_projection_id=packet.publication_projection_id,
                 publication_projection_version=(packet.publication_projection_version),
                 publication_projection_digest=(packet.publication_projection_digest),
+                account_editorial_resolution=account_resolution,
+                brand_relevance_state=assembly.brand_relevance_state,
+                brand_relevance_evidence=assembly.brand_relevance_evidence,
+                brand_relevance_degraded_reason=(assembly.brand_relevance_degraded_reason),
+                demonstration_eligible=assembly.demonstration_eligible,
             )
             return cls._frozen_task_value(contract, assembly, central_job)
         raise DomainError("新内容任务没有形成 PublicationContractV3。")
+
+    @staticmethod
+    def _brand_relevance_evidence(
+        *,
+        account_resolution: AccountEditorialResolutionV4,
+        product_value_contract: ProductValueContract | None,
+        frozen_series: SeriesEpisodeContractV1 | None,
+        series_context: SeriesContext | None,
+    ) -> tuple[BrandRelevanceEvidenceV1, ...]:
+        return (
+            *_product_relevance_evidence(product_value_contract),
+            *_series_relevance_evidence(frozen_series, series_context),
+            *_account_relevance_evidence(account_resolution),
+        )
 
     @staticmethod
     def _frame_with_brand_facts(
@@ -1153,16 +1274,9 @@ class ContentService:
         if decision.claim_scope == "specific_product_claim" and not products:
             return {
                 "kind": "question",
-                "message": (
-                    "这句涉及明确商品的工艺、性能或品质事实。"
-                    "请指定已登记 SKU 并补齐对应 ProductFact。"
-                ),
+                "message": ("这句涉及明确商品的工艺、性能或品质事实。请指定已登记 SKU 并补齐对应 ProductFact。"),
             }
-        if (
-            decision.claim_scope == "task_actuality"
-            and primary_product == "product_truth"
-            and not products
-        ):
+        if decision.claim_scope == "task_actuality" and primary_product == "product_truth" and not products:
             # The same intake model may over-select product_truth when a work
             # observation mentions production quality.  The server owns this
             # structural correction: a frozen task-local actuality without an
@@ -1595,9 +1709,7 @@ class ContentService:
             if segment.source_digest is not None:
                 segment_document["source_digest"] = segment.source_digest
             if segment.source_document_digest is not None:
-                segment_document["source_document_digest"] = (
-                    segment.source_document_digest
-                )
+                segment_document["source_document_digest"] = segment.source_document_digest
             if segment.applicability:
                 segment_document["applicability"] = list(segment.applicability)
             segment_documents.append(segment_document)
@@ -2175,10 +2287,7 @@ class ContentService:
             )
             if progress is not None:
                 progress("validating")
-            if narrative_frame is not None and artifact.reviewed_digest != visible_digest(
-                artifact.outline, artifact.body
-            ):
-                raise GenerationFailed("最终成品与被审查内容不一致")
+            _assert_reviewed_artifact(artifact, narrative_frame)
             assert_content_complete(artifact)
         except GenerationFailed as exc:
             self._repository.fail_run(scope, task_id, run_id, str(exc))
@@ -2275,6 +2384,7 @@ class ContentService:
             ),
             "has_product_facts": bool(products),
             "selected_material_count": len(control.materials) if control else 0,
+            **_gateb_context_basis(publication_contract),
             "gaps": [
                 label
                 for missing, label in (

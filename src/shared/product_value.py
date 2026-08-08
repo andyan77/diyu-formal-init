@@ -17,6 +17,7 @@ from src.shared.types import BoundProductMedia, ContentProduct, ProductFact
 
 PRODUCT_VALUE_CONTRACT_VERSION = "product-value-contract-v1"
 PRODUCT_DECISION_BASIS_VERSION = "product-decision-basis-v2"
+P1_PRODUCT_DECISION_BASIS_VERSION = "product-decision-basis-v3"
 P2DecisionAxis: TypeAlias = Literal[
     "complete_side_choice",
     "confirmed_visible_difference",
@@ -100,6 +101,27 @@ class P2ProductDecisionBasisV2:
 
 
 @dataclass(frozen=True)
+class P1ProductDecisionBasisV3:
+    """P1 selected-product basis with V facts and an explicit judgment condition."""
+
+    contract_version: str
+    primary_product: Literal["dressing_decision"]
+    decision_axis: P2DecisionAxis
+    product_specific_understanding: str
+    tradeoff: str
+    condition_of_validity: str
+    supporting_fact_refs: tuple[str, ...]
+    source_packet_digest: str
+    judgment_ref: str
+    judgment_version: str
+    applicability_conditions: tuple[str, ...]
+
+    @property
+    def source_fact_ids(self) -> tuple[str, ...]:
+        return self.supporting_fact_refs
+
+
+@dataclass(frozen=True)
 class P5ProductDecisionBasisV2:
     """Machine-only visual relation, bound to two registered resources."""
 
@@ -119,9 +141,11 @@ class P5ProductDecisionBasisV2:
 
 
 LegacyProductValueContract: TypeAlias = P2ProductValueContractV1 | P5ProductValueContractV1
-ProductValueContract: TypeAlias = LegacyProductValueContract | P2ProductDecisionBasisV2 | P5ProductDecisionBasisV2
+ProductValueContract: TypeAlias = (
+    LegacyProductValueContract | P1ProductDecisionBasisV3 | P2ProductDecisionBasisV2 | P5ProductDecisionBasisV2
+)
 
-ProductDecisionBasisV2: TypeAlias = P2ProductDecisionBasisV2 | P5ProductDecisionBasisV2
+ProductDecisionBasisV2: TypeAlias = P1ProductDecisionBasisV3 | P2ProductDecisionBasisV2 | P5ProductDecisionBasisV2
 
 
 def build_product_decision_basis_v2(
@@ -134,6 +158,10 @@ def build_product_decision_basis_v2(
 ) -> ProductDecisionBasisV2 | None:
     """Build the new machine plan without exposing a visible-text accessor."""
 
+    if primary_product == "dressing_decision":
+        if not products:
+            return None
+        return _build_p1_decision_basis_v3(products)
     if primary_product == "product_truth":
         return _build_p2_decision_basis_v2(products)
     legacy = build_product_value_contract(
@@ -145,28 +173,16 @@ def build_product_decision_basis_v2(
     )
     if isinstance(legacy, P5ProductValueContractV1):
         if legacy.relation_kind == "color_hierarchy":
-            understanding = (
-                "本题采用已经冻结的颜色主辅关系：由主视觉先定调，辅助视觉随后回应。"
-            )
-            condition = (
-                "只有两份登记素材都清楚，且主辅角色在图序和版面中保持一致时，"
-                "这项颜色关系才成立。"
-            )
+            understanding = "本题采用已经冻结的颜色主辅关系：由主视觉先定调，辅助视觉随后回应。"
+            condition = "只有两份登记素材都清楚，且主辅角色在图序和版面中保持一致时，这项颜色关系才成立。"
         else:
-            understanding = (
-                "本题采用已经冻结的轮廓主辅关系：由主视觉先定形，辅助视觉随后回应。"
-            )
-            condition = (
-                "只有两份登记素材都清楚，且主辅角色在图序和版面中保持一致时，"
-                "这项轮廓关系才成立。"
-            )
+            understanding = "本题采用已经冻结的轮廓主辅关系：由主视觉先定形，辅助视觉随后回应。"
+            condition = "只有两份登记素材都清楚，且主辅角色在图序和版面中保持一致时，这项轮廓关系才成立。"
         result = P5ProductDecisionBasisV2(
             contract_version=PRODUCT_DECISION_BASIS_VERSION,
             primary_product="visual_styling_story",
             product_specific_understanding=understanding,
-            tradeoff=(
-                "两份登记素材不能平均承担视觉重心；突出主视觉时，辅助视觉应退居次位。"
-            ),
+            tradeoff=("两份登记素材不能平均承担视觉重心；突出主视觉时，辅助视觉应退居次位。"),
             condition_of_validity=condition,
             supporting_fact_refs=legacy.source_fact_ids,
             source_packet_digest=legacy.source_packet_digest,
@@ -176,6 +192,38 @@ def build_product_decision_basis_v2(
         assert_product_decision_basis_v2(result)
         return result
     return None
+
+
+def _build_p1_decision_basis_v3(
+    products: Sequence[ProductFact],
+) -> P1ProductDecisionBasisV3:
+    if len(products) != 1:
+        raise GenerationFailed("基于商品给出穿衣建议时，需要明确选择一件已确认商品。")
+    product = products[0]
+    base = _build_p2_decision_basis_v2(products)
+    applicability = product.applicability.strip()
+    if not applicability:
+        raise GenerationFailed("所选商品缺少当前判断成立条件，不能形成商品建议。")
+    judgment_ref = (
+        f"product-version:{product.product_version_id}:judgment"
+        if product.product_version_id is not None
+        else f"product-judgment:{product.sku}:v{product.fact_version}"
+    )
+    result = P1ProductDecisionBasisV3(
+        contract_version=P1_PRODUCT_DECISION_BASIS_VERSION,
+        primary_product="dressing_decision",
+        decision_axis=base.decision_axis,
+        product_specific_understanding=base.product_specific_understanding,
+        tradeoff=base.tradeoff,
+        condition_of_validity=(f"{base.condition_of_validity} 当前商品判断另须满足：{applicability}"),
+        supporting_fact_refs=base.supporting_fact_refs,
+        source_packet_digest=base.source_packet_digest,
+        judgment_ref=judgment_ref,
+        judgment_version=str(product.fact_version),
+        applicability_conditions=(applicability,),
+    )
+    assert_product_decision_basis_v2(result)
+    return result
 
 
 def _build_p2_decision_basis_v2(
@@ -277,7 +325,7 @@ def product_value_contract_document(
     }
     if isinstance(
         contract,
-        (P2ProductDecisionBasisV2, P5ProductDecisionBasisV2),
+        (P1ProductDecisionBasisV3, P2ProductDecisionBasisV2, P5ProductDecisionBasisV2),
     ):
         result = common | {
             "product_specific_understanding": (contract.product_specific_understanding),
@@ -287,6 +335,15 @@ def product_value_contract_document(
         }
         if isinstance(contract, P2ProductDecisionBasisV2):
             result["decision_axis"] = contract.decision_axis
+        if isinstance(contract, P1ProductDecisionBasisV3):
+            result.update(
+                {
+                    "decision_axis": contract.decision_axis,
+                    "judgment_ref": contract.judgment_ref,
+                    "judgment_version": contract.judgment_version,
+                    "applicability_conditions": list(contract.applicability_conditions),
+                }
+            )
         if isinstance(contract, P5ProductDecisionBasisV2):
             result.update(
                 {
@@ -322,24 +379,90 @@ def product_value_contract_digest(contract: ProductValueContract) -> str:
     ).hexdigest()
 
 
+def _p1_decision_basis_from_document(
+    value: Mapping[object, object],
+    *,
+    product_specific_understanding: str,
+    tradeoff: str,
+    condition_of_validity: str,
+    fact_refs: tuple[str, ...],
+    packet_digest: str,
+) -> P1ProductDecisionBasisV3:
+    decision_axis = value.get("decision_axis")
+    if decision_axis not in P2_DECISION_AXES:
+        raise DomainError("内容任务冻结的商品选择维度无效")
+    return P1ProductDecisionBasisV3(
+        contract_version=P1_PRODUCT_DECISION_BASIS_VERSION,
+        primary_product="dressing_decision",
+        decision_axis=cast(P2DecisionAxis, decision_axis),
+        product_specific_understanding=product_specific_understanding,
+        tradeoff=tradeoff,
+        condition_of_validity=condition_of_validity,
+        supporting_fact_refs=fact_refs,
+        source_packet_digest=packet_digest,
+        judgment_ref=_required_string(value.get("judgment_ref")),
+        judgment_version=_required_string(value.get("judgment_version")),
+        applicability_conditions=_string_tuple(value.get("applicability_conditions")),
+    )
+
+
+def _p5_decision_basis_from_document(
+    value: Mapping[object, object],
+    *,
+    product_specific_understanding: str,
+    tradeoff: str,
+    condition_of_validity: str,
+    fact_refs: tuple[str, ...],
+    packet_digest: str,
+) -> P5ProductDecisionBasisV2:
+    resources = _string_tuple(value.get("resource_refs"))
+    relation_kind = value.get("relation_kind")
+    if len(resources) != 2 or relation_kind not in {
+        "color_hierarchy",
+        "silhouette_hierarchy",
+    }:
+        raise DomainError("内容任务冻结的商品价值合同无效")
+    return P5ProductDecisionBasisV2(
+        contract_version=PRODUCT_DECISION_BASIS_VERSION,
+        primary_product="visual_styling_story",
+        product_specific_understanding=product_specific_understanding,
+        tradeoff=tradeoff,
+        condition_of_validity=condition_of_validity,
+        supporting_fact_refs=fact_refs,
+        source_packet_digest=packet_digest,
+        relation_kind=cast(Literal["color_hierarchy", "silhouette_hierarchy"], relation_kind),
+        resource_refs=(resources[0], resources[1]),
+    )
+
+
 def product_value_contract_from_document(
     value: object,
 ) -> ProductValueContract:
     if not isinstance(value, Mapping):
         raise DomainError("内容任务冻结的商品价值合同无效")
     version = _required_string(value.get("contract_version"))
-    if version == PRODUCT_DECISION_BASIS_VERSION:
+    if version in {PRODUCT_DECISION_BASIS_VERSION, P1_PRODUCT_DECISION_BASIS_VERSION}:
         primary_product = value.get("primary_product")
         fact_refs = _string_tuple(value.get("supporting_fact_refs"))
         packet_digest = _required_digest(value.get("source_packet_digest"))
         product_specific_understanding = _required_string(value.get("product_specific_understanding"))
         tradeoff = _required_string(value.get("tradeoff"))
         condition_of_validity = _required_string(value.get("condition_of_validity"))
-        if primary_product == "product_truth":
+        contract_v2: ProductDecisionBasisV2
+        if primary_product == "dressing_decision" and version == P1_PRODUCT_DECISION_BASIS_VERSION:
+            contract_v2 = _p1_decision_basis_from_document(
+                value,
+                product_specific_understanding=product_specific_understanding,
+                tradeoff=tradeoff,
+                condition_of_validity=condition_of_validity,
+                fact_refs=fact_refs,
+                packet_digest=packet_digest,
+            )
+        elif primary_product == "product_truth" and version == PRODUCT_DECISION_BASIS_VERSION:
             decision_axis = value.get("decision_axis")
             if decision_axis not in P2_DECISION_AXES:
                 raise DomainError("内容任务冻结的商品选择维度无效")
-            contract_v2: ProductDecisionBasisV2 = P2ProductDecisionBasisV2(
+            contract_v2 = P2ProductDecisionBasisV2(
                 contract_version=PRODUCT_DECISION_BASIS_VERSION,
                 primary_product="product_truth",
                 decision_axis=cast(P2DecisionAxis, decision_axis),
@@ -350,28 +473,13 @@ def product_value_contract_from_document(
                 source_packet_digest=packet_digest,
             )
         elif primary_product == "visual_styling_story":
-            raw_resources = _string_tuple(value.get("resource_refs"))
-            if len(raw_resources) != 2:
-                raise DomainError("内容任务冻结的商品价值合同无效")
-            relation_kind = value.get("relation_kind")
-            if relation_kind not in {
-                "color_hierarchy",
-                "silhouette_hierarchy",
-            }:
-                raise DomainError("内容任务冻结的商品价值合同无效")
-            contract_v2 = P5ProductDecisionBasisV2(
-                contract_version=PRODUCT_DECISION_BASIS_VERSION,
-                primary_product="visual_styling_story",
+            contract_v2 = _p5_decision_basis_from_document(
+                value,
                 product_specific_understanding=product_specific_understanding,
                 tradeoff=tradeoff,
                 condition_of_validity=condition_of_validity,
-                supporting_fact_refs=fact_refs,
-                source_packet_digest=packet_digest,
-                relation_kind=cast(
-                    Literal["color_hierarchy", "silhouette_hierarchy"],
-                    relation_kind,
-                ),
-                resource_refs=(raw_resources[0], raw_resources[1]),
+                fact_refs=fact_refs,
+                packet_digest=packet_digest,
             )
         else:
             raise DomainError("内容任务冻结的商品价值合同无效")
@@ -444,7 +552,12 @@ def assert_product_decision_basis_v2(
     contract: ProductDecisionBasisV2,
 ) -> None:
     if (
-        contract.contract_version != PRODUCT_DECISION_BASIS_VERSION
+        contract.contract_version
+        != (
+            P1_PRODUCT_DECISION_BASIS_VERSION
+            if isinstance(contract, P1ProductDecisionBasisV3)
+            else PRODUCT_DECISION_BASIS_VERSION
+        )
         or not contract.product_specific_understanding.strip()
         or not contract.tradeoff.strip()
         or not contract.condition_of_validity.strip()
@@ -460,6 +573,14 @@ def assert_product_decision_basis_v2(
         raise DomainError("内容任务冻结的商品选择资源无效")
     if isinstance(contract, P2ProductDecisionBasisV2) and contract.decision_axis not in P2_DECISION_AXES:
         raise DomainError("内容任务冻结的商品选择维度无效")
+    if isinstance(contract, P1ProductDecisionBasisV3) and (
+        contract.decision_axis not in P2_DECISION_AXES
+        or not contract.judgment_ref
+        or not contract.judgment_version
+        or not contract.applicability_conditions
+        or any(not condition.strip() for condition in contract.applicability_conditions)
+    ):
+        raise DomainError("内容任务冻结的 P1 商品判断依据无效")
 
 
 def _build_p2_contract(

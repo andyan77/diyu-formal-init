@@ -879,3 +879,35 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   可生产、degraded 可见、topic fidelity、旧快照旧解释；禁新增 Reviewer/第二模型/语义
   词表/服务端固定成稿；alembic 与 frontend 冻结（确需迁移→停+报）。
 - 执行侧终态只允许 `GATE-B IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`。
+
+<!-- BRAND-MATRIX-01-GATEB-CLOSEOUT-START -->
+
+### Gate B 收口记录（执行侧核验稿，2026-08-08）
+
+> **待监理复验确认**。本记录只证明 Gate B 候选实现和本地门结果，不代替监理独立复验。
+
+- 新任务账号 lens 升级为 V4，精确覆盖 P1—P5；V1—V3 冻结解析保留。唯一入口
+  `resolve_account_editorial_context` 的同一解析结果进入 PublicationContract、任务快照、
+  WriterRequest、DeepSeek adapter 与确定性 stub；修订和平台改编继续回放冻结合同。
+- 五个显式降级码 5/5：`unsupported_content_product`、`account_profile_missing`、
+  `account_profile_identity_incomplete`、`account_profile_not_confirmed`、
+  `brand_context_incompatible`。快照和现有 context_basis 可读脱敏状态，静默 `None` 为 0；
+  本 Gate 未新增前端页面。
+- P1 三路径成立：合法选定商品冻结 V 级事实、J 判断条件和 digest 并送入 Writer；未选商品
+  仍可走自然关联；明确索要商品但多选/依据不足时失败关闭。候选价格、效果、性能、精确工艺
+  及 P/C/R 不升格。
+- 七族 7/7 具备类型化、带来源和实际消费引用的合同；后三族缺媒体/组织/人物授权资格引用时
+  失败关闭。没有自然路径时显式 degraded、`demonstration_eligible=false`，不硬插商品或品牌
+  收尾，生活题材不改写成商品题材。
+- 确定性测试覆盖 H01/H03/S02 同种子差异：事实、平台、central job 和资源不变，账号观察/
+  判断/受众/立场至少两维变化，profile ID/digest 正确变化；P1—P5 均有正向消费断言；一条
+  ContentService→PublicationContract→snapshot→WriterRequest→stub→context_basis 零模型纵向通过。
+- 本地门：Gate B scope/semantics/privacy、`git diff --check`、Ruff、mypy、Golden、EXE-V0
+  3/3、EXE-01 9/9、前端 lint/typecheck/test/build、独立 `scripts/test.sh` 与两套既有秘密
+  断言全绿；Golden 和全量测试均为 `984 passed, 2 skipped`。CI 四查在最终推送提交上执行，
+  结果待监理复验确认。
+- 七族合同能力成立；后三族的正式组织、素材和人物资格由 Gate C 承重验证。模型调用 0、生产
+  接触 0；未导入素材、未建十账号、未执行组织过滤/生命周期/授权、未制作母版。
+- 下一动作：监理独立复验 Gate B；PASS 后才可签发 Gate C。
+
+<!-- BRAND-MATRIX-01-GATEB-CLOSEOUT-END -->

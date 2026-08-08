@@ -30,6 +30,7 @@ from src.shared.publication_contract import (
     publication_contract_from_document,
 )
 from src.shared.task_value_assembly import (
+    BRAND_RELEVANCE_PATHS,
     TaskValueAssemblyV1,
     task_value_assembly_digest,
     task_value_assembly_from_document,
@@ -48,6 +49,29 @@ _CONTEXT_CATEGORY_LABELS = {
     "candidate_product_guidance": "候选商品参考",
     "source_catalog_only": "来源目录",
 }
+
+
+def _visible_gateb_states(
+    snapshot: Mapping[str, object],
+) -> tuple[str, list[str], str, str | None]:
+    raw_editorial = snapshot.get("account_editorial_resolution")
+    account_state = "legacy_unavailable"
+    reasons: list[str] = []
+    if isinstance(raw_editorial, dict):
+        account_state = "applied" if raw_editorial.get("applied") is True else "degraded"
+        raw_reasons = raw_editorial.get("degraded_reasons")
+        if isinstance(raw_reasons, list):
+            reasons = [str(reason) for reason in raw_reasons if isinstance(reason, str)]
+    raw_publication = snapshot.get("publication_contract")
+    relevance_state = "legacy_unavailable"
+    family: str | None = None
+    if isinstance(raw_publication, dict) and isinstance(raw_publication.get("brand_relevance_state"), str):
+        relevance_state = str(raw_publication["brand_relevance_state"])
+        raw_evidence = raw_publication.get("brand_relevance_evidence")
+        raw_family = raw_evidence.get("path_family") if isinstance(raw_evidence, dict) else None
+        if raw_family in BRAND_RELEVANCE_PATHS:
+            family = str(raw_family)
+    return account_state, reasons, relevance_state, family
 
 
 def visible_context_basis(
@@ -83,12 +107,19 @@ def visible_context_basis(
     raw_materials = snapshot.get("material_snapshots")
     material_count = len(raw_materials) if isinstance(raw_materials, list) else 0
     format_label = "图文" if media_format == "graphic" else "视频"
+    account_editorial_state, account_editorial_degraded_reasons, brand_relevance_state, brand_relevance_family = (
+        _visible_gateb_states(snapshot)
+    )
     return {
         "account": account_name,
         "platform_and_format": f"{channel} · {format_label}",
         "brand_material_categories": categories,
         "has_product_facts": has_products,
         "selected_material_count": material_count,
+        "account_editorial_state": account_editorial_state,
+        "account_editorial_degraded_reasons": account_editorial_degraded_reasons,
+        "brand_relevance_state": brand_relevance_state,
+        "brand_relevance_family": brand_relevance_family,
         "gaps": [
             label
             for missing, label in (
@@ -303,11 +334,7 @@ def frozen_series_context(snapshot: Mapping[str, object]) -> SeriesContext | Non
                     position=int(str(raw["position"])),
                     outline=str(raw["outline"]),
                     body=str(raw["body"]),
-                    prior_facts=tuple(
-                        str(item)
-                        for item in raw.get("prior_facts", [])
-                        if isinstance(item, str)
-                    ),
+                    prior_facts=tuple(str(item) for item in raw.get("prior_facts", []) if isinstance(item, str)),
                     prior_judgment=str(raw.get("prior_judgment") or ""),
                 )
             )

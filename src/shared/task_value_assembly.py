@@ -31,6 +31,16 @@ BRAND_RELEVANCE_PATHS: tuple[BrandRelevancePath, ...] = (
     "local_trust",
     "organization_people",
 )
+BRAND_RELEVANCE_CONTRACT_VERSION = "brand-relevance-resolution-v1"
+BRAND_RELEVANCE_SOURCE_TYPES: dict[BrandRelevancePath, frozenset[str]] = {
+    "product_expertise": frozenset({"product_decision_basis"}),
+    "existing_series": frozenset({"series_episode"}),
+    "audience_relationship": frozenset({"account_profile"}),
+    "brand_stance": frozenset({"account_profile"}),
+    "brand_visual": frozenset({"brand_visual_qualification"}),
+    "local_trust": frozenset({"local_trust_qualification"}),
+    "organization_people": frozenset({"organization_people_qualification"}),
+}
 V0_PRODUCIBLE_PATHS: tuple[BrandRelevancePath, ...] = (
     "product_expertise",
     "existing_series",
@@ -97,6 +107,22 @@ class TaskValueAssemblyTraceV1:
 
 
 @dataclass(frozen=True)
+class BrandRelevanceEvidenceV1:
+    """One typed, frozen source actually consumed by an applied relevance path."""
+
+    contract_version: str
+    path_family: BrandRelevancePath
+    source_object_type: str
+    source_id: str
+    source_version: str
+    source_digest: str
+    actual_consumed_refs: tuple[str, ...]
+    organization_ref: str | None = None
+    authorization_ref: str | None = None
+    media_ref: str | None = None
+
+
+@dataclass(frozen=True)
 class TaskValueAssemblyV1:
     """The independently versioned value object frozen next to a content task."""
 
@@ -110,6 +136,10 @@ class TaskValueAssemblyV1:
     ruleset_version: str
     ruleset_digest: str
     assembly_trace: TaskValueAssemblyTraceV1
+    brand_relevance_state: str | None = None
+    brand_relevance_evidence: BrandRelevanceEvidenceV1 | None = None
+    brand_relevance_degraded_reason: str | None = None
+    demonstration_eligible: bool | None = None
 
 
 def task_value_assembly_document(
@@ -118,7 +148,7 @@ def task_value_assembly_document(
     """Return one JSON-native representation used by JSONB and evidence."""
 
     trace = assembly.assembly_trace
-    return {
+    document: dict[str, object] = {
         "contract_version": assembly.contract_version,
         "audience_payoff": assembly.audience_payoff,
         "payoff_origin": assembly.payoff_origin,
@@ -136,6 +166,32 @@ def task_value_assembly_document(
             "series_basis_present": trace.series_basis_present,
         },
     }
+    if assembly.brand_relevance_state is not None:
+        evidence = assembly.brand_relevance_evidence
+        document.update(
+            {
+                "brand_relevance_state": assembly.brand_relevance_state,
+                "brand_relevance_evidence": (
+                    {
+                        "contract_version": evidence.contract_version,
+                        "path_family": evidence.path_family,
+                        "source_object_type": evidence.source_object_type,
+                        "source_id": evidence.source_id,
+                        "source_version": evidence.source_version,
+                        "source_digest": evidence.source_digest,
+                        "actual_consumed_refs": list(evidence.actual_consumed_refs),
+                        "organization_ref": evidence.organization_ref,
+                        "authorization_ref": evidence.authorization_ref,
+                        "media_ref": evidence.media_ref,
+                    }
+                    if evidence is not None
+                    else None
+                ),
+                "brand_relevance_degraded_reason": assembly.brand_relevance_degraded_reason,
+                "demonstration_eligible": assembly.demonstration_eligible,
+            }
+        )
+    return document
 
 
 def task_value_assembly_digest(assembly: TaskValueAssemblyV1) -> str:
@@ -155,6 +211,27 @@ def task_value_assembly_from_document(value: object) -> TaskValueAssemblyV1:
     raw_trace = value.get("assembly_trace")
     if not isinstance(raw_trace, Mapping):
         raise DomainError("内容任务冻结的价值组装无效")
+    raw_relevance = value.get("brand_relevance_evidence")
+    relevance_evidence: BrandRelevanceEvidenceV1 | None = None
+    if raw_relevance is not None:
+        if not isinstance(raw_relevance, Mapping):
+            raise DomainError("内容任务冻结的品牌关联证据无效")
+        try:
+            path_family = _brand_relevance_path(raw_relevance["path_family"])
+            relevance_evidence = BrandRelevanceEvidenceV1(
+                contract_version=str(raw_relevance["contract_version"]),
+                path_family=path_family,
+                source_object_type=str(raw_relevance["source_object_type"]),
+                source_id=str(raw_relevance["source_id"]),
+                source_version=str(raw_relevance["source_version"]),
+                source_digest=str(raw_relevance["source_digest"]),
+                actual_consumed_refs=_string_tuple(raw_relevance.get("actual_consumed_refs")),
+                organization_ref=_optional_string(raw_relevance.get("organization_ref")),
+                authorization_ref=_optional_string(raw_relevance.get("authorization_ref")),
+                media_ref=_optional_string(raw_relevance.get("media_ref")),
+            )
+        except (KeyError, TypeError) as exc:
+            raise DomainError("内容任务冻结的品牌关联证据无效") from exc
     try:
         assembly = TaskValueAssemblyV1(
             contract_version=str(value["contract_version"]),
@@ -173,6 +250,10 @@ def task_value_assembly_from_document(value: object) -> TaskValueAssemblyV1:
                 product_basis_present=_required_bool(raw_trace["product_basis_present"]),
                 series_basis_present=_required_bool(raw_trace["series_basis_present"]),
             ),
+            brand_relevance_state=_optional_string(value.get("brand_relevance_state")),
+            brand_relevance_evidence=relevance_evidence,
+            brand_relevance_degraded_reason=_optional_string(value.get("brand_relevance_degraded_reason")),
+            demonstration_eligible=_optional_bool(value.get("demonstration_eligible")),
         )
     except (KeyError, TypeError) as exc:
         raise DomainError("内容任务冻结的价值组装无效") from exc
@@ -200,6 +281,7 @@ def assert_task_value_assembly(assembly: TaskValueAssemblyV1) -> None:
     _required_sha256(assembly.ruleset_digest)
     assert_payoff_within_bounds(assembly.audience_payoff)
     _assert_origin_consistency(assembly)
+    _assert_brand_relevance_consistency(assembly)
 
 
 def assert_payoff_within_bounds(payoff: str) -> None:
@@ -209,10 +291,11 @@ def assert_payoff_within_bounds(payoff: str) -> None:
 
 def _assert_origin_consistency(assembly: TaskValueAssemblyV1) -> None:
     if assembly.payoff_origin == "server_assembled":
+        supported_paths = BRAND_RELEVANCE_PATHS if assembly.brand_relevance_state is not None else V0_PRODUCIBLE_PATHS
         invalid = (
             assembly.payoff_degraded
             or assembly.payoff_degradation_reason is not None
-            or assembly.brand_relevance_path not in V0_PRODUCIBLE_PATHS
+            or assembly.brand_relevance_path not in supported_paths
         )
     else:
         invalid = (
@@ -222,6 +305,61 @@ def _assert_origin_consistency(assembly: TaskValueAssemblyV1) -> None:
         )
     if invalid:
         raise DomainError("内容任务冻结的价值溯源自相矛盾")
+
+
+def _assert_brand_relevance_consistency(assembly: TaskValueAssemblyV1) -> None:
+    """Keep historical V0 documents intact and validate the expand-only Gate B fields."""
+
+    if assembly.brand_relevance_state is None:
+        if any(
+            value is not None
+            for value in (
+                assembly.brand_relevance_evidence,
+                assembly.brand_relevance_degraded_reason,
+                assembly.demonstration_eligible,
+            )
+        ):
+            raise DomainError("内容任务冻结的品牌关联状态不完整")
+        return
+    evidence = assembly.brand_relevance_evidence
+    if assembly.brand_relevance_state == "applied":
+        if (
+            evidence is None
+            or assembly.brand_relevance_path != evidence.path_family
+            or assembly.brand_relevance_degraded_reason is not None
+            or assembly.demonstration_eligible is not True
+        ):
+            raise DomainError("内容任务冻结的品牌关联状态不一致")
+        assert_brand_relevance_evidence(evidence)
+        return
+    if assembly.brand_relevance_state != "degraded" or (
+        evidence is not None
+        or assembly.brand_relevance_path is not None
+        or not assembly.brand_relevance_degraded_reason
+        or assembly.demonstration_eligible is not False
+    ):
+        raise DomainError("内容任务冻结的品牌关联状态不一致")
+
+
+def assert_brand_relevance_evidence(evidence: BrandRelevanceEvidenceV1) -> None:
+    if (
+        evidence.contract_version != BRAND_RELEVANCE_CONTRACT_VERSION
+        or evidence.source_object_type not in BRAND_RELEVANCE_SOURCE_TYPES[evidence.path_family]
+        or not evidence.source_id
+        or not evidence.source_version
+        or not evidence.actual_consumed_refs
+        or len(set(evidence.actual_consumed_refs)) != len(evidence.actual_consumed_refs)
+    ):
+        raise DomainError("内容任务冻结的品牌关联证据无效")
+    _required_sha256(evidence.source_digest)
+    if evidence.path_family == "brand_visual" and not evidence.media_ref:
+        raise DomainError("品牌视觉路径缺少冻结媒体资格引用")
+    if evidence.path_family == "local_trust" and not evidence.organization_ref:
+        raise DomainError("本地信任路径缺少冻结区域或门店引用")
+    if evidence.path_family == "organization_people" and (
+        not evidence.organization_ref or not evidence.authorization_ref
+    ):
+        raise DomainError("组织人物路径缺少冻结组织或人物授权引用")
 
 
 def assert_task_value_matches_contract(
@@ -277,6 +415,26 @@ def _optional_string(value: object) -> str | None:
         return None
     if not isinstance(value, str) or not value:
         raise DomainError("内容任务冻结的价值组装无效")
+    return value
+
+
+def _optional_bool(value: object) -> bool | None:
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise DomainError("内容任务冻结的价值组装无效")
+    return value
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        raise DomainError("内容任务冻结的品牌关联证据无效")
+    return tuple(value)
+
+
+def _brand_relevance_path(value: object) -> BrandRelevancePath:
+    if value not in BRAND_RELEVANCE_PATHS:
+        raise DomainError("内容任务冻结的品牌关联路径无效")
     return value
 
 

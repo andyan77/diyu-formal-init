@@ -134,7 +134,6 @@ from src.shared.types import (
     AccountExpression,
     BoundProductMedia,
     BrandContext,
-    BrandContextPacketV2,
     BrandContextPacketV3,
     BrandContextSegment,
     ContentProduct,
@@ -1621,15 +1620,9 @@ def _tenant01_generalization_reviews(
                 result_sha256=sha256_file(root / result_file),
                 hard_boundary="PASS",
                 structure_complete="PASS",
-                product_usable=(
-                    "FAIL" if case_id in failed_product_cases else "PASS"
-                ),
+                product_usable=("FAIL" if case_id in failed_product_cases else "PASS"),
                 excerpts={"visible_result": excerpt},
-                quality_observations=(
-                    ("首稿产品质量未达到采用门。",)
-                    if case_id in failed_product_cases
-                    else ()
-                ),
+                quality_observations=(("首稿产品质量未达到采用门。",) if case_id in failed_product_cases else ()),
                 residual_risks=(),
                 reviewer_scope="冻结结果的用户可见输出与机器硬门",
                 reviewer_kind="single_execution_product_review",
@@ -1680,12 +1673,16 @@ def test_account_editorial_lens_freezes_distinct_profile_inputs_and_publication(
         exact_text=segment_text,
         source_digest="a" * 64,
     )
-    packet = BrandContextPacketV2(
-        "brand-context-packet-v2",
+    packet = BrandContextPacketV3(
+        "brand-context-packet-v3",
         "b" * 64,
         "44444444-4444-4444-8444-444444444444",
         3,
         "c" * 64,
+        (segment.segment_id,),
+        (segment.segment_id,),
+        (segment.segment_id,),
+        (),
         (segment,),
     )
     expression = AccountExpression(
@@ -1699,12 +1696,14 @@ def test_account_editorial_lens_freezes_distinct_profile_inputs_and_publication(
         False,
     )
 
-    lens = build_account_editorial_lens(
+    resolution = build_account_editorial_lens(
         primary_product="brand_life_narrative",
         account_expression=expression,
         brand_context_packet=packet,
     )
 
+    assert resolution.applied is True
+    lens = resolution.lens
     assert lens is not None
     document = account_editorial_lens_document(lens)
     assert document["contract_version"] == ACCOUNT_EDITORIAL_LENS_VERSION
@@ -2033,6 +2032,10 @@ def test_visible_context_basis_is_frozen_business_language_only() -> None:
         "brand_material_categories": ["品牌已确认资料", "品牌创作方法"],
         "has_product_facts": True,
         "selected_material_count": 0,
+        "account_editorial_state": "legacy_unavailable",
+        "account_editorial_degraded_reasons": [],
+        "brand_relevance_state": "legacy_unavailable",
+        "brand_relevance_family": None,
         "gaps": ["本次没有选择制作素材"],
     }
     assert "private-id" not in json.dumps(result)
@@ -2921,9 +2924,7 @@ def test_exact_preimage_classification_is_atomic_and_revokes_hidden_access(
             scope,
             include_archived=True,
         )
-        assert {synthetic_user_id, legacy_user_id}.isdisjoint(
-            {UUID(str(person["id"])) for person in archived_people}
-        )
+        assert {synthetic_user_id, legacy_user_id}.isdisjoint({UUID(str(person["id"])) for person in archived_people})
         visible_accounts = repository.management_accounts(scope)
         assert synthetic_account_id not in {UUID(str(account["id"])) for account in visible_accounts}
     finally:
@@ -3585,9 +3586,7 @@ def test_tenant01_evidence_uses_aggregate_first_draft_usability_gate(
             first,
             scores=scores,
             quality_dimensions=quality_dimensions,
-            demonstration_checks={
-                check: False for check in TENANT01_DEMONSTRATION_CHECKS
-            },
+            demonstration_checks={check: False for check in TENANT01_DEMONSTRATION_CHECKS},
             product_usable="FAIL",
             verdict="FAIL",
             quality_observations=("首稿自然度不足，需通过自然反馈形成 V2。",),
@@ -3596,9 +3595,7 @@ def test_tenant01_evidence_uses_aggregate_first_draft_usability_gate(
     )
     generalization = _tenant01_generalization_reviews(
         tmp_path,
-        failed_product_cases=frozenset(
-            {"new_daily_delay", "new_couple_housework"}
-        ),
+        failed_product_cases=frozenset({"new_daily_delay", "new_couple_housework"}),
     )
 
     write_tenant01_evidence(
@@ -3614,9 +3611,7 @@ def test_tenant01_evidence_uses_aggregate_first_draft_usability_gate(
         dm01_file="dm01.json",
     )
 
-    human_review = json.loads(
-        (tmp_path / "human-review.json").read_text(encoding="utf-8")
-    )
+    human_review = json.loads((tmp_path / "human-review.json").read_text(encoding="utf-8"))
     assert human_review["first_draft_usable"] == 23
 
 
@@ -3895,12 +3890,7 @@ def test_tenant01_artifact_uses_explicit_target_for_non_golden_card_id(
     artifacts, _ = _tenant01_evidence_inputs(tmp_path)
     source = json.loads(
         (
-            tmp_path
-            / next(
-                item.artifact_file
-                for item in artifacts
-                if item.card_id == "cross_platform_douyin"
-            )
+            tmp_path / next(item.artifact_file for item in artifacts if item.card_id == "cross_platform_douyin")
         ).read_text(encoding="utf-8")
     )
     snapshot = cast(dict[str, object], source["formal_snapshot"])
@@ -3926,9 +3916,7 @@ def test_tenant01_artifact_uses_explicit_target_for_non_golden_card_id(
 
     assert artifact["outline"] == source["outline"]
     assert artifact["body"] == source["body"]
-    assert cast(dict[str, object], artifact["formal_snapshot"])[
-        "publishing_target"
-    ] == "douyin_video"
+    assert cast(dict[str, object], artifact["formal_snapshot"])["publishing_target"] == "douyin_video"
 
 
 def test_tenant01_artifact_rejects_explicit_target_mismatch_for_non_golden_card_id(
@@ -3938,12 +3926,7 @@ def test_tenant01_artifact_rejects_explicit_target_mismatch_for_non_golden_card_
     artifacts, _ = _tenant01_evidence_inputs(tmp_path)
     source = json.loads(
         (
-            tmp_path
-            / next(
-                item.artifact_file
-                for item in artifacts
-                if item.card_id == "cross_platform_douyin"
-            )
+            tmp_path / next(item.artifact_file for item in artifacts if item.card_id == "cross_platform_douyin")
         ).read_text(encoding="utf-8")
     )
     snapshot = cast(dict[str, object], source["formal_snapshot"])
@@ -4001,9 +3984,7 @@ def test_tenant01_git_status_preserves_index_and_worktree_columns(
 
     assert status == " M docs/项目记忆.md"
     assert not tenant01_runner._has_disallowed_worktree_change(status)
-    assert tenant01_runner._has_disallowed_worktree_change(
-        "M  docs/项目记忆.md"
-    )
+    assert tenant01_runner._has_disallowed_worktree_change("M  docs/项目记忆.md")
 
 
 def test_tenant01_human_review_v2_parses_every_required_field(
@@ -4234,9 +4215,7 @@ def test_tenant01_final_suite_preflights_protected_settings_before_ledger_start(
     golden_source = inspect.getsource(tenant01_runner._generate)
     generalization_source = inspect.getsource(generalization_runner._run)
 
-    assert golden_source.index("settings = _settings") < golden_source.index(
-        "control.begin_acceptance_suite"
-    )
+    assert golden_source.index("settings = _settings") < golden_source.index("control.begin_acceptance_suite")
     assert generalization_source.index("settings = _settings") < generalization_source.index(
         "control.begin_acceptance_suite"
     )
@@ -4282,12 +4261,8 @@ def test_tenant01_generalization_preflights_every_identity_target_before_ledger(
     class _Auth:
         def load_tenant_session(self, token: str) -> TenantSession | None:
             return {
-                "primary-session": TenantSession(
-                    primary_tenant, primary_user, "tenant-user"
-                ),
-                "secondary-session": TenantSession(
-                    secondary_tenant, secondary_user, "tenant-user"
-                ),
+                "primary-session": TenantSession(primary_tenant, primary_user, "tenant-user"),
+                "secondary-session": TenantSession(secondary_tenant, secondary_user, "tenant-user"),
             }.get(token)
 
         def allowed_content_targets(
@@ -4313,9 +4288,7 @@ def test_tenant01_generalization_preflights_every_identity_target_before_ledger(
         generalization_runner._validate_journey_targets("database", journey, cases)
 
     run_source = inspect.getsource(generalization_runner._run)
-    assert run_source.index("_validate_journey_targets") < run_source.index(
-        "control.begin_acceptance_suite"
-    )
+    assert run_source.index("_validate_journey_targets") < run_source.index("control.begin_acceptance_suite")
 
 
 def test_tenant01_generalization_review_parser_keeps_product_failures(

@@ -5,9 +5,18 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal, TypeAlias, cast
+from typing import TYPE_CHECKING, Literal, TypeAlias, cast
 
 from src.shared.errors import DomainError
+from src.shared.task_value_assembly import (
+    BRAND_RELEVANCE_PATHS,
+    BrandRelevanceEvidenceV1,
+    BrandRelevancePath,
+    assert_brand_relevance_evidence,
+)
+
+if TYPE_CHECKING:
+    from src.shared.account_editorial_lens import AccountEditorialResolutionV4
 
 PUBLICATION_CONTRACT_VERSION = "publication-contract-v2"
 PUBLICATION_CONTRACT_V3_VERSION = "publication-contract-v3"
@@ -121,6 +130,10 @@ class ProductDecisionBasisRefV2:
     contract_version: str
     digest: str
     supporting_fact_refs: tuple[str, ...]
+    source_packet_digest: str | None = None
+    judgment_ref: str | None = None
+    judgment_version: str | None = None
+    applicability_conditions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -175,9 +188,52 @@ class PublicationContractV3:
     publication_projection_digest: str
     expression_policy_version: str = USER_ACTUALITY_EXPRESSION_POLICY
     intake_role_contract_version: str = INTAKE_ROLE_CONTRACT_VERSION
+    account_editorial_resolution: AccountEditorialResolutionV4 | None = None
+    brand_relevance_state: str | None = None
+    brand_relevance_evidence: BrandRelevanceEvidenceV1 | None = None
+    brand_relevance_degraded_reason: str | None = None
+    demonstration_eligible: bool | None = None
 
 
 PublicationContract: TypeAlias = PublicationContractV2 | PublicationContractV3
+
+
+def _extend_publication_v3_document(
+    document: dict[str, object],
+    contract: PublicationContractV3,
+) -> None:
+    product_basis = contract.product_decision_basis
+    if product_basis is not None and product_basis.source_packet_digest is not None:
+        raw_product = document["product_decision_basis"]
+        if not isinstance(raw_product, dict):
+            raise AssertionError("product decision basis document is invalid")
+        raw_product.update(
+            {
+                "source_packet_digest": product_basis.source_packet_digest,
+                "judgment_ref": product_basis.judgment_ref,
+                "judgment_version": product_basis.judgment_version,
+                "applicability_conditions": list(product_basis.applicability_conditions),
+            }
+        )
+    if contract.account_editorial_resolution is not None:
+        from src.shared.account_editorial_lens import account_editorial_resolution_document
+
+        document["account_editorial_resolution"] = account_editorial_resolution_document(
+            contract.account_editorial_resolution
+        )
+    if contract.brand_relevance_state is not None:
+        document.update(
+            {
+                "brand_relevance_state": contract.brand_relevance_state,
+                "brand_relevance_evidence": _brand_relevance_evidence_document(contract.brand_relevance_evidence),
+                "brand_relevance_degraded_reason": contract.brand_relevance_degraded_reason,
+                "demonstration_eligible": contract.demonstration_eligible,
+            }
+        )
+    if contract.intake_role_contract_version != LEGACY_INTAKE_ROLE_CONTRACT_VERSION:
+        document["intake_role_contract_version"] = contract.intake_role_contract_version
+    if contract.expression_policy_version != LEGACY_USER_ACTUALITY_EXPRESSION_POLICY:
+        document["expression_policy_version"] = contract.expression_policy_version
 
 
 def publication_contract_document(
@@ -257,10 +313,7 @@ def publication_contract_document(
             "publication_projection_version": (contract.publication_projection_version),
             "publication_projection_digest": (contract.publication_projection_digest),
         }
-        if contract.intake_role_contract_version != LEGACY_INTAKE_ROLE_CONTRACT_VERSION:
-            document["intake_role_contract_version"] = contract.intake_role_contract_version
-        if contract.expression_policy_version != LEGACY_USER_ACTUALITY_EXPRESSION_POLICY:
-            document["expression_policy_version"] = contract.expression_policy_version
+        _extend_publication_v3_document(document, contract)
         return document
     return {
         "contract_version": contract.contract_version,
@@ -581,6 +634,11 @@ def build_publication_contract_v3(
     publication_projection_id: str,
     publication_projection_version: int,
     publication_projection_digest: str,
+    account_editorial_resolution: AccountEditorialResolutionV4 | None = None,
+    brand_relevance_state: str | None = None,
+    brand_relevance_evidence: BrandRelevanceEvidenceV1 | None = None,
+    brand_relevance_degraded_reason: str | None = None,
+    demonstration_eligible: bool | None = None,
 ) -> PublicationContractV3:
     contract = PublicationContractV3(
         contract_version=PUBLICATION_CONTRACT_V3_VERSION,
@@ -603,6 +661,11 @@ def build_publication_contract_v3(
         publication_projection_version=publication_projection_version,
         publication_projection_digest=publication_projection_digest,
         intake_role_contract_version=INTAKE_ROLE_CONTRACT_VERSION,
+        account_editorial_resolution=account_editorial_resolution,
+        brand_relevance_state=brand_relevance_state,
+        brand_relevance_evidence=brand_relevance_evidence,
+        brand_relevance_degraded_reason=brand_relevance_degraded_reason,
+        demonstration_eligible=demonstration_eligible,
     )
     _assert_publication_contract_v3(contract)
     return contract
@@ -641,6 +704,43 @@ def _span_from_document(value: object) -> PublicationInputSpanV1:
     return span
 
 
+def _account_permission_from_document(
+    value: Mapping[object, object],
+) -> AccountEditorialPermissionV3:
+    return AccountEditorialPermissionV3(
+        identity=str(value.get("identity") or ""),
+        audience=str(value.get("audience") or ""),
+        attention_order=str(value.get("attention_order") or ""),
+        response_posture=str(value.get("response_posture") or ""),
+        refusals=str(value.get("refusals") or ""),
+        allowed_stance=str(value.get("allowed_stance") or ""),
+        source_profile_id=_optional_string(value.get("source_profile_id")),
+        source_profile_version=_optional_positive_int(value.get("source_profile_version")),
+    )
+
+
+def _platform_direction_from_document(
+    value: Mapping[object, object],
+) -> PlatformDirectionV3:
+    return PlatformDirectionV3(
+        target=str(value["target"]),
+        media_format=str(value["media_format"]),
+        direction_version=str(value["direction_version"]),
+        direction_digest=_required_sha256(value.get("direction_digest")),
+    )
+
+
+def _gateb_contract_fields(
+    value: Mapping[object, object],
+) -> tuple[AccountEditorialResolutionV4 | None, BrandRelevanceEvidenceV1 | None]:
+    from src.shared.account_editorial_lens import account_editorial_resolution_from_document
+
+    raw_resolution = value.get("account_editorial_resolution")
+    resolution = account_editorial_resolution_from_document(raw_resolution) if raw_resolution is not None else None
+    evidence = _brand_relevance_evidence_from_document(value.get("brand_relevance_evidence"))
+    return resolution, evidence
+
+
 def _publication_contract_v3_from_document(
     value: Mapping[object, object],
 ) -> PublicationContractV3:
@@ -650,6 +750,7 @@ def _publication_contract_v3_from_document(
     raw_series = value.get("series_delta")
     raw_platform = value.get("platform_direction")
     raw_brand_use = value.get("brand_context_use")
+    account_resolution, relevance_evidence = _gateb_contract_fields(value)
     if (
         not isinstance(raw_roles, list)
         or not isinstance(raw_permission, Mapping)
@@ -665,6 +766,10 @@ def _publication_contract_v3_from_document(
             contract_version=str(raw_product.get("contract_version") or ""),
             digest=_required_sha256(raw_product.get("digest")),
             supporting_fact_refs=_string_tuple(raw_product.get("supporting_fact_refs")),
+            source_packet_digest=_optional_sha256(raw_product.get("source_packet_digest")),
+            judgment_ref=_optional_string(raw_product.get("judgment_ref")),
+            judgment_version=_optional_string(raw_product.get("judgment_version")),
+            applicability_conditions=_string_tuple_allow_empty(raw_product.get("applicability_conditions", [])),
         )
     series_delta: SeriesDeltaV1 | None = None
     if raw_series is not None:
@@ -689,25 +794,11 @@ def _publication_contract_v3_from_document(
             central_job=str(value["central_job"]),
             audience_payoff=str(value["audience_payoff"]),
             explicit_user_controls=_string_tuple_allow_empty(value.get("explicit_user_controls")),
-            account_editorial_permission=AccountEditorialPermissionV3(
-                identity=str(raw_permission.get("identity") or ""),
-                audience=str(raw_permission.get("audience") or ""),
-                attention_order=str(raw_permission.get("attention_order") or ""),
-                response_posture=str(raw_permission.get("response_posture") or ""),
-                refusals=str(raw_permission.get("refusals") or ""),
-                allowed_stance=str(raw_permission.get("allowed_stance") or ""),
-                source_profile_id=_optional_string(raw_permission.get("source_profile_id")),
-                source_profile_version=_optional_positive_int(raw_permission.get("source_profile_version")),
-            ),
+            account_editorial_permission=_account_permission_from_document(raw_permission),
             frozen_fact_refs=_string_tuple(value.get("frozen_fact_refs")),
             product_decision_basis=product_basis,
             series_delta=series_delta,
-            platform_direction=PlatformDirectionV3(
-                target=str(raw_platform["target"]),
-                media_format=str(raw_platform["media_format"]),
-                direction_version=str(raw_platform["direction_version"]),
-                direction_digest=_required_sha256(raw_platform.get("direction_digest")),
-            ),
+            platform_direction=_platform_direction_from_document(raw_platform),
             media_capability_ref=_required_sha256(value.get("media_capability_ref")),
             prohibited_bindings=_string_tuple(value.get("prohibited_bindings")),
             brand_context_use=BrandContextUseV3(
@@ -720,18 +811,47 @@ def _publication_contract_v3_from_document(
             publication_projection_version=_required_positive_int(value.get("publication_projection_version")),
             publication_projection_digest=_required_sha256(value.get("publication_projection_digest")),
             expression_policy_version=str(
-                value.get("expression_policy_version")
-                or LEGACY_USER_ACTUALITY_EXPRESSION_POLICY
+                value.get("expression_policy_version") or LEGACY_USER_ACTUALITY_EXPRESSION_POLICY
             ),
             intake_role_contract_version=str(
-                value.get("intake_role_contract_version")
-                or LEGACY_INTAKE_ROLE_CONTRACT_VERSION
+                value.get("intake_role_contract_version") or LEGACY_INTAKE_ROLE_CONTRACT_VERSION
             ),
+            account_editorial_resolution=account_resolution,
+            brand_relevance_state=_optional_string(value.get("brand_relevance_state")),
+            brand_relevance_evidence=relevance_evidence,
+            brand_relevance_degraded_reason=_optional_string(value.get("brand_relevance_degraded_reason")),
+            demonstration_eligible=_optional_bool(value.get("demonstration_eligible")),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise DomainError("内容任务冻结的发布责任合同无效") from exc
     _assert_publication_contract_v3(contract)
     return contract
+
+
+def _assert_product_basis_ref(contract: PublicationContractV3) -> None:
+    product_basis = contract.product_decision_basis
+    if product_basis is None:
+        return
+    _required_sha256(product_basis.digest)
+    if (
+        product_basis.contract_version
+        not in {
+            "product-decision-basis-v2",
+            "product-decision-basis-v3",
+        }
+        or not product_basis.supporting_fact_refs
+        or not set(product_basis.supporting_fact_refs) <= set(contract.frozen_fact_refs)
+    ):
+        raise DomainError("商品选择依据没有绑定冻结事实")
+    if product_basis.source_packet_digest is not None:
+        _required_sha256(product_basis.source_packet_digest)
+    if product_basis.contract_version == "product-decision-basis-v3" and (
+        product_basis.source_packet_digest is None
+        or not product_basis.judgment_ref
+        or not product_basis.judgment_version
+        or not product_basis.applicability_conditions
+    ):
+        raise DomainError("P1 商品选择依据没有绑定判断条件")
 
 
 def _assert_publication_contract_v3(contract: PublicationContractV3) -> None:
@@ -779,10 +899,7 @@ def _assert_publication_contract_v3(contract: PublicationContractV3) -> None:
         fact_ref for fact_ref in contract.frozen_fact_refs if fact_ref.startswith("source:user_actuality:")
     }:
         raise DomainError("现实事实跨度没有绑定冻结事实")
-    if any(
-        span.role == "observable_actuality" and span.exact_text in contract.topic
-        for span in contract.input_roles
-    ):
+    if any(span.role == "observable_actuality" and span.exact_text in contract.topic for span in contract.input_roles):
         raise DomainError("Writer 主题不得包含服务端冻结的现实原文")
     available = set(brand_use.available_refs)
     frozen = set(brand_use.frozen_refs)
@@ -790,15 +907,7 @@ def _assert_publication_contract_v3(contract: PublicationContractV3) -> None:
     displayed = set(brand_use.displayed_refs)
     if not displayed <= consumed <= frozen <= available:
         raise DomainError("品牌资料消费状态越界")
-    product_basis = contract.product_decision_basis
-    if product_basis is not None:
-        _required_sha256(product_basis.digest)
-        if (
-            product_basis.contract_version != "product-decision-basis-v2"
-            or not product_basis.supporting_fact_refs
-            or not set(product_basis.supporting_fact_refs) <= set(contract.frozen_fact_refs)
-        ):
-            raise DomainError("商品选择依据没有绑定冻结事实")
+    _assert_product_basis_ref(contract)
     series = contract.series_delta
     if series is not None and (
         series.contract_version != "series-episode-contract-v1"
@@ -809,6 +918,113 @@ def _assert_publication_contract_v3(contract: PublicationContractV3) -> None:
         or (series.series_position > 1 and not series.prior_judgments)
     ):
         raise DomainError("内容任务冻结的系列任务无效")
+    _assert_account_editorial_binding(contract)
+    _assert_brand_relevance_binding(contract)
+
+
+def _assert_account_editorial_binding(contract: PublicationContractV3) -> None:
+    resolution = contract.account_editorial_resolution
+    if resolution is None:
+        return
+    from src.shared.account_editorial_lens import assert_account_editorial_resolution
+
+    assert_account_editorial_resolution(resolution)
+    permission = contract.account_editorial_permission
+    resolved = resolution.editorial_permission
+    if (
+        permission.identity != resolved.identity
+        or permission.audience != resolved.audience
+        or permission.attention_order != resolved.attention_order
+        or permission.response_posture != resolved.response_posture
+        or permission.refusals != resolved.refusals
+        or permission.allowed_stance != resolved.allowed_stance
+        or permission.source_profile_id != resolved.source_profile_id
+        or permission.source_profile_version != resolved.source_profile_version
+    ):
+        raise DomainError("账号语义解析结果与发布权限不一致")
+
+
+def _assert_brand_relevance_binding(contract: PublicationContractV3) -> None:
+    if contract.brand_relevance_state is None:
+        if any(
+            value is not None
+            for value in (
+                contract.brand_relevance_evidence,
+                contract.brand_relevance_degraded_reason,
+                contract.demonstration_eligible,
+            )
+        ):
+            raise DomainError("品牌关联合同不完整")
+        return
+    if contract.brand_relevance_state == "applied":
+        evidence = contract.brand_relevance_evidence
+        if (
+            evidence is None
+            or contract.brand_relevance_degraded_reason is not None
+            or contract.demonstration_eligible is not True
+        ):
+            raise DomainError("品牌关联合同不一致")
+        assert_brand_relevance_evidence(evidence)
+        return
+    if contract.brand_relevance_state != "degraded" or (
+        contract.brand_relevance_evidence is not None
+        or not contract.brand_relevance_degraded_reason
+        or contract.demonstration_eligible is not False
+    ):
+        raise DomainError("品牌关联合同不一致")
+
+
+def _brand_relevance_evidence_document(
+    evidence: BrandRelevanceEvidenceV1 | None,
+) -> dict[str, object] | None:
+    if evidence is None:
+        return None
+    return {
+        "contract_version": evidence.contract_version,
+        "path_family": evidence.path_family,
+        "source_object_type": evidence.source_object_type,
+        "source_id": evidence.source_id,
+        "source_version": evidence.source_version,
+        "source_digest": evidence.source_digest,
+        "actual_consumed_refs": list(evidence.actual_consumed_refs),
+        "organization_ref": evidence.organization_ref,
+        "authorization_ref": evidence.authorization_ref,
+        "media_ref": evidence.media_ref,
+    }
+
+
+def _brand_relevance_evidence_from_document(
+    value: object,
+) -> BrandRelevanceEvidenceV1 | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise DomainError("品牌关联证据无效")
+    path = value.get("path_family")
+    if path not in BRAND_RELEVANCE_PATHS:
+        raise DomainError("品牌关联证据无效")
+    evidence = BrandRelevanceEvidenceV1(
+        contract_version=str(value.get("contract_version") or ""),
+        path_family=cast(BrandRelevancePath, path),
+        source_object_type=str(value.get("source_object_type") or ""),
+        source_id=str(value.get("source_id") or ""),
+        source_version=str(value.get("source_version") or ""),
+        source_digest=_required_sha256(value.get("source_digest")),
+        actual_consumed_refs=_string_tuple(value.get("actual_consumed_refs")),
+        organization_ref=_optional_string(value.get("organization_ref")),
+        authorization_ref=_optional_string(value.get("authorization_ref")),
+        media_ref=_optional_string(value.get("media_ref")),
+    )
+    assert_brand_relevance_evidence(evidence)
+    return evidence
+
+
+def _optional_bool(value: object) -> bool | None:
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise DomainError("内容任务冻结的发布责任合同无效")
+    return value
 
 
 def _required_sha256(value: object) -> str:
