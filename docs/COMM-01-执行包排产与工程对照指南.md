@@ -1019,3 +1019,21 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 - alembic 回冻（45 为 Gate D 基线 schema；确需新迁移→停+报）；frontend 代码冻结（允许
   运行作浏览器验收）。媒体母版二进制不入 git，仓库只登记台账与 checksum。
 - 执行侧终态只允许 `GATE-D IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`。
+
+### Gate D 操作者前置的 founder 裁决与监理代办记录（2026-08-08）
+
+- **founder 三项裁决（原话要点）**：① 26 条视频由监理直接下载至指定目录；② 「模型密钥
+  可以授权执行 AI 读取 .env」——显式授权执行侧读取 `.env` 注入模型密钥，supersede 此前
+  「密钥只允许操作者会话外预先 export、脚本禁读 .env」条款（适用 Gate D 及后续同类；
+  纪律保留：不打印值、不写入证据、不提交、密钥不回显）；③ ffmpeg 由监理确认。
+- **监理执行情况**：ffmpeg 4.4.2 / ffprobe 可用（WSL Ubuntu 22.04）。`.env` 键名核查
+  （只看名不看值）：现有 `DASHSCOPE_API_KEY`、`QWEN_REVIEWER_API_BASE_URL`、
+  `QWEN_REVIEWER_MODEL`；**缺代码消费面要求的 `DEEPSEEK_API_BASE_URL/KEY/MODEL`**
+  （`src/gateway/api/settings.py` 必需键、生产 `/etc/diyu/app.env` 实有）。监理尝试从生产
+  复制该三行至本地 `.env` 时被权限分类器拦截——**采认拦截**（密钥值转移应由人执行），
+  改为 founder 亲手执行一条追加命令补齐；执行侧开工前置自检将校验三键存在。
+  ECS 登录不在本地 `.env`（走既有 `~/.ssh` 密钥），Gate D 禁碰生产条款不变。
+- 26 条原片由监理经 gdown 下载至 `/home/faye/workspace/diyu-formal-init/var/media-staging/`
+  （untracked），完成后逐一核对台账 declared_identifier 并留 SHA256 清单，结果在
+  Prompt 5 rev2 签发件登记。
+- Prompt 5 原签发件（基线 239634c）作废，以含本记录的主线提交为 rev2 基线重签。
