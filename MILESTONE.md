@@ -18,6 +18,7 @@
 - 2026-08-08：**Gate A 监理复验 PASS**，状态 `GATE-A VERIFIED_BY_SUPERVISOR · AWAITING_FOUNDER_SIGNOFF`；等待 founder 对 manifest digest `14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06` 完成签署后置 COMPLETE（详见文末监理复验块与治理日志 §六）。
 - 2026-08-08：founder 签署完成（`ATT-GATEA-20260808-01`），**`GATE-A COMPLETE · PASS`**（监理落款）。当前动作：**Prompt 3（Gate B）待签发**。
 - 2026-08-08：Prompt 3（Gate B · 账号语义正向消费与七族品牌关联）**已签发**；执行分支 `exe/brand-matrix-b`，模型配额 0、生产接触 0；基线为签发记录提交（SHA 以 chat 签发件为准）。
+- 2026-08-08：**`GATE-B COMPLETE · PASS`**（监理落款）——监理亲跑全量 984/2 通过、语义断言与 CI 四查独立全绿；网关两文件写面扩展判定为签发件列漏并采认（含新增画像逐字复制红线）；隐私断言修正审定未弱化。Prompt 4（Gate C）**已签发**：执行分支 `exe/brand-matrix-c`，解冻 alembic（仅增量式、回滚实证入门），frontend 继续冻结，模型配额 0。
 
 > **口径声明（2026-08-07）**：以下 COMM-01 段为 2026-08-06 立项时的历史登记；其
 > 「当前里程碑」表述已被上方 BRAND-MATRIX-01 立项与 D10 暂停裁决 supersede，其余

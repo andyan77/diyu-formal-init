@@ -911,3 +911,39 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 - 下一动作：监理独立复验 Gate B；PASS 后才可签发 Gate C。
 
 <!-- BRAND-MATRIX-01-GATEB-CLOSEOUT-END -->
+
+<!-- BRAND-MATRIX-01-GATEB-SUPERVISOR-VERDICT-START -->
+
+### Gate B 监理复验终裁（2026-08-08）
+
+> 状态：**`GATE-B COMPLETE · PASS`**（监理落款；Gate B 无 founder 签署前置）。
+
+- **监理独立重测**：全量套件监理亲跑 `984 passed / 2 skipped`、退出码 0（短路径自带
+  本地 PG；含 26 个 Gate B 新测试，958+26 数字自洽）；`assert_gateb_semantics.py` 实跑
+  `products=5 reasons=5 paths=7 vertical=1 p1_paths=3`；Ruff/mypy 对 `scripts/gateb`
+  全绿；CI run `31258480200` 经 `gh api` 直查四查全绿（workflow_dispatch / headSha==
+  `b45bb3d` / success / 19 步非成功 0）；治理两文件 append-only（14/0、32/0）。
+- **语义抽验**：`_LENS_PRODUCTS` 精确等于 ADR-013 五键；V1—V3 常量与数据类原样保留；
+  五个 degraded reason 枚举与报告逐字一致；七族类型化来源表齐备、后三族缺资格 fail-closed；
+  同种子测试断言 topic/frozen_fact_refs/central_job/platform_direction 不变且 ≥2 语义
+  维度实变，画像身份不得出现在 topic。
+- **两项裁决**：① `src/tool/llm_gateway/{deepseek,stub}.py` 超出签发件列举写面——判定为
+  **签发件列漏**（G9 版本贯穿必经适配层），改动经逐行审查为 P1 依据接入、lens 结构化
+  贯穿、外加**新增"Writer 逐字复制画像即抛错"运行时红线**，采认；执行侧已在 scope 断言
+  中透明登记该扩展。② `b45bb3d`"隐私断言自扫描假阳性修正"经审**未弱化门禁**——仅剔除
+  正则字面量行，扫描器自身源码其余部分仍在扫描面内。
+- 模型调用累计 0；生产接触 0；alembic/frontend 零改动实证。
+- 下一动作：签发 Prompt 4（Gate C · 组织作用域、生命周期、冲突与人物授权）。
+
+<!-- BRAND-MATRIX-01-GATEB-SUPERVISOR-VERDICT-END -->
+
+### Prompt 4（Gate C）签发记录（2026-08-08）
+
+- 基线：本签发记录提交自身（SHA 以 chat 签发件载明值为准）；执行分支 `exe/brand-matrix-c`；
+  模型调用配额 **0**；生产接触 **0**；本地 PG 允许。
+- 监理签发前亲核锚点：`postgres_repository.py` 读路径仍硬编码 `visibility_scope="brand_all"`
+  （577 行附近，另 375/1768/1876 行 SQL 侧默认）；迁移头版本 `20260817_44_organization_lifecycle`
+  与生产 schema 一致，Gate C 新迁移自 45 起。
+- **本 Gate 解冻 alembic/**（Gate C 必须为投影补组织维度）：仅限**增量式**迁移（新表/新列/
+  新索引），禁破坏性 DDL，upgrade/downgrade 成对，回滚实证纳入完成门；frontend 继续冻结。
+- 执行侧终态只允许 `GATE-C IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`。
