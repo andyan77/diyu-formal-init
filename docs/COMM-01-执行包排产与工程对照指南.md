@@ -633,3 +633,17 @@ failed=0 + 新增 skip=0（不硬编码通过数）。函数预算 = EXE-01R 同
   门店知识计数以 8+7+6+5+5 为准，MANIFEST"30 条"待 Gate A 纠正；⑤停止条件收敛为四类
   （业务目标变／降隔离安全／超 300 次模型调用／无法安全回退），其余问题执行侧在当前 Gate
   内自主修复。**Prompt 1（S0·基线归一与历史悬账清零）已由监理签发**，基线钉本提交。
+- **Prompt 1 守护审查裁定与 rev2 签发（2026-08-08）**：远程守护审查
+  `CONDITIONAL_PASS / REVISION_REQUIRED`，六项修正经监理逐条独立核验后**全部采纳**：
+  ①S0 状态口径——执行侧只登记 `IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`，
+  四悬账由"预裁定核验成立"待监理复验终裁；②RLS 反证与显式谓词安全纪律拆分（反证
+  查询不得带 tenant 条件，仅切 `app.tenant_id`，以 `diyu_app` 角色执行）；③"21 条
+  任务"绑定私有证据冻结 task ID 批次逐 ID 对账，当前总量仅旁证；④复核判定改三态
+  `VERIFIED / HISTORICAL_ONLY / CONTRADICTED`，现场前进不反证历史报告为假，完成门
+  要求零未处置 CONTRADICTED；⑤镜像删除加不可变 dry-run allowlist、全量 digest 标识、
+  含停止容器与证据引用检查、删后回验（当前/回退为逻辑类别可同像）；⑥断言与 CI 命令
+  具体化——监理实证 `make exe01-gates`/`make exev0-gates`/`.github/workflows/ci.yml`
+  真实存在，CI dispatch 必须 `--ref exe/brand-matrix-s0` 防默认分支假绿；并采信审查
+  预侦察事实（试合并零冲突、仅 21 个 EXE-V1 文件、无 src 语义改动；`scripts/exev1/`
+  连同 secrets 门在 d7f90df 上、合并后才可用，S0 新增文档需专用 secrets 扫描）。
+  **Prompt 1 rev2 签发，基线钉本提交。**
