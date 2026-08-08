@@ -977,3 +977,45 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 - 下一动作：监理独立复验 Gate C；PASS 前不得签发后续 Gate。
 
 <!-- BRAND-MATRIX-01-GATEC-CLOSEOUT-END -->
+
+<!-- BRAND-MATRIX-01-GATEC-SUPERVISOR-VERDICT-START -->
+
+### Gate C 监理复验终裁（2026-08-08）
+
+> 状态：**`GATE-C COMPLETE · PASS`**（监理落款）。
+
+- **监理独立重测**：全量套件亲跑 `1002 passed / 2 skipped`、退出码 0（自带本地 PG 全新
+  建库，实测含 44→45 迁移与全部 Gate C 数据库测试）；`assert_gatec_semantics.py` 实跑
+  `scope_fields=7 rls_tables=6 conflict=structured authorization=lineage
+  observation=formal_source_blocked`；Ruff/mypy 对 `scripts/gatec` 全绿；CI run
+  `31262965592` 经 `gh api` 四查全绿；治理两文件 append-only（18/0、30/0）。
+- **迁移审查**：`20260818_45` 逐行审——全部增量式；六新表齐备 FORCE RLS + 租户策略 +
+  append-only 触发器；预留状态机在触发器层焊死（reserved→released/consumed、身份不可变、
+  非法迁移拒绝）；「观察层不得成为正式来源」写入 DDL CHECK；存量条目按 V1/brand_all/
+  legacy_compatibility 显式回填语义。
+- **读路径抽验**：`postgres_repository.py` 旧硬编码清零；`gatec_queries.py` 的
+  `brand_all` 为三分支条件树一支（V2 条目须过生效窗 + 组织后代校验）；其余 `brand_all`
+  残留均在资产/陈列/就绪等既有子系统（不属本 Gate 语义面，留待后续里程碑）。
+- **三项裁决**：① **downgrade fail-closed 偏离采认为正确**——签发件「回滚往返」与
+  「禁删数据」自相矛盾，且规范 Gate E 明定「镜像回退不降级数据库」；执行侧选择显式拒绝
+  降级 + 44 兼容夹具证旧读取，比签发件字面要求更安全，签发件该条就此 supersede。程序
+  注记：此类指令内部矛盾应先停抛叉再实现（执行侧已在报告透明披露，不计违规）。
+  ② `test_ux03_gate_d.py` 修改经查为**收紧**（schema 头版本断言 44→45、FORCE RLS 表数
+  13→19 恰含六新表）。③ 剩余 `brand_all` 残留判定为范围外既有面，不构成 G1 缺口。
+- 模型调用累计 0；生产接触 0；frontend 零改动实证。
+- 下一动作：签发 Prompt 5（Gate D · 隔离库完整预演与媒体母版完成）。
+
+<!-- BRAND-MATRIX-01-GATEC-SUPERVISOR-VERDICT-END -->
+
+### Prompt 5（Gate D）签发记录（2026-08-08）
+
+- 基线：本签发记录提交自身（SHA 以 chat 签发件载明值为准）；执行分支 `exe/brand-matrix-d`；
+  隔离环境全量预演，生产接触 **0**。
+- **本 Gate 首次开放模型调用**：建议 ≤80 次 provider request；Gate D+E 合计绝对上限 300、
+  240 预警；逐次记 ledger；禁随机重跑、择优、跨 SHA 拼接。密钥只允许操作者会话外预先
+  export，脚本只读进程环境，禁读 `.env`。
+- 操作者前置（founder 侧，签发件 §0 列明）：26 条原始视频下载至本地暂存目录；LLM 密钥
+  会话外注入；ffmpeg 可用。
+- alembic 回冻（45 为 Gate D 基线 schema；确需新迁移→停+报）；frontend 代码冻结（允许
+  运行作浏览器验收）。媒体母版二进制不入 git，仓库只登记台账与 checksum。
+- 执行侧终态只允许 `GATE-D IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`。
