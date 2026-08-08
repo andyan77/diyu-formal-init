@@ -21,6 +21,7 @@
 - 2026-08-08：**`GATE-B COMPLETE · PASS`**（监理落款）——监理亲跑全量 984/2 通过、语义断言与 CI 四查独立全绿；网关两文件写面扩展判定为签发件列漏并采认（含新增画像逐字复制红线）；隐私断言修正审定未弱化。Prompt 4（Gate C）**已签发**：执行分支 `exe/brand-matrix-c`，解冻 alembic（仅增量式、回滚实证入门），frontend 继续冻结，模型配额 0。
 - 2026-08-08：**`GATE-C COMPLETE · PASS`**（监理落款）——监理亲跑全量 1002/2 通过（含 44→45 实迁移）、迁移逐行审（六新表 FORCE RLS+append-only 触发器+预留状态机）、CI 四查独立全绿；downgrade fail-closed 偏离采认为正确解释（规范 Gate E 镜像回退不降级数据库），签发件矛盾条款 supersede。Prompt 5（Gate D）**已签发**：隔离全量预演+26 母版；首开模型调用（≤80 建议 / D+E 绝对 300 / 240 预警）；生产接触 0。
 - 2026-08-08：founder 三项裁决——监理代办视频下载；**显式授权执行侧读 `.env` 注入模型密钥**（supersede 会话外 export 条款，禁打印/禁提交不变，ECS 值 Gate D 禁用）；ffmpeg 4.4.2 已确认。发现 `.env` 缺 `DEEPSEEK_*` 三键，由 founder 亲手一条命令自生产补齐（分类器拦截 AI 转移密钥值，采认）。Prompt 5 将以 rev2 重签。
+- 2026-08-08：外部审查经监理逐条实测采纳——**Gate C 勘正为 `MECHANISM COMPLETE · PASS`**（按签发范围如约交付；正式管理写入/消费接线移交 Gate D 前置子门 D0，缺口归因监理签发范围）；**Prompt 5 rev3 签发**（rev2 作废）：D0 定向解冻 contracts/repository/TenantAdminApp、账号平台载体、31 条实消费证据、母版三态资格、先冻结 SHA+CI 后才准模型调用、.env 精确读取三键。执行侧已被 founder 暂停，草稿保留禁 reset，模型调用累计 0。
 
 > **口径声明（2026-08-07）**：以下 COMM-01 段为 2026-08-06 立项时的历史登记；其
 > 「当前里程碑」表述已被上方 BRAND-MATRIX-01 立项与 D10 暂停裁决 supersede，其余

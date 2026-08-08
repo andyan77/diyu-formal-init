@@ -1037,3 +1037,27 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   （untracked），完成后逐一核对台账 declared_identifier 并留 SHA256 清单，结果在
   Prompt 5 rev2 签发件登记。
 - Prompt 5 原签发件（基线 239634c）作废，以含本记录的主线提交为 rev2 基线重签。
+
+### Gate C 终裁范围勘正与 Prompt 5 rev3 签发记录（2026-08-08，监理）
+
+- **外部审查采纳（founder 转呈，监理逐条实测后裁决）**：四项代码证据全部属实——
+  ① `contracts.py` 正式条目请求仅旧四字段，无法表达 V2 条目级作用域/生命周期/权威/claim；
+  ② `workbench_repository.create_brand_publication_candidate` 仍 V1 写法；
+  ③ `TenantAdminApp.tsx` 仅提交旧四字段；④ Gate C 测试以裸 SQL 插 V2 数据。
+  结论成立：**Gate C 证明了机制，未证明正式管理员路径**。
+- **Gate C 终裁勘正（append-only，不改原记录）**：`GATE-C COMPLETE · PASS` 的范围口径
+  勘正为 **`MECHANISM COMPLETE · PASS`**——按 Prompt 4 签发范围如约交付（该签发件本就
+  未含管理端接线要求，缺口归因于监理签发范围而非执行侧假绿）；正式写入与消费接线
+  移交 Gate D 强制前置子门 **D0**。不回滚合并。剧本 1 本要求管理端建 F/J/G，D0 为其
+  必要前置而非范围膨胀。
+- **rev2 六项修正裁决**：31 条须证投影+Writer 实消费（采纳）；账号须建合同载明的
+  douyin/xiaohongshu/wechat_video 平台载体（采纳，凍結合同实证）；授权须配套
+  qualification（采纳）；母版十项门 PASS/FAIL/QUARANTINED 三态、证据不足隔离保留
+  不假绿（采纳）；**先冻结唯一 SHA + CI 绿后才允许模型调用**（采纳，监理补充：冻结后
+  允许 docs-only 的 ledger/审阅包/治理提交，不构成跨 SHA 拼接）；.env 改精确解析三个
+  DEEPSEEK_* 键、不得 source 整文件（采纳，属 founder 授权范围内的收窄）。
+- **Prompt 5 rev3 签发**：rev2 作废。执行分支 exe/brand-matrix-d 已自 `bd5a6bf` 建出
+  且含未提交草稿——founder 已终止其执行，草稿保留、禁 reset；基线校验改为
+  merge-base(exe/brand-matrix-d, 主线)==`bd5a6bf`，主线本勘正后的治理提交不需并入执行分支。
+  D0 定向解冻：API contracts / repository·service / TenantAdminApp 及对应测试（禁无关重构）。
+  模型调用在 D0+导入+媒体资格预检+全工程门+CI 冻结之前一律禁止；当前模型调用累计 0。
