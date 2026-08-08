@@ -33,6 +33,7 @@ _FROZEN_PATHS = (
     "scripts/gatea",
     "docs/项目记忆.md",
 )
+_SELF_PATH = "scripts/gateb/assert_gateb_no_secrets.py"
 
 
 def _run(root: Path, *args: str) -> str:
@@ -45,12 +46,21 @@ def _run(root: Path, *args: str) -> str:
     ).stdout
 
 
+def _added_content(diff: str) -> str:
+    current_path = ""
+    additions: list[str] = []
+    for line in diff.splitlines():
+        if line.startswith("+++ b/"):
+            current_path = line[6:]
+        elif line.startswith("+") and not line.startswith("+++") and current_path != _SELF_PATH:
+            additions.append(line[1:])
+    return "\n".join(additions)
+
+
 def main() -> None:
     root = Path(__file__).resolve().parents[2]
     diff = _run(root, "git", "diff", "--unified=0", "--no-ext-diff", EXPECTED_BASE_SHA)
-    added_lines = "\n".join(
-        line[1:] for line in diff.splitlines() if line.startswith("+") and not line.startswith("+++")
-    )
+    added_lines = _added_content(diff)
     untracked = {
         entry[3:]
         for entry in _run(
@@ -65,9 +75,12 @@ def main() -> None:
     untracked_text = "\n".join(
         (root / path).read_text(encoding="utf-8")
         for path in sorted(untracked & _changed_paths(root))
-        if path != "scripts/gateb/assert_gateb_no_secrets.py" and (root / path).is_file()
+        if path != _SELF_PATH and (root / path).is_file()
     )
-    candidate = f"{added_lines}\n{untracked_text}"
+    scanner_source = "\n".join(
+        line for line in (root / _SELF_PATH).read_text(encoding="utf-8").splitlines() if "re.compile(" not in line
+    )
+    candidate = f"{added_lines}\n{untracked_text}\n{scanner_source}"
     hits: list[str] = []
     for pattern in (*_SECRET_PATTERNS, *_PRIVATE_PATH_PATTERNS):
         match = pattern.search(candidate)
