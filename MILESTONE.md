@@ -12,6 +12,7 @@
 - 2026-08-08：方案 v4 定稿，执行包规范真源落盘
   `docs/BRAND-MATRIX-01/BRAND-MATRIX-01执行包.md`（REVISION-1）；结构 S0＋Gate A—E＋
   主控终审，六条执行 Prompt；当前动作：**Prompt 1（S0）已签发待执行**。
+- 2026-08-08：`S0 IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`；执行侧已完成基线归一、四悬账证据绑定核验、遗留镜像处置和盲测托管落盘，等待监理复验终裁。
 
 > **口径声明（2026-08-07）**：以下 COMM-01 段为 2026-08-06 立项时的历史登记；其
 > 「当前里程碑」表述已被上方 BRAND-MATRIX-01 立项与 D10 暂停裁决 supersede，其余

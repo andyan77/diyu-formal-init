@@ -647,3 +647,64 @@ failed=0 + 新增 skip=0（不硬编码通过数）。函数预算 = EXE-01R 同
   预侦察事实（试合并零冲突、仅 21 个 EXE-V1 文件、无 src 语义改动；`scripts/exev1/`
   连同 secrets 门在 d7f90df 上、合并后才可用，S0 新增文档需专用 secrets 扫描）。
   **Prompt 1 rev2 签发，基线钉本提交。**
+
+<!-- BRAND-MATRIX-01-S0-CLOSEOUT-START -->
+
+### S0 收口记录（执行侧核验稿，2026-08-08）
+
+> 状态：**`S0 IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`**。以下均为证据绑定的
+> 执行侧核验记录，全部待监理复验确认；`COMPLETE / PASS` 只能由监理终裁落款。
+
+#### 1. 基线归一与门控
+
+- 远端权威主线 fetch 后为 `a65c4e2fe4b05bebb4c036fac5c81758d683d734`；执行线
+  `d7f90dffaf6a79ec4a5144818fed5a4099c459a1` 零冲突合入。
+- merge commit：`ad8d471fb0a042952f3d7fc5fd16317fcee75872`。净增量严格为 21 个
+  EXE-V1 文件（15 文档、6 脚本），无 `src/`、前端、migration 或测试语义改动；冲突处置为无。
+- 合并后全量本地门：`git diff --check` 通过；pytest 958 passed / 2 skipped；EXE-V0 3/3；
+  EXE-01 9/9；前端 lint/typecheck/test/build；EXE-V1 secrets；Ruff；mypy 全部退出码 0。
+
+#### 2. S0-2 三态明细
+
+| 项 | 判定 | 核验摘要 | 私有证据锚点 |
+|---|---|---|---|
+| EXE-V1 原证据完整性 | `VERIFIED` | 34/34 checksum 全量复算成功 | `01_exev1_sha256_check.txt` |
+| 生产运行面 | `VERIFIED` | 运行代码身份一致、容器 digest 与冻结 digest 一致，三端点 200，schema `20260817_44` | `03_runtime_readonly.txt`、`05_schema_readonly.txt` |
+| 冻结 21 任务批次 | `VERIFIED` | 21/21 逐 ID 存在，抽样 3/3 为 `server_assembled`；当前任务总量 324 仅作旁证 | `07_frozen_batch_result.txt`、`11_current_tenant_task_count_result.txt` |
+| RLS 反证 | `VERIFIED` | `diyu_app` 非超管、无 BYPASS、RLS 生效；无租户谓词同 SQL 只切上下文得到 9→0 | `08_rls_counterproof.sql`、`09_rls_counterproof_result.txt` |
+| 历史 CI | `VERIFIED` | run `31207012048` 为 `workflow_dispatch`，head SHA 等于部署实现，success，19 步非成功数 0 | `12_historical_ci_run.json`、`13_historical_ci_jobs.json` |
+
+汇总：`VERIFIED=5`、`HISTORICAL_ONLY / SUPERSEDED=0`、`CONTRADICTED=0`；无未处置矛盾。
+
+#### 3. P0-D1 核验记录
+
+**预裁定核验成立（附 S0-2d 证据锚点）· 待监理复验确认。** P0 的 `false` 来自数据库
+超管视角；应用真实角色 `diyu_app` 实测 `rolsuper=false`、`rolbypassrls=false`、
+`row_security_active=true`，无租户谓词反证为 9→0。执行侧支持改判为
+**「观测 · 测量口径错误」**，最终改判由监理落款；原 P0 登记保持原文并已追加核验注记。
+
+#### 4. E1/E2 核验记录
+
+- **E1：事实核对无误 · 待监理复验确认。** 授权内 44 个无 binding `diyu-saas` 镜像
+  回收支持【追认】；扩大到 `diyu-tenant01-wip` 的越授权尝试支持【驳回】。护栏已拦、已停手，
+  影响面为零数据损失、扩权未遂、零运行容器影响。
+- **E2：事实核对无误 · 待监理复验确认。** 658MB 纯构建缓存回收结果支持【追认】，同时
+  登记一次「先做后报」程序违规；生产端任何清理动作继续执行先报、冻结范围、再做。
+
+#### 5. 镜像处置摘要
+
+- 删除前 55 个唯一镜像、20 个容器（含停止容器）；当前运行、回退锚、最终候选三逻辑类别齐备。
+- 17 个 `diyu-tenant01-wip` 经不可变 dry-run allowlist 逐项证明容器、binding、部署/回退、
+  systemd 与私有证据完整 digest 零引用。allowlist SHA-256 为
+  `a4511397b1e046dec51e22ccc5b168ecdbc610823510eca15ff5359dcd570c1c`。
+- 仅以完整 image ID 精确删除 allowlist 内 17 个镜像；删除后唯一镜像 38、WIP 剩余 0。
+- 两个 `diyu-tenant01-final` 因 `final` 语义承重且不在已接受的 17 镜像悬账内，按存疑保留。
+- 删除后当前与回退镜像 inspect 成功，运行容器 digest 未变，三端点 200；生产应用与数据库
+  无写入，模型调用为 0。
+
+#### 6. 执行侧状态
+
+四笔悬账已形成 4/4 证据绑定核验记录；密封盲测托管规则与空登记表已就位。执行侧仅登记
+`S0 IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`，等待监理复验终裁。
+
+<!-- BRAND-MATRIX-01-S0-CLOSEOUT-END -->
