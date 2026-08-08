@@ -8,7 +8,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, TypeAlias, cast
 
 from src.shared.errors import DomainError
+from src.shared.publication_scope import (
+    authorization_contract_document,
+    authorization_contract_from_document,
+)
 from src.shared.task_value_assembly import (
+    BRAND_RELEVANCE_CONTRACT_VERSION,
     BRAND_RELEVANCE_PATHS,
     BrandRelevanceEvidenceV1,
     BrandRelevancePath,
@@ -979,7 +984,7 @@ def _brand_relevance_evidence_document(
 ) -> dict[str, object] | None:
     if evidence is None:
         return None
-    return {
+    document: dict[str, object] = {
         "contract_version": evidence.contract_version,
         "path_family": evidence.path_family,
         "source_object_type": evidence.source_object_type,
@@ -991,6 +996,18 @@ def _brand_relevance_evidence_document(
         "authorization_ref": evidence.authorization_ref,
         "media_ref": evidence.media_ref,
     }
+    if evidence.contract_version != BRAND_RELEVANCE_CONTRACT_VERSION:
+        document.update(
+            {
+                "involves_person": evidence.involves_person,
+                "authorization": (
+                    authorization_contract_document(evidence.authorization)
+                    if evidence.authorization is not None
+                    else None
+                ),
+            }
+        )
+    return document
 
 
 def _brand_relevance_evidence_from_document(
@@ -1014,6 +1031,12 @@ def _brand_relevance_evidence_from_document(
         organization_ref=_optional_string(value.get("organization_ref")),
         authorization_ref=_optional_string(value.get("authorization_ref")),
         media_ref=_optional_string(value.get("media_ref")),
+        involves_person=_optional_bool(value.get("involves_person")) or False,
+        authorization=(
+            authorization_contract_from_document(value["authorization"])
+            if value.get("authorization") is not None
+            else None
+        ),
     )
     assert_brand_relevance_evidence(evidence)
     return evidence

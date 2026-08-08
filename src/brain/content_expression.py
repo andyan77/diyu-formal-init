@@ -522,6 +522,7 @@ def snapshot_document(
     product_value_contract: ProductValueContract | None = None,
     brand_context_packet: BrandContextPacket | None = None,
     publication_contract: PublicationContract | None = None,
+    task_context_as_of: str | None = None,
 ) -> dict[str, object]:
     """Freeze the conditions this task was compiled from.
 
@@ -598,6 +599,7 @@ def snapshot_document(
             publication_contract_digest(publication_contract) if publication_contract is not None else None
         ),
         "business_data_kind": business_data_kind,
+        **({"task_context_as_of": task_context_as_of} if task_context_as_of is not None else {}),
         "brand_reference_context": list(brand_reference_context),
         "brand_context_packet": (
             brand_context_packet_document(

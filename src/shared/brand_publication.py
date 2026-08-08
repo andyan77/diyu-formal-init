@@ -11,6 +11,7 @@ from src.shared.types import (
     BrandContextPacket,
     BrandContextPacketV2,
     BrandContextPacketV3,
+    BrandContextSegment,
     ContentProduct,
 )
 
@@ -105,33 +106,48 @@ def brand_context_packet_v3_digest(
     ).hexdigest()
 
 
+def _segment_document(segment: BrandContextSegment, *, include_text: bool) -> dict[str, object]:
+    document: dict[str, object] = {
+        "segment_id": segment.segment_id,
+        "source_document_id": segment.source_document_id,
+        "source_document_version_id": segment.source_document_version_id,
+        "source_id": segment.source_id,
+        "source_version": segment.source_version,
+        "semantic_kind": segment.semantic_kind,
+        "evidence_level": segment.evidence_level,
+        "visibility_scope": segment.visibility_scope,
+        "digest": segment.digest,
+    }
+    if segment.source_digest is not None:
+        document["source_digest"] = segment.source_digest
+    if segment.source_document_digest is not None:
+        document["source_document_digest"] = segment.source_document_digest
+    if segment.applicability:
+        document["applicability"] = list(segment.applicability)
+    if segment.scope_contract_version == "publication-item-scope-v2":
+        document.update(
+            {
+                "scope_contract_version": segment.scope_contract_version,
+                "scope_organization_ids": list(segment.scope_organization_ids),
+                "effective_at": segment.effective_at,
+                "expires_at": segment.expires_at,
+                "authority_class": segment.authority_class,
+                "semantic_subject_type": segment.semantic_subject_type,
+                "semantic_subject_id": segment.semantic_subject_id,
+                "claim_key": segment.claim_key,
+            }
+        )
+    if include_text:
+        document["exact_text"] = segment.exact_text
+    return document
+
+
 def brand_context_packet_document(
     packet: BrandContextPacket,
     *,
     include_text: bool,
 ) -> dict[str, object]:
-    segments: list[dict[str, object]] = []
-    for segment in packet.segments:
-        document: dict[str, object] = {
-            "segment_id": segment.segment_id,
-            "source_document_id": segment.source_document_id,
-            "source_document_version_id": segment.source_document_version_id,
-            "source_id": segment.source_id,
-            "source_version": segment.source_version,
-            "semantic_kind": segment.semantic_kind,
-            "evidence_level": segment.evidence_level,
-            "visibility_scope": segment.visibility_scope,
-            "digest": segment.digest,
-        }
-        if segment.source_digest is not None:
-            document["source_digest"] = segment.source_digest
-        if segment.source_document_digest is not None:
-            document["source_document_digest"] = segment.source_document_digest
-        if segment.applicability:
-            document["applicability"] = list(segment.applicability)
-        if include_text:
-            document["exact_text"] = segment.exact_text
-        segments.append(document)
+    segments = [_segment_document(segment, include_text=include_text) for segment in packet.segments]
     result: dict[str, object] = {
         "packet_version": packet.packet_version,
         "packet_digest": packet.packet_digest,

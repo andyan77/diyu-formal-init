@@ -11,6 +11,7 @@ from src.shared.publication_contract import (
     IntakeSpanRole,
     PublicationContract,
 )
+from src.shared.publication_scope import AuthorizationContractV1
 
 if TYPE_CHECKING:
     from src.shared.creative_kernel import CreativeKernel
@@ -86,6 +87,28 @@ class BrandContextSegment:
     source_digest: str | None = None
     source_document_digest: str | None = None
     applicability: tuple[str, ...] = ()
+    scope_contract_version: str = "publication-item-scope-v1"
+    scope_organization_ids: tuple[str, ...] = ()
+    effective_at: str | None = None
+    expires_at: str | None = None
+    authority_class: str = "legacy_compatibility"
+    semantic_subject_type: str | None = None
+    semantic_subject_id: str | None = None
+    claim_key: str | None = None
+
+
+@dataclass(frozen=True)
+class BrandRelevanceQualificationV1:
+    contract_version: str
+    path_family: str
+    source_object_type: str
+    source_id: str
+    source_version: str
+    source_digest: str
+    actual_consumed_refs: tuple[str, ...]
+    organization_ref: str
+    involves_person: bool
+    authorization: AuthorizationContractV1 | None = None
 
 
 @dataclass(frozen=True)
@@ -146,6 +169,8 @@ class BrandContext:
     candidate_product_guidance_context: tuple[str, ...] = ()
     context_packet: BrandContextPacket | None = None
     content_role_id: UUID | None = None
+    task_context_as_of: str | None = None
+    relevance_qualifications: tuple[BrandRelevanceQualificationV1, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -380,19 +405,11 @@ class ConversationDecision:
 
     @property
     def user_fact_source_ids(self) -> tuple[str, ...]:
-        return tuple(
-            source_id
-            for source_id, role in self.user_span_roles
-            if role == "observable_actuality"
-        )
+        return tuple(source_id for source_id, role in self.user_span_roles if role == "observable_actuality")
 
     @property
     def user_instruction_source_ids(self) -> tuple[str, ...]:
-        return tuple(
-            source_id
-            for source_id, role in self.user_span_roles
-            if role != "observable_actuality"
-        )
+        return tuple(source_id for source_id, role in self.user_span_roles if role != "observable_actuality")
 
 
 @dataclass(frozen=True)

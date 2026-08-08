@@ -1836,6 +1836,49 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "updated_at": self._time(row["updated_at"]),
         }
 
+    @staticmethod
+    def _optional_text(row: dict[str, object], key: str) -> str | None:
+        value = row[key]
+        return str(value) if value is not None else None
+
+    @classmethod
+    def _publication_scope_fields(cls, item: dict[str, object]) -> dict[str, object]:
+        scope_ids = item["scope_organization_ids"]
+        return {
+            "visibility_scope": str(item["visibility_scope"]),
+            "scope_organization_ids": [str(value) for value in (scope_ids if isinstance(scope_ids, list) else [])],
+            "effective_at": cls._time(item["effective_at"]) if item["effective_at"] is not None else None,
+            "expires_at": cls._time(item["expires_at"]) if item["expires_at"] is not None else None,
+            "authority_class": str(item["authority_class"]),
+            "semantic_subject_type": cls._optional_text(item, "semantic_subject_type"),
+            "semantic_subject_id": cls._optional_text(item, "semantic_subject_id"),
+            "claim_key": cls._optional_text(item, "claim_key"),
+            "scope_contract_version": str(item["scope_contract_version"]),
+        }
+
+    @classmethod
+    def _publication_projection_item(cls, item: dict[str, object]) -> dict[str, object]:
+        applicability = item["applicability"]
+        return {
+            "id": str(item["id"]),
+            "position": cls._integer(item["position"]),
+            "publication_role": str(item["publication_role"]),
+            "published_text": str(item["published_text"]),
+            "applicability": [str(value) for value in (applicability if isinstance(applicability, list) else [])],
+            "source_kind": str(item["source_kind"]),
+            "source_segment_id": cls._optional_text(item, "source_segment_id"),
+            "source_document_id": cls._optional_text(item, "source_document_id"),
+            "source_id": cls._optional_text(item, "source_id"),
+            "source_locator": cls._optional_text(item, "source_locator"),
+            "source_label": (
+                str(item["embedded_title"]) if item["embedded_title"] is not None else "已确认品牌表达基线"
+            ),
+            "source_version": str(item["source_version"]),
+            "source_digest": str(item["source_digest"]),
+            "source_document_digest": cls._optional_text(item, "source_document_digest"),
+            **cls._publication_scope_fields(item),
+        }
+
     def brand_publication_projection(
         self,
         scope: TenantManagementScope,
@@ -1845,6 +1888,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 """
                 SELECT projection.id, projection.version_number,
                        projection.status, projection.digest,
+                       projection.contract_version,
                        projection.created_at, projection.confirmed_at,
                        creator.display_name AS created_by,
                        confirmer.display_name AS confirmed_by,
@@ -1875,7 +1919,12 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                            item.publication_role, item.published_text,
                            item.applicability, item.source_kind,
                            item.source_ref, item.source_version,
-                           item.source_digest, source.embedded_title,
+                           item.source_digest, item.visibility_scope,
+                           item.scope_organization_ids, item.effective_at,
+                           item.expires_at, item.authority_class,
+                           item.semantic_subject_type, item.semantic_subject_id,
+                           item.claim_key, item.scope_contract_version,
+                           source.embedded_title,
                            source.id AS source_document_id,
                            source.source_id,
                            segment.source_locator,
@@ -1903,39 +1952,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 )
                 for item in cursor.fetchall():
                     items_by_projection.setdefault(str(item["projection_id"]), []).append(
-                        {
-                            "id": str(item["id"]),
-                            "position": self._integer(item["position"]),
-                            "publication_role": str(item["publication_role"]),
-                            "published_text": str(item["published_text"]),
-                            "applicability": [
-                                str(value)
-                                for value in (item["applicability"] if isinstance(item["applicability"], list) else [])
-                            ],
-                            "source_kind": str(item["source_kind"]),
-                            "source_segment_id": (
-                                str(item["source_segment_id"]) if item["source_segment_id"] is not None else None
-                            ),
-                            "source_document_id": (
-                                str(item["source_document_id"]) if item["source_document_id"] is not None else None
-                            ),
-                            "source_id": (str(item["source_id"]) if item["source_id"] is not None else None),
-                            "source_locator": (
-                                str(item["source_locator"]) if item["source_locator"] is not None else None
-                            ),
-                            "source_label": (
-                                str(item["embedded_title"])
-                                if item["embedded_title"] is not None
-                                else "已确认品牌表达基线"
-                            ),
-                            "source_version": str(item["source_version"]),
-                            "source_digest": str(item["source_digest"]),
-                            "source_document_digest": (
-                                str(item["source_document_digest"])
-                                if item["source_document_digest"] is not None
-                                else None
-                            ),
-                        }
+                        self._publication_projection_item(item)
                     )
         history = [
             {
@@ -1943,6 +1960,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 "version": self._integer(row["version_number"]),
                 "status": str(row["status"]),
                 "digest": str(row["digest"]),
+                "contract_version": str(row["contract_version"]),
                 "created_by": str(row["created_by"]),
                 "created_at": self._time(row["created_at"]),
                 "confirmed_by": (str(row["confirmed_by"]) if row["confirmed_by"] is not None else None),
@@ -1952,9 +1970,12 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             }
             for row in rows
         ]
+        current = next((item for item in history if item["is_current"]), None)
         return {
-            "contract_version": "brand-publication-projection-v1",
-            "current": next((item for item in history if item["is_current"]), None),
+            "contract_version": (
+                str(current["contract_version"]) if isinstance(current, dict) else "brand-publication-projection-v1"
+            ),
+            "current": current,
             "history": history,
         }
 
@@ -2197,6 +2218,21 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             "item_count": len(stored_items),
         }
 
+    @staticmethod
+    def _assert_no_claim_conflicts(
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TenantManagementScope,
+        projection_id: UUID,
+    ) -> None:
+        cursor.execute(
+            "SELECT 1 FROM brand_publication_claim_conflicts "
+            "WHERE tenant_id = %s AND brand_id = %s AND projection_id = %s "
+            "AND review_state = 'needs_review' LIMIT 1",
+            (scope.tenant_id, scope.brand_id, projection_id),
+        )
+        if cursor.fetchone() is not None:
+            raise DomainError("候选发布版本存在同级正式事实冲突，需先审核后建立新版本。")
+
     def confirm_brand_publication_projection(
         self,
         scope: TenantManagementScope,
@@ -2239,6 +2275,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
             counts = self._one(cursor, "无法核对候选发布版本")
             if self._integer(counts["writer_item_count"]) == 0:
                 raise DomainError("候选版本没有可供创作端使用的内容。")
+            self._assert_no_claim_conflicts(cursor, scope, projection_id)
             current = brand["current_publication_projection_id"]
             if current is not None:
                 cursor.execute(
@@ -2267,13 +2304,7 @@ class PostgresWorkbenchRepository(WorkbenchRepository):
                 """,
                 (projection_id, scope.tenant_id, scope.brand_id),
             )
-            self._event(
-                cursor,
-                scope,
-                "brand_publication.confirmed",
-                "brand_publication_projection",
-                projection_id,
-            )
+            self._event(cursor, scope, "brand_publication.confirmed", "brand_publication_projection", projection_id)
         return {
             "id": str(projection_id),
             "version": self._integer(candidate["version_number"]),

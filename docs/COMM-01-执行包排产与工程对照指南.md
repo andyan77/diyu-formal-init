@@ -947,3 +947,33 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 - **本 Gate 解冻 alembic/**（Gate C 必须为投影补组织维度）：仅限**增量式**迁移（新表/新列/
   新索引），禁破坏性 DDL，upgrade/downgrade 成对，回滚实证纳入完成门；frontend 继续冻结。
 - 执行侧终态只允许 `GATE-C IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`。
+
+<!-- BRAND-MATRIX-01-GATEC-CLOSEOUT-START -->
+
+### Gate C 收口记录（执行侧核验稿，2026-08-08）
+
+> **待监理复验确认**。本记录只证明 Gate C 候选机制和本地 fixture，不代替监理独立复验。
+
+- 新迁移 `20260818_45` 只前向扩展：作用域、时效、权威和 claim 身份落在不可变投影条目
+  级，`scope_organization_ids[]` 支持多组织；六张治理表全部 FORCE RLS。存量条目继续按 V1
+  `brand_all`/无到期解释，旧 digest 不变；V2 digest 纳入完整作用域合同。
+- 正式任务读取不再无条件固定 `brand_all`。执行组织只取根逻辑账号
+  `control_organization_id`，落实 brand_all/headquarters/organizations 及登记后代语义；服务端
+  可信时间冻结，修订和历史回读重放原快照。
+- 冲突只按结构化 subject/claim/authority/组织和时段重叠判定；总部正式事实优先于本地普通
+  资料，同级冲突进入 `needs_review` 并禁止实际消费。反馈进入独立 append-only 观察层，不能
+  直接成为 F/J/G 或正式投影来源。
+- organization_people 及涉人 local_trust 强制完整授权；机构型 local_trust 无需人物授权。
+  单次授权按任务谱系预留/核销/释放：V1 消耗一次、同任务 V2 不重复、新任务拒绝、失败释放，
+  两条 fixture 均有正反实证。
+- 两名自然人可分别使用同一逻辑账号，事件 actor 精确归属；`created_by` 边界保持，跨用户读取/
+  修订/保存继续拒绝。tenant 由 RLS 承重，brand 由复合约束和查询承重，region/store 由根逻辑
+  账号组织及祖先过滤承重；四级泄漏反证均为 0，合法组织后代正向可见。
+- 迁移验证为 44→45 前向升级、旧 V1 读取/快照/digest 在新 schema 上兼容、再次 upgrade head
+  幂等识别；没有数据库 downgrade 或数据删除。Gate C 三断言、完整本地回归和 CI 四查以最终
+  推送候选的退出码登记，均待监理复验确认。
+- 模型调用 0、生产接触 0、frontend 零修改。未导入 Gate A 的 31 条知识、10 个账号和两条
+  真实单次授权，未制作母版；Gate D 才做隔离环境真实导入和八剧本重演。
+- 下一动作：监理独立复验 Gate C；PASS 前不得签发后续 Gate。
+
+<!-- BRAND-MATRIX-01-GATEC-CLOSEOUT-END -->

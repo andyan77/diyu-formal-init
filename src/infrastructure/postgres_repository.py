@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
+from datetime import datetime, timezone
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -11,6 +12,15 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from src.infrastructure.gatec_queries import (
+    AUTHORIZATION_FOR_UPDATE_SQL,
+    AUTHORIZATION_RELEASE_SQL,
+    AUTHORIZATION_RESERVATION_SQL,
+    AUTHORIZATION_RESERVATION_UPSERT_SQL,
+    PROJECTION_TASK_CONTEXT_SQL,
+    PROJECTION_V2_ITEMS_SQL,
+    ROOT_TASK_LINEAGE_SQL,
+)
 from src.ports.content_repository import ContentRepository
 from src.shared.brand_publication import (
     BRAND_CONTEXT_PACKET_V3_VERSION,
@@ -36,11 +46,23 @@ from src.shared.product_references import (
     has_partial_reference_list,
     resolve_literal_mentions,
 )
+from src.shared.publication_scope import (
+    AUTHORIZATION_CONTRACT_VERSION,
+    QUALIFICATION_CONTRACT_VERSION,
+    AuthorizationContractV1,
+    assert_authorization_contract,
+    authorization_contract_digest,
+    authorization_contract_from_document,
+    publication_projection_v2_digest,
+    qualification_digest,
+    resolve_claim_authority,
+)
 from src.shared.types import (
     ActiveAsset,
     BrandContext,
     BrandContextPacketV3,
     BrandContextSegment,
+    BrandRelevanceQualificationV1,
     ContentControlContext,
     ContentProduct,
     ContentTarget,
@@ -446,6 +468,45 @@ class PostgresContentRepository(ContentRepository):
             content_role_id=UUID(str(row["content_role_id"])),
         )
 
+    @classmethod
+    def _verified_projection_identity(
+        cls,
+        rows: Sequence[Mapping[str, object]],
+        projection_v2_items: Sequence[Mapping[str, object]],
+    ) -> tuple[str, int, str]:
+        first = rows[0]
+        projection_id = str(first["projection_id"])
+        projection_version = cls._integer(first["projection_version"])
+        projection_digest = str(first["projection_digest"])
+        contract_version = str(first["projection_contract_version"])
+        digest_items = [
+            {
+                "position": cls._integer(row["position"]),
+                "publication_role": str(row["publication_role"]),
+                "published_text": str(row["published_text"]),
+                "applicability": [
+                    str(value) for value in (row["applicability"] if isinstance(row["applicability"], list) else [])
+                ],
+                "source_kind": str(row["source_kind"]),
+                "source_ref": str(row["source_ref"]),
+                "source_version": str(row["source_version"]),
+                "source_digest": str(row["source_digest"]),
+            }
+            for row in rows
+        ]
+        source_bound = any(str(item["source_kind"]) == "brand_source_segment" for item in digest_items)
+        if (
+            contract_version == "brand-publication-projection-v1"
+            and source_bound
+            and publication_projection_digest(digest_items) != projection_digest
+        ):
+            raise DomainError("当前品牌发布版本摘要校验失败。")
+        if contract_version == "brand-publication-projection-v2" and (
+            publication_projection_v2_digest(projection_v2_items) != projection_digest
+        ):
+            raise DomainError("当前作用域品牌发布版本摘要校验失败。")
+        return projection_id, projection_version, projection_digest
+
     def select_brand_context_for_task(
         self,
         scope: TrustedScope,
@@ -463,82 +524,22 @@ class PostgresContentRepository(ContentRepository):
             raise DomainError("商品解释必须明确绑定一件当前已确认商品。")
         with self._tx(scope) as cursor:
             cursor.execute(
-                """
-                SELECT projection.id AS projection_id,
-                       projection.version_number AS projection_version,
-                       projection.digest AS projection_digest,
-                       item.id AS item_id, item.position,
-                       item.publication_role, item.published_text,
-                       item.applicability, item.source_kind,
-                       item.source_ref, item.source_version,
-                       item.source_digest,
-                       segment.document_id, segment.document_version_id,
-                       document_version.normalized_sha256 AS source_document_digest
-                  FROM brands brand
-                  JOIN content_accounts target_account
-                    ON target_account.tenant_id = brand.tenant_id
-                   AND target_account.brand_id = brand.id
-                   AND target_account.id = %s
-                   AND target_account.enabled = true
-                  JOIN content_accounts root_account
-                    ON root_account.tenant_id = target_account.tenant_id
-                   AND root_account.brand_id = target_account.brand_id
-                   AND root_account.id = COALESCE(
-                       target_account.carrier_of_account_id,
-                       target_account.id
-                   )
-                   AND root_account.enabled = true
-                  JOIN brand_publication_projections projection
-                    ON projection.tenant_id = brand.tenant_id
-                   AND projection.brand_id = brand.id
-                   AND projection.id = brand.current_publication_projection_id
-                   AND projection.status = 'confirmed'
-                  JOIN brand_publication_projection_items item
-                    ON item.tenant_id = projection.tenant_id
-                   AND item.brand_id = projection.brand_id
-                   AND item.projection_id = projection.id
-                  LEFT JOIN brand_source_segments segment
-                    ON segment.tenant_id = item.tenant_id
-                   AND segment.brand_id = item.brand_id
-                   AND segment.id = item.source_segment_id
-                  LEFT JOIN brand_source_document_versions document_version
-                    ON document_version.tenant_id = segment.tenant_id
-                   AND document_version.brand_id = segment.brand_id
-                   AND document_version.id = segment.document_version_id
-                 WHERE brand.tenant_id = %s
-                   AND brand.id = %s
-                 ORDER BY item.position
-                """,
+                PROJECTION_TASK_CONTEXT_SQL,
                 (scope.account_id, scope.tenant_id, scope.brand_id),
             )
             rows = cursor.fetchall()
+            projection_v2_items: list[dict[str, object]] = []
+            if rows and str(rows[0]["projection_contract_version"]) == "brand-publication-projection-v2":
+                cursor.execute(
+                    PROJECTION_V2_ITEMS_SQL,
+                    (scope.tenant_id, scope.brand_id, rows[0]["projection_id"]),
+                )
+                projection_v2_items = [dict(row) for row in cursor.fetchall()]
         if not rows:
             raise DomainError("请先由品牌管理员确认创作端可用的品牌表达。")
-        projection_id = str(rows[0]["projection_id"])
-        projection_version = self._integer(rows[0]["projection_version"])
-        projection_digest = str(rows[0]["projection_digest"])
-        digest_items = [
-            {
-                "position": self._integer(row["position"]),
-                "publication_role": str(row["publication_role"]),
-                "published_text": str(row["published_text"]),
-                "applicability": [
-                    str(value) for value in (row["applicability"] if isinstance(row["applicability"], list) else [])
-                ],
-                "source_kind": str(row["source_kind"]),
-                "source_ref": str(row["source_ref"]),
-                "source_version": str(row["source_version"]),
-                "source_digest": str(row["source_digest"]),
-            }
-            for row in rows
-        ]
-        # Expand-only compatibility projections are derived from the already
-        # confirmed expression baseline by the migration.  Their migration
-        # digest proves that baseline source, while source-bound projections
-        # use the application contract digest and must be recomputable here.
-        source_bound = any(str(item["source_kind"]) == "brand_source_segment" for item in digest_items)
-        if source_bound and publication_projection_digest(digest_items) != projection_digest:
-            raise DomainError("当前品牌发布版本摘要校验失败。")
+        projection_id, projection_version, projection_digest = self._verified_projection_identity(
+            rows, projection_v2_items
+        )
         available_rows = [row for row in rows if str(row["publication_role"]) != "internal_only"]
         applicable_rows = [
             row
@@ -549,11 +550,13 @@ class PostgresContentRepository(ContentRepository):
                 or primary_product in row["applicability"]
             )
         ]
-        selected = [
-            row
-            for row in applicable_rows
-            if str(row["publication_role"]) in {"public_brand_fact", "expression_constraint", "creative_method"}
-        ]
+        selected = resolve_claim_authority(
+            [
+                row
+                for row in applicable_rows
+                if str(row["publication_role"]) in {"public_brand_fact", "expression_constraint", "creative_method"}
+            ]
+        )
         role_to_kind = {
             "public_brand_fact": "brand_fact",
             "expression_constraint": "expression_constraint",
@@ -574,7 +577,7 @@ class PostgresContentRepository(ContentRepository):
                 source_version=str(row["source_version"]),
                 semantic_kind=role_to_kind[str(row["publication_role"])],
                 evidence_level="confirmed_publication",
-                visibility_scope="brand_all",
+                visibility_scope=str(row["visibility_scope"]),
                 digest=hashlib.sha256(str(row["published_text"]).encode()).hexdigest(),
                 exact_text=str(row["published_text"]),
                 source_digest=str(row["source_digest"]),
@@ -584,6 +587,23 @@ class PostgresContentRepository(ContentRepository):
                 applicability=tuple(
                     str(value) for value in (row["applicability"] if isinstance(row["applicability"], list) else [])
                 ),
+                scope_contract_version=str(row["scope_contract_version"]),
+                scope_organization_ids=tuple(
+                    str(value)
+                    for value in (
+                        row["scope_organization_ids"] if isinstance(row["scope_organization_ids"], list) else []
+                    )
+                ),
+                effective_at=self._optional_time(row["effective_at"]),
+                expires_at=self._optional_time(row["expires_at"]),
+                authority_class=str(row["authority_class"]),
+                semantic_subject_type=(
+                    str(row["semantic_subject_type"]) if row["semantic_subject_type"] is not None else None
+                ),
+                semantic_subject_id=(
+                    str(row["semantic_subject_id"]) if row["semantic_subject_id"] is not None else None
+                ),
+                claim_key=(str(row["claim_key"]) if row["claim_key"] is not None else None),
             )
             for row in selected
         )
@@ -605,6 +625,20 @@ class PostgresContentRepository(ContentRepository):
             }
             for segment in segments
         ]
+        for segment, document in zip(segments, packet_document, strict=True):
+            if segment.scope_contract_version == "publication-item-scope-v2":
+                document.update(
+                    {
+                        "scope_contract_version": segment.scope_contract_version,
+                        "scope_organization_ids": list(segment.scope_organization_ids),
+                        "effective_at": segment.effective_at,
+                        "expires_at": segment.expires_at,
+                        "authority_class": segment.authority_class,
+                        "semantic_subject_type": segment.semantic_subject_type,
+                        "semantic_subject_id": segment.semantic_subject_id,
+                        "claim_key": segment.claim_key,
+                    }
+                )
         available_refs = tuple(str(row["item_id"]) for row in available_rows)
         frozen_refs = tuple(segment.segment_id for segment in segments)
         consumed_refs = tuple(
@@ -639,6 +673,10 @@ class PostgresContentRepository(ContentRepository):
             displayed_refs,
             segments,
         )
+        qualifications = self._brand_relevance_qualifications(
+            selected,
+            task_context_as_of=rows[0]["task_context_as_of"],
+        )
         return replace(
             context,
             brand_reference_context=tuple(
@@ -652,7 +690,195 @@ class PostgresContentRepository(ContentRepository):
             ),
             candidate_product_guidance_context=(),
             context_packet=packet,
+            task_context_as_of=self._time(rows[0]["task_context_as_of"]),
+            relevance_qualifications=qualifications,
         )
+
+    @classmethod
+    def _brand_relevance_qualifications(
+        cls,
+        rows: Sequence[Mapping[str, object]],
+        *,
+        task_context_as_of: object,
+    ) -> tuple[BrandRelevanceQualificationV1, ...]:
+        if not isinstance(task_context_as_of, datetime):
+            raise DomainError("任务可信时钟无效")
+        return tuple(
+            cls._qualification_from_row(row, task_context_as_of)
+            for row in rows
+            if row.get("qualification_id") is not None
+        )
+
+    @classmethod
+    def _qualification_from_row(
+        cls,
+        row: Mapping[str, object],
+        task_context_as_of: datetime,
+    ) -> BrandRelevanceQualificationV1:
+        path = str(row.get("qualification_path_family"))
+        if path not in {"local_trust", "organization_people"}:
+            raise DomainError("品牌关联资格路径无效")
+        organization_id = str(row.get("qualification_organization_id"))
+        raw_scope_ids = row.get("scope_organization_ids")
+        scope_ids = tuple(str(value) for value in (raw_scope_ids if isinstance(raw_scope_ids, list) else []))
+        if str(row.get("visibility_scope")) != "brand_all" and organization_id not in scope_ids:
+            raise DomainError("品牌关联资格超出冻结组织作用域")
+        involves_person = row.get("involves_person") is True
+        authorization = cls._authorization_from_qualification_row(
+            row,
+            task_context_as_of=task_context_as_of,
+            path=path,
+            authorization_required=path == "organization_people" or involves_person,
+        )
+        source_digest = str(row.get("qualification_source_digest"))
+        if source_digest != str(row.get("source_digest")):
+            raise DomainError("品牌关联资格来源摘要不一致")
+        source_id = str(row["qualification_id"])
+        expected_digest = qualification_digest(
+            {
+                "path_family": path,
+                "source_id": source_id,
+                "source_version": str(row.get("qualification_version")),
+                "source_digest": source_digest,
+                "organization_ref": organization_id,
+                "involves_person": involves_person,
+                "authorization_digest": authorization.digest if authorization is not None else None,
+            }
+        )
+        if expected_digest != str(row.get("qualification_digest")):
+            raise DomainError("品牌关联资格摘要校验失败")
+        return BrandRelevanceQualificationV1(
+            contract_version=QUALIFICATION_CONTRACT_VERSION,
+            path_family=path,
+            source_object_type=f"{path}_qualification",
+            source_id=source_id,
+            source_version=str(row.get("qualification_version")),
+            source_digest=source_digest,
+            actual_consumed_refs=(
+                str(row["item_id"]),
+                f"{str(row['source_kind'])}:{str(row['source_ref'])}",
+                source_id,
+            ),
+            organization_ref=organization_id,
+            involves_person=involves_person,
+            authorization=authorization,
+        )
+
+    @staticmethod
+    def _qualification_authorization_contract(
+        row: Mapping[str, object],
+    ) -> tuple[AuthorizationContractV1, datetime, datetime | None]:
+        required = (
+            "authorization_version",
+            "authorization_subject_ref",
+            "authorization_tenant_id",
+            "authorization_brand_id",
+            "authorization_logical_account_id",
+            "authorization_organization_id",
+            "allowed_source_digest",
+            "allowed_usage",
+            "single_use",
+            "authorization_effective_at",
+            "authorization_state",
+            "authorization_digest",
+        )
+        if any(row.get(key) is None for key in required):
+            raise DomainError("人物授权记录不完整")
+        allowed_usage = row["allowed_usage"]
+        effective_at, expires_at = row["authorization_effective_at"], row.get("authorization_expires_at")
+        if not isinstance(allowed_usage, list):
+            raise DomainError("人物授权用途无效")
+        if not isinstance(effective_at, datetime) or (expires_at is not None and not isinstance(expires_at, datetime)):
+            raise DomainError("人物授权生命周期无效")
+        contract = AuthorizationContractV1(
+            contract_version=AUTHORIZATION_CONTRACT_VERSION,
+            authorization_id=str(row["authorization_id"]),
+            authorization_version=str(row["authorization_version"]),
+            subject_ref=str(row["authorization_subject_ref"]),
+            tenant_id=str(row["authorization_tenant_id"]),
+            brand_id=str(row["authorization_brand_id"]),
+            logical_account_id=str(row["authorization_logical_account_id"]),
+            organization_id=str(row["authorization_organization_id"]),
+            allowed_source_digest=str(row["allowed_source_digest"]),
+            allowed_usage=tuple(str(value) for value in allowed_usage),
+            single_use=bool(row["single_use"]),
+            effective_at=effective_at.astimezone(timezone.utc).isoformat(),
+            expires_at=(expires_at.astimezone(timezone.utc).isoformat() if isinstance(expires_at, datetime) else None),
+            digest=str(row["authorization_digest"]),
+        )
+        assert_authorization_contract(contract)
+        return contract, effective_at, expires_at
+
+    @classmethod
+    def _authorization_from_qualification_row(
+        cls,
+        row: Mapping[str, object],
+        *,
+        task_context_as_of: datetime,
+        path: str,
+        authorization_required: bool,
+    ) -> AuthorizationContractV1 | None:
+        if row.get("authorization_id") is None:
+            if authorization_required:
+                raise DomainError("涉人品牌资料缺少有效人物授权")
+            return None
+        contract, effective_at, expires_at = cls._qualification_authorization_contract(row)
+        if (
+            authorization_contract_digest(contract) != str(row["authorization_digest"])
+            or contract.tenant_id != str(row.get("item_tenant_id"))
+            or contract.brand_id != str(row.get("item_brand_id"))
+            or contract.logical_account_id != str(row.get("logical_account_id"))
+            or contract.organization_id != str(row.get("qualification_organization_id"))
+            or contract.allowed_source_digest != str(row.get("qualification_source_digest"))
+            or path not in contract.allowed_usage
+            or row.get("authorization_state") != "active"
+            or task_context_as_of < effective_at
+            or (isinstance(expires_at, datetime) and task_context_as_of >= expires_at)
+        ):
+            raise DomainError("人物授权与任务作用域或生命周期不兼容")
+        if contract.single_use and row.get("authorization_reservation_status") in {
+            "reserved",
+            "consumed",
+        }:
+            raise DomainError("单次人物授权已被其他任务预留或核销")
+        return contract
+
+    @classmethod
+    def _logical_account_id(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TrustedScope,
+    ) -> UUID:
+        cursor.execute(
+            "SELECT COALESCE(carrier_of_account_id, id) AS logical_account_id "
+            "FROM content_accounts WHERE tenant_id = %s AND brand_id = %s "
+            "AND id = %s AND enabled = true",
+            (scope.tenant_id, scope.brand_id, scope.account_id),
+        )
+        return UUID(str(cls._one(cursor, "当前发布账号不可用")["logical_account_id"]))
+
+    @staticmethod
+    def _retry_snapshot(
+        previous: object,
+        current: dict[str, object] | None,
+    ) -> dict[str, object] | None:
+        if not isinstance(previous, dict) or not isinstance(current, dict):
+            return current
+        previous_as_of = previous.get("task_context_as_of")
+        current_as_of = current.get("task_context_as_of")
+        if isinstance(previous_as_of, str) and isinstance(current_as_of, str):
+            return current | {"task_context_as_of": previous_as_of}
+        return current
+
+    @classmethod
+    def _root_task_lineage_id(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        tenant_id: UUID,
+        parent_version_id: UUID,
+    ) -> UUID:
+        cursor.execute(ROOT_TASK_LINEAGE_SQL, (tenant_id, parent_version_id, tenant_id))
+        return UUID(str(cls._one(cursor, "源内容的任务谱系无效")["task_id"]))
 
     def create_task_and_running_run(
         self,
@@ -677,15 +903,7 @@ class PostgresContentRepository(ContentRepository):
     ) -> tuple[UUID, UUID, str | None]:
         task_id, run_id = uuid4(), uuid4()
         with self._tx(scope) as cursor:
-            cursor.execute(
-                """
-                SELECT COALESCE(carrier_of_account_id, id) AS logical_account_id
-                FROM content_accounts
-                WHERE tenant_id = %s AND brand_id = %s AND id = %s AND enabled = true
-                """,
-                (scope.tenant_id, scope.brand_id, scope.account_id),
-            )
-            logical_account_id = UUID(str(self._one(cursor, "当前发布账号不可用")["logical_account_id"]))
+            logical_account_id = self._logical_account_id(cursor, scope)
             task_snapshot = (
                 snapshot
                 | {
@@ -697,11 +915,8 @@ class PostgresContentRepository(ContentRepository):
                 else None
             )
             reused_failed_task = False
+            task_lineage_id = task_id
             if client_request_id is not None:
-                # Serialize every attempt for one tenant-scoped client request.
-                # A row lock on the previous failed run is insufficient because
-                # two concurrent retries can both observe that same historical
-                # row before either inserts the new running attempt.
                 cursor.execute(
                     "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
                     (f"content-request:{scope.tenant_id}:{client_request_id}",),
@@ -744,6 +959,8 @@ class PostgresContentRepository(ContentRepository):
                             failure_stage="persistence",
                             retryable=False,
                         )
+                    previous_snapshot = previous["content_context_snapshot"]
+                    retry_snapshot = self._retry_snapshot(previous_snapshot, task_snapshot)
                     expected = {
                         "brand_id": scope.brand_id,
                         "account_id": scope.account_id,
@@ -753,7 +970,7 @@ class PostgresContentRepository(ContentRepository):
                         "parent_version_id": parent_version_id,
                         "media_format": media_format,
                         "production_conditions": production_conditions,
-                        "content_context_snapshot": task_snapshot,
+                        "content_context_snapshot": retry_snapshot,
                         "series_id": series_context.series_id if series_context is not None else None,
                         "series_position": (series_context.target_position if series_context is not None else None),
                     }
@@ -765,6 +982,9 @@ class PostgresContentRepository(ContentRepository):
                             retryable=False,
                         )
                     task_id = UUID(str(previous["task_id"]))
+                    task_lineage_id = task_id
+                    if isinstance(previous_snapshot, dict):
+                        task_snapshot = previous_snapshot
                     reused_failed_task = True
             prior_body: str | None = None
             if parent_version_id is not None:
@@ -795,6 +1015,7 @@ class PostgresContentRepository(ContentRepository):
                 )
                 row = self._one(cursor, "只能明确复用当前用户当前作用域中的内容")
                 prior_body = validate_version_content(row).body
+                task_lineage_id = self._root_task_lineage_id(cursor, scope.tenant_id, parent_version_id)
             if not reused_failed_task:
                 cursor.execute(
                     """
@@ -860,6 +1081,9 @@ class PostgresContentRepository(ContentRepository):
                     ),
                     client_request_id,
                 ),
+            )
+            self._reserve_task_authorization(
+                cursor, scope, task_id, run_id, logical_account_id, task_lineage_id, task_snapshot
             )
             self._event(
                 cursor,
@@ -995,10 +1219,7 @@ class PostgresContentRepository(ContentRepository):
             )
             if cursor.rowcount != 1:
                 raise DomainError("生成运行不存在或已结束")
-            version_audit_snapshot = self._version_audit_snapshot(
-                merged_snapshot,
-                artifact_digest,
-            )
+            version_audit_snapshot = self._version_audit_snapshot(merged_snapshot, artifact_digest)
             cursor.execute(
                 """
                 INSERT INTO content_versions
@@ -1021,6 +1242,8 @@ class PostgresContentRepository(ContentRepository):
                     scope.user_id,
                 ),
             )
+            if next_version == 1:
+                self._consume_task_authorization(cursor, scope, task_id=task_id, run_id=run_id)
             cursor.execute(
                 """
                 SELECT outline, body, artifact_digest, version_audit_snapshot
@@ -1103,6 +1326,12 @@ class PostgresContentRepository(ContentRepository):
             )
             if cursor.rowcount != 1:
                 raise DomainError("当前作用域不能结束此生成")
+            self._release_task_authorization(
+                cursor,
+                scope,
+                task_id=task_id,
+                run_id=run_id,
+            )
             self._event(
                 cursor,
                 scope,
@@ -2008,6 +2237,321 @@ class PostgresContentRepository(ContentRepository):
             {"task_id": str(task_id), "position": position},
         )
 
+    @classmethod
+    def _persisted_authorization_for_task(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TrustedScope,
+        frozen: AuthorizationContractV1,
+        logical_account_id: UUID,
+        task_context_as_of: datetime,
+    ) -> AuthorizationContractV1:
+        cursor.execute(
+            AUTHORIZATION_FOR_UPDATE_SQL,
+            (scope.tenant_id, scope.brand_id, UUID(frozen.authorization_id)),
+        )
+        row = cls._one(cursor, "人物授权不存在或不属于当前品牌")
+        effective_at, expires_at, allowed_usage = row["effective_at"], row["expires_at"], row["allowed_usage"]
+        if not isinstance(effective_at, datetime) or not isinstance(allowed_usage, list):
+            raise DomainError("人物授权记录无效")
+        if expires_at is not None and not isinstance(expires_at, datetime):
+            raise DomainError("人物授权记录无效")
+        persisted = AuthorizationContractV1(
+            AUTHORIZATION_CONTRACT_VERSION,
+            str(row["id"]),
+            str(row["authorization_version"]),
+            str(row["subject_ref"]),
+            str(row["tenant_id"]),
+            str(row["brand_id"]),
+            str(row["logical_account_id"]),
+            str(row["organization_id"]),
+            str(row["allowed_source_digest"]),
+            tuple(str(value) for value in allowed_usage),
+            bool(row["single_use"]),
+            effective_at.astimezone(timezone.utc).isoformat(),
+            expires_at.astimezone(timezone.utc).isoformat() if isinstance(expires_at, datetime) else None,
+            str(row["digest"]),
+        )
+        assert_authorization_contract(persisted)
+        if (
+            persisted != frozen
+            or UUID(persisted.logical_account_id) != logical_account_id
+            or row["authorization_state"] != "active"
+            or task_context_as_of < effective_at
+            or (isinstance(expires_at, datetime) and task_context_as_of >= expires_at)
+        ):
+            raise DomainError("人物授权已失效或与任务作用域不一致")
+        return persisted
+
+    @staticmethod
+    def _snapshot_task_context_as_of(snapshot: Mapping[str, object] | None) -> datetime:
+        raw_as_of = snapshot.get("task_context_as_of") if snapshot is not None else None
+        if not isinstance(raw_as_of, str):
+            raise DomainError("涉人任务缺少服务端冻结的可信时间")
+        try:
+            task_context_as_of = datetime.fromisoformat(raw_as_of)
+        except ValueError as exc:
+            raise DomainError("涉人任务可信时间无效") from exc
+        if task_context_as_of.tzinfo is None:
+            raise DomainError("涉人任务可信时间无效")
+        return task_context_as_of
+
+    @classmethod
+    def _reserve_single_use_authorization(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TrustedScope,
+        persisted: AuthorizationContractV1,
+        task_id: UUID,
+        run_id: UUID,
+        task_lineage_id: UUID,
+    ) -> None:
+        authorization_id = UUID(persisted.authorization_id)
+        cursor.execute(
+            AUTHORIZATION_RESERVATION_SQL,
+            (scope.tenant_id, scope.brand_id, authorization_id),
+        )
+        existing = cursor.fetchone()
+        if (
+            existing is not None
+            and existing["status"] == "consumed"
+            and UUID(str(existing["task_lineage_id"])) == task_lineage_id
+            and task_lineage_id != task_id
+        ):
+            return
+        reservation_digest = cls._authorization_state_digest(
+            persisted.authorization_id, "reserved", task_id, run_id, task_lineage_id
+        )
+        cursor.execute(
+            AUTHORIZATION_RESERVATION_UPSERT_SQL,
+            (
+                authorization_id,
+                scope.tenant_id,
+                scope.brand_id,
+                task_id,
+                run_id,
+                task_lineage_id,
+                scope.user_id,
+                reservation_digest,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise DomainError("单次人物授权已被其他任务预留或核销")
+        cls._authorization_event(
+            cursor,
+            scope,
+            authorization_id=authorization_id,
+            task_id=task_id,
+            run_id=run_id,
+            task_lineage_id=task_lineage_id,
+            event_type="reserved",
+        )
+
+    @classmethod
+    def _reserve_task_authorization(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TrustedScope,
+        task_id: UUID,
+        run_id: UUID,
+        logical_account_id: UUID,
+        task_lineage_id: UUID,
+        snapshot: dict[str, object] | None,
+    ) -> None:
+        frozen = cls._snapshot_authorization(snapshot)
+        if frozen is None:
+            return
+        persisted = cls._persisted_authorization_for_task(
+            cursor, scope, frozen, logical_account_id, cls._snapshot_task_context_as_of(snapshot)
+        )
+        if persisted.single_use:
+            cls._reserve_single_use_authorization(cursor, scope, persisted, task_id, run_id, task_lineage_id)
+
+    @classmethod
+    def _consume_task_authorization(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TrustedScope,
+        *,
+        task_id: UUID,
+        run_id: UUID,
+    ) -> None:
+        cursor.execute(
+            """
+            SELECT authorization_id
+             FROM content_authorization_reservations
+             WHERE tenant_id = %s AND brand_id = %s
+               AND task_id = %s AND run_id = %s
+               AND task_lineage_id = %s AND status = 'reserved'
+             FOR UPDATE
+            """,
+            (scope.tenant_id, scope.brand_id, task_id, run_id, task_id),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return
+        authorization_id = UUID(str(row["authorization_id"]))
+        digest = cls._authorization_state_digest(
+            str(authorization_id),
+            "consumed",
+            task_id,
+            run_id,
+            task_id,
+        )
+        cursor.execute(
+            """
+            UPDATE content_authorization_reservations
+               SET status = 'consumed', actor_id = %s,
+                   finalized_at = transaction_timestamp(),
+                   reservation_digest = %s
+             WHERE tenant_id = %s AND brand_id = %s AND authorization_id = %s
+               AND task_id = %s AND run_id = %s AND status = 'reserved'
+            """,
+            (
+                scope.user_id,
+                digest,
+                scope.tenant_id,
+                scope.brand_id,
+                authorization_id,
+                task_id,
+                run_id,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise DomainError("单次人物授权核销失败")
+        cls._authorization_event(
+            cursor,
+            scope,
+            authorization_id=authorization_id,
+            task_id=task_id,
+            run_id=run_id,
+            task_lineage_id=task_id,
+            event_type="consumed",
+        )
+
+    @classmethod
+    def _release_task_authorization(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TrustedScope,
+        *,
+        task_id: UUID,
+        run_id: UUID,
+    ) -> None:
+        cursor.execute(
+            AUTHORIZATION_RELEASE_SQL,
+            (scope.tenant_id, scope.brand_id, task_id, run_id),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return
+        authorization_id = UUID(str(row["authorization_id"]))
+        task_lineage_id = UUID(str(row["task_lineage_id"]))
+        digest = cls._authorization_state_digest(
+            str(authorization_id),
+            "released",
+            task_id,
+            run_id,
+            task_lineage_id,
+        )
+        cursor.execute(
+            """
+            UPDATE content_authorization_reservations
+               SET status = 'released', actor_id = %s,
+                   finalized_at = transaction_timestamp(),
+                   reservation_digest = %s
+             WHERE tenant_id = %s AND brand_id = %s AND authorization_id = %s
+               AND task_id = %s AND run_id = %s AND status = 'reserved'
+            """,
+            (
+                scope.user_id,
+                digest,
+                scope.tenant_id,
+                scope.brand_id,
+                authorization_id,
+                task_id,
+                run_id,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise DomainError("单次人物授权释放失败")
+        cls._authorization_event(
+            cursor,
+            scope,
+            authorization_id=authorization_id,
+            task_id=task_id,
+            run_id=run_id,
+            task_lineage_id=task_lineage_id,
+            event_type="released",
+        )
+
+    @staticmethod
+    def _snapshot_authorization(
+        snapshot: Mapping[str, object] | None,
+    ) -> AuthorizationContractV1 | None:
+        if snapshot is None:
+            return None
+        publication = snapshot.get("publication_contract")
+        if not isinstance(publication, Mapping):
+            return None
+        evidence = publication.get("brand_relevance_evidence")
+        if not isinstance(evidence, Mapping):
+            return None
+        authorization = evidence.get("authorization")
+        return authorization_contract_from_document(authorization) if authorization is not None else None
+
+    @staticmethod
+    def _authorization_state_digest(
+        authorization_id: str,
+        state: str,
+        task_id: UUID,
+        run_id: UUID,
+        task_lineage_id: UUID,
+    ) -> str:
+        return hashlib.sha256(
+            (f"authorization-state-v1|{authorization_id}|{state}|{task_id}|{run_id}|{task_lineage_id}").encode()
+        ).hexdigest()
+
+    @classmethod
+    def _authorization_event(
+        cls,
+        cursor: psycopg.Cursor[dict[str, object]],
+        scope: TrustedScope,
+        *,
+        authorization_id: UUID,
+        task_id: UUID,
+        run_id: UUID,
+        task_lineage_id: UUID,
+        event_type: str,
+    ) -> None:
+        event_digest = cls._authorization_state_digest(
+            str(authorization_id),
+            event_type,
+            task_id,
+            run_id,
+            task_lineage_id,
+        )
+        cursor.execute(
+            """
+            INSERT INTO content_authorization_events (
+                id, tenant_id, brand_id, authorization_id, task_id, run_id,
+                task_lineage_id, event_type, actor_id, event_digest
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                uuid4(),
+                scope.tenant_id,
+                scope.brand_id,
+                authorization_id,
+                task_id,
+                run_id,
+                task_lineage_id,
+                event_type,
+                scope.user_id,
+                event_digest,
+            ),
+        )
+
     @staticmethod
     def _event(
         cursor: psycopg.Cursor[dict[str, object]],
@@ -2038,6 +2582,16 @@ class PostgresContentRepository(ContentRepository):
         if not isinstance(value, int):
             raise DomainError("内容版本数据无效")
         return value
+
+    @staticmethod
+    def _time(value: object) -> str:
+        if not isinstance(value, datetime):
+            raise DomainError("任务可信时钟无效")
+        return value.isoformat()
+
+    @classmethod
+    def _optional_time(cls, value: object) -> str | None:
+        return None if value is None else cls._time(value)
 
     @staticmethod
     def _asset_receipts(assets: tuple[ActiveAsset, ...]) -> list[dict[str, str]]:

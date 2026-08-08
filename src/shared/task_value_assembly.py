@@ -7,6 +7,13 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
 from src.shared.errors import DomainError
+from src.shared.publication_scope import (
+    AUTHORIZATION_CONTRACT_VERSION,
+    AuthorizationContractV1,
+    assert_authorization_contract,
+    authorization_contract_document,
+    authorization_contract_from_document,
+)
 
 TASK_VALUE_ASSEMBLY_VERSION = "task-value-assembly-v1"
 
@@ -32,6 +39,7 @@ BRAND_RELEVANCE_PATHS: tuple[BrandRelevancePath, ...] = (
     "organization_people",
 )
 BRAND_RELEVANCE_CONTRACT_VERSION = "brand-relevance-resolution-v1"
+BRAND_RELEVANCE_CONTRACT_V2_VERSION = "brand-relevance-resolution-v2"
 BRAND_RELEVANCE_SOURCE_TYPES: dict[BrandRelevancePath, frozenset[str]] = {
     "product_expertise": frozenset({"product_decision_basis"}),
     "existing_series": frozenset({"series_episode"}),
@@ -120,6 +128,8 @@ class BrandRelevanceEvidenceV1:
     organization_ref: str | None = None
     authorization_ref: str | None = None
     media_ref: str | None = None
+    involves_person: bool = False
+    authorization: AuthorizationContractV1 | None = None
 
 
 @dataclass(frozen=True)
@@ -168,25 +178,35 @@ def task_value_assembly_document(
     }
     if assembly.brand_relevance_state is not None:
         evidence = assembly.brand_relevance_evidence
+        evidence_document: dict[str, object] | None = None
+        if evidence is not None:
+            evidence_document = {
+                "contract_version": evidence.contract_version,
+                "path_family": evidence.path_family,
+                "source_object_type": evidence.source_object_type,
+                "source_id": evidence.source_id,
+                "source_version": evidence.source_version,
+                "source_digest": evidence.source_digest,
+                "actual_consumed_refs": list(evidence.actual_consumed_refs),
+                "organization_ref": evidence.organization_ref,
+                "authorization_ref": evidence.authorization_ref,
+                "media_ref": evidence.media_ref,
+            }
+            if evidence.contract_version != BRAND_RELEVANCE_CONTRACT_VERSION:
+                evidence_document.update(
+                    {
+                        "involves_person": evidence.involves_person,
+                        "authorization": (
+                            authorization_contract_document(evidence.authorization)
+                            if evidence.authorization is not None
+                            else None
+                        ),
+                    }
+                )
         document.update(
             {
                 "brand_relevance_state": assembly.brand_relevance_state,
-                "brand_relevance_evidence": (
-                    {
-                        "contract_version": evidence.contract_version,
-                        "path_family": evidence.path_family,
-                        "source_object_type": evidence.source_object_type,
-                        "source_id": evidence.source_id,
-                        "source_version": evidence.source_version,
-                        "source_digest": evidence.source_digest,
-                        "actual_consumed_refs": list(evidence.actual_consumed_refs),
-                        "organization_ref": evidence.organization_ref,
-                        "authorization_ref": evidence.authorization_ref,
-                        "media_ref": evidence.media_ref,
-                    }
-                    if evidence is not None
-                    else None
-                ),
+                "brand_relevance_evidence": evidence_document,
                 "brand_relevance_degraded_reason": assembly.brand_relevance_degraded_reason,
                 "demonstration_eligible": assembly.demonstration_eligible,
             }
@@ -229,6 +249,12 @@ def task_value_assembly_from_document(value: object) -> TaskValueAssemblyV1:
                 organization_ref=_optional_string(raw_relevance.get("organization_ref")),
                 authorization_ref=_optional_string(raw_relevance.get("authorization_ref")),
                 media_ref=_optional_string(raw_relevance.get("media_ref")),
+                involves_person=_optional_bool(raw_relevance.get("involves_person")) or False,
+                authorization=(
+                    authorization_contract_from_document(raw_relevance["authorization"])
+                    if raw_relevance.get("authorization") is not None
+                    else None
+                ),
             )
         except (KeyError, TypeError) as exc:
             raise DomainError("内容任务冻结的品牌关联证据无效") from exc
@@ -343,7 +369,7 @@ def _assert_brand_relevance_consistency(assembly: TaskValueAssemblyV1) -> None:
 
 def assert_brand_relevance_evidence(evidence: BrandRelevanceEvidenceV1) -> None:
     if (
-        evidence.contract_version != BRAND_RELEVANCE_CONTRACT_VERSION
+        evidence.contract_version not in {BRAND_RELEVANCE_CONTRACT_VERSION, BRAND_RELEVANCE_CONTRACT_V2_VERSION}
         or evidence.source_object_type not in BRAND_RELEVANCE_SOURCE_TYPES[evidence.path_family]
         or not evidence.source_id
         or not evidence.source_version
@@ -360,6 +386,29 @@ def assert_brand_relevance_evidence(evidence: BrandRelevanceEvidenceV1) -> None:
         not evidence.organization_ref or not evidence.authorization_ref
     ):
         raise DomainError("组织人物路径缺少冻结组织或人物授权引用")
+    if evidence.path_family == "local_trust" and evidence.involves_person and not evidence.authorization_ref:
+        raise DomainError("涉人本地信任路径缺少冻结人物授权引用")
+    if evidence.contract_version == BRAND_RELEVANCE_CONTRACT_VERSION:
+        if evidence.authorization is not None:
+            raise DomainError("历史品牌关联合同不能携带 V2 人物授权")
+        return
+    authorization_required = evidence.path_family == "organization_people" or (
+        evidence.path_family == "local_trust" and evidence.involves_person
+    )
+    if authorization_required:
+        authorization = evidence.authorization
+        if (
+            authorization is None
+            or authorization.contract_version != AUTHORIZATION_CONTRACT_VERSION
+            or evidence.authorization_ref != authorization.authorization_id
+            or evidence.organization_ref != authorization.organization_id
+            or evidence.source_digest != authorization.allowed_source_digest
+            or evidence.path_family not in authorization.allowed_usage
+        ):
+            raise DomainError("品牌关联证据与人物授权合同不一致")
+        assert_authorization_contract(authorization)
+    elif evidence.authorization is not None:
+        assert_authorization_contract(evidence.authorization)
 
 
 def assert_task_value_matches_contract(
