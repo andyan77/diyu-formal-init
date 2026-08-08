@@ -5,11 +5,17 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from src.shared.account_editorial_lens import (
+    account_editorial_lens_digest,
+    account_editorial_resolution_digest,
+)
 from src.shared.errors import DomainError, GenerationFailed
 from src.shared.product_value import (
+    P1ProductDecisionBasisV3,
     P2ProductDecisionBasisV2,
     P5ProductDecisionBasisV2,
     ProductDecisionBasisV2,
+    product_value_contract_digest,
 )
 from src.shared.publication_contract import (
     INTAKE_ROLE_CONTRACT_VERSION,
@@ -46,6 +52,8 @@ class WriterRequestV3:
     revision_instruction: str | None
     expression_policy_version: str
     intake_role_contract_version: str
+    account_editorial_context: dict[str, object] | None = None
+    brand_relevance: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +65,41 @@ class WriterOutputV3:
     publication_caption: str
 
 
+def _product_basis_document(
+    basis: ProductDecisionBasisV2 | None,
+) -> dict[str, object] | None:
+    if isinstance(basis, P1ProductDecisionBasisV3):
+        return {
+            "contract_version": basis.contract_version,
+            "decision_axis": basis.decision_axis,
+            "product_specific_understanding": basis.product_specific_understanding,
+            "tradeoff": basis.tradeoff,
+            "condition_of_validity": basis.condition_of_validity,
+            "supporting_fact_refs": list(basis.supporting_fact_refs),
+            "source_packet_digest": basis.source_packet_digest,
+            "judgment_ref": basis.judgment_ref,
+            "judgment_version": basis.judgment_version,
+            "applicability_conditions": list(basis.applicability_conditions),
+        }
+    if isinstance(basis, P2ProductDecisionBasisV2):
+        return {
+            "decision_axis": basis.decision_axis,
+            "product_specific_understanding": basis.product_specific_understanding,
+            "tradeoff": basis.tradeoff,
+            "condition_of_validity": basis.condition_of_validity,
+            "supporting_fact_refs": list(basis.supporting_fact_refs),
+        }
+    if isinstance(basis, P5ProductDecisionBasisV2):
+        return {
+            "product_specific_understanding": basis.product_specific_understanding,
+            "tradeoff": basis.tradeoff,
+            "condition_of_validity": basis.condition_of_validity,
+            "relation_kind": basis.relation_kind,
+            "supporting_fact_refs": list(basis.supporting_fact_refs),
+        }
+    return None
+
+
 def build_writer_request_v3(
     contract: PublicationContractV3,
     *,
@@ -65,31 +108,12 @@ def build_writer_request_v3(
     prior_output: WriterOutputV3 | None,
     revision_instruction: str | None,
 ) -> WriterRequestV3:
-    basis_document: dict[str, object] | None = None
-    if isinstance(product_decision_basis, P2ProductDecisionBasisV2):
-        basis_document = {
-            "decision_axis": product_decision_basis.decision_axis,
-            "product_specific_understanding": (product_decision_basis.product_specific_understanding),
-            "tradeoff": product_decision_basis.tradeoff,
-            "condition_of_validity": (product_decision_basis.condition_of_validity),
-            "supporting_fact_refs": list(product_decision_basis.supporting_fact_refs),
-        }
-    elif isinstance(product_decision_basis, P5ProductDecisionBasisV2):
-        basis_document = {
-            "product_specific_understanding": (product_decision_basis.product_specific_understanding),
-            "tradeoff": product_decision_basis.tradeoff,
-            "condition_of_validity": (product_decision_basis.condition_of_validity),
-            "relation_kind": product_decision_basis.relation_kind,
-            "supporting_fact_refs": list(product_decision_basis.supporting_fact_refs),
-        }
+    basis_document = _product_basis_document(product_decision_basis)
+    _assert_product_basis_binding(contract, product_decision_basis)
     permission = contract.account_editorial_permission
     series = contract.series_delta
     platform = contract.platform_direction
-    actuality_fact_refs = tuple(
-        span.source_id
-        for span in contract.input_roles
-        if span.role == "observable_actuality"
-    )
+    actuality_fact_refs = tuple(span.source_id for span in contract.input_roles if span.role == "observable_actuality")
     read_only_actuality_context = tuple(
         {
             "fact_ref": span.source_id,
@@ -134,9 +158,7 @@ def build_writer_request_v3(
             "target": platform.target,
             "media_format": platform.media_format,
             "direction_version": platform.direction_version,
-            "expression_responsibility": (
-                platform_expression_responsibility.strip()
-            ),
+            "expression_responsibility": (platform_expression_responsibility.strip()),
         },
         prohibited_bindings=contract.prohibited_bindings,
         prior_output=(
@@ -152,6 +174,8 @@ def build_writer_request_v3(
         revision_instruction=(revision_instruction.strip() if revision_instruction else None),
         expression_policy_version=contract.expression_policy_version,
         intake_role_contract_version=contract.intake_role_contract_version,
+        account_editorial_context=_writer_account_editorial_context(contract),
+        brand_relevance=_writer_brand_relevance(contract),
     )
     assert_writer_request_v3(request)
     return request
@@ -181,6 +205,10 @@ def writer_request_document(request: WriterRequestV3) -> dict[str, object]:
         document["expression_policy_version"] = request.expression_policy_version
     if request.intake_role_contract_version != LEGACY_INTAKE_ROLE_CONTRACT_VERSION:
         document["intake_role_contract_version"] = request.intake_role_contract_version
+    if request.account_editorial_context is not None:
+        document["account_editorial_context"] = request.account_editorial_context
+    if request.brand_relevance is not None:
+        document["brand_relevance"] = request.brand_relevance
     return document
 
 
@@ -204,8 +232,7 @@ def assert_writer_request_v3(request: WriterRequestV3) -> None:
         or not request.content_product
         or not request.central_job
         or not request.audience_payoff
-        or tuple(item.get("fact_ref") for item in request.read_only_actuality_context)
-        != request.actuality_fact_refs
+        or tuple(item.get("fact_ref") for item in request.read_only_actuality_context) != request.actuality_fact_refs
         or any(
             set(item) != {"fact_ref", "exact_text"} or not item["exact_text"]
             for item in request.read_only_actuality_context
@@ -238,8 +265,108 @@ def assert_writer_request_v3(request: WriterRequestV3) -> None:
             LEGACY_INTAKE_ROLE_CONTRACT_VERSION,
             INTAKE_ROLE_CONTRACT_VERSION,
         }
+        or not _valid_account_editorial_context(request.account_editorial_context)
+        or not _valid_brand_relevance(request.brand_relevance)
     ):
         raise DomainError("Writer 请求没有绑定唯一发布合同")
+
+
+def _assert_product_basis_binding(
+    contract: PublicationContractV3,
+    basis: ProductDecisionBasisV2 | None,
+) -> None:
+    frozen = contract.product_decision_basis
+    if frozen is None and basis is None:
+        return
+    if (
+        frozen is None
+        or basis is None
+        or (
+            frozen.contract_version != basis.contract_version
+            or frozen.digest != product_value_contract_digest(basis)
+            or frozen.supporting_fact_refs != basis.supporting_fact_refs
+        )
+    ):
+        raise DomainError("Writer 商品决策依据与冻结发布合同不一致")
+
+
+def _writer_account_editorial_context(
+    contract: PublicationContractV3,
+) -> dict[str, object] | None:
+    resolution = contract.account_editorial_resolution
+    if resolution is None:
+        return None
+    return {
+        "applied": resolution.applied,
+        "contract_version": resolution.contract_version,
+        "lens_contract_version": (resolution.lens.contract_version if resolution.lens is not None else None),
+        "lens_digest": (
+            account_editorial_lens_digest(resolution.lens) if resolution.lens is not None else None
+        ),
+        "degraded_reasons": [reason.value for reason in resolution.degraded_reasons],
+        "source_refs": list(resolution.source_refs),
+        "source_digest": resolution.source_digest,
+        "resolution_digest": account_editorial_resolution_digest(resolution),
+    }
+
+
+def _writer_brand_relevance(contract: PublicationContractV3) -> dict[str, object] | None:
+    if contract.brand_relevance_state is None:
+        return None
+    evidence = contract.brand_relevance_evidence
+    return {
+        "state": contract.brand_relevance_state,
+        "family": evidence.path_family if evidence is not None else None,
+        "source_object_type": evidence.source_object_type if evidence is not None else None,
+        "source_id": evidence.source_id if evidence is not None else None,
+        "source_version": evidence.source_version if evidence is not None else None,
+        "source_digest": evidence.source_digest if evidence is not None else None,
+        "organization_ref": evidence.organization_ref if evidence is not None else None,
+        "authorization_ref": evidence.authorization_ref if evidence is not None else None,
+        "media_ref": evidence.media_ref if evidence is not None else None,
+        "actual_consumed_refs": list(evidence.actual_consumed_refs) if evidence is not None else [],
+        "degraded_reason": contract.brand_relevance_degraded_reason,
+        "demonstration_eligible": contract.demonstration_eligible,
+    }
+
+
+def _valid_account_editorial_context(value: dict[str, object] | None) -> bool:
+    if value is None:
+        return True
+    reasons = value.get("degraded_reasons")
+    return (
+        isinstance(value.get("applied"), bool)
+        and value.get("contract_version") == "account-editorial-resolution-v1"
+        and isinstance(reasons, list)
+        and all(isinstance(reason, str) and reason for reason in reasons)
+        and _is_sha256(value.get("source_digest"))
+        and _is_sha256(value.get("resolution_digest"))
+        and ((value["applied"] is True and not reasons) or (value["applied"] is False and bool(reasons)))
+    )
+
+
+def _valid_brand_relevance(value: dict[str, object] | None) -> bool:
+    if value is None:
+        return True
+    state = value.get("state")
+    if state == "applied":
+        return (
+            value.get("family") is not None
+            and _is_sha256(value.get("source_digest"))
+            and isinstance(value.get("actual_consumed_refs"), list)
+            and bool(value["actual_consumed_refs"])
+            and value.get("demonstration_eligible") is True
+        )
+    return (
+        state == "degraded"
+        and value.get("family") is None
+        and bool(value.get("degraded_reason"))
+        and value.get("demonstration_eligible") is False
+    )
+
+
+def _is_sha256(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(character in "0123456789abcdef" for character in value)
 
 
 def writer_output_from_response(value: object) -> WriterOutputV3:
@@ -305,6 +432,8 @@ def suppress_exact_fact_only_units(
         creative_body="\n\n".join(creative_paragraphs),
         publication_caption=output.publication_caption,
     )
+
+
 def writer_output_document(output: WriterOutputV3) -> dict[str, object]:
     return {
         "output_version": output.output_version,

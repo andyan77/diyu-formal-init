@@ -30,6 +30,7 @@ from src.shared.media_program import (
     media_program_digest,
 )
 from src.shared.product_value import (
+    P1ProductDecisionBasisV3,
     P2ProductDecisionBasisV2,
     P2ProductValueContractV1,
     P5ProductDecisionBasisV2,
@@ -511,11 +512,7 @@ def _compile_delivery_v5(
         )
     )
     actuality_fact_refs = (
-        {
-            span.source_id
-            for span in contract.input_roles
-            if span.role == "observable_actuality"
-        }
+        {span.source_id for span in contract.input_roles if span.role == "observable_actuality"}
         if contract.expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
         else set()
     )
@@ -792,6 +789,12 @@ def _v5_semantic_contract(
     visible_facts: tuple[str, ...],
 ) -> ContentSemanticContract:
     basis = request.product_value_contract
+    if isinstance(basis, P1ProductDecisionBasisV3):
+        return P1SemanticContract(
+            basis.product_specific_understanding,
+            basis.tradeoff,
+            basis.condition_of_validity,
+        )
     if isinstance(basis, P2ProductDecisionBasisV2):
         return P2SemanticContract(
             basis.product_specific_understanding,

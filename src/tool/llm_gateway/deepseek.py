@@ -116,6 +116,7 @@ from src.shared.narrative import (
     visible_digest,
 )
 from src.shared.product_value import (
+    P1ProductDecisionBasisV3,
     P2ProductDecisionBasisV2,
     P2ProductValueContractV1,
     P5ProductDecisionBasisV2,
@@ -175,6 +176,31 @@ from src.shared.writer_request import (
     writer_request_digest,
     writer_request_document,
 )
+
+
+def _formal_product_basis(value: object) -> ProductDecisionBasisV2 | None:
+    return (
+        value
+        if isinstance(
+            value,
+            (P1ProductDecisionBasisV3, P2ProductDecisionBasisV2, P5ProductDecisionBasisV2),
+        )
+        else None
+    )
+
+
+def _account_profile_source_spans(contract: PublicationContractV3) -> tuple[str, ...]:
+    resolution = contract.account_editorial_resolution
+    if resolution is None or resolution.lens is None:
+        return ()
+    lens = resolution.lens
+    return (
+        lens.identity_position_input,
+        lens.authority_boundary_input,
+        lens.audience_relationship_input,
+        lens.content_territories_input,
+    )
+
 
 _LOGGER = logging.getLogger(__name__)
 _SPEAKER_ID = "speaker:brand_account"
@@ -851,14 +877,7 @@ class DeepSeekGenerator(ContentGenerator):
             request.media_program,
         )
         context = BoundaryContext.from_request(request, request.narrative_frame)
-        product_basis = (
-            request.product_value_contract
-            if isinstance(
-                request.product_value_contract,
-                (P2ProductDecisionBasisV2, P5ProductDecisionBasisV2),
-            )
-            else None
-        )
+        product_basis = _formal_product_basis(request.product_value_contract)
         if request.primary_product in {
             "product_truth",
             "visual_styling_story",
@@ -943,6 +962,7 @@ class DeepSeekGenerator(ContentGenerator):
             context=context,
             product_basis=product_basis,
             expression_policy_version=contract.expression_policy_version,
+            account_profile_spans=_account_profile_source_spans(contract),
         )
         supporting_fact_refs = product_basis.supporting_fact_refs if product_basis is not None else ()
         selected_fact_blocks = tuple(
@@ -1118,6 +1138,7 @@ class DeepSeekGenerator(ContentGenerator):
         context: BoundaryContext,
         product_basis: ProductDecisionBasisV2 | None,
         expression_policy_version: str = USER_ACTUALITY_EXPRESSION_POLICY,
+        account_profile_spans: tuple[str, ...] = (),
     ) -> None:
         visible = "\n".join(
             (
@@ -1127,6 +1148,8 @@ class DeepSeekGenerator(ContentGenerator):
                 output.publication_caption,
             )
         )
+        if any(span and span in visible for span in account_profile_spans):
+            raise GenerationFailed("Writer 不得逐字复制账号画像")
         actuality_fact_refs = (
             {record.fact_id for record in context.fact_registry if record.fact_kind == "user_actuality"}
             if expression_policy_version == USER_ACTUALITY_EXPRESSION_POLICY
@@ -2249,7 +2272,7 @@ class DeepSeekGenerator(ContentGenerator):
             primary_product=request.primary_product,
             account_expression=request.account_expression,
             brand_context_packet=request.brand.context_packet,
-        )
+        ).lens
         account_unit_responsibilities: dict[str, str] = {}
         if account_editorial_lens is not None:
             by_purpose = {
@@ -3291,14 +3314,11 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
     @staticmethod
     def _deidentified_writer_controls(request: GenerationInput) -> str:
         expression = request.account_expression
-        relationship_product = (
-            build_account_editorial_lens(
-                primary_product=request.primary_product,
-                account_expression=request.account_expression,
-                brand_context_packet=request.brand.context_packet,
-            )
-            is not None
-        )
+        relationship_product = build_account_editorial_lens(
+            primary_product=request.primary_product,
+            account_expression=request.account_expression,
+            brand_context_packet=request.brand.context_packet,
+        ).applied
         expression_parts = (
             ()
             if relationship_product
@@ -3406,7 +3426,7 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
             primary_product=request.primary_product,
             account_expression=request.account_expression,
             brand_context_packet=request.brand.context_packet,
-        )
+        ).lens
         if lens is not None:
             frozen_lens = account_editorial_lens_document(lens)
             writer_fields = (
@@ -3633,12 +3653,11 @@ unit_contract 和 required_expression，不得因为 purpose 或写作习惯换�
         source_spans: tuple[str, ...],
         forbid_attributed_dialogue: bool,
     ) -> str:
-
         editorial_lens = build_account_editorial_lens(
             primary_product=request.primary_product,
             account_expression=request.account_expression,
             brand_context_packet=request.brand.context_packet,
-        )
+        ).lens
         editorial_responsibilities: dict[str, str] = {}
         if editorial_lens is not None:
             by_purpose = {

@@ -54,6 +54,7 @@ from src.shared.media_program import (
 )
 from src.shared.narrative import legacy_frame, visible_digest
 from src.shared.product_value import (
+    P1ProductDecisionBasisV3,
     P2ProductDecisionBasisV2,
     P2ProductValueContractV1,
     P5ProductDecisionBasisV2,
@@ -211,10 +212,8 @@ class DeterministicContentGenerator(ContentGenerator):
         if (
             contract.platform_direction.target != request.target
             or contract.platform_direction.media_format != request.media_format
-            or contract.platform_direction.direction_version
-            != request.platform_direction.version
-            or contract.platform_direction.direction_digest
-            != request.platform_direction.direction_digest
+            or contract.platform_direction.direction_version != request.platform_direction.version
+            or contract.platform_direction.direction_digest != request.platform_direction.direction_digest
         ):
             raise GenerationFailed("Writer 平台责任没有绑定冻结平台方向")
         frame = request.narrative_frame
@@ -248,16 +247,18 @@ class DeterministicContentGenerator(ContentGenerator):
             request.product_value_contract
             if isinstance(
                 request.product_value_contract,
-                (P2ProductDecisionBasisV2, P5ProductDecisionBasisV2),
+                (
+                    P1ProductDecisionBasisV3,
+                    P2ProductDecisionBasisV2,
+                    P5ProductDecisionBasisV2,
+                ),
             )
             else None
         )
         writer_request = build_writer_request_v3(
             contract,
             product_decision_basis=product_basis,
-            platform_expression_responsibility=(
-                request.platform_direction.direction
-            ),
+            platform_expression_responsibility=(request.platform_direction.direction),
             prior_output=request.prior_writer_output,
             revision_instruction=request.revision_instruction,
         )

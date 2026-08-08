@@ -8,8 +8,11 @@ from pathlib import Path
 
 from src.brain.creation_intent_gate import CreationCommitment, commitment_document
 from src.shared.account_editorial_lens import (
+    AccountEditorialResolutionV4,
     account_editorial_lens_digest,
     account_editorial_lens_document,
+    account_editorial_resolution_digest,
+    account_editorial_resolution_document,
     build_account_editorial_lens,
 )
 from src.shared.brand_publication import brand_context_packet_document
@@ -36,6 +39,7 @@ from src.shared.product_value import (
 )
 from src.shared.publication_contract import (
     PublicationContract,
+    PublicationContractV3,
     publication_contract_digest,
     publication_contract_document,
 )
@@ -468,6 +472,39 @@ def direction_summary(direction: CreativeDirection | None) -> str:
 SNAPSHOT_SCHEMA = "content-context-snapshot-v1"
 
 
+def _account_editorial_snapshot_fields(
+    *,
+    control: ContentControlContext,
+    creative_plan: CreativePlanV2 | None,
+    brand_context_packet: BrandContextPacket | None,
+    publication_contract: PublicationContract | None,
+) -> dict[str, object]:
+    resolution: AccountEditorialResolutionV4 | None = (
+        publication_contract.account_editorial_resolution
+        if isinstance(publication_contract, PublicationContractV3)
+        else (
+            build_account_editorial_lens(
+                primary_product=creative_plan.primary_value,
+                account_expression=control.account_expression,
+                brand_context_packet=brand_context_packet,
+            )
+            if creative_plan is not None and publication_contract is None
+            else None
+        )
+    )
+    lens = resolution.lens if resolution is not None else None
+    return {
+        "account_editorial_lens": account_editorial_lens_document(lens) if lens is not None else None,
+        "account_editorial_lens_digest": account_editorial_lens_digest(lens) if lens is not None else None,
+        "account_editorial_resolution": (
+            account_editorial_resolution_document(resolution) if resolution is not None else None
+        ),
+        "account_editorial_resolution_digest": (
+            account_editorial_resolution_digest(resolution) if resolution is not None else None
+        ),
+    }
+
+
 def snapshot_document(
     control: ContentControlContext,
     content_role: str,
@@ -498,15 +535,6 @@ def snapshot_document(
     product_fact_packet = build_product_fact_packet(
         products,
         allowed_fact_ids=(narrative_frame.allowed_product_fact_ids if narrative_frame is not None else None),
-    )
-    account_editorial_lens = (
-        build_account_editorial_lens(
-            primary_product=creative_plan.primary_value,
-            account_expression=control.account_expression,
-            brand_context_packet=brand_context_packet,
-        )
-        if creative_plan is not None and publication_contract is None
-        else None
     )
     return {
         "schema": SNAPSHOT_SCHEMA,
@@ -557,11 +585,11 @@ def snapshot_document(
         "account_expression_profile_version": (
             control.account_expression.version if control.account_expression else None
         ),
-        "account_editorial_lens": (
-            account_editorial_lens_document(account_editorial_lens) if account_editorial_lens is not None else None
-        ),
-        "account_editorial_lens_digest": (
-            account_editorial_lens_digest(account_editorial_lens) if account_editorial_lens is not None else None
+        **_account_editorial_snapshot_fields(
+            control=control,
+            creative_plan=creative_plan,
+            brand_context_packet=brand_context_packet,
+            publication_contract=publication_contract,
         ),
         "publication_contract": (
             publication_contract_document(publication_contract) if publication_contract is not None else None

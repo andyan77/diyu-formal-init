@@ -12,12 +12,14 @@ from src.shared.publication_contract import (
     product_brief,
 )
 from src.shared.task_value_assembly import (
+    BRAND_RELEVANCE_CONTRACT_VERSION,
     PAYOFF_MAX_LENGTH,
     PAYOFF_MIN_LENGTH,
     PRE_PROPOSAL_CONFIRMATION_STATE,
     PROFILE_SIGNAL_FIELDS,
     TASK_VALUE_ASSEMBLY_VERSION,
     V0_PRODUCIBLE_PATHS,
+    BrandRelevanceEvidenceV1,
     BrandRelevancePath,
     PayoffDegradationReason,
     TaskValueAssemblyTraceV1,
@@ -28,6 +30,7 @@ from src.shared.task_value_assembly import (
 from src.shared.types import AccountExpression, ContentProduct
 
 PAYOFF_RULESET_VERSION = "task-value-ruleset-v0"
+PAYOFF_RULESET_V1_VERSION = "task-value-ruleset-v1"
 
 CONTENT_PRODUCTS: tuple[str, ...] = tuple(get_args(ContentProduct))
 TOPIC_ORIGINS: tuple[str, ...] = ("explicit_user", "system_selected")
@@ -94,6 +97,34 @@ RULESET_V0 = PayoffRuleset(
     ),
 )
 
+RULESET_V1 = PayoffRuleset(
+    version=PAYOFF_RULESET_V1_VERSION,
+    candidate_order=(
+        "brand_visual",
+        "local_trust",
+        "organization_people",
+        "product_expertise",
+        "existing_series",
+        "audience_relationship",
+        "brand_stance",
+    ),
+    path_lead={
+        "product_expertise": "让受众凭这一篇冻结的商品选择依据，拿到",
+        "existing_series": "让持续在追这条系列的受众，在这一篇里继续拿到",
+        "audience_relationship": "让本账号长期服务的这群受众，按各自处境拿到",
+        "brand_stance": "让受众从本账号已确认的判断立场出发，拿到",
+        "brand_visual": "让受众凭本篇已冻结的合法视觉关系，拿到",
+        "local_trust": "让受众凭本篇已冻结的区域或门店来源，拿到",
+        "organization_people": "让受众凭本篇已冻结的人物资格与组织来源，拿到",
+    },
+    product_focus=RULESET_V0.product_focus,
+    topic_tail=RULESET_V0.topic_tail,
+    series_continuity_tail=RULESET_V0.series_continuity_tail,
+    product_expertise_products=RULESET_V0.product_expertise_products,
+    natural_reserved_path=RULESET_V0.natural_reserved_path,
+    stance_profile_fields=RULESET_V0.stance_profile_fields,
+)
+
 
 @dataclass(frozen=True)
 class PayoffAssemblyRequest:
@@ -107,6 +138,7 @@ class PayoffAssemblyRequest:
     series_position: int
     static_payoff: str
     static_defaults: tuple[str, ...]
+    relevance_evidence: tuple[BrandRelevanceEvidenceV1, ...] = ()
 
 
 def payoff_ruleset_document(ruleset: PayoffRuleset) -> dict[str, object]:
@@ -179,6 +211,7 @@ def build_payoff_request(
     product_basis: ProductDecisionBasisRefV2 | None,
     series_delta: SeriesDeltaV1 | None,
     static_payoff: str,
+    relevance_evidence: tuple[BrandRelevanceEvidenceV1, ...] = (),
 ) -> PayoffAssemblyRequest:
     return PayoffAssemblyRequest(
         content_product=content_product,
@@ -186,13 +219,12 @@ def build_payoff_request(
         profile_signals=profile_signals(account_expression),
         product_basis_present=(product_basis is not None and bool(product_basis.supporting_fact_refs)),
         series_basis_present=(
-            series_delta is not None
-            and series_delta.series_position >= 1
-            and bool(series_delta.required_new_judgment)
+            series_delta is not None and series_delta.series_position >= 1 and bool(series_delta.required_new_judgment)
         ),
         series_position=(series_delta.series_position if series_delta is not None else 0),
         static_payoff=static_payoff,
         static_defaults=static_payoff_defaults(),
+        relevance_evidence=relevance_evidence,
     )
 
 
@@ -235,6 +267,8 @@ def _path_has_signal(
     request: PayoffAssemblyRequest,
     ruleset: PayoffRuleset,
 ) -> bool:
+    if ruleset.version == PAYOFF_RULESET_V1_VERSION:
+        return _evidence_for_path(path, request) is not None
     if path == "product_expertise":
         return request.product_basis_present
     if path == "existing_series":
@@ -330,6 +364,8 @@ def _server_assembled(
     ruleset: PayoffRuleset,
     digest: str,
 ) -> TaskValueAssemblyV1:
+    evidence = _evidence_for_path(path, request)
+    current_contract = ruleset.version == PAYOFF_RULESET_V1_VERSION
     assembly = TaskValueAssemblyV1(
         contract_version=TASK_VALUE_ASSEMBLY_VERSION,
         audience_payoff=payoff,
@@ -341,6 +377,10 @@ def _server_assembled(
         ruleset_version=ruleset.version,
         ruleset_digest=digest,
         assembly_trace=_trace(_template_id(path, request, ruleset), request, digest, path, ruleset),
+        brand_relevance_state=("applied" if current_contract else None),
+        brand_relevance_evidence=(evidence if current_contract else None),
+        brand_relevance_degraded_reason=None,
+        demonstration_eligible=(True if current_contract else None),
     )
     assert_task_value_assembly(assembly)
     return assembly
@@ -353,6 +393,7 @@ def _static_fallback(
     reason: PayoffDegradationReason,
 ) -> TaskValueAssemblyV1:
     template_id = f"{ruleset.version}/static_fallback/{request.content_product}/{request.topic_origin}"
+    current_contract = ruleset.version == PAYOFF_RULESET_V1_VERSION
     assembly = TaskValueAssemblyV1(
         contract_version=TASK_VALUE_ASSEMBLY_VERSION,
         audience_payoff=request.static_payoff,
@@ -364,6 +405,10 @@ def _static_fallback(
         ruleset_version=ruleset.version,
         ruleset_digest=digest,
         assembly_trace=_trace(template_id, request, digest, None, ruleset),
+        brand_relevance_state=("degraded" if current_contract else None),
+        brand_relevance_evidence=None,
+        brand_relevance_degraded_reason=("no_natural_brand_relevance_path" if current_contract else None),
+        demonstration_eligible=(False if current_contract else None),
     )
     assert_task_value_assembly(assembly)
     return assembly
@@ -382,4 +427,46 @@ def _trace(
         ruleset_digest=digest,
         product_basis_present=request.product_basis_present,
         series_basis_present=request.series_basis_present,
+    )
+
+
+def brand_relevance_evidence(
+    *,
+    path_family: BrandRelevancePath,
+    source_object_type: str,
+    source_id: str,
+    source_version: str,
+    source_digest: str,
+    actual_consumed_refs: tuple[str, ...],
+    organization_ref: str | None = None,
+    authorization_ref: str | None = None,
+    media_ref: str | None = None,
+) -> BrandRelevanceEvidenceV1:
+    """Create one typed path source; the shared contract performs fail-closed validation."""
+
+    from src.shared.task_value_assembly import assert_brand_relevance_evidence
+
+    evidence = BrandRelevanceEvidenceV1(
+        contract_version=BRAND_RELEVANCE_CONTRACT_VERSION,
+        path_family=path_family,
+        source_object_type=source_object_type,
+        source_id=source_id,
+        source_version=source_version,
+        source_digest=source_digest,
+        actual_consumed_refs=actual_consumed_refs,
+        organization_ref=organization_ref,
+        authorization_ref=authorization_ref,
+        media_ref=media_ref,
+    )
+    assert_brand_relevance_evidence(evidence)
+    return evidence
+
+
+def _evidence_for_path(
+    path: BrandRelevancePath,
+    request: PayoffAssemblyRequest,
+) -> BrandRelevanceEvidenceV1 | None:
+    return next(
+        (evidence for evidence in request.relevance_evidence if evidence.path_family == path),
+        None,
     )
