@@ -816,3 +816,41 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 复验；PASS 后由主控组织 founder 对上述 digest 作独立 attestation。
 
 <!-- BRAND-MATRIX-01-GATEA-CLOSEOUT-END -->
+
+<!-- BRAND-MATRIX-01-GATEA-SUPERVISOR-VERDICT-START -->
+
+### Gate A 监理复验记录（2026-08-08）
+
+> 状态：**`GATE-A VERIFIED_BY_SUPERVISOR · AWAITING_FOUNDER_SIGNOFF`**。监理复验通过，
+> 但 Gate A 完成门含 founder 素材定稿签署，签署完成前不得置 `COMPLETE / PASS`。
+
+#### 监理独立复验（重测，非采信执行侧证据）
+
+- **Git 面**：执行分支 HEAD `15190da` 精确匹配；基线祖先关系成立；主线未被执行侧触碰；
+  范围恰 18 文件，治理两文件 append-only（0 删行）；`素材草案-v0`、`docs/品牌入驻候选`、
+  `src/`、`alembic/`、`frontend/`、冻结脚本目录零改动。
+- **manifest 面**：监理独立双跑构建器，两次输出互相逐字节一致**且与已提交
+  `import-manifest.json` 逐字节一致**；digest 精确等于
+  `14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06`；计数
+  `10/6/4/2/31/26/4/1/8`＋文档 25 全部实测吻合。
+- **内容面**：31 条区域/门店条目前缀分布 8/7/6/5/5 与监理签发前亲数一致，`RK-EC-08`
+  状态 `expired_demo_sample_not_current`；媒体 26/26 `source_sha256=null`、
+  `sha_verification=pending_gate_d`、母版空、`p5_eligibility=false`、云盘文件名保留在
+  `declared_identifier`（较签发件"SHA 列登记声明值"更严谨，予以采认）；J 4/4 六字段齐备、
+  `judgment_owner`(H03/商品负责人) 与 `approved_by=founder` 分离、`approved_at=null`；
+  异常锚点 8/8 指向真实对象 ID（含 `PS-S04-03` 经查证为合法单次授权条目）；25/25 分类表
+  文件名互换处理正确、画像类 4 份改判画像通道、R 级守卫项零消费方。
+- **隐私面**：Gate A privacy 断言 PASS；监理另行独立计算 21 份 Windows 真源 git blob，
+  与候选树交集 **0**；EXE-V1 与 S0 secrets 断言复跑 PASS。
+- **CI 面**：`gh api` 直查 run `31254885113`：`workflow_dispatch`、head SHA==`15190da`、
+  `success`、19 步非成功 0。执行侧如实申报 `CI_SCOPE=existing_regression_only`
+  （CI 不跑 `scripts/gatea/**`）——监理本地以 Ruff/mypy 补验 4 个脚本全绿，缺口关闭。
+- **合并面**：合入主线树与 `15190da` 逐字节相同（CI 结论直接覆盖），断言门控提交。
+
+#### 状态推进
+
+- Gate A 推进至 `VERIFIED_BY_SUPERVISOR · AWAITING_FOUNDER_SIGNOFF`；模型调用累计 0。
+- 下一动作：主控向 founder 提交 manifest digest 签署请求；签署记录落盘后 Gate A 置
+  `COMPLETE`，随后签发 Prompt 3（Gate B）。
+
+<!-- BRAND-MATRIX-01-GATEA-SUPERVISOR-VERDICT-END -->
