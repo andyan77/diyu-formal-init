@@ -763,3 +763,7 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   的四个位置」）为 `演示虚构·待founder定稿`，入 founder 签署页。
 - 完成门含 founder 素材定稿签署；执行侧终态只允许
   `GATE-A IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`。
+
+> **基线勘正（2026-08-08，监理）**：上条记录中「基线 `55b1a5e`」为监理复验关账时点
+> HEAD；Prompt 2 实际 `EXPECTED_BASE_SHA` 为**含本勘正在内的签发链最终主线提交**，
+> 具体 SHA 以 chat 签发件载明值为准。执行侧以 chat 签发件为唯一基线真源。
