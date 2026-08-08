@@ -113,8 +113,16 @@ $SSH $DIYU_ECS_USER@$DIYU_ECS_HOST \
 
 `deploy.sh` 依次做：校验 `/etc/diyu/*.env` 存在 → 生产仓 fetch + `checkout --detach`（**脏则拒绝，保护人工改动**）→ 校验候选镜像 digest 与 label 双匹配 → `backup.sh predeploy`（整库 pg_dump + 对象存储镜像）→ `migrate` → `seed` → `bootstrap`（仅首次）→ `up -d --no-build app` → 轮询 `127.0.0.1:18000/health/ready` 30 次 → 校验**实际运行容器的镜像 digest == 冻结 digest** → 装并启用备份 timer。
 
-> **关键**：`deploy.sh` **不切公网路由**。成功后新版本只在 `127.0.0.1:18000` 上。
-> 这给了一个"上线了但还没暴露给用户"的窗口，冒烟就在这个窗口里做。
+> ⚠️ **这里有一条我先前写错、已被 2026-08-07 实测推翻的说法，务必看清**：
+>
+> `deploy.sh` 确实**不修改 nginx 配置**，但这**不等于**存在"上线了还没暴露"的窗口。
+> 实测：公网站点 `diyuai.cc` 本就处于 application 模式（反代到 `127.0.0.1:18000`），
+> 所以 `up -d app` 把容器换掉的那一刻，**新版本立即对公网生效**。
+>
+> 只有当公网当前挂在**维护页**时，步骤 5 才是真正的"暴露"动作。
+> 因此：**冒烟是在新版本已经对外服务的状态下做的**，兜底靠的是回滚够快
+> （`rollback.sh` 按 digest 切回，秒级），不是靠一个并不存在的灰度窗口。
+> 需要真正的灰度，得先 `switch_public_route.sh maintenance` 再部署，本轮未这样做。
 
 ### 步骤 4 · 上线前冒烟（在环回口做，公网仍是旧版本）
 
