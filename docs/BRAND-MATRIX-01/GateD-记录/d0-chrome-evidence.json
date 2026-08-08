@@ -1,0 +1,9 @@
+{
+  "browser": "headless-chrome",
+  "candidate_requests": 1,
+  "confirm_requests": 1,
+  "detail": "React V2 preview/save/confirm/readback contract passed",
+  "preview_requests": 2,
+  "provider_requests": 0,
+  "status": "PASS"
+}

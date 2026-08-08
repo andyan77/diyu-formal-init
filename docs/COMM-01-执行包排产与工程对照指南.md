@@ -1007,6 +1007,29 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 
 <!-- BRAND-MATRIX-01-GATEC-SUPERVISOR-VERDICT-END -->
 
+<!-- BRAND-MATRIX-01-GATED-EVIDENCE-BLOCK-START -->
+
+### Gate D 执行侧媒体证据阻断记录（2026-08-08）
+
+> **待监理复核**。状态为 `GATE-D EVIDENCE_BLOCKED · MEDIA_QUALIFICATION_INSUFFICIENT`，
+> 不等于 Gate D 已实现或通过。
+
+- D0 已把 publication-contract-v2 正式接入 React/API/仓储/任务快照；客户端治理字段拒绝，
+  服务端来源派生和确认后任务消费成立。两轮隔离导入 batch digest 与对象指纹分别逐字节一致。
+- 账号与载体精确为 10 根账号、20 carrier、30 矩阵账号行、40 平台/形式目标；旧 9 账号
+  归档隐藏且历史可读。31 条区域/门店资料全部登记，28 条进入 V2 projection，RK-EC-08
+  新任务消费为 0；七个组织任务冻结真实 projection item。
+- 四组 J 在 P1/P2 实际依据中可见；两条人物授权均完成失败释放、V1 单次核销、同谱系 V2
+  不二次核销和第二独立任务拒绝。反馈只进入观察层，下一任务不消费。
+- 26 个技术母版及源/母版 checksum 全部完成，二进制不入 Git；十项媒体门因逐文件权利证据
+  不完整判为 PASS 0 / FAIL 0 / QUARANTINED 26，原片和母版 P5 eligibility 均为 0。
+- 依据 Prompt 5 rev3 补正条款，P5 和全部正式 provider 套件在调用前停止：task/run/version
+  `0/0/0`，provider request `0`。八剧本/八异常只登记机制证据，未冒充正式 `8/8`。
+- 唯一下一动作：监理复核媒体证据缺口；取得至少两份分别绑定不同正式商品的 PASS 母版后，
+  从完整确定性工程门重新冻结候选并运行正式套件。
+
+<!-- BRAND-MATRIX-01-GATED-EVIDENCE-BLOCK-END -->
+
 ### Prompt 5（Gate D）签发记录（2026-08-08）
 
 - 基线：本签发记录提交自身（SHA 以 chat 签发件载明值为准）；执行分支 `exe/brand-matrix-d`；

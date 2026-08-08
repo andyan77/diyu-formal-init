@@ -24,6 +24,7 @@ P2DecisionAxis: TypeAlias = Literal[
     "internal_color_relationship",
     "confirmed_feature_and_structure",
     "confirmed_structure_and_silhouette",
+    "confirmed_identity_and_color",
 ]
 P2_DECISION_AXES = frozenset(
     {
@@ -32,8 +33,10 @@ P2_DECISION_AXES = frozenset(
         "internal_color_relationship",
         "confirmed_feature_and_structure",
         "confirmed_structure_and_silhouette",
+        "confirmed_identity_and_color",
     }
 )
+_P2DecisionShape: TypeAlias = tuple[P2DecisionAxis, tuple[str, ...], str, str, str]
 
 
 @dataclass(frozen=True)
@@ -92,6 +95,10 @@ class P2ProductDecisionBasisV2:
     condition_of_validity: str
     supporting_fact_refs: tuple[str, ...]
     source_packet_digest: str
+    judgment_ref: str | None = None
+    judgment_version: str | None = None
+    judgment_digest: str | None = None
+    applicability_conditions: tuple[str, ...] = ()
 
     @property
     def source_fact_ids(self) -> tuple[str, ...]:
@@ -115,6 +122,7 @@ class P1ProductDecisionBasisV3:
     judgment_ref: str
     judgment_version: str
     applicability_conditions: tuple[str, ...]
+    judgment_digest: str | None = None
 
     @property
     def source_fact_ids(self) -> tuple[str, ...]:
@@ -201,82 +209,115 @@ def _build_p1_decision_basis_v3(
         raise GenerationFailed("基于商品给出穿衣建议时，需要明确选择一件已确认商品。")
     product = products[0]
     base = _build_p2_decision_basis_v2(products)
-    applicability = product.applicability.strip()
-    if not applicability:
+    applicability_conditions = product.judgment_applicability_conditions or (
+        (product.applicability.strip(),) if product.applicability.strip() else ()
+    )
+    if not applicability_conditions:
         raise GenerationFailed("所选商品缺少当前判断成立条件，不能形成商品建议。")
-    judgment_ref = (
+    judgment_ref = product.judgment_ref or (
         f"product-version:{product.product_version_id}:judgment"
         if product.product_version_id is not None
         else f"product-judgment:{product.sku}:v{product.fact_version}"
     )
+    judgment_version = product.judgment_version or str(product.fact_version)
     result = P1ProductDecisionBasisV3(
         contract_version=P1_PRODUCT_DECISION_BASIS_VERSION,
         primary_product="dressing_decision",
         decision_axis=base.decision_axis,
         product_specific_understanding=base.product_specific_understanding,
         tradeoff=base.tradeoff,
-        condition_of_validity=(f"{base.condition_of_validity} 当前商品判断另须满足：{applicability}"),
+        condition_of_validity=(
+            f"{base.condition_of_validity} 当前商品判断另须满足："
+            f"{'；'.join(applicability_conditions)}"
+        ),
         supporting_fact_refs=base.supporting_fact_refs,
         source_packet_digest=base.source_packet_digest,
         judgment_ref=judgment_ref,
-        judgment_version=str(product.fact_version),
-        applicability_conditions=(applicability,),
+        judgment_version=judgment_version,
+        applicability_conditions=applicability_conditions,
+        judgment_digest=product.judgment_digest,
     )
     assert_product_decision_basis_v2(result)
     return result
 
 
-def _build_p2_decision_basis_v2(
-    products: Sequence[ProductFact],
-) -> P2ProductDecisionBasisV2:
-    """Derive a consumer decision, never a visible safety disclaimer."""
+def _color_decision_shape(product: ProductFact) -> _P2DecisionShape | None:
+    colors = _visible_values(product.facts.get("colors"))
+    both_sides = product.facts.get("both_sides_complete") is True
+    observable = _visible_string(product.facts.get("observable_features"))
+    if both_sides and len(colors) >= 2:
+        return (
+            "complete_side_choice", ("display_name", "colors", "both_sides_complete"),
+            "同一件商品以两种完整可见外观，提供商品内部的两面选择。",
+            "同一时刻主要呈现其中一面，选择一面就会暂时放下另一面的视觉重点。",
+            "只有用户确实需要在两种完整外观之间选择或切换时，这项价值才成立。",
+        )
+    if observable and len(colors) >= 2:
+        return (
+            "confirmed_visible_difference", ("display_name", "colors", "observable_features"),
+            "同一件商品的已确认可见特征与两种颜色，共同提供一个明确的视觉选择维度。",
+            "先让一种颜色或可见特征成为判断重点，就会暂时把另一种可见重点放在次位。",
+            "只有本次选择确实取决于这些已确认的可见差异时，这项价值才成立。",
+        )
+    if len(colors) >= 2:
+        return (
+            "internal_color_relationship", ("display_name", "colors"),
+            "这件商品的专属可见选择点，是资料中已确认的强对比颜色关系。",
+            "本次选择是采用这组已确认强对比作为判断重点，或不采用这项依据。",
+            "只有用户本次确实要按已确认的强对比颜色关系作选择时，这项价值才成立。",
+        )
+    return None
 
+
+def _construction_decision_shape(
+    product: ProductFact,
+    fact_keys: frozenset[str],
+) -> _P2DecisionShape | None:
+    observable = _visible_string(product.facts.get("observable_features"))
+    structure = _visible_string(product.facts.get("material_or_structure") or product.facts.get("material"))
+    silhouette = _visible_string(product.facts.get("silhouette"))
+    if observable and structure:
+        structure_key = "material_or_structure" if "material_or_structure" in fact_keys else "material"
+        return (
+            "confirmed_feature_and_structure", ("display_name", "observable_features", structure_key),
+            "这件商品已确认的可见特征与结构，提供两个可以相互复核的选择维度。",
+            "先看可见特征时，结构用于复核；把结构作为主要判断时，可见特征退到辅助位置。",
+            "只有本次选择确实需要同时核对这项可见特征与结构时，这项价值才成立。",
+        )
+    if structure and silhouette:
+        structure_key = "material_or_structure" if "material_or_structure" in fact_keys else "material"
+        return (
+            "confirmed_structure_and_silhouette", ("display_name", structure_key, "silhouette"),
+            "同一件商品已确认的结构与轮廓，提供两个可以相互复核的选择维度。",
+            "把结构作为主要判断时，轮廓会退到辅助位置；先看轮廓时，结构则用于复核。",
+            "只有本次选择确实同时需要核对结构与轮廓时，这项价值才成立。",
+        )
+    main_color = _visible_string(product.facts.get("main_color"))
+    if main_color:
+        keys = (("display_name", "category", "main_color") if _visible_string(product.facts.get("category"))
+                else ("display_name", "main_color"))
+        return (
+            "confirmed_identity_and_color", keys,
+            "这件商品已确认的商品身份与主色，提供一个可追踪的基础选择维度。",
+            "采用主色作为本次判断重点时，不能把资料未确认的效果、性能或精确适配一并说成事实。",
+            "只有本次选择确实需要核对这件商品及其已确认主色时，这项价值才成立。",
+        )
+    return None
+
+
+def _build_p2_decision_basis_v2(products: Sequence[ProductFact]) -> P2ProductDecisionBasisV2:
+    """Derive a consumer decision, never a visible safety disclaimer."""
     if len(products) != 1:
         raise GenerationFailed("商品解释需要明确选择一件已确认商品。")
     product = products[0]
     packet = build_product_fact_packet((product,))
     facts_by_key = {item.fact_key: item for item in packet.facts}
-    colors = _visible_values(product.facts.get("colors"))
-    both_sides = product.facts.get("both_sides_complete") is True
-    observable = _visible_string(product.facts.get("observable_features"))
-    structure = _visible_string(product.facts.get("material_or_structure") or product.facts.get("material"))
-    silhouette = _visible_string(product.facts.get("silhouette"))
-
-    source_keys: tuple[str, ...]
-    if both_sides and len(colors) >= 2:
-        decision_axis: P2DecisionAxis = "complete_side_choice"
-        source_keys = ("display_name", "colors", "both_sides_complete")
-        understanding = "同一件商品以两种完整可见外观，提供商品内部的两面选择。"
-        tradeoff = "同一时刻主要呈现其中一面，选择一面就会暂时放下另一面的视觉重点。"
-        condition = "只有用户确实需要在两种完整外观之间选择或切换时，这项价值才成立。"
-    elif observable and len(colors) >= 2:
-        decision_axis = "confirmed_visible_difference"
-        source_keys = ("display_name", "colors", "observable_features")
-        understanding = "同一件商品的已确认可见特征与两种颜色，共同提供一个明确的视觉选择维度。"
-        tradeoff = "先让一种颜色或可见特征成为判断重点，就会暂时把另一种可见重点放在次位。"
-        condition = "只有本次选择确实取决于这些已确认的可见差异时，这项价值才成立。"
-    elif len(colors) >= 2:
-        decision_axis = "internal_color_relationship"
-        source_keys = ("display_name", "colors")
-        understanding = "这件商品的专属可见选择点，是资料中已确认的强对比颜色关系。"
-        tradeoff = "本次选择是采用这组已确认强对比作为判断重点，或不采用这项依据。"
-        condition = "只有用户本次确实要按已确认的强对比颜色关系作选择时，这项价值才成立。"
-    elif observable and structure:
-        decision_axis = "confirmed_feature_and_structure"
-        structure_key = "material_or_structure" if "material_or_structure" in facts_by_key else "material"
-        source_keys = ("display_name", "observable_features", structure_key)
-        understanding = "这件商品已确认的可见特征与结构，提供两个可以相互复核的选择维度。"
-        tradeoff = "先看可见特征时，结构用于复核；把结构作为主要判断时，可见特征退到辅助位置。"
-        condition = "只有本次选择确实需要同时核对这项可见特征与结构时，这项价值才成立。"
-    elif structure and silhouette:
-        decision_axis = "confirmed_structure_and_silhouette"
-        structure_key = "material_or_structure" if "material_or_structure" in facts_by_key else "material"
-        source_keys = ("display_name", structure_key, "silhouette")
-        understanding = "同一件商品已确认的结构与轮廓，提供两个可以相互复核的选择维度。"
-        tradeoff = "把结构作为主要判断时，轮廓会退到辅助位置；先看轮廓时，结构则用于复核。"
-        condition = "只有本次选择确实同时需要核对结构与轮廓时，这项价值才成立。"
-    else:
+    shape = _color_decision_shape(product) or _construction_decision_shape(
+        product, frozenset(facts_by_key)
+    )
+    if shape is None:
         raise GenerationFailed("这件商品的当前已确认信息还不足以形成商品专属理解、相伴取舍和成立条件。")
+    decision_axis, source_keys, understanding, tradeoff, condition = shape
 
     supporting_fact_refs = tuple(facts_by_key[key].fact_id for key in source_keys if key in facts_by_key)
     if len(supporting_fact_refs) < 2:
@@ -290,6 +331,10 @@ def _build_p2_decision_basis_v2(
         condition_of_validity=condition,
         supporting_fact_refs=supporting_fact_refs,
         source_packet_digest=packet.packet_digest,
+        judgment_ref=product.judgment_ref,
+        judgment_version=product.judgment_version,
+        judgment_digest=product.judgment_digest,
+        applicability_conditions=product.judgment_applicability_conditions,
     )
     assert_product_decision_basis_v2(result)
     return result
@@ -315,18 +360,13 @@ def build_product_value_contract(
     return None
 
 
-def product_value_contract_document(
-    contract: ProductValueContract,
-) -> dict[str, object]:
+def product_value_contract_document(contract: ProductValueContract) -> dict[str, object]:
     common: dict[str, object] = {
         "contract_version": contract.contract_version,
         "primary_product": contract.primary_product,
         "source_packet_digest": contract.source_packet_digest,
     }
-    if isinstance(
-        contract,
-        (P1ProductDecisionBasisV3, P2ProductDecisionBasisV2, P5ProductDecisionBasisV2),
-    ):
+    if isinstance(contract, (P1ProductDecisionBasisV3, P2ProductDecisionBasisV2, P5ProductDecisionBasisV2)):
         result = common | {
             "product_specific_understanding": (contract.product_specific_understanding),
             "tradeoff": contract.tradeoff,
@@ -335,6 +375,15 @@ def product_value_contract_document(
         }
         if isinstance(contract, P2ProductDecisionBasisV2):
             result["decision_axis"] = contract.decision_axis
+            if contract.judgment_ref is not None:
+                result.update(
+                    {
+                        "judgment_ref": contract.judgment_ref,
+                        "judgment_version": contract.judgment_version,
+                        "judgment_digest": contract.judgment_digest,
+                        "applicability_conditions": list(contract.applicability_conditions),
+                    }
+                )
         if isinstance(contract, P1ProductDecisionBasisV3):
             result.update(
                 {
@@ -344,6 +393,8 @@ def product_value_contract_document(
                     "applicability_conditions": list(contract.applicability_conditions),
                 }
             )
+            if contract.judgment_digest is not None:
+                result["judgment_digest"] = contract.judgment_digest
         if isinstance(contract, P5ProductDecisionBasisV2):
             result.update(
                 {
@@ -403,6 +454,11 @@ def _p1_decision_basis_from_document(
         judgment_ref=_required_string(value.get("judgment_ref")),
         judgment_version=_required_string(value.get("judgment_version")),
         applicability_conditions=_string_tuple(value.get("applicability_conditions")),
+        judgment_digest=(
+            _required_digest(value.get("judgment_digest"))
+            if value.get("judgment_digest") is not None
+            else None
+        ),
     )
 
 
@@ -435,6 +491,41 @@ def _p5_decision_basis_from_document(
     )
 
 
+def _p2_decision_basis_from_document(
+    value: Mapping[object, object],
+    *,
+    product_specific_understanding: str,
+    tradeoff: str,
+    condition_of_validity: str,
+    fact_refs: tuple[str, ...],
+    packet_digest: str,
+) -> P2ProductDecisionBasisV2:
+    decision_axis = value.get("decision_axis")
+    if decision_axis not in P2_DECISION_AXES:
+        raise DomainError("内容任务冻结的商品选择维度无效")
+    judgment_ref = _optional_string(value.get("judgment_ref"))
+    return P2ProductDecisionBasisV2(
+        contract_version=PRODUCT_DECISION_BASIS_VERSION,
+        primary_product="product_truth",
+        decision_axis=cast(P2DecisionAxis, decision_axis),
+        product_specific_understanding=product_specific_understanding,
+        tradeoff=tradeoff,
+        condition_of_validity=condition_of_validity,
+        supporting_fact_refs=fact_refs,
+        source_packet_digest=packet_digest,
+        judgment_ref=judgment_ref,
+        judgment_version=_optional_string(value.get("judgment_version")),
+        judgment_digest=(
+            _required_digest(value.get("judgment_digest"))
+            if value.get("judgment_digest") is not None
+            else None
+        ),
+        applicability_conditions=(
+            _string_tuple(value.get("applicability_conditions")) if judgment_ref is not None else ()
+        ),
+    )
+
+
 def product_value_contract_from_document(
     value: object,
 ) -> ProductValueContract:
@@ -459,18 +550,13 @@ def product_value_contract_from_document(
                 packet_digest=packet_digest,
             )
         elif primary_product == "product_truth" and version == PRODUCT_DECISION_BASIS_VERSION:
-            decision_axis = value.get("decision_axis")
-            if decision_axis not in P2_DECISION_AXES:
-                raise DomainError("内容任务冻结的商品选择维度无效")
-            contract_v2 = P2ProductDecisionBasisV2(
-                contract_version=PRODUCT_DECISION_BASIS_VERSION,
-                primary_product="product_truth",
-                decision_axis=cast(P2DecisionAxis, decision_axis),
+            contract_v2 = _p2_decision_basis_from_document(
+                value,
                 product_specific_understanding=product_specific_understanding,
                 tradeoff=tradeoff,
                 condition_of_validity=condition_of_validity,
-                supporting_fact_refs=fact_refs,
-                source_packet_digest=packet_digest,
+                fact_refs=fact_refs,
+                packet_digest=packet_digest,
             )
         elif primary_product == "visual_styling_story":
             contract_v2 = _p5_decision_basis_from_document(
@@ -573,6 +659,13 @@ def assert_product_decision_basis_v2(
         raise DomainError("内容任务冻结的商品选择资源无效")
     if isinstance(contract, P2ProductDecisionBasisV2) and contract.decision_axis not in P2_DECISION_AXES:
         raise DomainError("内容任务冻结的商品选择维度无效")
+    if isinstance(contract, P2ProductDecisionBasisV2) and contract.judgment_ref is not None and (
+        not contract.judgment_version
+        or contract.judgment_digest is None
+        or len(contract.judgment_digest) != 64
+        or not contract.applicability_conditions
+    ):
+        raise DomainError("内容任务冻结的 P2 商品判断依据无效")
     if isinstance(contract, P1ProductDecisionBasisV3) and (
         contract.decision_axis not in P2_DECISION_AXES
         or not contract.judgment_ref
@@ -786,6 +879,12 @@ def _required_string(value: object) -> str:
     if not isinstance(value, str) or not value.strip():
         raise DomainError("内容任务冻结的商品价值合同文字无效")
     return value
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    return _required_string(value)
 
 
 def _required_digest(value: object) -> str:

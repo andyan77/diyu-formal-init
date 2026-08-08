@@ -1,0 +1,3079 @@
+{
+  "fail_count": 0,
+  "manifest_digest": "ab81e01fba2a83880c6d5ce38907cab849b60420a1f8fac2b181ddc34ca71a52",
+  "master_count": 26,
+  "master_p5_eligible_count": 0,
+  "original_p5_eligible_count": 0,
+  "pass_count": 0,
+  "quarantined_count": 26,
+  "records": [
+    {
+      "declared_identifier": "851756695e0a420b98eb98bade75e701",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-001-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "18.434000",
+          "size": "2746951"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 988,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "5e52476d051560ebb551b58b5b018f006c22277b7543af93478e948d0a967868",
+      "media_id": "DIYU-V-001",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-001"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "851756695e0a420b98eb98bade75e701.mov",
+      "source_probe": {
+        "format": {
+          "duration": "16.949000",
+          "size": "8503637"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "254000/8467",
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "height": 988,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "7de966ed2d7610b4f801886256520a933d783529674f325f96d2f74456eeb2a5",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "a3aa978ce1854cc9bc40fb13ea0fde3b",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-002-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "11.300000",
+          "size": "1694900"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 960,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "b9a325aeb234c027d01446c9e3b5fb0c501e8f10d23e6be83d87f4419e7bcfb8",
+      "media_id": "DIYU-V-002",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "a3aa978ce1854cc9bc40fb13ea0fde3b.mov",
+      "source_probe": {
+        "format": {
+          "duration": "9.800000",
+          "size": "4403022"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "height": 960,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "3e2d904bde4327bfd7daf7a6f6931ed27140a3faa67e0bc51693a6f2dee37a29",
+      "target_account_ids": [
+        "H01"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "ae449309367b4484a8bad14f1adb1378",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-003-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "12.967000",
+          "size": "2516849"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "eab1db0a09056799ea457794704094c648802577324a2e3807d88e88aff7f9b0",
+      "media_id": "DIYU-V-003",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-002"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "ae449309367b4484a8bad14f1adb1378.mov",
+      "source_probe": {
+        "format": {
+          "duration": "11.467000",
+          "size": "7138329"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "344000/11467",
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "930cb904c56aaf8ddfcdc8a71763880538df6e9148b7cf9d9c2cf20da3c42775",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "b075f71ac88241668395aa8986521775",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-004-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "20.034000",
+          "size": "3146599"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1000,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "9d2c4dd432c1e213002874e6a094436f0f7d6f0e102a65ed26f44f04eb16f63c",
+      "media_id": "DIYU-V-004",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-006"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "b075f71ac88241668395aa8986521775.mov",
+      "source_probe": {
+        "format": {
+          "duration": "18.534000",
+          "size": "17677927"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "278000/9267",
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "height": 1000,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "618860d7efbbb7873b0f838b99bbdaaf59d8d8ac0ca4a0523e627c7bcf6f94a5",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "b44984687f244b75b23298e853f52a16",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-005-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "19.367000",
+          "size": "4446350"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 990,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "c339804bb945c946b2ee2c60e5c9d30f941081ceebc1d68c36912fd532fee45c",
+      "media_id": "DIYU-V-005",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-006"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "b44984687f244b75b23298e853f52a16.mov",
+      "source_probe": {
+        "format": {
+          "duration": "17.877000",
+          "size": "11567189"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "536000/17867",
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "height": 990,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "ac0ecac7f4ae46d04a40da59fbc17702e106457f2b4cf3a32796349575439ad7",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "b591672b4f724cef832ad14af245106d",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-006-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "18.534000",
+          "size": "5077994"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "fcb99afebbd23bef5d15494b1d9756fb0043b63653e6fbdd4b48d53ab54036ee",
+      "media_id": "DIYU-V-006",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-005"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "b591672b4f724cef832ad14af245106d.mov",
+      "source_probe": {
+        "format": {
+          "duration": "17.034000",
+          "size": "18385499"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "255500/8517",
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "9fab000ccf194fa1ec85ae13cb379cbf12a14173edf0d7f48a1ac38d616dd494",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "c5c3e289b7474c11a556d77d64701eac",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-007-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "19.500000",
+          "size": "5378099"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "56ecf685c1b9588800d0481802a1398337c984897ea23853a3acb267865d033e",
+      "media_id": "DIYU-V-007",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-003"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "c5c3e289b7474c11a556d77d64701eac.mov",
+      "source_probe": {
+        "format": {
+          "duration": "18.017000",
+          "size": "14724189"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "fbcfdcea21ac35d12930ff03e2e5cc82c3da9b1fd759e09852ca61b76e05b55e",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "d29002784d76466dba7ee39bf91fe74e",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-008-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "10.600000",
+          "size": "1323834"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "7e9060e5d32957799854e2436d18f1c7de3129bf985de69b70e1315c90369b41",
+      "media_id": "DIYU-V-008",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "d29002784d76466dba7ee39bf91fe74e.mov",
+      "source_probe": {
+        "format": {
+          "duration": "9.100000",
+          "size": "4073795"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "d179161a2df704f1c789d1271fe3bdf6853934a9f745675acd7789f1fbfc288d",
+      "target_account_ids": [
+        "H01"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "f8d8ec9140ce4313b44428d135cdb357",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-009-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "10.934000",
+          "size": "1606515"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 960,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "bdb9b723b61bd54a9f74c8af372df8eceacecd21819c5ebec353ad364fd8f730",
+      "media_id": "DIYU-V-009",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "f8d8ec9140ce4313b44428d135cdb357.mov",
+      "source_probe": {
+        "format": {
+          "duration": "9.434000",
+          "size": "5536361"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "141500/4717",
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "height": 960,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "799285104cb735acea58066bff03e611993538830ba7a73a09480fe7c823820e",
+      "target_account_ids": [
+        "H01",
+        "H02"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "fe31d406d87343ee8ac548b59ce5d5f5",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-010-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "11.034000",
+          "size": "1813891"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "51fc6f05eac4f9a4ca8967a8b7fd6d0f8cc7260b2f56d58e88a5b24075277e5d",
+      "media_id": "DIYU-V-010",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-007"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "fe31d406d87343ee8ac548b59ce5d5f5.mov",
+      "source_probe": {
+        "format": {
+          "duration": "9.534000",
+          "size": "8531682"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "143000/4767",
+            "codec_name": "hevc",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "92b14a80dd786a56cd11a3028ffa9cb3abe1781011dcaa62613657bdddc50aa3",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v1e00fgi0000d4tob2nog65ovkq67hh0",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-011-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "18.125000",
+          "size": "1802083"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "fbe9a99c215147ddfd66d9d6ba8bf9734497c0e7538cdbe59750e79add51f309",
+      "media_id": "DIYU-V-011",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-008"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v1e00fgi0000d4tob2nog65ovkq67hh0.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "16.648000",
+          "size": "1392899"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "1ef56b1059e92939f7e4b9ac9b87c71df224ababf3d01f75b27b7cd1ba675139",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v1e00fgi0000d5i5b8nog65l7l5s42l0",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-012-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "17.000000",
+          "size": "3736351"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 960,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "97ce72dbc2c75651c09a5b837573310f409aa6577bf2d98920675ea8de9c153e",
+      "media_id": "DIYU-V-012",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-009"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v1e00fgi0000d5i5b8nog65l7l5s42l0.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "15.511000",
+          "size": "1986468"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "30/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 960,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "bed4bef98e7c6a45afa84c252db32ddd1e438c53fc14bad86e95811bbfc69c2b",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v1e00fgi0000d60klbfog65tsad5t4c0",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-013-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "23.834000",
+          "size": "2789240"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "20098a843c447b39d0f2c9c4b8d7031298caddd6a01cf2c1e837ff82187afc5e",
+      "media_id": "DIYU-V-013",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v1e00fgi0000d60klbfog65tsad5t4c0.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "22.337000",
+          "size": "2084784"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "0885521e62ec2560ba136442b8bc3e5462a672a2a86cfd4d0b79b7c51e22da11",
+      "target_account_ids": [
+        "H01",
+        "S02"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v1e00fgi0000d6rl76nog65sfji59cq0",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-014-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "15.500000",
+          "size": "1369129"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "49c2d1f9f52c52692a53cf00660c874102038959d88d3a8a5ac286de5bafaa9c",
+      "media_id": "DIYU-V-014",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-010"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v1e00fgi0000d6rl76nog65sfji59cq0.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "14.001000",
+          "size": "1038779"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "9b62fd6ca412f823acf856c7418573ec2a9bd93d2a9f0a498f1235bbd8a7c948",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v1e00fgi0000d7hlemvog65qj6u04g0g",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-015-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "22.500000",
+          "size": "1779908"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "b60bb7eceba28ebf6f3457effc143d31dfe08df747971a848a82170e4a4f36e7",
+      "media_id": "DIYU-V-015",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v1e00fgi0000d7hlemvog65qj6u04g0g.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "21.036000",
+          "size": "1302228"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "d7e3fde10eb68db6daa5cb26f4e0a168acda19a85adc049af10b810480103fed",
+      "target_account_ids": [
+        "H01"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v2700fgi0000d5vvgpnog65ki7hdqfig",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-016-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "16.417000",
+          "size": "1440599"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "d8d61257eb3dfd8bca81c82a00e4c1b8d7e2b7cb17b77a17732010df30edccbe",
+      "media_id": "DIYU-V-016",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-004"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v2700fgi0000d5vvgpnog65ki7hdqfig.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "14.918000",
+          "size": "977203"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "549888/22913",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "14bb5ca3539c9496a427d2d40d9d3b80e544e5f8738823256c3ccae82031c7c4",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v2700fgi0000d7nhjrfog65md31p25o0",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-017-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "30.500000",
+          "size": "5611130"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "60/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 960,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "a4849b98f01f474a6f1a6e86b89bb43b6233a7bf21ffd51cec6b9e742f58e927",
+      "media_id": "DIYU-V-017",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v2700fgi0000d7nhjrfog65md31p25o0.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "29.024000",
+          "size": "3004131"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "67740/1741",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 960,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "601f9b77bc4692cddb2b70840eb24d08e94be9d8e1a770420cf6a1b196059267",
+      "target_account_ids": [
+        "H01"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v2800fgi0000d4r2ssnog65vcrku7c50",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-018-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "14.167000",
+          "size": "1677741"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1280,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "ac6842ffa20943cd8c4b9d127bc048314c9ca310158c66672cc1b1e5328da77f",
+      "media_id": "DIYU-V-018",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v2800fgi0000d4r2ssnog65vcrku7c50.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "12.668000",
+          "size": "1144175"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "466944/19457",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1280,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "dfbc1d923694293d470f567414559973e981e935e5de0c0e2a1f4438afd65fc4",
+      "target_account_ids": [
+        "H01"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v2800fgi0000d4uc3d7og65vk8up4f80",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-019-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "16.792000",
+          "size": "1694589"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "eef6a7d6f00515d74611babf0e538e0ddfe461766b49f886378d60a34bbb2839",
+      "media_id": "DIYU-V-019",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v2800fgi0000d4uc3d7og65vk8up4f80.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "15.293000",
+          "size": "1297990"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "563712/23489",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "f44d43c5496348228c81120191b6ce2c8c6b4e0f1fa654015f6d9da546b4f197",
+      "target_account_ids": [
+        "H01"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v2800fgi0000d510ml7og65t6ofpqamg",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-020-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "18.042000",
+          "size": "2432532"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "9c9c0e3be8d4452204cc70870e7424c2d53d2b22e2116de304378be22732e027",
+      "media_id": "DIYU-V-020",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-011"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v2800fgi0000d510ml7og65t6ofpqamg.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "16.543000",
+          "size": "1943312"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "609792/25409",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "3d3545211d82cc38054df13ac572a2dd105f5d804a526b540cc2abd90d982e75",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v2800fgi0000d5e6dvfog65qh109916g",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-021-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "18.750000",
+          "size": "1787565"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "67246426495eb64f10bd628b5f2169a2e958b814c4d38d473ce830f5262edb15",
+      "media_id": "DIYU-V-021",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-012"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v2800fgi0000d5e6dvfog65qh109916g.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "17.252000",
+          "size": "1364191"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "317952/13249",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "033aae646a4e311a5d60679ef0ed8b54cbd89059e88cc28980839f113abe1e1b",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v2800fgi0000d5jf8vfog65gnp1id7r0",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-022-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "16.250000",
+          "size": "1764554"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "6e4f68c1cb0d156f0b1f52d0db11df2fd11a30e7d0bd045300d56e506cd2f17e",
+      "media_id": "DIYU-V-022",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-013"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v2800fgi0000d5jf8vfog65gnp1id7r0.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "14.767000",
+          "size": "1383693"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "f9236e51ba83ba9c8c77e7edf4a6d3fc15142a044527bad0ee23270683fdf103",
+      "target_account_ids": [
+        "H01",
+        "R01"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v2800fgi0000d5k3lenog65l69pdp9tg",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-023-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "20.625000",
+          "size": "2405021"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "1bbf02f95efe2ead6e31c6f704c7cb5449651fbdeabbb575b2ef55d59ef5a867",
+      "media_id": "DIYU-V-023",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-013"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v2800fgi0000d5k3lenog65l69pdp9tg.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "19.127000",
+          "size": "1886181"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "352512/14689",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "e0aab925a1e0f2c758d96562e45bb928f58bfb963fab65328f889c0edc623f08",
+      "target_account_ids": [
+        "H01",
+        "S04"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v2800fgi0000d5k42unog65kcr726gm0",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-024-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "16.834000",
+          "size": "1560464"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "dcf8f2f2a294306fbc38ee528686224c2ca699f017d63fc1e339481db10b5cee",
+      "media_id": "DIYU-V-024",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v2800fgi0000d5k42unog65kcr726gm0.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "15.335000",
+          "size": "1157101"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "1130496/47107",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "43ada1f0be9b7b78959e0bbe0216e9760317bacb353e46ffb5faa6e8965009c2",
+      "target_account_ids": [
+        "H01"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v2800fgi0000d5ndfinog65k8gc753s0",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-025-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "14.834000",
+          "size": "1445515"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "8358559691270a082b8a3347c52aeabf9e06d99561e5c8e35ba03662ee178038",
+      "media_id": "DIYU-V-025",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [
+        "DIYU-CSPU-014"
+      ],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v2800fgi0000d5ndfinog65k8gc753s0.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "13.335000",
+          "size": "1083306"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "983040/40963",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "9fd7862b80b225d0de5ce6ea0b355b9334c490545a23f9cf103ac6f0b90a4213",
+      "target_account_ids": [
+        "H01",
+        "H03"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    },
+    {
+      "declared_identifier": "v2800fgi0000d7k89gvog65gk4cugcl0",
+      "founder_authorization_ref": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+      "identifier_position": "upper_right_safe_area_and_1.5s_end_slate",
+      "master_filename": "DIYU-V-026-MASTER-v1.mp4",
+      "master_p5_eligible": false,
+      "master_probe": {
+        "format": {
+          "duration": "22.334000",
+          "size": "1923021"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "master_sha256": "0b24a663cc07c16e6c4b426308d1767846ef13cb5b1d53cfd89cdd2013001fa6",
+      "media_id": "DIYU-V-026",
+      "original_p5_eligible": false,
+      "processing_version": "gate-d-media-master-v1",
+      "product_bindings": [],
+      "release_status": "QUARANTINED",
+      "source_filename_raw": "v2800fgi0000d7k89gvog65gk4cugcl0.mp4",
+      "source_probe": {
+        "format": {
+          "duration": "20.851000",
+          "size": "1440017"
+        },
+        "programs": [],
+        "streams": [
+          {
+            "avg_frame_rate": "24/1",
+            "codec_name": "h264",
+            "codec_type": "video",
+            "height": 1080,
+            "index": 0,
+            "width": 720
+          },
+          {
+            "avg_frame_rate": "0/0",
+            "codec_name": "aac",
+            "codec_type": "audio",
+            "index": 1
+          }
+        ]
+      },
+      "source_sha256": "d175ec3758e93a8564630ba831d65d198fd0275b5e708dad524c3f6503134121",
+      "target_account_ids": [
+        "H01"
+      ],
+      "ten_release_gates": [
+        {
+          "evidence": "SHA256SUMS independent verification",
+          "gate": "source_checksum_verified",
+          "status": "PASS"
+        },
+        {
+          "evidence": "ffprobe completed after rendering",
+          "gate": "technical_master_valid",
+          "status": "PASS"
+        },
+        {
+          "evidence": "gate-d-media-master-v1",
+          "gate": "brand_identifier_present",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "commercial_use_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "secondary_edit_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "DIYU-MEDIA-AUTH-DECISION-v2/D13",
+          "gate": "ai_recreation_decision",
+          "status": "PASS"
+        },
+        {
+          "evidence": "per-person evidence not supplied",
+          "gate": "person_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "guardian evidence not supplied",
+          "gate": "child_rights_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file review evidence not supplied",
+          "gate": "third_party_elements_evidence",
+          "status": "QUARANTINED"
+        },
+        {
+          "evidence": "per-file platform and validity evidence not supplied",
+          "gate": "platform_scope_and_validity_evidence",
+          "status": "QUARANTINED"
+        }
+      ]
+    }
+  ],
+  "schema_version": "gate-d-media-master-v1",
+  "source_count": 26
+}

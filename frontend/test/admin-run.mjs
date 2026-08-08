@@ -203,6 +203,88 @@ let publicationProjection = {
   history: []
 };
 publicationProjection.history = [publicationProjection.current];
+
+function buildPublicationCandidate(body) {
+  return {
+    id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    version: 2,
+    status: "candidate",
+    contract_version: "brand-publication-projection-v2",
+    digest: "d".repeat(64),
+    created_at: "2026-08-02T00:00:00Z",
+    confirmed_at: null,
+    is_current: false,
+    items: body.items.map((item, index) => ({
+      position: index + 1,
+      publication_role: item.publication_role,
+      published_text: item.published_text,
+      applicability: item.applicability,
+      source_kind: "brand_source_segment",
+      source_segment_id: item.source_segment_id,
+      source_document_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      source_id: "DIYU-BRAND-BASELINE-001",
+      source_locator: "line:49",
+      source_label: publicationSources.find(
+        source => source.source_segment_id === item.source_segment_id
+      )?.source_title ?? "已确认来源",
+      source_version: "V1",
+      source_digest: "a".repeat(64),
+      source_document_digest: "f".repeat(64),
+      visibility_scope: item.visibility_scope,
+      scope_organization_ids: item.organization_ids,
+      effective_at: item.effective_at,
+      expires_at: item.expires_at,
+      authority_class: "headquarters_formal",
+      semantic_subject_type: item.fact_subject === "local_context" ? "local_context" : "brand",
+      semantic_subject_id: null,
+      claim_key: item.fact_subject === "brand_identity" ? "identity" : item.fact_subject,
+      scope_contract_version: "publication-item-scope-v2"
+    }))
+  };
+}
+
+function confirmPublicationFixture(path) {
+  const projectionId = path.split("/").at(-2);
+  const confirmed = publicationProjection.history.find(item => item.id === projectionId);
+  publicationProjection = {
+    ...publicationProjection,
+    current: confirmed,
+    history: publicationProjection.history.map(item => ({
+      ...item,
+      status: item.id === projectionId ? "confirmed" : "retired",
+      is_current: item.id === projectionId,
+      confirmed_at: item.id === projectionId ? "2026-08-02T00:00:00Z" : item.confirmed_at
+    }))
+  };
+  return confirmed;
+}
+
+function isGateDManagementRequest(path) {
+  return path.startsWith("/api/v1/tenant-management/brand-publication") ||
+    path === "/api/v1/tenant-management/brand-feedback-observations" ||
+    path === "/api/v1/tenant-management/brand-relevance-governance";
+}
+
+function gateDManagementResponse(path, method, body) {
+  if (path === "/api/v1/tenant-management/brand-publication" && method === "GET") {
+    return publicationProjection;
+  }
+  if (path === "/api/v1/tenant-management/brand-publication/sources") return publicationSources;
+  if (path.endsWith("/preview") && method === "POST") return {
+    contract_version: "brand-publication-projection-v2",
+    version: 2,
+    digest: "d".repeat(64),
+    item_count: body.items.length
+  };
+  if (path.endsWith("/candidates") && method === "POST") {
+    const candidate = buildPublicationCandidate(body);
+    publicationProjection = { ...publicationProjection, history: [candidate, ...publicationProjection.history] };
+    return candidate;
+  }
+  if (path.endsWith("/confirm") && method === "POST") return confirmPublicationFixture(path);
+  if (path.endsWith("brand-feedback-observations")) return [];
+  return { authorizations: [], qualifications: [] };
+}
 let products = [
   {
     id: "77777777-7777-4777-8777-777777777701",
@@ -626,68 +708,8 @@ globalThis.fetch = async (input, init = {}) => {
       },
       account_profile_candidate_source: "确定性冷启动候选，保存前必须纠正。"
     };
-  } else if (path === "/api/v1/tenant-management/brand-publication" && method === "GET") {
-    value = publicationProjection;
-  } else if (
-    path === "/api/v1/tenant-management/brand-publication/sources" &&
-    method === "GET"
-  ) {
-    value = publicationSources;
-  } else if (
-    path === "/api/v1/tenant-management/brand-publication/candidates" &&
-    method === "POST"
-  ) {
-    const candidate = {
-      id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-      version: 2,
-      status: "candidate",
-      digest: "d".repeat(64),
-      created_at: "2026-08-02T00:00:00Z",
-      confirmed_at: null,
-      is_current: false,
-      items: body.items.map((item, index) => ({
-        position: index + 1,
-        publication_role: item.publication_role,
-        published_text: item.published_text,
-        applicability: item.applicability,
-        source_kind: "brand_source_segment",
-        source_segment_id: item.source_segment_id,
-        source_document_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
-        source_id: "DIYU-BRAND-BASELINE-001",
-        source_locator: "line:49",
-        source_label: publicationSources.find(
-          source => source.source_segment_id === item.source_segment_id
-        )?.source_title ?? "已确认来源",
-        source_version: "V1",
-        source_digest: "a".repeat(64),
-        source_document_digest: "f".repeat(64)
-      }))
-    };
-    publicationProjection = {
-      ...publicationProjection,
-      history: [candidate, ...publicationProjection.history]
-    };
-    value = candidate;
-  } else if (
-    path.match(/^\/api\/v1\/tenant-management\/brand-publication\/[^/]+\/confirm$/) &&
-    method === "POST"
-  ) {
-    const projectionId = path.split("/").at(-2);
-    const confirmed = publicationProjection.history.find(
-      item => item.id === projectionId
-    );
-    publicationProjection = {
-      ...publicationProjection,
-      current: confirmed,
-      history: publicationProjection.history.map(item => ({
-        ...item,
-        status: item.id === projectionId ? "confirmed" : "retired",
-        is_current: item.id === projectionId,
-        confirmed_at:
-          item.id === projectionId ? "2026-08-02T00:00:00Z" : item.confirmed_at
-      }))
-    };
-    value = confirmed;
+  } else if (isGateDManagementRequest(path)) {
+    value = gateDManagementResponse(path, method, body);
   } else if (path === "/api/v1/tenant-management/brand-library" && method === "GET") {
     value = brandEntries;
   } else if (

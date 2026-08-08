@@ -4,6 +4,7 @@ import csv
 import hashlib
 import io
 from contextlib import suppress
+from datetime import datetime
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -242,11 +243,46 @@ class WorkbenchService:
     ) -> list[dict[str, object]]:
         return self._repository.publication_source_options(scope, query.strip())
 
-    def create_brand_publication_candidate(
-        self,
-        scope: TenantManagementScope,
+    @staticmethod
+    def _brand_publication_scope(item: dict[str, object], role: str) -> dict[str, object]:
+        visibility = str(item.get("visibility_scope", ""))
+        raw_organizations = item.get("organization_ids", ())
+        effective_at, expires_at = item.get("effective_at"), item.get("expires_at")
+        fact_subject = item.get("fact_subject")
+        if visibility not in {"brand_all", "headquarters", "organizations"}:
+            raise DomainError("发布表达的可见范围无效。")
+        if not isinstance(raw_organizations, (list, tuple)):
+            raise DomainError("发布表达的组织范围无效。")
+        organization_ids = tuple(dict.fromkeys(UUID(str(value)) for value in raw_organizations))
+        if visibility == "brand_all" and organization_ids:
+            raise DomainError("品牌全员发布表达不需要指定组织。")
+        if visibility != "brand_all" and not organization_ids:
+            raise DomainError("总部或指定组织发布表达必须选择获准组织。")
+        if not isinstance(effective_at, datetime) or effective_at.tzinfo is None:
+            raise DomainError("发布表达必须明确生效时间。")
+        if expires_at is not None and (
+            not isinstance(expires_at, datetime) or expires_at.tzinfo is None or expires_at <= effective_at
+        ):
+            raise DomainError("发布表达失效时间必须晚于生效时间。")
+        fact_subjects = {
+            "brand_identity", "brand_positioning", "audience_relationship", "brand_expression", "local_context"
+        }
+        if role == "public_brand_fact" and fact_subject not in fact_subjects:
+            raise DomainError("公开事实必须从受控事实主题中选择。")
+        if role != "public_brand_fact" and fact_subject is not None:
+            raise DomainError("只有公开事实可以选择事实主题。")
+        return {
+            "visibility_scope": visibility,
+            "organization_ids": organization_ids,
+            "effective_at": effective_at,
+            "expires_at": expires_at,
+            "fact_subject": fact_subject,
+        }
+
+    @staticmethod
+    def _brand_publication_items(
         items: tuple[dict[str, object], ...],
-    ) -> dict[str, object]:
+    ) -> tuple[dict[str, object], ...]:
         normalized: list[dict[str, object]] = []
         for item in items:
             text = str(item.get("published_text", "")).strip()
@@ -272,11 +308,29 @@ class WorkbenchService:
                     "publication_role": role,
                     "published_text": text,
                     "applicability": tuple(dict.fromkeys(str(value) for value in raw_applicability)),
+                    **WorkbenchService._brand_publication_scope(item, role),
                 }
             )
+        return tuple(normalized)
+
+    def preview_brand_publication_candidate(
+        self,
+        scope: TenantManagementScope,
+        items: tuple[dict[str, object], ...],
+    ) -> dict[str, object]:
+        return self._repository.preview_brand_publication_candidate(
+            scope,
+            self._brand_publication_items(items),
+        )
+
+    def create_brand_publication_candidate(
+        self,
+        scope: TenantManagementScope,
+        items: tuple[dict[str, object], ...],
+    ) -> dict[str, object]:
         return self._repository.create_brand_publication_candidate(
             scope,
-            tuple(normalized),
+            self._brand_publication_items(items),
         )
 
     def confirm_brand_publication_projection(
@@ -288,6 +342,38 @@ class WorkbenchService:
             scope,
             projection_id,
         )
+
+    def create_brand_feedback_observation(
+        self,
+        scope: TenantManagementScope,
+        source_task_id: UUID,
+        source_version_id: UUID | None,
+        source_account_id: UUID,
+        observation_payload: dict[str, object],
+    ) -> dict[str, object]:
+        if not observation_payload or len(observation_payload) > 20:
+            raise DomainError("反馈观察需要 1 到 20 个结构化字段。")
+        if len(str(observation_payload)) > 10_000:
+            raise DomainError("反馈观察内容过长。")
+        return self._repository.create_brand_feedback_observation(
+            scope,
+            source_task_id,
+            source_version_id,
+            source_account_id,
+            observation_payload,
+        )
+
+    def brand_feedback_observations(
+        self,
+        scope: TenantManagementScope,
+    ) -> list[dict[str, object]]:
+        return self._repository.brand_feedback_observations(scope)
+
+    def brand_relevance_governance(
+        self,
+        scope: TenantManagementScope,
+    ) -> dict[str, object]:
+        return self._repository.brand_relevance_governance(scope)
 
     def add_management_organization_material(
         self,

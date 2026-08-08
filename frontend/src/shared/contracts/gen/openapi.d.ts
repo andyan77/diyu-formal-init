@@ -1,7 +1,7 @@
 /**
  * GENERATED FILE — DO NOT EDIT BY HAND.
  *
- * Source:   openapi.json (sha256 61e0b67f1b08d4f442502ab6401576771fb9ed70eba54cee02977fdcba64ab8c)
+ * Source:   openapi.json (sha256 de301d6d54c49db145bb4cd2b35ebecf1ecadccba0cdc149dddeb0d69151448b)
  * Command:  npm --prefix frontend run contracts:gen
  * Drift:    python3 scripts/exe01/assert_codegen_drift.py
  *
@@ -714,6 +714,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tenant-management/brand-feedback-observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Management Brand Feedback Observations */
+        get: operations["management_brand_feedback_observations_api_v1_tenant_management_brand_feedback_observations_get"];
+        put?: never;
+        /** Create Management Brand Feedback Observation */
+        post: operations["create_management_brand_feedback_observation_api_v1_tenant_management_brand_feedback_observations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenant-management/brand-library": {
         parameters: {
             query?: never;
@@ -904,6 +922,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tenant-management/brand-publication/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Management Brand Publication Candidate */
+        post: operations["preview_management_brand_publication_candidate_api_v1_tenant_management_brand_publication_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenant-management/brand-publication/sources": {
         parameters: {
             query?: never;
@@ -913,6 +948,23 @@ export interface paths {
         };
         /** Management Brand Publication Sources */
         get: operations["management_brand_publication_sources_api_v1_tenant_management_brand_publication_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenant-management/brand-relevance-governance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Management Brand Relevance Governance */
+        get: operations["management_brand_relevance_governance_api_v1_tenant_management_brand_relevance_governance_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1876,6 +1928,25 @@ export interface components {
             /** Draft */
             draft: string;
         };
+        /** BrandFeedbackObservationRequest */
+        BrandFeedbackObservationRequest: {
+            /** Observation Payload */
+            observation_payload: {
+                [key: string]: unknown;
+            };
+            /**
+             * Source Account Id
+             * Format: uuid
+             */
+            source_account_id: string;
+            /**
+             * Source Task Id
+             * Format: uuid
+             */
+            source_task_id: string;
+            /** Source Version Id */
+            source_version_id?: string | null;
+        };
         /** BrandLibraryEntryRequest */
         BrandLibraryEntryRequest: {
             /**
@@ -1961,6 +2032,17 @@ export interface components {
             /** Applicability */
             applicability?: ("dressing_decision" | "product_truth" | "brand_life_narrative" | "local_response" | "visual_styling_story")[];
             /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Fact Subject */
+            fact_subject?: ("brand_identity" | "brand_positioning" | "audience_relationship" | "brand_expression" | "local_context") | null;
+            /** Organization Ids */
+            organization_ids?: string[];
+            /**
              * Publication Role
              * @enum {string}
              */
@@ -1972,6 +2054,11 @@ export interface components {
              * Format: uuid
              */
             source_segment_id: string;
+            /**
+             * Visibility Scope
+             * @enum {string}
+             */
+            visibility_scope: "brand_all" | "headquarters" | "organizations";
         };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
@@ -4717,6 +4804,96 @@ export interface operations {
             };
         };
     };
+    management_brand_feedback_observations_api_v1_tenant_management_brand_feedback_observations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description 缺少或无效的可信会话。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 当前可信会话属于另一应用。 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 业务失败；生成失败时不会产生半成品版本。 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_management_brand_feedback_observation_api_v1_tenant_management_brand_feedback_observations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BrandFeedbackObservationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description 缺少或无效的可信会话。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 当前可信会话属于另一应用。 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 业务失败；生成失败时不会产生半成品版本。 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     management_brand_library_api_v1_tenant_management_brand_library_get: {
         parameters: {
             query?: never;
@@ -5363,6 +5540,53 @@ export interface operations {
             };
         };
     };
+    preview_management_brand_publication_candidate_api_v1_tenant_management_brand_publication_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BrandPublicationProjectionCandidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description 缺少或无效的可信会话。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 当前可信会话属于另一应用。 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 业务失败；生成失败时不会产生半成品版本。 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     management_brand_publication_sources_api_v1_tenant_management_brand_publication_sources_get: {
         parameters: {
             query?: {
@@ -5383,6 +5607,49 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     }[];
+                };
+            };
+            /** @description 缺少或无效的可信会话。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 当前可信会话属于另一应用。 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 业务失败；生成失败时不会产生半成品版本。 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    management_brand_relevance_governance_api_v1_tenant_management_brand_relevance_governance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description 缺少或无效的可信会话。 */

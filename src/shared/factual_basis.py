@@ -292,7 +292,7 @@ def _product_packet_items(
         ("material", "材质"),
         ("structure", "结构"),
         ("silhouette", "轮廓"),
-        ("observable_features", "可观察特征"),
+        ("observable_features", "可观察特征"), ("main_color", "主色"),
     ):
         value = facts.get(key)
         if isinstance(value, str) and value.strip():
@@ -300,7 +300,7 @@ def _product_packet_items(
                 "category"
                 if key == "category"
                 else "appearance"
-                if key in {"silhouette", "observable_features"}
+                if key in {"silhouette", "observable_features", "main_color"}
                 else "structure"
             )
             specs.append(

@@ -115,6 +115,11 @@ SELECT projection.id AS projection_id,
            )
        )
    )
+   AND (
+       qualification.id IS NULL
+       OR qualification.authorization_id IS NULL
+       OR authz.logical_account_id = root_account.id
+   )
  ORDER BY item.position
 """
 

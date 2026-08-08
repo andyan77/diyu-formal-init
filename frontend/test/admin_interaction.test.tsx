@@ -99,6 +99,62 @@ async function renderTenantAdmin(
   return root;
 }
 
+type PublicationRequestItem = {
+  published_text: string;
+  applicability: string[];
+  visibility_scope: string;
+  organization_ids: string[];
+  effective_at: string;
+  fact_subject: string;
+} & Record<string, unknown>;
+
+function publicationRequestItem(path: string): PublicationRequestItem {
+  const request = requests.find(item => item.path === path && item.method === "POST");
+  const items = request?.body?.items as PublicationRequestItem[] | undefined;
+  assert.ok(items?.[0], `缺少 ${path} 的条目`);
+  return items[0];
+}
+
+function assertBusinessOwnedPublicationItem(item: PublicationRequestItem): void {
+  assert.ok(
+    item.published_text === "笛语帮助人们看清日常穿衣选择。" &&
+      item.applicability.includes("dressing_decision") &&
+      item.visibility_scope === "brand_all" &&
+      item.organization_ids.length === 0 && Boolean(item.effective_at) &&
+      item.fact_subject === "brand_identity",
+    "创作端只能消费管理员核对后保存的发布表达"
+  );
+  for (const field of [
+    "tenant_id", "brand_id", "contract_version", "scope_contract_version",
+    "authority_class", "source_ref", "source_version", "source_digest"
+  ]) assert.equal(item[field], undefined, `${field} 必须由服务端派生`);
+}
+
+async function exerciseGateDPublicationFlow(): Promise<void> {
+  await click(find("button", "核对创作端品牌表达"));
+  await settle();
+  const source = find(".tenant-drawer label", "笛语品牌身份与内容战略基线")
+    .querySelector("input") as HTMLInputElement;
+  await click(source);
+  const text = find(".tenant-drawer label", "核对后的自然表达")
+    .querySelector("textarea") as HTMLTextAreaElement;
+  await input(text, "笛语帮助人们看清日常穿衣选择。 ");
+  await click(find(".publication-applicability label", "穿衣选择"));
+  await click(find(".tenant-drawer button", "预览 V2 合同"));
+  await settle();
+  assertBusinessOwnedPublicationItem(publicationRequestItem(
+    "/api/v1/tenant-management/brand-publication/preview"
+  ));
+  await click(find(".tenant-drawer button", "保存为待确认版本"));
+  await settle();
+  assertBusinessOwnedPublicationItem(publicationRequestItem(
+    "/api/v1/tenant-management/brand-publication/candidates"
+  ));
+  await click(find(".publication-list button", "确认作为当前品牌表达"));
+  await settle();
+  assert.ok(requests.some(item => item.path.endsWith("/confirm") && item.method === "POST"));
+}
+
 async function main(): Promise<void> {
   setReducedMotion(false);
   let root = await renderAt("/", { application: "public" });
@@ -652,36 +708,7 @@ async function main(): Promise<void> {
   await settle();
   await click(find(".tenant-drawer button", "关闭"));
 
-  await click(find("button", "核对创作端品牌表达"));
-  await settle();
-  const publicationSource = find(
-    ".tenant-drawer label",
-    "笛语品牌身份与内容战略基线"
-  ).querySelector("input") as HTMLInputElement;
-  await click(publicationSource);
-  const publicationText = find(
-    ".tenant-drawer label",
-    "核对后的自然表达"
-  ).querySelector("textarea") as HTMLTextAreaElement;
-  await input(publicationText, "笛语帮助人们看清日常穿衣选择。 ");
-  await click(find(".publication-applicability label", "穿衣选择"));
-  await click(find(".tenant-drawer button", "保存为待确认版本"));
-  await settle();
-  const publicationRequest = requests.find(
-    item =>
-      item.path ===
-        "/api/v1/tenant-management/brand-publication/candidates" &&
-      item.method === "POST"
-  );
-  const publicationItems = publicationRequest?.body?.items as
-    | Array<{ published_text: string; applicability: string[] }>
-    | undefined;
-  assert.ok(
-    publicationItems?.[0]?.published_text ===
-      "笛语帮助人们看清日常穿衣选择。" &&
-      publicationItems[0].applicability.includes("dressing_decision"),
-    "创作端只能消费管理员核对后保存的发布表达"
-  );
+  await exerciseGateDPublicationFlow();
   await click(find(".library-list button", "查看版本与维护"));
   await settle();
   assert.match(document.querySelector(".tenant-drawer")?.textContent ?? "", /历史版本/);

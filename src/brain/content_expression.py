@@ -505,6 +505,30 @@ def _account_editorial_snapshot_fields(
     }
 
 
+def _snapshot_product_fact(item: ProductFact) -> dict[str, object]:
+    document: dict[str, object] = {
+        "sku": item.sku,
+        "display_name": item.display_name,
+        "facts": item.facts,
+        "source_kind": item.source_kind,
+        "source_note": item.source_note,
+        "fact_version": item.fact_version,
+        "applicability": item.applicability,
+        "product_id": str(item.product_id) if item.product_id else None,
+        "product_version_id": str(item.product_version_id) if item.product_version_id else None,
+    }
+    if item.judgment_ref is not None:
+        document.update(
+            {
+                "judgment_ref": item.judgment_ref,
+                "judgment_version": item.judgment_version,
+                "judgment_digest": item.judgment_digest,
+                "judgment_applicability_conditions": list(item.judgment_applicability_conditions),
+            }
+        )
+    return document
+
+
 def snapshot_document(
     control: ContentControlContext,
     content_role: str,
@@ -662,20 +686,7 @@ def snapshot_document(
             }
             for item in control.materials
         ],
-        "product_facts": [
-            {
-                "sku": item.sku,
-                "display_name": item.display_name,
-                "facts": item.facts,
-                "source_kind": item.source_kind,
-                "source_note": item.source_note,
-                "fact_version": item.fact_version,
-                "applicability": item.applicability,
-                "product_id": str(item.product_id) if item.product_id else None,
-                "product_version_id": (str(item.product_version_id) if item.product_version_id else None),
-            }
-            for item in products
-        ],
+        "product_facts": [_snapshot_product_fact(item) for item in products],
         "product_fact_packet": product_fact_packet_document(product_fact_packet),
         "immutable_product_fact_blocks": None,
         "used_product_fact_ids": None,

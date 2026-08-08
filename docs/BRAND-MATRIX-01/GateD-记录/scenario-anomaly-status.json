@@ -1,0 +1,126 @@
+{
+  "anomalies": [
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "ANOM-01",
+      "name": "过期成分口径版本对",
+      "reason": "旧快照兼容和版本冻结回归通过；正式模型套件被媒体资格门阻断。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "ANOM-02",
+      "name": "门店错误成分文件",
+      "reason": "结构化权威和普通资料不污染正式 ProductFact 的回归门通过；未生成正式成品。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "ANOM-03",
+      "name": "同字段正式事实冲突",
+      "reason": "同级同 claim 冲突进入 needs_review 并禁止消费的回归门通过；未调用 provider。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "ANOM-04",
+      "name": "过期区域活动",
+      "reason": "RK-EC-08 已存储并进入带时效 V2 条目，但七个新任务快照消费数为 0。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "ANOM-05",
+      "name": "跨门店读取",
+      "reason": "正式任务快照中兄弟区域和门店泄漏为 0；未生成正式成品。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "ANOM-06",
+      "name": "两名用户共同操作逻辑账号",
+      "reason": "既有 Gate C 所有权和真实 actor 回归门通过；本轮未运行正式模型内容套件。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "ANOM-07",
+      "name": "私人经历单次授权",
+      "reason": "PS-S02-05 与 PS-S04-03 均实证失败释放、V1 单次核销、同谱系 V2 不二次核销、新任务拒绝。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "ANOM-08",
+      "name": "知识更新前后两版任务",
+      "reason": "AMD-2026-0808-01 v2 导入与旧 synthetic v1 历史快照并存且旧摘要不改；正式成品套件未运行。"
+    }
+  ],
+  "blocking_reason": "MEDIA_QUALIFICATION_INSUFFICIENT",
+  "formal_binary_completion": false,
+  "formal_model_suite": {
+    "provider_requests": 0,
+    "result": "NOT_RUN",
+    "runtime_candidate_sha": null
+  },
+  "scenarios": [
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "SCENARIO-01",
+      "name": "总部 F/J/G",
+      "reason": "总部 V2 正式任务快照和四组 J 的 P1/P2 实际依据成立；模型成品未运行。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "SCENARIO-02",
+      "name": "华东资料",
+      "reason": "R01 正式任务快照消费华东条目；R02 和兄弟组织泄漏为 0。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "SCENARIO-03",
+      "name": "杭州资料",
+      "reason": "S01/S02 正式任务快照消费杭州条目；S03/S04 不读取杭州条目。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "SCENARIO-04",
+      "name": "成都错误普通文件",
+      "reason": "普通资料不能升格或覆盖总部正式事实的机制回归通过；未生成成品。"
+    },
+    {
+      "deterministic_mechanism_result": "PARTIAL_PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "SCENARIO-05",
+      "name": "同一 SKU 四节点",
+      "reason": "商品事实、账号 lens 和组织快照机制分别成立；四份正式模型成品差异未运行。"
+    },
+    {
+      "deterministic_mechanism_result": "PARTIAL_PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "SCENARIO-06",
+      "name": "同一种子三账号",
+      "reason": "Gate B 跨账号确定性语义差异回归通过；三份正式模型成品未运行。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "SCENARIO-07",
+      "name": "AMD v1/v2",
+      "reason": "导入前 v1 历史快照与 AMD v2 品牌版本并存；正式模型重演未运行。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN",
+      "id": "SCENARIO-08",
+      "name": "反馈观察",
+      "reason": "正式 API/仓储登记候选观察且下一任务仍只读原确认投影；观察不升格。"
+    }
+  ],
+  "status": "GATE-D EVIDENCE_BLOCKED · MEDIA_QUALIFICATION_INSUFFICIENT"
+}

@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, JSX, KeyboardEvent as ReactKeyboardEvent } from "react";
+import type {
+  Dispatch,
+  FormEvent,
+  JSX,
+  KeyboardEvent as ReactKeyboardEvent,
+  SetStateAction
+} from "react";
 import { BrandMark } from "../components/Brand";
 import { CapabilityMatrixView, UsageGuideView } from "../components/CapabilityGuide";
 import { ApiError, api } from "../services/api";
@@ -228,19 +234,29 @@ type PublicationItem = {
   source_version: string;
   source_digest: string;
   source_document_digest: string | null;
+  visibility_scope?: LibraryScope;
+  scope_organization_ids?: string[];
+  effective_at?: string | null;
+  expires_at?: string | null;
+  authority_class?: string;
+  semantic_subject_type?: string | null;
+  semantic_subject_id?: string | null;
+  claim_key?: string | null;
+  scope_contract_version?: string;
 };
 type PublicationVersion = {
   id: string;
   version: number;
   status: "candidate" | "confirmed" | "retired";
   digest: string;
+  contract_version: "brand-publication-projection-v1" | "brand-publication-projection-v2";
   created_at: string;
   confirmed_at: string | null;
   is_current: boolean;
   items: PublicationItem[];
 };
 type PublicationProjection = {
-  contract_version: "brand-publication-projection-v1";
+  contract_version: "brand-publication-projection-v1" | "brand-publication-projection-v2";
   current: PublicationVersion | null;
   history: PublicationVersion[];
 };
@@ -249,6 +265,49 @@ type PublicationDraft = {
   role: PublicationRole;
   text: string;
   applicability: string[];
+  visibilityScope: LibraryScope;
+  organizationIds: string[];
+  effectiveAt: string;
+  expiresAt: string;
+  factSubject:
+    | "brand_identity"
+    | "brand_positioning"
+    | "audience_relationship"
+    | "brand_expression"
+    | "local_context";
+};
+
+type PublicationPreview = {
+  contract_version: "brand-publication-projection-v2";
+  version: number;
+  digest: string;
+  item_count: number;
+  status: "preview";
+};
+
+type FeedbackObservation = {
+  id: string;
+  source_task_id: string;
+  source_account_name: string;
+  actor_name: string;
+  candidate_status: "candidate";
+  recorded_at: string;
+  promoted_to_formal_source: false;
+};
+
+type RelevanceGovernance = {
+  authorizations: Array<{
+    authorization_id: string;
+    subject_ref: string;
+    state: "available" | "unavailable";
+    unavailable_reasons: string[];
+  }>;
+  qualifications: Array<{
+    qualification_id: string;
+    path_family: string;
+    state: "available" | "unavailable";
+    unavailable_reasons: string[];
+  }>;
 };
 
 const publicationContentOptions = [
@@ -258,6 +317,231 @@ const publicationContentOptions = [
   ["local_response", "本地观察回应"],
   ["visual_styling_story", "商品视觉内容"]
 ] as const;
+
+const publicationFactSubjects = [
+  ["brand_identity", "品牌身份"],
+  ["brand_positioning", "品牌定位"],
+  ["audience_relationship", "受众关系"],
+  ["brand_expression", "品牌表达"],
+  ["local_context", "本地事实"]
+] as const;
+
+function publicationEffectiveDefault(): string {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function PublicationItemDetails({ item }: { item: PublicationItem }): JSX.Element {
+  const role = item.publication_role === "public_brand_fact"
+    ? "公开品牌信息"
+    : item.publication_role === "creative_method" ? "创作方法" : "表达边界";
+  const applicability = item.applicability.map(value =>
+    publicationContentOptions.find(([product]) => product === value)?.[1] ?? value
+  ).join("、");
+  return (
+    <>
+      <strong>{role}</strong>
+      <span>{item.published_text}</span>
+      <small>来源：{item.source_label} · {item.source_version}</small>
+      <small>适用：{applicability}</small>
+      <small>
+        合同：{item.scope_contract_version ?? "publication-item-scope-v1"} · 范围：
+        {item.visibility_scope ?? "brand_all"}
+        {(item.scope_organization_ids ?? []).length
+          ? `（${(item.scope_organization_ids ?? []).length} 个组织）` : ""}
+      </small>
+      <small>
+        生效：{item.effective_at ? humanDate(item.effective_at) : "历史兼容"}
+        {item.expires_at ? ` · 失效：${humanDate(item.expires_at)}` : " · 长期有效"}
+      </small>
+      <small>
+        权威：{item.authority_class ?? "历史兼容"}
+        {item.claim_key ? ` · 事实键：${item.claim_key}` : ""}
+      </small>
+    </>
+  );
+}
+
+function PublicationVersionCard({
+  version, saving, onConfirm
+}: {
+  version: PublicationVersion;
+  saving: boolean;
+  onConfirm: (id: string) => void;
+}): JSX.Element {
+  const state = version.is_current ? "当前使用" : version.status === "candidate" ? "等待确认" : "历史版本";
+  return (
+    <article>
+      <header><div><h2>品牌表达 V{version.version}</h2><span>{state}</span></div></header>
+      <ul>
+        {version.items.filter(item => item.publication_role !== "internal_only").map(item => (
+          <li key={`${version.id}-${item.position}`}><PublicationItemDetails item={item} /></li>
+        ))}
+      </ul>
+      {version.status === "candidate" && (
+        <button type="button" className="text-action" disabled={saving} onClick={() => onConfirm(version.id)}>
+          确认作为当前品牌表达
+        </button>
+      )}
+    </article>
+  );
+}
+
+function PublicationHistorySection({
+  data, loading, error, saving, onRetry, onConfirm
+}: {
+  data: PublicationProjection | null;
+  loading: boolean;
+  error: string | null;
+  saving: boolean;
+  onRetry: () => Promise<void>;
+  onConfirm: (id: string) => void;
+}): JSX.Element {
+  return (
+    <section className="tenant-subsection" aria-labelledby="brand-publication-title">
+      <header>
+        <h2 id="brand-publication-title">创作端品牌表达</h2>
+        <span>{data?.current ? `当前 V${data.current.version}` : "尚未确认"}</span>
+      </header>
+      <p className="tenant-help">原始资料保持不变；只有你核对并确认的自然表达会进入之后的新内容。</p>
+      {error ? <RequestFailure message={error} onRetry={onRetry} /> : loading ? (
+        <p className="tenant-empty">正在读取当前品牌表达…</p>
+      ) : (
+        <div className="library-list publication-list">
+          {data?.history.map(version => (
+            <PublicationVersionCard key={version.id} version={version} saving={saving} onConfirm={onConfirm} />
+          ))}
+          {!data?.history.length && <p className="tenant-empty">请先从已有资料中形成并确认一版创作端品牌表达。</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function BrandGovernanceSection({ observations, governance }: {
+  observations: FeedbackObservation[];
+  governance: RelevanceGovernance | null;
+}): JSX.Element {
+  return (
+    <section className="tenant-subsection" aria-labelledby="brand-governance-title">
+      <header><h2 id="brand-governance-title">观察与关联资格</h2><span>
+        {observations.length} 条观察 · {governance?.qualifications.length ?? 0} 条资格
+      </span></header>
+      <p className="tenant-help">反馈只保存在候选观察层，不会自动成为品牌事实、商品事实或创作规则。</p>
+      <div className="library-list">
+        {observations.map(item => <article key={item.id}>
+          <strong>{item.source_account_name}</strong><span>任务 {item.source_task_id}</span>
+          <small>{item.actor_name} · {humanDate(item.recorded_at)} · 未升格</small>
+        </article>)}
+        {(governance?.authorizations ?? []).map(item => <article key={item.authorization_id}>
+          <strong>人物授权 {item.subject_ref}</strong>
+          <span>{item.state === "available" ? "当前可用" : "当前不可用"}</span>
+          {!!item.unavailable_reasons.length && <small>{item.unavailable_reasons.join("、")}</small>}
+        </article>)}
+        {(governance?.qualifications ?? []).map(item => <article key={item.qualification_id}>
+          <strong>关联资格 {item.path_family}</strong>
+          <span>{item.state === "available" ? "当前可用" : "当前不可用"}</span>
+          {!!item.unavailable_reasons.length && <small>{item.unavailable_reasons.join("、")}</small>}
+        </article>)}
+      </div>
+    </section>
+  );
+}
+
+type PublicationDraftSetter = Dispatch<SetStateAction<PublicationDraft[]>>;
+
+function updatePublicationDraft(
+  setter: PublicationDraftSetter, index: number, update: (draft: PublicationDraft) => PublicationDraft
+): void {
+  setter(current => current.map((item, itemIndex) => itemIndex === index ? update(item) : item));
+}
+
+function PublicationDraftBasics({ draft, index, setDrafts }: {
+  draft: PublicationDraft; index: number; setDrafts: PublicationDraftSetter;
+}): JSX.Element {
+  return <>
+    <label>在创作中的作用<select value={draft.role} onChange={event =>
+      updatePublicationDraft(setDrafts, index, item => ({ ...item, role: event.target.value as PublicationRole }))}>
+      {draft.source.semantic_kind === "brand_fact" && <option value="public_brand_fact">公开品牌信息</option>}
+      {draft.source.semantic_kind !== "creative_method" && <option value="expression_constraint">表达边界</option>}
+      {draft.source.semantic_kind === "creative_method" && <option value="creative_method">创作方法</option>}
+    </select></label>
+    {draft.role === "public_brand_fact" && <label>受控事实主题<select value={draft.factSubject} onChange={event =>
+      updatePublicationDraft(setDrafts, index, item => ({
+        ...item, factSubject: event.target.value as PublicationDraft["factSubject"]
+      }))}>
+      {publicationFactSubjects.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+    </select></label>}
+    <label>核对后的自然表达<textarea value={draft.text} maxLength={1200} onChange={event =>
+      updatePublicationDraft(setDrafts, index, item => ({ ...item, text: event.target.value }))}
+      placeholder="只写确认可公开或可用于表达控制的内容" /></label>
+  </>;
+}
+
+function PublicationApplicability({ draft, index, setDrafts }: {
+  draft: PublicationDraft; index: number; setDrafts: PublicationDraftSetter;
+}): JSX.Element {
+  return <fieldset className="publication-applicability"><legend>适用内容</legend>
+    {publicationContentOptions.map(([value, label]) => <label key={value}><input type="checkbox"
+      checked={draft.applicability.includes(value)} onChange={() =>
+        updatePublicationDraft(setDrafts, index, item => ({ ...item,
+          applicability: item.applicability.includes(value)
+            ? item.applicability.filter(entry => entry !== value) : [...item.applicability, value]
+        }))} /><span>{label}</span></label>)}
+  </fieldset>;
+}
+
+function PublicationOrganizations({ draft, index, organizations, setDrafts }: {
+  draft: PublicationDraft; index: number; organizations: Organization[];
+  setDrafts: PublicationDraftSetter;
+}): JSX.Element | null {
+  if (draft.visibilityScope === "brand_all") return null;
+  const eligible = organizations.filter(organization => draft.visibilityScope !== "headquarters" ||
+    (organization.organization_level ?? organization.level) === "company");
+  return <fieldset><legend>获准组织</legend>{eligible.map(organization => <label key={organization.id}>
+    <input type={draft.visibilityScope === "headquarters" ? "radio" : "checkbox"}
+      name={`publication-scope-${index}`} checked={draft.organizationIds.includes(organization.id)}
+      onChange={() => updatePublicationDraft(setDrafts, index, item => ({ ...item,
+        organizationIds: draft.visibilityScope === "headquarters" ? [organization.id]
+          : item.organizationIds.includes(organization.id)
+            ? item.organizationIds.filter(value => value !== organization.id)
+            : [...item.organizationIds, organization.id]
+      }))} /><span>{organization.name}</span>
+  </label>)}</fieldset>;
+}
+
+function PublicationScopeAndTime({ draft, index, organizations, setDrafts }: {
+  draft: PublicationDraft; index: number; organizations: Organization[];
+  setDrafts: PublicationDraftSetter;
+}): JSX.Element {
+  return <>
+    <label>可见范围<select value={draft.visibilityScope} onChange={event =>
+      updatePublicationDraft(setDrafts, index, item => ({ ...item,
+        visibilityScope: event.target.value as LibraryScope, organizationIds: []
+      }))}>
+      <option value="brand_all">品牌全员</option><option value="headquarters">总部专用</option>
+      <option value="organizations">指定组织及后代</option>
+    </select></label>
+    <PublicationOrganizations draft={draft} index={index} organizations={organizations} setDrafts={setDrafts} />
+    <label>生效时间<input type="datetime-local" value={draft.effectiveAt} required onChange={event =>
+      updatePublicationDraft(setDrafts, index, item => ({ ...item, effectiveAt: event.target.value }))} /></label>
+    <label>失效时间（可留空）<input type="datetime-local" value={draft.expiresAt} onChange={event =>
+      updatePublicationDraft(setDrafts, index, item => ({ ...item, expiresAt: event.target.value }))} /></label>
+  </>;
+}
+
+function PublicationDraftEditor({ drafts, organizations, setDrafts }: {
+  drafts: PublicationDraft[]; organizations: Organization[]; setDrafts: PublicationDraftSetter;
+}): JSX.Element {
+  return <>{drafts.map((draft, index) => <fieldset className="publication-draft"
+    key={draft.source.source_segment_id}>
+    <legend>{draft.source.source_title}</legend>
+    <PublicationDraftBasics draft={draft} index={index} setDrafts={setDrafts} />
+    <PublicationApplicability draft={draft} index={index} setDrafts={setDrafts} />
+    <PublicationScopeAndTime draft={draft} index={index} organizations={organizations} setDrafts={setDrafts} />
+  </fieldset>)}</>;
+}
 
 type OnboardingPrefill = {
   account_profile_candidate: ProfileSegments;
@@ -3124,6 +3408,12 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
   const publicationSources = useRequest<PublicationSource[]>(
     "/api/v1/tenant-management/brand-publication/sources"
   );
+  const feedbackObservations = useRequest<FeedbackObservation[]>(
+    "/api/v1/tenant-management/brand-feedback-observations"
+  );
+  const relevanceGovernance = useRequest<RelevanceGovernance>(
+    "/api/v1/tenant-management/brand-relevance-governance"
+  );
   const organizations = useRequest<Organization[]>("/api/v1/tenant-management/organizations");
   const products = useRequest<ProductFact[]>("/api/v1/tenant-management/brand-products");
   const materials = useRequest<OrganizationMaterial[]>(
@@ -3147,6 +3437,8 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
   const [publicationDrafts, setPublicationDrafts] = useState<
     PublicationDraft[]
   >([]);
+  const [publicationPreview, setPublicationPreview] =
+    useState<PublicationPreview | null>(null);
   const [referencePreview, setReferencePreview] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<LibraryEntry | null>(null);
   const [entryVersions, setEntryVersions] = useState<LibraryVersion[]>([]);
@@ -3773,44 +4065,97 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
           source,
           role: defaultPublicationRole(source),
           text: "",
-          applicability: []
+          applicability: [],
+          visibilityScope: "brand_all",
+          organizationIds: [],
+          effectiveAt: publicationEffectiveDefault(),
+          expiresAt: "",
+          factSubject: "brand_identity"
         }
       ];
     });
+    setPublicationPreview(null);
   };
-  const savePublicationCandidate = (event: FormEvent): void => {
-    event.preventDefault();
+  const publicationRequestBody = (): { items: object[] } | null => {
+    const invalidScope = publicationDrafts.some(
+      item =>
+        (item.visibilityScope === "brand_all" && item.organizationIds.length > 0) ||
+        (item.visibilityScope !== "brand_all" && item.organizationIds.length === 0)
+    );
     if (
       publicationDrafts.length === 0 ||
+      invalidScope ||
       publicationDrafts.some(
-        item => !item.text.trim() || item.applicability.length === 0
+        item => !item.text.trim() || item.applicability.length === 0 || !item.effectiveAt
       )
     ) {
       setNotice({
         tone: "error",
-        message: "请选择来源、适用内容，并把每条内容改写成可直接用于品牌表达的自然文字。"
+        message: "请选择来源、适用内容、可见组织和生效时间，并核对每条自然表达。"
       });
-      return;
+      return null;
     }
+    return {
+      items: publicationDrafts.map(item => ({
+        source_segment_id: item.source.source_segment_id,
+        publication_role: item.role,
+        published_text: item.text.trim(),
+        applicability: item.applicability,
+        visibility_scope: item.visibilityScope,
+        organization_ids: item.organizationIds,
+        effective_at: new Date(item.effectiveAt).toISOString(),
+        expires_at: item.expiresAt ? new Date(item.expiresAt).toISOString() : null,
+        fact_subject: item.role === "public_brand_fact" ? item.factSubject : null
+      }))
+    };
+  };
+  const previewPublicationCandidate = (event: FormEvent): void => {
+    event.preventDefault();
+    const body = publicationRequestBody();
+    if (!body) return;
     setSaving(true);
-    void api("/api/v1/tenant-management/brand-publication/candidates", {
+    void api<PublicationPreview>("/api/v1/tenant-management/brand-publication/preview", {
       method: "POST",
-      body: JSON.stringify({
-        items: publicationDrafts.map(item => ({
-          source_segment_id: item.source.source_segment_id,
-          publication_role: item.role,
-          published_text: item.text.trim(),
-          applicability: item.applicability
-        }))
-      })
+      body: JSON.stringify(body)
     })
+      .then(preview => {
+        setPublicationPreview(preview);
+        setNotice({
+          tone: "success",
+          message: `V${preview.version} 合同预览已生成；请核对摘要后再保存。`
+        });
+      })
+      .catch(error =>
+        setNotice({ tone: "error", message: readableRequestError(error) })
+      )
+      .finally(() => setSaving(false));
+  };
+  const savePublicationCandidate = (): void => {
+    const body = publicationRequestBody();
+    if (!body || !publicationPreview) return;
+    setSaving(true);
+    void api<PublicationPreview>("/api/v1/tenant-management/brand-publication/preview", {
+      method: "POST",
+      body: JSON.stringify(body)
+    })
+      .then(preview => {
+        if (preview.digest !== publicationPreview.digest) {
+          setPublicationPreview(preview);
+          throw new Error("输入已变化，请核对新的合同摘要后再次保存。");
+        }
+        return api("/api/v1/tenant-management/brand-publication/candidates", {
+          method: "POST",
+          body: JSON.stringify(body)
+        });
+      })
       .then(async () => {
         await publication.refresh();
         setDrawer(null);
         setPublicationDrafts([]);
+        setPublicationPreview(null);
         setNotice({
           tone: "success",
-          message: "候选品牌表达已保存。确认前不会进入新的创作任务。"
+          message: "V2 候选品牌表达已保存。确认前不会进入新的创作任务。"
         });
       })
       .catch(error =>
@@ -3951,90 +4296,18 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
         <RequestFailure message={entries.error} onRetry={entries.refresh} />
       ) : (
         <>
-          <section className="tenant-subsection" aria-labelledby="brand-publication-title">
-            <header>
-              <h2 id="brand-publication-title">创作端品牌表达</h2>
-              <span>
-                {publication.data?.current
-                  ? `当前 V${publication.data.current.version}`
-                  : "尚未确认"}
-              </span>
-            </header>
-            <p className="tenant-help">
-              原始资料保持不变；只有你核对并确认的自然表达会进入之后的新内容。
-            </p>
-            {publication.error ? (
-              <RequestFailure
-                message={publication.error}
-                onRetry={publication.refresh}
-              />
-            ) : publication.loading ? (
-              <p className="tenant-empty">正在读取当前品牌表达…</p>
-            ) : (
-              <div className="library-list publication-list">
-                {publication.data?.history.map(version => (
-                  <article key={version.id}>
-                    <header>
-                      <div>
-                        <h2>品牌表达 V{version.version}</h2>
-                        <span>
-                          {version.is_current
-                            ? "当前使用"
-                            : version.status === "candidate"
-                              ? "等待确认"
-                              : "历史版本"}
-                        </span>
-                      </div>
-                    </header>
-                    <ul>
-                      {version.items
-                        .filter(item => item.publication_role !== "internal_only")
-                        .map(item => (
-                          <li key={`${version.id}-${item.position}`}>
-                            <strong>
-                              {item.publication_role === "public_brand_fact"
-                                ? "公开品牌信息"
-                                : item.publication_role === "creative_method"
-                                  ? "创作方法"
-                                  : "表达边界"}
-                            </strong>
-                            <span>{item.published_text}</span>
-                            <small>
-                              来源：{item.source_label} · {item.source_version}
-                            </small>
-                            <small>
-                              适用：
-                              {item.applicability
-                                .map(value =>
-                                  publicationContentOptions.find(
-                                    ([product]) => product === value
-                                  )?.[1] ?? value
-                                )
-                                .join("、")}
-                            </small>
-                          </li>
-                        ))}
-                    </ul>
-                    {version.status === "candidate" && (
-                      <button
-                        type="button"
-                        className="text-action"
-                        disabled={saving}
-                        onClick={() => confirmPublication(version.id)}
-                      >
-                        确认作为当前品牌表达
-                      </button>
-                    )}
-                  </article>
-                ))}
-                {!publication.data?.history.length && (
-                  <p className="tenant-empty">
-                    请先从已有资料中形成并确认一版创作端品牌表达。
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
+          <PublicationHistorySection
+            data={publication.data}
+            loading={publication.loading}
+            error={publication.error}
+            saving={saving}
+            onRetry={publication.refresh}
+            onConfirm={confirmPublication}
+          />
+          <BrandGovernanceSection
+            observations={feedbackObservations.data ?? []}
+            governance={relevanceGovernance.data}
+          />
           <section className="tenant-subsection">
             <header>
               <h2>品牌表达与参考资料</h2>
@@ -4236,7 +4509,7 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
       )}
       {drawer === "publication" && (
         <Drawer title="核对创作端品牌表达" onClose={() => setDrawer(null)}>
-          <form className="tenant-form publication-form" onSubmit={savePublicationCandidate}>
+          <form className="tenant-form publication-form" onSubmit={previewPublicationCandidate}>
             <p>
               选择来源后，请写成面向创作的自然表达。目录、表格、验收问题和采集说明不会自动进入。
             </p>
@@ -4274,89 +4547,28 @@ function BrandLibrary({ setNotice }: { setNotice: (notice: Notice) => void }): J
                 <p className="tenant-empty">没有找到可用于核对的来源。</p>
               )}
             </fieldset>
-            {publicationDrafts.map((draft, index) => (
-              <fieldset
-                className="publication-draft"
-                key={draft.source.source_segment_id}
-              >
-                <legend>{draft.source.source_title}</legend>
-                <label>
-                  在创作中的作用
-                  <select
-                    value={draft.role}
-                    onChange={event =>
-                      setPublicationDrafts(current =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? {
-                                ...item,
-                                role: event.target.value as PublicationRole
-                              }
-                            : item
-                        )
-                      )
-                    }
-                  >
-                    {draft.source.semantic_kind === "brand_fact" && (
-                      <option value="public_brand_fact">公开品牌信息</option>
-                    )}
-                    {draft.source.semantic_kind !== "creative_method" && (
-                      <option value="expression_constraint">表达边界</option>
-                    )}
-                    {draft.source.semantic_kind === "creative_method" && (
-                      <option value="creative_method">创作方法</option>
-                    )}
-                  </select>
-                </label>
-                <label>
-                  核对后的自然表达
-                  <textarea
-                    value={draft.text}
-                    maxLength={1200}
-                    onChange={event =>
-                      setPublicationDrafts(current =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, text: event.target.value }
-                            : item
-                        )
-                      )
-                    }
-                    placeholder="只写确认可公开或可用于表达控制的内容"
-                  />
-                </label>
-                <fieldset className="publication-applicability">
-                  <legend>适用内容</legend>
-                  {publicationContentOptions.map(([value, label]) => (
-                    <label key={value}>
-                      <input
-                        type="checkbox"
-                        checked={draft.applicability.includes(value)}
-                        onChange={() =>
-                          setPublicationDrafts(current =>
-                            current.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? {
-                                    ...item,
-                                    applicability: item.applicability.includes(value)
-                                      ? item.applicability.filter(entry => entry !== value)
-                                      : [...item.applicability, value]
-                                  }
-                                : item
-                            )
-                          )
-                        }
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ))}
-                </fieldset>
-              </fieldset>
-            ))}
+            <PublicationDraftEditor
+              drafts={publicationDrafts}
+              organizations={activeOrganizations(organizations.data)}
+              setDrafts={setPublicationDrafts}
+            />
+            {publicationPreview && (
+              <p className="tenant-help">
+                待保存 V{publicationPreview.version} · {publicationPreview.item_count} 条 ·
+                摘要 {publicationPreview.digest}
+              </p>
+            )}
             <button
               type="submit"
               className="primary"
               disabled={saving || publicationDrafts.length === 0}
+            >
+              预览 V2 合同
+            </button>
+            <button
+              type="button"
+              disabled={saving || !publicationPreview}
+              onClick={savePublicationCandidate}
             >
               保存为待确认版本
             </button>

@@ -100,6 +100,9 @@ from src.gateway.api.contracts import (
     UpdateTenantUserGrantsRequest,
     UpdateTenantUserRequest,
 )
+from src.gateway.api.gated_routes import (
+    register_gate_d_management_routes,
+)
 from src.gateway.api.html import (
     render_activation_failure,
     render_login_failure,
@@ -1677,7 +1680,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scope: TenantManagementScope = Depends(management_scope_from_request),
     ) -> list[dict[str, object]]:
         return workbench_service.publication_source_options(scope, query)
-
+    register_gate_d_management_routes(app, workbench_service, management_scope_from_request, business_failures)
     @app.post(
         "/api/v1/tenant-management/brand-publication/candidates",
         status_code=status.HTTP_201_CREATED,
