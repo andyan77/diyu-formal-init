@@ -750,3 +750,16 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 - 下一动作：**Prompt 2（Gate A · 素材定稿、消费通道与导入合同）签发**。
 
 <!-- BRAND-MATRIX-01-S0-SUPERVISOR-VERDICT-END -->
+
+### Prompt 2（Gate A）签发记录（2026-08-08）
+
+- 基线：`55b1a5ea7ef8101f1029f360e427de0a330554d7`（S0 关账后主线 HEAD）；执行分支
+  `exe/brand-matrix-a`；模型调用配额 **0**；生产接触 **0**（本 Gate 不得 SSH）。
+- 监理签发前亲核事实（写入 Prompt accepted_facts，执行侧不再重验）：
+  区域/门店知识实数 **31 条**＝`RK-EC-01..08`(8，含过期样本 `RK-EC-08`)＋`RK-SW-01..07`(7)
+  ＋`SK-HZ-01..06`(6)＋`SK-HuZ-01..05`(5)＋`SK-CD-01..05`(5)；`素材草案-v0/MANIFEST.md`
+  的「全部 30 条」为漏计 `RK-EC-08` 的误计数，按 Gate A 合同追加式纠正、v0 冻结不改；
+  「四组 J」锚定 `06-P1穿搭决策资料.md` 四款决策组；两条系列名（「各自站住」「同一件外套
+  的四个位置」）为 `演示虚构·待founder定稿`，入 founder 签署页。
+- 完成门含 founder 素材定稿签署；执行侧终态只允许
+  `GATE-A IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`。
