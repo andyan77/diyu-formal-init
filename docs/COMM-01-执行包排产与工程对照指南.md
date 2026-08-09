@@ -1836,3 +1836,11 @@ founder 裁决原文要旨：品控的账号生产出与品控没有任何关系
 - 《问题诊断与里程碑修复部署方案-v2.md》入库：四态分离诊断法、监理十条勘误表（审查方勘误逐项实测采纳）、五线四态总表、缺口五类台账（A 已修待验收/B 部署前置/C 下一里程碑机制/D 待裁扩展/E 卫生债）、Gate E 九步收口计划与验收标准、下一里程碑建议。
 - 供审查方审查；审查通过＋founder 放行后签发 E-1' 重冻结执行 prompt（含考务合同 v2 与 SEALED-SET-02 流程）。
 <!-- BRAND-MATRIX-01-R1-SUPERVISOR-VERDICT-END -->
+
+<!-- BRAND-MATRIX-01-PLAN-V21-START -->
+## 诊断方案 v2.1 与 E-1' 重签（2026-08-09）
+
+- 审查方对 v2 判定 `CONDITIONAL_PASS`，六项补强+两条生产诚实口径+一条单独授权边界经监理逐项核验（签署页 SIGNED·ATT-GATEA-20260808-01 / 执行包四门与 REVIEW-CLOSED 原文 / organization-materials 端点 / importer `_insert_series` 演示导入）后**全部采纳**，落《问题诊断与里程碑修复部署方案-v2.1.md》。
+- 关键修正：考务合同+执行工具+oracle 判定器先行并入冻结（八对象）；B11/B12/B16 三卡公开回归为硬前置；SET-02 全生成卡+负向确定性套件分离（provider=0）；四门分账恢复；封存前独立 oracle 审计制度；系列/brand-library/上传授权三处口径再勘正（C1 改行为审计先行）；26 母版"全上传、仅激活 6 份合格"；执行止于 REVIEW、CLOSED 仅主控终审置位；真实公开发布须单独授权不搭车。
+- E-1' 执行 prompt 按修订一顺序重签（本块之后由 founder 转执行侧）；R-1 判定不变，R1—R4 不返工。SEALED-SET-02 制作延至三卡回归通过后，先草卷后审计后封存。
+<!-- BRAND-MATRIX-01-PLAN-V21-END -->
