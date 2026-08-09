@@ -80,7 +80,7 @@ def test_gate_d_provider_handshake_is_direct_and_spends_no_request(
             server_hostname: str,
         ) -> TlsConnection:
             assert isinstance(connection, Connection)
-            assert server_hostname == "dashscope.aliyuncs.com"
+            assert server_hostname == "api.deepseek.com"
             return TlsConnection()
 
     def create_connection(
@@ -96,19 +96,27 @@ def test_gate_d_provider_handshake_is_direct_and_spends_no_request(
     monkeypatch.setattr("scripts.gated.provider_env.ssl.create_default_context", Context)
 
     result = probe_provider_tcp_tls(
-        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "https://api.deepseek.com/v1",
         timeout_seconds=3.0,
     )
 
-    assert calls == [(("dashscope.aliyuncs.com", 443), 3.0)]
+    assert calls == [(("api.deepseek.com", 443), 3.0)]
     assert result["status"] == "PASS"
     assert result["completion_requests"] == 0
     assert result["provider_budget_consumed"] == 0
 
 
-def test_gate_d_provider_handshake_fails_closed_for_other_hosts() -> None:
+@pytest.mark.parametrize(
+    "base_url",
+    (
+        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "https://example.invalid/v1",
+        "https://api.deepseek.com:8443/v1",
+    ),
+)
+def test_gate_d_provider_handshake_fails_closed_for_other_hosts(base_url: str) -> None:
     with pytest.raises(ProviderHandshakeError):
-        probe_provider_tcp_tls("https://example.invalid/v1")
+        probe_provider_tcp_tls(base_url)
 
 
 def test_gate_d_evidence_ledger_records_transport_retries(
@@ -136,7 +144,7 @@ def test_gate_d_evidence_ledger_records_transport_retries(
     generator = EvidenceGenerator(
         evidence_root=tmp_path,
         prior_request_count=44,
-        api_base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        api_base_url="https://api.deepseek.com/v1",
         api_key="x",
         model="deepseek-test",
         max_retries=0,

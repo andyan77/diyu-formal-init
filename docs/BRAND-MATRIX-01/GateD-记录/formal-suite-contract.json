@@ -186,6 +186,7 @@
     }
   ],
   "constraints": {
+    "authorized_provider_host": "api.deepseek.com",
     "maximum_provider_requests": 80,
     "content_max_retries": 0,
     "maximum_transport_retries": 2,
@@ -194,6 +195,7 @@
     "orchestration_isolation": "deterministic_preflight_consumes_fixture_only",
     "prior_provider_requests": 44,
     "provider_handshake_policy": "DIRECT_TCP_TLS_BEFORE_SUITE_ZERO_COMPLETION_REQUESTS",
+    "provider_endpoint_policy": "AUTH-PROVIDER-ENDPOINT-20260809-01-DEEPSEEK-OFFICIAL",
     "provider_request_policy": "one accepted Writer response per card; deterministic anomalies fail before provider",
     "retry_policy": "DIRECT_PROVIDER_TRANSPORT_RETRY_V1",
     "same_candidate_resume_policy": "INTERRUPTED_CARD_ONLY_AFTER_EXPLICIT_USER_CONTINUE",
@@ -206,5 +208,5 @@
     "content_products": 5,
     "scenarios": 8
   },
-  "suite_version": "brand-matrix-gate-d-formal-suite-v9"
+  "suite_version": "brand-matrix-gate-d-formal-suite-v10"
 }

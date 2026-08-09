@@ -359,7 +359,9 @@ def _assert_media() -> str:
 
 def _assert_formal_suite_contract() -> None:
     contract = _document("formal-suite-contract.json")
-    if contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v9" or contract.get("expected_counts") != {
+    if contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v10" or contract.get(
+        "expected_counts"
+    ) != {
         "anomalies": 8,
         "cards": 15,
         "content_products": 5,
@@ -369,6 +371,7 @@ def _assert_formal_suite_contract() -> None:
     constraints = cast(dict[str, Any], contract.get("constraints"))
     if (
         constraints.get("maximum_provider_requests") != 80
+        or constraints.get("authorized_provider_host") != "api.deepseek.com"
         or constraints.get("content_max_retries") != 0
         or constraints.get("maximum_transport_retries") != 2
         or constraints.get("prior_provider_requests") != 44
@@ -379,6 +382,8 @@ def _assert_formal_suite_contract() -> None:
         or constraints.get("orchestration_isolation") != "deterministic_preflight_consumes_fixture_only"
         or constraints.get("retry_policy") != "DIRECT_PROVIDER_TRANSPORT_RETRY_V1"
         or constraints.get("provider_handshake_policy") != "DIRECT_TCP_TLS_BEFORE_SUITE_ZERO_COMPLETION_REQUESTS"
+        or constraints.get("provider_endpoint_policy")
+        != "AUTH-PROVIDER-ENDPOINT-20260809-01-DEEPSEEK-OFFICIAL"
         or constraints.get("same_candidate_resume_policy") != "INTERRUPTED_CARD_ONLY_AFTER_EXPLICIT_USER_CONTINUE"
     ):
         raise SystemExit("Gate D semantics FAIL: formal provider discipline differs")
@@ -424,6 +429,41 @@ def _assert_formal_suite_contract() -> None:
             "GATED_FORMAL_SUITE_FAILED_SAFE",
         ),
         "formal frozen runner",
+    )
+    provider_env = _source("scripts/gated/provider_env.py")
+    _require(
+        provider_env,
+        (
+            'AUTHORIZED_PROVIDER_HOST = "api.deepseek.com"',
+            "host != AUTHORIZED_PROVIDER_HOST",
+            "provider host is outside the authorized official endpoint",
+            "socket.create_connection",
+        ),
+        "unified official provider endpoint",
+    )
+    if "aliyuncs.com" in provider_env:
+        raise SystemExit("Gate D semantics FAIL: superseded provider host remains in runtime guard")
+    freeze = _source("scripts/gated/freeze_runtime_candidate.py")
+    _require(
+        freeze,
+        (
+            'AUTHORIZED_PROVIDER_HOST = "api.deepseek.com"',
+            '"provider_endpoint_policy": "AUTH-PROVIDER-ENDPOINT-20260809-01"',
+        ),
+        "runtime provider endpoint freeze",
+    )
+    endpoint_decision = _source(
+        "docs/BRAND-MATRIX-01/GateD-记录/"
+        "provider端点统一裁决-AUTH-PROVIDER-ENDPOINT-20260809-01.md"
+    )
+    _require(
+        endpoint_decision,
+        (
+            "AUTH-PROVIDER-ENDPOINT-20260809-01",
+            "api.deepseek.com",
+            "USER_CONFIRMED",
+        ),
+        "founder provider endpoint decision",
     )
     factual_boundary = _source("src/shared/factual_basis.py")
     _require(
@@ -520,6 +560,7 @@ def _assert_formal_suite_contract() -> None:
             "test_gated_rerun05_repeatable_persona_quote_can_be_committed_again",
             "test_gate_d_provider_handshake_is_direct_and_spends_no_request",
             "test_gate_d_evidence_ledger_records_transport_retries",
+            '"https://api.deepseek.com/v1"',
             "3bafbf45-fb92-45ae-b832-984ef425a5f8",
             "27b810b8-f219-4d72-aaf8-b2b1aee1f80e",
         ),

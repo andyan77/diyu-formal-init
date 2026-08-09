@@ -11,6 +11,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlsplit
 from uuid import UUID
 
 import psycopg
@@ -25,6 +26,7 @@ from scripts.gated.provider_env import parse_authorized_deepseek_env  # noqa: E4
 REGISTRATION_VERSION = "brand-matrix-gate-d-runtime-freeze-v1"
 EXPECTED_MEDIA_DIGEST = "587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b"
 EXPECTED_GATE_A_MANIFEST_DIGEST = "14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06"
+AUTHORIZED_PROVIDER_HOST = "api.deepseek.com"
 
 _FROZEN_QUERIES = {
     "brand": (
@@ -202,6 +204,9 @@ def build_registration(
         raise ValueError("runtime candidate differs from HEAD outside Gate D records")
     environment = parse_authorized_deepseek_env(env_path)
     model = environment["DEEPSEEK_MODEL"]
+    provider_host = urlsplit(environment["DEEPSEEK_API_BASE_URL"]).hostname
+    if provider_host != AUTHORIZED_PROVIDER_HOST:
+        raise ValueError("runtime freeze provider host differs from the unified endpoint decision")
     media = _load_object(_ROOT / "docs/BRAND-MATRIX-01/GateD-记录/media-master-manifest.json")
     if media.get("manifest_digest") != EXPECTED_MEDIA_DIGEST:
         raise ValueError("runtime freeze media manifest digest differs")
@@ -215,6 +220,8 @@ def build_registration(
         "runtime_candidate_sha": candidate_sha,
         "provider_requests_at_freeze": 0,
         "model": model,
+        "provider_host": provider_host,
+        "provider_endpoint_policy": "AUTH-PROVIDER-ENDPOINT-20260809-01",
         "temperature": 0,
         "max_retries": 0,
         "content_max_retries": 0,

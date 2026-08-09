@@ -826,8 +826,8 @@ class DeepSeekGenerator(ContentGenerator):
         self._review_timeout_seconds = max(timeout_seconds, 60.0)
 
     def _http_client(self, timeout_seconds: float | None = None) -> httpx.Client:
-        # The configured provider is a mainland endpoint. Inheriting workstation proxy
-        # variables can incorrectly send it through a cross-border SOCKS tunnel.
+        # The authorized provider endpoint must not inherit workstation proxy variables;
+        # doing so previously produced intermittent transport failures.
         return httpx.Client(
             timeout=httpx.Timeout(timeout_seconds or self._timeout_seconds),
             trust_env=False,

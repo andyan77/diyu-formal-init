@@ -75,7 +75,7 @@ from src.tool.llm_gateway.deepseek import (  # noqa: E402
     ProviderRequestFailure,
 )
 
-SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v9"
+SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v10"
 MAX_PROVIDER_REQUESTS = 80
 MAX_TRANSPORT_RETRIES = 2
 INITIAL_RUNTIME_CANDIDATE_SHA = "997e6b55c1c40dacd44a46ff6617b28766011958"
@@ -86,7 +86,8 @@ FOURTH_RERUN_RUNTIME_CANDIDATE_SHA = "7e48f7a7d96d4a196a8cbc8e503efe55f36291f9"
 FIFTH_RERUN_RUNTIME_CANDIDATE_SHA = "e0dba46689397f16a967efbc126621df0683f385"
 SIXTH_RERUN_RUNTIME_CANDIDATE_SHA = "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b"
 PRIOR_RUNTIME_CANDIDATE_SHA = "587bed9168e92db7444db81ba9123b92a80cbacf"
-_RUNTIME_CANDIDATE_HISTORY = (
+PRECONDITION_RUNTIME_CANDIDATE_SHA = "f00e5d44098e2ef2ef70d76dab67a3e3fdd03ea4"
+_LEDGER_CANDIDATE_HISTORY = (
     INITIAL_RUNTIME_CANDIDATE_SHA,
     FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
     SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
@@ -95,6 +96,10 @@ _RUNTIME_CANDIDATE_HISTORY = (
     FIFTH_RERUN_RUNTIME_CANDIDATE_SHA,
     SIXTH_RERUN_RUNTIME_CANDIDATE_SHA,
     PRIOR_RUNTIME_CANDIDATE_SHA,
+)
+_RUNTIME_CANDIDATE_HISTORY = (
+    *_LEDGER_CANDIDATE_HISTORY,
+    PRECONDITION_RUNTIME_CANDIDATE_SHA,
 )
 _ENV_PATH = Path("/home") / "faye" / "workspace" / "diyu-formal-init" / ".env"
 _ACCOUNT_ORGANIZATIONS = {
@@ -339,7 +344,7 @@ def _load_prior_ledger(
         runtime_candidate_sha != PRIOR_RUNTIME_CANDIDATE_SHA
         or document.get("prior_runtime_candidate_sha") != SIXTH_RERUN_RUNTIME_CANDIDATE_SHA
         or document.get("initial_runtime_candidate_sha") != INITIAL_RUNTIME_CANDIDATE_SHA
-        or document.get("runtime_candidate_chain") != list(_RUNTIME_CANDIDATE_HISTORY)
+        or document.get("runtime_candidate_chain") != list(_LEDGER_CANDIDATE_HISTORY)
         or document.get("prior_provider_request_count") != 42
         or document.get("current_provider_request_count") != 2
         or document.get("current_successful_response_count") != 1
@@ -908,6 +913,9 @@ def _assert_runtime_freeze(
         or registration.get("runtime_candidate_sha") != candidate_sha
         or registration.get("provider_requests_at_freeze") != 0
         or registration.get("model") != model
+        or registration.get("provider_host") != "api.deepseek.com"
+        or registration.get("provider_endpoint_policy")
+        != "AUTH-PROVIDER-ENDPOINT-20260809-01"
         or registration.get("temperature") != 0
         or registration.get("max_retries") != 0
         or registration.get("content_max_retries") != 0

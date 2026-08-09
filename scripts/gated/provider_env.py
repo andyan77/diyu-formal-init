@@ -13,6 +13,7 @@ AUTHORIZED_KEYS = (
     "DEEPSEEK_API_KEY",
     "DEEPSEEK_MODEL",
 )
+AUTHORIZED_PROVIDER_HOST = "api.deepseek.com"
 _KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
@@ -29,13 +30,19 @@ def probe_provider_tcp_tls(
 
     parsed = urlsplit(api_base_url)
     host = parsed.hostname or ""
-    if parsed.scheme != "https" or not host:
+    if (
+        parsed.scheme != "https"
+        or not host
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.port not in {None, 443}
+    ):
         raise ProviderHandshakeError("provider base URL must name one HTTPS host")
-    if host != "aliyuncs.com" and not host.endswith(".aliyuncs.com"):
-        raise ProviderHandshakeError("provider host is outside the authorized mainland endpoint")
+    if host != AUTHORIZED_PROVIDER_HOST:
+        raise ProviderHandshakeError("provider host is outside the authorized official endpoint")
     port = parsed.port or 443
     try:
-        # A raw socket deliberately ignores HTTP(S)/ALL_PROXY from the workstation.
+        # The official endpoint must not inherit workstation HTTP(S)/ALL_PROXY.
         with socket.create_connection((host, port), timeout=timeout_seconds) as connection:
             context = ssl.create_default_context()
             with context.wrap_socket(connection, server_hostname=host) as tls_connection:
