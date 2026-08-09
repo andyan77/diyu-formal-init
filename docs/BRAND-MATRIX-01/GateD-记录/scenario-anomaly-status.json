@@ -57,16 +57,21 @@
       "reason": "旧 AMD v1 快照在前置检查中保持冻结；新套件首卡失败安全后，新 v2 任务比较未到达。"
     }
   ],
-  "blocking_reason": "FORMAL_SUITE_UNCONFIRMED_PRODUCT_SPECIFICITY_REJECTED",
+  "blocking_reason": "PUBLICATION_V3_COMPLETION_SNAPSHOT_KEYS_REJECTED",
   "formal_binary_completion": false,
   "formal_model_suite": {
     "current_completed_artifacts": 0,
     "current_provider_requests": 1,
-    "cumulative_provider_requests": 7,
-    "deterministic_boundary_match": "performance_assertion:耐穿",
+    "cumulative_provider_requests": 8,
     "failed_card": "S01-P1",
+    "failure_stage": "persistence",
+    "l2_boundary_result": "PASS",
     "result": "FAILED_SAFE",
-    "runtime_candidate_sha": "f7e8e81c80ebc8552794f82aab81ef509e242b14",
+    "runtime_candidate_sha": "ba4208a6ea96775683ecd89f41b6cd869b45eead",
+    "snapshot_patch_extra_keys": [
+      "used_persona_quote_ids",
+      "writer_confirmed_product_fact_refs"
+    ],
     "transport_retries": 0
   },
   "scenarios": [
@@ -75,28 +80,28 @@
       "formal_suite_result": "FAILED_SAFE",
       "id": "SCENARIO-01",
       "name": "总部 F/J/G",
-      "reason": "新候选首卡 S01-P1 收到唯一响应后新增未确认性能断言“耐穿”，被确定性边界拒绝；事务未提交 task/run/version。"
+      "reason": "新候选首卡 S01-P1 通过 L2 文案边界并收到唯一响应；成品快照补丁在持久化时多出两个 Writer 来源字段，被仓储精确字段清单失败关闭。任务/运行已留 failed 审计，版本为 0。"
     },
     {
       "deterministic_mechanism_result": "PASS",
       "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "SCENARIO-02",
       "name": "华东资料",
-      "reason": "整套重跑在首卡失败安全停止，未运行本剧本。"
+      "reason": "整套重跑在首卡持久化失败安全后停止，未运行本剧本。"
     },
     {
       "deterministic_mechanism_result": "PASS",
       "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "SCENARIO-03",
       "name": "杭州资料",
-      "reason": "整套重跑在首卡失败安全停止，未运行本剧本。"
+      "reason": "整套重跑在首卡持久化失败安全后停止，未运行本剧本。"
     },
     {
       "deterministic_mechanism_result": "PASS",
       "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "SCENARIO-04",
       "name": "成都错误普通文件",
-      "reason": "整套重跑在首卡失败安全停止；旧候选结果不拼接进新套件。"
+      "reason": "整套重跑在首卡失败安全停止；不拼接旧候选结果。"
     },
     {
       "deterministic_mechanism_result": "PARTIAL_PASS",
@@ -134,5 +139,5 @@
     "p5_eligible_master_count": 6,
     "scope": "internal_demo_and_demo_tenant_operation"
   },
-  "status": "GATE-D FAILED_SAFE · FORMAL_SUITE_UNCONFIRMED_PRODUCT_SPECIFICITY_REJECTED"
+  "status": "GATE-D FAILED_SAFE · PUBLICATION_V3_COMPLETION_SNAPSHOT_KEYS_REJECTED"
 }

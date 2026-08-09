@@ -1995,3 +1995,25 @@
   alembic 0、密钥泄漏 0、二进制入 Git 0。
 - 唯一下一动作：监理复核失败证据与冻结纪律；若需继续，主控须另行裁决并签发新指令，
   执行侧不得自行进行第二次共享修复或 provider 重跑。
+
+## BRAND-MATRIX-01 · Gate D 第二次共享修复后整套重跑失败安全稿（2026-08-09，待监理复核）
+
+- 状态：**`GATE-D FAILED_SAFE · PUBLICATION_V3_COMPLETION_SNAPSHOT_KEYS_REJECTED`**；
+  不得据此写 `IMPLEMENTED / COMPLETE / PASS`。
+- ADJ-WRITER-BOUNDARY-03 三层制修复已通过双向回归：L1 未确认硬断言仍拒绝，
+  L2 `耐穿`类软性体验词放行且不进入 ProductFact，L3 保持用户侧条件语态。
+  本轮唯一正式响应已通过新边界，证明上一候选的 L2 误拒已解除。
+- 新 runtime candidate `ba4208a6ea96775683ecd89f41b6cd869b45eead`；本地全门
+  `1025 passed / 2 skipped`，CI run `31299692372` 四查全绿。两轮隔离导入的
+  batch digest `f15d0efe…1750` 与对象指纹 `e48dc654…6b88` 一致；媒体
+  PASS(scope)/FAIL/QUARANTINED=`26/0/0`，母版 P5 资格 `6`。
+- 整套重跑在首卡 `S01-P1` 的唯一响应后，于成品持久化失败关闭：
+  Writer 冻结的 `writer_confirmed_product_fact_refs` 与 `used_persona_quote_ids`
+  尚未进入仓储 publication-v3 completion 允许集。task/run/version=`1/1/0`，
+  run=`failed`，最终成品 `0`。
+- ledger 累计 `8/80`（历史 7 + 本轮 1），temperature `0`、max_retries `0`、
+  transport retry `0`、失败后 provider request `0`，旧候选成品不拼接。
+- 生产/SSH/ECS 0、alembic 0、密钥泄漏 0、二进制入 Git 0；首次请求后仅追加
+  Gate D 脱敏证据、治理记录和本状态。
+- 唯一下一动作：监理复核三层制、冻结纪律、ledger 与快照契约失败证据；
+  如需继续，由主控另行签发新指令，执行侧不得自行修复或重跑 provider。

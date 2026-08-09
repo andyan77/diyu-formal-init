@@ -1108,3 +1108,35 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   继续与否及新的产品语义边界须由主控另行裁决和签发。
 
 <!-- BRAND-MATRIX-01-GATED-FINAL-RERUN-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-02-FAILED-SAFE-START -->
+
+### Gate D 第二次共享修复后整套重跑失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · PUBLICATION_V3_COMPLETION_SNAPSHOT_KEYS_REJECTED`，不等于
+> Gate D 已实现或通过。
+
+- ADJ-WRITER-BOUNDARY-03 三层制已实现：L1 未确认具体/保证/绝对断言仍硬拦；
+  L2 `耐穿/百搭/好打理/显精神` 作为不取得 ProductFact 资格的软表达放行；
+  L3 保持用户侧条件语态。双向回归和本轮唯一正式响应均证明 L2 不再被误拒。
+- 新 runtime candidate 为 `ba4208a6ea96775683ecd89f41b6cd869b45eead`；本地全门
+  `1025 passed / 2 skipped`，CI run `31299692372` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 隔离栈从零重建；两轮 batch digest `f15d0efe…1750`、对象指纹
+  `e48dc654…6b88` 逐字节一致。媒体仍为 PASS(scope) `26` / FAIL `0` /
+  QUARANTINED `0`，母版 P5 资格 `6`，覆盖 4 个正式商品。
+- 正式套件在首卡 `S01-P1` 收到唯一响应并通过 Writer 边界后，在成品持久化
+  失败关闭：adapter 产出的 `writer_confirmed_product_fact_refs` 和
+  `used_persona_quote_ids` 未被仓储 publication-v3 completion 精确字段集接纳。
+  隔离库保留 task/run=`1/1`，run=`failed`，version=`0`。
+- provider ledger 累计为 `8/80`：请求 1–6 绑定 `997e6b5…`，请求 7 绑定
+  `f7e8e81…`，请求 8 绑定 `ba4208a…`；transport retry `0`、失败后请求 `0`、
+  三个候选产物不拼接。
+- 该问题是新的通用快照契约不同步，不是模型胡编或 L2 政策回归。按本指令停止线，
+  执行侧未自行进行第三次修复或 provider 重跑。生产/SSH/ECS 0、alembic 0、
+  密钥泄漏 0、二进制入 Git 0。
+- 唯一下一动作：监理复核三层制、冻结纪律、ledger 及新快照契约失败证据；
+  如要继续，由主控另行签发新指令。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-02-FAILED-SAFE-END -->
