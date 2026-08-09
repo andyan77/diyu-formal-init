@@ -1296,3 +1296,29 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 - 本记录仅表示用户裁决已落盘；运行代码和候选尚未依裁决重建，Gate D 仍未完成。
 
 <!-- BRAND-MATRIX-01-PROVIDER-ENDPOINT-AUTH-END -->
+
+<!-- BRAND-MATRIX-01-GATED-OFFICIAL-ENDPOINT-IMPLEMENTED-START -->
+
+### Gate D 官方 DeepSeek 端点完整套件实施记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`，尚非 Gate D `COMPLETE / PASS`。
+
+- 官方端点统一裁决已进入正式运行链：握手仅允许
+  `api.deepseek.com:443`，未知主机失败关闭；`trust_env=False`、三键精确
+  解析、密钥不落盘、内容重试 0 和传输重试≤2均继续生效。
+- 最终 runtime candidate `81289d8619ef831d9d6a79acceaac9090f17ee3a`；本地
+  `1057 passed / 2 skipped`，CI `31312097476` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 隔离导入两轮 digest/指纹为 `20e1d00a…6ed` / `1ec150e8…2f98`；媒体
+  PASS(scope)/FAIL/QUARANTINED=`26/0/0`，P5 合格母版 6、正式商品 4。
+- 完整正式套件在同一 SHA 上产生 15 张成品：八剧本 `8/8 PASS`、八异常
+  `8/8 PASS`。provider 历史 44 + 本轮 15 = `59/80`；仅 1 次无内容传输重试，
+  没有内容重试、择优或跨 SHA 拼接。
+- 私有 raw/artifact 证据保存在 0700/0600 私有目录，Git 只保存脱敏索引；
+  生产/SSH/ECS 0，alembic 0，密钥泄漏 0，二进制入 Git 0。
+- 9 条非阻断性性能词标注留待 founder 逐篇审阅；执行侧不代签监理或
+  founder 的独立人工终审。
+- 唯一下一动作：监理独立复验 + founder 逐篇审阅。
+
+<!-- BRAND-MATRIX-01-GATED-OFFICIAL-ENDPOINT-IMPLEMENTED-END -->

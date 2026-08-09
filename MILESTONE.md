@@ -2147,3 +2147,26 @@
   Gate D 仍非 `IMPLEMENTED`。
 - 唯一下一动作：在 Gate D 续行中移除旧的 `aliyuncs.com` 专用阻断，以官方
   DeepSeek 端点重做完整确定性门、CI、新候选冻结和正式套件。
+
+## BRAND-MATRIX-01 · Gate D 官方端点完整套件实施稿（2026-08-09，待监理复验）
+
+- 状态：**`GATE-D IMPLEMENTED · AWAITING_SUPERVISOR_REVERIFICATION`**；不等于
+  Gate D 已 `COMPLETE / PASS`。
+- `AUTH-PROVIDER-ENDPOINT-20260809-01` 已进入正式实现：仅允许
+  `api.deepseek.com` 的 HTTPS/443 直连，未知主机失败关闭；零预算 TCP/TLS
+  握手 PASS，系统不再继承工作站代理环境。
+- 最终 runtime candidate 为 `81289d8619ef831d9d6a79acceaac9090f17ee3a`；
+  冻结登记 digest `57a5f5202559a5e55fc2314e9c7f7324eec96e4d93a925dfabcf778000f27376`。
+  本地全量 `1057 passed / 2 skipped`，CI run `31312097476` 四查通过。
+- 隔离栈两轮导入 batch digest `20e1d00a…6ed`、对象指纹 `1ec150e8…2f98`
+  一致；10 根账号/20 carrier/40 target、31 条区域门店资料、4 J、
+  6 authorization、30 qualification 均可回读。
+- 媒体 PASS(scope)/FAIL/QUARANTINED=`26/0/0`，原片 P5 资格 0，母版
+  P5 资格 6，覆盖 4 个正式商品；媒体 manifest digest 为
+  `587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b`。
+- 完整正式套件一次跑通：八剧本 `8/8 PASS`，八异常 `8/8 PASS`，
+  当前候选 15 张成品全部落版。本轮有效内容请求 15，传输重试 1，
+  累计 `59/80`；内容重试 0，无择优、无单卡补丁、无跨 SHA 拼接。
+- 审阅包登记 9 条非阻断性性能词标注，执行侧不代替 founder 对成品内容的
+  逐篇审阅。生产/SSH/ECS 0，alembic 0，密钥泄漏 0，二进制入 Git 0。
+- 唯一下一动作：**监理独立复验 + founder 逐篇审阅**。
