@@ -1777,3 +1777,25 @@ S04-P2：Writer 提示合同不足 vs 匹配器误伤，对症修一处）→ �
 ### 四、当前状态与唯一下一动作
 机器面（初裁后）：**16 PASS / 1 真实 FAIL（B10）/ 3 待考务修正补跑**。人工评分（founder+监理 ≥17/20）待补跑完成后集中进行——人工分照常产出以完成本轮证据闭环，但不能替代机器门。下一动作：执行侧按 ADJ-BLIND-ORACLE-03 补跑三卡并交增补包 → 人工评分 → 本轮盲测按规则关账（FAILED_SAFE）→ founder 裁决修复轮授权。
 <!-- BRAND-MATRIX-01-E2-SUPERVISOR-CENTRAL-ADJUDICATION-END -->
+
+<!-- BRAND-MATRIX-01-E2-SYS-DEFECT-02-START -->
+## SYS-DEFECT-BM01-E-02 · B04 类缺陷 founder 裁决升级立案（2026-08-09）
+
+founder 裁决原文要旨：品控的账号生产出与品控没有任何关系的内容，这样的错误绝对不能接受。
+
+### 定性（两层分离）
+- **考卷层（维持）**：B04 机器判据 `S-04-QC-SOURCE` 无效的结论不变——判据要求消费的「五环节枚举/DEMO 品控记录」从未导入为可消费对象，结构性不可能 PASS，属考题缺陷（ADJ-BLIND-ORACLE-02 维持）。
+- **系统层（founder 推翻监理原路由）**：监理原将「H04 品控数据无结构化通道」列为下一里程碑观察件——**该路由被 founder 推翻，裁定为本里程碑部署前置缺陷**。缺陷定性：**账号使命主题上的数据贫乏跑题硬写**——账号使命领地（H04=品控）被以自然语言问及使命主题时，系统因无可消费依据而产出跑题内容并落版，未 fail-closed。监理自认：初裁把业务严重度定轻了；B04 人工评分面按使命失守处理（不可用）。
+
+### 已实测的三层根因
+1. **数据建模缺口**：`05-品控记录汇编-演示补充.md` 仅登记于 `source_documents`（digest 62b43ff4…），importer 的 segment 面仅有 `product-segment:{sku}:{key}` 与 `publication-segment:*` 两族——品控汇编从未切分为 `brand_source_segments`/claim 可消费对象；schema 无品控表，「五环节」代码零出现。
+2. **机制缺口**：P2 无「所问主题 vs 可用依据」覆盖门——依据不足时按既有依据（品类/主色）跑题硬写，而非像 P2 选品那样 provider 前确定性拦问。
+3. **覆盖缺口**：盲测前无任何测试以自然语言问过 H04 品控问答（执行侧根因分析此条成立）。
+
+### 修复两件套（并入修复轮，与 SYS-DEFECT-BM01-E-01 同批）
+- (a) **通用跑题防线**：所问主题属账号使命领地且无可消费依据 → provider 调用前确定性拦问（与 P2 选品问句同族；机器只做结构判断，不建语义黑名单，守 ADJ-WRITER-BOUNDARY-05）。边界：非使命主题的生活题材仍走 P3 topic-fidelity + `brand_relevance_degraded` 显式化，不过度收紧。
+- (b) **H04 品控供给**：将 DEMO 品控汇编建模为结构化可消费对象（segment/claim 族），保留冻结约束「仅演示、不得当作真实批次证据」，接入 H04 P2 快照白名单。
+
+### 修复轮范围（更新后）
+`SYS-DEFECT-BM01-E-01`（B10 人物原句强制闭环）+ `SYS-DEFECT-BM01-E-02`（B04 跑题防线+品控供给）→ 全门禁 → 重冻结（新六对象回执）→ `SEALED-SET-02` 重考。其余三项提案（自然语言选品/P5 单商品形态/stance·series 路由演进）仍待 founder 单独裁决，不搭车。
+<!-- BRAND-MATRIX-01-E2-SYS-DEFECT-02-END -->
