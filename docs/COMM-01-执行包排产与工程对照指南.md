@@ -1167,3 +1167,29 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   另行签发。
 
 <!-- BRAND-MATRIX-01-GATED-RERUN-03-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-04-FAILED-SAFE-START -->
+
+### Gate D 第四轮守卫修复后整套重跑失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · SINGLE_USE_AUTHORIZATION_PRECONSUMED`，不等于 Gate D 已实现或通过。
+
+- `absolute_claim` 机器守卫已移除 `最/第一` 歧义匹配，保留 `100%`、`永不/绝不`和保证类
+  性能硬门；正式套件中上一候选失败的 `S01-P2` 已成功落版，证明修复进入真实运行链。
+- runtime candidate 为 `7e48f7a7d96d4a196a8cbc8e503efe55f36291f9`；本地全门
+  `1037 passed / 2 skipped`，CI run `31303644503` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 隔离栈重建后两轮 batch digest `f15d0efe…1750`、对象指纹 `e48dc654…6b88` 一致；媒体
+  PASS(scope)/FAIL/QUARANTINED=`26/0/0`，P5 合格母版 6、覆盖 4 个正式商品。
+- 本候选前 11 张卡均落版；`S06-S02-P3` 在创建 task/run/version 和 provider 请求前失败关闭。
+  私有 bundle 响应数为 0；数据库回读确认它所需的 single-use `PS-S02-05` 已被正式套件前的
+  确定性授权消费者证明核销。授权状态机正确拒绝，问题是同一隔离栈的证明编排预先消耗资格。
+- ledger 本轮 11、历史 10、累计 `21/80`；temperature 0、max_retries 0、transport retry 0、
+  失败后请求 0。候选产物不拼接；八剧本/八异常未完成。
+- 首次请求后仅追加脱敏证据、治理记录与 MILESTONE；生产/SSH/ECS 0、alembic 0、密钥泄漏 0、
+  二进制入 Git 0。按第四轮停止线，不自行第五轮修复或 provider 重跑。
+- 唯一下一动作：监理复核守卫实证、授权预先核销编排诊断、冻结纪律和累计 ledger；继续须由
+  主控另行签发。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-04-FAILED-SAFE-END -->

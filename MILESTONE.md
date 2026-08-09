@@ -2039,3 +2039,23 @@
   二进制入 Git 0。根据 `UNLOCK-D-RERUN-03`，执行侧不得自行第四轮修复或 provider 重跑。
 - 唯一下一动作：监理复核第三轮修复实证、冻结纪律、ledger 与“最好”误报；继续须由主控
   另行签发。
+
+## BRAND-MATRIX-01 · Gate D 第四轮守卫修复后整套重跑失败安全稿（2026-08-09，待监理复核）
+
+- 状态：**`GATE-D FAILED_SAFE · SINGLE_USE_AUTHORIZATION_PRECONSUMED`**；不得据此写
+  `IMPLEMENTED / COMPLETE / PASS`。
+- 绝对化守卫已收窄：`最/第一` 不再由机器硬拦，`100%`、`永不/绝不`与保证类性能硬门保留；
+  上一候选失败的 `S01-P2` 已在正式套件成功落版，修复真实生效。
+- runtime candidate `7e48f7a7d96d4a196a8cbc8e503efe55f36291f9`；本地全门
+  `1037 passed / 2 skipped`，CI run `31303644503` 四查全绿。两轮隔离导入 batch digest
+  `f15d0efe…1750`、对象指纹 `e48dc654…6b88` 一致；媒体 PASS(scope)/FAIL/QUARANTINED=
+  `26/0/0`，母版 P5 资格 6、覆盖 4 个商品。
+- 新候选完成 11 张成品卡；`S06-S02-P3` 在 provider 前因 `PS-S02-05` single-use 授权已被
+  前置确定性消费者证明核销而失败关闭，失败卡 task/run/version 和 provider request 均为 0。
+  这是同一隔离栈的验证编排/冻结输入覆盖缺口，不是模型内容失败，也不是授权 fail-closed 缺陷。
+- ledger 累计 `21/80`（历史 10 + 本轮 11），temperature 0、max_retries 0、transport retry 0、
+  失败后请求 0；旧候选成品不拼接，八剧本/八异常未完成。
+- 首次请求后仅追加 Gate D 脱敏证据、治理记录和本状态；生产/SSH/ECS 0、alembic 0、
+  密钥泄漏 0、二进制入 Git 0。根据 `UNLOCK-D-RERUN-04`，执行侧不得自行第五轮修复或重跑。
+- 唯一下一动作：监理复核第四轮守卫正式实证、授权预先核销诊断、冻结纪律与 ledger；继续须由
+  主控另行签发。

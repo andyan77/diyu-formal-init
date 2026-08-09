@@ -5,14 +5,14 @@
       "formal_suite_result": "INCOMPLETE_SUITE_ABORTED",
       "id": "ANOM-01",
       "name": "过期成分口径版本对",
-      "reason": "旧 v1 快照在新套件前置检查中保持冻结；第二张卡失败安全后，当前任务完整比较未到达。"
+      "reason": "旧 v1 快照在前置检查中保持冻结；套件在 S06-S02-P3 失败安全后，最终当前任务比较未到达。"
     },
     {
       "deterministic_mechanism_result": "PASS",
       "formal_suite_result": "PASS_ZERO_PROVIDER",
       "id": "ANOM-02",
       "name": "门店错误成分文件",
-      "reason": "前置检查确认门店错误普通资料未进入 ProductFact 或 projection，provider request=0。"
+      "reason": "门店错误普通资料未进入 ProductFact 或 projection，provider request=0。"
     },
     {
       "deterministic_mechanism_result": "PASS",
@@ -26,7 +26,7 @@
       "formal_suite_result": "PASS_ZERO_PROVIDER",
       "id": "ANOM-04",
       "name": "过期区域活动",
-      "reason": "新任务选择前确认过期 RK-EC-08 消费数为 0，provider request=0。"
+      "reason": "过期 RK-EC-08 新任务消费数为 0，provider request=0。"
     },
     {
       "deterministic_mechanism_result": "PASS",
@@ -47,89 +47,33 @@
       "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "ANOM-07",
       "name": "私人经历单次授权",
-      "reason": "该正式检查按冻结套件顺序位于成品卡之后；新套件第二张卡失败安全，未运行。"
+      "reason": "冻结套件把此检查放在成品卡之后；S06-S02-P3 发现授权已被前置确定性证明核销，套件停止，未运行套件内核销检查。"
     },
     {
       "deterministic_mechanism_result": "PASS",
       "formal_suite_result": "INCOMPLETE_SUITE_ABORTED",
       "id": "ANOM-08",
       "name": "知识更新前后两版任务",
-      "reason": "旧 AMD v1 快照在前置检查中保持冻结；新套件第二张卡失败安全后，新 v2 任务比较未到达。"
+      "reason": "旧 AMD v1 快照前置保持冻结；套件停止后，新 v2 任务比较未到达。"
     }
   ],
-  "blocking_reason": "WRITER_UNCONFIRMED_PRODUCT_SPECIFICITY_FALSE_POSITIVE_REJECTED",
+  "blocking_reason": "SINGLE_USE_AUTHORIZATION_PRECONSUMED_BEFORE_FORMAL_CARD",
   "formal_binary_completion": false,
   "formal_model_suite": {
-    "current_completed_artifacts": 1,
-    "current_provider_requests": 2,
-    "cumulative_provider_requests": 10,
-    "failed_card": "S01-P2",
-    "failure_stage": "post_response_writer_boundary",
-    "guard_match": "absolute_claim:最好",
-    "guard_match_context_excerpt": "整套搭配里最好不要再出现第二个强色",
-    "rerun03_snapshot_fields_result": "PASS_COMMITTED",
+    "authorization_id": "0559324c-860b-5cb0-ab33-b637d1bd6972",
+    "authorization_subject_ref": "PS-S02-05",
+    "current_completed_artifacts": 11,
+    "current_provider_requests": 11,
+    "cumulative_provider_requests": 21,
+    "failed_card": "S06-S02-P3",
+    "failed_card_task_run_version": "0/0/0",
+    "failure_stage": "context_selection_pre_provider",
+    "provider_requests_for_failed_card": 0,
+    "reservation_status": "consumed",
     "result": "FAILED_SAFE",
-    "runtime_candidate_sha": "596b87e7e9d0551c6b62834137e03eed2bf52c82",
+    "runtime_candidate_sha": "7e48f7a7d96d4a196a8cbc8e503efe55f36291f9",
     "transport_retries": 0
   },
-  "scenarios": [
-    {
-      "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "FAILED_SAFE",
-      "id": "SCENARIO-01",
-      "name": "总部 F/J/G",
-      "reason": "S01-P1 已成功落版并冻结两个 Writer 审计字段；S01-P2 的条件建议‘最好不要再出现第二个强色’被绝对化守卫误判，任务/运行保留 failed 审计且版本为 0，因此本剧本未完整通过。"
-    },
-    {
-      "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
-      "id": "SCENARIO-02",
-      "name": "华东资料",
-      "reason": "整套重跑在第二张卡的 Writer 边界误报后停止，未运行本剧本。"
-    },
-    {
-      "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
-      "id": "SCENARIO-03",
-      "name": "杭州资料",
-      "reason": "整套重跑在第二张卡的 Writer 边界误报后停止，未运行本剧本。"
-    },
-    {
-      "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
-      "id": "SCENARIO-04",
-      "name": "成都错误普通文件",
-      "reason": "整套重跑在第二张卡失败安全停止；不拼接旧候选结果。"
-    },
-    {
-      "deterministic_mechanism_result": "PARTIAL_PASS",
-      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
-      "id": "SCENARIO-05",
-      "name": "同一 SKU 四节点",
-      "reason": "商品事实、账号 lens 和组织快照机制成立；新候选四份模型成品未运行。"
-    },
-    {
-      "deterministic_mechanism_result": "PARTIAL_PASS",
-      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
-      "id": "SCENARIO-06",
-      "name": "同一种子三账号",
-      "reason": "Gate B 确定性语义差异回归成立；新候选三份模型成品未运行。"
-    },
-    {
-      "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
-      "id": "SCENARIO-07",
-      "name": "AMD v1/v2",
-      "reason": "导入前 v1 历史快照与 AMD v2 版本并存；新候选正式模型重演未运行。"
-    },
-    {
-      "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
-      "id": "SCENARIO-08",
-      "name": "反馈观察",
-      "reason": "正式观察层机制成立；新候选正式任务卡未运行。"
-    }
-  ],
   "media_unlock": {
     "attestation_id": "ATT-MEDIA-20260808-01",
     "formal_product_count": 4,
@@ -137,5 +81,63 @@
     "p5_eligible_master_count": 6,
     "scope": "internal_demo_and_demo_tenant_operation"
   },
-  "status": "GATE-D FAILED_SAFE · WRITER_ABSOLUTE_CLAIM_FALSE_POSITIVE"
+  "scenarios": [
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "CARD_SET_COMPLETE_FINAL_ASSERTION_NOT_REACHED",
+      "id": "SCENARIO-01",
+      "name": "总部 F/J/G",
+      "reason": "S01-P1/P2/P5 三卡均在新候选成功落版；全套 scenario assertion 因后续卡失败未执行，故不冒充剧本 PASS。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "CARD_SET_COMPLETE_FINAL_ASSERTION_NOT_REACHED",
+      "id": "SCENARIO-02",
+      "name": "华东资料",
+      "reason": "S02-R01-P4 成功落版；全套 scenario assertion 未到达。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "CARD_SET_COMPLETE_FINAL_ASSERTION_NOT_REACHED",
+      "id": "SCENARIO-03",
+      "name": "杭州资料",
+      "reason": "S03-S01-P4 成功落版；全套 scenario assertion 未到达。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "CARD_SET_COMPLETE_FINAL_ASSERTION_NOT_REACHED",
+      "id": "SCENARIO-04",
+      "name": "成都错误普通文件",
+      "reason": "S04-S04-P2 成功落版且卡级边界通过；全套 scenario assertion 未到达。"
+    },
+    {
+      "deterministic_mechanism_result": "PARTIAL_PASS",
+      "formal_suite_result": "CARD_SET_COMPLETE_FINAL_ASSERTION_NOT_REACHED",
+      "id": "SCENARIO-05",
+      "name": "同一 SKU 四节点",
+      "reason": "H01/R01/S01/S04 四张新候选成品均成功落版且 body digest 四不相同；跨卡最终 assertion 未到达。"
+    },
+    {
+      "deterministic_mechanism_result": "PARTIAL_PASS",
+      "formal_suite_result": "FAILED_SAFE",
+      "id": "SCENARIO-06",
+      "name": "同一种子三账号",
+      "reason": "H01 卡成功；S02 在任务创建和 provider 请求前因 PS-S02-05 已被前置确定性证明核销而失败关闭；S04 未运行。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
+      "id": "SCENARIO-07",
+      "name": "AMD v1/v2",
+      "reason": "S06 失败安全后未运行。"
+    },
+    {
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
+      "id": "SCENARIO-08",
+      "name": "反馈观察",
+      "reason": "S06 失败安全后未运行。"
+    }
+  ],
+  "status": "GATE-D FAILED_SAFE · SINGLE_USE_AUTHORIZATION_PRECONSUMED"
 }
