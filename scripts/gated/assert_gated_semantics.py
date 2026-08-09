@@ -291,7 +291,7 @@ def _assert_media() -> str:
 def _assert_formal_suite_contract() -> None:
     contract = _document("formal-suite-contract.json")
     if (
-        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v3"
+        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v4"
         or contract.get("expected_counts")
         != {"anomalies": 8, "cards": 15, "content_products": 5, "scenarios": 8}
     ):
@@ -300,7 +300,7 @@ def _assert_formal_suite_contract() -> None:
     if (
         constraints.get("maximum_provider_requests") != 80
         or constraints.get("maximum_transport_retries") != 0
-        or constraints.get("prior_provider_requests") != 7
+        or constraints.get("prior_provider_requests") != 8
         or constraints.get("temperature") != 0
         or constraints.get("writer_assertion_policy")
         != "ADJ-WRITER-BOUNDARY-03-L1-L2-L3"
@@ -393,6 +393,32 @@ def _assert_formal_suite_contract() -> None:
             "这件商品永不变形",
         ),
         "Writer assertion-layer regression",
+    )
+    repository = _source("src/infrastructure/postgres_repository.py")
+    _require(
+        repository,
+        (
+            '"writer_confirmed_product_fact_refs"',
+            '"used_persona_quote_ids"',
+            "_PUBLICATION_V3_LEGACY_COMPLETION_KEYS",
+            "_validate_publication_v3_grounding",
+            "Writer 确认商品事实引用超出冻结事实包",
+            "Writer 单次人设原句与冻结核销授权不一致",
+        ),
+        "publication-v3 completion grounding",
+    )
+    snapshot_tests = _source("tests/test_gated_d0.py")
+    _require(
+        snapshot_tests,
+        (
+            "test_gated_rerun03_completion_snapshot_commits_the_failed_shape",
+            "test_gated_rerun03_completion_snapshot_stays_fail_closed_and_legacy_safe",
+            "test_gated_rerun03_completion_grounding_rejects_invalid_shapes",
+            "test_gated_rerun03_single_use_quote_matches_frozen_authorization",
+            "3bafbf45-fb92-45ae-b832-984ef425a5f8",
+            "27b810b8-f219-4d72-aaf8-b2b1aee1f80e",
+        ),
+        "publication-v3 completion snapshot regression",
     )
 
 

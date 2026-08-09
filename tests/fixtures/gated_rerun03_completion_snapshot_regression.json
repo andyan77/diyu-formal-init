@@ -1,0 +1,12 @@
+{
+  "fixture_version": "gate-d-rerun-03-completion-snapshot-regression-v1",
+  "source_failure_code": "PUBLICATION_V3_COMPLETION_SNAPSHOT_KEYS_REJECTED",
+  "source_task_id": "3bafbf45-fb92-45ae-b832-984ef425a5f8",
+  "source_run_id": "27b810b8-f219-4d72-aaf8-b2b1aee1f80e",
+  "source_response_sha256": "8594708f414ddbca2f0714e100d7d79a0444592da595d5089a3ee8a772045fda",
+  "required_completion_fields": [
+    "used_persona_quote_ids",
+    "writer_confirmed_product_fact_refs"
+  ],
+  "expected_version_after_fix": 1
+}

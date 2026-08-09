@@ -266,7 +266,13 @@ class PostgresContentRepository(ContentRepository):
             "publication_contract_digest",
         }
     )
-    _PUBLICATION_V3_COMPLETION_KEYS = frozenset(
+    _PUBLICATION_V3_GROUNDING_KEYS = frozenset(
+        {
+            "writer_confirmed_product_fact_refs",
+            "used_persona_quote_ids",
+        }
+    )
+    _PUBLICATION_V3_LEGACY_COMPLETION_KEYS = frozenset(
         {
             "creative_kernel_v5",
             "writer_request_v3",
@@ -298,6 +304,24 @@ class PostgresContentRepository(ContentRepository):
             "publication_contract_digest",
         }
     )
+    _PUBLICATION_V3_COMPLETION_KEYS = (
+        _PUBLICATION_V3_LEGACY_COMPLETION_KEYS | _PUBLICATION_V3_GROUNDING_KEYS
+    )
+    _PERSONA_QUOTE_IDS = frozenset(
+        {
+            "PS-S02-01",
+            "PS-S02-02",
+            "PS-S02-03",
+            "PS-S02-04",
+            "PS-S02-05",
+            "PS-S04-01",
+            "PS-S04-02",
+            "PS-S04-03",
+            "PS-S04-04",
+            "PS-S04-05",
+        }
+    )
+    _SINGLE_USE_PERSONA_QUOTE_IDS = frozenset({"PS-S02-05", "PS-S04-03"})
     _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS = _DUAL_TRACK_COMPLETION_KEYS - _PUBLICATION_COMPLETION_KEYS
     _MEDIA_NATIVE_COMPLETION_KEYS = _PRE_PUBLICATION_DUAL_TRACK_COMPLETION_KEYS - _PRODUCT_VALUE_COMPLETION_KEYS
     _LEGACY_DUAL_TRACK_COMPLETION_KEYS = _MEDIA_NATIVE_COMPLETION_KEYS - _MEDIA_PROGRAM_COMPLETION_KEYS
@@ -395,7 +419,10 @@ class PostgresContentRepository(ContentRepository):
         compiler_version = patch.get("delivery_compiler_version")
         expected_key_sets: tuple[frozenset[str], ...]
         if compiler_version == DELIVERY_COMPILER_V5_VERSION:
-            expected_key_sets = (cls._PUBLICATION_V3_COMPLETION_KEYS,)
+            expected_key_sets = (
+                cls._PUBLICATION_V3_COMPLETION_KEYS,
+                cls._PUBLICATION_V3_LEGACY_COMPLETION_KEYS,
+            )
         elif compiler_version == DELIVERY_COMPILER_VERSION:
             expected_key_sets = (
                 cls._DUAL_TRACK_COMPLETION_KEYS,
@@ -420,11 +447,78 @@ class PostgresContentRepository(ContentRepository):
         )
         if patch.get("version_authorization") != expected_authorization:
             raise DomainError("内容版本缺少确定性双轨授权")
+        if patch_keys == cls._PUBLICATION_V3_COMPLETION_KEYS:
+            cls._validate_publication_v3_grounding(current, patch)
         for key in cls._REVISION_IMMUTABLE_SNAPSHOT_KEYS:
             current_value = current.get(key)
             if current_value is not None and key in patch and patch[key] != current_value:
                 raise DomainError(f"内容修订不能改变冻结字段：{key}")
         return current | dict(patch)
+
+    @staticmethod
+    def _completion_ref_list(value: object, message: str) -> tuple[str, ...]:
+        if (
+            not isinstance(value, list)
+            or any(not isinstance(ref, str) or not ref for ref in value)
+            or len(value) != len(set(value))
+        ):
+            raise DomainError(message)
+        return tuple(cast(list[str], value))
+
+    @classmethod
+    def _validate_publication_v3_grounding(
+        cls,
+        current: Mapping[str, object],
+        patch: Mapping[str, object],
+    ) -> None:
+        fact_refs = cls._completion_ref_list(
+            patch.get("writer_confirmed_product_fact_refs"),
+            "Writer 确认商品事实引用无效",
+        )
+        product_packet = current.get("product_fact_packet")
+        raw_facts = product_packet.get("facts") if isinstance(product_packet, Mapping) else None
+        if not isinstance(raw_facts, list):
+            raise DomainError("Writer 确认商品事实未绑定冻结事实包")
+        frozen_fact_ids = {
+            str(fact["fact_id"])
+            for fact in raw_facts
+            if isinstance(fact, Mapping)
+            and isinstance(fact.get("fact_id"), str)
+            and fact["fact_id"]
+        }
+        if any(ref not in frozen_fact_ids for ref in fact_refs):
+            raise DomainError("Writer 确认商品事实引用超出冻结事实包")
+
+        quote_ids = cls._completion_ref_list(
+            patch.get("used_persona_quote_ids"),
+            "Writer 人设原句引用无效",
+        )
+        publication = current.get("publication_contract")
+        brand_use = publication.get("brand_context_use") if isinstance(publication, Mapping) else None
+        consumed_refs = brand_use.get("consumed_refs") if isinstance(brand_use, Mapping) else None
+        frozen_quote_refs = set(
+            cls._completion_ref_list(
+                consumed_refs,
+                "Writer 人设原句未绑定冻结发布合同",
+            )
+        )
+        if any(ref not in cls._PERSONA_QUOTE_IDS or ref not in frozen_quote_refs for ref in quote_ids):
+            raise DomainError("Writer 人设原句引用超出冻结授权条目")
+        single_use_quote_ids = cls._SINGLE_USE_PERSONA_QUOTE_IDS.intersection(quote_ids)
+        if not single_use_quote_ids:
+            return
+        evidence = publication.get("brand_relevance_evidence") if isinstance(publication, Mapping) else None
+        if not isinstance(evidence, Mapping) or evidence.get("authorization") is None:
+            raise DomainError("Writer 单次人设原句缺少冻结核销授权")
+        authorization_document = evidence["authorization"]
+        authorization = authorization_contract_from_document(authorization_document)
+        if (
+            len(single_use_quote_ids) != 1
+            or authorization.single_use is not True
+            or authorization.subject_ref != next(iter(single_use_quote_ids))
+            or evidence.get("authorization_ref") != authorization.authorization_id
+        ):
+            raise DomainError("Writer 单次人设原句与冻结核销授权不一致")
 
     @classmethod
     def _version_audit_snapshot(
@@ -458,6 +552,11 @@ class PostgresContentRepository(ContentRepository):
                 FINAL_VISIBLE_PROJECTION_V3 if audit_version == AUDIT_VERSION_V3 else FINAL_VISIBLE_PROJECTION_V2
             ),
             **{key: task_snapshot.get(key) for key in cls._VERSION_AUDIT_KEYS},
+            **{
+                key: task_snapshot[key]
+                for key in cls._PUBLICATION_V3_GROUNDING_KEYS
+                if key in task_snapshot
+            },
         }
         creative_kernel = (
             audit["creative_kernel_v5"]

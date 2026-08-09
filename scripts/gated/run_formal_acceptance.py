@@ -67,10 +67,11 @@ from src.shared.types import (  # noqa: E402
 )
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator  # noqa: E402
 
-SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v3"
+SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v4"
 MAX_PROVIDER_REQUESTS = 80
 INITIAL_RUNTIME_CANDIDATE_SHA = "997e6b55c1c40dacd44a46ff6617b28766011958"
-PRIOR_RUNTIME_CANDIDATE_SHA = "f7e8e81c80ebc8552794f82aab81ef509e242b14"
+FIRST_RERUN_RUNTIME_CANDIDATE_SHA = "f7e8e81c80ebc8552794f82aab81ef509e242b14"
+PRIOR_RUNTIME_CANDIDATE_SHA = "ba4208a6ea96775683ecd89f41b6cd869b45eead"
 _ENV_PATH = Path("/home") / "faye" / "workspace" / "diyu-formal-init" / ".env"
 _ACCOUNT_ORGANIZATIONS = {
     "H01": "DIYU-HQ-001",
@@ -312,9 +313,11 @@ def _load_prior_ledger(
     if (
         runtime_candidate_sha != PRIOR_RUNTIME_CANDIDATE_SHA
         or document.get("prior_runtime_candidate_sha")
+        != FIRST_RERUN_RUNTIME_CANDIDATE_SHA
+        or document.get("initial_runtime_candidate_sha")
         != INITIAL_RUNTIME_CANDIDATE_SHA
-        or document.get("prior_record_range") != [1, 6]
-        or document.get("prior_provider_request_count") != 6
+        or document.get("prior_record_range") != [1, 7]
+        or document.get("prior_provider_request_count") != 7
         or document.get("current_provider_request_count") != 1
         or document.get("status") != "FAILED_SAFE"
         or document.get("provider_request_count") != expected_count
@@ -330,7 +333,11 @@ def _load_prior_ledger(
         expected_candidate = (
             INITIAL_RUNTIME_CANDIDATE_SHA
             if request_index <= 6
-            else PRIOR_RUNTIME_CANDIDATE_SHA
+            else (
+                FIRST_RERUN_RUNTIME_CANDIDATE_SHA
+                if request_index == 7
+                else PRIOR_RUNTIME_CANDIDATE_SHA
+            )
         )
         recorded_candidate = str(
             raw_record.get("runtime_candidate_sha", expected_candidate)
@@ -1076,6 +1083,12 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         private_manifest = {
             "suite_version": SUITE_VERSION,
             "runtime_candidate_sha": candidate_sha,
+            "runtime_candidate_chain": [
+                INITIAL_RUNTIME_CANDIDATE_SHA,
+                FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
+                PRIOR_RUNTIME_CANDIDATE_SHA,
+                candidate_sha,
+            ],
             "registration_digest": registration["registration_digest"],
             "provider_request_count": generator.request_count,
             "cumulative_provider_request_count": generator.cumulative_request_count,
@@ -1101,6 +1114,12 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         public_evidence = {
             "suite_version": SUITE_VERSION,
             "runtime_candidate_sha": candidate_sha,
+            "runtime_candidate_chain": [
+                INITIAL_RUNTIME_CANDIDATE_SHA,
+                FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
+                PRIOR_RUNTIME_CANDIDATE_SHA,
+                candidate_sha,
+            ],
             "registration_digest": registration["registration_digest"],
             "model": model,
             "temperature": 0,
@@ -1123,9 +1142,15 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         _write_public_json(
             cast(Path, arguments.public_ledger),
             {
-                "ledger_version": "brand-matrix-gate-d-provider-ledger-v2",
+                "ledger_version": "brand-matrix-gate-d-provider-ledger-v4",
                 "runtime_candidate_sha": candidate_sha,
                 "prior_runtime_candidate_sha": prior_candidate_sha,
+                "runtime_candidate_chain": [
+                    INITIAL_RUNTIME_CANDIDATE_SHA,
+                    FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
+                    PRIOR_RUNTIME_CANDIDATE_SHA,
+                    candidate_sha,
+                ],
                 "prior_provider_request_count": prior_request_count,
                 "current_provider_request_count": generator.request_count,
                 "provider_request_count": generator.cumulative_request_count,

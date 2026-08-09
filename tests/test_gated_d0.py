@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -16,7 +19,104 @@ from src.gateway.api.settings import Settings
 from src.infrastructure.postgres_repository import PostgresContentRepository
 from src.infrastructure.workbench_repository import PostgresWorkbenchRepository
 from src.shared.brand_publication import brand_context_packet_document
+from src.shared.delivery_compiler import DELIVERY_COMPILER_V5_VERSION
+from src.shared.errors import DomainError
+from src.shared.publication_scope import (
+    AUTHORIZATION_CONTRACT_VERSION,
+    AuthorizationContractV1,
+    authorization_contract_digest,
+    authorization_contract_document,
+)
 from src.shared.types import BrandContext, BrandContextPacketV3, TenantManagementScope, TrustedScope
+
+_RERUN03_FACT_ID = "fact:product:gated-rerun-03"
+
+
+def _rerun03_authorization(subject_ref: str) -> AuthorizationContractV1:
+    draft = AuthorizationContractV1(
+        contract_version=AUTHORIZATION_CONTRACT_VERSION,
+        authorization_id=str(uuid4()),
+        authorization_version="v1",
+        subject_ref=subject_ref,
+        tenant_id=str(uuid4()),
+        brand_id=str(uuid4()),
+        logical_account_id=str(uuid4()),
+        organization_id=str(uuid4()),
+        allowed_source_digest="a" * 64,
+        allowed_usage=("organization_people",),
+        single_use=True,
+        effective_at="2026-08-08T00:00:00+00:00",
+        expires_at=None,
+        digest="",
+    )
+    return replace(draft, digest=authorization_contract_digest(draft))
+
+
+def _rerun03_completion_patch(
+    *,
+    fact_refs: object | None = None,
+    quote_ids: object | None = None,
+    authorization: AuthorizationContractV1 | None = None,
+) -> dict[str, object]:
+    normalized_quote_ids = [] if quote_ids is None else quote_ids
+    publication_contract: dict[str, object] = {
+        "brand_context_use": {
+            "consumed_refs": normalized_quote_ids if isinstance(normalized_quote_ids, list) else [],
+        },
+        "brand_relevance_evidence": None,
+    }
+    if authorization is not None:
+        publication_contract["brand_relevance_evidence"] = {
+            "authorization_ref": authorization.authorization_id,
+            "authorization": authorization_contract_document(authorization),
+        }
+    return {
+        "creative_kernel_v5": {"kernel_version": "creative-kernel-v5", "units": []},
+        "writer_request_v3": {"request_version": "writer-request-v3"},
+        "writer_request_v3_digest": "1" * 64,
+        "writer_output_v3": {"output_version": "writer-output-v3"},
+        "writer_output_v3_digest": "2" * 64,
+        "writer_confirmed_product_fact_refs": (
+            [_RERUN03_FACT_ID] if fact_refs is None else fact_refs
+        ),
+        "used_persona_quote_ids": normalized_quote_ids,
+        "expression_plan_version": "creative-kernel-v5",
+        "expression_plan_digest": "3" * 64,
+        "delivery_compiler_version": DELIVERY_COMPILER_V5_VERSION,
+        "writer_model": "gate-d-rerun-03-zero-provider-stub",
+        "version_authorization": "deterministic-publication-v3",
+        "claim_inventory_v1": [],
+        "deterministic_checked_kernel_digest": "4" * 64,
+        "reviewed_creative_digest": "5" * 64,
+        "product_fact_packet": {
+            "packet_version": "product-fact-packet-v1",
+            "packet_digest": "6" * 64,
+            "facts": [{"fact_id": _RERUN03_FACT_ID}],
+        },
+        "immutable_product_fact_blocks": [],
+        "used_product_fact_ids": [_RERUN03_FACT_ID],
+        "used_product_fact_block_ids": [],
+        "product_fact_renderer_version": None,
+        "visible_provenance": {"body": ["writer-output-v3:creative_body"]},
+        "delivery_resource_refs": [],
+        "media_capability_envelope": None,
+        "media_capability_envelope_digest": None,
+        "media_program": None,
+        "media_program_digest": None,
+        "product_value_contract": None,
+        "product_value_contract_digest": None,
+        "publication_contract": publication_contract,
+        "publication_contract_digest": "7" * 64,
+    }
+
+
+def _rerun03_task_snapshot(patch: dict[str, object]) -> dict[str, object]:
+    return {
+        "narrative_frame": {"frame_version": "narrative-frame-v1"},
+        "product_fact_packet": patch["product_fact_packet"],
+        "publication_contract": patch["publication_contract"],
+        "publication_contract_digest": patch["publication_contract_digest"],
+    }
 
 
 def _seed_d0_scope(database_url: str) -> tuple[TenantManagementScope, TrustedScope, UUID, UUID]:
@@ -289,3 +389,179 @@ def test_gated_d0_api_contract_forbids_client_owned_governance_fields() -> None:
         "/api/v1/tenant-management/brand-feedback-observations",
         "/api/v1/tenant-management/brand-relevance-governance",
     } <= paths
+
+
+def test_gated_rerun03_completion_snapshot_commits_the_failed_shape(
+    app_database_url: str,
+    migrator_database_url: str,
+) -> None:
+    fixture = json.loads(
+        (
+            Path(__file__).parent
+            / "fixtures/gated_rerun03_completion_snapshot_regression.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert fixture["source_task_id"] == "3bafbf45-fb92-45ae-b832-984ef425a5f8"
+    assert fixture["source_run_id"] == "27b810b8-f219-4d72-aaf8-b2b1aee1f80e"
+    assert fixture["source_failure_code"] == (
+        "PUBLICATION_V3_COMPLETION_SNAPSHOT_KEYS_REJECTED"
+    )
+    _, content_scope, _, _ = _seed_d0_scope(migrator_database_url)
+    patch = _rerun03_completion_patch()
+    assert sorted(
+        key
+        for key in patch
+        if key in PostgresContentRepository._PUBLICATION_V3_GROUNDING_KEYS
+    ) == sorted(cast(list[str], fixture["required_completion_fields"]))
+    repository = PostgresContentRepository(app_database_url)
+    context = BrandContext(
+        brand_name="笛语",
+        positioning="真实穿衣问题",
+        decision_order="先事实后判断",
+        tone="真实自然",
+        account_name="Gate D Rerun 03 账号",
+        operator_name="Gate D 内容操作人",
+        organization_name="Gate D 总部",
+        content_role_name="品牌内容编辑",
+        content_role_boundary="只使用已确认来源",
+        audience_description="需要真实穿衣判断的人",
+        strategy_version="v1",
+        platform="抖音",
+        media_format="视频",
+        production_conditions="隔离确定性测试",
+    )
+    task_id, run_id, _ = repository.create_task_and_running_run(
+        content_scope,
+        "Gate D Rerun 03 完成快照回归",
+        "brand_life_narrative",
+        None,
+        "gate-d-rerun-03-zero-provider-stub",
+        (),
+        context,
+        (),
+        "douyin_video",
+        "video",
+        direction_for("douyin_video"),
+        None,
+        "隔离确定性测试",
+        snapshot=_rerun03_task_snapshot(patch),
+    )
+    result = repository.complete_run_with_version(
+        content_scope,
+        task_id,
+        run_id,
+        "Gate D Rerun 03 快照落版",
+        "两个合法审计字段已绑定冻结来源。",
+        "gate-d-rerun-03-zero-provider-stub",
+        0,
+        0,
+        None,
+        {},
+        (),
+        snapshot_patch=patch,
+    )
+
+    assert result["version"] == fixture["expected_version_after_fix"] == 1
+    committed_snapshot = repository.load_content_context_snapshot(content_scope, task_id)
+    assert committed_snapshot is not None
+    assert committed_snapshot["writer_confirmed_product_fact_refs"] == [
+        _RERUN03_FACT_ID
+    ]
+    assert committed_snapshot["used_persona_quote_ids"] == []
+
+
+def test_gated_rerun03_completion_snapshot_stays_fail_closed_and_legacy_safe() -> None:
+    patch = _rerun03_completion_patch()
+    task_snapshot = _rerun03_task_snapshot(patch)
+    merged = PostgresContentRepository._validated_completion_snapshot(
+        task_snapshot,
+        patch,
+    )
+    audit = PostgresContentRepository._version_audit_snapshot(merged, "8" * 64)
+    assert audit["writer_confirmed_product_fact_refs"] == [_RERUN03_FACT_ID]
+    assert audit["used_persona_quote_ids"] == []
+
+    unknown = patch | {"unregistered_completion_field": "must-stay-closed"}
+    with pytest.raises(DomainError, match="字段不完整或越界"):
+        PostgresContentRepository._validated_completion_snapshot(
+            task_snapshot,
+            unknown,
+        )
+    half_grounding = dict(patch)
+    half_grounding.pop("used_persona_quote_ids")
+    with pytest.raises(DomainError, match="字段不完整或越界"):
+        PostgresContentRepository._validated_completion_snapshot(
+            task_snapshot,
+            half_grounding,
+        )
+
+    legacy_patch = dict(patch)
+    legacy_patch.pop("writer_confirmed_product_fact_refs")
+    legacy_patch.pop("used_persona_quote_ids")
+    legacy = PostgresContentRepository._validated_completion_snapshot(
+        task_snapshot,
+        legacy_patch,
+    )
+    legacy_audit = PostgresContentRepository._version_audit_snapshot(
+        legacy,
+        "8" * 64,
+    )
+    assert "writer_confirmed_product_fact_refs" not in legacy
+    assert "used_persona_quote_ids" not in legacy
+    assert "writer_confirmed_product_fact_refs" not in legacy_audit
+    assert "used_persona_quote_ids" not in legacy_audit
+    assert legacy["publication_contract_digest"] == merged["publication_contract_digest"]
+    assert legacy_audit["artifact_digest"] == audit["artifact_digest"]
+
+
+@pytest.mark.parametrize(
+    ("patch", "message"),
+    (
+        (
+            _rerun03_completion_patch(fact_refs=("fact:product:not-a-list",)),
+            "Writer 确认商品事实引用无效",
+        ),
+        (
+            _rerun03_completion_patch(fact_refs=["fact:product:not-frozen"]),
+            "Writer 确认商品事实引用超出冻结事实包",
+        ),
+        (
+            _rerun03_completion_patch(
+                fact_refs=[_RERUN03_FACT_ID, _RERUN03_FACT_ID]
+            ),
+            "Writer 确认商品事实引用无效",
+        ),
+        (
+            _rerun03_completion_patch(quote_ids=["PS-S01-01"]),
+            "Writer 人设原句引用超出冻结授权条目",
+        ),
+        (
+            _rerun03_completion_patch(quote_ids=["PS-S02-05"]),
+            "Writer 单次人设原句缺少冻结核销授权",
+        ),
+    ),
+)
+def test_gated_rerun03_completion_grounding_rejects_invalid_shapes(
+    patch: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(DomainError, match=message):
+        PostgresContentRepository._validated_completion_snapshot(
+            _rerun03_task_snapshot(patch),
+            patch,
+        )
+
+
+def test_gated_rerun03_single_use_quote_matches_frozen_authorization() -> None:
+    authorization = _rerun03_authorization("PS-S02-05")
+    patch = _rerun03_completion_patch(
+        quote_ids=[authorization.subject_ref],
+        authorization=authorization,
+    )
+
+    merged = PostgresContentRepository._validated_completion_snapshot(
+        _rerun03_task_snapshot(patch),
+        patch,
+    )
+
+    assert merged["used_persona_quote_ids"] == [authorization.subject_ref]
