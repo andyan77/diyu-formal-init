@@ -20,7 +20,6 @@ from scripts.gated.run_formal_acceptance import (
     INITIAL_RUNTIME_CANDIDATE_SHA,
     PRIOR_RUNTIME_CANDIDATE_SHA,
     EvidenceGenerator,
-    _load_prior_ledger,
     _performance_review_annotations,
 )
 from src.brain.platform_directions import direction_for
