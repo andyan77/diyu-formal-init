@@ -1,4 +1,5 @@
 {
+  "content_max_retries": 0,
   "gate_a_manifest_digest": "14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06",
   "import_batch_digest": "20e1d00aa527d31312748ed84a22119d28784776ed3d2c40824b3775d8bdd6ed",
   "import_object_fingerprint": "1ec150e8f992e4d8f2439e7a791f744c5d3ee7bb7c69f25d735a6999bfbb2f98",
@@ -21,20 +22,23 @@
     "projection_items": 34,
     "qualifications": 30
   },
-  "local_isolated_database_input_fingerprint": "426b163dc7ff464bab3b4810568d23ab92aa1baf72217717cb072f1a22ec254c",
+  "local_isolated_database_input_fingerprint": "1c45da23aca5544cbc19cc26d20e8ebcdeb7cab2b912cffd74571adfc72fd2b5",
   "max_retries": 0,
-  "media_database_readback_digest": "9c09d5a4c664aabe01976ed74e07b4eeba9e04861c502207bb1154421d20823d",
+  "media_database_readback_digest": "db41cfca689a848e3b5b763625d061e8995988a9a6f2ba1c2d4f20c7ca7a0baa",
   "media_manifest_digest": "587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b",
   "model": "deepseek-v4-flash",
   "prompt_contracts": {
-    "formal_suite_contract_sha256": "89a5e0a4489857c36b73ef1ddc03b6c808d3680d25849e0bda3ac52dce2c0818",
+    "formal_suite_contract_sha256": "6a4053969a3bac348dd5d8254f4651a243b439129d8ac4c136a90d36fa7aad22",
     "prompt_5_rev3_sha256": "e118e903b8cb9c00f133065ac6b381b48731697ec15dc2bc0f6334f926687178"
   },
   "provider_requests_at_freeze": 0,
   "publication_projection_digest": "cb6b2cf509c31e9864ea632449e41ff06d553e7f2ed93cf758fce7c77e978962",
-  "registration_digest": "bc7846da9f16ec928d06e102bd558b2e00bcbbe8f8a7dd16b53116106af64896",
+  "registration_digest": "93a49a1d0cebcb62d2cc52c93594e0dd891bf69bb79dd1c82331a7887cfb3bf1",
   "registration_version": "brand-matrix-gate-d-runtime-freeze-v1",
-  "runtime_candidate_sha": "587bed9168e92db7444db81ba9123b92a80cbacf",
+  "retry_policy_version": "provider-transport-v1",
+  "runtime_candidate_sha": "f00e5d44098e2ef2ef70d76dab67a3e3fdd03ea4",
+  "same_candidate_resume_policy": "interrupted_card_only_after_explicit_user_continue",
   "status": "FROZEN_NO_PROVIDER_REQUESTS",
-  "temperature": 0
+  "temperature": 0,
+  "transport_max_retries": 2
 }
