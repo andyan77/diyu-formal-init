@@ -32,6 +32,16 @@ _D0_TESTS = (
     "test_gated_d0_v2_preview_confirm_task_snapshot_and_feedback",
     "test_gated_d0_api_contract_forbids_client_owned_governance_fields",
 )
+_MEDIA_DIGEST = "587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b"
+_PRIOR_MEDIA_DIGEST = "ab81e01fba2a83880c6d5ce38907cab849b60420a1f8fac2b181ddc34ca71a52"
+_MEDIA_ATTESTATION = "ATT-MEDIA-20260808-01"
+_MEDIA_SCOPE = "internal_demo_and_demo_tenant_operation"
+_RIGHTS_GATES = {
+    "person_rights_evidence",
+    "child_rights_evidence",
+    "third_party_elements_evidence",
+    "platform_scope_and_validity_evidence",
+}
 
 
 def _document(name: str) -> dict[str, Any]:
@@ -177,11 +187,11 @@ def _assert_media() -> str:
     expected = {
         "source_count": 26,
         "master_count": 26,
-        "pass_count": 0,
+        "pass_count": 26,
         "fail_count": 0,
-        "quarantined_count": 26,
+        "quarantined_count": 0,
         "original_p5_eligible_count": 0,
-        "master_p5_eligible_count": 0,
+        "master_p5_eligible_count": 6,
     }
     for key, value in expected.items():
         if document.get(key) != value:
@@ -189,23 +199,138 @@ def _assert_media() -> str:
     records = cast(list[dict[str, Any]], document.get("records"))
     if len(records) != 26 or len({record.get("media_id") for record in records}) != 26:
         raise SystemExit("Gate D semantics FAIL: media rows are not 26 unique records")
+    eligible_pairs: set[tuple[str, str]] = set()
     for record in records:
         gates = cast(list[dict[str, Any]], record.get("ten_release_gates"))
+        by_name = {str(gate.get("gate")): gate for gate in gates}
+        formal_bindings = cast(list[str], record.get("formal_product_bindings"))
         if (
             len(gates) != 10
-            or record.get("release_status") != "QUARANTINED"
+            or record.get("release_status") != "PASS"
             or record.get("original_p5_eligible") is not False
-            or record.get("master_p5_eligible") is not False
+            or record.get("master_p5_eligible") != bool(formal_bindings)
+            or record.get("media_rights_attestation_ref") != _MEDIA_ATTESTATION
             or len(str(record.get("source_sha256", ""))) != 64
             or len(str(record.get("master_sha256", ""))) != 64
         ):
-            raise SystemExit("Gate D semantics FAIL: a media row violates the quarantine contract")
+            raise SystemExit("Gate D semantics FAIL: a media row violates the unlocked contract")
+        for gate_name in _RIGHTS_GATES:
+            if by_name.get(gate_name) != {
+                "gate": gate_name,
+                "status": "PASS",
+                "evidence": _MEDIA_ATTESTATION,
+                "scope": _MEDIA_SCOPE,
+            }:
+                raise SystemExit("Gate D semantics FAIL: a media rights gate differs")
+        for sku in formal_bindings:
+            eligible_pairs.add((str(record["media_id"]), sku))
     frozen = dict(document)
     claimed = str(frozen.pop("manifest_digest", ""))
     canonical = json.dumps(frozen, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
-    if claimed != hashlib.sha256(canonical).hexdigest():
+    if (
+        claimed != _MEDIA_DIGEST
+        or claimed != hashlib.sha256(canonical).hexdigest()
+        or document.get("prior_manifest_digest") != _PRIOR_MEDIA_DIGEST
+        or document.get("media_rights_attestation")
+        != {
+            "attestation_id": _MEDIA_ATTESTATION,
+            "governance_commit": "84234f34a745c6ecc7c10b4437025c526c899f14",
+            "scope": _MEDIA_SCOPE,
+        }
+    ):
         raise SystemExit("Gate D semantics FAIL: media manifest digest differs")
+    required_pairs = {
+        ("DIYU-V-001", "DIYU-CSPU-001"),
+        ("DIYU-V-004", "DIYU-CSPU-006"),
+        ("DIYU-V-005", "DIYU-CSPU-006"),
+        ("DIYU-V-011", "DIYU-CSPU-008"),
+        ("DIYU-V-022", "DIYU-CSPU-013"),
+        ("DIYU-V-023", "DIYU-CSPU-013"),
+    }
+    if eligible_pairs != required_pairs:
+        raise SystemExit("Gate D semantics FAIL: formal P5 media pool differs")
+    attestation = (_EVIDENCE / "媒体权利授权-ATT-MEDIA-20260808-01.md").read_text(
+        encoding="utf-8"
+    )
+    if (
+        "「裁决：A；覆盖26条，确认授权；" not in attestation
+        or _MEDIA_SCOPE not in attestation
+        or "真实对外公开发布" not in attestation
+    ):
+        raise SystemExit("Gate D semantics FAIL: media attestation record is incomplete")
+    unlock = _document("media-unlock-evidence.json")
+    if (
+        unlock.get("prior_media_manifest_digest") != _PRIOR_MEDIA_DIGEST
+        or unlock.get("media_manifest_digest") != claimed
+        or unlock.get("p5_precondition_satisfied") is not True
+        or len(cast(list[object], unlock.get("distinct_qualifying_product_ids"))) != 4
+    ):
+        raise SystemExit("Gate D semantics FAIL: P5 unlock evidence differs")
+    readback = _document("media-database-readback.json")
+    readback_unsigned = dict(readback)
+    readback_digest = str(readback_unsigned.pop("readback_digest", ""))
+    if (
+        readback.get("media_manifest_digest") != claimed
+        or readback.get("asset_count") != 26
+        or readback.get("formal_binding_count") != 6
+        or readback.get("p5_eligible_master_count") != 6
+        or readback_digest
+        != hashlib.sha256(
+            json.dumps(
+                readback_unsigned,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+    ):
+        raise SystemExit("Gate D semantics FAIL: isolated media database readback differs")
     return claimed
+
+
+def _assert_formal_suite_contract() -> None:
+    contract = _document("formal-suite-contract.json")
+    if (
+        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v1"
+        or contract.get("expected_counts")
+        != {"anomalies": 8, "cards": 15, "content_products": 5, "scenarios": 8}
+    ):
+        raise SystemExit("Gate D semantics FAIL: formal suite counts differ")
+    constraints = cast(dict[str, Any], contract.get("constraints"))
+    if (
+        constraints.get("maximum_provider_requests") != 80
+        or constraints.get("maximum_transport_retries") != 0
+        or constraints.get("temperature") != 0
+    ):
+        raise SystemExit("Gate D semantics FAIL: formal provider discipline differs")
+    cards = cast(list[dict[str, Any]], contract.get("cards"))
+    anomalies = cast(list[dict[str, Any]], contract.get("anomalies"))
+    if (
+        len(cards) != 15
+        or len({str(item.get("id")) for item in cards}) != 15
+        or len(anomalies) != 8
+        or len({str(item.get("id")) for item in anomalies}) != 8
+        or {str(item.get("content_product")) for item in cards}
+        != {
+            "dressing_decision",
+            "product_truth",
+            "brand_life_narrative",
+            "local_response",
+            "visual_styling_story",
+        }
+    ):
+        raise SystemExit("Gate D semantics FAIL: formal suite coverage differs")
+    runner = _source("scripts/gated/run_formal_acceptance.py")
+    _require(
+        runner,
+        (
+            '"temperature": 0.0',
+            "max_retries=0",
+            "each formal card must receive exactly one Writer response",
+            "GATED_FORMAL_SUITE_FAILED_SAFE",
+        ),
+        "formal frozen runner",
+    )
 
 
 def main() -> None:
@@ -213,12 +338,14 @@ def main() -> None:
     batch_digest, fingerprint = _assert_import()
     _assert_consumers()
     media_digest = _assert_media()
+    _assert_formal_suite_contract()
     print(
         "GATED_SEMANTICS_OK "
         f"batch_digest={batch_digest} object_fingerprint={fingerprint} "
         f"media_digest={media_digest} roots=10 carriers=20 accounts=30 targets=40 "
-        "local_entries=31 J=4 authorizations=2 masters=26 quarantined=26 p5_eligible=0 "
-        "provider_requests=0 terminal=MEDIA_QUALIFICATION_INSUFFICIENT"
+        "local_entries=31 J=4 authorizations=2 masters=26 pass=26 quarantined=0 "
+        "p5_eligible=6 distinct_p5_products=4 provider_requests_before_freeze=0 "
+        "terminal=READY_FOR_RUNTIME_FREEZE"
     )
 
 

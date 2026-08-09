@@ -1,0 +1,49 @@
+{
+  "attestation_id": "ATT-MEDIA-20260808-01",
+  "distinct_qualifying_product_ids": [
+    "DIYU-CSPU-001",
+    "DIYU-CSPU-006",
+    "DIYU-CSPU-008",
+    "DIYU-CSPU-013"
+  ],
+  "formal_product_ids": [
+    "DIYU-CSPU-001",
+    "DIYU-CSPU-006",
+    "DIYU-CSPU-008",
+    "DIYU-CSPU-013"
+  ],
+  "import_batch_digest": "f15d0efe63173b1b6c72b5b4cf4681673cf29e4536fe600e3d92066e52781750",
+  "import_object_fingerprint": "e48dc6542db65593bb3830eda9cebad425d54b756d34a1ce469b88931eef6b88",
+  "media_manifest_digest": "587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b",
+  "p5_precondition_satisfied": true,
+  "prior_media_manifest_digest": "ab81e01fba2a83880c6d5ce38907cab849b60420a1f8fac2b181ddc34ca71a52",
+  "provider_requests_before_candidate_freeze": 0,
+  "qualifying_media_product_pairs": [
+    {
+      "media_id": "DIYU-V-001",
+      "product_id": "DIYU-CSPU-001"
+    },
+    {
+      "media_id": "DIYU-V-004",
+      "product_id": "DIYU-CSPU-006"
+    },
+    {
+      "media_id": "DIYU-V-005",
+      "product_id": "DIYU-CSPU-006"
+    },
+    {
+      "media_id": "DIYU-V-011",
+      "product_id": "DIYU-CSPU-008"
+    },
+    {
+      "media_id": "DIYU-V-022",
+      "product_id": "DIYU-CSPU-013"
+    },
+    {
+      "media_id": "DIYU-V-023",
+      "product_id": "DIYU-CSPU-013"
+    }
+  ],
+  "scope": "internal_demo_and_demo_tenant_operation",
+  "status": "READY_FOR_CANDIDATE_FREEZE"
+}

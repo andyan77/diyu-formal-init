@@ -9,6 +9,7 @@ from pathlib import Path
 EXPECTED_BRANCH = "exe/brand-matrix-d"
 EXPECTED_MERGE_BASE = "bd5a6bfac1c196f059242e5f42fe6c5efbec5b06"
 GOVERNANCE_BASE = "c913a1d38a522ecfed790b75ee822cb82f96fad8"
+MEDIA_GOVERNANCE = "84234f34a745c6ecc7c10b4437025c526c899f14"
 REMOTE_MAIN = "origin/claude/brand-knowledge-pilot-review-8a3105"
 
 _EXACT_ALLOWED = frozenset(
@@ -116,7 +117,7 @@ def main() -> None:
     root = _repo_root()
     if _run(root, "git", "branch", "--show-current") != EXPECTED_BRANCH:
         raise SystemExit("Gate D scope FAIL: wrong branch")
-    for revision in (EXPECTED_MERGE_BASE, GOVERNANCE_BASE, REMOTE_MAIN):
+    for revision in (EXPECTED_MERGE_BASE, GOVERNANCE_BASE, MEDIA_GOVERNANCE, REMOTE_MAIN):
         _run(root, "git", "cat-file", "-e", f"{revision}^{{commit}}")
     merge_base = _run(root, "git", "merge-base", "HEAD", REMOTE_MAIN)
     if merge_base != EXPECTED_MERGE_BASE:
@@ -127,6 +128,12 @@ def main() -> None:
         check=False,
     ).returncode:
         raise SystemExit("Gate D scope FAIL: required governance commit is not on remote main")
+    if subprocess.run(
+        ("git", "merge-base", "--is-ancestor", MEDIA_GOVERNANCE, REMOTE_MAIN),
+        cwd=root,
+        check=False,
+    ).returncode:
+        raise SystemExit("Gate D scope FAIL: media governance commit is not on remote main")
 
     changed = changed_paths(root)
     if not changed:

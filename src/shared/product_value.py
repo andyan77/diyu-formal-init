@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias, cast
 
 from src.shared.errors import DomainError, GenerationFailed
-from src.shared.factual_basis import build_product_fact_packet
+from src.shared.factual_basis import ProductFactPacket, build_product_fact_packet
 from src.shared.media_program import (
     BoundProductMediaResourceV2,
     MediaCapabilityEnvelope,
@@ -812,13 +812,11 @@ def _build_p5_contract(
     ordered_products = tuple(item.product for item in ordered_media)
     packets = tuple(build_product_fact_packet((product,)) for product in ordered_products)
     source_fact_ids: list[str] = []
-    colors = tuple(_visible_values(product.facts.get("colors")) for product in ordered_products)
-    color_pair = _distinct_pair(colors[0], colors[1])
+    color_pair, color_fact_ids = _p5_color_evidence(ordered_products, packets)
     relation_kind: Literal["color_hierarchy", "silhouette_hierarchy"]
     if color_pair is not None:
         relation_kind = "color_hierarchy"
-        for packet in packets:
-            source_fact_ids.extend(item.fact_id for item in packet.facts if item.fact_key in {"display_name", "colors"})
+        source_fact_ids.extend(color_fact_ids)
         proposition = (
             f"让{ordered_products[0].display_name}的已确认{color_pair[0]}先成为画面主色，"
             f"再让{ordered_products[1].display_name}的已确认{color_pair[1]}在侧边回应；"
@@ -853,6 +851,26 @@ def _build_p5_contract(
         source_packet_digest=packet_digest,
         resource_refs=cast(tuple[str, str], resource_refs),
     )
+
+
+def _p5_color_evidence(
+    products: Sequence[ProductFact],
+    packets: Sequence[ProductFactPacket],
+) -> tuple[tuple[str, str] | None, tuple[str, ...]]:
+    colors: list[tuple[str, ...]] = []
+    fact_ids: list[str] = []
+    for product, packet in zip(products, packets, strict=True):
+        values = _visible_values(product.facts.get("colors"))
+        fact_key = "colors"
+        if not values:
+            main_color = _visible_string(product.facts.get("main_color"))
+            values = (main_color,) if main_color else ()
+            fact_key = "main_color"
+        colors.append(values)
+        fact_ids.extend(
+            item.fact_id for item in packet.facts if item.fact_key in {"display_name", fact_key}
+        )
+    return _distinct_pair(colors[0], colors[1]), tuple(fact_ids)
 
 
 def _visible_values(value: object) -> tuple[str, ...]:

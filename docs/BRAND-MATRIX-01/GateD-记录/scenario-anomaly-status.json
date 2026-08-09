@@ -57,11 +57,11 @@
       "reason": "AMD-2026-0808-01 v2 导入与旧 synthetic v1 历史快照并存且旧摘要不改；正式成品套件未运行。"
     }
   ],
-  "blocking_reason": "MEDIA_QUALIFICATION_INSUFFICIENT",
+  "blocking_reason": null,
   "formal_binary_completion": false,
   "formal_model_suite": {
     "provider_requests": 0,
-    "result": "NOT_RUN",
+    "result": "READY_AFTER_CANDIDATE_FREEZE",
     "runtime_candidate_sha": null
   },
   "scenarios": [
@@ -122,5 +122,12 @@
       "reason": "正式 API/仓储登记候选观察且下一任务仍只读原确认投影；观察不升格。"
     }
   ],
-  "status": "GATE-D EVIDENCE_BLOCKED · MEDIA_QUALIFICATION_INSUFFICIENT"
+  "media_unlock": {
+    "attestation_id": "ATT-MEDIA-20260808-01",
+    "formal_product_count": 4,
+    "media_manifest_digest": "587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b",
+    "p5_eligible_master_count": 6,
+    "scope": "internal_demo_and_demo_tenant_operation"
+  },
+  "status": "GATE-D READY_FOR_RUNTIME_CANDIDATE_FREEZE"
 }

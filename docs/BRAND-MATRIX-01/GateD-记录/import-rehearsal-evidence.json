@@ -8,7 +8,7 @@
     "legacy_version_id": "432cc50a-240e-5b4a-88e1-dcc37b6b38df",
     "tenant_id": "3020d100-d206-5f02-aa49-8aefa442ce86"
   },
-  "prestate_snapshot_sha256": "aec9e787de2fbe3a4e3944b409765460c37ab29504a44a8fddbe75678e6fe230",
+  "prestate_snapshot_sha256": "20f375c2f28b1594a2a2888bb986c719d1519fbc0ff67b8ad0df552596fde5fc",
   "round_one": {
     "batch_digest": "f15d0efe63173b1b6c72b5b4cf4681673cf29e4536fe600e3d92066e52781750",
     "counts": {

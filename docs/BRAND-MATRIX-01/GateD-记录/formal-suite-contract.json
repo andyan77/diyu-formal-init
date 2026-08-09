@@ -1,0 +1,202 @@
+{
+  "anomalies": [
+    {
+      "id": "ANOM-01",
+      "name": "过期成分口径版本对",
+      "oracle": "旧版本冻结摘要不变；新任务仅使用当前 V 级事实与 J 条件，不发明精确成分比例。",
+      "provider_policy": "pre_provider_deterministic"
+    },
+    {
+      "id": "ANOM-02",
+      "name": "门店错误成分文件",
+      "oracle": "门店错误普通资料不进入 ProductFact，不出现在正式成品或其事实引用。",
+      "provider_policy": "pre_provider_deterministic"
+    },
+    {
+      "id": "ANOM-03",
+      "name": "同字段正式事实冲突",
+      "oracle": "同级、同 claim、重叠作用域和时效且值或来源摘要不同，必须 needs_review 并失败关闭。",
+      "provider_policy": "pre_provider_deterministic"
+    },
+    {
+      "id": "ANOM-04",
+      "name": "过期区域活动",
+      "oracle": "RK-EC-08 不得进入新任务冻结资料包。",
+      "provider_policy": "pre_provider_deterministic"
+    },
+    {
+      "id": "ANOM-05",
+      "name": "跨门店读取",
+      "oracle": "杭州账号不得读取湖州资料，湖州账号不得读取杭州资料；合法组织及后代正向可见。",
+      "provider_policy": "pre_provider_deterministic"
+    },
+    {
+      "id": "ANOM-06",
+      "name": "两名用户共同操作一个逻辑账号",
+      "oracle": "两名自然人可分别操作 S01，事件 actor 精确，逻辑账号相同，跨用户任务读取继续拒绝。",
+      "provider_policy": "pre_provider_deterministic"
+    },
+    {
+      "id": "ANOM-07",
+      "name": "私人经历单次授权",
+      "oracle": "两条授权均满足失败释放、V1 消耗一次、同谱系 V2 不重复消耗、另一独立任务拒绝。",
+      "provider_policy": "pre_provider_deterministic"
+    },
+    {
+      "id": "ANOM-08",
+      "name": "知识更新前后两版任务",
+      "oracle": "AMD 导入前任务保持 v1 与原 digest，导入后任务冻结 v2；修订和回读不重解释。",
+      "provider_policy": "pre_provider_deterministic"
+    }
+  ],
+  "artifact_acceptance": {
+    "account_editorial_state": "applied",
+    "aigc_disclosure_required": true,
+    "brand_relevance_state": "applied",
+    "content_kind": "content",
+    "non_empty_outline_and_body": true,
+    "publication_contract_version": "publication-contract-v3",
+    "provider_transport_retries": 0,
+    "writer_requests_per_artifact": 1
+  },
+  "cards": [
+    {
+      "account_code": "H03",
+      "content_product": "dressing_decision",
+      "id": "S01-P1",
+      "scenario_id": "SCENARIO-01",
+      "seed": "请围绕 DIYU-CSPU-001 给家庭一条有条件、有取舍的日常穿衣选择建议。",
+      "target": "douyin_video"
+    },
+    {
+      "account_code": "H03",
+      "content_product": "product_truth",
+      "id": "S01-P2",
+      "scenario_id": "SCENARIO-01",
+      "seed": "请只依据已确认资料解释 DIYU-CSPU-001 的已知商品事实和适用边界。",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "account_code": "H01",
+      "content_product": "visual_styling_story",
+      "id": "S01-P5",
+      "media_ids": [
+        "DIYU-V-001",
+        "DIYU-V-011"
+      ],
+      "scenario_id": "SCENARIO-01",
+      "seed": "请用 DIYU-CSPU-001 与 DIYU-CSPU-008 的两份已登记母版，形成一条保留商品差异的视觉造型叙事。",
+      "target": "douyin_video"
+    },
+    {
+      "account_code": "R01",
+      "content_product": "local_response",
+      "id": "S02-R01-P4",
+      "scenario_id": "SCENARIO-02",
+      "seed": "请回应今天华东家庭在本地天气变化里如何安排孩子出门穿衣，使用当前有效区域资料。",
+      "target": "wechat_channels_video"
+    },
+    {
+      "account_code": "S01",
+      "content_product": "local_response",
+      "id": "S03-S01-P4",
+      "scenario_id": "SCENARIO-03",
+      "seed": "请用杭州门店当前有效资料，回应家庭到店前最需要知道的一件事。",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "account_code": "S04",
+      "content_product": "product_truth",
+      "id": "S04-S04-P2",
+      "scenario_id": "SCENARIO-04",
+      "seed": "请只依据总部已确认事实解释 DIYU-CSPU-008，不采用门店普通文件中的成分说法。",
+      "target": "douyin_video"
+    },
+    {
+      "account_code": "H01",
+      "content_product": "dressing_decision",
+      "id": "S05-H01-P1",
+      "scenario_id": "SCENARIO-05",
+      "seed": "请围绕 DIYU-CSPU-008 给出一条适用条件清楚、保留取舍的穿衣建议。",
+      "target": "douyin_video"
+    },
+    {
+      "account_code": "R01",
+      "content_product": "dressing_decision",
+      "id": "S05-R01-P1",
+      "scenario_id": "SCENARIO-05",
+      "seed": "请围绕 DIYU-CSPU-008 给出一条适用条件清楚、保留取舍的穿衣建议。",
+      "target": "douyin_video"
+    },
+    {
+      "account_code": "S01",
+      "content_product": "dressing_decision",
+      "id": "S05-S01-P1",
+      "scenario_id": "SCENARIO-05",
+      "seed": "请围绕 DIYU-CSPU-008 给出一条适用条件清楚、保留取舍的穿衣建议。",
+      "target": "douyin_video"
+    },
+    {
+      "account_code": "S04",
+      "content_product": "dressing_decision",
+      "id": "S05-S04-P1",
+      "scenario_id": "SCENARIO-05",
+      "seed": "请围绕 DIYU-CSPU-008 给出一条适用条件清楚、保留取舍的穿衣建议。",
+      "target": "douyin_video"
+    },
+    {
+      "account_code": "H01",
+      "content_product": "brand_life_narrative",
+      "id": "S06-H01-P3",
+      "scenario_id": "SCENARIO-06",
+      "seed": "写一条关于孩子早晨自己决定穿什么时，大人如何留出选择空间的生活观察。",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "account_code": "S02",
+      "content_product": "brand_life_narrative",
+      "id": "S06-S02-P3",
+      "scenario_id": "SCENARIO-06",
+      "seed": "写一条关于孩子早晨自己决定穿什么时，大人如何留出选择空间的生活观察。",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "account_code": "S04",
+      "content_product": "brand_life_narrative",
+      "id": "S06-S04-P3",
+      "scenario_id": "SCENARIO-06",
+      "seed": "写一条关于孩子早晨自己决定穿什么时，大人如何留出选择空间的生活观察。",
+      "target": "xiaohongshu_graphic"
+    },
+    {
+      "account_code": "H01",
+      "content_product": "brand_life_narrative",
+      "id": "S07-H01-P3",
+      "scenario_id": "SCENARIO-07",
+      "seed": "围绕不同地方的说话方式写一条品牌生活观察；只使用当前已确认的表达版本。",
+      "target": "wechat_channels_video"
+    },
+    {
+      "account_code": "S01",
+      "content_product": "local_response",
+      "id": "S08-S01-P4",
+      "scenario_id": "SCENARIO-08",
+      "seed": "在登记一条门店反馈观察后，再用已确认资料回应杭州家庭的到店准备；不得使用未确认反馈。",
+      "target": "douyin_video"
+    }
+  ],
+  "constraints": {
+    "maximum_provider_requests": 80,
+    "maximum_transport_retries": 0,
+    "model_source": "DEEPSEEK_MODEL exact env key",
+    "provider_request_policy": "one accepted Writer response per card; deterministic anomalies fail before provider",
+    "temperature": 0
+  },
+  "expected_counts": {
+    "anomalies": 8,
+    "cards": 15,
+    "content_products": 5,
+    "scenarios": 8
+  },
+  "suite_version": "brand-matrix-gate-d-formal-suite-v1"
+}
