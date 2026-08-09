@@ -1,0 +1,100 @@
+{
+  "ci_evidence": {
+    "branch_head_sha": "1544b850802c136923de70a872cf7b2114b224dc",
+    "conclusion": "success",
+    "event": "workflow_dispatch",
+    "head_sha": "1544b850802c136923de70a872cf7b2114b224dc",
+    "non_success_steps": 0,
+    "run_id": 31332774814,
+    "status": "completed",
+    "url": "https://github.com/andyan77/diyu-formal-init/actions/runs/31332774814"
+  },
+  "documentation_parent_sha": "1544b850802c136923de70a872cf7b2114b224dc",
+  "eight_objects": [
+    {
+      "digest": "bb9e63daa4558b9b202465d148b43d7c92a83266",
+      "object": "candidate_git_sha"
+    },
+    {
+      "contract_version": "publication-contract-v3 / ADJ-CONTENT-TERRITORY-01",
+      "digest": "0a1aa5043915d2ffa84d7ad1ae55785b02a8ba2f72bde2fab3541288bd510d12",
+      "object": "writer_contract",
+      "sources": {
+        "src/shared/publication_contract.py": "86f50c09d6134abf56a6a6f5ec5497f01283bdb44e7342a71e9bbac33cfd003f",
+        "src/shared/writer_request.py": "e3cae4aa40c9951205c4ea169fb8935ab0bac6a2c28a693e164f7475ef1de6d9",
+        "src/tool/llm_gateway/deepseek.py": "14f8002dee2ca1c07d96e723d8dcf7af551abe4eb18612b8ea8ebb38fad9ed1d"
+      }
+    },
+    {
+      "content_max_retries": 0,
+      "digest": "88488e59adbb1a49a365cc427bb7d564ba71d6016f9ce5373fbad0d29e4582be",
+      "model": "deepseek-v4-flash",
+      "object": "model_configuration",
+      "provider_endpoint_policy": "AUTH-PROVIDER-ENDPOINT-20260809-01",
+      "provider_host": "api.deepseek.com",
+      "temperature": 0,
+      "transport_max_retries": 2,
+      "transport_retries_are_content_retries": false
+    },
+    {
+      "digest": "23b042d625f1f781f4d9e67b102afb8a2700470d532fe51b6043fbaa58739420",
+      "object": "guard_and_rules",
+      "rule_version": "immutable-product-fact-renderer-v3 / ADJ-WRITER-BOUNDARY-05",
+      "sources": {
+        "src/shared/content_territory.py": "81d4be1af5570b0c46fd0c79bb2a376bfe8e39163e361023bcd753a77a5d1256",
+        "src/shared/factual_basis.py": "030a63af249bd2498288230408b4942aae5914974107aed7a47db05178a75983",
+        "src/shared/visible_structure.py": "7e4643bb458072b648522144a4ecc7b905df721cdfaf7a682fb40726647c7a54"
+      }
+    },
+    {
+      "authorization_amendment_sha256": "e5c3ae916a1d3663c0a7df0a40a9b24094044417236d57c1550cec4d66d00291",
+      "digest": "ee80e4e27bfe71d743070492099d89feabebf44aa1556bdcf561661ab7ab5dfc",
+      "gate_a_contract_sha256": "e8cafdf3cf09abe4c6c57d3c6393c8f3bc9bca59215f3ae4081252d36016363e",
+      "gate_a_manifest_digest": "14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06",
+      "import_batch_digest": "961e33d93b4b504318c5b9531064574a34ab5e6d2b5362f76c22ca19e3389088",
+      "import_object_fingerprint": "03c572b79ee0ef36e5852a2c9657abb484ff318dc11c38d492007b48fee1ec28",
+      "media_manifest_digest": "587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b",
+      "object": "data_manifest_bundle",
+      "publication_projection_digest": "cba9c56bed7fb4f5eb5569a99ae3953f9f4daf4188f34d607383d4d98117a938",
+      "quality_content_amendment_digest": "5e3a82ecaa74d5dc0a2467e2ca5d1ce31b6065115e9396ab1835e7a4e3524081",
+      "quality_source_sha256": "62b43ff4ba93f6856b50c95486574a7b2ec966669b4d828fc18b0c2894fb1d7a"
+    },
+    {
+      "binding_sha256": "db7e0f696aaab014c0a6ffd0311bdb1d0f0b4af68582691dda2b30910d943877",
+      "build_count": 1,
+      "digest": "sha256:4ba10759d1bba760fa1523d987f0eeca69dd1ff43788b5c29bc95e3f2f4c91be",
+      "implementation_label": "bb9e63daa4558b9b202465d148b43d7c92a83266",
+      "object": "production_image"
+    },
+    {
+      "contract_version": "brand-matrix-exam-administration-v2",
+      "digest": "6ed7e897e64edee234c7f87faff292169b8e39cb86aee6a7390ad7a1c0da782a",
+      "object": "exam_contract_and_runner",
+      "sources": {
+        "docs/BRAND-MATRIX-01/GateE-记录/考务合同-v2.md": "5fe65e0a81acb12a2a38ed65c8609492f0d6558205a2f7d94d14b8b689df9dd6",
+        "scripts/gatee/exam_contract.py": "797c2d3476caa88d391baa036717ba0a53961b900dbada5599138c6ada1579dd",
+        "scripts/gatee/exam_readiness.py": "96b979efcb85a82591ec8d9db958dc4b572eee00180ed71c5350f37c424ec10a",
+        "scripts/gatee/run_negative_suite.py": "bac13fce98c67487900a22fc7325823be15559c8f89ef8884e9646ea44932f2e",
+        "scripts/gatee/run_three_card_regression.py": "2045c5b9f38228cce436329cedab53be5c4b4d1b3c65b7a151bb7943532e6789",
+        "scripts/gatee/setup_isolated_exam.py": "9dec1109ef486d5616cfd2fbd11046aef95c63bd1ee4cc4b502ad271347d1f78"
+      }
+    },
+    {
+      "digest": "e2647e278e694670a887f6bd57596a7e989c09bbcc36b264e46ee5e4e96394d9",
+      "object": "oracle",
+      "oracle_version": "brand-matrix-exam-oracle-v2",
+      "source": "scripts/gatee/exam_oracle.py",
+      "source_sha256": "41b3cae577e16e4eafa35262dbeb33da0c3fc5e367a2a7887ded3413975eff3a"
+    }
+  ],
+  "execution_boundary": {
+    "binary_added_to_git": 0,
+    "dotenv_read": false,
+    "production_contact": 0,
+    "provider_requests_during_e1_prime_before_public_regression": 0,
+    "provider_requests_lifetime_budget_total": 300,
+    "provider_requests_lifetime_budget_used": 76
+  },
+  "receipt_version": "brand-matrix-gate-e-eight-object-freeze-v2",
+  "status": "FROZEN_PUBLIC_REGRESSION_PENDING"
+}
