@@ -1219,3 +1219,29 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   继续须由主控另行签发。
 
 <!-- BRAND-MATRIX-01-GATED-RERUN-05-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-06-FAILED-SAFE-START -->
+
+### Gate D 第六轮性能词极性收口后整套重跑失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · PROVIDER_REQUEST_FAILURE`，不等于 Gate D 已实现或通过。
+
+- 性能词机器硬门已收窄到明确肯定组合；裸性能词进入非阻断审阅标注。本地正反回归和完整
+  工程门通过，实际 12 份成品登记 4 条非阻断标注，未再出现裸词误杀。
+- runtime candidate 为 `3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b`；本地全门
+  `1047 passed / 2 skipped`，CI run `31307989195` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 两轮 batch digest `20e1d00a…6ed`、对象指纹 `1ec150e8…2f98` 一致；媒体
+  PASS(scope)/FAIL/QUARANTINED=`26/0/0`，P5 合格母版 6、覆盖 4 个正式商品。
+- 本候选 12 张卡落版；第 13 张 `S06-S04-P3` 的唯一 provider 请求失败，未取得可接受响应，
+  task/run/version=`1/1/0`，后 2 张卡未运行。失败类型仅能确认 `ProviderRequestFailure`，不
+  臆测更细原因。
+- ledger 本轮 13 次请求尝试（12 响应、1 失败）、历史 29、累计 `42/80`；temperature 0、
+  max_retries 0、transport retry 0、失败后请求 0。候选产物不拼接；八剧本/八异常未完成。
+- 首次请求后仅追加脱敏证据、治理记录与 MILESTONE；生产/SSH/ECS 0、alembic 0、密钥泄漏 0、
+  二进制入 Git 0。按第六轮停止线，不自行第七轮或 provider 重跑。
+- 唯一下一动作：监理复核极性收口、非阻断标注、provider 失败安全、冻结纪律和累计 ledger；
+  继续须由主控另行签发。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-06-FAILED-SAFE-END -->

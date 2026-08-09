@@ -2080,3 +2080,25 @@
   密钥泄漏 0、二进制入 Git 0。根据 `UNLOCK-D-RERUN-05`，执行侧不得自行第六轮修复或重跑。
 - 唯一下一动作：监理复核第五轮授权再许可、编排隔离、否定性边界词误拦诊断、冻结纪律与
   ledger；继续须由主控另行签发。
+
+## BRAND-MATRIX-01 · Gate D 第六轮性能词极性收口后整套重跑失败安全稿（2026-08-09，待监理复核）
+
+- 状态：**`GATE-D FAILED_SAFE · PROVIDER_REQUEST_FAILURE`**；不得据此写
+  `IMPLEMENTED / COMPLETE / PASS`。
+- 性能词裸提及已从机器阻断移入非阻断审阅标注；明确肯定式保证仍失败关闭，正反回归和实际
+  12 张完成卡均未再出现裸词误杀。实际审阅标注 4 条，不影响卡级落版。
+- runtime candidate `3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b`；本地全门
+  `1047 passed / 2 skipped`，CI run `31307989195` 四查全绿。两轮隔离导入 batch digest
+  `20e1d00a…6ed`、对象指纹 `1ec150e8…2f98` 一致；媒体 PASS(scope)/FAIL/QUARANTINED=
+  `26/0/0`，母版 P5 资格 6、覆盖 4 个商品。
+- 本候选前 12 张卡落版；第 13 张 `S06-S04-P3` 在唯一 provider 请求阶段失败，未形成版本，
+  task/run/version=`1/1/0`，后 2 张卡未运行。失败类型为 `ProviderRequestFailure`，现有脱敏证据
+  不足以继续细分，执行侧未臆测。
+- ledger 累计 `42/80`（历史 29 + 本轮 13 次尝试，其中 12 次取得响应、1 次失败），
+  temperature 0、max_retries 0、transport retry 0、失败后请求 0；旧候选成品不拼接，
+  八剧本/八异常未完成。
+- 首次请求后仅追加 Gate D 脱敏证据、治理记录和本状态；生产/SSH/ECS 0、alembic 0、
+  密钥泄漏 0、二进制入 Git 0。根据 `UNLOCK-D-RERUN-06`，执行侧不得自行第七轮或再次调用
+  provider。
+- 唯一下一动作：监理复核第六轮极性收口、非阻断标注、provider 失败安全、冻结纪律与
+  ledger；继续须由主控另行签发。
