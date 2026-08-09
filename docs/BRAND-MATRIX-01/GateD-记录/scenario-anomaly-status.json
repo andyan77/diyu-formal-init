@@ -2,121 +2,124 @@
   "anomalies": [
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "INCOMPLETE_SUITE_ABORTED",
       "id": "ANOM-01",
       "name": "过期成分口径版本对",
-      "reason": "旧快照兼容和版本冻结回归通过；正式模型套件被媒体资格门阻断。"
+      "reason": "旧 v1 快照在正式套件前置检查中保持冻结；套件在当前任务完整比较前失败安全停止。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "PASS_ZERO_PROVIDER",
       "id": "ANOM-02",
       "name": "门店错误成分文件",
-      "reason": "结构化权威和普通资料不污染正式 ProductFact 的回归门通过；未生成正式成品。"
+      "reason": "正式套件前置检查确认门店错误普通资料未进入 ProductFact 或 projection，provider request=0。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "PASS_ZERO_PROVIDER",
       "id": "ANOM-03",
       "name": "同字段正式事实冲突",
-      "reason": "同级同 claim 冲突进入 needs_review 并禁止消费的回归门通过；未调用 provider。"
+      "reason": "正式套件以结构化同级 claim 冲突实测 needs_review 失败关闭，provider request=0。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "PASS_ZERO_PROVIDER",
       "id": "ANOM-04",
       "name": "过期区域活动",
-      "reason": "RK-EC-08 已存储并进入带时效 V2 条目，但七个新任务快照消费数为 0。"
+      "reason": "正式套件新任务选择前确认过期 RK-EC-08 消费数为 0，provider request=0。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "PASS_ZERO_PROVIDER",
       "id": "ANOM-05",
       "name": "跨门店读取",
-      "reason": "正式任务快照中兄弟区域和门店泄漏为 0；未生成正式成品。"
+      "reason": "正式套件确认杭州/湖州正向与兄弟门店反向隔离，provider request=0。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "PASS_ZERO_PROVIDER",
       "id": "ANOM-06",
       "name": "两名用户共同操作逻辑账号",
-      "reason": "既有 Gate C 所有权和真实 actor 回归门通过；本轮未运行正式模型内容套件。"
+      "reason": "正式套件前置建立两个用户各自任务，actor 精确且跨用户读取拒绝，provider request=0。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "ANOM-07",
       "name": "私人经历单次授权",
-      "reason": "PS-S02-05 与 PS-S04-03 均实证失败释放、V1 单次核销、同谱系 V2 不二次核销、新任务拒绝。"
+      "reason": "该检查按冻结顺序安排在全部成品之后；套件于第 6 卡失败安全停止，未重跑。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "INCOMPLETE_SUITE_ABORTED",
       "id": "ANOM-08",
       "name": "知识更新前后两版任务",
-      "reason": "AMD-2026-0808-01 v2 导入与旧 synthetic v1 历史快照并存且旧摘要不改；正式成品套件未运行。"
+      "reason": "旧 AMD v1 快照在前置检查中保持冻结；套件在新 v2 任务运行前失败安全停止。"
     }
   ],
-  "blocking_reason": null,
+  "blocking_reason": "FORMAL_SUITE_BOUNDARY_REJECTED",
   "formal_binary_completion": false,
   "formal_model_suite": {
-    "provider_requests": 0,
-    "result": "READY_AFTER_CANDIDATE_FREEZE",
-    "runtime_candidate_sha": null
+    "completed_artifacts": 5,
+    "failed_card": "S04-S04-P2",
+    "provider_requests": 6,
+    "result": "FAILED_SAFE",
+    "runtime_candidate_sha": "997e6b55c1c40dacd44a46ff6617b28766011958",
+    "transport_retries": 0
   },
   "scenarios": [
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "INCOMPLETE_SUITE_ABORTED",
       "id": "SCENARIO-01",
       "name": "总部 F/J/G",
-      "reason": "总部 V2 正式任务快照和四组 J 的 P1/P2 实际依据成立；模型成品未运行。"
+      "reason": "P1/P2/P5 三卡各取得一次响应并成功落版本；套件在全局剧本断言前中止，不冒充 PASS。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "INCOMPLETE_SUITE_ABORTED",
       "id": "SCENARIO-02",
       "name": "华东资料",
-      "reason": "R01 正式任务快照消费华东条目；R02 和兄弟组织泄漏为 0。"
+      "reason": "R01 P4 卡取得一次响应并成功落版本；套件在全局剧本断言前中止。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "INCOMPLETE_SUITE_ABORTED",
       "id": "SCENARIO-03",
       "name": "杭州资料",
-      "reason": "S01/S02 正式任务快照消费杭州条目；S03/S04 不读取杭州条目。"
+      "reason": "S01 P4 卡取得一次响应并成功落版本；套件在全局剧本断言前中止。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "FAILED_SAFE",
       "id": "SCENARIO-04",
       "name": "成都错误普通文件",
-      "reason": "普通资料不能升格或覆盖总部正式事实的机制回归通过；未生成成品。"
+      "reason": "S04-S04-P2 的唯一响应触发“Writer 不得复述或改写服务端商品事实块”边界；运行失败、版本未产生。"
     },
     {
       "deterministic_mechanism_result": "PARTIAL_PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "SCENARIO-05",
       "name": "同一 SKU 四节点",
       "reason": "商品事实、账号 lens 和组织快照机制分别成立；四份正式模型成品差异未运行。"
     },
     {
       "deterministic_mechanism_result": "PARTIAL_PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "SCENARIO-06",
       "name": "同一种子三账号",
       "reason": "Gate B 跨账号确定性语义差异回归通过；三份正式模型成品未运行。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "SCENARIO-07",
       "name": "AMD v1/v2",
       "reason": "导入前 v1 历史快照与 AMD v2 品牌版本并存；正式模型重演未运行。"
     },
     {
       "deterministic_mechanism_result": "PASS",
-      "formal_suite_result": "NOT_RUN",
+      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "SCENARIO-08",
       "name": "反馈观察",
       "reason": "正式 API/仓储登记候选观察且下一任务仍只读原确认投影；观察不升格。"
@@ -129,5 +132,5 @@
     "p5_eligible_master_count": 6,
     "scope": "internal_demo_and_demo_tenant_operation"
   },
-  "status": "GATE-D READY_FOR_RUNTIME_CANDIDATE_FREEZE"
+  "status": "GATE-D FAILED_SAFE · FORMAL_SUITE_BOUNDARY_REJECTED"
 }

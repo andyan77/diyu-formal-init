@@ -1,0 +1,75 @@
+{
+  "suite_version": "brand-matrix-gate-d-formal-suite-v1",
+  "runtime_candidate_sha": "997e6b55c1c40dacd44a46ff6617b28766011958",
+  "registration_digest": "a69c5c4736114cd96c0c330dd42063c36c63b86fbee562c700d253b1bef59b16",
+  "model": "deepseek-v4-flash",
+  "temperature": 0,
+  "max_retries": 0,
+  "provider_request_count": 6,
+  "provider_request_budget": 80,
+  "provider_transport_retries": 0,
+  "completed_artifact_count": 5,
+  "failed_card": {
+    "card_id": "S04-S04-P2",
+    "failure_code": "WRITER_FACT_BLOCK_RESTATEMENT_REJECTED",
+    "failure_stage": "post_response_writer_boundary",
+    "response_received": true,
+    "task_id": "7f503b29-726b-4ffa-8dac-5501d8deceab",
+    "run_id": "c3c316bb-c4bc-4244-8460-cae144cf5852",
+    "version_id": null
+  },
+  "completed_artifact_index": [
+    {
+      "card_id": "S01-P1",
+      "task_id": "9f88305f-bb48-44f2-8940-17cd32b88a7d",
+      "run_id": "b3d20d01-62d4-45fd-b900-1252e011f5cb",
+      "version_id": "1529cd91-5a19-4414-aaf7-ccccde0bc106",
+      "artifact_digest": "fb420abacd1fe7a283ba6932c90c326a94b0d73b5e4b6a87fddebb615d0fd860"
+    },
+    {
+      "card_id": "S01-P2",
+      "task_id": "fee9c014-364b-4191-abdb-d242f7c16da7",
+      "run_id": "3cc73882-f56e-450f-a554-e40afec0a607",
+      "version_id": "931514e7-ba50-4f2e-80d9-c76469bf4b67",
+      "artifact_digest": "59dda0fe2a8577a8dd8283644375bc63ee6ad5668731dd63a9b54e91b9691cb4"
+    },
+    {
+      "card_id": "S01-P5",
+      "task_id": "cec02175-5ef7-4cce-a636-a2e00b37bfd1",
+      "run_id": "9a96acc6-c8c4-45e0-aac4-1f9bab2f0d67",
+      "version_id": "59248692-3345-4ad6-b1fa-0c1fb1041d45",
+      "artifact_digest": "10f3fb19b6501dcbceb2fd5363d62b211841b290b71449c52876e801ecb42c0f"
+    },
+    {
+      "card_id": "S02-R01-P4",
+      "task_id": "908599b6-2736-4c83-bbe8-868bc5dc5519",
+      "run_id": "4fcd7555-b524-41de-89f5-1e880f272050",
+      "version_id": "a84cb6b0-99ef-487b-82e6-2e498554a17d",
+      "artifact_digest": "e9f2a3fef6567ea2d649140c9f108c84d198c7a611a0bc1804c2581d80931f6"
+    },
+    {
+      "card_id": "S03-S01-P4",
+      "task_id": "aa23da8c-37d0-48c2-83e3-91c03f020f8b",
+      "run_id": "9168440f-8c7a-4cae-a031-b0c452033558",
+      "version_id": "311e1f23-92ba-40e3-9204-8ab75b3ea811",
+      "artifact_digest": "a5d2582ec4ad292ebd1c64e716abec7b6550b513cb2c8ae6888a43ec46440d34"
+    }
+  ],
+  "scenario_summary": {
+    "pass": 0,
+    "failed_safe": 1,
+    "incomplete": 3,
+    "not_run": 4
+  },
+  "anomaly_summary": {
+    "pass_zero_provider": 5,
+    "incomplete": 2,
+    "not_run": 1
+  },
+  "formal_binary_completion": false,
+  "raw_responses_in_git": 0,
+  "private_evidence_path": "~/diyu-evidence-brand-matrix-gated-997e6b55c1c40dacd44a46ff6617b28766011958",
+  "private_sha256s_digest": "146366d3a88abe168f67eae3499683aa055c2ec9252b09f733580af5eed05d58",
+  "rerun_count": 0,
+  "status": "FAILED_SAFE"
+}

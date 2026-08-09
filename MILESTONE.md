@@ -1956,3 +1956,20 @@
   `8/8`。本地全量门和远端 CI 结果以最终候选报告为准，待监理复核。
 - 唯一下一动作：监理复核逐文件人物/儿童、第三方元素、平台权利和有效期证据缺口；补齐并
   形成至少两份绑定不同正式商品的 PASS 母版后，从完整确定性门重新开始 Gate D 候选。
+
+## BRAND-MATRIX-01 · Gate D 媒体解锁后正式套件失败安全稿（2026-08-08，待监理复核）
+
+- 状态：**`GATE-D FAILED_SAFE · FORMAL_SUITE_BOUNDARY_REJECTED`**；不得据此写
+  `IMPLEMENTED / COMPLETE / PASS`。
+- `ATT-MEDIA-20260808-01` 已登记；26 份母版十项门 PASS(scope) `26` / FAIL `0` /
+  QUARANTINED `0`，母版 P5 资格 `6`，覆盖 4 个正式商品。
+- 媒体 manifest 从 `ab81e01f…` 重算为 `587d8213…`；P5 卡取得一次正式响应并
+  成功落版本。
+- runtime candidate 为 `997e6b55c1c40dacd44a46ff6617b28766011958`；CI run
+  `31292553896` 四查全绿。本地全量门为 `1005 passed / 2 skipped`。
+- 正式套件在第 6 卡 `S04-S04-P2` 的唯一响应后触发事实块复述保护边界；
+  provider request `6`、transport retry `0`、成功卡级版本 `5`、失败卡 `1`、重跑 `0`。
+- 保留私有原始证据与 SHA256SUMS；Git 只登记脱敏索引和 ledger。首次请求后未改代码/
+  Prompt/数据/媒体，未重跑。生产接触 0，密钥泄漏 0，二进制入 Git 0。
+- 唯一下一动作：监理独立复核失败证据；如要修复，由主控另行签发共享根因修复与
+  新候选整套重跑指令。
