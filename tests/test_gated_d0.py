@@ -12,6 +12,7 @@ import psycopg
 import pytest
 from pydantic import ValidationError
 
+from scripts.gated.run_formal_acceptance import _performance_review_annotations
 from src.brain.platform_directions import direction_for
 from src.gateway.api.app import create_app
 from src.gateway.api.contracts import BrandPublicationProjectionCandidateRequest
@@ -30,6 +31,27 @@ from src.shared.publication_scope import (
 from src.shared.types import BrandContext, BrandContextPacketV3, TenantManagementScope, TrustedScope
 
 _RERUN03_FACT_ID = "fact:product:gated-rerun-03"
+
+
+def test_gate_d_review_package_records_bare_performance_terms_without_blocking() -> None:
+    sentence = "这件外套防水又耐磨。"
+
+    assert _performance_review_annotations("S05-R01-P1", sentence) == [
+        {
+            "annotation_kind": "bare_performance_term_review",
+            "blocking": False,
+            "card_id": "S05-R01-P1",
+            "matched_term": "防水",
+            "sentence": sentence,
+        },
+        {
+            "annotation_kind": "bare_performance_term_review",
+            "blocking": False,
+            "card_id": "S05-R01-P1",
+            "matched_term": "耐磨",
+            "sentence": sentence,
+        },
+    ]
 
 
 def _rerun03_authorization(

@@ -57,6 +57,9 @@ from src.infrastructure.workbench_repository import (  # noqa: E402
 )
 from src.shared.brand_publication import brand_context_packet_document  # noqa: E402
 from src.shared.errors import DomainError, GenerationFailed  # noqa: E402
+from src.shared.factual_basis import (  # noqa: E402
+    performance_term_review_annotations,
+)
 from src.shared.publication_scope import resolve_claim_authority  # noqa: E402
 from src.shared.types import (  # noqa: E402
     ContentProduct,
@@ -67,13 +70,14 @@ from src.shared.types import (  # noqa: E402
 )
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator  # noqa: E402
 
-SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v6"
+SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v7"
 MAX_PROVIDER_REQUESTS = 80
 INITIAL_RUNTIME_CANDIDATE_SHA = "997e6b55c1c40dacd44a46ff6617b28766011958"
 FIRST_RERUN_RUNTIME_CANDIDATE_SHA = "f7e8e81c80ebc8552794f82aab81ef509e242b14"
 SECOND_RERUN_RUNTIME_CANDIDATE_SHA = "ba4208a6ea96775683ecd89f41b6cd869b45eead"
 THIRD_RERUN_RUNTIME_CANDIDATE_SHA = "596b87e7e9d0551c6b62834137e03eed2bf52c82"
-PRIOR_RUNTIME_CANDIDATE_SHA = "7e48f7a7d96d4a196a8cbc8e503efe55f36291f9"
+FOURTH_RERUN_RUNTIME_CANDIDATE_SHA = "7e48f7a7d96d4a196a8cbc8e503efe55f36291f9"
+PRIOR_RUNTIME_CANDIDATE_SHA = "e0dba46689397f16a967efbc126621df0683f385"
 _ENV_PATH = Path("/home") / "faye" / "workspace" / "diyu-formal-init" / ".env"
 _ACCOUNT_ORGANIZATIONS = {
     "H01": "DIYU-HQ-001",
@@ -315,7 +319,7 @@ def _load_prior_ledger(
     if (
         runtime_candidate_sha != PRIOR_RUNTIME_CANDIDATE_SHA
         or document.get("prior_runtime_candidate_sha")
-        != THIRD_RERUN_RUNTIME_CANDIDATE_SHA
+        != FOURTH_RERUN_RUNTIME_CANDIDATE_SHA
         or document.get("initial_runtime_candidate_sha")
         != INITIAL_RUNTIME_CANDIDATE_SHA
         or document.get("runtime_candidate_chain")
@@ -324,11 +328,12 @@ def _load_prior_ledger(
             FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
             SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
             THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
+            FOURTH_RERUN_RUNTIME_CANDIDATE_SHA,
             PRIOR_RUNTIME_CANDIDATE_SHA,
         ]
-        or document.get("prior_record_range") != [1, 10]
-        or document.get("prior_provider_request_count") != 10
-        or document.get("current_provider_request_count") != 11
+        or document.get("prior_record_range") != [1, 21]
+        or document.get("prior_provider_request_count") != 21
+        or document.get("current_provider_request_count") != 8
         or document.get("status") != "FAILED_SAFE"
         or document.get("provider_request_count") != expected_count
         or not isinstance(records, list)
@@ -348,6 +353,8 @@ def _load_prior_ledger(
             expected_candidate = SECOND_RERUN_RUNTIME_CANDIDATE_SHA
         elif request_index <= 10:
             expected_candidate = THIRD_RERUN_RUNTIME_CANDIDATE_SHA
+        elif request_index <= 21:
+            expected_candidate = FOURTH_RERUN_RUNTIME_CANDIDATE_SHA
         else:
             expected_candidate = PRIOR_RUNTIME_CANDIDATE_SHA
         recorded_candidate = str(
@@ -486,6 +493,10 @@ def _validate_artifact(
         "logical_account_id": persisted["logical_account_id"],
         "artifact_digest": persisted["artifact_digest"],
         "body_digest": hashlib.sha256(str(result["body"]).encode()).hexdigest(),
+        "performance_term_review_annotations": _performance_review_annotations(
+            card.card_id,
+            str(result["body"]),
+        ),
         "publication_contract_digest": snapshot.get("publication_contract_digest"),
         "account_editorial_resolution_digest": snapshot.get("account_editorial_resolution_digest"),
         "account_profile_id": lens.get("source_profile_id"),
@@ -514,6 +525,22 @@ def _validate_artifact(
         ],
         "snapshot": snapshot,
     }
+
+
+def _performance_review_annotations(
+    card_id: str,
+    visible_text: str,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "annotation_kind": "bare_performance_term_review",
+            "blocking": False,
+            "card_id": card_id,
+            "matched_term": annotation.term,
+            "sentence": annotation.sentence,
+        }
+        for annotation in performance_term_review_annotations(visible_text)
+    ]
 
 
 def _legacy_state(database_url: str) -> dict[str, Any]:
@@ -1076,6 +1103,14 @@ def _internal_run(arguments: argparse.Namespace) -> int:
             }
             for artifact in artifacts.values()
         ]
+        performance_review_annotations = [
+            annotation
+            for artifact in public_artifacts
+            for annotation in cast(
+                list[dict[str, object]],
+                artifact["performance_term_review_annotations"],
+            )
+        ]
         current_public_ledger = [
             entry
             | {
@@ -1096,6 +1131,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
                 FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
                 SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
                 THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
+                FOURTH_RERUN_RUNTIME_CANDIDATE_SHA,
                 PRIOR_RUNTIME_CANDIDATE_SHA,
                 candidate_sha,
             ],
@@ -1113,6 +1149,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
                 }
                 for item in public_artifacts
             ],
+            "performance_term_review_annotations": performance_review_annotations,
             "status": "PASS",
         }
         _write_private_json(evidence_root / "manifest.json", private_manifest)
@@ -1129,6 +1166,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
                 FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
                 SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
                 THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
+                FOURTH_RERUN_RUNTIME_CANDIDATE_SHA,
                 PRIOR_RUNTIME_CANDIDATE_SHA,
                 candidate_sha,
             ],
@@ -1144,6 +1182,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
             "scenario_results": scenario_results,
             "anomaly_results": [anomaly_results[key] for key in sorted(anomaly_results)],
             "artifact_index": public_artifacts,
+            "performance_term_review_annotations": performance_review_annotations,
             "private_evidence_path": f"~/{evidence_root.name}",
             "private_sha256s_digest": checksum_digest,
             "raw_responses_in_git": 0,
@@ -1154,7 +1193,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
         _write_public_json(
             cast(Path, arguments.public_ledger),
             {
-                "ledger_version": "brand-matrix-gate-d-provider-ledger-v6",
+                "ledger_version": "brand-matrix-gate-d-provider-ledger-v7",
                 "runtime_candidate_sha": candidate_sha,
                 "prior_runtime_candidate_sha": prior_candidate_sha,
                 "runtime_candidate_chain": [
@@ -1162,6 +1201,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
                     FIRST_RERUN_RUNTIME_CANDIDATE_SHA,
                     SECOND_RERUN_RUNTIME_CANDIDATE_SHA,
                     THIRD_RERUN_RUNTIME_CANDIDATE_SHA,
+                    FOURTH_RERUN_RUNTIME_CANDIDATE_SHA,
                     PRIOR_RUNTIME_CANDIDATE_SHA,
                     candidate_sha,
                 ],

@@ -52,6 +52,7 @@ from src.shared.errors import GenerationFailed
 from src.shared.factual_basis import (
     brand_fact_records,
     build_product_fact_packet,
+    performance_term_review_annotations,
     product_fact_records,
     select_product_fact_block_ids,
     unconfirmed_product_specificity_spans,
@@ -1349,6 +1350,90 @@ def test_publication_v3_allows_prior_s01_p2_absolute_claim_false_positive() -> N
     assert raw["founder_classification"] == "L3_daily_suggestion_allowed"
 
 
+def test_publication_v3_allows_prior_s05_r01_negated_performance_boundary() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    raw = json.loads(
+        (
+            Path(__file__).parent
+            / "fixtures/gated_s05_r01_p1_negated_performance_v1.json"
+        ).read_text(encoding="utf-8")
+    )
+    excerpt = str(raw["machine_boundary_excerpt"])
+    assert excerpt == "如果你需要的是防风防水的功能外套，那它就不是那个答案"
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="先把能力边界说清楚",
+        natural_guide="这是一条否定式商品边界，不是性能承诺。",
+        creative_body=excerpt,
+        publication_caption="按自己的真实用途选择。",
+    )
+
+    assert unconfirmed_product_specificity_spans(excerpt) == ()
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+    assert raw["prior_guard_match"] == "guaranteed_performance_assertion:防水"
+    assert raw["prior_response_sha256"] == (
+        "52e4e3a0ec2a73db75e28f16888dcbe859fccb77bb82a85abf8b3deaf0d51798"
+    )
+
+
+def test_bare_performance_terms_are_non_blocking_review_annotations() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    text = "这件外套防水又耐磨。"
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="进入人工复核",
+        natural_guide="裸性能词不再由机器判断极性。",
+        creative_body=text,
+        publication_caption="由 founder 逐篇复核。",
+    )
+
+    assert unconfirmed_product_specificity_spans(text) == ()
+    assert [
+        (annotation.term, annotation.sentence)
+        for annotation in performance_term_review_annotations(text)
+    ] == [
+        ("防水", text),
+        ("耐磨", text),
+    ]
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+
+@pytest.mark.parametrize(
+    "negative_boundary",
+    (
+        "这件商品不能保证防水。",
+        "这件商品并非100%防水。",
+        "这件商品不是绝对不起球。",
+    ),
+)
+def test_negated_guarantee_phrases_do_not_become_affirmative_machine_claims(
+    negative_boundary: str,
+) -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="说清未确认能力",
+        natural_guide="否定式边界不是肯定式保证。",
+        creative_body=negative_boundary,
+        publication_caption="不把未确认能力写成卖点。",
+    )
+
+    assert unconfirmed_product_specificity_spans(negative_boundary) == ()
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+
 @pytest.mark.parametrize(
     "unsupported_text",
     (
@@ -1357,12 +1442,12 @@ def test_publication_v3_allows_prior_s01_p2_absolute_claim_false_positive() -> N
         "本店售价459元。",
         "采用全成型无缝针织工艺。",
         "适穿年龄为3—12岁。",
-        "这件商品不起球，而且亲肤透气。",
         "这件商品保证耐穿。",
-        "这件商品保证不起球。",
+        "这件商品保证防水。",
+        "这件商品100%防水。",
         "这件商品100%纯棉。",
         "这件商品永不变形。",
-        "这件商品绝不掉色。",
+        "这件商品绝对不起球。",
     ),
 )
 def test_publication_v3_rejects_changed_or_unconfirmed_product_specifics(
@@ -1417,9 +1502,12 @@ def test_publication_v3_product_prompt_exposes_confirmed_values_and_keeps_j_cond
     assert "针织开衫" in prompt
     assert "灰色" in prompt
     assert "主色已经确认’却隐去颜色" in prompt
-    assert "ADJ-WRITER-BOUNDARY-04 三层制" in prompt
+    assert "ADJ-WRITER-BOUNDARY-05 性能词极性收口" in prompt
     assert "L1 硬断言" in prompt
-    assert "100%／永不／绝不" in prompt
+    assert "未经确认的性能词只可用于" in prompt
+    assert "否定式或边界式说明" in prompt
+    assert "如果你要 X，它不是答案" in prompt
+    assert "保证／100%／永不／绝不／绝对" in prompt
     assert "最舒适／业内第一／全网最好" in prompt
     assert "最好不要／最好先／第一眼" in prompt
     assert "L2 是不取得事实资格的软性体验表达" in prompt

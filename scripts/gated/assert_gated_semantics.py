@@ -376,7 +376,7 @@ def _assert_media() -> str:
 def _assert_formal_suite_contract() -> None:
     contract = _document("formal-suite-contract.json")
     if (
-        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v6"
+        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v7"
         or contract.get("expected_counts")
         != {"anomalies": 8, "cards": 15, "content_products": 5, "scenarios": 8}
     ):
@@ -385,10 +385,10 @@ def _assert_formal_suite_contract() -> None:
     if (
         constraints.get("maximum_provider_requests") != 80
         or constraints.get("maximum_transport_retries") != 0
-        or constraints.get("prior_provider_requests") != 21
+        or constraints.get("prior_provider_requests") != 29
         or constraints.get("temperature") != 0
         or constraints.get("writer_assertion_policy")
-        != "ADJ-WRITER-BOUNDARY-04-EXACT-ABSOLUTE"
+        != "ADJ-WRITER-BOUNDARY-05-PERFORMANCE-POLARITY"
         or constraints.get("authorization_policy")
         != "AMD-AUTH-20260809-01-REPEATABLE-BUSINESS-AND-DEMO-TEST-SINGLE-USE"
         or constraints.get("orchestration_isolation")
@@ -433,6 +433,8 @@ def _assert_formal_suite_contract() -> None:
             '"temperature": 0.0',
             "max_retries=0",
             "each formal card must receive exactly one Writer response",
+            '"performance_term_review_annotations"',
+            '"bare_performance_term_review"',
             "GATED_FORMAL_SUITE_FAILED_SAFE",
         ),
         "formal frozen runner",
@@ -443,12 +445,15 @@ def _assert_formal_suite_contract() -> None:
         (
             "def product_fact_value_conflicts(",
             "def unconfirmed_product_specificity_spans(",
+            "def performance_term_review_annotations(",
             '"composition_percentage"',
             '"price_amount"',
             '"exact_process"',
             '"age_range"',
             '"guaranteed_performance_assertion"',
             '"absolute_claim"',
+            "(?<!不能)",
+            "(?<!并非)",
             "(?:永不|绝不)",
         ),
         "Writer factual boundary",
@@ -463,7 +468,10 @@ def _assert_formal_suite_contract() -> None:
             "product_fact_value_conflicts(context.product_fact_packet, visible)",
             "unconfirmed_product_specificity_spans(visible)",
             "used_persona_quote_ids",
-            "ADJ-WRITER-BOUNDARY-04 三层制",
+            "ADJ-WRITER-BOUNDARY-05 性能词极性收口",
+            "未经确认的性能词只可用于",
+            "否定式或边界式说明",
+            "如果你要 X，它不是答案",
             "最舒适／业内第一／全网最好",
             "最好不要／最好先／第一眼",
             "L2 是不取得事实资格的软性体验表达",
@@ -483,12 +491,15 @@ def _assert_formal_suite_contract() -> None:
             "test_publication_v3_allows_prior_s01_p1_l2_boundary_excerpt",
             "test_publication_v3_allows_ambiguous_daily_suggestion_words",
             "test_publication_v3_allows_prior_s01_p2_absolute_claim_false_positive",
+            "test_publication_v3_allows_prior_s05_r01_negated_performance_boundary",
+            "test_bare_performance_terms_are_non_blocking_review_annotations",
             "整套搭配里最好不要再出现第二个强色",
             "先看这一眼",
-            "这件商品保证不起球",
-            "这件商品100%纯棉",
-            "这件商品永不变形",
-            "这件商品绝不掉色",
+            "如果你需要的是防风防水的功能外套，那它就不是那个答案",
+            "保证防水",
+            "100%防水",
+            "永不变形",
+            "绝对不起球",
         ),
         "Writer assertion-layer regression",
     )

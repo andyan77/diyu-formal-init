@@ -48,6 +48,41 @@ _LABELED_PRODUCT_VALUE_PATTERNS: dict[str, re.Pattern[str]] = {
         r"(?P<value>[\u4e00-\u9fffA-Za-z]{1,12}色)"
     ),
 }
+_PERFORMANCE_REVIEW_TERMS = (
+    "不易变形",
+    "不会变形",
+    "不变形",
+    "不起球",
+    "好打理",
+    "显精神",
+    "不掉色",
+    "不褪色",
+    "防水",
+    "抗菌",
+    "耐穿",
+    "百搭",
+    "亲肤",
+    "透气",
+    "防风",
+    "保暖",
+    "显瘦",
+    "耐磨",
+    "抗皱",
+    "速干",
+    "舒适",
+    "掉色",
+    "褪色",
+    "缩水",
+    "磨损",
+    "过时",
+)
+_PERFORMANCE_REVIEW_TERM_PATTERN = "(?:" + "|".join(
+    re.escape(term) for term in _PERFORMANCE_REVIEW_TERMS
+) + ")"
+_PERFORMANCE_OUTCOME_AFTER_NEGATIVE_PREFIX_PATTERN = (
+    r"(?:起球|变形|防水|防风|抗菌|掉色|褪色|缩水|磨损|过时)"
+)
+_VISIBLE_SENTENCE_PATTERN = re.compile(r"[^。！？!?\n]+[。！？!?]?")
 _UNCONFIRMED_PRODUCT_SPECIFICITY_PATTERNS: tuple[
     tuple[str, re.Pattern[str]], ...
 ] = (
@@ -55,7 +90,9 @@ _UNCONFIRMED_PRODUCT_SPECIFICITY_PATTERNS: tuple[
         "composition_percentage",
         re.compile(
             r"(?:棉|腈纶|羊毛|羊绒|涤纶|聚酯纤维|锦纶|氨纶|粘纤|莱赛尔|莫代尔|"
-            r"麻|真丝|成分|含量)[^，。；;！？!?\n]{0,16}?\d{1,3}(?:\.\d+)?\s*%"
+            r"麻|真丝|成分|含量)[^，。；;！？!?\n]{0,16}?\d{1,3}(?:\.\d+)?\s*%|"
+            r"(?:100\s*%|百分之百)\s*(?:纯)?(?:棉|腈纶|羊毛|羊绒|涤纶|聚酯纤维|"
+            r"锦纶|氨纶|粘纤|莱赛尔|莫代尔|麻|真丝)"
         ),
     ),
     (
@@ -76,17 +113,15 @@ _UNCONFIRMED_PRODUCT_SPECIFICITY_PATTERNS: tuple[
     (
         "guaranteed_performance_assertion",
         re.compile(
-            r"不起球|不(?:易|会)?变形|防水|抗菌|"
-            r"(?:保证|确保|承诺|绝对)[^，。；;！？!?\n]{0,12}"
-            r"(?:不起球|不变形|防水|抗菌|耐穿|百搭|好打理|显精神|亲肤|透气|防风|"
-            r"保暖|显瘦|耐磨|抗皱|速干|舒适)"
+            rf"(?<!不)(?<!未)(?<!不能)(?<!无法)(?<!未能)保证\s*{_PERFORMANCE_REVIEW_TERM_PATTERN}|"
+            rf"(?<!不是)(?<!并非)绝对\s*{_PERFORMANCE_REVIEW_TERM_PATTERN}"
         ),
     ),
     (
         "absolute_claim",
         re.compile(
-            r"100\s*%|百分之百|"
-            r"(?:永不|绝不)(?:起球|变形|掉色|褪色|缩水|磨损|过时)"
+            rf"(?<!不是)(?<!并非)(?:100\s*%|百分之百)\s*{_PERFORMANCE_REVIEW_TERM_PATTERN}|"
+            rf"(?:永不|绝不)\s*{_PERFORMANCE_OUTCOME_AFTER_NEGATIVE_PREFIX_PATTERN}"
         ),
     ),
 )
@@ -111,6 +146,12 @@ class FrozenFactRecord:
     fact_id: str
     exact_text: str
     fact_kind: FactKind
+
+
+@dataclass(frozen=True)
+class PerformanceTermReviewAnnotation:
+    term: str
+    sentence: str
 
 
 @dataclass(frozen=True)
@@ -368,6 +409,34 @@ def unconfirmed_product_specificity_spans(text: str) -> tuple[str, ...]:
                 continue
             violations.append(f"{reason}:{match.group(0).strip()}")
     return tuple(dict.fromkeys(violations))
+
+
+def performance_term_review_annotations(
+    text: str,
+) -> tuple[PerformanceTermReviewAnnotation, ...]:
+    """Collect visible performance terms for non-blocking human review.
+
+    This channel deliberately does not infer polarity or product ownership. It
+    records the exact visible sentence so founder review can distinguish a
+    positive claim from a legitimate negative boundary without another
+    machine gate.
+    """
+
+    annotations: list[PerformanceTermReviewAnnotation] = []
+    seen: set[tuple[str, str]] = set()
+    for sentence_match in _VISIBLE_SENTENCE_PATTERN.finditer(text):
+        sentence = sentence_match.group(0).strip()
+        if not sentence:
+            continue
+        for term_match in re.finditer(_PERFORMANCE_REVIEW_TERM_PATTERN, sentence):
+            item = (term_match.group(0), sentence)
+            if item in seen:
+                continue
+            seen.add(item)
+            annotations.append(
+                PerformanceTermReviewAnnotation(term=item[0], sentence=item[1])
+            )
+    return tuple(annotations)
 
 
 def _product_fact_string_values(value: ProductFactValue) -> tuple[str, ...]:
