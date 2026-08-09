@@ -1669,3 +1669,17 @@ S04-P2：Writer 提示合同不足 vs 匹配器误伤，对症修一处）→ �
   release binding、备份或业务表数据。删除卷数据本身不可由 Docker 恢复。
 - 状态：**构建容量前置阻断已解除，Gate E 尚未冻结**；SEALED-SET-01 未开封、模型请求 0、
   累计 59/300。唯一下一动作恢复 E-1 build-once 与六对象冻结。
+
+### Gate E E-1 六对象冻结（2026-08-09，执行侧待复验）
+
+- 运行候选仍为完整本地门与 CI `31316900146` 承重的
+  `65995f3ba6ba99f79941395ab5042f671d2bc2e7`；其后提交仅为 Gate E 记录、治理与里程碑，
+  代码、脚本、配置及数据清单差异为 0。
+- build-once 产出镜像
+  `sha256:ec48710d7bb2820ea02e712769e4c3573a093c14eef668c4fdcf74b09ab5e0b1`；标签、构建源、
+  release binding 与 build_count=1 回读一致。候选没有运行，线上仍为旧镜像且健康 200/200。
+- 候选 SHA、Writer Prompt、模型、守卫/三层制、数据 manifest 包、生产镜像六对象均已冻结，
+  机器回执位于 `GateE-记录/E-1六对象冻结回执.json`。
+- 状态：**`E-1 FROZEN · AWAITING_CONTROLLER_OPEN`**；SEALED-SET-01 未开封，Gate E 模型请求 0，
+  累计 59/300；没有部署、迁移、导入、上传或账号切换。
+- 唯一下一动作：执行侧停下，等待主控开封并逐字提供 20 卡明文。

@@ -1,0 +1,95 @@
+{
+  "build_evidence": {
+    "binding_build_count": 1,
+    "binding_built_at": "2026-08-09T14:18:54.931938Z",
+    "binding_sha256": "b33d21f65b06f18ce5cbd279bb1d69a8333aa34c378ef04fcc84462693f31580",
+    "candidate_running_containers": 0,
+    "current_app_image_digest": "sha256:9a1dea01f3caae7dd4f086c9931ec5acb56ebe9abfd23b03b55214fbdd46cda1",
+    "live_http": 200,
+    "ready_http": 200,
+    "source_dirty_count": 0,
+    "source_head": "65995f3ba6ba99f79941395ab5042f671d2bc2e7"
+  },
+  "ci_evidence": {
+    "conclusion": "success",
+    "event": "workflow_dispatch",
+    "head_sha": "65995f3ba6ba99f79941395ab5042f671d2bc2e7",
+    "non_success_steps": 0,
+    "run_id": 31316900146
+  },
+  "documentation_parent_sha": "79bab47cad25ec6947639f1cf19433ffc3338524",
+  "execution_boundary": {
+    "binary_added_to_git": 0,
+    "blind_set_opened": false,
+    "database_migration_executed": false,
+    "deployment_executed": false,
+    "import_executed": false,
+    "media_upload_executed": false,
+    "provider_requests_during_gate_e": 0,
+    "provider_requests_lifetime_budget_used": 59,
+    "provider_requests_lifetime_budget_total": 300,
+    "production_container_switched": false,
+    "secret_values_read": false
+  },
+  "receipt_version": "brand-matrix-gate-e-freeze-receipt-v1",
+  "sealed_set_custody": {
+    "ciphertext_sha256": "332ac8f0bac7ecb5b7c3793cd8aea9b8ce5e5d8cf4a7c998b94984d138297a8a",
+    "declared_plaintext_sha256": "12de2ba475b28304dccec38acdef4f7e3e15f6fd124fd5059097dfadd11fb86c",
+    "opened": false,
+    "sealed_set_id": "SEALED-SET-01"
+  },
+  "six_objects": [
+    {
+      "digest": "65995f3ba6ba99f79941395ab5042f671d2bc2e7",
+      "object": "candidate_git_sha"
+    },
+    {
+      "assembly_source": "src/tool/llm_gateway/deepseek.py",
+      "assembly_source_sha256": "fcdc067e812667eab002cbbe6e8e855daefd16610f1275d7db9487ec0ff5379e",
+      "contract_version": "publication-contract-v3 / ADJ-WRITER-BOUNDARY-05-PERFORMANCE-POLARITY",
+      "digest": "13e0be37a0c172beb9e3ebfed14be272cbf2cadf9c663327ac15a6460bb40505",
+      "formal_suite_contract_sha256": "a23eb60d6acf28679c837543b48e077d45d4095efc4846b7dd23ae93c9f7587e",
+      "object": "writer_prompt_contract"
+    },
+    {
+      "content_max_retries": 0,
+      "digest": "88488e59adbb1a49a365cc427bb7d564ba71d6016f9ce5373fbad0d29e4582be",
+      "model": "deepseek-v4-flash",
+      "object": "model_configuration",
+      "provider_endpoint_policy": "AUTH-PROVIDER-ENDPOINT-20260809-01",
+      "provider_host": "api.deepseek.com",
+      "temperature": 0,
+      "transport_max_retries": 2,
+      "transport_retries_are_content_retries": false
+    },
+    {
+      "digest": "feb4497f5040587a0c66b5bd8a15fd08d37ab1a97c0121060067595d60dd4790",
+      "guard_source": "src/shared/factual_basis.py",
+      "guard_source_sha256": "030a63af249bd2498288230408b4942aae5914974107aed7a47db05178a75983",
+      "object": "guard_and_three_layer_rules",
+      "product_fact_renderer_version": "immutable-product-fact-renderer-v3",
+      "three_layer_policy_version": "ADJ-WRITER-BOUNDARY-05-PERFORMANCE-POLARITY"
+    },
+    {
+      "authorization_amendment": {
+        "document_sha256": "e5c3ae916a1d3663c0a7df0a40a9b24094044417236d57c1550cec4d66d00291",
+        "id": "AMD-AUTH-20260809-01"
+      },
+      "digest": "84ac932b103e5ad0254496d232b301fc3a0d55df37034838f87f3be97c72e134",
+      "gate_a_manifest_digest": "14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06",
+      "import_batch_digest": "20e1d00aa527d31312748ed84a22119d28784776ed3d2c40824b3775d8bdd6ed",
+      "import_object_fingerprint": "1ec150e8f992e4d8f2439e7a791f744c5d3ee7bb7c69f25d735a6999bfbb2f98",
+      "media_manifest_digest": "587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b",
+      "object": "data_manifest_bundle",
+      "publication_projection_digest": "cb6b2cf509c31e9864ea632449e41ff06d553e7f2ed93cf758fce7c77e978962"
+    },
+    {
+      "build_count": 1,
+      "digest": "sha256:ec48710d7bb2820ea02e712769e4c3573a093c14eef668c4fdcf74b09ab5e0b1",
+      "implementation_label": "65995f3ba6ba99f79941395ab5042f671d2bc2e7",
+      "object": "production_image",
+      "size_bytes": 104097056
+    }
+  ],
+  "status": "FROZEN_AWAITING_CONTROLLER_OPEN"
+}
