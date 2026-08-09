@@ -1163,3 +1163,15 @@ S04-P2：Writer 提示合同不足 vs 匹配器误伤，对症修一处）→ �
      过滤测试保留为确定性测试，测试话术不再进入用户输入。
 - founder 判断采认：被拒稿创作方向正确（钩子/观察角/节奏/条件建议/互动收束），三处
   手术后即达发布级；合规示意稿定性为培训材料，非消费者内容基准。
+
+### 补充授权 AUTH-D-FIX-FRONTEND-TEST-01（2026-08-08，监理）
+
+- 执行侧 PRECONDITION_BLOCKED 采认：共享修复已完成（守卫反转+话术出清+1016/2 后端绿），
+  Chrome 门被既有夹具缺 `team-usage`/`admin/readiness` stub 与清理竞态阻断；修复须动
+  `frontend/test/gated-d0-browser-entry.tsx`，而续行指令写面未列 `frontend/test/**`。
+- 裁决：**签发方写面列漏**（D0-1 本就授权 Chrome 测试面，续行指令收窄时未带上），非执行侧
+  越界。执行侧零草稿丢失、零 push、零 provider、停在边界上——纪律正确。
+- 补充授权：允许最小修改 `frontend/test/**`（本次为 gated-d0-browser-entry.tsx）：仅限
+  ① 补缺失端点 stub；② 修测试后临时 profile 清理竞态。禁改 `frontend/src/**` 产品代码；
+  **Chrome 测试的既有断言不得弱化或删除**（新增 stub 使断言可达 ≠ 放松断言）。
+- 续跑要求：从完整确定性门重新起跑（含 Chrome），其后按 UNLOCK-D-RERUN-FINAL §2—§7 原文。
