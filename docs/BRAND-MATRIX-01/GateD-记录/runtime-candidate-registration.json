@@ -1,10 +1,12 @@
 {
   "gate_a_manifest_digest": "14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06",
-  "import_batch_digest": "f15d0efe63173b1b6c72b5b4cf4681673cf29e4536fe600e3d92066e52781750",
-  "import_object_fingerprint": "e48dc6542db65593bb3830eda9cebad425d54b756d34a1ce469b88931eef6b88",
+  "import_batch_digest": "20e1d00aa527d31312748ed84a22119d28784776ed3d2c40824b3775d8bdd6ed",
+  "import_object_fingerprint": "1ec150e8f992e4d8f2439e7a791f744c5d3ee7bb7c69f25d735a6999bfbb2f98",
   "local_isolated_database_counts": {
     "accounts": 39,
-    "authorizations": 2,
+    "authorization_events": 8,
+    "authorization_reservations": 2,
+    "authorizations": 6,
     "brand": 1,
     "library": 35,
     "library_versions": 35,
@@ -19,20 +21,20 @@
     "projection_items": 34,
     "qualifications": 30
   },
-  "local_isolated_database_input_fingerprint": "94e4ebfdf252de272c1a994074cda464f16aec145c62215cbcb97f7b14ec6c93",
+  "local_isolated_database_input_fingerprint": "b30c3aaa116888f93f9b4a7b67f29cdb3d21c5524bae210577f3e163054cd4cf",
   "max_retries": 0,
-  "media_database_readback_digest": "602c6d47151b40535d6f08195f41c7c5f07856a9aad4b20276bc19ec1fc26cd3",
+  "media_database_readback_digest": "2c4200e73df5e54b1f633febf412df4a13724d5d5dbe333253867b29ef1d8d09",
   "media_manifest_digest": "587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b",
   "model": "deepseek-v4-flash",
   "prompt_contracts": {
-    "formal_suite_contract_sha256": "cebf27debec5192159636d92cbf2c4338cd607f72f1c923c443b3f819cdf640e",
+    "formal_suite_contract_sha256": "65e1948353b43eddd4a7d1b741348eccb8d5a697fa1537fa1919c824b4aa6b5c",
     "prompt_5_rev3_sha256": "e118e903b8cb9c00f133065ac6b381b48731697ec15dc2bc0f6334f926687178"
   },
   "provider_requests_at_freeze": 0,
   "publication_projection_digest": "cb6b2cf509c31e9864ea632449e41ff06d553e7f2ed93cf758fce7c77e978962",
-  "registration_digest": "3a5bdec4ba6c3bbf464150080da1bdc8715c8085e85780383f196738bc3cec83",
+  "registration_digest": "61ac1c23d7f9288b1f7355b196423c48a9698e472d45d01d798149150897d56f",
   "registration_version": "brand-matrix-gate-d-runtime-freeze-v1",
-  "runtime_candidate_sha": "7e48f7a7d96d4a196a8cbc8e503efe55f36291f9",
+  "runtime_candidate_sha": "e0dba46689397f16a967efbc126621df0683f385",
   "status": "FROZEN_NO_PROVIDER_REQUESTS",
   "temperature": 0
 }

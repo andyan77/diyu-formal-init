@@ -11,16 +11,16 @@
   "formal_binding_count": 6,
   "media_manifest_digest": "587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b",
   "p5_eligible_master_count": 6,
-  "readback_digest": "dcb05ed18f6ba384c140cd38e3cd514f2585217fd1bd04ce54019ccacd9a226e",
+  "readback_digest": "2c4200e73df5e54b1f633febf412df4a13724d5d5dbe333253867b29ef1d8d09",
   "records": [
     {
       "asset_id": "4cc971de-d3af-5348-952d-e1ee8bebc27f",
       "asset_version": 1,
-      "asset_version_id": "39ae8450-6c2e-42c5-9ee7-3fa6f759330f",
+      "asset_version_id": "64fd8b5d-5d45-4148-8403-b3b4a816f1fa",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [
         {
-          "binding_id": "10563de5-6a25-4c29-8550-ed7e84f67ee5",
+          "binding_id": "fc6e5767-c7d1-4089-a2de-5dff807cb285",
           "product_id": "3527ca23-1d63-5779-bc05-b7d486588505",
           "product_version_id": "2c4a6a8c-18e8-5247-8de1-ecb507bd8085",
           "sku": "DIYU-CSPU-001"
@@ -35,7 +35,7 @@
     {
       "asset_id": "a1d71e4f-0e06-5070-a2ef-36e05abda6fe",
       "asset_version": 1,
-      "asset_version_id": "d623737f-dae8-4b11-81f9-e61a8db6b8a2",
+      "asset_version_id": "9a2e9645-69b2-42fd-8927-daacfbe98052",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-002-MASTER-v1.mp4",
@@ -47,7 +47,7 @@
     {
       "asset_id": "d2bb954b-92b0-507c-86f9-9c9301a5c1ab",
       "asset_version": 1,
-      "asset_version_id": "1cfbd69a-89c1-46d1-972c-5572b9864d01",
+      "asset_version_id": "4f7fba9a-11da-4eff-8395-25958742f6c1",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-003-MASTER-v1.mp4",
@@ -59,11 +59,11 @@
     {
       "asset_id": "569ec517-2834-556d-8907-48c4760954c4",
       "asset_version": 1,
-      "asset_version_id": "0f3de086-dbf5-4ffc-80d9-6cc774566224",
+      "asset_version_id": "2fa8b87e-409c-4d3b-b804-f55336c88eb4",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [
         {
-          "binding_id": "9421ad47-a5a3-443a-8bde-d807aac5be4a",
+          "binding_id": "9babfe5f-e209-498c-ad89-a9c38610be96",
           "product_id": "7acf8b3d-12d1-5d0f-9a58-27d01c4c8441",
           "product_version_id": "27b16ffc-b8ef-5614-a64e-5281399e1c5d",
           "sku": "DIYU-CSPU-006"
@@ -78,11 +78,11 @@
     {
       "asset_id": "4307c256-af11-53d9-979c-3558804f0b48",
       "asset_version": 1,
-      "asset_version_id": "09b03d67-915b-4542-9f8c-01e26fad9ee3",
+      "asset_version_id": "5c40298f-1dca-4b43-8d73-81a27cdc7cdf",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [
         {
-          "binding_id": "2c765923-c86b-4559-be70-afdf32a00d0a",
+          "binding_id": "50eaebed-6cac-454f-8e80-3ea2635aef65",
           "product_id": "7acf8b3d-12d1-5d0f-9a58-27d01c4c8441",
           "product_version_id": "27b16ffc-b8ef-5614-a64e-5281399e1c5d",
           "sku": "DIYU-CSPU-006"
@@ -97,7 +97,7 @@
     {
       "asset_id": "52424c57-a479-5e50-a935-b051e4be21fa",
       "asset_version": 1,
-      "asset_version_id": "566814a7-3bfd-4931-9b96-92262cc6d8f4",
+      "asset_version_id": "25bd01aa-a4d2-46cd-8c73-5db7bca1e035",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-006-MASTER-v1.mp4",
@@ -109,7 +109,7 @@
     {
       "asset_id": "c50c367a-a246-5ffc-a5db-6908afc64eb3",
       "asset_version": 1,
-      "asset_version_id": "0d03a3e6-0d8d-4073-a758-b495dddc79e0",
+      "asset_version_id": "c06e7d1d-11c4-4ea2-8808-97bf7bb285d3",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-007-MASTER-v1.mp4",
@@ -121,7 +121,7 @@
     {
       "asset_id": "efc94306-7882-5955-84bb-799b7e985eb3",
       "asset_version": 1,
-      "asset_version_id": "57689b5b-845d-4fd8-b5cf-1cd5a0f3be5c",
+      "asset_version_id": "a88e31d1-f73f-4f12-bfd7-9f347a6e762b",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-008-MASTER-v1.mp4",
@@ -133,7 +133,7 @@
     {
       "asset_id": "678019b6-1f0f-5d91-af6c-917e2cd809c7",
       "asset_version": 1,
-      "asset_version_id": "6147f27b-f199-4e8f-b29c-214db94f317d",
+      "asset_version_id": "0d3fa445-5158-4073-a197-1b17295ae2be",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-009-MASTER-v1.mp4",
@@ -145,7 +145,7 @@
     {
       "asset_id": "6d20a087-e7f2-537e-b7af-99938d8e1401",
       "asset_version": 1,
-      "asset_version_id": "4c8df469-928f-4040-90c1-ff822830c91b",
+      "asset_version_id": "b222baa9-91e3-4264-984b-8459ce42c6cf",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-010-MASTER-v1.mp4",
@@ -157,11 +157,11 @@
     {
       "asset_id": "a80db213-a5e4-5602-84e6-cc93d2603167",
       "asset_version": 1,
-      "asset_version_id": "ee81e1dd-79d9-4167-8754-370b0691044b",
+      "asset_version_id": "6029e7e9-9c22-47ee-aeba-eab0031f52cd",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [
         {
-          "binding_id": "9423a905-5417-4d22-a87e-98c57991e547",
+          "binding_id": "a056cc30-c456-4003-929a-41ac14f6eee6",
           "product_id": "6d8d061a-0572-541d-9fb1-eee61c27a627",
           "product_version_id": "6462c29e-1cf5-53a4-b6a9-19aa35ebd6ca",
           "sku": "DIYU-CSPU-008"
@@ -176,7 +176,7 @@
     {
       "asset_id": "38044eab-c845-5754-83f9-1ffb8de313d9",
       "asset_version": 1,
-      "asset_version_id": "2fdebeb9-3d58-4ed8-a7e3-8e135fc925de",
+      "asset_version_id": "90063668-0f45-475c-b290-996227ee12ab",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-012-MASTER-v1.mp4",
@@ -188,7 +188,7 @@
     {
       "asset_id": "ee5e9dab-2c51-56cf-8343-60db920df382",
       "asset_version": 1,
-      "asset_version_id": "d84c9f29-ace2-45a8-a9d2-18034c8e1cde",
+      "asset_version_id": "477b5e44-1603-4b97-8abd-13fd4c25cc16",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-013-MASTER-v1.mp4",
@@ -200,7 +200,7 @@
     {
       "asset_id": "5f52173a-ad48-5e8a-af04-cfd7fdfff49b",
       "asset_version": 1,
-      "asset_version_id": "4f4182b0-373d-41e6-b547-544bdd09f4f1",
+      "asset_version_id": "7eb00a3f-c0b4-4018-bc60-886bfed3ed01",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-014-MASTER-v1.mp4",
@@ -212,7 +212,7 @@
     {
       "asset_id": "076346d3-3e76-5bfd-b94b-0cfeef80879e",
       "asset_version": 1,
-      "asset_version_id": "b102af88-5fd9-4908-92a2-2deb4d2c51c3",
+      "asset_version_id": "dffbab0b-7f05-4aee-9c22-580d35575983",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-015-MASTER-v1.mp4",
@@ -224,7 +224,7 @@
     {
       "asset_id": "69af75bb-6b8f-50b7-8ae5-30cd7087555f",
       "asset_version": 1,
-      "asset_version_id": "6a2ce84e-7ff8-40e8-9810-4be80dab8b46",
+      "asset_version_id": "60824c5a-3273-4214-ba9f-19b4995f74ac",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-016-MASTER-v1.mp4",
@@ -236,7 +236,7 @@
     {
       "asset_id": "449e819d-4796-543a-bd0e-2015e7cb8443",
       "asset_version": 1,
-      "asset_version_id": "43c391c3-fe5e-4b8a-b270-6e58d06ed6fc",
+      "asset_version_id": "8410c3c1-1bd4-4cf0-91dc-fe0e273f61d2",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-017-MASTER-v1.mp4",
@@ -248,7 +248,7 @@
     {
       "asset_id": "3d279624-98a0-5ddc-aef3-0cc3fb3fa313",
       "asset_version": 1,
-      "asset_version_id": "32b5914b-6ade-4cac-a0a1-8af5b70f012f",
+      "asset_version_id": "e1882c8b-9a36-4e4e-9ef6-4094e674a41a",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-018-MASTER-v1.mp4",
@@ -260,7 +260,7 @@
     {
       "asset_id": "e8dd0976-cc77-59d0-851b-27283b26a3f8",
       "asset_version": 1,
-      "asset_version_id": "ac34162f-b259-42a1-b96f-2d9e2c0423b4",
+      "asset_version_id": "a3fc09e4-105f-4532-b2fa-d09cd044ca56",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-019-MASTER-v1.mp4",
@@ -272,7 +272,7 @@
     {
       "asset_id": "c4346d5f-931a-5b94-b268-31578f64dfe5",
       "asset_version": 1,
-      "asset_version_id": "422b49b9-1257-461b-96b2-f67fded8a3c4",
+      "asset_version_id": "633c5f76-7969-477c-8608-98bb46d50f19",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-020-MASTER-v1.mp4",
@@ -284,7 +284,7 @@
     {
       "asset_id": "7772f053-fb71-5cb9-a5ce-f8d0da1863fb",
       "asset_version": 1,
-      "asset_version_id": "268a2c2b-11b3-429b-a3d5-69dc8226d5fe",
+      "asset_version_id": "6b8a2eaf-4244-4c88-b3c1-ebd48a2f1a0e",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-021-MASTER-v1.mp4",
@@ -296,11 +296,11 @@
     {
       "asset_id": "cb3278b4-1456-50a2-bdec-32c560e48a91",
       "asset_version": 1,
-      "asset_version_id": "bffa24be-029a-4f29-9ac5-fd3b44bf0a99",
+      "asset_version_id": "b0022beb-5598-456e-95be-c9028d767e58",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [
         {
-          "binding_id": "fc30a222-8734-4b5a-bfc1-a91ec7ea59f3",
+          "binding_id": "48d3fbf4-6e7b-4a09-8465-e78f890eccb2",
           "product_id": "1d52468c-68b5-54e2-95f5-89328436236f",
           "product_version_id": "99b61675-3a49-5a3a-8797-be544e6cf344",
           "sku": "DIYU-CSPU-013"
@@ -315,11 +315,11 @@
     {
       "asset_id": "9338b78d-0b4b-5554-967a-c24f0c895fac",
       "asset_version": 1,
-      "asset_version_id": "39c9f7ae-2dd1-4d7b-83a3-493baf1206c5",
+      "asset_version_id": "a4f35ee4-dbfa-4235-8b0f-0fcb9fd5988a",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [
         {
-          "binding_id": "b3f55a13-f197-4090-a2db-76614741ee97",
+          "binding_id": "3633f859-8c78-4f40-a975-81f8b0adeeaa",
           "product_id": "1d52468c-68b5-54e2-95f5-89328436236f",
           "product_version_id": "99b61675-3a49-5a3a-8797-be544e6cf344",
           "sku": "DIYU-CSPU-013"
@@ -334,7 +334,7 @@
     {
       "asset_id": "5e523137-5e1a-58bc-bdb0-858c9be17fa6",
       "asset_version": 1,
-      "asset_version_id": "678f10c8-6a3b-4110-ab1e-418bc7bbdf3d",
+      "asset_version_id": "f6eb9c42-405a-4295-821d-def38a26524c",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-024-MASTER-v1.mp4",
@@ -346,7 +346,7 @@
     {
       "asset_id": "6b038faa-b601-549a-b589-4a6af9a34c8e",
       "asset_version": 1,
-      "asset_version_id": "80300598-0b21-4709-a878-7008aca5e8d9",
+      "asset_version_id": "24bb5a8c-35b0-4621-a705-1542d533e7d6",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-025-MASTER-v1.mp4",
@@ -358,7 +358,7 @@
     {
       "asset_id": "cf07d7b9-fce7-575c-8228-90bca389d6fd",
       "asset_version": 1,
-      "asset_version_id": "3ad7dacd-daba-44a0-a3f4-d9a8e9e387d6",
+      "asset_version_id": "ff10a7f0-b447-4163-b2d7-bdd593644790",
       "attestation_id": "ATT-MEDIA-20260808-01",
       "formal_product_bindings": [],
       "master_filename": "DIYU-V-026-MASTER-v1.mp4",
