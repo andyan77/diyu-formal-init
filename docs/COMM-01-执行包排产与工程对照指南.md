@@ -1645,3 +1645,16 @@ S04-P2：Writer 提示合同不足 vs 匹配器误伤，对症修一处）→ �
   全量 1057 passed / 2 skipped），全链退出码焊死、零管道。SEALED-SET-01 继续有效未开封。
 - Gate E 基线二次勘正为含本记录的主线最终提交（SHA 以 chat 件为准），执行分支重建后
   从 E-1 重启；Prompt 6 其余条款原文有效。
+
+### Gate E E-1 第三次重启构建主机空间前置阻断（2026-08-09，执行侧待复验）
+
+- 执行分支已从 `65995f3ba6ba99f79941395ab5042f671d2bc2e7` 重建；本地完整门全绿，
+  CI `31316900146` 四查为 `workflow_dispatch / 65995f3… / success / 非成功步骤 0`。
+- 正式 build-once 主机开建前仅余 `2,751,897,600` 字节；按 runbook 只清理超过 24 小时的
+  可再生 builder cache 后约余 `3,179,950,080` 字节，仍低于 `4,000,000,000` 字节硬门。
+- 现存 10 个 `diyu-saas` 镜像逐个核对：1 个运行中，其余均有 release binding；可安全按
+  runbook 删除的未运行无 binding 镜像为 0。其他仓库镜像和卷不在授权范围，未触碰。
+- 状态为 **`GATE-E PRECONDITION_BLOCKED · BUILD_HOST_DISK_CAPACITY_INSUFFICIENT`**；镜像未构建、
+  六对象未冻结、SEALED-SET-01 未开封、provider 请求 0、累计仍 59/300。
+- 唯一下一动作：主控明确扩容、精确授权合规清理对象，或指定等价受控构建主机；解除后继续
+  镜像构建与六对象冻结，冻结回执前不得开封。
