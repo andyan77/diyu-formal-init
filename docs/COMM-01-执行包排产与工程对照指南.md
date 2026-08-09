@@ -1821,3 +1821,18 @@ founder 裁决原文要旨：品控的账号生产出与品控没有任何关系
 - **盲测第一轮关账**：机器门未达+契约修订双因，SEALED-SET-01 完成历史使命归档；SEALED-SET-02 按新契约出卷重考。B11/B12/B16 补跑令（ADJ-BLIND-ORACLE-03）维持，目的重定义为**考务路径验证+校准样本**（验证操作员绑定路径端到端可产出，为二轮考务规范提供实证）。
 - **修复轮范围 v2（唯一部署前置）**：R1 人设契约改写 / R2 披露转元数据 / R3 优先律+缺料拦问+品牌压力拆除 / R4 品控供给（素材合同仅 append amendment）→ 全门禁 → 重冻结 → SEALED-SET-02 重考。三项产品提案（自然语言选品/P5 单商品/stance·series 路由）继续单列待裁，不入修复轮。
 <!-- BRAND-MATRIX-01-ADJ-CONTENT-TERRITORY-01-END -->
+
+<!-- BRAND-MATRIX-01-R1-SUPERVISOR-VERDICT-START -->
+## Gate E 修复轮 R-1 监理复验判定＋诊断方案 v2 交付（2026-08-09）
+
+### R-1 判定：`PASS`（e0f520a 已 fast-forward 合入主线）
+- 范围/基座/合同追加性逐项核验通过（见方案 v2 §5）；R1-R4 逐字对照 ADJ-CONTENT-TERRITORY-01 与 SYS-DEFECT-BM01-E-02 落点无偏差。
+- 监理独立门禁（隔离工作树）：lint PASS / mypy 180 文件 PASS / golden **1061 passed·2 skipped** / EXE-01 **9/9** / EXE-V0 3/3 / CI `31328589880` 四查全过。
+- 环境自因两次假失败如实记录：沙箱 socket 限制致 pg_ctl 失败、临时工作树缺前端依赖（以与 e0f520a 同 lock 的依赖重跑后全绿），均非分支缺陷。
+- 非阻塞观察项：`expression_mode` 常量语义与字段名不贴（演绎粒度真值在 kernel observation_type）；4 处 scripts 遗留 lint（本轮未引入、门禁范围外）→ 均入卫生债。
+- 监理纪律台账第三条：E-1 期"Ruff 全仓 PASS"表述不准（实际口径 src/tests/alembic）。
+
+### 诊断方案 v2 交付
+- 《问题诊断与里程碑修复部署方案-v2.md》入库：四态分离诊断法、监理十条勘误表（审查方勘误逐项实测采纳）、五线四态总表、缺口五类台账（A 已修待验收/B 部署前置/C 下一里程碑机制/D 待裁扩展/E 卫生债）、Gate E 九步收口计划与验收标准、下一里程碑建议。
+- 供审查方审查；审查通过＋founder 放行后签发 E-1' 重冻结执行 prompt（含考务合同 v2 与 SEALED-SET-02 流程）。
+<!-- BRAND-MATRIX-01-R1-SUPERVISOR-VERDICT-END -->
