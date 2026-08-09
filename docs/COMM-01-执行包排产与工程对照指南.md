@@ -1078,3 +1078,33 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   Prompt、数据或媒体；只追加脱敏证据、ledger 和治理记录。
 - 下一动作：监理复核失败证据；是否进入共享根因修复和新候选整套重跑，须由主控
   重新签发，不在本轮自动续行。
+
+<!-- BRAND-MATRIX-01-GATED-FINAL-RERUN-FAILED-SAFE-START -->
+
+### Gate D 共享根因修复后整套重跑失败安全记录（2026-08-08，执行侧）
+
+> **待监理复核确认**。状态为
+> `GATE-D FAILED_SAFE · FORMAL_SUITE_UNCONFIRMED_PRODUCT_SPECIFICITY_REJECTED`，不等于
+> Gate D 已实现或通过。
+
+- R-1 通用修复完成：已确认 V 级事实允许逐字面向消费者使用；可确定的改值、未确认成分
+  百分比/价格/工艺/年龄/性能、画像逐字复制和内部选择计划照抄继续拒绝。第一人称具体经历
+  只可取授权原句库并冻结 ID；未新增语义检测器。15 张验收卡已清除内部系统话术。
+- 补充授权仅修改 `frontend/test/**`：补齐 `team-usage`、`admin/readiness` stub 及临时
+  profile 清理竞态；Chrome 既有断言未删减，`frontend/src/**` 零修改。
+- 唯一 runtime candidate 为 `f7e8e81c80ebc8552794f82aab81ef509e242b14`；本地全门
+  `1016 passed / 2 skipped`，CI run `31297635710` 四查全绿。候选登记 digest 为
+  `90d1ad5a0d31c22e0c0904cd5c9a2d6653b4ec52dad2b11fcbad0252bc6a399a`。
+- 隔离栈从零重建，两轮 batch digest `f15d0efe…1750`、对象指纹 `e48dc654…6b88`
+  逐字节一致；媒体 PASS(scope) `26` / FAIL `0` / QUARANTINED `0`，母版 P5 资格 `6`、
+  覆盖 4 个正式商品。
+- 新候选正式套件在首卡 `S01-P1` 收到唯一响应后，确定性守卫命中
+  `performance_assertion:耐穿` 并拒绝未确认商品性能断言；task/run/version 未提交。
+  这是新共享根因，不是旧“针织开衫”真值误拒。上一候选 5 张完成卡只作历史证据，未拼接。
+- ledger 累计为前 6 次 + 本轮 1 次 = `7/80`，temperature `0`、max_retries `0`、
+  transport retry `0`、失败后重跑 `0`。私有原始证据继续 0700/0600；Git raw response、
+  密钥、视频/母版二进制均为 0。
+- 按唯一一次共享修复纪律，执行侧停止，不自行启动第二次修复。唯一下一动作是监理复核；
+  继续与否及新的产品语义边界须由主控另行裁决和签发。
+
+<!-- BRAND-MATRIX-01-GATED-FINAL-RERUN-FAILED-SAFE-END -->

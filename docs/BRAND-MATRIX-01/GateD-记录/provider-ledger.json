@@ -1,7 +1,14 @@
 {
-  "ledger_version": "brand-matrix-gate-d-provider-ledger-v1-failed-safe",
-  "runtime_candidate_sha": "997e6b55c1c40dacd44a46ff6617b28766011958",
-  "provider_request_count": 6,
+  "ledger_version": "brand-matrix-gate-d-provider-ledger-v2-failed-safe",
+  "runtime_candidate_sha": "f7e8e81c80ebc8552794f82aab81ef509e242b14",
+  "prior_runtime_candidate_sha": "997e6b55c1c40dacd44a46ff6617b28766011958",
+  "prior_record_range": [
+    1,
+    6
+  ],
+  "prior_provider_request_count": 6,
+  "current_provider_request_count": 1,
+  "provider_request_count": 7,
   "provider_request_budget": 80,
   "transport_retry_count": 0,
   "records": [
@@ -80,6 +87,23 @@
       "response_sha256": "4cb0ed314c93957a046f5447e7c349565de3f8f3089f8ffdabaf61ad444de33f",
       "run_id": "c3c316bb-c4bc-4244-8460-cae144cf5852",
       "task_id": "7f503b29-726b-4ffa-8dac-5501d8deceab",
+      "temperature": 0,
+      "transport_retries": 0,
+      "version_id": null
+    },
+    {
+      "binary_result": "FAILED_SAFE",
+      "card_id": "S01-P1",
+      "failure_code": "WRITER_UNCONFIRMED_PRODUCT_SPECIFICITY_REJECTED",
+      "failure_stage": "post_response_writer_boundary",
+      "model": "deepseek-v4-flash",
+      "request_index": 7,
+      "request_sha256": "9f5aa08162f4ab126dac4ecbf4907271b56c354e5141ac5e5039fb932755e353",
+      "response_received": true,
+      "response_sha256": "1ea7e83c9c5241511ee3ea07a0b9684b90994d1d6022e8009082125a26af1d64",
+      "run_id": null,
+      "runtime_candidate_sha": "f7e8e81c80ebc8552794f82aab81ef509e242b14",
+      "task_id": null,
       "temperature": 0,
       "transport_retries": 0,
       "version_id": null

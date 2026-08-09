@@ -1973,3 +1973,25 @@
   Prompt/数据/媒体，未重跑。生产接触 0，密钥泄漏 0，二进制入 Git 0。
 - 唯一下一动作：监理独立复核失败证据；如要修复，由主控另行签发共享根因修复与
   新候选整套重跑指令。
+
+## BRAND-MATRIX-01 · Gate D 最终整套重跑失败安全稿（2026-08-08，待监理复核）
+
+- 状态：**`GATE-D FAILED_SAFE · FORMAL_SUITE_UNCONFIRMED_PRODUCT_SPECIFICITY_REJECTED`**；
+  不得据此写 `IMPLEMENTED / COMPLETE / PASS`。
+- R-1 已把商品边界从“保护字符串”修正为“保护真值与权责”：已确认 V 级品类/商品名/
+  主色可直接表述，改值及未确认成分百分比、价格、工艺、年龄、性能继续失败关闭；人设经历
+  仅可取授权原句 ID。15 张验收卡话术已改为消费者/运营者语言。
+- `AUTH-D-FIX-FRONTEND-TEST-01` 仅用于补齐两个浏览器 fixture stub 和临时 profile 清理
+  竞态；Chrome 既有断言未弱化，`frontend/src/**` 差异为 0。
+- 新 runtime candidate 为 `f7e8e81c80ebc8552794f82aab81ef509e242b14`；本地全部门
+  `1016 passed / 2 skipped`，CI run `31297635710` 四查全绿。两轮导入 batch digest
+  `f15d0efe…1750` 和对象指纹 `e48dc654…6b88` 均逐字节一致；媒体仍为 PASS(scope)
+  `26`、母版 P5 资格 `6`、正式商品 `4`。
+- 新候选整套重跑在首卡 `S01-P1` 的唯一响应后命中
+  `performance_assertion:耐穿`；该词是未获 V 级事实或 J 条件支持的商品性能断言，响应被
+  拒绝且 task/run/version 未提交。上一候选 5 张成品不拼接；本候选成品 0。
+- provider request：上一候选 `6` + 本候选 `1` = 累计 `7/80`；transport retry `0`、
+  失败后重跑 `0`。首次请求后只改 Gate D 脱敏证据、治理日志和本文件，生产/SSH/ECS 0、
+  alembic 0、密钥泄漏 0、二进制入 Git 0。
+- 唯一下一动作：监理复核失败证据与冻结纪律；若需继续，主控须另行裁决并签发新指令，
+  执行侧不得自行进行第二次共享修复或 provider 重跑。
