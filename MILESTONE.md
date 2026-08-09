@@ -2118,3 +2118,18 @@
   二进制入 Git 均为 0。
 - 唯一下一动作：监理复核两次 provider 失败，决定暂停等待恢复或另行签发服务诊断/重跑指令；
   执行侧不再自动尝试。
+
+## BRAND-MATRIX-01 · Gate D 第七轮端点不匹配前置阻断稿（2026-08-09，待监理复核）
+
+- 状态：**`GATE-D PRECONDITION_BLOCKED · PROVIDER_ENDPOINT_MISMATCH`**；不得写
+  `IMPLEMENTED / COMPLETE / PASS`。
+- 直连、传输重试分立账本和握手探针实现已通过完整确定性门；候选
+  `f00e5d44098e2ef2ef70d76dab67a3e3fdd03ea4`，CI `31310993995` 四查全绿。
+- 两轮导入 digest/对象指纹仍为 `20e1d00a…` / `1ec150e8…`，冻结登记 digest
+  `93a49a1d…`；媒体 26 PASS(scope)，P5 合格母版 6 份/商品 4 个。
+- 精确三键解析显示当前 provider 主机为 `api.deepseek.com`，与指令及主线治理冻结的
+  `*.aliyuncs.com` 境内端点冲突。握手在建连前 fail-closed，本轮 provider 请求 0，
+  累计仍 `44/80`。
+- 生产/SSH/ECS 0，alembic 0，密钥泄漏 0，二进制入 Git 0，八剧本/八异常未启动。
+- 唯一下一动作：主控对齐授权 `.env` 端点与 `f783c37` 冻结事实，或签发明示允许
+  `api.deepseek.com` 的政策修订；执行侧不自行改变目标后续跑。

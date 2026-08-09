@@ -1263,3 +1263,22 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
 - 唯一下一动作：监理复核两次 provider 失败，决定暂停等待或另行签发服务诊断/重跑指令。
 
 <!-- BRAND-MATRIX-01-GATED-USER-RETRY-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-07-PRECONDITION-BLOCKED-START -->
+
+### Gate D 第七轮 provider 端点不匹配前置阻断记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D PRECONDITION_BLOCKED · PROVIDER_ENDPOINT_MISMATCH`，不等于 Gate D 已实现或通过。
+
+- 直连 `trust_env=False`、传输重试≤2、内容重试 0、零预算 TCP/TLS 握手和账本回归
+  已通过全部本地门；候选 `f00e5d44098e2ef2ef70d76dab67a3e3fdd03ea4`，CI
+  `31310993995` 四查全绿。
+- 隔离栈已重建，两轮导入 digest/指纹一致，媒体 26 PASS(scope)，冻结登记 digest
+  `93a49a1d0cebcb62d2cc52c93594e0dd891bf69bb79dd1c82331a7887cfb3bf1`。
+- 精确解析的 provider 主机为 `api.deepseek.com`，与本轮冻结的 `*.aliyuncs.com` 端点冲突。
+  握手在建连和补全请求前阻断；本轮请求 0，累计 `44/80`。
+- 唯一下一动作：主控对齐授权环境端点与 `f783c37`，或另行签发端点政策修订；
+  执行侧不绕过前置门。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-07-PRECONDITION-BLOCKED-END -->
