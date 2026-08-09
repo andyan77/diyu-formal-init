@@ -12,7 +12,11 @@ import psycopg
 import pytest
 from pydantic import ValidationError
 
-from scripts.gated.run_formal_acceptance import _performance_review_annotations
+from scripts.gated.run_formal_acceptance import (
+    PRIOR_RUNTIME_CANDIDATE_SHA,
+    _load_prior_ledger,
+    _performance_review_annotations,
+)
 from src.brain.platform_directions import direction_for
 from src.gateway.api.app import create_app
 from src.gateway.api.contracts import BrandPublicationProjectionCandidateRequest
@@ -31,6 +35,19 @@ from src.shared.publication_scope import (
 from src.shared.types import BrandContext, BrandContextPacketV3, TenantManagementScope, TrustedScope
 
 _RERUN03_FACT_ID = "fact:product:gated-rerun-03"
+
+
+def test_gate_d_full_retry_preserves_all_prior_provider_attempts() -> None:
+    candidate_sha, records = _load_prior_ledger(
+        Path("docs/BRAND-MATRIX-01/GateD-记录/provider-ledger.json"),
+        expected_count=42,
+    )
+
+    assert candidate_sha == PRIOR_RUNTIME_CANDIDATE_SHA
+    assert len(records) == 42
+    assert records[-1]["card_id"] == "S06-S04-P3"
+    assert records[-1]["binary_result"] == "FAILED_SAFE_PROVIDER_REQUEST"
+    assert records[-1]["response_sha256"] is None
 
 
 def test_gate_d_review_package_records_bare_performance_terms_without_blocking() -> None:

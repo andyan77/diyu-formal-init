@@ -376,7 +376,7 @@ def _assert_media() -> str:
 def _assert_formal_suite_contract() -> None:
     contract = _document("formal-suite-contract.json")
     if (
-        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v7"
+        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v8"
         or contract.get("expected_counts")
         != {"anomalies": 8, "cards": 15, "content_products": 5, "scenarios": 8}
     ):
@@ -385,7 +385,7 @@ def _assert_formal_suite_contract() -> None:
     if (
         constraints.get("maximum_provider_requests") != 80
         or constraints.get("maximum_transport_retries") != 0
-        or constraints.get("prior_provider_requests") != 29
+        or constraints.get("prior_provider_requests") != 42
         or constraints.get("temperature") != 0
         or constraints.get("writer_assertion_policy")
         != "ADJ-WRITER-BOUNDARY-05-PERFORMANCE-POLARITY"
@@ -393,6 +393,8 @@ def _assert_formal_suite_contract() -> None:
         != "AMD-AUTH-20260809-01-REPEATABLE-BUSINESS-AND-DEMO-TEST-SINGLE-USE"
         or constraints.get("orchestration_isolation")
         != "deterministic_preflight_consumes_fixture_only"
+        or constraints.get("retry_policy")
+        != "FULL_SUITE_NO_SPLICE_USER_RETRY-20260809-01"
     ):
         raise SystemExit("Gate D semantics FAIL: formal provider discipline differs")
     cards = cast(list[dict[str, Any]], contract.get("cards"))
