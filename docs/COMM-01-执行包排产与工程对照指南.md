@@ -1574,3 +1574,25 @@ S04-P2：Writer 提示合同不足 vs 匹配器误伤，对症修一处）→ �
 - 唯一下一动作：监理独立复验 + founder 逐篇审阅。
 
 <!-- BRAND-MATRIX-01-GATED-OFFICIAL-ENDPOINT-IMPLEMENTED-END -->
+
+### Gate D 监理终局复验（2026-08-09）
+
+> 状态：**`GATE-D VERIFIED_BY_SUPERVISOR · AWAITING_FOUNDER_PIECE_REVIEW`**。
+> 完成门 10/10 复验通过；Gate D 置 COMPLETE 的最后一关 = founder 逐篇审阅 15 份成品
+> 并裁决 9 条非阻断标注。
+
+- **独立重测**：全量套件亲跑 `1057 passed / 2 skipped` 退出码 0；CI `31312097476` 四查
+  独立通过（headSha==候选 `81289d8`）；最终 ledger `59/80`、传输重试 1（分立入账）、
+  内容重试 0、候选链 10 节、15/15 成品全部落于唯一冻结 SHA、零拼接。
+- **证据面**：剧本 8/8 + 异常 8/8；两轮导入 digest 与对象指纹一致；媒体 26 PASS(scope)、
+  P5 合格母版 6 覆盖 4 商品、原片资格恒 0；四层口径成立（成品层 15/15）。
+- **成品实感抽读**：S04-S04-P2 等篇逐字审——确认事实直说、软性词当场声明未证实、
+  取舍条件句、零虚构经历、完整视频脚本结构；六轮裁决的目标语法在真实成品中成立。
+- **两点注记**：① 七族中 4 族（product_expertise/brand_visual/local_trust/
+  audience_relationship）在正式生成中被实际消费，其余 3 族（existing_series/
+  brand_stance/organization_people）由 Gate B 装配测试与 Gate C 资格机制承重——符合
+  规范分工（7/7 可生产是 Gate B 锚点），如实登记不虚报；② 监理第七轮签发件中
+  「端点=aliyuncs」假设有误（实际 .env 为 DeepSeek 官方 api.deepseek.com），执行侧
+  按纪律 PRECONDITION_BLOCKED 后经授权切换，机制修复与主机无关，结论不受影响。
+- 下一动作：founder 逐篇审阅（审阅文档由监理生成送达）；PASS 后 Gate D 置 COMPLETE，
+  签发 Prompt 6（Gate E · 密封盲测与生产收束）。

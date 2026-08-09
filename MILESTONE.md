@@ -2174,3 +2174,4 @@
 - 审阅包登记 9 条非阻断性性能词标注，执行侧不代替 founder 对成品内容的
   逐篇审阅。生产/SSH/ECS 0，alembic 0，密钥泄漏 0，二进制入 Git 0。
 - 唯一下一动作：**监理独立复验 + founder 逐篇审阅**。
+- 2026-08-09：**`GATE-D VERIFIED_BY_SUPERVISOR`**——监理亲跑 1057/2、CI 四查、账本 59/80（传输重试 1 分立）、剧本 8/8+异常 8/8、15/15 成品唯一 SHA、成品逐字抽读通过。合入主线（union 合并治理文件零丢失）。当前动作：**founder 逐篇审阅 15 份成品 + 裁决 9 条标注**；PASS 后 Gate D COMPLETE → Prompt 6（Gate E）。
