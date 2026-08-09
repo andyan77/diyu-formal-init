@@ -189,9 +189,10 @@
     "maximum_provider_requests": 80,
     "maximum_transport_retries": 0,
     "model_source": "DEEPSEEK_MODEL exact env key",
-    "prior_provider_requests": 6,
+    "prior_provider_requests": 7,
     "provider_request_policy": "one accepted Writer response per card; deterministic anomalies fail before provider",
-    "temperature": 0
+    "temperature": 0,
+    "writer_assertion_policy": "ADJ-WRITER-BOUNDARY-03-L1-L2-L3"
   },
   "expected_counts": {
     "anomalies": 8,
@@ -199,5 +200,5 @@
     "content_products": 5,
     "scenarios": 8
   },
-  "suite_version": "brand-matrix-gate-d-formal-suite-v2"
+  "suite_version": "brand-matrix-gate-d-formal-suite-v3"
 }

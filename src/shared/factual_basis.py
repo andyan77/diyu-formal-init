@@ -74,10 +74,21 @@ _UNCONFIRMED_PRODUCT_SPECIFICITY_PATTERNS: tuple[
         re.compile(r"\d{1,2}\s*(?:—|-|~|～|至|到)\s*\d{1,2}\s*岁|全年龄段"),
     ),
     (
-        "performance_assertion",
+        "guaranteed_performance_assertion",
         re.compile(
-            r"不易变形|不起球|亲肤透气|防水|防风|保暖|显瘦|耐穿|耐磨|抗皱|速干|"
-            r"保证舒适|确保舒适"
+            r"不起球|不(?:易|会)?变形|防水|抗菌|"
+            r"(?:保证|确保|承诺|绝对)[^，。；;！？!?\n]{0,12}"
+            r"(?:不起球|不变形|防水|抗菌|耐穿|百搭|好打理|显精神|亲肤|透气|防风|"
+            r"保暖|显瘦|耐磨|抗皱|速干|舒适)"
+        ),
+    ),
+    (
+        "absolute_claim",
+        re.compile(
+            r"100\s*%|百分之百|"
+            r"(?:全网|行业|同类|史上|市面上)?最(?:好|优|强|耐穿|百搭|好打理|显精神|"
+            r"保暖|舒适|划算|值得)|"
+            r"永不(?:起球|变形|褪色|缩水|磨损|过时)"
         ),
     ),
 )
@@ -344,10 +355,12 @@ def product_fact_value_conflicts(
 def unconfirmed_product_specificity_spans(text: str) -> tuple[str, ...]:
     """Return deterministic unsupported product specifics in visible prose.
 
-    The patterns deliberately cover only high-confidence forms: percentages,
-    numeric prices, exact process wording, explicit age ranges and stable
-    performance assertions.  A nearby disclosure such as ``未确认`` keeps a
-    phrase legal because it is a boundary statement, not a product claim.
+    The patterns deliberately cover only L1 forms that machines can identify
+    reliably: verifiable specifics, guaranteed performance claims and
+    absolute claims.  L2 experience language is intentionally outside this
+    detector and remains creative expression rather than ProductFact.  A
+    nearby disclosure such as ``未确认`` keeps a phrase legal because it is a
+    boundary statement, not a product claim.
     """
 
     violations: list[str] = []

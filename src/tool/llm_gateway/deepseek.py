@@ -268,12 +268,21 @@ def _writer_truth_and_persona_instruction(
     confirmed_product_facts: ProductFactProjection,
     persona_quote_ids: tuple[str, ...],
 ) -> str:
+    assertion_layers = (
+        "商品表达采用 ADJ-WRITER-BOUNDARY-03 三层制。L1 硬断言只有冻结 V 级真值可以直说；"
+        "未确认的成分比例、价格、精确工艺、适穿年龄，不起球、不变形、防水、抗菌等保证类"
+        "性能，以及‘最／100%／永不’等绝对化表述一律不写。"
+        "L2 是不取得事实资格的软性体验表达，可以自然使用‘耐穿／百搭／好打理／显精神’等"
+        "泛质感词，但不得加上保证、承诺、"
+        "绝对或永不等措辞，不得写入 ProductFact。L3 判断只保持条件语态，主语留在用户侧。"
+        "账号声纹 lens 只调节表达分寸，不改变这三层权责。\n"
+    )
     confirmed = ""
     if confirmed_product_facts:
         confirmed = (
             "confirmed_product_facts 是服务端冻结且允许面向受众逐字使用的商品真值。可以自然说出"
-            "其中的商品名、品类、主色和其他已列字段；不得改值、换成未列值或据此补出成分、价格、"
-            "精确工艺、适穿年龄、性能、效果与精确适配。信息完整性要求：一旦写某个字段已经确认，"
+            "其中的商品名、品类、主色和其他已列字段；不得改值、换成未列值或据此补出 L1 具体信息"
+            "与保证。信息完整性要求：一旦写某个字段已经确认，"
             "必须同时说出 confirmed_product_facts 中的实际值，不能只写‘主色已经确认’却隐去颜色。"
             "当前真值："
             + json.dumps(confirmed_product_facts, ensure_ascii=False, sort_keys=True)
@@ -295,7 +304,7 @@ def _writer_truth_and_persona_instruction(
         "‘我曾经／我在店里／我接待过’等已发生的账号经历，可以使用不绑定既成事件的一般观察"
         "和条件建议。\n"
     )
-    return confirmed + judgment + persona
+    return assertion_layers + confirmed + judgment + persona
 
 
 def _writer_scope(request: WriterRequestV3) -> list[str]:

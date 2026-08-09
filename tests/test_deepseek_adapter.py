@@ -1237,6 +1237,62 @@ def test_publication_v3_allows_exact_confirmed_category_and_color() -> None:
 
 
 @pytest.mark.parametrize(
+    "soft_experience_text",
+    (
+        "日常穿着会觉得耐穿一些。",
+        "灰色针织开衫在日常选择里比较百搭。",
+        "如果你更在意好打理，可以把这一点放进自己的取舍。",
+        "这个灰色看起来显精神。",
+    ),
+)
+def test_publication_v3_allows_l2_soft_experience_words(
+    soft_experience_text: str,
+) -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="给日常选择留一点弹性",
+        natural_guide="软性体验表达不取得商品事实资格。",
+        creative_body=soft_experience_text,
+        publication_caption="最终仍按自己的穿着条件判断。",
+    )
+
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+
+def test_publication_v3_allows_prior_s01_p1_l2_boundary_excerpt() -> None:
+    context, basis = _gate_d_s04_product_boundary()
+    raw = json.loads(
+        (
+            Path(__file__).parent
+            / "fixtures/gated_s01_p1_rejected_writer_output_v2.json"
+        ).read_text(encoding="utf-8")
+    )
+    output = WriterOutputV3(
+        output_version=WRITER_OUTPUT_VERSION,
+        title="资料边界要说清楚",
+        natural_guide="把已确认和未确认的信息分开。",
+        creative_body=str(raw["machine_boundary_excerpt"]),
+        publication_caption="没有依据的具体信息不作保证。",
+    )
+
+    DeepSeekGenerator._assert_writer_output_v3_boundaries(
+        output,
+        context=context,
+        product_basis=basis,
+    )
+
+    assert raw["prior_response_sha256"] == (
+        "1ea7e83c9c5241511ee3ea07a0b9684b90994d1d6022e8009082125a26af1d64"
+    )
+    assert raw["founder_classification"] == "L2_soft_experience_allowed"
+
+
+@pytest.mark.parametrize(
     "unsupported_text",
     (
         "这件商品的主色是黑色。",
@@ -1245,6 +1301,10 @@ def test_publication_v3_allows_exact_confirmed_category_and_color() -> None:
         "采用全成型无缝针织工艺。",
         "适穿年龄为3—12岁。",
         "这件商品不起球，而且亲肤透气。",
+        "这件商品保证耐穿。",
+        "这是同类最耐穿的一件。",
+        "这件商品100%好打理。",
+        "这件商品永不变形。",
     ),
 )
 def test_publication_v3_rejects_changed_or_unconfirmed_product_specifics(
@@ -1299,6 +1359,12 @@ def test_publication_v3_product_prompt_exposes_confirmed_values_and_keeps_j_cond
     assert "针织开衫" in prompt
     assert "灰色" in prompt
     assert "主色已经确认’却隐去颜色" in prompt
+    assert "ADJ-WRITER-BOUNDARY-03 三层制" in prompt
+    assert "L1 硬断言" in prompt
+    assert "L2 是不取得事实资格的软性体验表达" in prompt
+    assert "耐穿／百搭／好打理／显精神" in prompt
+    assert "不得写入 ProductFact" in prompt
+    assert "L3 判断只保持条件语态" in prompt
     assert "如果你需要／如果你的条件是" in prompt
     assert "它适合／它提供／它能带来" in prompt
     assert "PS-S02-/PS-S04-" in prompt

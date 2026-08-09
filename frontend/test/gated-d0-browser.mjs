@@ -61,7 +61,7 @@ try {
       `--user-data-dir=${profile}`,
       "about:blank"
     ],
-    { stdio: ["ignore", "ignore", "pipe"] }
+    { detached: true, stdio: ["ignore", "ignore", "pipe"] }
   );
   const websocketUrl = await new Promise((resolvePromise, reject) => {
     let stderr = "";
@@ -137,15 +137,23 @@ try {
   socket?.close();
   if (chrome) {
     const exited = new Promise(resolvePromise => chrome.once("exit", resolvePromise));
-    chrome.kill("SIGTERM");
+    const signalGroup = signal => {
+      try {
+        process.kill(-chrome.pid, signal);
+      } catch (error) {
+        if (error?.code !== "ESRCH") throw error;
+      }
+    };
+    signalGroup("SIGTERM");
     const stopped = await Promise.race([
       exited.then(() => true),
       new Promise(resolvePromise => setTimeout(() => resolvePromise(false), 2000))
     ]);
     if (!stopped) {
-      chrome.kill("SIGKILL");
+      signalGroup("SIGKILL");
       await exited;
     }
+    signalGroup("SIGKILL");
   }
   await new Promise(resolvePromise => server?.close(resolvePromise));
   rmSync(workdir, { recursive: true, force: true, maxRetries: 50, retryDelay: 100 });
