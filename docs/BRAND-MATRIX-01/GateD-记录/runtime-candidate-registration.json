@@ -21,20 +21,20 @@
     "projection_items": 34,
     "qualifications": 30
   },
-  "local_isolated_database_input_fingerprint": "b2f61f7662421feafbf73695b9923e5ec551f5221b06169b90a804b2ebab6dcd",
+  "local_isolated_database_input_fingerprint": "426b163dc7ff464bab3b4810568d23ab92aa1baf72217717cb072f1a22ec254c",
   "max_retries": 0,
-  "media_database_readback_digest": "96295c2df507c6063ed098e2d9dad1b3b8afb33f698163ed81b9e4dc835b6b65",
+  "media_database_readback_digest": "9c09d5a4c664aabe01976ed74e07b4eeba9e04861c502207bb1154421d20823d",
   "media_manifest_digest": "587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b",
   "model": "deepseek-v4-flash",
   "prompt_contracts": {
-    "formal_suite_contract_sha256": "d99e2224dc77fd8e05c24a2740820e5e7da47579ce74998cf02b58c359b546b3",
+    "formal_suite_contract_sha256": "89a5e0a4489857c36b73ef1ddc03b6c808d3680d25849e0bda3ac52dce2c0818",
     "prompt_5_rev3_sha256": "e118e903b8cb9c00f133065ac6b381b48731697ec15dc2bc0f6334f926687178"
   },
   "provider_requests_at_freeze": 0,
   "publication_projection_digest": "cb6b2cf509c31e9864ea632449e41ff06d553e7f2ed93cf758fce7c77e978962",
-  "registration_digest": "56a474986fa7eb7d32333f6244e7e0cc2304a483460cdda8bcbfb9da053e3449",
+  "registration_digest": "bc7846da9f16ec928d06e102bd558b2e00bcbbe8f8a7dd16b53116106af64896",
   "registration_version": "brand-matrix-gate-d-runtime-freeze-v1",
-  "runtime_candidate_sha": "3399dc4cd58e0235a06cb469fe6dfe1ea2cdcc5b",
+  "runtime_candidate_sha": "587bed9168e92db7444db81ba9123b92a80cbacf",
   "status": "FROZEN_NO_PROVIDER_REQUESTS",
   "temperature": 0
 }
