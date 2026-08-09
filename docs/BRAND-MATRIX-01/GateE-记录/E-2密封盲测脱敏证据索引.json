@@ -1,0 +1,53 @@
+{
+  "candidate_sha": "65995f3ba6ba99f79941395ab5042f671d2bc2e7",
+  "completed_cards": [
+    {
+      "body_sha256": "059f6c2666992de3a8d07d884ecbaae33533ae0167985d523dc42e18e96339eb",
+      "brand_relevance_family": "audience_relationship",
+      "card_id": "B01",
+      "machine_check_count": 12,
+      "result": "PASS",
+      "run_id": "afdf26e4-e8d4-4221-aa74-d503fb2ca037",
+      "task_id": "6b8716c3-3820-4ae3-96cf-a53db6b3c647",
+      "version_id": "18815dff-03eb-4332-86ef-67ad623b70dc"
+    }
+  ],
+  "cumulative_provider_requests": 61,
+  "failed_card": {
+    "card_id": "B02",
+    "failed_check": "S-02-UNKNOWN-DISCLOSED",
+    "generic_and_prior_specific_checks_passed": 11,
+    "result": "FAIL",
+    "run_id": "48b5b77b-bcad-4ad0-bebe-fda092ea5e6c",
+    "task_id": "b84d2acb-b9d6-47e8-b559-a2a1939e2f1b",
+    "version_id": "c5986c80-5d30-4f74-8e1c-786fe7c823da"
+  },
+  "gatee_provider_requests": 2,
+  "not_run_cards": [
+    "B03",
+    "B04",
+    "B05",
+    "B06",
+    "B07",
+    "B08",
+    "B09",
+    "B10",
+    "B11",
+    "B12",
+    "B13",
+    "B14",
+    "B15",
+    "B16",
+    "B17",
+    "B18",
+    "B19",
+    "B20"
+  ],
+  "plaintext_digest": "12de2ba475b28304dccec38acdef4f7e3e15f6fd124fd5059097dfadd11fb86c",
+  "private_evidence_path": "/home/faye/diyu-evidence-brand-matrix-gatee-65995f3ba6ba99f79941395ab5042f671d2bc2e7/",
+  "private_evidence_sha256s_digest": "1ae2237765b2f8c28b5f7902a9815d1ec0f398681ee4453f33111a38f97a974a",
+  "runner_digest": "9b9dc336001cf6fe9668a98b078d2ac8e021ebc88a59e9fb2be5bccd9f52ab93",
+  "status": "GATE-E FAILED_SAFE · SEALED_BLIND_MACHINE_GATE_FAILED",
+  "suite_failure_digest": "a57c07dad317ea805ff379e517b964c568a2f9d53a99a95b5f0eee1167a81766",
+  "transport_retries": 0
+}
