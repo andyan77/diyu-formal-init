@@ -1,62 +1,72 @@
 {
-  "suite_version": "brand-matrix-gate-d-formal-suite-v3",
-  "runtime_candidate_sha": "ba4208a6ea96775683ecd89f41b6cd869b45eead",
-  "prior_runtime_candidate_sha": "f7e8e81c80ebc8552794f82aab81ef509e242b14",
-  "initial_runtime_candidate_sha": "997e6b55c1c40dacd44a46ff6617b28766011958",
-  "registration_digest": "4815beafe39394db8e43ace33e5cf33721e5f1f989795ba19df2a7955d8c9cf4",
-  "model": "deepseek-v4-flash",
-  "temperature": 0,
-  "max_retries": 0,
-  "prior_provider_request_count": 7,
-  "current_provider_request_count": 1,
-  "cumulative_provider_request_count": 8,
-  "provider_request_budget": 80,
-  "provider_transport_retries": 0,
-  "current_completed_artifact_count": 0,
-  "failed_card": {
-    "card_id": "S01-P1",
-    "failure_code": "PUBLICATION_V3_COMPLETION_SNAPSHOT_KEYS_REJECTED",
-    "failure_stage": "persistence",
-    "boundary_result": "PASS_L2_SOFT_EXPERIENCE_ALLOWED",
-    "repository_error_code": "DOMAIN_VALIDATION_FAILED",
-    "repository_error_message": "创作内核快照补丁字段不完整或越界",
-    "snapshot_patch_extra_keys": [
-      "used_persona_quote_ids",
-      "writer_confirmed_product_fact_refs"
-    ],
-    "snapshot_patch_missing_keys": [],
-    "response_received": true,
-    "request_sha256": "f451656934e11049831f52fb0430ee2493178ba8c8308e5845f5f042826cc783",
-    "response_sha256": "8594708f414ddbca2f0714e100d7d79a0444592da595d5089a3ee8a772045fda",
-    "task_id": "3bafbf45-fb92-45ae-b832-984ef425a5f8",
-    "run_id": "27b810b8-f219-4d72-aaf8-b2b1aee1f80e",
-    "run_status": "failed",
-    "version_id": null
+  "anomaly_summary": {
+    "incomplete": 2,
+    "not_run": 1,
+    "pass_zero_provider": 5
   },
   "current_candidate_database_readback": {
-    "formal_task_count": 1,
-    "formal_run_count": 1,
     "formal_failed_run_count": 1,
-    "formal_version_count": 0,
-    "completion_snapshot_patch_committed": false
+    "formal_run_count": 2,
+    "formal_succeeded_run_count": 1,
+    "formal_task_count": 2,
+    "formal_version_count": 1,
+    "writer_grounding_fields_committed_on_completed_version": true
   },
-  "current_completed_artifact_index": [],
-  "scenario_summary": {
-    "pass": 0,
-    "failed_safe": 1,
-    "incomplete": 0,
-    "not_run": 7
-  },
-  "anomaly_summary": {
-    "pass_zero_provider": 5,
-    "incomplete": 2,
-    "not_run": 1
+  "current_completed_artifact_count": 1,
+  "current_completed_artifact_index": [
+    {
+      "card_id": "S01-P1",
+      "run_id": "8930e048-1471-4baa-8b9b-23f1fc58427d",
+      "task_id": "f34874d3-e0b8-44c0-98b7-dfc2f20f3780",
+      "version_id": "b11cc265-5054-48d0-9e28-d08907eff844",
+      "version_number": 1,
+      "writer_confirmed_product_fact_ref_count": 3,
+      "used_persona_quote_id_count": 0
+    }
+  ],
+  "current_candidate_suite_attempts": 1,
+  "current_provider_request_count": 2,
+  "cumulative_provider_request_count": 10,
+  "failed_card": {
+    "boundary_result": "FALSE_POSITIVE_ABSOLUTE_CLAIM_MATCH",
+    "card_id": "S01-P2",
+    "failure_code": "WRITER_UNCONFIRMED_PRODUCT_SPECIFICITY_FALSE_POSITIVE_REJECTED",
+    "failure_stage": "post_response_writer_boundary",
+    "guard_match": "absolute_claim:最好",
+    "guard_match_context_excerpt": "整套搭配里最好不要再出现第二个强色",
+    "repository_error_message": "Writer 新增了未确认商品具体信息",
+    "response_received": true,
+    "request_sha256": "717cba563f6b8484e2aa1d3f8ec557e079761b7c5eca56de5ada6d4b74b4ade7",
+    "response_sha256": "b7d660a98db2ef2c149c967bf8b1a8961aa0dced8cf3556a9c994c445406d004",
+    "run_id": "d7df9a05-9936-4331-adb8-b34c50bc5633",
+    "run_status": "failed",
+    "task_id": "5c71339d-0cff-4d39-a4c5-8df17a82d789",
+    "version_id": null
   },
   "formal_binary_completion": false,
-  "raw_responses_in_git": 0,
-  "private_evidence_path": "~/diyu-evidence-brand-matrix-gated-ba4208a6ea96775683ecd89f41b6cd869b45eead",
-  "private_sha256s_digest": "846fb87383e2b2541296f8447e2da932ad8be0d8f2a837a3b67b19a2268d1114",
-  "current_candidate_suite_attempts": 1,
+  "max_retries": 0,
+  "model": "deepseek-v4-flash",
   "post_failure_reruns": 0,
-  "status": "FAILED_SAFE"
+  "prior_provider_request_count": 8,
+  "private_evidence_path": "~/diyu-evidence-brand-matrix-gated-596b87e7e9d0551c6b62834137e03eed2bf52c82",
+  "private_sha256s_digest": "7272ac9a0abc845794ec46062817a5b5c577fa8d31745cac1a7a5d9f67965724",
+  "provider_request_budget": 80,
+  "provider_transport_retries": 0,
+  "raw_responses_in_git": 0,
+  "registration_digest": "538b0ae11eb1dc7511e54d40beee7e56dd3e9d35ded7c2b06aa6bbe66bc77304",
+  "runtime_candidate_chain": [
+    "997e6b55c1c40dacd44a46ff6617b28766011958",
+    "f7e8e81c80ebc8552794f82aab81ef509e242b14",
+    "ba4208a6ea96775683ecd89f41b6cd869b45eead",
+    "596b87e7e9d0551c6b62834137e03eed2bf52c82"
+  ],
+  "runtime_candidate_sha": "596b87e7e9d0551c6b62834137e03eed2bf52c82",
+  "scenario_summary": {
+    "failed_safe": 1,
+    "not_run": 7,
+    "pass": 0
+  },
+  "status": "FAILED_SAFE",
+  "suite_version": "brand-matrix-gate-d-formal-suite-v4",
+  "temperature": 0
 }

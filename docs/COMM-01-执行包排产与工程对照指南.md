@@ -1140,3 +1140,30 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   如要继续，由主控另行签发新指令。
 
 <!-- BRAND-MATRIX-01-GATED-RERUN-02-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-03-FAILED-SAFE-START -->
+
+### Gate D 第三轮机械修复后整套重跑失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · WRITER_ABSOLUTE_CLAIM_FALSE_POSITIVE`，不等于 Gate D 已实现或通过。
+
+- publication-v3 completion 白名单已纳入两个合法 Writer 审计字段，仍对未知字段、未冻结事实、
+  非法人物原句和 single-use 授权不一致失败关闭；旧快照不回填、不改旧 digest。正式套件首卡
+  `S01-P1` 已成功提交 version 1，版本审计快照真实含两字段。
+- runtime candidate 为 `596b87e7e9d0551c6b62834137e03eed2bf52c82`；本地全门
+  `1033 passed / 2 skipped`，CI run `31302112683` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 隔离栈从零重建，两轮 batch digest `f15d0efe…1750`、对象指纹 `e48dc654…6b88` 一致；
+  媒体 PASS(scope)/FAIL/QUARANTINED=`26/0/0`，P5 合格母版 6、覆盖 4 个商品。
+- 第二卡 `S01-P2` 的条件建议“整套搭配里最好不要再出现第二个强色”被绝对化正则误判为
+  `absolute_claim:最好`，继而被未确认具体信息守卫拒绝。该卡未生成版本；这不是商品事实改写、
+  不是 L2 回归，也不是快照字段回归。
+- 本轮 provider request 2、历史 8、累计 `10/80`；temperature 0、max_retries 0、transport
+  retry 0、失败后请求 0。候选链产物不拼接，当前候选仅 1 张完成卡，八剧本/八异常未完成。
+- 私有证据目录 0700、文件 0600、SHA256SUMS 校验通过；Git raw response、完整 artifact、密钥、
+  视频和母版二进制均为 0。生产/SSH/ECS 0、alembic 0。
+- 按第三轮指令停止线，执行侧未修改正则或开启第四轮。唯一下一动作：监理复核；继续须由主控
+  另行签发。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-03-FAILED-SAFE-END -->

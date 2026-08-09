@@ -2017,3 +2017,25 @@
   Gate D 脱敏证据、治理记录和本状态。
 - 唯一下一动作：监理复核三层制、冻结纪律、ledger 与快照契约失败证据；
   如需继续，由主控另行签发新指令，执行侧不得自行修复或重跑 provider。
+
+## BRAND-MATRIX-01 · Gate D 第三轮机械修复后整套重跑失败安全稿（2026-08-09，待监理复核）
+
+- 状态：**`GATE-D FAILED_SAFE · WRITER_ABSOLUTE_CLAIM_FALSE_POSITIVE`**；不得据此写
+  `IMPLEMENTED / COMPLETE / PASS`。
+- publication-v3 completion 已正式接纳 `writer_confirmed_product_fact_refs` 与
+  `used_persona_quote_ids`，同时维持未知字段、非法事实/原句 ID 和单次授权不一致失败关闭；
+  旧快照不回填、不改旧 digest。本候选 `S01-P1` 已真实落版并冻结两字段，证明修复进入正式链。
+- runtime candidate `596b87e7e9d0551c6b62834137e03eed2bf52c82`；本地全门
+  `1033 passed / 2 skipped`，CI run `31302112683` 四查全绿。两轮导入 batch digest
+  `f15d0efe…1750`、对象指纹 `e48dc654…6b88` 一致；媒体 PASS(scope)/FAIL/QUARANTINED=
+  `26/0/0`，母版 P5 资格 6、覆盖 4 个正式商品。
+- 整套重跑第 1 卡 `S01-P1` PASS；第 2 卡 `S01-P2` 的条件建议“整套搭配里最好不要再出现
+  第二个强色”被绝对化模式误命中 `absolute_claim:最好`，以“未确认商品具体信息”拒绝。
+  这是新通用守卫误报，不是模型改写商品事实，也不是白名单回归。
+- 本候选 task/run/version=`2/2/1`；失败卡 run=`failed`、version=0。ledger 累计
+  `10/80`（历史 8 + 本轮 2），temperature 0、max_retries 0、transport retry 0、失败后请求 0，
+  旧候选成品不拼接。
+- 首次请求后仅追加脱敏证据、治理记录和本状态；生产/SSH/ECS 0、alembic 0、密钥泄漏 0、
+  二进制入 Git 0。根据 `UNLOCK-D-RERUN-03`，执行侧不得自行第四轮修复或 provider 重跑。
+- 唯一下一动作：监理复核第三轮修复实证、冻结纪律、ledger 与“最好”误报；继续须由主控
+  另行签发。

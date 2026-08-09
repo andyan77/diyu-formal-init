@@ -1,15 +1,21 @@
 {
-  "ledger_version": "brand-matrix-gate-d-provider-ledger-v3-failed-safe",
-  "runtime_candidate_sha": "ba4208a6ea96775683ecd89f41b6cd869b45eead",
-  "prior_runtime_candidate_sha": "f7e8e81c80ebc8552794f82aab81ef509e242b14",
+  "ledger_version": "brand-matrix-gate-d-provider-ledger-v4-failed-safe",
+  "runtime_candidate_sha": "596b87e7e9d0551c6b62834137e03eed2bf52c82",
+  "prior_runtime_candidate_sha": "ba4208a6ea96775683ecd89f41b6cd869b45eead",
   "initial_runtime_candidate_sha": "997e6b55c1c40dacd44a46ff6617b28766011958",
+  "runtime_candidate_chain": [
+    "997e6b55c1c40dacd44a46ff6617b28766011958",
+    "f7e8e81c80ebc8552794f82aab81ef509e242b14",
+    "ba4208a6ea96775683ecd89f41b6cd869b45eead",
+    "596b87e7e9d0551c6b62834137e03eed2bf52c82"
+  ],
   "prior_record_range": [
     1,
-    7
+    8
   ],
-  "prior_provider_request_count": 7,
-  "current_provider_request_count": 1,
-  "provider_request_count": 8,
+  "prior_provider_request_count": 8,
+  "current_provider_request_count": 2,
+  "provider_request_count": 10,
   "provider_request_budget": 80,
   "transport_retry_count": 0,
   "records": [
@@ -128,6 +134,38 @@
       "run_id": "27b810b8-f219-4d72-aaf8-b2b1aee1f80e",
       "runtime_candidate_sha": "ba4208a6ea96775683ecd89f41b6cd869b45eead",
       "task_id": "3bafbf45-fb92-45ae-b832-984ef425a5f8",
+      "temperature": 0,
+      "transport_retries": 0,
+      "version_id": null
+    },
+    {
+      "binary_result": "PASS",
+      "card_id": "S01-P1",
+      "model": "deepseek-v4-flash",
+      "request_index": 9,
+      "request_sha256": "74be18ac8356c26c55fcef681cdc716aa22d8d4f2056a4109b417cc080f058d4",
+      "response_sha256": "9aef5331be908b53ce5d1f556d4562f54826d31d4737c569f4f14bd503c158f3",
+      "run_id": "8930e048-1471-4baa-8b9b-23f1fc58427d",
+      "runtime_candidate_sha": "596b87e7e9d0551c6b62834137e03eed2bf52c82",
+      "task_id": "f34874d3-e0b8-44c0-98b7-dfc2f20f3780",
+      "temperature": 0,
+      "transport_retries": 0,
+      "version_id": "b11cc265-5054-48d0-9e28-d08907eff844"
+    },
+    {
+      "binary_result": "FAILED_SAFE",
+      "card_id": "S01-P2",
+      "failure_code": "WRITER_UNCONFIRMED_PRODUCT_SPECIFICITY_FALSE_POSITIVE_REJECTED",
+      "failure_stage": "post_response_writer_boundary",
+      "guard_match": "absolute_claim:最好",
+      "model": "deepseek-v4-flash",
+      "request_index": 10,
+      "request_sha256": "717cba563f6b8484e2aa1d3f8ec557e079761b7c5eca56de5ada6d4b74b4ade7",
+      "response_received": true,
+      "response_sha256": "b7d660a98db2ef2c149c967bf8b1a8961aa0dced8cf3556a9c994c445406d004",
+      "run_id": "d7df9a05-9936-4331-adb8-b34c50bc5633",
+      "runtime_candidate_sha": "596b87e7e9d0551c6b62834137e03eed2bf52c82",
+      "task_id": "5c71339d-0cff-4d39-a4c5-8df17a82d789",
       "temperature": 0,
       "transport_retries": 0,
       "version_id": null
