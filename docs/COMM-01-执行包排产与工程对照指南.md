@@ -1282,3 +1282,17 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   执行侧不绕过前置门。
 
 <!-- BRAND-MATRIX-01-GATED-RERUN-07-PRECONDITION-BLOCKED-END -->
+
+<!-- BRAND-MATRIX-01-PROVIDER-ENDPOINT-AUTH-START -->
+
+### DeepSeek 官方端点统一裁决（2026-08-09）
+
+- 用户已确认 `AUTH-PROVIDER-ENDPOINT-20260809-01`：当前正式 provider 主机为
+  `api.deepseek.com`。
+- 本裁决取代 `f783c37` / `UNLOCK-D-RERUN-07` 中将当前端点固定为
+  `*.aliyuncs.com` 的部分；后续不得再因该旧主机识别与已授权官方配置冲突。
+- LLM Gateway、精确三键解析、密钥不落盘、直连、握手、内容重试 0、传输重试≤2、
+  唯一候选和 provider 预算纪律不变。
+- 本记录仅表示用户裁决已落盘；运行代码和候选尚未依裁决重建，Gate D 仍未完成。
+
+<!-- BRAND-MATRIX-01-PROVIDER-ENDPOINT-AUTH-END -->

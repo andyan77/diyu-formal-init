@@ -2133,3 +2133,17 @@
 - 生产/SSH/ECS 0，alembic 0，密钥泄漏 0，二进制入 Git 0，八剧本/八异常未启动。
 - 唯一下一动作：主控对齐授权 `.env` 端点与 `f783c37` 冻结事实，或签发明示允许
   `api.deepseek.com` 的政策修订；执行侧不自行改变目标后续跑。
+
+## BRAND-MATRIX-01 · Provider 端点统一裁决（2026-08-09）
+
+- 用户已确认 `AUTH-PROVIDER-ENDPOINT-20260809-01`：当前正式 DeepSeek provider
+  统一使用官方主机 `api.deepseek.com`。
+- `f783c37` / `UNLOCK-D-RERUN-07` 对“当前端点为 `*.aliyuncs.com`”的识别已被
+  本裁决追加式取代；历史证据不回改。后续不得再以该旧主机识别与
+  官方端点互相否定。
+- 密钥精确解析、LLM Gateway 单一出口、`trust_env=False`、零请求握手、
+  内容重试 0、传输重试≤2、预算和冻结纪律全部不变。
+- 状态边界：**用户裁决已确认并落盘，尚未修改代码、尚未重跑正式套件**。
+  Gate D 仍非 `IMPLEMENTED`。
+- 唯一下一动作：在 Gate D 续行中移除旧的 `aliyuncs.com` 专用阻断，以官方
+  DeepSeek 端点重做完整确定性门、CI、新候选冻结和正式套件。
