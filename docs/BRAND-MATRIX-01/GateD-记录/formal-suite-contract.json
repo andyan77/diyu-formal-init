@@ -65,7 +65,7 @@
       "content_product": "dressing_decision",
       "id": "S01-P1",
       "scenario_id": "SCENARIO-01",
-      "seed": "请围绕 DIYU-CSPU-001 给家庭一条有条件、有取舍的日常穿衣选择建议。",
+      "seed": "家庭正在考虑 DIYU-CSPU-001 时，请给一条条件清楚、取舍明确的日常穿衣建议。",
       "target": "douyin_video"
     },
     {
@@ -73,7 +73,7 @@
       "content_product": "product_truth",
       "id": "S01-P2",
       "scenario_id": "SCENARIO-01",
-      "seed": "请只依据已确认资料解释 DIYU-CSPU-001 的已知商品事实和适用边界。",
+      "seed": "请介绍 DIYU-CSPU-001，把已经正式确认的商品信息说清楚；未确认的不要作确定表述。",
       "target": "xiaohongshu_graphic"
     },
     {
@@ -85,7 +85,7 @@
         "DIYU-V-011"
       ],
       "scenario_id": "SCENARIO-01",
-      "seed": "请用 DIYU-CSPU-001 与 DIYU-CSPU-008 的两份已登记母版，形成一条保留商品差异的视觉造型叙事。",
+      "seed": "请用 DIYU-CSPU-001 和 DIYU-CSPU-008 的现有商品视频，做一条能看出两件商品视觉差异的造型内容。",
       "target": "douyin_video"
     },
     {
@@ -93,7 +93,7 @@
       "content_product": "local_response",
       "id": "S02-R01-P4",
       "scenario_id": "SCENARIO-02",
-      "seed": "请回应今天华东家庭在本地天气变化里如何安排孩子出门穿衣，使用当前有效区域资料。",
+      "seed": "今天华东天气有变化，请给准备带孩子出门的家庭一条实用穿衣提醒。",
       "target": "wechat_channels_video"
     },
     {
@@ -101,7 +101,7 @@
       "content_product": "local_response",
       "id": "S03-S01-P4",
       "scenario_id": "SCENARIO-03",
-      "seed": "请用杭州门店当前有效资料，回应家庭到店前最需要知道的一件事。",
+      "seed": "请给准备去杭州门店的家庭一条到店前实用提醒。",
       "target": "xiaohongshu_graphic"
     },
     {
@@ -109,7 +109,7 @@
       "content_product": "product_truth",
       "id": "S04-S04-P2",
       "scenario_id": "SCENARIO-04",
-      "seed": "请只依据总部已确认事实解释 DIYU-CSPU-008，不采用门店普通文件中的成分说法。",
+      "seed": "请介绍 DIYU-CSPU-008，只陈述已经正式确认的商品信息；未确认的不要作确定表述。",
       "target": "douyin_video"
     },
     {
@@ -117,7 +117,7 @@
       "content_product": "dressing_decision",
       "id": "S05-H01-P1",
       "scenario_id": "SCENARIO-05",
-      "seed": "请围绕 DIYU-CSPU-008 给出一条适用条件清楚、保留取舍的穿衣建议。",
+      "seed": "家庭正在考虑 DIYU-CSPU-008 时，请给一条适用条件清楚、保留取舍的穿衣建议。",
       "target": "douyin_video"
     },
     {
@@ -125,7 +125,7 @@
       "content_product": "dressing_decision",
       "id": "S05-R01-P1",
       "scenario_id": "SCENARIO-05",
-      "seed": "请围绕 DIYU-CSPU-008 给出一条适用条件清楚、保留取舍的穿衣建议。",
+      "seed": "家庭正在考虑 DIYU-CSPU-008 时，请给一条适用条件清楚、保留取舍的穿衣建议。",
       "target": "douyin_video"
     },
     {
@@ -133,7 +133,7 @@
       "content_product": "dressing_decision",
       "id": "S05-S01-P1",
       "scenario_id": "SCENARIO-05",
-      "seed": "请围绕 DIYU-CSPU-008 给出一条适用条件清楚、保留取舍的穿衣建议。",
+      "seed": "家庭正在考虑 DIYU-CSPU-008 时，请给一条适用条件清楚、保留取舍的穿衣建议。",
       "target": "douyin_video"
     },
     {
@@ -141,7 +141,7 @@
       "content_product": "dressing_decision",
       "id": "S05-S04-P1",
       "scenario_id": "SCENARIO-05",
-      "seed": "请围绕 DIYU-CSPU-008 给出一条适用条件清楚、保留取舍的穿衣建议。",
+      "seed": "家庭正在考虑 DIYU-CSPU-008 时，请给一条适用条件清楚、保留取舍的穿衣建议。",
       "target": "douyin_video"
     },
     {
@@ -173,7 +173,7 @@
       "content_product": "brand_life_narrative",
       "id": "S07-H01-P3",
       "scenario_id": "SCENARIO-07",
-      "seed": "围绕不同地方的说话方式写一条品牌生活观察；只使用当前已确认的表达版本。",
+      "seed": "请写一条关于不同地方说话方式的生活观察，表达自然、有地域感，但不刻意模仿具体人物。",
       "target": "wechat_channels_video"
     },
     {
@@ -181,7 +181,7 @@
       "content_product": "local_response",
       "id": "S08-S01-P4",
       "scenario_id": "SCENARIO-08",
-      "seed": "在登记一条门店反馈观察后，再用已确认资料回应杭州家庭的到店准备；不得使用未确认反馈。",
+      "seed": "请给准备去杭州门店的家庭一条到店前实用提醒。",
       "target": "douyin_video"
     }
   ],
@@ -189,6 +189,7 @@
     "maximum_provider_requests": 80,
     "maximum_transport_retries": 0,
     "model_source": "DEEPSEEK_MODEL exact env key",
+    "prior_provider_requests": 6,
     "provider_request_policy": "one accepted Writer response per card; deterministic anomalies fail before provider",
     "temperature": 0
   },
@@ -198,5 +199,5 @@
     "content_products": 5,
     "scenarios": 8
   },
-  "suite_version": "brand-matrix-gate-d-formal-suite-v1"
+  "suite_version": "brand-matrix-gate-d-formal-suite-v2"
 }

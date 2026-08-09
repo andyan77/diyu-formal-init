@@ -87,6 +87,16 @@ function confirmPublication(): Record<string, unknown> {
 function fixtureResponse(
   path: string, method: string, body: Record<string, unknown> | null
 ): Response {
+  if (path === "/api/v1/tenant-management/team-usage") {
+    return response({
+      window_days: 7,
+      members: { enabled: 1, active: 1 },
+      activity: { content_attempts: 0, display_attempts: 0 }
+    });
+  }
+  if (path === "/api/v1/admin/readiness") {
+    return response({ items: [] });
+  }
   if (path === "/api/v1/tenant-management/brand-library") return response([]);
   if (path === "/api/v1/tenant-management/brand-publication" && method === "GET") {
     return response(publication);

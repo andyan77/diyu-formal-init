@@ -67,8 +67,9 @@ from src.shared.types import (  # noqa: E402
 )
 from src.tool.llm_gateway.deepseek import DeepSeekGenerator  # noqa: E402
 
-SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v1"
+SUITE_VERSION = "brand-matrix-gate-d-formal-suite-v2"
 MAX_PROVIDER_REQUESTS = 80
+PRIOR_RUNTIME_CANDIDATE_SHA = "997e6b55c1c40dacd44a46ff6617b28766011958"
 _ENV_PATH = Path("/home") / "faye" / "workspace" / "diyu-formal-init" / ".env"
 _ACCOUNT_ORGANIZATIONS = {
     "H01": "DIYU-HQ-001",
@@ -133,9 +134,16 @@ class Card:
 class EvidenceGenerator(DeepSeekGenerator):
     """Bind every real provider response to exactly one frozen Gate D card."""
 
-    def __init__(self, *, evidence_root: Path, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        evidence_root: Path,
+        prior_request_count: int,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self._evidence_root = evidence_root
+        self._prior_request_count = prior_request_count
         self._active_card: str | None = None
         self._active_responses: list[dict[str, Any]] = []
         self._ledger: list[dict[str, Any]] = []
@@ -143,6 +151,10 @@ class EvidenceGenerator(DeepSeekGenerator):
     @property
     def request_count(self) -> int:
         return len(self._ledger)
+
+    @property
+    def cumulative_request_count(self) -> int:
+        return self._prior_request_count + self.request_count
 
     @property
     def ledger(self) -> list[dict[str, Any]]:
@@ -195,7 +207,7 @@ class EvidenceGenerator(DeepSeekGenerator):
         card_id = self._active_card
         if card_id is None:
             raise RuntimeError("provider request is not bound to a frozen card")
-        if self.request_count >= MAX_PROVIDER_REQUESTS:
+        if self.cumulative_request_count >= MAX_PROVIDER_REQUESTS:
             raise RuntimeError("Gate D provider request budget is exhausted")
         request_document: dict[str, object] = {
             "model": self.model_name,
@@ -221,7 +233,7 @@ class EvidenceGenerator(DeepSeekGenerator):
         record = {
             "card_id": card_id,
             "model": self.model_name,
-            "request_index": self.request_count + 1,
+            "request_index": self.cumulative_request_count + 1,
             "request_sha256": _canonical_digest(request_document),
             "response_sha256": _canonical_digest(response),
             "response": response,
@@ -286,6 +298,27 @@ def _parse_cards(contract: dict[str, Any]) -> tuple[Card, ...]:
     ):
         raise ValueError("formal suite card coverage differs")
     return tuple(cards)
+
+
+def _load_prior_ledger(
+    path: Path,
+    *,
+    expected_count: int,
+) -> tuple[str, list[dict[str, Any]]]:
+    document = _load_object(path)
+    records = document.get("records")
+    runtime_candidate_sha = str(document.get("runtime_candidate_sha", ""))
+    if (
+        runtime_candidate_sha != PRIOR_RUNTIME_CANDIDATE_SHA
+        or document.get("status") != "FAILED_SAFE"
+        or document.get("provider_request_count") != expected_count
+        or not isinstance(records, list)
+        or len(records) != expected_count
+        or [item.get("request_index") for item in records]
+        != list(range(1, expected_count + 1))
+    ):
+        raise RuntimeError("prior failed-safe provider ledger differs")
+    return runtime_candidate_sha, cast(list[dict[str, Any]], records)
 
 
 def _scope(
@@ -887,6 +920,14 @@ def _internal_run(arguments: argparse.Namespace) -> int:
     registration = _load_object(cast(Path, arguments.registration))
     contract = _load_object(contract_path)
     cards = _parse_cards(contract)
+    constraints = contract.get("constraints")
+    if not isinstance(constraints, dict):
+        raise RuntimeError("formal suite constraints are missing")
+    prior_request_count = int(constraints.get("prior_provider_requests", -1))
+    prior_candidate_sha, prior_ledger = _load_prior_ledger(
+        cast(Path, arguments.prior_ledger),
+        expected_count=prior_request_count,
+    )
     model = os.environ.get("DEEPSEEK_MODEL", "")
     api_base_url = os.environ.get("DEEPSEEK_API_BASE_URL", "")
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
@@ -913,6 +954,7 @@ def _internal_run(arguments: argparse.Namespace) -> int:
     object_root.mkdir(mode=0o700)
     generator = EvidenceGenerator(
         evidence_root=evidence_root,
+        prior_request_count=prior_request_count,
         api_base_url=api_base_url,
         api_key=api_key,
         model=model,
@@ -984,7 +1026,10 @@ def _internal_run(arguments: argparse.Namespace) -> int:
             str(arguments.app_database_url),
             feedback_observation_id,
         )
-        if generator.request_count != len(cards) or generator.request_count > MAX_PROVIDER_REQUESTS:
+        if (
+            generator.request_count != len(cards)
+            or generator.cumulative_request_count > MAX_PROVIDER_REQUESTS
+        ):
             raise RuntimeError("formal provider ledger count differs")
         public_artifacts = [
             {
@@ -994,9 +1039,10 @@ def _internal_run(arguments: argparse.Namespace) -> int:
             }
             for artifact in artifacts.values()
         ]
-        public_ledger = [
+        current_public_ledger = [
             entry
             | {
+                "runtime_candidate_sha": candidate_sha,
                 "task_id": artifacts[str(entry["card_id"])]["task_id"],
                 "run_id": artifacts[str(entry["card_id"])]["run_id"],
                 "version_id": artifacts[str(entry["card_id"])]["version_id"],
@@ -1004,11 +1050,16 @@ def _internal_run(arguments: argparse.Namespace) -> int:
             }
             for entry in generator.ledger
         ]
+        cumulative_public_ledger = [
+            entry | {"runtime_candidate_sha": prior_candidate_sha}
+            for entry in prior_ledger
+        ] + current_public_ledger
         private_manifest = {
             "suite_version": SUITE_VERSION,
             "runtime_candidate_sha": candidate_sha,
             "registration_digest": registration["registration_digest"],
             "provider_request_count": generator.request_count,
+            "cumulative_provider_request_count": generator.cumulative_request_count,
             "scenario_results": scenario_results,
             "anomaly_results": [anomaly_results[key] for key in sorted(anomaly_results)],
             "artifact_ids": [
@@ -1023,7 +1074,10 @@ def _internal_run(arguments: argparse.Namespace) -> int:
             "status": "PASS",
         }
         _write_private_json(evidence_root / "manifest.json", private_manifest)
-        _write_private_json(evidence_root / "provider-ledger.json", public_ledger)
+        _write_private_json(
+            evidence_root / "provider-ledger.json",
+            cumulative_public_ledger,
+        )
         checksum_digest = _write_checksums(evidence_root)
         public_evidence = {
             "suite_version": SUITE_VERSION,
@@ -1033,6 +1087,8 @@ def _internal_run(arguments: argparse.Namespace) -> int:
             "temperature": 0,
             "max_retries": 0,
             "provider_request_count": generator.request_count,
+            "prior_provider_request_count": prior_request_count,
+            "cumulative_provider_request_count": generator.cumulative_request_count,
             "provider_request_budget": MAX_PROVIDER_REQUESTS,
             "provider_transport_retries": 0,
             "scenario_results": scenario_results,
@@ -1050,8 +1106,14 @@ def _internal_run(arguments: argparse.Namespace) -> int:
             {
                 "ledger_version": "brand-matrix-gate-d-provider-ledger-v1",
                 "runtime_candidate_sha": candidate_sha,
-                "provider_request_count": generator.request_count,
-                "records": public_ledger,
+                "prior_runtime_candidate_sha": prior_candidate_sha,
+                "prior_provider_request_count": prior_request_count,
+                "current_provider_request_count": generator.request_count,
+                "provider_request_count": generator.cumulative_request_count,
+                "provider_request_budget": MAX_PROVIDER_REQUESTS,
+                "transport_retry_count": 0,
+                "records": cumulative_public_ledger,
+                "status": "PASS",
             },
         )
     except Exception as exc:
@@ -1097,6 +1159,8 @@ def _launcher(arguments: argparse.Namespace) -> int:
         str(arguments.registration),
         "--contract",
         str(arguments.contract),
+        "--prior-ledger",
+        str(arguments.prior_ledger),
         "--evidence-root",
         str(arguments.evidence_root),
         "--public-evidence",
@@ -1115,6 +1179,7 @@ def main() -> int:
     parser.add_argument("--app-database-url", required=True)
     parser.add_argument("--registration", type=Path, required=True)
     parser.add_argument("--contract", type=Path, required=True)
+    parser.add_argument("--prior-ledger", type=Path, required=True)
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--public-evidence", type=Path, required=True)
     parser.add_argument("--public-ledger", type=Path, required=True)

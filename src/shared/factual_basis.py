@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Literal, TypeAlias, cast
@@ -32,6 +33,67 @@ _PROHIBITED_PRODUCT_INFERENCES = (
     "inventory",
     "comparison_conclusion",
     "actual_experience",
+)
+_LABELED_PRODUCT_VALUE_PATTERNS: dict[str, re.Pattern[str]] = {
+    "sku": re.compile(
+        r"(?:商品编号|型号|SKU)\s*(?:是|为|：|:)\s*[「『“\"']?"
+        r"(?P<value>DIYU-[A-Z0-9-]+)"
+    ),
+    "category": re.compile(
+        r"(?:品类|商品类型)\s*(?:是|为|：|:)\s*[「『“\"']?"
+        r"(?P<value>[^，。；;！？!?\n」』”\"']{1,24})"
+    ),
+    "main_color": re.compile(
+        r"(?:主色|主要颜色)\s*(?:是|为|：|:)\s*[「『“\"']?"
+        r"(?P<value>[\u4e00-\u9fffA-Za-z]{1,12}色)"
+    ),
+}
+_UNCONFIRMED_PRODUCT_SPECIFICITY_PATTERNS: tuple[
+    tuple[str, re.Pattern[str]], ...
+] = (
+    (
+        "composition_percentage",
+        re.compile(
+            r"(?:棉|腈纶|羊毛|羊绒|涤纶|聚酯纤维|锦纶|氨纶|粘纤|莱赛尔|莫代尔|"
+            r"麻|真丝|成分|含量)[^，。；;！？!?\n]{0,16}?\d{1,3}(?:\.\d+)?\s*%"
+        ),
+    ),
+    (
+        "price_amount",
+        re.compile(r"(?:售价|价格|到手价|吊牌价|本店售价)?\s*[¥￥]?\s*\d+(?:\.\d+)?\s*元"),
+    ),
+    (
+        "exact_process",
+        re.compile(
+            r"全成型无缝针织|无缝一体成型|全成型针织|"
+            r"(?:工艺|制作工艺)\s*(?:是|为|：|:|采用)\s*[^，。；;！？!?\n]{2,24}"
+        ),
+    ),
+    (
+        "age_range",
+        re.compile(r"\d{1,2}\s*(?:—|-|~|～|至|到)\s*\d{1,2}\s*岁|全年龄段"),
+    ),
+    (
+        "performance_assertion",
+        re.compile(
+            r"不易变形|不起球|亲肤透气|防水|防风|保暖|显瘦|耐穿|耐磨|抗皱|速干|"
+            r"保证舒适|确保舒适"
+        ),
+    ),
+)
+_NON_ASSERTIVE_PRODUCT_MARKERS = (
+    "未确认",
+    "没有确认",
+    "尚未确认",
+    "不能确认",
+    "无法确认",
+    "不确定",
+    "不要声称",
+    "不得声称",
+    "不作确定表述",
+    "不写成卖点",
+    "不会去说",
+    "是否",
 )
 
 
@@ -247,6 +309,69 @@ def product_fact_literal_spans(
         )
         if atom in text
     )
+
+
+def product_fact_value_conflicts(
+    packet: ProductFactPacket,
+    text: str,
+) -> tuple[str, ...]:
+    """Return only unambiguous labeled claims that conflict with frozen values.
+
+    Exact confirmed values are intentionally legal in Writer prose.  This
+    guard stays conservative: it checks only labeled fields whose asserted
+    value can be compared deterministically, and leaves ambiguous language to
+    human review instead of inventing a semantic detector.
+    """
+
+    allowed_by_key: dict[str, set[str]] = {}
+    for item in packet.facts:
+        values = _product_fact_string_values(item.structured_value)
+        if values:
+            allowed_by_key.setdefault(item.fact_key, set()).update(values)
+    conflicts: list[str] = []
+    for fact_key, pattern in _LABELED_PRODUCT_VALUE_PATTERNS.items():
+        allowed = allowed_by_key.get(fact_key)
+        if not allowed:
+            continue
+        for match in pattern.finditer(text):
+            claimed = match.group("value").strip()
+            if claimed in allowed:
+                continue
+            conflicts.append(f"{fact_key}:{claimed}")
+    return tuple(dict.fromkeys(conflicts))
+
+
+def unconfirmed_product_specificity_spans(text: str) -> tuple[str, ...]:
+    """Return deterministic unsupported product specifics in visible prose.
+
+    The patterns deliberately cover only high-confidence forms: percentages,
+    numeric prices, exact process wording, explicit age ranges and stable
+    performance assertions.  A nearby disclosure such as ``未确认`` keeps a
+    phrase legal because it is a boundary statement, not a product claim.
+    """
+
+    violations: list[str] = []
+    for reason, pattern in _UNCONFIRMED_PRODUCT_SPECIFICITY_PATTERNS:
+        for match in pattern.finditer(text):
+            if _is_non_assertive_product_mention(text, match.start()):
+                continue
+            violations.append(f"{reason}:{match.group(0).strip()}")
+    return tuple(dict.fromkeys(violations))
+
+
+def _product_fact_string_values(value: ProductFactValue) -> tuple[str, ...]:
+    if isinstance(value, str):
+        return (value.strip(),) if value.strip() else ()
+    if isinstance(value, int) and not isinstance(value, bool):
+        return (str(value),)
+    if isinstance(value, tuple):
+        return tuple(item.strip() for item in value if item.strip())
+    return ()
+
+
+def _is_non_assertive_product_mention(text: str, start: int) -> bool:
+    prefix = text[max(0, start - 24) : start]
+    return any(marker in prefix for marker in _NON_ASSERTIVE_PRODUCT_MARKERS)
 
 
 def _product_packet_items(

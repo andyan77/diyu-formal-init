@@ -291,7 +291,7 @@ def _assert_media() -> str:
 def _assert_formal_suite_contract() -> None:
     contract = _document("formal-suite-contract.json")
     if (
-        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v1"
+        contract.get("suite_version") != "brand-matrix-gate-d-formal-suite-v2"
         or contract.get("expected_counts")
         != {"anomalies": 8, "cards": 15, "content_products": 5, "scenarios": 8}
     ):
@@ -300,6 +300,7 @@ def _assert_formal_suite_contract() -> None:
     if (
         constraints.get("maximum_provider_requests") != 80
         or constraints.get("maximum_transport_retries") != 0
+        or constraints.get("prior_provider_requests") != 6
         or constraints.get("temperature") != 0
     ):
         raise SystemExit("Gate D semantics FAIL: formal provider discipline differs")
@@ -320,6 +321,20 @@ def _assert_formal_suite_contract() -> None:
         }
     ):
         raise SystemExit("Gate D semantics FAIL: formal suite coverage differs")
+    internal_prompt_terms = (
+        "门店普通文件",
+        "已登记母版",
+        "当前有效区域资料",
+        "当前有效资料",
+        "登记一条门店反馈观察",
+        "不得使用未确认反馈",
+    )
+    if any(
+        term in str(card.get("seed", ""))
+        for card in cards
+        for term in internal_prompt_terms
+    ):
+        raise SystemExit("Gate D semantics FAIL: formal cards expose internal governance language")
     runner = _source("scripts/gated/run_formal_acceptance.py")
     _require(
         runner,
@@ -331,6 +346,35 @@ def _assert_formal_suite_contract() -> None:
         ),
         "formal frozen runner",
     )
+    factual_boundary = _source("src/shared/factual_basis.py")
+    _require(
+        factual_boundary,
+        (
+            "def product_fact_value_conflicts(",
+            "def unconfirmed_product_specificity_spans(",
+            '"composition_percentage"',
+            '"price_amount"',
+            '"exact_process"',
+            '"age_range"',
+            '"performance_assertion"',
+        ),
+        "Writer factual boundary",
+    )
+    writer = _source("src/tool/llm_gateway/deepseek.py")
+    _require(
+        writer,
+        (
+            "confirmed_product_facts=confirmed_product_facts",
+            "product_fact_value_conflicts(context.product_fact_packet, visible)",
+            "unconfirmed_product_specificity_spans(visible)",
+            "used_persona_quote_ids",
+            "如果你需要／如果你的条件是",
+            "账号画像只提供观察角度，不提供自传",
+        ),
+        "Writer truth and persona prompt boundary",
+    )
+    if "product_fact_literal_spans(context.product_fact_packet, visible)" in writer:
+        raise SystemExit("Gate D semantics FAIL: confirmed product literals remain forbidden")
 
 
 def main() -> None:

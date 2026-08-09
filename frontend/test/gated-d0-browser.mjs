@@ -148,5 +148,5 @@ try {
     }
   }
   await new Promise(resolvePromise => server?.close(resolvePromise));
-  rmSync(workdir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  rmSync(workdir, { recursive: true, force: true, maxRetries: 50, retryDelay: 100 });
 }
