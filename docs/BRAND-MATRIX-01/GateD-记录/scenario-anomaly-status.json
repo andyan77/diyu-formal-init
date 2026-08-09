@@ -5,7 +5,7 @@
       "formal_suite_result": "INCOMPLETE_SUITE_ABORTED",
       "id": "ANOM-01",
       "name": "过期成分口径版本对",
-      "reason": "旧 v1 快照在前置检查中保持冻结；套件在 S06-S02-P3 失败安全后，最终当前任务比较未到达。"
+      "reason": "旧 v1 快照在前置检查中保持冻结；套件在 S05-R01-P1 失败安全后，最终当前任务比较未到达。"
     },
     {
       "deterministic_mechanism_result": "PASS",
@@ -46,8 +46,8 @@
       "deterministic_mechanism_result": "PASS",
       "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "ANOM-07",
-      "name": "私人经历单次授权",
-      "reason": "冻结套件把此检查放在成品卡之后；S06-S02-P3 发现授权已被前置确定性证明核销，套件停止，未运行套件内核销检查。"
+      "name": "专用合成单次授权",
+      "reason": "两条 DEMO-TEST fixture 的一次成功、重复拒绝和失败释放已由独立确定性证据证明；套件内只读复核位于全部成品卡之后，因 S05-R01-P1 失败而未到达。"
     },
     {
       "deterministic_mechanism_result": "PASS",
@@ -57,21 +57,19 @@
       "reason": "旧 AMD v1 快照前置保持冻结；套件停止后，新 v2 任务比较未到达。"
     }
   ],
-  "blocking_reason": "SINGLE_USE_AUTHORIZATION_PRECONSUMED_BEFORE_FORMAL_CARD",
+  "blocking_reason": "NEGATED_ALTERNATIVE_PERFORMANCE_TERM_REJECTED",
   "formal_binary_completion": false,
   "formal_model_suite": {
-    "authorization_id": "0559324c-860b-5cb0-ab33-b637d1bd6972",
-    "authorization_subject_ref": "PS-S02-05",
-    "current_completed_artifacts": 11,
-    "current_provider_requests": 11,
-    "cumulative_provider_requests": 21,
-    "failed_card": "S06-S02-P3",
-    "failed_card_task_run_version": "0/0/0",
-    "failure_stage": "context_selection_pre_provider",
-    "provider_requests_for_failed_card": 0,
-    "reservation_status": "consumed",
+    "current_completed_artifacts": 7,
+    "current_provider_requests": 8,
+    "cumulative_provider_requests": 29,
+    "detected_span": "guaranteed_performance_assertion:防水",
+    "failed_card": "S05-R01-P1",
+    "failed_card_task_run_version": "1/1/0",
+    "failure_stage": "post_provider_factual_boundary",
+    "provider_requests_for_failed_card": 1,
     "result": "FAILED_SAFE",
-    "runtime_candidate_sha": "7e48f7a7d96d4a196a8cbc8e503efe55f36291f9",
+    "runtime_candidate_sha": "e0dba46689397f16a967efbc126621df0683f385",
     "transport_retries": 0
   },
   "media_unlock": {
@@ -87,7 +85,7 @@
       "formal_suite_result": "CARD_SET_COMPLETE_FINAL_ASSERTION_NOT_REACHED",
       "id": "SCENARIO-01",
       "name": "总部 F/J/G",
-      "reason": "S01-P1/P2/P5 三卡均在新候选成功落版；全套 scenario assertion 因后续卡失败未执行，故不冒充剧本 PASS。"
+      "reason": "S01-P1/P2/P5 三卡均在新候选成功落版；全套 scenario assertion 因后续卡失败未执行。"
     },
     {
       "deterministic_mechanism_result": "PASS",
@@ -112,32 +110,32 @@
     },
     {
       "deterministic_mechanism_result": "PARTIAL_PASS",
-      "formal_suite_result": "CARD_SET_COMPLETE_FINAL_ASSERTION_NOT_REACHED",
+      "formal_suite_result": "FAILED_SAFE",
       "id": "SCENARIO-05",
       "name": "同一 SKU 四节点",
-      "reason": "H01/R01/S01/S04 四张新候选成品均成功落版且 body digest 四不相同；跨卡最终 assertion 未到达。"
+      "reason": "H01 成功；R01 收到一次响应，但防水只出现在‘需要防水外套时本商品不是答案’的排除性边界句中，机器仍将其判作商品防水主张并拒绝落版；S01/S04 未运行。"
     },
     {
-      "deterministic_mechanism_result": "PARTIAL_PASS",
-      "formal_suite_result": "FAILED_SAFE",
+      "deterministic_mechanism_result": "PASS",
+      "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "SCENARIO-06",
       "name": "同一种子三账号",
-      "reason": "H01 卡成功；S02 在任务创建和 provider 请求前因 PS-S02-05 已被前置确定性证明核销而失败关闭；S04 未运行。"
+      "reason": "套件在 S05-R01-P1 失败安全后未运行。"
     },
     {
       "deterministic_mechanism_result": "PASS",
       "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "SCENARIO-07",
       "name": "AMD v1/v2",
-      "reason": "S06 失败安全后未运行。"
+      "reason": "套件在 S05-R01-P1 失败安全后未运行。"
     },
     {
       "deterministic_mechanism_result": "PASS",
       "formal_suite_result": "NOT_RUN_SUITE_ABORTED",
       "id": "SCENARIO-08",
       "name": "反馈观察",
-      "reason": "S06 失败安全后未运行。"
+      "reason": "套件在 S05-R01-P1 失败安全后未运行。"
     }
   ],
-  "status": "GATE-D FAILED_SAFE · SINGLE_USE_AUTHORIZATION_PRECONSUMED"
+  "status": "GATE-D FAILED_SAFE · NEGATED_ALTERNATIVE_PERFORMANCE_TERM_REJECTED"
 }

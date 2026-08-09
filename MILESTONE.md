@@ -2059,3 +2059,24 @@
   密钥泄漏 0、二进制入 Git 0。根据 `UNLOCK-D-RERUN-04`，执行侧不得自行第五轮修复或重跑。
 - 唯一下一动作：监理复核第四轮守卫正式实证、授权预先核销诊断、冻结纪律与 ledger；继续须由
   主控另行签发。
+
+## BRAND-MATRIX-01 · Gate D 第五轮授权再许可后整套重跑失败安全稿（2026-08-09，待监理复核）
+
+- 状态：**`GATE-D FAILED_SAFE · NEGATED_ALTERNATIVE_PERFORMANCE_TERM_REJECTED`**；不得据此写
+  `IMPLEMENTED / COMPLETE / PASS`。
+- `PS-S02-05`、`PS-S04-03` 已按 `AMD-AUTH-20260809-01` 追加 v2 可重复授权，旧 v1/digest
+  不变；两条 DEMO-TEST single-use fixture 独立证明一次成功、重复拒绝和失败释放，前置验证对
+  正式业务授权 reservation/event 为 0，上一轮编排阻断已关闭。
+- runtime candidate `e0dba46689397f16a967efbc126621df0683f385`；本地全门
+  `1041 passed / 2 skipped`，CI run `31306058996` 四查全绿。两轮隔离导入 batch digest
+  `20e1d00a…6ed`、对象指纹 `1ec150e8…2f98` 一致；媒体 PASS(scope)/FAIL/QUARANTINED=
+  `26/0/0`，母版 P5 资格 6、覆盖 4 个商品。
+- 本候选前 7 张卡成功落版；第 8 张 `S05-R01-P1` 的模型响应用“如果需要防风防水外套，
+  本商品不是答案”表达能力边界，但机器仅因出现 `防水` 误判为本商品性能断言，返回
+  `Writer 新增了未确认商品具体信息`。失败卡 task/run/version=`1/1/0`，后 7 卡未运行。
+- ledger 累计 `29/80`（历史 21 + 本轮 8），temperature 0、max_retries 0、transport retry 0、
+  失败后请求 0；旧候选成品不拼接，八剧本/八异常未完成。
+- 首次请求后仅追加 Gate D 脱敏证据、治理记录和本状态；生产/SSH/ECS 0、alembic 0、
+  密钥泄漏 0、二进制入 Git 0。根据 `UNLOCK-D-RERUN-05`，执行侧不得自行第六轮修复或重跑。
+- 唯一下一动作：监理复核第五轮授权再许可、编排隔离、否定性边界词误拦诊断、冻结纪律与
+  ledger；继续须由主控另行签发。

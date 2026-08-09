@@ -1193,3 +1193,29 @@ allowlist 17/17 精确删除、删后 WIP 归零、当前/回退锚 inspect 正�
   主控另行签发。
 
 <!-- BRAND-MATRIX-01-GATED-RERUN-04-FAILED-SAFE-END -->
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-05-FAILED-SAFE-START -->
+
+### Gate D 第五轮授权再许可后整套重跑失败安全记录（2026-08-09，执行侧）
+
+> **待监理复验确认**。状态为
+> `GATE-D FAILED_SAFE · NEGATED_ALTERNATIVE_PERFORMANCE_TERM_REJECTED`，不等于 Gate D 已实现或通过。
+
+- `PS-S02-05`、`PS-S04-03` 已按 `AMD-AUTH-20260809-01` 追加 v2 可重复授权，旧 v1 和 digest
+  保留；`ANOM-07` 改用两条专用 DEMO-TEST single-use fixture，正式前置验证对业务授权事件为 0。
+- runtime candidate 为 `e0dba46689397f16a967efbc126621df0683f385`；本地全门
+  `1041 passed / 2 skipped`，CI run `31306058996` 的 workflow_dispatch、headSha、success、
+  非成功步骤 0 四查通过。
+- 新两轮 batch digest `20e1d00a…6ed`、对象指纹 `1ec150e8…2f98` 一致；媒体
+  PASS(scope)/FAIL/QUARANTINED=`26/0/0`，P5 合格母版 6、覆盖 4 个正式商品。
+- 本候选 7 张卡完成；第 8 张 `S05-R01-P1` 收到一次响应后，排除性句子“如果需要防风防水
+  的功能外套……它就不是那个答案”中的 `防水` 被机器误作本商品防水主张，命中
+  `guaranteed_performance_assertion:防水` 并拒绝落版。失败卡 task/run/version=`1/1/0`。
+- ledger 本轮 8、历史 21、累计 `29/80`；temperature 0、max_retries 0、transport retry 0、
+  失败后请求 0。候选产物不拼接；八剧本/八异常未完成。
+- 首次请求后仅追加脱敏证据、治理记录与 MILESTONE；生产/SSH/ECS 0、alembic 0、密钥泄漏 0、
+  二进制入 Git 0。按第五轮停止线，不自行第六轮修复或 provider 重跑。
+- 唯一下一动作：监理复核授权再许可、编排隔离、否定性边界词误拦诊断、冻结纪律和累计 ledger；
+  继续须由主控另行签发。
+
+<!-- BRAND-MATRIX-01-GATED-RERUN-05-FAILED-SAFE-END -->
