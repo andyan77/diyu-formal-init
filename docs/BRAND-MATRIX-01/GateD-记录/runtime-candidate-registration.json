@@ -1,0 +1,38 @@
+{
+  "gate_a_manifest_digest": "14fed12141dc3b277c09c878a2a30ef71b445ce8ea31457c0122b403aeb48a06",
+  "import_batch_digest": "f15d0efe63173b1b6c72b5b4cf4681673cf29e4536fe600e3d92066e52781750",
+  "import_object_fingerprint": "e48dc6542db65593bb3830eda9cebad425d54b756d34a1ce469b88931eef6b88",
+  "local_isolated_database_counts": {
+    "accounts": 39,
+    "authorizations": 2,
+    "brand": 1,
+    "library": 35,
+    "library_versions": 35,
+    "media_assets": 26,
+    "media_bindings": 6,
+    "media_versions": 26,
+    "organizations": 7,
+    "product_versions": 4,
+    "products": 4,
+    "profiles": 10,
+    "projection": 1,
+    "projection_items": 34,
+    "qualifications": 30
+  },
+  "local_isolated_database_input_fingerprint": "e3862fb84b388eb27d7df9c738fd2235705691862ef860bd3ec40d05fbe6bba2",
+  "max_retries": 0,
+  "media_database_readback_digest": "bcd3b3ac435e8e319b4b77e4597fded39c108085cfee125cfb7235c677cd37a0",
+  "media_manifest_digest": "587d821315d896c414b382a1f277a07e1f7290f95cb8e0d829334cc53efc335b",
+  "model": "deepseek-v4-flash",
+  "prompt_contracts": {
+    "formal_suite_contract_sha256": "536a5067ebe840d5080c720bf4acc365699052cb03ae1316ea1afd9903c5c5a2",
+    "prompt_5_rev3_sha256": "e118e903b8cb9c00f133065ac6b381b48731697ec15dc2bc0f6334f926687178"
+  },
+  "provider_requests_at_freeze": 0,
+  "publication_projection_digest": "cb6b2cf509c31e9864ea632449e41ff06d553e7f2ed93cf758fce7c77e978962",
+  "registration_digest": "a69c5c4736114cd96c0c330dd42063c36c63b86fbee562c700d253b1bef59b16",
+  "registration_version": "brand-matrix-gate-d-runtime-freeze-v1",
+  "runtime_candidate_sha": "997e6b55c1c40dacd44a46ff6617b28766011958",
+  "status": "FROZEN_NO_PROVIDER_REQUESTS",
+  "temperature": 0
+}
